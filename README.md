@@ -1,5 +1,7 @@
 # XCAGI v7.0 - 桌面版 + Web 版并行的企业 AI 员工平台
 
+**当前语义化版本：`7.0.0`**（与 [`VERSION.md`](VERSION.md)、根目录 `pyproject.toml` / `package.json` / `frontend/package.json` / `desktop/package.json` 一致）· **Git 默认分支：`main`** · **附注标签：`v7.0.0`**（在 `main` 上执行 `git describe --tags` 应得到 `v7.0.0`）。
+
 🤖 **基于 Neuro-DDD（分层 + AI 用例编排）与 FastAPI 的 AI 单据智能处理系统**，适用于各行业的标签打印、出货管理和收货确认场景。
 
 [Release](https://github.com/42433422/xcagi/releases)
@@ -10,13 +12,13 @@
 [Vue](https://vuejs.org/)
 [Platform](https://www.microsoft.com/windows/)
 [Code style: black](https://github.com/psf/black)
-[Contributions welcome](https://github.com/42433422/ai-excel-helper/blob/master/.github/CONTRIBUTING.md)
+[Contributions welcome](https://github.com/42433422/ai-excel-helper/blob/main/.github/CONTRIBUTING.md)
 
 ## 🌟 项目简介
 
 **XCAGI v7.0** 通过 OCR、混合意图识别与大模型工作流，把「上传 Excel / 对话指令 → 解析 → 业务动作（出货、打印、库存等）」连成可运维的闭环，并新增 Windows / macOS 桌面交付形态。
 
-> 🚀 **v7.0 当前版本**: `Electron 桌面壳 + FastAPI 本地子进程 + Vue 3 前端复用`，同时保留 Docker / Nginx web 版并行交付；Mod 商店 / 员工商店 / Token 认证钱包继续作为两种形态共用的商业化能力。  
+> 🚀 **v7.0 / 7.0.0 当前版本**: `Electron 桌面壳 + FastAPI 本地子进程 + Vue 3 前端复用`，同时保留 Docker / Nginx web 版并行交付；Mod 商店 / 员工商店 / Token 认证钱包继续作为两种形态共用的商业化能力。  
 > 🎯 **从「工具」到「员工」**: 侧重可编排的用例与可替换的基础设施实现，而不是把业务规则堆在路由里。  
 > 🧠 **Neuro-DDD 在本仓库的含义**: **DDD 分层**（`application` / `domain` / `infrastructure`）+ **AI 对话与工作流的用例编排**；HTTP 层尽量薄，装配集中在 Composition Root（`app/bootstrap.py`）。**神经域 + NeuroBus 大图及组件摘录**与 `**[XCAGI/README.md](XCAGI/README.md)`** 同构展示；**以源码为准**。
 
@@ -34,9 +36,11 @@
 - 📝 [更新日志](CHANGELOG.md)
 - 🤝 [贡献指南](.github/CONTRIBUTING.md)
 
-### 云端 `main` 与 v7
+### 云端 `main` 与 v7 / 7.0.0
 
-GitHub 仓库 **[ai-excel-helper](https://github.com/42433422/ai-excel-helper)** 的 **`main`** 已与 **v7.0 展示快照**对齐（单提交增量同步到 `origin/main`，避免附带历史中的超大二进制）。公开展示以源码与文档为主；**`QClaw/resources/app.asar` 等大体积运行时文件未纳入该分支**，完整安装与发行仍以本地构建或 Release 为准。可选发布标签 **`v7.*`** 会触发 `.github/workflows/` 中的桌面/Web 流水线（与「仅浏览代码」用途独立）。
+GitHub 仓库 **[ai-excel-helper](https://github.com/42433422/ai-excel-helper)** 的 **`main`** 承载 **v7.0 源码展示树**，并已打 **Git 附注标签 [`v7.0.0`](https://github.com/42433422/ai-excel-helper/releases/tag/v7.0.0)**（与上文 **语义化 7.0.0** 对齐）。同步策略为在 `origin/main` 上增量提交，避免把历史中的超大二进制（如旧快照里的 zip）推上公网克隆。
+
+公开展示以源码与文档为主；**`QClaw/resources/app.asar` 等大体积运行时文件未纳入该分支**，完整安装与发行仍以本地构建或 [xcagi Release](https://github.com/42433422/xcagi/releases) 为准。推送 **`v7.*`** 标签会触发 `.github/workflows/` 中的桌面/Web 流水线（与「仅浏览代码」用途独立）。
 
 ---
 
@@ -491,6 +495,7 @@ cd XCAGI && python run.py
 - **桌面交付**：Windows / macOS 安装包（Electron 壳 + 本地 FastAPI 子进程 + 与 Web 同源 Vue 资源），与 Docker / 本地 `run.py` 并行  
 - **延续 v6 商业化与 Mod 生态**：本地部署授权、Mod 商店分成、Token 认证钱包；Manifest 与路由契约不变  
 - **文档与版本号统一**：根 `VERSION.md`、`CHANGELOG.md`、本 README 与 `docs/*` 主文档以 **7.0.0** 为当前口径  
+- **Git 口径**：一体化展示仓库默认分支 **`main`**；发布锚点为附注标签 **`v7.0.0`**（与 `pyproject.toml` 等 **7.0.0** 字段一致）  
 
 ### v6.0
 
