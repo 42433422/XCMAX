@@ -34,6 +34,10 @@
 - 📝 [更新日志](CHANGELOG.md)
 - 🤝 [贡献指南](.github/CONTRIBUTING.md)
 
+### 云端 `main` 与 v7
+
+GitHub 仓库 **[ai-excel-helper](https://github.com/42433422/ai-excel-helper)** 的 **`main`** 已与 **v7.0 展示快照**对齐（单提交增量同步到 `origin/main`，避免附带历史中的超大二进制）。公开展示以源码与文档为主；**`QClaw/resources/app.asar` 等大体积运行时文件未纳入该分支**，完整安装与发行仍以本地构建或 Release 为准。可选发布标签 **`v7.*`** 会触发 `.github/workflows/` 中的桌面/Web 流水线（与「仅浏览代码」用途独立）。
+
 ---
 
 ## 🖥️ v7.0 交付形态
