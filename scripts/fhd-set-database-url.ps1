@@ -1,21 +1,49 @@
-# PowerShell：设置与 fhd-set-database-url.cmd 相同的环境变量（当前窗口有效）
-# 用法（必须「点源」执行，变量才会留在当前终端）：
-#   . E:\FHD\scripts\fhd-set-database-url.ps1
-# 或先 cd 到仓库：
-#   Set-Location E:\FHD
-#   . .\scripts\fhd-set-database-url.ps1
+# Dot-source in PowerShell:  . .\scripts\fhd-set-database-url.ps1
+$FhdRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+$env:FHD_REPO_ROOT = $FhdRoot
+$xcagi = Join-Path $FhdRoot 'XCAGI'
+$envFile = Join-Path $xcagi '.env'
 
-$ErrorActionPreference = "Stop"
-Set-Location (Join-Path $PSScriptRoot "..")
-$env:FHD_ROOT = (Get-Location).Path
-$env:DATABASE_URL = "postgresql+psycopg://xcagi:xcagi@127.0.0.1:5433/xcagi"
-$env:FHD_DB_WRITE_TOKEN = "61408693"
-# 一级只读锁：与写入令牌可相同或不同；无此头时 GET 产品/客户等返回 403
-$env:FHD_DB_READ_TOKEN = "61408693"
-$env:PYTHONPATH = (Get-Location).Path
+function Test-TcpPort([int]$Port) {
+    try {
+        $c = New-Object Net.Sockets.TcpClient
+        $c.Connect('127.0.0.1', $Port)
+        $c.Dispose()
+        return $true
+    } catch {
+        return $false
+    }
+}
 
-Write-Host "[INFO] FHD_ROOT=$($env:FHD_ROOT)"
-Write-Host "[INFO] DATABASE_URL=$($env:DATABASE_URL)"
-Write-Host "[INFO] FHD_DB_WRITE_TOKEN set (bulk-import / admin)"
-Write-Host "[INFO] FHD_DB_READ_TOKEN set (product/customer GET gate; restart backend to apply)"
-Write-Host "[INFO] Start backend from this shell so it inherits these variables."
+if (-not $env:DATABASE_URL -and (Test-Path -LiteralPath $envFile)) {
+    Get-Content -LiteralPath $envFile | ForEach-Object {
+        if ($_ -match '^\s*DATABASE_URL\s*=') {
+            $env:DATABASE_URL = ($_.Split('=', 2)[1]).Trim()
+        }
+        if ($_ -match '^\s*VECTOR_DB_URL\s*=') {
+            $env:VECTOR_DB_URL = ($_.Split('=', 2)[1]).Trim()
+        }
+    }
+}
+
+$p5433 = Test-TcpPort 5433
+$p5432 = Test-TcpPort 5432
+
+if (-not $env:DATABASE_URL) {
+    if ($p5433) { $port = 5433 }
+    elseif ($p5432) { $port = 5432 }
+    else { $port = 5433 }
+    $env:DATABASE_URL = "postgresql+psycopg://xcagi:xcagi@127.0.0.1:$port/xcagi"
+}
+
+$xcagiApp = Join-Path $xcagi 'app'
+if (Test-Path -LiteralPath $xcagiApp) {
+    $prefix = "$xcagi;$FhdRoot"
+    if (-not $env:PYTHONPATH) {
+        $env:PYTHONPATH = $prefix
+    } elseif ($env:PYTHONPATH -notlike "*$xcagi*") {
+        $env:PYTHONPATH = "$prefix;$($env:PYTHONPATH)"
+    }
+} elseif (-not $env:PYTHONPATH) {
+    $env:PYTHONPATH = $FhdRoot
+}

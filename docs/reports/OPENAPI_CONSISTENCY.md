@@ -1,0 +1,483 @@
+# OpenAPI 与路由一致性报告
+
+- 运行时路由（含隐藏）: **532**
+- OpenAPI 操作: **518**
+- 发现: error **0** / warn **877** / info **20**
+
+## [WARN] DUPLICATE_TRAILING_SLASH_ROUTE  (35)
+
+- `GET /api/shipment/shipment-records/units` — GET /api/shipment/shipment-records/units 被同一处理器注册了 2 次（endpoint: app.fastapi_routes.xcagi_compat.shipment_records_units）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
+- `GET /api/purchase_units` — GET /api/purchase_units 被同一处理器注册了 2 次（endpoint: app.fastapi_routes.xcagi_compat.purchase_units_list）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
+- `GET /api/customers` — GET /api/customers 被同一处理器注册了 2 次（endpoint: app.fastapi_routes.xcagi_compat.customers_all）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
+- `GET /api/customers/match` — GET /api/customers/match 被同一处理器注册了 2 次（endpoint: app.fastapi_routes.xcagi_compat.customers_match）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
+- `GET /api/customers/{customer_id}` — GET /api/customers/{customer_id} 被同一处理器注册了 2 次（endpoint: app.fastapi_routes.xcagi_compat.customers_get_one）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
+- `POST /api/customers` — POST /api/customers 被同一处理器注册了 2 次（endpoint: app.fastapi_routes.xcagi_compat.customers_create）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
+- `PUT /api/customers/{customer_id}` — PUT /api/customers/{customer_id} 被同一处理器注册了 2 次（endpoint: app.fastapi_routes.xcagi_compat.customers_update）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
+- `DELETE /api/customers/{customer_id}` — DELETE /api/customers/{customer_id} 被同一处理器注册了 2 次（endpoint: app.fastapi_routes.xcagi_compat.customers_delete）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
+- `POST /api/customers/batch-delete` — POST /api/customers/batch-delete 被同一处理器注册了 2 次（endpoint: app.fastapi_routes.xcagi_compat.customers_batch_delete）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
+- `POST /api/customers/import` — POST /api/customers/import 被同一处理器注册了 2 次（endpoint: app.fastapi_routes.xcagi_compat.customers_import）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
+- `GET /api/customers/export` — GET /api/customers/export 被同一处理器注册了 2 次（endpoint: app.fastapi_routes.xcagi_compat.customers_export_stub）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
+- `GET /api/products/{product_id}` — GET /api/products/{product_id} 被同一处理器注册了 2 次（endpoint: app.fastapi_routes.xcagi_compat.products_get_by_id）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
+- `POST /api/products/resolve-name-hints` — POST /api/products/resolve-name-hints 被同一处理器注册了 2 次（endpoint: app.fastapi_routes.xcagi_compat.products_resolve_name_hints）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
+- `POST /api/products/update` — POST /api/products/update 被同一处理器注册了 2 次（endpoint: app.fastapi_routes.xcagi_compat.products_update）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
+- `POST /api/products/add` — POST /api/products/add 被同一处理器注册了 2 次（endpoint: app.fastapi_routes.xcagi_compat.products_add）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
+- `POST /api/products/delete` — POST /api/products/delete 被同一处理器注册了 2 次（endpoint: app.fastapi_routes.xcagi_compat.products_delete）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
+- `POST /api/products/batch-delete` — POST /api/products/batch-delete 被同一处理器注册了 2 次（endpoint: app.fastapi_routes.xcagi_compat.products_batch_delete）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
+- `GET /api/products/price-list-export` — GET /api/products/price-list-export 被同一处理器注册了 2 次（endpoint: app.fastapi_routes.xcagi_compat.products_price_list_export）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
+- `GET /api/products/export.docx` — GET /api/products/export.docx 被同一处理器注册了 2 次（endpoint: app.fastapi_routes.xcagi_compat.products_export_docx）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
+- `GET /api/products/price-list-template-preview` — GET /api/products/price-list-template-preview 被同一处理器注册了 2 次（endpoint: app.fastapi_routes.xcagi_compat.products_price_list_template_preview）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
+- `POST /api/templates/extract-grid` — POST /api/templates/extract-grid 被同一处理器注册了 2 次（endpoint: app.fastapi_routes.xcagi_compat.templates_extract_grid）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
+- `GET /api/system/test-db/status` — GET /api/system/test-db/status 被同一处理器注册了 2 次（endpoint: app.fastapi_routes.xcagi_compat.system_test_db_status）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
+- `POST /api/system/test-db/enable` — POST /api/system/test-db/enable 被同一处理器注册了 2 次（endpoint: app.fastapi_routes.xcagi_compat.system_test_db_enable）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
+- `POST /api/system/test-db/disable` — POST /api/system/test-db/disable 被同一处理器注册了 2 次（endpoint: app.fastapi_routes.xcagi_compat.system_test_db_disable）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
+- `GET /api/preferences` — GET /api/preferences 被同一处理器注册了 2 次（endpoint: app.fastapi_routes.xcagi_compat.preferences_get）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
+- `POST /api/preferences` — POST /api/preferences 被同一处理器注册了 2 次（endpoint: app.fastapi_routes.xcagi_compat.preferences_post）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
+- `GET /api/distillation/versions` — GET /api/distillation/versions 被同一处理器注册了 2 次（endpoint: app.fastapi_routes.xcagi_compat.distillation_versions）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
+- `GET /api/tools` — GET /api/tools 被同一处理器注册了 2 次（endpoint: app.fastapi_routes.xcagi_compat.compat_tools_list）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
+- `GET /api/db-tools` — GET /api/db-tools 被同一处理器注册了 2 次（endpoint: app.fastapi_routes.xcagi_compat.compat_db_tools_list）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
+- `GET /api/tool-categories` — GET /api/tool-categories 被同一处理器注册了 2 次（endpoint: app.fastapi_routes.xcagi_compat.compat_tool_categories_list）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
+- `GET /api/document-templates` — GET /api/document-templates 被同一处理器注册了 2 次（endpoint: app.fastapi_routes.document_templates.list_document_templates）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
+- `GET /api/startup/status` — GET /api/startup/status 被同一处理器注册了 2 次（endpoint: app.fastapi_routes.xcagi_startup.startup_status）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
+- `GET /api/templates` — GET /api/templates 被同一处理器注册了 2 次（endpoint: app.fastapi_routes.template_api.templates_list_compat）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
+- `DELETE /api/orders` — DELETE /api/orders 被同一处理器注册了 2 次（endpoint: app.fastapi_routes.shipment_orders.api_orders_delete_root）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
+- `GET /api/shipment/shipment-records/records` — GET /api/shipment/shipment-records/records 被同一处理器注册了 2 次（endpoint: app.fastapi_routes.shipment_orders.shipment_records_list）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
+
+## [WARN] MISSING_DESCRIPTION  (441)
+
+- `POST /api/control/input` — 缺少 description/docstring：POST /api/control/input
+- `GET /api/control/input/latest` — 缺少 description/docstring：GET /api/control/input/latest
+- `POST /api/control/input/{cmd_id}/ack` — 缺少 description/docstring：POST /api/control/input/{cmd_id}/ack
+- `GET /api/health` — 缺少 description/docstring：GET /api/health
+- `GET /api/ping` — 缺少 description/docstring：GET /api/ping
+- `GET /api/neurobus/health` — 缺少 description/docstring：GET /api/neurobus/health
+- `GET /api/neurobus/stats` — 缺少 description/docstring：GET /api/neurobus/stats
+- `GET /api/lan/host-info` — 缺少 description/docstring：GET /api/lan/host-info
+- `GET /api/lan/status` — 缺少 description/docstring：GET /api/lan/status
+- `GET /api/lan/access-requests/mine` — 缺少 description/docstring：GET /api/lan/access-requests/mine
+- `POST /api/lan/access-requests` — 缺少 description/docstring：POST /api/lan/access-requests
+- `POST /api/lan/activate` — 缺少 description/docstring：POST /api/lan/activate
+- `POST /api/lan/logout` — 缺少 description/docstring：POST /api/lan/logout
+- `GET /api/lan/admin/whoami` — 缺少 description/docstring：GET /api/lan/admin/whoami
+- `GET /api/lan/admin/keys` — 缺少 description/docstring：GET /api/lan/admin/keys
+- `POST /api/lan/admin/keys` — 缺少 description/docstring：POST /api/lan/admin/keys
+- `DELETE /api/lan/admin/keys/{key_id}` — 缺少 description/docstring：DELETE /api/lan/admin/keys/{key_id}
+- `GET /api/lan/admin/sessions` — 缺少 description/docstring：GET /api/lan/admin/sessions
+- `DELETE /api/lan/admin/sessions/{jti}` — 缺少 description/docstring：DELETE /api/lan/admin/sessions/{jti}
+- `GET /api/lan/admin/audit` — 缺少 description/docstring：GET /api/lan/admin/audit
+- `GET /api/lan/admin/access-requests` — 缺少 description/docstring：GET /api/lan/admin/access-requests
+- `POST /api/lan/admin/access-requests/{request_id}/approve` — 缺少 description/docstring：POST /api/lan/admin/access-requests/{request_id}/approve
+- `POST /api/lan/admin/access-requests/{request_id}/reject` — 缺少 description/docstring：POST /api/lan/admin/access-requests/{request_id}/reject
+- `GET /api/lan/admin/allowlist` — 缺少 description/docstring：GET /api/lan/admin/allowlist
+- `DELETE /api/lan/admin/allowlist/{client_id}` — 缺少 description/docstring：DELETE /api/lan/admin/allowlist/{client_id}
+- `GET /api/lan/admin/settings` — 缺少 description/docstring：GET /api/lan/admin/settings
+- `PUT /api/lan/admin/settings` — 缺少 description/docstring：PUT /api/lan/admin/settings
+- `POST /api/lan/admin/settings` — 缺少 description/docstring：POST /api/lan/admin/settings
+- `GET /api/fhd/db-tokens/status` — 缺少 description/docstring：GET /api/fhd/db-tokens/status
+- `POST /api/debug/client-log` — 缺少 description/docstring：POST /api/debug/client-log
+- `GET /api/code-editor/status` — 缺少 description/docstring：GET /api/code-editor/status
+- `POST /api/code-editor/analyze` — 缺少 description/docstring：POST /api/code-editor/analyze
+- `POST /api/code-editor/edit` — 缺少 description/docstring：POST /api/code-editor/edit
+- `GET /api/code-editor/diff/{edit_id}` — 缺少 description/docstring：GET /api/code-editor/diff/{edit_id}
+- `POST /api/code-editor/apply/{edit_id}` — 缺少 description/docstring：POST /api/code-editor/apply/{edit_id}
+- `POST /api/code-editor/draft` — 缺少 description/docstring：POST /api/code-editor/draft
+- `GET /api/wechat_contacts/search` — 缺少 description/docstring：GET /api/wechat_contacts/search
+- `POST /api/wechat_contacts/unstar_all` — 缺少 description/docstring：POST /api/wechat_contacts/unstar_all
+- `POST /api/wechat_contacts/refresh_messages_cache` — 缺少 description/docstring：POST /api/wechat_contacts/refresh_messages_cache
+- `POST /api/wechat_contacts/refresh_contact_cache` — 缺少 description/docstring：POST /api/wechat_contacts/refresh_contact_cache
+- `PUT /api/wechat_contacts/{contact_id}` — 缺少 description/docstring：PUT /api/wechat_contacts/{contact_id}
+- `GET /api/wechat_contacts/{contact_id}` — 缺少 description/docstring：GET /api/wechat_contacts/{contact_id}
+- `GET /api/wechat_contacts/{contact_id}/context` — 缺少 description/docstring：GET /api/wechat_contacts/{contact_id}/context
+- `POST /api/wechat_contacts/{contact_id}/refresh_messages` — 缺少 description/docstring：POST /api/wechat_contacts/{contact_id}/refresh_messages
+- `GET /api/products/units` — 缺少 description/docstring：GET /api/products/units
+- `POST /api/purchase_units` — 缺少 description/docstring：POST /api/purchase_units
+- `POST /api/customers` — 缺少 description/docstring：POST /api/customers
+- `POST /api/customers` — 缺少 description/docstring：POST /api/customers
+- `GET /api/customers/{customer_id}` — 缺少 description/docstring：GET /api/customers/{customer_id}
+- `PUT /api/customers/{customer_id}` — 缺少 description/docstring：PUT /api/customers/{customer_id}
+- `DELETE /api/customers/{customer_id}` — 缺少 description/docstring：DELETE /api/customers/{customer_id}
+- `GET /api/customers/{customer_id}` — 缺少 description/docstring：GET /api/customers/{customer_id}
+- `PUT /api/customers/{customer_id}` — 缺少 description/docstring：PUT /api/customers/{customer_id}
+- `DELETE /api/customers/{customer_id}` — 缺少 description/docstring：DELETE /api/customers/{customer_id}
+- `POST /api/customers/batch-delete` — 缺少 description/docstring：POST /api/customers/batch-delete
+- `POST /api/customers/batch-delete` — 缺少 description/docstring：POST /api/customers/batch-delete
+- `GET /api/customers/import` — 缺少 description/docstring：GET /api/customers/import
+- `GET /api/customers/export` — 缺少 description/docstring：GET /api/customers/export
+- `GET /api/customers/export` — 缺少 description/docstring：GET /api/customers/export
+- `GET /api/products/list` — 缺少 description/docstring：GET /api/products/list
+- `DELETE /api/products/{product_id}` — 缺少 description/docstring：DELETE /api/products/{product_id}
+- `POST /api/products/{product_id}` — 缺少 description/docstring：POST /api/products/{product_id}
+- `PUT /api/products/{product_id}` — 缺少 description/docstring：PUT /api/products/{product_id}
+- `PATCH /api/products/{product_id}` — 缺少 description/docstring：PATCH /api/products/{product_id}
+- `GET /api/products/export.docx` — 缺少 description/docstring：GET /api/products/export.docx
+- `GET /api/products/export.docx` — 缺少 description/docstring：GET /api/products/export.docx
+- `POST /api/ai/chat/stream` — 缺少 description/docstring：POST /api/ai/chat/stream
+- `POST /api/ai/unified_chat/stream` — 缺少 description/docstring：POST /api/ai/unified_chat/stream
+- `GET /api/conversations/sessions` — 缺少 description/docstring：GET /api/conversations/sessions
+- `POST /api/conversations/sessions/clear` — 缺少 description/docstring：POST /api/conversations/sessions/clear
+- `POST /api/ai/conversation/new` — 缺少 description/docstring：POST /api/ai/conversation/new
+- `POST /api/ai/unified_chat` — 缺少 description/docstring：POST /api/ai/unified_chat
+- `POST /api/ai/chat/v2` — 缺少 description/docstring：POST /api/ai/chat/v2
+- `POST /api/ai/chat` — 缺少 description/docstring：POST /api/ai/chat
+- `POST /api/ai/unified_chat/batch` — 缺少 description/docstring：POST /api/ai/unified_chat/batch
+- `POST /api/ai/chat/v2/batch` — 缺少 description/docstring：POST /api/ai/chat/v2/batch
+- `POST /api/ai/chat/batch` — 缺少 description/docstring：POST /api/ai/chat/batch
+- `GET /api/ai/context` — 缺少 description/docstring：GET /api/ai/context
+- `POST /api/ai/context/clear` — 缺少 description/docstring：POST /api/ai/context/clear
+- `GET /api/ai/config` — 缺少 description/docstring：GET /api/ai/config
+- `GET /api/conversations/{conversation_id}` — 缺少 description/docstring：GET /api/conversations/{conversation_id}
+- `GET /api/system/test-db/status` — 缺少 description/docstring：GET /api/system/test-db/status
+- `GET /api/system/test-db/status` — 缺少 description/docstring：GET /api/system/test-db/status
+- `POST /api/system/test-db/enable` — 缺少 description/docstring：POST /api/system/test-db/enable
+- `POST /api/system/test-db/enable` — 缺少 description/docstring：POST /api/system/test-db/enable
+- `GET /api/preferences` — 缺少 description/docstring：GET /api/preferences
+- `POST /api/preferences` — 缺少 description/docstring：POST /api/preferences
+- `GET /api/preferences` — 缺少 description/docstring：GET /api/preferences
+- `POST /api/preferences` — 缺少 description/docstring：POST /api/preferences
+- `GET /api/distillation/versions` — 缺少 description/docstring：GET /api/distillation/versions
+- `GET /api/distillation/versions` — 缺少 description/docstring：GET /api/distillation/versions
+- `GET /api/intent-packages` — 缺少 description/docstring：GET /api/intent-packages
+- `POST /api/intent-packages` — 缺少 description/docstring：POST /api/intent-packages
+- `GET /api/tools` — 缺少 description/docstring：GET /api/tools
+- `GET /api/tools` — 缺少 description/docstring：GET /api/tools
+- `GET /api/db-tools` — 缺少 description/docstring：GET /api/db-tools
+- `GET /api/db-tools` — 缺少 description/docstring：GET /api/db-tools
+- `GET /api/tool-categories` — 缺少 description/docstring：GET /api/tool-categories
+- `GET /api/tool-categories` — 缺少 description/docstring：GET /api/tool-categories
+- `GET /api/products` — 缺少 description/docstring：GET /api/products
+- `POST /api/shipment/create` — 缺少 description/docstring：POST /api/shipment/create
+- `GET /api/print/label/{shipment_id}` — 缺少 description/docstring：GET /api/print/label/{shipment_id}
+- `GET /api/print/labels/{shipment_id}/list` — 缺少 description/docstring：GET /api/print/labels/{shipment_id}/list
+- `GET /api/wx/miniprogram/products/{product_id}` — 缺少 description/docstring：GET /api/wx/miniprogram/products/{product_id}
+- `GET /api/wx/miniprogram/customers` — 缺少 description/docstring：GET /api/wx/miniprogram/customers
+- `GET /api/wx/miniprogram/customers/{customer_id}` — 缺少 description/docstring：GET /api/wx/miniprogram/customers/{customer_id}
+- `GET /api/wx/miniprogram/shipment/list` — 缺少 description/docstring：GET /api/wx/miniprogram/shipment/list
+- `GET /api/document-templates` — 缺少 description/docstring：GET /api/document-templates
+- `GET /api/document-templates` — 缺少 description/docstring：GET /api/document-templates
+- `GET /api/templates` — 缺少 description/docstring：GET /api/templates
+- `GET /api/templates` — 缺少 description/docstring：GET /api/templates
+- `GET /api/templates/detail/{template_id}` — 缺少 description/docstring：GET /api/templates/detail/{template_id}
+- `GET /api/templates/{template_id}` — 缺少 description/docstring：GET /api/templates/{template_id}
+- `GET /orders/next_number` — 缺少 description/docstring：GET /orders/next_number
+- `GET /api/shipment/orders/next_number` — 缺少 description/docstring：GET /api/shipment/orders/next_number
+- `GET /api/orders/next_number` — 缺少 description/docstring：GET /api/orders/next_number
+- `POST /api/shipment/generate` — 缺少 description/docstring：POST /api/shipment/generate
+- `POST /api/shipment/print` — 缺少 description/docstring：POST /api/shipment/print
+- `GET /api/shipment/download/{filename}` — 缺少 description/docstring：GET /api/shipment/download/{filename}
+- `GET /api/shipment/orders/purchase-units` — 缺少 description/docstring：GET /api/shipment/orders/purchase-units
+- `POST /api/shipment/orders/clear-shipment` — 缺少 description/docstring：POST /api/shipment/orders/clear-shipment
+- `GET /api/shipment/orders` — 缺少 description/docstring：GET /api/shipment/orders
+- `GET /api/shipment/orders/search` — 缺少 description/docstring：GET /api/shipment/orders/search
+- `GET /api/shipment/orders/latest` — 缺少 description/docstring：GET /api/shipment/orders/latest
+- `POST /api/shipment/orders/set-sequence` — 缺少 description/docstring：POST /api/shipment/orders/set-sequence
+- `POST /api/shipment/orders/reset-sequence` — 缺少 description/docstring：POST /api/shipment/orders/reset-sequence
+- `DELETE /api/shipment/orders/clear-all` — 缺少 description/docstring：DELETE /api/shipment/orders/clear-all
+- `GET /api/shipment/orders/{order_number}` — 缺少 description/docstring：GET /api/shipment/orders/{order_number}
+- `DELETE /api/shipment/orders/{order_number}` — 缺少 description/docstring：DELETE /api/shipment/orders/{order_number}
+- `GET /api/orders` — 缺少 description/docstring：GET /api/orders
+- `DELETE /api/orders` — 缺少 description/docstring：DELETE /api/orders
+- `DELETE /api/orders` — 缺少 description/docstring：DELETE /api/orders
+- `GET /api/orders/latest` — 缺少 description/docstring：GET /api/orders/latest
+- `GET /api/orders/search` — 缺少 description/docstring：GET /api/orders/search
+- `POST /api/orders/set-sequence` — 缺少 description/docstring：POST /api/orders/set-sequence
+- `POST /api/orders/reset-sequence` — 缺少 description/docstring：POST /api/orders/reset-sequence
+- `GET /api/orders/purchase-units` — 缺少 description/docstring：GET /api/orders/purchase-units
+- `POST /api/orders/clear-shipment` — 缺少 description/docstring：POST /api/orders/clear-shipment
+- `DELETE /api/orders/clear-all` — 缺少 description/docstring：DELETE /api/orders/clear-all
+- `GET /api/orders/{order_number}` — 缺少 description/docstring：GET /api/orders/{order_number}
+- `GET /api/shipment/shipment-records/records` — 缺少 description/docstring：GET /api/shipment/shipment-records/records
+- `GET /api/shipment/shipment-records/records` — 缺少 description/docstring：GET /api/shipment/shipment-records/records
+- `DELETE /api/shipment/shipment-records/record` — 缺少 description/docstring：DELETE /api/shipment/shipment-records/record
+- `PATCH /api/shipment/shipment-records/record` — 缺少 description/docstring：PATCH /api/shipment/shipment-records/record
+- `GET /api/shipment/shipment-records/export` — 缺少 description/docstring：GET /api/shipment/shipment-records/export
+- `POST /api/materials` — 缺少 description/docstring：POST /api/materials
+- `GET /api/materials` — 缺少 description/docstring：GET /api/materials
+- `PUT /api/materials/{material_id}` — 缺少 description/docstring：PUT /api/materials/{material_id}
+- `DELETE /api/materials/{material_id}` — 缺少 description/docstring：DELETE /api/materials/{material_id}
+- `POST /api/materials/batch-delete` — 缺少 description/docstring：POST /api/materials/batch-delete
+- `GET /api/materials/low-stock` — 缺少 description/docstring：GET /api/materials/low-stock
+- `GET /api/materials/export` — 缺少 description/docstring：GET /api/materials/export
+- `POST /api/upload/temp` — 缺少 description/docstring：POST /api/upload/temp
+- `DELETE /api/upload/temp/{filename}` — 缺少 description/docstring：DELETE /api/upload/temp/{filename}
+- `GET /api/upload/config` — 缺少 description/docstring：GET /api/upload/config
+- `POST /api/ocr/recognize` — 缺少 description/docstring：POST /api/ocr/recognize
+- `POST /api/ocr/extract` — 缺少 description/docstring：POST /api/ocr/extract
+- `POST /api/ocr/analyze` — 缺少 description/docstring：POST /api/ocr/analyze
+- `POST /api/ocr/recognize-and-extract` — 缺少 description/docstring：POST /api/ocr/recognize-and-extract
+- `GET /api/ocr/test` — 缺少 description/docstring：GET /api/ocr/test
+- `GET /api/print/printers` — 缺少 description/docstring：GET /api/print/printers
+- `GET /api/print/printer-selection` — 缺少 description/docstring：GET /api/print/printer-selection
+- `PUT /api/print/printer-selection` — 缺少 description/docstring：PUT /api/print/printer-selection
+- `GET /api/print/default` — 缺少 description/docstring：GET /api/print/default
+- `POST /api/print/document` — 缺少 description/docstring：POST /api/print/document
+- `POST /api/print/label` — 缺少 description/docstring：POST /api/print/label
+- `GET /api/print/test` — 缺少 description/docstring：GET /api/print/test
+- `POST /api/print/test` — 缺少 description/docstring：POST /api/print/test
+- `GET /api/print/validate` — 缺少 description/docstring：GET /api/print/validate
+- `GET /api/print/document-printer` — 缺少 description/docstring：GET /api/print/document-printer
+- `GET /api/print/label-printer` — 缺少 description/docstring：GET /api/print/label-printer
+- `GET /api/print/list_labels` — 缺少 description/docstring：GET /api/print/list_labels
+- `GET /api/print/label/{filename}` — 缺少 description/docstring：GET /api/print/label/{filename}
+- `POST /api/generate` — 缺少 description/docstring：POST /api/generate
+- `GET /api/shipment-records/units` — 缺少 description/docstring：GET /api/shipment-records/units
+- `GET /api/shipment-records/records` — 缺少 description/docstring：GET /api/shipment-records/records
+- `GET /api/units` — 缺少 description/docstring：GET /api/units
+- `PUT /api/purchase_units/{unit_id}` — 缺少 description/docstring：PUT /api/purchase_units/{unit_id}
+- `DELETE /api/purchase_units/{unit_id}` — 缺少 description/docstring：DELETE /api/purchase_units/{unit_id}
+- `GET /api/purchase_units/by_name/{unit_name}` — 缺少 description/docstring：GET /api/purchase_units/by_name/{unit_name}
+- `GET /api/product_names` — 缺少 description/docstring：GET /api/product_names
+- `GET /api/product_names/search` — 缺少 description/docstring：GET /api/product_names/search
+- `GET /api/product_names/by_unit/{unit_id}` — 缺少 description/docstring：GET /api/product_names/by_unit/{unit_id}
+- `GET /api/product_names/by_unit_and_name` — 缺少 description/docstring：GET /api/product_names/by_unit_and_name
+- `GET /api/printers` — 缺少 description/docstring：GET /api/printers
+- `GET /api/print/diagnose` — 缺少 description/docstring：GET /api/print/diagnose
+- `POST /api/print/{filename}` — 缺少 description/docstring：POST /api/print/{filename}
+- `POST /api/print-last` — 缺少 description/docstring：POST /api/print-last
+- `POST /api/print/pdf_labels` — 缺少 description/docstring：POST /api/print/pdf_labels
+- `POST /api/print/single_label` — 缺少 description/docstring：POST /api/print/single_label
+- `POST /api/tts` — 缺少 description/docstring：POST /api/tts
+- `GET /api/excel/list` — 缺少 description/docstring：GET /api/excel/list
+- `GET /api/excel/templates/by_type` — 缺少 description/docstring：GET /api/excel/templates/by_type
+- `GET /api/excel/templates/default` — 缺少 description/docstring：GET /api/excel/templates/default
+- `GET /api/excel/template/{template_id}/file` — 缺少 description/docstring：GET /api/excel/template/{template_id}/file
+- `POST /api/excel/template/save` — 缺少 description/docstring：POST /api/excel/template/save
+- `POST /api/excel/template/decompose` — 缺少 description/docstring：POST /api/excel/template/decompose
+- `POST /api/excel/upload` — 缺少 description/docstring：POST /api/excel/upload
+- `GET /api/excel/test` — 缺少 description/docstring：GET /api/excel/test
+- `GET /api/excel/templates/{template_id}` — 缺少 description/docstring：GET /api/excel/templates/{template_id}
+- … 省略 241 条
+
+## [WARN] MISSING_RESPONSE_SCHEMA  (398)
+
+- `GET /api/system/industries` — 2xx 响应未声明 schema：GET /api/system/industries
+- `GET /api/system/industry` — 2xx 响应未声明 schema：GET /api/system/industry
+- `POST /api/system/industry` — 2xx 响应未声明 schema：POST /api/system/industry
+- `GET /api/system/industry/{industry_id}` — 2xx 响应未声明 schema：GET /api/system/industry/{industry_id}
+- `GET /api/mods/loading-status` — 2xx 响应未声明 schema：GET /api/mods/loading-status
+- `GET /api/mods` — 2xx 响应未声明 schema：GET /api/mods
+- `GET /api/mods/routes` — 2xx 响应未声明 schema：GET /api/mods/routes
+- `GET /api/mods/comms/endpoints` — 2xx 响应未声明 schema：GET /api/mods/comms/endpoints
+- `GET /api/mods/{mod_id}` — 2xx 响应未声明 schema：GET /api/mods/{mod_id}
+- `POST /api/control/input` — 2xx 响应未声明 schema：POST /api/control/input
+- `GET /api/control/input/latest` — 2xx 响应未声明 schema：GET /api/control/input/latest
+- `POST /api/control/input/{cmd_id}/ack` — 2xx 响应未声明 schema：POST /api/control/input/{cmd_id}/ack
+- `POST /api/voice/transcribe` — 2xx 响应未声明 schema：POST /api/voice/transcribe
+- `GET /api/voice/health` — 2xx 响应未声明 schema：GET /api/voice/health
+- `GET /api/health` — 2xx 响应未声明 schema：GET /api/health
+- `GET /api/ping` — 2xx 响应未声明 schema：GET /api/ping
+- `GET /api/neurobus/health` — 2xx 响应未声明 schema：GET /api/neurobus/health
+- `GET /api/neurobus/stats` — 2xx 响应未声明 schema：GET /api/neurobus/stats
+- `GET /api/wechat_contacts/{contact_id}` — 2xx 响应未声明 schema：GET /api/wechat_contacts/{contact_id}
+- `POST /api/purchase_units` — 2xx 响应未声明 schema：POST /api/purchase_units
+- `GET /api/customers` — 2xx 响应未声明 schema：GET /api/customers
+- `GET /api/customers` — 2xx 响应未声明 schema：GET /api/customers
+- `GET /api/customers/{customer_id}` — 2xx 响应未声明 schema：GET /api/customers/{customer_id}
+- `GET /api/customers/{customer_id}` — 2xx 响应未声明 schema：GET /api/customers/{customer_id}
+- `DELETE /api/customers/batch-delete` — 2xx 响应未声明 schema：DELETE /api/customers/batch-delete
+- `GET /api/customers/import` — 2xx 响应未声明 schema：GET /api/customers/import
+- `GET /api/products/{product_id}` — 2xx 响应未声明 schema：GET /api/products/{product_id}
+- `GET /api/products/{product_id}` — 2xx 响应未声明 schema：GET /api/products/{product_id}
+- `DELETE /api/products/{product_id}` — 2xx 响应未声明 schema：DELETE /api/products/{product_id}
+- `POST /api/products/{product_id}` — 2xx 响应未声明 schema：POST /api/products/{product_id}
+- `PUT /api/products/{product_id}` — 2xx 响应未声明 schema：PUT /api/products/{product_id}
+- `PATCH /api/products/{product_id}` — 2xx 响应未声明 schema：PATCH /api/products/{product_id}
+- `GET /api/products/price-list-export` — 2xx 响应未声明 schema：GET /api/products/price-list-export
+- `GET /api/products/price-list-export` — 2xx 响应未声明 schema：GET /api/products/price-list-export
+- `GET /api/products/export.docx` — 2xx 响应未声明 schema：GET /api/products/export.docx
+- `GET /api/products/export.docx` — 2xx 响应未声明 schema：GET /api/products/export.docx
+- `POST /api/ai/chat/stream` — 2xx 响应未声明 schema：POST /api/ai/chat/stream
+- `POST /api/ai/unified_chat/stream` — 2xx 响应未声明 schema：POST /api/ai/unified_chat/stream
+- `POST /api/intent-packages` — 2xx 响应未声明 schema：POST /api/intent-packages
+- `GET /api/products` — 2xx 响应未声明 schema：GET /api/products
+- `POST /api/shipment/create` — 2xx 响应未声明 schema：POST /api/shipment/create
+- `GET /api/shipment/list` — 2xx 响应未声明 schema：GET /api/shipment/list
+- `GET /api/print/label/{shipment_id}` — 2xx 响应未声明 schema：GET /api/print/label/{shipment_id}
+- `GET /api/print/labels/{shipment_id}/list` — 2xx 响应未声明 schema：GET /api/print/labels/{shipment_id}/list
+- `GET /api/wx/miniprogram/products/{product_id}` — 2xx 响应未声明 schema：GET /api/wx/miniprogram/products/{product_id}
+- `GET /api/wx/miniprogram/customers` — 2xx 响应未声明 schema：GET /api/wx/miniprogram/customers
+- `GET /api/wx/miniprogram/customers/{customer_id}` — 2xx 响应未声明 schema：GET /api/wx/miniprogram/customers/{customer_id}
+- `GET /api/wx/miniprogram/shipment/list` — 2xx 响应未声明 schema：GET /api/wx/miniprogram/shipment/list
+- `GET /api/templates/list` — 2xx 响应未声明 schema：GET /api/templates/list
+- `GET /api/templates` — 2xx 响应未声明 schema：GET /api/templates
+- `GET /api/templates` — 2xx 响应未声明 schema：GET /api/templates
+- `GET /api/templates/detail/{template_id}` — 2xx 响应未声明 schema：GET /api/templates/detail/{template_id}
+- `GET /api/templates/{template_id}` — 2xx 响应未声明 schema：GET /api/templates/{template_id}
+- `GET /orders/next_number` — 2xx 响应未声明 schema：GET /orders/next_number
+- `GET /api/shipment/orders/next_number` — 2xx 响应未声明 schema：GET /api/shipment/orders/next_number
+- `GET /api/orders/next_number` — 2xx 响应未声明 schema：GET /api/orders/next_number
+- `POST /api/shipment/generate-batch` — 2xx 响应未声明 schema：POST /api/shipment/generate-batch
+- `POST /api/shipment/generate` — 2xx 响应未声明 schema：POST /api/shipment/generate
+- `POST /api/shipment/print` — 2xx 响应未声明 schema：POST /api/shipment/print
+- `GET /api/shipment/download/{filename}` — 2xx 响应未声明 schema：GET /api/shipment/download/{filename}
+- `GET /api/shipment/orders/purchase-units` — 2xx 响应未声明 schema：GET /api/shipment/orders/purchase-units
+- `POST /api/shipment/orders/clear-shipment` — 2xx 响应未声明 schema：POST /api/shipment/orders/clear-shipment
+- `GET /api/shipment/orders` — 2xx 响应未声明 schema：GET /api/shipment/orders
+- `GET /api/shipment/orders/search` — 2xx 响应未声明 schema：GET /api/shipment/orders/search
+- `GET /api/shipment/orders/latest` — 2xx 响应未声明 schema：GET /api/shipment/orders/latest
+- `POST /api/shipment/orders/set-sequence` — 2xx 响应未声明 schema：POST /api/shipment/orders/set-sequence
+- `POST /api/shipment/orders/reset-sequence` — 2xx 响应未声明 schema：POST /api/shipment/orders/reset-sequence
+- `DELETE /api/shipment/orders/clear-all` — 2xx 响应未声明 schema：DELETE /api/shipment/orders/clear-all
+- `GET /api/shipment/orders/{order_number}` — 2xx 响应未声明 schema：GET /api/shipment/orders/{order_number}
+- `DELETE /api/shipment/orders/{order_number}` — 2xx 响应未声明 schema：DELETE /api/shipment/orders/{order_number}
+- `GET /api/orders` — 2xx 响应未声明 schema：GET /api/orders
+- `DELETE /api/orders` — 2xx 响应未声明 schema：DELETE /api/orders
+- `DELETE /api/orders` — 2xx 响应未声明 schema：DELETE /api/orders
+- `GET /api/orders/latest` — 2xx 响应未声明 schema：GET /api/orders/latest
+- `GET /api/orders/search` — 2xx 响应未声明 schema：GET /api/orders/search
+- `POST /api/orders/set-sequence` — 2xx 响应未声明 schema：POST /api/orders/set-sequence
+- `POST /api/orders/reset-sequence` — 2xx 响应未声明 schema：POST /api/orders/reset-sequence
+- `GET /api/orders/purchase-units` — 2xx 响应未声明 schema：GET /api/orders/purchase-units
+- `POST /api/orders/clear-shipment` — 2xx 响应未声明 schema：POST /api/orders/clear-shipment
+- `DELETE /api/orders/clear-all` — 2xx 响应未声明 schema：DELETE /api/orders/clear-all
+- `GET /api/orders/{order_number}` — 2xx 响应未声明 schema：GET /api/orders/{order_number}
+- `GET /api/shipment/shipment-records/records` — 2xx 响应未声明 schema：GET /api/shipment/shipment-records/records
+- `GET /api/shipment/shipment-records/records` — 2xx 响应未声明 schema：GET /api/shipment/shipment-records/records
+- `DELETE /api/shipment/shipment-records/record` — 2xx 响应未声明 schema：DELETE /api/shipment/shipment-records/record
+- `PATCH /api/shipment/shipment-records/record` — 2xx 响应未声明 schema：PATCH /api/shipment/shipment-records/record
+- `GET /api/shipment/shipment-records/export` — 2xx 响应未声明 schema：GET /api/shipment/shipment-records/export
+- `POST /api/materials` — 2xx 响应未声明 schema：POST /api/materials
+- `GET /api/materials` — 2xx 响应未声明 schema：GET /api/materials
+- `PUT /api/materials/{material_id}` — 2xx 响应未声明 schema：PUT /api/materials/{material_id}
+- `DELETE /api/materials/{material_id}` — 2xx 响应未声明 schema：DELETE /api/materials/{material_id}
+- `POST /api/materials/batch-delete` — 2xx 响应未声明 schema：POST /api/materials/batch-delete
+- `GET /api/materials/low-stock` — 2xx 响应未声明 schema：GET /api/materials/low-stock
+- `GET /api/materials/export` — 2xx 响应未声明 schema：GET /api/materials/export
+- `POST /api/upload/temp` — 2xx 响应未声明 schema：POST /api/upload/temp
+- `DELETE /api/upload/temp/{filename}` — 2xx 响应未声明 schema：DELETE /api/upload/temp/{filename}
+- `GET /api/upload/config` — 2xx 响应未声明 schema：GET /api/upload/config
+- `POST /api/ocr/recognize` — 2xx 响应未声明 schema：POST /api/ocr/recognize
+- `POST /api/ocr/extract` — 2xx 响应未声明 schema：POST /api/ocr/extract
+- `POST /api/ocr/analyze` — 2xx 响应未声明 schema：POST /api/ocr/analyze
+- `POST /api/ocr/recognize-and-extract` — 2xx 响应未声明 schema：POST /api/ocr/recognize-and-extract
+- `GET /api/ocr/test` — 2xx 响应未声明 schema：GET /api/ocr/test
+- `GET /api/print/printers` — 2xx 响应未声明 schema：GET /api/print/printers
+- `GET /api/print/printer-selection` — 2xx 响应未声明 schema：GET /api/print/printer-selection
+- `PUT /api/print/printer-selection` — 2xx 响应未声明 schema：PUT /api/print/printer-selection
+- `GET /api/print/default` — 2xx 响应未声明 schema：GET /api/print/default
+- `POST /api/print/document` — 2xx 响应未声明 schema：POST /api/print/document
+- `POST /api/print/label` — 2xx 响应未声明 schema：POST /api/print/label
+- `GET /api/print/test` — 2xx 响应未声明 schema：GET /api/print/test
+- `POST /api/print/test` — 2xx 响应未声明 schema：POST /api/print/test
+- `GET /api/print/validate` — 2xx 响应未声明 schema：GET /api/print/validate
+- `GET /api/print/document-printer` — 2xx 响应未声明 schema：GET /api/print/document-printer
+- `GET /api/print/label-printer` — 2xx 响应未声明 schema：GET /api/print/label-printer
+- `GET /api/print/list_labels` — 2xx 响应未声明 schema：GET /api/print/list_labels
+- `GET /api/print/label/{filename}` — 2xx 响应未声明 schema：GET /api/print/label/{filename}
+- `POST /api/generate` — 2xx 响应未声明 schema：POST /api/generate
+- `GET /api/shipment-records/units` — 2xx 响应未声明 schema：GET /api/shipment-records/units
+- `GET /api/shipment-records/records` — 2xx 响应未声明 schema：GET /api/shipment-records/records
+- `GET /api/units` — 2xx 响应未声明 schema：GET /api/units
+- `PUT /api/purchase_units/{unit_id}` — 2xx 响应未声明 schema：PUT /api/purchase_units/{unit_id}
+- `DELETE /api/purchase_units/{unit_id}` — 2xx 响应未声明 schema：DELETE /api/purchase_units/{unit_id}
+- `GET /api/purchase_units/by_name/{unit_name}` — 2xx 响应未声明 schema：GET /api/purchase_units/by_name/{unit_name}
+- `GET /api/product_names` — 2xx 响应未声明 schema：GET /api/product_names
+- `GET /api/product_names/search` — 2xx 响应未声明 schema：GET /api/product_names/search
+- `GET /api/product_names/by_unit/{unit_id}` — 2xx 响应未声明 schema：GET /api/product_names/by_unit/{unit_id}
+- `GET /api/product_names/by_unit_and_name` — 2xx 响应未声明 schema：GET /api/product_names/by_unit_and_name
+- `GET /api/printers` — 2xx 响应未声明 schema：GET /api/printers
+- `GET /api/print/diagnose` — 2xx 响应未声明 schema：GET /api/print/diagnose
+- `POST /api/print/{filename}` — 2xx 响应未声明 schema：POST /api/print/{filename}
+- `POST /api/print-last` — 2xx 响应未声明 schema：POST /api/print-last
+- `POST /api/print/pdf_labels` — 2xx 响应未声明 schema：POST /api/print/pdf_labels
+- `POST /api/print/single_label` — 2xx 响应未声明 schema：POST /api/print/single_label
+- `POST /api/tts` — 2xx 响应未声明 schema：POST /api/tts
+- `GET /api/excel/templates` — 2xx 响应未声明 schema：GET /api/excel/templates
+- `GET /api/excel/list` — 2xx 响应未声明 schema：GET /api/excel/list
+- `GET /api/excel/templates/by_type` — 2xx 响应未声明 schema：GET /api/excel/templates/by_type
+- `GET /api/excel/templates/default` — 2xx 响应未声明 schema：GET /api/excel/templates/default
+- `GET /api/excel/template/{template_id}/file` — 2xx 响应未声明 schema：GET /api/excel/template/{template_id}/file
+- `POST /api/excel/template/save` — 2xx 响应未声明 schema：POST /api/excel/template/save
+- `POST /api/excel/template/decompose` — 2xx 响应未声明 schema：POST /api/excel/template/decompose
+- `POST /api/excel/upload` — 2xx 响应未声明 schema：POST /api/excel/upload
+- `GET /api/excel/test` — 2xx 响应未声明 schema：GET /api/excel/test
+- `GET /api/excel/templates/{template_id}` — 2xx 响应未声明 schema：GET /api/excel/templates/{template_id}
+- `PUT /api/excel/templates/{template_id}` — 2xx 响应未声明 schema：PUT /api/excel/templates/{template_id}
+- `DELETE /api/excel/templates/{template_id}` — 2xx 响应未声明 schema：DELETE /api/excel/templates/{template_id}
+- `POST /api/excel/data/extract` — 2xx 响应未声明 schema：POST /api/excel/data/extract
+- `POST /api/excel/data/extract/upload` — 2xx 响应未声明 schema：POST /api/excel/data/extract/upload
+- `POST /api/excel/data/generate` — 2xx 响应未声明 schema：POST /api/excel/data/generate
+- `POST /api/excel/data/generate/download` — 2xx 响应未声明 schema：POST /api/excel/data/generate/download
+- `GET /api/excel/data/extract/test` — 2xx 响应未声明 schema：GET /api/excel/data/extract/test
+- `POST /api/excel/data/import/products` — 2xx 响应未声明 schema：POST /api/excel/data/import/products
+- `POST /api/excel/data/import/customers` — 2xx 响应未声明 schema：POST /api/excel/data/import/customers
+- `GET /api/excel/data/logs` — 2xx 响应未声明 schema：GET /api/excel/data/logs
+- `GET /api/excel/data/logs/{log_id}` — 2xx 响应未声明 schema：GET /api/excel/data/logs/{log_id}
+- `GET /api/excel/data/preview/{log_id}` — 2xx 响应未声明 schema：GET /api/excel/data/preview/{log_id}
+- `POST /api/excel/vector/ingest` — 2xx 响应未声明 schema：POST /api/excel/vector/ingest
+- `POST /api/excel/vector/query` — 2xx 响应未声明 schema：POST /api/excel/vector/query
+- `GET /api/excel/vector/indexes` — 2xx 响应未声明 schema：GET /api/excel/vector/indexes
+- `DELETE /api/excel/vector/indexes/{index_id}` — 2xx 响应未声明 schema：DELETE /api/excel/vector/indexes/{index_id}
+- `GET /health/liveness` — 2xx 响应未声明 schema：GET /health/liveness
+- `GET /health/readiness` — 2xx 响应未声明 schema：GET /health/readiness
+- `GET /health/details` — 2xx 响应未声明 schema：GET /health/details
+- `GET /api/diagnostics/capabilities` — 2xx 响应未声明 schema：GET /api/diagnostics/capabilities
+- `GET /api/state/client-mods-off` — 2xx 响应未声明 schema：GET /api/state/client-mods-off
+- `POST /api/state/client-mods-off` — 2xx 响应未声明 schema：POST /api/state/client-mods-off
+- `GET /api/model-payment/plans` — 2xx 响应未声明 schema：GET /api/model-payment/plans
+- `POST /api/model-payment/checkout` — 2xx 响应未声明 schema：POST /api/model-payment/checkout
+- `POST /api/model-payment/notify/alipay` — 2xx 响应未声明 schema：POST /api/model-payment/notify/alipay
+- `GET /api/model-payment/diagnostics` — 2xx 响应未声明 schema：GET /api/model-payment/diagnostics
+- `GET /api/model-payment/entitlements` — 2xx 响应未声明 schema：GET /api/model-payment/entitlements
+- `GET /api/model-payment/query/{out_trade_no}` — 2xx 响应未声明 schema：GET /api/model-payment/query/{out_trade_no}
+- `POST /api/model-payment/refund` — 2xx 响应未声明 schema：POST /api/model-payment/refund
+- `POST /api/model-payment/close` — 2xx 响应未声明 schema：POST /api/model-payment/close
+- `GET /api/model-payment/refund/query` — 2xx 响应未声明 schema：GET /api/model-payment/refund/query
+- `GET /` — 2xx 响应未声明 schema：GET /
+- `GET /api/ai/qclaw/routes` — 2xx 响应未声明 schema：GET /api/ai/qclaw/routes
+- `GET /api/ai/qclaw/panel` — 2xx 响应未声明 schema：GET /api/ai/qclaw/panel
+- `GET /api/ai/test` — 2xx 响应未声明 schema：GET /api/ai/test
+- `GET /api/ai/approval/pending` — 2xx 响应未声明 schema：GET /api/ai/approval/pending
+- `GET /api/ai/config/approval` — 2xx 响应未声明 schema：GET /api/ai/config/approval
+- `POST /api/ai/config/approval` — 2xx 响应未声明 schema：POST /api/ai/config/approval
+- `GET /api/ai/kitten/business-snapshot` — 2xx 响应未声明 schema：GET /api/ai/kitten/business-snapshot
+- `GET /api/ai/kitten/charts/all` — 2xx 响应未声明 schema：GET /api/ai/kitten/charts/all
+- `GET /api/ai/kitten/charts/revenue` — 2xx 响应未声明 schema：GET /api/ai/kitten/charts/revenue
+- `GET /api/ai/kitten/charts/products` — 2xx 响应未声明 schema：GET /api/ai/kitten/charts/products
+- `GET /api/ai/kitten/charts/customers` — 2xx 响应未声明 schema：GET /api/ai/kitten/charts/customers
+- `GET /api/ai/kitten/charts/profit` — 2xx 响应未声明 schema：GET /api/ai/kitten/charts/profit
+- `GET /api/ai/kitten/charts/inventory` — 2xx 响应未声明 schema：GET /api/ai/kitten/charts/inventory
+- `GET /api/ai/kitten/saved/list` — 2xx 响应未声明 schema：GET /api/ai/kitten/saved/list
+- `GET /api/ai/kitten/saved/{analysis_id}` — 2xx 响应未声明 schema：GET /api/ai/kitten/saved/{analysis_id}
+- `DELETE /api/ai/kitten/saved/{analysis_id}` — 2xx 响应未声明 schema：DELETE /api/ai/kitten/saved/{analysis_id}
+- `GET /api/ai/kitten/saved/{analysis_id}/export` — 2xx 响应未声明 schema：GET /api/ai/kitten/saved/{analysis_id}/export
+- `GET /api/ai/analyze/export/{export_id}` — 2xx 响应未声明 schema：GET /api/ai/analyze/export/{export_id}
+- `GET /api/auth/me` — 2xx 响应未声明 schema：GET /api/auth/me
+- `GET /api/auth/session/validate` — 2xx 响应未声明 schema：GET /api/auth/session/validate
+- `GET /api/users` — 2xx 响应未声明 schema：GET /api/users
+- `POST /api/users` — 2xx 响应未声明 schema：POST /api/users
+- `GET /api/users/{user_id}` — 2xx 响应未声明 schema：GET /api/users/{user_id}
+- `DELETE /api/users/{user_id}` — 2xx 响应未声明 schema：DELETE /api/users/{user_id}
+- `PUT /api/users/{user_id}` — 2xx 响应未声明 schema：PUT /api/users/{user_id}
+- `GET /api/conversations/{session_id}` — 2xx 响应未声明 schema：GET /api/conversations/{session_id}
+- … 省略 198 条
+
+## [WARN] MISSING_TAGS  (3)
+
+- `GET /api/neurobus/health` — 缺少 tags：GET /api/neurobus/health
+- `GET /api/neurobus/stats` — 缺少 tags：GET /api/neurobus/stats
+- `GET /metrics` — 缺少 tags：GET /metrics
+
+## [INFO] COMPAT_ALIAS_OVERRIDE  (9)
+
+- `GET /api/system/industries` — GET /api/system/industries 存在 2 个处理器但只有 1 个进入文档（endpoint: app.fastapi_routes.system_routes.get_industries, app.fastapi_routes.xcagi_compat.system_industries）；多为历史兼容别名，后注册者运行时覆盖前者
+- `GET /api/system/industry` — GET /api/system/industry 存在 2 个处理器但只有 1 个进入文档（endpoint: app.fastapi_routes.system_routes.get_current_industry_endpoint, app.fastapi_routes.xcagi_compat.system_industry_get）；多为历史兼容别名，后注册者运行时覆盖前者
+- `POST /api/system/industry` — POST /api/system/industry 存在 2 个处理器但只有 1 个进入文档（endpoint: app.fastapi_routes.system_routes.set_industry_endpoint, app.fastapi_routes.xcagi_compat.system_industry_post）；多为历史兼容别名，后注册者运行时覆盖前者
+- `GET /api/health` — GET /api/health 存在 2 个处理器但只有 1 个进入文档（endpoint: app.fastapi_routes._register_health_routes.<locals>.health_check, app.fastapi_routes.ai_assistant.compat_health）；多为历史兼容别名，后注册者运行时覆盖前者
+- `GET /api/lan/admin/settings` — GET /api/lan/admin/settings 存在 2 个处理器但只有 1 个进入文档（endpoint: app.fastapi_routes.lan_admin_routes.get_settings, app.fastapi_routes.lan_settings_routes.get_settings）；多为历史兼容别名，后注册者运行时覆盖前者
+- `PUT /api/lan/admin/settings` — PUT /api/lan/admin/settings 存在 2 个处理器但只有 1 个进入文档（endpoint: app.fastapi_routes.lan_admin_routes.update_settings, app.fastapi_routes.lan_settings_routes.update_settings）；多为历史兼容别名，后注册者运行时覆盖前者
+- `POST /api/lan/admin/settings` — POST /api/lan/admin/settings 存在 2 个处理器但只有 1 个进入文档（endpoint: app.fastapi_routes.lan_admin_routes.update_settings, app.fastapi_routes.lan_settings_routes.update_settings）；多为历史兼容别名，后注册者运行时覆盖前者
+- `GET /api/intent-packages` — GET /api/intent-packages 存在 2 个处理器但只有 1 个进入文档（endpoint: app.fastapi_routes.xcagi_compat.compat_intent_packages_hyphen, app.fastapi_routes.xcagi_compat.compat_intent_packages_hyphen_slash）；多为历史兼容别名，后注册者运行时覆盖前者
+- `GET /api/intent_packages` — GET /api/intent_packages 存在 2 个处理器但只有 1 个进入文档（endpoint: app.fastapi_routes.xcagi_compat.compat_intent_packages_underscore, app.fastapi_routes.xcagi_compat.compat_intent_packages_underscore_slash）；多为历史兼容别名，后注册者运行时覆盖前者
+
+## [INFO] ROUTE_HIDDEN_FROM_SCHEMA  (11)
+
+- `GET /api/health` — 路由被显式标记为不进入 OpenAPI：GET /api/health
+- `GET /api/intent-packages` — 路由被显式标记为不进入 OpenAPI：GET /api/intent-packages
+- `GET /api/intent_packages` — 路由被显式标记为不进入 OpenAPI：GET /api/intent_packages
+- `GET /api/lan/admin/settings` — 路由被显式标记为不进入 OpenAPI：GET /api/lan/admin/settings
+- `GET /api/startup/status` — 路由被显式标记为不进入 OpenAPI：GET /api/startup/status
+- `GET /api/system/industries` — 路由被显式标记为不进入 OpenAPI：GET /api/system/industries
+- `GET /api/system/industry` — 路由被显式标记为不进入 OpenAPI：GET /api/system/industry
+- `GET /health` — 路由被显式标记为不进入 OpenAPI：GET /health
+- `POST /api/lan/admin/settings` — 路由被显式标记为不进入 OpenAPI：POST /api/lan/admin/settings
+- `POST /api/system/industry` — 路由被显式标记为不进入 OpenAPI：POST /api/system/industry
+- `PUT /api/lan/admin/settings` — 路由被显式标记为不进入 OpenAPI：PUT /api/lan/admin/settings

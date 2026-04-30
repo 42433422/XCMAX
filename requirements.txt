@@ -1,24 +1,58 @@
-# Backend: Excel tools, BGE embeddings, agentic planner
-pandas>=2.0,<3
-openpyxl>=3.1,<4
-xlrd==1.2.0
-sentence-transformers>=2.2,<4
-huggingface-hub>=0.34,<1.0
-torch>=2.0,<3
-openai>=1.0,<2
-numpy>=1.26.4,<2.0
-pytest>=7.0,<9
-testcontainers[postgres]>=4.0,<5
-prophet>=1.1,<2
-fastapi>=0.115,<1
-uvicorn[standard]>=0.30,<1
-python-multipart>=0.0.9,<1
-SQLAlchemy>=2.0,<3
-psycopg[binary]>=3.1,<4
-zstandard>=0.22,<1
-pydantic>=2.0,<3
-cryptography>=42,<46
-httpx>=0.27,<1
-python-docx>=1.1,<2
-Pillow>=10.0,<11
-alipay-sdk>=2.0,<3
+# ⚠️ 重要提示：本项目的 Flask 路由已迁移到 XCAGI FastAPI
+# 现在应该使用 XCAGI/requirements.txt 安装依赖
+# 
+# 安装方式：
+#   cd XCAGI
+#   pip install -r requirements.txt
+#
+# 启动方式：
+#   cd XCAGI
+#   python run.py
+#
+# ============================================
+# 以下依赖仍与 XCAGI 共用
+# ============================================
+Celery==5.3.4
+redis==5.0.1
+openpyxl==3.1.2
+Pillow>=10.2.0
+gunicorn==21.2.0
+gevent==24.2.1
+python-dotenv==1.0.0
+httpx==0.26.0
+edge-tts>=6.1.10
+# 奇士美 PRO phone_agent：VB-Cable 播放前 MP3→PCM（无系统 ffmpeg 时）
+miniaudio>=1.59
+imageio-ffmpeg>=0.4.0
+# 奇士美 PRO phone_agent：Windows 对方语音 WASAPI 扬声器回环（与 numpy 同用）
+soundcard>=0.4.3
+# 奇士美 PRO phone_agent：WASAPI 失败时回退 PyAudio（立体声混音/指定设备）
+PyAudio>=0.2.14
+# 奇士美 PRO phone_agent：ASR（CTranslate2，通常比 openai-whisper 更快；无则回退 openai-whisper）
+faster-whisper>=1.0.0
+SQLAlchemy>=2.0.0
+alembic>=1.13.0
+psycopg[binary]>=3.1.18
+pgvector>=0.2.5
+
+# ML/AI 预训练模型依赖
+torch>=2.0.0
+transformers>=4.35.0
+scikit-learn>=1.3.0
+pandas>=2.0.0
+xlrd>=2.0.1
+numpy>=1.24.0
+statsmodels>=0.14.6
+prophet>=1.3.0
+accelerate>=0.25.0
+protobuf>=4.25.0
+
+# Retry and resilience
+tenacity>=8.2.0
+prometheus_client>=0.19.0
+psutil>=5.9.0
+
+# 测试依赖
+pytest==7.4.3
+pytest-cov==4.1.0
+pytest-mock==3.12.0

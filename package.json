@@ -1,0 +1,30 @@
+{
+  "name": "xcagi-legacy-static-tests",
+  "version": "7.0.0",
+  "description": "XCAGI 根级旧版 static/ 测试与 lint 配置（真实前端见 frontend/）",
+  "scripts": {
+    "test": "jest",
+    "test:coverage": "jest --coverage",
+    "test:e2e": "playwright test",
+    "lint": "eslint static/js/",
+    "desktop:dev": "npm --prefix desktop run dev",
+    "desktop:build": "npm --prefix desktop run build",
+    "desktop:dist:win": "powershell -ExecutionPolicy Bypass -File scripts/package/build-installer.ps1",
+    "desktop:dist:mac": "bash scripts/package/build-installer.sh"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "@babel/preset-env": "^7.23.0",
+    "eslint": "^8.56.0"
+  },
+  "jest": {
+    "testEnvironment": "jsdom",
+    "moduleFileExtensions": ["js", "json"],
+    "testMatch": ["**/tests/**/*.test.js"],
+    "coverageDirectory": "coverage",
+    "collectCoverageFrom": [
+      "static/js/**/*.js",
+      "!static/js/**/*.test.js"
+    ]
+  }
+}

@@ -1,0 +1,28 @@
+/**
+ * 全景「四工位横拼」：在 desk 逻辑画布上裁掉四周透明边，再边对边贴齐。
+ * 画布宽高优先使用运行时读到的 `naturalWidth`/`naturalHeight`（见 useYuangongDeskIntrinsicSize），
+ * 未加载前回退为下列默认值。更换素材后可微调 TRIM。
+ */
+export const YUANGONG_CANVAS_W = 80
+export const YUANGONG_CANVAS_H = 58
+
+export const YUANGONG_COMPOSED_TRIM = {
+  left: 6,
+  right: 6,
+  top: 0,
+  bottom: 0,
+} as const
+
+/** 默认画布（未探测到实际尺寸时） */
+export function yuangongComposedBaseSize(): { width: number; height: number } {
+  return yuangongComposedBaseSizeFromCanvas(YUANGONG_CANVAS_W, YUANGONG_CANVAS_H)
+}
+
+/** 已知 desk 实际像素尺寸时的裁后可视区域 */
+export function yuangongComposedBaseSizeFromCanvas(canvasW: number, canvasH: number): { width: number; height: number } {
+  const t = YUANGONG_COMPOSED_TRIM
+  return {
+    width: Math.max(1, Math.round(canvasW) - t.left - t.right),
+    height: Math.max(1, Math.round(canvasH) - t.top - t.bottom),
+  }
+}

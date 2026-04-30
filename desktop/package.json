@@ -1,0 +1,27 @@
+{
+  "name": "xcagi-desktop",
+  "version": "7.0.0",
+  "private": true,
+  "author": "XCAGI",
+  "description": "XCAGI desktop shell for Windows and macOS",
+  "main": "dist/main.js",
+  "type": "commonjs",
+  "scripts": {
+    "dev": "npm run build && electron .",
+    "build": "tsc -p tsconfig.json",
+    "pack": "npm run build && electron-builder --dir --config electron-builder.yml",
+    "dist": "npm run build && electron-builder --config electron-builder.yml",
+    "dist:win": "npm run build && electron-builder --win --config electron-builder.yml",
+    "dist:mac": "npm run build && electron-builder --mac --config electron-builder.yml"
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.3"
+  },
+  "devDependencies": {
+    "@electron/notarize": "latest",
+    "@types/node": "latest",
+    "electron": "latest",
+    "electron-builder": "latest",
+    "typescript": "latest"
+  }
+}

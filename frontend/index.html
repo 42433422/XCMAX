@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI 智能助手控制台 - 出货单管理系统</title>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+    <script>
+      // Legacy script loader - only for backward compatibility with old Flask templates
+      // Can be disabled via window.__ENABLE_LEGACY__ = false in production
+      window.addEventListener('load', () => {
+        const enableLegacy = window.__ENABLE_LEGACY__ !== false
+        if (!enableLegacy) return
+
+        const legacyScripts = [
+          '/static/js/core/config.js',
+          '/static/js/core/utils.js',
+          '/static/js/modules/chat.js',
+          '/static/js/modules/file-import.js',
+          '/static/js/modules/wechat.js',
+          '/static/js/pro_feature_widget.js',
+          '/static/js/modules/pro-mode.js?v=2'
+        ]
+
+        const loadSequentially = (index) => {
+          if (index >= legacyScripts.length) return
+          const script = document.createElement('script')
+          script.src = legacyScripts[index]
+          script.onload = () => loadSequentially(index + 1)
+          script.onerror = () => loadSequentially(index + 1)
+          document.body.appendChild(script)
+        }
+
+        console.log('[XCAGI] Loading legacy static JS for compatibility...')
+        loadSequentially(0)
+      })
+    </script>
+  </body>
+</html>

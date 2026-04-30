@@ -1,0 +1,117 @@
+# ============================================================================
+# Line-ending policy (fixes uvicorn --reload false-positive mass-reload storms)
+# ============================================================================
+#
+# Without explicit rules, Git honours core.autocrlf (often 'true' on Windows)
+# and silently rewrites LF<->CRLF whenever it touches a file. That mass mtime
+# bump makes watchfiles / uvicorn --reload think hundreds of files changed at
+# once, triggering a reload loop right after checkout, branch switch, or even
+# a stray `git status`.
+#
+# Policy:
+#   - Source code, configs, docs → always LF (works on Windows Python fine).
+#   - Windows shell scripts (.bat/.cmd) → must be CRLF or cmd.exe mis-parses.
+#   - Binaries → binary (no conversion, no diff).
+# ============================================================================
+
+# Default: text files get LF and no autocrlf conversion
+* text=auto eol=lf
+
+# --- Source code ------------------------------------------------------------
+*.py       text eol=lf
+*.pyi      text eol=lf
+*.pyx      text eol=lf
+*.js       text eol=lf
+*.jsx      text eol=lf
+*.ts       text eol=lf
+*.tsx      text eol=lf
+*.vue      text eol=lf
+*.mjs      text eol=lf
+*.cjs      text eol=lf
+*.css      text eol=lf
+*.scss     text eol=lf
+*.html     text eol=lf
+*.svg      text eol=lf
+
+# --- Configs / data ---------------------------------------------------------
+*.json     text eol=lf
+*.yaml     text eol=lf
+*.yml      text eol=lf
+*.toml     text eol=lf
+*.ini      text eol=lf
+*.cfg      text eol=lf
+*.conf     text eol=lf
+*.env      text eol=lf
+.env.*     text eol=lf
+.editorconfig text eol=lf
+.gitignore text eol=lf
+.gitattributes text eol=lf
+.dockerignore text eol=lf
+
+# --- Docs -------------------------------------------------------------------
+*.md       text eol=lf
+*.mdx      text eol=lf
+*.txt      text eol=lf
+*.rst      text eol=lf
+
+# --- Shell / deploy scripts -------------------------------------------------
+# POSIX shells want LF
+*.sh       text eol=lf
+*.zsh      text eol=lf
+*.bash     text eol=lf
+
+# Windows CMD requires CRLF in .bat/.cmd; LF-only files break parsing
+# (cmd.exe splits commands like 'sions', 'Script').
+*.bat      text eol=crlf
+*.cmd      text eol=crlf
+
+# PowerShell is fine with either but we pick LF for consistency with Git
+# history on cross-platform clones. Edit as CRLF in-editor still works.
+*.ps1      text eol=lf
+
+# Dockerfile / Makefile (LF)
+Dockerfile text eol=lf
+Dockerfile.*  text eol=lf
+Makefile   text eol=lf
+*.mk       text eol=lf
+
+# --- Database migrations / schema ------------------------------------------
+*.sql      text eol=lf
+
+# --- Lock / manifest files (treat as text but don't diff-explode) ----------
+package-lock.json text eol=lf -diff
+yarn.lock  text eol=lf -diff
+pnpm-lock.yaml text eol=lf -diff
+poetry.lock text eol=lf -diff
+
+# --- Binary / opaque --------------------------------------------------------
+*.png      binary
+*.jpg      binary
+*.jpeg     binary
+*.gif      binary
+*.webp     binary
+*.ico      binary
+*.pdf      binary
+*.docx     binary
+*.xlsx     binary
+*.xls      binary
+*.btw      binary
+*.db       binary
+*.sqlite   binary
+*.sqlite3  binary
+*.zip      binary
+*.gz       binary
+*.tar      binary
+*.exe      binary
+*.dll      binary
+*.so       binary
+*.dylib    binary
+*.pyc      binary
+*.pyd      binary
+*.mp3      binary
+*.mp4      binary
+*.wav      binary
+*.pt       binary
+*.safetensors binary
+*.asar     binary
+*.lnk      binary
