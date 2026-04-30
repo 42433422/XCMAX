@@ -12,7 +12,7 @@
 [Vue](https://vuejs.org/)
 [Platform](https://www.microsoft.com/windows/)
 [Code style: black](https://github.com/psf/black)
-[Contributions welcome](https://github.com/42433422/ai-excel-helper/blob/main/.github/CONTRIBUTING.md)
+[Contributions welcome](https://github.com/42433422/ai-excel-helper/blob/master/.github/CONTRIBUTING.md)
 
 ## 🌟 项目简介
 
@@ -105,10 +105,10 @@ rg -n 'version\s*=\s*"[0-9]' app/fastapi_app.py app/infrastructure/mods/manifest
 
 | 项目 | 说明 |
 |------|------|
-| **一体化展示仓库** | **[ai-excel-helper](https://github.com/42433422/ai-excel-helper)**，默认分支 **`main`**，用于公开展示与协作克隆。 |
-| **Git 标签** | 附注标签 **`v7.0.0`** 指向与上表 **语义化 `7.0.0`** 一致的提交；在 `main` 上执行 `git describe --tags` 应得到 **`v7.0.0`**（[标签页](https://github.com/42433422/ai-excel-helper/releases/tag/v7.0.0)）。 |
+| **一体化展示仓库** | **[ai-excel-helper](https://github.com/42433422/ai-excel-helper)**，**主库默认分支为 `master`**，用于公开展示与协作克隆（`git clone` 后默认检出 `master`）。 |
+| **Git 标签** | 附注标签 **`v7.0.0`** 指向与上表 **语义化 `7.0.0`** 一致的提交；在 **`master`** 上执行 `git describe --tags` 应得到 **`v7.0.0`**（[标签页](https://github.com/42433422/ai-excel-helper/releases/tag/v7.0.0)）。 |
 | **与 xcagi 发行说明** | 历史与发行说明仍可与 **[xcagi/releases](https://github.com/42433422/xcagi/releases)** 对照；本仓库 `CHANGELOG` 为一体化树的主变更记录。 |
-| **展示克隆体积控制** | 向 `origin/main` 推送时采用**在 `main` 上增量提交**的方式，避免附带历史中的超大二进制（如旧快照 zip）；**`QClaw/resources/app.asar` 等运行时大包不纳入该分支**，本地完整体验需自行构建或取发行物。 |
+| **展示克隆体积控制** | 向 **`origin/master`** 推送时采用**在 `master` 上增量提交**的方式，避免附带历史中的超大二进制（如旧快照 zip）；**`QClaw/resources/app.asar` 等运行时大包不纳入该分支**，本地完整体验需自行构建或取发行物。 |
 | **CI 触发** | 推送符合 **`v7.*`** 模式的标签会触发 `.github/workflows/` 中桌面/Web 相关流水线；若仅浏览源码、不需要 CI，请避免误推此类标签或按需调整 workflow。 |
 
 ---
