@@ -1,7 +1,8 @@
 # XCAGI 当前版本
 
 > 本文件只记录**单一事实来源**。完整发布说明请看 [`CHANGELOG.md`](CHANGELOG.md)。  
-> [`README.md`](README.md) 中的 **「版本与发布约定」** 与本文件以下各节对齐；若出现不一致，**以本文件为准**并应通过 PR 修正 README。
+> [`README.md`](README.md) 中的 **「版本与发布约定」** 与本文件以下各节对齐；若出现不一致，**以本文件为准**并应通过 PR 修正 README。  
+> **GitHub 主库默认分支**：**`master`**（`ai-excel-helper` 克隆后默认检出；CI/发版请以该分支与 `v7.*` 标签为准）。
 
 ---
 
