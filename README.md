@@ -1,6 +1,6 @@
 # XCAGI v7.0 - 桌面版 + Web 版并行的企业 AI 员工平台
 
-**当前语义化版本：`7.0.0`**（与 [`VERSION.md`](VERSION.md)、根目录 `pyproject.toml` / `package.json` / `frontend/package.json` / `desktop/package.json` 一致）· **Git 默认分支：`main`** · **附注标签：`v7.0.0`**（在 `main` 上执行 `git describe --tags` 应得到 `v7.0.0`）。
+**版本说明索引**：下列 **[版本与发布约定](#version-policy)** 与仓库根目录 **[`VERSION.md`](VERSION.md)** 保持同一套锚点与自检命令；本 README 在该节**复述 `VERSION.md` 正文**并额外说明 **Git / GitHub 展示仓库** 行为。若两处将来出现差异，**以 `VERSION.md` 为准**，README 应随 PR 一并改正。
 
 🤖 **基于 Neuro-DDD（分层 + AI 用例编排）与 FastAPI 的 AI 单据智能处理系统**，适用于各行业的标签打印、出货管理和收货确认场景。
 
@@ -34,13 +34,82 @@
 - 🧭 [迁移总登记册](docs/MIGRATION_REGISTRY.md)(入口统一 / Flask 拆除 / Neuro / 归档索引)
 - 📚 [完整文档](docs/)
 - 📝 [更新日志](CHANGELOG.md)
+- 📌 [版本锚点 VERSION.md](VERSION.md)（**单一事实来源**，与下文 README 节同步）
 - 🤝 [贡献指南](.github/CONTRIBUTING.md)
 
-### 云端 `main` 与 v7 / 7.0.0
+<a id="version-policy"></a>
 
-GitHub 仓库 **[ai-excel-helper](https://github.com/42433422/ai-excel-helper)** 的 **`main`** 承载 **v7.0 源码展示树**，并已打 **Git 附注标签 [`v7.0.0`](https://github.com/42433422/ai-excel-helper/releases/tag/v7.0.0)**（与上文 **语义化 7.0.0** 对齐）。同步策略为在 `origin/main` 上增量提交，避免把历史中的超大二进制（如旧快照里的 zip）推上公网克隆。
+## 版本与发布约定（与 VERSION.md 一致）
 
-公开展示以源码与文档为主；**`QClaw/resources/app.asar` 等大体积运行时文件未纳入该分支**，完整安装与发行仍以本地构建或 [xcagi Release](https://github.com/42433422/xcagi/releases) 为准。推送 **`v7.*`** 标签会触发 `.github/workflows/` 中的桌面/Web 流水线（与「仅浏览代码」用途独立）。
+> 本节的**版本号表、产品定位、相关文档索引、发版前自检命令**与 [`VERSION.md`](VERSION.md) 对齐；完整叙事与按日期的发布说明仍以 [`CHANGELOG.md`](CHANGELOG.md) 为准（当前 GA 章节：**v7.0.0 (2026-04-29) — 桌面化时代**）。
+
+### 版本号（必须同步的锚点）
+
+| 组件 | 版本 | 文件 |
+|------|------|------|
+| **XCAGI 总版本** | `7.0.0` | `CHANGELOG.md`、`README.md` |
+| **Python 包（根）** | `7.0.0` | `pyproject.toml` |
+| **Python 包（XCAGI 子树）** | `7.0.0` | `XCAGI/pyproject.toml` |
+| **前端 SPA** | `7.0.0` | `frontend/package.json` |
+| **桌面壳 npm** | `7.0.0` | `desktop/package.json` |
+| **根级 npm（脚本/测试入口）** | `7.0.0` | `package.json` |
+| **FastAPI 应用** | `7.0.0` | `app/fastapi_app.py`（`FastAPI(version=...)`） |
+| **Mod 依赖校验基线** | `7.0.0` | `app/infrastructure/mods/manifest.py` |
+
+> 独立子工程保留自己的版本号：`MODstore/pyproject.toml`（`0.2.0`）、`MODstore/web/package.json`（`0.2.0`）、`MODstore/market/package.json`（`1.0.0`）。
+
+发版打安装包时脚本使用的 **`-Version` / 参数版本字符串** 须与上表 **7.0.0** 一致（示例见下文 CHANGELOG 摘要中的命令块）。
+
+### 当前定位（v7.0）
+
+**跨平台企业 AI 员工桌面平台** — Windows/macOS 桌面版 + Web 版并行交付，保留 Neuro-DDD + FastAPI + Mod 生态 + Token 认证钱包。
+
+### v7.0.0 发布摘要（详见 CHANGELOG）
+
+以下内容对应 `CHANGELOG.md` **v7.0.0 (2026-04-29) — 桌面化时代** 一节，此处仅作索引；细节、命令与注意事项以 CHANGELOG 全文为准。
+
+- **定位**：由「以 Web 为主的企业 AI 员工平台」升级为「**桌面版 + Web 版并行**」；桌面为 Electron 壳 + 本地 FastAPI 子进程，Web/Docker 路径保留。
+- **新增能力（节选）**：`app/desktop_runtime/`、桌面相关 API（如 `/api/desktop/*`）、`frontend/src/views/DesktopRuntimeView.vue`、`scripts/package/build-*`、`desktop/`、`.github/workflows/release-desktop.yml` / `release-web.yml`、`update-server/` 模板等。
+- **环境与标志**：`XCAGI_DESKTOP_MODE=1` 启用 SQLite / 本地队列等桌面运行时；默认 Web 模式仍为 PostgreSQL + Redis + Celery（见 CHANGELOG 注意事项）。
+- **打包命令示例**（与 CHANGELOG 一致）：
+
+```bash
+# Windows 桌面安装包
+powershell -ExecutionPolicy Bypass -File scripts/package/build-installer.ps1 -Version 7.0.0
+
+# macOS 桌面安装包
+bash scripts/package/build-installer.sh 7.0.0
+```
+
+### 相关文档（与 VERSION.md 相同索引）
+
+- 📝 [完整变更日志 CHANGELOG.md](CHANGELOG.md)
+- 📖 [项目 README](README.md)（即本页）
+- 🏗️ [架构设计 docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- 🗺️ [功能边界 docs/FEATURE_MAP.md](docs/FEATURE_MAP.md)
+- 🧭 [迁移登记册 docs/MIGRATION_REGISTRY.md](docs/MIGRATION_REGISTRY.md)
+
+### 版本同步约定（发版前自检）
+
+当主版本号变更时，必须**同步修改**本节表格中的所有锚点文件，并在 `CHANGELOG.md` 顶部新增一节。建议在 PR 描述里贴一段 diff 摘要。
+
+```bash
+# 快速全仓对齐扫描（与 VERSION.md 中命令一致）
+rg -n --hidden -g '!node_modules' -g '!.archive' -g '!XCAGI/node_modules' \
+  'version\s*=\s*"[0-9]' pyproject.toml XCAGI/pyproject.toml \
+  frontend/package.json desktop/package.json package.json
+rg -n 'version\s*=\s*"[0-9]' app/fastapi_app.py app/infrastructure/mods/manifest.py
+```
+
+### Git 与 GitHub 展示仓库（README 扩展说明）
+
+| 项目 | 说明 |
+|------|------|
+| **一体化展示仓库** | **[ai-excel-helper](https://github.com/42433422/ai-excel-helper)**，默认分支 **`main`**，用于公开展示与协作克隆。 |
+| **Git 标签** | 附注标签 **`v7.0.0`** 指向与上表 **语义化 `7.0.0`** 一致的提交；在 `main` 上执行 `git describe --tags` 应得到 **`v7.0.0`**（[标签页](https://github.com/42433422/ai-excel-helper/releases/tag/v7.0.0)）。 |
+| **与 xcagi 发行说明** | 历史与发行说明仍可与 **[xcagi/releases](https://github.com/42433422/xcagi/releases)** 对照；本仓库 `CHANGELOG` 为一体化树的主变更记录。 |
+| **展示克隆体积控制** | 向 `origin/main` 推送时采用**在 `main` 上增量提交**的方式，避免附带历史中的超大二进制（如旧快照 zip）；**`QClaw/resources/app.asar` 等运行时大包不纳入该分支**，本地完整体验需自行构建或取发行物。 |
+| **CI 触发** | 推送符合 **`v7.*`** 模式的标签会触发 `.github/workflows/` 中桌面/Web 相关流水线；若仅浏览源码、不需要 CI，请避免误推此类标签或按需调整 workflow。 |
 
 ---
 
@@ -492,10 +561,9 @@ cd XCAGI && python run.py
 
 ### v7.0（当前主线）
 
-- **桌面交付**：Windows / macOS 安装包（Electron 壳 + 本地 FastAPI 子进程 + 与 Web 同源 Vue 资源），与 Docker / 本地 `run.py` 并行  
-- **延续 v6 商业化与 Mod 生态**：本地部署授权、Mod 商店分成、Token 认证钱包；Manifest 与路由契约不变  
-- **文档与版本号统一**：根 `VERSION.md`、`CHANGELOG.md`、本 README 与 `docs/*` 主文档以 **7.0.0** 为当前口径  
-- **Git 口径**：一体化展示仓库默认分支 **`main`**；发布锚点为附注标签 **`v7.0.0`**（与 `pyproject.toml` 等 **7.0.0** 字段一致）  
+- **版本与锚点、发版自检、Git/GitHub 行为**：已上收至前文 **[版本与发布约定](#version-policy)**（与 [`VERSION.md`](VERSION.md) 对齐），请勿在本小节重复改版本号表。  
+- **桌面交付**：Windows / macOS 安装包（Electron 壳 + 本地 FastAPI 子进程 + 与 Web 同源 Vue 资源），与 Docker / 本地 `run.py` 并行。  
+- **延续 v6 商业化与 Mod 生态**：本地部署授权、Mod 商店分成、Token 认证钱包；Manifest 与路由契约不变。  
 
 ### v6.0
 

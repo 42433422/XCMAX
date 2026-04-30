@@ -1,6 +1,7 @@
 # XCAGI 当前版本
 
-> 本文件只记录**单一事实来源**。完整发布说明请看 [`CHANGELOG.md`](CHANGELOG.md)。
+> 本文件只记录**单一事实来源**。完整发布说明请看 [`CHANGELOG.md`](CHANGELOG.md)。  
+> [`README.md`](README.md) 中的 **「版本与发布约定」** 与本文件以下各节对齐；若出现不一致，**以本文件为准**并应通过 PR 修正 README。
 
 ---
 
@@ -12,6 +13,8 @@
 | **Python 包（根）** | `7.0.0` | `pyproject.toml` |
 | **Python 包（XCAGI 子树）** | `7.0.0` | `XCAGI/pyproject.toml` |
 | **前端 SPA** | `7.0.0` | `frontend/package.json` |
+| **桌面壳 npm** | `7.0.0` | `desktop/package.json` |
+| **根级 npm（脚本/测试入口）** | `7.0.0` | `package.json` |
 | **FastAPI 应用** | `7.0.0` | `app/fastapi_app.py`（`FastAPI(version=...)`） |
 | **Mod 依赖校验基线** | `7.0.0` | `app/infrastructure/mods/manifest.py` |
 
@@ -36,11 +39,11 @@
 ```bash
 # 快速全仓对齐扫描（PowerShell）
 rg -n --hidden -g '!node_modules' -g '!.archive' -g '!XCAGI/node_modules' \
-   'version\s*=\s*"[0-9]' pyproject.toml XCAGI/pyproject.toml \
-   frontend/package.json package.json
+  'version\s*=\s*"[0-9]' pyproject.toml XCAGI/pyproject.toml \
+  frontend/package.json desktop/package.json package.json
 rg -n 'version\s*=\s*"[0-9]' app/fastapi_app.py app/infrastructure/mods/manifest.py
 ```
 
 ---
 
-*最后更新：2026-04-29*
+*最后更新：2026-04-30（补充 `desktop`/`package.json` 锚点行；与 README「版本与发布约定」交叉引用）*
