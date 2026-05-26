@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Optional
 
@@ -22,6 +22,11 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
+
+def _utc_now_naive() -> datetime:
+    return datetime.now(UTC).replace(tzinfo=None)
+
+
 class Base(DeclarativeBase):
     pass
 
@@ -34,7 +39,7 @@ class User(Base):
     email = Column(String(128), unique=True, nullable=True)
     password_hash = Column(String(256), nullable=False)
     is_admin = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=_utc_now_naive)
 
 
 class Wallet(Base):
@@ -43,7 +48,7 @@ class Wallet(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False)
     balance = Column(Float, default=0.0)
-    updated_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=_utc_now_naive)
 
 
 class Transaction(Base):
@@ -55,7 +60,7 @@ class Transaction(Base):
     txn_type = Column(String(32), nullable=False)
     status = Column(String(16), default="completed")
     description = Column(Text, default="")
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=_utc_now_naive)
 
 
 class CatalogItem(Base):
@@ -72,7 +77,7 @@ class CatalogItem(Base):
     stored_filename = Column(String(256), default="")
     sha256 = Column(String(64), default="")
     is_public = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=_utc_now_naive)
 
 
 class Purchase(Base):
@@ -82,7 +87,7 @@ class Purchase(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     catalog_id = Column(Integer, ForeignKey("catalog_items.id"), nullable=False)
     amount = Column(Float, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=_utc_now_naive)
 
 
 def default_db_path() -> Path:

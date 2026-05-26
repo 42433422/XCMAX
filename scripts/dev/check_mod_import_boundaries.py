@@ -9,7 +9,6 @@
 
     mods/**/*.py
     XCAGI/mods/**/*.py
-    XCAGI/AI手机电话功能包/backend/**/*.py
 
 允许的跨边界 import：
 
@@ -39,7 +38,6 @@ from pathlib import Path
 MOD_ROOTS = (
     Path("mods"),
     Path("XCAGI") / "mods",
-    Path("XCAGI") / "AI手机电话功能包" / "backend",
 )
 
 # 允许跨边界导入的前缀（严格匹配起始 token）
