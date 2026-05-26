@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from app.mod_sdk.platform_shell import (
     BRIDGE_MOD_HOST_APIS,
     CORE_WORKFLOW_MOD_ID,
@@ -9,6 +11,20 @@ from app.mod_sdk.platform_shell import (
     PROTECTED_CLIENT_MOD_IDS,
     build_platform_shell_payload,
 )
+
+
+@pytest.fixture(autouse=True)
+def _isolate_edition_and_sku_env(monkeypatch):
+    for key in (
+        "XCAGI_PRODUCT_SKU",
+        "XCAGI_EDITION",
+        "XCAGI_GENERIC_EDITION",
+        "XCAGI_MINIMAL_EDITION",
+        "XCAGI_PRODUCT_SKU_FILE",
+        "XCAGI_RESOURCES_DIR",
+    ):
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setattr("app.mod_sdk.product_skus.resolve_product_sku", lambda: None)
 
 
 def test_build_platform_shell_payload(monkeypatch):

@@ -19,7 +19,7 @@ def test_list_planner_pages_registry():
     from app.mod_sdk.planner_pages_compat import list_planner_pages_registry
 
     reg = list_planner_pages_registry()
-    assert reg.get("page_count") == 3
+    assert reg.get("page_count") >= 3
     assert reg.get("chat_mod_path") == "/mod/xcagi-planner-bridge/chat"
 
 

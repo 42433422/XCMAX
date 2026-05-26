@@ -15,6 +15,30 @@ from app.mod_sdk.edition_policy import (
 from app.mod_sdk.platform_shell import GENERIC_HOST_MOD_IDS, MINIMAL_HOST_MOD_IDS
 
 
+@pytest.fixture(autouse=True)
+def _isolate_edition_and_sku_env(monkeypatch):
+    """全量套件中其它用例可能写入 SKU/EDITION，导致本文件断言 full。"""
+    for key in (
+        "XCAGI_PRODUCT_SKU",
+        "XCAGI_EDITION",
+        "XCAGI_GENERIC_EDITION",
+        "XCAGI_MINIMAL_EDITION",
+        "XCAGI_DEFAULT_EDITION",
+        "XCAGI_PRODUCT_SKU_FILE",
+        "XCAGI_RESOURCES_DIR",
+        "XCAGI_DESKTOP_RESOURCES",
+    ):
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setattr(
+        "app.mod_sdk.product_skus.resolve_product_sku",
+        lambda: None,
+    )
+    monkeypatch.setattr(
+        "app.mod_sdk.host_profile._resolve_product_sku",
+        lambda: None,
+    )
+
+
 def test_resolve_edition_generic(monkeypatch):
     monkeypatch.delenv("XCAGI_EDITION", raising=False)
     monkeypatch.setenv("XCAGI_GENERIC_EDITION", "1")

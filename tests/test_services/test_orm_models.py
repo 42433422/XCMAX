@@ -47,8 +47,7 @@ class TestPurchaseUnitModel:
             contact_person="张三",
             contact_phone="13800138000",
             address="测试地址",
-            discount_rate=0.9,
-            is_active=1
+            is_active=True,
         )
         test_session.add(unit)
         test_session.commit()
@@ -57,8 +56,7 @@ class TestPurchaseUnitModel:
         assert unit.id is not None
         assert unit.unit_name == "测试购货单位"
         assert unit.contact_person == "张三"
-        assert unit.discount_rate == 0.9
-        assert unit.is_active == 1
+        assert unit.is_active is True
     
     def test_purchase_unit_soft_delete(self, test_session):
         """测试软删除"""

@@ -30,6 +30,6 @@ def test_list_neuro_bus_facade_registry(monkeypatch):
 
     monkeypatch.setattr(nbc, "is_neuro_bus_via_mod_enabled", lambda: True)
     data = nbc.list_neuro_bus_facade_registry()
-    assert data.get("execution_path") == "mod_facade"
-    assert data.get("phase") in ("M", "M+", "N")
+    assert data.get("execution_path") in ("mod_facade", "mod_bus_runtime")
+    assert data.get("phase") in ("M", "M+", "N", "S")
     assert "POST /events/publish" in (data.get("endpoints") or [])

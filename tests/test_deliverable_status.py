@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from app.mod_sdk.deliverable_status import build_deliverable_status
 from app.mod_sdk.erp_domain_compat import ERP_DOMAIN_BRIDGE_MOD_ID
 from app.mod_sdk.platform_shell import GENERIC_HOST_MOD_IDS, MINIMAL_HOST_MOD_IDS
@@ -9,6 +11,20 @@ from app.mod_sdk.product_skus import (
     ENTERPRISE_HOST_MOD_IDS,
     PERSONAL_HOST_MOD_IDS,
 )
+
+
+@pytest.fixture(autouse=True)
+def _isolate_sku_env(monkeypatch):
+    for key in (
+        "XCAGI_PRODUCT_SKU",
+        "XCAGI_EDITION",
+        "XCAGI_GENERIC_EDITION",
+        "XCAGI_MINIMAL_EDITION",
+        "XCAGI_PRODUCT_SKU_FILE",
+        "XCAGI_RESOURCES_DIR",
+    ):
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setattr("app.mod_sdk.product_skus.resolve_product_sku", lambda: None)
 
 
 def test_deliverable_generic_when_pack_complete():

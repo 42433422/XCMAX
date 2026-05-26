@@ -303,7 +303,18 @@ def _recognize_intents_impl(message: str) -> dict[str, Any]:
         "all_matched_tools": [],
     }
 
-    basic_intents = _reflex_basic_intents(message)
+    try:
+        basic_intents = _reflex_basic_intents(message)
+    except Exception as exc:
+        logger.warning("reflex basic intents skipped: %s", exc)
+        basic_intents = {
+            "is_greeting": False,
+            "is_goodbye": False,
+            "is_help": False,
+            "is_confirmation": False,
+            "is_negation_intent": False,
+            "is_negated": False,
+        }
     result.update(basic_intents)
 
     engine = get_rule_engine()
@@ -379,11 +390,12 @@ def _recognize_intents_impl(message: str) -> dict[str, Any]:
                 if "shipment_generate" not in result["intent_hints"]:
                     result["intent_hints"].append("shipment_generate")
 
-    if result["tool_key"] == "products":
+    if result["tool_key"] in (None, "products", "print_label"):
         has_print_kw = ("打印" in msg) or msg.startswith("打印")
         has_model_spec = (
             re.search(r"(\d+)\s*规格\s*(\d+(?:\.\d+)?)", msg) is not None
             or re.search(r"(\d+)\s*的\s*规格\s*(\d+(?:\.\d+)?)", msg) is not None
+            or re.search(r"(\d+)规格(\d+(?:\.\d+)?)", msg) is not None
         )
         has_container_qty = any(k in msg for k in ["桶", "箱", "件", "公斤", "kg"])
         if has_print_kw and has_model_spec and not has_container_qty and not result["is_negated"]:
@@ -440,7 +452,11 @@ def _recognize_intents_impl(message: str) -> dict[str, Any]:
         model = unit_model_match.group(2)
         from app.infrastructure.lookups.purchase_unit_resolver import resolve_purchase_unit
 
-        resolved = resolve_purchase_unit(potential_unit)
+        try:
+            resolved = resolve_purchase_unit(potential_unit)
+        except Exception as exc:
+            logger.warning("resolve_purchase_unit skipped: %s", exc)
+            resolved = None
         if resolved:
             result["slots"] = {"unit_name": resolved.unit_name, "model_number": model}
         else:

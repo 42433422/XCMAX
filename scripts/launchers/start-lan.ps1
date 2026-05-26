@@ -709,6 +709,12 @@ function Show-Info {
 }
 
 # --- Main -------------------------------------------------------------------
+if ($StopOnly) {
+    Stop-Existing
+    Write-Success "StopOnly requested; not starting anything."
+    exit 0
+}
+
 Clear-Host
 Write-Host ""
 Write-Host '              XCAGI  v7.0' -ForegroundColor Green
@@ -725,11 +731,6 @@ Write-Host ('       LAN Dev Launcher · FastAPI :{0} + Vite :{1}' -f $BackendPor
 Write-Host ""
 
 Stop-Existing
-
-if ($StopOnly) {
-    Write-Success "StopOnly requested; not starting anything."
-    exit 0
-}
 
 # --- Firewall rules (only when running as admin) ---------------------------
 if ($ConfigureFirewall) {
