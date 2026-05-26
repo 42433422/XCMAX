@@ -76,8 +76,22 @@ def test_catalog_upload_with_token(monkeypatch, tmp_path: Path):
     )
     assert r.status_code == 200, r.text
     idx = c.get("/v1/index.json").json()
+    # 仅登记到 packages.json、未在市场上架时，公网 index 不应暴露
+    assert idx["packages"] == []
+
+    from modstore_server.db import get_session_factory
+    from modstore_server.models import CatalogItem
+
+    sf = get_session_factory()
+    with sf() as session:
+        row = session.query(CatalogItem).filter(CatalogItem.pkg_id == "catalog-test-mod").first()
+        if row:
+            row.is_public = True
+            session.commit()
+    idx = c.get("/v1/index.json").json()
     assert len(idx["packages"]) == 1
     assert idx["packages"][0]["id"] == "catalog-test-mod"
+    assert idx["packages"][0].get("public_listing") is True
 
 
 def test_catalog_upload_blocked_when_employee_gate_on(monkeypatch, tmp_path: Path):

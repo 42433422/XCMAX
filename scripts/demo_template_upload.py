@@ -2,7 +2,7 @@
 演示脚本：展示模板上传功能的使用
 
 运行此脚本前，请确保：
-1. 后端服务正在运行 (uvicorn backend.http_app:app --reload)
+1. 后端服务正在运行 (cd XCAGI && python run.py，默认端口 5000)
 2. 已安装 requests 库 (pip install requests)
 """
 
@@ -259,11 +259,11 @@ def main():
         response = requests.get(f"{BASE_URL}/docs")
         if response.status_code != 200:
             print(f"⚠ 警告：后端服务可能未运行 (状态码：{response.status_code})")
-            print(f"  请先运行：uvicorn backend.http_app:app --reload")
+            print("  请先运行：cd XCAGI && python run.py")
             return
     except requests.exceptions.ConnectionError:
         print(f"✗ 错误：无法连接到后端服务 ({BASE_URL})")
-        print(f"  请确保后端服务正在运行：uvicorn backend.http_app:app --reload")
+        print("  请确保后端服务正在运行：cd XCAGI && python run.py")
         return
     
     print("✓ 后端服务连接成功")

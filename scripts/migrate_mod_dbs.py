@@ -77,6 +77,10 @@ def main(argv: list[str] | None = None) -> int:
 
     base_u = make_url(url)
     base_db = (base_u.database or "xcagi").strip()
+
+    def url_for_database(dbname: str) -> str:
+        return base_u.set(database=dbname).render_as_string(hide_password=False)
+
     alembic_ini = _ROOT / "alembic.ini"
     if not alembic_ini.is_file():
         print(f"ERROR: alembic.ini not found at {alembic_ini}", file=sys.stderr)
@@ -104,7 +108,7 @@ def main(argv: list[str] | None = None) -> int:
         if not suf:
             continue
         dbn = f"{base_db}__{suf}"
-        mod_url = str(base_u.set(database=dbn))
+        mod_url = url_for_database(dbn)
         env = os.environ.copy()
         env["DATABASE_URL"] = mod_url
 

@@ -38,6 +38,7 @@ ENV/
 .cursor/logs/
 *.swp
 *.swo
+*.bak
 *~
 
 # ============================================================================
@@ -62,8 +63,13 @@ coverage/
 *.sqlite
 *.sqlite3
 data/dev-db/
+XCAGI/data/desktop-dev/
+XCAGI/data/enterprise-desktop/
 data/model_payment_orders.json
 customer_products_final_corrected.db
+
+# Stray local scratch (historical)
+XCAGI/dy
 
 # ============================================================================
 # Logs & temporary output
@@ -78,6 +84,14 @@ test_ocr_modify.log
 test_trademark_files.log
 tsc-errors.txt
 cleanup_report.txt
+**/_fail*.txt
+_fail*.txt
+_full*.txt
+_pytest*.txt
+_sweep*.txt
+startup_output.txt
+test_image.*
+test_barcode*
 
 # ============================================================================
 # OS
@@ -91,6 +105,7 @@ Thumbs.db
 .env
 .env.local
 .env.*.local
+scripts/package/upload-release.env
 .secrets/
 **/alipay_app_private.pem
 **/alipay_*_private*.pem
@@ -183,3 +198,6 @@ sz-qsm-pro-1.0.0.xcmod
 data/exports/
 合同/
 _compare_convert_output.xlsx
+
+# Removed mods snapshot (restored from git; may contain large zips)
+_archived_removed_mods/

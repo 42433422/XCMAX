@@ -29,8 +29,9 @@ def main() -> int:
     try:
         from sqlalchemy import inspect, text
 
-        from backend.database import get_sync_engine
-        from backend.document_template_service import ROLE_SALES_CONTRACT
+        from app.infrastructure.db.sync_engine import get_sync_engine
+
+        ROLE_SALES_CONTRACT = "sales_contract_docx"
     except Exception as e:
         print("导入失败:", e)
         return 1

@@ -14,7 +14,7 @@ import os
 from datetime import datetime
 
 def export_customers():
-    """导出客户/购买单位数据"""
+    """导出客户数据"""
     try:
         from app.db.models.purchase_unit import PurchaseUnit
         from app.db.session import get_customers_session
