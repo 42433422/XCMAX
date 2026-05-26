@@ -11,9 +11,13 @@ class TestLegacyShipmentDocumentGenerator:
     """发货单文档生成器测试"""
 
     @patch.object(LegacyShipmentDocumentGenerator, "_load_products_from_main_db", return_value=[])
+    @patch(
+        "app.infrastructure.documents.shipment_document_generator_impl.prepare_parsed_products",
+        return_value=[{"name": "测试产品", "quantity": 1}],
+    )
     @patch("app.infrastructure.documents.shipment_document_generator_impl.resolve_purchase_unit")
     @patch("app.infrastructure.documents.shipment_document_generator_impl.load_legacy_shipment_document_generator")
-    def test_generate_success(self, mock_loader, mock_resolve, _mock_products_db):
+    def test_generate_success(self, mock_loader, mock_resolve, _mock_prepare, _mock_products_db):
         resolved = MagicMock()
         resolved.unit_name = "测试单位"
         resolved.contact_person = "张三"
@@ -32,8 +36,10 @@ class TestLegacyShipmentDocumentGenerator:
         }
         ShipmentDocumentGenerator = MagicMock()
         ShipmentDocumentGenerator.return_value.generate_document.return_value = fake_doc
+        PurchaseUnitInfo = MagicMock()
         loader_ns = MagicMock()
         loader_ns.ShipmentDocumentGenerator = ShipmentDocumentGenerator
+        loader_ns.PurchaseUnitInfo = PurchaseUnitInfo
         mock_loader.return_value = loader_ns
 
         gen = LegacyShipmentDocumentGenerator()
