@@ -3,8 +3,8 @@ package com.xiuci.xcagi.mobile
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.fragment.app.FragmentActivity
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -17,7 +17,7 @@ import com.xiuci.xcagi.mobile.ui.theme.XcagiTheme
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
     private var unlocked = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
