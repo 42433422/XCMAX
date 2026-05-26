@@ -261,7 +261,11 @@ def query_trade(out_trade_no: str):
     local = mp_orders.get_order(out_trade_no)
     if not res["ok"]:
         return JSONResponse(
-            {"success": False, "message": res.get("message") or "查询失败", "data": {"local": local}}
+            {
+                "success": False,
+                "message": res.get("message") or "查询失败",
+                "data": {"local": local},
+            }
         )
     return JSONResponse(
         {
@@ -285,7 +289,9 @@ def refund_trade(body: dict[str, Any] = Body(default_factory=dict)):
     if not out_trade_no:
         return JSONResponse({"success": False, "message": "out_trade_no 必填"}, status_code=400)
     if not refund_amount:
-        return JSONResponse({"success": False, "message": "refund_amount 必填（元）"}, status_code=400)
+        return JSONResponse(
+            {"success": False, "message": "refund_amount 必填（元）"}, status_code=400
+        )
 
     res = mp_ali.refund_order(
         out_trade_no=out_trade_no,

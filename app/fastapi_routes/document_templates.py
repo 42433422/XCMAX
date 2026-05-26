@@ -4,7 +4,9 @@ from typing import Any
 
 from fastapi import APIRouter, Query
 
-from app.infrastructure.documents.template_registry import list_templates as list_builtin_document_templates
+from app.infrastructure.documents.template_registry import (
+    list_templates as list_builtin_document_templates,
+)
 
 public_router = APIRouter(prefix="/api/document-templates", tags=["document-templates"])
 admin_router = APIRouter(prefix="/api/admin/document-templates", tags=["admin-document-templates"])

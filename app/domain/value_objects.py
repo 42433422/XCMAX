@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any
 
 from app.domain.value_objects_industry import get_current_industry_config
 
@@ -46,7 +46,7 @@ class Quantity:
         tins: int | None = None,
         kg: float | None = None,
         spec_per_tin: float | None = None,
-        industry_config: Optional[Dict[str, Any]] = None,
+        industry_config: dict[str, Any] | None = None,
     ):
         if tins is not None:
             primary = tins
@@ -134,7 +134,7 @@ class Quantity:
     def __hash__(self) -> int:
         return hash((self.primary, self.secondary, self.spec))
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """转换为字典，支持多行业"""
         config = self._industry_config
         return {
@@ -143,7 +143,7 @@ class Quantity:
             config.get("spec_field", "spec_per_tin"): self.spec,
         }
 
-    def to_industry_dict(self) -> Dict[str, Any]:
+    def to_industry_dict(self) -> dict[str, Any]:
         """转换为包含行业标签的字典"""
         return {
             "primary": self.primary,
@@ -174,7 +174,7 @@ class Quantity:
         return cls(primary=primary, secondary=secondary, spec=spec)
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "Quantity":
+    def from_dict(cls, data: dict[str, Any]) -> "Quantity":
         """从字典创建，支持多行业字段名"""
         industry_config = get_current_industry_config()
         primary_field = industry_config.get("primary_field", "tins")
@@ -212,7 +212,7 @@ class ContactInfo:
 
     person: str
     phone: str
-    address: Optional[str] = None
+    address: str | None = None
 
     @classmethod
     def empty(cls) -> "ContactInfo":

@@ -55,7 +55,7 @@ def _verify_mp_jwt(token: str) -> dict[str, Any] | None:
 
         payload = json.loads(b64url_decode(parts[1]).decode("utf-8"))
         signature = b64url_decode(parts[2])
-        message = f"{parts[0]}.{parts[1]}".encode("utf-8")
+        message = f"{parts[0]}.{parts[1]}".encode()
         expected = hmac.new(secret, message, hashlib.sha256).digest()
         if not hmac.compare_digest(signature, expected):
             return None
@@ -195,9 +195,7 @@ def build_mp_product_detail_response(product_id: int) -> JSONResponse:
     try:
         with get_db() as db:
             product = (
-                db.query(Product)
-                .filter(Product.id == product_id, Product.is_active == 1)
-                .first()
+                db.query(Product).filter(Product.id == product_id, Product.is_active == 1).first()
             )
             if not product:
                 return _mp_json(404, "产品不存在", success=False)
@@ -307,11 +305,7 @@ def _build_items_from_mp_products(products: list[Any]) -> list[dict[str, Any]]:
             price = float(p.get("price") or 0)
             if pid is None or qty <= 0:
                 continue
-            prod = (
-                db.query(Product)
-                .filter(Product.id == int(pid), Product.is_active == 1)
-                .first()
-            )
+            prod = db.query(Product).filter(Product.id == int(pid), Product.is_active == 1).first()
             if not prod:
                 continue
             out.append(
@@ -349,7 +343,7 @@ def _order_prefixes_for_shipment_row(row: dict[str, Any]) -> list[str]:
     return out
 
 
-# ----- 与 Flask 路由优先级一致（先于 xcagi 注册）-----
+# ----- 与归档蓝图路由优先级一致（先于 xcagi 注册）-----
 
 
 @router.get("/api/products")
@@ -487,9 +481,7 @@ def api_shipment_list_unified(
     eff_unit = (unit_name or unit or "").strip() or None
 
     if kind == "ok":
-        return build_mp_shipment_list_response(
-            eff_unit, start_date, end_date, page, per_page
-        )
+        return build_mp_shipment_list_response(eff_unit, start_date, end_date, page, per_page)
     if kind == "invalid":
         return _mp_json(401, "token 无效或已过期", {"error": "invalid_token"}, success=False)
 
@@ -594,7 +586,7 @@ def mp_list_labels(
     )
 
 
-# ----- 归档中存在但被其它 Flask 蓝图覆盖；显式子路径保留小程序 JSON 形态 -----
+# ----- 归档中被其它蓝图覆盖；显式子路径保留小程序 JSON 形态 -----
 
 
 @router.get("/api/wx/miniprogram/products/{product_id:int}")
@@ -640,6 +632,4 @@ def mp_shipment_list_shadow(
     _auth = _parse_mp_auth(authorization)
     if isinstance(_auth, JSONResponse):
         return _auth
-    return build_mp_shipment_list_response(
-        unit_name, start_date, end_date, page, per_page
-    )
+    return build_mp_shipment_list_response(unit_name, start_date, end_date, page, per_page)

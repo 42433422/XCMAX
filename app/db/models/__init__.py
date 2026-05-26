@@ -13,6 +13,7 @@ from app.db.models.approval import (
     ApprovalRequest,
 )
 from app.db.models.customer import Customer
+from app.db.models.finance import FinancialTransaction
 from app.db.models.inventory import (
     InventoryLedger,
     InventoryTransaction,
@@ -44,12 +45,15 @@ from app.db.models.shipment import ShipmentRecord
 from app.db.models.user import Session as UserSession
 from app.db.models.user import User
 from app.db.models.wechat import WechatContact, WechatContactContext, WechatTask
+from app.db.models.service_request import ServiceBridgeConfig, ServiceRequest
+from app.db.models.mobile_device import MobileDeviceToken
 
 __all__ = [
     "PurchaseUnit",
     "Product",
     "ShipmentRecord",
     "Customer",
+    "FinancialTransaction",
     "WechatTask",
     "WechatContact",
     "WechatContactContext",
@@ -85,4 +89,6 @@ __all__ = [
     "ApprovalRequest",
     "ApprovalRecord",
     "ApprovalDelegation",
+    "ServiceRequest",
+    "ServiceBridgeConfig",
 ]

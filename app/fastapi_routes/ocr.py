@@ -1,4 +1,4 @@
-"""OCR API（自归档 Flask ocr 蓝图迁移）。"""
+"""OCR API（继承自归档 ocr 蓝图的端点契约）。"""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ from typing import Any
 
 from fastapi import APIRouter, Body, File, Form, UploadFile
 from fastapi.responses import JSONResponse
+
 from app.utils.secure_filename import secure_filename
 
 logger = logging.getLogger(__name__)
@@ -20,7 +21,7 @@ ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "bmp", "tiff", "webp"}
 
 @lru_cache(maxsize=1)
 def _get_ocr_service():
-    from app.services import get_ocr_service as _get
+    from app.application.facades.ocr_facade import get_ocr_service as _get
 
     return _get()
 
@@ -48,7 +49,9 @@ async def ocr_recognize(
                 f.write(body)
 
         if not resolved_path:
-            return JSONResponse({"success": False, "message": "请提供图像文件或文件路径"}, status_code=400)
+            return JSONResponse(
+                {"success": False, "message": "请提供图像文件或文件路径"}, status_code=400
+            )
 
         service = _get_ocr_service()
         result = service.recognize_file(resolved_path)
@@ -106,7 +109,9 @@ async def ocr_recognize_and_extract(
                 f.write(body)
 
         if not resolved_path:
-            return JSONResponse({"success": False, "message": "请提供图像文件或文件路径"}, status_code=400)
+            return JSONResponse(
+                {"success": False, "message": "请提供图像文件或文件路径"}, status_code=400
+            )
 
         service = _get_ocr_service()
         recognize_result = service.recognize_file(resolved_path)
