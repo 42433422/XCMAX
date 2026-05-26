@@ -210,7 +210,16 @@ class TestNeuroBusPublishSubscribe:
 
 class TestNeuroBusMetrics:
     @pytest.mark.asyncio
-    async def test_published_count(self):
+    async def test_published_count(self, monkeypatch):
+        # 全量套件中其它用例可能留下 FHD_ENV / 可靠性开关，导致 dedup 拦截第二次 publish
+        monkeypatch.delenv("FHD_ENV", raising=False)
+        for name in (
+            "XCAGI_NEURO_BUS_DEDUP",
+            "XCAGI_NEURO_BUS_CIRCUIT",
+            "XCAGI_NEURO_BUS_RATE_LIMIT",
+            "XCAGI_NEURO_BUS_LIFELINE",
+        ):
+            monkeypatch.delenv(name, raising=False)
         bus = NeuroBus(enable_metrics=True)
         await bus.start()
         try:
