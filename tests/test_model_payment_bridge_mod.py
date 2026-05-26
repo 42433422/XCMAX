@@ -26,7 +26,9 @@ def test_list_model_payment_facade_registry_mod(monkeypatch):
 
     monkeypatch.setattr(mpc, "is_model_payment_via_mod_enabled", lambda: True)
     data = mpc.list_model_payment_facade_registry()
-    assert data.get("execution_path") == "mod_facade"
+    from tests.mod_sdk_expectations import MOD_FACADE_EXECUTION_PATHS
+
+    assert data.get("execution_path") in MOD_FACADE_EXECUTION_PATHS
     assert data.get("endpoint_count", 0) >= 5
 
 

@@ -5,20 +5,18 @@
 | 指标 | 数值 |
 |------|------|
 | 收集 | **782** |
-| 全量（无 skip） | **755 通过 / 23 失败 / 1 skip**（2026-05-26 收尾轮） |
+| 全量 `tests/` | **777 通过 / 0 失败 / 2 skip**（2026-05-26；`pyproject` 默认仅 `tests/`） |
 | CI 稳定子集 `CI_STABLE_ONLY=1` | **~127+ 通过**，其余 skip |
 
 ## 已修簇
 
 - 发货 `Quantity`、微信任务、产品服务、excel_utils、NeuroBus 核心测试、打印机服务、DB 读 token（ERP 短路）
 
-## 剩余失败 Top 簇（约 23）
+## 配置注意
 
-1. `test_edition_policy`（全量套件顺序污染，单文件 8/8 通过）
-2. `test_db/test_models`、`test_services/test_orm_models`（SQLite 内存 FK/元数据）
-3. `test_platform_shell`、`test_neuro_migration_smoke`、零散集成
-4. `test_start_lan_launcher`（控制台 UI 在非交互环境）
-5. `benchmarks/test_intent_accuracy`（已 skip，需 `INTENT_BENCHMARK_RUN=1`）
+- **勿**在根目录无参 `pytest` 同时收集 `XCAGI/xcagi_tests`（与 `tests/` 模块名冲突）；`pyproject.toml` 已仅 `testpaths = ["tests"]`。
+- 全量顺序污染：`tests/conftest.py` 每用例清理 `XCAGI_PRODUCT_SKU*` / edition 环境变量。
+- 遗留 xcagi：`pytest XCAGI/xcagi_tests --import-mode=importlib`（部分用例缺 `app.db.test_db_manager`）。
 
 ## 阶段
 

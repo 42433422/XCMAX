@@ -71,6 +71,30 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 
+@pytest.fixture(autouse=True)
+def _isolate_edition_and_product_sku_env(monkeypatch):
+    """
+    全量后端测试顺序敏感：其它用例或桌面 product-sku.json 会留下
+    XCAGI_PRODUCT_SKU / XCAGI_EDITION，导致 edition/generic/minimal 与 deliverable 断言失败。
+    """
+    for key in (
+        "XCAGI_PRODUCT_SKU",
+        "XCAGI_EDITION",
+        "XCAGI_GENERIC_EDITION",
+        "XCAGI_MINIMAL_EDITION",
+        "XCAGI_DEFAULT_EDITION",
+        "XCAGI_RESOURCES_DIR",
+        "XCAGI_DESKTOP_RESOURCES",
+        "XCAGI_STAGED_MODS_DIR",
+    ):
+        monkeypatch.delenv(key, raising=False)
+    # 避免读取安装目录 product-sku.json；各用例仍可用 monkeypatch.setenv("XCAGI_PRODUCT_SKU", ...)
+    monkeypatch.setenv(
+        "XCAGI_PRODUCT_SKU_FILE",
+        os.path.join(PROJECT_ROOT, "tests", "_fixtures", "no-product-sku.json"),
+    )
+
+
 # ---------------------------------------------------------------------------
 # FastAPI 应用/客户端 fixture
 # ---------------------------------------------------------------------------

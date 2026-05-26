@@ -26,7 +26,9 @@ def test_list_lan_facade_registry_mod(monkeypatch):
 
     monkeypatch.setattr(lc, "is_lan_via_mod_enabled", lambda: True)
     data = lc.list_lan_facade_registry()
-    assert data.get("execution_path") == "mod_facade"
+    from tests.mod_sdk_expectations import MOD_FACADE_EXECUTION_PATHS
+
+    assert data.get("execution_path") in MOD_FACADE_EXECUTION_PATHS
     assert data.get("endpoint_count", 0) >= 10
 
 

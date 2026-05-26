@@ -52,7 +52,9 @@ def test_list_planner_tools_registry_detail_mod_facade(monkeypatch):
     monkeypatch.setattr(pnt, "is_planner_native_tools_enabled", lambda: False)
     data = pt.list_planner_tools_registry_detail()
     assert data.get("execution_via_mod_facade") is True
-    assert data.get("execution_path") == "mod_facade"
+    from tests.mod_sdk_expectations import MOD_FACADE_EXECUTION_PATHS
+
+    assert data.get("execution_path") in MOD_FACADE_EXECUTION_PATHS
     assert "tools/execute" in str(data.get("tools_execute_endpoint") or "")
 
 

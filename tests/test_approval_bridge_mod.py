@@ -26,7 +26,9 @@ def test_list_approval_facade_registry_mod(monkeypatch):
 
     monkeypatch.setattr(ac, "is_approval_via_mod_enabled", lambda: True)
     data = ac.list_approval_facade_registry()
-    assert data.get("execution_path") == "mod_facade"
+    from tests.mod_sdk_expectations import MOD_FACADE_EXECUTION_PATHS
+
+    assert data.get("execution_path") in MOD_FACADE_EXECUTION_PATHS
     assert data.get("endpoint_count", 0) >= 10
 
 

@@ -67,10 +67,12 @@ def test_manifest_mod_domain_handlers():
     data = json.loads((MOD_DIR / "manifest.json").read_text(encoding="utf-8"))
     handlers = data.get("config", {}).get("mod_domain_handlers") or []
     assert {"products", "shipment", "customers", "wechat"} <= set(handlers)
+    from tests.mod_sdk_expectations import ERP_PHASE_TOKENS, ERP_REPOSITORY_ADAPTERS
+
     cfg = data.get("config", {})
     phase = cfg.get("phase") or cfg.get("repository_phase") or ""
-    assert phase in ("L", "L+", "L++", "K+", "O+")
-    assert cfg.get("repository_adapter") in ("mod_delegated", "mod_factory")
+    assert phase in ERP_PHASE_TOKENS
+    assert cfg.get("repository_adapter") in ERP_REPOSITORY_ADAPTERS
     assert data.get("config", {}).get("erp_extended_pages") is True
     assert data.get("config", {}).get("products_via_service") is True
     assert data.get("config", {}).get("customers_via_service") is True
