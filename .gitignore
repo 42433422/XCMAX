@@ -181,6 +181,9 @@ _perf_*.json
 # ============================================================================
 # Misc
 # ============================================================================
+git-change-inventory.txt
+arch_violations.txt
+test_reports/intent_benchmark_latest.json
 *.spec
 current_page.html
 custom_mode_test.html
