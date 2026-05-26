@@ -5,7 +5,7 @@
 import pytest
 from datetime import datetime
 from app.domain.shipment.aggregates import ShipmentItem, Shipment
-from app.domain.value_objects import Money, Quantity, ContactInfo, OrderNumber
+from app.domain.shipment.legacy_vo import ContactInfo, Money, OrderNumber, Quantity
 
 
 class TestShipmentItem:

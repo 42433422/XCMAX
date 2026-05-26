@@ -10,9 +10,10 @@ from app.infrastructure.documents.shipment_document_generator_impl import Legacy
 class TestLegacyShipmentDocumentGenerator:
     """发货单文档生成器测试"""
 
+    @patch.object(LegacyShipmentDocumentGenerator, "_load_products_from_main_db", return_value=[])
     @patch("app.infrastructure.documents.shipment_document_generator_impl.resolve_purchase_unit")
     @patch("app.infrastructure.documents.shipment_document_generator_impl.load_legacy_shipment_document_generator")
-    def test_generate_success(self, mock_loader, mock_resolve):
+    def test_generate_success(self, mock_loader, mock_resolve, _mock_products_db):
         resolved = MagicMock()
         resolved.unit_name = "测试单位"
         resolved.contact_person = "张三"

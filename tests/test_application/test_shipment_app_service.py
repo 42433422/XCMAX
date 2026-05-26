@@ -6,7 +6,7 @@ import pytest
 from unittest.mock import MagicMock, patch
 from app.application.shipment_app_service import ShipmentApplicationService
 from app.domain.shipment.aggregates import Shipment, ShipmentItem
-from app.domain.value_objects import Money, Quantity, ContactInfo
+from app.domain.shipment.legacy_vo import ContactInfo, Money, Quantity
 
 
 class DummyRepository:
@@ -70,6 +70,11 @@ class DummyRecordStore:
 
     def record_document_generation(self, **kwargs):
         self.recorded.append(kwargs)
+
+
+@pytest.fixture(autouse=True)
+def _noop_shipment_hooks(monkeypatch):
+    monkeypatch.setattr("app.infrastructure.mods.hooks.trigger", lambda *a, **k: None)
 
 
 class TestShipmentApplicationServiceCreate:

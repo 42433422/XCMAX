@@ -8,8 +8,9 @@ from app import bootstrap
 
 
 def _clear_shipment_caches():
-    bootstrap.get_shipment_application_service_core.cache_clear()
-    bootstrap._get_shipment_app_service_event_primary.cache_clear()
+    from app.di.registry import get_service_registry
+
+    get_service_registry().invalidate_shipment_wiring()
 
 
 def test_get_shipment_app_service_defaults_to_core():

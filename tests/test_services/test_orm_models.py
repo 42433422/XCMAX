@@ -261,10 +261,17 @@ class TestAIModels:
     
     def test_create_ai_conversation(self, test_session):
         """测试创建 AI 对话"""
+        from app.db.models.ai import AIConversationSession
+
+        user = User(username="tester", password="x", is_active=True)
+        test_session.add(user)
+        test_session.commit()
+        test_session.add(AIConversationSession(session_id="session_001", user_id=user.id))
+        test_session.commit()
         conv = AIConversation(
             session_id="session_001",
             role="user",
-            content="你好"
+            content="你好",
         )
         test_session.add(conv)
         test_session.commit()

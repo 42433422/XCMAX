@@ -35,7 +35,7 @@ class TestWechatTasksImport:
 class TestProcessWechatMessageTask:
     """测试 process_wechat_message 任务"""
 
-    @patch('app.services.wechat_task_service.WechatTaskService')
+    @patch('app.services.get_wechat_task_service')
     def test_process_wechat_message_success(self, mock_service_class):
         """测试成功处理微信消息"""
         from app.tasks.wechat_tasks import process_wechat_message
@@ -56,7 +56,7 @@ class TestProcessWechatMessageTask:
         assert result is True
         mock_service.process_message.assert_called_once_with(123)
 
-    @patch('app.services.wechat_task_service.WechatTaskService')
+    @patch('app.services.get_wechat_task_service')
     def test_process_wechat_message_failure(self, mock_service_class):
         """测试处理微信消息失败"""
         from app.tasks.wechat_tasks import process_wechat_message
@@ -74,7 +74,7 @@ class TestProcessWechatMessageTask:
 
         assert result is False
 
-    @patch('app.services.wechat_task_service.WechatTaskService')
+    @patch('app.services.get_wechat_task_service')
     def test_process_wechat_message_with_full_data(self, mock_service_class):
         """测试带完整数据的微信消息处理"""
         from app.tasks.wechat_tasks import process_wechat_message
@@ -103,7 +103,7 @@ class TestScanWechatMessagesTask:
     """测试 scan_wechat_messages 任务"""
 
     @patch('app.tasks.wechat_tasks.process_wechat_message')
-    @patch('app.services.wechat_task_service.WechatTaskService')
+    @patch('app.services.get_wechat_task_service')
     def test_scan_wechat_messages_success(self, mock_service_class, mock_process):
         """测试成功扫描微信消息"""
         from app.tasks.wechat_tasks import scan_wechat_messages
@@ -121,7 +121,7 @@ class TestScanWechatMessagesTask:
         mock_service.scan_messages.assert_called_once_with(contact_id=1, limit=20)
 
     @patch('app.tasks.wechat_tasks.process_wechat_message')
-    @patch('app.services.wechat_task_service.WechatTaskService')
+    @patch('app.services.get_wechat_task_service')
     def test_scan_wechat_messages_no_contact(self, mock_service_class, mock_process):
         """测试不指定联系人的扫描"""
         from app.tasks.wechat_tasks import scan_wechat_messages
@@ -136,7 +136,7 @@ class TestScanWechatMessagesTask:
         mock_service.scan_messages.assert_called_once_with(contact_id=None, limit=10)
 
     @patch('app.tasks.wechat_tasks.process_wechat_message')
-    @patch('app.services.wechat_task_service.WechatTaskService')
+    @patch('app.services.get_wechat_task_service')
     def test_scan_wechat_messages_with_dispatch(self, mock_service_class, mock_process):
         """测试扫描后派发处理任务"""
         from app.tasks.wechat_tasks import scan_wechat_messages
@@ -155,7 +155,7 @@ class TestScanWechatMessagesTask:
         assert mock_process.delay.call_count == 3
 
     @patch('app.tasks.wechat_tasks.process_wechat_message')
-    @patch('app.services.wechat_task_service.WechatTaskService')
+    @patch('app.services.get_wechat_task_service')
     def test_scan_wechat_messages_exception(self, mock_service_class, mock_process):
         """测试扫描时服务异常"""
         from celery.app.task import MaxRetriesExceededError
@@ -175,74 +175,59 @@ class TestScanWechatMessagesTask:
 class TestCleanupOldTasksTask:
     """测试 cleanup_old_tasks 任务"""
 
-    @patch('db.get_db_path')
-    @patch('sqlite3.connect')
-    def test_cleanup_old_tasks_success(self, mock_connect, mock_get_db_path):
-        """测试成功清理旧任务"""
+    @patch("app.tasks.wechat_tasks.SessionLocal")
+    def test_cleanup_old_tasks_success(self, mock_session_local):
+        """测试成功清理旧任务（SQLAlchemy SessionLocal）"""
         from app.tasks.wechat_tasks import cleanup_old_tasks
 
-        mock_get_db_path.return_value = "/test/db.sqlite"
-
-        mock_cursor = MagicMock()
-        mock_cursor.rowcount = 5
-
-        mock_conn = MagicMock()
-        mock_conn.cursor.return_value = mock_cursor
-        mock_connect.return_value = mock_conn
+        mock_result = MagicMock()
+        mock_result.rowcount = 5
+        mock_db = MagicMock()
+        mock_db.execute.return_value = mock_result
+        mock_session_local.return_value.__enter__.return_value = mock_db
 
         result = cleanup_old_tasks(days=30)
 
         assert result == 5
-        mock_conn.commit.assert_called_once()
-        mock_conn.close.assert_called_once()
+        mock_db.commit.assert_called_once()
 
-    @patch('db.get_db_path')
-    @patch('sqlite3.connect')
-    def test_cleanup_old_tasks_with_custom_days(self, mock_connect, mock_get_db_path):
+    @patch("app.tasks.wechat_tasks.SessionLocal")
+    def test_cleanup_old_tasks_with_custom_days(self, mock_session_local):
         """测试自定义天数的清理"""
         from app.tasks.wechat_tasks import cleanup_old_tasks
 
-        mock_get_db_path.return_value = "/test/db.sqlite"
-
-        mock_cursor = MagicMock()
-        mock_cursor.rowcount = 10
-
-        mock_conn = MagicMock()
-        mock_conn.cursor.return_value = mock_cursor
-        mock_connect.return_value = mock_conn
+        mock_result = MagicMock()
+        mock_result.rowcount = 10
+        mock_db = MagicMock()
+        mock_db.execute.return_value = mock_result
+        mock_session_local.return_value.__enter__.return_value = mock_db
 
         result = cleanup_old_tasks(days=60)
 
         assert result == 10
-        mock_cursor.execute.assert_called_once()
+        mock_db.execute.assert_called_once()
 
-    @patch('db.get_db_path')
-    @patch('sqlite3.connect')
-    def test_cleanup_old_tasks_no_tasks_to_clean(self, mock_connect, mock_get_db_path):
+    @patch("app.tasks.wechat_tasks.SessionLocal")
+    def test_cleanup_old_tasks_no_tasks_to_clean(self, mock_session_local):
         """测试没有需要清理的任务"""
         from app.tasks.wechat_tasks import cleanup_old_tasks
 
-        mock_get_db_path.return_value = "/test/db.sqlite"
-
-        mock_cursor = MagicMock()
-        mock_cursor.rowcount = 0
-
-        mock_conn = MagicMock()
-        mock_conn.cursor.return_value = mock_cursor
-        mock_connect.return_value = mock_conn
+        mock_result = MagicMock()
+        mock_result.rowcount = 0
+        mock_db = MagicMock()
+        mock_db.execute.return_value = mock_result
+        mock_session_local.return_value.__enter__.return_value = mock_db
 
         result = cleanup_old_tasks(days=7)
 
         assert result == 0
 
-    @patch('db.get_db_path')
-    @patch('sqlite3.connect')
-    def test_cleanup_old_tasks_exception(self, mock_connect, mock_get_db_path):
+    @patch("app.tasks.wechat_tasks.SessionLocal")
+    def test_cleanup_old_tasks_exception(self, mock_session_local):
         """测试清理时发生异常"""
         from app.tasks.wechat_tasks import cleanup_old_tasks
 
-        mock_get_db_path.return_value = "/test/db.sqlite"
-        mock_connect.side_effect = Exception("数据库连接失败")
+        mock_session_local.return_value.__enter__.side_effect = Exception("数据库连接失败")
 
         result = cleanup_old_tasks(days=30)
 
@@ -276,7 +261,7 @@ class TestWechatTasksAttributes:
 class TestWechatTasksIntegration:
     """测试微信任务集成"""
 
-    @patch('app.services.wechat_task_service.WechatTaskService')
+    @patch('app.services.get_wechat_task_service')
     @patch('app.tasks.wechat_tasks.process_wechat_message')
     def test_scan_and_process_workflow(self, mock_process, mock_service_class):
         """测试扫描和处理工作流"""
