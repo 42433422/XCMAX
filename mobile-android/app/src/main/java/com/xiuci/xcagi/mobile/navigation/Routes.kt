@@ -1,6 +1,7 @@
 package com.xiuci.xcagi.mobile.navigation
 
 object Routes {
+    const val LEGAL = "legal"
     const val SPLASH = "splash"
     const val CONNECT = "connect"
     const val CONNECT_PC = "connect_pc"

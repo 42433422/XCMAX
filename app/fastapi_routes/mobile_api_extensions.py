@@ -36,6 +36,9 @@ def _ensure_mobile_device_table() -> None:
 
 class DeviceRegisterBody(BaseModel):
     fcm_token: str = Field(..., min_length=8)
+    push_provider: str = Field(default="fcm", max_length=16)
+    push_token: str = Field(default="", max_length=512)
+    product_sku: str = Field(default="personal", max_length=32)
     device_label: str = Field(default="", max_length=200)
     platform: str = Field(default="android", max_length=32)
 
@@ -147,6 +150,13 @@ async def mobile_device_register(body: DeviceRegisterBody, user=Depends(get_mobi
     from app.db.session import get_db
     from app.utils.time import utc_now_naive
 
+    token = (body.push_token or body.fcm_token).strip()
+    provider = (body.push_provider or "fcm").strip().lower()[:16]
+    if not token:
+        return JSONResponse(
+            format_mobile_response(None, "缺少 push_token", success=False, code=400),
+            status_code=400,
+        )
     with get_db() as db:
         row = (
             db.query(MobileDeviceToken)
@@ -159,12 +169,19 @@ async def mobile_device_register(body: DeviceRegisterBody, user=Depends(get_mobi
         if row:
             row.device_label = body.device_label[:200]
             row.platform = body.platform[:32]
+            row.fcm_token = body.fcm_token.strip()[:512]
+            row.push_provider = provider
+            row.push_token = token
+            row.product_sku = (body.product_sku or "personal")[:32]
             row.updated_at = utc_now_naive()
         else:
             db.add(
                 MobileDeviceToken(
                     user_id=user.id,
                     fcm_token=body.fcm_token.strip(),
+                    push_provider=provider,
+                    push_token=token,
+                    product_sku=(body.product_sku or "personal")[:32],
                     platform=body.platform[:32],
                     device_label=body.device_label[:200],
                 )

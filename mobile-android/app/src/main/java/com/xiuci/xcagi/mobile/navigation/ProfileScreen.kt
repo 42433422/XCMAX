@@ -22,6 +22,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -47,10 +48,11 @@ fun ProfileScreen(
     vm: AppViewModel,
     onConnectPc: () -> Unit,
     onAbout: () -> Unit,
+    onSettings: () -> Unit,
     onBridge: () -> Unit,
     onMods: () -> Unit,
+    onMarket: () -> Unit,
     onLongTail: () -> Unit,
-    onOcr: () -> Unit,
     onLogout: () -> Unit,
 ) {
     val displayName by vm.displayName.collectAsState()
@@ -60,6 +62,8 @@ fun ProfileScreen(
     val autoSync by vm.autoSync.collectAsState()
     val hub by vm.homeHub.collectAsState()
     var advancedOpen by remember { mutableStateOf(false) }
+    var showDelete by remember { mutableStateOf(false) }
+    var deletePassword by remember { mutableStateOf("") }
 
     Column(
         Modifier
@@ -142,6 +146,11 @@ fun ProfileScreen(
 
         Card(Modifier.fillMaxWidth()) {
             ListItem(
+                headlineContent = { Text("设置") },
+                modifier = Modifier.clickable(onClick = onSettings),
+            )
+            HorizontalDivider()
+            ListItem(
                 headlineContent = { Text("关于") },
                 supportingContent = { Text(stringResource(R.string.company_name)) },
                 modifier = Modifier.clickable(onClick = onAbout),
@@ -172,10 +181,10 @@ fun ProfileScreen(
                 Column(Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     ProfileNavRow("Service Bridge", onBridge)
                     ProfileNavRow("Mod 列表", onMods)
+                    ProfileNavRow("插件市场", onMarket)
                     if (ProductSkuConfig.showsEnterpriseNav) {
                         ProfileNavRow("财务 / 打印摘要", onLongTail)
                     }
-                    ProfileNavRow("OCR / 上传", onOcr)
                 }
             }
         }
@@ -185,6 +194,40 @@ fun ProfileScreen(
         OutlinedButton(onClick = onLogout, modifier = Modifier.fillMaxWidth()) {
             Text("退出登录")
         }
+        TextButton(
+            onClick = { showDelete = true },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text("注销账号", color = MaterialTheme.colorScheme.error)
+        }
+    }
+
+    if (showDelete) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showDelete = false },
+            title = { Text("注销账号") },
+            text = {
+                Column {
+                    Text("注销后无法恢复，请确认密码。")
+                    OutlinedTextField(
+                        deletePassword,
+                        { deletePassword = it },
+                        label = { Text("密码") },
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton({
+                    vm.deleteAccount(deletePassword) {
+                        showDelete = false
+                        onLogout()
+                    }
+                }) { Text("确认注销") }
+            },
+            dismissButton = {
+                TextButton({ showDelete = false }) { Text("取消") }
+            },
+        )
     }
 }
 

@@ -499,6 +499,18 @@ def approve_request(
 
         db.commit()
         db.refresh(req)
+        try:
+            from app.services.mobile_push import notify_user
+
+            if req.applicant_id:
+                notify_user(
+                    int(req.applicant_id),
+                    "审批进度更新",
+                    f"《{req.title or req.request_no}》已处理",
+                    {"route": f"/app/approval/{req.id}", "request_id": str(req.id)},
+                )
+        except Exception:
+            pass
         return {"success": True, "data": _request_to_dict(req, include_records=True)}
 
 

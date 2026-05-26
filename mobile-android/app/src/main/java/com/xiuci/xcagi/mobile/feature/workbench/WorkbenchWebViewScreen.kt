@@ -7,6 +7,8 @@ import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
+import androidx.browser.customtabs.CustomTabsIntent
+import com.xiuci.xcagi.mobile.feature.web.WebViewUrlPolicy
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -90,6 +92,16 @@ fun WorkbenchWebViewScreen(
                         }
                     }
                     webViewClient = object : WebViewClient() {
+                        override fun shouldOverrideUrlLoading(
+                            view: WebView?,
+                            request: WebResourceRequest?,
+                        ): Boolean {
+                            val target = request?.url?.toString() ?: return false
+                            if (WebViewUrlPolicy.isAllowed(target)) return false
+                            CustomTabsIntent.Builder().build().launchUrl(ctx, android.net.Uri.parse(target))
+                            return true
+                        }
+
                         override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                             loading = true
                             loadError = null

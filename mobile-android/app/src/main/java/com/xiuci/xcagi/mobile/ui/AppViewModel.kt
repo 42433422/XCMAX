@@ -6,6 +6,10 @@ import com.xiuci.xcagi.mobile.core.datastore.SessionStore
 import com.xiuci.xcagi.mobile.core.model.ListItem
 import com.xiuci.xcagi.mobile.core.network.ServerMode
 import com.xiuci.xcagi.mobile.core.network.ServerRouter
+import com.xiuci.xcagi.mobile.BuildConfig
+import com.xiuci.xcagi.mobile.core.model.AppConfigResponse
+import com.xiuci.xcagi.mobile.core.observability.XcagiAnalytics
+import com.xiuci.xcagi.mobile.core.push.PushRegistrar
 import com.xiuci.xcagi.mobile.core.repository.XcagiRepository
 import com.xiuci.xcagi.mobile.core.sync.MobileSyncRepository
 import com.xiuci.xcagi.mobile.core.work.MobileSyncWorker
@@ -34,6 +38,12 @@ import javax.inject.Inject
 
 data class UiMessage(val text: String, val isError: Boolean = false)
 
+data class UpdatePrompt(
+    val force: Boolean,
+    val versionName: String,
+    val downloadUrl: String,
+)
+
 @HiltViewModel
 class AppViewModel @Inject constructor(
     @ApplicationContext private val appContext: Context,
@@ -41,6 +51,8 @@ class AppViewModel @Inject constructor(
     private val sessionStore: SessionStore,
     private val serverRouter: ServerRouter,
     private val syncRepo: MobileSyncRepository,
+    private val pushRegistrar: PushRegistrar,
+    private val analytics: XcagiAnalytics,
 ) : ViewModel() {
     val isLoggedIn = sessionStore.isLoggedInFlow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
     val isSetupComplete = sessionStore.isSetupCompleteFlow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
@@ -132,17 +144,42 @@ class AppViewModel @Inject constructor(
         true,
     )
 
+    private val _appConfig = MutableStateFlow<AppConfigResponse?>(null)
+    val appConfig: StateFlow<AppConfigResponse?> = _appConfig.asStateFlow()
+
+    private val _updatePrompt = MutableStateFlow<UpdatePrompt?>(null)
+    val updatePrompt: StateFlow<UpdatePrompt?> = _updatePrompt.asStateFlow()
+
+    val biometricEnabled = sessionStore.biometricEnabledFlow.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5_000),
+        false,
+    )
+
+    val themeMode = sessionStore.themeModeFlow.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5_000),
+        "system",
+    )
+
     private var chatJob: Job? = null
 
     init {
+        pushRegistrar.initSdk()
+        analytics.log("app_open")
         viewModelScope.launch {
+            repo.fetchAppConfig().onSuccess {
+                _appConfig.value = it
+                refreshStartRoute()
+            }
+            checkForUpdate(manual = false)
             try {
                 repo.ensureStandaloneCloudIfFresh()
                 val host = sessionStore.fhdHost()
                 if (host.isNotBlank()) serverRouter.fhdHost = host
                 val mode = sessionStore.serverModeFlow.first()
                 serverRouter.mode = if (mode == "cloud") ServerMode.CLOUD else ServerMode.LAN
-                refreshStartRoute()
+                if (_appConfig.value == null) refreshStartRoute()
                 val (access, refresh) = repo.marketTokensForWeb()
                 _marketAccess.value = access
                 _marketRefresh.value = refresh
@@ -161,6 +198,13 @@ class AppViewModel @Inject constructor(
     }
 
     fun refreshStartRoute() = viewModelScope.launch {
+        val cfg = _appConfig.value
+        val accepted = sessionStore.legalAcceptedVersion()
+        val needLegal = cfg != null && accepted != cfg.legal_version
+        if (needLegal) {
+            _startRoute.value = Routes.LEGAL
+            return@launch
+        }
         val setup = sessionStore.isSetupComplete()
         val loggedIn = sessionStore.isLoggedInFlow.first()
         _startRoute.value = when {
@@ -168,6 +212,67 @@ class AppViewModel @Inject constructor(
             !loggedIn -> Routes.AUTH
             else -> Routes.HOME_HUB
         }
+    }
+
+    fun acceptLegal(onDone: () -> Unit) = viewModelScope.launch {
+        val ver = _appConfig.value?.legal_version ?: "1"
+        sessionStore.setLegalAcceptedVersion(ver)
+        refreshStartRoute()
+        onDone()
+    }
+
+    fun checkForUpdate(manual: Boolean) = viewModelScope.launch {
+        val cfg = _appConfig.value ?: repo.fetchAppConfig().getOrNull().also { _appConfig.value = it } ?: return@launch
+        val cur = BuildConfig.VERSION_CODE
+        if (cur < cfg.min_android_version || (cfg.force_update && cur < cfg.latest_android_version)) {
+            _updatePrompt.value = UpdatePrompt(
+                force = true,
+                versionName = cfg.latest_android_version_name,
+                downloadUrl = cfg.apk_download_url,
+            )
+        } else if (manual && cur < cfg.latest_android_version) {
+            _updatePrompt.value = UpdatePrompt(
+                force = false,
+                versionName = cfg.latest_android_version_name,
+                downloadUrl = cfg.apk_download_url,
+            )
+        } else if (manual) {
+            snack("当前已是最新版本")
+        }
+    }
+
+    fun dismissUpdatePrompt() {
+        _updatePrompt.value = null
+    }
+
+    fun setBiometricEnabled(enabled: Boolean) = viewModelScope.launch {
+        sessionStore.setBiometricEnabled(enabled)
+    }
+
+    fun setThemeMode(mode: String) = viewModelScope.launch {
+        sessionStore.setThemeMode(mode)
+    }
+
+    fun submitFeedback(message: String, onDone: () -> Unit = {}) = viewModelScope.launch {
+        repo.submitFeedback(message).onSuccess {
+            snack("感谢反馈")
+            onDone()
+        }.onFailure { snack(it.message ?: "提交失败", true) }
+    }
+
+    fun deleteAccount(password: String, onDone: () -> Unit) = viewModelScope.launch {
+        repo.deleteAccount(password).onSuccess {
+            pushRegistrar.unregisterAll()
+            snack("账号已注销")
+            refreshStartRoute()
+            onDone()
+        }.onFailure { snack(it.message ?: "注销失败", true) }
+    }
+
+    fun exportAccount(onPath: (String) -> Unit) = viewModelScope.launch {
+        repo.exportAccountData().onSuccess {
+            snack("导出数据已就绪")
+        }.onFailure { snack(it.message ?: "导出失败", true) }
     }
 
     fun loadHomeHub() = viewModelScope.launch {
@@ -320,9 +425,15 @@ class AppViewModel @Inject constructor(
     fun loginFhd(u: String, p: String, onDone: (Boolean) -> Unit) = viewModelScope.launch {
         repo.loginUnified(u, p).onSuccess {
             snack("欢迎 $it")
+            analytics.log("login_success", mapOf("method" to "password"))
             refreshMarketTokens()
+            pushRegistrar.registerAll()
             onDone(true)
-        }.onFailure { snack(it.message ?: "失败", true); onDone(false) }
+        }.onFailure {
+            analytics.log("login_fail", mapOf("method" to "password"))
+            snack(it.message ?: "失败", true)
+            onDone(false)
+        }
     }
 
     fun register(u: String, p: String, e: String, onDone: (Boolean) -> Unit) = viewModelScope.launch {
@@ -338,9 +449,15 @@ class AppViewModel @Inject constructor(
     fun loginPhone(phone: String, code: String, onDone: (Boolean) -> Unit) = viewModelScope.launch {
         repo.loginMarketPhone(phone, code).onSuccess {
             snack(it)
+            analytics.log("login_success", mapOf("method" to "phone"))
             refreshMarketTokens()
+            pushRegistrar.registerAll()
             onDone(true)
-        }.onFailure { snack(it.message ?: "失败", true); onDone(false) }
+        }.onFailure {
+            analytics.log("login_fail", mapOf("method" to "phone"))
+            snack(it.message ?: "失败", true)
+            onDone(false)
+        }
     }
 
     fun exchangeQr(nonce: String, onDone: (Boolean) -> Unit) = viewModelScope.launch {
@@ -505,8 +622,21 @@ class AppViewModel @Inject constructor(
     }
 
     fun logout(onDone: () -> Unit) = viewModelScope.launch {
+        pushRegistrar.unregisterAll()
         repo.logout()
         refreshStartRoute()
         onDone()
+    }
+
+    fun handleDeepLink(route: String, nav: (String) -> Unit) {
+        when {
+            route.contains("workbench") -> nav(Routes.WORKBENCH)
+            route.contains("chat") -> nav(Routes.CHAT)
+            route.contains("approval") -> {
+                val id = Regex("approval/(\\d+)").find(route)?.groupValues?.getOrNull(1)
+                if (id != null) nav("approval/$id") else nav(Routes.APPROVAL)
+            }
+            else -> nav(Routes.HOME_HUB)
+        }
     }
 }

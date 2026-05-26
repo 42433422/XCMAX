@@ -2,6 +2,7 @@ package com.xiuci.xcagi.mobile.core.network
 
 import com.google.gson.JsonObject
 import com.xiuci.xcagi.mobile.core.model.AccessRequestPayload
+import com.xiuci.xcagi.mobile.core.model.DeviceRegisterBody
 import com.xiuci.xcagi.mobile.core.model.ChatRequest
 import com.xiuci.xcagi.mobile.core.model.DiscoverHintData
 import com.xiuci.xcagi.mobile.core.model.MobileEnvelope
@@ -36,7 +37,6 @@ data class RegisterRequest(
 data class ApproveBody(val approver_id: Int, val opinion: String = "")
 data class RejectBody(val approver_id: Int, val reason: String = "")
 data class BridgeRespondBody(val response: String, val responded_by: String? = null, val status: String = "resolved")
-data class DeviceRegisterBody(val fcm_token: String, val device_label: String = "", val platform: String = "android")
 data class PairingExchangeBody(val nonce: String)
 
 data class SyncPullBody(val since_cursor: Int = 0)

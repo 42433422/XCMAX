@@ -1,7 +1,9 @@
 package com.xiuci.xcagi.mobile.ui.theme
 
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
@@ -24,10 +26,27 @@ private val DarkColors = darkColorScheme(
     outline = Color(0x33FFFFFF),
 )
 
+private val LightColors = lightColorScheme(
+    primary = XiuciBlueDark,
+    onPrimary = Color.White,
+    background = Color(0xFFF6F8FC),
+    onBackground = Color(0xFF1A1A1F),
+    surface = Color.White,
+    onSurface = Color(0xFF1A1A1F),
+)
+
 @Composable
-fun XcagiTheme(content: @Composable () -> Unit) {
+fun XcagiTheme(
+    themeMode: String = "system",
+    content: @Composable () -> Unit,
+) {
+    val dark = when (themeMode) {
+        "light" -> false
+        "dark" -> true
+        else -> isSystemInDarkTheme()
+    }
     MaterialTheme(
-        colorScheme = DarkColors,
+        colorScheme = if (dark) DarkColors else LightColors,
         content = content,
     )
 }

@@ -39,6 +39,9 @@ class SessionStore @Inject constructor(
     private val syncCursorKey = intPreferencesKey("sync_cursor")
     private val lastSyncAtKey = stringPreferencesKey("last_sync_at")
     private val autoSyncKey = booleanPreferencesKey("auto_sync")
+    private val legalAcceptedVersionKey = stringPreferencesKey("legal_accepted_version")
+    private val themeModeKey = stringPreferencesKey("theme_mode")
+    private val biometricEnabledKey = booleanPreferencesKey("biometric_enabled")
 
     val fhdHostFlow: Flow<String> = context.dataStore.data.map { it[fhdHost] ?: "" }
     val userIdFlow: Flow<Int> = context.dataStore.data.map { it[userIdKey] ?: 0 }
@@ -66,6 +69,12 @@ class SessionStore @Inject constructor(
     val lastSyncAtFlow: Flow<String> = context.dataStore.data.map { it[lastSyncAtKey] ?: "" }
 
     val autoSyncFlow: Flow<Boolean> = context.dataStore.data.map { it[autoSyncKey] != false }
+
+    val legalAcceptedVersionFlow: Flow<String> = context.dataStore.data.map { it[legalAcceptedVersionKey] ?: "" }
+
+    val themeModeFlow: Flow<String> = context.dataStore.data.map { it[themeModeKey] ?: "system" }
+
+    val biometricEnabledFlow: Flow<Boolean> = context.dataStore.data.map { it[biometricEnabledKey] == true }
 
     suspend fun isSetupComplete(): Boolean = isSetupCompleteFlow.first()
 
@@ -146,6 +155,20 @@ class SessionStore @Inject constructor(
 
     suspend fun setDisplayName(name: String) {
         context.dataStore.edit { it[fhdUsername] = name.trim() }
+    }
+
+    suspend fun legalAcceptedVersion(): String = legalAcceptedVersionFlow.first()
+
+    suspend fun setLegalAcceptedVersion(version: String) {
+        context.dataStore.edit { it[legalAcceptedVersionKey] = version.trim() }
+    }
+
+    suspend fun setThemeMode(mode: String) {
+        context.dataStore.edit { it[themeModeKey] = mode }
+    }
+
+    suspend fun setBiometricEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[biometricEnabledKey] = enabled }
     }
 
     suspend fun clear() {

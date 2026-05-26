@@ -62,12 +62,30 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.xiuci.xcagi.mobile.R
 import com.xiuci.xcagi.mobile.core.ProductSkuConfig
+import com.xiuci.xcagi.mobile.core.connectivity.NetworkMonitor
+import com.xiuci.xcagi.mobile.feature.legal.LegalConsentScreen
 import com.xiuci.xcagi.mobile.feature.modhost.ModWebViewScreen
+import com.xiuci.xcagi.mobile.feature.settings.SettingsScreen
 import com.xiuci.xcagi.mobile.feature.workbench.WorkbenchWebViewScreen
 import com.xiuci.xcagi.mobile.ui.AppViewModel
+import android.content.Intent
+import android.net.Uri
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
+import androidx.hilt.navigation.compose.hiltViewModel
+import dagger.hilt.android.EntryPointAccessors
+import dagger.hilt.EntryPoint
+import dagger.hilt.InstallIn
+import dagger.hilt.components.SingletonComponent
+
+@EntryPoint
+@InstallIn(SingletonComponent::class)
+interface NetworkEntryPoint {
+    fun networkMonitor(): NetworkMonitor
+}
 
 @Composable
-fun XcagiNavHost(vm: AppViewModel = hiltViewModel()) {
+fun XcagiNavHost(vm: AppViewModel, pendingDeepLink: String? = null) {
     val nav = rememberNavController()
     val snack = remember { SnackbarHostState() }
     val msg by vm.message.collectAsState()
@@ -76,8 +94,41 @@ fun XcagiNavHost(vm: AppViewModel = hiltViewModel()) {
     val autoLanProbe by vm.autoLanProbe.collectAsState()
     val navReady by vm.navReady.collectAsState()
     val startRoute by vm.startRoute.collectAsState()
-
+    val updatePrompt by vm.updatePrompt.collectAsState()
     val ctx = LocalContext.current
+    val networkMonitor = androidx.compose.runtime.remember(ctx) {
+        EntryPointAccessors.fromApplication(ctx.applicationContext, NetworkEntryPoint::class.java)
+            .networkMonitor()
+    }
+    val online by networkMonitor.online.collectAsState(initial = true)
+
+    LaunchedEffect(pendingDeepLink, loggedIn) {
+        if (loggedIn && !pendingDeepLink.isNullOrBlank()) {
+            vm.handleDeepLink(pendingDeepLink) { route ->
+                nav.navigate(route) { launchSingleTop = true }
+            }
+        }
+    }
+
+    updatePrompt?.let { prompt ->
+        AlertDialog(
+            onDismissRequest = { if (!prompt.force) vm.dismissUpdatePrompt() },
+            title = { Text(if (prompt.force) "需要更新" else "发现新版本") },
+            text = { Text("最新版本 ${prompt.versionName}，请更新以获得完整功能与安全修复。") },
+            confirmButton = {
+                TextButton({
+                    ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(prompt.downloadUrl)))
+                    if (!prompt.force) vm.dismissUpdatePrompt()
+                }) { Text("去更新") }
+            },
+            dismissButton = if (!prompt.force) {
+                { TextButton({ vm.dismissUpdatePrompt() }) { Text("稍后") } }
+            } else {
+                null
+            },
+        )
+    }
+
     LaunchedEffect(autoLanProbe) {
         try {
             val wm = WorkManager.getInstance(ctx)
@@ -127,6 +178,18 @@ fun XcagiNavHost(vm: AppViewModel = hiltViewModel()) {
 
     Scaffold(
         snackbarHost = { SnackbarHost(snack) },
+        topBar = {
+            if (!online) {
+                androidx.compose.material3.Surface(color = MaterialTheme.colorScheme.errorContainer) {
+                    Text(
+                        "当前无网络连接",
+                        modifier = Modifier.fillMaxWidth().padding(8.dp),
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+        },
         bottomBar = {
             if (showBar) {
                 NavigationBar {
@@ -177,6 +240,17 @@ fun XcagiNavHost(vm: AppViewModel = hiltViewModel()) {
             startDestination = startRoute,
             Modifier.padding(padding),
         ) {
+            composable(Routes.LEGAL) {
+                LegalConsentScreen(
+                    vm,
+                    onAccepted = {
+                        nav.navigate(Routes.CONNECT) {
+                            popUpTo(Routes.LEGAL) { inclusive = true }
+                        }
+                    },
+                    onAbout = { nav.navigate(Routes.ABOUT) },
+                )
+            }
             composable(Routes.CONNECT) {
                 ConnectScreen(
                     vm,
@@ -204,7 +278,12 @@ fun XcagiNavHost(vm: AppViewModel = hiltViewModel()) {
                     onBack = { nav.popBackStack() },
                 )
             }
-            composable(Routes.SCAN_QR) { ScanQrScreen(vm) { nav.popBackStack() } }
+            composable(Routes.SCAN_QR) {
+                com.xiuci.xcagi.mobile.feature.scan.ScanQrScreen(vm) { nav.popBackStack() }
+            }
+            composable(Routes.SETTINGS) {
+                SettingsScreen(vm) { nav.popBackStack() }
+            }
             composable(Routes.AUTH) {
                 AuthScreen(vm, { nav.navigate(Routes.REGISTER) }, { nav.navigate(Routes.HOME_HUB) })
             }
@@ -240,10 +319,11 @@ fun XcagiNavHost(vm: AppViewModel = hiltViewModel()) {
                     vm,
                     onConnectPc = { nav.navigate(Routes.CONNECT_PC) },
                     onAbout = { nav.navigate(Routes.ABOUT) },
+                    onSettings = { nav.navigate(Routes.SETTINGS) },
                     onBridge = { nav.navigate(Routes.BRIDGE) },
                     onMods = { nav.navigate(Routes.MODS) },
+                    onMarket = { nav.navigate(Routes.MARKET) },
                     onLongTail = { nav.navigate(Routes.LONGTAIL) },
-                    onOcr = { nav.navigate(Routes.OCR) },
                     onLogout = {
                         val dest = if (setupComplete) Routes.AUTH else Routes.CONNECT
                         vm.logout {
@@ -296,30 +376,9 @@ fun XcagiNavHost(vm: AppViewModel = hiltViewModel()) {
                     ModWebViewScreen(url, bearer, access, refresh)
                 }
             }
-            composable(Routes.OCR) { OcrScreen() }
             composable(Routes.LONGTAIL) { LongTailScreen(vm) }
             composable(Routes.ABOUT) { AboutScreen { nav.popBackStack() } }
         }
-    }
-}
-
-@Composable
-fun ScanQrScreen(vm: AppViewModel, onBack: () -> Unit) {
-    var nonce by remember { mutableStateOf("") }
-    Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("粘贴桌面 QR 中的 nonce")
-        OutlinedTextField(nonce, { nonce = it }, Modifier.fillMaxWidth())
-        Button(
-            {
-                vm.exchangeQr(nonce) {
-                    if (it) {
-                        vm.completeSetup()
-                        onBack()
-                    }
-                }
-            },
-            Modifier.fillMaxWidth(),
-        ) { Text("配对") }
     }
 }
 

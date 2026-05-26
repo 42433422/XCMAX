@@ -6,6 +6,8 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
     id("com.google.dagger.hilt.android")
     id("com.google.devtools.ksp")
+    id("com.google.gms.google-services")
+    id("com.google.firebase.crashlytics")
 }
 
 android {
@@ -16,8 +18,11 @@ android {
         applicationId = "com.xiuci.xcagi.mobile"
         minSdk = 26
         targetSdk = 35
-        versionCode = 8
-        versionName = "1.3.4"
+        versionCode = 9
+        versionName = "1.4.0"
+        manifestPlaceholders["JPUSH_PKGNAME"] = "com.xiuci.xcagi.mobile"
+        manifestPlaceholders["JPUSH_CHANNEL"] = "developer-default"
+        manifestPlaceholders["JPUSH_APPKEY"] = "placeholder_replace_in_local_properties"
         buildConfigField("int", "FHD_DEFAULT_PORT", "5000")
         buildConfigField("String", "MODSTORE_BASE_URL", "\"https://xiu-ci.com\"")
         buildConfigField("String", "COMPANY_NAME", "\"成都修茈科技有限公司\"")
@@ -30,12 +35,14 @@ android {
             applicationIdSuffix = ".personal"
             resValue("string", "app_name", "XCAGI 个人版")
             buildConfigField("String", "PRODUCT_SKU", "\"personal\"")
+            manifestPlaceholders["JPUSH_PKGNAME"] = "com.xiuci.xcagi.mobile.personal"
         }
         create("enterprise") {
             dimension = "sku"
             applicationIdSuffix = ".enterprise"
             resValue("string", "app_name", "XCAGI 企业版")
             buildConfigField("String", "PRODUCT_SKU", "\"enterprise\"")
+            manifestPlaceholders["JPUSH_PKGNAME"] = "com.xiuci.xcagi.mobile.enterprise"
         }
     }
 
@@ -100,7 +107,12 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
             val releaseSigning = signingConfigs.getByName("release")
             val requireSigning = System.getenv("XCAGI_REQUIRE_RELEASE_SIGNING") == "1"
             signingConfig = when {
@@ -168,6 +180,27 @@ dependencies {
     implementation("com.google.mlkit:barcode-scanning:17.3.0")
 
     implementation("androidx.webkit:webkit:1.12.1")
+    implementation("androidx.browser:browser:1.8.0")
+    implementation("androidx.biometric:biometric:1.1.0")
+    implementation("androidx.security:security-crypto:1.1.0-alpha06")
+
+    val firebaseBom = platform("com.google.firebase:firebase-bom:33.7.0")
+    implementation(firebaseBom)
+    implementation("com.google.firebase:firebase-crashlytics")
+    implementation("com.google.firebase:firebase-analytics")
+    implementation("com.google.firebase:firebase-messaging")
+
+    implementation("cn.jiguang.sdk:jpush:5.6.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.9.0")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
+}
+
+val localProps = Properties().apply {
+    val f = rootProject.file("local.properties")
+    if (f.isFile) f.inputStream().use { load(it) }
+}
+val jpushKey = localProps.getProperty("JPUSH_APPKEY")?.trim().orEmpty()
+if (jpushKey.isNotBlank()) {
+    android.defaultConfig.manifestPlaceholders["JPUSH_APPKEY"] = jpushKey
 }

@@ -15,7 +15,10 @@ import com.xiuci.xcagi.mobile.core.model.MarketRegisterBody
 import com.xiuci.xcagi.mobile.core.model.MarketSendCodeBody
 import com.xiuci.xcagi.mobile.core.network.ApproveBody
 import com.xiuci.xcagi.mobile.core.network.BridgeRespondBody
-import com.xiuci.xcagi.mobile.core.network.DeviceRegisterBody
+import com.xiuci.xcagi.mobile.core.model.AppConfigResponse
+import com.xiuci.xcagi.mobile.core.model.AccountDeleteBody
+import com.xiuci.xcagi.mobile.core.model.AppFeedbackBody
+import com.xiuci.xcagi.mobile.core.model.DeviceRegisterBody
 import com.xiuci.xcagi.mobile.core.network.FhdApi
 import com.xiuci.xcagi.mobile.core.network.LanScanner
 import com.xiuci.xcagi.mobile.core.network.ModstoreApi
@@ -245,15 +248,57 @@ class XcagiRepository @Inject constructor(
         }
     }
 
-    suspend fun registerDeviceToken() {
-        var tok = sessionStore.fcmToken()
-        if (tok.isBlank()) {
-            tok = "dev-${UUID.randomUUID()}"
-            sessionStore.setFcmToken(tok)
-        }
+    suspend fun fetchAppConfig(): Result<AppConfigResponse> = try {
+        val cfg = modstore().appConfig(sku = BuildConfig.PRODUCT_SKU)
+        Result.success(cfg)
+    } catch (e: Exception) {
+        Result.failure(e)
+    }
+
+    suspend fun deleteAccount(password: String): Result<Unit> = try {
+        modstore().deleteAccount(AccountDeleteBody(password))
+        logout()
+        Result.success(Unit)
+    } catch (e: Exception) {
+        Result.failure(e)
+    }
+
+    suspend fun exportAccountData(): Result<Map<String, Any?>> = try {
+        Result.success(modstore().exportAccount())
+    } catch (e: Exception) {
+        Result.failure(e)
+    }
+
+    suspend fun submitFeedback(message: String, contact: String = ""): Result<Unit> = try {
+        modstore().submitFeedback(
+            AppFeedbackBody(
+                message = message,
+                contact = contact,
+                app_version = BuildConfig.VERSION_NAME,
+                sku = BuildConfig.PRODUCT_SKU,
+            ),
+        )
+        Result.success(Unit)
+    } catch (e: Exception) {
+        Result.failure(e)
+    }
+
+    suspend fun registerDeviceToken(
+        pushProvider: String = "fcm",
+        pushToken: String? = null,
+    ) {
+        val token = pushToken?.trim().orEmpty().ifBlank { sessionStore.fcmToken() }
+        if (token.isBlank()) return
+        sessionStore.setFcmToken(token)
         try {
             fhd().registerDevice(
-                DeviceRegisterBody(tok, "Android-${Build.MODEL}"),
+                DeviceRegisterBody(
+                    fcm_token = token,
+                    push_provider = pushProvider,
+                    push_token = token,
+                    product_sku = BuildConfig.PRODUCT_SKU,
+                    device_label = "Android-${Build.MODEL}",
+                ),
             )
         } catch (_: Exception) {
         }

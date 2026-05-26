@@ -5,6 +5,20 @@
 - `git status` 报：`fatal: not a git repository: E:/FHD/.git/worktrees/...`
 - 或大量 `D` / `??`，与 IDE 里实际文件不一致
 - 仓库根在 **`E:\XCMAX\FHD`**（独立 `.git` 目录），勿与旧路径 `E:\FHD` 混用
+- IDE 显示 **~900+ 变更**，但 `cd FHD && git status --short | measure` 只有几十行：多数是 **`XCAGI/` 子模块**内未提交；其中 **`app/`（junction → 根 `app/`）与 `frontend/` 副本仍被索引** 时，父仓库一改 `app/` 子模块会整树显示为修改
+
+### 子模块脏树快修（2026-05）
+
+```powershell
+cd E:\XCMAX\FHD\XCAGI
+# 权威代码在 monorepo 根 ../app、../frontend；子模块只保留入口/mods/run.py 等
+git rm -r --cached app frontend   # 若尚未做；并确保 .gitignore 含 /app 与 /frontend
+git add -u && git commit -m "chore: sync XCAGI shell after monorepo migration"
+cd E:\XCMAX\FHD
+git add XCAGI && git commit -m "chore: bump XCAGI submodule pointer"
+```
+
+本地 junction：`powershell -File scripts/ensure_xcagi_app_link.ps1`
 
 ## 安全诊断
 
