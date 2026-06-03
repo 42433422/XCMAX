@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 from typing import Any
 
-from fastapi import APIRouter, Body, Depends, Header, Request
+from fastapi import APIRouter, Depends, Header, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
@@ -63,35 +64,80 @@ async def get_mobile_user(
                 return user
         return None
 
-    from app.fastapi_routes.legacy_helpers import _require_login_user
+    from app.infrastructure.auth.dependencies import resolve_session_user
 
-    user, err = _require_login_user(request)
-    if err:
-        return None
-    return user
+    return resolve_session_user(request)
+
+
+def _parse_web_auth_login_response(web_resp: Any) -> tuple[dict[str, Any], int]:
+    """解析 ``POST /api/auth/login`` 的 JSONResponse（与 Web 桌面端同源）。"""
+    status = int(getattr(web_resp, "status_code", 200) or 200)
+    if isinstance(web_resp, JSONResponse):
+        raw = web_resp.body
+        if not raw:
+            return {"success": False, "message": "登录失败"}, status
+        if isinstance(raw, memoryview):
+            raw = raw.tobytes()
+        if isinstance(raw, bytes):
+            return json.loads(raw.decode("utf-8")), status
+        return json.loads(str(raw)), status
+    if isinstance(web_resp, dict):
+        return web_resp, status
+    return {"success": False, "message": "登录失败"}, status
+
+
+def _web_login_error_message(payload: dict[str, Any]) -> str:
+    err = payload.get("error")
+    if isinstance(err, dict):
+        msg = str(err.get("message") or "").strip()
+        if msg:
+            return msg
+    return str(payload.get("message") or "登录失败").strip() or "登录失败"
 
 
 @router.post("/auth/login")
 async def mobile_auth_login(body: MobileLoginRequest):
-    from app.application.auth_app_service import get_auth_app_service
-    from app.application.session_account_meta import normalize_account_kind, persist_session_account_meta
+    """与 Web ``POST /api/auth/login`` 共用认证逻辑（市场校验、JIT、account_kind、市场 token）。"""
+    from app.application.session_account_meta import normalize_account_kind
+    from app.fastapi_routes.domains.auth.routes import auth_login
+    from app.mod_sdk.product_skus import resolve_product_sku
 
-    auth = get_auth_app_service()
-    result = auth.login(body.username.strip(), body.password)
-    if not result.get("success"):
+    sku = resolve_product_sku()
+    default_kind = "enterprise" if sku == "enterprise" else "personal"
+    account_kind = normalize_account_kind(body.account_kind, default=default_kind)
+
+    scope = {
+        "type": "http",
+        "method": "POST",
+        "path": "/api/auth/login",
+        "headers": [],
+    }
+    request = Request(scope)
+    web_resp = await auth_login(
+        request,
+        {
+            "username": body.username.strip(),
+            "password": body.password,
+            "account_kind": account_kind,
+        },
+    )
+    payload, status = _parse_web_auth_login_response(web_resp)
+    if not payload.get("success"):
+        message = _web_login_error_message(payload)
+        code = status if status >= 400 else 401
         return JSONResponse(
             format_mobile_response(
-                data={"error": result.get("message", "登录失败")},
-                message=str(result.get("message") or "登录失败"),
+                data={"error": message, "error_id": payload.get("error_id")},
+                message=message,
                 success=False,
-                code=401,
+                code=code,
             ),
-            status_code=401,
+            status_code=code,
         )
 
-    session_id = str(result.get("session_id") or "")
-    user = result.get("user")
-    if not user or not session_id:
+    session_id = str(payload.get("session_id") or "").strip()
+    user_raw = payload.get("user")
+    if not session_id or not isinstance(user_raw, dict) or user_raw.get("id") is None:
         return JSONResponse(
             format_mobile_response(
                 data=None,
@@ -102,32 +148,30 @@ async def mobile_auth_login(body: MobileLoginRequest):
             status_code=500,
         )
 
-    account_kind = normalize_account_kind(body.account_kind, default="enterprise")
-    try:
-        persist_session_account_meta(
-            session_id,
-            account_kind=account_kind,
-            company_brand="成都修茈科技有限公司",
-        )
-    except Exception as exc:
-        logger.warning("mobile login session meta: %s", exc)
-
+    resolved_kind = str(payload.get("account_kind") or account_kind).strip() or account_kind
     tokens = issue_mobile_tokens(
-        user_id=int(user.id),
+        user_id=int(user_raw["id"]),
         session_id=session_id,
-        account_kind=account_kind,
-        username=str(user.username or ""),
+        account_kind=resolved_kind,
+        username=str(user_raw.get("username") or body.username.strip()),
     )
-    return format_mobile_response(
-        data={
-            "user": _user_public_dict(user),
-            "session_id": session_id,
-            "account_kind": account_kind,
-            **tokens,
-            "expires_in": 24 * 3600,
-        },
-        message="登录成功",
-    )
+    data: dict[str, Any] = {
+        "user": user_raw,
+        "session_id": session_id,
+        "account_kind": resolved_kind,
+        **tokens,
+        "expires_in": 24 * 3600,
+    }
+    for key in (
+        "market_access_token",
+        "market_refresh_token",
+        "company_brand",
+        "market_is_admin",
+        "market_is_enterprise",
+    ):
+        if key in payload and payload[key] is not None:
+            data[key] = payload[key]
+    return format_mobile_response(data=data, message="登录成功")
 
 
 @router.post("/auth/refresh")
@@ -178,6 +222,7 @@ async def mobile_me(request: Request, user=Depends(get_mobile_user)):
 
     from app.application.auth_app_service import get_auth_app_service
     from app.application.session_account_meta import load_session_account_meta
+
     auth_app = get_auth_app_service()
     permissions = auth_app.get_user_permissions(user)
     sid = ""
@@ -187,9 +232,9 @@ async def mobile_me(request: Request, user=Depends(get_mobile_user)):
         if payload:
             sid = str(payload.get("session_id") or "")
     if not sid:
-        from app.fastapi_routes.legacy_helpers import _session_id_from_request
+        from app.infrastructure.auth.dependencies import session_id_from_request
 
-        sid = _session_id_from_request(request)
+        sid = session_id_from_request(request)
     meta = load_session_account_meta(sid) if sid else {}
 
     mods_summary: list[dict[str, str]] = []

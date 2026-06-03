@@ -54,6 +54,22 @@ def _register_infrastructure_routes(app: FastAPI) -> None:
         logger.info("Registered desktop_runtime_router (/api/desktop/*)")
     except Exception as e:
         logger.warning("Desktop runtime routes skipped: %s", e)
+    try:
+        from app.fastapi_routes.desktop_automation import router as desktop_automation_router
+
+        app.include_router(desktop_automation_router)
+        logger.info("Registered desktop_automation_router (/api/desktop/automation/*)")
+    except Exception as e:
+        logger.warning("Desktop automation routes skipped: %s", e)
+
+    # P1-3（2026-06-02）：GDPR 数据主体 API（Article 15/16/17/20）
+    try:
+        from app.fastapi_routes.gdpr import router as gdpr_router
+
+        app.include_router(gdpr_router)
+        logger.info("Registered gdpr_router (/api/gdpr/*)")
+    except Exception as e:
+        logger.warning("GDPR routes skipped: %s", e)
     logger.debug("Infrastructure routes registered (mod_schema_router is utility module)")
 
 
@@ -84,6 +100,24 @@ def _register_business_routes(app: FastAPI) -> None:
         logger.info("Registered inventory router (/api/inventory/*)")
     except (ImportError, AttributeError) as e:
         logger.warning("inventory router not available: %s", e)
+
+    try:
+        from app.fastapi_routes.finance_unified_ledger import (
+            router as finance_unified_ledger_router,
+        )
+
+        app.include_router(finance_unified_ledger_router)
+        logger.info("Registered finance unified-ledger router (/api/finance/unified-ledger)")
+    except (ImportError, AttributeError) as e:
+        logger.warning("finance unified-ledger router not available: %s", e)
+
+    try:
+        from app.fastapi_routes.finance_invoices_api import router as finance_invoices_router
+
+        app.include_router(finance_invoices_router)
+        logger.info("Registered finance invoices router (/api/finance/invoices/*)")
+    except (ImportError, AttributeError) as e:
+        logger.warning("finance invoices router not available: %s", e)
 
     try:
         from app.fastapi_routes.finance import router as finance_router
@@ -252,7 +286,7 @@ def _register_lan_routes(app: FastAPI) -> None:
 def _register_legacy_compat_routes(app: FastAPI) -> None:
     """注册 XCAGI 前端依赖的历史兼容路由(原 backend.routers.*,2026-04-20 已全部迁至本包)。
 
-    ``xcagi_compat`` 必须先于 ``miniprogram``:``POST /api/ai/chat`` 在两套路由中均有定义;
+    ``xcagi_compat`` 路由注册顺序说明:
     主站 Vue 依赖 xcagi_compat(Planner / run_agent_chat)的 JSON 契约与错误语义。
     """
 
@@ -274,7 +308,7 @@ def _register_legacy_compat_routes(app: FastAPI) -> None:
     logger.info("Registered debug_client_log_router (/api/debug/client-log)")
 
     # 须早于 xcagi_compat / SPA 兜底：避免 ``GET /api/auth/session/validate`` 等落入 ``/{fallback:path}`` 返回 404。
-    from app.fastapi_routes.legacy_auth import router as legacy_auth_router
+    from app.fastapi_routes.domains.auth.routes import router as legacy_auth_router
 
     app.include_router(legacy_auth_router)
     logger.info("Registered legacy_auth_router early (/api/auth/*)")
@@ -292,17 +326,36 @@ def _register_legacy_compat_routes(app: FastAPI) -> None:
     app.include_router(code_editor_router)
     logger.info("Registered code_editor_router (/api/code-editor/*)")
 
+    try:
+        from app.fastapi_routes.private_db_read_assistant_compat import (
+            register_private_db_read_assistant_routes,
+        )
+
+        register_private_db_read_assistant_routes(app)
+    except Exception as e:
+        logger.warning("private_db_read_assistant compat routes skipped: %s", e)
+
+    try:
+        from app.fastapi_routes.user_cs_wechat_passive_compat import (
+            register_user_cs_wechat_passive_routes,
+        )
+
+        register_user_cs_wechat_passive_routes(app)
+    except Exception as e:
+        logger.warning("user_cs_wechat_passive compat routes skipped: %s", e)
+
+    try:
+        from app.fastapi_routes.wechat_decrypt_routes import router as wechat_decrypt_router
+
+        app.include_router(wechat_decrypt_router)
+        logger.info("Registered wechat_decrypt_router (/api/wechat/decrypt/*)")
+    except Exception as e:
+        logger.warning("wechat_decrypt routes skipped: %s", e)
+
     from app.fastapi_routes.xcagi_compat import router as xcagi_compat_router
 
     app.include_router(xcagi_compat_router, prefix="/api")
     logger.info("Registered xcagi_compat_router (prefix=/api)")
-
-    from app.fastapi_routes.miniprogram import router as miniprogram_api_router
-
-    app.include_router(miniprogram_api_router)
-    logger.info(
-        "Registered miniprogram_api_router (/api/products, /api/shipment/create|list, print/*, /api/wx/miniprogram/*)"
-    )
 
     from app.fastapi_routes.document_templates import public_router as doc_templates_public_router
 
@@ -387,6 +440,28 @@ def _register_legacy_compat_routes(app: FastAPI) -> None:
     app.include_router(model_payment_router)
     logger.info("Registered model_payment (/api/model-payment/*)")
 
+    from app.fastapi_routes.payment_reconcile_internal_api import (
+        router as payment_reconcile_internal_router,
+    )
+
+    app.include_router(payment_reconcile_internal_router)
+    logger.info("Registered payment_reconcile_internal (/api/internal/payment/*)")
+
+    from app.fastapi_routes.sales_contract_api import router as sales_contract_router
+
+    app.include_router(sales_contract_router)
+    logger.info("Registered sales_contract (/api/sales-contract/*)")
+
+    from app.fastapi_routes.contract_lifecycle_api import router as contract_lifecycle_router
+
+    app.include_router(contract_lifecycle_router)
+    logger.info("Registered contract_lifecycle (/api/contract-lifecycle/*)")
+
+    from app.fastapi_routes.operations_line_api import router as operations_line_router
+
+    app.include_router(operations_line_router)
+    logger.info("Registered operations_line (/api/operations-line/*)")
+
     from app.fastapi_routes.ai_intent import router as ai_intent_router
 
     app.include_router(ai_intent_router)
@@ -407,28 +482,21 @@ def _register_legacy_compat_routes(app: FastAPI) -> None:
     from app.mod_sdk.edition_policy import should_register_host_legacy_routes
 
     if should_register_host_legacy_routes():
-        from app.fastapi_routes.legacy_gaps_batch1 import router as legacy_gaps_batch1_router
+        from app.fastapi_routes.legacy_host_routers import register_legacy_gap_routers
 
-        app.include_router(legacy_gaps_batch1_router)
-        logger.info("Registered legacy_gaps_batch1 (FastAPI route gap backfill batch1)")
+        register_legacy_gap_routers(app)
     else:
         logger.info(
-            "Skipped legacy_gaps_batch1 (edition=%s, set XCAGI_REGISTER_LEGACY_ROUTES=1 to force)",
-            __import__("app.mod_sdk.edition_policy", fromlist=["resolve_edition"]).resolve_edition(),
+            "Skipped legacy gap routers (edition=%s, set XCAGI_REGISTER_LEGACY_ROUTES=1 to force)",
+            __import__(
+                "app.mod_sdk.edition_policy", fromlist=["resolve_edition"]
+            ).resolve_edition(),
         )
 
     from app.fastapi_routes.approval import router as approval_router
 
     app.include_router(approval_router)
     logger.info("Registered approval (/api/approval/requests*, /api/approval/flows*)")
-
-    if should_register_host_legacy_routes():
-        from app.fastapi_routes.legacy_gaps_batch2 import router as legacy_gaps_batch2_router
-
-        app.include_router(legacy_gaps_batch2_router)
-        logger.info("Registered legacy_gaps_batch2 (FastAPI route gap backfill batch2)")
-    else:
-        logger.info("Skipped legacy_gaps_batch2 (non-full edition)")
 
     try:
         from app.fastapi_routes.service_bridge import router as service_bridge_router

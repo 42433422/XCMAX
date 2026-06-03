@@ -16,12 +16,11 @@ import secrets
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, Body, Header, HTTPException, Query
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
-from app.infrastructure.auth import CurrentUser, get_current_user
-
+from app.application.mobile_push_app_service import notify_mobile_user
 from app.db.models.approval import (
     ApprovalAction,
     ApprovalFlow,
@@ -99,9 +98,7 @@ def _node_query_for_user(node: ApprovalFlowNode, user_id: int) -> bool:
 def _ordered_nodes(db, flow_id: int) -> list[ApprovalFlowNode]:
     return (
         db.query(ApprovalFlowNode)
-        .filter(
-            ApprovalFlowNode.flow_id == flow_id, ApprovalFlowNode.is_active == True
-        )  # noqa: E712
+        .filter(ApprovalFlowNode.flow_id == flow_id, ApprovalFlowNode.is_active == True)  # noqa: E712
         .order_by(ApprovalFlowNode.node_order.asc())
         .all()
     )
@@ -119,7 +116,7 @@ def _request_to_dict(req: ApprovalRequest, *, include_records: bool = False) -> 
     base = req.to_dict()
     if include_records:
         records = (
-            sorted(req.records or [], key=lambda r: (r.action_time or datetime.min))
+            sorted(req.records or [], key=lambda r: r.action_time or datetime.min)
             if req.records
             else []
         )
@@ -499,18 +496,13 @@ def approve_request(
 
         db.commit()
         db.refresh(req)
-        try:
-            from app.services.mobile_push import notify_user
-
-            if req.applicant_id:
-                notify_user(
-                    int(req.applicant_id),
-                    "审批进度更新",
-                    f"《{req.title or req.request_no}》已处理",
-                    {"route": f"/app/approval/{req.id}", "request_id": str(req.id)},
-                )
-        except Exception:
-            pass
+        if req.applicant_id:
+            notify_mobile_user(
+                int(req.applicant_id),
+                "审批进度更新",
+                f"《{req.title or req.request_no}》已处理",
+                {"route": f"/app/approval/{req.id}", "request_id": str(req.id)},
+            )
         return {"success": True, "data": _request_to_dict(req, include_records=True)}
 
 
@@ -795,26 +787,33 @@ def get_approval_users():
 def check_approver_orphan(user_id: int):
     """检查某用户 ID 是否出现在激活流程的审批节点但在用户表中已不存在（孤儿检测）。"""
     with get_db() as db:
-        active_flows = db.query(ApprovalFlow).filter(
-            ApprovalFlow.is_active == True, ApprovalFlow.is_deleted == False  # noqa: E712
-        ).all()
+        active_flows = (
+            db.query(ApprovalFlow)
+            .filter(
+                ApprovalFlow.is_active == True,
+                ApprovalFlow.is_deleted == False,  # noqa: E712
+            )
+            .all()
+        )
         orphan_flows: list[dict] = []
         for flow in active_flows:
-            for node in (flow.nodes or []):
+            for node in flow.nodes or []:
                 ids = []
                 try:
                     ids = json.loads(node.approver_ids or "[]")
                 except Exception:
                     pass
                 if user_id in ids:
-                    orphan_flows.append({"flow_id": flow.id, "flow_name": flow.flow_name, "node_id": node.id})
+                    orphan_flows.append(
+                        {"flow_id": flow.id, "flow_name": flow.flow_name, "node_id": node.id}
+                    )
         is_orphan = len(orphan_flows) > 0
         return {
             "success": True,
             "user_id": user_id,
             "is_orphan_in_active_flows": is_orphan,
             "orphan_flows": orphan_flows,
-            "message": f"用户 {user_id} {'出现在以下激活流程节点中但可能已不存在' if is_orphan else '未在任何激活流程节点中'}" ,
+            "message": f"用户 {user_id} {'出现在以下激活流程节点中但可能已不存在' if is_orphan else '未在任何激活流程节点中'}",
         }
 
 
@@ -882,9 +881,7 @@ def create_flow(
     with get_db() as db:
         existed = (
             db.query(ApprovalFlow)
-            .filter(
-                ApprovalFlow.flow_key == flow_key, ApprovalFlow.is_deleted == False
-            )  # noqa: E712
+            .filter(ApprovalFlow.flow_key == flow_key, ApprovalFlow.is_deleted == False)  # noqa: E712
             .first()
         )
         if existed:
@@ -972,8 +969,14 @@ def update_flow(
             return JSONResponse({"success": False, "message": "审批流程不存在"}, status_code=404)
 
         updatable = [
-            "flow_name", "description", "industry", "business_type",
-            "node_type", "allow_transfer", "allow_delegate", "allow_withdraw",
+            "flow_name",
+            "description",
+            "industry",
+            "business_type",
+            "node_type",
+            "allow_transfer",
+            "allow_delegate",
+            "allow_withdraw",
             "timeout_hours",
         ]
         for field in updatable:
@@ -1013,7 +1016,11 @@ def toggle_flow_active(
             payload={"flow_id": flow_id, "is_active": is_active},
         )
         db.commit()
-        return {"success": True, "message": f"流程已{'启用' if is_active else '停用'}", "is_active": is_active}
+        return {
+            "success": True,
+            "message": f"流程已{'启用' if is_active else '停用'}",
+            "is_active": is_active,
+        }
 
 
 @router.delete("/flows/{flow_id}")
@@ -1030,7 +1037,9 @@ def delete_flow(
             .first()
         )
         if not flow:
-            return JSONResponse({"success": False, "message": "审批流程不存在或已删除"}, status_code=404)
+            return JSONResponse(
+                {"success": False, "message": "审批流程不存在或已删除"}, status_code=404
+            )
         # 检查是否有进行中的审批请求
         pending_count = (
             db.query(ApprovalRequest)

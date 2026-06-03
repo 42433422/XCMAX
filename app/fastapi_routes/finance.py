@@ -14,7 +14,9 @@ from __future__ import annotations
 import logging
 from datetime import datetime
 
-from fastapi import APIRouter, Body, Query
+from fastapi import APIRouter, Query
+
+from app.schemas.finance_schema import FinanceTransactionCreate, FinanceTransactionUpdate
 
 logger = logging.getLogger(__name__)
 
@@ -123,16 +125,19 @@ def finance_transaction_get(txn_id: int):
 
 
 @router.post("/transactions")
-def finance_transaction_create(body: dict = Body(default_factory=dict)):
+def finance_transaction_create(body: FinanceTransactionCreate):
     """新建财务凭证。必填：transaction_type, amount。"""
-    return _svc().create_transaction(body or {})
+    return _svc().create_transaction(body.model_dump(exclude_none=True))
 
 
 @router.put("/transactions/{txn_id}")
-def finance_transaction_update(txn_id: int, body: dict = Body(default_factory=dict)):
-    return _svc().update_transaction(txn_id, body or {})
+def finance_transaction_update(txn_id: int, body: FinanceTransactionUpdate):
+    return _svc().update_transaction(txn_id, body.model_dump(exclude_none=True))
 
 
 @router.delete("/transactions/{txn_id}")
 def finance_transaction_delete(txn_id: int):
     return _svc().delete_transaction(txn_id)
+
+
+# unified-ledger 见 finance_unified_ledger.py（独立注册，避免本模块 schema 导入失败时端点不可用）

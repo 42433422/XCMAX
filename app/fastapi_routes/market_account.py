@@ -34,7 +34,9 @@ def _auth_header(raw: str) -> str:
 
 def session_id_from_request(request: Request) -> str:
     cookie_name = os.environ.get("SESSION_COOKIE_NAME", "session_id")
-    return str(request.cookies.get(cookie_name) or request.headers.get("X-Session-ID") or "").strip()
+    return str(
+        request.cookies.get(cookie_name) or request.headers.get("X-Session-ID") or ""
+    ).strip()
 
 
 def bind_market_auth_to_session(
@@ -74,7 +76,9 @@ def save_session_market_token(
                     row.market_refresh_token = rtok
                 db.commit()
     except Exception:
-        logger.exception("save_session_market_token: failed to persist market token for session_id=%s", sid)
+        logger.exception(
+            "save_session_market_token: failed to persist market token for session_id=%s", sid
+        )
 
 
 def clear_session_market_token(session_id: str) -> None:
@@ -95,7 +99,9 @@ def clear_session_market_token(session_id: str) -> None:
                     row.market_refresh_token = None
                 db.commit()
     except Exception:
-        logger.exception("clear_session_market_token: failed to clear persisted token for session_id=%s", sid)
+        logger.exception(
+            "clear_session_market_token: failed to clear persisted token for session_id=%s", sid
+        )
 
 
 def session_market_token(session_id: str) -> str:
@@ -223,10 +229,10 @@ async def market_session_handoff(request: Request):
     ``localStorage`` to append ``xcagi_mt=`` on cross-origin links (cookies do not carry).
     """
     try:
-        from app.fastapi_routes.legacy_helpers import _require_login_user
+        from app.infrastructure.auth.dependencies import resolve_session_user
 
-        user, err = _require_login_user(request)
-        if err:
+        user = resolve_session_user(request)
+        if user is None:
             tok = _normalize_bearer_token(latest_session_market_token())
             if tok:
                 return {
@@ -236,7 +242,16 @@ async def market_session_handoff(request: Request):
                         "market_base_url": _market_base_url(),
                     },
                 }
-            return err
+            return JSONResponse(
+                {
+                    "success": False,
+                    "message": (
+                        "当前会话未绑定修茈市场账号。请使用与本软件相同的用户名与密码重新登录，"
+                        "或在设置中粘贴修茈 Authorization 完成同步。"
+                    ),
+                },
+                status_code=404,
+            )
         sid = session_id_from_request(request)
         tok = await resolve_valid_market_access_token(sid)
         if not tok:
@@ -312,7 +327,9 @@ def _authorization_from_request(request: Request, body: dict[str, Any]) -> str:
     auth = _auth_header(str(body.get("authorization") or body.get("token") or ""))
     if auth:
         return auth
-    hdr = str(request.headers.get("Authorization") or request.headers.get("authorization") or "").strip()
+    hdr = str(
+        request.headers.get("Authorization") or request.headers.get("authorization") or ""
+    ).strip()
     if hdr:
         return _auth_header(hdr)
     return ""
@@ -321,7 +338,9 @@ def _authorization_from_request(request: Request, body: dict[str, Any]) -> str:
 async def _authorization_from_request_resolved(request: Request, body: dict[str, Any]) -> str:
     """Like ``_authorization_from_request`` but refreshes expired session-bound market JWTs."""
     sid = session_id_from_request(request)
-    session_tok = _normalize_bearer_token(session_market_token(sid) or latest_session_market_token())
+    session_tok = _normalize_bearer_token(
+        session_market_token(sid) or latest_session_market_token()
+    )
     if session_tok:
         resolved = await resolve_valid_market_access_token(sid)
         if resolved:
@@ -330,17 +349,17 @@ async def _authorization_from_request_resolved(request: Request, body: dict[str,
 
 
 def _body_snippet(payload: Any, limit: int = 240) -> str:
-  if isinstance(payload, dict):
-    try:
-      import json as _json
+    if isinstance(payload, dict):
+        try:
+            import json as _json
 
-      text = _json.dumps(payload, ensure_ascii=False)
-    except Exception:
-      text = str(payload)
-  else:
-    text = str(payload or "")
-  text = text.replace("\n", " ").strip()
-  return text[:limit] + ("…" if len(text) > limit else "")
+            text = _json.dumps(payload, ensure_ascii=False)
+        except Exception:
+            text = str(payload)
+    else:
+        text = str(payload or "")
+    text = text.replace("\n", " ").strip()
+    return text[:limit] + ("…" if len(text) > limit else "")
 
 
 def _error_message(payload: Any, status_code: int) -> str:
@@ -419,7 +438,10 @@ async def _proxy_json(
             {
                 "success": False,
                 "message": str(detail),
-                "data": {**(payload if isinstance(payload, dict) else {}), "market_base_url": _market_base_url()},
+                "data": {
+                    **(payload if isinstance(payload, dict) else {}),
+                    "market_base_url": _market_base_url(),
+                },
             },
             status_code=res.status_code,
         )
@@ -627,7 +649,9 @@ async def send_market_reset_password_code(email: str) -> dict[str, Any]:
     }
 
 
-async def reset_market_password_with_code(email: str, code: str, new_password: str) -> dict[str, Any]:
+async def reset_market_password_with_code(
+    email: str, code: str, new_password: str
+) -> dict[str, Any]:
     """Reset password on market server using email verification code."""
     email_norm = (email or "").strip().lower()
     code_s = (code or "").strip()
@@ -679,7 +703,9 @@ async def register_market_user(
         "email": email,
         "verification_code": (verification_code or "").strip() or "000000",
     }
-    payload = await _proxy_json("POST", "/api/auth/register", json_body=register_body, return_error_payload=True)
+    payload = await _proxy_json(
+        "POST", "/api/auth/register", json_body=register_body, return_error_payload=True
+    )
     if isinstance(payload, JSONResponse):
         return {"success": False, "message": "市场服务不可用"}
     if isinstance(payload, dict) and payload.get("__proxy_error__"):
@@ -718,15 +744,28 @@ async def market_register(request: Request, body: dict[str, Any] = Body(default_
     email = str(body.get("email") or "").strip()
     verification_code = str(body.get("verification_code") or body.get("code") or "").strip()
     if not username or not password or not email:
-        return JSONResponse({"success": False, "message": "username、password、email 必填"}, status_code=400)
+        return JSONResponse(
+            {"success": False, "message": "username、password、email 必填"}, status_code=400
+        )
     result = await register_market_user(username, password, email, verification_code)
     if not result.get("success"):
         return JSONResponse(
-            {"success": False, "message": result.get("message", "注册失败"), "data": result.get("raw")},
+            {
+                "success": False,
+                "message": result.get("message", "注册失败"),
+                "data": result.get("raw"),
+            },
             status_code=400,
         )
     token, _ = bind_market_auth_to_session(request, result)
-    return {"success": True, "data": {"market_base_url": result.get("market_base_url"), "token": token, "raw": result.get("raw")}}
+    return {
+        "success": True,
+        "data": {
+            "market_base_url": result.get("market_base_url"),
+            "token": token,
+            "raw": result.get("raw"),
+        },
+    }
 
 
 @router.post("/login")
@@ -739,7 +778,9 @@ async def market_login(request: Request, body: dict[str, Any] = Body(default_fac
     username = str(body.get("username") or body.get("email") or "").strip()
     password = str(body.get("password") or "")
     if not username or not password:
-        return JSONResponse({"success": False, "message": "username 与 password 必填"}, status_code=400)
+        return JSONResponse(
+            {"success": False, "message": "username 与 password 必填"}, status_code=400
+        )
     market_result = await login_market_with_password(username, password)
     if not market_result.get("success"):
         return JSONResponse(
@@ -759,7 +800,9 @@ async def market_login(request: Request, body: dict[str, Any] = Body(default_fac
 
 async def login_market_with_password(username: str, password: str) -> dict[str, Any]:
     """Authenticate against the market server and return a normalized token payload."""
-    payload = await _proxy_json("POST", "/api/auth/login", json_body={"username": username, "password": password})
+    payload = await _proxy_json(
+        "POST", "/api/auth/login", json_body={"username": username, "password": password}
+    )
     if isinstance(payload, JSONResponse):
         try:
             raw_body = json.loads(payload.body.decode("utf-8") if payload.body else "{}")
@@ -781,7 +824,9 @@ async def login_market_with_password(username: str, password: str) -> dict[str, 
     refresh = _refresh_token_from_auth_response(payload)
     if not token:
         return {"success": False, "message": "市场登录成功但未返回 access_token", "raw": payload}
-    me = await _proxy_json("GET", "/api/auth/me", authorization=f"Bearer {token}", return_error_payload=True)
+    me = await _proxy_json(
+        "GET", "/api/auth/me", authorization=f"Bearer {token}", return_error_payload=True
+    )
     is_enterprise, is_market_admin, user_blob = _market_identity_from_payloads(payload, me)
     raw_out = dict(payload) if isinstance(payload, dict) else {}
     if user_blob and not isinstance(raw_out.get("user"), dict):
@@ -801,7 +846,9 @@ async def login_market_with_password(username: str, password: str) -> dict[str, 
 async def market_account_sync(request: Request, body: dict[str, Any] = Body(default_factory=dict)):
     authorization = _auth_header(str(body.get("authorization") or body.get("token") or ""))
     if not authorization:
-        hdr = str(request.headers.get("Authorization") or request.headers.get("authorization") or "").strip()
+        hdr = str(
+            request.headers.get("Authorization") or request.headers.get("authorization") or ""
+        ).strip()
         if hdr:
             authorization = _auth_header(hdr)
     if not authorization:
@@ -809,9 +856,17 @@ async def market_account_sync(request: Request, body: dict[str, Any] = Body(defa
     payload = await _proxy_json("GET", "/api/auth/me", authorization=authorization)
     if isinstance(payload, JSONResponse):
         return payload
-    save_session_market_token(session_id_from_request(request), _normalize_bearer_token(authorization))
-    data = payload.get("data") if isinstance(payload, dict) and isinstance(payload.get("data"), dict) else payload
-    user = data.get("user") if isinstance(data, dict) and isinstance(data.get("user"), dict) else data
+    save_session_market_token(
+        session_id_from_request(request), _normalize_bearer_token(authorization)
+    )
+    data = (
+        payload.get("data")
+        if isinstance(payload, dict) and isinstance(payload.get("data"), dict)
+        else payload
+    )
+    user = (
+        data.get("user") if isinstance(data, dict) and isinstance(data.get("user"), dict) else data
+    )
     return {"success": True, "data": {"user": user, "market_base_url": _market_base_url()}}
 
 
@@ -842,7 +897,9 @@ def _merge_live_overview_fields(data: dict[str, Any], live: dict[str, Any]) -> N
 
 
 @router.post("/account-overview")
-async def market_account_overview(request: Request, body: dict[str, Any] = Body(default_factory=dict)):
+async def market_account_overview(
+    request: Request, body: dict[str, Any] = Body(default_factory=dict)
+):
     try:
         authorization = await _authorization_from_request_resolved(request, body)
     except Exception as exc:
@@ -852,7 +909,10 @@ async def market_account_overview(request: Request, body: dict[str, Any] = Body(
             "data": _degraded_account_overview(f"读取市场令牌失败：{exc}"),
         }
     if not authorization:
-        return JSONResponse({"success": False, "message": "尚未绑定市场账号；请重新登录软件以自动同步"}, status_code=401)
+        return JSONResponse(
+            {"success": False, "message": "尚未绑定市场账号；请重新登录软件以自动同步"},
+            status_code=401,
+        )
     try:
         payload = await _proxy_json(
             "GET", "/api/account/bootstrap", authorization=authorization, return_error_payload=True
@@ -865,9 +925,7 @@ async def market_account_overview(request: Request, body: dict[str, Any] = Body(
                 import json as _json
 
                 proxy_body = _json.loads(payload.body.decode() if payload.body else "{}")
-                err = str(
-                    proxy_body.get("message") or proxy_body.get("detail") or "市场服务不可用"
-                )
+                err = str(proxy_body.get("message") or proxy_body.get("detail") or "市场服务不可用")
             except Exception:
                 err = "市场服务不可用"
             data = _degraded_account_overview(err)
@@ -891,13 +949,19 @@ async def market_account_overview(request: Request, body: dict[str, Any] = Body(
             else:
                 err = ""
                 if isinstance(legacy, dict) and legacy.get("__proxy_error__"):
-                    err = _error_message(legacy.get("payload"), int(legacy.get("status_code") or 502))
+                    err = _error_message(
+                        legacy.get("payload"), int(legacy.get("status_code") or 502)
+                    )
                 elif isinstance(payload, dict) and payload.get("__proxy_error__"):
-                    err = _error_message(payload.get("payload"), int(payload.get("status_code") or 502))
+                    err = _error_message(
+                        payload.get("payload"), int(payload.get("status_code") or 502)
+                    )
                 else:
                     err = "无法连接修茈市场服务器"
                 data = _degraded_account_overview(err)
-                logger.warning("market_account_overview degraded: %s (base=%s)", err, _market_base_url())
+                logger.warning(
+                    "market_account_overview degraded: %s (base=%s)", err, _market_base_url()
+                )
 
         if not isinstance(data, dict):
             data = _degraded_account_overview("市场账户概览返回格式异常")
@@ -917,7 +981,10 @@ async def market_account_overview(request: Request, body: dict[str, Any] = Body(
 async def _market_llm_catalog_impl(request: Request, body: dict[str, Any]):
     authorization = await _authorization_from_request_resolved(request, body)
     if not authorization:
-        return JSONResponse({"success": False, "message": "尚未绑定市场账号；请重新登录软件以自动同步"}, status_code=401)
+        return JSONResponse(
+            {"success": False, "message": "尚未绑定市场账号；请重新登录软件以自动同步"},
+            status_code=401,
+        )
     refresh = "1" if bool(body.get("refresh")) else "0"
     payload = await _proxy_json(
         "GET",
@@ -954,7 +1021,9 @@ async def _market_llm_catalog_impl(request: Request, body: dict[str, Any]):
 
 
 @router.post("/llm-catalog")
-async def market_llm_catalog_post(request: Request, body: dict[str, Any] = Body(default_factory=dict)):
+async def market_llm_catalog_post(
+    request: Request, body: dict[str, Any] = Body(default_factory=dict)
+):
     return await _market_llm_catalog_impl(request, body)
 
 
@@ -965,21 +1034,45 @@ async def market_llm_catalog_get(request: Request, refresh: bool = False):
 
 async def _legacy_account_overview(authorization: str) -> dict[str, Any]:
     """Compose account overview from older market APIs when /api/account/bootstrap is not deployed."""
-    me = await _proxy_json("GET", "/api/auth/me", authorization=authorization, return_error_payload=True)
+    me = await _proxy_json(
+        "GET", "/api/auth/me", authorization=authorization, return_error_payload=True
+    )
     if isinstance(me, dict) and me.get("__proxy_error__"):
         return me
-    wallet = await _proxy_json("GET", "/api/wallet/overview", authorization=authorization, return_error_payload=True)
+    wallet = await _proxy_json(
+        "GET", "/api/wallet/overview", authorization=authorization, return_error_payload=True
+    )
     if isinstance(wallet, dict) and wallet.get("__proxy_error__"):
-        balance = await _proxy_json("GET", "/api/wallet/balance", authorization=authorization, return_error_payload=True)
-        wallet_data = {} if isinstance(balance, dict) and balance.get("__proxy_error__") else {"wallet": balance}
+        balance = await _proxy_json(
+            "GET", "/api/wallet/balance", authorization=authorization, return_error_payload=True
+        )
+        wallet_data = (
+            {}
+            if isinstance(balance, dict) and balance.get("__proxy_error__")
+            else {"wallet": balance}
+        )
     else:
         wallet_data = wallet if isinstance(wallet, dict) else {}
-    plan = await _proxy_json("GET", "/api/payment/my-plan", authorization=authorization, return_error_payload=True)
-    plan_data = {} if isinstance(plan, dict) and plan.get("__proxy_error__") else (plan if isinstance(plan, dict) else {})
-    llm = await _proxy_json("GET", "/api/llm/status", authorization=authorization, return_error_payload=True)
-    llm_data = {} if isinstance(llm, dict) and llm.get("__proxy_error__") else (llm if isinstance(llm, dict) else {})
+    plan = await _proxy_json(
+        "GET", "/api/payment/my-plan", authorization=authorization, return_error_payload=True
+    )
+    plan_data = (
+        {}
+        if isinstance(plan, dict) and plan.get("__proxy_error__")
+        else (plan if isinstance(plan, dict) else {})
+    )
+    llm = await _proxy_json(
+        "GET", "/api/llm/status", authorization=authorization, return_error_payload=True
+    )
+    llm_data = (
+        {}
+        if isinstance(llm, dict) and llm.get("__proxy_error__")
+        else (llm if isinstance(llm, dict) else {})
+    )
     user = me.get("user") if isinstance(me, dict) and isinstance(me.get("user"), dict) else me
-    wallet_obj = wallet_data.get("wallet") if isinstance(wallet_data.get("wallet"), dict) else wallet_data
+    wallet_obj = (
+        wallet_data.get("wallet") if isinstance(wallet_data.get("wallet"), dict) else wallet_data
+    )
     return {
         "ok": True,
         "user": user,
@@ -990,9 +1083,136 @@ async def _legacy_account_overview(authorization: str) -> dict[str, Any]:
         "llm": {
             "providers": llm_data.get("providers") or [],
             "fernet_configured": llm_data.get("fernet_configured"),
-            "byok_configured_count": len([p for p in (llm_data.get("providers") or []) if p.get("has_user_override")]),
+            "byok_configured_count": len(
+                [p for p in (llm_data.get("providers") or []) if p.get("has_user_override")]
+            ),
         },
     }
+
+
+def _market_auth_from_request(request: Request) -> str:
+    sid = session_id_from_request(request)
+    tok = session_market_token(sid)
+    if tok:
+        return tok
+    return str(request.headers.get("Authorization") or "").strip()
+
+
+@router.get("/payment/plans")
+async def market_payment_plans(request: Request):
+    """修茈市场套餐（含微信/支付宝统一收银，Java SoT）。"""
+    payload = await _proxy_json(
+        "GET",
+        "/api/payment/plans",
+        authorization=_market_auth_from_request(request),
+        return_error_payload=True,
+    )
+    if isinstance(payload, dict) and payload.get("__proxy_error__"):
+        return JSONResponse(
+            {
+                "success": False,
+                "message": _error_message(
+                    payload.get("payload"), int(payload.get("status_code") or 502)
+                ),
+            },
+            status_code=int(payload.get("status_code") or 502),
+        )
+    return {"success": True, "data": payload, "market_base_url": _market_base_url()}
+
+
+@router.post("/payment/checkout")
+async def market_payment_checkout(
+    request: Request, body: dict[str, Any] = Body(default_factory=dict)
+):
+    payload = await _proxy_json(
+        "POST",
+        "/api/payment/checkout",
+        json_body=body,
+        authorization=_market_auth_from_request(request),
+        return_error_payload=True,
+    )
+    if isinstance(payload, dict) and payload.get("__proxy_error__"):
+        return JSONResponse(
+            {
+                "success": False,
+                "message": _error_message(
+                    payload.get("payload"), int(payload.get("status_code") or 502)
+                ),
+            },
+            status_code=int(payload.get("status_code") or 502),
+        )
+    return {"success": True, "data": payload}
+
+
+@router.get("/payment/orders")
+async def market_payment_orders(
+    request: Request,
+    status: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+):
+    path = f"/api/payment/orders?limit={int(limit)}&offset={int(offset)}"
+    if status:
+        path += f"&status={status.strip()}"
+    payload = await _proxy_json(
+        "GET",
+        path,
+        authorization=_market_auth_from_request(request),
+        return_error_payload=True,
+    )
+    if isinstance(payload, dict) and payload.get("__proxy_error__"):
+        return JSONResponse(
+            {
+                "success": False,
+                "message": _error_message(
+                    payload.get("payload"), int(payload.get("status_code") or 502)
+                ),
+            },
+            status_code=int(payload.get("status_code") or 502),
+        )
+    return {"success": True, "data": payload}
+
+
+@router.get("/payment/query/{out_trade_no}")
+async def market_payment_query(request: Request, out_trade_no: str):
+    payload = await _proxy_json(
+        "GET",
+        f"/api/payment/query/{out_trade_no}",
+        authorization=_market_auth_from_request(request),
+        return_error_payload=True,
+    )
+    if isinstance(payload, dict) and payload.get("__proxy_error__"):
+        return JSONResponse(
+            {
+                "success": False,
+                "message": _error_message(
+                    payload.get("payload"), int(payload.get("status_code") or 502)
+                ),
+            },
+            status_code=int(payload.get("status_code") or 502),
+        )
+    return {"success": True, "data": payload}
+
+
+@router.get("/wallet/overview")
+async def market_wallet_overview(request: Request):
+    payload = await _proxy_json(
+        "GET",
+        "/api/wallet/overview",
+        authorization=_market_auth_from_request(request),
+        return_error_payload=True,
+    )
+    if isinstance(payload, dict) and payload.get("__proxy_error__"):
+        return JSONResponse(
+            {
+                "success": False,
+                "message": _error_message(
+                    payload.get("payload"), int(payload.get("status_code") or 502)
+                ),
+            },
+            status_code=int(payload.get("status_code") or 502),
+        )
+    return {"success": True, "data": payload}
 
 
 @router.get("/status")
@@ -1007,7 +1227,9 @@ async def market_status():
         "data": {
             "market_base_url": _market_base_url(),
             "reachable": reachable,
-            "raw": payload.get("payload") if isinstance(payload, dict) and payload.get("__proxy_error__") else payload,
+            "raw": payload.get("payload")
+            if isinstance(payload, dict) and payload.get("__proxy_error__")
+            else payload,
         },
     }
 
@@ -1028,16 +1250,27 @@ async def market_dev_create_account(body: dict[str, Any] = Body(default_factory=
         status_code = int(payload.get("status_code") or 400)
         raw_error = payload.get("payload")
         if status_code == 409 or "存在" in _error_message(raw_error, status_code):
-            payload = await _proxy_json("POST", "/api/auth/login", json_body={"username": username, "password": password})
+            payload = await _proxy_json(
+                "POST", "/api/auth/login", json_body={"username": username, "password": password}
+            )
         else:
             return JSONResponse(
-                {"success": False, "message": _error_message(raw_error, status_code), "data": raw_error},
+                {
+                    "success": False,
+                    "message": _error_message(raw_error, status_code),
+                    "data": raw_error,
+                },
                 status_code=status_code,
             )
     token = _token_from_auth_response(payload)
     if not token:
-        return JSONResponse({"success": False, "message": "账号创建成功但未返回 token", "data": payload}, status_code=502)
-    overview = await _proxy_json("GET", "/api/account/bootstrap", authorization=token, return_error_payload=True)
+        return JSONResponse(
+            {"success": False, "message": "账号创建成功但未返回 token", "data": payload},
+            status_code=502,
+        )
+    overview = await _proxy_json(
+        "GET", "/api/account/bootstrap", authorization=token, return_error_payload=True
+    )
     return {
         "success": True,
         "data": {
@@ -1047,6 +1280,8 @@ async def market_dev_create_account(body: dict[str, Any] = Body(default_factory=
             "password": password,
             "token": token,
             "overview_ok": not (isinstance(overview, dict) and overview.get("__proxy_error__")),
-            "overview": overview.get("payload") if isinstance(overview, dict) and overview.get("__proxy_error__") else overview,
+            "overview": overview.get("payload")
+            if isinstance(overview, dict) and overview.get("__proxy_error__")
+            else overview,
         },
     }

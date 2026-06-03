@@ -36,9 +36,9 @@ def _fail(message: str, status: int = 400, **extra: Any) -> JSONResponse:
 
 
 def _shipment_svc():
-    from app.bootstrap import get_shipment_app_service
+    from app.bootstrap import get_shipment_application_service_core
 
-    return get_shipment_app_service()
+    return get_shipment_application_service_core()
 
 
 def _printer_svc():
@@ -144,9 +144,9 @@ def compat_units_alias():
 
 @router.post("/api/purchase_units")
 def compat_purchase_units_create(payload: dict[str, Any] = Body(default_factory=dict)):
+    from app.application.facades.query_facade import find_purchase_unit
     from app.db.models import PurchaseUnit
     from app.db.session import get_db
-    from app.application.facades.query_facade import find_purchase_unit
 
     unit_name = str(payload.get("unit_name") or payload.get("name") or "").strip()
     if not unit_name:
@@ -195,8 +195,8 @@ def compat_purchase_units_update(
 
 @router.delete("/api/purchase_units/{unit_id}")
 def compat_purchase_units_delete(unit_id: int):
-    from app.db.models import PurchaseUnit
     from app.application.facades.query_facade import query_service
+    from app.db.models import PurchaseUnit
 
     deleted = query_service.delete(PurchaseUnit, id=unit_id)
     if deleted == 0:
@@ -359,8 +359,10 @@ def compat_tts(payload: dict[str, Any] = Body(default_factory=dict)):
     pitch = payload.get("pitch")
 
     try:
-        from app.application.facades.tts_facade import synthesize_to_data_uri
-        from app.application.facades.tts_facade import trigger_common_tts_warmup
+        from app.application.facades.tts_facade import (
+            synthesize_to_data_uri,
+            trigger_common_tts_warmup,
+        )
 
         trigger_common_tts_warmup()
 
@@ -392,5 +394,6 @@ def compat_tts(payload: dict[str, Any] = Body(default_factory=dict)):
                 "success": False,
                 "message": "TTS 服务未启用，将使用浏览器语音",
                 "data": {},
-            }
+            },
+            status_code=200,
         )

@@ -149,8 +149,8 @@ def _register_mods_endpoints(router) -> None:
                 },
             }
 
-    @router.get("", include_in_schema=False)
-    @router.get("/")
+    @router.get("")
+    @router.get("/", include_in_schema=False)
     async def list_mods(request: Request, all: str | None = None):
         """List all loaded or discovered mods
 
@@ -208,14 +208,15 @@ def _register_mods_endpoints(router) -> None:
     @router.get("/employee-packs/{pack_id}/config-preview")
     async def employee_pack_config_preview(pack_id: str):
         """返回已安装 employee_pack 的 ``employee_config_v2`` 摘要（供宿主/MODstore 联调）。"""
-        import json
         import os
 
         try:
             from app.infrastructure.mods.mod_manager import _default_mods_root
         except Exception as e:  # noqa: BLE001
             return {"success": False, "error": str(e)}
-        root = os.path.join(_default_mods_root(), "_employees", (pack_id or "").strip(), "manifest.json")
+        root = os.path.join(
+            _default_mods_root(), "_employees", (pack_id or "").strip(), "manifest.json"
+        )
         if not os.path.isfile(root):
             return {"success": False, "error": "员工包未安装或 manifest 不存在"}
         try:

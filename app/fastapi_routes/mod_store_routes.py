@@ -163,7 +163,10 @@ def _remote_to_mod_info(d: dict[str, Any], installed_ids: set[str]) -> dict[str,
         "pkg_id": mid,
         "name": name,
         "version": version,
-        "author": str(d.get("author") or d.get("publisher") or commerce.get("seller") or "—").strip() or "—",
+        "author": str(
+            d.get("author") or d.get("publisher") or commerce.get("seller") or "—"
+        ).strip()
+        or "—",
         "description": str(d.get("description") or "").strip(),
         "package_file": f"{mid}:{version}",
         "download_url": download_url,
@@ -180,7 +183,9 @@ def _remote_to_mod_info(d: dict[str, Any], installed_ids: set[str]) -> dict[str,
         "license": d.get("license"),
         "source": "remote",
         "catalog_base_url": catalog_base_url(),
-        "store_collection": str(d.get("store_collection") or commerce.get("collection") or "").strip(),
+        "store_collection": str(
+            d.get("store_collection") or commerce.get("collection") or ""
+        ).strip(),
         "public_listing": bool(d.get("public_listing")),
     }
     if not row_out["store_collection"]:
@@ -205,20 +210,19 @@ async def _remote_rows() -> list[dict[str, Any]]:
     return rows
 
 
-def _inject_host_foundation_row(
-    available: list[dict[str, Any]], installed_ids: set[str]
-) -> None:
+def _inject_host_foundation_row(available: list[dict[str, Any]], installed_ids: set[str]) -> None:
     from app.mod_sdk.host_foundation import (
         HOST_FOUNDATION_EMPLOYEE_PACK_ID,
         host_foundation_catalog_row,
+        is_host_foundation_pack_installed,
         is_infrastructure_mod_hidden_from_store,
     )
 
-    from app.mod_sdk.host_foundation import is_host_foundation_pack_installed
-
     if any(str(r.get("id") or "") == HOST_FOUNDATION_EMPLOYEE_PACK_ID for r in available):
         return
-    installed = HOST_FOUNDATION_EMPLOYEE_PACK_ID in installed_ids or is_host_foundation_pack_installed()
+    installed = (
+        HOST_FOUNDATION_EMPLOYEE_PACK_ID in installed_ids or is_host_foundation_pack_installed()
+    )
     available.insert(0, host_foundation_catalog_row(installed=installed))
     # 去掉误上架的逐项 bridge（远端若仍有历史条目）
     i = 0
@@ -251,7 +255,9 @@ async def _combined_rows() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
 
     inject_aux_employee_pack_rows(available, set(installed_map.keys()))
     installed_visible = [
-        r for r in installed_map.values() if not is_infrastructure_mod_hidden_from_store(str(r.get("id") or ""))
+        r
+        for r in installed_map.values()
+        if not is_infrastructure_mod_hidden_from_store(str(r.get("id") or ""))
     ]
     return available, installed_visible
 
@@ -305,7 +311,9 @@ async def _request_payload(request: Request) -> dict[str, str]:
     try:
         if "application/json" in content_type:
             data = await request.json()
-            return {str(k): _safe_text(v) for k, v in data.items()} if isinstance(data, dict) else {}
+            return (
+                {str(k): _safe_text(v) for k, v in data.items()} if isinstance(data, dict) else {}
+            )
         form = await request.form()
         return {str(k): _safe_text(v) for k, v in form.items()}
     except Exception:
@@ -323,9 +331,10 @@ def _split_package_file(package_file: str) -> tuple[str, str]:
 _normalize_package_zip = normalize_package_zip_path
 
 
-async def _install_from_catalog(pkg_id: str, version: str, activate: bool = True) -> ModStoreInstallResult:
+async def _install_from_catalog(
+    pkg_id: str, version: str, activate: bool = True
+) -> ModStoreInstallResult:
     from app.mod_sdk.host_foundation import (
-        HOST_FOUNDATION_EMPLOYEE_PACK_ID,
         install_aux_employee_pack_from_repo_seed,
         is_aux_employee_pack_mod_id,
         is_host_foundation_employee_pack,
@@ -382,7 +391,11 @@ async def _install_from_catalog(pkg_id: str, version: str, activate: bool = True
             verify_signature=False,
             activate=activate,
         )
-        data = dataclasses.asdict(metadata) if metadata and dataclasses.is_dataclass(metadata) else None
+        data = (
+            dataclasses.asdict(metadata)
+            if metadata and dataclasses.is_dataclass(metadata)
+            else None
+        )
         return ModStoreInstallResult(success=bool(ok), message=message, data=data)
     finally:
         for p in {tmp_path, normalized_path}:
@@ -416,7 +429,7 @@ async def mod_store_search(
 @router.get("/popular", response_model=ModStoreListResponse)
 async def mod_store_popular(limit: int = Query(10, ge=1, le=200)) -> ModStoreListResponse:
     rows, _installed = await _combined_rows()
-    rows.sort(key=lambda r: (r.get("total_downloads") or r.get("download_count") or 0), reverse=True)
+    rows.sort(key=lambda r: r.get("total_downloads") or r.get("download_count") or 0, reverse=True)
     return ModStoreListResponse(data=rows[:limit])
 
 
@@ -436,7 +449,9 @@ async def mod_store_details(mod_id: str) -> ModStoreDetailResponse:
         if isinstance(rows, list) and rows:
             latest = rows[0] if isinstance(rows[0], dict) else {"version": rows[0]}
             version = _safe_text(latest.get("version")) or "1.0.0"
-            detail = await catalog_get_json(f"/packages/{quote(mid, safe='')}/{quote(version, safe='')}")
+            detail = await catalog_get_json(
+                f"/packages/{quote(mid, safe='')}/{quote(version, safe='')}"
+            )
             return ModStoreDetailResponse(
                 data=ModStoreDetailData(
                     id=str(detail.get("id") or mid),
@@ -618,7 +633,9 @@ async def mod_store_install_host_foundation(
     """安装「宿主基础能力·预装员工」并 materialize 全部 bridge（非逐项 Mod 上架）。"""
     try:
         result = await _install_host_foundation_internal(edition)
-        return ModStoreSimpleResponse(success=result.success, message=result.message, data=result.data)
+        return ModStoreSimpleResponse(
+            success=result.success, message=result.message, data=result.data
+        )
     except Exception as exc:
         logger.exception("install-host-foundation failed")
         return ModStoreSimpleResponse(
@@ -687,10 +704,15 @@ async def mod_store_sync_modstore_library(request: Request) -> ModStoreSimpleRes
     if not isinstance(body, dict):
         raise HTTPException(status_code=400, detail="JSON 须为对象")
 
-    base = str(body.get("base_url") or body.get("baseUrl") or "").strip().rstrip("/") or "https://xiu-ci.com"
+    base = (
+        str(body.get("base_url") or body.get("baseUrl") or "").strip().rstrip("/")
+        or "https://xiu-ci.com"
+    )
     token = str(body.get("token") or "").strip()
     if not token:
-        raise HTTPException(status_code=400, detail="缺少 token（修茈 Developer PAT，需含 mod:sync）")
+        raise HTTPException(
+            status_code=400, detail="缺少 token（修茈 Developer PAT，需含 mod:sync）"
+        )
 
     sync_all = bool(body.get("all"))
     raw_ids = body.get("mod_ids")
@@ -701,7 +723,9 @@ async def mod_store_sync_modstore_library(request: Request) -> ModStoreSimpleRes
         mod_ids = [x.strip() for x in raw_ids.split(",") if x.strip()]
 
     if not sync_all and (not mod_ids or len(mod_ids) == 0):
-        raise HTTPException(status_code=400, detail="请指定 mod_ids（数组或逗号分隔字符串）或设置 all: true")
+        raise HTTPException(
+            status_code=400, detail="请指定 mod_ids（数组或逗号分隔字符串）或设置 all: true"
+        )
 
     try:
         raw = await sync_modstore_library_to_local(

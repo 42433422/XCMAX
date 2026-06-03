@@ -37,6 +37,8 @@ _EXCLUDED_PREFIXES = (
     "startup/",
     "yuangong/",
     "workflow/",
+    "data-sources/",
+    "xcmax-dashboard/",
     "brand-xc-logo",
 )
 

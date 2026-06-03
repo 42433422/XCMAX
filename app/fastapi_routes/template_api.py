@@ -80,13 +80,13 @@ def _publish_template_event(event_type: str, payload: dict[str, Any]) -> None:
 
 
 @router.get("/api/templates/list", summary="模板列表（兼容旧路径 /api/templates/list）")
-async def templates_list_legacy_alias(request: Request):
+def templates_list_legacy_alias(request: Request):
     """与 GET /api/templates 相同，供仍使用 /list 后缀的前端使用。"""
-    return await templates_list_compat(request)
+    return templates_list_compat(request)
 
 
 @router.get("/api/templates", summary="模板列表（兼容 XCAGI 前端）")
-@router.get("/api/templates/", summary="模板列表（兼容 XCAGI 前端）")
+@router.get("/api/templates/", summary="模板列表（兼容 XCAGI 前端）", include_in_schema=False)
 def templates_list_compat(request: Request):
     t0 = time.perf_counter()
     rid = str(getattr(request.state, "trace_id", None) or id(request))

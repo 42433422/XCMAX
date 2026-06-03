@@ -13,7 +13,7 @@ admin_router = APIRouter(prefix="/api/admin/document-templates", tags=["admin-do
 
 
 @public_router.get("")
-@public_router.get("/")
+@public_router.get("/", include_in_schema=False)
 def list_document_templates(role: str | None = Query(None)) -> dict[str, Any]:
     rows = list_builtin_document_templates(role)
     default_id = next(
@@ -24,6 +24,6 @@ def list_document_templates(role: str | None = Query(None)) -> dict[str, Any]:
 
 
 @admin_router.post("")
-@admin_router.post("/")
+@admin_router.post("/", include_in_schema=False)
 def admin_upload_document_template() -> dict[str, Any]:
     return {"success": False, "message": "admin upload not available in recovery mode"}

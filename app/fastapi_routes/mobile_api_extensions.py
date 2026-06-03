@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import logging
-import os
+import socket
 from typing import Any
 
-from fastapi import APIRouter, Body, Depends, Header, Query, Request
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
@@ -21,9 +21,10 @@ extension_router = APIRouter(tags=["mobile-api-ext"])
 
 def _ensure_mobile_device_table() -> None:
     try:
+        from sqlalchemy import inspect
+
         from app.db.models.mobile_device import MobileDeviceToken
         from app.db.session import get_db
-        from sqlalchemy import inspect
 
         with get_db() as db:
             bind = db.get_bind()
@@ -61,7 +62,9 @@ async def mobile_approval_list(
     user=Depends(get_mobile_user),
 ):
     if user is None:
-        return JSONResponse(format_mobile_response(None, "未授权", success=False, code=401), status_code=401)
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
+        )
     from app.db.models.approval import ApprovalRequest
     from app.db.session import get_db
 
@@ -96,7 +99,9 @@ async def mobile_customers(
     user=Depends(get_mobile_user),
 ):
     if user is None:
-        return JSONResponse(format_mobile_response(None, "未授权", success=False, code=401), status_code=401)
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
+        )
     from app.db.models import Customer
     from app.db.session import get_db
 
@@ -122,14 +127,18 @@ async def mobile_shipments(
     user=Depends(get_mobile_user),
 ):
     if user is None:
-        return JSONResponse(format_mobile_response(None, "未授权", success=False, code=401), status_code=401)
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
+        )
     from app.db.models.shipment import ShipmentRecord
     from app.db.session import get_db
 
     with get_db() as db:
         q = db.query(ShipmentRecord)
         total = q.count()
-        rows = q.order_by(ShipmentRecord.id.desc()).offset((page - 1) * per_page).limit(per_page).all()
+        rows = (
+            q.order_by(ShipmentRecord.id.desc()).offset((page - 1) * per_page).limit(per_page).all()
+        )
         items = [
             {
                 "id": r.id,
@@ -144,7 +153,9 @@ async def mobile_shipments(
 @extension_router.post("/devices/register")
 async def mobile_device_register(body: DeviceRegisterBody, user=Depends(get_mobile_user)):
     if user is None:
-        return JSONResponse(format_mobile_response(None, "未授权", success=False, code=401), status_code=401)
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
+        )
     _ensure_mobile_device_table()
     from app.db.models.mobile_device import MobileDeviceToken
     from app.db.session import get_db
@@ -195,7 +206,9 @@ async def mobile_device_unregister(
     user=Depends(get_mobile_user),
 ):
     if user is None:
-        return JSONResponse(format_mobile_response(None, "未授权", success=False, code=401), status_code=401)
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
+        )
     _ensure_mobile_device_table()
     from app.db.models.mobile_device import MobileDeviceToken
     from app.db.session import get_db
@@ -208,12 +221,34 @@ async def mobile_device_unregister(
     return format_mobile_response(data={"unregistered": True})
 
 
+def _guess_lan_ipv4() -> str:
+    """本机对外网卡 IPv4，供手机扫码时避免 127.0.0.1。"""
+    try:
+        probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        probe.connect(("8.8.8.8", 80))
+        ip = str(probe.getsockname()[0] or "").strip()
+        probe.close()
+        if ip and not ip.startswith("127."):
+            return ip
+    except OSError:
+        pass
+    return "127.0.0.1"
+
+
+def _pairing_issue_host(requested: str) -> str:
+    host = str(requested or "").strip() or "127.0.0.1"
+    if host in ("127.0.0.1", "localhost", "0.0.0.0"):
+        return _guess_lan_ipv4()
+    return host
+
+
 @extension_router.post("/pairing/issue")
 async def mobile_pairing_issue(body: PairingIssueBody):
     """桌面或运维签发配对 QR 载荷（开发/内网）。"""
-    return format_mobile_response(
-        data=issue_pairing_nonce(body.host.strip(), int(body.port)),
-    )
+    host = _pairing_issue_host(body.host)
+    port = int(body.port)
+    payload = issue_pairing_nonce(host, port)
+    return format_mobile_response(data=payload)
 
 
 @extension_router.post("/pairing/exchange")
@@ -256,14 +291,18 @@ def _mobile_mod_items() -> list[dict[str, str]]:
 @extension_router.get("/mods")
 async def mobile_mods_summary(user=Depends(get_mobile_user)):
     if user is None:
-        return JSONResponse(format_mobile_response(None, "未授权", success=False, code=401), status_code=401)
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
+        )
     return format_mobile_response(data={"items": _mobile_mod_items()})
 
 
 @extension_router.get("/platform-shell")
 async def mobile_platform_shell(user=Depends(get_mobile_user)):
     if user is None:
-        return JSONResponse(format_mobile_response(None, "未授权", success=False, code=401), status_code=401)
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
+        )
     installed = [m["id"] for m in _mobile_mod_items()]
     from app.mod_sdk.platform_shell import build_platform_shell_payload
 
@@ -273,7 +312,9 @@ async def mobile_platform_shell(user=Depends(get_mobile_user)):
 @extension_router.get("/home")
 async def mobile_home(user=Depends(get_mobile_user)):
     if user is None:
-        return JSONResponse(format_mobile_response(None, "未授权", success=False, code=401), status_code=401)
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
+        )
     installed = [m["id"] for m in _mobile_mod_items()]
     from app.mod_sdk.platform_shell import build_platform_shell_payload
 
@@ -313,7 +354,9 @@ def _approval_items(limit: int = 100) -> list[dict[str, Any]]:
     from app.db.session import get_db
 
     with get_db() as db:
-        rows = db.query(ApprovalRequest).order_by(ApprovalRequest.created_at.desc()).limit(limit).all()
+        rows = (
+            db.query(ApprovalRequest).order_by(ApprovalRequest.created_at.desc()).limit(limit).all()
+        )
         return [
             {
                 "id": r.id,
@@ -344,7 +387,9 @@ def _shipment_items(limit: int = 100) -> list[dict[str, Any]]:
 @extension_router.get("/sync/status")
 async def mobile_sync_status(user=Depends(get_mobile_user)):
     if user is None:
-        return JSONResponse(format_mobile_response(None, "未授权", success=False, code=401), status_code=401)
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
+        )
     try:
         from app.db.xcmax_sync import SyncDb, _ensure_schema, _get_conn
 
@@ -363,7 +408,9 @@ async def mobile_sync_status(user=Depends(get_mobile_user)):
 @extension_router.post("/sync/pull")
 async def mobile_sync_pull(body: SyncPullBody, user=Depends(get_mobile_user)):
     if user is None:
-        return JSONResponse(format_mobile_response(None, "未授权", success=False, code=401), status_code=401)
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
+        )
     try:
         from app.db.xcmax_sync import SyncDb
 
@@ -391,7 +438,9 @@ async def mobile_sync_pull(body: SyncPullBody, user=Depends(get_mobile_user)):
 @extension_router.post("/sync/push")
 async def mobile_sync_push(body: SyncPushBody, user=Depends(get_mobile_user)):
     if user is None:
-        return JSONResponse(format_mobile_response(None, "未授权", success=False, code=401), status_code=401)
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
+        )
     actor = getattr(user, "username", None) or f"user-{getattr(user, 'id', 0)}"
     written = 0
     try:
@@ -427,10 +476,12 @@ async def mobile_sync_push(body: SyncPushBody, user=Depends(get_mobile_user)):
 @extension_router.get("/sync/conflicts")
 async def mobile_sync_conflicts(user=Depends(get_mobile_user)):
     if user is None:
-        return JSONResponse(format_mobile_response(None, "未授权", success=False, code=401), status_code=401)
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
+        )
     items: list[dict[str, Any]] = []
     try:
-        from app.db.xcmax_sync import _get_conn, _ensure_schema
+        from app.db.xcmax_sync import _ensure_schema, _get_conn
 
         with _get_conn() as conn:
             _ensure_schema(conn)

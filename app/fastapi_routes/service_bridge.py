@@ -130,11 +130,17 @@ async def update_config(body: BridgeConfigUpdate):
 @router.post("/requests")
 async def receive_request(body: ServiceRequestCreate):
     with get_db() as db:
-        from app.db.models.service_request import ServiceRequest, ServiceRequestStatus, ServiceRequestPriority
+        from app.db.models.service_request import (
+            ServiceRequest,
+            ServiceRequestPriority,
+            ServiceRequestStatus,
+        )
 
         valid_priorities = [p.value for p in ServiceRequestPriority]
         if body.priority not in valid_priorities:
-            raise HTTPException(status_code=400, detail=f"Invalid priority. Must be one of: {valid_priorities}")
+            raise HTTPException(
+                status_code=400, detail=f"Invalid priority. Must be one of: {valid_priorities}"
+            )
 
         req = ServiceRequest(
             source_instance_id=body.source_instance_id,
@@ -202,9 +208,15 @@ async def get_request(request_id: int):
 async def respond_request(request_id: int, body: ServiceRequestRespond):
     from app.db.models.service_request import ServiceRequestStatus
 
-    valid_statuses = [ServiceRequestStatus.PROCESSING.value, ServiceRequestStatus.RESOLVED.value, ServiceRequestStatus.CLOSED.value]
+    valid_statuses = [
+        ServiceRequestStatus.PROCESSING.value,
+        ServiceRequestStatus.RESOLVED.value,
+        ServiceRequestStatus.CLOSED.value,
+    ]
     if body.status not in valid_statuses:
-        raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {valid_statuses}")
+        raise HTTPException(
+            status_code=400, detail=f"Invalid status. Must be one of: {valid_statuses}"
+        )
 
     with get_db() as db:
         from app.db.models.service_request import ServiceRequest
@@ -225,15 +237,18 @@ async def respond_request(request_id: int, body: ServiceRequestRespond):
 @router.get("/instances")
 async def list_instances():
     with get_db() as db:
-        from app.db.models.service_request import ServiceRequest, ServiceRequestStatus
         from sqlalchemy import func
+
+        from app.db.models.service_request import ServiceRequest, ServiceRequestStatus
 
         rows = (
             db.query(
                 ServiceRequest.source_instance_id,
                 ServiceRequest.source_instance_name,
                 func.count(ServiceRequest.id).label("total_requests"),
-                func.count().filter(ServiceRequest.status == ServiceRequestStatus.PENDING.value).label("pending_count"),
+                func.count()
+                .filter(ServiceRequest.status == ServiceRequestStatus.PENDING.value)
+                .label("pending_count"),
             )
             .group_by(ServiceRequest.source_instance_id, ServiceRequest.source_instance_name)
             .all()
@@ -255,13 +270,29 @@ async def list_instances():
 @router.get("/stats")
 async def get_stats():
     with get_db() as db:
-        from app.db.models.service_request import ServiceRequest
         from sqlalchemy import func
 
+        from app.db.models.service_request import ServiceRequest
+
         total = db.query(func.count(ServiceRequest.id)).scalar() or 0
-        pending = db.query(func.count(ServiceRequest.id)).filter(ServiceRequest.status == "pending").scalar() or 0
-        processing = db.query(func.count(ServiceRequest.id)).filter(ServiceRequest.status == "processing").scalar() or 0
-        resolved = db.query(func.count(ServiceRequest.id)).filter(ServiceRequest.status == "resolved").scalar() or 0
+        pending = (
+            db.query(func.count(ServiceRequest.id))
+            .filter(ServiceRequest.status == "pending")
+            .scalar()
+            or 0
+        )
+        processing = (
+            db.query(func.count(ServiceRequest.id))
+            .filter(ServiceRequest.status == "processing")
+            .scalar()
+            or 0
+        )
+        resolved = (
+            db.query(func.count(ServiceRequest.id))
+            .filter(ServiceRequest.status == "resolved")
+            .scalar()
+            or 0
+        )
         return {
             "ok": True,
             "data": {
@@ -284,7 +315,9 @@ async def send_outbox(body: OutboxCreate):
 
     valid_priorities = [p.value for p in ServiceRequestPriority]
     if body.priority not in valid_priorities:
-        raise HTTPException(status_code=400, detail=f"Invalid priority. Must be one of: {valid_priorities}")
+        raise HTTPException(
+            status_code=400, detail=f"Invalid priority. Must be one of: {valid_priorities}"
+        )
 
     payload = {
         "source_instance_id": instance_id,
@@ -362,7 +395,9 @@ async def sync_outbox():
     with get_db() as db:
         from app.db.models.service_request import ServiceRequest
 
-        for req in db.query(ServiceRequest).filter(ServiceRequest.source_instance_id == instance_id).all():
+        for req in (
+            db.query(ServiceRequest).filter(ServiceRequest.source_instance_id == instance_id).all()
+        ):
             extra = {}
             try:
                 extra = json.loads(req.extra_data) if req.extra_data else {}
@@ -373,7 +408,9 @@ async def sync_outbox():
                 continue
             try:
                 async with httpx.AsyncClient(timeout=10.0) as client:
-                    resp = await client.get(f"{main_server_url}/api/service-bridge/requests/{remote_id}")
+                    resp = await client.get(
+                        f"{main_server_url}/api/service-bridge/requests/{remote_id}"
+                    )
                     if resp.status_code == 200:
                         remote_data = resp.json().get("data", {})
                         if remote_data.get("response"):

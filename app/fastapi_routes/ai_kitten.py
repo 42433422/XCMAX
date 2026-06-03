@@ -176,8 +176,8 @@ def ai_kitten_financial_report(body: dict = Body(default_factory=dict)):
         from app.application.facades.kitten_facade import (
             FinancialReportPlugin,
             InventoryValuationPlugin,
+            analysis_save_service,
         )
-        from app.application.facades.kitten_facade import analysis_save_service
 
         fin_result = FinancialReportPlugin().run(payload)
         inv_result = InventoryValuationPlugin().run(payload)

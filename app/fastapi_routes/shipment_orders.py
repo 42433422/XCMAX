@@ -5,7 +5,7 @@
 
 - ``/api/orders*``、``/orders/next_number``（AI 助手根路径）
 - ``/api/shipment/generate|print|download/*`` 与 ``/api/shipment/orders*``（与归档 ``shipment`` 蓝图对齐）
-- ``GET /api/shipment/list`` 由 ``migrated_miniprogram_api`` 统一注册（桌面 / 小程序 JWT 分流）
+- ``GET /api/shipment/list`` 统一注册
 - ``/api/shipment/shipment-records/*``
 
 历史：统一 FastAPI 入口后兼容层未挂载上述路径时，前端会出现大量 404。
@@ -22,9 +22,9 @@ from typing import Any
 from fastapi import APIRouter, Body, HTTPException, Query
 from fastapi.responses import FileResponse, JSONResponse
 
-from app.bootstrap import get_shipment_app_service
-from app.db.models import ShipmentRecord
 from app.application.facades.query_facade import query_service
+from app.bootstrap import get_shipment_application_service_core
+from app.db.models import ShipmentRecord
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +32,7 @@ router = APIRouter(tags=["shipment-orders-compat"])
 
 
 def _svc():
-    return get_shipment_app_service()
+    return get_shipment_application_service_core()
 
 
 def _next_order_number_payload(suffix: str = "A") -> dict[str, Any]:
@@ -277,7 +277,7 @@ def api_orders_list(limit: int = Query(default=100, ge=1, le=5000)):
 
 
 @router.delete("/api/orders")
-@router.delete("/api/orders/")
+@router.delete("/api/orders/", include_in_schema=False)
 def api_orders_delete_root():
     result = _svc().clear_all_orders()
     return JSONResponse(result, status_code=200 if result.get("success") else 500)
@@ -370,7 +370,7 @@ def shipment_records_dashboard_alias(
 
 
 @router.get("/api/shipment/shipment-records/records")
-@router.get("/api/shipment/shipment-records/records/")
+@router.get("/api/shipment/shipment-records/records/", include_in_schema=False)
 def shipment_records_list(
     unit: str | None = Query(default=None),
     unit_name: str | None = Query(default=None),
