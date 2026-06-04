@@ -32,7 +32,7 @@
 | M3-W1 | Mod 商店 **0.01 元**真实流水 | 支付宝账单截图 | ⬜ 待启动 | 否 |
 | M3-W2 | 智能搜索 V0 | API 文档 + 1 个 demo | ⬜ 待启动 | 否 |
 | M3-W3 | 智能纪要 | 通义听悟 / 腾讯会议 API；1 个 demo | ⬜ 待启动 | 否 |
-| M3-W4 | **等保二级测评启动** | 测评机构合同 + 时间表（[`compliance-tier2-kickoff.md`](compliance-tier2-kickoff.md)） | ⬜ 待启动 | 否 |
+| M3-W4 | **等保二级测评启动** | 测评机构合同 + 时间表（[`compliance-tier2-kickoff.md`](compliance-tier2-kickoff.md)） | 📝 **已起草**（启动清单）；合同/时间表待签 | 否 |
 
 ---
 
@@ -70,3 +70,4 @@
 | 日期 | 更新 |
 |------|------|
 | 2026-06-05 | 初版：对照路径图阶段 1；mypy 标绿；staging 依赖单列 |
+| 2026-06-05 | M3-W4 等保二级：链 [`compliance-tier2-kickoff.md`](compliance-tier2-kickoff.md)，状态标 **已起草** |
