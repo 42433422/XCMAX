@@ -46,7 +46,7 @@
 | `*_app_service_v2.py` 数量 | 历史 CHANGELOG / V10_ACCEPTANCE 曾写「0 / 已清零」 | **23** 个应用服务模块（见下表）；决策为**保留**作应用层 SSOT 后缀 | 夸大（已对齐） | 后端架构 | 本表 + [`V10_ACCEPTANCE.md`](V10_ACCEPTANCE.md) |
 | mypy `ignore_errors` 目录数 | ≤ 6（[`plan-2026-06.md`](../../specs/plan-2026-06.md) M0） | **6**（`pyproject.toml` 宽口径 `module` 条，2026-06-05；自 **12→6**） | 一致 | 后端架构 | 自 plan 基线 **18** 分批收口；`app.routes.*` / `ai_chat` 移出宽口径；[`MYPY_BATCH_STATUS.md`](MYPY_BATCH_STATUS.md) |
 | 全量覆盖率 | ≥ 88%（plan 目标） | **77.44%**（`metrics/coverage-dual-summary.json`，2026-06-04） | 一致 | QA | CI `fail_under=77` |
-| 工作区体积（`du -sh .`） | ≤ 8 GB（[`plan-2026-06.md`](../../specs/plan-2026-06.md) M0） | **7.8G**（2026-06-05；外置 ~/XCMAX-archives/m0-fhd-bulk-20260605/；XCAGI models/installer、tools/XcagiInstaller 等为 ARCHIVE_POINTER；未删 .git 历史） | 一致 | 发布工程 | 迁出前 22 GB；见仓根 ARCHIVE_POINTER.md |
+| 工作区体积（`du -sh Desktop/XCMAX`） | ≤ 8 GB（[`plan-2026-06.md`](../../specs/plan-2026-06.md) M0） | **9.7G**（2026-06-05；可重建依赖外置 `~/XCMAX-archives/m0-venv-20260605/` ~1.6G，工作区为 ARCHIVE_POINTER；bulk 仍管 models/installer 等；**主占用** `FHD/.git` ~9.4G；不含 `.git` 交付树 ~**0.3G**） | 夸大 | 发布工程 | 迁出前 ~10–11G；见仓根 `ARCHIVE_POINTER.md` |
 | 仓根/FHD 散落脚本 | 无 `fix_*`/`check_*`/`probe_*` 于仓根或 `scripts/` 根 | **已收敛（2026-06-05）**：`maxdepth 2` 无散落；一次性脚本在 [`scripts/_archived/`](../scripts/_archived/)、探针在 [`scripts/dev/diagnostics/`](../scripts/dev/diagnostics/)、CI 在 [`scripts/ci/`](../scripts/ci/) | 一致 | 发布工程 | [`scripts/README.md`](../scripts/README.md) |
 | Android 原生 | README 曾写 Kotlin Compose 已交付 | Kotlin Compose **实验骨架**已存在；非签约级移动产品 | 滞后 | 移动端 | [`mobile-android/README.md`](../mobile-android/README.md) |
 
@@ -135,3 +135,4 @@
 | 2026-06-05 | observability subagent | `--check-only` 通过；Docker 不可用→无 PNG；CLAIMED 可观测行区分 local/staging，禁止伪造 7 天 |
 | 2026-06-05 | command-exec subagent | 复跑 `--check-only` OK；`which docker` 无；未伪造 staging 7 天；可观测性栈/T66 行已对齐事实 |
 | 2026-06-05 | M0 docs worker | `mod-merchant-pilot.md`、`M0-remaining-gaps.md`、`evidence/mod/`；SLO/Mod 行对齐 BLOCKERS T36–T37 |
+| 2026-06-05 | M0 venv 分包 worker | 依赖迁至 `m0-venv-20260605`；仓根 du 仍 **9.7G**（`.git`）；CLAIMED/M0-gaps 体积表述对齐 |
