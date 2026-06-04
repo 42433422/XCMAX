@@ -1,0 +1,48 @@
+{
+  "generated_at": "2026-06-04T19:57:27Z",
+  "input_message": "查一下七彩乐园有哪些产品",
+  "execution_mode": "mock",
+  "planner_mode": "fallback",
+  "plan_id": "17927b4b835b48d0a1ab481d2bab0d6f",
+  "intent": "generic_workflow",
+  "risk_level": "low",
+  "nodes": [
+    {
+      "node_id": "query_products",
+      "tool_id": "products",
+      "action": "query",
+      "risk": "low",
+      "depends_on": [],
+      "params": {
+        "keyword": "查一下七彩乐园有哪些产品"
+      }
+    }
+  ],
+  "plan_validation_error": null,
+  "risk_gate": {
+    "requires_confirmation": false,
+    "blocking_nodes": [],
+    "reason": "计划仅包含低风险读操作"
+  },
+  "dry_plan": false,
+  "success": true,
+  "message": "工作流执行完成",
+  "node_results_summary": [
+    {
+      "node_id": "query_products",
+      "tool_id": "products",
+      "action": "query",
+      "success": true,
+      "error": "",
+      "output_summary": {
+        "success": true,
+        "data_count": 1,
+        "data_sample_keys": [
+          "name",
+          "model_number",
+          "unit"
+        ]
+      }
+    }
+  ]
+}

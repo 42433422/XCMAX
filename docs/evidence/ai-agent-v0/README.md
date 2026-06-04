@@ -1,7 +1,25 @@
 # AI Agent V0 证据目录（M2-W2）
 
-> **状态（2026-06）**：**待 demo** — 跑通前禁止在 [`CLAIMED_VS_ACTUAL.md`](../../CLAIMED_VS_ACTUAL.md) 标「已验证」。  
+> **状态（2026-06-05）**：**mock demo 已留证**（`demo-run-20260605.json`，`planner_mode=fallback`，`execution_mode=mock`）。本机无 LLM API Key；`AI_AGENT_V0_LIVE_TOOLS=1` 曾尝试 live 工具链但 `products.query` 因 `unit_name` 参数失败，故仍以 mock 为准。  
+> **禁止**在 [`CLAIMED_VS_ACTUAL.md`](../../CLAIMED_VS_ACTUAL.md) 标「已验证」。  
 > **实施计划**：[`docs/ai-agent-v0-plan.md`](../../ai-agent-v0-plan.md)
+
+---
+
+## 0. 运行环境（2026-06-05 复跑）
+
+```bash
+cd FHD
+# Python ≥3.10；系统 python3 若为 3.9 请用 .venv（uv venv --python 3.11 && uv pip install -r requirements-base.txt）
+.venv/bin/python scripts/ai_agent_v0/run_demo.py --mock-tools
+# 或：AI_AGENT_V0_MOCK_TOOLS=1 .venv/bin/python scripts/ai_agent_v0/run_demo.py
+```
+
+| 条件 | 结果 |
+|------|------|
+| 无 `DEEPSEEK_API_KEY` / `OPENAI_API_KEY` / `.env` | `planner_mode=fallback`（符合禁止无 Key 标 `llm`） |
+| `AI_AGENT_V0_LIVE_TOOLS=1`（无 mock） | `execution_mode=live`，`success=false`（`get_products(unit_name=…)` 与当前 `ProductApplicationService` 签名不匹配） |
+| `AI_AGENT_V0_MOCK_TOOLS=1` | `execution_mode=mock`，`success=true`，`demo-checklist.sh --verify` **通过** |
 
 ---
 

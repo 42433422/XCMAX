@@ -2,7 +2,7 @@
 
 > **来源**：`bash FHD/MODstore/scripts/mod-pilot-checklist.sh --check-only`（工作区根 `Desktop/XCMAX`）。  
 > **SSOT 步骤**：[`mod-merchant-pilot.md`](mod-merchant-pilot.md) · **脚本**：[`MODstore/scripts/mod-pilot-checklist.sh`](../MODstore/scripts/mod-pilot-checklist.sh)  
-> **最后核对**：2026-06-05（`MODSTORE_DEPLOY_ROOT` 指向归档复扫）
+> **最后核对**：2026-06-05（`MODSTORE_DEPLOY_ROOT` 指向归档；`alipay_package` 经归档 rsync 命令 documented）
 
 ## 自动化结论
 
@@ -65,6 +65,16 @@ export AR="${XCMAX_ARCHIVE_ROOT:-$HOME/XCMAX-archives}/m0-fhd-bulk-20260605"
 mkdir -p "/Users/a4243342/Desktop/XCMAX/成都修茈科技有限公司"
 rsync -a "$AR/成都修茈科技有限公司/MODstore_deploy/" \
   "/Users/a4243342/Desktop/XCMAX/成都修茈科技有限公司/MODstore_deploy/"
+```
+
+仅恢复 **alipay_package**（归档已存在；解除 checklist 对支付目录的 WARN；**勿** `git add` 密钥）：
+
+```bash
+export AR="${XCMAX_ARCHIVE_ROOT:-$HOME/XCMAX-archives}/m0-fhd-bulk-20260605"
+mkdir -p "/Users/a4243342/Desktop/XCMAX/成都修茈科技有限公司"
+rsync -a "$AR/成都修茈科技有限公司/alipay_package/" \
+  "/Users/a4243342/Desktop/XCMAX/成都修茈科技有限公司/alipay_package/"
+# 归档内另有 _local_secrets/ 等敏感目录；仅 rsync alipay_package/，勿整树提交 git
 ```
 
 **方式 B — 不 rsync，仅让 checklist 指向归档**
