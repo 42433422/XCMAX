@@ -24,10 +24,56 @@
 
 | 项 | 期望路径 | 现状 | 解除方式 |
 |----|----------|------|----------|
-| **MODstore_deploy** | `成都修茈科技有限公司/MODstore_deploy/` | 未检出（姊妹目录仅有 `ARCHIVE_POINTER.md`） | 按指针恢复 SSOT 树，或 `export MODSTORE_DEPLOY_ROOT=/path/to/MODstore_deploy` |
-| **alipay_package** | `成都修茈科技有限公司/alipay_package/` | 未检出 | 本地配置支付宝沙箱/生产 **0.01 元** 密钥；**勿** `git add` 密钥 |
+| **MODstore_deploy** | `成都修茈科技有限公司/MODstore_deploy/` | 未检出（姊妹目录仅有 `ARCHIVE_POINTER.md`） | 见下文「恢复 MODstore_deploy」；或 `export MODSTORE_DEPLOY_ROOT=/path/to/MODstore_deploy` |
+| **alipay_package** | `成都修茈科技有限公司/alipay_package/` | 未检出 | 与 `成都修茈科技有限公司/` 一并 rsync 恢复（见下）；或本地配置 **0.01 元** 密钥；**勿** `git add` 密钥 |
 
-恢复 deploy 后建议再跑 `--check-only`，确认树内存在 `modstore_server/` 或 `market/`（否则脚本会 WARN）。
+#### 恢复 MODstore_deploy（`~/XCMAX-archives` / `ARCHIVE_POINTER`）
+
+M0 已将整棵 **`成都修茈科技有限公司/`**（含 `MODstore_deploy/`、`alipay_package/`）迁出工作区；工作区仅保留指针：
+
+- 姊妹目录：[`成都修茈科技有限公司/ARCHIVE_POINTER.md`](../../成都修茈科技有限公司/ARCHIVE_POINTER.md)
+- 仓根索引：[`ARCHIVE_POINTER.md`](../../ARCHIVE_POINTER.md)（`m0-fhd-bulk-20260605`）
+
+**归档实体**（默认根 `~/XCMAX-archives`，可用 `XCMAX_ARCHIVE_ROOT` 覆盖）：
+
+```text
+${XCMAX_ARCHIVE_ROOT:-$HOME/XCMAX-archives}/m0-fhd-bulk-20260605/成都修茈科技有限公司/MODstore_deploy/
+```
+
+**方式 A — 恢复默认 SSOT 路径（推荐）**
+
+自任意目录执行；将 `MODstore_deploy` 与 `alipay_package` 等一并拉回 `Desktop/XCMAX/成都修茈科技有限公司/`：
+
+```bash
+export AR="${XCMAX_ARCHIVE_ROOT:-$HOME/XCMAX-archives}/m0-fhd-bulk-20260605"
+rsync -a "$AR/成都修茈科技有限公司/" "/Users/a4243342/Desktop/XCMAX/成都修茈科技有限公司/"
+```
+
+仅恢复 deploy（不拉整棵姊妹树）：
+
+```bash
+export AR="${XCMAX_ARCHIVE_ROOT:-$HOME/XCMAX-archives}/m0-fhd-bulk-20260605"
+mkdir -p "/Users/a4243342/Desktop/XCMAX/成都修茈科技有限公司"
+rsync -a "$AR/成都修茈科技有限公司/MODstore_deploy/" \
+  "/Users/a4243342/Desktop/XCMAX/成都修茈科技有限公司/MODstore_deploy/"
+```
+
+**方式 B — 不 rsync，仅让 checklist 指向归档**
+
+```bash
+export MODSTORE_DEPLOY_ROOT="${XCMAX_ARCHIVE_ROOT:-$HOME/XCMAX-archives}/m0-fhd-bulk-20260605/成都修茈科技有限公司/MODstore_deploy"
+```
+
+**恢复后校验**
+
+```bash
+test -d "/Users/a4243342/Desktop/XCMAX/成都修茈科技有限公司/MODstore_deploy/modstore_server" \
+  -o -d "/Users/a4243342/Desktop/XCMAX/成都修茈科技有限公司/MODstore_deploy/market"
+cd /Users/a4243342/Desktop/XCMAX/FHD
+bash MODstore/scripts/mod-pilot-checklist.sh --check-only   # 应不再 WARN deploy
+```
+
+> `rsync` 会带回 `_local_secrets/`、`.env*` 等本地敏感文件；**勿** `git add` 密钥或生产配置。支付试点仍需 [`alipay_package/`](../../成都修茈科技有限公司/alipay_package/) 内 **0.01 元** 沙箱/生产密钥就位。
 
 ### 2. 试点证据（`--verify` 阻塞）
 
