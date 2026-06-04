@@ -1,0 +1,19 @@
+{
+  "marker": "<!-- xcagi-doc-archive -->",
+  "banner_template": "!!! warning \"阶段报告（归档）\"\n    非日常 Runbook。请从 [从这里开始]({start_here}) 进入 Tier 1 文档。\n",
+  "globs": [
+    "docs/reports/**/*.md",
+    "docs/wxcc/**/*.md",
+    "docs/history/**/*.md",
+    "docs/architecture/**/*.md"
+  ],
+  "exclude_suffixes": ["README.md"],
+  "root_archive_files": [
+    "docs/ACCEPTANCE_20260527.md",
+    "docs/ACCEPTANCE_GOVERNANCE_20260529.md",
+    "docs/OVERLAY_MERGE_REPORT.md",
+    "docs/migration_report.md",
+    "docs/FRONTEND_PORT_MIGRATION.md",
+    "docs/README_TEMPLATE.md"
+  ]
+}

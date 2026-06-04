@@ -1,0 +1,48 @@
+# 本地 Prometheus + Grafana（T36–T37 可复现栈）
+# 用法：FHD/scripts/observability/local_stack_up.sh
+services:
+  prometheus:
+    image: prom/prometheus:v2.45.0
+    container_name: xcagi-local-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ../../k8s/monitoring/prometheus/prometheus.local.yml:/etc/prometheus/prometheus.yml:ro
+      - ../../k8s/monitoring/prometheus/alert_rules.yml:/etc/prometheus/rules/alert_rules.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=7d
+      - --web.enable-lifecycle
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - monitoring
+
+  grafana:
+    image: grafana/grafana:10.2.0
+    container_name: xcagi-local-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin123
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_ROOT_URL: http://localhost:3000
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ../../k8s/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ../../k8s/monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+    networks:
+      - monitoring
+
+volumes:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  monitoring:
+    driver: bridge

@@ -1,0 +1,101 @@
+# XCAGI / FHD 公开文档站 — MkDocs Material
+# CI: .github/workflows/ci-docs-site.yml
+# Nav 仅暴露 Tier 1 + 少量 Tier 2（config/tier1_docs.json、tier2_docs.json）
+site_name: XCAGI 产品文档
+site_url: https://docs.xiu-ci.com/
+site_description: XCAGI v10 客户交付、发版与架构文档（Tier 1 直达）
+repo_url: https://github.com/xiuci-tech/XCAGI
+edit_uri: edit/main/FHD/docs/
+
+docs_dir: docs
+site_dir: site-docs
+
+theme:
+  name: material
+  language: zh
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - search.suggest
+    - content.code.copy
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - toc:
+      permalink: true
+  - tables
+  - fenced_code
+
+# 未列入 nav 的历史报告仍可在仓库内阅读，但不进入公开站搜索
+exclude_docs: |
+  reports/**
+  !reports/capacity-planning.md
+  !reports/_completed/COVERAGE_RAMP.md
+  reports/_completed/**
+  legal/**
+  wxcc/**
+  history/**
+  architecture/**
+  ACCEPTANCE_*.md
+  OVERLAY_*.md
+  migration_report.md
+  FRONTEND_PORT_MIGRATION.md
+  README_TEMPLATE.md
+  PR_COVERAGE_CHECKLIST.md
+  V10_REMAINING_DEBT.md
+  ENTERPRISE_AUDIT.md
+  copy-style-zh.md
+  mod-sidebar-from-manifest.md
+  label-template-generator-feature.md
+  excel_import_api.md
+  payment-alipay-sandbox.md
+  PERFORMANCE_*.md
+  MOD_DAL_ARCHITECTURE.md
+  MOD_EXTENSION_LOADER_DESIGN.md
+  SECURITY_MOD_TRUST_BOUNDARY.md
+  api/**
+
+nav:
+  - 从这里开始: START_HERE.md
+  - 文档地图: DOCUMENTATION_MAP.md
+  - 客户与交付:
+      - 快速启动: QUICK_START.md
+      - 产品用户流程: guides/PRODUCT_USER_FLOW.md
+      - 可交付产品: DELIVERABLE_PRODUCT.md
+      - 客户支持: customer/CUSTOMER_SUPPORT.md
+      - 生产安装: guides/PROD_INSTALL.md
+      - 桌面数据库: guides/DESKTOP_DATABASE_DELIVERY.md
+      - 中文启动补充: guides/快速启动说明.md
+  - 研发:
+      - 系统架构: ARCHITECTURE.md
+      - 功能地图: FEATURE_MAP.md
+      - 技术栈: TECH_STACK.md
+      - 迁移登记: MIGRATION_REGISTRY.md
+      - Mod 编写: guides/MOD_AUTHORING_GUIDE.md
+      - 开发者门户: DEVELOPER_PORTAL.md
+      - AI Provider: AI_PROVIDER_MATRIX.md
+  - 运维与发版:
+      - 部署: DEPLOYMENT.md
+      - 双 SKU 发版: guides/RELEASE_TWO_SKUS.md
+      - 发版质量门: guides/RELEASE_QUALITY_GATE.md
+      - SLO: SLO.md
+      - 灾备 Runbook: guides/DR_RUNBOOK.md
+      - 局域网联调: guides/LAN启动说明.md
+  - 参考:
+      - V10 架构收口: V10_ROADMAP_COMPLETE.md
+      - V10 验收: V10_ACCEPTANCE.md
+      - 双入口迁移: MIGRATION_v10_DUAL_ENTRY.md
+      - 客户成功 SLA: CUSTOMER_SUCCESS_SLA.md
+      - 限流: guides/RATE_LIMITING.md
+      - 依赖锁定: guides/DEPENDENCY_LOCKS.md
+      - Android: guides/MOBILE_ANDROID.md
+      - 容量规划: reports/capacity-planning.md
+      - 覆盖率门槛: reports/_completed/COVERAGE_RAMP.md
+      - 专题指南索引: guides/README.md

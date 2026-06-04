@@ -1,0 +1,27 @@
+{
+  "description": "Tier 1 docs: directly usable; validated by scripts/ci/verify_tier1_docs.py",
+  "fhd_docs": [
+    "docs/START_HERE.md",
+    "docs/QUICK_START.md",
+    "docs/guides/PRODUCT_USER_FLOW.md",
+    "docs/customer/CUSTOMER_SUPPORT.md",
+    "docs/DELIVERABLE_PRODUCT.md",
+    "docs/guides/PROD_INSTALL.md",
+    "docs/guides/DESKTOP_DATABASE_DELIVERY.md",
+    "docs/ARCHITECTURE.md",
+    "docs/FEATURE_MAP.md",
+    "docs/MIGRATION_REGISTRY.md",
+    "docs/TECH_STACK.md",
+    "docs/guides/MOD_AUTHORING_GUIDE.md",
+    "docs/DEVELOPER_PORTAL.md",
+    "docs/AI_PROVIDER_MATRIX.md",
+    "docs/DEPLOYMENT.md",
+    "docs/guides/RELEASE_TWO_SKUS.md",
+    "docs/guides/RELEASE_QUALITY_GATE.md",
+    "docs/SLO.md",
+    "docs/guides/DR_RUNBOOK.md"
+  ],
+  "xcmax_sibling_docs": [
+    "成都修茈科技有限公司/MODstore_deploy/docs/developer/README.md"
+  ]
+}

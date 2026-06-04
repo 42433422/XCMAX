@@ -1,0 +1,15 @@
+[run]
+include = [
+    "app/neuro_bus/*",
+    "app/middleware/*",
+    "app/fastapi_routes/*",
+    "app/infrastructure/auth/*",
+    "app/utils/rate_limiter.py",
+    "app/utils/password_hash.py",
+    "app/config.py",
+]
+omit = ["*/tests/*"]
+
+[report]
+fail_under = 70
+show_missing = false

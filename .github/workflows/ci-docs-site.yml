@@ -1,0 +1,69 @@
+# 组件级 CI：FHD 公开文档站（MkDocs Material）
+name: CI - Docs Site
+
+on:
+  pull_request:
+    paths:
+      - 'docs/**'
+      - 'config/tier1_docs.json'
+      - 'config/tier2_docs.json'
+      - 'config/docs_archive.json'
+      - 'scripts/ci/verify_tier1_docs.py'
+      - 'config/tier3_docs_policy.json'
+      - 'scripts/ci/stamp_archive_doc_banners.py'
+      - 'mkdocs.yml'
+      - '.github/workflows/ci-docs-site.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - 'config/tier1_docs.json'
+      - 'config/tier2_docs.json'
+      - 'config/docs_archive.json'
+      - 'scripts/ci/verify_tier1_docs.py'
+      - 'config/tier3_docs_policy.json'
+      - 'scripts/ci/stamp_archive_doc_banners.py'
+      - 'mkdocs.yml'
+      - 'mkdocs.yml'
+      - '.github/workflows/ci-docs-site.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ci-docs-site-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  docs-site-ci:
+    name: Docs site (MkDocs)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install MkDocs Material
+        run: pip install 'mkdocs-material>=9.5,<10'
+
+      - name: Verify doc SSOT (Tier1/2, nav, links, archive banners)
+        run: |
+          python scripts/ci/stamp_archive_doc_banners.py --check
+          python scripts/ci/verify_tier1_docs.py --tier3-report
+
+      # 全仓 docs/ 含历史内链；公开 nav 页构建。链式校验逐步收紧后可改 --strict
+      - name: Build docs
+        run: mkdocs build
+
+      - name: Upload site artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: fhd-docs-site
+          path: site-docs/
+          retention-days: 14

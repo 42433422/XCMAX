@@ -1,0 +1,3 @@
+# 公开文档站（MkDocs Material）— 与 ci-docs-site.yml 一致
+# 此文件不在 pyproject 中维护（独立工具链，CI 单独安装）
+<原内容保留>

@@ -1,0 +1,33 @@
+# P1-5 T42：新建 docs/*.md 须带 Tier 3 frontmatter（全量存量由 --tier3-report 跟踪）
+name: Docs Archive Guard
+
+on:
+  pull_request:
+    paths:
+      - 'docs/**/*.md'
+      - 'config/tier3_docs_policy.json'
+      - 'scripts/ci/verify_tier1_docs.py'
+      - '.github/workflows/docs-archive-guard.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  new-md-frontmatter:
+    name: Tier 3 frontmatter (added files)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Reject new docs without Tier 3 frontmatter
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.sha || 'HEAD~1' }}
+        run: python scripts/ci/verify_tier1_docs.py --check-added-md "$BASE_REF"

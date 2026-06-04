@@ -1,0 +1,72 @@
+# 文档站生产部署：在 "CI - Docs Site" 工作流成功后触发。
+# Secrets: DEPLOY_HOST, DEPLOY_USER, DEPLOY_SSH_PRIVATE_KEY
+# Variables: DEPLOY_DOCS_REMOTE_DIR（静态根，例 /var/www/docs.xiu-ci.com）
+#            DEPLOY_GIT_BRANCH（默认 main）
+
+name: Docs live deploy
+
+on:
+  workflow_run:
+    workflows: ['CI - Docs Site']
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: docs-live-deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy-docs-on-server:
+    runs-on: ubuntu-latest
+    if: >-
+      ${{
+        github.event_name == 'workflow_dispatch' ||
+        (
+          github.event.workflow_run.conclusion == 'success' &&
+          github.event.workflow_run.head_branch == 'main' &&
+          github.event.workflow_run.event == 'push'
+        )
+      }}
+    steps:
+      - name: Checkout (for mkdocs build on dispatch)
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/checkout@v4
+
+      - name: Build docs on dispatch
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          pip install 'mkdocs-material>=9.5,<10'
+          mkdocs build
+
+      - name: Download CI artifact
+        if: github.event_name == 'workflow_run'
+        uses: actions/download-artifact@v4
+        with:
+          name: fhd-docs-site
+          path: site-docs
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: ${{ github.event.workflow_run.id }}
+
+      - name: Rsync docs to server
+        if: ${{ secrets.DEPLOY_HOST != '' && secrets.DEPLOY_SSH_PRIVATE_KEY != '' }}
+        env:
+          DEPLOY_DOCS_REMOTE_DIR: ${{ vars.DEPLOY_DOCS_REMOTE_DIR }}
+        run: |
+          set -euo pipefail
+          REMOTE_DIR="${DEPLOY_DOCS_REMOTE_DIR:-/var/www/docs.xiu-ci.com}"
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/deploy_key \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            "mkdir -p '${REMOTE_DIR}'"
+          rsync -avz --delete -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no" \
+            site-docs/ \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:${REMOTE_DIR}/"
+          echo "[ok] docs deployed to ${REMOTE_DIR}"
+
+      - name: Skip deploy (no SSH secrets)
+        if: ${{ secrets.DEPLOY_HOST == '' || secrets.DEPLOY_SSH_PRIVATE_KEY == '' }}
+        run: echo "::notice::DEPLOY_HOST / DEPLOY_SSH_PRIVATE_KEY not set — docs build OK, deploy skipped"

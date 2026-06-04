@@ -45,7 +45,7 @@
 | `*_app_service_v2.py` 数量 | 历史 CHANGELOG / V10_ACCEPTANCE 曾写「0 / 已清零」 | **23** 个应用服务模块（见下表）；决策为**保留**作应用层 SSOT 后缀 | 夸大（已对齐） | 后端架构 | 本表 + [`V10_ACCEPTANCE.md`](V10_ACCEPTANCE.md) |
 | mypy `ignore_errors` 目录数 | ≤ 6（[`plan-2026-06.md`](../../specs/plan-2026-06.md) M0） | **6**（`pyproject.toml` 宽口径 `module` 条，2026-06-05；自 **12→6**） | 一致 | 后端架构 | 自 plan 基线 **18** 分批收口；`app.routes.*` / `ai_chat` 移出宽口径；[`MYPY_BATCH_STATUS.md`](MYPY_BATCH_STATUS.md) |
 | 全量覆盖率 | ≥ 88%（plan 目标） | **77.44%**（`metrics/coverage-dual-summary.json`，2026-06-04） | 一致 | QA | CI `fail_under=77` |
-| 工作区体积（`du -sh .`） | ≤ 8 GB（[`plan-2026-06.md`](../../specs/plan-2026-06.md) M0） | **20 GB**（2026-06-05 迁出 M0 归档后；FHD 18 GB；未达标） | 夸大 | 发布工程 | 迁出前 **22 GB**；`move_archive_off_workspace.sh`（根 `_archive` 已不在工作区）；`FHD/_archived/m0-20260605/` ~1.7 GB 已迁至 `~/XCMAX-archives/m0-20260605/`；见 M0 Top10 |
+| 工作区体积（`du -sh .`） | ≤ 8 GB（[`plan-2026-06.md`](../../specs/plan-2026-06.md) M0） | **7.8G**（2026-06-05；外置 ~/XCMAX-archives/m0-fhd-bulk-20260605/；XCAGI models/installer、tools/XcagiInstaller 等为 ARCHIVE_POINTER；未删 .git 历史） | 一致 | 发布工程 | 迁出前 22 GB；见仓根 ARCHIVE_POINTER.md |
 | 仓根/FHD 散落脚本 | 无 `fix_*`/`check_*`/`probe_*` 于仓根或 `scripts/` 根 | **已收敛（2026-06-05）**：`maxdepth 2` 无散落；一次性脚本在 [`scripts/_archived/`](../scripts/_archived/)、探针在 [`scripts/dev/diagnostics/`](../scripts/dev/diagnostics/)、CI 在 [`scripts/ci/`](../scripts/ci/) | 一致 | 发布工程 | [`scripts/README.md`](../scripts/README.md) |
 | Android 原生 | README 曾写 Kotlin Compose 已交付 | Kotlin Compose **实验骨架**已存在；非签约级移动产品 | 滞后 | 移动端 | [`mobile-android/README.md`](../mobile-android/README.md) |
 
@@ -124,7 +124,9 @@
 | 2026-06-04 | 计划执行 worker | 初版模板；实际列均为「未验证」直至 staging/业务数据接入 |
 | 2026-06-04 | 计划执行 worker | T66 首轮「待填」行入表；待月度负责人填写 |
 | 2026-06-04 | align-claimed-vs-actual | 新增 _v2 清单（23）、fastapi_routes 未 SSOT 表；工程节覆盖率/Android 对齐 |
+| 2026-06-05 | M0 bulk 外置 worker | m0-fhd-bulk-20260605；仓根 du 达标；models/installer/XcagiInstaller 指针 |
 | 2026-06-05 | M0 仓根卫生 worker | 工作区体积事实行；e2e 行已含 M0 验证 |
+| 2026-06-05 | M0 外置 bulk worker | `m0-fhd-bulk-20260605`；仓根 **8.6 GB**；models/installer/XcagiInstaller 已指针化 |
 | 2026-06-05 | M0 归档迁出 worker | `~/XCMAX-archives/m0-20260605/`；工作区 `du` 22→20 GB |
 | 2026-06-05 | mypy P1-1 worker | `ignore_errors` 宽口径 **12→6**（plan SSOT 18→6）；`pyproject.toml` + `app/routes/*` |
 | 2026-06-05 | M0 脚本/env worker | `fix_*`/`check_*` 迁入 `scripts/*`；`.env*` maxdepth2=5；[`ENV_FILES.md`](ENV_FILES.md) |

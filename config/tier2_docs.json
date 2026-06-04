@@ -1,0 +1,21 @@
+{
+  "description": "Tier 2 reference docs; optional MkDocs nav; validated by verify_tier1_docs.py",
+  "fhd_docs": [
+    "docs/DOCUMENTATION_MAP.md",
+    "docs/guides/README.md",
+    "docs/V10_ROADMAP_COMPLETE.md",
+    "docs/V10_ACCEPTANCE.md",
+    "docs/MIGRATION_v10_DUAL_ENTRY.md",
+    "docs/CUSTOMER_SUCCESS_SLA.md",
+    "docs/guides/RATE_LIMITING.md",
+    "docs/guides/ENTERPRISE_IDP_SETUP.md",
+    "docs/guides/CUSTOMER_DEPLOYMENT_30MIN.md",
+    "docs/guides/DEPENDENCY_LOCKS.md",
+    "docs/guides/MOBILE_ANDROID.md",
+    "docs/guides/快速启动说明.md",
+    "docs/guides/LAN启动说明.md",
+    "docs/reports/capacity-planning.md",
+    "docs/reports/_completed/COVERAGE_RAMP.md",
+    "docs/AI_EMPLOYEE.md"
+  ]
+}

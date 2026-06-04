@@ -1,0 +1,8 @@
+{
+  "description": "Tier 3 doc policy: frontmatter for non-Tier1/2 markdown under FHD/docs/",
+  "required_frontmatter_keys": ["tier", "status", "last_reviewed"],
+  "allowed_status": ["active", "archived"],
+  "archived_path_prefix": "docs/_archive/",
+  "implicit_tier3_via_archive_banner": true,
+  "archive_config": "config/docs_archive.json"
+}
