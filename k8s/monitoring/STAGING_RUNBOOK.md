@@ -8,6 +8,8 @@
 
 ## 0. 前置检查（部署前 / 解除阻塞前）
 
+无 Docker 本机最低验收链（kubectl → `export_m0_panels --prefix staging` → T36–T37）：[`docs/staging-m0-preflight.md`](../../docs/staging-m0-preflight.md)。
+
 ```bash
 cd FHD
 
@@ -214,4 +216,5 @@ kubectl delete -k k8s/monitoring/prometheus -n "$NS"
 | [`docs/evidence/slo/README.md`](../../docs/evidence/slo/README.md) | M0 四域 + **7 天验收 YAML 模板** |
 | [`scripts/observability/README.md`](../../scripts/observability/README.md) | 本地栈、k6、导出脚本 |
 | [`specs/BLOCKERS.md`](../../../specs/BLOCKERS.md) | T36–T37 阻塞 SSOT |
+| [`docs/staging-m0-preflight.md`](../../docs/staging-m0-preflight.md) | 无 Docker 本机最低验收（T36–T37 链） |
 | [`docs/M0-remaining-gaps.md`](../../docs/M0-remaining-gaps.md) | M0 剩余三项缺口 |
