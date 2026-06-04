@@ -40,6 +40,30 @@ class TestProductApplicationService:
         assert result["success"] is True
         mock_products_service.get_products.assert_called_once()
 
+    def test_get_products_workflow_aliases(self):
+        """workflow tools 使用 unit_name / model_number 关键字参数。"""
+        mock_products_service = Mock()
+        mock_products_service.get_products.return_value = {
+            "success": True,
+            "data": [],
+            "total": 0,
+        }
+        service = ProductApplicationService(products_service=mock_products_service)
+        service.get_products(
+            unit_name="七彩乐园",
+            model_number="9803",
+            keyword="乐园",
+            page=2,
+            per_page=5,
+        )
+        mock_products_service.get_products.assert_called_once_with(
+            unit_name="七彩乐园",
+            model_number="9803",
+            keyword="乐园",
+            page=2,
+            per_page=5,
+        )
+
     def test_create_product_validation(self):
         """测试创建产品验证"""
         mock_products_service = Mock()

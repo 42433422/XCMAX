@@ -1,6 +1,6 @@
 # AI Agent V0 证据目录（M2-W2）
 
-> **状态（2026-06-05）**：**mock demo 已留证**（`demo-run-20260605.json`，`planner_mode=fallback`，`execution_mode=mock`）。本机无 LLM API Key；`AI_AGENT_V0_LIVE_TOOLS=1` 曾尝试 live 工具链但 `products.query` 因 `unit_name` 参数失败，故仍以 mock 为准。  
+> **状态（2026-06-05）**：**mock demo 已留证**（`demo-run-20260605.json`）。`ProductApplicationService.get_products` 已兼容 `unit_name`/`model_number`；live 工具链见 `scripts/ai_agent_v0/demo.local.env.example`。  
 > **禁止**在 [`CLAIMED_VS_ACTUAL.md`](../../CLAIMED_VS_ACTUAL.md) 标「已验证」。  
 > **实施计划**：[`docs/ai-agent-v0-plan.md`](../../ai-agent-v0-plan.md)
 
@@ -18,7 +18,7 @@ cd FHD
 | 条件 | 结果 |
 |------|------|
 | 无 `DEEPSEEK_API_KEY` / `OPENAI_API_KEY` / `.env` | `planner_mode=fallback`（符合禁止无 Key 标 `llm`） |
-| `AI_AGENT_V0_LIVE_TOOLS=1`（无 mock） | `execution_mode=live`，`success=false`（`get_products(unit_name=…)` 与当前 `ProductApplicationService` 签名不匹配） |
+| `AI_AGENT_V0_LIVE_TOOLS=1` + `DATABASE_URL` 可达 | `execution_mode=live`；`products.query` 走真实 `get_products(unit_name=…)` |
 | `AI_AGENT_V0_MOCK_TOOLS=1` | `execution_mode=mock`，`success=true`，`demo-checklist.sh --verify` **通过** |
 
 ---

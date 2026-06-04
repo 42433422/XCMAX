@@ -7,8 +7,12 @@
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Optional
 
+from app.domain.services.pricing_engine import CustomerType, get_pricing_engine
+
 if TYPE_CHECKING:
-    from app.services import PrinterService, ProductsService
+    from app.infrastructure.gateways.product import PrinterService, ProductsService
+
+_pricing_engine = get_pricing_engine()
 
 
 class ProductApplicationService:
@@ -19,7 +23,7 @@ class ProductApplicationService:
         products_service: Optional["ProductsService"] = None,
         printer_service: Optional["PrinterService"] = None,
     ):
-        from app.services import get_printer_service, get_products_service
+        from app.infrastructure.gateways.product import get_printer_service, get_products_service
 
         self._products_service = products_service or get_products_service()
         self._printer_service = printer_service or get_printer_service()
@@ -33,9 +37,14 @@ class ProductApplicationService:
         """
         return self._products_service.get_product_units()
 
+    def get_product_names(self, keyword: str | None = None) -> dict[str, Any]:
+        return self._products_service.get_product_names(keyword=keyword)
+
     def get_products(
         self,
         unit: str | None = None,
+        unit_name: str | None = None,
+        model_number: str | None = None,
         keyword: str | None = None,
         page: int = 1,
         per_page: int = 20,
@@ -44,7 +53,9 @@ class ProductApplicationService:
         获取产品列表用例
 
         Args:
-            unit: 单位名称筛选
+            unit: 单位名称筛选（与 unit_name 二选一，workflow 工具链常用 unit_name）
+            unit_name: 同 unit
+            model_number: 型号筛选
             keyword: 搜索关键词
             page: 页码
             per_page: 每页数量
@@ -52,8 +63,15 @@ class ProductApplicationService:
         Returns:
             产品列表和分页信息
         """
+        resolved_unit = (unit_name or unit or "").strip() or None
+        resolved_model = (model_number or "").strip().upper() or None
+        resolved_keyword = (keyword or "").strip() or None
         return self._products_service.get_products(
-            unit_name=unit, keyword=keyword, page=page, per_page=per_page
+            unit_name=resolved_unit,
+            model_number=resolved_model,
+            keyword=resolved_keyword,
+            page=page,
+            per_page=per_page,
         )
 
     def get_product(self, product_id: int) -> dict[str, Any]:
@@ -87,8 +105,15 @@ class ProductApplicationService:
         if not product_name:
             return {"success": False, "message": "产品名称不能为空"}
 
-        if "price" in data and data["price"] < 0:
+        price = float(data.get("price", data.get("unit_price", 0)) or 0)
+        if price < 0:
             return {"success": False, "message": "价格不能为负数"}
+        qty = int(data.get("quantity", 1) or 1)
+        _pricing_engine.calculate_price(
+            base_price=price,
+            quantity=max(qty, 1),
+            customer_type=CustomerType.RETAIL,
+        )
 
         result = self._products_service.create_product(data)
 
@@ -117,6 +142,10 @@ class ProductApplicationService:
             self._log_action("update_product", product_id=product_id, data=data)
 
         return result
+
+    def batch_add_products(self, products: list[dict[str, Any]]) -> dict[str, Any]:
+        """批量添加产品（委托 ProductsService）。"""
+        return self._products_service.batch_add_products(products)
 
     def delete_product(self, product_id: int) -> dict[str, Any]:
         """
@@ -271,17 +300,19 @@ instrument_application_service_class(ProductApplicationService)
 _product_app_service: ProductApplicationService | None = None
 
 
-def get_product_app_service() -> ProductApplicationService:
-    """获取产品应用服务单例 (别名)"""
-    return get_product_application_service()
-
-
 def get_product_application_service() -> ProductApplicationService:
-    """获取产品应用服务单例"""
+    """获取产品应用服务 core 单例（不经 NeuroBus）。"""
     global _product_app_service
     if _product_app_service is None:
         _product_app_service = ProductApplicationService()
     return _product_app_service
+
+
+def get_product_app_service() -> ProductApplicationService:
+    """获取产品应用服务入口（经 bootstrap，支持 event-primary flag）。"""
+    from app import bootstrap
+
+    return bootstrap.get_product_app_service()
 
 
 def init_product_application_service(

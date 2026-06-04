@@ -136,6 +136,7 @@ Thumbs.db
 .env
 .env.local
 .env.*.local
+scripts/ai_agent_v0/demo.local.env
 scripts/package/upload-release.env
 .secrets/
 **/alipay_app_private.pem

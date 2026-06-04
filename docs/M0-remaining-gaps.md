@@ -6,7 +6,7 @@
 |---|------|------|------|
 | 1 | **staging 7 天流量 + SLO 截图** | `docs/evidence/slo/` 含 4 域 PNG + 7 天基线写入 CLAIMED | `specs/BLOCKERS.md` **T36–T37**（约 2026-09） |
 | 2 | **1 个真实 Mod 商家** | `docs/evidence/mod/01–04.png` | 商务/环境；见 [`mod-merchant-pilot.md`](mod-merchant-pilot.md) · 阻塞 [`mod-pilot-blockers.md`](mod-pilot-blockers.md) |
-| 3 | **Docker 本地 SLO PNG** | `grafana-local-m0-*.png` 入 `docs/evidence/slo/` | 本机需 Docker；[`local_stack_up.sh`](../scripts/observability/local_stack_up.sh) |
+| 3 | **SLO 四域 PNG**（**staging 优先**） | `grafana-staging-m0-*.png` 或 staging 7 天基线 | **T36–T37**；本地 Docker 仅可选捷径（[`local_stack_up.sh`](../scripts/observability/local_stack_up.sh)），**非**网站/App 开发前置 |
 
 ## 已达标（勿重复开工）
 

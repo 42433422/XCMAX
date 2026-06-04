@@ -76,6 +76,9 @@ def _bootstrap() -> None:
         from dotenv import load_dotenv
 
         load_dotenv(ROOT / ".env", override=False)
+        local_demo_env = ROOT / "scripts" / "ai_agent_v0" / "demo.local.env"
+        if local_demo_env.is_file():
+            load_dotenv(local_demo_env, override=True)
     except ImportError:
         pass
 
