@@ -1,6 +1,6 @@
 # M0 剩余缺口（2026-06-05）
 
-本地/文档侧 M0 工程项已基本闭环（e2e 14/14、mypy 6/6、脚本/env 收口；可重建依赖外置 `~/XCMAX-archives/m0-venv-20260605/` ~1.6G，工作区仅指针）。**仓根 `du -sh Desktop/XCMAX` ~9.7G**（2026-06-05 自 ~11G 去重后；含 `FHD/.git` ~9.4G；[`plan-2026-06.md`](../../specs/plan-2026-06.md) 工作区 ≤8G **未达标**）。**下列三项仍缺**，不可在 CLAIMED 中标为完成。
+本地/文档侧 M0 工程项已基本闭环（e2e 14/14、mypy 6/6、脚本/env 收口；可重建依赖外置 `~/XCMAX-archives/m0-venv-20260605/` ~1.6G，工作区仅指针）。**仓根 `du -sh Desktop/XCMAX` ~9.7G**（2026-06-05：自 ~11G 去掉与 `~/XCMAX-archives/m0-venv-20260605/` 重复的工作区 `FHD/.venv` + `frontend/node_modules` 实体 ~0.8G；含 `FHD/.git` ~9.4G；[`plan-2026-06.md`](../../specs/plan-2026-06.md) 工作区 ≤8G **未达标**）。**下列三项仍缺**，不可在 CLAIMED 中标为完成。
 
 | # | 缺口 | 验收 | 阻塞 |
 |---|------|------|------|
