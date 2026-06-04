@@ -10,6 +10,13 @@
 - [ ] 支付宝沙箱/生产 **0.01 元** 密钥（[`alipay_package/`](../../成都修茈科技有限公司/alipay_package/)），**勿**提交密钥入仓
 - [ ] 试点完成后仅事实更新 CLAIMED「Mod 商店分成」行
 
+## 自动化
+
+```bash
+bash MODstore/scripts/mod-pilot-checklist.sh          # 步骤 + 证据路径
+bash MODstore/scripts/mod-pilot-checklist.sh --verify # 四张 PNG 就位后校验
+```
+
 ## 步骤
 
 | # | 动作 | 证据文件 |
