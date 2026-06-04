@@ -32,14 +32,14 @@
 | M3-W1 | Mod 商店 **0.01 元**真实流水 | 支付宝账单截图 | ⬜ 待启动 | 否 |
 | M3-W2 | 智能搜索 V0 | API 文档 + 1 个 demo | ⬜ 待启动 | 否 |
 | M3-W3 | 智能纪要 | 通义听悟 / 腾讯会议 API；1 个 demo | ⬜ 待启动 | 否 |
-| M3-W4 | **等保二级测评启动** | 测评机构合同 + 时间表 | ⬜ 待启动 | 否 |
+| M3-W4 | **等保二级测评启动** | 测评机构合同 + 时间表（[`compliance-tier2-kickoff.md`](compliance-tier2-kickoff.md)） | ⬜ 待启动 | 否 |
 
 ---
 
 ## 执行优先级（建议）
 
 1. **已闭项**：mypy **6/6** — 勿重复开工；MODstore 自有模块继续减半（路径图 M2-W1 后半句）。
-2. **可立即开**：AI Agent V0 demo、API 契约测试绿线、Mod 四图（[`mod-merchant-pilot.md`](mod-merchant-pilot.md) + 脚本）、等保机构询价/合同。
+2. **可立即开**：AI Agent V0 demo、API 契约测试绿线、Mod 四图（[`mod-merchant-pilot.md`](mod-merchant-pilot.md) + 脚本）、等保机构询价/合同（[`compliance-tier2-kickoff.md`](compliance-tier2-kickoff.md)）。
 3. **等 staging**：AI 月报 PDF 真实版；月报写入 CLAIMED 前需 T36–T37 + T56 复核。
 
 ---
@@ -52,6 +52,7 @@
 | AI 月报 PDF | `docs/evidence/`（待建；文件名建议 `ai-monthly-YYYY-MM.pdf`） |
 | staging SLO | [`evidence/slo/`](evidence/slo/)（M0 #1，M1 月报数据源） |
 | AI Agent demo | 待定点（建议 `docs/evidence/ai-agent-v0/`） |
+| 等保二级启动 | [`evidence/compliance-tier2/`](evidence/compliance-tier2/)（合同脱敏 + 时间表） |
 
 ---
 
@@ -59,6 +60,7 @@
 
 - M0 剩余缺口：[`M0-remaining-gaps.md`](M0-remaining-gaps.md)
 - Mod 试点步骤：[`mod-merchant-pilot.md`](mod-merchant-pilot.md)
+- 等保二级启动：[`compliance-tier2-kickoff.md`](compliance-tier2-kickoff.md)（M3-W4）
 - 声称对照：[`CLAIMED_VS_ACTUAL.md`](CLAIMED_VS_ACTUAL.md)
 - 阻塞 SSOT：[`specs/BLOCKERS.md`](../../specs/BLOCKERS.md)（T36–T37、T56）
 - Staging runbook：[`k8s/monitoring/STAGING_RUNBOOK.md`](../k8s/monitoring/STAGING_RUNBOOK.md)
