@@ -1,7 +1,8 @@
 # 声称 vs 实际（CLAIMED_VS_ACTUAL）
 
 > **维护节奏**：每月首个工作日更新（T66）  
-> **数据源**：文档声称来自 `BUSINESS_MODEL.md` / `SLO.md` / `CHANGELOG.md`；实际列需 Grafana、业务库或 e2e 证据，**无证据填「未验证」**。
+> **数据源**：文档声称来自 `BUSINESS_MODEL.md` / `SLO.md` / `CHANGELOG.md`；实际列需 Grafana、业务库或 e2e 证据，**无证据填「未验证」**。  
+> **M0 仍缺（仅 3 项）**：[`M0-remaining-gaps.md`](M0-remaining-gaps.md) · staging SLO 阻塞见 [`specs/BLOCKERS.md`](../../specs/BLOCKERS.md) **T36–T37**（最早 2026-09）。
 
 ## 使用说明
 
@@ -18,12 +19,12 @@
 
 | ID | 声称 | 实际 | 差距 | 负责人 | 证据 |
 |----|------|------|------|--------|------|
-| SLO-API-01 | API 可用性 99.9%（目标）；基线 99.94% | **staging 未验证**；本地 compose 可复现（脚本 + JSON，无 7 天曲线） | 未测 | SRE | 本地：[`scripts/observability/local_stack_up.sh`](../scripts/observability/local_stack_up.sh) → [`evidence/slo/`](evidence/slo/)；staging：[`staging-runbook.md`](staging-runbook.md) · BLOCKERS T36–T37 |
-| SLO-API-02 | 登录 P95 &lt; 500ms；基线 312ms | **staging 未验证**；本地栈未宣称 P95 基线 | 未测 | SRE | 同上 + [`SLO_STAGING_TICKET.md`](SLO_STAGING_TICKET.md) |
-| SLO-API-03 | API 错误率 &lt; 0.1%；基线 0.06% | **staging 未验证** | 未测 | SRE | 同上 |
-| SLO-AI-01 | 聊天首包 P95 &lt; 1500ms；基线 1080ms | **staging 未验证** | 未测 | AI 平台 | [`evidence/README.md`](evidence/README.md) M0 表 · panel `xcagi-slo:3` |
-| SLO-BUS-01 | NeuroBus 投递 99.95%；基线 99.97% | **staging 未验证** | 未测 | 平台 | M0 · panel `xcagi-slo:7` |
-| **可观测性栈** | M0：Grafana 四域 + staging 7 天 | **本地**：2026-06-05 `local_stack_up.sh --check-only` 通过；**本环境无 Docker**，未起栈、**未导出** M0 四 PNG（[`evidence/slo/`](evidence/slo/) 仍占位）。**staging**：7 天流量与正式基线 **未验证**（非伪造曲线） | 未测（staging）；本地仅路径/脚本 | SRE | [`evidence/README.md`](evidence/README.md) · [`scripts/observability/`](../scripts/observability/) · T36–T37 |
+| SLO-API-01 | API 可用性 99.9%（目标）；基线 99.94% | **阻塞 T36–T37**：staging **未验证**（需 7 天流量或 k6 + PNG）；本地 compose 可复现（脚本 + JSON，**无** 7 天曲线） | 未测 | SRE | 本地：[`local_stack_up.sh`](../scripts/observability/local_stack_up.sh) → [`evidence/slo/`](evidence/slo/)；staging：[`STAGING_RUNBOOK.md`](../k8s/monitoring/STAGING_RUNBOOK.md) · [`BLOCKERS.md`](../../specs/BLOCKERS.md) T36–T37（2026-09） |
+| SLO-API-02 | 登录 P95 &lt; 500ms；基线 312ms | **阻塞 T36–T37**：staging **未验证**；本地栈未宣称 P95 基线 | 未测 | SRE | 同上 · [`M0-remaining-gaps.md`](M0-remaining-gaps.md) #1 |
+| SLO-API-03 | API 错误率 &lt; 0.1%；基线 0.06% | **阻塞 T36–T37**：staging **未验证** | 未测 | SRE | 同上 |
+| SLO-AI-01 | 聊天首包 P95 &lt; 1500ms；基线 1080ms | **阻塞 T36–T37**：staging **未验证** | 未测 | AI 平台 | [`evidence/slo/`](evidence/slo/) · panel `xcagi-slo:3` · 禁止无 PNG 填数 |
+| SLO-BUS-01 | NeuroBus 投递 99.95%；基线 99.97% | **阻塞 T36–T37**：staging **未验证** | 未测 | 平台 | [`evidence/slo/`](evidence/slo/) · panel `xcagi-slo:7` |
+| **可观测性栈** | M0：Grafana 四域 + staging 7 天 | **本地**：`local_stack_up.sh --check-only` 通过；**Docker SLO 四 PNG 未导出**（[`M0-remaining-gaps.md`](M0-remaining-gaps.md) #3）。**staging**：**阻塞 T36–T37** — 7 天流量与正式基线 **未验证**（禁止伪造曲线） | 未测 | SRE | [`scripts/observability/README.md`](../scripts/observability/README.md) · [`BLOCKERS.md`](../../specs/BLOCKERS.md) T36–T37 |
 | e2e 关键链路 | 5 条 Playwright 在 CI 稳定通过 | **M0 已验证（2026-06-05）**：本地 `E2E_VITE_MOCK_API=1` + Vite :5001 → `npm run test:e2e:p0` **14/14 passed**（连续 2 次本地复现，约 36s）（`critical-paths` 5 链 + `plan2026-skeleton` 5 链 + `smoke` 4）；截图 [`evidence/e2e/01–05.png`](evidence/e2e/README.md)。CI：仓根 [`e2e.yml`](../../.github/workflows/e2e.yml) → [`e2e-playwright-reusable.yml`](../.github/workflows/e2e-playwright-reusable.yml)；`E2E_VITE_MOCK_API=1` 契约 mock + 可选 Postgres 全栈 | 一致 | 前端 + QA | [`frontend/e2e/README.md`](../frontend/e2e/README.md)、[`evidence/e2e/`](evidence/e2e/) |
 
 ---
@@ -32,7 +33,7 @@
 
 | 主题 | 声称 | 实际 | 差距 | 负责人 | 证据 |
 |----|------|------|------|--------|------|
-| Mod 商店分成 | 平台抽成 30% | 未验证 | 未测 | 商务 + MODstore | *需生产/ staging 账单* |
+| Mod 商店分成 | 平台抽成 30% | **未验证**（**非** T36–T37）；无真实商家 / 0.01 元订单 | 未测 | 商务 + MODstore | [`mod-merchant-pilot.md`](mod-merchant-pilot.md) · [`evidence/mod/`](evidence/mod/) · [`M0-remaining-gaps.md`](M0-remaining-gaps.md) #2 |
 | Token 月费档位 | ¥999–9,999/月 | 未验证 | 未测 | 商务 | |
 | AI 自动审单命中率 | 文档隐含「AI 员工」自动化 | 未验证 | 未测 | 业务 + 数据 | *待 T55–T57 月报* |
 
@@ -108,8 +109,8 @@
 
 | 主题 | 声称（摘要） | 实际 | 差距 | 填表人 | 证据路径 |
 |------|--------------|------|------|--------|----------|
-| SLO 全表复核 | 见上文 SLO 节 | **待填**（staging）；本地栈仅文档/脚本 | — | SRE | [`evidence/slo/`](evidence/slo/) · 禁止无 PNG 填数 |
-| Mod 分成 30% | BUSINESS_MODEL | **待填** | — | 商务 | |
+| SLO 全表复核 | 见上文 SLO 节 | **阻塞 T36–T37**（staging）；本地 Docker 四 PNG 待补 | — | SRE | [`M0-remaining-gaps.md`](M0-remaining-gaps.md) #1、#3 |
+| Mod 分成 30% | BUSINESS_MODEL | **待填**（需试点订单） | — | 商务 | [`mod-merchant-pilot.md`](mod-merchant-pilot.md) · `evidence/mod/` |
 | AI 审单命中率 | ≥70%（计划 P2-3） | **待填** | — | 业务 | [`AI_BUSINESS_EVIDENCE.md`](AI_BUSINESS_EVIDENCE.md) |
 | 合同提醒触达 | ≥90%（计划 P2-3） | **待填** | — | 业务 | 同上 |
 | DORA 四月指标 | Lead time / deploy freq 等 | **待填** | — | 发布工程 | [`metrics/dora-monthly-202606.md`](../metrics/dora-monthly-202606.md) |
@@ -132,3 +133,4 @@
 | 2026-06-05 | M0 脚本/env worker | `fix_*`/`check_*` 迁入 `scripts/*`；`.env*` maxdepth2=5；[`ENV_FILES.md`](ENV_FILES.md) |
 | 2026-06-05 | observability worker | SLO 行区分「本地 compose 可复现」vs「staging 未验证」；证据链 `docs/evidence/` |
 | 2026-06-05 | observability subagent | `--check-only` 通过；Docker 不可用→无 PNG；CLAIMED 可观测行区分 local/staging，禁止伪造 7 天 |
+| 2026-06-05 | M0 docs worker | `mod-merchant-pilot.md`、`M0-remaining-gaps.md`、`evidence/mod/`；SLO/Mod 行对齐 BLOCKERS T36–T37 |
