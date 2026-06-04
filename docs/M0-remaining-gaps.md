@@ -1,6 +1,6 @@
 # M0 剩余缺口（2026-06-05）
 
-本地/文档侧 M0 工程项已基本闭环（e2e 14/14、mypy 6/6、脚本/env 收口；可重建依赖外置 `~/XCMAX-archives/m0-venv-20260605/` ~1.6G，工作区仅指针）。**仓根 `du -sh Desktop/XCMAX` ~9.8G**（2026-06-05 实删后复扫：自 ~11G 去掉与 `~/XCMAX-archives/m0-venv-20260605/` 重复的 `FHD/.venv` + `FHD/frontend/node_modules` 实体（frontend ~744M；`.venv` 此前已仅指针）；工作区两路径仅 `ARCHIVE_POINTER.md`；含 `FHD/.git` ~9.4G；[`plan-2026-06.md`](../../specs/plan-2026-06.md) 工作区 ≤8G **未达标**）。**下列三项仍缺**，不可在 CLAIMED 中标为完成。
+本地/文档侧 M0 工程项已基本闭环（e2e 14/14、mypy 6/6、脚本/env 收口；可重建依赖外置 `~/XCMAX-archives/m0-venv-20260605/` ~1.6G，工作区仅指针）。**仓根 `du -sh Desktop/XCMAX` ~11G**（2026-06-05：`du` 前 **9.9G**；去掉与 `~/XCMAX-archives/m0-venv-20260605/` 重复的 `FHD/.venv` + `FHD/frontend/node_modules` 实体（frontend ~744M；`.venv` 此前已仅指针）；工作区 `FHD/.venv` / `FHD/frontend/node_modules` 各 **4K**（仅 `ARCHIVE_POINTER.md`）；含 `FHD/.git` **~9.4G**（`git gc --prune=now` 权限失败未 prune）；[`plan-2026-06.md`](../../specs/plan-2026-06.md) 工作区 ≤8G **未达标**）。**下列三项仍缺**，不可在 CLAIMED 中标为完成。
 
 | # | 缺口 | 验收 | 阻塞 |
 |---|------|------|------|
@@ -16,7 +16,7 @@
 
 ## 体积（plan SSOT，勿误标已闭环）
 
-- **工作区 `du -sh Desktop/XCMAX` ~9.8G**（含 `FHD/.git` ~9.4G；不含 `.git` 交付树 ~0.3G；`FHD/.venv` / `FHD/frontend/node_modules` 无实体）— plan ≤8G **未达标**；与 [`CLAIMED_VS_ACTUAL.md`](CLAIMED_VS_ACTUAL.md)「工作区体积」行一致（判定：夸大）
+- **工作区 `du -sh Desktop/XCMAX` ~11G**（`du` 前 9.9G；实删可重建依赖 ~1.0G 后仍 **>8G**，主因 `FHD/.git`；`FHD/.venv` / `FHD/frontend/node_modules` 各 4K）— plan ≤8G **未达标**；与 [`CLAIMED_VS_ACTUAL.md`](CLAIMED_VS_ACTUAL.md)「工作区体积」行一致（判定：夸大）
 
 ## 相关文档
 
