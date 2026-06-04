@@ -1,9 +1,9 @@
 {
-  "generated_at": "2026-06-04T19:42:54Z",
+  "generated_at": "2026-06-04T19:43:16Z",
   "input_message": "查一下七彩乐园有哪些产品",
   "execution_mode": "mock",
   "planner_mode": "fallback",
-  "plan_id": "98c87d00fb274566853eb965c5d7af35",
+  "plan_id": "cf239eb168fc46d7bbc67a78580ecf66",
   "intent": "generic_workflow",
   "risk_level": "low",
   "nodes": [

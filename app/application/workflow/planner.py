@@ -1231,6 +1231,8 @@ class LLMWorkflowPlanner:
             logger.debug("用户记忆 RAG 参数错误（不阻断主流程）: %s", e)
         except RuntimeError as e:
             logger.warning("用户记忆 RAG 运行时错误（不阻断主流程）: %s", e)
+        except Exception as e:
+            logger.warning("用户记忆 RAG 不可用（不阻断主流程）: %s", e)
 
         planned = self._plan_with_react_multiagent(
             plan_id=plan_id,

@@ -325,18 +325,17 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     _bootstrap()
+    force_live = str(os.environ.get("AI_AGENT_V0_LIVE_TOOLS", "")).strip().lower() in {
+        "1",
+        "true",
+        "yes",
+    }
     mock_tools = bool(args.mock_tools) or (
         str(os.environ.get("AI_AGENT_V0_MOCK_TOOLS", "")).strip().lower()
         in {"1", "true", "yes"}
     )
-    if not mock_tools and not _database_reachable():
+    if not mock_tools and not force_live and not _database_reachable():
         mock_tools = True
-    if not mock_tools and str(os.environ.get("AI_AGENT_V0_LIVE_TOOLS", "")).strip().lower() not in {
-        "1",
-        "true",
-        "yes",
-    }:
-        mock_tools = not _database_reachable()
     evidence = run_demo(
         str(args.message or DEFAULT_MESSAGE).strip() or DEFAULT_MESSAGE,
         user_id=str(args.user_id or DEFAULT_USER_ID),
