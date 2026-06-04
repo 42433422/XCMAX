@@ -25,7 +25,7 @@
 | SLO-AI-01 | 聊天首包 P95 &lt; 1500ms；基线 1080ms | **阻塞 T36–T37**：staging **未验证** | 未测 | AI 平台 | [`evidence/slo/`](evidence/slo/) · panel `xcagi-slo:3` · 禁止无 PNG 填数 |
 | SLO-BUS-01 | NeuroBus 投递 99.95%；基线 99.97% | **阻塞 T36–T37**：staging **未验证** | 未测 | 平台 | [`evidence/slo/`](evidence/slo/) · panel `xcagi-slo:7` |
 | **可观测性栈** | M0：Grafana 四域 + staging 7 天 | **本地（2026-06-05）**：`bash scripts/observability/local_stack_up.sh --check-only` **通过**（compose / prometheus.local.yml / dashboards 路径 OK）；**本机未检测到 `docker` CLI** → 未起栈、**无** `grafana-local-m0-*.png`（[`evidence/slo/`](evidence/slo/) 仅 `.gitkeep`，[`M0-remaining-gaps.md`](M0-remaining-gaps.md) #3）。**staging**：**阻塞 T36–T37** — 7 天流量/SLO 基线 **未验证**（**禁止**无流量伪造 7 天曲线或填数） | 未测 | SRE | [`local_stack_up.sh`](../scripts/observability/local_stack_up.sh) · [`BLOCKERS.md`](../../specs/BLOCKERS.md) T36–T37 |
-| e2e 关键链路 | 5 条 Playwright 在 CI 稳定通过 | **M0 已验证（2026-06-05）**：本地 `E2E_VITE_MOCK_API=1` + Vite :5001 → `npm run test:e2e:p0` **14/14 passed**（连续 2 次本地复现，约 36s）（`critical-paths` 5 链 + `plan2026-skeleton` 5 链 + `smoke` 4）；截图 [`evidence/e2e/01–05.png`](evidence/e2e/README.md)。CI：仓根 [`e2e.yml`](../../.github/workflows/e2e.yml) → [`e2e-playwright-reusable.yml`](../.github/workflows/e2e-playwright-reusable.yml)；`E2E_VITE_MOCK_API=1` 契约 mock + 可选 Postgres 全栈 | 一致 | 前端 + QA | [`frontend/e2e/README.md`](../frontend/e2e/README.md)、[`evidence/e2e/`](evidence/e2e/) |
+| e2e 关键链路 | 5 条 Playwright 在 CI 稳定通过 | **M0 已验证（2026-06-05）**：本地 `E2E_VITE_MOCK_API=1` + Vite :5001 → `npm run test:e2e:p0` **14/14 passed**（当日第 3 次本地复现，约 45s；需先起 Vite :5001）（`critical-paths` 5 链 + `plan2026-skeleton` 5 链 + `smoke` 4）；截图 [`evidence/e2e/01–05.png`](evidence/e2e/README.md)。CI：仓根 [`e2e.yml`](../../.github/workflows/e2e.yml) → [`e2e-playwright-reusable.yml`](../.github/workflows/e2e-playwright-reusable.yml)；`E2E_VITE_MOCK_API=1` 契约 mock + 可选 Postgres 全栈 | 一致 | 前端 + QA | [`frontend/e2e/README.md`](../frontend/e2e/README.md)、[`evidence/e2e/`](evidence/e2e/) |
 
 ---
 
@@ -135,4 +135,5 @@
 | 2026-06-05 | observability subagent | `--check-only` 通过；Docker 不可用→无 PNG；CLAIMED 可观测行区分 local/staging，禁止伪造 7 天 |
 | 2026-06-05 | command-exec subagent | 复跑 `--check-only` OK；`which docker` 无；未伪造 staging 7 天；可观测性栈/T66 行已对齐事实 |
 | 2026-06-05 | M0 docs worker | `mod-merchant-pilot.md`、`M0-remaining-gaps.md`、`evidence/mod/`；SLO/Mod 行对齐 BLOCKERS T36–T37 |
+| 2026-06-05 | e2e P0 subagent | `E2E_VITE_MOCK_API=1` 复跑 **14/14**（~45s）；e2e 行复现次数/耗时更新 |
 | 2026-06-05 | M0 venv 分包 worker | 依赖迁至 `m0-venv-20260605`；仓根 du 仍 **9.7G**（`.git`）；CLAIMED/M0-gaps 体积表述对齐 |
