@@ -2,6 +2,7 @@ import { api } from './core';
 import type { ApiResponse } from '@/types/api';
 import type { Product, ProductCreateDTO, ProductUpdateDTO, ProductQueryParams } from '@/types/product';
 import { resolveErpApiBase, resolveErpApiPath } from '@/utils/erpDomainPaths';
+import { productCreateSchema, productUpdateSchema } from '@/schemas/product';
 
 function erpBase(): string {
   return resolveErpApiBase();
@@ -28,11 +29,22 @@ export const productsApi = {
   },
 
   createProduct(data: ProductCreateDTO): Promise<ApiResponse<Product>> {
-    return api.post<ApiResponse<Product>>(`${erpBase()}/products/add`, data);
+    const parsed = productCreateSchema.safeParse(data);
+    if (!parsed.success) {
+      const issue = parsed.error.issues[0];
+      throw new Error(issue?.message || '产品信息无效');
+    }
+    return api.post<ApiResponse<Product>>(`${erpBase()}/products/add`, parsed.data);
   },
 
   updateProduct(id: number | string, data: ProductUpdateDTO): Promise<ApiResponse<Product>> {
-    return api.post<ApiResponse<Product>>(`${erpBase()}/products/update`, { id, ...data });
+    const parsed = productUpdateSchema.safeParse({ id, ...data });
+    if (!parsed.success) {
+      const issue = parsed.error.issues[0];
+      throw new Error(issue?.message || '产品信息无效');
+    }
+    const { id: productId, ...rest } = parsed.data;
+    return api.post<ApiResponse<Product>>(`${erpBase()}/products/update`, { id: productId, ...rest });
   },
 
   deleteProduct(id: number | string, data: Record<string, any> = {}): Promise<ApiResponse<void>> {

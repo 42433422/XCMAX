@@ -25,7 +25,7 @@
 | 路径图周次 | 任务 | 验收 | 状态 | 依赖 M0 staging? |
 |------------|------|------|------|------------------|
 | M2-W1 | mypy 收紧：FHD `ignore_errors` **18→6** | `pyproject.toml` 宽口径 ≤6；见 CLAIMED mypy 行 | ✅ **已完成**（2026-06-05，**6/6**） | 否 |
-| M2-W1 | 核心 API 契约测试 | `cd FHD/frontend && vitest run` 全绿；随 API 变更增补 | ⬜ 待启动 | 否 |
+| M2-W1 | 核心 API 契约测试 | `cd FHD/frontend && vitest run` 全绿；随 API 变更增补 | ✅ **已完成**（2026-06-05，`src/api` 367 项） | 否 |
 | M2-W2 | **AI Agent 平台 V0** | 自然语言 → 工作流；1 个 demo 跑通（`workflow/engine.py` + LLM planner） | ⬜ 待启动 | 否 |
 | M2-W3 | **AI 月报自动生成** | 1 份 PDF 入 `docs/evidence/` | ⬜ 待启动 | **是**（7 天 staging 数据；T36–T37 / T56） |
 | M2-W4 | **Mod 真实商家**（四图） | 上架 → 支付 → 开通 → `evidence/mod/01–04.png` | ⬜ 待启动 | 否（与 staging SLO 独立） |
@@ -68,3 +68,4 @@
 | 日期 | 更新 |
 |------|------|
 | 2026-06-05 | 初版：对照路径图阶段 1；mypy 标绿；staging 依赖单列 |
+| 2026-06-05 | API 契约：`frontend` `src/api` vitest 全绿；core/apiFetch、wechat 契约、zod 依赖 |

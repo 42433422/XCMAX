@@ -40,7 +40,7 @@ export const systemApi = {
   },
 
   getWorkflowEmployeeCatalog(): Promise<ApiResponse<any>> {
-    return api.get<ApiResponse<any>>('/api/system/workflow-employee-catalog');
+    return api.get<ApiResponse<any>>('/api/system/workflow-employees');
   },
 
   getEmployeeRegistryRules(): Promise<ApiResponse<any>> {

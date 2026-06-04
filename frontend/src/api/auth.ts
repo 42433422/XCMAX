@@ -2,6 +2,7 @@ import { api, primeCsrfCookie } from './core';
 import { LS_MARKET_ACCESS_TOKEN, LS_MARKET_USER_JSON } from './marketAccount';
 import { invalidateEnterpriseSessionCache } from '@/utils/authSessionCache';
 import type { ApiResponse } from '@/types/api';
+import { registerSchema } from '@/schemas/auth';
 
 export type AccountKind = 'personal' | 'enterprise' | 'admin';
 
@@ -67,9 +68,14 @@ export const authApi = {
   },
 
   async register(payload: RegisterRequest): Promise<ApiResponse<LoginResponse>> {
+    const parsed = registerSchema.safeParse(payload);
+    if (!parsed.success) {
+      const issue = parsed.error.issues[0];
+      throw new Error(issue?.message || '注册信息无效');
+    }
     await primeCsrfCookie();
     invalidateEnterpriseSessionCache();
-    const res = await api.post<ApiResponse<LoginResponse>>('/api/auth/register', payload);
+    const res = await api.post<ApiResponse<LoginResponse>>('/api/auth/register', parsed.data);
     invalidateEnterpriseSessionCache();
     return res;
   },
@@ -89,7 +95,8 @@ export const authApi = {
       /* ignore */
     }
     await primeCsrfCookie();
-    return api.post<ApiResponse<void>>('/api/auth/logout', {});
+    const signal = typeof AbortSignal !== 'undefined' ? AbortSignal.timeout(15_000) : undefined;
+    return api.post<ApiResponse<void>>('/api/auth/logout', {}, signal ? { signal } : {});
   },
 
   async getCurrentUser(): Promise<ApiResponse<{ user: User; permissions: string[] }>> {

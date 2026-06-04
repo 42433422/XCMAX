@@ -15,18 +15,29 @@ let modRouteAvailable: boolean | null = null;
 async function isPrivateDbModRouteAvailable(): Promise<boolean> {
   if (modRouteAvailable !== null) return modRouteAvailable;
   try {
-    const { api } = await import('./core');
     const resp = await api.get<{ success?: boolean; data?: Array<{ id?: string; enabled?: boolean }> }>(
       '/api/mods/',
     );
     const mods = Array.isArray(resp?.data) ? resp.data : [];
-    modRouteAvailable =
-      resp?.success !== false &&
-      mods.some((m) => m?.id === PRIVATE_DB_READ_ASSISTANT_MOD_ID && m?.enabled !== false);
+    if (resp?.success !== false && mods.some((m) => m?.id === PRIVATE_DB_READ_ASSISTANT_MOD_ID && m?.enabled !== false)) {
+      modRouteAvailable = true;
+      return true;
+    }
+  } catch {
+    /* fall through to status probe */
+  }
+  try {
+    const status = await api.get<{ success?: boolean }>(`${BASE}/status`);
+    if (status?.success !== false) {
+      modRouteAvailable = true;
+      return true;
+    }
   } catch {
     modRouteAvailable = false;
+    return false;
   }
-  return modRouteAvailable;
+  modRouteAvailable = false;
+  return false;
 }
 
 export interface PrivateDbSource {
