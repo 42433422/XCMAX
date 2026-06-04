@@ -33,7 +33,7 @@
 
 | 主题 | 声称 | 实际 | 差距 | 负责人 | 证据 |
 |----|------|------|------|--------|------|
-| Mod 商店分成 | 平台抽成 30% | **未验证**（**非** T36–T37）；无真实商家 / 0.01 元订单 | 未测 | 商务 + MODstore | [`mod-merchant-pilot.md`](mod-merchant-pilot.md) · [`evidence/mod/`](evidence/mod/) · [`M0-remaining-gaps.md`](M0-remaining-gaps.md) #2 |
+| Mod 商店分成 | 平台抽成 30% | **未验证**（**非** T36–T37）；无真实商家 / 0.01 元订单。`MODstore_deploy` 在 `~/XCMAX-archives/m0-fhd-bulk-20260605/`（`mod-pilot-checklist.sh --check-only` 经 `MODSTORE_DEPLOY_ROOT` **通过**；`--verify` 仍缺 4 张 PNG） | 未测 | 商务 + MODstore | [`mod-merchant-pilot.md`](mod-merchant-pilot.md) · [`mod-pilot-blockers.md`](mod-pilot-blockers.md) · [`evidence/mod/`](evidence/mod/) · [`M0-remaining-gaps.md`](M0-remaining-gaps.md) #2 |
 | Token 月费档位 | ¥999–9,999/月 | 未验证 | 未测 | 商务 | |
 | AI 自动审单命中率 | 文档隐含「AI 员工」自动化 | 未验证 | 未测 | 业务 + 数据 | *待 T55–T57 月报* |
 

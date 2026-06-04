@@ -7,7 +7,7 @@
 ## 前置
 
 - [ ] 1 家友好商家或内部沙箱租户（商务/运营签字）
-- [ ] **MODstore SSOT**：[`成都修茈科技有限公司/MODstore_deploy/`](../../成都修茈科技有限公司/MODstore_deploy/)（勿在废弃的 `FHD/MODstore/` 开发）
+- [ ] **MODstore SSOT**：[`成都修茈科技有限公司/MODstore_deploy/`](../../成都修茈科技有限公司/MODstore_deploy/)（M0 已迁出工作区；归档实体见 [`mod-pilot-blockers.md`](mod-pilot-blockers.md)。checklist 可用 `export MODSTORE_DEPLOY_ROOT=…/m0-fhd-bulk-20260605/…/MODstore_deploy`；勿在废弃的 `FHD/MODstore/` 开发）
 - [ ] 支付宝沙箱/生产 **0.01 元** 密钥（[`alipay_package/`](../../成都修茈科技有限公司/alipay_package/)），**勿**提交密钥入仓
 - [ ] 试点完成后仅事实更新 CLAIMED「Mod 商店分成」行
 
@@ -16,6 +16,7 @@
 **脚本 SSOT**：[`MODstore/scripts/mod-pilot-checklist.sh`](../MODstore/scripts/mod-pilot-checklist.sh)（`--verify` / `--check-only` / `--paths`）
 
 ```bash
+export MODSTORE_DEPLOY_ROOT="${XCMAX_ARCHIVE_ROOT:-$HOME/XCMAX-archives}/m0-fhd-bulk-20260605/成都修茈科技有限公司/MODstore_deploy"  # deploy 未 rsync 回工作区时
 bash MODstore/scripts/mod-pilot-checklist.sh          # 步骤 + 证据路径
 bash MODstore/scripts/mod-pilot-checklist.sh --verify # 四张 PNG 就位后校验
 bash MODstore/scripts/mod-pilot-checklist.sh --check-only # 仅校验目录/文档（无需商家）
