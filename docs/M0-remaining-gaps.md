@@ -24,7 +24,7 @@
 | **交付树**（不含 `.git`） | **~285M / ~0.3G** | **≤8 GB ✅**（尽调 SSOT） |
 | **`du -sh` 含 `.git`** | **~9.7G**（`FHD/.git` ~9.4G） | **仅跟踪**；**不等于**交付树未达标 |
 
-plan 条文「工作区 ≤8G」若用 `du -sh` 含对象库仍会 **>8G**（主因 `.git`）；与 [`CLAIMED_VS_ACTUAL.md`](CLAIMED_VS_ACTUAL.md)「工作区体积」行、[`specs/weekly/2026-W24.md`](../../specs/weekly/2026-W24.md) 脚注一致。**勿**因交付树已达标而勾掉上表 **#1–#3**。
+2026-06-05：`du` **~12G→~9.7G**（删除 `frontend` 与 `m0-venv-20260605` 重复的 `.nm-e2e` / `node_modules.*` ~2.6G；`FHD/.venv` **ln -s** 归档；`node_modules` 仅 `ARCHIVE_POINTER.md`）。plan 条文「工作区 ≤8G」若用 `du -sh` 含对象库仍会 **>8G**（主因 `.git`）；与 [`CLAIMED_VS_ACTUAL.md`](CLAIMED_VS_ACTUAL.md)「工作区体积」行、[`specs/weekly/2026-W24.md`](../../specs/weekly/2026-W24.md) 脚注一致。**勿**因交付树已达标而勾掉上表 **#1–#3**。
 
 ## 相关文档
 

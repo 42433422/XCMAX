@@ -182,6 +182,7 @@ wechat-decrypt/build/
 # ============================================================================
 node_modules/
 frontend/node_modules/
+!frontend/node_modules/ARCHIVE_POINTER.md
 frontend/.vite/
 frontend/dist/
 templates/vue-dist/

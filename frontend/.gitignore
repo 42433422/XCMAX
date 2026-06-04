@@ -1,3 +1,4 @@
 node_modules
+!node_modules/ARCHIVE_POINTER.md
 dist
 *.local

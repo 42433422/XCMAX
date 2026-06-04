@@ -48,7 +48,7 @@
 | mypy `ignore_errors` 目录数 | ≤ 6（[`plan-2026-06.md`](../../specs/plan-2026-06.md) M0） | **6**（`pyproject.toml` 宽口径 `module` 条，2026-06-05；自 **12→6**） | 一致 | 后端架构 | 自 plan 基线 **18** 分批收口；`app.routes.*` / `ai_chat` 移出宽口径；[`MYPY_BATCH_STATUS.md`](MYPY_BATCH_STATUS.md) |
 | 前端 API 契约测试 | M2-W1：`src/api` 全绿 | **367/367** 通过（**30** 文件，vitest 2.0.5；2026-06-05 `cd frontend && npm run test -- src/api`） | 一致 | 前端 + QA | [`M1-kickoff-checklist.md`](M1-kickoff-checklist.md) M2-W1 · commit `618e4ade` |
 | 全量覆盖率 | ≥ 88%（plan 目标） | **77.44%**（`metrics/coverage-dual-summary.json`，2026-06-04） | 一致 | QA | CI `fail_under=77` |
-| 工作区体积（`du -sh Desktop/XCMAX`） | ≤ 8 GB（[`plan-2026-06.md`](../../specs/plan-2026-06.md) M0） | **~11G**（2026-06-05 本轮：`du` 前 **9.9G** → 实删与 `~/XCMAX-archives/m0-venv-20260605/` 重复的 `FHD/.venv` + `FHD/frontend/node_modules`（约 **~1.0G**）后复扫 **~11G**；两路径各 **4K**（仅 `ARCHIVE_POINTER.md`）；`FHD/.git` **~9.4G** 未缩（`git gc --prune=now` 大量 `Operation not permitted`）；不含 `.git` 交付树 **~0.3G**） | 夸大 | 发布工程 | 仓根 `ARCHIVE_POINTER.md` · [`FHD/.venv/ARCHIVE_POINTER.md`](../.venv/ARCHIVE_POINTER.md) · [`FHD/frontend/node_modules/ARCHIVE_POINTER.md`](../frontend/node_modules/ARCHIVE_POINTER.md) |
+| 工作区体积（`du -sh Desktop/XCMAX`） | ≤ 8 GB（[`plan-2026-06.md`](../../specs/plan-2026-06.md) M0） | **~9.7G**（2026-06-05：`du` 前 **~12G**；实删与 `~/XCMAX-archives/m0-venv-20260605/` 重复的 `frontend/.nm-e2e` / `node_modules.*` 残留（**~2.6G**）及工作区实体；`FHD/.venv` **ln -s** 归档、`frontend/node_modules` **4K**（仅 `ARCHIVE_POINTER.md`，`npm ci` 可恢复）；`FHD/.git` **~9.4G**；不含 `.git` 交付树 **~0.3G**） | 夸大 | 发布工程 | 仓根 `ARCHIVE_POINTER.md` · [`FHD/.venv-ARCHIVE_POINTER.md`](../.venv-ARCHIVE_POINTER.md) · [`FHD/frontend/node_modules/ARCHIVE_POINTER.md`](../frontend/node_modules/ARCHIVE_POINTER.md) |
 | 仓根/FHD 散落脚本 | 无 `fix_*`/`check_*`/`probe_*` 于仓根或 `scripts/` 根 | **已收敛（2026-06-05）**：`maxdepth 2` 无散落；一次性脚本在 [`scripts/_archived/`](../scripts/_archived/)、探针在 [`scripts/dev/diagnostics/`](../scripts/dev/diagnostics/)、CI 在 [`scripts/ci/`](../scripts/ci/) | 一致 | 发布工程 | [`scripts/README.md`](../scripts/README.md) |
 | Android 原生 | README 曾写 Kotlin Compose 已交付 | Kotlin Compose **实验骨架**已存在；非签约级移动产品 | 滞后 | 移动端 | [`mobile-android/README.md`](../mobile-android/README.md) |
 
@@ -145,6 +145,7 @@
 | 2026-06-05 | M0 venv 去重 worker | 删除工作区与 `m0-venv-20260605` 重复的 `.venv`/`frontend/node_modules` 实体；`du` **11G→9.7G**；CLAIMED/M0-gaps 对齐 |
 | 2026-06-05 | M0 venv 分包 worker | 依赖迁至 `m0-venv-20260605`；仓根 du 仍 **9.7G**（`.git`）；CLAIMED/M0-gaps 体积表述对齐 |
 | 2026-06-05 | command-exec subagent | 实删工作区 `FHD/.venv` + `frontend/node_modules` 实体（保留 ARCHIVE_POINTER）；`du -sh Desktop/XCMAX` **11G→9.7G**；新增 `frontend/node_modules/ARCHIVE_POINTER.md` |
+| 2026-06-05 | command-exec subagent | 清 `frontend` 重复 `node_modules`/`\.nm-e2e`（~2.6G）；`.venv` **ln -s** `m0-venv-20260605`；`du` **12G→9.7G**；`\.venv-ARCHIVE_POINTER.md` |
 | 2026-06-05 | command-exec subagent | `E2E_VITE_MOCK_API=1` + `E2E_FULL_STACK=1` 复跑 **14 passed**（~43s）；e2e 行第 7 次复现 |
 | 2026-06-05 | claimed-align worker | 对齐 e2e 14/14（`e2db1aaa`）、vitest **367/367**（`618e4ade`）、AI Agent live JSON（`087cf0a9`）、Mod check-only（`eb594987`）、体积 ~11G（`783dfbc3`）；Mod/staging **仍标未验证** |
 | 2026-06-05 | e2e full_stack subagent | `E2E_VITE_MOCK_API=1` + `E2E_FULL_STACK=1` 复跑 **14 passed / 0 failed**（~43s）；e2e 行 mock/full_stack 分述 |
