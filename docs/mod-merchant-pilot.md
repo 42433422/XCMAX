@@ -1,6 +1,7 @@
 # Mod 真实商家试点（M1/M2 分水岭）
 
 > **状态（2026-06）**：**未跑通** — 无真实商家；[`CLAIMED_VS_ACTUAL.md`](CLAIMED_VS_ACTUAL.md) Mod 行保持「未验证」（**非** T36–T37 阻塞）。  
+> **阻塞清单（自动生成口径）**：[`mod-pilot-blockers.md`](mod-pilot-blockers.md)（`mod-pilot-checklist.sh --check-only` / `--verify`）  
 > 路径图：**上架 → 0.01 元支付 → 宿主开通**；证据目录 [`evidence/mod/`](evidence/mod/)（4 张 PNG，禁止空宣称 / 假图）。
 
 ## 前置
@@ -41,6 +42,7 @@ git add FHD/docs/evidence/mod/*.png
 
 ## 参考
 
+- 阻塞清单：[`mod-pilot-blockers.md`](mod-pilot-blockers.md)（与 [`M0-remaining-gaps.md`](M0-remaining-gaps.md) #2 对齐）
 - 验收脚本：[`MODstore/scripts/mod-pilot-checklist.sh`](../MODstore/scripts/mod-pilot-checklist.sh)
 - M1 对账：[`M1-kickoff-checklist.md`](M1-kickoff-checklist.md)（M2-W4 Mod 四图）
 - 部署：[`MODstore_deploy/docs/runbooks/xiu-ci-single-modstore-upstream.md`](../../成都修茈科技有限公司/MODstore_deploy/docs/runbooks/xiu-ci-single-modstore-upstream.md)
