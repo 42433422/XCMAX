@@ -25,7 +25,7 @@ bash scripts/observability/local_stack_up.sh --check-only
 | Prometheus Pod | `kubectl -n xcagi-staging get pods -l app=prometheus` | Running |
 | Grafana Pod | `kubectl -n xcagi-staging get pods -l app=grafana` | Running |
 | API `/metrics` | staging API Service 可达 | Prometheus targets UP |
-| 7 天验收模板 | [`docs/evidence/slo/README.md`](../../docs/evidence/slo/README.md) §2 | YAML 字段就绪，**数值待填** |
+| 7 天验收模板 | [`docs/evidence/slo/acceptance-TEMPLATE.yaml`](../../docs/evidence/slo/acceptance-TEMPLATE.yaml) | 已存在；`acceptance-*.yaml` **数值待填** |
 
 ---
 
@@ -138,7 +138,12 @@ export GRAFANA_PASS='***'
 TIME_RANGE=now-7d bash scripts/observability/export_m0_panels.sh --prefix staging
 ```
 
-4. 复制 [`docs/evidence/slo/README.md`](../../docs/evidence/slo/README.md) §2 YAML 模板 → `docs/evidence/slo/acceptance-YYYYMMDD.yaml`，**仅从面板读数填写**
+4. 复制验收模板并填数（**仅从面板读数填写**）：
+
+```bash
+cp docs/evidence/slo/acceptance-TEMPLATE.yaml docs/evidence/slo/acceptance-YYYYMMDD.yaml
+# 或见 docs/evidence/slo/README.md §2 内联 YAML
+```
 
 #### B. k6 压测（短时补量）
 
