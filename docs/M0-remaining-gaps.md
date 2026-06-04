@@ -28,7 +28,8 @@
 
 ## 相关文档
 
-- Staging SLO：[`k8s/monitoring/STAGING_RUNBOOK.md`](../k8s/monitoring/STAGING_RUNBOOK.md)
+- **工程 vs 外部依赖总表**：[`ROADMAP-REMAINING-EXTERNAL.md`](ROADMAP-REMAINING-EXTERNAL.md)
+- Staging SLO：[`k8s/monitoring/STAGING_RUNBOOK.md`](../k8s/monitoring/STAGING_RUNBOOK.md) · [`staging-m0-preflight.md`](staging-m0-preflight.md)
 - Mod 试点：[`mod-merchant-pilot.md`](mod-merchant-pilot.md) · 阻塞清单 [`mod-pilot-blockers.md`](mod-pilot-blockers.md)
 - 声称对照：[`CLAIMED_VS_ACTUAL.md`](CLAIMED_VS_ACTUAL.md)
 - 阻塞 SSOT：[`specs/BLOCKERS.md`](../../specs/BLOCKERS.md)

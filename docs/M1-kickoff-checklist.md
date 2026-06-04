@@ -26,12 +26,12 @@
 |------------|------|------|------|------------------|
 | M2-W1 | mypy 收紧：FHD `ignore_errors` **18→6** | `pyproject.toml` 宽口径 ≤6；见 CLAIMED mypy 行 | ✅ **已完成**（2026-06-05，**6/6**） | 否 |
 | M2-W1 | 核心 API 契约测试 | `cd FHD/frontend && npm run test -- src/api` 全绿（**30** 文件 / **367** 测例，2026-06-05） | ✅ **已完成** | 否 |
-| M2-W2 | **AI Agent 平台 V0** | 自然语言 → 工作流；1 个 demo 跑通（`workflow/engine.py` + LLM planner） | ✅ 2026-06-05：`run_demo.py` + `demo-run-20260604.json`（`105dda84`，fallback/mock） | 否 |
+| M2-W2 | **AI Agent 平台 V0** | 自然语言 → 工作流；1 个 demo 跑通 | ✅ mock + **live** 工具链（`087cf0a9` · `demo-run-20260605-live.json`）；planner 无 Key 仍为 fallback | 否 |
 | M2-W3 | **AI 月报自动生成** | 1 份 PDF 入 `docs/evidence/` | ⬜ 待启动 | **是**（7 天 staging 数据；T36–T37 / T56） |
 | M2-W4 | **Mod 真实商家**（四图） | 上架 → 支付 → 开通 → `evidence/mod/01–04.png` | ⬜ 待启动 | 否（与 staging SLO 独立） |
 | M3-W1 | Mod 商店 **0.01 元**真实流水 | 支付宝账单截图 | ⬜ 待启动 | 否 |
-| M3-W2 | 智能搜索 V0 | API 文档 + 1 个 demo | ⬜ 待启动 | 否 |
-| M3-W3 | 智能纪要 | 通义听悟 / 腾讯会议 API；1 个 demo | ⬜ 待启动 | 否 |
+| M3-W2 | 智能搜索 V0 | API 文档 + 1 个 demo | 📝 计划已起草 [`smart-search-v0-plan.md`](smart-search-v0-plan.md)；demo 未交付 | 否 |
+| M3-W3 | 智能纪要 | 通义听悟 / 腾讯会议 API；1 个 demo | 📝 计划已起草 [`meeting-minutes-v0-plan.md`](meeting-minutes-v0-plan.md)；demo 未交付 | 否 |
 | M3-W4 | **等保二级测评启动** | 测评机构合同 + 时间表（[`compliance-tier2-kickoff.md`](compliance-tier2-kickoff.md)） | 📝 **已起草**（启动清单）；合同/时间表待签 | 否 |
 
 ---

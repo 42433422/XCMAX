@@ -8,7 +8,7 @@
 
 | 检查 | 结果 |
 |------|------|
-| `--check-only` | **通过**（`MODSTORE_DEPLOY_ROOT` 指向归档；不要求四张 PNG） |
+| `--check-only` | **通过**（deploy 归档 + 工作区已 rsync `alipay_package`；不要求四张 PNG） |
 | `--verify` | **未通过** — 缺 4 张证据 PNG |
 
 **本次复扫命令**（deploy 在工作区外时）：
@@ -34,7 +34,7 @@ bash MODstore/scripts/mod-pilot-checklist.sh --check-only
 | 项 | 期望路径 | 现状 | 解除方式 |
 |----|----------|------|----------|
 | **MODstore_deploy** | `成都修茈科技有限公司/MODstore_deploy/` | 工作区未检出；**归档已存在**（`m0-fhd-bulk-20260605/…/MODstore_deploy/`）。`MODSTORE_DEPLOY_ROOT` 指向归档时 checklist **不再 WARN deploy** | 方式 B（见下）已可用；或 rsync 方式 A 拉回工作区默认 SSOT 路径 |
-| **alipay_package** | `成都修茈科技有限公司/alipay_package/` | 工作区未检出；**归档已存在**（同 bulk 树）。checklist 仍 **WARN**（支付步骤需工作区或 env 内密钥） | rsync 恢复（见下）；或本地配置 **0.01 元** 密钥；**勿** `git add` 密钥 |
+| **alipay_package** | `成都修茈科技有限公司/alipay_package/` | **2026-06-05**：已从归档 rsync 至工作区；checklist **不再 WARN**（密钥仍勿 `git add`） | 支付试点：0.01 元订单 + 四图 |
 
 #### 恢复 MODstore_deploy（`~/XCMAX-archives` / `ARCHIVE_POINTER`）
 

@@ -1,0 +1,22 @@
+{
+  "month": "2026-06",
+  "data_class": "SYNTHETIC/SEED",
+  "source": "metrics/ai-evidence-seed.db",
+  "generated_at": "2026-06-04T20:07:13Z",
+  "scenarios": {
+    "shipment_audit": {
+      "total": 100,
+      "auto_approve": 72,
+      "manual": 23,
+      "ocr_failed": 5,
+      "ai_hit_rate_pct": 75.8
+    },
+    "contract_reminder": {
+      "contracts_due_30d": 95,
+      "should_push": 120,
+      "push_success": 108,
+      "push_failed": 12,
+      "reach_rate_pct": 90.0
+    }
+  }
+}
