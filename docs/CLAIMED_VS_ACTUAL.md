@@ -25,7 +25,7 @@
 | SLO-AI-01 | 聊天首包 P95 &lt; 1500ms；基线 1080ms | **阻塞 T36–T37**：staging **未验证** | 未测 | AI 平台 | [`evidence/slo/`](evidence/slo/) · panel `xcagi-slo:3` · 禁止无 PNG 填数 |
 | SLO-BUS-01 | NeuroBus 投递 99.95%；基线 99.97% | **阻塞 T36–T37**：staging **未验证** | 未测 | 平台 | [`evidence/slo/`](evidence/slo/) · panel `xcagi-slo:7` |
 | **可观测性栈** | M0：Grafana 四域 + staging 7 天 | **本地（2026-06-05）**：`bash scripts/observability/local_stack_up.sh --check-only` **通过**（compose / prometheus.local.yml / dashboards 路径 OK）；**本机 `which docker` 无**（`/usr/local/bin/docker` → `/Volumes/Docker/Docker.app/...`，卷未挂载，CLI 不可用）→ 未起栈、**无** `grafana-local-m0-*.png`（[`evidence/slo/`](evidence/slo/) 仅 `.gitkeep`，[`M0-remaining-gaps.md`](M0-remaining-gaps.md) #3）。**staging**：**阻塞 T36–T37** — 7 天流量/SLO 基线 **未验证**（**禁止**无流量伪造 7 天曲线或填数） | 未测 | SRE | [`local_stack_up.sh`](../scripts/observability/local_stack_up.sh) · [`BLOCKERS.md`](../../specs/BLOCKERS.md) T36–T37 |
-| e2e 关键链路 | 5 条 Playwright 在 CI 稳定通过 | **M0 已验证（2026-06-05）**：本地 `E2E_VITE_MOCK_API=1` dev :5001 → `E2E_FULL_STACK=1 npm run test:e2e:p0` **14/14**（`critical-paths` 5 + `plan2026-skeleton` 5 + `smoke` 4；第 6 次本地复现，~60s；需先 `E2E_VITE_MOCK_API=1 npm run dev -- --port 5001`；`node_modules` 仅归档指针时先 `npm ci`）；不设 `E2E_FULL_STACK` 时为 **9 passed / 5 skipped**（~28s）。截图 [`evidence/e2e/01–05.png`](evidence/e2e/README.md)。CI：仓根 [`e2e.yml`](../../.github/workflows/e2e.yml) → [`e2e-playwright-reusable.yml`](../.github/workflows/e2e-playwright-reusable.yml)；`E2E_VITE_MOCK_API=1` 契约 mock + 可选 Postgres 全栈 | 一致 | 前端 + QA | [`frontend/e2e/README.md`](../frontend/e2e/README.md)、[`evidence/e2e/`](evidence/e2e/) |
+| e2e 关键链路 | 5 条 Playwright 在 CI 稳定通过 | **M0 已验证（2026-06-05）**：本地 `E2E_VITE_MOCK_API=1` dev :5001 → `E2E_FULL_STACK=1 npm run test:e2e:p0` **14/14**（`critical-paths` 5 + `plan2026-skeleton` 5 + `smoke` 4；第 6 次本地复现，~60s；需先 `E2E_VITE_MOCK_API=1 npm run dev -- --port 5001`；`node_modules` 仅归档指针时先 `npm ci`）；不设 `E2E_FULL_STACK` 时为 **9 passed / 5 skipped**（~28s）。截图 [`evidence/e2e/01–05.png`](evidence/e2e/README.md)。CI：仓根 [`e2e.yml`](../../.github/workflows/e2e.yml) → [`e2e-playwright-reusable.yml`](../.github/workflows/e2e-playwright-reusable.yml)；`E2E_VITE_MOCK_API=1` 契约 mock + 可选 Postgres 全栈 | 一致 | 前端 + QA | [`frontend/e2e/README.md`](../frontend/e2e/README.md)、[`evidence/e2e/`](evidence/e2e/) · commit `e2db1aaa` |
 
 ---
 
@@ -36,6 +36,7 @@
 | Mod 商店分成 | 平台抽成 30% | **未验证**（**非** T36–T37）；无真实商家 / 0.01 元订单。`MODstore_deploy` 在 `~/XCMAX-archives/m0-fhd-bulk-20260605/`（`mod-pilot-checklist.sh --check-only` 经 `MODSTORE_DEPLOY_ROOT` **通过**；`--verify` 仍缺 4 张 PNG） | 未测 | 商务 + MODstore | [`mod-merchant-pilot.md`](mod-merchant-pilot.md) · [`mod-pilot-blockers.md`](mod-pilot-blockers.md) · [`evidence/mod/`](evidence/mod/) · [`M0-remaining-gaps.md`](M0-remaining-gaps.md) #2 |
 | Token 月费档位 | ¥999–9,999/月 | 未验证 | 未测 | 商务 | |
 | AI 自动审单命中率 | 文档隐含「AI 员工」自动化 | 未验证 | 未测 | 业务 + 数据 | *待 T55–T57 月报* |
+| AI Agent V0（自然语言→工作流） | M2-W2：1 个 demo 跑通 | **本地（2026-06-05）**：`run_demo.py` **live** 链 `success=true`（`execution_mode=live`，`planner_mode=fallback`；`087cf0a9` 修复 `get_products(unit_name=…)`；`products.query` 返回 `data_count=0` 仍算链路闭环）。证据 [`demo-run-20260605-live.json`](evidence/ai-agent-v0/demo-run-20260605-live.json)；mock 版 [`demo-run-20260604.json`](evidence/ai-agent-v0/demo-run-20260604.json)。**禁止**标「已验证」/ 与 staging SLO 混谈 | 一致（demo） | AI 平台 | [`evidence/ai-agent-v0/README.md`](evidence/ai-agent-v0/README.md) · [`ai-agent-v0-plan.md`](ai-agent-v0-plan.md) · commit `087cf0a9` |
 
 ---
 
@@ -45,6 +46,7 @@
 |----|------|------|------|--------|------|
 | `*_app_service_v2.py` 数量 | 历史 CHANGELOG / V10_ACCEPTANCE 曾写「0 / 已清零」 | **23** 个应用服务模块（见下表）；决策为**保留**作应用层 SSOT 后缀 | 夸大（已对齐） | 后端架构 | 本表 + [`V10_ACCEPTANCE.md`](V10_ACCEPTANCE.md) |
 | mypy `ignore_errors` 目录数 | ≤ 6（[`plan-2026-06.md`](../../specs/plan-2026-06.md) M0） | **6**（`pyproject.toml` 宽口径 `module` 条，2026-06-05；自 **12→6**） | 一致 | 后端架构 | 自 plan 基线 **18** 分批收口；`app.routes.*` / `ai_chat` 移出宽口径；[`MYPY_BATCH_STATUS.md`](MYPY_BATCH_STATUS.md) |
+| 前端 API 契约测试 | M2-W1：`src/api` 全绿 | **367/367** 通过（**30** 文件，vitest 2.0.5；2026-06-05 `cd frontend && npm run test -- src/api`） | 一致 | 前端 + QA | [`M1-kickoff-checklist.md`](M1-kickoff-checklist.md) M2-W1 · commit `618e4ade` |
 | 全量覆盖率 | ≥ 88%（plan 目标） | **77.44%**（`metrics/coverage-dual-summary.json`，2026-06-04） | 一致 | QA | CI `fail_under=77` |
 | 工作区体积（`du -sh Desktop/XCMAX`） | ≤ 8 GB（[`plan-2026-06.md`](../../specs/plan-2026-06.md) M0） | **~11G**（2026-06-05 本轮：`du` 前 **9.9G** → 实删与 `~/XCMAX-archives/m0-venv-20260605/` 重复的 `FHD/.venv` + `FHD/frontend/node_modules`（约 **~1.0G**）后复扫 **~11G**；两路径各 **4K**（仅 `ARCHIVE_POINTER.md`）；`FHD/.git` **~9.4G** 未缩（`git gc --prune=now` 大量 `Operation not permitted`）；不含 `.git` 交付树 **~0.3G**） | 夸大 | 发布工程 | 仓根 `ARCHIVE_POINTER.md` · [`FHD/.venv/ARCHIVE_POINTER.md`](../.venv/ARCHIVE_POINTER.md) · [`FHD/frontend/node_modules/ARCHIVE_POINTER.md`](../frontend/node_modules/ARCHIVE_POINTER.md) |
 | 仓根/FHD 散落脚本 | 无 `fix_*`/`check_*`/`probe_*` 于仓根或 `scripts/` 根 | **已收敛（2026-06-05）**：`maxdepth 2` 无散落；一次性脚本在 [`scripts/_archived/`](../scripts/_archived/)、探针在 [`scripts/dev/diagnostics/`](../scripts/dev/diagnostics/)、CI 在 [`scripts/ci/`](../scripts/ci/) | 一致 | 发布工程 | [`scripts/README.md`](../scripts/README.md) |
@@ -110,7 +112,9 @@
 | 主题 | 声称（摘要） | 实际 | 差距 | 填表人 | 证据路径 |
 |------|--------------|------|------|--------|----------|
 | SLO 全表复核 | 见上文 SLO 节 | **staging 阻塞 T36–T37**（无 7 天证据）；**本地** check-only OK，四域 PNG 待 Docker | — | SRE | [`M0-remaining-gaps.md`](M0-remaining-gaps.md) #1、#3 · 2026-06-05 复验 |
-| Mod 分成 30% | BUSINESS_MODEL | **待填**（需试点订单） | — | 商务 | [`mod-merchant-pilot.md`](mod-merchant-pilot.md) · `evidence/mod/` |
+| Mod 分成 30% | BUSINESS_MODEL | **未验证**；`mod-pilot-checklist.sh --check-only` 经 `MODSTORE_DEPLOY_ROOT`→`m0-fhd-bulk-20260605` **通过**（`eb594987`）；仍无商家 / 0.01 元 / 四图 PNG | 未测 | 商务 | [`mod-merchant-pilot.md`](mod-merchant-pilot.md) · [`mod-pilot-blockers.md`](mod-pilot-blockers.md) · `evidence/mod/` |
+| API 契约 vitest | M2-W1 367 测例 | **367/367**（30 文件，2026-06-05） | 一致 | 前端 | commit `618e4ade` · [`M1-kickoff-checklist.md`](M1-kickoff-checklist.md) |
+| AI Agent V0 demo | M2-W2 live 链 | **live JSON 已入库**（`demo-run-20260605-live.json`，`087cf0a9`）；**非** staging / 月报 | 一致（demo） | AI 平台 | [`evidence/ai-agent-v0/`](evidence/ai-agent-v0/) |
 | AI 审单命中率 | ≥70%（计划 P2-3） | **待填** | — | 业务 | [`AI_BUSINESS_EVIDENCE.md`](AI_BUSINESS_EVIDENCE.md) |
 | 合同提醒触达 | ≥90%（计划 P2-3） | **待填** | — | 业务 | 同上 |
 | DORA 四月指标 | Lead time / deploy freq 等 | **待填** | — | 发布工程 | [`metrics/dora-monthly-202606.md`](../metrics/dora-monthly-202606.md) |
@@ -141,3 +145,4 @@
 | 2026-06-05 | M0 venv 去重 worker | 删除工作区与 `m0-venv-20260605` 重复的 `.venv`/`frontend/node_modules` 实体；`du` **11G→9.7G**；CLAIMED/M0-gaps 对齐 |
 | 2026-06-05 | M0 venv 分包 worker | 依赖迁至 `m0-venv-20260605`；仓根 du 仍 **9.7G**（`.git`）；CLAIMED/M0-gaps 体积表述对齐 |
 | 2026-06-05 | command-exec subagent | 实删工作区 `FHD/.venv` + `frontend/node_modules` 实体（保留 ARCHIVE_POINTER）；`du -sh Desktop/XCMAX` **11G→9.7G**；新增 `frontend/node_modules/ARCHIVE_POINTER.md` |
+| 2026-06-05 | claimed-align worker | 对齐 e2e 14/14（`e2db1aaa`）、vitest **367/367**（`618e4ade`）、AI Agent live JSON（`087cf0a9`）、Mod check-only（`eb594987`）、体积 ~11G（`783dfbc3`）；Mod/staging **仍标未验证** |
