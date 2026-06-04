@@ -1,7 +1,7 @@
 param(
   [ValidateSet('pre', 'post')]
   [string]$Phase = 'pre',
-  [string]$Version = '8.0.0'
+  [string]$Version = '10.0.0'
 )
 
 $ErrorActionPreference = 'Stop'

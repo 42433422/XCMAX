@@ -507,10 +507,12 @@ def _build_app():
 
     # 避免启动期 LAN 门禁 / license 初始化对环境敏感
     os.environ.setdefault("XCAGI_NEURO_INTENT", "1")
+    if str(root) not in sys.path:
+        sys.path.insert(0, str(root))
 
-    from app.fastapi_app import create_fastapi_app
+    from app.fastapi_app import get_fastapi_app
 
-    return create_fastapi_app(enable_docs=True, enable_cors=False)
+    return get_fastapi_app()
 
 
 def main(argv: list[str] | None = None) -> int:

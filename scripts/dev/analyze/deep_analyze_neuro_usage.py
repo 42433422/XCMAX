@@ -149,7 +149,7 @@ def _iter_route_like_files() -> list[Path]:
     add_many(ROOT / "app" / "control", "**/*.py")
     add_many(ROOT / "backend", "**/*.py")
 
-    fa = ROOT / "app" / "fastapi_app.py"
+    fa = ROOT / "app" / "fastapi_app" / "factory.py"
     if fa.is_file():
         files.append(fa)
 
@@ -177,7 +177,7 @@ def analyze_routes() -> list[dict]:
             content = file.read_text(encoding="utf-8", errors="ignore")
         except OSError:
             continue
-        if not route_decorator.search(content) and file.name != "fastapi_app.py":
+        if not route_decorator.search(content) and file.name not in ("factory.py", "__init__.py"):
             continue
 
         result = check_file_for_neuro_usage(file)

@@ -4,11 +4,11 @@
 
 .EXAMPLE
   powershell -File scripts/package/build-android-release-signed.ps1
-  powershell -File scripts/package/build-android-release-signed.ps1 -Stage -Version 8.0.0 -AndroidVersion 1.3.0
+  powershell -File scripts/package/build-android-release-signed.ps1 -Stage -Version 10.0.0 -AndroidVersion 1.3.0
 #>
 param(
   [switch]$Stage,
-  [string]$Version = '8.0.0',
+  [string]$Version = '10.0.0',
   [string]$AndroidVersion = '1.3.0'
 )
 

@@ -8,7 +8,7 @@ from pathlib import Path
 
 ALLOWED = frozenset(
     {
-        "legacy_host_routers.py",
+        "legacy_gap_registry.py",
         "xcagi_compat.py",
     }
 )

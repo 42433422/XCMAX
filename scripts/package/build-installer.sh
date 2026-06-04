@@ -2,7 +2,7 @@
 # macOS：按 SKU 输出到 release/xcagi-v{version}/{personal|enterprise}/
 set -euo pipefail
 
-VERSION="${1:-8.0.0}"
+VERSION="${1:-10.0.0}"
 SKU="${2:-}"
 VERSION="${VERSION#v}"
 VERSION="${VERSION#V}"

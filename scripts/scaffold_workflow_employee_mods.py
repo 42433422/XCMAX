@@ -234,7 +234,7 @@ VIZ_BRIDGE_MANIFEST = {
     "author": "成都修茈科技有限公司",
     "description": "仅提供流程全景物理页路由；工作流员工由商店安装的 6 个独立 Mod 注入。",
     "primary": False,
-    "dependencies": {"xcagi": ">=8.0.0"},
+    "dependencies": {"xcagi": ">=10.0.0"},
     "backend": {"entry": "blueprints", "init": "mod_init"},
     "frontend": {
         "routes": "frontend/routes",
@@ -336,7 +336,7 @@ def write_manifest(spec: dict) -> dict:
         "author": "成都修茈科技有限公司",
         "description": spec["summary"],
         "primary": False,
-        "dependencies": {"xcagi": ">=8.0.0"},
+        "dependencies": {"xcagi": ">=10.0.0"},
         "backend": {"entry": "blueprints", "init": "mod_init"},
         "frontend": {"routes": None},
         "hooks": {},

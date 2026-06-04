@@ -1,5 +1,5 @@
 param(
-  [string]$Version = '8.0.0',
+  [string]$Version = '10.0.0',
   [ValidateSet('personal', 'enterprise', 'all')]
   [string]$ProductSku = 'all',
   [switch]$DryRun

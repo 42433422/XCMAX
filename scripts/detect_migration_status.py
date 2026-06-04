@@ -65,7 +65,9 @@ class MigrationReport:
 class MigrationDetector:
     """迁移状态检测器"""
     
-    def __init__(self, project_root: str = "e:/FHD"):
+    def __init__(self, project_root: str | None = None):
+        if project_root is None:
+            project_root = str(Path(__file__).resolve().parents[1])
         self.project_root = Path(project_root)
         self.report = MigrationReport()
         

@@ -32,6 +32,9 @@ ENV/
 .venv-hardening/
 .venv-mypy/
 .venv-governance/
+.venv-data-cov/
+.venv-ramp/
+.venv-ramp311/
 
 # ============================================================================
 # IDE / editor metadata
@@ -72,6 +75,7 @@ coverage/
 coverage-*.xml
 coverage-*.json
 coverage.json
+coverage-full-branches-baseline.json
 
 # 微信开发者工具本地配置
 project.private.config.json
@@ -208,6 +212,13 @@ _perf_*.json
 # ============================================================================
 # Misc
 # ============================================================================
+.push-v5-worktree.bak/
+.hypothesis/
+tools/XcagiInstaller/bin/
+tools/XcagiDownloader/bin/
+mobile-android/app/build/
+mobile-android/.toolchain/
+mobile-android/.gradle/
 git-change-inventory.txt
 arch_violations.txt
 test_reports/intent_benchmark_latest.json
@@ -231,3 +242,7 @@ _compare_convert_output.xlsx
 
 # Removed mods snapshot (restored from git; may contain large zips)
 _archived_removed_mods/
+
+# Local env copies with real secrets (templates: .env.example, .env.*.example)
+.env.fhd-docker
+.env.monitoring

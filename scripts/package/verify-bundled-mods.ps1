@@ -16,7 +16,7 @@ $expectedIds = @($idsJson | ConvertFrom-Json)
 $erpMod = 'xcagi-erp-domain-bridge'
 
 if (-not $UnpackedDir) {
-  $ver = '8.0.0'
+  $ver = '10.0.0'
   if ($env:XCAGI_VERIFY_VERSION) { $ver = $env:XCAGI_VERIFY_VERSION }
   $UnpackedDir = Join-Path $Root "release\xcagi-v$ver\$ProductSku\win-unpacked\resources\backend\_internal\mods"
 }

@@ -7,7 +7,7 @@ param(
   [string]$Edition = 'generic',
   [ValidateSet('personal', 'enterprise')]
   [string]$ProductSku = 'enterprise',
-  [string]$Version = '8.0.0'
+  [string]$Version = '10.0.0'
 )
 
 $ErrorActionPreference = 'Stop'

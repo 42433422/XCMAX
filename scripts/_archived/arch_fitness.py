@@ -94,6 +94,32 @@ def check_routes_not_import_services() -> None:
                     )
 
 
+def check_application_not_import_services() -> None:
+    """application 层须经 infrastructure.gateways，禁止直连 app.services。"""
+    app_dir = APP_DIR / "application"
+    if not app_dir.is_dir():
+        return
+    for py in app_dir.rglob("*.py"):
+        rel = py.relative_to(REPO_ROOT)
+        if "facades" in rel.parts:
+            continue  # facades 仅作废弃 shim，由路由逐步淘汰
+        try:
+            tree = ast.parse(py.read_text(encoding="utf-8"))
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ImportFrom):
+                continue
+            if not node.module or "app.services" not in node.module:
+                continue
+            names = ", ".join(a.name for a in node.names)
+            VIOLATIONS.append(
+                f"[application->services] {rel}:{node.lineno} — "
+                f"from {node.module} import {names} "
+                f"(use app.infrastructure.gateways.* instead)"
+            )
+
+
 def check_domain_not_depend_on_infrastructure() -> None:
     domain_dir = APP_DIR / "domain"
     if not domain_dir.is_dir():
@@ -152,6 +178,7 @@ def main() -> int:
 
     check_no_v1_backup_files()
     check_routes_not_import_services()
+    check_application_not_import_services()
     check_domain_not_depend_on_infrastructure()
     check_no_giant_files_in_app()
     check_no_giant_files_in_modstore_server()

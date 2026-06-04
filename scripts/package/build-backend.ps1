@@ -1,6 +1,6 @@
 # FrontendEdition: generic = 默认通用壳（ADCDFG）；full = 完整 ERP 侧栏
 param(
-  [string]$Version = "8.0.0",
+  [string]$Version = "10.0.0",
   [switch]$SkipFrontend,
   [ValidateSet('full', 'generic', 'minimal')]
   [string]$FrontendEdition = 'generic',
