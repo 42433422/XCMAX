@@ -1,0 +1,172 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {"type": "grafana", "uid": "-- Grafana --"},
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "description": "XCAGI API overview: latency (P50/P95/P99), RPS, error rate, top slow endpoints.",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "uid": "xcagi-api-overview",
+  "title": "XCAGI · API Overview",
+  "tags": ["xcagi", "api", "overview"],
+  "timezone": "browser",
+  "time": {"from": "now-1h", "to": "now"},
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "version": 1,
+  "templating": {
+    "list": [
+      {
+        "name": "DS_PROMETHEUS",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {"selected": false, "text": "Prometheus", "value": "Prometheus"}
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "API Latency P50 / P95 / P99 (ms)",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "gridPos": {"h": 9, "w": 12, "x": 0, "y": 0},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": {"drawStyle": "line", "lineWidth": 2, "fillOpacity": 10},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 200},
+              {"color": "red", "value": 1000}
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(api_request_duration_seconds_bucket{job=\"xcagi-backend\"}[5m]))) * 1000",
+          "legendFormat": "p50",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(api_request_duration_seconds_bucket{job=\"xcagi-backend\"}[5m]))) * 1000",
+          "legendFormat": "p95",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(api_request_duration_seconds_bucket{job=\"xcagi-backend\"}[5m]))) * 1000",
+          "legendFormat": "p99",
+          "refId": "C"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Requests / sec by status",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "gridPos": {"h": 9, "w": 12, "x": 12, "y": 0},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {"drawStyle": "bars", "fillOpacity": 60, "stacking": {"group": "A", "mode": "normal"}}
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (status) (rate(api_requests_total{job=\"xcagi-backend\"}[1m]))",
+          "legendFormat": "{{status}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Error rate (5xx)",
+      "type": "stat",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "gridPos": {"h": 5, "w": 6, "x": 0, "y": 9},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 0.01},
+              {"color": "red", "value": 0.05}
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(api_requests_total{job=\"xcagi-backend\",status=~\"5..\"}[5m])) / clamp_min(sum(rate(api_requests_total{job=\"xcagi-backend\"}[5m])), 1)",
+          "legendFormat": "5xx rate",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "In-flight requests",
+      "type": "stat",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "gridPos": {"h": 5, "w": 6, "x": 6, "y": 9},
+      "fieldConfig": {
+        "defaults": {"unit": "short", "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 500}, {"color": "red", "value": 2000}]}}
+      },
+      "targets": [
+        {
+          "expr": "sum(http_requests_in_progress{job=\"xcagi-backend\"})",
+          "legendFormat": "in-flight",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Top 10 slow endpoints (P95)",
+      "type": "table",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "gridPos": {"h": 9, "w": 12, "x": 0, "y": 14},
+      "targets": [
+        {
+          "expr": "topk(10, histogram_quantile(0.95, sum by (le, endpoint) (rate(api_request_duration_seconds_bucket{job=\"xcagi-backend\"}[5m]))) * 1000)",
+          "format": "table",
+          "instant": true,
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Top 10 error endpoints (5xx)",
+      "type": "table",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "gridPos": {"h": 9, "w": 12, "x": 12, "y": 14},
+      "targets": [
+        {
+          "expr": "topk(10, sum by (endpoint) (rate(api_requests_total{job=\"xcagi-backend\",status=~\"5..\"}[5m])))",
+          "format": "table",
+          "instant": true,
+          "refId": "A"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,125 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {"type": "grafana", "uid": "-- Grafana --"},
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "description": "XCAGI revenue: MRR / ARR / Churn / ARPU / new vs churned MRR, by plan tier.",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "title": "XCAGI · Revenue (MRR/ARR/Churn)",
+  "tags": ["xcagi", "revenue", "mrr", "arr", "churn", "finance"],
+  "timezone": "browser",
+  "time": {"from": "now-1y", "to": "now"},
+  "refresh": "1h",
+  "schemaVersion": 39,
+  "version": 1,
+  "templating": {
+    "list": [
+      {
+        "name": "DS_PROMETHEUS",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {"selected": false, "text": "Prometheus", "value": "Prometheus"}
+      },
+      {
+        "name": "job",
+        "type": "constant",
+        "query": "modstore",
+        "current": {"text": "modstore", "value": "modstore"}
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "MRR (CNY)",
+      "type": "stat",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "gridPos": {"h": 5, "w": 6, "x": 0, "y": 0},
+      "fieldConfig": {"defaults": {"unit": "currencyCNY", "color": {"mode": "thresholds"}}},
+      "targets": [
+        {"expr": "sum(xcagi_mrr_cny{job=\"$job\"})", "legendFormat": "MRR", "refId": "A"}
+      ]
+    },
+    {
+      "id": 2,
+      "title": "ARR (CNY)",
+      "type": "stat",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "gridPos": {"h": 5, "w": 6, "x": 6, "y": 0},
+      "fieldConfig": {"defaults": {"unit": "currencyCNY"}},
+      "targets": [
+        {"expr": "sum(xcagi_mrr_cny{job=\"$job\"}) * 12", "legendFormat": "ARR", "refId": "A"}
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Churn rate (30d)",
+      "type": "stat",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "gridPos": {"h": 5, "w": 6, "x": 12, "y": 0},
+      "fieldConfig": {"defaults": {"unit": "percentunit", "thresholds": {"mode": "absolute", "steps": [
+        {"color": "green", "value": null}, {"color": "yellow", "value": 0.03}, {"color": "red", "value": 0.05}
+      ]}}},
+      "targets": [
+        {"expr": "sum(increase(xcagi_subscriptions_churned_total{job=\"$job\"}[30d])) / clamp_min(sum(xcagi_subscriptions_active{job=\"$job\"}),1)", "legendFormat": "churn", "refId": "A"}
+      ]
+    },
+    {
+      "id": 4,
+      "title": "ARPU (CNY)",
+      "type": "stat",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "gridPos": {"h": 5, "w": 6, "x": 18, "y": 0},
+      "fieldConfig": {"defaults": {"unit": "currencyCNY"}},
+      "targets": [
+        {"expr": "sum(xcagi_mrr_cny{job=\"$job\"}) / clamp_min(sum(xcagi_subscriptions_active{job=\"$job\"}),1)", "legendFormat": "ARPU", "refId": "A"}
+      ]
+    },
+    {
+      "id": 5,
+      "title": "MRR trend by plan tier",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 5},
+      "fieldConfig": {"defaults": {"unit": "currencyCNY", "custom": {"drawStyle": "line", "lineWidth": 2, "fillOpacity": 20, "stacking": {"group": "A", "mode": "normal"}}}},
+      "targets": [
+        {"expr": "sum by (plan) (xcagi_mrr_cny{job=\"$job\"})", "legendFormat": "{{plan}}", "refId": "A"}
+      ]
+    },
+    {
+      "id": 6,
+      "title": "New vs Churned MRR (monthly)",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 5},
+      "fieldConfig": {"defaults": {"unit": "currencyCNY", "custom": {"drawStyle": "bars", "fillOpacity": 70}}},
+      "targets": [
+        {"expr": "sum(increase(xcagi_mrr_new_cny_total{job=\"$job\"}[30d]))", "legendFormat": "new MRR", "refId": "A"},
+        {"expr": "-sum(increase(xcagi_mrr_churned_cny_total{job=\"$job\"}[30d]))", "legendFormat": "churned MRR", "refId": "B"}
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Net revenue retention (NRR)",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 13},
+      "fieldConfig": {"defaults": {"unit": "percentunit", "custom": {"drawStyle": "line", "lineWidth": 2}}},
+      "targets": [
+        {"expr": "(sum(xcagi_mrr_cny{job=\"$job\"}) + sum(increase(xcagi_mrr_expansion_cny_total{job=\"$job\"}[30d])) - sum(increase(xcagi_mrr_churned_cny_total{job=\"$job\"}[30d]))) / clamp_min(sum(xcagi_mrr_cny{job=\"$job\"}),1)", "legendFormat": "NRR", "refId": "A"}
+      ]
+    }
+  ]
+}

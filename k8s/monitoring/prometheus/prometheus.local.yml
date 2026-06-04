@@ -1,0 +1,20 @@
+# 本地 compose 专用：抓取宿主机 FastAPI（host.docker.internal）
+# 由 scripts/observability/docker-compose.local.yml 挂载，勿用于 staging K8s
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: [localhost:9090]
+
+  - job_name: xcagi-backend
+    metrics_path: /metrics
+    static_configs:
+      - targets: [host.docker.internal:5000]
+        labels:
+          env: local

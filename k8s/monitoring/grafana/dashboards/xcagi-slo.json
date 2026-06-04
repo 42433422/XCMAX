@@ -1,0 +1,193 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {"type": "grafana", "uid": "-- Grafana --"},
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "description": "XCAGI SLO overview: availability, latency, error rate and error-budget burn rate (multi-window).",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "uid": "xcagi-slo",
+  "title": "XCAGI · SLO Overview",
+  "tags": ["xcagi", "slo", "sre"],
+  "timezone": "browser",
+  "time": {"from": "now-30d", "to": "now"},
+  "refresh": "1m",
+  "schemaVersion": 39,
+  "version": 1,
+  "templating": {
+    "list": [
+      {
+        "name": "DS_PROMETHEUS",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {"selected": false, "text": "Prometheus", "value": "Prometheus"}
+      },
+      {
+        "name": "job",
+        "type": "constant",
+        "query": "xcagi-backend",
+        "current": {"text": "xcagi-backend", "value": "xcagi-backend"}
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "SLO-API-01 · Availability (30d) target 99.9%",
+      "type": "stat",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "gridPos": {"h": 6, "w": 8, "x": 0, "y": 0},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {"mode": "absolute", "steps": [
+            {"color": "red", "value": null},
+            {"color": "yellow", "value": 0.998},
+            {"color": "green", "value": 0.999}
+          ]}
+        }
+      },
+      "targets": [
+        {
+          "expr": "1 - (sum(rate(api_requests_total{job=\"$job\",status=~\"5..\"}[30d])) / clamp_min(sum(rate(api_requests_total{job=\"$job\"}[30d])),1))",
+          "legendFormat": "availability",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "SLO-API-03 · Error rate (30d) target < 0.1%",
+      "type": "stat",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "gridPos": {"h": 6, "w": 8, "x": 8, "y": 0},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {"mode": "absolute", "steps": [
+            {"color": "green", "value": null},
+            {"color": "yellow", "value": 0.0008},
+            {"color": "red", "value": 0.001}
+          ]}
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(api_requests_total{job=\"$job\",status=~\"5..\"}[30d])) / clamp_min(sum(rate(api_requests_total{job=\"$job\"}[30d])),1)",
+          "legendFormat": "error rate",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "SLO-AI-01 · Chat first-byte P95 (30d) target < 1500ms",
+      "type": "stat",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "gridPos": {"h": 6, "w": 8, "x": 16, "y": 0},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "thresholds": {"mode": "absolute", "steps": [
+            {"color": "green", "value": null},
+            {"color": "yellow", "value": 1200},
+            {"color": "red", "value": 1500}
+          ]}
+        }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(chat_stream_first_byte_seconds_bucket{job=\"$job\"}[30d]))) * 1000",
+          "legendFormat": "p95",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Availability trend (1h success ratio)",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 6},
+      "fieldConfig": {"defaults": {"unit": "percentunit", "min": 0.99, "max": 1, "custom": {"drawStyle": "line", "lineWidth": 2, "fillOpacity": 10}}},
+      "targets": [
+        {
+          "expr": "1 - (sum(rate(api_requests_total{job=\"$job\",status=~\"5..\"}[1h])) / clamp_min(sum(rate(api_requests_total{job=\"$job\"}[1h])),1))",
+          "legendFormat": "availability 1h",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Error-budget burn rate (multi-window)",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 6},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {"drawStyle": "line", "lineWidth": 2, "fillOpacity": 0},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"color": "green", "value": null},
+            {"color": "yellow", "value": 6},
+            {"color": "red", "value": 14.4}
+          ]}
+        }
+      },
+      "targets": [
+        {
+          "expr": "(sum(rate(api_requests_total{job=\"$job\",status=~\"5..\"}[1h])) / clamp_min(sum(rate(api_requests_total{job=\"$job\"}[1h])),1)) / 0.001",
+          "legendFormat": "burn 1h",
+          "refId": "A"
+        },
+        {
+          "expr": "(sum(rate(api_requests_total{job=\"$job\",status=~\"5..\"}[6h])) / clamp_min(sum(rate(api_requests_total{job=\"$job\"}[6h])),1)) / 0.001",
+          "legendFormat": "burn 6h",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Login latency P95 (SLO-API-02 < 500ms)",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 14},
+      "fieldConfig": {"defaults": {"unit": "ms", "custom": {"drawStyle": "line", "lineWidth": 2}}},
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(auth_login_duration_seconds_bucket{job=\"$job\"}[5m]))) * 1000",
+          "legendFormat": "login p95",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "NeuroBus delivery success (SLO-BUS-01 >= 99.95%)",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 14},
+      "fieldConfig": {"defaults": {"unit": "percentunit", "min": 0.999, "max": 1}},
+      "targets": [
+        {
+          "expr": "1 - (sum(rate(neurobus_events_dead_lettered_total[1h])) + sum(rate(neurobus_events_lost_total[1h]))) / clamp_min(sum(rate(neurobus_events_published_total[1h])),1)",
+          "legendFormat": "delivery 1h",
+          "refId": "A"
+        }
+      ]
+    }
+  ]
+}

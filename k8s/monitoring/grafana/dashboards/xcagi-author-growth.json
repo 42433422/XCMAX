@@ -1,0 +1,122 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {"type": "grafana", "uid": "-- Grafana --"},
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "description": "XCAGI MOD store author growth: new/active authors, published items, author GMV & net earnings, top authors.",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "title": "XCAGI · Author Growth",
+  "tags": ["xcagi", "modstore", "author", "growth"],
+  "timezone": "browser",
+  "time": {"from": "now-90d", "to": "now"},
+  "refresh": "5m",
+  "schemaVersion": 39,
+  "version": 1,
+  "templating": {
+    "list": [
+      {
+        "name": "DS_PROMETHEUS",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {"selected": false, "text": "Prometheus", "value": "Prometheus"}
+      },
+      {
+        "name": "job",
+        "type": "constant",
+        "query": "modstore",
+        "current": {"text": "modstore", "value": "modstore"}
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Total authors",
+      "type": "stat",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "gridPos": {"h": 5, "w": 6, "x": 0, "y": 0},
+      "fieldConfig": {"defaults": {"unit": "short", "color": {"mode": "thresholds"}}},
+      "targets": [
+        {"expr": "max(modstore_authors_total{job=\"$job\"})", "legendFormat": "authors", "refId": "A"}
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Active authors (28d)",
+      "type": "stat",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "gridPos": {"h": 5, "w": 6, "x": 6, "y": 0},
+      "fieldConfig": {"defaults": {"unit": "short"}},
+      "targets": [
+        {"expr": "max(modstore_authors_active_28d{job=\"$job\"})", "legendFormat": "active", "refId": "A"}
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Published items",
+      "type": "stat",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "gridPos": {"h": 5, "w": 6, "x": 12, "y": 0},
+      "fieldConfig": {"defaults": {"unit": "short"}},
+      "targets": [
+        {"expr": "max(modstore_catalog_published_total{job=\"$job\"})", "legendFormat": "items", "refId": "A"}
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Author net earnings (30d, CNY)",
+      "type": "stat",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "gridPos": {"h": 5, "w": 6, "x": 18, "y": 0},
+      "fieldConfig": {"defaults": {"unit": "currencyCNY"}},
+      "targets": [
+        {"expr": "sum(increase(modstore_author_net_earnings_cny_total{job=\"$job\"}[30d]))", "legendFormat": "net 30d", "refId": "A"}
+      ]
+    },
+    {
+      "id": 5,
+      "title": "New authors per day",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 5},
+      "fieldConfig": {"defaults": {"unit": "short", "custom": {"drawStyle": "bars", "fillOpacity": 60}}},
+      "targets": [
+        {"expr": "increase(modstore_authors_total{job=\"$job\"}[1d])", "legendFormat": "new authors", "refId": "A"}
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Author GMV vs net earnings (daily)",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 5},
+      "fieldConfig": {"defaults": {"unit": "currencyCNY", "custom": {"drawStyle": "line", "lineWidth": 2, "fillOpacity": 10}}},
+      "targets": [
+        {"expr": "sum(increase(modstore_author_gmv_cny_total{job=\"$job\"}[1d]))", "legendFormat": "GMV", "refId": "A"},
+        {"expr": "sum(increase(modstore_author_net_earnings_cny_total{job=\"$job\"}[1d]))", "legendFormat": "net", "refId": "B"}
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Top 10 authors by net earnings (30d)",
+      "type": "table",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "gridPos": {"h": 9, "w": 24, "x": 0, "y": 13},
+      "targets": [
+        {"expr": "topk(10, sum by (author_id) (increase(modstore_author_net_earnings_cny_total{job=\"$job\"}[30d])))", "format": "table", "instant": true, "refId": "A"}
+      ]
+    }
+  ]
+}

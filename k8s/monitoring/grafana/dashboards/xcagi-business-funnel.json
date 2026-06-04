@@ -1,0 +1,132 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {"type": "grafana", "uid": "-- Grafana --"},
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "description": "XCAGI business funnel: order pipeline, AI calls and print pipeline success/latency, plus product analytics events.",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "title": "XCAGI · Business Funnel",
+  "tags": ["xcagi", "business", "funnel", "order", "ai", "print"],
+  "timezone": "browser",
+  "time": {"from": "now-6h", "to": "now"},
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "version": 1,
+  "templating": {
+    "list": [
+      {
+        "name": "DS_PROMETHEUS",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {"selected": false, "text": "Prometheus", "value": "Prometheus"}
+      },
+      {
+        "name": "tenant_id",
+        "type": "query",
+        "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+        "query": "label_values(user_events_total, tenant_id)",
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {"text": "All", "value": "$__all"},
+        "refresh": 2
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Order pipeline success rate (SLO-ORDER-01 >= 99.5%)",
+      "type": "stat",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "gridPos": {"h": 6, "w": 8, "x": 0, "y": 0},
+      "fieldConfig": {"defaults": {"unit": "percentunit", "thresholds": {"mode": "absolute", "steps": [
+        {"color": "red", "value": null}, {"color": "yellow", "value": 0.99}, {"color": "green", "value": 0.995}
+      ]}}},
+      "targets": [
+        {"expr": "sum(rate(order_pipeline_total{status=\"success\"}[1h])) / clamp_min(sum(rate(order_pipeline_total[1h])),1)", "legendFormat": "order success", "refId": "A"}
+      ]
+    },
+    {
+      "id": 2,
+      "title": "AI call success rate (SLO-AI-02 >= 99%)",
+      "type": "stat",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "gridPos": {"h": 6, "w": 8, "x": 8, "y": 0},
+      "fieldConfig": {"defaults": {"unit": "percentunit", "thresholds": {"mode": "absolute", "steps": [
+        {"color": "red", "value": null}, {"color": "yellow", "value": 0.98}, {"color": "green", "value": 0.99}
+      ]}}},
+      "targets": [
+        {"expr": "sum(rate(ai_call_total{status=\"success\"}[1h])) / clamp_min(sum(rate(ai_call_total[1h])),1)", "legendFormat": "ai success", "refId": "A"}
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Print pipeline success rate (SLO-PRINT-01 >= 99%)",
+      "type": "stat",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "gridPos": {"h": 6, "w": 8, "x": 16, "y": 0},
+      "fieldConfig": {"defaults": {"unit": "percentunit", "thresholds": {"mode": "absolute", "steps": [
+        {"color": "red", "value": null}, {"color": "yellow", "value": 0.97}, {"color": "green", "value": 0.99}
+      ]}}},
+      "targets": [
+        {"expr": "sum(rate(print_job_total{status=\"success\"}[1h])) / clamp_min(sum(rate(print_job_total[1h])),1)", "legendFormat": "print success", "refId": "A"}
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Order pipeline by stage (success vs error rps)",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 6},
+      "fieldConfig": {"defaults": {"unit": "reqps", "custom": {"drawStyle": "bars", "fillOpacity": 60, "stacking": {"group": "A", "mode": "normal"}}}},
+      "targets": [
+        {"expr": "sum by (stage, status) (rate(order_pipeline_total[5m]))", "legendFormat": "{{stage}}/{{status}}", "refId": "A"}
+      ]
+    },
+    {
+      "id": 5,
+      "title": "AI call latency P95 by provider (ms)",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 6},
+      "fieldConfig": {"defaults": {"unit": "ms", "custom": {"drawStyle": "line", "lineWidth": 2}}},
+      "targets": [
+        {"expr": "histogram_quantile(0.95, sum by (le, provider) (rate(ai_call_duration_seconds_bucket[5m]))) * 1000", "legendFormat": "{{provider}}", "refId": "A"}
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Print pipeline stage duration P95 (ms)",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 14},
+      "fieldConfig": {"defaults": {"unit": "ms", "custom": {"drawStyle": "line", "lineWidth": 2}}},
+      "targets": [
+        {"expr": "histogram_quantile(0.95, sum by (le, stage) (rate(print_job_duration_seconds_bucket[5m]))) * 1000", "legendFormat": "{{stage}}", "refId": "A"}
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Top user events (product analytics)",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 14},
+      "fieldConfig": {"defaults": {"unit": "short", "custom": {"drawStyle": "line", "lineWidth": 2}}},
+      "targets": [
+        {"expr": "topk(10, sum by (event) (rate(user_events_total{tenant_id=~\"$tenant_id\"}[5m])))", "legendFormat": "{{event}}", "refId": "A"}
+      ]
+    }
+  ]
+}
