@@ -12,9 +12,12 @@
 
 ## 自动化
 
+**脚本 SSOT**：[`MODstore/scripts/mod-pilot-checklist.sh`](../MODstore/scripts/mod-pilot-checklist.sh)（`--verify` / `--check-only` / `--paths`）
+
 ```bash
 bash MODstore/scripts/mod-pilot-checklist.sh          # 步骤 + 证据路径
 bash MODstore/scripts/mod-pilot-checklist.sh --verify # 四张 PNG 就位后校验
+bash MODstore/scripts/mod-pilot-checklist.sh --check-only # 仅校验目录/文档（无需商家）
 ```
 
 ## 步骤
@@ -38,6 +41,8 @@ git add FHD/docs/evidence/mod/*.png
 
 ## 参考
 
+- 验收脚本：[`MODstore/scripts/mod-pilot-checklist.sh`](../MODstore/scripts/mod-pilot-checklist.sh)
+- M1 对账：[`M1-kickoff-checklist.md`](M1-kickoff-checklist.md)（M2-W4 Mod 四图）
 - 部署：[`MODstore_deploy/docs/runbooks/xiu-ci-single-modstore-upstream.md`](../../成都修茈科技有限公司/MODstore_deploy/docs/runbooks/xiu-ci-single-modstore-upstream.md)
 - M0 缺口：[`M0-remaining-gaps.md`](M0-remaining-gaps.md) #2
 - SLO 阻塞（独立）：[`specs/BLOCKERS.md`](../../specs/BLOCKERS.md) T36–T37
