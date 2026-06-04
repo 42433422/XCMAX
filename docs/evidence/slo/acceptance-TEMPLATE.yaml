@@ -1,0 +1,75 @@
+# acceptance-YYYYMMDD.yaml — staging SLO 7 天验收（T36–T37）
+# 用法: cp acceptance-TEMPLATE.yaml acceptance-YYYYMMDD.yaml
+# 仅从 Grafana / Prometheus 读数填写；禁止臆造数值或截图。
+meta:
+  status: pending
+  blocker_ref: specs/BLOCKERS.md#T36-T37
+  environment: staging
+  namespace: xcagi-staging
+  grafana_url: null
+  prometheus_url: null
+  observation_mode: null
+  window_start: null
+  window_end: null
+  verified_by: null
+  verified_at: null
+
+traffic:
+  k6_run_id: null
+  k6_script: scripts/loadtest/smoke.js
+  k6_base_url: null
+  natural_traffic_note: null
+
+panels:
+  api_availability:
+    slo_id: SLO-API-01
+    target: "99.9%"
+    panel_ref: "xcagi-slo:1"
+    screenshot: null
+    reading_7d: null
+    meets_target: null
+
+  api_login_p95_ms:
+    slo_id: SLO-API-02
+    target: "< 500"
+    panel_ref: "xcagi-slo:6"
+    screenshot: null
+    reading_7d: null
+    meets_target: null
+
+  api_error_rate:
+    slo_id: SLO-API-03
+    target: "< 0.1%"
+    panel_ref: "xcagi-slo:2"
+    screenshot: null
+    reading_7d: null
+    meets_target: null
+
+  ai_chat_first_byte_p95_ms:
+    slo_id: SLO-AI-01
+    target: "< 1500"
+    panel_ref: "xcagi-slo:3"
+    screenshot: null
+    reading_7d: null
+    meets_target: null
+
+  neurobus_delivery:
+    slo_id: SLO-BUS-01
+    target: ">= 99.95%"
+    panel_ref: "xcagi-slo:7"
+    screenshot: null
+    reading_7d: null
+    meets_target: null
+
+  db_mod_sqlite:
+    slo_id: null
+    panel_ref: "xcagi-mod-store:5"
+    screenshot: null
+    reading_7d: null
+    meets_target: null
+
+overall:
+  all_m0_png_present: false
+  claimed_vs_actual_updated: false
+  slo_md_updated: false
+  notes: null
