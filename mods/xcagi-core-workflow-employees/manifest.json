@@ -6,7 +6,7 @@
   "description": "Mod（房子）：承载原 FHD 焊死的四名工作流副窗 AI 员工。员工（家具）：label_print、shipment_mgmt、receipt_confirm、wechat_msg。前端事件链仍在宿主；本包提供 manifest 名片与 backend/employees/*.py，供 MODstore 制作与 mod:sync 安装。",
   "primary": false,
   "dependencies": {
-    "xcagi": ">=8.0.0"
+    "xcagi": ">=10.0.0"
   },
   "backend": {
     "entry": "blueprints",

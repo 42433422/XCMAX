@@ -79,20 +79,20 @@ export const useSidebarLayoutStore = defineStore('sidebarLayout', () => {
 
   function normalizeOrder(defaultKeys: string[]) {
     const valid = new Set(defaultKeys.map((k) => String(k)))
-    const seen = new Set<string>()
-    const kept = menuOrder.value.filter((k) => {
-      const key = String(k)
-      if (!valid.has(key) || seen.has(key)) return false
-      seen.add(key)
-      return true
-    })
+    const kept = menuOrder.value.filter((k) => valid.has(k))
     const missing = defaultKeys.filter((k) => !kept.includes(k))
     const normalized = [...kept, ...missing]
 
-    const prev = menuOrder.value.join('\0')
-    const next = normalized.join('\0')
+    // 业务固定顺序：服务器功能模块紧跟在班次列表后（与考勤等业务路由一致）。
+    const materialsListIdx = normalized.indexOf('materials-list')
+    const materialsIdx = normalized.indexOf('materials')
+    if (materialsListIdx >= 0 && materialsIdx >= 0 && materialsIdx !== materialsListIdx + 1) {
+      normalized.splice(materialsIdx, 1)
+      normalized.splice(materialsListIdx + 1, 0, 'materials')
+    }
+
     menuOrder.value = normalized
-    if (prev !== next) persistOrder()
+    persistOrder()
   }
 
   function setReorderEnabled(enabled: boolean) {
@@ -118,17 +118,9 @@ export const useSidebarLayoutStore = defineStore('sidebarLayout', () => {
     persistSidebarWidth()
   }
 
-  let lastApplyOrderKeysSig = ''
-
   function applyOrder<T extends { key: string }>(items: T[]): T[] {
     if (!Array.isArray(items) || items.length === 0) return []
-    const keys = items.map((item) => String(item.key))
-    const sig = keys.join('\0')
-    if (!menuOrder.value.length) loadFromStorage()
-    if (sig !== lastApplyOrderKeysSig) {
-      normalizeOrder(keys)
-      lastApplyOrderKeysSig = sig
-    }
+    initialize(items.map((item) => String(item.key)))
     const rank = new Map(menuOrder.value.map((k, idx) => [k, idx]))
     return [...items].sort((a, b) => {
       const ra = rank.get(String(a.key))

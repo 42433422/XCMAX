@@ -1,0 +1,38 @@
+{
+  "sku": "admin",
+  "runtime_edition": "full",
+  "frontend_edition": "full",
+  "blocked_mod_ids": [
+    "xcagi-erp-domain-bridge",
+    "taiyangniao-pro",
+    "sz-qsm-pro"
+  ],
+  "package_stage_ids": [
+    "xcmax-personnel",
+    "xcagi-planner-bridge",
+    "xcagi-core-workflow-employees",
+    "xcagi-approval-bridge",
+    "xcagi-lan-license-bridge",
+    "xcagi-model-payment-bridge",
+    "xcagi-neuro-bus-bridge",
+    "xcagi-office-employee-pack-bridge",
+    "xcagi-customer-service-bridge",
+    "xcagi-planner-excel-tools",
+    "wechat-contacts-ai-employee",
+    "lan-gate-ai-employee"
+  ],
+  "sku_bundled_mod_ids": [
+    "xcmax-personnel",
+    "xcagi-planner-bridge",
+    "xcagi-core-workflow-employees",
+    "xcagi-approval-bridge",
+    "xcagi-lan-license-bridge",
+    "xcagi-model-payment-bridge",
+    "xcagi-neuro-bus-bridge",
+    "xcagi-office-employee-pack-bridge",
+    "xcagi-customer-service-bridge",
+    "xcagi-planner-excel-tools",
+    "wechat-contacts-ai-employee",
+    "lan-gate-ai-employee"
+  ]
+}

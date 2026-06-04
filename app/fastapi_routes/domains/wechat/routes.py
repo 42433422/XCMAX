@@ -16,9 +16,9 @@ router = APIRouter(tags=["legacy-wechat"], deprecated=True)
 def _send_wechat_via_automation(contact_name: str, message: str) -> dict:
     """优先 DesktopAutomationService，失败则回退 wechat_cv_send。"""
     from app.desktop_automation.service import get_desktop_automation_service
-    from app.services.wechat_passive_group_monitor import assert_safe_outbound_group_reply
+    from app.application.wechat_integration_app_service import get_wechat_integration_app_service
 
-    safe = assert_safe_outbound_group_reply(message)
+    safe = get_wechat_integration_app_service().assert_safe_outbound_group_reply(message)
     if not safe:
         return {
             "success": False,
@@ -113,23 +113,19 @@ def wechat_starred_messages(
 ):
     """星标/绑定群聊最近一条上下文消息，供内部客服「客户微信摘要」。"""
     try:
-        from app.services.wechat_group_customer_bridge import (
-            build_starred_group_feed,
-            sync_group_messages,
+        from app.application.wechat_integration_app_service import (
+            get_wechat_integration_app_service,
         )
 
+        wx = get_wechat_integration_app_service()
         if type.strip().lower() == "group":
             if sync and market_user_id is not None:
-                from app.services.wechat_group_customer_bridge import (
-                    sync_bound_groups_from_live_wechat,
-                )
-
-                sync_bound_groups_from_live_wechat(
+                wx.sync_bound_groups_from_live_wechat(
                     int(market_user_id), message_limit=80, mode="feed"
                 )
             elif sync:
-                sync_group_messages(force_refresh=True)
-            page = build_starred_group_feed(limit=limit, market_user_id=market_user_id)
+                wx.sync_group_messages(force_refresh=True)
+            page = wx.build_starred_group_feed(limit=limit, market_user_id=market_user_id)
             return {"success": True, "data": page, "total": len(page), "filter": {"type": "group"}}
 
         from app.application import get_wechat_contact_app_service
@@ -147,9 +143,7 @@ def wechat_starred_messages(
             if cid is None:
                 continue
             messages = service.get_contact_context(int(cid))
-            from app.services.wechat_group_customer_bridge import _latest_context_message
-
-            last = _latest_context_message(messages)
+            last = wx.latest_context_message(messages)
             if not last:
                 continue
             text = _wechat_message_text(last)
@@ -185,12 +179,14 @@ def wechat_groups_sync_messages(
     data = body or {}
     uid = market_user_id if market_user_id is not None else data.get("market_user_id")
     try:
-        from app.services.wechat_group_customer_bridge import sync_group_messages
+        from app.application.wechat_integration_app_service import (
+            get_wechat_integration_app_service,
+        )
 
         force_refresh = data.get("force_refresh")
         if force_refresh is None:
             force_refresh = True
-        result = sync_group_messages(
+        result = get_wechat_integration_app_service().sync_group_messages(
             market_user_id=int(uid) if uid is not None else None,
             group_limit=int(data.get("group_limit") or 30),
             message_limit=int(data.get("message_limit") or 80),
@@ -219,9 +215,13 @@ def wechat_groups_list(
 ):
     """列出已导入的微信群（供管理员绑定企业客户）。"""
     try:
-        from app.services.wechat_group_customer_bridge import list_group_contacts
+        from app.application.wechat_integration_app_service import (
+            get_wechat_integration_app_service,
+        )
 
-        rows = list_group_contacts(keyword=keyword or None, limit=limit)
+        rows = get_wechat_integration_app_service().list_group_contacts(
+            keyword=keyword or None, limit=limit
+        )
         return {"success": True, "data": rows, "total": len(rows)}
     except Exception as exc:
         return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
@@ -302,11 +302,13 @@ def wechat_contact_context_api(contact_id: int, refresh: bool = False):
         service = get_wechat_contact_app_service()
         if refresh:
             try:
-                from app.services.wechat_decrypt_autoconfig import (
-                    prepare_wechat_message_db_for_read,
+                from app.application.wechat_integration_app_service import (
+                    get_wechat_integration_app_service,
                 )
 
-                prepare_wechat_message_db_for_read(force_decrypt=True, retry_key_scan=False)
+                get_wechat_integration_app_service().prepare_wechat_message_db_for_read(
+                    force_decrypt=True, retry_key_scan=False
+                )
             except Exception:
                 logger.debug("context refresh: prepare_wechat_message_db skipped", exc_info=True)
             refresh_fn = getattr(service, "refresh_messages", None)
@@ -437,7 +439,7 @@ def wechat_scan(body: dict = Body(default_factory=dict)):
 
 @router.get("/api/wechat_contacts/ensure_contact_cache")
 def wechat_contacts_ensure_cache():
-    from app.application.facades.wechat_facade import refresh_wechat_contacts_from_decrypt
+    from app.infrastructure.gateways.wechat import refresh_wechat_contacts_from_decrypt
 
     payload, code = refresh_wechat_contacts_from_decrypt()
     return JSONResponse(payload, status_code=code)
@@ -445,7 +447,7 @@ def wechat_contacts_ensure_cache():
 
 @router.post("/api/wechat_contacts/ensure_contact_cache")
 def wechat_contacts_ensure_contact_cache_post():
-    from app.application.facades.wechat_facade import refresh_wechat_contacts_from_decrypt
+    from app.infrastructure.gateways.wechat import refresh_wechat_contacts_from_decrypt
 
     payload, code = refresh_wechat_contacts_from_decrypt()
     return JSONResponse(payload, status_code=code)
@@ -456,7 +458,7 @@ def wechat_contacts_ensure_contact_cache_post():
 
 @router.get("/api/wechat_contacts/message_source_size")
 def wechat_contacts_message_source_size():
-    from app.application.facades.wechat_facade import wechat_message_source_size_payload
+    from app.infrastructure.gateways.wechat import wechat_message_source_size_payload
 
     payload, code = wechat_message_source_size_payload()
     return JSONResponse(payload, status_code=code)

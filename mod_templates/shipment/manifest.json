@@ -1,0 +1,42 @@
+{
+  "sdk_version": "2.0",
+  "id": "template-shipment",
+  "name": "行业模板 · 出货管理",
+  "version": "1.0.0",
+  "author": "<your-name>",
+  "description": "出货 / 物流单据行业模板：发货单 / 出货记录 / 打印链路 + AI 出货助手双发布。",
+  "artifact": "mod",
+  "release_targets": ["mod", "ai"],
+  "capabilities": ["shipment.orders", "shipment.records", "print", "intent"],
+  "compat": { "min_host_version": "9.0.0", "max_host_version": "" },
+  "dependencies": { "xcagi": ">=9.0.0" },
+  "backend": { "entry": "blueprints", "init": "mod_init" },
+  "frontend": {
+    "routes": "frontend/routes",
+    "menu": [
+      { "id": "tpl-ship-orders", "label": "发货单", "icon": "fa-truck", "path": "/mod/template-shipment/orders" },
+      { "id": "tpl-ship-records", "label": "出货记录", "icon": "fa-industry", "path": "/mod/template-shipment/records" },
+      { "id": "tpl-ship-print", "label": "标签打印", "icon": "fa-print", "path": "/mod/template-shipment/print" }
+    ]
+  },
+  "hooks": {
+    "shipment.created": "backend/hooks.on_shipment_created",
+    "print.completed": "backend/hooks.on_print_completed"
+  },
+  "comms": { "exports": ["shipment.generate", "shipment.print_label"] },
+  "ai": {
+    "employee_id": "shipment-assistant",
+    "model": "deepseek-chat",
+    "tier": "cloud",
+    "prompt": "你是出货管理助手，帮助用户生成发货单、查询出货记录并打印标签。",
+    "tools": ["shipment.generate", "shipment.print_label"]
+  },
+  "industry": {
+    "id": "shipment_logistics",
+    "name": "出货物流",
+    "description": "发货单 / 出货记录 / 标签打印",
+    "order_types": ["shipment"],
+    "intent_keywords": ["发货", "开单", "打单", "出货", "打印标签"]
+  },
+  "config": { "phase": "template" }
+}

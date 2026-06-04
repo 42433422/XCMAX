@@ -39,9 +39,9 @@ def generate_shipment_order(
         logger.info(f"开始生成发货单：{unit_name}, 产品数量：{len(products)}")
 
         # 调用服务层生成发货单
-        from app.bootstrap import get_shipment_app_service
+        from app.bootstrap import get_shipment_application_service_core
 
-        app_service = get_shipment_app_service()
+        app_service = get_shipment_application_service_core()
         result = app_service.generate_shipment_document(
             unit_name=unit_name, products=products, date=date
         )
@@ -253,9 +253,9 @@ def export_shipment_records_task(
     try:
         logger.info(f"开始异步导出出货记录：unit={unit_name}, start={start_date}, end={end_date}")
 
-        from app.bootstrap import get_shipment_app_service
+        from app.bootstrap import get_shipment_application_service_core
 
-        app_service = get_shipment_app_service()
+        app_service = get_shipment_application_service_core()
         result = app_service.export_shipment_records(unit_name=unit_name)
 
         logger.info(f"导出完成：{result}")

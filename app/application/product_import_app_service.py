@@ -4,21 +4,20 @@
 负责产品导入相关的用例编排
 """
 
-from typing import Any
-
-from app.services.product_import_service import ProductImportService
-
-# get_product_import_service is in services/__init__.py - use direct import to avoid circular deps during init
-
+from typing import Any, cast
 
 class ProductImportApplicationService:
     """产品导入应用服务 - 负责产品导入相关的用例编排"""
 
     def __init__(
         self,
-        product_import_service: ProductImportService | None = None,
+        product_import_service: Any | None = None,
     ):
-        self._product_import_service = product_import_service or get_product_import_service()  # type: ignore
+        if product_import_service is None:
+            from app.infrastructure.gateways.product import ProductImportService
+
+            product_import_service = ProductImportService()
+        self._product_import_service: Any = product_import_service
 
     def import_from_file(self, file_path: str, unit_name: str) -> dict[str, Any]:
         """
@@ -31,7 +30,10 @@ class ProductImportApplicationService:
         Returns:
             导入结果
         """
-        return self._product_import_service.import_products_from_excel(file_path, unit_name)
+        return cast(
+            dict[str, Any],
+            self._product_import_service.import_products_from_excel(file_path, unit_name),
+        )
 
     def import_from_data(self, products: list[dict[str, Any]], unit_name: str) -> dict[str, Any]:
         """
@@ -44,7 +46,10 @@ class ProductImportApplicationService:
         Returns:
             导入结果
         """
-        return self._product_import_service.batch_add_products(products, unit_name)
+        return cast(
+            dict[str, Any],
+            self._product_import_service.batch_add_products(products, unit_name),
+        )
 
     def validate_import_data(self, products: list[dict[str, Any]]) -> dict[str, Any]:
         """
@@ -56,7 +61,10 @@ class ProductImportApplicationService:
         Returns:
             验证结果
         """
-        return self._product_import_service.validate_products(products)
+        return cast(dict[str, Any], self._product_import_service.validate_products(products))
+
+    def import_data(self, **kwargs: Any) -> dict[str, Any]:
+        return cast(dict[str, Any], self._product_import_service.import_data(**kwargs))
 
     def get_import_history(self, page: int = 1, per_page: int = 20) -> dict[str, Any]:
         """
@@ -69,7 +77,10 @@ class ProductImportApplicationService:
         Returns:
             导入历史和分页信息
         """
-        return self._product_import_service.get_import_history(page=page, per_page=per_page)
+        return cast(
+            dict[str, Any],
+            self._product_import_service.get_import_history(page=page, per_page=per_page),
+        )
 
 
 from app.neuro_bus.neuro_application_instrumentation import instrument_application_service_class
@@ -93,14 +104,14 @@ def get_product_import_application_service() -> ProductImportApplicationService:
 
 
 def init_product_import_app_service(
-    product_import_service: ProductImportService,
+    product_import_service: Any,
 ) -> ProductImportApplicationService:
     """初始化产品导入应用服务 (用于依赖注入) (别名)"""
     return init_product_import_application_service(product_import_service)
 
 
 def init_product_import_application_service(
-    product_import_service: ProductImportService,
+    product_import_service: Any,
 ) -> ProductImportApplicationService:
     """初始化产品导入应用服务 (用于依赖注入)"""
     global _product_import_app_service

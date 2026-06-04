@@ -6,10 +6,10 @@ on:
       version:
         description: "Release version"
         required: true
-        default: "8.0.0"
+        default: "10.0.0"
   push:
     tags:
-      - "v8.*"
+      - "v10.*"
 
 permissions:
   contents: write

@@ -1,0 +1,143 @@
+# Default values for xcagi chart (align with k8s/*.yaml)
+nameOverride: ""
+fullnameOverride: ""
+
+image:
+  repository: ghcr.io/xiuci-tech/xcagi/backend
+  tag: latest
+  pullPolicy: IfNotPresent
+
+replicaCount: 3
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 5000
+
+ingress:
+  enabled: true
+  className: nginx
+  host: xcagi.example.com
+  tls:
+    enabled: true
+    secretName: xcagi-tls
+  clusterIssuer: letsencrypt-prod
+
+config:
+  redis_url: redis://redis-service:6379
+  flask_env: production
+  log_level: INFO
+  logFormat: json
+  FHD_ENV: production
+
+release:
+  sloHalt: "1"
+
+llm:
+  provider: ""
+  routingOrder: "modstore,openai_compatible,deepseek_legacy"
+
+neuroBus:
+  dedup: "1"
+  circuit: "1"
+  rateLimit: "1"
+  trace: "1"
+  traceSampleRate: "0.1"
+  lifeline: "1"
+  dlqAuto: "1"
+  slaLog: "1"
+
+rateLimit:
+  global: "1"
+  globalMax: "300"
+  globalWindow: "60"
+  auth: "1"
+  authMax: "10"
+  authWindow: "60"
+
+env:
+  XCAGI_DEBUG: "0"
+
+extraEnv: []
+
+existingSecret: xcagi-secrets
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: 1000m
+    memory: 2Gi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
+
+pdb:
+  enabled: true
+  minAvailable: 1
+
+# 多租户：每个客户实例部署到独立 namespace，并打租户标签做隔离。
+tenancy:
+  # 租户标识（用于 NetworkPolicy 选择器与配额标签）。
+  tenantId: "default"
+
+# 阶段 10：chart 可选创建并管理 Namespace（多租户隔离场景）。
+namespace:
+  create: false
+  name: ""        # 为空则使用 .Release.Namespace
+  labels: {}
+
+networkPolicy:
+  enabled: true
+  # 收紧策略：仅允许来自 ingress 控制器 namespace 与同租户 pod 的入站；
+  # 关闭后回退为旧的「全 namespace 放行」（兼容）。
+  strict: true
+  # ingress-nginx 所在 namespace（用其 namespace label 精确放行）。
+  ingressNamespace: ingress-nginx
+  ingressNamespaceLabel: kubernetes.io/metadata.name
+  # 出站允许的端口（DB / Redis / HTTPS / DNS）。
+  egressPorts:
+    - 5432
+    - 6379
+    - 443
+
+# 阶段 10：ServiceMonitor（Prometheus Operator）一体化监控发布。
+serviceMonitor:
+  enabled: false
+  interval: 30s
+  scrapeTimeout: 10s
+  path: /metrics
+  labels: {}   # 需匹配 Prometheus Operator 的 serviceMonitorSelector
+
+# 阶段 10：多租户资源配额与默认限额。
+resourceQuota:
+  enabled: false
+  hard:
+    requests.cpu: "8"
+    requests.memory: 16Gi
+    limits.cpu: "16"
+    limits.memory: 32Gi
+    pods: "50"
+    persistentvolumeclaims: "20"
+
+limitRange:
+  enabled: false
+  default:
+    cpu: 500m
+    memory: 1Gi
+  defaultRequest:
+    cpu: 100m
+    memory: 256Mi
+
+canary:
+  enabled: false
+  weight: 10
+
+blueGreen:
+  enabled: false
+  track: blue

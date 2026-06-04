@@ -1,0 +1,7 @@
+# 可观测性（OpenTelemetry 4 件套）· 由 scripts/sync_requirements.py 从 pyproject.toml 生成
+# ⚠️ 不要手工编辑！请改 pyproject.toml 后运行 python scripts/sync_requirements.py --write
+-r requirements-base.txt
+opentelemetry-api>=1.22.0
+opentelemetry-sdk>=1.22.0
+opentelemetry-exporter-otlp-proto-http>=1.22.0
+opentelemetry-instrumentation-fastapi>=0.43b0

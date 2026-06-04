@@ -97,8 +97,8 @@ def mock_purchase_svc(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
     svc.create_purchase_inbound.return_value = {"success": True}
     svc.get_purchase_summary.return_value = {"success": True, "total": 0}
     monkeypatch.setattr(
-        "app.application.facades.inventory_facade.PurchaseService",
-        MagicMock(return_value=svc),
+        "app.application.purchase_app_service.get_purchase_app_service",
+        lambda: svc,
     )
     return svc
 
@@ -113,8 +113,8 @@ def mock_report_svc(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
     svc.get_dashboard_summary.return_value = {"success": True, "revenue": 0}
     svc.export_to_excel.return_value = {"success": True, "file_path": "/tmp/r54.xlsx"}
     monkeypatch.setattr(
-        "app.application.facades.inventory_facade.ReportService",
-        MagicMock(return_value=svc),
+        "app.application.report_app_service.get_report_app_service",
+        lambda: svc,
     )
     return svc
 
@@ -171,16 +171,16 @@ def report_client(mock_report_svc: MagicMock) -> TestClient:
 @pytest.fixture
 def ops_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     monkeypatch.setattr(
-        "app.services.operations_line_bridge.compute_operations_health",
+        "app.infrastructure.gateways.cs_operations.compute_operations_health",
         lambda: {"status": "ok", "checks": []},
     )
     monkeypatch.setattr(
-        "app.services.contract_expiry_scheduler.run_contract_expiry_scan",
+        "app.infrastructure.gateways.cs_operations.run_contract_expiry_scan",
         lambda **kwargs: {"scanned": 2, "expiring": 0, **kwargs},
     )
     monkeypatch.setattr(
-        "app.services.user_cs_delivery_signoff.signoff_backend_info",
-        lambda: {"enabled": True},
+        "app.application.user_cs_app_service.get_user_cs_app_service",
+        lambda: MagicMock(signoff_backend_info=lambda: {"enabled": True}),
     )
     monkeypatch.setattr(
         "app.services.reconciliation_scheduler.get_reconciliation_status",
@@ -843,16 +843,16 @@ def test_ai_print_pdf_labels_501(ai_client: TestClient) -> None:
 
 def test_ai_tts_success(ai_client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        "app.application.facades.tts_facade.synthesize_to_data_uri",
+        "app.infrastructure.gateways.tts.synthesize_to_data_uri",
         lambda **kwargs: {"audioBase64": "P54", "voice": "zh-CN-female", "lang": "zh"},
     )
     monkeypatch.setattr(
-        "app.application.facades.tts_facade.trigger_common_tts_warmup",
+        "app.infrastructure.gateways.tts.trigger_common_tts_warmup",
         lambda: None,
     )
     r = ai_client.post(
         "/api/tts",
-        json={"text": "测试语音", "speakerId": 1, "rate": 1.0, "pitch": 1.0},
+        json={"text": "测试语音", "speakerId": "1", "rate": 1.0, "pitch": 1.0},
     )
     assert r.status_code == 200
     assert r.json()["data"]["audioBase64"] == "P54"
@@ -860,11 +860,11 @@ def test_ai_tts_success(ai_client: TestClient, monkeypatch: pytest.MonkeyPatch) 
 
 def test_ai_tts_fallback_on_error(ai_client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        "app.application.facades.tts_facade.trigger_common_tts_warmup",
+        "app.infrastructure.gateways.tts.trigger_common_tts_warmup",
         lambda: None,
     )
     monkeypatch.setattr(
-        "app.application.facades.tts_facade.synthesize_to_data_uri",
+        "app.infrastructure.gateways.tts.synthesize_to_data_uri",
         lambda **kwargs: (_ for _ in ()).throw(RuntimeError("edge offline")),
     )
     r = ai_client.post("/api/tts", json={"text": "回退测试"})
@@ -884,7 +884,7 @@ def test_ai_purchase_units_create_name_alias(
         address="",
     )
     monkeypatch.setattr(
-        "app.application.facades.query_facade.find_purchase_unit",
+        "app.infrastructure.gateways.query.find_purchase_unit",
         lambda **kwargs: None,
     )
     db = MagicMock()

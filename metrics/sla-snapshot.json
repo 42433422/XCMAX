@@ -1,0 +1,20 @@
+{
+  "generated_at": "2026-06-04T00:00:00+08:00",
+  "source": "tests/test_sla_health_probe.py + docs/SLO.md",
+  "probe": {
+    "endpoint": "/api/health",
+    "budget_ms_env": "XCAGI_SLA_HEALTH_MS",
+    "default_budget_ms": 500
+  },
+  "slos": [
+    {"id": "SLO-API-01", "name": "API 可用性", "target": "99.9%", "window": "30d", "baseline": "99.94%"},
+    {"id": "SLO-API-02", "name": "登录 P95 延迟", "target": "<500ms", "window": "30d", "baseline": "312ms"},
+    {"id": "SLO-API-03", "name": "API 错误率", "target": "<0.1%", "window": "30d", "baseline": "0.06%"},
+    {"id": "SLO-AI-01", "name": "聊天首包 P95", "target": "<1500ms", "window": "30d", "baseline": "1080ms"},
+    {"id": "SLO-BUS-01", "name": "NeuroBus 投递成功率", "target": "99.95%", "window": "30d", "baseline": "99.97%"},
+    {"id": "SLO-ORDER-01", "name": "订单链路成功率", "target": "99.5%", "window": "30d", "baseline": null},
+    {"id": "SLO-AI-02", "name": "AI 调用成功率", "target": "99.0%", "window": "30d", "baseline": null},
+    {"id": "SLO-PRINT-01", "name": "打印链路成功率", "target": "99.0%", "window": "30d", "baseline": null}
+  ],
+  "notes": "baseline 来自 SLO.md 2026-06-02；生产 30d 滚动值以 Prometheus/Grafana 为准。"
+}

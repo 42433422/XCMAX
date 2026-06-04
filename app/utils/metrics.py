@@ -144,3 +144,17 @@ def track_ai_request(service: str):
         return wrapper
 
     return decorator
+
+
+def record_ai_call(
+    service: str,
+    call_type: str,
+    status: str,
+    duration_seconds: float | None = None,
+) -> None:
+    """记录 AI  provider 调用（intent/chat/tts 等）。"""
+    ai_requests_total.labels(service=service, status=status).inc()
+    if duration_seconds is not None:
+        ai_request_duration_seconds.labels(service=service).observe(duration_seconds)
+    if status == "error":
+        ai_request_errors_total.labels(service=service, error_type=call_type).inc()

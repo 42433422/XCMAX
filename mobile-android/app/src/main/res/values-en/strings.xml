@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">XCAGI</string>
+    <string name="company_name">Chengdu Xiuci Technology Co., Ltd.</string>
+    <string name="login_slogan_personal">Work easily, live more</string>
+    <string name="login_slogan_enterprise">Smart collaboration for your business</string>
+    <string name="login_primary_button">Sign in with password</string>
+    <string name="login_account_placeholder_enterprise">Market account or email</string>
+    <string name="login_account_placeholder_personal">Local account</string>
+    <string name="login_password_placeholder">Password</string>
+    <string name="login_mode_hint_enterprise">Enterprise branding appears after sign-in</string>
+    <string name="login_mode_hint_personal">Same account as MODstore on the web.</string>
+    <string name="login_mode_hint_admin">Use a Xiuci Market platform admin account</string>
+    <string name="login_alt_enterprise">Enterprise</string>
+    <string name="login_alt_personal">Personal</string>
+    <string name="login_alt_passkey">Passkey</string>
+    <string name="login_alt_admin">Admin</string>
+    <string name="login_passkey_unavailable">Passkey sign-in is not available yet. Use password or contact support.</string>
+    <string name="login_admin_cloud_unavailable">Admin sign-in requires the desktop app or web.</string>
+    <string name="login_agreement">I agree to the Terms of Service and Privacy Policy</string>
+    <string name="login_agree_required">Please accept the terms before signing in</string>
+    <string name="register_title">Create account</string>
+    <string name="register_username">Username</string>
+    <string name="register_password">Password (min. 6 characters)</string>
+    <string name="register_confirm_password">Confirm password</string>
+    <string name="register_email_enterprise">Email (required for Enterprise)</string>
+    <string name="register_email_optional">Email (optional)</string>
+    <string name="register_hint_enterprise">Creates a local user and registers a Xiuci Market account when the market service is reachable.</string>
+    <string name="register_hint_personal">Creates an account on the local server database and signs you in.</string>
+    <string name="register_submit">Register and sign in</string>
+    <string name="register_back_login">Already have an account? Back to sign in</string>
+    <string name="register_password_mismatch">Passwords do not match</string>
+    <string name="register_fill_required">Enter username, email, and password (min. 6 characters)</string>
+    <string name="register_fill_required_personal">Enter username and password (min. 6 characters)</string>
+    <string name="company_icp">Shu ICP 2026014056-1</string>
+    <string name="company_app_filing">Mobile app filing approved (MIIT)</string>
+    <string name="brand_url">https://xiu-ci.com</string>
+</resources>

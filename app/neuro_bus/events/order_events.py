@@ -4,135 +4,225 @@ Order 领域事件定义
 包含订单生命周期中的所有领域事件。
 """
 
-from dataclasses import dataclass
+from __future__ import annotations
 
-from app.neuro_bus.events.base import EventPriority, NeuroEvent
+from typing import Any
+
+from app.neuro_bus.events._typed_event import init_typed_event
+from app.neuro_bus.events.base import EventMetadata, EventPriority, NeuroEvent
 
 
-@dataclass
 class OrderSubmittedEvent(NeuroEvent):
     """订单提交事件"""
 
-    event_type: str = "order.submitted"
-    priority: EventPriority = EventPriority.HIGH
+    def __init__(
+        self,
+        payload: dict[str, Any],
+        *,
+        event_type: str = "order.submitted",
+        priority: EventPriority = EventPriority.HIGH,
+        metadata: EventMetadata | None = None,
+        preserve_queue_identity: bool = False,
+    ) -> None:
+        init_typed_event(
+            self,
+            payload,
+            event_type=event_type,
+            priority=priority,
+            required=("order_id", "customer_id", "items"),
+            class_name="OrderSubmittedEvent",
+            metadata=metadata,
+            preserve_queue_identity=preserve_queue_identity,
+        )
 
-    def __post_init__(self):
-        super().__post_init__()
-        required = ["order_id", "customer_id", "items"]
-        for field in required:
-            if field not in self.payload:
-                raise ValueError(f"OrderSubmittedEvent 缺少必要字段: {field}")
 
-
-@dataclass
 class OrderPaidEvent(NeuroEvent):
     """订单支付事件"""
 
-    event_type: str = "order.paid"
-    priority: EventPriority = EventPriority.HIGH
+    def __init__(
+        self,
+        payload: dict[str, Any],
+        *,
+        event_type: str = "order.paid",
+        priority: EventPriority = EventPriority.HIGH,
+        metadata: EventMetadata | None = None,
+        preserve_queue_identity: bool = False,
+    ) -> None:
+        init_typed_event(
+            self,
+            payload,
+            event_type=event_type,
+            priority=priority,
+            required=("order_id", "payment_id", "amount"),
+            class_name="OrderPaidEvent",
+            metadata=metadata,
+            preserve_queue_identity=preserve_queue_identity,
+        )
 
-    def __post_init__(self):
-        super().__post_init__()
-        required = ["order_id", "payment_id", "amount"]
-        for field in required:
-            if field not in self.payload:
-                raise ValueError(f"OrderPaidEvent 缺少必要字段: {field}")
 
-
-@dataclass
 class OrderPaymentFailedEvent(NeuroEvent):
     """订单支付失败事件"""
 
-    event_type: str = "order.payment_failed"
-    priority: EventPriority = EventPriority.HIGH
+    def __init__(
+        self,
+        payload: dict[str, Any],
+        *,
+        event_type: str = "order.payment_failed",
+        priority: EventPriority = EventPriority.HIGH,
+        metadata: EventMetadata | None = None,
+        preserve_queue_identity: bool = False,
+    ) -> None:
+        init_typed_event(
+            self,
+            payload,
+            event_type=event_type,
+            priority=priority,
+            required=("order_id",),
+            class_name="OrderPaymentFailedEvent",
+            metadata=metadata,
+            preserve_queue_identity=preserve_queue_identity,
+        )
 
-    def __post_init__(self):
-        super().__post_init__()
-        if "order_id" not in self.payload:
-            raise ValueError("OrderPaymentFailedEvent 缺少必要字段: order_id")
 
-
-@dataclass
 class OrderFulfilledEvent(NeuroEvent):
     """订单履行完成事件"""
 
-    event_type: str = "order.fulfilled"
-    priority: EventPriority = EventPriority.NORMAL
+    def __init__(
+        self,
+        payload: dict[str, Any],
+        *,
+        event_type: str = "order.fulfilled",
+        priority: EventPriority = EventPriority.NORMAL,
+        metadata: EventMetadata | None = None,
+        preserve_queue_identity: bool = False,
+    ) -> None:
+        init_typed_event(
+            self,
+            payload,
+            event_type=event_type,
+            priority=priority,
+            required=("order_id",),
+            class_name="OrderFulfilledEvent",
+            metadata=metadata,
+            preserve_queue_identity=preserve_queue_identity,
+        )
 
-    def __post_init__(self):
-        super().__post_init__()
-        if "order_id" not in self.payload:
-            raise ValueError("OrderFulfilledEvent 缺少必要字段: order_id")
 
-
-@dataclass
 class OrderShippedEvent(NeuroEvent):
     """订单发货事件"""
 
-    event_type: str = "order.shipped"
-    priority: EventPriority = EventPriority.NORMAL
+    def __init__(
+        self,
+        payload: dict[str, Any],
+        *,
+        event_type: str = "order.shipped",
+        priority: EventPriority = EventPriority.NORMAL,
+        metadata: EventMetadata | None = None,
+        preserve_queue_identity: bool = False,
+    ) -> None:
+        init_typed_event(
+            self,
+            payload,
+            event_type=event_type,
+            priority=priority,
+            required=("order_id", "shipment_id", "tracking_number"),
+            class_name="OrderShippedEvent",
+            metadata=metadata,
+            preserve_queue_identity=preserve_queue_identity,
+        )
 
-    def __post_init__(self):
-        super().__post_init__()
-        required = ["order_id", "shipment_id", "tracking_number"]
-        for field in required:
-            if field not in self.payload:
-                raise ValueError(f"OrderShippedEvent 缺少必要字段: {field}")
 
-
-@dataclass
 class OrderCancelledEvent(NeuroEvent):
     """订单取消事件"""
 
-    event_type: str = "order.cancelled"
-    priority: EventPriority = EventPriority.HIGH
+    def __init__(
+        self,
+        payload: dict[str, Any],
+        *,
+        event_type: str = "order.cancelled",
+        priority: EventPriority = EventPriority.HIGH,
+        metadata: EventMetadata | None = None,
+        preserve_queue_identity: bool = False,
+    ) -> None:
+        init_typed_event(
+            self,
+            payload,
+            event_type=event_type,
+            priority=priority,
+            required=("order_id",),
+            class_name="OrderCancelledEvent",
+            metadata=metadata,
+            preserve_queue_identity=preserve_queue_identity,
+        )
 
-    def __post_init__(self):
-        super().__post_init__()
-        if "order_id" not in self.payload:
-            raise ValueError("OrderCancelledEvent 缺少必要字段: order_id")
 
-
-@dataclass
 class OrderRefundedEvent(NeuroEvent):
     """订单退款事件"""
 
-    event_type: str = "order.refunded"
-    priority: EventPriority = EventPriority.HIGH
+    def __init__(
+        self,
+        payload: dict[str, Any],
+        *,
+        event_type: str = "order.refunded",
+        priority: EventPriority = EventPriority.HIGH,
+        metadata: EventMetadata | None = None,
+        preserve_queue_identity: bool = False,
+    ) -> None:
+        init_typed_event(
+            self,
+            payload,
+            event_type=event_type,
+            priority=priority,
+            required=("order_id", "refund_id", "refund_amount"),
+            class_name="OrderRefundedEvent",
+            metadata=metadata,
+            preserve_queue_identity=preserve_queue_identity,
+        )
 
-    def __post_init__(self):
-        super().__post_init__()
-        required = ["order_id", "refund_id", "refund_amount"]
-        for field in required:
-            if field not in self.payload:
-                raise ValueError(f"OrderRefundedEvent 缺少必要字段: {field}")
 
-
-@dataclass
 class OrderItemUpdatedEvent(NeuroEvent):
     """订单项更新事件"""
 
-    event_type: str = "order.item_updated"
-    priority: EventPriority = EventPriority.NORMAL
+    def __init__(
+        self,
+        payload: dict[str, Any],
+        *,
+        event_type: str = "order.item_updated",
+        priority: EventPriority = EventPriority.NORMAL,
+        metadata: EventMetadata | None = None,
+        preserve_queue_identity: bool = False,
+    ) -> None:
+        init_typed_event(
+            self,
+            payload,
+            event_type=event_type,
+            priority=priority,
+            required=("order_id", "item_id", "changes"),
+            class_name="OrderItemUpdatedEvent",
+            metadata=metadata,
+            preserve_queue_identity=preserve_queue_identity,
+        )
 
-    def __post_init__(self):
-        super().__post_init__()
-        required = ["order_id", "item_id", "changes"]
-        for field in required:
-            if field not in self.payload:
-                raise ValueError(f"OrderItemUpdatedEvent 缺少必要字段: {field}")
 
-
-@dataclass
 class OrderStatusChangedEvent(NeuroEvent):
     """订单状态变更事件"""
 
-    event_type: str = "order.status_changed"
-    priority: EventPriority = EventPriority.NORMAL
-
-    def __post_init__(self):
-        super().__post_init__()
-        required = ["order_id", "old_status", "new_status"]
-        for field in required:
-            if field not in self.payload:
-                raise ValueError(f"OrderStatusChangedEvent 缺少必要字段: {field}")
+    def __init__(
+        self,
+        payload: dict[str, Any],
+        *,
+        event_type: str = "order.status_changed",
+        priority: EventPriority = EventPriority.NORMAL,
+        metadata: EventMetadata | None = None,
+        preserve_queue_identity: bool = False,
+    ) -> None:
+        init_typed_event(
+            self,
+            payload,
+            event_type=event_type,
+            priority=priority,
+            required=("order_id", "old_status", "new_status"),
+            class_name="OrderStatusChangedEvent",
+            metadata=metadata,
+            preserve_queue_identity=preserve_queue_identity,
+        )

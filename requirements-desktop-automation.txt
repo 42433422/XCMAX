@@ -1,0 +1,3 @@
+# Mac/Windows 桌面自动化（微信 UI 发消息等）
+# 此文件不在 pyproject 中维护（按平台 marker 条件安装）
+<原内容保留>

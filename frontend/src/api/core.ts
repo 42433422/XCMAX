@@ -1,5 +1,5 @@
-import { notifyDbReadTokenRequiredAfter403, notifyDbWriteTokenRequiredAfter403 } from '@/fhd/dbTokenHeaders';
-import { apiFetch, getApiBase } from '@/utils/apiBase';
+import { notifyDbReadTokenRequiredAfter403, notifyDbWriteTokenRequiredAfter403 } from '@amin/primary-key-guard/dbTokenHeaders';
+import { getApiBase } from '@/utils/apiBase';
 import { readCsrfTokenFromCookie, shouldAttachCsrfHeader } from '@/utils/csrfCookie';
 
 /**
@@ -64,7 +64,7 @@ export async function primeCsrfCookie(): Promise<void> {
   for (let attempt = 0; attempt < 3; attempt++) {
     for (const p of paths) {
       try {
-        const r = await apiFetch(buildFullApiUrl(p), { method: 'GET', credentials: 'include' });
+        const r = await fetch(buildFullApiUrl(p), { method: 'GET', credentials: 'include' });
         if (r.ok && readCsrfTokenFromCookie()) return;
       } catch {
         /* 下一路径或重试 */
@@ -134,7 +134,7 @@ async function request(url: string, options: RequestOptions = {}): Promise<any> 
   }
 
   try {
-    const response = await apiFetch(fullUrl, config);
+    const response = await fetch(fullUrl, config);
     const contentType = response.headers.get('content-type') || '';
 
     if (!response.ok) {

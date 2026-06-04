@@ -31,6 +31,4 @@ export const CORE_WORKFLOW_PAYLOAD_KEYS: Record<
   label_print: 'lastLabelPrint',
   shipment_mgmt: 'lastShipmentAudit',
   receipt_confirm: 'lastReceiptFeedback',
-  wechat_phone: 'lastWechat',
-  real_phone: 'lastWechat',
 }

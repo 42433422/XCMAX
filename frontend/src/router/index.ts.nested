@@ -241,7 +241,7 @@ const router = createRouter({
 
 router.beforeEach((to, _from, next) => {
   if (to.meta.title) {
-    document.title = `${to.meta.title} - XCAGI`;
+    document.title = `${to.meta.title} - XCMAX`;
   }
   try {
     const modsStore = useModsStore();

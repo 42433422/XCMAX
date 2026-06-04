@@ -32,7 +32,7 @@ router = APIRouter(tags=["ai-kitten"])
 @router.get("/api/ai/kitten/business-snapshot")
 def kitten_business_snapshot():
     try:
-        from app.application.facades.kitten_facade import build_kitten_business_snapshot
+        from app.infrastructure.gateways.kitten import build_kitten_business_snapshot
 
         snap = build_kitten_business_snapshot()
         return {"success": True, "data": snap}
@@ -44,7 +44,7 @@ def kitten_business_snapshot():
 @router.get("/api/ai/kitten/charts/all")
 def kitten_charts_all():
     try:
-        from app.application.facades.kitten_facade import chart_service
+        from app.infrastructure.gateways.kitten import chart_service
 
         return {"success": True, "data": chart_service.get_all_charts_data()}
     except Exception as e:
@@ -55,7 +55,7 @@ def kitten_charts_all():
 @router.get("/api/ai/kitten/charts/revenue")
 def kitten_charts_revenue(months: int = Query(default=6)):
     try:
-        from app.application.facades.kitten_facade import chart_service
+        from app.infrastructure.gateways.kitten import chart_service
 
         return chart_service.get_revenue_chart_data(months)
     except Exception as e:
@@ -66,7 +66,7 @@ def kitten_charts_revenue(months: int = Query(default=6)):
 @router.get("/api/ai/kitten/charts/products")
 def kitten_charts_products():
     try:
-        from app.application.facades.kitten_facade import chart_service
+        from app.infrastructure.gateways.kitten import chart_service
 
         return chart_service.get_product_pie_chart_data()
     except Exception as e:
@@ -77,7 +77,7 @@ def kitten_charts_products():
 @router.get("/api/ai/kitten/charts/customers")
 def kitten_charts_customers():
     try:
-        from app.application.facades.kitten_facade import chart_service
+        from app.infrastructure.gateways.kitten import chart_service
 
         return chart_service.get_customer_bar_chart_data()
     except Exception as e:
@@ -88,7 +88,7 @@ def kitten_charts_customers():
 @router.get("/api/ai/kitten/charts/profit")
 def kitten_charts_profit(months: int = Query(default=6)):
     try:
-        from app.application.facades.kitten_facade import chart_service
+        from app.infrastructure.gateways.kitten import chart_service
 
         return chart_service.get_profit_trend_chart_data(months)
     except Exception as e:
@@ -99,7 +99,7 @@ def kitten_charts_profit(months: int = Query(default=6)):
 @router.get("/api/ai/kitten/charts/inventory")
 def kitten_charts_inventory():
     try:
-        from app.application.facades.kitten_facade import chart_service
+        from app.infrastructure.gateways.kitten import chart_service
 
         return chart_service.get_inventory_chart_data()
     except Exception as e:
@@ -110,7 +110,7 @@ def kitten_charts_inventory():
 @router.get("/api/ai/kitten/saved/list")
 def kitten_saved_list(type: str | None = Query(default=None)):
     try:
-        from app.application.facades.kitten_facade import analysis_save_service
+        from app.infrastructure.gateways.kitten import analysis_save_service
 
         analyses = analysis_save_service.list_saved_analyses(type)
         stats = analysis_save_service.get_statistics_summary()
@@ -123,7 +123,7 @@ def kitten_saved_list(type: str | None = Query(default=None)):
 @router.get("/api/ai/kitten/saved/{analysis_id}")
 def kitten_saved_get(analysis_id: str):
     try:
-        from app.application.facades.kitten_facade import analysis_save_service
+        from app.infrastructure.gateways.kitten import analysis_save_service
 
         analysis = analysis_save_service.get_analysis(analysis_id)
         if not analysis:
@@ -137,7 +137,7 @@ def kitten_saved_get(analysis_id: str):
 @router.get("/api/ai/kitten/saved/{analysis_id}/export")
 def kitten_saved_export(analysis_id: str):
     try:
-        from app.application.facades.kitten_facade import analysis_save_service
+        from app.infrastructure.gateways.kitten import analysis_save_service
 
         result = analysis_save_service.export_analysis_to_xlsx(analysis_id)
         if not result.get("success"):
@@ -157,7 +157,7 @@ def kitten_saved_export(analysis_id: str):
 @router.delete("/api/ai/kitten/saved/{analysis_id}")
 def kitten_saved_delete(analysis_id: str):
     try:
-        from app.application.facades.kitten_facade import analysis_save_service
+        from app.infrastructure.gateways.kitten import analysis_save_service
 
         result = analysis_save_service.delete_analysis(analysis_id)
         if result.get("success"):
@@ -173,7 +173,7 @@ def ai_kitten_financial_report(body: dict = Body(default_factory=dict)):
     try:
         payload = body or {}
         metadata = payload.get("metadata") or {}
-        from app.application.facades.kitten_facade import (
+        from app.infrastructure.gateways.kitten import (
             FinancialReportPlugin,
             InventoryValuationPlugin,
             analysis_save_service,
@@ -221,7 +221,7 @@ def ai_kitten_financial_report(body: dict = Body(default_factory=dict)):
 @router.post("/api/ai/kitten/report/export")
 def ai_kitten_report_export(body: dict = Body(default_factory=dict)):
     try:
-        from app.application.facades.kitten_facade import KittenReportExportService
+        from app.infrastructure.gateways.kitten import KittenReportExportService
 
         service = KittenReportExportService()
         report = service.build_report(body or {})
@@ -240,7 +240,7 @@ def ai_kitten_report_export(body: dict = Body(default_factory=dict)):
 @router.post("/api/ai/kitten/report/export-docx")
 def ai_kitten_report_export_docx(body: dict = Body(default_factory=dict)):
     try:
-        from app.application.facades.kitten_facade import build_kitten_docx
+        from app.infrastructure.gateways.kitten import build_kitten_docx
 
         report = build_kitten_docx(body or {})
         file_name = str(report.get("file_name") or "小猫分析报告.docx")
@@ -270,7 +270,7 @@ def kitten_document_generate(body: dict = Body(default_factory=dict)):
             {"success": False, "message": "请提供文档需求描述（prompt）"}, status_code=400
         )
     try:
-        from app.application.facades.kitten_facade import generate_office_file
+        from app.infrastructure.gateways.kitten import generate_office_file
 
         content, file_name = generate_office_file(prompt, fmt)  # type: ignore[arg-type]
         mime = (
@@ -297,7 +297,7 @@ def kitten_document_generate(body: dict = Body(default_factory=dict)):
 @router.get("/api/ai/kitten/document/pickup/{token}")
 def kitten_document_pickup(token: str):
     """一次性下载 Planner 工具 ``generate_office_document`` 生成的文档。"""
-    from app.application.facades.kitten_facade import pop_document_pickup
+    from app.infrastructure.gateways.kitten import pop_document_pickup
 
     item = pop_document_pickup(token)
     if not item:

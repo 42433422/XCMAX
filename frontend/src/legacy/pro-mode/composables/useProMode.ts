@@ -1,5 +1,5 @@
 import { ref, computed, onUnmounted } from 'vue';
-import { useProModeStore } from '../stores/proMode';
+import { useProModeStore } from '@/stores/proMode';
 
 export function useProMode() {
   const store = useProModeStore();

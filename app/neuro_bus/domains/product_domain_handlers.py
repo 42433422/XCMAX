@@ -7,7 +7,10 @@ Product 领域事件处理器
 import logging
 from typing import Any
 
+from app.bootstrap import get_product_application_service_core
 from app.neuro_bus.bus import get_neuro_bus
+from app.neuro_bus.command_gateway import try_complete_command_reply
+from app.neuro_bus.events.base import NeuroEvent
 from app.neuro_bus.events.product_events import (
     ProductCacheInvalidatedEvent,
     ProductCreatedEvent,
@@ -34,183 +37,113 @@ class ProductDomainHandlers:
         return self._bus
 
     async def handle_product_created(self, event: ProductCreatedEvent) -> dict[str, Any]:
-        """
-        处理产品创建事件
-
-        职责:
-        1. 记录产品创建日志
-        2. 初始化产品相关数据
-        3. 触发缓存预热
-        4. 发送通知（如果需要）
-        """
+        """落库 + 命令回复；副作用（缓存失效）仍经事件链。"""
         logger.info(
-            f"[ProductDomain] 处理产品创建: {event.payload.get('product_name')} "
-            f"(ID: {event.payload.get('product_id')})"
+            "[ProductDomain] 处理产品创建: %s",
+            event.payload.get("product_name") or event.payload.get("name"),
         )
-
-        result = {"success": True, "product_id": event.payload.get("product_id"), "actions": []}
-
+        core = get_product_application_service_core()
         try:
-            # 1. 记录审计日志
-            result["actions"].append("audit_logged")
-
-            # 2. 触发缓存预热
-            cache_event = ProductCacheInvalidatedEvent(
-                payload={
-                    "unit_name": event.payload.get("unit_name"),
-                    "reason": "new_product_added",
-                },
-                source="product_domain",
-                correlation_id=event.metadata.event_id,
-            )
-            self.bus.publish(cache_event)
-            result["actions"].append("cache_warmup_triggered")
-
-            # 3. 可以在这里触发其他下游事件
-            # 例如：通知搜索服务索引新产品
-
+            data = dict(event.payload)
+            result = core.create_product(data)
+            try_complete_command_reply(event, result)
+            if result.get("success"):
+                cache_event = ProductCacheInvalidatedEvent(
+                    payload={
+                        "unit_name": event.payload.get("unit_name"),
+                        "reason": "new_product_added",
+                    },
+                    source="product_domain",
+                    correlation_id=event.metadata.event_id,
+                )
+                self.bus.publish(cache_event)
+            return result
         except Exception as e:
-            logger.error(f"[ProductDomain] 处理产品创建事件失败: {e}")
-            result["success"] = False
-            result["error"] = str(e)
-
-        return result
+            logger.exception("[ProductDomain] 创建产品失败: %s", e)
+            err = {"success": False, "message": str(e)}
+            try_complete_command_reply(event, None, error=e)
+            raise
 
     async def handle_product_updated(self, event: ProductUpdatedEvent) -> dict[str, Any]:
-        """
-        处理产品更新事件
-
-        职责:
-        1. 记录变更历史
-        2. 检查价格变更并触发价格变更事件
-        3. 使相关缓存失效
-        """
-        logger.info(f"[ProductDomain] 处理产品更新: {event.payload.get('product_id')}")
-
-        result = {"success": True, "product_id": event.payload.get("product_id"), "actions": []}
-
+        logger.info("[ProductDomain] 处理产品更新: %s", event.payload.get("product_id"))
+        core = get_product_application_service_core()
         try:
-            # 1. 记录变更历史
-            result["actions"].append("change_history_recorded")
-
-            # 2. 检查价格变更
-            if "price" in event.payload.get("changed_fields", []):
-                old_price = event.payload.get("old_price")
-                new_price = event.payload.get("price")
-
+            pid = int(event.payload.get("product_id"))
+            updates = {
+                k: v
+                for k, v in event.payload.items()
+                if k not in ("product_id", "changed_fields", "old_price")
+            }
+            result = core.update_product(pid, updates)
+            try_complete_command_reply(event, result)
+            if result.get("success") and "price" in (event.payload.get("changed_fields") or []):
                 price_event = ProductPriceChangedEvent(
                     payload={
-                        "product_id": event.payload.get("product_id"),
-                        "old_price": old_price,
-                        "new_price": new_price,
+                        "product_id": pid,
+                        "old_price": event.payload.get("old_price"),
+                        "new_price": event.payload.get("price"),
                         "unit_name": event.payload.get("unit_name"),
                     },
                     source="product_domain",
                     correlation_id=event.metadata.event_id,
                 )
                 self.bus.publish(price_event)
-                result["actions"].append("price_change_event_triggered")
-
-            # 3. 使缓存失效
-            cache_event = ProductCacheInvalidatedEvent(
-                payload={
-                    "product_id": event.payload.get("product_id"),
-                    "unit_name": event.payload.get("unit_name"),
-                },
-                source="product_domain",
-                correlation_id=event.metadata.event_id,
-            )
-            self.bus.publish(cache_event)
-            result["actions"].append("cache_invalidated")
-
+            return result
         except Exception as e:
-            logger.error(f"[ProductDomain] 处理产品更新事件失败: {e}")
-            result["success"] = False
-            result["error"] = str(e)
-
-        return result
+            logger.exception("[ProductDomain] 更新产品失败: %s", e)
+            try_complete_command_reply(event, None, error=e)
+            raise
 
     async def handle_product_deleted(self, event: ProductDeletedEvent) -> dict[str, Any]:
-        """
-        处理产品删除事件
-
-        职责:
-        1. 记录删除审计日志
-        2. 使相关缓存失效
-        3. 清理相关关联数据
-        """
-        logger.info(f"[ProductDomain] 处理产品删除: {event.payload.get('product_id')}")
-
-        result = {"success": True, "product_id": event.payload.get("product_id"), "actions": []}
-
+        logger.info("[ProductDomain] 处理产品删除: %s", event.payload.get("product_id"))
+        core = get_product_application_service_core()
         try:
-            # 1. 记录删除审计
-            result["actions"].append("deletion_audit_logged")
-
-            # 2. 使缓存失效
-            cache_event = ProductCacheInvalidatedEvent(
-                payload={
-                    "product_id": event.payload.get("product_id"),
-                    "unit_name": event.payload.get("unit_name"),
-                    "reason": "product_deleted",
-                },
-                source="product_domain",
-                correlation_id=event.metadata.event_id,
-            )
-            self.bus.publish(cache_event)
-            result["actions"].append("cache_invalidated")
-
+            pid = int(event.payload.get("product_id"))
+            result = core.delete_product(pid)
+            try_complete_command_reply(event, result)
+            if result.get("success"):
+                cache_event = ProductCacheInvalidatedEvent(
+                    payload={
+                        "product_id": pid,
+                        "unit_name": event.payload.get("unit_name"),
+                        "reason": "product_deleted",
+                    },
+                    source="product_domain",
+                    correlation_id=event.metadata.event_id,
+                )
+                self.bus.publish(cache_event)
+            return result
         except Exception as e:
-            logger.error(f"[ProductDomain] 处理产品删除事件失败: {e}")
-            result["success"] = False
-            result["error"] = str(e)
-
-        return result
+            logger.exception("[ProductDomain] 删除产品失败: %s", e)
+            try_complete_command_reply(event, None, error=e)
+            raise
 
     async def handle_product_imported(self, event: ProductImportedEvent) -> dict[str, Any]:
-        """
-        处理批量导入事件
-
-        职责:
-        1. 统计导入结果
-        2. 批量使缓存失效
-        3. 发送导入完成通知
-        """
         logger.info(
-            f"[ProductDomain] 处理产品批量导入: {event.payload.get('unit_name')} "
-            f"(数量: {event.payload.get('count', 0)})"
+            "[ProductDomain] 批量导入: count=%s",
+            event.payload.get("count", len(event.payload.get("products") or [])),
         )
-
-        result = {
-            "success": True,
-            "unit_name": event.payload.get("unit_name"),
-            "imported_count": event.payload.get("count", 0),
-            "actions": [],
-        }
-
+        core = get_product_application_service_core()
         try:
-            # 1. 记录导入统计
-            result["actions"].append("import_stats_recorded")
-
-            # 2. 批量使缓存失效
-            cache_event = ProductCacheInvalidatedEvent(
-                payload={
-                    "unit_name": event.payload.get("unit_name"),
-                    "reason": "bulk_import",
-                    "affected_count": event.payload.get("count", 0),
-                },
-                source="product_domain",
-                correlation_id=event.metadata.event_id,
-            )
-            self.bus.publish(cache_event)
-            result["actions"].append("bulk_cache_invalidated")
-
+            products = event.payload.get("products") or []
+            result = core.batch_add_products(products)
+            try_complete_command_reply(event, result)
+            if result.get("success"):
+                cache_event = ProductCacheInvalidatedEvent(
+                    payload={
+                        "unit_name": event.payload.get("unit_name"),
+                        "reason": "bulk_import",
+                        "affected_count": event.payload.get("count", len(products)),
+                    },
+                    source="product_domain",
+                    correlation_id=event.metadata.event_id,
+                )
+                self.bus.publish(cache_event)
+            return result
         except Exception as e:
-            logger.error(f"[ProductDomain] 处理产品导入事件失败: {e}")
-            result["success"] = False
-            result["error"] = str(e)
-
-        return result
+            logger.exception("[ProductDomain] 批量导入失败: %s", e)
+            try_complete_command_reply(event, None, error=e)
+            raise
 
     async def handle_price_changed(self, event: ProductPriceChangedEvent) -> dict[str, Any]:
         """

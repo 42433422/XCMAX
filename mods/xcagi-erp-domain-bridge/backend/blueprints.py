@@ -179,7 +179,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
     @router.get("/purchase_units")
     @router.get("/purchase_units/")
     def mod_purchase_units_list():
-        from app.fastapi_routes.xcagi_compat_product import purchase_units_list
+        from app.fastapi_routes.domains.product.compat_routes import purchase_units_list
 
         return purchase_units_list()
 

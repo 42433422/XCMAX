@@ -34,18 +34,7 @@ vi.mock('@/stores/workflowAiEmployees', () => ({ useWorkflowAiEmployeesStore: ()
 // Other heavy composables used by useChatView can be mocked as no-ops.
 vi.mock('./useShipmentTask', () => ({ useShipmentTask: () => ({}) }))
 vi.mock('./usePrintService', () => ({ usePrintService: () => ({}) }))
-vi.mock('./useExcelAnalysis', async () => {
-  const { ref } = await import('vue')
-  return {
-    useExcelAnalysis: () => ({
-      excelAnalyzeUploading: ref(false),
-      excelAnalyzeInputRef: ref(null),
-      triggerUpload: vi.fn(),
-      onExcelAnalyzeFileChange: vi.fn(),
-      setOnMultimodalFileChangeCallback: vi.fn(),
-    }),
-  }
-})
+vi.mock('./useExcelAnalysis', () => ({ useExcelAnalysis: () => ({}) }))
 
 import { useChatView } from './useChatView'
 
@@ -56,9 +45,10 @@ describe('useChatView (composable)', () => {
 
   it('returns core API including sendMessage and isProMode', () => {
     const sessionId = ref('test-session')
-    const api = useChatView({ sessionId, proIntentExperienceEnabled: ref(false) })
+    const api = useChatView({ sessionId, proIntentExperienceEnabled: false })
     expect(api).toBeTruthy()
     expect(typeof api.sendMessage).toBe('function')
     expect(api.isProMode).toBeDefined()
   })
 })
+

@@ -71,7 +71,16 @@ mac:
   gatekeeperAssess: false
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
+  # --- macOS 公证（notarize）骨架 — T49 ---
+  # CI / 本地出包：在仓库 Secrets 或环境中设置：
+  #   APPLE_ID、APPLE_APP_SPECIFIC_PASSWORD、APPLE_TEAM_ID
+  # 有凭证时 afterSign 会调用 build/notarize.cjs（@electron/notarize）；
+  # 缺凭证时脚本跳过，不阻断构建。
+  # 正式分发：将下行改为 notarize: true，并确保 codesign 身份在钥匙串可用。
   notarize: false
+  # 可选：显式指定签名身份（本地 Developer ID Application）
+  # identity: "Developer ID Application: Your Company (TEAMID)"
 dmg:
   sign: false
+# 与 mac.notarize 配合：release-desktop.yml 已注入 APPLE_* secrets
 afterSign: build/notarize.cjs

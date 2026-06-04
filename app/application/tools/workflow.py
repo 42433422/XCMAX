@@ -1,8 +1,5 @@
 """Workflow tool registry + dispatcher + Excel/import handlers.
 
-import logging
-
-logger = logging.getLogger(__name__)
 Phase 4B 从 ``app.legacy.tools`` 吸收实现。本模块汇总所有工作流工具的:
 
 - 注册表 :func:`get_workflow_tool_registry` / :func:`_base_registry`
@@ -17,12 +14,15 @@ Phase 4B 从 ``app.legacy.tools`` 吸收实现。本模块汇总所有工作流�
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 from app.infrastructure.auth.db_token import configured_db_write_token
 from app.infrastructure.excel.schema_service import ExcelSchemaUnderstandingService
@@ -132,7 +132,7 @@ def run_natural_language_pandas(
     result_df = df
 
     try:
-        from app.legacy.excel_text_to_pandas import ExcelTextToPandas  # type: ignore
+        from app.infrastructure.excel.text_to_pandas import ExcelTextToPandas
         converter = ExcelTextToPandas()
         code = converter.translate(natural_language, df)
         if code and code.strip():
@@ -765,8 +765,7 @@ def execute_workflow_tool(
                 return json.dumps(
                     {"success": False, "error": "missing_user_request"}, ensure_ascii=False
                 )
-            from app.services.kitten_ai_document.generate import generate_office_file
-            from app.services.kitten_ai_document.pickup import store_document_pickup
+            from app.infrastructure.gateways.kitten import generate_office_file, store_document_pickup
 
             content, fname = generate_office_file(req, fmt)  # type: ignore[arg-type]
             mime = (
@@ -1322,7 +1321,7 @@ def _import_products_preview_or_execute(
 
     try:
         from app.bootstrap import get_customer_app_service, get_products_service
-        from app.services.unified_query_service import find_purchase_unit
+        from app.infrastructure.gateways.query import find_purchase_unit
 
         if detected_unit or unit_name:
             target_unit = detected_unit or unit_name
@@ -1479,9 +1478,9 @@ def _import_orders_preview_or_execute(df, columns, unit_name, confirm, row_count
         )
 
     try:
-        from app.bootstrap import get_shipment_app_service
+        from app.bootstrap import get_shipment_application_service_core
 
-        svc = get_shipment_app_service()
+        svc = get_shipment_application_service_core()
         imported = 0
         failed = 0
         for _, row in df.iterrows():

@@ -17,24 +17,24 @@ describe('workflowAiEmployees store', () => {
     vi.restoreAllMocks()
   })
 
-  it('reads keys from localStorage without builtin defaults', () => {
+  it('reads builtins from localStorage and merges extra boolean keys', () => {
     localStorage.setItem(
       WORKFLOW_AI_EMPLOYEES_STORAGE_KEY,
       JSON.stringify({
         label_print: true,
         custom_mod_emp: false,
-      }),
+      })
     )
     const store = useWorkflowAiEmployeesStore()
     expect(store.enabled.label_print).toBe(true)
-    expect(store.enabled.shipment_mgmt).toBeUndefined()
+    expect(store.enabled.shipment_mgmt).toBe(false)
     expect(store.enabled.custom_mod_emp).toBe(false)
   })
 
-  it('falls back to empty defaults on invalid JSON', () => {
+  it('falls back to defaults on invalid JSON', () => {
     localStorage.setItem(WORKFLOW_AI_EMPLOYEES_STORAGE_KEY, '{not json')
     const store = useWorkflowAiEmployeesStore()
-    expect(store.enabled).toEqual(defaultWorkflowBuiltinEnabled())
+    expect(store.enabled).toEqual(expect.objectContaining(defaultWorkflowBuiltinEnabled()))
   })
 
   it('hydrateFromMods adds dynamic ids with default false', () => {
@@ -48,13 +48,10 @@ describe('workflowAiEmployees store', () => {
     expect(store.enabled.from_manifest).toBe(false)
   })
 
-  it('stripModWorkflowEmployeeKeys keeps only registry keys', async () => {
+  it('stripModWorkflowEmployeeKeys keeps only builtin keys', () => {
     const store = useWorkflowAiEmployeesStore()
-    await store.loadRegistry([
-      { id: 'm', workflow_employees: [{ id: 'label_print', label: 'L' }] },
-    ])
     store.setAll({
-      ...store.enabled,
+      ...defaultWorkflowBuiltinEnabled(),
       extra: true,
       label_print: true,
     })
@@ -82,7 +79,7 @@ describe('workflowAiEmployees store', () => {
     ])
     expect(store.enabled.orphan).toBeUndefined()
     expect(store.enabled.still_here).toBe(true)
-    expect(store.enabled.label_print).toBeUndefined()
+    expect(store.enabled.label_print).toBe(true)
     expect(window.dispatchEvent).toHaveBeenCalled()
   })
 
@@ -92,7 +89,7 @@ describe('workflowAiEmployees store', () => {
     store.toggle('label_print')
     expect(store.enabled.label_print).toBe(true)
     const evt = vi.mocked(window.dispatchEvent).mock.calls.find(
-      (c) => (c[0] as CustomEvent).type === 'xcagi:workflow-ai-employees-changed',
+      (c) => (c[0] as CustomEvent).type === 'xcagi:workflow-ai-employees-changed'
     )?.[0] as CustomEvent
     expect(evt).toBeDefined()
     expect(evt.detail.enabled.label_print).toBe(true)
@@ -113,7 +110,7 @@ describe('workflowAiEmployees store', () => {
     const store = useWorkflowAiEmployeesStore()
     localStorage.setItem(
       WORKFLOW_AI_EMPLOYEES_STORAGE_KEY,
-      JSON.stringify({ label_print: true }),
+      JSON.stringify({ ...defaultWorkflowBuiltinEnabled(), label_print: true })
     )
     store.reloadFromLocalStorage()
     expect(store.enabled.label_print).toBe(true)

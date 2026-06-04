@@ -103,7 +103,7 @@ class ShipmentRulesEngine:
         """规则：所有货物数量必须为正数"""
         items = data.get("items") or []
         for idx, item in enumerate(items):
-            quantity = item.get("quantity", 0)
+            quantity = item.get("quantity") or item.get("quantity_tins") or 0
             if quantity <= 0:
                 return f"第 {idx + 1} 项货物数量必须大于 0"
         return None
@@ -117,6 +117,49 @@ class ShipmentRulesEngine:
             except (ValueError, TypeError):
                 return "日期格式无效"
         return None
+
+    def calculate_totals_from_line_items(self, items_data: list[dict[str, Any]]) -> dict[str, Any]:
+        """
+        按出货明细行（quantity_tins / tin_spec / unit_price）计算汇总，供应用层编排调用。
+        """
+        total_amount = 0.0
+        total_tins = 0
+        total_kg = 0.0
+        for item_data in items_data:
+            tins = int(item_data.get("quantity_tins") or 0)
+            spec = float(item_data.get("tin_spec", item_data.get("spec_per_tin", 10.0)) or 10.0)
+            kg = tins * spec
+            price = float(item_data.get("unit_price") or 0)
+            total_tins += tins
+            total_kg += kg
+            total_amount += price * kg
+        return {
+            "total_tins": total_tins,
+            "total_kg": total_kg,
+            "total_amount": total_amount,
+        }
+
+    @staticmethod
+    def filter_records_by_status(
+        records: list[dict[str, Any]], status_filter: str | None
+    ) -> list[dict[str, Any]]:
+        """导出/列表用状态过滤（printed / pending）。"""
+        normalized = str(status_filter or "").strip().lower()
+        if not normalized:
+            return records
+        if normalized in ("printed", "已打印"):
+            return [
+                r
+                for r in records
+                if str(r.get("status") or "").strip().lower() == "printed"
+            ]
+        if normalized in ("pending", "未打印"):
+            return [
+                r
+                for r in records
+                if str(r.get("status") or "").strip().lower() in ("pending", "")
+            ]
+        return records
 
     def calculate_total(self, shipment_data: dict[str, Any]) -> float:
         """

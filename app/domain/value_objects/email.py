@@ -27,7 +27,7 @@ class Email:
     # 简单邮箱验证正则
     _EMAIL_REGEX = re.compile(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$")
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         # 标准化：小写并去除空格
         normalized = self.address.strip().lower()
         object.__setattr__(self, "address", normalized)
@@ -66,7 +66,7 @@ class Email:
     def __repr__(self) -> str:
         return f"Email(address={self.address})"
 
-    def __eq__(self, other) -> bool:
+    def __eq__(self, other: object) -> bool:
         if not isinstance(other, Email):
             return False
         return self.address == other.address

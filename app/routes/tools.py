@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from app.application.facades.tools_facade import (
+from app.infrastructure.gateways.tools import (
     _parse_order_text,
     execute_registered_workflow_tool,
     execute_tool_from_payload,

@@ -30,6 +30,9 @@ class ServiceContainer:
         "_wechat_contact_application_service",
         "_shipment_application_service_core",
         "_shipment_event_primary_facade",
+        "_product_event_primary_facade",
+        "_customer_event_primary_facade",
+        "_inventory_event_primary_facade",
     )
 
     def __init__(self) -> None:
@@ -45,6 +48,9 @@ class ServiceContainer:
         self._wechat_contact_application_service = None
         self._shipment_application_service_core = None
         self._shipment_event_primary_facade = None
+        self._product_event_primary_facade = None
+        self._customer_event_primary_facade = None
+        self._inventory_event_primary_facade = None
 
     # --- core HTTP / session services ---
 
@@ -142,8 +148,8 @@ class ServiceContainer:
     def shipment_application_service_core(self) -> Any:
         if self._shipment_application_service_core is None:
             from app.application.shipment_app_service import ShipmentApplicationService
-            from app.infrastructure.documents.shipment_document_generator_impl import (
-                LegacyShipmentDocumentGenerator,
+            from app.infrastructure.documents.shipment_document_generator_factory import (
+                resolve_shipment_document_generator,
             )
             from app.infrastructure.persistence.purchase_unit_query_impl import (
                 SQLAlchemyPurchaseUnitQuery,
@@ -163,7 +169,7 @@ class ServiceContainer:
 
             self._shipment_application_service_core = ShipmentApplicationService(
                 repository=shipment_repo,
-                document_generator=LegacyShipmentDocumentGenerator(),
+                document_generator=resolve_shipment_document_generator(),
                 record_store=SQLAlchemyShipmentRecordStore(),
                 record_query=SQLAlchemyShipmentRecordQuery(),
                 record_command=SQLAlchemyShipmentRecordCommand(),
@@ -183,10 +189,54 @@ class ServiceContainer:
             )
         return self._shipment_event_primary_facade
 
+    @property
+    def product_event_primary_facade(self) -> Any:
+        if self._product_event_primary_facade is None:
+            from app.application.facades.product_event_primary import (
+                ProductApplicationServiceEventPrimary,
+            )
+            from app.application.product_app_service import get_product_application_service
+
+            self._product_event_primary_facade = ProductApplicationServiceEventPrimary(
+                get_product_application_service()
+            )
+        return self._product_event_primary_facade
+
+    @property
+    def customer_event_primary_facade(self) -> Any:
+        if self._customer_event_primary_facade is None:
+            from app.application.customer_app_service import get_customer_app_service
+            from app.application.facades.customer_event_primary import (
+                CustomerApplicationServiceEventPrimary,
+            )
+
+            from app.bootstrap import get_customer_application_service_core
+
+            self._customer_event_primary_facade = CustomerApplicationServiceEventPrimary(
+                get_customer_application_service_core()
+            )
+        return self._customer_event_primary_facade
+
+    @property
+    def inventory_event_primary_facade(self) -> Any:
+        if self._inventory_event_primary_facade is None:
+            from app.application.facades.inventory_event_primary import (
+                InventoryApplicationServiceEventPrimary,
+            )
+            from app.services.inventory_service import InventoryService
+
+            self._inventory_event_primary_facade = InventoryApplicationServiceEventPrimary(
+                InventoryService()
+            )
+        return self._inventory_event_primary_facade
+
     def invalidate_shipment_wiring(self) -> None:
         """Clear shipment singletons (tests / hot-reload hooks)."""
         self._shipment_application_service_core = None
         self._shipment_event_primary_facade = None
+        self._product_event_primary_facade = None
+        self._customer_event_primary_facade = None
+        self._inventory_event_primary_facade = None
 
 
 def get_service_registry() -> ServiceContainer:

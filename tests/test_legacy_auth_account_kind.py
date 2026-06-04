@@ -7,14 +7,14 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.fastapi_routes import legacy_auth
+from app.fastapi_routes.domains.auth import routes as legacy_auth
 
 
 class FakeAuthService:
     def __init__(self) -> None:
         self.login_calls: list[tuple[str, str]] = []
 
-    def login(self, username: str, password: str) -> dict[str, Any]:
+    def login(self, username: str, password: str, totp_code: str | None = None) -> dict[str, Any]:
         self.login_calls.append((username, password))
         return {
             "success": True,

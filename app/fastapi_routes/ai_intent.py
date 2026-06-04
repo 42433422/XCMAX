@@ -106,7 +106,7 @@ def ai_intent_test(body: dict = Body(default_factory=dict)):
 @router.get("/api/intent/health")
 def intent_health():
     try:
-        from app.application.facades.intent_facade import BertIntentClassifier
+        from app.infrastructure.gateways.intent import BertIntentClassifier
 
         model_path = os.environ.get("INTENT_MODEL_PATH")
         classifier = (
@@ -152,7 +152,7 @@ def intent_packages_put(package_id: str, body: dict = Body(default_factory=dict)
 
 
 def _bert_intent_classifier():
-    from app.application.facades.intent_facade import BertIntentClassifier
+    from app.infrastructure.gateways.intent import BertIntentClassifier
 
     model_path = os.environ.get("INTENT_MODEL_PATH")
     if model_path:

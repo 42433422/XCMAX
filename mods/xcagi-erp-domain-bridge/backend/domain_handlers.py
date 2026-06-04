@@ -50,7 +50,7 @@ def _products_list(**kw: Any) -> Any:
             )
         )
     from app.infrastructure.auth.db_token import verify_db_read_token_header
-    from app.fastapi_routes.xcagi_compat_db_product_queries import _load_products_list_impl_pg
+    from app.fastapi_routes.domains.db.product_queries import _load_products_list_impl_pg
 
     if request is not None:
         verify_db_read_token_header(request)
@@ -70,7 +70,7 @@ def _products_get(**kw: Any) -> Any:
         from app.mod_sdk.erp_products_facade import products_get as svc_get
 
         return svc_get(**kw)
-    from app.fastapi_routes.xcagi_compat_product import products_get_by_id
+    from app.fastapi_routes.domains.product.compat_routes import products_get_by_id
 
     return products_get_by_id(**kw)
 
@@ -80,7 +80,7 @@ def _products_add(**kw: Any) -> Any:
         from app.mod_sdk.erp_products_facade import products_add as svc_add
 
         return _tag(svc_add(kw.get("request"), kw.get("body") or {}))
-    from app.fastapi_routes.xcagi_compat_product import products_add
+    from app.fastapi_routes.domains.product.compat_routes import products_add
 
     return _tag(products_add(**kw))
 
@@ -90,7 +90,7 @@ def _products_update(**kw: Any) -> Any:
         from app.mod_sdk.erp_products_facade import products_update as svc_update
 
         return _tag(svc_update(kw.get("request"), kw.get("body") or {}))
-    from app.fastapi_routes.xcagi_compat_product import products_update
+    from app.fastapi_routes.domains.product.compat_routes import products_update
 
     return _tag(products_update(**kw))
 
@@ -100,7 +100,7 @@ def _products_delete(**kw: Any) -> Any:
         from app.mod_sdk.erp_products_facade import products_delete as svc_delete
 
         return _tag(svc_delete(kw.get("request"), kw.get("body") or {}))
-    from app.fastapi_routes.xcagi_compat_product import products_delete
+    from app.fastapi_routes.domains.product.compat_routes import products_delete
 
     return _tag(products_delete(**kw))
 
@@ -110,7 +110,7 @@ def _products_batch_delete(**kw: Any) -> Any:
         from app.mod_sdk.erp_products_facade import products_batch_delete as svc_batch_del
 
         return _tag(svc_batch_del(kw.get("request"), kw.get("body") or {}))
-    from app.fastapi_routes.xcagi_compat_product import products_batch_delete
+    from app.fastapi_routes.domains.product.compat_routes import products_batch_delete
 
     return _tag(products_batch_delete(**kw))
 
@@ -146,24 +146,24 @@ def _products_batch(**kw: Any) -> Any:
 
 
 def _shipment_records_list(**kw: Any) -> Any:
-    from app.bootstrap import get_shipment_app_service
+    from app.bootstrap import get_shipment_application_service_core
 
     unit = (kw.get("unit") or kw.get("unit_name") or "").strip() or None
-    records = get_shipment_app_service().get_shipment_records(unit)
+    records = get_shipment_application_service_core().get_shipment_records(unit)
     return _tag({"success": True, "data": records})
 
 
 def _shipment_records_units(**kw: Any) -> Any:
-    from app.fastapi_routes.xcagi_compat_product import shipment_records_units
+    from app.fastapi_routes.domains.product.compat_routes import shipment_records_units
 
     return _tag(shipment_records_units(**kw))
 
 
 def _shipment_orders_list(**kw: Any) -> Any:
-    from app.bootstrap import get_shipment_app_service
+    from app.bootstrap import get_shipment_application_service_core
 
     limit = int(kw.get("limit") or 100)
-    orders_list = get_shipment_app_service().get_orders(limit=limit) or []
+    orders_list = get_shipment_application_service_core().get_orders(limit=limit) or []
     inner = {"success": True, "data": orders_list, "count": len(orders_list)}
     return _tag({"success": True, "data": inner, "count": len(inner)})
 
@@ -186,7 +186,7 @@ def _customers_list(**kw: Any) -> Any:
             svc_list(request, page=page, per_page=per_page, keyword=keyword)
         )
     from app.infrastructure.auth.db_token import verify_db_read_token_header
-    from app.fastapi_routes.xcagi_compat_db_queries import (
+    from app.fastapi_routes.domains.db.queries import (
         _customer_row_matches_keyword,
         _customers_schema_hint_if_empty,
         _load_customers_rows,

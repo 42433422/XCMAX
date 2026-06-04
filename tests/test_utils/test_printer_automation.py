@@ -1,7 +1,14 @@
-import unittest
-from unittest.mock import Mock, MagicMock, patch
 import os
 import sys
+import unittest
+from unittest.mock import MagicMock, Mock, patch
+
+import pytest
+
+pytestmark = pytest.mark.skipif(
+    sys.platform != "win32",
+    reason="printer_automation 依赖 win32 API，仅在 Windows 运行",
+)
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, PROJECT_ROOT)

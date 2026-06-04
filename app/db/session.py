@@ -1,23 +1,22 @@
-import hashlib
 import logging
 import time
 from contextlib import contextmanager
 from functools import wraps
 
 from app.db import SessionLocal
+from app.db.session_cache import ThreadSafeLRUCache
 
 logger = logging.getLogger(__name__)
 
-_query_cache = {}
 _CACHE_MAX_SIZE = 128
 _CACHE_TTL_SECONDS = 300
+_query_cache = ThreadSafeLRUCache(max_size=_CACHE_MAX_SIZE, ttl_seconds=_CACHE_TTL_SECONDS)
 
 _SLOW_QUERY_THRESHOLD = 1.0
 
 
 def _make_cache_key(query_func_name: str, *args, **kwargs) -> str:
-    key_str = f"{query_func_name}:{str(args)}:{str(kwargs)}"
-    return hashlib.md5(key_str.encode()).hexdigest()
+    return _query_cache.make_key(query_func_name, *args, **kwargs)
 
 
 def get_cached_query(cache_key: str):
@@ -25,16 +24,12 @@ def get_cached_query(cache_key: str):
 
 
 def set_cached_query(cache_key: str, value, ttl: int = _CACHE_TTL_SECONDS):
-    if len(_query_cache) >= _CACHE_MAX_SIZE:
-        oldest_key = next(iter(_query_cache))
-        del _query_cache[oldest_key]
-    _query_cache[cache_key] = value
+    del ttl  # TTL is enforced by ThreadSafeLRUCache instance configuration
+    _query_cache.set(cache_key, value)
 
 
 def clear_query_cache():
-    global _query_cache
-    _query_cache = {}
-    logger.info("Query cache cleared")
+    _query_cache.clear()
 
 
 def _log_slow_query(query_name: str, duration: float, details: str = ""):

@@ -1,9 +1,9 @@
 {
-  "generated_at": "2026-06-04T19:43:16Z",
+  "generated_at": "2026-06-04T20:01:25Z",
   "input_message": "查一下七彩乐园有哪些产品",
-  "execution_mode": "mock",
+  "execution_mode": "live",
   "planner_mode": "fallback",
-  "plan_id": "cf239eb168fc46d7bbc67a78580ecf66",
+  "plan_id": "b1b90e12c50944749c5831a102f476aa",
   "intent": "generic_workflow",
   "risk_level": "low",
   "nodes": [
@@ -36,12 +36,7 @@
       "error": "",
       "output_summary": {
         "success": true,
-        "data_count": 1,
-        "data_sample_keys": [
-          "name",
-          "model_number",
-          "unit"
-        ]
+        "data_count": 0
       }
     }
   ]

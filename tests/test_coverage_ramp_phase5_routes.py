@@ -18,7 +18,7 @@ from app.fastapi_routes.domains.misc import helpers as legacy_helpers
 from app.fastapi_routes import print_routes, spa_fallback
 from app.fastapi_routes import neuro_migration_routes as neuro_routes
 from app.fastapi_routes import state as state_routes
-from app.fastapi_routes import xcmax_admin as xcmax_routes
+from app.fastapi_routes.domains.xcmax_admin import routes as xcmax_routes
 
 # ---------------------------------------------------------------------------
 # Fixtures

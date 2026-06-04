@@ -30,6 +30,13 @@ Please describe the tests that you ran to verify your changes. Provide instructi
 * OS: 
 * Other relevant environment details:
 
+## TECH-DEBT-ID（mypy / P1-1）
+
+若本 PR 调整 `pyproject.toml` 中 `[tool.mypy]` 的 `ignore_errors` 或新增 strict override，**必填**：
+
+- [ ] 已填写 TECH-DEBT-ID（如 `TD-P1-1-LEGACY-2026-07`），见 [`docs/MYPY_TECH_DEBT.md`](../docs/MYPY_TECH_DEBT.md)
+- [ ] 不适用（未改 mypy 配置）
+
 ## Checklist
 
 - [ ] My code follows the style guidelines of this project

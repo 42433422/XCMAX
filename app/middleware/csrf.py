@@ -1,12 +1,17 @@
 import os
-import secrets
 
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
+from xcagi_common.csrf import (
+    MUTATING_HTTP_METHODS,
+    SAFE_HTTP_METHODS,
+    csrf_tokens_match,
+    generate_csrf_token,
+)
 
-_MUTATING_METHODS = {"POST", "PUT", "DELETE", "PATCH"}
-_SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
+_MUTATING_METHODS = set(MUTATING_HTTP_METHODS)
+_SAFE_METHODS = set(SAFE_HTTP_METHODS)
 
 
 def _csrf_exempt_sandbox_modstore_install(scope: Scope) -> bool:
@@ -43,7 +48,7 @@ class CSRFMiddleware:
         if request.method in _SAFE_METHODS:
             csrf_cookie = request.cookies.get("csrf_token")
             if not csrf_cookie:
-                new_token = secrets.token_hex(32)
+                new_token = generate_csrf_token()
 
                 async def send_with_cookie(message):
                     if message["type"] == "http.response.start":
@@ -94,7 +99,7 @@ class CSRFMiddleware:
                 await response(scope, receive, send)
                 return
 
-            if not secrets.compare_digest(csrf_cookie, csrf_header):
+            if not csrf_tokens_match(csrf_header, csrf_cookie):
                 response = JSONResponse(
                     {"success": False, "message": "CSRF token mismatch"},
                     status_code=403,

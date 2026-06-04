@@ -157,9 +157,9 @@ def build_kitten_business_snapshot(
 
     # —— 出货：最近若干条（非全历史） ——
     try:
-        from app.bootstrap import get_shipment_app_service
+        from app.bootstrap import get_shipment_application_service_core
 
-        recs = get_shipment_app_service().get_shipment_records(unit_name=None)
+        recs = get_shipment_application_service_core().get_shipment_records(unit_name=None)
         if len(recs) > max_shipment_lines:
             recs = recs[:max_shipment_lines]
         stats["shipments_sample_count"] = len(recs)

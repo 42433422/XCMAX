@@ -4,19 +4,12 @@ import { readCsrfTokenFromCookie, shouldAttachCsrfHeader } from '@/utils/csrfCoo
 import type { RequestOptions } from './core';
 import type { ApiResponse } from '@/types/api';
 import type { ChatRequest, ChatResponse, ChatSession } from '@/types/chat';
-import { isProductsReadGateGraceActive, readStoredDbTokens } from '@/fhd/dbTokenHeaders';
+import { isProductsReadGateGraceActive, readStoredDbTokens } from '@amin/primary-key-guard/dbTokenHeaders';
 import {
   readPlannerSseResponse,
   resolveChatStreamPath,
   type PlannerSseEvent,
 } from '@/utils/chatSseStream';
-import {
-  resolvePlannerChatBatchPath,
-  resolvePlannerChatPath,
-  resolvePlannerIntentTestPath,
-  resolvePlannerUnifiedChatBatchPath,
-  resolvePlannerUnifiedChatPath,
-} from '@/utils/plannerChatPaths';
 
 export type { PlannerSseEvent };
 
@@ -72,11 +65,7 @@ export const chatApi = {
     payload: ChatRequest,
     options: RequestOptions = {}
   ): Promise<ApiResponse<ChatResponse>> {
-    return api.post<ApiResponse<ChatResponse>>(
-      resolvePlannerChatPath(),
-      payload,
-      withMarketAuthorization(options),
-    );
+    return api.post<ApiResponse<ChatResponse>>('/api/ai/chat', payload, withMarketAuthorization(options));
   },
 
   /**
@@ -140,18 +129,14 @@ export const chatApi = {
   },
 
   testIntent(data: any): Promise<ApiResponse<any>> {
-    return api.post<ApiResponse<any>>(resolvePlannerIntentTestPath(), data);
+    return api.post<ApiResponse<any>>('/api/ai/intent/test', data);
   },
 
   sendUnifiedChat(
     payload: ChatRequest,
     options: RequestOptions = {}
   ): Promise<ApiResponse<ChatResponse>> {
-    return api.post<ApiResponse<ChatResponse>>(
-      resolvePlannerUnifiedChatPath(),
-      payload,
-      withMarketAuthorization(options),
-    );
+    return api.post<ApiResponse<ChatResponse>>('/api/ai/unified_chat', payload, withMarketAuthorization(options));
   },
 
   /** 专业链路：多条消息一次 HTTP，按顺序 process_chat */
@@ -159,7 +144,7 @@ export const chatApi = {
     payload: ChatRequest & { messages: string[] },
     options: RequestOptions = {}
   ): Promise<ApiResponse<{ success: boolean; results: ChatResponse[]; count: number; batch?: boolean }>> {
-    return api.post(resolvePlannerChatBatchPath(), payload, withMarketAuthorization(options));
+    return api.post('/api/ai/chat/batch', payload, withMarketAuthorization(options));
   },
 
   /** 普通 unified：多条消息一次 HTTP */
@@ -167,7 +152,7 @@ export const chatApi = {
     payload: ChatRequest & { messages: string[] },
     options: RequestOptions = {}
   ): Promise<ApiResponse<{ success: boolean; results: ChatResponse[]; count: number; batch?: boolean }>> {
-    return api.post(resolvePlannerUnifiedChatBatchPath(), payload, withMarketAuthorization(options));
+    return api.post('/api/ai/unified_chat/batch', payload, withMarketAuthorization(options));
   },
 
   getConversations(params: Record<string, any> = {}): Promise<ApiResponse<ChatSession[]>> {

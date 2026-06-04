@@ -12,7 +12,7 @@ export type ModPrimaryWorkflow = {
 function normalizeSteps(raw: unknown): ModPrimaryWorkflowStep[] {
   if (!Array.isArray(raw)) return []
   return raw
-    .map((row, idx) => {
+    .map((row, idx): ModPrimaryWorkflowStep | null => {
       if (typeof row === 'string') {
         const label = row.trim()
         return label ? { id: `step-${idx + 1}`, label } : null

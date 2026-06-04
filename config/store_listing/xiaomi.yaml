@@ -1,0 +1,41 @@
+# 小米应用商店 · 上架元数据（半自动上传 stub）
+# 用法：release-android.yml artifact + 人工/脚本上传至小米开放平台
+# 文档：FHD/docs/guides/MOBILE_ANDROID_STORE_COMPLIANCE.md
+
+store: xiaomi
+display_name: XCAGI
+developer: 成都修茈科技有限公司
+
+skus:
+  personal:
+    application_id: com.xiuci.xcagi.mobile.personal
+    label: XCAGI 个人版
+  enterprise:
+    application_id: com.xiuci.xcagi.mobile.enterprise
+    label: XCAGI 企业版
+
+compliance:
+  app_filing_url: https://beian.miit.gov.cn/
+  icp_number: 蜀ICP备2026014056号-1
+  privacy_url: https://xiu-ci.com/legal/privacy
+  terms_url: https://xiu-ci.com/legal/terms
+
+release_notes:
+  zh-CN: |
+    · 移动互联网应用程序备案已通过
+    · 关于页备案号可跳转工信部查询
+    · 稳定性与发布链改进
+
+artifacts:
+  aab_glob: mobile-android/app/build/outputs/bundle/*Release/*.aab
+  apk_glob: mobile-android/app/build/outputs/apk/*/*-release.apk
+
+screenshots:
+  phone:
+    - docs/store/xiaomi/screenshots/phone-01.png
+    - docs/store/xiaomi/screenshots/phone-02.png
+  # 路径占位；实际上传前替换为真实截图
+
+upload:
+  script_stub: scripts/package/upload-xiaomi-store-stub.ps1
+  manual_checklist: docs/guides/MOBILE_ANDROID_STORE_COMPLIANCE.md

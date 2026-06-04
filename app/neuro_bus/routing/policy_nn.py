@@ -20,17 +20,22 @@ FEATURE_DIM = 16
 NUM_ACTIONS = 3
 
 
-class RoutingMLP(nn.Module):  # type: ignore[misc]
-    def __init__(self, in_dim: int = FEATURE_DIM, hidden: int = 32, out_dim: int = NUM_ACTIONS):
-        super().__init__()
-        self.net = nn.Sequential(
-            nn.Linear(in_dim, hidden),
-            nn.ReLU(),
-            nn.Linear(hidden, out_dim),
-        )
+if nn is not None:
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.net(x)
+    class RoutingMLP(nn.Module):  # type: ignore[misc]
+        def __init__(self, in_dim: int = FEATURE_DIM, hidden: int = 32, out_dim: int = NUM_ACTIONS):
+            super().__init__()
+            self.net = nn.Sequential(
+                nn.Linear(in_dim, hidden),
+                nn.ReLU(),
+                nn.Linear(hidden, out_dim),
+            )
+
+        def forward(self, x: torch.Tensor) -> torch.Tensor:
+            return self.net(x)
+
+else:  # pragma: no cover
+    RoutingMLP = None  # type: ignore[misc, assignment]
 
 
 _policy: RoutingMLP | None = None

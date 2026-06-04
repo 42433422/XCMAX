@@ -6,7 +6,7 @@
           <router-link :to="{ name: 'workflow-employee-space' }" class="panorama-btn">
             返回员工空间
           </router-link>
-          <router-link :to="workflowVisualizationLocation" class="panorama-btn">
+          <router-link :to="{ name: 'workflow-visualization' }" class="panorama-btn">
             流程全景说明
           </router-link>
         </div>
@@ -24,7 +24,7 @@
               image-src=""
               :selected-emp-id="selectedEmpId"
               :hotspots="EMPTY_HOTSPOTS"
-              :desks="onDutyDesks"
+              :desks="desks"
               :resolve-station-aria-label="stationReaderLabel"
               @select="onSelectEmp"
             />
@@ -39,7 +39,7 @@
           <div v-if="isPanoramaPaneResizable" class="panorama-divider" aria-hidden="true" />
           <WorkflowEmployeeInspector
             v-model:selected-emp-id="selectedEmpId"
-            :desks="onDutyDesks"
+            :desks="desks"
             :pixel-skin="true"
           />
         </div>
@@ -56,13 +56,11 @@ import StitchStage from '@/components/workflow/StitchStage.vue'
 import WorkflowEmployeeInspector from '@/components/workflow/WorkflowEmployeeInspector.vue'
 import { useWorkflowEmployeeDesks } from '@/composables/useWorkflowEmployeeDesks'
 import type { YuangongStitchHotspot } from '@/constants/yuangongStitchHotspots'
-import { resolveWorkflowVisualizationLocation } from '@/utils/workflowNav'
 
-const workflowVisualizationLocation = resolveWorkflowVisualizationLocation()
 const EMPTY_HOTSPOTS: YuangongStitchHotspot[] = []
 const PANORAMA_LAYOUT_MQ = '(max-width: 960px)'
 
-const { desks, onDutyDesks, ariaLabel } = useWorkflowEmployeeDesks()
+const { desks, ariaLabel } = useWorkflowEmployeeDesks()
 
 const selectedEmpId = ref<string | null>(null)
 const isPanoramaPaneResizable = ref(true)
@@ -89,7 +87,7 @@ function onSelectEmp(empId: string) {
 }
 
 function stationReaderLabel(empId: string): string {
-  const row = onDutyDesks.value.find((d) => d.empId === empId)
+  const row = desks.value.find((d) => d.empId === empId)
   return row ? ariaLabel(row) : `员工 ${empId}`
 }
 

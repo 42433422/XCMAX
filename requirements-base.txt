@@ -1,0 +1,36 @@
+# 基础运行时依赖（生产必装）· 由 scripts/sync_requirements.py 从 pyproject.toml 生成
+# ⚠️ 不要手工编辑！请改 pyproject.toml 后运行 python scripts/sync_requirements.py --write
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+starlette>=0.36.0
+python-multipart>=0.0.6
+aiofiles>=23.2.1
+Celery==5.3.4
+redis==5.0.1
+openpyxl>=3.1.5
+python-docx>=1.1.0
+pdfplumber>=0.11.0
+Pillow>=10.2.0
+gunicorn==21.2.0
+gevent==24.2.1
+python-dotenv==1.0.0
+httpx[socks]==0.26.0
+certifi>=2024.2.2
+requests>=2.31.0
+python-alipay-sdk>=3.3.0
+edge-tts>=6.1.10
+SQLAlchemy>=2.0.0
+alembic>=1.13.0
+psycopg[binary]>=3.1.18
+pgvector>=0.2.5
+pycryptodome>=3.19,<4
+zstandard>=0.22,<1
+sqlcipher3>=0.5,<1
+pandas>=2.0.0
+xlrd>=2.0.1
+numpy>=1.24.0
+openai>=1.40.0
+tenacity>=8.2.0
+prometheus_client>=0.19.0
+psutil>=5.9.0
+marshmallow>=3.20.0

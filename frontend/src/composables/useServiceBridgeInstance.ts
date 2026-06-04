@@ -31,30 +31,33 @@ function marketUserKey(marketUser: MarketUserProfile | null): string {
   return String(marketUser?.username || '').trim()
 }
 
+function useSunbirdEnterpriseChannel(): boolean {
+  const modsStore = useModsStore()
+  const installed = (modsStore.mods || []).map((m) => String(m.id || '').trim()).filter(Boolean)
+  if (hasInstalledClientPrimaryErpMod(installed)) return true
+  const active = String(modsStore.activeModId || '').trim()
+  return active === CLIENT_PRIMARY_ERP_MOD_ID
+}
+
+function stableEnterpriseInstanceId(marketUser: MarketUserProfile | null): string {
+  const key = marketUserKey(marketUser)
+  const prefix = useSunbirdEnterpriseChannel() ? 'taiyangniao-pro' : 'enterprise'
+  if (key) return `${prefix}-${key}`
+  if (typeof localStorage !== 'undefined') {
+    const cached = localStorage.getItem(LS_INSTANCE_ID)?.trim()
+    if (cached) return cached
+  }
+  return `${prefix}-local`
+}
+
 /** 企业侧 service-bridge 实例标识（太阳鸟场景为 taiyangniao-pro-*，与管理员总机互通） */
 export function useServiceBridgeInstance() {
   const accountProfileStore = useAccountProfileStore()
-  const modsStore = useModsStore()
   const { companyBrand, displayBrand } = storeToRefs(accountProfileStore)
 
-  const isSunbirdChannel = computed(() => {
-    const installed = (modsStore.mods || []).map((m) => String(m.id || '').trim()).filter(Boolean)
-    if (hasInstalledClientPrimaryErpMod(installed)) return true
-    const active = String(modsStore.activeModId || '').trim()
-    return active === CLIENT_PRIMARY_ERP_MOD_ID
-  })
+  const isSunbirdChannel = computed(() => useSunbirdEnterpriseChannel())
 
-  const instanceId = computed(() => {
-    const marketUser = readMarketUser()
-    const key = marketUserKey(marketUser)
-    const prefix = isSunbirdChannel.value ? 'taiyangniao-pro' : 'enterprise'
-    if (key) return `${prefix}-${key}`
-    if (typeof localStorage !== 'undefined') {
-      const cached = localStorage.getItem(LS_INSTANCE_ID)?.trim()
-      if (cached) return cached
-    }
-    return `${prefix}-local`
-  })
+  const instanceId = computed(() => stableEnterpriseInstanceId(readMarketUser()))
 
   const instanceName = computed(() => {
     const brand = companyBrand.value.trim() || displayBrand.value.trim()

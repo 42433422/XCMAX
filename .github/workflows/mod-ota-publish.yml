@@ -1,0 +1,93 @@
+# 制作线 P6：Mod 索引/差分包发布（桌面 OTA 上游）
+name: Mod OTA publish
+
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows: ['Release Desktop']
+    types: [completed]
+    branches: [main]
+
+jobs:
+  publish-mod-index:
+    runs-on: ubuntu-latest
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success')
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install backend deps for mods index
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r XCAGI/requirements.lock.txt
+
+      - name: Regenerate mods index
+        run: |
+          set -euo pipefail
+          for script in scripts/package/generate_mods_index.py scripts/generate_mods_index.py tools/generate_mods_index.py; do
+            if [ -f "$script" ]; then
+              python3 "$script"
+              echo "[ok] ran $script"
+              exit 0
+            fi
+          done
+          echo "::error::generate_mods_index.py not found"
+          exit 1
+
+      - name: Locate mods-index.json
+        id: index_path
+        run: |
+          set -euo pipefail
+          for candidate in resources/mods_index.json mods/mods-index.json; do
+            if [ -f "$candidate" ]; then
+              echo "path=$candidate" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          done
+          INDEX="$(find mods -maxdepth 2 -name 'mods-index.json' 2>/dev/null | head -1)"
+          if [ -n "$INDEX" ]; then
+            echo "path=$INDEX" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "::error::mods-index.json not found after generate"
+          exit 1
+
+      - name: Upload mods index artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mods-index-ota
+          path: ${{ steps.index_path.outputs.path }}
+          retention-days: 30
+
+      - name: Optional upload mods index to COS
+        if: >-
+          secrets.DEPLOY_HOST != '' && secrets.DEPLOY_SSH_PRIVATE_KEY != '' &&
+          vars.COS_BUCKET != ''
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          script_stop: true
+          command_timeout: 15m
+          script: |
+            set -euo pipefail
+            REPO="${{ vars.DEPLOY_REMOTE_REPO }}"
+            UP="${REPO}/scripts/package/upload-mods-index-to-cos.sh"
+            if [ ! -f "$UP" ] && [ -f "${REPO}/FHD/scripts/package/upload-mods-index-to-cos.sh" ]; then
+              UP="${REPO}/FHD/scripts/package/upload-mods-index-to-cos.sh"
+            fi
+            if [ ! -f "$UP" ]; then
+              echo "::notice::upload-mods-index-to-cos.sh not on deploy host — artifact only"
+              exit 0
+            fi
+            export COS_BUCKET="${{ vars.COS_BUCKET }}"
+            export COS_PREFIX="${{ vars.COS_PREFIX }}"
+            export COS_REGION="${{ vars.COS_REGION }}"
+            bash "$UP"

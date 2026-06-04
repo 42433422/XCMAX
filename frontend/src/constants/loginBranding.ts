@@ -3,11 +3,11 @@ import packageJson from '../../package.json';
 /** 主版本号展示，如 8.0.0 → V8 */
 export const XCAGI_VERSION_LABEL = `V${String(packageJson.version || '8.0.0').split('.')[0]}`;
 
-export type LoginSku = 'enterprise' | 'personal' | 'generic' | string;
+export type LoginSku = 'enterprise' | 'personal' | 'offline' | 'generic' | string;
 
 export function normalizeLoginSku(raw: string | null | undefined): LoginSku {
   const s = String(raw || 'generic').trim().toLowerCase();
-  if (s === 'enterprise' || s === 'personal') return s;
+  if (s === 'enterprise' || s === 'personal' || s === 'offline') return s;
   return 'generic';
 }
 
@@ -17,6 +17,8 @@ export function loginEyebrow(sku: LoginSku): string {
       return `XCAGI 企业版 · ${XCAGI_VERSION_LABEL}`;
     case 'personal':
       return `XCAGI 个人版 · ${XCAGI_VERSION_LABEL}`;
+    case 'offline':
+      return `XCAGI 离线版 · ${XCAGI_VERSION_LABEL}`;
     default:
       return `XCAGI · ${XCAGI_VERSION_LABEL}`;
   }
@@ -28,6 +30,8 @@ export function loginSubtitle(sku: LoginSku): string {
       return '使用修茈市场账号登录';
     case 'personal':
       return '本地账号登录';
+    case 'offline':
+      return '离线本地登录';
     default:
       return '登录进入工作台';
   }
@@ -42,6 +46,7 @@ export function loginAccountInputPlaceholder(sku: LoginSku): string {
     case 'enterprise':
       return '市场账号或邮箱';
     case 'personal':
+    case 'offline':
       return '本地账号';
     default:
       return '账号';

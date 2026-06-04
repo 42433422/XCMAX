@@ -132,16 +132,16 @@ def register_fastapi_routes(app, mod_id: str) -> None:
 
     @router.post("/lan/admin/access-requests/{request_id}/approve")
     async def mod_approve_access_request(
-        request_id: int = Path(..., ge=1),
         payload: AccessRequestReview,
+        request_id: int = Path(..., ge=1),
         actor: dict = Depends(require_admin),
     ):
         return await approve_access_request_endpoint(request_id, payload, actor)
 
     @router.post("/lan/admin/access-requests/{request_id}/reject")
     async def mod_reject_access_request(
-        request_id: int = Path(..., ge=1),
         payload: AccessRequestReview,
+        request_id: int = Path(..., ge=1),
         actor: dict = Depends(require_admin),
     ):
         return await reject_access_request_endpoint(request_id, payload, actor)

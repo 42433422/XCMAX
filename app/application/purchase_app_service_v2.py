@@ -31,7 +31,7 @@ class PurchaseAppServiceV2:
 
     def _purchase_svc(self):
         if self._svc is None:
-            from app.services.purchase_service import PurchaseService
+            from app.infrastructure.gateways.purchase_legacy import PurchaseService
 
             self._svc = PurchaseService()
         return self._svc

@@ -41,7 +41,7 @@ class Money:
     amount: Decimal
     currency: Currency
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         # 确保 amount 是 Decimal
         if not isinstance(self.amount, Decimal):
             object.__setattr__(self, "amount", Decimal(str(self.amount)))
@@ -162,7 +162,7 @@ class Money:
     def __truediv__(self, divisor: int | float | Decimal) -> Money:
         return self.divide(divisor)
 
-    def __eq__(self, other) -> bool:
+    def __eq__(self, other: object) -> bool:
         if not isinstance(other, Money):
             return False
         return self.amount == other.amount and self.currency == other.currency

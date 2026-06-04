@@ -29,15 +29,13 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.fastapi_routes import ai_intent, legacy_gaps_batch1, legacy_gaps_batch2
+from app.fastapi_routes import ai_intent
 
 
 @pytest.fixture
 def app_with_routers() -> FastAPI:
     app = FastAPI()
     app.include_router(ai_intent.router)
-    app.include_router(legacy_gaps_batch1.router)
-    app.include_router(legacy_gaps_batch2.router)
     return app
 
 

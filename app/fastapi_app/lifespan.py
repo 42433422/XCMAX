@@ -43,6 +43,26 @@ async def lifespan(app: FastAPI):
 
     mark_startup("lifespan_begin")
 
+    try:
+        from app.utils.rate_limiter import RateLimitBackendError, ensure_rate_limit_backend
+
+        ensure_rate_limit_backend()
+        mark_startup("rate_limit_backend_ready")
+    except RateLimitBackendError:
+        raise
+    except Exception as exc:
+        logger.warning("Rate limit backend check skipped: %s", exc)
+
+    try:
+        from app.utils.deployment import validate_production_runtime
+
+        validate_production_runtime()
+        mark_startup("production_runtime_validated")
+    except RuntimeError:
+        raise
+    except Exception as exc:
+        logger.warning("Production runtime validation skipped: %s", exc)
+
     from app.neuro_async_bridge import set_neuro_main_loop
 
     set_neuro_main_loop(asyncio.get_running_loop())
@@ -170,7 +190,7 @@ def _initialize_databases_sync(app: FastAPI):
 
         if not is_sqlite_url(database_url):
             try:
-                from app.db.ensure_mod_postgres import ensure_postgres_per_mod_databases
+                from app.db.bootstrap_mod import ensure_postgres_per_mod_databases
                 from app.infrastructure.mods.mod_manager import get_mod_manager
 
                 mm = get_mod_manager()

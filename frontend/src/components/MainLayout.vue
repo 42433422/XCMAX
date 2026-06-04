@@ -37,30 +37,10 @@
       </button>
     </div>
     <div class="main-content">
-      <div
-        v-if="isImpersonating"
-        class="impersonate-bar"
-        role="status"
-      >
-        <span class="impersonate-bar__text">
-          正在代管：<strong>{{ impersonationLabel }}</strong>
-        </span>
-        <button
-          type="button"
-          class="impersonate-bar__end"
-          :disabled="endingImpersonation"
-          @click="endImpersonation"
-        >
-          {{ endingImpersonation ? '结束中…' : '结束代管' }}
-        </button>
-      </div>
       <div class="top-bar">
         <div class="page-title-wrap">
-          <div class="page-kicker">{{ topKickerText }}</div>
+          <div class="page-kicker">XCmax 服务器后台</div>
           <div class="page-title">{{ currentViewTitle }}</div>
-          <div v-if="accountUsername && displayBrand" class="page-account-sub muted">
-            {{ accountUsername }}
-          </div>
         </div>
         <div
           class="mode-badge"
@@ -68,17 +48,6 @@
         >
           {{ modeBadgeText }}
         </div>
-        <button
-          type="button"
-          class="top-bar-settings-btn"
-          :class="{ active: currentRouteName === 'settings' }"
-          aria-label="系统设置"
-          title="系统设置"
-          data-tutorial-id="top-bar-settings"
-          @click="openSettings"
-        >
-          <i class="fa fa-cog" aria-hidden="true"></i>
-        </button>
         <TopAssistantFloat />
       </div>
       <slot></slot>
@@ -94,25 +63,15 @@ import { storeToRefs } from 'pinia'
 import { useRoute, useRouter } from 'vue-router'
 import { useIndustryStore } from '@/stores/industry'
 import { useModsStore } from '@/stores/mods'
-import { useAccountProfileStore } from '@/stores/accountProfile'
-import { xcmaxAdminApi } from '@/api/xcmaxAdmin'
-import { LS_MARKET_USER_JSON } from '@/api/marketAccount'
-import { appAlert } from '@/utils/appDialog'
 import { useResizablePane } from '@/composables/useResizablePane'
 import { DEFAULT_INDUSTRY_ID } from '@/constants/industryDefaults'
-import { getIndustryPreset } from '@/constants/industryPresets'
 import { resolveCoreNavLabel, INDUSTRY_MENU_LABELS } from '@/utils/coreNavLabel'
-import { resolveHostBusinessPageRedirect } from '@/utils/hostBusinessPageRedirect'
-import { customerServiceHostPathFromModPath } from '@/utils/customerServicePagePaths'
-import { isChatSidebarActive, normalizeSidebarActiveKey } from '@/utils/sidebarActiveKey'
 import { useModRoutes } from '@/composables/useModRoutes'
 import FloatingChatAssistant from './FloatingChatAssistant.vue'
 import PaneResizeHandle from './PaneResizeHandle.vue'
 import Sidebar from './Sidebar.vue'
 import TopAssistantFloat from './TopAssistantFloat.vue'
 import TutorialOverlay from './TutorialOverlay.vue'
-import { setTutorialBuildContextFactory } from '@/stores/tutorial'
-import { useTutorialCatalog } from '@/composables/useTutorialCatalog'
 
 const props = defineProps({
   isProMode: {
@@ -127,15 +86,7 @@ const route = useRoute()
 const router = useRouter()
 const industryStore = useIndustryStore()
 const modsStore = useModsStore()
-const accountProfileStore = useAccountProfileStore()
 const { modsForUi } = storeToRefs(modsStore)
-const {
-  displayBrand,
-  isImpersonating,
-  impersonatingUsername,
-  companyBrand,
-} = storeToRefs(accountProfileStore)
-const endingImpersonation = ref(false)
 const { modMenuItems } = useModRoutes()
 const SIDEBAR_INACTIVITY_MS = 15000
 const SIDEBAR_HOVER_OPEN_MS = 1000
@@ -153,57 +104,6 @@ const isSandboxMode = new URLSearchParams(window.location.search).has('sandbox')
 /** 原版模式或未加载扩展时为空，与侧栏 Mod 菜单一致 */
 const hasModsForUi = computed(() => modsForUi.value.length > 0)
 
-const { buildContext: tutorialBuildContext } = useTutorialCatalog()
-setTutorialBuildContextFactory(() => tutorialBuildContext.value)
-
-const workbenchKicker = computed(() => {
-  const id = String(industryStore.currentIndustryId || DEFAULT_INDUSTRY_ID).trim() || DEFAULT_INDUSTRY_ID
-  const name = getIndustryPreset(id).name
-  return `${name}工作台`
-})
-
-const topKickerText = computed(() => {
-  const brand = String(displayBrand.value || '').trim()
-  if (brand) return brand
-  return workbenchKicker.value
-})
-
-const accountUsername = computed(() => {
-  try {
-    const raw = window.localStorage.getItem(LS_MARKET_USER_JSON)
-    if (!raw) return ''
-    const u = JSON.parse(raw)
-    return String(u?.username || '').trim()
-  } catch {
-    return ''
-  }
-})
-
-const impersonationLabel = computed(() => {
-  const brand = String(companyBrand.value || '').trim()
-  if (brand) return brand
-  const user = String(impersonatingUsername.value || '').trim()
-  return user || '目标用户'
-})
-
-async function endImpersonation() {
-  endingImpersonation.value = true
-  try {
-    await xcmaxAdminApi.endImpersonate()
-    await accountProfileStore.refreshFromServer()
-    try {
-      await modsStore.initialize(true)
-    } catch {
-      /* ignore */
-    }
-    window.location.reload()
-  } catch (e) {
-    await appAlert(`结束代管失败：${e instanceof Error ? e.message : String(e)}`)
-  } finally {
-    endingImpersonation.value = false
-  }
-}
-
 /** 顶栏角标：普通/专业 + 已加载 Mod 时追加简写（如 ·Pro） */
 function resolveModBadgeSuffix() {
   const list = modsForUi.value
@@ -216,7 +116,7 @@ function resolveModBadgeSuffix() {
 
 const modeBadgeText = computed(() => {
   if (isSandboxMode) return '沙箱模式'
-  const base = props.isProMode ? '专业版' : '普通版'
+  const base = props.isProMode ? '管理端' : '普通版'
   if (!hasModsForUi.value) return base
   return `${base}·${resolveModBadgeSuffix()}`
 })
@@ -230,42 +130,44 @@ const modPathToSidebarKey = computed(() => {
 })
 
 const viewTitlesBase = {
+  'xcmax-admin': '服务器后台',
   chat: '智能对话',
   'ai-ecosystem': '智能生态',
   brain: '智脑集成',
   'model-payment': '模型服务',
   'kitten-finance': '财务分析',
-  'mod-store': '能力库',
-  products: '业务对象',
-  'materials-list': '资源列表',
-  materials: '资源库',
+  'mod-store': '扩展市场',
+  products: '人员管理',
+  'materials-list': '班次列表',
+  materials: '服务器功能模块',
   'traditional-mode': '表格模式',
   'business-docking': '业务对接',
-  orders: '业务单据',
-  'orders-create': '新建业务单据',
-  'shipment-records': '业务记录',
-  customers: '组织管理',
+  orders: '考勤单管理',
+  'orders-create': '新建考勤单',
+  'shipment-records': '考勤记录',
+  customers: '部门管理',
   'data-sources': '数据来源',
   'wechat-contacts': '企业微信联系人',
-  print: '模板与打印',
+  print: '考勤表打印',
   'printer-list': '打印机列表',
   'template-preview': '模板库',
   console: '模板库',
   settings: '系统设置',
   tools: '工具表',
-  'other-tools': '员工工作流',
-  'workflow-employee-space': '员工空间',
   'workflow-visualization': '流程可视化',
   purchase: '耗材申领',
   'label-editor': '模板编辑器',
   'batch-analyze': '批量分析',
   'chat-debug': '对话调试',
   'enterprise-customer-service': '外部客服',
-  'internal-customer-service': '内部客服',
-  'admin-entitlements': '用户 Mod 管理',
+  'other-tools': '员工工作流',
+  'workflow-employee-space': '员工空间',
+  'workflow-employee-stitch-full': '员工工作流全景',
+  'workflow-employee-load-remove': '加载和去除员工'
 }
 
 const routeNameMap = {
+  '/xcmax-admin': 'xcmax-admin',
   '/': 'chat',
   '/ai-ecosystem': 'ai-ecosystem',
   '/brain': 'brain',
@@ -289,41 +191,38 @@ const routeNameMap = {
   '/console': 'console',
   '/settings': 'settings',
   '/tools': 'tools',
-  '/other-tools': 'other-tools',
-  '/workflow-employee-space': 'workflow-employee-space',
   '/workflow-visualization': 'workflow-visualization',
   '/purchase': 'purchase',
   '/label-editor': 'label-editor',
   '/batch-analyze': 'batch-analyze',
   '/chat-debug': 'chat-debug',
   '/enterprise-customer-service': 'enterprise-customer-service',
-  '/internal-customer-service': 'internal-customer-service',
   '/approval-hub': 'approval-hub',
   '/approval-hub/workspace': 'approval-hub',
   '/approval-hub/flows': 'approval-hub',
   '/approval-hub/rules': 'approval-hub',
-  '/inventory': 'inventory'
+  '/inventory': 'inventory',
+  '/other-tools': 'other-tools',
+  '/other-tools/employee-load-remove': 'other-tools',
+  '/workflow-employee-space': 'workflow-employee-space',
+  '/workflow-employee-space/stitch-full': 'workflow-employee-stitch-full'
 }
 
 const currentRouteName = computed(() => {
   const modKey = modPathToSidebarKey.value[route.path]
-  let raw = modKey || routeNameMap[route.path] || ''
-  if (!raw) {
-    for (const matched of [...route.matched].reverse()) {
-      if (matched.path && routeNameMap[matched.path]) {
-        raw = routeNameMap[matched.path]
-        break
-      }
-    }
+  if (modKey) return modKey
+  const direct = routeNameMap[route.path]
+  if (direct) return direct
+  // 对嵌套子路由：沿着 matched 链找第一个命中 routeNameMap 的父路径
+  for (const matched of [...route.matched].reverse()) {
+    if (matched.path && routeNameMap[matched.path]) return routeNameMap[matched.path]
   }
-  if (!raw) raw = String(route.name || '') || 'chat'
-  return normalizeSidebarActiveKey(raw, route)
+  return String(route.name || '') || 'chat'
 })
 
-/** 侧栏选中「智能对话」时隐藏悬浮入口（含 Mod 门面 /mod/.../chat） */
-const shouldShowFloatingChatAssistant = computed(
-  () => !isChatSidebarActive(currentRouteName.value, route),
-)
+const shouldShowFloatingChatAssistant = computed(() => {
+  return currentRouteName.value !== 'chat'
+})
 
 const {
   paneStyle: sidebarShellStyle,
@@ -361,6 +260,11 @@ const viewTitles = computed(() => {
 })
 
 const currentViewTitle = computed(() => {
+  if (route.name === 'workflow-employee-load-remove') {
+    const metaTitle = route.meta?.title
+    if (typeof metaTitle === 'string' && metaTitle.trim()) return metaTitle
+    return '加载和去除员工'
+  }
   const key = currentRouteName.value
   const industryId = String(industryStore.currentIndustryId || DEFAULT_INDUSTRY_ID)
   const fromNav = resolveCoreNavLabel(key, industryId, modsForUi.value)
@@ -372,115 +276,25 @@ const currentViewTitle = computed(() => {
   return '未知页面'
 })
 
-/** 侧栏 key → 实际叶子路由，避免父级 redirect 触发连续两次导航 */
-const SIDEBAR_ROUTE_ALIASES = {
-  'approval-hub': 'approval-workspace',
-  'mod-approval-hub': 'approval-workspace',
-}
-
-function resolveLegacyRouteFromModPath(modPath) {
-  const pathOnly = String(modPath || '').split('?')[0]?.split('#')[0] || ''
-  if (!pathOnly) return null
-  if (pathOnly.includes('/approval-hub/workspace') && router.hasRoute('approval-workspace')) {
-    return { name: 'approval-workspace' }
-  }
-  if (pathOnly.endsWith('/approval-hub') && router.hasRoute('approval-hub')) {
-    return { name: 'approval-hub' }
-  }
-  const lastSeg = pathOnly.split('/').filter(Boolean).pop()
-  if (lastSeg && router.hasRoute(lastSeg)) {
-    return { name: lastSeg }
-  }
-  return null
-}
-
-async function navigateToView(viewKey) {
-  const routeName =
-    typeof viewKey === 'string' ? SIDEBAR_ROUTE_ALIASES[viewKey] || viewKey : viewKey
-
+const handleViewChange = (viewKey) => {
   const modItem = modMenuItems.value.find((m) => m.key === viewKey)
   if (modItem?.path) {
-    if (router.resolve(modItem.path).matched.length === 0) {
-      try {
-        const { registerAllModRoutesFromGlob, registerModRoutes } = await import(
-          '@/router/registerModRoutes'
-        )
-        await registerAllModRoutesFromGlob(router)
-        if (modsStore.modRoutes?.length) {
-          await registerModRoutes(router, modsStore.modRoutes)
-        }
-      } catch (e) {
-        console.warn('[MainLayout] 补注册 Mod 路由失败:', e)
-      }
-    }
-    if (router.resolve(modItem.path).matched.length > 0) {
-      await router.push(modItem.path)
-      return
-    }
-    const legacy = resolveLegacyRouteFromModPath(modItem.path)
-    if (legacy) {
-      await router.push(legacy)
-      return
-    }
-    const csHost = customerServiceHostPathFromModPath(modItem.path)
-    if (csHost) {
-      await router.push(csHost)
-      return
-    }
-    console.warn('[MainLayout] Mod 路由未注册，路径无效:', modItem.path)
-  }
-  // ERP/审批等 Mod 业务页：优先于宿主 route name（企业版与壳模式一致）
-  if (typeof routeName === 'string') {
-    const stripped = routeName.replace(/^mod-/, '')
-    const modBusinessPath = resolveHostBusinessPageRedirect(stripped) || resolveHostBusinessPageRedirect(routeName)
-    if (modBusinessPath) {
-      if (router.resolve(modBusinessPath).matched.length === 0) {
-        const { registerAllModRoutesFromGlob } = await import('@/router/registerModRoutes')
-        await registerAllModRoutesFromGlob(router)
-      }
-      if (router.resolve(modBusinessPath).matched.length > 0) {
-        await router.push(modBusinessPath)
-        return
-      }
-      const legacy = resolveLegacyRouteFromModPath(modBusinessPath)
-      if (legacy) {
-        await router.push(legacy)
-        return
-      }
-      const csHost = customerServiceHostPathFromModPath(modBusinessPath)
-      if (csHost) {
-        await router.push(csHost)
-        return
-      }
-    }
-  }
-  // 侧栏 key 与核心路由 name 一致，优先按名称跳转，避免 routeNameMap 漏配或反查顺序问题
-  const nameCandidate =
-    typeof routeName === 'string' ? routeName.replace(/^mod-/, '') : routeName
-  if (typeof nameCandidate === 'string' && router.hasRoute(nameCandidate)) {
-    await router.push({ name: nameCandidate })
+    router.push(modItem.path)
     return
   }
-  if (typeof routeName === 'string' && router.hasRoute(routeName)) {
-    await router.push({ name: routeName })
+  // 侧栏 key 与核心路由 name 一致，优先按名称跳转，避免 routeNameMap 漏配或反查顺序问题
+  if (typeof viewKey === 'string' && router.hasRoute(viewKey)) {
+    router.push({ name: viewKey })
     return
   }
   const routePath = Object.entries(routeNameMap).find(
     ([, name]) => name === viewKey
   )?.[0]
   if (routePath) {
-    await router.push(routePath)
+    router.push(routePath)
     return
   }
   console.warn('[MainLayout] 侧栏无对应路由:', viewKey)
-}
-
-const handleViewChange = (viewKey) => {
-  void navigateToView(viewKey)
-}
-
-function openSettings() {
-  void router.push({ name: 'settings' })
 }
 
 const clearSidebarCollapseTimer = () => {
@@ -547,35 +361,6 @@ const onViewportChange = (event) => {
 }
 
 onMounted(async () => {
-  if (!accountProfileStore.loaded) {
-    try {
-      await accountProfileStore.refreshFromServer()
-    } catch {
-      /* ignore */
-    }
-  }
-  try {
-    const { authApi } = await import('@/api/auth')
-    const {
-      augmentEntitledModIdsForAccount,
-      isSunbirdAccountUsername,
-      SUNBIRD_CLIENT_MOD_ID,
-    } = await import('@/constants/accountModBinding')
-    const me = await authApi.getCurrentUser()
-    const uname = String(me?.data?.user?.username || accountUsername.value || '').trim()
-    if (
-      isSunbirdAccountUsername(uname) &&
-      String(modsStore.activeModId || '').trim() !== SUNBIRD_CLIENT_MOD_ID
-    ) {
-      await modsStore.initialize(true, {
-        entitledModIds: augmentEntitledModIdsForAccount(uname, []),
-        forceFromEntitlements: true,
-        accountUsername: uname,
-      })
-    }
-  } catch {
-    /* ignore */
-  }
   if (!industryStore.isLoaded) {
     try {
       await industryStore.initialize()
@@ -704,67 +489,6 @@ onBeforeUnmount(() => {
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: rgba(71, 85, 105, 0.72);
-}
-
-.page-account-sub {
-  font-size: 12px;
-  line-height: 1.2;
-  color: rgba(100, 116, 139, 0.9);
-}
-
-.impersonate-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-  padding: 8px 16px;
-  background: linear-gradient(90deg, #fff7ed, #ffedd5);
-  border-bottom: 1px solid #fdba74;
-  color: #9a3412;
-  font-size: 13px;
-}
-
-.impersonate-bar__end {
-  border: 1px solid #fb923c;
-  background: #fff;
-  color: #c2410c;
-  border-radius: 8px;
-  padding: 4px 12px;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.impersonate-bar__end:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.top-bar-settings-btn {
-  margin-left: 10px;
-  width: 36px;
-  height: 36px;
-  border: 1px solid rgba(203, 213, 225, 0.85);
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.88);
-  color: #475569;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  transition:
-    background 0.15s ease,
-    border-color 0.15s ease,
-    color 0.15s ease;
-}
-
-.top-bar-settings-btn:hover,
-.top-bar-settings-btn.active {
-  color: #0b72d9;
-  border-color: rgba(11, 114, 217, 0.35);
-  background: rgba(239, 246, 255, 0.96);
 }
 
 .mode-badge {

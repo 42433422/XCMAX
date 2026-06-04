@@ -66,7 +66,12 @@ def _audit(db, *, actor: int | None, action: str, payload: dict) -> None:
                 "payload": json.dumps(payload, ensure_ascii=False, default=str),
             },
         )
-    except Exception as exc:  # pragma: no cover - 审计失败不应阻塞主流程
+    except Exception as exc:
+        from app.utils.deployment import env_flag
+
+        fail_open = env_flag("XCAGI_AUDIT_FAIL_OPEN", default=True)
+        if not fail_open:
+            raise
         logger.warning("ai_action_audit 写入失败 action=%s: %s", action, exc)
 
 

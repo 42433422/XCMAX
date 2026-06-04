@@ -498,7 +498,7 @@ onMounted(async () => {
     }
   }
   if (!modsStore.isLoaded) {
-    void modsStore.initialize()
+    await modsStore.initialize()
   }
 })
 
@@ -565,11 +565,11 @@ onBeforeUnmount(() => {
   box-sizing: border-box;
 }
 
-.sidebar-menu.reorder-enabled :deep(.menu-item.pressing) {
+.sidebar-menu.reorder-enabled .menu-item.pressing {
   background: rgba(125, 211, 252, 0.1);
 }
 
-.sidebar-menu.reorder-enabled.is-dragging :deep(.menu-item.dragging) {
+.sidebar-menu.reorder-enabled.is-dragging .menu-item.dragging {
   opacity: 0.5;
 }
 

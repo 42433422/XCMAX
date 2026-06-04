@@ -1,5 +1,7 @@
 """
-Neuro-DDD Architecture Verification Script
+Neuro-DDD Architecture Verification Script (demo / local only).
+
+生产 HTTP 路径经 FastAPI lifespan → ``register_neuro_runtime``，勿依赖本模块自测发布。
 
 Usage:
     python -m app.neuro_bus

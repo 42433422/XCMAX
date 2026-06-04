@@ -15,8 +15,10 @@ import json
 import logging
 import os
 import pickle
+import secrets
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -24,6 +26,15 @@ logger = logging.getLogger(__name__)
 REDIS_CACHE_PREFIX = os.environ.get("XCAGI_REDIS_CACHE_PREFIX", "xcagi:")
 DEFAULT_REDIS_TTL = int(os.environ.get("XCAGI_DEFAULT_CACHE_TTL", "300"))
 CACHE_NULL_TTL = int(os.environ.get("XCAGI_CACHE_NULL_TTL", "60"))
+
+# Lua：仅当锁值与 token 一致时删除，避免误释放他人持有的锁
+_UNLOCK_SCRIPT = """
+if redis.call("get", KEYS[1]) == ARGV[1] then
+    return redis.call("del", KEYS[1])
+else
+    return 0
+end
+"""
 
 
 class RedisCache:
@@ -296,52 +307,60 @@ class RedisCache:
         except Exception:
             return -1
 
-    def lock(self, key: str, timeout: int = 10, blocking_timeout: int | None = None) -> bool:
+    def lock(
+        self, key: str, timeout: int = 10, blocking_timeout: int | None = None
+    ) -> str | None:
         """
-        获取分布式锁
-
-        Args:
-            key: 锁名称
-            timeout: 锁超时时间（秒）
-            blocking_timeout: 阻塞等待时间（秒），None 为非阻塞
-
-        Returns:
-            是否获取成功
+        获取分布式锁，返回 32 字符 token；Redis 不可用时返回 ``__noop__``。
         """
         lock_key = self._make_key(f"lock:{key}")
 
         if not self.is_available:
-            return True  # Redis 不可用时跳过锁
+            return "__noop__"
 
+        token = secrets.token_hex(16)
         try:
-            acquired = self._redis.set(lock_key, "1", nx=True, ex=timeout)
+            acquired = self._redis.set(lock_key, token, nx=True, ex=timeout)
 
             if blocking_timeout and not acquired:
                 start = time.time()
                 while time.time() - start < blocking_timeout:
                     time.sleep(0.05)
-                    acquired = self._redis.set(lock_key, "1", nx=True, ex=timeout)
+                    acquired = self._redis.set(lock_key, token, nx=True, ex=timeout)
                     if acquired:
                         break
 
-            return bool(acquired)
+            return token if acquired else None
 
         except Exception as e:
             logger.error(f"获取分布式锁失败 [{key}]: {e}")
-            return False
+            return None
 
-    def unlock(self, key: str) -> bool:
-        """释放分布式锁"""
+    def unlock(self, key: str, token: str) -> bool:
+        """释放分布式锁（token 须与 lock 时一致）。"""
         lock_key = self._make_key(f"lock:{key}")
 
-        if not self.is_available:
+        if not self.is_available or token == "__noop__":
             return True
 
         try:
-            return bool(self._redis.delete(lock_key))
+            result = self._redis.eval(_UNLOCK_SCRIPT, 1, lock_key, token)
+            return bool(result)
         except Exception as e:
             logger.error(f"释放分布式锁失败 [{key}]: {e}")
             return False
+
+    @contextmanager
+    def lock_context(
+        self, key: str, timeout: int = 10, blocking_timeout: int | None = None
+    ) -> Iterator[str | None]:
+        """上下文管理器：退出时自动 unlock。"""
+        token = self.lock(key, timeout=timeout, blocking_timeout=blocking_timeout)
+        try:
+            yield token
+        finally:
+            if token:
+                self.unlock(key, token)
 
     def clear_pattern(self, pattern: str) -> int:
         """根据模式清除匹配的键"""

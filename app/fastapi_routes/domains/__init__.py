@@ -6,6 +6,8 @@ domains/ — 按业务域组织的路由包（替代散落的 legacy_/xcagi_comp
 
 from __future__ import annotations
 
+from app.fastapi_routes.domains import auth as auth
+
 __all__ = [
     "auth",
 ]

@@ -17,7 +17,7 @@ router = APIRouter(tags=["legacy-excel"], deprecated=True)
 
 @router.post("/api/ai/parse-single")
 def ai_parse_single(body: dict = Body(default_factory=dict)):
-    from app.application.facades.excel_facade import get_ai_product_parser
+    from app.application.excel_import_app_service import get_excel_import_app_service
 
     data = body or {}
     text = data.get("text", "") or ""
@@ -31,7 +31,7 @@ def ai_parse_single(body: dict = Body(default_factory=dict)):
             },
             status_code=400,
         )
-    parser = get_ai_product_parser()
+    parser = get_excel_import_app_service().get_ai_product_parser()
     result = parser.parse_single(
         text,
         use_ai=bool(data.get("use_ai", True)),
@@ -42,13 +42,13 @@ def ai_parse_single(body: dict = Body(default_factory=dict)):
 
 @router.post("/api/ai/parse-products")
 def ai_parse_products(body: dict = Body(default_factory=dict)):
-    from app.application.facades.excel_facade import get_ai_product_parser
+    from app.application.excel_import_app_service import get_excel_import_app_service
 
     data = body or {}
     texts = data.get("texts") or []
     if not isinstance(texts, list) or not texts:
         return JSONResponse({"success": False, "message": "texts 必须为非空数组"}, status_code=400)
-    parser = get_ai_product_parser()
+    parser = get_excel_import_app_service().get_ai_product_parser()
     result = parser.parse_batch(
         texts,
         use_ai=bool(data.get("use_ai", True)),
@@ -63,7 +63,7 @@ async def ai_analyze_post(
     file: UploadFile | None = File(default=None),
 ):
     try:
-        from app.application.facades.conversation_facade import get_data_analysis_service
+        from app.infrastructure.gateways.conversation import get_data_analysis_service
         from app.utils.secure_filename import secure_filename as _sf
 
         service = get_data_analysis_service()

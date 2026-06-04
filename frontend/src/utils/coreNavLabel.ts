@@ -18,26 +18,26 @@ export type ModForNavLabel = {
   menu_overrides?: MenuOverrideRow[]
 }
 
-/** 与 MainLayout.viewTitlesBase 对齐；默认文案保持通用宿主语境，行业词汇由 preset / Mod 覆盖 */
+/** 与 MainLayout.viewTitlesBase 对齐；默认文案按考勤系统语境 */
 export const MENU_DEFAULT_NAMES: Record<string, string> = {
   chat: '智能对话',
   'ai-ecosystem': '智能生态',
   brain: '智脑集成',
   'model-payment': '模型服务',
   'kitten-finance': '财务分析',
-  'mod-store': '能力库',
-  products: '业务对象',
-  'materials-list': '资源列表',
-  materials: '资源库',
+  'mod-store': '扩展市场',
+  products: '人员管理',
+  'materials-list': '班次列表',
+  materials: '排班资源',
   'traditional-mode': '表格模式',
   'business-docking': '业务对接',
-  orders: '业务单据',
-  'orders-create': '新建业务单据',
-  'shipment-records': '业务记录',
-  customers: '组织管理',
+  orders: '考勤单管理',
+  'orders-create': '新建考勤单',
+  'shipment-records': '考勤记录',
+  customers: '部门管理',
   'data-sources': '数据来源',
   'wechat-contacts': '企业微信联系人',
-  print: '模板与打印',
+  print: '考勤表打印',
   'printer-list': '打印机列表',
   'template-preview': '模板库',
   console: '模板库',

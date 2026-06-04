@@ -5,7 +5,7 @@
   "author": "成都修茈科技有限公司",
   "description": "里程碑 K/O（客服）：外部/内部客服页物理视图在 Mod 包；API 仍走宿主门面。",
   "primary": false,
-  "dependencies": { "xcagi": ">=8.0.0" },
+  "dependencies": { "xcagi": ">=10.0.0" },
   "backend": { "entry": "blueprints", "init": "mod_init" },
   "frontend": {
     "routes": "frontend/routes",

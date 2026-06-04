@@ -4,104 +4,177 @@ Shipment 领域事件定义
 包含发货单生命周期中的所有领域事件。
 """
 
-from dataclasses import dataclass
+from __future__ import annotations
 
-from app.neuro_bus.events.base import EventPriority, NeuroEvent
+from typing import Any
+
+from app.neuro_bus.events._typed_event import init_typed_event
+from app.neuro_bus.events.base import EventMetadata, EventPriority, NeuroEvent
 
 
-@dataclass
 class ShipmentCreatedEvent(NeuroEvent):
     """发货单创建事件"""
 
-    event_type: str = "shipment.created"
-    priority: EventPriority = EventPriority.HIGH  # 创建是高频核心操作
+    def __init__(
+        self,
+        payload: dict[str, Any],
+        *,
+        event_type: str = "shipment.created",
+        priority: EventPriority = EventPriority.HIGH,
+        metadata: EventMetadata | None = None,
+        preserve_queue_identity: bool = False,
+    ) -> None:
+        init_typed_event(
+            self,
+            payload,
+            event_type=event_type,
+            priority=priority,
+            required=("shipment_id", "unit_name"),
+            class_name="ShipmentCreatedEvent",
+            metadata=metadata,
+            preserve_queue_identity=preserve_queue_identity,
+        )
 
-    def __post_init__(self):
-        super().__post_init__()
-        required = ["shipment_id", "unit_name"]
-        for field in required:
-            if field not in self.payload:
-                raise ValueError(f"ShipmentCreatedEvent 缺少必要字段: {field}")
 
-
-@dataclass
 class ShipmentItemAddedEvent(NeuroEvent):
     """发货单添加产品事件"""
 
-    event_type: str = "shipment.item_added"
-    priority: EventPriority = EventPriority.NORMAL
+    def __init__(
+        self,
+        payload: dict[str, Any],
+        *,
+        event_type: str = "shipment.item_added",
+        priority: EventPriority = EventPriority.NORMAL,
+        metadata: EventMetadata | None = None,
+        preserve_queue_identity: bool = False,
+    ) -> None:
+        init_typed_event(
+            self,
+            payload,
+            event_type=event_type,
+            priority=priority,
+            required=("shipment_id", "product_id", "quantity"),
+            class_name="ShipmentItemAddedEvent",
+            metadata=metadata,
+            preserve_queue_identity=preserve_queue_identity,
+        )
 
-    def __post_init__(self):
-        super().__post_init__()
-        required = ["shipment_id", "product_id", "quantity"]
-        for field in required:
-            if field not in self.payload:
-                raise ValueError(f"ShipmentItemAddedEvent 缺少必要字段: {field}")
 
-
-@dataclass
 class ShipmentPrintedEvent(NeuroEvent):
     """发货单打印事件"""
 
-    event_type: str = "shipment.printed"
-    priority: EventPriority = EventPriority.NORMAL
+    def __init__(
+        self,
+        payload: dict[str, Any],
+        *,
+        event_type: str = "shipment.printed",
+        priority: EventPriority = EventPriority.NORMAL,
+        metadata: EventMetadata | None = None,
+        preserve_queue_identity: bool = False,
+    ) -> None:
+        init_typed_event(
+            self,
+            payload,
+            event_type=event_type,
+            priority=priority,
+            required=("shipment_id",),
+            class_name="ShipmentPrintedEvent",
+            metadata=metadata,
+            preserve_queue_identity=preserve_queue_identity,
+        )
 
-    def __post_init__(self):
-        super().__post_init__()
-        if "shipment_id" not in self.payload:
-            raise ValueError("ShipmentPrintedEvent 缺少必要字段: shipment_id")
 
-
-@dataclass
 class ShipmentCancelledEvent(NeuroEvent):
     """发货单取消事件"""
 
-    event_type: str = "shipment.cancelled"
-    priority: EventPriority = EventPriority.HIGH
+    def __init__(
+        self,
+        payload: dict[str, Any],
+        *,
+        event_type: str = "shipment.cancelled",
+        priority: EventPriority = EventPriority.HIGH,
+        metadata: EventMetadata | None = None,
+        preserve_queue_identity: bool = False,
+    ) -> None:
+        init_typed_event(
+            self,
+            payload,
+            event_type=event_type,
+            priority=priority,
+            required=("shipment_id",),
+            class_name="ShipmentCancelledEvent",
+            metadata=metadata,
+            preserve_queue_identity=preserve_queue_identity,
+        )
 
-    def __post_init__(self):
-        super().__post_init__()
-        if "shipment_id" not in self.payload:
-            raise ValueError("ShipmentCancelledEvent 缺少必要字段: shipment_id")
 
-
-@dataclass
 class ShipmentDeletedEvent(NeuroEvent):
     """发货单删除事件"""
 
-    event_type: str = "shipment.deleted"
-    priority: EventPriority = EventPriority.NORMAL
+    def __init__(
+        self,
+        payload: dict[str, Any],
+        *,
+        event_type: str = "shipment.deleted",
+        priority: EventPriority = EventPriority.NORMAL,
+        metadata: EventMetadata | None = None,
+        preserve_queue_identity: bool = False,
+    ) -> None:
+        init_typed_event(
+            self,
+            payload,
+            event_type=event_type,
+            priority=priority,
+            required=("shipment_id",),
+            class_name="ShipmentDeletedEvent",
+            metadata=metadata,
+            preserve_queue_identity=preserve_queue_identity,
+        )
 
-    def __post_init__(self):
-        super().__post_init__()
-        if "shipment_id" not in self.payload:
-            raise ValueError("ShipmentDeletedEvent 缺少必要字段: shipment_id")
 
-
-@dataclass
 class ShipmentExportedEvent(NeuroEvent):
     """发货单导出事件"""
 
-    event_type: str = "shipment.exported"
-    priority: EventPriority = EventPriority.LOW  # 导出是后台操作
+    def __init__(
+        self,
+        payload: dict[str, Any],
+        *,
+        event_type: str = "shipment.exported",
+        priority: EventPriority = EventPriority.LOW,
+        metadata: EventMetadata | None = None,
+        preserve_queue_identity: bool = False,
+    ) -> None:
+        init_typed_event(
+            self,
+            payload,
+            event_type=event_type,
+            priority=priority,
+            required=("file_path",),
+            class_name="ShipmentExportedEvent",
+            metadata=metadata,
+            preserve_queue_identity=preserve_queue_identity,
+        )
 
-    def __post_init__(self):
-        super().__post_init__()
-        if "file_path" not in self.payload:
-            raise ValueError("ShipmentExportedEvent 缺少必要字段: file_path")
 
-
-# 发货单相关库存事件
-@dataclass
 class ShipmentInventoryDeductedEvent(NeuroEvent):
     """发货单库存扣减事件"""
 
-    event_type: str = "shipment.inventory_deducted"
-    priority: EventPriority = EventPriority.HIGH
-
-    def __post_init__(self):
-        super().__post_init__()
-        required = ["shipment_id", "items"]
-        for field in required:
-            if field not in self.payload:
-                raise ValueError(f"ShipmentInventoryDeductedEvent 缺少必要字段: {field}")
+    def __init__(
+        self,
+        payload: dict[str, Any],
+        *,
+        event_type: str = "shipment.inventory_deducted",
+        priority: EventPriority = EventPriority.HIGH,
+        metadata: EventMetadata | None = None,
+        preserve_queue_identity: bool = False,
+    ) -> None:
+        init_typed_event(
+            self,
+            payload,
+            event_type=event_type,
+            priority=priority,
+            required=("shipment_id", "items"),
+            class_name="ShipmentInventoryDeductedEvent",
+            metadata=metadata,
+            preserve_queue_identity=preserve_queue_identity,
+        )

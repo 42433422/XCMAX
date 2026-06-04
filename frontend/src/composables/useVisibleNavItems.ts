@@ -14,10 +14,7 @@ import {
 } from '@/constants/coreMenuCatalog'
 import { useAccountProfileStore } from '@/stores/accountProfile'
 import { isPlatformShellModeEnabled, SHELL_CORE_MENU_KEYS } from '@/constants/platformShellMode'
-import {
-  isClientErpSidebarContext,
-  keepHostNavKeyVisibleWhenModSidebarFacetSuppressed,
-} from '@/constants/genericModPack'
+import { keepHostNavKeyVisibleWhenModSidebarFacetSuppressed } from '@/constants/genericModPack'
 import { resolveNavRouteName } from '@/constants/navRouteAliases'
 import { resolveCoreNavLabel } from '@/utils/coreNavLabel'
 import { isCustomerServiceNavVisible } from '@/constants/customerServiceNav'
@@ -26,7 +23,6 @@ import {
   type ResolvedSidebarMenuItem,
 } from '@/utils/mergeSidebarMenuItems'
 import { pinSidebarMenuItemsTop } from '@/utils/pinSidebarMenuItemsTop'
-import { buildRoleMenuProfile, canShowCoreMenuKey } from '@/utils/roleMenuProfile'
 
 export type VisibleNavSource = 'core' | 'mod' | 'trailing' | 'settings' | 'child'
 
@@ -81,22 +77,6 @@ export function useVisibleNavItems() {
     (mods.value || []).map((m) => String(m.id || '').trim()).filter(Boolean),
   )
 
-  const hasIndustryBusinessMod = computed(() =>
-    isClientErpSidebarContext(installedModIds.value, activeModId.value),
-  )
-
-  const roleMenuProfile = computed(() =>
-    buildRoleMenuProfile(
-      {
-        accountKind: accountProfileStore.accountKind,
-        marketIsAdmin: accountProfileStore.marketIsAdmin,
-        marketIsEnterprise: accountProfileStore.marketIsEnterprise,
-        isAdminAccount: accountProfileStore.isAdminAccount,
-      },
-      hasIndustryBusinessMod.value,
-    ),
-  )
-
   const coreMenuOverrides = computed(() => buildCoreMenuOverrides(modsForUi.value || []))
 
   const industryId = computed(() =>
@@ -118,7 +98,6 @@ export function useVisibleNavItems() {
     return CORE_MENU_ITEMS_BASE.map((item) => {
       const override = coreMenuOverrides.value.get(item.key)
       if (isCoreNavHidden(item.key)) return null
-      if (!canShowCoreMenuKey(roleMenuProfile.value, item.key)) return null
       const resolved: ResolvedSidebarMenuItem = {
         ...item,
         name: resolveCoreNavLabel(item.key, id, modsForUi.value),
@@ -128,7 +107,6 @@ export function useVisibleNavItems() {
         resolved.children = item.children
           .map((child) => {
             if (isCoreNavHidden(child.key)) return null
-            if (!canShowCoreMenuKey(roleMenuProfile.value, child.key)) return null
             const childOverride = coreMenuOverrides.value.get(child.key)
             return {
               ...child,
@@ -155,7 +133,6 @@ export function useVisibleNavItems() {
     })).filter((item) => {
       if (isSandboxMode() && !SANDBOX_MENU_KEYS.has(item.key)) return false
       if (isPlatformShellMode()) return false
-      if (!canShowCoreMenuKey(roleMenuProfile.value, item.key)) return false
       if (
         !isCustomerServiceNavVisible(item.key, accountProfileStore.isAdminAccount)
       ) {
@@ -166,7 +143,7 @@ export function useVisibleNavItems() {
   })
 
   const adminItems = computed((): ResolvedSidebarMenuItem[] => {
-    if (!roleMenuProfile.value.canSeeAdminMenus) return []
+    if (!accountProfileStore.isAdminAccount) return []
     const id = industryId.value
     return [
       {

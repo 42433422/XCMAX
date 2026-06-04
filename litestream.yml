@@ -1,0 +1,58 @@
+# Litestream 配置 · XCAGI SQLite 复制与灾难恢复
+# https://litestream.io/
+#
+# 用途：
+#   - 桌面模式下，每个 Mod 的 SQLite 数据库（products__<mod>.db 等）实时增量复制到
+#     S3 兼容对象存储
+#   - 灾难恢复：在母机丢失/损坏时，可从对象存储恢复到任意时间点
+#   - 跨设备同步基础：未来 v10.0 桌面云同步可复用此管线
+#
+# 启用：
+#   1. 安装 litestream: brew install litestream
+#   2. 配置环境变量 LITESTREAM_S3_ACCESS_KEY_ID / LITESTREAM_S3_SECRET_ACCESS_KEY
+#   3. 启动: litestream replicate -config FHD/litestream.yml
+#
+# 2026-06-03：配置 + scripts/dev/litestream-replicate.sh 已就位；桌面版默认不启 replicate
+#    （单机本地备份已覆盖；按需执行脚本或 release-desktop 校验 litestream.yml）
+
+dbs:
+  # 母库（无后缀，products.db / orders.db / analytics.db）
+  - path: $LITESTREAM_DATA_DIR/products.db
+    replicas:
+      - url: $LITESTREAM_REPLICA_URL
+        # 保留最近 24 小时增量 + 每日 1 个快照
+        retention: 24h
+        snapshot-interval: 24h
+  - path: $LITESTREAM_DATA_DIR/orders.db
+    replicas:
+      - url: $LITESTREAM_REPLICA_URL
+        retention: 24h
+        snapshot-interval: 24h
+  - path: $LITESTREAM_DATA_DIR/analytics.db
+    replicas:
+      - url: $LITESTREAM_REPLICA_URL
+        retention: 24h
+        snapshot-interval: 24h
+
+  # Mod 专用库（按 pattern 匹配，复用到所有 products__*.db）
+  - path: $LITESTREAM_DATA_DIR/products__*.db
+    replicas:
+      - url: $LITESTREAM_REPLICA_URL
+        retention: 12h
+        snapshot-interval: 24h
+
+  - path: $LITESTREAM_DATA_DIR/orders__*.db
+    replicas:
+      - url: $LITESTREAM_REPLICA_URL
+        retention: 12h
+        snapshot-interval: 24h
+
+# 监控：暴露 :9090 指标给 Prometheus（与 K8s 监控栈统一）
+metrics-addr: ":9090"
+
+# 快照级别：full（完整快照）+ incremental（默认）
+# 桌面场景下用 full 更稳（恢复简单）；生产可用 incremental 节省空间
+snapshot-level: full
+
+# 校验：每 24h 一次 WAL checksum 校验，失败立即告警
+validation-interval: 24h

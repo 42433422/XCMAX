@@ -9,11 +9,8 @@ import {
   type WorkflowEmployeeDeskRow,
 } from '@/composables/useWorkflowEmployeeDesks'
 import { databaseLinkForEmployee } from '@/constants/workflowEmployeeDatabaseLinks'
-import { buildSyntheticManifestWorkflowFlow, getWorkflowEmployeeDocs } from '@/utils/workflowEmployeeDocs'
+import { getWorkflowEmployeeDocs } from '@/utils/workflowEmployeeDocs'
 import type { WorkflowFlowDoc, WorkflowStepDoc } from '@/types/workflowEmployeeDocs'
-import { findWorkflowEmployeeEntry } from '@/utils/modWorkflowEmployees'
-import { useModsStore } from '@/stores/mods'
-import { storeToRefs } from 'pinia'
 import YuangongInteractiveWorkstation from '@/components/workflow/YuangongInteractiveWorkstation.vue'
 
 const props = defineProps<{
@@ -22,8 +19,6 @@ const props = defineProps<{
 }>()
 
 const router = useRouter()
-const modsStore = useModsStore()
-const { modsForUi } = storeToRefs(modsStore)
 const { statusLine, isBusy } = useWorkflowEmployeeDesks()
 const nowMs = useNowMsTicker(30000)
 
@@ -48,11 +43,7 @@ onMounted(async () => {
 const flow = computed<WorkflowFlowDoc | null>(() => {
   const id = props.row?.empId
   if (!id) return null
-  const fromDocs = flowsByEmpId.value[id]
-  if (fromDocs) return fromDocs
-  const entry = findWorkflowEmployeeEntry(modsForUi.value, id)
-  if (!entry) return null
-  return buildSyntheticManifestWorkflowFlow(entry, entry.modId, entry.modName)
+  return flowsByEmpId.value[id] ?? null
 })
 
 const steps = computed<WorkflowStepDoc[]>(() => flow.value?.steps ?? [])
@@ -92,10 +83,7 @@ const dbLink = computed(() =>
 const isCurrentlyBusy = computed(() => (props.row ? isBusy(props.row) : false))
 
 function openDatabase() {
-  router.push({
-    name: dbLink.value.routeName,
-    ...(dbLink.value.query ? { query: dbLink.value.query } : {}),
-  })
+  router.push({ name: dbLink.value.routeName })
 }
 </script>
 

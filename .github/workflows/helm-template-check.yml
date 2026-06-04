@@ -1,0 +1,35 @@
+name: Helm template check
+
+on:
+  pull_request:
+    paths:
+      - 'charts/**'
+      - 'k8s/**'
+      - '.github/workflows/helm-template-check.yml'
+  workflow_dispatch:
+
+jobs:
+  template:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.14.0
+
+      - name: helm lint
+        run: helm lint ./charts/xcagi -f charts/xcagi/values-staging.yaml
+
+      - name: helm template (staging)
+        run: |
+          helm template xcagi ./charts/xcagi \
+            -f charts/xcagi/values-staging.yaml \
+            --set image.repository=ghcr.io/example/backend \
+            --set image.tag=sha-test > /tmp/rendered.yaml
+          grep -q 'kind: Deployment' /tmp/rendered.yaml
+          grep -q 'kind: Service' /tmp/rendered.yaml
+          grep -q 'envFrom' /tmp/rendered.yaml
+          grep -q 'LOG_FORMAT' /tmp/rendered.yaml
+          grep -q 'XCAGI_GLOBAL_RATE_LIMIT' /tmp/rendered.yaml

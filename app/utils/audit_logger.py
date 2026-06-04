@@ -19,3 +19,17 @@ def audit_log(event_type: str, user_id, ip_address, details, success: bool = Tru
         "success": success,
     }
     _audit_logger.info(json.dumps(entry, ensure_ascii=False, default=str))
+    try:
+        from app.utils.audit_events import append_audit_event
+
+        append_audit_event(
+            {
+                "action": event_type,
+                "actor": str(user_id) if user_id is not None else None,
+                "client_host": ip_address or None,
+                "details": details,
+                "success": success,
+            }
+        )
+    except Exception:
+        pass

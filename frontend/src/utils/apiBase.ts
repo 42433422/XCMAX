@@ -5,11 +5,7 @@ import { readCsrfTokenFromCookie, shouldAttachCsrfHeader } from './csrfCookie'
  * Mod 列表、loading-status、routes 等读请求上限。
  * 冷启动时 lifespan 中 load_all_mods + 数据库初始化可能超过 1min；并行启动后仍可能偶发较慢，故与路由预取对齐放宽。
  */
-/** 冷启动后台 load_all_mods 期间列表接口可能较慢，但不应无限挂起 */
-export const DEFAULT_MOD_API_TIMEOUT_MS = 90_000
-
-/** Mod 门面 HTTP 探针（status/employees）用较短超时，避免拖住 initialize */
-export const MOD_PROBE_API_TIMEOUT_MS = 8_000
+export const DEFAULT_MOD_API_TIMEOUT_MS = 180_000
 
 export type ApiFetchInit = RequestInit & { timeoutMs?: number }
 

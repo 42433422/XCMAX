@@ -1,0 +1,34 @@
+{
+  "sdk_version": "2.0",
+  "id": "template-finance",
+  "name": "行业模板 · 财务",
+  "version": "1.0.0",
+  "author": "<your-name>",
+  "description": "财务行业模板：对账 / 开票 / 统一账本脚手架（仅 mod 发布，含敏感数据不默认对外 AI）。",
+  "artifact": "mod",
+  "release_targets": ["mod"],
+  "capabilities": ["finance.ledger", "finance.invoices", "finance.reconciliation"],
+  "compat": { "min_host_version": "9.0.0", "max_host_version": "" },
+  "dependencies": { "xcagi": ">=9.0.0" },
+  "backend": { "entry": "blueprints", "init": "mod_init" },
+  "frontend": {
+    "routes": "frontend/routes",
+    "menu": [
+      { "id": "tpl-fin-ledger", "label": "统一账本", "icon": "fa-book", "path": "/mod/template-finance/ledger" },
+      { "id": "tpl-fin-invoices", "label": "开票", "icon": "fa-file-text", "path": "/mod/template-finance/invoices" },
+      { "id": "tpl-fin-reconciliation", "label": "对账", "icon": "fa-balance-scale", "path": "/mod/template-finance/reconciliation" }
+    ]
+  },
+  "hooks": {
+    "finance.invoice.issued": "backend/hooks.on_invoice_issued",
+    "finance.reconciliation.completed": "backend/hooks.on_reconciliation_completed"
+  },
+  "comms": { "exports": ["finance.post_ledger", "finance.issue_invoice"] },
+  "industry": {
+    "id": "finance",
+    "name": "财务",
+    "description": "对账 / 开票 / 统一账本",
+    "intent_keywords": ["对账", "开票", "发票", "账本", "财务"]
+  },
+  "config": { "phase": "template" }
+}

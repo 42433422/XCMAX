@@ -21,7 +21,7 @@ router = APIRouter(tags=["legacy-conversation"], deprecated=True)
 @router.get("/api/conversations/{session_id}")
 def conversations_get(session_id: str, limit: int = Query(default=50)):
     try:
-        from app.application.facades.conversation_facade import get_conversation_service
+        from app.infrastructure.gateways.conversation import get_conversation_service
 
         service = get_conversation_service()
         messages = service.get_session_messages(session_id, limit)
@@ -42,7 +42,7 @@ def conversations_get(session_id: str, limit: int = Query(default=50)):
 @router.delete("/api/conversations/{session_id}")
 def conversations_delete(session_id: str):
     try:
-        from app.application.facades.conversation_facade import get_conversation_service
+        from app.infrastructure.gateways.conversation import get_conversation_service
 
         service = get_conversation_service()
         success = service.delete_session(session_id)
@@ -54,7 +54,7 @@ def conversations_delete(session_id: str):
 
 @router.put("/api/conversations/{session_id}/title")
 def conversations_title_put(session_id: str, body: dict = Body(default_factory=dict)):
-    from app.application.facades.conversation_facade import (
+    from app.infrastructure.gateways.conversation import (
         get_conversation_service as get_conversation_app_service,
     )
 
@@ -68,7 +68,7 @@ def conversations_title_put(session_id: str, body: dict = Body(default_factory=d
 @router.get("/api/ai/analyze/export/{export_id}")
 def ai_analyze_export(export_id: str):
     try:
-        from app.application.facades.conversation_facade import get_data_analysis_service
+        from app.infrastructure.gateways.conversation import get_data_analysis_service
         from app.utils.path_utils import get_upload_dir
 
         service = get_data_analysis_service()
@@ -87,7 +87,7 @@ def ai_analyze_export(export_id: str):
 
 @router.post("/api/ai/message/save")
 def ai_message_save(body: dict = Body(default_factory=dict)):
-    from app.application.facades.conversation_facade import (
+    from app.infrastructure.gateways.conversation import (
         get_conversation_service as get_conversation_app_service,
     )
 

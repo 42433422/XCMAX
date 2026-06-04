@@ -132,4 +132,16 @@ def _safe_exec_pandas(code: str, df: pd.DataFrame) -> pd.DataFrame:
     return df.head(0)
 
 
-__all__ = ["_validate_generated_code", "_safe_exec_pandas"]
+class ExcelTextToPandas:
+    """自然语言 → pandas 代码（默认空实现；可由宿主 LLM 扩展）。"""
+
+    def translate(self, natural_language: str, df: pd.DataFrame) -> str:
+        _ = natural_language, df
+        return ""
+
+
+__all__ = [
+    "ExcelTextToPandas",
+    "_validate_generated_code",
+    "_safe_exec_pandas",
+]

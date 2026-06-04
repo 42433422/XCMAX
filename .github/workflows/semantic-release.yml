@@ -1,0 +1,80 @@
+# 制作线 P9：conventional commits → 版本 bump 建议（调用 MODstore auto_version_bump 或本地脚本）
+name: Semantic release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      force_bump:
+        description: major|minor|patch
+        required: false
+        type: choice
+        options:
+          - ''
+          - patch
+          - minor
+          - major
+
+concurrency:
+  group: semantic-release
+  cancel-in-progress: false
+
+jobs:
+  analyze-and-bump:
+    runs-on: ubuntu-latest
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 50
+
+      - name: Determine bump from conventional commits
+        id: bump
+        run: |
+          set -euo pipefail
+          FORCE="${{ github.event.inputs.force_bump }}"
+          if [ -n "${FORCE}" ]; then
+            echo "type=${FORCE}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          LOG=$(git log -20 --pretty=format:%s)
+          if echo "$LOG" | grep -qE 'BREAKING CHANGE|!:'; then
+            echo "type=major" >> "$GITHUB_OUTPUT"
+          elif echo "$LOG" | grep -qE '^feat(\(|:)'; then
+            echo "type=minor" >> "$GITHUB_OUTPUT"
+          else
+            echo "type=patch" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: AI release gate notice
+        run: |
+          echo "Suggested bump: ${{ steps.bump.outputs.type }}"
+          echo "Set XCAGI_AUTO_VERSION_ENABLED=1 on MODstore worker to apply via auto_version_bump.py"
+          echo "Set XCAGI_RELEASE_AI_GATE=1 to require telemetry release_candidate before tag"
+
+      - name: Dispatch version bump (MODstore)
+        if: ${{ secrets.MODSTORE_ORCHESTRATE_URL != '' }}
+        env:
+          ORCH_URL: ${{ secrets.MODSTORE_ORCHESTRATE_URL }}
+          ORCH_TOKEN: ${{ secrets.MODSTORE_ORCHESTRATE_TOKEN }}
+        run: |
+          set -euo pipefail
+          BODY=$(python3 -c "
+          import json
+          print(json.dumps({
+            'task_description': '【P9 semantic-release】按 conventional commits 建议 ${{ steps.bump.outputs.type }} bump；运行 auto_version_bump；更新 CHANGELOG 与 VERSION 锚点。',
+            'use_task_router': False,
+            'target_employee_id': 'deploy-release-officer',
+            'dispatch_source': 'github:semantic-release',
+          }, ensure_ascii=False))
+          ")
+          AUTH=()
+          if [ -n "${ORCH_TOKEN:-}" ]; then
+            AUTH=(-H "Authorization: Bearer ${ORCH_TOKEN}")
+          fi
+          curl -fsS -X POST "${ORCH_URL}" "${AUTH[@]}" \
+            -H 'Content-Type: application/json' \
+            -d "${BODY}" || echo "::warning::orchestrate dispatch failed"

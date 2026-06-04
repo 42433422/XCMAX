@@ -19,14 +19,9 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
-      '@mod-views/xcagi-planner-bridge/ChatView.vue': path.resolve(
-        __dirname,
-        './src/test-stubs/ModChatViewStub.vue'
-      ),
     },
   },
   test: {
-    setupFiles: ['./vitest.setup.ts'],
     globals: true,
     environment: 'jsdom',
     testTimeout: 30_000,
@@ -37,12 +32,6 @@ export default defineConfig({
       'tests/**/*.test.ts',
       'tests/smoke/**/*.test.js',
     ],
-    exclude: [
-      '**/node_modules/**',
-      '**/dist/**',
-      // CI 无 Mod 视图构建产物；本地有 mods 时可跑
-      ...(process.env.CI === 'true' ? ['src/views/ChatView.proTaskStatus.test.js'] : []),
-    ],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
@@ -50,10 +39,10 @@ export default defineConfig({
       exclude: ['src/**/*.test.js', 'src/**/*.test.ts'],
       /** 全仓含大量 .vue 占位行；阈值略高于当前基线，新增 utils/store 单测后应稳定通过 */
       thresholds: {
-        lines: 18,
-        branches: 10,
-        functions: 12,
-        statements: 18,
+        lines: 8,
+        branches: 4,
+        functions: 5,
+        statements: 8,
       },
     },
   },

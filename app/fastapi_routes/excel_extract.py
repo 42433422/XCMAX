@@ -21,9 +21,9 @@ os.makedirs(TEMP_EXCEL_DIR, exist_ok=True)
 
 
 def _get_ai_product_parser():
-    from app.application.facades.excel_facade import get_ai_product_parser
+    from app.application.excel_import_app_service import get_excel_import_app_service
 
-    return get_ai_product_parser()
+    return get_excel_import_app_service().get_ai_product_parser()
 
 
 def _extract_from_excel(file_path, sheet_name=None, header_row=1) -> tuple[dict, int]:
@@ -295,7 +295,9 @@ def extract_test():
 def import_products(data: dict[str, Any] = Body(default_factory=dict)):
     try:
         from app.application import get_extract_log_app_service
-        from app.application.facades.excel_facade import get_product_import_service
+        from app.application.product_import_app_service import (
+            get_product_import_application_service,
+        )
 
         extracted_data = data.get("data", [])
         options = data.get("options", {})
@@ -336,8 +338,12 @@ def import_products(data: dict[str, Any] = Body(default_factory=dict)):
                 normalized_rows.append(row)
             extracted_data = normalized_rows
 
-        service = get_product_import_service()
-        result = service.import_data(
+        from app.application.product_import_app_service import (
+            get_product_import_application_service,
+        )
+
+        svc = get_product_import_application_service()
+        result = svc.import_data(
             data=extracted_data,
             skip_duplicates=options.get("skip_duplicates", True),
             validate_before_import=options.get("validate_before_import", True),
@@ -371,7 +377,8 @@ def import_products(data: dict[str, Any] = Body(default_factory=dict)):
 @router.post("/import/customers")
 def import_customers(data: dict[str, Any] = Body(default_factory=dict)):
     try:
-        from app.application import get_customer_app_service, get_extract_log_app_service
+        from app.application import get_extract_log_app_service
+        from app.bootstrap import get_customer_app_service
 
         extracted_data = data.get("data", [])
         options = data.get("options", {})

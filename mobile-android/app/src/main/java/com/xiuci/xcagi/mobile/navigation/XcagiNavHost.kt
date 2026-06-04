@@ -95,6 +95,7 @@ fun XcagiNavHost(vm: AppViewModel, pendingDeepLink: String? = null) {
     val navReady by vm.navReady.collectAsState()
     val startRoute by vm.startRoute.collectAsState()
     val updatePrompt by vm.updatePrompt.collectAsState()
+    val updateDownload by vm.updateDownload.collectAsState()
     val ctx = LocalContext.current
     val networkMonitor = androidx.compose.runtime.remember(ctx) {
         EntryPointAccessors.fromApplication(ctx.applicationContext, NetworkEntryPoint::class.java)
@@ -112,17 +113,38 @@ fun XcagiNavHost(vm: AppViewModel, pendingDeepLink: String? = null) {
 
     updatePrompt?.let { prompt ->
         AlertDialog(
-            onDismissRequest = { if (!prompt.force) vm.dismissUpdatePrompt() },
+            onDismissRequest = {
+                if (!prompt.force && !updateDownload.downloading) vm.dismissUpdatePrompt()
+            },
             title = { Text(if (prompt.force) "需要更新" else "发现新版本") },
-            text = { Text("最新版本 ${prompt.versionName}，请更新以获得完整功能与安全修复。") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("最新版本 ${prompt.versionName}，请更新以获得完整功能与安全修复。")
+                    if (updateDownload.downloading) {
+                        CircularProgressIndicator(
+                            progress = { updateDownload.progress / 100f },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        Text(
+                            "正在下载… ${updateDownload.progress}%",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
+            },
             confirmButton = {
-                TextButton({
-                    ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(prompt.downloadUrl)))
-                    if (!prompt.force) vm.dismissUpdatePrompt()
-                }) { Text("去更新") }
+                TextButton(
+                    onClick = { vm.downloadAndInstallUpdate() },
+                    enabled = !updateDownload.downloading,
+                ) { Text(if (updateDownload.downloading) "下载中" else "下载并安装") }
             },
             dismissButton = if (!prompt.force) {
-                { TextButton({ vm.dismissUpdatePrompt() }) { Text("稍后") } }
+                {
+                    TextButton(
+                        onClick = { vm.dismissUpdatePrompt() },
+                        enabled = !updateDownload.downloading,
+                    ) { Text("稍后") }
+                }
             } else {
                 null
             },

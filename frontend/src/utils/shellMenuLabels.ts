@@ -46,25 +46,25 @@ export function readShellTagline(mod: unknown): string {
   return pickShellStr(mod, 'shell_tagline', 'shellTagline')
 }
 
-/** 与 MainLayout viewTitlesBase 一致（默认通用宿主语境） */
+/** 与 MainLayout viewTitlesBase 一致（默认考勤语境） */
 export const SHELL_VIEW_TITLE_BASE: Record<string, string> = {
   chat: '智能对话',
   'ai-ecosystem': '智能生态',
   brain: '智脑集成',
   'model-payment': '模型服务',
-  products: '业务对象',
-  'materials-list': '资源列表',
-  materials: '资源库',
+  products: '人员管理',
+  'materials-list': '班次列表',
+  materials: '排班资源',
   'traditional-mode': '表格模式',
   'business-docking': '业务对接',
-  orders: '业务单据',
-  'orders-create': '新建业务单据',
+  orders: '考勤单管理',
+  'orders-create': '新建考勤单',
   purchase: '耗材申领',
-  'shipment-records': '业务记录',
-  customers: '组织管理',
+  'shipment-records': '考勤记录',
+  customers: '部门管理',
   'data-sources': '数据来源',
   'wechat-contacts': '企业微信联系人',
-  print: '模板与打印',
+  print: '考勤表打印',
   'printer-list': '打印机列表',
   'template-preview': '模板库',
   'label-editor': '模板编辑器',
@@ -83,7 +83,7 @@ export const SHELL_VIEW_TITLE_BASE: Record<string, string> = {
   'batch-analyze': '批量分析',
   'kitten-finance': '财务分析',
   'chat-debug': '对话调试',
-  'mod-store': '能力库'
+  'mod-store': '扩展市场'
 }
 
 /**

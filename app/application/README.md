@@ -37,6 +37,8 @@ from app.application.auth_app_service import get_auth_app_service
 
 ## 📦 可用的应用服务
 
+> **说明**：`app/services` 为过渡兼容层（导入时会发出 `DeprecationWarning`），HTTP 路由应只依赖本目录下的 `*_app_service`。`AuthApplicationService` 等部分用例已直接在应用层实现，不再强制包装同名 `*Service`。
+
 ### 已实现的应用服务
 
 | 应用服务 | 文件路径 | 功能 |
@@ -287,18 +289,12 @@ def test_login_integration(client):
 #### 步骤 1: 创建应用服务包装器
 
 ```python
-# application/auth_app_service.py
-from app.services.auth_service import AuthService
+# application/auth_app_service.py — 经 infrastructure/gateways 访问遗留实现
+from app.application.auth_app_service import get_auth_app_service
 
-class AuthAppService:
-    def __init__(self, auth_service: AuthService = None):
-        self._auth_service = auth_service or AuthService()
-    
-    def login(self, username: str, password: str):
-        # 用例编排
-        result = self._auth_service.authenticate(username, password)
-        # 可以添加额外的逻辑，如日志、事件发布等
-        return result
+auth = get_auth_app_service()
+result = auth.login(username, password)
+# Neuro-DDD 写路径可经 *_app_service_v2 + NeuroBus（见 NEW_FEATURE_PLACEMENT.md）
 ```
 
 #### 步骤 2: 更新 routes 导入

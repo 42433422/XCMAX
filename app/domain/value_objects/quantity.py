@@ -53,7 +53,7 @@ class Quantity:
     value: Decimal
     unit: UnitOfMeasure
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if not isinstance(self.value, Decimal):
             object.__setattr__(self, "value", Decimal(str(self.value)))
         # 标准化精度
@@ -193,7 +193,7 @@ class Quantity:
     def __truediv__(self, divisor: int | float | Decimal) -> Quantity:
         return self.divide(divisor)
 
-    def __eq__(self, other) -> bool:
+    def __eq__(self, other: object) -> bool:
         if not isinstance(other, Quantity):
             return False
         return self.value == other.value and self.unit == other.unit

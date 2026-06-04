@@ -27,10 +27,22 @@ class Product:
             raise ValueError("产品名称不能为空")
 
     def apply_discount(self, discount_rate: float) -> Money:
+        """按折扣率返回折后单价（领域行为）。"""
+        if not 0 <= discount_rate <= 1:
+            raise ValueError("折扣率必须在 0-1 之间")
         return Money(self.price.amount * discount_rate)
+
+    def validate_for_sale(self) -> None:
+        if not self.name:
+            raise ValueError("产品名称不能为空")
+        if self.price.amount < 0:
+            raise ValueError("价格不能为负数")
 
     def is_available(self) -> bool:
         return self.is_active and self.quantity > 0
+
+    def can_fulfill(self, requested_qty: int) -> bool:
+        return self.is_available() and self.quantity >= requested_qty
 
     def to_dict(self) -> dict:
         return {

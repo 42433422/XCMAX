@@ -1,0 +1,4 @@
+# AI Provider · RASA NLU（边缘档）· 由 scripts/sync_requirements.py 从 pyproject.toml 生成
+# ⚠️ 不要手工编辑！请改 pyproject.toml 后运行 python scripts/sync_requirements.py --write
+-r requirements-base.txt
+rasa>=3.6,<4

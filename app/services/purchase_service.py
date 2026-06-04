@@ -29,6 +29,7 @@ logger = logging.getLogger(__name__)
 class PurchaseService(NeuroEventPublisherMixin):
     """采购管理服务类"""
 
+    @staticmethod
     def _decimal_to_float(value: Any) -> Any:
         if isinstance(value, Decimal):
             return float(value)

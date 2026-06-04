@@ -117,19 +117,19 @@ export function useIndustryUiText() {
   })
 
   const entityName = computed(() =>
-    str(uiLabels.value.entity, stripEntitySuffix(str(productFields.value.name, '业务对象')) || '业务对象'),
+    str(uiLabels.value.entity, stripEntitySuffix(str(productFields.value.name, '员工')) || '员工'),
   )
   const entityPluralName = computed(() => str(uiLabels.value.entity_plural, entityName.value))
-  const modelLabel = computed(() => str(uiLabels.value.model_label, str(productFields.value.model, '编号')))
-  const nameLabel = computed(() => str(uiLabels.value.name_label, str(productFields.value.name, `${entityName.value}名称`)))
-  const categoryLabel = computed(() => str(uiLabels.value.category_label, str(productFields.value.category, '分类')))
+  const modelLabel = computed(() => str(uiLabels.value.model_label, str(productFields.value.model, '工号')))
+  const nameLabel = computed(() => str(uiLabels.value.name_label, str(productFields.value.name, `${entityName.value}姓名`)))
+  const categoryLabel = computed(() => str(uiLabels.value.category_label, str(productFields.value.category, '部门')))
   const priceLabel = computed(() => str(uiLabels.value.price_label, str(productFields.value.price, '单价')))
   const unitLabel = computed(() => str(uiLabels.value.unit_label, str(productFields.value.unit, '单位')))
-  const primaryUnit = computed(() => str(uiLabels.value.primary_unit, str(units.value.primary, '次')))
+  const primaryUnit = computed(() => str(uiLabels.value.primary_unit, str(units.value.primary, '天')))
   const primaryQuantityLabel = computed(() =>
     str(uiLabels.value.primary_quantity_label, str(quantityFields.value.primary_label, primaryUnit.value)),
   )
-  const shipmentOrderName = computed(() => str(uiLabels.value.shipment_order, str(orderTypes.value.shipment, '业务单')))
+  const shipmentOrderName = computed(() => str(uiLabels.value.shipment_order, str(orderTypes.value.shipment, '考勤单')))
   const recordsName = computed(() =>
     str(
       uiLabels.value.records,

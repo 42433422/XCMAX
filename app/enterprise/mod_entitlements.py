@@ -23,6 +23,7 @@ _cached_market_username: str = ""
 _cached_entitled_client_mod_ids: set[str] | None = None
 _cached_account_kind: str = "enterprise"
 _cached_market_is_admin: bool = False
+_cached_impersonating_market_user_id: int | None = None
 
 
 def is_client_mod_id(mod_id: str) -> bool:
@@ -51,12 +52,13 @@ def get_cached_market_identity() -> tuple[int | None, str]:
 
 def clear_session_entitlements() -> None:
     global _cached_market_user_id, _cached_market_username, _cached_entitled_client_mod_ids
-    global _cached_account_kind, _cached_market_is_admin
+    global _cached_account_kind, _cached_market_is_admin, _cached_impersonating_market_user_id
     _cached_market_user_id = None
     _cached_market_username = ""
     _cached_entitled_client_mod_ids = None
     _cached_account_kind = "enterprise"
     _cached_market_is_admin = False
+    _cached_impersonating_market_user_id = None
 
 
 def set_session_entitlements(
@@ -66,14 +68,20 @@ def set_session_entitlements(
     entitled_client_mod_ids: set[str],
     account_kind: str = "enterprise",
     market_is_admin: bool = False,
+    impersonating_market_user_id: int | None = None,
 ) -> None:
     global _cached_market_user_id, _cached_market_username, _cached_entitled_client_mod_ids
-    global _cached_account_kind, _cached_market_is_admin
+    global _cached_account_kind, _cached_market_is_admin, _cached_impersonating_market_user_id
     _cached_market_user_id = market_user_id
     _cached_market_username = (market_username or "").strip()
     _cached_entitled_client_mod_ids = set(entitled_client_mod_ids)
     _cached_account_kind = (account_kind or "enterprise").strip() or "enterprise"
     _cached_market_is_admin = bool(market_is_admin)
+    _cached_impersonating_market_user_id = impersonating_market_user_id
+
+
+def is_impersonating_session() -> bool:
+    return _cached_impersonating_market_user_id is not None
 
 
 def is_admin_account_session() -> bool:
@@ -94,7 +102,7 @@ def is_mod_visible_for_enterprise(mod_id: str) -> bool:
         return True
     if not is_client_mod_id(mid):
         return True
-    if is_admin_account_session():
+    if is_admin_account_session() and not is_impersonating_session():
         return True
     uname = (_cached_market_username or "").strip()
     if is_sunbird_local_username(uname) and mid == SUNBIRD_CLIENT_MOD_ID:

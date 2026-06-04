@@ -32,9 +32,9 @@ def finance_unified_ledger(
 ):
     """XCAGI 自建财务统一单据：CRM 账单 + MODstore 订单 + 归档凭证。"""
     try:
-        from app.services.finance_unified_archive import list_ledger
+        from app.application.user_cs_app_service import get_user_cs_app_service
 
-        items = list_ledger(
+        items = get_user_cs_app_service().list_ledger(
             market_user_id=market_user_id,
             track=track,
             limit=limit,
@@ -59,9 +59,9 @@ def finance_unified_ledger_summary(
 ):
     """按轨道汇总笔数与金额（分）。"""
     try:
-        from app.services.finance_unified_archive import summarize_ledger
+        from app.application.user_cs_app_service import get_user_cs_app_service
 
-        summary = summarize_ledger(market_user_id=market_user_id)
+        summary = get_user_cs_app_service().summarize_ledger(market_user_id=market_user_id)
         return {
             "ok": True,
             "summary": summary,
@@ -79,10 +79,10 @@ def finance_unified_ledger_summary(
 def finance_unified_ledger_rebuild(body: FinanceLedgerRebuildBody):
     """从 CRM 发票与 Token 订单幂等重建 financial_transactions 归档。"""
     try:
-        from app.services.finance_unified_archive import rebuild_ledger_archive
+        from app.application.user_cs_app_service import get_user_cs_app_service
 
         market_user_id = body.market_user_id
-        result = rebuild_ledger_archive(market_user_id=market_user_id)
+        result = get_user_cs_app_service().rebuild_ledger_archive(market_user_id=market_user_id)
         return {"ok": True, **result}
     except Exception as exc:
         logger.exception("unified-ledger rebuild failed")

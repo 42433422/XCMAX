@@ -20,7 +20,7 @@ class PhoneDecryptSchema(Schema):
 
 class CartAddSchema(Schema):
     product_id = fields.Int(required=True)
-    quantity = fields.Int(validate=validate.Range(min=1), missing=1)
+    quantity = fields.Int(validate=validate.Range(min=1), load_default=1)
 
 
 class CartUpdateSchema(Schema):
@@ -35,12 +35,12 @@ class AddressCreateSchema(Schema):
     city = fields.Str(required=True, validate=validate.Length(max=32))
     district = fields.Str(required=True, validate=validate.Length(max=32))
     detail_address = fields.Str(required=True)
-    is_default = fields.Bool(missing=False)
+    is_default = fields.Bool(load_default=False)
 
 
 class OrderCreateSchema(Schema):
     address_id = fields.Int(required=True)
-    remark = fields.Str(missing="")
+    remark = fields.Str(load_default="")
 
 
 class FeedbackSubmitSchema(Schema):
@@ -48,15 +48,15 @@ class FeedbackSubmitSchema(Schema):
         required=True, validate=validate.OneOf(["bug", "suggestion", "complaint", "other"])
     )
     content = fields.Str(required=True, validate=validate.Length(max=1000))
-    images = fields.List(fields.Str(), missing=[])
+    images = fields.List(fields.Str(), load_default=list)
 
 
 class ProductListSchema(Schema):
-    page = fields.Int(missing=1, validate=validate.Range(min=1))
-    page_size = fields.Int(missing=20, validate=validate.Range(min=1, max=100))
-    keyword = fields.Str(missing="")
+    page = fields.Int(load_default=1, validate=validate.Range(min=1))
+    page_size = fields.Int(load_default=20, validate=validate.Range(min=1, max=100))
+    keyword = fields.Str(load_default="")
     category_id = fields.Int()
     sort_by = fields.Str(
-        missing="newest",
+        load_default="newest",
         validate=validate.OneOf(["price_asc", "price_desc", "newest", "sales"]),
     )

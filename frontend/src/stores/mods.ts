@@ -3,11 +3,9 @@ import { computed, ref } from 'vue';
 import {
   apiFetch,
   DEFAULT_MOD_API_TIMEOUT_MS,
-  MOD_PROBE_API_TIMEOUT_MS,
   isApiFetchTimeoutError,
 } from '@/utils/apiBase';
 import { fetchModRoutesPayloadShared } from '@/utils/modRoutesSharedFetch';
-import { fetchModLoadingStatusShared } from '@/utils/modLoadingStatusShared';
 import { summarizeModLoadingData } from '@/utils/modLoadingStatus';
 import { fetchPlatformShellCapabilities } from '@/utils/platformShellApi';
 import { APPROVAL_BRIDGE_MOD_ID, setApprovalModFacadeEnabled } from '@/constants/approvalMod';
@@ -43,18 +41,9 @@ import {
   augmentEntitledModIdsForAccount,
   isSunbirdAccountUsername,
 } from '@/constants/accountModBinding';
-import { buildSunbirdClientModStub } from '@/constants/sunbirdClientMod';
 import { isProtectedClientModId } from '@/constants/protectedMods';
 import { bootstrapHostConfig, clientModPolicies } from '@/stores/hostConfig';
 import { XCAGI_ACTIVE_EXTENSION_MOD_ID_KEY } from '@/utils/xcagiStorageKeys';
-
-/** 防止 applyEntitledActiveMod 内 refetch 再次触发 entitlement 回流 */
-let entitledRefetchInProgress = false;
-
-type FetchModsOptions = {
-  /** 为 true 时只更新 mods 列表，不再调用 applyEntitledActiveMod（打破递归） */
-  skipEntitledApply?: boolean;
-};
 
 export type ModsInitializeOptions = {
   entitledModIds?: string[];
@@ -127,7 +116,7 @@ async function probeModStatusSuccess(
 
   try {
     const response = await apiFetch(path, {
-      timeoutMs: MOD_PROBE_API_TIMEOUT_MS,
+      timeoutMs: DEFAULT_MOD_API_TIMEOUT_MS,
     });
     if (response.status === 429) {
       writeModProbeCache(cacheKey, false, MOD_PROBE_RATE_LIMIT_CACHE_MS);
@@ -181,22 +170,12 @@ async function applyModFacadeFlagsFromListing(
   setPlannerModFacadeEnabled(modsList.some((m) => m.id === PLANNER_FACADE_MOD_ID));
 
   const hasErpDomainModListed = modsList.some((m) => m.id === ERP_DOMAIN_BRIDGE_MOD_ID);
-  const hasCoreWorkflowListed = modsList.some((m) => m.id === CORE_WORKFLOW_MOD_ID);
-
-  let erpFacade = false;
-  let coreWorkflow = false;
   if (skipProbes) {
     setErpDomainModFacadeEnabled(false);
-    setCoreWorkflowModPagesEnabled(false);
   } else {
-    const [erpOk, wfOk] = await Promise.all([
-      hasErpDomainModListed ? probeErpDomainModFacadeAvailable() : Promise.resolve(false),
-      hasCoreWorkflowListed ? probeCoreWorkflowModAvailable() : Promise.resolve(false),
-    ]);
-    erpFacade = erpOk;
-    coreWorkflow = wfOk;
-    setErpDomainModFacadeEnabled(erpFacade);
-    setCoreWorkflowModPagesEnabled(coreWorkflow);
+    setErpDomainModFacadeEnabled(
+      hasErpDomainModListed ? await probeErpDomainModFacadeAvailable() : false,
+    );
   }
 
   setApprovalModFacadeEnabled(modsList.some((m) => m.id === APPROVAL_BRIDGE_MOD_ID));
@@ -208,6 +187,15 @@ async function applyModFacadeFlagsFromListing(
   setOfficeEmployeePackModPagesEnabled(
     modsList.some((m) => m.id === OFFICE_EMPLOYEE_PACK_BRIDGE_MOD_ID),
   );
+
+  const hasCoreWorkflowListed = modsList.some((m) => m.id === CORE_WORKFLOW_MOD_ID);
+  if (skipProbes) {
+    setCoreWorkflowModPagesEnabled(false);
+  } else {
+    setCoreWorkflowModPagesEnabled(
+      hasCoreWorkflowListed ? await probeCoreWorkflowModAvailable() : false,
+    );
+  }
 
   modFacadeProbesCompleted = true;
 }
@@ -269,10 +257,6 @@ export interface ModInfo {
   };
   ui_labels?: Record<string, unknown>;
   ui_starter_pack?: Array<Record<string, unknown>>;
-  primary_workflow?: {
-    title?: string;
-    steps?: Array<string | Record<string, unknown>>;
-  };
   workflow_employees?: ModWorkflowEmployee[];
   /** 可选：贡献教程路线、步骤或页内高亮 */
   tutorial?: {
@@ -380,27 +364,6 @@ export const useModsStore = defineStore('mods', () => {
   const loadError = ref<string | null>(null);
   let initInFlight: Promise<void> | null = null;
   let pendingInitOptions: ModsInitializeOptions | null = null;
-  let lastInitAccountUsername = '';
-
-  function resolveModsAccountUsername(): string {
-    const pending = String(pendingInitOptions?.accountUsername || '').trim();
-    if (pending) return pending;
-    if (lastInitAccountUsername) return lastInitAccountUsername;
-    try {
-      const raw = localStorage.getItem('xcagi_market_user_json');
-      if (!raw) return '';
-      const parsed = JSON.parse(raw) as { username?: string };
-      return String(parsed?.username || '').trim();
-    } catch {
-      return '';
-    }
-  }
-
-  function findClientPrimaryErpMod(): ModInfo | undefined {
-    return mods.value.find(
-      (m) => String(m.id || '').trim() === CLIENT_PRIMARY_ERP_MOD_ID,
-    );
-  }
 
   /** 侧栏、副窗工作流等应使用此列表；仍为完整拉取结果时用 mods */
   const modsForUi = computed<ModInfo[]>(() => {
@@ -408,11 +371,7 @@ export const useModsStore = defineStore('mods', () => {
     const active = String(activeModId.value || '').trim();
     if (!active) return mods.value;
     const hit = mods.value.find((m) => String(m.id || '').trim() === active);
-    if (hit) return [hit];
-    if (active === CLIENT_PRIMARY_ERP_MOD_ID) {
-      return [findClientPrimaryErpMod() || buildSunbirdClientModStub()];
-    }
-    return mods.value;
+    return hit ? [hit] : mods.value;
   });
 
   function setActiveModId(modId: string | null | undefined) {
@@ -433,44 +392,15 @@ export const useModsStore = defineStore('mods', () => {
       return;
     }
     const current = String(activeModId.value || '').trim();
-    const accountUsername = resolveModsAccountUsername();
-    if (isSunbirdAccountUsername(accountUsername)) {
-      const sunbird = findClientPrimaryErpMod();
-      if (sunbird || current === CLIENT_PRIMARY_ERP_MOD_ID) {
-        setActiveModId(CLIENT_PRIMARY_ERP_MOD_ID);
-        return;
-      }
-    }
-    const primaryErp = String(
-      clientModPolicies.value?.client_primary_erp_mod_id || CLIENT_PRIMARY_ERP_MOD_ID,
-    ).trim();
-    const primaryListed = mods.value.some((m) => String(m.id || '').trim() === primaryErp);
-    if (
-      primaryErp &&
-      isProtectedClientModId(primaryErp) &&
-      (primaryListed || isClientErpSidebarContext(mods.value.map((m) => String(m.id || '')), primaryErp))
-    ) {
-      if (
-        !current ||
-        current === ERP_DOMAIN_BRIDGE_MOD_ID ||
-        !isSelectableExtensionModId(current)
-      ) {
-        setActiveModId(primaryErp);
-        return;
-      }
-    }
     if (current && mods.value.some((m) => String(m.id || '').trim() === current)) {
       // 若误选宿主 bridge，优先改到第一个行业扩展包（bridge 不作为「当前扩展」）
       if (!isSelectableExtensionModId(current)) {
-        const ext =
-          findClientPrimaryErpMod() ||
-          mods.value.find((m) => isSelectableExtensionModId(String(m.id || '')));
+        const ext = mods.value.find((m) => isSelectableExtensionModId(String(m.id || '')));
         if (ext) setActiveModId(String(ext.id || '').trim());
       }
       return;
     }
     const preferred =
-      findClientPrimaryErpMod() ||
       mods.value.find((m) => m.primary && isSelectableExtensionModId(String(m.id || ''))) ||
       mods.value.find((m) => isSelectableExtensionModId(String(m.id || '')));
     setActiveModId(preferred ? String(preferred.id || '').trim() : '');
@@ -537,19 +467,9 @@ export const useModsStore = defineStore('mods', () => {
       if (Boolean(options?.force) || pendingInitOptions?.forceFromEntitlements) {
         setActiveModId(CLIENT_PRIMARY_ERP_MOD_ID);
         await syncIndustryForActiveMod();
-        if (!entitledRefetchInProgress) {
-          entitledRefetchInProgress = true;
-          try {
-            const refetch = await fetchModsOnce({ skipEntitledApply: true });
-            if (
-              refetch.ok &&
-              mods.value.some((m) => String(m.id || '').trim() === CLIENT_PRIMARY_ERP_MOD_ID)
-            ) {
-              await syncIndustryForActiveMod();
-            }
-          } finally {
-            entitledRefetchInProgress = false;
-          }
+        const refetch = await fetchModsWithRetry();
+        if (refetch.ok && mods.value.some((m) => String(m.id || '').trim() === CLIENT_PRIMARY_ERP_MOD_ID)) {
+          await syncIndustryForActiveMod();
         }
         return;
       }
@@ -582,16 +502,9 @@ export const useModsStore = defineStore('mods', () => {
     if (!listedNext && sunbirdForce) {
       setActiveModId(next);
       await syncIndustryForActiveMod();
-      if (!entitledRefetchInProgress) {
-        entitledRefetchInProgress = true;
-        try {
-          const refetch = await fetchModsOnce({ skipEntitledApply: true });
-          if (refetch.ok && mods.value.some((m) => String(m.id || '').trim() === next)) {
-            await syncIndustryForActiveMod();
-          }
-        } finally {
-          entitledRefetchInProgress = false;
-        }
+      const refetch = await fetchModsWithRetry();
+      if (refetch.ok && mods.value.some((m) => String(m.id || '').trim() === next)) {
+        await syncIndustryForActiveMod();
       }
       return;
     }
@@ -657,7 +570,7 @@ export const useModsStore = defineStore('mods', () => {
     }));
   }
 
-  async function fetchModsOnce(fetchOpts?: FetchModsOptions): Promise<{
+  async function fetchModsOnce(): Promise<{
     ok: boolean
     modsDisabled?: boolean
     /** 连接被拒绝/中断等，适合稍长间隔再试（例如刚启动 Vite 或 run.py） */
@@ -689,31 +602,17 @@ export const useModsStore = defineStore('mods', () => {
       }
       mods.value = Array.isArray(data.data) ? data.data : [];
       ensureActiveModSelection();
-      const active = String(activeModId.value || '').trim();
-      const postTasks: Promise<unknown>[] = [];
-      if (!fetchOpts?.skipEntitledApply) {
-        postTasks.push(
-          applyEntitledActiveMod(pendingInitOptions?.entitledModIds, {
-            force: pendingInitOptions?.forceFromEntitlements ?? false,
-            accountUsername: pendingInitOptions?.accountUsername,
-          }),
-        );
-      }
-      if (!active || !mods.value.some((m) => String(m.id || '').trim() === active)) {
-        postTasks.push(syncActiveModWithServerIndustry());
-      }
-      if (postTasks.length) {
-        await Promise.all(postTasks);
-      }
+      await applyEntitledActiveMod(pendingInitOptions?.entitledModIds, {
+        force: pendingInitOptions?.forceFromEntitlements ?? false,
+        accountUsername: pendingInitOptions?.accountUsername,
+      });
+      await syncActiveModWithServerIndustry();
       loadError.value = null;
       void fetchPlatformShellCapabilities(true).catch((e) =>
         console.warn('[mods] platform-shell capabilities:', e),
       );
       await applyModFacadeFlagsFromListing(mods.value, activeModId.value);
       applyEditionPackPlatformShell(mods.value.map((m) => String(m.id || '')));
-      if (typeof performance !== 'undefined' && performance.mark) {
-        performance.mark('mods_list_ok');
-      }
       return { ok: true };
     } catch (error) {
       if (isApiFetchTimeoutError(error)) {
@@ -740,26 +639,17 @@ export const useModsStore = defineStore('mods', () => {
    * 仅当 loading-status 明确「磁盘上未发现任何 manifest」时为 true。
    * 用于避免：/api/mods/ 暂时空列表 + loading-status 失败时误把 isLoaded 置 true，导致之后 initialize 被短路、Mod 永远不拉。
    */
-  async function readLoadingStatusPayload() {
-    const d = await fetchModLoadingStatusShared();
-    if (!d) return null;
-    return d as {
-      discovered_mod_ids?: string[];
-      mods_loaded?: number;
-      load_mismatch?: boolean;
-      load_errors?: unknown[];
-      manifest_errors?: unknown[];
-      blueprint_errors?: unknown[];
-      partial_failure?: boolean;
-      mods_disabled?: boolean;
-    };
-  }
-
   async function confirmServerReportsZeroDiscoveredMods(): Promise<boolean> {
     try {
-      const d = await readLoadingStatusPayload();
-      if (!d) return false;
-      const discovered = Array.isArray(d.discovered_mod_ids) ? d.discovered_mod_ids : [];
+      const response = await apiFetch('/api/mods/loading-status', {
+        timeoutMs: DEFAULT_MOD_API_TIMEOUT_MS,
+      });
+      if (!response.ok) return false;
+      const data = await response.json();
+      if (!data.success || !data.data) return false;
+      const discovered = Array.isArray(data.data.discovered_mod_ids)
+        ? data.data.discovered_mod_ids
+        : [];
       return discovered.length === 0;
     } catch {
       return false;
@@ -768,8 +658,22 @@ export const useModsStore = defineStore('mods', () => {
 
   async function shouldRetryModsListWhenEmpty(): Promise<boolean> {
     try {
-      const d = await readLoadingStatusPayload();
-      if (!d) return false;
+      const response = await apiFetch('/api/mods/loading-status', {
+        timeoutMs: DEFAULT_MOD_API_TIMEOUT_MS,
+      });
+      if (!response.ok) return false;
+      const data = await response.json();
+      if (!data.success || !data.data) return false;
+      const d = data.data as {
+        discovered_mod_ids?: string[];
+        mods_loaded?: number;
+        load_mismatch?: boolean;
+        load_errors?: unknown[];
+        manifest_errors?: unknown[];
+        blueprint_errors?: unknown[];
+        partial_failure?: boolean;
+        mods_disabled?: boolean;
+      };
       const discovered = Array.isArray(d.discovered_mod_ids) ? d.discovered_mod_ids : [];
       const loaded = typeof d.mods_loaded === 'number' ? d.mods_loaded : 0;
       if (d.mods_disabled === true) return false;
@@ -783,33 +687,35 @@ export const useModsStore = defineStore('mods', () => {
 
   async function fetchModLoadingStatusHint(): Promise<string | null> {
     try {
-      const d = await readLoadingStatusPayload();
-      if (!d) return null;
-      return summarizeModLoadingData(d as Record<string, unknown>);
+      const response = await apiFetch('/api/mods/loading-status', {
+        timeoutMs: DEFAULT_MOD_API_TIMEOUT_MS,
+      });
+      if (!response.ok) return null;
+      const data = await response.json();
+      if (!data.success || !data.data) return null;
+      return summarizeModLoadingData(data.data as Record<string, unknown>);
     } catch {
       return null;
     }
   }
 
-  async function fetchModsWithRetry(
-    fetchOpts?: FetchModsOptions,
-  ): Promise<{ ok: boolean; modsDisabled?: boolean }> {
-    let r = await fetchModsOnce(fetchOpts);
+  async function fetchModsWithRetry(): Promise<{ ok: boolean; modsDisabled?: boolean }> {
+    let r = await fetchModsOnce();
     if (r.modsDisabled) return r;
     if (!r.ok) {
-      await delay(r.transportError ? 1200 : 400);
-      r = await fetchModsOnce(fetchOpts);
+      await delay(r.transportError ? 3500 : 900);
+      r = await fetchModsOnce();
     }
     if (r.modsDisabled) return r;
     if (r.ok && mods.value.length === 0) {
       const mismatch = await shouldRetryModsListWhenEmpty();
       if (mismatch) {
-        await delay(500);
-        r = await fetchModsOnce(fetchOpts);
+        await delay(1000);
+        r = await fetchModsOnce();
         if (r.modsDisabled) return r;
         if (r.ok && mods.value.length === 0) {
-          await delay(800);
-          r = await fetchModsOnce(fetchOpts);
+          await delay(1500);
+          r = await fetchModsOnce();
         }
       }
     }
@@ -867,28 +773,15 @@ export const useModsStore = defineStore('mods', () => {
   /** 侧栏 Mod 菜单来源：已选行业扩展时仅该包 + AI 员工触点；不遍历全部 bridge */
   function modsContributingSidebarMenu(): ModInfo[] {
     const ui = modsForUi.value;
-    const full = mods.value;
     const active = String(activeModId.value || '').trim();
-
-    const pickForActive = (pool: ModInfo[]): ModInfo[] =>
-      pool.filter((m) => {
+    if (active && isSelectableExtensionModId(active)) {
+      return ui.filter((m) => {
         const id = String(m.id || '').trim();
         if (!id) return false;
         if (id === active) return true;
         if (isAuxEmployeePackModId(id)) return true;
         return false;
       });
-
-    if (active && isSelectableExtensionModId(active)) {
-      const fromUi = pickForActive(ui);
-      if (fromUi.length) return fromUi;
-      const fromFull = pickForActive(full);
-      if (fromFull.length) return fromFull;
-      if (active === CLIENT_PRIMARY_ERP_MOD_ID) {
-        const stub = findClientPrimaryErpMod() || buildSunbirdClientModStub();
-        return [stub, ...full.filter((m) => isAuxEmployeePackModId(String(m.id || '')))];
-      }
-      return [];
     }
     const installedIds = mods.value.map((m) => String(m.id || '').trim()).filter(Boolean);
     if (isClientErpSidebarContext(installedIds, activeModId.value)) {
@@ -965,13 +858,7 @@ export const useModsStore = defineStore('mods', () => {
       const expectedPrefix = `/mod/${modId}/`;
       if (path.startsWith(expectedPrefix) || path === `/mod/${modId}`) continue;
       const mod = mods.value.find((m) => String(m.id || '').trim() === modId);
-      const proEntry =
-        String(mod?.frontend?.pro_entry_path || '').trim() ||
-        (modId === 'wechat-contacts-ai-employee'
-          ? '/wechat-contacts'
-          : modId === 'lan-gate-ai-employee'
-            ? '/lan-gate'
-            : '');
+      const proEntry = String(mod?.frontend?.pro_entry_path || '').trim();
       if (isHostMountedModMenuPath(path, proEntry)) continue;
       const warnKey = `${modId}\0${path}`;
       if (warnedModMenuPathKeys.has(warnKey)) continue;
@@ -984,8 +871,6 @@ export const useModsStore = defineStore('mods', () => {
 
   async function initialize(force = false, options?: ModsInitializeOptions) {
     pendingInitOptions = options ?? null;
-    const uname = String(options?.accountUsername || '').trim();
-    if (uname) lastInitAccountUsername = uname;
     // 同步原版模式状态到后端
     if (clientModsUiOff.value) {
       try {
@@ -1043,6 +928,10 @@ export const useModsStore = defineStore('mods', () => {
       const ok = r.ok;
       if (ok) {
         ensureActiveModSelection();
+        await applyEntitledActiveMod(pendingInitOptions?.entitledModIds, {
+          force: pendingInitOptions?.forceFromEntitlements ?? false,
+          accountUsername: pendingInitOptions?.accountUsername,
+        });
         if (mods.value.length > 0) {
           isLoaded.value = true;
           loadError.value = null;

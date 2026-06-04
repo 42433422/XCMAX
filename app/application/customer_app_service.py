@@ -541,7 +541,7 @@ class CustomerApplicationService:
 
     def import_from_excel(self, file) -> dict[str, Any]:
         """从 Excel 导入购买单位"""
-        from app.db.sqlite_write_guard import sqlite_write_guard
+        from app.db.session_cache import sqlite_write_guard
 
         try:
             with sqlite_write_guard():
@@ -825,7 +825,7 @@ instrument_application_service_class(CustomerApplicationService)
 
 
 def get_customer_app_service() -> CustomerApplicationService:
-    """获取客户服务单例"""
-    from app.di.registry import get_service_registry
+    """获取客户服务入口（经 bootstrap，支持 event-primary flag）。"""
+    from app import bootstrap
 
-    return get_service_registry().customer_application_service
+    return bootstrap.get_customer_app_service()

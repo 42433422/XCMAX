@@ -1,0 +1,17 @@
+# 开发/测试（pytest + mypy + ruff）· 由 scripts/sync_requirements.py 从 pyproject.toml 生成
+# ⚠️ 不要手工编辑！请改 pyproject.toml 后运行 python scripts/sync_requirements.py --write
+-r requirements-base.txt
+pytest==7.4.3
+pytest-cov==4.1.0
+pytest-mock==3.12.0
+pytest-random-order>=1.1.0
+ruff>=0.4.0
+mypy>=1.8.0
+types-redis
+types-requests
+types-pyyaml
+types-psutil
+types-aiofiles
+types-python-dotenv
+types-pillow
+types-openpyxl

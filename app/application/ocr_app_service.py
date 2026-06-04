@@ -7,7 +7,7 @@ OCR 应用服务
 from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
-    from app.services import OCRService
+    from app.infrastructure.gateways.ocr import OCRService
 
 
 class OCRApplicationService:
@@ -18,7 +18,7 @@ class OCRApplicationService:
         ocr_service: Optional["OCRService"] = None,
     ):
         if ocr_service is None:
-            from app.services import get_ocr_service
+            from app.infrastructure.gateways.ocr import get_ocr_service
 
             ocr_service = get_ocr_service()
         self._ocr_service = ocr_service
@@ -70,6 +70,18 @@ class OCRApplicationService:
             产品识别结果
         """
         return self._ocr_service.recognize_product(image_path)
+
+    def recognize_file(self, file_path: str) -> dict[str, Any]:
+        return self._ocr_service.recognize_file(file_path)
+
+    def extract_structured_data(self, text: str) -> dict[str, Any]:
+        return self._ocr_service.extract_structured_data(text)
+
+    def analyze_text(self, text: str) -> dict[str, Any]:
+        return self._ocr_service.analyze_text(text)
+
+    def get_active_ocr_backend(self) -> str:
+        return self._ocr_service.get_active_ocr_backend()
 
     def batch_recognize(self, image_paths: list) -> dict[str, Any]:
         """

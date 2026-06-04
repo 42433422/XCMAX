@@ -6,7 +6,7 @@
   "description": "副窗启用 → phone-agent start/stop → Win32 来电监控 → ASR/TTS（与 /status 轮询同步）。",
   "primary": false,
   "dependencies": {
-    "xcagi": ">=8.0.0"
+    "xcagi": ">=10.0.0"
   },
   "backend": {
     "entry": "blueprints",

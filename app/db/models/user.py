@@ -43,6 +43,8 @@ class User(Base):
     wx_avatar_url: Mapped[Optional[str]] = mapped_column(Text)
     mp_phone: Mapped[Optional[str]] = mapped_column(String(20))
     mp_nickname: Mapped[Optional[str]] = mapped_column(String(64))
+    totp_secret: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    mfa_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     created_user: Mapped[Optional[User]] = relationship(
         "User", remote_side=[id], backref="created_users", foreign_keys=[created_by]

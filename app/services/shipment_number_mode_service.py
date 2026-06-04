@@ -5,7 +5,7 @@ import re
 from collections.abc import Callable
 from typing import Any
 
-from app.bootstrap import get_shipment_app_service
+from app.bootstrap import get_shipment_application_service_core
 from app.db.models import Product
 from app.db.session import get_db
 
@@ -464,7 +464,7 @@ class ShipmentNumberModeService:
                 # 仅提示，不阻断：名称可能存在历史别名，但型号已被主库验证。
                 pass
 
-        app_service = get_shipment_app_service()
+        app_service = get_shipment_application_service_core()
         result = app_service.generate_shipment_document(
             unit_name=unit_to_use,
             products=products,

@@ -452,6 +452,7 @@ export default defineConfig(({ mode }) => {
           replacement: path.join(constantsDir, `modRouteGlob.${editionSuffix}.ts`),
         },
         { find: '@', replacement: path.resolve(__dirname, './src') },
+        { find: '@amin', replacement: path.resolve(__dirname, '../AMIN') },
         {
           find: '@mod-views/xcagi-lan-license-bridge',
           replacement: modViewsDir('xcagi-lan-license-bridge'),

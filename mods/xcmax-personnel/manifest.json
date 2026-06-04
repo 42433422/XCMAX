@@ -1,0 +1,19 @@
+{
+  "id": "xcmax-personnel",
+  "name": "XCmax 人员库",
+  "version": "1.0.0",
+  "author": "XCmax",
+  "description": "仅挂载人员管理 / 部门（客户）/ 远端 yuangon SSH 同步等 HTTP 路由；实现与主栈 ``app.mod_sdk.personnel_http`` 共享，SQLite 默认仍为 ``taiyangniao_pro.db``（可用 ``XCAGI_PERSONNEL_DB_FILENAME`` 改文件名）。",
+  "primary": false,
+  "dependencies": {
+    "xcagi": ">=9.0.0"
+  },
+  "backend": {
+    "entry": "blueprints"
+  },
+  "frontend": {},
+  "industry": {
+    "id": "通用",
+    "name": "通用"
+  }
+}

@@ -22,9 +22,9 @@ from app.domain.context.session_context import (
     runtime_context_after_workflow_interrupt,
 )
 from app.infrastructure.llm.client import set_mode as set_llm_mode
-from app.services.conversation.modstore_adapter import create_modstore_openai_client_from_request
+from app.infrastructure.gateways.conversation import create_modstore_openai_client_from_request
 
-from app.fastapi_routes.xcagi_compat_chat_helpers import (
+from app.fastapi_routes.domains.conversation.helpers import (
     XcagiCompatChatBatchBody,
     XcagiCompatChatBody,
     _ensure_chat_db_read_authorized,

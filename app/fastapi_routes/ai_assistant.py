@@ -48,15 +48,15 @@ def _printer_svc():
     注意：不要从 `app.services` 导入（其 __init__ 会拉起大量服务/依赖，可能导致启动慢或卡死），
     直接引用打印服务模块内的单例即可。
     """
-    from app.application.facades.print_facade import printer_service
+    from app.infrastructure.gateways.print import printer_service
 
     return printer_service
 
 
 def _distinct_product_names(keyword: str | None = None) -> list[str]:
-    from app.application.facades.query_facade import get_product_names
+    from app.application.query_app_service import get_query_app_service
 
-    return get_product_names(keyword=keyword)
+    return get_query_app_service().get_product_names(keyword=keyword)
 
 
 # ``/api/health`` 的文档化版本由 ``app.fastapi_routes.__init__._register_health_routes``
@@ -136,7 +136,7 @@ def compat_shipment_records_records(unit: str | None = Query(default=None)):
 
 @router.get("/api/units")
 def compat_units_alias():
-    from app.application.facades.query_facade import get_purchase_units
+    from app.application.query_app_service import get_query_app_service
 
     data = get_purchase_units()
     return _ok(data, count=len(data))
@@ -144,9 +144,9 @@ def compat_units_alias():
 
 @router.post("/api/purchase_units")
 def compat_purchase_units_create(payload: dict[str, Any] = Body(default_factory=dict)):
-    from app.application.facades.query_facade import find_purchase_unit
     from app.db.models import PurchaseUnit
     from app.db.session import get_db
+    from app.infrastructure.gateways.query import find_purchase_unit
 
     unit_name = str(payload.get("unit_name") or payload.get("name") or "").strip()
     if not unit_name:
@@ -195,10 +195,10 @@ def compat_purchase_units_update(
 
 @router.delete("/api/purchase_units/{unit_id}")
 def compat_purchase_units_delete(unit_id: int):
-    from app.application.facades.query_facade import query_service
+    from app.application.query_app_service import get_query_app_service
     from app.db.models import PurchaseUnit
 
-    deleted = query_service.delete(PurchaseUnit, id=unit_id)
+    deleted = get_query_app_service().query_service.delete(PurchaseUnit, id=unit_id)
     if deleted == 0:
         return _fail("购买单位不存在", 404)
     return _ok(message="删除成功")
@@ -206,7 +206,7 @@ def compat_purchase_units_delete(unit_id: int):
 
 @router.get("/api/purchase_units/by_name/{unit_name}")
 def compat_purchase_units_by_name(unit_name: str):
-    from app.application.facades.query_facade import find_purchase_unit
+    from app.infrastructure.gateways.query import find_purchase_unit
 
     name = (unit_name or "").strip()
     unit = find_purchase_unit(unit_name=name)
@@ -235,7 +235,7 @@ def compat_product_names_by_unit(unit_id: int):
 
 @router.get("/api/product_names/by_unit_and_name")
 def compat_product_by_unit_and_name(name: str = Query(default="")):
-    from app.application.facades.query_facade import find_product
+    from app.application.query_app_service import get_query_app_service
 
     n = (name or "").strip()
     if not n:
@@ -359,7 +359,7 @@ def compat_tts(payload: dict[str, Any] = Body(default_factory=dict)):
     pitch = payload.get("pitch")
 
     try:
-        from app.application.facades.tts_facade import (
+        from app.infrastructure.gateways.tts import (
             synthesize_to_data_uri,
             trigger_common_tts_warmup,
         )

@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>XCAGI Performance Trends</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 2rem; background: #0f172a; color: #e2e8f0; }
+    h1 { font-size: 1.5rem; }
+    .meta { color: #94a3b8; font-size: 0.9rem; margin-bottom: 1.5rem; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.5rem; }
+    .card { background: #1e293b; border-radius: 8px; padding: 1rem; }
+    canvas { max-height: 280px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 1.5rem; font-size: 0.85rem; }
+    th, td { border-bottom: 1px solid #334155; padding: 0.5rem; text-align: left; }
+    th { color: #94a3b8; }
+    .err { color: #f87171; }
+  </style>
+</head>
+<body>
+  <h1>XCAGI k6 Performance Smoke — Trend Dashboard</h1>
+  <p class="meta">Source: CI <code>performance-smoke.yml</code> · Thresholds: P99 &lt; 500ms, errors &lt; 1%</p>
+  <div class="grid">
+    <div class="card"><canvas id="p99Chart"></canvas></div>
+    <div class="card"><canvas id="rpsChart"></canvas></div>
+    <div class="card"><canvas id="errChart"></canvas></div>
+  </div>
+  <table id="runsTable"><thead><tr><th>Time (UTC)</th><th>Ref</th><th>SHA</th><th>P99 (ms)</th><th>RPS</th><th>Error rate</th></tr></thead><tbody></tbody></table>
+  <p id="loadErr" class="err" hidden></p>
+  <script>
+    const METRICS_URL = new URL('metrics.json', window.location.href).href;
+    function fmt(n, digits = 2) {
+      return n == null || Number.isNaN(n) ? '—' : Number(n).toFixed(digits);
+    }
+    async function load() {
+      const res = await fetch(METRICS_URL, { cache: 'no-store' });
+      if (!res.ok) throw new Error(`Failed to load metrics.json (${res.status})`);
+      const payload = await res.json();
+      const runs = (payload.runs || []).filter(r => r.p99_ms != null);
+      if (!runs.length) {
+        document.getElementById('loadErr').hidden = false;
+        document.getElementById('loadErr').textContent = 'No runs yet. Wait for Performance Smoke CI on main.';
+        return;
+      }
+      const labels = runs.map(r => (r.ts || '').slice(0, 16).replace('T', ' '));
+      const common = { labels, responsive: true, plugins: { legend: { labels: { color: '#cbd5e1' } } }, scales: { x: { ticks: { color: '#94a3b8' } }, y: { ticks: { color: '#94a3b8' } } } };
+      new Chart(document.getElementById('p99Chart'), { type: 'line', data: { labels, datasets: [{ label: 'P99 (ms)', data: runs.map(r => r.p99_ms), borderColor: '#38bdf8', tension: 0.2 }] }, options: { ...common, plugins: { ...common.plugins, title: { display: true, text: 'P99 latency', color: '#e2e8f0' } } } });
+      new Chart(document.getElementById('rpsChart'), { type: 'line', data: { labels, datasets: [{ label: 'RPS', data: runs.map(r => r.rps), borderColor: '#4ade80', tension: 0.2 }] }, options: { ...common, plugins: { ...common.plugins, title: { display: true, text: 'Request rate', color: '#e2e8f0' } } } });
+      new Chart(document.getElementById('errChart'), { type: 'line', data: { labels, datasets: [{ label: 'Error rate', data: runs.map(r => (r.error_rate || 0) * 100), borderColor: '#fb923c', tension: 0.2 }] }, options: { ...common, plugins: { ...common.plugins, title: { display: true, text: 'Error rate (%)', color: '#e2e8f0' } } } });
+      const tbody = document.querySelector('#runsTable tbody');
+      [...runs].reverse().slice(0, 20).forEach(r => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${(r.ts || '').slice(0, 19)}</td><td>${r.ref || ''}</td><td><code>${r.sha || ''}</code></td><td>${fmt(r.p99_ms, 1)}</td><td>${fmt(r.rps)}</td><td>${fmt((r.error_rate || 0) * 100, 3)}%</td>`;
+        tbody.appendChild(tr);
+      });
+    }
+    load().catch(e => {
+      document.getElementById('loadErr').hidden = false;
+      document.getElementById('loadErr').textContent = e.message;
+    });
+  </script>
+</body>
+</html>

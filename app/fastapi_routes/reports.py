@@ -32,11 +32,11 @@ def report_sales(
     group_by: str = Query(default="product"),
     customer_id: int | None = Query(default=None),
 ):
-    from app.application.facades.inventory_facade import ReportService
+    from app.application.report_app_service import get_report_app_service
 
     start_dt = datetime.fromisoformat(start_date) if start_date else None
     end_dt = datetime.fromisoformat(end_date) if end_date else None
-    return ReportService().get_sales_report(
+    return get_report_app_service().get_sales_report(
         start_date=start_dt,
         end_date=end_dt,
         group_by=group_by,
@@ -49,9 +49,9 @@ def report_inventory(
     warehouse_id: int | None = Query(default=None),
     category: str | None = Query(default=None),
 ):
-    from app.application.facades.inventory_facade import ReportService
+    from app.application.report_app_service import get_report_app_service
 
-    return ReportService().get_inventory_report(warehouse_id=warehouse_id, category=category)
+    return get_report_app_service().get_inventory_report(warehouse_id=warehouse_id, category=category)
 
 
 @router.get("/api/report/inventory/transactions")
@@ -61,11 +61,11 @@ def report_inventory_transactions(
     transaction_type: str | None = Query(default=None),
     product_id: int | None = Query(default=None),
 ):
-    from app.application.facades.inventory_facade import ReportService
+    from app.application.report_app_service import get_report_app_service
 
     start_dt = datetime.fromisoformat(start_date) if start_date else None
     end_dt = datetime.fromisoformat(end_date) if end_date else None
-    return ReportService().get_inventory_transaction_report(
+    return get_report_app_service().get_inventory_transaction_report(
         start_date=start_dt,
         end_date=end_dt,
         transaction_type=transaction_type,
@@ -79,11 +79,11 @@ def report_purchase(
     end_date: str | None = Query(default=None),
     group_by: str = Query(default="supplier"),
 ):
-    from app.application.facades.inventory_facade import ReportService
+    from app.application.report_app_service import get_report_app_service
 
     start_dt = datetime.fromisoformat(start_date) if start_date else None
     end_dt = datetime.fromisoformat(end_date) if end_date else None
-    return ReportService().get_purchase_report(
+    return get_report_app_service().get_purchase_report(
         start_date=start_dt,
         end_date=end_dt,
         group_by=group_by,
@@ -92,17 +92,17 @@ def report_purchase(
 
 @router.get("/api/report/dashboard")
 def report_dashboard():
-    from app.application.facades.inventory_facade import ReportService
+    from app.application.report_app_service import get_report_app_service
 
-    return ReportService().get_dashboard_summary()
+    return get_report_app_service().get_dashboard_summary()
 
 
 @router.post("/api/report/export")
 def report_export(body: dict = Body(default_factory=dict)):
-    from app.application.facades.inventory_facade import ReportService
+    from app.application.report_app_service import get_report_app_service
 
     data = body or {}
-    return ReportService().export_to_excel(
+    return get_report_app_service().export_to_excel(
         report_type=data.get("report_type", "report"),
         data=data.get("data", []),
         filename=data.get("filename", "report"),

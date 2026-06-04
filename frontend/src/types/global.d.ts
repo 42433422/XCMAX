@@ -8,7 +8,6 @@ declare global {
     __XCAGI_IS_PRO_MODE?: boolean;
     setProModeEnabled: (enabled: boolean) => void;
     openImportWindow?: () => void;
-    isProTaskAcquisitionMessage?: (text: string) => boolean;
   }
 }
 

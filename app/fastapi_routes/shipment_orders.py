@@ -22,7 +22,9 @@ from typing import Any
 from fastapi import APIRouter, Body, HTTPException, Query
 from fastapi.responses import FileResponse, JSONResponse
 
-from app.application.facades.query_facade import query_service
+from app.application.query_app_service import get_query_app_service
+
+query_service = get_query_app_service().query_service
 from app.bootstrap import get_shipment_application_service_core
 from app.db.models import ShipmentRecord
 

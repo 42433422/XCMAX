@@ -23,7 +23,6 @@ export type WorkflowCatalogEntry = {
 
 const loaded = ref(false)
 const loadError = ref<string | null>(null)
-let bootstrapInFlight: Promise<void> | null = null
 export const industryPresets = ref<Record<string, IndustryPreset>>({})
 export const industryPresetIds = ref<string[]>([])
 export const workflowEmployeeModIds = ref<string[]>([])
@@ -56,8 +55,6 @@ async function fetchSystemJson<T>(path: string): Promise<T | null> {
 
 export async function bootstrapHostConfig(): Promise<void> {
   if (loaded.value) return
-  if (bootstrapInFlight) return bootstrapInFlight
-  bootstrapInFlight = (async () => {
   try {
     const [presetsData, catalogWrap, rulesData, profileWrap] = await Promise.all([
       fetchSystemJson<{
@@ -115,12 +112,6 @@ export async function bootstrapHostConfig(): Promise<void> {
     loadError.value = null
   } catch (e) {
     loadError.value = e instanceof Error ? e.message : String(e)
-  }
-  })()
-  try {
-    await bootstrapInFlight
-  } finally {
-    bootstrapInFlight = null
   }
 }
 

@@ -1,0 +1,1206 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.11.15, pytest-7.4.3, pluggy-1.6.0
+rootdir: /Users/a4243342/Desktop/XCMAX/FHD
+configfile: pyproject.toml
+plugins: asyncio-0.23.8, cov-4.1.0, mock-3.12.0, hypothesis-6.155.1, anyio-4.13.0
+asyncio: mode=Mode.STRICT
+collected 8830 items / 1 skipped
+
+tests/test_ai_tier.py ..F...                                             [  0%]
+tests/test_approval_bridge_mod.py ....                                   [  0%]
+tests/test_approval_pages_compat.py .                                    [  0%]
+tests/test_async_decorators.py .F..                                      [  0%]
+tests/test_audit_events.py .F.                                           [  0%]
+tests/test_auth_dependencies.py ....                                     [  0%]
+tests/test_aux_employee_store.py ..                                      [  0%]
+tests/test_bootstrap_deprecation.py F..                                  [  0%]
+tests/test_canary_analysis.py .........                                  [  0%]
+tests/test_catalog_visibility.py ....                                    [  0%]
+tests/test_change_request_ops_dispatch.py ..                             [  0%]
+tests/test_code_editor_router.py .............                           [  0%]
+tests/test_core_workflow_mod.py ..............................           [  0%]
+tests/test_coverage_gate70_boost.py .........F..s.F                      [  1%]
+tests/test_coverage_milestone_phase2.py ....                             [  1%]
+tests/test_coverage_milestone_phase3.py ...                              [  1%]
+tests/test_coverage_milestone_phase4_gates.py F...                       [  1%]
+tests/test_coverage_ramp_ai_chat.py ..                                   [  1%]
+tests/test_coverage_ramp_ai_helpers.py ..                                [  1%]
+tests/test_coverage_ramp_api_get_sweep.py F                              [  1%]
+tests/test_coverage_ramp_domain_routes.py ..........F....s               [  1%]
+tests/test_coverage_ramp_domain_utils.py ........                        [  1%]
+tests/test_coverage_ramp_error_handling.py ............                  [  1%]
+tests/test_coverage_ramp_imports.py .................................... [  2%]
+........................................................................ [  2%]
+........................................................................ [  3%]
+........................FFF.F........................................... [  4%]
+..F....................F.F.............................................. [  5%]
+........................................................................ [  6%]
+........................................................................ [  7%]
+........................................................................ [  7%]
+.                                                                        [  7%]
+tests/test_coverage_ramp_legacy_schemas_metrics.py .......               [  7%]
+tests/test_coverage_ramp_middleware.py .....                             [  7%]
+tests/test_coverage_ramp_neuro_units.py .......                          [  8%]
+tests/test_coverage_ramp_normal_chat.py .................                [  8%]
+tests/test_coverage_ramp_p0.py ......................................... [  8%]
+........................................................................ [  9%]
+...................................................................F.F.F [ 10%]
+FF...................................................................... [ 11%]
+........................................................................ [ 11%]
+........................................................................ [ 12%]
+........................................................................ [ 13%]
+........................................................................ [ 14%]
+........................................................................ [ 15%]
+....................                                                     [ 15%]
+tests/test_coverage_ramp_path_utils.py ....                              [ 15%]
+tests/test_coverage_ramp_phase10_backend.py .......F.F...............    [ 15%]
+tests/test_coverage_ramp_phase10_ci_gate.py ...............F....         [ 16%]
+tests/test_coverage_ramp_phase10_routes.py .FF......................     [ 16%]
+tests/test_coverage_ramp_phase12_application.py ........................ [ 16%]
+F....                                                                    [ 16%]
+tests/test_coverage_ramp_phase12_quick_wins.py ..........                [ 16%]
+tests/test_coverage_ramp_phase12_routes_middleware.py ..F............F.. [ 16%]
+F.....                                                                   [ 17%]
+tests/test_coverage_ramp_phase13_backend.py .F.F.F..............FF.F.... [ 17%]
+.F......F..F.F...F                                                       [ 17%]
+tests/test_coverage_ramp_phase13_routes.py EEEEEEEEE........F....F...    [ 17%]
+tests/test_coverage_ramp_phase14_ai_chat.py ...........F.......          [ 18%]
+tests/test_coverage_ramp_phase14_mod_wechat.py .........F............... [ 18%]
+.......                                                                  [ 18%]
+tests/test_coverage_ramp_phase15_ai_customer.py ......................   [ 18%]
+tests/test_coverage_ramp_phase15_routes_mod.py ......F..............     [ 18%]
+tests/test_coverage_ramp_phase19_documents.py .......................... [ 19%]
+........                                                                 [ 19%]
+tests/test_coverage_ramp_phase19_neuro_contexts.py ..................... [ 19%]
+..........                                                               [ 19%]
+tests/test_coverage_ramp_phase19_quick_wins.py ......                    [ 19%]
+tests/test_coverage_ramp_phase20_backend.py ............................ [ 20%]
+..F....                                                                  [ 20%]
+tests/test_coverage_ramp_phase20_routes_app.py ..........FF.....FF..F.   [ 20%]
+tests/test_coverage_ramp_phase21_backend.py ..................FFF....... [ 20%]
+....F.                                                                   [ 20%]
+tests/test_coverage_ramp_phase21_routes.py ....................          [ 20%]
+tests/test_coverage_ramp_phase22_backend.py ..............F............. [ 21%]
+...........................................                              [ 21%]
+tests/test_coverage_ramp_phase22_routes.py ..........................F.. [ 22%]
+F....                                                                    [ 22%]
+tests/test_coverage_ramp_phase23_backend.py ...........FF............... [ 22%]
+..............                                                           [ 22%]
+tests/test_coverage_ramp_phase23_routes.py FFFFFF.                       [ 22%]
+tests/test_coverage_ramp_phase24_backend.py .F.F..........FFFF           [ 22%]
+tests/test_coverage_ramp_phase24_backend_wechat.py ..................... [ 23%]
+.......                                                                  [ 23%]
+tests/test_coverage_ramp_phase25_backend.py .........F.................. [ 23%]
+......................                                                   [ 23%]
+tests/test_coverage_ramp_phase25_routes.py ........Fs.s                  [ 23%]
+tests/test_coverage_ramp_phase26_backend.py ............FF.......F...... [ 24%]
+...........                                                              [ 24%]
+tests/test_coverage_ramp_phase26_routes.py FFFF.FFF...................   [ 24%]
+tests/test_coverage_ramp_phase27_backend.py .........FFFFFF............. [ 25%]
+..                                                                       [ 25%]
+tests/test_coverage_ramp_phase27_routes.py FFFF.FFF..................... [ 25%]
+.......                                                                  [ 25%]
+tests/test_coverage_ramp_phase28_backend.py ........FFFFF......          [ 25%]
+tests/test_coverage_ramp_phase28_routes.py .....................         [ 25%]
+tests/test_coverage_ramp_phase29_backend.py ........FF...F...            [ 26%]
+tests/test_coverage_ramp_phase29_routes.py FFFF...........               [ 26%]
+tests/test_coverage_ramp_phase30_backend.py ..FFFF..                     [ 26%]
+tests/test_coverage_ramp_phase30_routes.py FFEEEEEEE............         [ 26%]
+tests/test_coverage_ramp_phase31_backend.py ...........F.FFFFF           [ 26%]
+tests/test_coverage_ramp_phase31_routes.py ......                        [ 26%]
+tests/test_coverage_ramp_phase32_backend.py .......                      [ 26%]
+tests/test_coverage_ramp_phase32_routes.py .F.                           [ 26%]
+tests/test_coverage_ramp_phase33_backend.py ............................ [ 27%]
+....F                                                                    [ 27%]
+tests/test_coverage_ramp_phase33_routes.py .............                 [ 27%]
+tests/test_coverage_ramp_phase34_backend.py .....                        [ 27%]
+tests/test_coverage_ramp_phase34_routes.py F...F..                       [ 27%]
+tests/test_coverage_ramp_phase35_backend.py ...FFFFF................F.   [ 27%]
+tests/test_coverage_ramp_phase35_routes.py ...                           [ 27%]
+tests/test_coverage_ramp_phase36_backend.py ............................ [ 28%]
+.                                                                        [ 28%]
+tests/test_coverage_ramp_phase36_routes.py FFF..EEEEEEE                  [ 28%]
+tests/test_coverage_ramp_phase37_backend.py .....................F...... [ 28%]
+                                                                         [ 28%]
+tests/test_coverage_ramp_phase37_routes.py ..........FFF.F.F...          [ 28%]
+tests/test_coverage_ramp_phase38_backend.py ........................     [ 29%]
+tests/test_coverage_ramp_phase38_routes.py .........FFF                  [ 29%]
+tests/test_coverage_ramp_phase39_backend.py ......F.....FFFFFF...F...... [ 29%]
+.............                                                            [ 29%]
+tests/test_coverage_ramp_phase39_routes.py EEEEEEFFF............         [ 30%]
+tests/test_coverage_ramp_phase40_backend.py ............................ [ 30%]
+.............................FFFFFFFFF.........                          [ 30%]
+tests/test_coverage_ramp_phase40_routes.py ...............F.F......FF..  [ 31%]
+tests/test_coverage_ramp_phase41_backend.py F...........FFF............. [ 31%]
+.....                                                                    [ 31%]
+tests/test_coverage_ramp_phase41_routes.py .......EEEE......             [ 31%]
+tests/test_coverage_ramp_phase42_backend.py ................FF.......... [ 32%]
+.......................F                                                 [ 32%]
+tests/test_coverage_ramp_phase43_backend.py .F...F...........            [ 32%]
+tests/test_coverage_ramp_phase44_backend.py ............................ [ 32%]
+......                                                                   [ 32%]
+tests/test_coverage_ramp_phase44_routes.py ...F.FFF........F..........   [ 33%]
+tests/test_coverage_ramp_phase45_backend.py ................FF.......... [ 33%]
+.............                                                            [ 33%]
+tests/test_coverage_ramp_phase46_backend.py ............                 [ 33%]
+tests/test_coverage_ramp_phase46_routes.py ........F.....                [ 34%]
+tests/test_coverage_ramp_phase47_backend.py F..........F............F... [ 34%]
+.......................                                                  [ 34%]
+tests/test_coverage_ramp_phase47_routes.py ........................F...F [ 34%]
+FF...........                                                            [ 35%]
+tests/test_coverage_ramp_phase48_backend.py .......                      [ 35%]
+tests/test_coverage_ramp_phase48_routes.py ...F.                         [ 35%]
+tests/test_coverage_ramp_phase49_backend.py ...F......................F. [ 35%]
+.............................                                            [ 35%]
+tests/test_coverage_ramp_phase49_routes.py ....................F........ [ 36%]
+..F............                                                          [ 36%]
+tests/test_coverage_ramp_phase4_ci_gate.py ...................F......... [ 36%]
+........F                                                                [ 36%]
+tests/test_coverage_ramp_phase4_routes.py .............................. [ 37%]
+..........                                                               [ 37%]
+tests/test_coverage_ramp_phase4_workflow.py ....F....................... [ 37%]
+...................                                                      [ 37%]
+tests/test_coverage_ramp_phase50_backend.py ...F....                     [ 37%]
+tests/test_coverage_ramp_phase50_routes.py ......                        [ 37%]
+tests/test_coverage_ramp_phase51_backend.py ..............F............. [ 38%]
+.FFFF......FFFFFF.....                                                   [ 38%]
+tests/test_coverage_ramp_phase51_routes.py ............................. [ 38%]
+...F...........                                                          [ 39%]
+tests/test_coverage_ramp_phase52_backend.py ......                       [ 39%]
+tests/test_coverage_ramp_phase52_routes.py .......                       [ 39%]
+tests/test_coverage_ramp_phase53_backend.py .........................FFF [ 39%]
+FFFFFFF......................                                            [ 39%]
+tests/test_coverage_ramp_phase53_routes.py ............................. [ 40%]
+...........FF..F.                                                        [ 40%]
+tests/test_coverage_ramp_phase54_backend.py ........F................... [ 40%]
+...............                                                          [ 40%]
+tests/test_coverage_ramp_phase54_routes.py FFFFF.FFF..................FF [ 41%]
+FFF..FFFFF......FFF                                                      [ 41%]
+tests/test_coverage_ramp_phase55_backend.py ..............FF............ [ 41%]
+......................                                                   [ 41%]
+tests/test_coverage_ramp_phase55_routes.py ............................. [ 42%]
+.....                                                                    [ 42%]
+tests/test_coverage_ramp_phase56_ai_intent.py ...................F...... [ 42%]
+..................................................................       [ 43%]
+tests/test_coverage_ramp_phase56_finance_payment.py .................... [ 43%]
+..............................................                           [ 44%]
+tests/test_coverage_ramp_phase56_routes_mod_store.py ................... [ 44%]
+...............................................                          [ 44%]
+tests/test_coverage_ramp_phase56_wechat_crm.py ......................... [ 45%]
+............................                                             [ 45%]
+tests/test_coverage_ramp_phase57_ai_intent.py ...F...........FF.......F. [ 45%]
+......F.................F........FF....F...                              [ 46%]
+tests/test_coverage_ramp_phase57_alipay_payment.py ..................... [ 46%]
+.......................................................                  [ 47%]
+tests/test_coverage_ramp_phase58_ai_intent.py ........FF............FF.. [ 47%]
+..........................FF........F.                                   [ 47%]
+tests/test_coverage_ramp_phase58_external_crm.py ....................... [ 48%]
+..............................................................           [ 48%]
+tests/test_coverage_ramp_phase59_ai_intent.py ................F......... [ 49%]
+..........F......                                                        [ 49%]
+tests/test_coverage_ramp_phase59_inventory.py ....EEEEEEEEEEEEEEEEEEEEEE [ 49%]
+EEEEEEEEEEEEE                                                            [ 49%]
+tests/test_coverage_ramp_phase5_infra_domain.py .........F....FF........ [ 49%]
+...........................                                              [ 50%]
+tests/test_coverage_ramp_phase5_routes.py ........................F..... [ 50%]
+..F...F........                                                          [ 50%]
+tests/test_coverage_ramp_phase60_ai_app_deep.py ...............F....F... [ 51%]
+....................F...........F..F....FFFFFFF.F...........F........... [ 51%]
+...............FFF...................................................... [ 52%]
+.....                                                                    [ 52%]
+tests/test_coverage_ramp_phase60_ai_intent.py .......................... [ 53%]
+......................................                                   [ 53%]
+tests/test_coverage_ramp_phase60_optimizers.py ......................... [ 53%]
+................                                                         [ 53%]
+tests/test_coverage_ramp_phase61_ai_intent.py .......................... [ 54%]
+.....................................                                    [ 54%]
+tests/test_coverage_ramp_phase61_tools_workflow_deep.py ................ [ 54%]
+...............................................FF.........               [ 55%]
+tests/test_coverage_ramp_phase62_ai_intent.py .......................... [ 55%]
+........................................................................ [ 56%]
+..                                                                       [ 56%]
+tests/test_coverage_ramp_phase62_planner_deep.py ............FFF.F...... [ 56%]
+...........FFF....................FFFFF.............................     [ 57%]
+tests/test_coverage_ramp_phase62_routes_mod_store.py ................... [ 57%]
+...............                                                          [ 58%]
+tests/test_coverage_ramp_phase62_wechat_crm.py ......................... [ 58%]
+...............                                                          [ 58%]
+tests/test_coverage_ramp_phase63_ai_app_deep.py ...F.......FFFF......... [ 58%]
+...........s.s...sss...ss.....F................                          [ 59%]
+tests/test_coverage_ramp_phase63_ai_intent.py .......................... [ 59%]
+..........................................F..                            [ 60%]
+tests/test_coverage_ramp_phase63_routes_excel_extract.py ............... [ 60%]
+......F....FF.............                                               [ 60%]
+tests/test_coverage_ramp_phase63_wechat_crm.py ......................... [ 60%]
+....F............                                                        [ 61%]
+tests/test_coverage_ramp_phase64_ai_intent.py .......................... [ 61%]
+............................................F                            [ 61%]
+tests/test_coverage_ramp_phase64_routes_excel_templates.py ............. [ 61%]
+............................                                             [ 62%]
+tests/test_coverage_ramp_phase64_wechat_crm.py ......................... [ 62%]
+......................                                                   [ 62%]
+tests/test_coverage_ramp_phase65_ai_intent.py .......................... [ 63%]
+........................                                                 [ 63%]
+tests/test_coverage_ramp_phase65_routes_ai_kitten.py FF.FF.F.......FF.FF [ 63%]
+.FFF.FFFFF.F..FF.F.F                                                     [ 63%]
+tests/test_coverage_ramp_phase65_wechat_crm.py ......................... [ 64%]
+......                                                                   [ 64%]
+tests/test_coverage_ramp_phase66_routes_mobile_api_extensions.py ....... [ 64%]
+........................................                                 [ 64%]
+tests/test_coverage_ramp_phase66_wechat_crm.py ......................... [ 65%]
+..........                                                               [ 65%]
+tests/test_coverage_ramp_phase67_wechat_crm.py ......................... [ 65%]
+.......                                                                  [ 65%]
+tests/test_coverage_ramp_phase68_wechat_crm.py FFFFFFFFF.F.FF..FFFFFFF.. [ 65%]
+..                                                                       [ 65%]
+tests/test_coverage_ramp_phase69_to_90_backend.py ......                 [ 65%]
+tests/test_coverage_ramp_phase6_quick_wins.py ......................     [ 66%]
+tests/test_coverage_ramp_phase6_services.py ............................ [ 66%]
+.........                                                                [ 66%]
+tests/test_coverage_ramp_phase6_workflow.py ..............F.F........... [ 66%]
+..F..                                                                    [ 66%]
+tests/test_coverage_ramp_phase70_backend_gate90.py ...............F..... [ 67%]
+.                                                                        [ 67%]
+tests/test_coverage_ramp_phase71_backend_push90.py .......               [ 67%]
+tests/test_coverage_ramp_phase7_conversation.py ........................ [ 67%]
+..................                                                       [ 67%]
+tests/test_coverage_ramp_phase7_routes.py FFF.FFFF..........FFFF........ [ 68%]
+..................                                                       [ 68%]
+tests/test_coverage_ramp_phase8_ci_gate.py .............                 [ 68%]
+tests/test_coverage_ramp_phase8_shipment_lifespan.py .......F...F....... [ 68%]
+F............                                                            [ 68%]
+tests/test_coverage_ramp_phase8_tools_workflow.py ..................F.F. [ 69%]
+...F.                                                                    [ 69%]
+tests/test_coverage_ramp_phase9_documents.py ........................... [ 69%]
+...                                                                      [ 69%]
+tests/test_coverage_ramp_phase9_planner.py .....F..F...............F     [ 69%]
+tests/test_coverage_ramp_route_modules.py ....F......................... [ 70%]
+...............................                                          [ 70%]
+tests/test_coverage_ramp_routes.py .........F....                        [ 70%]
+tests/test_coverage_ramp_session_context.py ..........                   [ 70%]
+tests/test_coverage_ramp_utils_bulk.py .......                           [ 70%]
+tests/test_coverage_ramp_workflow.py ..                                  [ 70%]
+tests/test_coverage_track3_p0_backend.py .....                           [ 70%]
+tests/test_csrf_middleware.py F.                                         [ 70%]
+tests/test_customer_service_bridge_blueprints_sync.py F                  [ 70%]
+tests/test_customer_service_pages_compat.py ..                           [ 70%]
+tests/test_db_read_token.py ...F.F                                       [ 70%]
+tests/test_db_session_consistency.py FF                                  [ 70%]
+tests/test_decoupling_mods.py .......                                    [ 71%]
+tests/test_deliverable_status.py ........                                [ 71%]
+tests/test_delivery_signoff_sot.py ...                                   [ 71%]
+tests/test_desktop_automation.py ..........                              [ 71%]
+tests/test_desktop_runtime.py ......                                     [ 71%]
+tests/test_desktop_status_api.py .                                       [ 71%]
+tests/test_dora_metrics.py ........                                      [ 71%]
+tests/test_duty_roster_alignment.py ...                                  [ 71%]
+tests/test_edition_policy.py ........                                    [ 71%]
+tests/test_employee_pack_bridge_mod.py .F.                               [ 71%]
+tests/test_employee_run_isolation.py ....                                [ 71%]
+tests/test_erp_customers_facade.py ...                                   [ 71%]
+tests/test_erp_domain_mod.py ........F.F.F.                              [ 71%]
+tests/test_erp_pages_compat.py .                                         [ 71%]
+tests/test_erp_products_facade.py ...F                                   [ 71%]
+tests/test_erp_repository_registry.py ........                           [ 71%]
+tests/test_esign_channel.py ..                                           [ 72%]
+tests/test_exception_helpers.py .................F.................      [ 72%]
+tests/test_external_crm_hubspot_mapping.py ...                           [ 72%]
+tests/test_external_crm_salesforce_mapping.py ...                        [ 72%]
+tests/test_fadada_fasc_client.py ...                                     [ 72%]
+tests/test_fastapi_cors_origins.py ..                                    [ 72%]
+tests/test_fastapi_factory_middleware.py ..                              [ 72%]
+tests/test_feature_flag.py ....................................          [ 72%]
+tests/test_fhd_payment_reconciliation.py ..                              [ 72%]
+tests/test_finance_invoices_api.py ...                                   [ 73%]
+tests/test_finance_unified_archive.py ....                               [ 73%]
+tests/test_finance_unified_ledger_route.py .                             [ 73%]
+tests/test_finance_unified_rebuild.py ...                                [ 73%]
+tests/test_gdpr_routes.py ......F....                                    [ 73%]
+tests/test_host_base_db_api.py F.F.F..                                   [ 73%]
+tests/test_host_foundation.py ...                                        [ 73%]
+tests/test_infrastructure_repositories.py ...                            [ 73%]
+tests/test_lan_bridge_mod.py ....                                        [ 73%]
+tests/test_lan_pages_compat.py .                                         [ 73%]
+tests/test_legacy_auth_account_kind.py F.F...                            [ 73%]
+tests/test_middleware_rate_limit.py ..                                   [ 73%]
+tests/test_mobile_api.py ...                                             [ 73%]
+tests/test_mobile_api_extensions.py ..                                   [ 73%]
+tests/test_mod_database_isolation.py ....                                [ 73%]
+tests/test_mod_entitlements_admin.py FF.                                 [ 73%]
+tests/test_mod_physical_view_imports.py .                                [ 73%]
+tests/test_mod_views_compat.py .F.                                       [ 73%]
+tests/test_model_payment_bridge_mod.py ....                              [ 73%]
+tests/test_model_payment_order_pg.py ...                                 [ 73%]
+tests/test_model_payment_pages_compat.py .                               [ 73%]
+tests/test_model_payment_routes.py .......                               [ 73%]
+tests/test_mods_list_etag.py .                                           [ 73%]
+tests/test_modstore_llm_chat_url.py FF                                   [ 73%]
+tests/test_neuro_application_hooks.py ..                                 [ 73%]
+tests/test_neuro_bus_backpressure.py ......FFFFFFFFFF                    [ 74%]
+tests/test_neuro_bus_bridge_mod.py ...                                   [ 74%]
+tests/test_neuro_bus_core.py ...................                         [ 74%]
+tests/test_neuro_bus_dlq_persistence.py F.F                              [ 74%]
+tests/test_neuro_bus_event_loop.py .                                     [ 74%]
+tests/test_neuro_bus_handler_registry.py .....                           [ 74%]
+tests/test_neuro_bus_reliability_env.py ................                 [ 74%]
+tests/test_neuro_bus_runtime.py .F....                                   [ 74%]
+tests/test_neuro_command_base.py .                                       [ 74%]
+tests/test_neuro_migration_smoke.py ...s.                                [ 74%]
+tests/test_neuro_plan.py ....                                            [ 74%]
+tests/test_openapi_consistency.py ..                                     [ 74%]
+tests/test_operations_line_repair.py ..                                  [ 74%]
+tests/test_operator_profile.py .F...                                     [ 74%]
+tests/test_order_parse_voice.py .........                                [ 75%]
+tests/test_otel_setup.py ...                                             [ 75%]
+tests/test_payment_sot.py ...                                            [ 75%]
+tests/test_phase2_quick_coverage.py ........................             [ 75%]
+tests/test_pipeline_funnel_endpoint.py ..                                [ 75%]
+tests/test_planner_mod_facade.py .....                                   [ 75%]
+tests/test_planner_native_tools.py ............                          [ 75%]
+tests/test_planner_pages_compat.py ...                                   [ 75%]
+tests/test_planner_tools_dispatch.py ....                                [ 75%]
+tests/test_planner_tools_mod.py ........                                 [ 75%]
+tests/test_platform_shell.py ...                                         [ 75%]
+tests/test_product_repository_exceptions.py .F.FFFF.                     [ 75%]
+tests/test_product_skus.py .......                                       [ 75%]
+tests/test_production_line_orchestrator.py .....                         [ 76%]
+tests/test_property_based.py ....................                        [ 76%]
+tests/test_redis_lock.py .....                                           [ 76%]
+tests/test_ruff_config.py ..F.FFFFsss                                    [ 76%]
+tests/test_sensitive_audit_middleware.py ......                          [ 76%]
+tests/test_service_container_wiring.py FF                                [ 76%]
+tests/test_service_contract_fill.py ..                                   [ 76%]
+tests/test_session_account_meta.py ..                                    [ 76%]
+tests/test_shipment_tasks.py .............F....                          [ 76%]
+tests/test_six_line_department_coverage.py ..                            [ 76%]
+tests/test_sla_health_probe.py .                                         [ 76%]
+tests/test_start_lan_launcher.py sF                                      [ 76%]
+tests/test_stub_esign_store.py ..                                        [ 76%]
+tests/test_task_agent.py .........                                       [ 76%]
+tests/test_telemetry_production_bridge.py ...                            [ 76%]
+tests/test_user_cs_change_request.py .                                   [ 76%]
+tests/test_user_cs_connected_welcome.py ..                               [ 77%]
+tests/test_user_cs_crm_store.py ...                                      [ 77%]
+tests/test_user_cs_delivery.py ..                                        [ 77%]
+tests/test_user_cs_intake_finalize.py ...                                [ 77%]
+tests/test_user_cs_intake_prefill.py .                                   [ 77%]
+tests/test_user_cs_landing_crm.py .                                      [ 77%]
+tests/test_user_cs_market_payment.py .                                   [ 77%]
+tests/test_user_cs_market_profile.py .                                   [ 77%]
+tests/test_user_cs_pipeline.py ....                                      [ 77%]
+tests/test_user_cs_pipeline_crm_gate.py .                                [ 77%]
+tests/test_user_cs_pipeline_save.py ..                                   [ 77%]
+tests/test_user_cs_software_delivery.py ........                         [ 77%]
+tests/test_user_customer_service_officer.py ...                          [ 77%]
+tests/test_wechat_group_feed.py .                                        [ 77%]
+tests/test_wechat_message_display.py ........                            [ 77%]
+tests/test_wechat_passive_group_monitor.py ............................. [ 77%]
+                                                                         [ 77%]
+tests/test_wechat_tasks.py ....................                          [ 78%]
+tests/test_xcagi_safe_download_path.py ...                               [ 78%]
+tests/test_xcmax_ops_proxy.py ..                                         [ 78%]
+tests/test_xcmax_path_employee_coverage.py ......                        [ 78%]
+tests/application/test_dynamic_workflow_routing.py ..                    [ 78%]
+tests/application/test_pro_excel_deterministic_import.py .               [ 78%]
+tests/application/test_pro_excel_import_policy.py ..                     [ 78%]
+tests/benchmarks/test_intent_accuracy.py s                               [ 78%]
+tests/infrastructure/test_payment_sot.py ....                            [ 78%]
+tests/integration/test_auth_session_flow.py ....F                        [ 78%]
+tests/integration/test_cross_domain_event_flow.py FFFFFFFFFFFFFFFF.FFF.. [ 78%]
+........F                                                                [ 78%]
+tests/integration/test_erp_purchase_inventory_flow.py FFFFF              [ 78%]
+tests/integration/test_finance_reports_smoke.py FFFF                     [ 78%]
+tests/integration/test_mobile_auth_flow.py .F...                         [ 78%]
+tests/integration/test_ocr_api.py FFF.                                   [ 78%]
+tests/integration/test_rbac_permission_flow.py ..F                       [ 78%]
+tests/neuro/test_bootstrap_event_primary_flag.py ..                      [ 78%]
+tests/neuro/test_command_gateway.py ..                                   [ 78%]
+tests/neuro/test_shipment_bootstrap_parity.py ..                         [ 78%]
+tests/release/test_release_900_contract.py .....                         [ 79%]
+tests/release/test_release_contract.py ..                                [ 79%]
+tests/release_gate/test_release_gate_manifest.py .                       [ 79%]
+tests/routes/test_fastapi_routes_phase2_smoke.py ...                     [ 79%]
+tests/routes/test_market_account_phase1.py ...                           [ 79%]
+tests/routes/test_market_account_smoke.py .                              [ 79%]
+tests/routes/test_xcmax_admin_routes.py ......                           [ 79%]
+tests/test_application/test_ai_chat_app_service.py ..............        [ 79%]
+tests/test_application/test_finance_app_service.py .                     [ 79%]
+tests/test_application/test_shipment_app_service.py FF.F.......          [ 79%]
+tests/test_db/test_models.py ......                                      [ 79%]
+tests/test_db/test_orm_model_helpers.py .................                [ 79%]
+tests/test_db/test_session_cache.py ................                     [ 79%]
+tests/test_db/test_session_module.py F.FFF                               [ 79%]
+tests/test_db/test_sqlite_mod_paths.py ....                              [ 80%]
+tests/test_db/test_sqlite_write_guard.py ..                              [ 80%]
+tests/test_domain/test_shipment_aggregates.py ................           [ 80%]
+tests/test_domain/test_value_objects.py ...............................  [ 80%]
+tests/test_infrastructure/test_customer_repository_impl.py ............. [ 80%]
+                                                                         [ 80%]
+tests/test_infrastructure/test_db_consistency.py .............           [ 80%]
+tests/test_infrastructure/test_db_engine_routing.py ..............F..F.. [ 81%]
+...........                                                              [ 81%]
+tests/test_infrastructure/test_inventory_purchase_user_repos.py FFF..... [ 81%]
+..                                                                       [ 81%]
+tests/test_infrastructure/test_material_repository_impl.py ............. [ 81%]
+...                                                                      [ 81%]
+tests/test_infrastructure/test_pg_vector_store.py .....                  [ 81%]
+tests/test_infrastructure/test_product_constants.py .                    [ 81%]
+tests/test_infrastructure/test_product_repository_impl.py .FFF...FFFF... [ 81%]
+...FFFFFF.F...FFFF.FFF                                                   [ 82%]
+tests/test_infrastructure/test_purchase_unit_query_impl.py ..            [ 82%]
+tests/test_infrastructure/test_shipment_document_generator.py ..         [ 82%]
+tests/test_infrastructure/test_shipment_record_impls.py ................ [ 82%]
+..............                                                           [ 82%]
+tests/test_infrastructure/test_shipment_repository_impl.py .....         [ 82%]
+tests/test_infrastructure/test_sqlalchemy_uow.py ...                     [ 82%]
+tests/test_infrastructure/test_sqlite_templates_legacy.py .              [ 82%]
+tests/test_infrastructure/test_wechat_contact_store_impl.py ............ [ 82%]
+.........F.....                                                          [ 82%]
+tests/test_routes/test_ai_chat.py ...............                        [ 82%]
+tests/test_routes/test_health_capabilities.py ..                         [ 82%]
+tests/test_routes/test_materials.py ............................         [ 83%]
+tests/test_routes/test_mods_routes.py ..                                 [ 83%]
+tests/test_routes/test_smoke_apis.py ............                        [ 83%]
+tests/test_schemas/test_auth_schema.py .........                         [ 83%]
+tests/test_schemas/test_common_ocr_schema.py ..                          [ 83%]
+tests/test_schemas/test_finance_rbac_contract_schema.py ............     [ 83%]
+tests/test_schemas/test_material_schema.py ................              [ 83%]
+tests/test_schemas/test_mp_schema.py ....                                [ 83%]
+tests/test_schemas/test_product_customer_shipment_schema.py ............ [ 84%]
+.                                                                        [ 84%]
+tests/test_services/test_ai_conversation_service.py ...                  [ 84%]
+tests/test_services/test_ai_product_parser.py .                          [ 84%]
+tests/test_services/test_auth_user_session_services.py ....              [ 84%]
+tests/test_services/test_deepseek_intent_service.py ..                   [ 84%]
+tests/test_services/test_extract_log_service.py .................        [ 84%]
+tests/test_services/test_intent_service.py ..........                    [ 84%]
+tests/test_services/test_inventory_service.py F.                         [ 84%]
+tests/test_services/test_mod_store_stack.py ....                         [ 84%]
+tests/test_services/test_neuro_event_publisher_mixin.py ..               [ 84%]
+tests/test_services/test_ocr_service.py ................................ [ 84%]
+...........                                                              [ 85%]
+tests/test_services/test_orm_models.py .........................         [ 85%]
+tests/test_services/test_printer_service.py ......................       [ 85%]
+tests/test_services/test_product_import_service.py ....................  [ 85%]
+tests/test_services/test_products_service.py ...........                 [ 85%]
+tests/test_services/test_purchase_service.py FFF                         [ 86%]
+tests/test_services/test_rasa_nlu_service.py .........                   [ 86%]
+tests/test_services/test_shipment_service.py FF....                      [ 86%]
+tests/test_services/test_task_agent.py .............                     [ 86%]
+tests/test_services/test_task_context_service.py ....                    [ 86%]
+tests/test_tasks/test_shipment_tasks.py ..                               [ 86%]
+tests/test_utils/test_path_utils.py ...                                  [ 86%]
+tests/test_utils/test_printer_automation.py FFF.FF.F.FF..F......         [ 86%]
+tests/test_utils/test_time_utils.py ..                                   [ 86%]
+tests/test_utils/test_utils.py ....................FF.................   [ 87%]
+tests/unit/test_p4_s1_zero_pct_clear.py .......FFF                       [ 87%]
+tests/unit/test_taiyangniao_work_intervals.py FF.F.                      [ 87%]
+tests/unit/application/test_ai_chat_app_service.py .                     [ 87%]
+tests/unit/application/test_ai_chat_extended.py ....                     [ 87%]
+tests/unit/application/test_event_primary_base.py ....                   [ 87%]
+tests/unit/application/test_excel_vector_app_service.py ....             [ 87%]
+tests/unit/application/test_kitten_planner_context_p4.py .........FF.... [ 87%]
+.............                                                            [ 87%]
+tests/unit/application/test_phase2_application_services.py ..            [ 87%]
+tests/unit/application/test_rbac_app_service_p4.py ....F....FFFF........ [ 88%]
+..................                                                       [ 88%]
+tests/unit/application/test_session_account_meta_p4.py ................. [ 88%]
+.............................................                            [ 88%]
+tests/unit/application/test_unit_products_import_app_service_p4.py ..... [ 88%]
+...............................                                          [ 89%]
+tests/unit/application/test_user_app_service_p4.py ...................F  [ 89%]
+tests/unit/coverage/test_application_import_sweep.py ................... [ 89%]
+........................................................................ [ 90%]
+............................................................             [ 91%]
+tests/unit/coverage/test_fastapi_routes_import_sweep.py ....F........... [ 91%]
+..........................................                               [ 91%]
+tests/unit/coverage/test_import_services_sweep.py ...................... [ 92%]
+....................................................................     [ 92%]
+tests/unit/coverage/test_infrastructure_import_sweep.py ...FFF.F........ [ 93%]
+.....................................F....................F.F........... [ 93%]
+...................................................................      [ 94%]
+tests/unit/coverage/test_sweep_application_layer.py ....                 [ 94%]
+tests/unit/coverage/test_sweep_bootstrap_artifact.py F.......            [ 94%]
+tests/unit/coverage/test_sweep_ocr_bootstrap.py ......                   [ 94%]
+tests/unit/coverage/test_tasks_domain_import_sweep.py .................. [ 95%]
+..................................                                       [ 95%]
+tests/unit/infrastructure/test_domain_registry.py ....FF...F.F           [ 95%]
+tests/unit/infrastructure/test_infra_small_p4.py .....................   [ 95%]
+tests/unit/infrastructure/test_inventory_repository_impl.py F.F          [ 95%]
+tests/unit/infrastructure/test_mod_dal.py .........                      [ 96%]
+tests/unit/infrastructure/test_mod_index_service.py ..                   [ 96%]
+tests/unit/infrastructure/test_mod_manager.py ...                        [ 96%]
+tests/unit/infrastructure/test_mod_manager_extended.py ....F..           [ 96%]
+tests/unit/infrastructure/test_mod_manager_phase1.py ...                 [ 96%]
+tests/unit/infrastructure/test_mod_package_unit.py ......                [ 96%]
+tests/unit/infrastructure/test_order_store_json.py .....                 [ 96%]
+tests/unit/infrastructure/test_sqlite_per_mod_policy.py ...              [ 96%]
+tests/unit/infrastructure/test_template_store_impl.py ......             [ 96%]
+tests/unit/infrastructure/test_workspace_payment_signoff_p4.py ......... [ 96%]
+............................                                             [ 96%]
+tests/unit/neuro_bus/test_neuro_reliability_defaults.py ...              [ 96%]
+tests/unit/rbac/test_tenant_scope.py ...                                 [ 96%]
+tests/unit/security/test_license_store.py ..........                     [ 96%]
+tests/unit/services/test_bert_intent_service_p4.py ..................... [ 97%]
+...........                                                              [ 97%]
+tests/unit/services/test_contract_lifecycle_p4.py ...................... [ 97%]
+.......................                                                  [ 97%]
+tests/unit/services/test_metrics.py ...........                          [ 97%]
+tests/unit/services/test_ocr_service_extended.py .......                 [ 98%]
+tests/unit/services/test_phase3_neuro_and_sync.py ...                    [ 98%]
+tests/unit/services/test_phase3_services.py .F.                          [ 98%]
+tests/unit/services/test_report_service.py ....................F.FF..    [ 98%]
+tests/unit/services/test_user_cs_crm_store_p4.py ....................... [ 98%]
+................................................                         [ 99%]
+tests/unit/services/test_wechat_contact_service_p4.py .................. [ 99%]
+.............F...............                                            [ 99%]
+tests/unit/services/test_wechat_decrypt_autoconfig.py .....              [ 99%]
+tests/unit/services/test_wechat_decrypt_extended.py ..F.                 [ 99%]
+tests/unit/utils/test_structured_logging.py ...........                  [100%]
+
+=============================== warnings summary ===============================
+.venv/lib/python3.11/site-packages/fastapi/testclient.py:1
+  /Users/a4243342/Desktop/XCMAX/FHD/.venv/lib/python3.11/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+tests/test_coverage_ramp_phase65_ai_intent.py::test_main_collect_no_api_key
+  /Users/a4243342/Desktop/XCMAX/FHD/tests/test_coverage_ramp_phase65_ai_intent.py:608: RuntimeWarning: coroutine 'AsyncMockMixin._execute_mock_call' was never awaited
+    asyncio.run(main())
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_coverage_ramp_phase65_ai_intent.py::test_main_collect_with_api_key
+  /Users/a4243342/Desktop/XCMAX/FHD/tests/test_coverage_ramp_phase65_ai_intent.py:620: RuntimeWarning: coroutine 'AsyncMockMixin._execute_mock_call' was never awaited
+    asyncio.run(main())
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_ai_tier.py::test_resolve_ai_tier_uses_compare_digest - Attr...
+FAILED tests/test_async_decorators.py::test_retry_async_succeeds_after_failure
+FAILED tests/test_audit_events.py::test_audit_logger_dual_writes - FileNotFou...
+FAILED tests/test_bootstrap_deprecation.py::test_legacy_shipment_dual_entry_removed
+FAILED tests/test_coverage_gate70_boost.py::test_structured_log_formatter_with_trace_fields
+FAILED tests/test_coverage_gate70_boost.py::test_neurobus_dlq_http_routes - a...
+FAILED tests/test_coverage_milestone_phase4_gates.py::test_ramp_doc_lists_authoritative_baseline
+FAILED tests/test_coverage_ramp_api_get_sweep.py::test_all_registered_api_get_routes_not_5xx
+FAILED tests/test_coverage_ramp_domain_routes.py::test_domain_routes_smoke[get-/api/mod-store/catalog]
+FAILED tests/test_coverage_ramp_imports.py::test_import_app_submodule[app.infrastructure.ai.providers.bert_provider]
+FAILED tests/test_coverage_ramp_imports.py::test_import_app_submodule[app.infrastructure.ai.providers.deepseek_provider]
+FAILED tests/test_coverage_ramp_imports.py::test_import_app_submodule[app.infrastructure.ai.providers.rasa_provider]
+FAILED tests/test_coverage_ramp_imports.py::test_import_app_submodule[app.infrastructure.ai.providers.tts_provider]
+FAILED tests/test_coverage_ramp_imports.py::test_import_app_submodule[app.infrastructure.gateways.customers]
+FAILED tests/test_coverage_ramp_imports.py::test_import_app_submodule[app.infrastructure.llm.invoke]
+FAILED tests/test_coverage_ramp_imports.py::test_import_app_submodule[app.infrastructure.llm.providers]
+FAILED tests/test_coverage_ramp_p0.py::test_coverage_ramp_safe_get_not_5xx[/api/mod-store/catalog]
+FAILED tests/test_coverage_ramp_p0.py::test_coverage_ramp_safe_get_not_5xx[/api/mod-store/mod/1/details]
+FAILED tests/test_coverage_ramp_p0.py::test_coverage_ramp_safe_get_not_5xx[/api/mod-store/popular]
+FAILED tests/test_coverage_ramp_p0.py::test_coverage_ramp_safe_get_not_5xx[/api/mod-store/recent]
+FAILED tests/test_coverage_ramp_p0.py::test_coverage_ramp_safe_get_not_5xx[/api/mod-store/search]
+FAILED tests/test_coverage_ramp_phase10_backend.py::test_ai_chat_price_resolution_and_column_roles
+FAILED tests/test_coverage_ramp_phase10_backend.py::test_ai_chat_inject_excel_vector_and_persist
+FAILED tests/test_coverage_ramp_phase10_ci_gate.py::test_resolve_session_user_from_cookie
+FAILED tests/test_coverage_ramp_phase10_routes.py::test_contract_lifecycle_status
+FAILED tests/test_coverage_ramp_phase10_routes.py::test_contract_transition
+FAILED tests/test_coverage_ramp_phase12_application.py::test_auth_login_and_permissions
+FAILED tests/test_coverage_ramp_phase12_routes_middleware.py::test_csrf_demand_form_sync_exempt
+FAILED tests/test_coverage_ramp_phase12_routes_middleware.py::test_wechat_decrypt_routes
+FAILED tests/test_coverage_ramp_phase12_routes_middleware.py::test_user_cs_wechat_passive_compat
+FAILED tests/test_coverage_ramp_phase13_backend.py::test_execute_products_import_and_invalid_params
+FAILED tests/test_coverage_ramp_phase13_backend.py::test_execute_shipment_and_materials_paths
+FAILED tests/test_coverage_ramp_phase13_backend.py::test_execute_import_excel_success_and_service_fallbacks
+FAILED tests/test_coverage_ramp_phase13_backend.py::test_initialize_databases_sync_sqlite_warning_paths
+FAILED tests/test_coverage_ramp_phase13_backend.py::test_initialize_databases_async_pycryptodome_warning
+FAILED tests/test_coverage_ramp_phase13_backend.py::test_run_ensure_ai_action_audit_table_no_loader
+FAILED tests/test_coverage_ramp_phase13_backend.py::test_execute_import_excel_ai_price_column_resolution
+FAILED tests/test_coverage_ramp_phase13_backend.py::test_ai_assistant_health_and_units
+FAILED tests/test_coverage_ramp_phase13_backend.py::test_ai_chat_static_helpers_and_fallback
+FAILED tests/test_coverage_ramp_phase13_backend.py::test_ai_chat_process_chat_empty_and_workflow_shortcut
+FAILED tests/test_coverage_ramp_phase13_backend.py::test_execute_import_excel_skips_duplicate_product
+FAILED tests/test_coverage_ramp_phase13_routes.py::test_xcmax_wechat_customers_roundtrip
+FAILED tests/test_coverage_ramp_phase13_routes.py::test_xcmax_sync_resolve_apply
+FAILED tests/test_coverage_ramp_phase14_ai_chat.py::test_persist_chat_turn_with_session_and_tool_summary
+FAILED tests/test_coverage_ramp_phase14_mod_wechat.py::test_mod_manager_failures_and_ensure_disabled
+FAILED tests/test_coverage_ramp_phase15_routes_mod.py::test_ensure_mods_loaded_triggers_reload
+FAILED tests/test_coverage_ramp_phase20_backend.py::test_call_llm_platform_fail_fallback_direct
+FAILED tests/test_coverage_ramp_phase20_routes_app.py::test_template_application_service_mock_store
+FAILED tests/test_coverage_ramp_phase20_routes_app.py::test_finance_unified_ledger_error_paths
+FAILED tests/test_coverage_ramp_phase20_routes_app.py::test_ocr_application_service_and_singleton
+FAILED tests/test_coverage_ramp_phase20_routes_app.py::test_print_application_service_and_singleton
+FAILED tests/test_coverage_ramp_phase20_routes_app.py::test_xcmax_sync_and_mobile_push_and_intent
+FAILED tests/test_coverage_ramp_phase21_backend.py::test_delete_supplier_soft_delete
+FAILED tests/test_coverage_ramp_phase21_backend.py::test_update_purchase_order_rejects_non_draft
+FAILED tests/test_coverage_ramp_phase21_backend.py::test_approve_purchase_order_not_draft
+FAILED tests/test_coverage_ramp_phase21_backend.py::test_save_bindings_skips_inactive
+FAILED tests/test_coverage_ramp_phase22_backend.py::test_retry_async_path - V...
+FAILED tests/test_coverage_ramp_phase22_routes.py::test_contract_esign_start
+FAILED tests/test_coverage_ramp_phase22_routes.py::test_finance_crm_archive_success
+FAILED tests/test_coverage_ramp_phase23_backend.py::test_shipment_create_skips_invalid_items_and_hook_warning
+FAILED tests/test_coverage_ramp_phase23_backend.py::test_shipment_create_repository_exception
+FAILED tests/test_coverage_ramp_phase23_routes.py::test_purchase_suppliers_list
+FAILED tests/test_coverage_ramp_phase23_routes.py::test_purchase_supplier_crud_paths
+FAILED tests/test_coverage_ramp_phase23_routes.py::test_purchase_orders_summary
+FAILED tests/test_coverage_ramp_phase23_routes.py::test_report_sales_and_dashboard
+FAILED tests/test_coverage_ramp_phase23_routes.py::test_report_inventory_transactions
+FAILED tests/test_coverage_ramp_phase23_routes.py::test_operations_line_health_and_signoff
+FAILED tests/test_coverage_ramp_phase24_backend.py::test_process_chat_workflow_shortcut_and_file_context
+FAILED tests/test_coverage_ramp_phase24_backend.py::test_persist_chat_turn_writes_when_session_present
+FAILED tests/test_coverage_ramp_phase24_backend.py::test_ai_assistant_shipment_records_and_units
+FAILED tests/test_coverage_ramp_phase24_backend.py::test_ai_assistant_purchase_units_crud
+FAILED tests/test_coverage_ramp_phase24_backend.py::test_ai_assistant_product_names_and_printers
+FAILED tests/test_coverage_ramp_phase24_backend.py::test_ai_assistant_print_and_tts_routes
+FAILED tests/test_coverage_ramp_phase25_backend.py::test_mod_manager_scan_from_build_index
+FAILED tests/test_coverage_ramp_phase25_routes.py::test_legacy_gaps_system_info
+FAILED tests/test_coverage_ramp_phase26_backend.py::test_get_bindings_for_user_maps_rows
+FAILED tests/test_coverage_ramp_phase26_backend.py::test_save_bindings_for_user_active_group
+FAILED tests/test_coverage_ramp_phase26_backend.py::test_excel_static_helpers_and_payload_present
+FAILED tests/test_coverage_ramp_phase26_routes.py::test_inventory_list_and_summary
+FAILED tests/test_coverage_ramp_phase26_routes.py::test_inventory_transactions_with_dates
+FAILED tests/test_coverage_ramp_phase26_routes.py::test_inventory_alerts_and_combined
+FAILED tests/test_coverage_ramp_phase26_routes.py::test_inventory_combined_alert_materials_error
+FAILED tests/test_coverage_ramp_phase26_routes.py::test_inventory_locations_crud
+FAILED tests/test_coverage_ramp_phase26_routes.py::test_inventory_warehouses_crud
+FAILED tests/test_coverage_ramp_phase26_routes.py::test_inventory_movements
+FAILED tests/test_coverage_ramp_phase27_backend.py::test_purchase_create_and_update_supplier
+FAILED tests/test_coverage_ramp_phase27_backend.py::test_purchase_get_orders_and_order_detail
+FAILED tests/test_coverage_ramp_phase27_backend.py::test_purchase_approve_and_cancel_order
+FAILED tests/test_coverage_ramp_phase27_backend.py::test_purchase_create_inbound_updates_order
+FAILED tests/test_coverage_ramp_phase27_backend.py::test_purchase_inbounds_and_summaries
+FAILED tests/test_coverage_ramp_phase27_backend.py::test_purchase_generate_order_numbers
+FAILED tests/test_coverage_ramp_phase27_routes.py::test_inventory_list_and_summary
+FAILED tests/test_coverage_ramp_phase27_routes.py::test_inventory_transactions_with_dates
+FAILED tests/test_coverage_ramp_phase27_routes.py::test_inventory_alerts_and_combined
+FAILED tests/test_coverage_ramp_phase27_routes.py::test_inventory_combined_alert_materials_error
+FAILED tests/test_coverage_ramp_phase27_routes.py::test_inventory_locations_crud
+FAILED tests/test_coverage_ramp_phase27_routes.py::test_inventory_warehouses_crud
+FAILED tests/test_coverage_ramp_phase27_routes.py::test_inventory_movements
+FAILED tests/test_coverage_ramp_phase28_backend.py::test_purchase_get_suppliers_and_delete
+FAILED tests/test_coverage_ramp_phase28_backend.py::test_purchase_get_supplier_missing
+FAILED tests/test_coverage_ramp_phase28_backend.py::test_purchase_create_and_update_order
+FAILED tests/test_coverage_ramp_phase28_backend.py::test_purchase_update_order_wrong_status
+FAILED tests/test_coverage_ramp_phase28_backend.py::test_purchase_update_received_quantity
+FAILED tests/test_coverage_ramp_phase29_backend.py::test_ai_intent_bert_classifier_uses_model_path
+FAILED tests/test_coverage_ramp_phase29_backend.py::test_ai_intent_bert_classifier_default_path
+FAILED tests/test_coverage_ramp_phase29_backend.py::test_ai_intent_health_import_failure
+FAILED tests/test_coverage_ramp_phase29_routes.py::test_legacy_products_delete_and_names
+FAILED tests/test_coverage_ramp_phase29_routes.py::test_legacy_products_search_and_batch
+FAILED tests/test_coverage_ramp_phase29_routes.py::test_legacy_products_update_methods
+FAILED tests/test_coverage_ramp_phase29_routes.py::test_legacy_products_export_success_and_missing_file
+FAILED tests/test_coverage_ramp_phase30_backend.py::test_purchase_delete_supplier_soft_delete
+FAILED tests/test_coverage_ramp_phase30_backend.py::test_purchase_delete_supplier_missing
+FAILED tests/test_coverage_ramp_phase30_backend.py::test_purchase_get_orders_pagination
+FAILED tests/test_coverage_ramp_phase30_backend.py::test_purchase_model_to_dict_decimal
+FAILED tests/test_coverage_ramp_phase30_routes.py::test_report_inventory_and_purchase
+FAILED tests/test_coverage_ramp_phase30_routes.py::test_report_export_post - ...
+FAILED tests/test_coverage_ramp_phase31_backend.py::test_excel_static_helpers_and_payload_present
+FAILED tests/test_coverage_ramp_phase31_backend.py::test_purchase_cancel_order_missing
+FAILED tests/test_coverage_ramp_phase31_backend.py::test_purchase_cancel_order_already_completed
+FAILED tests/test_coverage_ramp_phase31_backend.py::test_purchase_cancel_order_success
+FAILED tests/test_coverage_ramp_phase31_backend.py::test_purchase_create_inbound_inventory_warning
+FAILED tests/test_coverage_ramp_phase31_backend.py::test_purchase_get_inbounds_empty
+FAILED tests/test_coverage_ramp_phase32_routes.py::test_legacy_excel_parse_single_success
+FAILED tests/test_coverage_ramp_phase33_backend.py::test_process_chat_returns_workflow_shortcut
+FAILED tests/test_coverage_ramp_phase34_routes.py::test_operations_line_health
+FAILED tests/test_coverage_ramp_phase34_routes.py::test_legacy_gaps_system_info
+FAILED tests/test_coverage_ramp_phase35_backend.py::test_purchase_approve_order_success
+FAILED tests/test_coverage_ramp_phase35_backend.py::test_purchase_approve_order_wrong_status
+FAILED tests/test_coverage_ramp_phase35_backend.py::test_purchase_get_supplier_summary
+FAILED tests/test_coverage_ramp_phase35_backend.py::test_purchase_get_purchase_summary
+FAILED tests/test_coverage_ramp_phase35_backend.py::test_purchase_create_inbound_updates_order_qty
+FAILED tests/test_coverage_ramp_phase35_backend.py::test_persist_chat_turn_with_session
+FAILED tests/test_coverage_ramp_phase36_routes.py::test_inventory_alert_aliases
+FAILED tests/test_coverage_ramp_phase36_routes.py::test_inventory_combined_alert
+FAILED tests/test_coverage_ramp_phase36_routes.py::test_inventory_combined_alert_materials_failure
+FAILED tests/test_coverage_ramp_phase37_backend.py::test_batch_delete_and_export
+FAILED tests/test_coverage_ramp_phase37_routes.py::test_report_dashboard_summary
+FAILED tests/test_coverage_ramp_phase37_routes.py::test_report_sales_with_filters
+FAILED tests/test_coverage_ramp_phase37_routes.py::test_report_inventory_transactions_filters
+FAILED tests/test_coverage_ramp_phase37_routes.py::test_legacy_excel_parse_products_success
+FAILED tests/test_coverage_ramp_phase37_routes.py::test_legacy_excel_analyze_with_file
+FAILED tests/test_coverage_ramp_phase38_routes.py::test_purchase_orders_with_date_filters
+FAILED tests/test_coverage_ramp_phase38_routes.py::test_purchase_inbounds_with_filters_and_create
+FAILED tests/test_coverage_ramp_phase38_routes.py::test_purchase_suppliers_summary_and_order_workflow
+FAILED tests/test_coverage_ramp_phase39_backend.py::test_redis_unlock_empty_token_returns_false
+FAILED tests/test_coverage_ramp_phase39_backend.py::test_purchase_get_supplier_not_found
+FAILED tests/test_coverage_ramp_phase39_backend.py::test_purchase_update_supplier_not_found
+FAILED tests/test_coverage_ramp_phase39_backend.py::test_purchase_create_supplier_db_error_raises_app_error
+FAILED tests/test_coverage_ramp_phase39_backend.py::test_purchase_create_order_with_items
+FAILED tests/test_coverage_ramp_phase39_backend.py::test_purchase_approve_order_not_found
+FAILED tests/test_coverage_ramp_phase39_backend.py::test_save_bindings_skips_invalid_contacts
+FAILED tests/test_coverage_ramp_phase39_backend.py::test_ensure_enterprise_wechat_binding_tables_calls_create
+FAILED tests/test_coverage_ramp_phase39_routes.py::test_inventory_list_with_batch_filter
+FAILED tests/test_coverage_ramp_phase39_routes.py::test_inventory_warehouse_get_by_id
+FAILED tests/test_coverage_ramp_phase39_routes.py::test_operations_contract_scan_expiry
+FAILED tests/test_coverage_ramp_phase40_backend.py::test_purchase_update_order_not_draft
+FAILED tests/test_coverage_ramp_phase40_backend.py::test_purchase_update_order_with_items
+FAILED tests/test_coverage_ramp_phase40_backend.py::test_purchase_approve_non_draft
+FAILED tests/test_coverage_ramp_phase40_backend.py::test_purchase_cancel_completed
+FAILED tests/test_coverage_ramp_phase40_backend.py::test_purchase_get_orders_with_filters
+FAILED tests/test_coverage_ramp_phase40_backend.py::test_purchase_get_order_success
+FAILED tests/test_coverage_ramp_phase40_backend.py::test_purchase_delete_supplier_success
+FAILED tests/test_coverage_ramp_phase40_backend.py::test_purchase_inbound_inventory_warning_still_succeeds
+FAILED tests/test_coverage_ramp_phase40_backend.py::test_purchase_get_summary
+FAILED tests/test_coverage_ramp_phase40_routes.py::test_legacy_static_customers_batch_delete_body
+FAILED tests/test_coverage_ramp_phase40_routes.py::test_legacy_static_preferences_delete
+FAILED tests/test_coverage_ramp_phase40_routes.py::test_legacy_products_delete
+FAILED tests/test_coverage_ramp_phase40_routes.py::test_legacy_products_export_with_filters
+FAILED tests/test_coverage_ramp_phase41_backend.py::test_shipment_create_invalid_shipment_returns_error
+FAILED tests/test_coverage_ramp_phase41_backend.py::test_inventory_service_get_warehouse_missing
+FAILED tests/test_coverage_ramp_phase41_backend.py::test_inventory_service_update_warehouse_missing
+FAILED tests/test_coverage_ramp_phase41_backend.py::test_inventory_service_get_inventory_alert_empty
+FAILED tests/test_coverage_ramp_phase42_backend.py::test_get_bindings_for_user_maps_rows
+FAILED tests/test_coverage_ramp_phase42_backend.py::test_save_bindings_for_user_stars_valid_groups
+FAILED tests/test_coverage_ramp_phase42_backend.py::test_ensure_enterprise_binding_tables_phase42
+FAILED tests/test_coverage_ramp_phase43_backend.py::test_process_chat_dynamic_workflow_short_circuit
+FAILED tests/test_coverage_ramp_phase43_backend.py::test_process_chat_success_builds_response
+FAILED tests/test_coverage_ramp_phase44_routes.py::test_ai_assistant_purchase_unit_by_name_not_found
+FAILED tests/test_coverage_ramp_phase44_routes.py::test_report_dashboard_summary
+FAILED tests/test_coverage_ramp_phase44_routes.py::test_report_sales_filters
+FAILED tests/test_coverage_ramp_phase44_routes.py::test_report_export_excel
+FAILED tests/test_coverage_ramp_phase44_routes.py::test_wechat_decrypt_status
+FAILED tests/test_coverage_ramp_phase45_backend.py::test_shipment_create_success_skips_invalid_items
+FAILED tests/test_coverage_ramp_phase45_backend.py::test_shipment_create_repository_exception
+FAILED tests/test_coverage_ramp_phase46_routes.py::test_intent_health - Asser...
+FAILED tests/test_coverage_ramp_phase47_backend.py::test_app_error_to_dict_includes_code_and_message
+FAILED tests/test_coverage_ramp_phase47_backend.py::test_persist_chat_turn_excel_import_summary
+FAILED tests/test_coverage_ramp_phase47_backend.py::test_process_chat_enriches_excel_from_file_context
+FAILED tests/test_coverage_ramp_phase47_routes.py::test_finance_crm_list_success
+FAILED tests/test_coverage_ramp_phase47_routes.py::test_contract_status_success
+FAILED tests/test_coverage_ramp_phase47_routes.py::test_contract_transition_success
+FAILED tests/test_coverage_ramp_phase47_routes.py::test_contract_esign_webhook_json
+FAILED tests/test_coverage_ramp_phase48_routes.py::test_inventory_list_mocked
+FAILED tests/test_coverage_ramp_phase49_backend.py::test_process_chat_returns_workflow_result_early
+FAILED tests/test_coverage_ramp_phase49_backend.py::test_execute_tool_products_query_dispatches
+FAILED tests/test_coverage_ramp_phase49_routes.py::test_excel_extract_import_products_mocked
+FAILED tests/test_coverage_ramp_phase49_routes.py::test_wechat_decrypt_status_passthrough
+FAILED tests/test_coverage_ramp_phase4_ci_gate.py::test_auth_dependencies_current_user_and_role
+FAILED tests/test_coverage_ramp_phase4_ci_gate.py::test_auth_resolve_session_with_mock
+FAILED tests/test_coverage_ramp_phase4_workflow.py::test_execute_products_query_mocked
+FAILED tests/test_coverage_ramp_phase50_backend.py::test_product_import_singleton_and_init
+FAILED tests/test_coverage_ramp_phase51_backend.py::test_template_singleton_init
+FAILED tests/test_coverage_ramp_phase51_backend.py::test_auth_inactive_user_and_wrong_password
+FAILED tests/test_coverage_ramp_phase51_backend.py::test_auth_session_create_failure_raises_app_error
+FAILED tests/test_coverage_ramp_phase51_backend.py::test_auth_change_and_reset_password
+FAILED tests/test_coverage_ramp_phase51_backend.py::test_auth_permissions_admin_and_db_fallback
+FAILED tests/test_coverage_ramp_phase51_backend.py::test_purchase_get_inbounds_with_filters
+FAILED tests/test_coverage_ramp_phase51_backend.py::test_purchase_inbound_marks_order_completed
+FAILED tests/test_coverage_ramp_phase51_backend.py::test_purchase_get_supplier_missing
+FAILED tests/test_coverage_ramp_phase51_backend.py::test_purchase_generate_numbers
+FAILED tests/test_coverage_ramp_phase51_backend.py::test_purchase_get_purchase_order_missing
+FAILED tests/test_coverage_ramp_phase51_backend.py::test_purchase_cancel_order_success
+FAILED tests/test_coverage_ramp_phase51_routes.py::test_xcmax_sync_conflicts
+FAILED tests/test_coverage_ramp_phase53_backend.py::test_purchase_get_suppliers
+FAILED tests/test_coverage_ramp_phase53_backend.py::test_purchase_create_supplier_success
+FAILED tests/test_coverage_ramp_phase53_backend.py::test_purchase_delete_supplier_soft_delete
+FAILED tests/test_coverage_ramp_phase53_backend.py::test_purchase_approve_order_not_draft
+FAILED tests/test_coverage_ramp_phase53_backend.py::test_purchase_update_order_rejects_non_draft
+FAILED tests/test_coverage_ramp_phase53_backend.py::test_purchase_create_order_with_items
+FAILED tests/test_coverage_ramp_phase53_backend.py::test_purchase_inbound_inventory_warning_still_succeeds
+FAILED tests/test_coverage_ramp_phase53_backend.py::test_purchase_get_inbounds_empty
+FAILED tests/test_coverage_ramp_phase53_backend.py::test_purchase_generate_numbers_format
+FAILED tests/test_coverage_ramp_phase53_backend.py::test_purchase_get_supplier_summary
+FAILED tests/test_coverage_ramp_phase53_routes.py::test_contract_status_party_a_from_erp
+FAILED tests/test_coverage_ramp_phase53_routes.py::test_contract_esign_non_stub_provider
+FAILED tests/test_coverage_ramp_phase53_routes.py::test_contract_esign_webhook_empty_body
+FAILED tests/test_coverage_ramp_phase54_backend.py::test_resolve_wechat_decrypt_toolkit_uses_persisted_valid
+FAILED tests/test_coverage_ramp_phase54_routes.py::test_inventory_summary_with_warehouse
+FAILED tests/test_coverage_ramp_phase54_routes.py::test_inventory_transactions_with_iso_dates
+FAILED tests/test_coverage_ramp_phase54_routes.py::test_inventory_alert_primary_and_alias
+FAILED tests/test_coverage_ramp_phase54_routes.py::test_inventory_combined_alert_merges_materials
+FAILED tests/test_coverage_ramp_phase54_routes.py::test_inventory_combined_alert_materials_exception
+FAILED tests/test_coverage_ramp_phase54_routes.py::test_inventory_locations_crud
+FAILED tests/test_coverage_ramp_phase54_routes.py::test_inventory_warehouses_lifecycle
+FAILED tests/test_coverage_ramp_phase54_routes.py::test_inventory_in_without_unit_price
+FAILED tests/test_coverage_ramp_phase54_routes.py::test_purchase_orders_supplier_and_status_filters
+FAILED tests/test_coverage_ramp_phase54_routes.py::test_purchase_inbounds_order_filter
+FAILED tests/test_coverage_ramp_phase54_routes.py::test_purchase_approve_custom_approver
+FAILED tests/test_coverage_ramp_phase54_routes.py::test_operations_health_payload
+FAILED tests/test_coverage_ramp_phase54_routes.py::test_operations_contract_scan_expiry_params
+FAILED tests/test_coverage_ramp_phase54_routes.py::test_report_sales_customer_filter
+FAILED tests/test_coverage_ramp_phase54_routes.py::test_report_inventory_category
+FAILED tests/test_coverage_ramp_phase54_routes.py::test_report_inventory_transactions_filters
+FAILED tests/test_coverage_ramp_phase54_routes.py::test_report_purchase_date_range
+FAILED tests/test_coverage_ramp_phase54_routes.py::test_report_export_defaults
+FAILED tests/test_coverage_ramp_phase54_routes.py::test_ai_tts_success - KeyE...
+FAILED tests/test_coverage_ramp_phase54_routes.py::test_ai_tts_fallback_on_error
+FAILED tests/test_coverage_ramp_phase54_routes.py::test_ai_purchase_units_create_name_alias
+FAILED tests/test_coverage_ramp_phase55_backend.py::test_db_get_db_closes_session
+FAILED tests/test_coverage_ramp_phase55_backend.py::test_db_close_old_connections_clears_pool
+FAILED tests/test_coverage_ramp_phase56_ai_intent.py::test_enrich_keeps_user_file_path_when_different
+FAILED tests/test_coverage_ramp_phase57_ai_intent.py::test_cn_to_number_compound
+FAILED tests/test_coverage_ramp_phase57_ai_intent.py::test_recognize_retries_then_falls_back
+FAILED tests/test_coverage_ramp_phase57_ai_intent.py::test_recognize_handles_empty_choices
+FAILED tests/test_coverage_ramp_phase57_ai_intent.py::test_parse_response_invalid_intent_falls_back
+FAILED tests/test_coverage_ramp_phase57_ai_intent.py::test_normalize_unit_name_give_pattern
+FAILED tests/test_coverage_ramp_phase57_ai_intent.py::test_hybrid_recognize_greeting_short_circuits
+FAILED tests/test_coverage_ramp_phase57_ai_intent.py::test_extract_slots_give_branch
+FAILED tests/test_coverage_ramp_phase57_ai_intent.py::test_extract_slots_help_branch
+FAILED tests/test_coverage_ramp_phase57_ai_intent.py::test_extract_slots_contact_person_to_unit_name
+FAILED tests/test_coverage_ramp_phase58_ai_intent.py::test_reflex_basic_intents_goodbye
+FAILED tests/test_coverage_ramp_phase58_ai_intent.py::test_reflex_basic_intents_help
+FAILED tests/test_coverage_ramp_phase58_ai_intent.py::test_recognize_intents_goodbye
+FAILED tests/test_coverage_ramp_phase58_ai_intent.py::test_recognize_intents_help
+FAILED tests/test_coverage_ramp_phase58_ai_intent.py::test_extract_multi_unit_names_no_match
+FAILED tests/test_coverage_ramp_phase58_ai_intent.py::test_extract_multi_unit_names_strips_prefix
+FAILED tests/test_coverage_ramp_phase58_ai_intent.py::test_recognize_intents_shipment_startswith_with_order_info
+FAILED tests/test_coverage_ramp_phase59_ai_intent.py::test_merge_low_confidence_falls_back
+FAILED tests/test_coverage_ramp_phase59_ai_intent.py::test_recognize_deepseek_success
+FAILED tests/test_coverage_ramp_phase5_infra_domain.py::test_cn_to_number[\u4e8c\u5341-20]
+FAILED tests/test_coverage_ramp_phase5_infra_domain.py::test_extract_number_from_text_chinese
+FAILED tests/test_coverage_ramp_phase5_infra_domain.py::test_parse_quantity_with_unit
+FAILED tests/test_coverage_ramp_phase5_routes.py::test_xcmax_wechat_groups_ok
+FAILED tests/test_coverage_ramp_phase5_routes.py::test_xcmax_sync_conflicts_list
+FAILED tests/test_coverage_ramp_phase5_routes.py::test_legacy_require_login_and_permission
+FAILED tests/test_coverage_ramp_phase60_ai_app_deep.py::test_excel_cell_looks_like_product_measure_unit
+FAILED tests/test_coverage_ramp_phase60_ai_app_deep.py::test_guess_default_purchase_unit_empty
+FAILED tests/test_coverage_ramp_phase60_ai_app_deep.py::test_infer_excel_column_roles_basic
+FAILED tests/test_coverage_ramp_phase60_ai_app_deep.py::test_infer_excel_column_roles_with_llm_invalid_role_filtered
+FAILED tests/test_coverage_ramp_phase60_ai_app_deep.py::test_price_column_buckets_success
+FAILED tests/test_coverage_ramp_phase60_ai_app_deep.py::test_resolve_unit_price_column_forced_not_found
+FAILED tests/test_coverage_ramp_phase60_ai_app_deep.py::test_resolve_unit_price_column_tension_prefer_before
+FAILED tests/test_coverage_ramp_phase60_ai_app_deep.py::test_resolve_unit_price_column_tension_prefer_after
+FAILED tests/test_coverage_ramp_phase60_ai_app_deep.py::test_resolve_unit_price_column_tension_ambiguous
+FAILED tests/test_coverage_ramp_phase60_ai_app_deep.py::test_resolve_unit_price_column_tension_default_before
+FAILED tests/test_coverage_ramp_phase60_ai_app_deep.py::test_resolve_unit_price_column_quote_only_before
+FAILED tests/test_coverage_ramp_phase60_ai_app_deep.py::test_resolve_unit_price_column_quote_only_after
+FAILED tests/test_coverage_ramp_phase60_ai_app_deep.py::test_resolve_unit_price_column_generic_ambiguous
+FAILED tests/test_coverage_ramp_phase60_ai_app_deep.py::test_extract_excel_import_records_price_error
+FAILED tests/test_coverage_ramp_phase60_ai_app_deep.py::test_persist_chat_turn_with_session_id
+FAILED tests/test_coverage_ramp_phase60_ai_app_deep.py::test_persist_chat_turn_with_conversation_id
+FAILED tests/test_coverage_ramp_phase60_ai_app_deep.py::test_persist_chat_turn_exception
+FAILED tests/test_coverage_ramp_phase61_tools_workflow_deep.py::test_import_products_execute
+FAILED tests/test_coverage_ramp_phase61_tools_workflow_deep.py::test_import_products_execute_with_existing_unit
+FAILED tests/test_coverage_ramp_phase62_planner_deep.py::test_execute_products_query_keyword
+FAILED tests/test_coverage_ramp_phase62_planner_deep.py::test_execute_products_query_unit
+FAILED tests/test_coverage_ramp_phase62_planner_deep.py::test_execute_products_query_model
+FAILED tests/test_coverage_ramp_phase62_planner_deep.py::test_execute_products_runtime_error
+FAILED tests/test_coverage_ramp_phase62_planner_deep.py::test_execute_materials_query
+FAILED tests/test_coverage_ramp_phase62_planner_deep.py::test_execute_materials_value_error
+FAILED tests/test_coverage_ramp_phase62_planner_deep.py::test_execute_materials_runtime_error
+FAILED tests/test_coverage_ramp_phase62_planner_deep.py::test_execute_import_excel_runtime_error
+FAILED tests/test_coverage_ramp_phase62_planner_deep.py::test_execute_import_excel_runtime_init
+FAILED tests/test_coverage_ramp_phase62_planner_deep.py::test_execute_import_excel_success
+FAILED tests/test_coverage_ramp_phase62_planner_deep.py::test_execute_import_excel_skip_existing
+FAILED tests/test_coverage_ramp_phase62_planner_deep.py::test_get_planner_http_client_singleton
+FAILED tests/test_coverage_ramp_phase63_ai_app_deep.py::test_process_chat_pro_mode_handled_via_dynamic_workflow
+FAILED tests/test_coverage_ramp_phase63_ai_app_deep.py::test_persist_chat_turn_with_session_id
+FAILED tests/test_coverage_ramp_phase63_ai_app_deep.py::test_persist_chat_turn_with_tool_call
+FAILED tests/test_coverage_ramp_phase63_ai_app_deep.py::test_persist_chat_turn_with_excel_import
+FAILED tests/test_coverage_ramp_phase63_ai_app_deep.py::test_persist_chat_turn_with_document
+FAILED tests/test_coverage_ramp_phase63_ai_app_deep.py::test_price_column_buckets_with_hint
+FAILED tests/test_coverage_ramp_phase63_ai_intent.py::test_recognize_deepseek_returns_intent_with_low_conf
+FAILED tests/test_coverage_ramp_phase63_routes_excel_extract.py::test_import_products_with_ai_parser
+FAILED tests/test_coverage_ramp_phase63_routes_excel_extract.py::test_import_customers_success
+FAILED tests/test_coverage_ramp_phase63_routes_excel_extract.py::test_import_customers_partial_failure
+FAILED tests/test_coverage_ramp_phase63_wechat_crm.py::test_get_contact_context_with_non_list_json
+FAILED tests/test_coverage_ramp_phase64_ai_intent.py::test_get_wechat_task_app_service_resets
+FAILED tests/test_coverage_ramp_phase65_routes_ai_kitten.py::test_business_snapshot_success
+FAILED tests/test_coverage_ramp_phase65_routes_ai_kitten.py::test_business_snapshot_exception
+FAILED tests/test_coverage_ramp_phase65_routes_ai_kitten.py::test_charts_all_exception
+FAILED tests/test_coverage_ramp_phase65_routes_ai_kitten.py::test_charts_revenue_success
+FAILED tests/test_coverage_ramp_phase65_routes_ai_kitten.py::test_charts_products_success
+FAILED tests/test_coverage_ramp_phase65_routes_ai_kitten.py::test_saved_list_success
+FAILED tests/test_coverage_ramp_phase65_routes_ai_kitten.py::test_saved_list_exception
+FAILED tests/test_coverage_ramp_phase65_routes_ai_kitten.py::test_saved_get_success
+FAILED tests/test_coverage_ramp_phase65_routes_ai_kitten.py::test_saved_get_exception
+FAILED tests/test_coverage_ramp_phase65_routes_ai_kitten.py::test_saved_export_success
+FAILED tests/test_coverage_ramp_phase65_routes_ai_kitten.py::test_saved_export_exception
+FAILED tests/test_coverage_ramp_phase65_routes_ai_kitten.py::test_saved_delete_success
+FAILED tests/test_coverage_ramp_phase65_routes_ai_kitten.py::test_saved_delete_exception
+FAILED tests/test_coverage_ramp_phase65_routes_ai_kitten.py::test_financial_report_saved
+FAILED tests/test_coverage_ramp_phase65_routes_ai_kitten.py::test_financial_report_save_failure
+FAILED tests/test_coverage_ramp_phase65_routes_ai_kitten.py::test_financial_report_exception
+FAILED tests/test_coverage_ramp_phase65_routes_ai_kitten.py::test_report_export_success
+FAILED tests/test_coverage_ramp_phase65_routes_ai_kitten.py::test_report_export_docx_success
+FAILED tests/test_coverage_ramp_phase65_routes_ai_kitten.py::test_document_generate_docx_success
+FAILED tests/test_coverage_ramp_phase65_routes_ai_kitten.py::test_document_generate_xlsx_success
+FAILED tests/test_coverage_ramp_phase65_routes_ai_kitten.py::test_document_generate_generic_exception_500
+FAILED tests/test_coverage_ramp_phase65_routes_ai_kitten.py::test_document_pickup_success
+FAILED tests/test_coverage_ramp_phase68_wechat_crm.py::test_export_encrypted_db_to_plain_no_sqlcipher
+FAILED tests/test_coverage_ramp_phase68_wechat_crm.py::test_export_encrypted_db_to_plain_empty_key
+FAILED tests/test_coverage_ramp_phase68_wechat_crm.py::test_export_encrypted_db_to_plain_exception
+FAILED tests/test_coverage_ramp_phase68_wechat_crm.py::test_should_decrypt_wechat_db_contact_section
+FAILED tests/test_coverage_ramp_phase68_wechat_crm.py::test_should_decrypt_wechat_db_message_section
+FAILED tests/test_coverage_ramp_phase68_wechat_crm.py::test_should_decrypt_wechat_db_unknown_section
+FAILED tests/test_coverage_ramp_phase68_wechat_crm.py::test_source_bundle_mtime_empty
+FAILED tests/test_coverage_ramp_phase68_wechat_crm.py::test_source_bundle_mtime_missing_files
+FAILED tests/test_coverage_ramp_phase68_wechat_crm.py::test_source_bundle_mtime_uses_max
+FAILED tests/test_coverage_ramp_phase68_wechat_crm.py::test_resolve_wechat_decrypt_dir_finds_config
+FAILED tests/test_coverage_ramp_phase68_wechat_crm.py::test_ensure_decrypted_wechat_dbs_db_dir_not_configured
+FAILED tests/test_coverage_ramp_phase68_wechat_crm.py::test_ensure_decrypted_wechat_dbs_keys_missing
+FAILED tests/test_coverage_ramp_phase68_wechat_crm.py::test_refresh_wechat_contacts_no_sync
+FAILED tests/test_coverage_ramp_phase68_wechat_crm.py::test_refresh_wechat_contacts_sync_fails_generic
+FAILED tests/test_coverage_ramp_phase68_wechat_crm.py::test_refresh_wechat_contacts_no_source
+FAILED tests/test_coverage_ramp_phase68_wechat_crm.py::test_refresh_wechat_contacts_with_contact_db
+FAILED tests/test_coverage_ramp_phase68_wechat_crm.py::test_refresh_wechat_contacts_updates_existing
+FAILED tests/test_coverage_ramp_phase68_wechat_crm.py::test_refresh_wechat_contacts_falls_back_to_name2id
+FAILED tests/test_coverage_ramp_phase68_wechat_crm.py::test_refresh_wechat_contacts_exception
+FAILED tests/test_coverage_ramp_phase6_workflow.py::test_get_planner_http_client_singleton
+FAILED tests/test_coverage_ramp_phase6_workflow.py::test_execute_materials_import_error_paths
+FAILED tests/test_coverage_ramp_phase6_workflow.py::test_call_llm_platform_fallback_to_legacy
+FAILED tests/test_coverage_ramp_phase70_backend_gate90.py::test_inventory_repository_impl_crud_mocked
+FAILED tests/test_coverage_ramp_phase7_routes.py::test_inventory_list_and_summary
+FAILED tests/test_coverage_ramp_phase7_routes.py::test_inventory_transactions_with_dates
+FAILED tests/test_coverage_ramp_phase7_routes.py::test_inventory_alerts_and_combined
+FAILED tests/test_coverage_ramp_phase7_routes.py::test_inventory_locations_crud
+FAILED tests/test_coverage_ramp_phase7_routes.py::test_inventory_warehouses_crud
+FAILED tests/test_coverage_ramp_phase7_routes.py::test_inventory_movements - ...
+FAILED tests/test_coverage_ramp_phase7_routes.py::test_inventory_combined_alert_materials_error
+FAILED tests/test_coverage_ramp_phase7_routes.py::test_purchase_suppliers_crud
+FAILED tests/test_coverage_ramp_phase7_routes.py::test_purchase_orders_flow
+FAILED tests/test_coverage_ramp_phase7_routes.py::test_purchase_inbounds_and_summary
+FAILED tests/test_coverage_ramp_phase7_routes.py::test_reports_endpoints - As...
+FAILED tests/test_coverage_ramp_phase8_shipment_lifespan.py::test_shipment_execute_direct_products_success
+FAILED tests/test_coverage_ramp_phase8_shipment_lifespan.py::test_shipment_execute_db_terms_fallback_then_generate
+FAILED tests/test_coverage_ramp_phase8_shipment_lifespan.py::test_initialize_databases_sync_sqlite_branch
+FAILED tests/test_coverage_ramp_phase8_tools_workflow.py::test_execute_workflow_bulk_import_and_office_doc
+FAILED tests/test_coverage_ramp_phase8_tools_workflow.py::test_excel_cell_helpers_and_product_import_execute
+FAILED tests/test_coverage_ramp_phase8_tools_workflow.py::test_shipment_execute_success_mocked
+FAILED tests/test_coverage_ramp_phase9_planner.py::test_execute_products_query_branches
+FAILED tests/test_coverage_ramp_phase9_planner.py::test_execute_print_label_and_materials_errors
+FAILED tests/test_coverage_ramp_phase9_planner.py::test_get_planner_http_client_reuses_instance
+FAILED tests/test_coverage_ramp_route_modules.py::test_fastapi_route_module_importable[app.fastapi_routes.analytics_routes]
+FAILED tests/test_coverage_ramp_routes.py::test_coverage_ramp_get_not_5xx[/api/mod-store/catalog]
+FAILED tests/test_csrf_middleware.py::test_auth_exempt_off_by_default - Asser...
+FAILED tests/test_customer_service_bridge_blueprints_sync.py::test_xcagi_customer_service_bridge_blueprints_in_sync
+FAILED tests/test_db_read_token.py::test_products_list_ok_with_read_header_mocked_pg
+FAILED tests/test_db_read_token.py::test_products_list_200_when_read_token_unconfigured_no_header
+FAILED tests/test_db_session_consistency.py::test_app_db_get_db_uses_consistency_transaction
+FAILED tests/test_db_session_consistency.py::test_session_get_db_uses_consistency_transaction
+FAILED tests/test_employee_pack_bridge_mod.py::test_list_office_pack_catalog
+FAILED tests/test_erp_domain_mod.py::test_domain_handlers_products_list - Imp...
+FAILED tests/test_erp_domain_mod.py::test_try_invoke_products_list - ImportEr...
+FAILED tests/test_erp_domain_mod.py::test_domain_handlers_customers_list - Im...
+FAILED tests/test_erp_products_facade.py::test_products_delete_via_service - ...
+FAILED tests/test_exception_helpers.py::test_to_dict_includes_request_id - As...
+FAILED tests/test_gdpr_routes.py::test_require_gdpr_enabled_raises_when_off
+FAILED tests/test_host_base_db_api.py::test_xcmax_admin_routes_use_host_base_database
+FAILED tests/test_host_base_db_api.py::test_customer_service_bridge_mod_uses_host_base_database
+FAILED tests/test_host_base_db_api.py::test_query_string_stripped_from_path
+FAILED tests/test_legacy_auth_account_kind.py::test_管理员账号走管理员入口成功
+FAILED tests/test_legacy_auth_account_kind.py::test_企业账号走企业入口成功 - ...
+FAILED tests/test_mod_entitlements_admin.py::test_admin_session_entitlements_exclude_client_erp
+FAILED tests/test_mod_entitlements_admin.py::test_admin_session_hides_client_mods
+FAILED tests/test_mod_views_compat.py::test_list_mod_physical_views_registry
+FAILED tests/test_modstore_llm_chat_url.py::test_llm_chat_url_strips_market_suffix
+FAILED tests/test_modstore_llm_chat_url.py::test_llm_chat_url_keeps_plain_host
+FAILED tests/test_neuro_bus_backpressure.py::TestDropOldPolicy::test_default_drops_low_priority
+FAILED tests/test_neuro_bus_backpressure.py::TestDropOldPolicy::test_drop_new_rejects_when_no_room
+FAILED tests/test_neuro_bus_backpressure.py::TestDropOldPolicy::test_on_drop_callback_receives_record
+FAILED tests/test_neuro_bus_backpressure.py::TestDropOldPolicy::test_on_drop_callback_exception_does_not_break_queue
+FAILED tests/test_neuro_bus_backpressure.py::TestDropNewPolicy::test_rejects_new_when_full
+FAILED tests/test_neuro_bus_backpressure.py::TestDropNewPolicy::test_reject_alias
+FAILED tests/test_neuro_bus_backpressure.py::TestBlockPolicy::test_block_currently_fast_fails
+FAILED tests/test_neuro_bus_backpressure.py::TestPolicyProperty::test_backpressure_property
+FAILED tests/test_neuro_bus_backpressure.py::TestDlqReasonEnum::test_bus_backpressure_reason_exists
+FAILED tests/test_neuro_bus_backpressure.py::TestBusDlqWiring::test_wire_dlq_injects_callback
+FAILED tests/test_neuro_bus_dlq_persistence.py::test_production_defaults_core_four_without_explicit_env
+FAILED tests/test_neuro_bus_dlq_persistence.py::test_production_enables_dlq_auto_with_persistence
+FAILED tests/test_neuro_bus_runtime.py::test_create_bus_runtime_bundle - File...
+FAILED tests/test_operator_profile.py::test_enterprise_profile_includes_personnel
+FAILED tests/test_product_repository_exceptions.py::test_find_by_id_raises_on_db_error
+FAILED tests/test_product_repository_exceptions.py::test_delete_raises_on_db_error
+FAILED tests/test_product_repository_exceptions.py::test_exists_false_when_missing
+FAILED tests/test_product_repository_exceptions.py::test_batch_create_empty_raises
+FAILED tests/test_product_repository_exceptions.py::test_batch_delete_empty_raises
+FAILED tests/test_ruff_config.py::test_ignore_list_contains_expected_rules - ...
+FAILED tests/test_ruff_config.py::test_per_file_ignores_tests_allow_blind_except
+FAILED tests/test_ruff_config.py::test_per_file_ignores_migrations_allow - as...
+FAILED tests/test_ruff_config.py::test_per_file_ignores_legacy_paths_allow - ...
+FAILED tests/test_ruff_config.py::test_blind_except_whitelist_under_bugbear
+FAILED tests/test_service_container_wiring.py::test_service_container_lazy_init_core_services
+FAILED tests/test_service_container_wiring.py::test_bootstrap_facade_delegates_to_registry
+FAILED tests/test_shipment_tasks.py::TestCleanupOldShipmentDocumentsTask::test_cleanup_old_documents_success
+FAILED tests/test_start_lan_launcher.py::test_stop_existing_enumeration_and_path_reads_are_quick
+FAILED tests/integration/test_auth_session_flow.py::test_auth_logout_without_session
+FAILED tests/integration/test_cross_domain_event_flow.py::TestEventConstruction::test_order_submitted_requires_fields
+FAILED tests/integration/test_cross_domain_event_flow.py::TestEventConstruction::test_order_submitted_valid
+FAILED tests/integration/test_cross_domain_event_flow.py::TestEventConstruction::test_order_paid_requires_amount
+FAILED tests/integration/test_cross_domain_event_flow.py::TestEventConstruction::test_inventory_low_stock_alert
+FAILED tests/integration/test_cross_domain_event_flow.py::TestEventConstruction::test_inventory_low_stock_alert_missing_fields
+FAILED tests/integration/test_cross_domain_event_flow.py::TestCrossDomainFlows::test_order_to_inventory_flow
+FAILED tests/integration/test_cross_domain_event_flow.py::TestCrossDomainFlows::test_inventory_to_safety_alert_flow
+FAILED tests/integration/test_cross_domain_event_flow.py::TestCrossDomainFlows::test_order_paid_to_fulfillment_to_shipment_flow
+FAILED tests/integration/test_cross_domain_event_flow.py::TestCrossDomainFlows::test_order_shipped_event_carries_tracking
+FAILED tests/integration/test_cross_domain_event_flow.py::TestCrossDomainFlows::test_order_cancelled_triggers_inventory_restock
+FAILED tests/integration/test_cross_domain_event_flow.py::TestEventDeduplication::test_same_payload_produces_same_dedup_key_within_same_ms
+FAILED tests/integration/test_cross_domain_event_flow.py::TestEventDeduplication::test_different_payload_produces_different_dedup_key
+FAILED tests/integration/test_cross_domain_event_flow.py::TestEventDeduplication::test_remint_queue_identity_resets_dedup_key
+FAILED tests/integration/test_cross_domain_event_flow.py::TestEventSerialization::test_to_dict_from_dict_round_trip
+FAILED tests/integration/test_cross_domain_event_flow.py::TestEventSerialization::test_to_json_from_dict
+FAILED tests/integration/test_cross_domain_event_flow.py::TestEventSerialization::test_from_dict_preserves_priority
+FAILED tests/integration/test_cross_domain_event_flow.py::TestEventPriority::test_order_events_priority
+FAILED tests/integration/test_cross_domain_event_flow.py::TestEventPriority::test_inventory_low_stock_is_high
+FAILED tests/integration/test_cross_domain_event_flow.py::TestEventPriority::test_inventory_check_completed_is_low
+FAILED tests/integration/test_cross_domain_event_flow.py::test_full_ecommerce_event_chain_uniqueness
+FAILED tests/integration/test_erp_purchase_inventory_flow.py::test_purchase_suppliers_list_contract
+FAILED tests/integration/test_erp_purchase_inventory_flow.py::test_purchase_orders_list_contract
+FAILED tests/integration/test_erp_purchase_inventory_flow.py::test_purchase_summary_contract
+FAILED tests/integration/test_erp_purchase_inventory_flow.py::test_inventory_summary_contract
+FAILED tests/integration/test_erp_purchase_inventory_flow.py::test_inventory_warehouses_list_contract
+FAILED tests/integration/test_finance_reports_smoke.py::test_finance_dashboard_contract
+FAILED tests/integration/test_finance_reports_smoke.py::test_finance_transactions_list_contract
+FAILED tests/integration/test_finance_reports_smoke.py::test_report_dashboard_contract
+FAILED tests/integration/test_finance_reports_smoke.py::test_report_sales_contract
+FAILED tests/integration/test_mobile_auth_flow.py::test_mobile_refresh_invalid_token
+FAILED tests/integration/test_ocr_api.py::test_ocr_extract_requires_text - as...
+FAILED tests/integration/test_ocr_api.py::test_ocr_analyze_requires_text - as...
+FAILED tests/integration/test_ocr_api.py::test_ocr_recognize_requires_file - ...
+FAILED tests/integration/test_rbac_permission_flow.py::test_rbac_role_create_unauthorized
+FAILED tests/test_application/test_shipment_app_service.py::TestShipmentApplicationServiceCreate::test_create_shipment_success
+FAILED tests/test_application/test_shipment_app_service.py::TestShipmentApplicationServiceCreate::test_create_shipment_invalid_no_items
+FAILED tests/test_application/test_shipment_app_service.py::TestShipmentApplicationServiceCreate::test_create_shipment_with_multiple_items
+FAILED tests/test_db/test_session_module.py::test_query_cache_roundtrip - Att...
+FAILED tests/test_db/test_session_module.py::test_get_db_commits_on_success
+FAILED tests/test_db/test_session_module.py::test_get_db_rolls_back_on_error
+FAILED tests/test_db/test_session_module.py::test_get_db_dependency_yields_session
+FAILED tests/test_infrastructure/test_db_engine_routing.py::test_create_engine_sqlite_server_uses_null_pool
+FAILED tests/test_infrastructure/test_db_engine_routing.py::test_get_db_yields_and_closes_session
+FAILED tests/test_infrastructure/test_inventory_purchase_user_repos.py::test_inventory_get_warehouses_with_status_filter
+FAILED tests/test_infrastructure/test_inventory_purchase_user_repos.py::test_inventory_get_warehouse_by_id
+FAILED tests/test_infrastructure/test_inventory_purchase_user_repos.py::test_inventory_ledger_pagination
+FAILED tests/test_infrastructure/test_product_repository_impl.py::test_find_names_returns_empty_when_table_missing
+FAILED tests/test_infrastructure/test_product_repository_impl.py::test_batch_delete_returns_zero_when_no_rows
+FAILED tests/test_infrastructure/test_product_repository_impl.py::test_exists_true_when_row_present
+FAILED tests/test_infrastructure/test_product_repository_impl.py::test_update_raises_when_missing
+FAILED tests/test_infrastructure/test_product_repository_impl.py::test_update_applies_fields
+FAILED tests/test_infrastructure/test_product_repository_impl.py::test_batch_create_skips_empty_names
+FAILED tests/test_infrastructure/test_product_repository_impl.py::test_batch_delete_success
+FAILED tests/test_infrastructure/test_product_repository_impl.py::test_batch_create_bulk_insert
+FAILED tests/test_infrastructure/test_product_repository_impl.py::test_batch_create_fallback_single_insert
+FAILED tests/test_infrastructure/test_product_repository_impl.py::test_exists_raises_database_error
+FAILED tests/test_infrastructure/test_product_repository_impl.py::test_find_names_with_keyword
+FAILED tests/test_infrastructure/test_product_repository_impl.py::test_export_raises_when_products_table_missing
+FAILED tests/test_infrastructure/test_product_repository_impl.py::test_export_to_excel_uses_template
+FAILED tests/test_infrastructure/test_product_repository_impl.py::test_export_to_excel_writes_file
+FAILED tests/test_infrastructure/test_product_repository_impl.py::test_update_raises_database_error
+FAILED tests/test_infrastructure/test_product_repository_impl.py::test_batch_create_raises_outer_error
+FAILED tests/test_infrastructure/test_product_repository_impl.py::test_delete_raises_database_error
+FAILED tests/test_infrastructure/test_product_repository_impl.py::test_export_ignores_template_service_errors
+FAILED tests/test_infrastructure/test_product_repository_impl.py::test_batch_delete_raises
+FAILED tests/test_infrastructure/test_product_repository_impl.py::test_find_names_raises
+FAILED tests/test_infrastructure/test_product_repository_impl.py::test_export_generic_failure_wrapped
+FAILED tests/test_infrastructure/test_wechat_contact_store_impl.py::test_get_context_parses_json
+FAILED tests/test_services/test_inventory_service.py::test_get_warehouses_empty
+FAILED tests/test_services/test_purchase_service.py::test_get_suppliers_empty
+FAILED tests/test_services/test_purchase_service.py::test_get_supplier_not_found
+FAILED tests/test_services/test_purchase_service.py::test_decimal_to_float_helper
+FAILED tests/test_services/test_shipment_service.py::TestShipmentApplicationService::test_create_shipment_success
+FAILED tests/test_services/test_shipment_service.py::TestShipmentApplicationService::test_create_shipment_invalid_no_items
+FAILED tests/test_utils/test_printer_automation.py::TestPrinterAutomation::test_click_mouse_left
+FAILED tests/test_utils/test_printer_automation.py::TestPrinterAutomation::test_click_mouse_right
+FAILED tests/test_utils/test_printer_automation.py::TestPrinterAutomation::test_find_window_found
+FAILED tests/test_utils/test_printer_automation.py::TestPrinterAutomation::test_get_window_position
+FAILED tests/test_utils/test_printer_automation.py::TestPrinterAutomation::test_handle_printer_dialog_found
+FAILED tests/test_utils/test_printer_automation.py::TestPrinterAutomation::test_move_mouse
+FAILED tests/test_utils/test_printer_automation.py::TestPrinterAutomation::test_print_with_automation_shell_execute_failure
+FAILED tests/test_utils/test_printer_automation.py::TestPrinterAutomation::test_print_with_automation_success
+FAILED tests/test_utils/test_printer_automation.py::TestPrinterAutomation::test_set_default_printer_success
+FAILED tests/test_utils/test_utils.py::TestPathUtils::test_get_db_path_default
+FAILED tests/test_utils/test_utils.py::TestPathUtils::test_get_db_path_custom
+FAILED tests/unit/test_p4_s1_zero_pct_clear.py::test_sqlalchemy_inventory_repository_get_warehouses
+FAILED tests/unit/test_p4_s1_zero_pct_clear.py::test_sqlalchemy_inventory_repository_get_warehouse_by_id
+FAILED tests/unit/test_p4_s1_zero_pct_clear.py::test_sqlalchemy_inventory_repository_get_inventory_ledger_all_paths
+FAILED tests/unit/test_taiyangniao_work_intervals.py::test_noon_extra_punch_deduped_to_morning_end_and_afternoon_in
+FAILED tests/unit/test_taiyangniao_work_intervals.py::test_work_intervals_afternoon_not_lost_with_noon_duplicate
+FAILED tests/unit/test_taiyangniao_work_intervals.py::test_afternoon_blocks_get_credit[punches0]
+FAILED tests/unit/application/test_kitten_planner_context_p4.py::test_enrich_kitten_with_business_db
+FAILED tests/unit/application/test_kitten_planner_context_p4.py::test_enrich_kitten_business_db_failure
+FAILED tests/unit/application/test_rbac_app_service_p4.py::test_list_roles_with_tenant_id
+FAILED tests/unit/application/test_rbac_app_service_p4.py::test_create_role_duplicate_tenant
+FAILED tests/unit/application/test_rbac_app_service_p4.py::test_create_role_duplicate_global
+FAILED tests/unit/application/test_rbac_app_service_p4.py::test_create_role_with_permissions
+FAILED tests/unit/application/test_rbac_app_service_p4.py::test_create_role_without_permissions
+FAILED tests/unit/application/test_user_app_service_p4.py::test_get_user_app_service_returns_from_registry
+FAILED tests/unit/coverage/test_fastapi_routes_import_sweep.py::test_fastapi_route_module_importable[app.fastapi_routes.analytics_routes]
+FAILED tests/unit/coverage/test_infrastructure_import_sweep.py::test_infrastructure_module_importable[app.infrastructure.ai.providers.bert_provider]
+FAILED tests/unit/coverage/test_infrastructure_import_sweep.py::test_infrastructure_module_importable[app.infrastructure.ai.providers.deepseek_provider]
+FAILED tests/unit/coverage/test_infrastructure_import_sweep.py::test_infrastructure_module_importable[app.infrastructure.ai.providers.rasa_provider]
+FAILED tests/unit/coverage/test_infrastructure_import_sweep.py::test_infrastructure_module_importable[app.infrastructure.ai.providers.tts_provider]
+FAILED tests/unit/coverage/test_infrastructure_import_sweep.py::test_infrastructure_module_importable[app.infrastructure.gateways.customers]
+FAILED tests/unit/coverage/test_infrastructure_import_sweep.py::test_infrastructure_module_importable[app.infrastructure.llm.invoke]
+FAILED tests/unit/coverage/test_infrastructure_import_sweep.py::test_infrastructure_module_importable[app.infrastructure.llm.providers]
+FAILED tests/unit/coverage/test_sweep_bootstrap_artifact.py::test_bootstrap_getters_use_registry
+FAILED tests/unit/infrastructure/test_domain_registry.py::test_verify_registry_integrity_passes
+FAILED tests/unit/infrastructure/test_domain_registry.py::test_get_routes_by_domain
+FAILED tests/unit/infrastructure/test_domain_registry.py::test_legacy_files_total_25
+FAILED tests/unit/infrastructure/test_domain_registry.py::test_legacy_route_dataclass
+FAILED tests/unit/infrastructure/test_inventory_repository_impl.py::test_get_warehouses_with_status
+FAILED tests/unit/infrastructure/test_inventory_repository_impl.py::test_get_inventory_ledger_filters
+FAILED tests/unit/infrastructure/test_mod_manager_extended.py::test_scan_mods_when_disabled
+FAILED tests/unit/services/test_phase3_services.py::test_purchase_service_instantiate
+FAILED tests/unit/services/test_report_service.py::test_get_inventory_transaction_report
+FAILED tests/unit/services/test_report_service.py::test_get_inventory_transaction_report_none_decimal
+FAILED tests/unit/services/test_report_service.py::test_get_dashboard_summary
+FAILED tests/unit/services/test_wechat_contact_service_p4.py::test_get_contact_context_non_list
+FAILED tests/unit/services/test_wechat_decrypt_extended.py::test_resolve_toolkit_from_persisted
+ERROR tests/test_coverage_ramp_phase13_routes.py::test_shipment_orders_next_number_paths
+ERROR tests/test_coverage_ramp_phase13_routes.py::test_shipment_orders_next_number_invalid_suffix_fallback
+ERROR tests/test_coverage_ramp_phase13_routes.py::test_shipment_generate_batch_validation_and_partial
+ERROR tests/test_coverage_ramp_phase13_routes.py::test_shipment_generate_and_print
+ERROR tests/test_coverage_ramp_phase13_routes.py::test_shipment_download - At...
+ERROR tests/test_coverage_ramp_phase13_routes.py::test_shipment_orders_crud_paths
+ERROR tests/test_coverage_ramp_phase13_routes.py::test_api_orders_legacy_mirror
+ERROR tests/test_coverage_ramp_phase13_routes.py::test_shipment_records_and_export
+ERROR tests/test_coverage_ramp_phase13_routes.py::test_shipment_generate_exception
+ERROR tests/test_coverage_ramp_phase30_routes.py::test_shipment_next_number_paths
+ERROR tests/test_coverage_ramp_phase30_routes.py::test_shipment_orders_list_and_search
+ERROR tests/test_coverage_ramp_phase30_routes.py::test_shipment_generate_requires_body
+ERROR tests/test_coverage_ramp_phase30_routes.py::test_shipment_generate_success
+ERROR tests/test_coverage_ramp_phase30_routes.py::test_shipment_generate_service_failure
+ERROR tests/test_coverage_ramp_phase30_routes.py::test_shipment_print_with_and_without_order_id
+ERROR tests/test_coverage_ramp_phase30_routes.py::test_shipment_generate_batch_partial
+ERROR tests/test_coverage_ramp_phase36_routes.py::test_shipment_clear_shipment_by_unit
+ERROR tests/test_coverage_ramp_phase36_routes.py::test_shipment_delete_and_clear_failures
+ERROR tests/test_coverage_ramp_phase36_routes.py::test_shipment_sequence_and_clear_all_failures
+ERROR tests/test_coverage_ramp_phase36_routes.py::test_shipment_records_crud_failures
+ERROR tests/test_coverage_ramp_phase36_routes.py::test_shipment_records_export_missing_file
+ERROR tests/test_coverage_ramp_phase36_routes.py::test_shipment_records_list_erp_dispatch_exception
+ERROR tests/test_coverage_ramp_phase36_routes.py::test_shipment_orders_get_not_found
+ERROR tests/test_coverage_ramp_phase39_routes.py::test_shipment_next_number_suffix_fallback
+ERROR tests/test_coverage_ramp_phase39_routes.py::test_shipment_download_found_and_missing
+ERROR tests/test_coverage_ramp_phase39_routes.py::test_shipment_records_dashboard_alias
+ERROR tests/test_coverage_ramp_phase39_routes.py::test_api_orders_get_numeric_and_non_numeric
+ERROR tests/test_coverage_ramp_phase39_routes.py::test_api_orders_delete_and_sequence
+ERROR tests/test_coverage_ramp_phase39_routes.py::test_shipment_print_invalid_order_id
+ERROR tests/test_coverage_ramp_phase41_routes.py::test_shipment_generate_validation_errors
+ERROR tests/test_coverage_ramp_phase41_routes.py::test_shipment_generate_service_failure
+ERROR tests/test_coverage_ramp_phase41_routes.py::test_shipment_generate_success
+ERROR tests/test_coverage_ramp_phase41_routes.py::test_shipment_orders_latest_alias
+ERROR tests/test_coverage_ramp_phase59_inventory.py::test_get_warehouses - Ty...
+ERROR tests/test_coverage_ramp_phase59_inventory.py::test_get_warehouse_found
+ERROR tests/test_coverage_ramp_phase59_inventory.py::test_get_warehouse_not_found
+ERROR tests/test_coverage_ramp_phase59_inventory.py::test_create_warehouse_success
+ERROR tests/test_coverage_ramp_phase59_inventory.py::test_create_warehouse_error
+ERROR tests/test_coverage_ramp_phase59_inventory.py::test_update_warehouse_found
+ERROR tests/test_coverage_ramp_phase59_inventory.py::test_update_warehouse_not_found
+ERROR tests/test_coverage_ramp_phase59_inventory.py::test_update_warehouse_error
+ERROR tests/test_coverage_ramp_phase59_inventory.py::test_delete_warehouse_found
+ERROR tests/test_coverage_ramp_phase59_inventory.py::test_delete_warehouse_not_found
+ERROR tests/test_coverage_ramp_phase59_inventory.py::test_delete_warehouse_error
+ERROR tests/test_coverage_ramp_phase59_inventory.py::test_get_storage_locations_no_status
+ERROR tests/test_coverage_ramp_phase59_inventory.py::test_get_storage_locations_with_status
+ERROR tests/test_coverage_ramp_phase59_inventory.py::test_create_storage_location_success
+ERROR tests/test_coverage_ramp_phase59_inventory.py::test_create_storage_location_error
+ERROR tests/test_coverage_ramp_phase59_inventory.py::test_update_storage_location_found
+ERROR tests/test_coverage_ramp_phase59_inventory.py::test_update_storage_location_with_max_capacity
+ERROR tests/test_coverage_ramp_phase59_inventory.py::test_update_storage_location_not_found
+ERROR tests/test_coverage_ramp_phase59_inventory.py::test_update_storage_location_error
+ERROR tests/test_coverage_ramp_phase59_inventory.py::test_get_inventory_basic
+ERROR tests/test_coverage_ramp_phase59_inventory.py::test_get_inventory_with_filters
+ERROR tests/test_coverage_ramp_phase59_inventory.py::test_get_inventory_with_no_product_warehouse_location
+ERROR tests/test_coverage_ramp_phase59_inventory.py::test_get_inventory_summary
+ERROR tests/test_coverage_ramp_phase59_inventory.py::test_get_inventory_summary_no_warehouse
+ERROR tests/test_coverage_ramp_phase59_inventory.py::test_inventory_in_new_ledger
+ERROR tests/test_coverage_ramp_phase59_inventory.py::test_inventory_in_existing_ledger
+ERROR tests/test_coverage_ramp_phase59_inventory.py::test_inventory_in_no_product
+ERROR tests/test_coverage_ramp_phase59_inventory.py::test_inventory_in_error
+ERROR tests/test_coverage_ramp_phase59_inventory.py::test_inventory_out_success
+ERROR tests/test_coverage_ramp_phase59_inventory.py::test_inventory_out_no_ledger
+ERROR tests/test_coverage_ramp_phase59_inventory.py::test_inventory_out_error
+ERROR tests/test_coverage_ramp_phase59_inventory.py::test_get_inventory_transactions_basic
+ERROR tests/test_coverage_ramp_phase59_inventory.py::test_get_inventory_transactions_with_filters
+ERROR tests/test_coverage_ramp_phase59_inventory.py::test_get_inventory_alert
+ERROR tests/test_coverage_ramp_phase59_inventory.py::test_get_inventory_alert_no_items
+= 558 failed, 8187 passed, 18 skipped, 3 warnings, 68 errors in 268.99s (0:04:28) =

@@ -1,23 +1,30 @@
-import re
-from datetime import datetime
-from typing import Any
+"""产品仓储：服务层 dict API 以 persistence 为 SSOT。
 
-from sqlalchemy import inspect
+域实体版查询（``find_all`` 返回 ``Product`` 元组）见 ``DomainProductRepository``；
+``SQLAlchemyProductRepository`` 与 ``products_service`` 一致，委托
+``app.infrastructure.persistence.product_repository_impl``。
+"""
 
+from __future__ import annotations
+
+from app.infrastructure.persistence.product_repository_impl import (
+    SQLAlchemyProductRepository,
+    TRIVIAL_MEASURE_UNITS,
+)
+
+__all__ = ["SQLAlchemyProductRepository", "TRIVIAL_MEASURE_UNITS", "DomainProductRepository"]
+
+
+# 域测试与 NeuroBus 域层仍可使用（避免与 dict API 的 find_all 签名冲突）
 from app.db.models import Product as ProductModel
 from app.db.session import get_db
 from app.domain.product.entities import Product
-from app.domain.value_objects import ModelNumber, Money
 from app.infrastructure.mappers.product_mapper import product_to_domain, product_to_db
-from app.infrastructure.persistence.product_repository_impl import TRIVIAL_MEASURE_UNITS
-from app.infrastructure.repositories.product_repository import ProductRepository
+from app.infrastructure.repositories.product_repository import ProductRepository as DomainProductRepositoryBase
 
 
-import logging
-
-logger = logging.getLogger(__name__)
-class SQLAlchemyProductRepository(ProductRepository):
-    """产品仓储 SQLAlchemy 实现"""
+class DomainProductRepository(DomainProductRepositoryBase):
+    """产品仓储 SQLAlchemy 实现（域 ``Product`` 实体）。"""
 
     def _to_domain(self, db_model: ProductModel) -> Product:
         return product_to_domain(db_model)
@@ -26,6 +33,8 @@ class SQLAlchemyProductRepository(ProductRepository):
         return product_to_db(product)
 
     def save(self, product: Product) -> Product:
+        from datetime import datetime
+
         with get_db() as db:
             if product.id:
                 existing = db.query(ProductModel).filter(ProductModel.id == product.id).first()
@@ -52,29 +61,26 @@ class SQLAlchemyProductRepository(ProductRepository):
             return self._to_domain(model) if model else None
 
     def find_all(self, page: int = 1, per_page: int = 20, **kwargs) -> tuple:
+        import re
+        from typing import Any
+
         with get_db() as db:
             offset = (page - 1) * per_page
             query = db.query(ProductModel)
-
             unit_name = kwargs.get("unit_name")
             if unit_name:
                 query = query.filter(ProductModel.unit == unit_name)
-
             model_number = kwargs.get("model_number")
             if model_number:
-                model_token = str(model_number).strip()
-                if model_token:
-                    from sqlalchemy import or_
+                from sqlalchemy import or_
 
-                    pattern = f"%{model_token}%"
-                    # 优先通过型号字段匹配；兼容历史数据中型号写在名称里的情况。
-                    query = query.filter(
-                        or_(
-                            ProductModel.model_number.like(pattern),
-                            ProductModel.name.like(pattern),
-                        )
+                pattern = f"%{str(model_number).strip()}%"
+                query = query.filter(
+                    or_(
+                        ProductModel.model_number.like(pattern),
+                        ProductModel.name.like(pattern),
                     )
-
+                )
             keyword = kwargs.get("keyword")
             if keyword:
                 from sqlalchemy import func, or_
@@ -109,7 +115,6 @@ class SQLAlchemyProductRepository(ProductRepository):
 
                 segments = re.findall(r"[\u4e00-\u9fff]+|[0-9]+|[A-Za-z]+", keyword_text)
                 segments = [p for p in segments if p.strip()]
-
                 if len(segments) > 1:
                     for seg in segments:
                         filt = _one_kw(seg)
@@ -126,29 +131,27 @@ class SQLAlchemyProductRepository(ProductRepository):
             return [self._to_domain(m) for m in models], total
 
     def find_all_dict(self, page: int = 1, per_page: int = 20, **kwargs) -> tuple:
-        """快速查询，返回字典列表（避免 Domain 对象转换开销）"""
+        """返回 (dict 行列表, total)。"""
+        import re
+        from typing import Any
+
         with get_db() as db:
             offset = (page - 1) * per_page
             query = db.query(ProductModel)
-
             unit_name = kwargs.get("unit_name")
             if unit_name:
                 query = query.filter(ProductModel.unit == unit_name)
-
             model_number = kwargs.get("model_number")
             if model_number:
-                model_token = str(model_number).strip()
-                if model_token:
-                    from sqlalchemy import or_
+                from sqlalchemy import or_
 
-                    pattern = f"%{model_token}%"
-                    query = query.filter(
-                        or_(
-                            ProductModel.model_number.like(pattern),
-                            ProductModel.name.like(pattern),
-                        )
+                pattern = f"%{str(model_number).strip()}%"
+                query = query.filter(
+                    or_(
+                        ProductModel.model_number.like(pattern),
+                        ProductModel.name.like(pattern),
                     )
-
+                )
             keyword = kwargs.get("keyword")
             if keyword:
                 from sqlalchemy import func, or_
@@ -183,7 +186,6 @@ class SQLAlchemyProductRepository(ProductRepository):
 
                 segments = re.findall(r"[\u4e00-\u9fff]+|[0-9]+|[A-Za-z]+", keyword_text)
                 segments = [p for p in segments if p.strip()]
-
                 if len(segments) > 1:
                     for seg in segments:
                         filt = _one_kw(seg)
@@ -197,7 +199,6 @@ class SQLAlchemyProductRepository(ProductRepository):
 
             total = query.count()
             models = query.order_by(ProductModel.id.desc()).limit(per_page).offset(offset).all()
-
             dicts = [
                 {
                     "id": m.id,
@@ -229,69 +230,10 @@ class SQLAlchemyProductRepository(ProductRepository):
             return [self._to_domain(m) for m in models]
 
     def delete(self, product_id: int) -> bool:
-        with get_db() as db:
-            model = db.query(ProductModel).filter(ProductModel.id == product_id).first()
-            if model:
-                db.delete(model)
-                db.commit()
-                return True
-            return False
+        return SQLAlchemyProductRepository().delete(product_id)
 
     def count(self) -> int:
-        with get_db() as db:
-            return db.query(ProductModel).count()
+        return SQLAlchemyProductRepository().count()
 
     def find_product_units(self) -> list[str]:
-        """与 persistence.SQLAlchemyProductRepository.find_product_units 行为对齐。"""
-        seen: dict[str, None] = {}
-        ordered: list[str] = []
-
-        def add_label(raw: Any, *, from_products: bool = False) -> None:
-            s = str(raw or "").strip()
-            if not s or s in seen:
-                return
-            if from_products and s in TRIVIAL_MEASURE_UNITS:
-                return
-            seen[s] = None
-            ordered.append(s)
-
-        purchase_units_authoritative = False
-        try:
-            from app.application.customer_app_service import get_customers_session
-            from app.db.models.purchase_unit import PurchaseUnit as PurchaseUnitModel
-
-            cs = get_customers_session()
-            try:
-                bind = getattr(cs, "bind", None) or cs.get_bind()
-                if bind is not None:
-                    tinsp = inspect(bind)
-                    if "purchase_units" in (tinsp.get_table_names() or []):
-                        purchase_units_authoritative = True
-                        for r in (
-                            cs.query(PurchaseUnitModel.unit_name)
-                            .filter(PurchaseUnitModel.unit_name.isnot(None))
-                            .filter(PurchaseUnitModel.is_active.is_(True))
-                            .distinct()
-                            .all()
-                        ):
-                            if r and r[0] is not None:
-                                add_label(r[0], from_products=False)
-            finally:
-                cs.close()
-        except Exception:
-            logger.debug('suppressed exception', exc_info=True)
-
-        if purchase_units_authoritative:
-            return ordered
-
-        try:
-            with get_db() as db:
-                insp = inspect(db.bind)
-                if "products" in (insp.get_table_names() or []):
-                    for u in db.query(ProductModel.unit).distinct().all():
-                        if u and u[0] is not None:
-                            add_label(u[0], from_products=True)
-        except Exception:
-            logger.debug('suppressed exception', exc_info=True)
-
-        return ordered
+        return SQLAlchemyProductRepository().find_product_units()

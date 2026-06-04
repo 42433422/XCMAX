@@ -147,6 +147,48 @@ def _default_profile(record: AttendanceDayRecord) -> TemplateEmployeeProfile:
     )
 
 
+def _dedupe_noon_transition_punches(
+    punches: list[datetime],
+    schedule_segments: tuple[TimeRange, ...],
+) -> list[datetime]:
+    """午休过渡区 (morning_end, afternoon_start) 内的多余打卡丢弃，保留边界上的下班/上班卡。"""
+    sorted_punches = _unique_sorted(punches)
+    if len(sorted_punches) <= 2 or len(schedule_segments) < 2:
+        return sorted_punches
+    morning_end = schedule_segments[0].end
+    afternoon_start = schedule_segments[1].start
+    result: list[datetime] = []
+    for punch in sorted_punches:
+        t = punch.time()
+        if morning_end < t < afternoon_start:
+            continue
+        result.append(punch)
+    return result
+
+
+def _prepare_detail_roster(
+    _workbook: Any,
+    roster: list[tuple[str, str, str]],
+    records: list[AttendanceDayRecord],
+) -> tuple[list[tuple[str, str, str]] | None, list[str]]:
+    """合并钉钉-only 人员到明细花名册；返回 (merged_roster, appended_names)。"""
+    if roster is None:
+        return None, []
+    merged = list(roster)
+    known = {(row[2] or "").strip() for row in merged}
+    appended: list[str] = []
+    for rec in records:
+        name = (rec.employee_name or "").strip()
+        if not name or name in known:
+            continue
+        dept = (rec.department or "").strip()
+        nature = (rec.attendance_group or "").strip()
+        merged.append((dept, nature, name))
+        known.add(name)
+        appended.append(name)
+    return merged, appended
+
+
 def _primary_interval(punches: list[datetime]) -> tuple[datetime, datetime] | None:
     if len(punches) < 2:
         return None
@@ -155,12 +197,24 @@ def _primary_interval(punches: list[datetime]) -> tuple[datetime, datetime] | No
     return (start, end) if end > start else None
 
 
-def _work_intervals(punches: list[datetime]) -> list[tuple[datetime, datetime]]:
+def _work_intervals(
+    punches: list[datetime],
+    *,
+    work_date: date | None = None,
+    schedule_segments: tuple[TimeRange, ...] | None = None,
+) -> list[tuple[datetime, datetime]]:
     """按相邻两卡拆成多段在岗时间（钉钉常见「上班1/下班1/上班2/下班2」）。
 
     偶数次打卡依次两两配对，午休落在两段之间，不会被单段「首末卡」吞进正班重叠。
     奇数次打卡无法可靠配对，退回首尾单段，与历史 `_primary_interval` 行为一致。
     """
+    from .rules import DEFAULT_WEEKDAY_SEGMENTS
+
+    segs = schedule_segments or DEFAULT_WEEKDAY_SEGMENTS
+    if work_date is not None:
+        punches = _dedupe_noon_transition_punches(punches, segs)
+    else:
+        punches = _unique_sorted(punches)
     n = len(punches)
     if n < 2:
         return []

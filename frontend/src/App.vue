@@ -6,7 +6,6 @@ import { useWorkflowAiEmployeesStore } from '@/stores/workflowAiEmployees'
 import { authApi } from '@/api/auth'
 import { fetchSessionMarketHandoff, persistMarketTokensFromHandoff } from '@/api/marketAccount'
 import { apiFetch, isApiFetchTimeoutError } from '@/utils/apiBase'
-import { fetchModLoadingStatusShared } from '@/utils/modLoadingStatusShared'
 import { summarizeModLoadingData } from '@/utils/modLoadingStatus'
 import MainLayout from './components/MainLayout.vue'
 import GlobalReadTokenPrompt from './fhd/GlobalReadTokenPrompt.vue'
@@ -41,11 +40,11 @@ function isPublicEntryRoute(r = route) {
 }
 
 /** 过长的启动遮罩会拖慢「可交互」时间；略长于 logo 文案渐显（约 1.65s）即可 */
-const STARTUP_SPLASH_MS = 1200
+const STARTUP_SPLASH_MS = 1800
 /** 为在关屏前展示 Mod 摘要，最多额外等待 loading-status（避免后端极慢时无限停留） */
-const STARTUP_MOD_FETCH_CAP_MS = 2500
+const STARTUP_MOD_FETCH_CAP_MS = 4000
 /** 无论开屏逻辑是否异常，超时后强制显示主界面，避免永久 opacity:0 白屏 */
-const STARTUP_FAILSAFE_MS = 6000
+const STARTUP_FAILSAFE_MS = 12000
 const STARTUP_AUTH_TIMEOUT_MS = 8_000
 /** 开屏仅拉 loading-status：勿用 180s Mod 超时，后端未起时尽快结束请求并交给开屏 cap / failsafe */
 const STARTUP_LOADING_STATUS_TIMEOUT_MS = 12_000
@@ -303,16 +302,25 @@ const loadModsForStartup = async () => {
   modsLoading.value = true
   modsLoadError.value = null
   try {
-    const d = await fetchModLoadingStatusShared()
-    if (!d) {
+    const response = await apiFetch('/api/mods/loading-status', {
+      timeoutMs: STARTUP_LOADING_STATUS_TIMEOUT_MS,
+    })
+    if (!response.ok) {
       startupModPreview.value = []
       return
     }
-    const raw = d.mods
-    startupModPreview.value = Array.isArray(raw) ? raw : []
-    const hint = summarizeModLoadingData(d)
-    if (hint) {
-      modsLoadError.value = hint
+    const data = await response.json()
+    if (data.success) {
+      const d = data.data || {}
+      const raw = d.mods
+      startupModPreview.value = Array.isArray(raw) ? raw : []
+      const hint = summarizeModLoadingData(d)
+      if (hint) {
+        modsLoadError.value = hint
+      }
+    } else {
+      startupModPreview.value = []
+      modsLoadError.value = typeof data.error === 'string' ? data.error : 'Mod 加载失败'
     }
   } catch (error) {
     startupModPreview.value = []
@@ -502,10 +510,6 @@ let onModsVisibilityRetry = null
 let onPageShowBfCache = null
 
 onMounted(async () => {
-  if (isPublicEntryRoute()) {
-    dismissStartupSplashImmediate()
-  }
-
   try {
     if (new URLSearchParams(window.location.search).has('replayNav')) {
       sessionStorage.removeItem('xcagi.navReveal.done')
@@ -520,10 +524,8 @@ onMounted(async () => {
     void router.isReady().then(() => runEnterpriseStartupAuth())
   }
 
-  // 非开屏场景（如桌面 shell）尽早拉 Mod；开屏流程内会 initialize(true)，避免重复 force
-  if (shouldSkipSplashVisual()) {
-    void modsStore.initialize()
-  }
+  // 不等待开屏：与侧栏 mount 并行尽早拉 /api/mods*（initialize 内部有 initInFlight 去重）
+  void modsStore.initialize()
   onModsVisibilityRetry = () => {
     if (document.visibilityState !== 'visible') return
     if (!modsStore.isLoaded) void modsStore.initialize()
@@ -788,7 +790,7 @@ onBeforeUnmount(() => {
 
 <template>
   <div
-    v-if="startupVisible && !hideChrome"
+    v-if="startupVisible"
     class="startup-splash"
     aria-label="初始化动画，点击跳过"
     title="点击屏幕快速进入"
@@ -851,7 +853,7 @@ onBeforeUnmount(() => {
     <div class="startup-version" aria-label="当前版本">v8.0.0</div>
   </div>
 
-  <div class="app-shell" :class="{ 'is-ready': appReady || hideChrome }">
+  <div class="app-shell" :class="{ 'is-ready': appReady }">
     <div class="transition-overlay" id="transitionOverlay"></div>
 
     <div class="preview-float-window" id="previewFloatWindow">
@@ -990,12 +992,15 @@ onBeforeUnmount(() => {
 
 <style>
 .app-shell {
-  /* 不用 opacity:0 藏整页（开屏遮罩已 z-index 盖住）；否则 appReady 未置位时会长期白屏 */
-  opacity: 1;
+  opacity: 0;
   transition: opacity 320ms ease;
   background:
     radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.88), transparent 42%),
     linear-gradient(135deg, #edf5fb 0%, #e7eef6 48%, #eef3f8 100%);
+}
+
+.app-shell.is-ready {
+  opacity: 1;
 }
 
 .startup-splash {

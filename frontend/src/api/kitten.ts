@@ -1,4 +1,4 @@
-import { api } from './core';
+import { api } from './index';
 
 export const kittenApi = {
   getBusinessSnapshot: () => api.get('/api/ai/kitten/business-snapshot'),

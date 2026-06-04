@@ -1,8 +1,8 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import type { CoreWorkflowEmployeeId } from '@/constants/coreWorkflowMod'
 import { shortNameFromPanelTitle } from '@/utils/workflowEmployeeDisplayName'
 import { useWorkflowAiEmployeesStore } from '@/stores/workflowAiEmployees'
+import { aminSignalBridges } from '@/utils/aminRegistry'
 
 export const WORKFLOW_EMPLOYEE_SPACE_STORAGE_KEY = 'xcagi_workflow_employee_space_v1'
 export const WORKFLOW_EMPLOYEE_SESSIONS_STORAGE_KEY = 'xcagi_workflow_employee_sessions_v1'
@@ -270,25 +270,11 @@ export const useWorkflowEmployeeSpaceStore = defineStore('workflowEmployeeSpace'
     schedulePersist(snapshots.value)
   }
 
-  /** 副窗事件桥：仅更新标签打印工作流快照（不操作任务列表） */
   function applyLabelPrintBridge(detail: { at?: number; line?: string }) {
-    const wf = useWorkflowAiEmployeesStore()
-    if (!wf.enabled.label_print) return
-    const line = String(detail?.line || '').trim() || '标签/打印类消息'
-    const at = Number(detail?.at) || Date.now()
-    applyFromWorkflowPayload('工作流 · 标签打印 AI 员工', {
-      employeeId: 'label_print' as CoreWorkflowEmployeeId,
-      workflowStageLine: '已收微信侧标签/打印信号',
-      workflowProgressPct: 55,
-      workflowProgressLabel: '进行中',
-      workflowCurrentHint: `最近命中标签/打印意图：${line.slice(0, 160)}${line.length > 160 ? '…' : ''}`,
-      workflowProgressIdle: false,
-      workflowProgressStarted: true,
-      lastLabelPrint: { at, line },
-    })
+    const bridge = aminSignalBridges().find((b) => b.empId === 'label_print')
+    if (bridge) bridge.handler(detail as Record<string, unknown>)
   }
 
-  /** 副窗事件桥：收货确认 */
   function applyReceiptBridge(detail: {
     at?: number
     line?: string
@@ -296,76 +282,18 @@ export const useWorkflowEmployeeSpaceStore = defineStore('workflowEmployeeSpace'
     messageText?: string
     contactName?: string
   }) {
-    const wf = useWorkflowAiEmployeesStore()
-    if (!wf.enabled.receipt_confirm) return
-    const line = String(detail?.line || '').trim() || '客户反馈'
-    const at = Number(detail?.at) || Date.now()
-    const hint = [
-      detail?.contactName ? `联系人：${detail.contactName}` : '',
-      detail?.intentLabel ? `意图：${detail.intentLabel}` : '',
-      detail?.messageText ? `摘要：${String(detail.messageText).slice(0, 120)}` : '',
-    ]
-      .filter(Boolean)
-      .join(' · ')
-    applyFromWorkflowPayload('工作流 · 收货确认 AI 员工', {
-      employeeId: 'receipt_confirm' as CoreWorkflowEmployeeId,
-      workflowStageLine: '已收客户侧业务进程反馈',
-      workflowProgressPct: 55,
-      workflowProgressLabel: '进行中',
-      workflowCurrentHint: hint || line,
-      workflowProgressIdle: false,
-      workflowProgressStarted: true,
-      lastReceiptFeedback: { at, line, detail: hint },
-    })
+    const bridge = aminSignalBridges().find((b) => b.empId === 'receipt_confirm')
+    if (bridge) bridge.handler(detail as Record<string, unknown>)
   }
 
-  /** 副窗事件桥：微信消息处理（与 onWechatAiTaskEnqueue 写入的 lastWechat 对齐） */
   function applyWechatMsgBridge(detail: { messageText?: string; contactName?: string }) {
-    const wf = useWorkflowAiEmployeesStore()
-    if (!wf.enabled.wechat_msg) return
-    const name = String(detail?.contactName || '星标联系人').trim()
-    const msg = String(detail?.messageText || '').trim()
-    const line = `${name}：${msg.replace(/\s+/g, ' ').slice(0, 120)}`
-    const at = Date.now()
-    applyFromWorkflowPayload('工作流 · 微信消息处理 AI 员工', {
-      employeeId: 'wechat_msg' as CoreWorkflowEmployeeId,
-      workflowStageLine: '监控中 · 最近已处理',
-      workflowProgressPct: 100,
-      workflowProgressLabel: '处理中',
-      workflowCurrentHint: `最近一条客户消息已预处理：${line.slice(0, 120)}${line.length > 120 ? '…' : ''}`,
-      workflowProgressIdle: false,
-      workflowProgressStarted: true,
-      lastWechat: { at, line },
-    })
+    const bridges = aminSignalBridges().filter((b) => b.empId === 'wechat_msg' && b.eventNames.includes('xcagi:wechat-ai-task-enqueue'))
+    for (const bridge of bridges) bridge.handler(detail as Record<string, unknown>)
   }
 
-  /**
-   * 星标轮询心跳：在无聊天页 upsert 时仍刷新「监控」提示（与任务面板 monitor 行语义接近）。
-   */
   function applyWechatStarFeedPolledBridge(detail: { at?: number; intervalMs?: number; contactCount?: number; ok?: boolean }) {
-    const wf = useWorkflowAiEmployeesStore()
-    if (!wf.enabled.wechat_msg) return
-    const prev = snapshots.value.wechat_msg
-    const pollOk = detail?.ok !== false
-    const t = Number(detail?.at) || Date.now()
-    const sec = Math.max(1, Math.round((Number(detail?.intervalMs) || 60000) / 1000))
-    const n = detail?.contactCount
-    const cnt = typeof n === 'number' ? `星标联系人 ${n} 位` : '星标联系人'
-    const clock = new Date(t).toLocaleTimeString('zh-CN', { hour12: false })
-    const monitorLine = `${pollOk ? '拉取通道正常' : '上次拉取失败，将重试'} · 上次检查 ${clock} · 每 ${sec}s 轮询 · ${cnt}`
-    applyFromWorkflowPayload(
-      prev?.panelTitle || '工作流 · 微信消息处理 AI 员工',
-      {
-        employeeId: 'wechat_msg' as CoreWorkflowEmployeeId,
-        workflowStageLine: prev?.stage && prev.stage.includes('已处理') ? prev.stage : '监控中 · 等待新消息',
-        workflowProgressPct: prev?.progressPct ?? 30,
-        workflowProgressLabel: prev?.progressLabel || '轮询中',
-        workflowCurrentHint: prev?.hintLine ? `${prev.hintLine}\n${monitorLine}` : monitorLine,
-        workflowProgressIdle: prev ? prev.idle : true,
-        workflowProgressStarted: prev ? prev.visuallyBusy : false,
-      },
-      { isHeartbeat: true }
-    )
+    const bridges = aminSignalBridges().filter((b) => b.empId === 'wechat_msg' && b.eventNames.includes('xcagi:wechat-star-feed-polled'))
+    for (const bridge of bridges) bridge.handler(detail as Record<string, unknown>)
   }
 
   function removeEmployee(empId: string) {

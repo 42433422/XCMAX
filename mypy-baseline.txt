@@ -1,0 +1,1 @@
+# Placeholder baseline — CI runs mypy_ratchet.sh to populate on first failure.

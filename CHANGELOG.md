@@ -1,6 +1,6 @@
 # XCAGI 版本更新日志
 
-> 从 v1.0 到 v8.0 的演进历程
+> 从 v1.0 到 v10.0 的演进历程
 
 ---
 
@@ -15,7 +15,19 @@
 | **v5.0** | 稳定 | Neuro-DDD 架构 + 小程序 + 性能监控 + 审批流 |
 | **v6.0** | 稳定 | **商业模式明确 + 三层收入 + Mod 生态** |
 | **v7.0** | 稳定 | **Windows/macOS 桌面版 + Web 版并行交付 + 自动更新** |
-| **v8.0** | 🚀 当前最新 | **跨行业 UI 适配 + Mod 制作端行业选择 + 平台壳 V8** |
+| **v8.0** | 稳定 | **跨行业 UI 适配 + Mod 制作端行业选择 + 平台壳 V8** |
+| **v10.0** | 🚀 当前最新 | **域路由 SSOT + Legacy shim 拆除 + LLM Provider Registry** |
+
+---
+
+## v10.0.0 (2026-06-04) - 域路由 SSOT 与 Legacy 拆除
+
+- **破坏性清理**：删除 `legacy_*` / `xcagi_compat_*` shim；域路由 SSOT **推进中**（`finance` / `inventory` / `ocr` / `rbac` / `lan` 等待迁入 `domains/*`，详见 [`docs/CLAIMED_VS_ACTUAL.md`](docs/CLAIMED_VS_ACTUAL.md)）；CI：`scripts/dev/verify_no_legacy_shims.py`。
+- **应用服务层**：23 个 `*_app_service_v2.py` **保留**为应用层模块（非「已清零」）；见 CLAIMED_VS_ACTUAL「_v2 实际清单」。
+- **LLM 可插拔**：`LLMProviderRegistry` 与 `POST /api/admin/llm/reload`（详见 [`docs/V10_ROADMAP_COMPLETE.md`](docs/V10_ROADMAP_COMPLETE.md)）。
+- **SLO / Canary**：Prometheus recording rules、Helm 发布门禁与 SLA 探针收紧。
+- **版本锚点**：前后端与桌面壳统一为 `10.0.0`；Mod 依赖基线 `>=10.0.0`。
+- **工作区卫生**：`bang/` 重复扫描产物忽略；XCMAX 分析 JSON 迁至 `.cache/xcmax/`；README 瘦身并以 [`VERSION.md`](VERSION.md) 为唯一数字来源。
 
 ---
 
@@ -550,7 +562,7 @@ cd XCAGI && python run.py
 - [x] Windows/macOS 桌面安装包
 - [x] 自动更新
 
-### v8.0（当前）
+### v8.0（历史）
 
 - [x] 跨行业 UI 适配 + 行业预设
 - [x] Mod 制作端行业选择

@@ -41,7 +41,7 @@ class PhoneNumber:
     # 固定电话正则（简化版）
     _LANDLINE_REGEX = re.compile(r"^(0\d{2,3})?-?\d{7,8}$")
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         # 标准化：去除所有非数字字符
         cleaned = re.sub(r"\D", "", self.number)
 
@@ -133,7 +133,7 @@ class PhoneNumber:
     def __repr__(self) -> str:
         return f"PhoneNumber(number={self.number})"
 
-    def __eq__(self, other) -> bool:
+    def __eq__(self, other: object) -> bool:
         if not isinstance(other, PhoneNumber):
             return False
         return self.number == other.number

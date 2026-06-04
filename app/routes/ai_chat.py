@@ -14,7 +14,9 @@ from app.utils.ai_helpers import format_money, safe_float
 logger = logging.getLogger(__name__)
 
 
-def _fetch_product_meta_by_models(models, unit_name: str = "") -> dict[str, dict[str, Any]]:
+def _fetch_product_meta_by_models(
+    models: list[Any], unit_name: str = ""
+) -> dict[str, dict[str, Any]]:
     model_list = [m for m in models if m]
     if not model_list:
         return {}
@@ -56,7 +58,7 @@ def _fetch_product_meta_by_models(models, unit_name: str = "") -> dict[str, dict
         for model in model_list:
             model_raw = str(model or "").strip()
             model_norm = _normalize_model_token(model_raw)
-            records = []
+            records: list[dict[str, Any]] = []
 
             if unit_name:
                 result = (
@@ -87,7 +89,9 @@ def _fetch_product_meta_by_models(models, unit_name: str = "") -> dict[str, dict
     return meta
 
 
-def _build_number_preview_items(unit_name: str, products) -> dict[str, Any]:
+def _build_number_preview_items(
+    unit_name: str, products: list[dict[str, Any]]
+) -> dict[str, Any]:
     products = products or []
     models = []
     for p in products:
@@ -158,7 +162,7 @@ def _build_number_preview_items(unit_name: str, products) -> dict[str, Any]:
 
 
 def build_shipment_preview_response_dict(
-    unit_name: str, products, order_text: str
+    unit_name: str, products: list[dict[str, Any]], order_text: str
 ) -> dict[str, Any]:
     preview = _build_number_preview_items(unit_name, products)
     total_text = (
@@ -316,9 +320,9 @@ def unified_chat_single_payload(
             }
 
     if route_intent == "product_query":
-        body = build_product_query_response_dict(route_result)
-        if body:
-            return body
+        query_body = build_product_query_response_dict(route_result)
+        if query_body is not None:
+            return query_body
 
     return {
         "success": True,

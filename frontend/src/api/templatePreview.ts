@@ -1,4 +1,4 @@
-import api, { ApiError } from './core';
+import api, { ApiError } from './index';
 import type { RequestOptions } from './core';
 
 /**

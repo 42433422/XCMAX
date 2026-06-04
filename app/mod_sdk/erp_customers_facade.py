@@ -37,7 +37,7 @@ def _service():
 
 
 def _map_body(body: dict[str, Any]) -> dict[str, Any]:
-    from app.fastapi_routes.xcagi_compat_db_base import _customer_body_name_contact
+    from app.fastapi_routes.domains.db.base import _customer_body_name_contact
 
     name, cp, ph, addr = _customer_body_name_contact(body)
     return {
@@ -49,7 +49,7 @@ def _map_body(body: dict[str, Any]) -> dict[str, Any]:
 
 
 def _write_gate(request: Request | None) -> None:
-    from app.fastapi_routes.xcagi_compat_db_base import _customers_write_raise
+    from app.fastapi_routes.domains.db.base import _customers_write_raise
 
     if request is not None:
         _customers_write_raise(request)

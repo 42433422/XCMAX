@@ -131,11 +131,10 @@ class ServiceWorkerManager {
    * 激活新的Service Worker（需要刷新页面）
    */
   async activateUpdate(): Promise<void> {
-    const controller = navigator.serviceWorker?.controller;
-    if (!this._status.controller || !controller) return;
+    if (!this._status.controller) return;
 
     // 发送消息让SW跳过等待
-    controller.postMessage({ type: 'SKIP_WAITING' });
+    navigator.serviceWorker.controller.postMessage({ type: 'SKIP_WAITING' });
     
     // 监听controllerchange事件
     await new Promise<void>((resolve) => {
@@ -149,8 +148,7 @@ class ServiceWorkerManager {
    * 清除所有缓存
    */
   async clearCache(): Promise<boolean> {
-    const controller = navigator.serviceWorker?.controller;
-    if (!this._status.supported || !controller) return false;
+    if (!this._status.supported || !navigator.serviceWorker?.controller) return false;
 
     return new Promise((resolve) => {
       const channel = new MessageChannel();
@@ -164,7 +162,7 @@ class ServiceWorkerManager {
         }
       };
 
-      controller.postMessage(
+      navigator.serviceWorker.controller.postMessage(
         { type: 'CLEAR_CACHE' },
         [channel.port2]
       );
@@ -177,8 +175,7 @@ class ServiceWorkerManager {
    * 获取缓存状态信息
    */
   async getCacheStatus(): Promise<object | null> {
-    const controller = navigator.serviceWorker?.controller;
-    if (!this._status.supported || !controller) return null;
+    if (!this._status.supported || !navigator.serviceWorker?.controller) return null;
 
     return new Promise((resolve) => {
       const channel = new MessageChannel();
@@ -191,7 +188,7 @@ class ServiceWorkerManager {
         }
       };
 
-      controller.postMessage(
+      navigator.serviceWorker.controller.postMessage(
         { type: 'GET_STATUS' },
         [channel.port2]
       );

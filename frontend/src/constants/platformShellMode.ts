@@ -115,6 +115,11 @@ function isEnterpriseProductSkuBuild(): boolean {
   return raw === 'enterprise'
 }
 
+function isPersonalProductSkuBuild(): boolean {
+  const raw = String(import.meta.env.VITE_XCAGI_PRODUCT_SKU || '').trim().toLowerCase()
+  return raw === 'personal'
+}
+
 /** 企业版默认完整侧栏与路由，不进入通用平台壳 */
 export function bootstrapEnterpriseShellDefaults(): void {
   if (!isEnterpriseProductSkuBuild()) return
@@ -126,8 +131,21 @@ export function bootstrapEnterpriseShellDefaults(): void {
   }
 }
 
+/** @deprecated 请用 FHD 主树 VITE_XCAGI_PRODUCT_SKU=admin + bootstrapAdminOperatorShellDefaults */
+/** 历史：管理员运营树误用 personal 构建变量时的完整侧栏 */
+export function bootstrapPersonalShellDefaults(): void {
+  if (!isPersonalProductSkuBuild()) return
+  if (typeof localStorage === 'undefined') return
+  try {
+    localStorage.setItem(LS_PLATFORM_SHELL_MODE, '0')
+  } catch {
+    /* ignore */
+  }
+}
+
 export function isPlatformShellModeEnabled(): boolean {
   if (isEnterpriseProductSkuBuild()) return false
+  if (isPersonalProductSkuBuild()) return false
   if (typeof window !== 'undefined') {
     if (new URLSearchParams(window.location.search).has('shell')) return true
     if (new URLSearchParams(window.location.search).has('full')) return false

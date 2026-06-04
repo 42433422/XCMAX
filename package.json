@@ -1,16 +1,16 @@
 {
   "name": "xcagi-legacy-static-tests",
-  "version": "8.0.0",
+  "version": "10.0.0",
   "description": "XCAGI 根级旧版 static/ 测试与 lint 配置（真实前端见 frontend/）",
   "scripts": {
-    "test": "jest",
-    "test:coverage": "jest --coverage",
-    "test:e2e": "playwright test",
+    "test": "echo \"Use FHD/frontend: npm test\" && exit 1",
+    "test:coverage": "echo \"Use FHD/frontend: npm run test:coverage\" && exit 1",
+    "test:e2e": "echo \"Use FHD/frontend: npm run test:e2e\" && exit 1",
     "lint": "eslint static/js/",
     "desktop:dev": "npm --prefix desktop run dev",
     "desktop:build": "npm --prefix desktop run build",
     "desktop:dist:win": "powershell -ExecutionPolicy Bypass -File scripts/package/build-all-skus.ps1",
-    "desktop:dist:mac": "bash scripts/package/build-installer.sh 8.0.0 all"
+    "desktop:dist:mac": "bash scripts/package/build-installer.sh 10.0.0 all"
   },
   "devDependencies": {
     "jest": "^29.7.0",

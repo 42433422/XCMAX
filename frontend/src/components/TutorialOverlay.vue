@@ -59,7 +59,12 @@ import { getTutorialTtsWarmupTexts, useTutorialStore } from '@/stores/tutorial'
 const tutorialStore = useTutorialStore()
 const router = useRouter()
 
-const trackLabel = computed(() => tutorialStore.currentTrackLabel || '')
+const trackLabel = computed(() => {
+  const t = tutorialStore.currentTrack
+  if (t === 'advanced') return '进阶教程'
+  if (t === 'basic') return '基础教程'
+  return ''
+})
 let wasActive = false
 const ttsAudio = ref(null)
 let ttsSeq = 0

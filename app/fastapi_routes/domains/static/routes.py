@@ -66,9 +66,11 @@ def gap_batch2_vite_svg():
 
 @router.get("/brand-xc-logo.jpg")
 def gap_batch2_brand_xc_logo():
-    p = os.path.join(_vue_dist_dir(), "brand-xc-logo.jpg")
-    if os.path.exists(p):
-        return FileResponse(p, media_type="image/jpeg")
+    vue_dist_dir = _vue_dist_dir()
+    for name, media in (("brand-xc-logo.jpg", "image/jpeg"), ("vite.svg", "image/svg+xml")):
+        p = os.path.join(vue_dist_dir, name)
+        if os.path.exists(p):
+            return FileResponse(p, media_type=media)
     return JSONResponse({"success": False, "message": "brand-xc-logo.jpg 不存在"}, status_code=404)
 
 
@@ -403,7 +405,7 @@ def customers_batch_delete_delete(
     force: str = Query(default="false"),
     body: dict | None = Body(default=None),
 ):
-    from app.application import get_customer_app_service
+    from app.bootstrap import get_customer_app_service
 
     try:
         if isinstance(body, dict) and body.get("ids"):
@@ -430,7 +432,7 @@ def customers_batch_delete_delete(
 @router.delete("/api/preferences/{key}")
 def preferences_delete_key(key: str, user_id: str = Query(default="default")):
     try:
-        from app.application.facades.conversation_facade import get_user_preference_service
+        from app.infrastructure.gateways.conversation import get_user_preference_service
 
         success = get_user_preference_service().delete_preference(user_id, key)
         return {"success": success, "message": "偏好已删除" if success else "删除失败"}

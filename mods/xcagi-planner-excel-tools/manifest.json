@@ -6,7 +6,7 @@
   "description": "里程碑 F4：Planner 工作流工具集（8 项）均在 Mod backend 分派；向量/批量导入/DB 仍用宿主应用服务。",
   "primary": false,
   "dependencies": {
-    "xcagi": ">=8.0.0",
+    "xcagi": ">=10.0.0",
     "xcagi-planner-bridge": ">=1.1.0"
   },
   "backend": { "entry": "blueprints", "init": "mod_init" },

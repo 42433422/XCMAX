@@ -1,0 +1,7 @@
+config:
+  FHD_ENV: staging
+
+ingress:
+  host: staging.xcagi.example.com
+
+replicaCount: 2

@@ -228,8 +228,8 @@ export function useShipmentTask(
 
         return {
           name: String(best?.name || best?.product_name || '').trim(),
-          unit_price: toNumber(best?.price ?? best?.unit_price) ?? undefined,
-          tin_spec: toNumber(best?.tin_spec ?? best?.specification ?? best?.spec) ?? undefined
+          unit_price: toNumber(best?.price ?? best?.unit_price),
+          tin_spec: toNumber(best?.tin_spec ?? best?.specification ?? best?.spec)
         }
       } catch (_err) {
         // Ignore network/query errors in preview enrichment.

@@ -126,15 +126,17 @@
       </div>
 
       <div v-else-if="activeTab === 'oneClick' || activeTab === 'lobster'" class="assistant-body assistant-body-recommend">
+        <p class="recommend-intro">{{ recommendIntroText }}</p>
         <div class="workflow-employee-section">
           <div class="workflow-employee-section-head">
             <div class="workflow-employee-heading">工作流员工选择</div>
             <router-link
-              :to="workflowVisualizationLocation"
+              :to="{ name: 'workflow-visualization' }"
               class="workflow-employee-visual-link"
               :title="workflowPanoramaLinkTitle"
             >流程全景</router-link>
           </div>
+          <p class="workflow-employee-hint">与侧栏「专业版」开关样式一致：打开即启用对应 AI 员工参与工作流。</p>
           <div class="workflow-employee-list" role="group" aria-label="工作流 AI 员工">
             <button
               v-for="emp in workflowEmployeeDefs"
@@ -245,6 +247,7 @@
       </div>
 
       <div v-else-if="activeTab === 'starterPack'" class="assistant-body assistant-body-starter">
+        <p class="starter-pack-intro">点选一条示例，将跳转到智能对话并填入输入框；确认无误后请自行点击「发送」。</p>
         <div class="starter-pack-list">
           <button
             v-for="(item, idx) in starterPackPresets"
@@ -262,40 +265,18 @@
       <div v-else-if="activeTab === 'tutorial'" class="assistant-body assistant-body-tutorial">
         <div class="tutorial-track-pick">
           <div class="tutorial-track-heading">选择教程</div>
-          <ul class="tutorial-track-list">
-            <li
-              v-for="(track, index) in tutorialTracks"
-              :key="track.id"
-              class="tutorial-track-card"
-            >
-              <div class="tutorial-track-card-main">
-                <div class="tutorial-track-card-title">{{ track.title }}</div>
-                <p class="tutorial-track-card-summary">{{ track.summary }}</p>
-                <p v-if="track.id === 'advanced'" class="tutorial-track-card-extra muted">
-                  {{ advancedTrackHint }}
-                </p>
-              </div>
-              <button
-                type="button"
-                class="btn btn-sm"
-                :class="index === 0 || track.recommended ? 'btn-primary' : 'btn-secondary'"
-                :title="track.description"
-                @click="startTutorialGuide(track.id)"
-              >
-                开始
-              </button>
-            </li>
-          </ul>
-          <details class="tutorial-track-details">
-            <summary>路线说明</summary>
-            <p
-              v-for="track in tutorialTracks"
-              :key="`${track.id}-desc`"
-              class="tutorial-track-hint"
-            >
-              <strong>{{ track.title }}</strong> — {{ track.description }}
-            </p>
-          </details>
+          <p class="tutorial-track-lead">请先选择路线，再进入全屏引导。</p>
+          <div class="tutorial-track-buttons">
+            <button type="button" class="btn btn-primary btn-sm" @click="startTutorialGuide('basic')">
+              基础教程
+            </button>
+            <button type="button" class="btn btn-secondary btn-sm" @click="startTutorialGuide('advanced')">
+              进阶教程
+            </button>
+          </div>
+          <p class="tutorial-track-hint">
+            <strong>基础教程</strong>覆盖对话包、任务、微信与星标、输入区与副窗等常用操作；<strong>进阶教程</strong>会带你依次认路左侧菜单（智能对话、{{ uiText.entityName.value }}、{{ uiText.recordsName.value }}、打印、设置等）。
+          </p>
         </div>
       </div>
     </div>
@@ -310,12 +291,11 @@ import { useRouter } from 'vue-router';
 import { ApiError } from '@/api';
 import productsApi from '@/api/products';
 import { useTutorialStore } from '@/stores/tutorial';
-import { useTutorialCatalog } from '@/composables/useTutorialCatalog';
 import { useModsStore } from '@/stores/mods';
 import { useWorkflowAiEmployeesStore } from '@/stores/workflowAiEmployees';
-import { WORKFLOW_EMPLOYEE_IDS } from '@/constants/workflowEmployeeMods';
 import { useWorkflowModsRuntimeContext } from '@/composables/useWorkflowModsRuntimeContext';
-import { resolveLabel } from '@/utils/workflowEmployeeRegistry';
+import { buildModWorkflowPanelMeta } from '@/utils/modWorkflowEmployees';
+import { aminPlugins } from '@/utils/aminRegistry';
 import { useIndustryUiText } from '@/composables/useIndustryUiText';
 import {
   inferWechatCustomerIntent,
@@ -323,18 +303,15 @@ import {
   isReceiptConfirmRelatedWechatIntent,
 } from '@/utils/wechatIntent';
 import { shouldTryWechatShipmentPreview } from '@/utils/wechatShipmentDetect';
-import { resolveErpApiPath } from '@/utils/erpDomainPaths';
-import { resolveWorkflowVisualizationLocation } from '@/utils/workflowNav';
 import ExcelPreview from '@/components/template/ExcelPreview.vue';
 
 const router = useRouter();
 const tutorialStore = useTutorialStore();
-const { tutorialTracks, advancedTrackHint, buildContext: tutorialBuildContext } = useTutorialCatalog();
 const modsStore = useModsStore();
 const uiText = useIndustryUiText();
 const { modWorkflowEmployeesActive } = useWorkflowModsRuntimeContext();
 const workflowAiEmployeesStore = useWorkflowAiEmployeesStore();
-const { enabled: workflowEmployeesEnabled, registryEntries: workflowRegistryEntries, registryLoaded: workflowRegistryLoaded } = storeToRefs(workflowAiEmployeesStore);
+const { enabled: workflowEmployeesEnabled } = storeToRefs(workflowAiEmployeesStore);
 
 const isOpen = ref(false);
 const activeTab = ref('push');
@@ -405,17 +382,21 @@ const operationHistory = ref([]);
 const PRO_INTENT_EXPERIENCE_KEY = 'xcagi_pro_intent_experience';
 
 const workflowEmployeeDefs = computed(() => {
-  const i18nResolver = (key) => {
-    if (key === 'shipmentOrderName') return `${uiText.shipmentOrderName.value}管理 AI 员工`;
-    return key;
-  };
-  return workflowRegistryEntries.value.map((entry) => ({
-    id: entry.id,
-    label: resolveLabel(entry, i18nResolver),
-  }));
+  const modMeta = buildModWorkflowPanelMeta(modsStore.modsForUi);
+  const builtin = aminPlugins.map((p) => {
+    if (p.id === 'shipment_mgmt') return { id: p.id, label: `${uiText.shipmentOrderName.value}管理 AI 员工` }
+    return { id: p.id, label: p.label }
+  });
+  const seen = new Set(builtin.map((x) => x.id));
+  const out = [...builtin];
+  for (const [id, meta] of Object.entries(modMeta)) {
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const t = (meta.title || '').replace(/^工作流 ·\s*/, '').trim();
+    out.push({ id, label: t || id });
+  }
+  return out;
 });
-
-const workflowVisualizationLocation = resolveWorkflowVisualizationLocation();
 
 const workflowPanoramaLinkTitle = computed(() =>
   modWorkflowEmployeesActive.value
@@ -423,16 +404,14 @@ const workflowPanoramaLinkTitle = computed(() =>
     : '查看固定六类工作流的执行逻辑与过程'
 );
 
-const coreWorkflowEnabled = (id) =>
-  !!workflowEmployeesEnabled.value?.[id];
-
-const isWechatMsgEmployeeEnabled = () => coreWorkflowEnabled('wechat_msg');
-const isLabelPrintEmployeeEnabled = () => coreWorkflowEnabled('label_print');
-const isReceiptConfirmEmployeeEnabled = () => coreWorkflowEnabled('receipt_confirm');
-
+const isWechatMsgEmployeeEnabled = () => !!workflowEmployeesEnabled.value?.wechat_msg;
+const isLabelPrintEmployeeEnabled = () => !!workflowEmployeesEnabled.value?.label_print;
+const isReceiptConfirmEmployeeEnabled = () => !!workflowEmployeesEnabled.value?.receipt_confirm;
 /** 星标新消息是否需要跑意图链路（微信任务 / 发货预览 / 标签与收货确认信号等） */
 const shouldRunStarredWechatIntentPipeline = () =>
-  WORKFLOW_EMPLOYEE_IDS.filter((id) => id !== 'shipment_mgmt').some((id) => coreWorkflowEnabled(id));
+  isWechatMsgEmployeeEnabled() ||
+  isLabelPrintEmployeeEnabled() ||
+  isReceiptConfirmEmployeeEnabled();
 
 /**
  * 微信消息处理 AI 员工：星标 feed 发现新消息后，按「专业模式 AI 意图体验」走 /api/ai/intent/test，否则本地规则预处理；结果推到对话页任务列表（事件）。
@@ -705,7 +684,7 @@ function onAssistantPanelKeydown(e) {
 }
 
 const startTutorialGuide = async (track = 'basic') => {
-  const t = String(track || 'basic').trim() || 'basic';
+  const t = track === 'advanced' ? 'advanced' : 'basic';
   const extractChatMessagesSnapshot = () => {
     const nodes = Array.from(document.querySelectorAll('#chatMessages .message'));
     return nodes.slice(-30).map((node) => {
@@ -788,7 +767,6 @@ const startTutorialGuide = async (track = 'basic') => {
   tutorialStore.startTutorial({
     isProMode: !!window.__XCAGI_IS_PRO_MODE,
     track: t,
-    buildContext: tutorialBuildContext.value,
     returnContext: {
       routeName: previousRouteName || 'chat',
       assistantOpen: previousOpen,
@@ -1125,7 +1103,7 @@ const pollStarredFeed = async () => {
   if (feedPolling || !isAutoRefreshEnabled()) return;
   feedPolling = true;
   try {
-    const resp = await fetch(resolveErpApiPath('/api/wechat_contacts/work_mode_feed?per_contact=1'));
+    const resp = await fetch('/api/wechat_contacts/work_mode_feed?per_contact=1');
     const data = await resp.json().catch(() => ({}));
     if (!resp.ok || !data?.success || !Array.isArray(data.feed)) {
       return;
@@ -1265,14 +1243,12 @@ onMounted(() => {
   window.addEventListener('xcagi:tutorial:set-assistant-tab', onTutorialSetAssistantTab);
   startFeedPolling();
   syncTopScrollMetrics();
+  // Mod 拉取由 App 开屏路径统一 initialize；此处只同步当前 store，避免与 App 重复触发 initInFlight
   if (modsStore.clientModsUiOff) {
     workflowAiEmployeesStore.stripModWorkflowEmployeeKeys();
   } else {
     workflowAiEmployeesStore.hydrateFromMods(modsStore.modsForUi);
     workflowAiEmployeesStore.pruneOrphanWorkflowEmployeeToggles(modsStore.modsForUi);
-  }
-  if (!workflowRegistryLoaded.value) {
-    workflowAiEmployeesStore.loadRegistry(modsStore.modsForUi);
   }
 });
 
@@ -1281,9 +1257,6 @@ watch(
   (list) => {
     workflowAiEmployeesStore.hydrateFromMods(list);
     workflowAiEmployeesStore.pruneOrphanWorkflowEmployeeToggles(list);
-    if (workflowRegistryLoaded.value) {
-      workflowAiEmployeesStore.loadRegistry(list);
-    }
   },
   { deep: true }
 );
@@ -1739,56 +1712,14 @@ watch(() => linkedGridData.value, () => {
   color: #4b5563;
   line-height: 1.45;
 }
-.tutorial-track-list {
-  list-style: none;
-  margin: 0 0 10px;
-  padding: 0;
+.tutorial-track-buttons {
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
   gap: 8px;
-}
-.tutorial-track-card {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 10px;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  background: #fff;
-}
-.tutorial-track-card-main {
-  flex: 1;
-  min-width: 0;
-}
-.tutorial-track-card-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: #111827;
-}
-.tutorial-track-card-summary {
-  margin: 4px 0 0;
-  font-size: 12px;
-  color: #4b5563;
-  line-height: 1.4;
-}
-.tutorial-track-card-extra {
-  margin: 6px 0 0;
-  font-size: 11px;
-  line-height: 1.45;
-}
-.tutorial-track-details {
-  margin-top: 4px;
-  font-size: 11px;
-  color: #6b7280;
-}
-.tutorial-track-details summary {
-  cursor: pointer;
-  color: #374151;
-  font-weight: 500;
+  margin-bottom: 10px;
 }
 .tutorial-track-hint {
-  margin: 8px 0 0;
+  margin: 0;
   font-size: 11px;
   color: #6b7280;
   line-height: 1.5;

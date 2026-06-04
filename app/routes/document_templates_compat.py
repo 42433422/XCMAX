@@ -22,7 +22,7 @@ import shutil
 from io import BytesIO
 from typing import Any, BinaryIO
 
-from app.application.facades.template_facade import document_templates_service as _tpl
+from app.infrastructure.gateways.templates import document_templates_service as _tpl
 
 
 class _UploadLikeFile:

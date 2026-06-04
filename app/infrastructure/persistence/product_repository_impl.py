@@ -517,6 +517,13 @@ class SQLAlchemyProductRepository(ProductRepository):
         except Exception as e:
             return {"success": False, "message": f"批量删除失败：{str(e)}"}
 
+    def count(self) -> int:
+        try:
+            with get_db() as db:
+                return int(db.query(Product).count())
+        except Exception:
+            return 0
+
     def exists(self, product_id: int) -> bool:
         try:
             with get_db() as db:

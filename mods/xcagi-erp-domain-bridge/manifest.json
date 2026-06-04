@@ -5,7 +5,7 @@
   "author": "成都修茈科技有限公司",
   "description": "四领域 API 门面 + Repository 可插拔 + Mod 业务页（K+/O+ 物理视图；L 仓储边界）。",
   "primary": false,
-  "dependencies": { "xcagi": ">=8.0.0" },
+  "dependencies": { "xcagi": ">=10.0.0" },
   "backend": { "entry": "blueprints", "init": "mod_init" },
   "frontend": {
     "routes": "frontend/routes",

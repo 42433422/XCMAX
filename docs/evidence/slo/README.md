@@ -34,7 +34,13 @@ GRAFANA_URL=https://grafana.staging.example bash scripts/observability/export_m0
 
 ## 2. 7 天验收字段模板（staging 解除阻塞后填写）
 
-复制下方 YAML 块至 `acceptance-YYYYMMDD.yaml`（同目录），**仅从 Grafana / Prometheus 读数填写**；无法观测的字段保持 `null` 或 `待测`，勿臆造。
+**推荐**：复制仓内模板文件（字段均为 `null` / `pending`，无假数据）：
+
+```bash
+cp docs/evidence/slo/acceptance-TEMPLATE.yaml docs/evidence/slo/acceptance-YYYYMMDD.yaml
+```
+
+亦可复制下方 YAML 块至 `acceptance-YYYYMMDD.yaml`（同目录），**仅从 Grafana / Prometheus 读数填写**；无法观测的字段保持 `null` 或 `待测`，勿臆造。
 
 ```yaml
 # acceptance-YYYYMMDD.yaml — staging SLO 7 天验收（T36–T37）
@@ -135,6 +141,7 @@ Staging 部署：[`STAGING_RUNBOOK.md`](../../../k8s/monitoring/STAGING_RUNBOOK.
 
 ## 4. 关联
 
+- 可复制模板：[`acceptance-TEMPLATE.yaml`](acceptance-TEMPLATE.yaml)（`meta.status: pending`，无假数据）
 - 声称对照：[`docs/CLAIMED_VS_ACTUAL.md`](../../CLAIMED_VS_ACTUAL.md)
 - M0 剩余缺口：[`docs/M0-remaining-gaps.md`](../../M0-remaining-gaps.md)
 - 可观测脚本：[`scripts/observability/README.md`](../../../scripts/observability/README.md)

@@ -1,0 +1,24 @@
+{
+  "generated_at": "2026-06-04T14:05:07Z",
+  "date": "20260604",
+  "window_days": 30,
+  "report": {
+    "window_days": 30,
+    "total_deploys": 5,
+    "deployment_frequency_per_day": 0.167,
+    "lead_time_hours_median": 1.5,
+    "change_failure_rate": 0.2,
+    "mttr_hours_median": 7.417,
+    "performance_band": "High"
+  },
+  "data_sources": {
+    "deployment_frequency": "GitHub Actions: Deploy + CI/CD Pipeline（种子见 deploy_events.seed.jsonl）",
+    "lead_time_hours_median": "commit author date → run updated_at",
+    "change_failure_rate": "failed runs / total",
+    "mttr_hours_median": "failed → next success"
+  },
+  "events_file": "metrics/deploy_events.seed.jsonl",
+  "events_count": 5,
+  "documentation": "metrics/DORA_DATA_SOURCES.md",
+  "note": "bootstrap snapshot until CI dora-metrics-collect.yml populates deploy_events.jsonl"
+}

@@ -14,7 +14,7 @@ describe('buildModSteps', () => {
           },
         },
       },
-    ] as unknown as ModInfo[]
+    ] as ModInfo[]
     const ctx = createTutorialBuildContext({
       industryId: '考勤',
       mods,
@@ -34,7 +34,7 @@ describe('buildModSteps', () => {
           tracks: [{ id: 'erp-tour', title: 'ERP 导览', requires_mod_menu: true }],
         },
       },
-    ] as unknown as ModInfo[]
+    ] as ModInfo[]
     const keys = new Set(['mod-erp-products'])
     const tracks = collectModTutorialTracks(mods, keys)
     expect(tracks).toHaveLength(1)

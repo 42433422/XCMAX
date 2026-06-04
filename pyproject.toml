@@ -1,9 +1,116 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "xcagi"
-version = "8.0.0"
+version = "10.0.0"
 description = "XCAGI - 企业 AI 员工平台（桌面版 + Web 版并行交付）"
 requires-python = ">=3.11"
-dependencies = []
+readme = "README.md"
+dependencies = [
+    "fastapi>=0.109.0",
+    "uvicorn[standard]>=0.27.0",
+    "starlette>=0.36.0",
+    "python-multipart>=0.0.6",
+    "aiofiles>=23.2.1",
+    "Celery==5.3.4",
+    "redis==5.0.1",
+    "openpyxl==3.1.2",
+    "python-docx>=1.1.0",
+    "pdfplumber>=0.11.0",
+    "Pillow>=10.2.0",
+    "gunicorn==21.2.0",
+    "gevent==24.2.1",
+    "python-dotenv==1.0.0",
+    "httpx[socks]==0.26.0",
+    "requests>=2.31.0",
+    "python-alipay-sdk>=3.3.0",
+    "edge-tts>=6.1.10",
+    "SQLAlchemy>=2.0.0",
+    "alembic>=1.13.0",
+    "psycopg[binary]>=3.1.18",
+    "pgvector>=0.2.5",
+    "pycryptodome>=3.19,<4",
+    "zstandard>=0.22,<1",
+    "sqlcipher3>=0.5,<1",
+    "pandas>=2.0.0",
+    "xlrd>=2.0.1",
+    "numpy>=1.24.0",
+    "openai>=1.40.0",
+    "tenacity>=8.2.0",
+    "prometheus_client>=0.19.0",
+    "psutil>=5.9.0",
+    "marshmallow>=3.20.0",
+    "xcagi-common @ file:../packages/xcagi_common",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==7.4.3",
+    "pytest-cov==4.1.0",
+    "pytest-mock==3.12.0",
+    "pytest-random-order>=1.1.0",
+    "ruff>=0.4.0",
+    "mypy>=1.8.0",
+    "types-redis",
+    "types-requests",
+    "types-pyyaml",
+    "types-psutil",
+    "types-aiofiles",
+    "types-pillow",
+    "types-openpyxl",
+    "types-PyYAML",
+]
+ml = [
+    "torch>=2.0.0",
+    "transformers>=4.35.0",
+    "scikit-learn>=1.3.0",
+    "statsmodels>=0.14.6",
+    "prophet>=1.3.0",
+    "accelerate>=0.25.0",
+    "protobuf>=4.25.0",
+]
+desktop = [
+    "miniaudio>=1.59",
+    "imageio-ffmpeg>=0.4.0",
+    "soundcard>=0.4.3; sys_platform == 'win32'",
+    "PyAudio>=0.2.14; sys_platform == 'win32'",
+    "faster-whisper>=1.0.0",
+]
+ml-bert = [
+    "torch>=2.0.0",
+    "transformers>=4.35.0",
+    "scikit-learn>=1.3.0",
+    "accelerate>=0.25.0",
+]
+ml-rasa = [
+    "rasa>=3.6,<4",
+]
+ml-tts = [
+    "edge-tts>=6.1.0",
+]
+ml-forecast = [
+    "statsmodels>=0.14.6",
+    "prophet>=1.3.0",
+]
+observability = [
+    "opentelemetry-api>=1.22.0",
+    "opentelemetry-sdk>=1.22.0",
+    "opentelemetry-exporter-otlp-proto-http>=1.22.0",
+    "opentelemetry-instrumentation-fastapi>=0.43b0",
+]
+enterprise = [
+    "lxml>=5.0",
+    "signxml>=4.0.2",
+]
+
+[tool.setuptools]
+package-dir = {"" = "."}
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]
 
 [tool.ruff]
 line-length = 100
@@ -22,8 +129,19 @@ exclude = [
 ]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "B", "C4", "UP", "SIM", "PLC"]
+select = ["E", "F", "I", "B", "C4", "UP", "SIM", "PLC", "BLE001"]
 ignore = ["E501", "E402"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["BLE001"]
+"mods/**" = ["BLE001"]
+"resources/**" = ["BLE001"]
+"scripts/**" = ["BLE001"]
+"app/services/**" = ["BLE001"]
+"app/mod_sdk/**" = ["BLE001"]
+"app/fastapi_routes/**" = ["BLE001"]
+"app/neuro_bus/**" = ["BLE001"]
+"app/legacy/**" = ["BLE001"]
 
 [tool.ruff.format]
 quote-style = "double"
@@ -62,11 +180,12 @@ skip_gitignore = true
 skip = [".venv", "venv", "node_modules", "frontend", "migrations", "alembic/versions"]
 
 # mypy 配置唯一真相源（2026-05-04 整合）：
-# - 旧 mypy.ini（strict=True 但拼错过 frontned，且 ignore_missing_imports=False 与本节冲突）已删除。
-# - 当前以 pyproject 的"宽松配置"为准，与 [FHD项目评估报告.md](FHD项目评估报告.md) §四 的认知一致。
-# - 后续严格化路线见 §四 P1 改进项（逐步关闭 ignore_missing_imports、引入 types-* 包）。
+# - CI 严格子集：scripts/ci/mypy_strict_gate.sh（blocking）
+# - 全量 app/ 仍分阶段；legacy 包暂 ignore_errors，禁止再扩大裸 except。
 [tool.mypy]
 python_version = "3.11"
+explicit_package_bases = true
+mypy_path = "."
 warn_return_any = true
 warn_unused_configs = true
 ignore_missing_imports = false
@@ -77,11 +196,116 @@ exclude = [
     "frontend",
     "migrations",
     "alembic/versions",
+    "app/infrastructure/skills/.*",
+    "resources/.*",
 ]
 
 [[tool.mypy.overrides]]
 module = "tests.*"
+# 测试包允许松散推断；不再整包 ignore_errors（见 specs/spec.md P1-3）
+disable_error_code = [
+    "attr-defined",
+    "assignment",
+    "arg-type",
+    "return-value",
+    "union-attr",
+    "var-annotated",
+    "import-untyped",
+]
+
+# P1-1 收口：routes / ai_chat 移出宽口径（子集 strict + 豁免）
+[[tool.mypy.overrides]]
+module = ["app.routes.*", "app.application.ai_chat_app_service"]
+ignore_errors = false
+disallow_untyped_defs = true
+check_untyped_defs = true
+ignore_missing_imports = true
+disable_error_code = ["import-not-found", "import-untyped", "no-any-return"]
+
+# Legacy / 宽口径包（plan SSOT：ignore_errors 目录数 ≤6，2026-06-05）
+[[tool.mypy.overrides]]
+module = [
+    "app.infrastructure.mods.*",
+    "app.application.tools.*",
+    "app.services.*",
+    "app.fastapi_routes.*",
+    "app.mod_sdk.*",
+    "app.neuro_bus.*",
+]
 ignore_errors = true
+
+# P1-1 第 2 批（T20 / TD-P1-1-AI-2026-07）：ai + llm
+[[tool.mypy.overrides]]
+module = ["app.infrastructure.ai.*", "app.infrastructure.llm.*"]
+ignore_errors = false
+disallow_untyped_defs = true
+check_untyped_defs = true
+ignore_missing_imports = true
+disable_error_code = ["import-not-found", "no-any-return"]
+
+# P1-1 第 3–4 批（T21–T22 / TD-P1-1-WORKFLOW-2026-08、TD-P1-1-PERSIST-2026-08）— 已移出宽口径；子集见 MYPY_BATCH_STATUS.md
+# P1-1 第 6 批（T24 / TD-P1-1-SURFACE-2026-10）— services/fastapi_routes/mod_sdk/neuro_bus 仍处上方 6 项宽口径
+
+# P1-1 第 5 批（T23 / TD-P1-1-GATEWAYS-2026-09）
+[[tool.mypy.overrides]]
+module = ["app.infrastructure.gateways.*"]
+ignore_errors = false
+disallow_untyped_defs = true
+check_untyped_defs = true
+
+# P1-1 第 6 批（T24）— 见上方宽口径 block；gateways 已单独收紧
+
+# P1-1 第 1 批：legacy 仅剩 v11 前兼容 shim（3 文件），无 ignore_errors。
+[[tool.mypy.overrides]]
+module = ["app.legacy.*"]
+ignore_errors = false
+disallow_untyped_defs = true
+check_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = [
+    "app.application.ports.*",
+    "app.domain.value_objects.*",
+    "app.domain.entities.*",
+    "app.domain.events.*",
+    "app.domain.policies.*",
+    "app.infrastructure.auth.*",
+    "app.utils.deployment",
+    "app.utils.rate_limiter",
+]
+ignore_errors = false
+disallow_untyped_defs = true
+check_untyped_defs = true
+
+# 已收口的新应用服务（逐步扩大；*_v2 / neuro_commands 仍走默认宽松）
+[[tool.mypy.overrides]]
+module = [
+    "app.application.purchase_app_service",
+    "app.application.report_app_service",
+    "app.application.inventory_app_service",
+    "app.application.query_app_service",
+    "app.application.kitten_app_service",
+    "app.application.excel_import_app_service",
+    "app.application.wechat_integration_app_service",
+    "app.application.user_cs_app_service",
+    "app.application.contract_lifecycle_app_service",
+    "app.application.operations_app_service",
+    "app.application.admin_sync_app_service",
+    "app.application.platform_app_service",
+    "app.application.ocr_app_service",
+    "app.application.product_import_app_service",
+    "app.infrastructure.repositories.inventory_repository_impl",
+]
+ignore_errors = false
+disallow_untyped_defs = true
+check_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "app.application.excel_vector_app_service"
+ignore_errors = false
+disallow_untyped_defs = true
+check_untyped_defs = true
+ignore_missing_imports = true
 
 # pytest 配置唯一真相源（2026-05-04 整合）：
 # - 旧 pytest.ini 已删除；当前 addopts 保留为不含 --cov，与历史 pytest.ini 的有效行为一致，
@@ -95,9 +319,11 @@ python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = "-v --tb=short -p no:xdist --import-mode=importlib"
+xfail_strict = true
 markers = [
     "integration: 集成测试",
     "e2e: 端到端测试",
+    "release_gate: 发版门禁探针",
 ]
 filterwarnings = [
     "ignore::DeprecationWarning",
@@ -105,47 +331,17 @@ filterwarnings = [
 ]
 
 [tool.coverage.run]
-# 仅统计下列路径（勿与 source=app 并用，否则 include 不生效）
-include = [
-    "app/neuro_bus/*",
-    "app/middleware/*",
-    "app/fastapi_routes/*",
-    "app/infrastructure/templates/template_store_impl.py",
-    "app/utils/password_hash.py",
-    "app/utils/rate_limiter.py",
-    "app/config.py",
-]
+# 全量 app/ 单轨门禁（目标 90%，见 docs/reports/COVERAGE_RAMP.md）
+source = ["app"]
 omit = [
     "*/tests/*",
     "*/xcagi_tests/*",
     "*/__pycache__/*",
     "*/migrations/*",
-    "*/alembic/*",
+    "*/alembic/versions/*",
     "*/venv/*",
     "*/virtualenv/*",
-    # COVERAGE_RAMP：非关键路径分阶段纳入（见 docs/reports/COVERAGE_RAMP.md）
-    "app/shell/*",
-    "app/desktop_runtime/*",
-    "app/mod_sdk/*",
-    "app/routes/*",
-    "app/enterprise/*",
-    "app/contexts/*",
-    "app/control/*",
-    "app/http/*",
-    "app/models/*",
-    "app/neuro_domains/*",
-    "app/ai_engines/*",
-    "app/utils/performance_*.py",
-    "app/utils/performance_monitor.py",
-    "app/utils/performance_initializer.py",
-    "app/utils/query_optimizer.py",
-    "app/utils/redis_cache.py",
-    "app/utils/request_deduplicator.py",
-    "app/utils/excel_template_analyzer.py",
-    "app/utils/logging_utils.py",
-    "app/utils/openapi_path.py",
-    "app/utils/mobile_api.py",
-    "app/utils/template_export_utils.py",
+    "app/**/conftest.py",
 ]
 
 [tool.coverage.report]
@@ -160,9 +356,8 @@ exclude_lines = [
     "@abstractmethod",
     "if DEBUG:",
 ]
-# 分阶段上调见 docs/reports/COVERAGE_RAMP.md
-# 本地全量 --cov=app 时适用；CI 使用多包 --cov=app.neuro_bus 等（见 workflow）约 26%+
-fail_under = 25
+# 分阶段上调见 docs/reports/COVERAGE_RAMP.md（当前基线 ~77%，终态 90%）
+fail_under = 77
 
 [tool.coverage.html]
 directory = "htmlcov"

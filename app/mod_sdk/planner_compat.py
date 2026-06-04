@@ -12,7 +12,7 @@ from app.application.planner_compat_service import (
     execute_compat_chat,
     execute_compat_chat_batch,
 )
-from app.fastapi_routes.xcagi_compat_chat_helpers import (
+from app.fastapi_routes.domains.conversation.helpers import (
     XcagiCompatChatBatchBody,
     XcagiCompatChatBody,
 )

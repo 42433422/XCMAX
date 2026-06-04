@@ -11,6 +11,22 @@ env:
   NODE_VERSION: "20"
 
 jobs:
+  docs-ssot:
+    name: Docs SSOT (Tier1/2 + archive banners)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Verify documentation SSOT
+        working-directory: FHD
+        run: |
+          python scripts/ci/stamp_archive_doc_banners.py --check
+          python scripts/ci/verify_tier1_docs.py
+
   guard-temp-scripts:
     runs-on: ubuntu-latest
     steps:
@@ -63,6 +79,54 @@ jobs:
 
           echo "Temporary script location guard passed."
 
+      - name: Block new test_coverage_ramp_phase* files
+        if: github.event_name == 'pull_request'
+        run: |
+          set -euo pipefail
+          BASE_REF="${{ github.base_ref }}"
+          git fetch origin "${BASE_REF}" --depth=1
+          ADDED="$(git diff --name-only --diff-filter=A "origin/${BASE_REF}"...HEAD || true)"
+          if [ -z "${ADDED}" ]; then
+            echo "No added files."
+            exit 0
+          fi
+          python3 scripts/guard_no_new_coverage_ramp.py ${ADDED}
+
+      - name: Block new FHD/app/**/*_vN.py files
+        if: github.event_name == 'pull_request'
+        run: |
+          set -euo pipefail
+          BASE_REF="${{ github.base_ref }}"
+          git fetch origin "${BASE_REF}" --depth=1
+          ADDED="$(git diff --name-only --diff-filter=A "origin/${BASE_REF}"...HEAD || true)"
+          if [ -z "${ADDED}" ]; then
+            echo "No added files."
+            exit 0
+          fi
+          python3 scripts/guard_no_new_v2_files.py ${ADDED}
+
+  backend-prod-install-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+
+      - name: Production deps only (no torch/pytest)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-base.txt
+          pip install -e .
+          ! pip freeze | grep -iE '^(torch|pytest|faster-whisper|transformers)=='
+
+      - name: Import app entry (editable install)
+        run: |
+          python -c "from app.fastapi_app import get_fastapi_app; get_fastapi_app"
+
   backend-erp-test:
     runs-on: windows-latest
     steps:
@@ -78,6 +142,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install pytest pytest-mock
+          pip install -e ".[dev,ml]"
           pip install -r XCAGI/requirements.lock.txt
 
       - name: Run ERP facade tests (enterprise SKU surface)
@@ -101,16 +166,17 @@ jobs:
           python -m pip install --upgrade pip
           pip install pytest pytest-cov pytest-mock
           # 可重复构建：优先使用 pip-compile 锁定（见 XCAGI/requirements.lock.txt）
+          pip install -e ".[dev,ml]"
           pip install -r XCAGI/requirements.lock.txt
 
       - name: Run full test suite with coverage
+        env:
+          DATABASE_URL: sqlite://
         run: |
           python -m pytest tests/ \
-            --cov=app.neuro_bus --cov=app.middleware --cov=app.fastapi_routes \
-            --cov=app.infrastructure.auth --cov=app.utils \
-            --cov=app.utils.rate_limiter --cov=app.utils.password_hash --cov=app.config \
+            --cov=app \
             --cov-report=xml --cov-report=html -v \
-            --cov-fail-under=70
+            --cov-fail-under=77
 
   backend-test-random-order:
     runs-on: ubuntu-latest
@@ -127,6 +193,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install pytest pytest-random-order
+          pip install -e ".[dev,ml]"
           pip install -r XCAGI/requirements.lock.txt
 
       - name: Stable subset (random order smoke)
@@ -134,6 +201,33 @@ jobs:
           CI_STABLE_ONLY: "1"
         run: |
           python -m pytest tests/ -q --random-order --random-order-bucket=module
+
+  backend-full-pytest:
+    name: Backend full pytest (no CI_STABLE_ONLY)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev,enterprise]"
+          pip install -r XCAGI/requirements.lock.txt
+
+      - name: Full test suite
+        env:
+          DATABASE_URL: sqlite://
+          XCAGI_TESTING: "1"
+        run: |
+          python -m pytest tests/ -q --maxfail=30 --continue-on-collection-errors \
+            --ignore=tests/neuro/test_routing_policy.py
 
   backend-governance-verify:
     runs-on: ubuntu-latest
@@ -156,6 +250,7 @@ jobs:
 
       - name: Export OpenAPI snapshot
         run: |
+          pip install -e ".[dev,ml]"
           pip install -r XCAGI/requirements.lock.txt
           python - <<'PY'
           from app.fastapi_app import get_fastapi_app
@@ -179,8 +274,8 @@ jobs:
 
   backend-coverage-report:
     runs-on: ubuntu-latest
-    # 全量 app：阶段 1 advisory 45%，阶段 4 全绿后再 fail-under=90 且 continue-on-error: false
-    continue-on-error: true
+    # 全量 app：fail-under 77（基线）→ 90（终态）；与 pyproject.toml 单轨 source=app 对齐
+    continue-on-error: false
     steps:
       - uses: actions/checkout@v4
 
@@ -194,6 +289,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install pytest pytest-cov pytest-mock
+          pip install -e ".[dev,ml]"
           pip install -r XCAGI/requirements.lock.txt
 
       - name: Full app coverage report (COVERAGE_RAMP C1)
@@ -206,15 +302,24 @@ jobs:
             --cov-report=term-missing -q \
             --ignore=tests/neuro/test_routing_policy.py \
             --continue-on-collection-errors
-          python -m coverage report --rcfile=pyproject.toml --fail-under=45
+          python -m coverage report --rcfile=pyproject.toml --fail-under=77
+          python scripts/coverage_dual_summary.py \
+            --xml coverage-full.xml \
+            --json coverage.json \
+            --metrics-out metrics/coverage-dual-summary.json \
+            --dashboard-out ../xcmax-pytest-coverage.json
           python - <<'PY'
-          import xml.etree.ElementTree as ET
-          root = ET.parse("coverage-full.xml").getroot()
-          rate = root.attrib.get("line-rate", "0")
-          pct = float(rate) * 100
+          import json
+          from pathlib import Path
+          dual = json.loads(Path("metrics/coverage-dual-summary.json").read_text())
+          pct = dual["full_app"]["pct"]
           print(f"FULL_APP_COVERAGE_PCT={pct:.1f}")
+          print(f"MEASURED_CORE_COVERAGE_PCT={dual['measured_core_c1']['pct']:.1f}")
           with open("coverage-full-summary.txt", "w", encoding="utf-8") as f:
               f.write(f"full_app_line_coverage_pct={pct:.1f}\n")
+              f.write(
+                  f"measured_core_line_coverage_pct={dual['measured_core_c1']['pct']:.1f}\n"
+              )
           PY
 
       - name: Read coverage pct for telemetry
@@ -231,6 +336,7 @@ jobs:
             coverage-full.xml
             coverage.json
             coverage-full-summary.txt
+            metrics/coverage-dual-summary.json
           retention-days: 14
 
       - name: Telemetry coverage_drop (COVERAGE_RAMP C1)
@@ -280,6 +386,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install pytest pytest-cov pytest-mock
+          pip install -e ".[dev,ml]"
           pip install -r XCAGI/requirements.lock.txt
 
       - name: Run integration tests (no coverage gate)
@@ -365,6 +472,7 @@ jobs:
         run: |
           set -euo pipefail
           python scripts/dev/verify_no_legacy_shims.py
+          python scripts/dev/verify_version_anchors.py
           python -m app.fastapi_routes.domain_registry
           echo "✅ legacy_/compat_ 路由全部登记入业务域（shim 已删）"
 
@@ -385,6 +493,7 @@ jobs:
       - name: Install linters
         run: |
           pip install ruff mypy
+          pip install -e ".[dev,ml]"
           pip install -r XCAGI/requirements.lock.txt
 
       - name: Ruff format check
@@ -393,14 +502,17 @@ jobs:
       - name: Ruff lint
         run: ruff check app/ tests/
 
-      - name: Run MyPy (P0 modules)
-        run: |
-          mypy app/infrastructure/auth app/utils/async_compat.py app/utils/redis_cache.py \
-            --ignore-missing-imports --no-error-summary
+      - name: Run MyPy (strict gate)
+        run: bash scripts/ci/mypy_strict_gate.sh
 
-      - name: Run MyPy (full app, advisory)
-        continue-on-error: true
-        run: mypy app/ --ignore-missing-imports --no-error-summary
+      - name: Bare except gate (critical paths)
+        run: python scripts/ci/check_bare_except_gate.py
+
+      - name: Run MyPy (full app — informational)
+        run: bash scripts/ci/mypy_ratchet.sh || mypy app/ --no-error-summary || true
+
+      - name: Architecture fitness
+        run: python scripts/arch_fitness.py
 
       - name: Verify architecture doc consistency
         run: python scripts/verify_arch_doc.py
@@ -520,6 +632,7 @@ jobs:
           XCAGI_SKIP_INTENT_LLM: "1"
           XCAGI_SQLITE_PER_MOD_COPIES: "0"
         run: |
+          pip install -e ".[dev,ml]"
           pip install -r XCAGI/requirements.lock.txt
           python XCAGI/run.py &
           for i in $(seq 1 40); do

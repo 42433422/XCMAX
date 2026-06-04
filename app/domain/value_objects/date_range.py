@@ -21,7 +21,7 @@ class DateRange:
     start: date
     end: date
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         # 确保 start 和 end 是 date 类型
         if isinstance(self.start, datetime):
             object.__setattr__(self, "start", self.start.date())
@@ -177,7 +177,7 @@ class DateRange:
     def __repr__(self) -> str:
         return f"DateRange(start={self.start}, end={self.end})"
 
-    def __eq__(self, other) -> bool:
+    def __eq__(self, other: object) -> bool:
         if not isinstance(other, DateRange):
             return False
         return self.start == other.start and self.end == other.end

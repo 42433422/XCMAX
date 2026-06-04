@@ -1,0 +1,110 @@
+name: Release Android
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Desktop/Android bundle version label (for artifacts)"
+        required: true
+        default: "9.0.0"
+      allow_unsigned:
+        description: "Allow debug-signed APK when Android keystore secrets are missing (dev only)"
+        required: false
+        default: false
+        type: boolean
+  push:
+    tags:
+      - "v9.*"
+
+permissions:
+  contents: read
+
+jobs:
+  android-release:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile-android
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Release contract smoke
+        working-directory: ${{ github.workspace }}
+        run: python3 -m pip install pytest -q && python3 -m pytest tests/release/ --confcutdir=tests/release -q --tb=no
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+
+      - name: Android signing gate
+        id: android_sign_gate
+        shell: bash
+        env:
+          XCAGI_ANDROID_KEYSTORE: ${{ secrets.XCAGI_ANDROID_KEYSTORE }}
+          XCAGI_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.XCAGI_ANDROID_KEYSTORE_PASSWORD }}
+          XCAGI_ANDROID_KEY_ALIAS: ${{ secrets.XCAGI_ANDROID_KEY_ALIAS }}
+          XCAGI_ANDROID_KEY_PASSWORD: ${{ secrets.XCAGI_ANDROID_KEY_PASSWORD }}
+        run: |
+          allow_unsigned="${{ github.event.inputs.allow_unsigned }}"
+          is_dispatch="${{ github.event_name == 'workflow_dispatch' }}"
+          missing=()
+          for key in XCAGI_ANDROID_KEYSTORE XCAGI_ANDROID_KEYSTORE_PASSWORD XCAGI_ANDROID_KEY_ALIAS XCAGI_ANDROID_KEY_PASSWORD; do
+            if [ -z "${!key:-}" ]; then
+              missing+=("$key")
+            fi
+          done
+          if [ ${#missing[@]} -eq 0 ]; then
+            echo "signing=enabled" >> "$GITHUB_OUTPUT"
+            echo "::notice::Android release signing secrets present."
+          elif [ "$is_dispatch" = "true" ] && [ "$allow_unsigned" = "true" ]; then
+            echo "signing=skipped" >> "$GITHUB_OUTPUT"
+            echo "::warning::Android secrets missing (${missing[*]}); allow_unsigned=true — debug-signed release APK."
+          else
+            {
+              echo "## Android release signing"
+              echo "signing=FAILED — missing: ${missing[*]}"
+              echo ""
+              echo "Set repository secrets or workflow_dispatch with allow_unsigned=true (dev only)."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+      - name: Build signed Release APKs (personal + enterprise)
+        if: steps.android_sign_gate.outputs.signing == 'enabled'
+        env:
+          XCAGI_ANDROID_KEYSTORE: ${{ secrets.XCAGI_ANDROID_KEYSTORE }}
+          XCAGI_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.XCAGI_ANDROID_KEYSTORE_PASSWORD }}
+          XCAGI_ANDROID_KEY_ALIAS: ${{ secrets.XCAGI_ANDROID_KEY_ALIAS }}
+          XCAGI_ANDROID_KEY_PASSWORD: ${{ secrets.XCAGI_ANDROID_KEY_PASSWORD }}
+          XCAGI_REQUIRE_RELEASE_SIGNING: "1"
+        run: ./gradlew assemblePersonalRelease assembleEnterpriseRelease --no-daemon
+
+      - name: Build debug-signed Release APKs (allow_unsigned)
+        if: steps.android_sign_gate.outputs.signing == 'skipped'
+        run: ./gradlew assemblePersonalRelease assembleEnterpriseRelease --no-daemon
+
+      - name: Android signing summary
+        shell: bash
+        run: |
+          echo "## Android release" >> "$GITHUB_STEP_SUMMARY"
+          echo "signing=${{ steps.android_sign_gate.outputs.signing }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Upload: scripts/package/stage-sku-download-folders.ps1 -BuildAndroidRelease + upload-release-skus (desktop paths)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Collect release artifact manifest
+        if: success()
+        working-directory: mobile-android
+        run: |
+          find app/build/outputs/apk -name '*-release*.apk' -type f 2>/dev/null | sort > "${{ runner.temp }}/android-apk-manifest.txt"
+          wc -l "${{ runner.temp }}/android-apk-manifest.txt" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: xcagi-android-release-${{ github.event.inputs.version || github.ref_name }}
+          path: |
+            mobile-android/app/build/outputs/apk/personal/release/*.apk
+            mobile-android/app/build/outputs/apk/enterprise/release/*.apk
+            ${{ runner.temp }}/android-apk-manifest.txt
+          retention-days: 30
+          if-no-files-found: warn

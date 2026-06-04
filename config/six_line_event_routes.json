@@ -1,0 +1,203 @@
+{
+  "version": "2026-06-04",
+  "description": "六线事件轨 SSOT：与时间轨（release_train 日更）互补，覆盖 O-A/O-B/P-W/P-M/P-S/S-R 的任务/事件驱动入口。",
+  "rails": {
+    "time": {
+      "label": "时间轨 · 日根线",
+      "triggers": ["cron 03:15", "cron 08:00", "cron 08:15", "cron 08:25"],
+      "ssot": ["FHD/config/release_train.json", "daily_digest_records", "digest_vibe_work_units.py"]
+    },
+    "event": {
+      "label": "事件轨 · 任务驱动",
+      "triggers": ["operations_line", "incident_bus", "cross_line", "webhook", "telemetry"],
+      "ssot": ["FHD/config/six_line_event_routes.json", "modstore_server/six_line_event_router.py", "EmployeeTriggerBinding"]
+    }
+  },
+  "operations_line": [
+    {
+      "id": "oa-o1-lead",
+      "step_id": "O1",
+      "status_in": ["progress", "completed"],
+      "six_line": "ops_acquisition",
+      "line_step": "O1",
+      "action": "incident",
+      "event_type": "ops.intake.user_request",
+      "priority": "P2"
+    },
+    {
+      "id": "oa-o2-crm",
+      "step_id": "O2",
+      "status_in": ["progress", "completed"],
+      "six_line": "ops_acquisition",
+      "line_step": "O2",
+      "action": "incident",
+      "event_type": "ops.intake.user_request",
+      "priority": "P1"
+    },
+    {
+      "id": "oa-o3-contract",
+      "step_id": "O3",
+      "status_in": ["progress", "completed"],
+      "six_line": "ops_acquisition",
+      "line_step": "O3",
+      "action": "incident",
+      "event_type": "ops.change_request.submitted",
+      "priority": "P2"
+    },
+    {
+      "id": "oa-o4-payment",
+      "step_id": "O4",
+      "status_in": ["progress", "completed", "anomaly"],
+      "six_line": "ops_acquisition",
+      "line_step": "O4",
+      "action": "incident",
+      "event_type": "payment.anomaly",
+      "priority": "P0"
+    },
+    {
+      "id": "oa-o5-delivery",
+      "step_id": "O5",
+      "status_in": ["progress", "completed"],
+      "six_line": "ops_acquisition",
+      "line_step": "O5",
+      "action": "incident",
+      "event_type": "ops.intake.task.queued",
+      "priority": "P1"
+    },
+    {
+      "id": "oa-o7-feedback",
+      "step_id": "O7",
+      "status_in": ["progress", "completed"],
+      "six_line": "ops_acquisition",
+      "line_step": "O7",
+      "action": "digest_backlog",
+      "dispatch_line": "P-S",
+      "list_kind": "patches",
+      "priority": "P1",
+      "also_incident": "ops.change_request.submitted"
+    },
+    {
+      "id": "oa-o8-signoff",
+      "step_id": "O8",
+      "status_in": ["progress", "completed"],
+      "six_line": "ops_acquisition",
+      "line_step": "O8",
+      "action": "incident",
+      "event_type": "ops.intake.task.queued",
+      "priority": "P1"
+    },
+    {
+      "id": "oa-o10-recon",
+      "step_id": "O10",
+      "status_in": ["progress", "completed", "anomaly"],
+      "six_line": "ops_acquisition",
+      "line_step": "O10",
+      "action": "incident",
+      "event_type": "payment.anomaly",
+      "priority": "P1"
+    },
+    {
+      "id": "ob-b1-onboard",
+      "step_id": "B1",
+      "status_in": ["progress", "completed"],
+      "six_line": "ops_partner",
+      "line_step": "B1",
+      "action": "incident",
+      "event_type": "ops.intake.user_request",
+      "priority": "P2"
+    },
+    {
+      "id": "ob-b3-delivery",
+      "step_id": "B3",
+      "status_in": ["progress", "completed"],
+      "six_line": "ops_partner",
+      "line_step": "B3",
+      "action": "incident",
+      "event_type": "ops.intake.task.queued",
+      "priority": "P2"
+    },
+    {
+      "id": "ob-b5-share",
+      "step_id": "B5",
+      "status_in": ["progress", "completed", "anomaly"],
+      "six_line": "ops_partner",
+      "line_step": "B5",
+      "action": "incident",
+      "event_type": "payment.anomaly",
+      "priority": "P1"
+    }
+  ],
+  "cross_line": [
+    {
+      "id": "xl-o7-p2",
+      "from_step": "O7",
+      "to_step": "P2",
+      "six_line": "prod_software",
+      "line_step": "P2",
+      "action": "digest_backlog",
+      "dispatch_line": "P-S",
+      "list_kind": "patches",
+      "priority": "P1",
+      "also_incident": "ops.intake.task.queued"
+    },
+    {
+      "id": "xl-o7-p10",
+      "from_step": "O7",
+      "to_step": "P10",
+      "six_line": "prod_software",
+      "line_step": "P10",
+      "action": "incident",
+      "event_type": "ops.intake.task.queued",
+      "priority": "P2"
+    },
+    {
+      "id": "xl-p10-o7",
+      "from_step": "P10",
+      "to_step": "O7",
+      "six_line": "ops_acquisition",
+      "line_step": "O7",
+      "action": "incident",
+      "event_type": "employee.suggestion.created",
+      "priority": "P2"
+    },
+    {
+      "id": "xl-b3-o8",
+      "from_step": "B3",
+      "to_step": "O8",
+      "six_line": "ops_acquisition",
+      "line_step": "O8",
+      "action": "incident",
+      "event_type": "ops.intake.task.queued",
+      "priority": "P1"
+    }
+  ],
+  "incident_defaults": [
+    {
+      "id": "inc-ci-fail",
+      "event_type": "ci.failed",
+      "six_line": "prod_software",
+      "line_step": "P3",
+      "action": "incident",
+      "priority": "P0"
+    },
+    {
+      "id": "inc-security",
+      "event_type": "security.alert",
+      "six_line": "shared_retention",
+      "line_step": "R4",
+      "action": "incident",
+      "priority": "P0"
+    },
+    {
+      "id": "inc-craft-fail",
+      "event_type": "on_quality_fail",
+      "six_line": "prod_mod",
+      "line_step": "P2",
+      "action": "digest_backlog",
+      "dispatch_line": "P-S",
+      "list_kind": "patches",
+      "priority": "P1",
+      "also_incident": "on_quality_fail"
+    }
+  ]
+}

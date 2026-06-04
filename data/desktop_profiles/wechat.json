@@ -1,0 +1,56 @@
+{
+  "app_id": "wechat",
+  "label": "微信",
+  "window_match": {
+    "win": ["WeChatMainWndForPC", "Qt51514QWindowIcon", "Qt5152QWindowIcon", "Qt64QWindowIcon"],
+    "win_titles": ["微信", "Weixin"],
+    "mac": ["WeChat", "微信"]
+  },
+  "driver_preference": "auto",
+  "elements": {
+    "search_box": {
+      "role": "input",
+      "vlm_hint": "顶部搜索框",
+      "yolo_class": "search_box",
+      "fallback_norm": [0.1154, 0.0432],
+      "fallback_norm_mac": [0.11, 0.11]
+    },
+    "contact_card": {
+      "role": "list_item",
+      "vlm_hint": "搜索结果第一条联系人/群卡片",
+      "yolo_class": "contact_card",
+      "fallback_norm": [0.3377, 0.1129],
+      "fallback_norm_mac": [0.24, 0.135]
+    },
+    "input_area": {
+      "role": "input",
+      "vlm_hint": "聊天输入区",
+      "yolo_class": "input_area",
+      "fallback_norm": [0.1467, 0.7317],
+      "fallback_norm_mac": [0.52, 0.86]
+    },
+    "send_button": {
+      "role": "button",
+      "vlm_hint": "发送按钮",
+      "yolo_class": "send_button",
+      "fallback_norm": [0.92, 0.88]
+    }
+  },
+  "workflows": {
+    "open_chat": [
+      "focus_window",
+      "click:search_box",
+      "paste:contact_name",
+      "press:enter",
+      "wait:0.6",
+      "click:contact_card"
+    ],
+    "send_message": [
+      "focus_window",
+      "click:input_area",
+      "paste:message",
+      "click:send_button"
+    ],
+    "open_and_send": []
+  }
+}

@@ -35,6 +35,7 @@ log "=== Staging SLO 前置检查（T36–T37）==="
 # 1. 仓内路径
 [[ -f "${ROOT}/k8s/monitoring/STAGING_RUNBOOK.md" ]] || fail "缺少 STAGING_RUNBOOK.md"
 [[ -f "${ROOT}/docs/evidence/slo/README.md" ]] || fail "缺少 docs/evidence/slo/README.md"
+[[ -f "${ROOT}/docs/evidence/slo/acceptance-TEMPLATE.yaml" ]] || fail "缺少 acceptance-TEMPLATE.yaml"
 log "✓ 文档路径 OK"
 
 # 2. promtool（可选）
@@ -78,8 +79,16 @@ else
 fi
 
 log "=== 检查结束 ==="
-log "7 天验收 YAML 模板: docs/evidence/slo/README.md §2"
+log "7 天验收模板: docs/evidence/slo/acceptance-TEMPLATE.yaml"
 log "k6 补量: BASE_URL=... bash scripts/observability/k6_smoke.sh --check-only"
+
+if [[ -n "${BASE_URL}" ]] && [[ -x "${ROOT}/scripts/observability/k6_smoke.sh" ]]; then
+  if bash "${ROOT}/scripts/observability/k6_smoke.sh" --check-only 2>/dev/null; then
+    log "✓ k6_smoke --check-only 通过"
+  else
+    warn "k6_smoke --check-only 未通过（缺 k6 或 API 不可达）"
+  fi
+fi
 
 if [[ "${CHECK_ONLY}" == "--check-only" ]]; then
   exit 0

@@ -40,11 +40,13 @@ def build_user_cs_wechat_passive_router() -> APIRouter:
     @router.get("/user-cs/wechat/llm-status")
     def wechat_llm_status(request: Request):
         from app.fastapi_routes.market_account import session_id_from_request
-        from app.services.wechat_passive_group_monitor import probe_passive_llm_ready
+        from app.application.wechat_integration_app_service import (
+            get_wechat_integration_app_service,
+        )
 
         return {
             "success": True,
-            "data": probe_passive_llm_ready(
+            "data": get_wechat_integration_app_service().probe_passive_llm_ready(
                 session_id=session_id_from_request(request),
                 request=request,
             ),
@@ -53,9 +55,11 @@ def build_user_cs_wechat_passive_router() -> APIRouter:
     @router.post("/user-cs/wechat/passive-poll")
     async def passive_poll(request: Request, body: PassivePollBody):
         from app.fastapi_routes.market_account import session_id_from_request
-        from app.services.wechat_passive_group_monitor import passive_poll_once
+        from app.application.wechat_integration_app_service import (
+            get_wechat_integration_app_service,
+        )
 
-        out = passive_poll_once(
+        out = get_wechat_integration_app_service().passive_poll_once(
             market_user_id=int(body.market_user_id),
             username=body.username,
             dry_run=body.dry_run,
@@ -73,11 +77,15 @@ def build_user_cs_wechat_passive_router() -> APIRouter:
 
     @router.get("/user-cs/wechat/passive-loop")
     def passive_loop_get(market_user_id: int, username: str = ""):
-        from app.services.wechat_passive_group_monitor import get_passive_poll_config
+        from app.application.wechat_integration_app_service import (
+            get_wechat_integration_app_service,
+        )
 
         return {
             "success": True,
-            "data": get_passive_poll_config(market_user_id, username=username),
+            "data": get_wechat_integration_app_service().get_passive_poll_config(
+                market_user_id, username=username
+            ),
         }
 
     @router.post(
@@ -85,9 +93,11 @@ def build_user_cs_wechat_passive_router() -> APIRouter:
         operation_id="fhd_user_cs_passive_loop_post_compat",
     )
     def passive_loop_save_post(body: PassiveLoopConfigBody):
-        from app.services.wechat_passive_group_monitor import save_passive_poll_config
+        from app.application.wechat_integration_app_service import (
+            get_wechat_integration_app_service,
+        )
 
-        data = save_passive_poll_config(
+        data = get_wechat_integration_app_service().save_passive_poll_config(
             int(body.market_user_id),
             username=body.username,
             poll_enabled=body.poll_enabled,
@@ -100,9 +110,11 @@ def build_user_cs_wechat_passive_router() -> APIRouter:
         operation_id="fhd_user_cs_passive_loop_put_compat",
     )
     def passive_loop_save_put(body: PassiveLoopConfigBody):
-        from app.services.wechat_passive_group_monitor import save_passive_poll_config
+        from app.application.wechat_integration_app_service import (
+            get_wechat_integration_app_service,
+        )
 
-        data = save_passive_poll_config(
+        data = get_wechat_integration_app_service().save_passive_poll_config(
             int(body.market_user_id),
             username=body.username,
             poll_enabled=body.poll_enabled,
@@ -112,9 +124,13 @@ def build_user_cs_wechat_passive_router() -> APIRouter:
 
     @router.post("/user-cs/wechat/passive-reset-watch")
     def passive_reset_watch(body: PassiveLoopConfigBody):
-        from app.services.wechat_passive_group_monitor import reset_passive_watch
+        from app.application.wechat_integration_app_service import (
+            get_wechat_integration_app_service,
+        )
 
-        state = reset_passive_watch(int(body.market_user_id), username=body.username)
+        state = get_wechat_integration_app_service().reset_passive_watch(
+            int(body.market_user_id), username=body.username
+        )
         return {"success": True, "data": state}
 
     return router

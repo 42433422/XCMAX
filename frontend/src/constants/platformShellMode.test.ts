@@ -30,15 +30,12 @@ describe('platformShellMode', () => {
     })
 
     it('isGenericEditionBuild reads VITE_XCAGI_DEFAULT_PLATFORM_SHELL', () => {
-      vi.stubEnv('VITE_XCAGI_EDITION', 'generic')
       vi.stubEnv('VITE_XCAGI_DEFAULT_PLATFORM_SHELL', '1')
       expect(isGenericEditionBuild()).toBe(true)
     })
 
     it('bootstrap sets shell mode in localStorage', () => {
-      vi.stubEnv('VITE_XCAGI_EDITION', 'generic')
       vi.stubEnv('VITE_XCAGI_DEFAULT_PLATFORM_SHELL', '1')
-      vi.stubEnv('VITE_XCAGI_PRODUCT_SKU', '')
       bootstrapGenericEditionDefaults()
       expect(localStorage.getItem(LS_PLATFORM_SHELL_MODE)).toBe('1')
       expect(isPlatformShellModeEnabled()).toBe(true)
@@ -62,7 +59,6 @@ describe('platformShellMode', () => {
     it('isMinimalEditionBuild reads VITE_XCAGI_EDITION', () => {
       vi.stubEnv('VITE_XCAGI_EDITION', 'minimal')
       vi.stubEnv('VITE_XCAGI_DEFAULT_PLATFORM_SHELL', '1')
-      vi.stubEnv('VITE_XCAGI_PRODUCT_SKU', '')
       expect(isMinimalEditionBuild()).toBe(true)
       expect(isPlatformShellModeEnabled()).toBe(true)
     })

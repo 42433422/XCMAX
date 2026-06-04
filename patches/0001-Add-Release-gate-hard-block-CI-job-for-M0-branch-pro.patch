@@ -1,0 +1,1025 @@
+From ee5d447c2b2129bce41f2ae9f78d05a922147fd9 Mon Sep 17 00:00:00 2001
+From: 4243342 <a4243342@4243342deMac-mini.local>
+Date: Thu, 4 Jun 2026 13:04:22 +0800
+Subject: [PATCH] Add Release gate (hard block) CI job for M0 branch
+ protection.
+
+Introduces release contract tests, release_gate marker, and a dedicated
+XCAGI CI/CD job so GitHub can require the check on master merges.
+
+Co-authored-by: Cursor <cursoragent@cursor.com>
+---
+ .github/workflows/release-android.yml         | 110 +++++++++
+ .github/workflows/test.yml                    |  18 ++
+ .gitignore                                    |   1 +
+ config/release_train.json                     |   9 +
+ config/store_listing/xiaomi.yaml              |  41 ++++
+ mobile-android/app/build.gradle.kts           | 229 ++++++++++++++++++
+ pytest.ini                                    |   1 +
+ .../package/build-android-release-signed.ps1  |  97 ++++++++
+ .../package/stage-sku-download-folders.ps1    | 140 +++++++++++
+ scripts/package/sync-version-anchors.py       | 157 ++++++++++++
+ tests/release/conftest.py                     |   1 +
+ tests/release/test_release_900_contract.py    |  44 ++++
+ tests/release/test_release_contract.py        |  27 +++
+ .../test_release_gate_manifest.py             |  13 +
+ 14 files changed, 888 insertions(+)
+ create mode 100644 .github/workflows/release-android.yml
+ create mode 100644 config/release_train.json
+ create mode 100644 config/store_listing/xiaomi.yaml
+ create mode 100644 mobile-android/app/build.gradle.kts
+ create mode 100644 scripts/package/build-android-release-signed.ps1
+ create mode 100644 scripts/package/stage-sku-download-folders.ps1
+ create mode 100644 scripts/package/sync-version-anchors.py
+ create mode 100644 tests/release/conftest.py
+ create mode 100644 tests/release/test_release_900_contract.py
+ create mode 100644 tests/release/test_release_contract.py
+ create mode 100644 tests/release_gate/test_release_gate_manifest.py
+
+diff --git a/.github/workflows/release-android.yml b/.github/workflows/release-android.yml
+new file mode 100644
+index 0000000..5094691
+--- /dev/null
++++ b/.github/workflows/release-android.yml
+@@ -0,0 +1,110 @@
++name: Release Android
++
++on:
++  workflow_dispatch:
++    inputs:
++      version:
++        description: "Desktop/Android bundle version label (for artifacts)"
++        required: true
++        default: "9.0.0"
++      allow_unsigned:
++        description: "Allow debug-signed APK when Android keystore secrets are missing (dev only)"
++        required: false
++        default: false
++        type: boolean
++  push:
++    tags:
++      - "v9.*"
++
++permissions:
++  contents: read
++
++jobs:
++  android-release:
++    runs-on: ubuntu-latest
++    defaults:
++      run:
++        working-directory: mobile-android
++    steps:
++      - uses: actions/checkout@v4
++
++      - name: Release contract smoke
++        working-directory: ${{ github.workspace }}
++        run: python3 -m pip install pytest -q && python3 -m pytest tests/release/ --confcutdir=tests/release -q --tb=no
++
++      - uses: actions/setup-java@v4
++        with:
++          distribution: temurin
++          java-version: "17"
++      - uses: android-actions/setup-android@v3
++
++      - name: Android signing gate
++        id: android_sign_gate
++        shell: bash
++        env:
++          XCAGI_ANDROID_KEYSTORE: ${{ secrets.XCAGI_ANDROID_KEYSTORE }}
++          XCAGI_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.XCAGI_ANDROID_KEYSTORE_PASSWORD }}
++          XCAGI_ANDROID_KEY_ALIAS: ${{ secrets.XCAGI_ANDROID_KEY_ALIAS }}
++          XCAGI_ANDROID_KEY_PASSWORD: ${{ secrets.XCAGI_ANDROID_KEY_PASSWORD }}
++        run: |
++          allow_unsigned="${{ github.event.inputs.allow_unsigned }}"
++          is_dispatch="${{ github.event_name == 'workflow_dispatch' }}"
++          missing=()
++          for key in XCAGI_ANDROID_KEYSTORE XCAGI_ANDROID_KEYSTORE_PASSWORD XCAGI_ANDROID_KEY_ALIAS XCAGI_ANDROID_KEY_PASSWORD; do
++            if [ -z "${!key:-}" ]; then
++              missing+=("$key")
++            fi
++          done
++          if [ ${#missing[@]} -eq 0 ]; then
++            echo "signing=enabled" >> "$GITHUB_OUTPUT"
++            echo "::notice::Android release signing secrets present."
++          elif [ "$is_dispatch" = "true" ] && [ "$allow_unsigned" = "true" ]; then
++            echo "signing=skipped" >> "$GITHUB_OUTPUT"
++            echo "::warning::Android secrets missing (${missing[*]}); allow_unsigned=true — debug-signed release APK."
++          else
++            {
++              echo "## Android release signing"
++              echo "signing=FAILED — missing: ${missing[*]}"
++              echo ""
++              echo "Set repository secrets or workflow_dispatch with allow_unsigned=true (dev only)."
++            } >> "$GITHUB_STEP_SUMMARY"
++            exit 1
++          fi
++
++      - name: Build signed Release APKs (personal + enterprise)
++        if: steps.android_sign_gate.outputs.signing == 'enabled'
++        env:
++          XCAGI_ANDROID_KEYSTORE: ${{ secrets.XCAGI_ANDROID_KEYSTORE }}
++          XCAGI_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.XCAGI_ANDROID_KEYSTORE_PASSWORD }}
++          XCAGI_ANDROID_KEY_ALIAS: ${{ secrets.XCAGI_ANDROID_KEY_ALIAS }}
++          XCAGI_ANDROID_KEY_PASSWORD: ${{ secrets.XCAGI_ANDROID_KEY_PASSWORD }}
++          XCAGI_REQUIRE_RELEASE_SIGNING: "1"
++        run: ./gradlew assemblePersonalRelease assembleEnterpriseRelease --no-daemon
++
++      - name: Build debug-signed Release APKs (allow_unsigned)
++        if: steps.android_sign_gate.outputs.signing == 'skipped'
++        run: ./gradlew assemblePersonalRelease assembleEnterpriseRelease --no-daemon
++
++      - name: Android signing summary
++        shell: bash
++        run: |
++          echo "## Android release" >> "$GITHUB_STEP_SUMMARY"
++          echo "signing=${{ steps.android_sign_gate.outputs.signing }}" >> "$GITHUB_STEP_SUMMARY"
++          echo "Upload: scripts/package/stage-sku-download-folders.ps1 -BuildAndroidRelease + upload-release-skus (desktop paths)" >> "$GITHUB_STEP_SUMMARY"
++
++      - name: Collect release artifact manifest
++        if: success()
++        working-directory: mobile-android
++        run: |
++          find app/build/outputs/apk -name '*-release*.apk' -type f 2>/dev/null | sort > "${{ runner.temp }}/android-apk-manifest.txt"
++          wc -l "${{ runner.temp }}/android-apk-manifest.txt" | tee -a "$GITHUB_STEP_SUMMARY"
++
++      - uses: actions/upload-artifact@v4
++        with:
++          name: xcagi-android-release-${{ github.event.inputs.version || github.ref_name }}
++          path: |
++            mobile-android/app/build/outputs/apk/personal/release/*.apk
++            mobile-android/app/build/outputs/apk/enterprise/release/*.apk
++            ${{ runner.temp }}/android-apk-manifest.txt
++          retention-days: 30
++          if-no-files-found: warn
+diff --git a/.github/workflows/test.yml b/.github/workflows/test.yml
+index 1a33e0f..25da433 100644
+--- a/.github/workflows/test.yml
++++ b/.github/workflows/test.yml
+@@ -204,3 +204,21 @@ jobs:
+           tags: xcagi-frontend:${{ github.sha }}
+           cache-from: type=gha
+           cache-to: type=gha,mode=max
++
++  release-gate:
++    name: Release gate (hard block)
++    runs-on: ubuntu-latest
++    timeout-minutes: 20
++    steps:
++      - uses: actions/checkout@v4
++      - uses: actions/setup-python@v5
++        with:
++          python-version: ${{ env.PYTHON_VERSION }}
++          cache: pip
++      - name: Install test deps
++        run: python -m pip install -U pip pytest pytest-mock
++      - name: Release contract tests (isolated conftest)
++        run: python -m pytest tests/release/ --confcutdir=tests/release -q --tb=short
++      - name: Release gate manifest
++        run: python -m pytest tests/release_gate/ -q --tb=short
++
+diff --git a/.gitignore b/.gitignore
+index 142e534..6c2e15b 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -175,6 +175,7 @@ custom_mode_test.html
+ # Large local data / release builds
+ # ============================================================================
+ release/
++!tests/release/
+ update-server/
+ 424/
+ ces/
+diff --git a/config/release_train.json b/config/release_train.json
+new file mode 100644
+index 0000000..ef88597
+--- /dev/null
++++ b/config/release_train.json
+@@ -0,0 +1,9 @@
++{
++  "epoch": "1.0.0.0",
++  "current": "1.0.0.0",
++  "started_at": "2026-06-04",
++  "day_index": 0,
++  "last_bump_at": null,
++  "last_installer_push_at": null,
++  "last_major_push_at": null
++}
+diff --git a/config/store_listing/xiaomi.yaml b/config/store_listing/xiaomi.yaml
+new file mode 100644
+index 0000000..f029136
+--- /dev/null
++++ b/config/store_listing/xiaomi.yaml
+@@ -0,0 +1,41 @@
++# 小米应用商店 · 上架元数据（半自动上传 stub）
++# 用法：release-android.yml artifact + 人工/脚本上传至小米开放平台
++# 文档：FHD/docs/guides/MOBILE_ANDROID_STORE_COMPLIANCE.md
++
++store: xiaomi
++display_name: XCAGI
++developer: 成都修茈科技有限公司
++
++skus:
++  personal:
++    application_id: com.xiuci.xcagi.mobile.personal
++    label: XCAGI 个人版
++  enterprise:
++    application_id: com.xiuci.xcagi.mobile.enterprise
++    label: XCAGI 企业版
++
++compliance:
++  app_filing_url: https://beian.miit.gov.cn/
++  icp_number: 蜀ICP备2026014056号-1
++  privacy_url: https://xiu-ci.com/legal/privacy
++  terms_url: https://xiu-ci.com/legal/terms
++
++release_notes:
++  zh-CN: |
++    · 移动互联网应用程序备案已通过
++    · 关于页备案号可跳转工信部查询
++    · 稳定性与发布链改进
++
++artifacts:
++  aab_glob: mobile-android/app/build/outputs/bundle/*Release/*.aab
++  apk_glob: mobile-android/app/build/outputs/apk/*/*-release.apk
++
++screenshots:
++  phone:
++    - docs/store/xiaomi/screenshots/phone-01.png
++    - docs/store/xiaomi/screenshots/phone-02.png
++  # 路径占位；实际上传前替换为真实截图
++
++upload:
++  script_stub: scripts/package/upload-xiaomi-store-stub.ps1
++  manual_checklist: docs/guides/MOBILE_ANDROID_STORE_COMPLIANCE.md
+diff --git a/mobile-android/app/build.gradle.kts b/mobile-android/app/build.gradle.kts
+new file mode 100644
+index 0000000..ea7de11
+--- /dev/null
++++ b/mobile-android/app/build.gradle.kts
+@@ -0,0 +1,229 @@
++import java.util.Properties
++
++val localProperties = Properties().apply {
++    val f = rootProject.file("local.properties")
++    if (f.isFile) {
++        f.inputStream().use { load(it) }
++    }
++}
++val legacyWorkbenchWeb =
++    localProperties.getProperty("XCAGI_LEGACY_WORKBENCH_WEB", "false")
++        .equals("true", ignoreCase = true)
++
++plugins {
++    id("com.android.application")
++    id("org.jetbrains.kotlin.android")
++    id("org.jetbrains.kotlin.plugin.compose")
++    id("com.google.dagger.hilt.android")
++    id("com.google.devtools.ksp")
++    id("com.google.gms.google-services")
++    id("com.google.firebase.crashlytics")
++}
++
++android {
++    namespace = "com.xiuci.xcagi.mobile"
++    compileSdk = 35
++
++    defaultConfig {
++        applicationId = "com.xiuci.xcagi.mobile"
++        minSdk = 26
++        targetSdk = 35
++        versionCode = 16
++        versionName = "1.6.3"
++        manifestPlaceholders["JPUSH_PKGNAME"] = "com.xiuci.xcagi.mobile"
++        manifestPlaceholders["JPUSH_CHANNEL"] = "developer-default"
++        manifestPlaceholders["JPUSH_APPKEY"] = "placeholder_replace_in_local_properties"
++        buildConfigField("int", "FHD_DEFAULT_PORT", "5000")
++        buildConfigField("String", "MODSTORE_BASE_URL", "\"https://xiu-ci.com\"")
++        buildConfigField("String", "MODSTORE_CERT_PIN", "\"\"")
++        buildConfigField("String", "COMPANY_NAME", "\"成都修茈科技有限公司\"")
++        buildConfigField("boolean", "LEGACY_WORKBENCH_WEB", legacyWorkbenchWeb.toString())
++    }
++
++    flavorDimensions += "sku"
++    productFlavors {
++        create("personal") {
++            dimension = "sku"
++            applicationIdSuffix = ".personal"
++            resValue("string", "app_name", "XCAGI 个人版")
++            buildConfigField("String", "PRODUCT_SKU", "\"personal\"")
++            manifestPlaceholders["JPUSH_PKGNAME"] = "com.xiuci.xcagi.mobile.personal"
++        }
++        create("enterprise") {
++            dimension = "sku"
++            applicationIdSuffix = ".enterprise"
++            resValue("string", "app_name", "XCAGI 企业版")
++            buildConfigField("String", "PRODUCT_SKU", "\"enterprise\"")
++            manifestPlaceholders["JPUSH_PKGNAME"] = "com.xiuci.xcagi.mobile.enterprise"
++        }
++    }
++
++    buildFeatures {
++        compose = true
++        buildConfig = true
++    }
++
++    compileOptions {
++        sourceCompatibility = JavaVersion.VERSION_17
++        targetCompatibility = JavaVersion.VERSION_17
++    }
++
++    kotlinOptions {
++        jvmTarget = "17"
++    }
++
++    packaging {
++        resources {
++            excludes += "/META-INF/{AL2.0,LGPL2.1}"
++        }
++    }
++
++    signingConfigs {
++        create("release") {
++            val keystoreProps = Properties()
++            val propsFile = rootProject.file("keystore.properties")
++            if (propsFile.isFile) {
++                propsFile.inputStream().use { keystoreProps.load(it) }
++            }
++
++            fun prop(name: String): String? =
++                System.getenv("XCAGI_ANDROID_${name.uppercase()}")?.takeIf { it.isNotBlank() }
++                    ?: keystoreProps.getProperty(
++                        when (name) {
++                            "KEYSTORE" -> "storeFile"
++                            "KEYSTORE_PASSWORD" -> "storePassword"
++                            "KEY_ALIAS" -> "keyAlias"
++                            "KEY_PASSWORD" -> "keyPassword"
++                            else -> name
++                        },
++                    )?.trim()?.takeIf { it.isNotBlank() }
++
++            val storePath = prop("KEYSTORE")
++            if (!storePath.isNullOrBlank()) {
++                val resolved = rootProject.file(storePath)
++                if (!resolved.isFile) {
++                    throw GradleException("Release keystore not found: ${resolved.absolutePath}")
++                }
++                storeFile = resolved
++                storePassword = prop("KEYSTORE_PASSWORD")
++                keyAlias = prop("KEY_ALIAS")
++                keyPassword = prop("KEY_PASSWORD") ?: prop("KEYSTORE_PASSWORD")
++                if (storePassword.isNullOrBlank() || keyAlias.isNullOrBlank()) {
++                    throw GradleException(
++                        "Release signing incomplete: set storePassword and keyAlias in keystore.properties or XCAGI_ANDROID_* env vars.",
++                    )
++                }
++            }
++        }
++    }
++
++    buildTypes {
++        release {
++            isMinifyEnabled = true
++            isShrinkResources = true
++            configure<com.google.firebase.crashlytics.buildtools.gradle.CrashlyticsExtension> {
++                // 占位 google-services 时禁用；替换真实 Firebase 后可改为 true
++                mappingFileUploadEnabled = false
++            }
++            proguardFiles(
++                getDefaultProguardFile("proguard-android-optimize.txt"),
++                "proguard-rules.pro",
++            )
++            val releaseSigning = signingConfigs.getByName("release")
++            val requireSigning = System.getenv("XCAGI_REQUIRE_RELEASE_SIGNING") == "1"
++            signingConfig = when {
++                releaseSigning.storeFile != null -> releaseSigning
++                requireSigning -> throw GradleException(
++                    "XCAGI_REQUIRE_RELEASE_SIGNING=1 but no release keystore configured. " +
++                        "Run scripts/package/new-android-release-keystore.ps1 or set XCAGI_ANDROID_KEYSTORE*.",
++                )
++                else -> signingConfigs.getByName("debug")
++            }
++        }
++    }
++}
++
++tasks.matching { it.name.startsWith("assemble") && it.name.contains("Release") }.configureEach {
++    doFirst {
++        val releaseSigning = android.signingConfigs.getByName("release")
++        if (releaseSigning.storeFile == null) {
++            logger.warn(
++                "XCAGI Release: no release keystore — APK will be signed with DEBUG key. " +
++                    "Copy keystore.properties.example → keystore.properties or run new-android-release-keystore.ps1",
++            )
++        } else {
++            logger.lifecycle("XCAGI Release: signing with ${releaseSigning.storeFile}")
++        }
++    }
++}
++
++dependencies {
++    val composeBom = platform("androidx.compose:compose-bom:2024.10.01")
++    implementation(composeBom)
++    implementation("androidx.compose.ui:ui")
++    implementation("androidx.compose.ui:ui-tooling-preview")
++    implementation("androidx.compose.material3:material3")
++    implementation("androidx.compose.material:material-icons-extended")
++    implementation("androidx.activity:activity-compose:1.9.3")
++    implementation("androidx.fragment:fragment-ktx:1.8.5")
++    implementation("androidx.navigation:navigation-compose:2.8.3")
++    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
++    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
++    implementation("androidx.core:core-ktx:1.15.0")
++    implementation("androidx.core:core-splashscreen:1.0.1")
++    implementation("androidx.datastore:datastore-preferences:1.1.1")
++    implementation("androidx.work:work-runtime-ktx:2.9.1")
++    implementation("androidx.hilt:hilt-work:1.2.0")
++    ksp("androidx.hilt:hilt-compiler:1.2.0")
++
++    implementation("androidx.room:room-runtime:2.6.1")
++    implementation("androidx.room:room-ktx:2.6.1")
++    ksp("androidx.room:room-compiler:2.6.1")
++
++    implementation("com.google.dagger:hilt-android:2.52")
++    ksp("com.google.dagger:hilt-android-compiler:2.52")
++    implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
++
++    implementation("com.squareup.retrofit2:retrofit:2.11.0")
++    implementation("com.squareup.retrofit2:converter-gson:2.11.0")
++    implementation("com.squareup.okhttp3:okhttp:4.12.0")
++    implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
++    implementation("com.squareup.okhttp3:okhttp-sse:4.12.0")
++
++    val camerax = "1.4.0"
++    implementation("androidx.camera:camera-camera2:$camerax")
++    implementation("androidx.camera:camera-lifecycle:$camerax")
++    implementation("androidx.camera:camera-view:$camerax")
++    implementation("com.google.mlkit:barcode-scanning:17.3.0")
++
++    implementation("androidx.webkit:webkit:1.12.1")
++    implementation("androidx.browser:browser:1.8.0")
++    implementation("androidx.biometric:biometric:1.1.0")
++    implementation("androidx.security:security-crypto:1.1.0-alpha06")
++
++    val firebaseBom = platform("com.google.firebase:firebase-bom:33.7.0")
++    implementation(firebaseBom)
++    implementation("com.google.firebase:firebase-crashlytics")
++    implementation("com.google.firebase:firebase-analytics")
++    implementation("com.google.firebase:firebase-messaging")
++
++    implementation("cn.jiguang.sdk:jpush:5.6.0")
++    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.9.0")
++
++    debugImplementation("androidx.compose.ui:ui-tooling")
++
++    testImplementation("junit:junit:4.13.2")
++}
++
++val localProps = Properties().apply {
++    val f = rootProject.file("local.properties")
++    if (f.isFile) f.inputStream().use { load(it) }
++}
++val jpushKey = localProps.getProperty("JPUSH_APPKEY")?.trim().orEmpty()
++if (jpushKey.isNotBlank()) {
++    android.defaultConfig.manifestPlaceholders["JPUSH_APPKEY"] = jpushKey
++}
++val certPin = localProps.getProperty("MODSTORE_CERT_PIN_SHA256")?.trim().orEmpty()
++if (certPin.isNotBlank()) {
++    android.defaultConfig.buildConfigField("String", "MODSTORE_CERT_PIN", "\"$certPin\"")
++}
+diff --git a/pytest.ini b/pytest.ini
+index fe79d23..4b67213 100644
+--- a/pytest.ini
++++ b/pytest.ini
+@@ -7,6 +7,7 @@ addopts = -v --tb=short -p no:xdist
+ markers =
+     integration: 集成测试
+     e2e: 端到端测试
++    release_gate: release train hard gate subset
+ filterwarnings =
+     ignore::DeprecationWarning
+     ignore::PendingDeprecationWarning
+diff --git a/scripts/package/build-android-release-signed.ps1 b/scripts/package/build-android-release-signed.ps1
+new file mode 100644
+index 0000000..4bfde96
+--- /dev/null
++++ b/scripts/package/build-android-release-signed.ps1
+@@ -0,0 +1,97 @@
++<#
++.SYNOPSIS
++  Build signed personal + enterprise Release APKs (requires keystore.properties or env).
++
++.EXAMPLE
++  powershell -File scripts/package/build-android-release-signed.ps1
++  powershell -File scripts/package/build-android-release-signed.ps1 -Stage -Version 9.0.0 -AndroidVersion 1.5.0
++#>
++param(
++  [switch]$Stage,
++  [string]$Version = '9.0.0',
++  [string]$AndroidVersion = '1.5.0'
++)
++
++$ErrorActionPreference = 'Stop'
++$Root = Resolve-Path (Join-Path $PSScriptRoot '..\..')
++$MobileRoot = Join-Path $Root 'mobile-android'
++$PropsPath = Join-Path $MobileRoot 'keystore.properties'
++
++function Load-KeystoreEnv {
++  if ($env:XCAGI_ANDROID_KEYSTORE -and (Test-Path $env:XCAGI_ANDROID_KEYSTORE)) {
++    return
++  }
++  if (-not (Test-Path $PropsPath)) {
++    throw @"
++未配置 Release 签名。
++  1) 运行: powershell -File scripts/package/new-android-release-keystore.ps1
++  或 2) 复制 mobile-android/keystore.properties.example → keystore.properties
++  或 3) 设置环境变量 XCAGI_ANDROID_KEYSTORE / XCAGI_ANDROID_KEYSTORE_PASSWORD / XCAGI_ANDROID_KEY_ALIAS / XCAGI_ANDROID_KEY_PASSWORD
++"@
++  }
++  $lines = Get-Content -LiteralPath $PropsPath | Where-Object { $_ -match '^\s*[^#]' }
++  $map = @{}
++  foreach ($line in $lines) {
++    if ($line -match '^\s*([^=]+)=(.*)$') {
++      $map[$Matches[1].Trim()] = $Matches[2].Trim()
++    }
++  }
++  $storeRel = $map['storeFile']
++  if (-not $storeRel) { throw 'keystore.properties 缺少 storeFile' }
++  $storeAbs = Join-Path $MobileRoot $storeRel
++  if (-not (Test-Path $storeAbs)) { throw "找不到密钥库: $storeAbs" }
++
++  $env:XCAGI_ANDROID_KEYSTORE = $storeAbs
++  $env:XCAGI_ANDROID_KEYSTORE_PASSWORD = $map['storePassword']
++  $env:XCAGI_ANDROID_KEY_ALIAS = $map['keyAlias']
++  $env:XCAGI_ANDROID_KEY_PASSWORD = if ($map['keyPassword']) { $map['keyPassword'] } else { $map['storePassword'] }
++  $env:XCAGI_REQUIRE_RELEASE_SIGNING = '1'
++}
++
++Load-KeystoreEnv
++
++Push-Location $MobileRoot
++try {
++  & .\gradlew.bat assemblePersonalRelease assembleEnterpriseRelease --no-daemon
++  if ($LASTEXITCODE -ne 0) { throw 'Gradle release build failed' }
++} finally {
++  Pop-Location
++}
++
++function Find-Apksigner {
++  $sdk = $env:ANDROID_HOME
++  if (-not $sdk) { $sdk = $env:ANDROID_SDK_ROOT }
++  if ($sdk) {
++    $buildTools = Join-Path $sdk 'build-tools'
++    if (Test-Path $buildTools) {
++      $latest = Get-ChildItem $buildTools -Directory | Sort-Object Name -Descending | Select-Object -First 1
++      $p = Join-Path $latest.FullName 'apksigner.bat'
++      if (Test-Path $p) { return $p }
++    }
++  }
++  return $null
++}
++
++$apks = @(
++  (Join-Path $MobileRoot 'app\build\outputs\apk\personal\release\app-personal-release.apk')
++  (Join-Path $MobileRoot 'app\build\outputs\apk\enterprise\release\app-enterprise-release.apk')
++)
++$signer = Find-Apksigner
++foreach ($apk in $apks) {
++  if (-not (Test-Path $apk)) { throw "未找到 APK: $apk" }
++  if ($signer) {
++    Write-Host "验证签名: $apk"
++    & $signer verify --verbose $apk
++    if ($LASTEXITCODE -ne 0) { throw "apksigner verify failed: $apk" }
++  } else {
++    Write-Host "跳过 apksigner（未设置 ANDROID_HOME）: $apk"
++  }
++}
++
++Write-Host ''
++Write-Host '已签名 Release APK:'
++foreach ($apk in $apks) { Write-Host "  $apk" }
++
++if ($Stage) {
++  & (Join-Path $PSScriptRoot 'stage-sku-download-folders.ps1') -Version $Version -AndroidVersion $AndroidVersion
++}
+diff --git a/scripts/package/stage-sku-download-folders.ps1 b/scripts/package/stage-sku-download-folders.ps1
+new file mode 100644
+index 0000000..50faf6b
+--- /dev/null
++++ b/scripts/package/stage-sku-download-folders.ps1
+@@ -0,0 +1,140 @@
++<#
++.SYNOPSIS
++  Stage Windows installer + Android APK into per-SKU folders (personal / enterprise).
++
++.EXAMPLE
++  powershell -File scripts/package/stage-sku-download-folders.ps1 -Version 9.0.0
++#>
++param(
++  [string]$Version = '9.0.0',
++  [string]$AndroidVersion = '1.5.0',
++  [switch]$BuildAndroidRelease
++)
++
++$ErrorActionPreference = 'Stop'
++$Root = Resolve-Path (Join-Path $PSScriptRoot '..\..')
++$Version = $Version.TrimStart('v', 'V')
++
++$outRoot = Join-Path $Root "release\packages-v$Version"
++$personalDir = Join-Path $outRoot 'personal'
++$enterpriseDir = Join-Path $outRoot 'enterprise'
++# UTF-16 code units — avoids .ps1 encoding issues on Windows PowerShell 5.1
++$personalDirZh = Join-Path $outRoot ($([char]0x4E2A) + [char]0x4EBA + [char]0x7248)
++$enterpriseDirZh = Join-Path $outRoot ($([char]0x4F01) + [char]0x4E1A + [char]0x7248)
++
++foreach ($d in @($personalDir, $enterpriseDir, $personalDirZh, $enterpriseDirZh)) {
++  New-Item -ItemType Directory -Force -Path $d | Out-Null
++}
++
++$winPersonal = Join-Path $Root "release\xcagi-v$Version\personal\XCAGI-Personal-Setup-$Version-x64.exe"
++$winEnterprise = Join-Path $Root "release\xcagi-v$Version\enterprise\XCAGI-Enterprise-Setup-$Version-x64.exe"
++
++$androidRoot = Join-Path $Root 'mobile-android'
++$iconScript = Join-Path $PSScriptRoot 'generate-android-icons.py'
++if (Test-Path $iconScript) {
++  python $iconScript
++  if ($LASTEXITCODE -ne 0) { throw 'generate-android-icons.py failed' }
++}
++
++if ($BuildAndroidRelease) {
++  $signedScript = Join-Path $PSScriptRoot 'build-android-release-signed.ps1'
++  $propsFile = Join-Path $androidRoot 'keystore.properties'
++  if ((Test-Path $propsFile) -or $env:XCAGI_ANDROID_KEYSTORE) {
++    & $signedScript
++    if ($LASTEXITCODE -ne 0) { throw 'build-android-release-signed.ps1 failed' }
++  } else {
++    Write-Warning '未找到 keystore.properties，Release 将使用 debug 签名。请先运行 new-android-release-keystore.ps1'
++    Push-Location $androidRoot
++    & .\gradlew.bat assemblePersonalRelease assembleEnterpriseRelease --no-daemon
++    Pop-Location
++  }
++}
++
++$apkPersonalCandidates = @(
++  (Join-Path $androidRoot 'app\build\outputs\apk\personal\release\app-personal-release.apk'),
++  (Join-Path $androidRoot 'app\build\outputs\apk\personal\debug\app-personal-debug.apk')
++)
++$apkEnterpriseCandidates = @(
++  (Join-Path $androidRoot 'app\build\outputs\apk\enterprise\release\app-enterprise-release.apk'),
++  (Join-Path $androidRoot 'app\build\outputs\apk\enterprise\debug\app-enterprise-debug.apk')
++)
++
++function Resolve-FirstFile([string[]]$paths) {
++  foreach ($p in $paths) {
++    if (Test-Path $p) { return (Resolve-Path $p).Path }
++  }
++  return $null
++}
++
++function Copy-IfExists([string]$src, [string]$destDir, [string]$destName) {
++  if (-not $src -or -not (Test-Path $src)) { return $false }
++  Copy-Item -LiteralPath $src -Destination (Join-Path $destDir $destName) -Force
++  return $true
++}
++
++$apkPersonal = Resolve-FirstFile $apkPersonalCandidates
++$apkEnterprise = Resolve-FirstFile $apkEnterpriseCandidates
++
++$winPersonalName = "XCAGI-Personal-Windows-$Version-x64.exe"
++$winEnterpriseName = "XCAGI-Enterprise-Windows-$Version-x64.exe"
++$apkPersonalName = "XCAGI-Personal-Android-$AndroidVersion.apk"
++$apkEnterpriseName = "XCAGI-Enterprise-Android-$AndroidVersion.apk"
++
++function Remove-OldAndroidApks([string]$dir, [string]$keepName) {
++  Get-ChildItem -LiteralPath $dir -Filter 'XCAGI-*-Android-*.apk' -ErrorAction SilentlyContinue |
++    Where-Object { $_.Name -ne $keepName } |
++    ForEach-Object { Remove-Item -LiteralPath $_.FullName -Force }
++}
++
++function Stage-SkuPair(
++  [string]$srcWin,
++  [string]$srcApk,
++  [string]$enDir,
++  [string]$zhDir,
++  [string]$winName,
++  [string]$apkName,
++  [ref]$okList
++) {
++  if (Copy-IfExists $srcWin $enDir $winName) { $okList.Value += 'Windows' }
++  if (Copy-IfExists $srcWin $zhDir $winName) { }
++  if (Copy-IfExists $srcApk $enDir $apkName) {
++    $okList.Value += 'Android'
++    Remove-OldAndroidApks $enDir $apkName
++  }
++  if (Copy-IfExists $srcApk $zhDir $apkName) {
++    Remove-OldAndroidApks $zhDir $apkName
++  }
++}
++
++$okP = [System.Collections.Generic.List[string]]::new()
++$okE = [System.Collections.Generic.List[string]]::new()
++Stage-SkuPair $winPersonal $apkPersonal $personalDir $personalDirZh $winPersonalName $apkPersonalName ([ref]$okP)
++Stage-SkuPair $winEnterprise $apkEnterprise $enterpriseDir $enterpriseDirZh $winEnterpriseName $apkEnterpriseName ([ref]$okE)
++
++$readmePersonal = @"
++XCAGI 个人版 (Personal) v$Version
++
++  本目录仅含个人版安装包，与企业版不可混用。
++  Windows: $winPersonalName
++  Android: $apkPersonalName
++  包名: com.xiuci.xcagi.mobile.personal
++"@
++$readmeEnterprise = @"
++XCAGI 企业版 (Enterprise) v$Version
++
++  本目录仅含企业版安装包，与个人版不可混用。
++  Windows: $winEnterpriseName
++  Android: $apkEnterpriseName
++  包名: com.xiuci.xcagi.mobile.enterprise
++"@
++foreach ($pair in @(
++    @{ En = $personalDir; Zh = $personalDirZh; Text = $readmePersonal },
++    @{ En = $enterpriseDir; Zh = $enterpriseDirZh; Text = $readmeEnterprise }
++  )) {
++  Set-Content -Path (Join-Path $pair.En 'README.txt') -Value $pair.Text -Encoding UTF8
++  Set-Content -Path (Join-Path $pair.Zh 'README.txt') -Value $pair.Text -Encoding UTF8
++}
++
++Write-Host "Done: $outRoot"
++Write-Host "  personal / 个人版   -> $($okP -join ', ')"
++Write-Host "  enterprise / 企业版 -> $($okE -join ', ')"
+diff --git a/scripts/package/sync-version-anchors.py b/scripts/package/sync-version-anchors.py
+new file mode 100644
+index 0000000..95aabb2
+--- /dev/null
++++ b/scripts/package/sync-version-anchors.py
+@@ -0,0 +1,157 @@
++#!/usr/bin/env python3
++"""Sync XCAGI version across the 8 anchor files listed in VERSION.md."""
++
++from __future__ import annotations
++
++import argparse
++import re
++import sys
++from pathlib import Path
++from typing import Any
++
++# Paths relative to FHD repo root (this file: scripts/package/ → ../..)
++REPO_ROOT = Path(__file__).resolve().parents[2]
++
++VERSION_ANCHORS: list[dict[str, str]] = [
++    {
++        "key": "pyproject_root",
++        "path": "pyproject.toml",
++        "pattern": r'version\s*=\s*"([\d.]+)"',
++        "replacement": 'version = "{version}"',
++    },
++    {
++        "key": "pyproject_xcagi",
++        "path": "XCAGI/pyproject.toml",
++        "pattern": r'version\s*=\s*"([\d.]+)"',
++        "replacement": 'version = "{version}"',
++    },
++    {
++        "key": "frontend_package",
++        "path": "frontend/package.json",
++        "pattern": r'"version"\s*:\s*"([\d.]+)"',
++        "replacement": '"version": "{version}"',
++    },
++    {
++        "key": "desktop_package",
++        "path": "desktop/package.json",
++        "pattern": r'"version"\s*:\s*"([\d.]+)"',
++        "replacement": '"version": "{version}"',
++    },
++    {
++        "key": "root_package",
++        "path": "package.json",
++        "pattern": r'"version"\s*:\s*"([\d.]+)"',
++        "replacement": '"version": "{version}"',
++    },
++    {
++        "key": "fastapi_factory",
++        "path": "app/fastapi_app/factory.py",
++        "pattern": r'version="([\d.]+)"',
++        "replacement": 'version="{version}"',
++    },
++    {
++        "key": "mod_manifest",
++        "path": "app/infrastructure/mods/manifest.py",
++        "pattern": r'current_version\s*=\s*"([\d.]+)"',
++        "replacement": 'current_version = "{version}"',
++    },
++    {
++        "key": "version_md",
++        "path": "VERSION.md",
++        "pattern": r"`([\d.]+)`",
++        "replacement": "`{version}`",
++    },
++]
++
++
++def sync_version_anchors(
++    project_root: Path,
++    new_version: str,
++    *,
++    dry_run: bool = False,
++) -> list[dict[str, Any]]:
++    results: list[dict[str, Any]] = []
++    for anchor in VERSION_ANCHORS:
++        full_path = project_root / anchor["path"]
++        entry: dict[str, Any] = {"key": anchor["key"], "path": anchor["path"]}
++        if not full_path.is_file():
++            entry.update(status="skipped", reason="file not found")
++            results.append(entry)
++            continue
++        content = full_path.read_text(encoding="utf-8")
++        if anchor["key"] == "version_md":
++            # Only replace version literals in the anchor table (lines with | `x.y.z` |)
++            lines = content.splitlines(keepends=True)
++            changed = False
++            new_lines: list[str] = []
++            for line in lines:
++                if re.search(r"\|\s*`[\d.]+`\s*\|", line):
++                    current = re.search(r"`([\d.]+)`", line)
++                    if current and current.group(1) == new_version:
++                        new_lines.append(line)
++                        continue
++                    new_line, n = re.subn(
++                        r"`([\d.]+)`",
++                        f"`{new_version}`",
++                        line,
++                        count=1,
++                    )
++                    if n:
++                        changed = True
++                    new_lines.append(new_line)
++                else:
++                    new_lines.append(line)
++            if not changed:
++                entry.update(status="skipped", reason="VERSION.md table versions unchanged")
++            elif dry_run:
++                entry.update(status="would_update", new=new_version)
++            else:
++                full_path.write_text("".join(new_lines), encoding="utf-8")
++                entry.update(status="updated", new=new_version)
++            results.append(entry)
++            continue
++
++        match = re.search(anchor["pattern"], content)
++        if not match:
++            entry.update(status="skipped", reason="version pattern not found")
++            results.append(entry)
++            continue
++        old_version = match.group(1)
++        if old_version == new_version:
++            entry.update(status="already_synced", old=old_version)
++            results.append(entry)
++            continue
++        replacement = anchor["replacement"].format(version=new_version)
++        new_content = re.sub(anchor["pattern"], replacement, content, count=1)
++        if dry_run:
++            entry.update(status="would_update", old=old_version, new=new_version)
++        else:
++            full_path.write_text(new_content, encoding="utf-8")
++            entry.update(status="updated", old=old_version, new=new_version)
++        results.append(entry)
++    return results
++
++
++def main(argv: list[str] | None = None) -> int:
++    parser = argparse.ArgumentParser(description=__doc__)
++    parser.add_argument("version", help='Target semver, e.g. 9.0.1')
++    parser.add_argument(
++        "--dry-run",
++        action="store_true",
++        help="Print planned updates without writing files",
++    )
++    args = parser.parse_args(argv)
++    if not re.fullmatch(r"\d+\.\d+\.\d+", args.version):
++        print(f"invalid version: {args.version!r} (expected major.minor.patch)", file=sys.stderr)
++        return 2
++
++    results = sync_version_anchors(REPO_ROOT, args.version, dry_run=args.dry_run)
++    updated = sum(1 for r in results if r.get("status") in ("updated", "would_update"))
++    for row in results:
++        print(f"{row['path']}: {row.get('status', '?')}")
++    print(f"anchors touched: {updated}/{len(VERSION_ANCHORS)}")
++    return 0
++
++
++if __name__ == "__main__":
++    raise SystemExit(main())
+diff --git a/tests/release/conftest.py b/tests/release/conftest.py
+new file mode 100644
+index 0000000..d9b5876
+--- /dev/null
++++ b/tests/release/conftest.py
+@@ -0,0 +1 @@
++"""Isolated conftest for release contract tests (see release-android.yml)."""
+diff --git a/tests/release/test_release_900_contract.py b/tests/release/test_release_900_contract.py
+new file mode 100644
+index 0000000..2ef880f
+--- /dev/null
++++ b/tests/release/test_release_900_contract.py
+@@ -0,0 +1,44 @@
++"""Release contract tests (isolated conftest via --confcutdir=tests/release)."""
++
++from __future__ import annotations
++
++from pathlib import Path
++
++REPO_ROOT = Path(__file__).resolve().parents[2]
++
++
++def test_release_workflow_files_exist() -> None:
++    workflows = REPO_ROOT / ".github" / "workflows"
++    for name in ("release-desktop.yml", "release-web.yml", "release-android.yml"):
++        assert (workflows / name).is_file(), f"missing {name}"
++
++
++def test_dual_sku_packaging_scripts_exist() -> None:
++    scripts = REPO_ROOT / "scripts" / "package"
++    assert (scripts / "stage-sku-download-folders.ps1").is_file()
++    assert (scripts / "build-android-release-signed.ps1").is_file()
++
++
++def test_sync_version_anchors_script_present() -> None:
++    script = REPO_ROOT / "scripts" / "package" / "sync-version-anchors.py"
++    assert script.is_file()
++
++
++def test_release_train_json_exists_and_quad() -> None:
++    import json
++
++    path = REPO_ROOT / "config" / "release_train.json"
++    assert path.is_file()
++    data = json.loads(path.read_text(encoding="utf-8"))
++    quad = str(data.get("current") or data.get("release_train") or "").strip()
++    parts = quad.split(".")
++    assert len(parts) == 4
++    assert all(p.isdigit() for p in parts)
++
++
++def test_xiaomi_store_listing_stub_exists() -> None:
++    listing = REPO_ROOT / "config" / "store_listing" / "xiaomi.yaml"
++    assert listing.is_file()
++    text = listing.read_text(encoding="utf-8")
++    assert "store: xiaomi" in text
++    assert "beian.miit.gov.cn" in text
+diff --git a/tests/release/test_release_contract.py b/tests/release/test_release_contract.py
+new file mode 100644
+index 0000000..07efe48
+--- /dev/null
++++ b/tests/release/test_release_contract.py
+@@ -0,0 +1,27 @@
++"""Release train / version anchor contract smoke (no network)."""
++
++from __future__ import annotations
++
++import json
++from pathlib import Path
++
++import pytest
++
++pytestmark = pytest.mark.release_gate
++
++_REPO = Path(__file__).resolve().parents[2]
++_RELEASE_TRAIN = _REPO / "config" / "release_train.json"
++
++
++def test_release_train_json_exists_and_quad() -> None:
++    assert _RELEASE_TRAIN.is_file(), "config/release_train.json missing"
++    data = json.loads(_RELEASE_TRAIN.read_text(encoding="utf-8"))
++    quad = str(data.get("current") or data.get("release_train") or "").strip()
++    parts = quad.split(".")
++    assert len(parts) == 4, f"expected quad version, got {quad!r}"
++    assert all(p.isdigit() for p in parts)
++
++
++def test_sync_version_anchors_script_present() -> None:
++    script = _REPO / "scripts" / "package" / "sync-version-anchors.py"
++    assert script.is_file(), "scripts/package/sync-version-anchors.py missing"
+diff --git a/tests/release_gate/test_release_gate_manifest.py b/tests/release_gate/test_release_gate_manifest.py
+new file mode 100644
+index 0000000..6e7a33e
+--- /dev/null
++++ b/tests/release_gate/test_release_gate_manifest.py
+@@ -0,0 +1,13 @@
++"""Release gate manifest test."""
++
++from __future__ import annotations
++
++import pytest
++
++pytestmark = pytest.mark.release_gate
++
++
++def test_release_gate_marker_is_registered(pytestconfig) -> None:
++    markers = pytestconfig.getini("markers") or []
++    joined = "\n".join(markers) if isinstance(markers, list) else str(markers)
++    assert "release_gate" in joined
+-- 
+2.50.1 (Apple Git-155)
+

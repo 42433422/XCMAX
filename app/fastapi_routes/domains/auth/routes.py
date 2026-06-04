@@ -5,7 +5,7 @@ import logging
 import os
 from typing import Any
 
-from fastapi import APIRouter, Body, Depends, File, Query, Request, UploadFile
+from fastapi import APIRouter, Body, Depends, File, Form, Query, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 
 from app.infrastructure.auth.dependencies import (
@@ -377,6 +377,7 @@ async def auth_register(request: Request, body: dict = Body(default_factory=dict
 
     username = (body.get("username") or "").strip()
     password = body.get("password", "")
+    totp_code = (body.get("totp_code") or body.get("mfa_code") or "").strip() or None
     email = (body.get("email") or "").strip()
     verification_code = str(body.get("verification_code") or body.get("code") or "").strip()
 
@@ -423,7 +424,7 @@ async def auth_register(request: Request, body: dict = Body(default_factory=dict
             )
         email_market = _market_user_email_from_raw(market_reg.get("raw")) or email
         _jit_create_local_user_for_enterprise(username, password, email_market)
-        result = auth_app_service.login(username, password)
+        result = auth_app_service.login(username, password, totp_code=totp_code)
         if not result.get("success"):
             return JSONResponse(
                 {
@@ -471,7 +472,7 @@ async def auth_register(request: Request, body: dict = Body(default_factory=dict
                 {"success": False, "error": {"code": "CREATE_FAILED", "message": msg}},
                 status_code=400,
             )
-        result = auth_app_service.login(username, password)
+        result = auth_app_service.login(username, password, totp_code=totp_code)
         if not result.get("success"):
             return JSONResponse(
                 {
@@ -512,6 +513,7 @@ async def auth_login(request: Request, body: dict = Body(default_factory=dict)):
 
     username = (body.get("username") or "").strip()
     password = body.get("password", "")
+    totp_code = (body.get("totp_code") or body.get("mfa_code") or "").strip() or None
     if not username or not password:
         return JSONResponse(
             {
@@ -577,7 +579,7 @@ async def auth_login(request: Request, body: dict = Body(default_factory=dict)):
                 },
                 status_code=403,
             )
-        result = auth_app_service.login(username, password)
+        result = auth_app_service.login(username, password, totp_code=totp_code)
         if not result["success"]:
             from app.db.models.user import User
             from app.db.session import get_db
@@ -626,11 +628,11 @@ async def auth_login(request: Request, body: dict = Body(default_factory=dict)):
                     },
                     status_code=500,
                 )
-            result = auth_app_service.login(username, password)
+            result = auth_app_service.login(username, password, totp_code=totp_code)
             if not result["success"]:
                 return JSONResponse(result, status_code=401)
     else:
-        result = auth_app_service.login(username, password)
+        result = auth_app_service.login(username, password, totp_code=totp_code)
         if not result["success"]:
             return JSONResponse(result, status_code=401)
 
@@ -1082,3 +1084,199 @@ def users_reset_password(
     if not result["success"]:
         return JSONResponse(result, status_code=400)
     return result
+
+
+@router.get("/api/auth/oidc/status")
+def auth_oidc_status():
+    from app.infrastructure.auth.oidc_provider import oidc_enabled
+
+    return {"success": True, "data": {"enabled": oidc_enabled()}}
+
+
+@router.get("/api/auth/oidc/start")
+async def auth_oidc_start():
+    from app.infrastructure.auth.oidc_provider import build_authorization_url, oidc_enabled
+
+    if not oidc_enabled():
+        return JSONResponse(
+            {"success": False, "error": {"code": "OIDC_DISABLED", "message": "未启用 OIDC"}},
+            status_code=404,
+        )
+    try:
+        url, _state = await build_authorization_url()
+    except Exception as exc:
+        logger.exception("OIDC start failed")
+        return JSONResponse(
+            {"success": False, "error": {"code": "OIDC_CONFIG", "message": str(exc)}},
+            status_code=503,
+        )
+    from fastapi.responses import RedirectResponse
+
+    return RedirectResponse(url, status_code=302)
+
+
+@router.get("/api/auth/oidc/callback")
+async def auth_oidc_callback(code: str = "", state: str = ""):
+    from app.application.auth_app_service import get_auth_app_service
+    from app.infrastructure.auth.oidc_provider import (
+        exchange_code_for_userinfo,
+        map_oidc_profile_to_username,
+        oidc_enabled,
+        verify_oidc_state,
+    )
+
+    if not oidc_enabled():
+        return JSONResponse(
+            {"success": False, "error": {"code": "OIDC_DISABLED", "message": "未启用 OIDC"}},
+            status_code=404,
+        )
+    if not code or not state or not verify_oidc_state(state):
+        return JSONResponse(
+            {"success": False, "error": {"code": "OIDC_STATE", "message": "无效或过期的 OIDC state"}},
+            status_code=400,
+        )
+    try:
+        profile = await exchange_code_for_userinfo(code)
+        username = map_oidc_profile_to_username(profile)
+    except Exception as exc:
+        logger.exception("OIDC callback token exchange failed")
+        return JSONResponse(
+            {"success": False, "error": {"code": "OIDC_EXCHANGE", "message": str(exc)}},
+            status_code=502,
+        )
+
+    auth_app_service = get_auth_app_service()
+    result = auth_app_service.authenticate_oidc_user(
+        username,
+        email=str(profile.get("email") or ""),
+        display_name=str(profile.get("name") or profile.get("preferred_username") or username),
+    )
+    if not result.get("success"):
+        return JSONResponse(result, status_code=401)
+    payload = {"success": True, **result}
+    return _attach_session_cookie(JSONResponse(payload), result.get("session_id"))
+
+
+@router.post("/api/auth/mfa/enroll")
+def auth_mfa_enroll(body: dict = Body(default_factory=dict), user=Depends(_require_admin)):
+    """管理员为指定用户启用 TOTP MFA（返回一次性 secret，需客户端写入 Authenticator）。"""
+    from app.application.auth_app_service import get_auth_app_service
+    from app.db.models.user import User
+    from app.db.session import get_db
+    from app.infrastructure.auth.mfa_totp import generate_totp_secret
+
+    user_id = body.get("user_id")
+    if not user_id:
+        return JSONResponse(
+            {"success": False, "error": {"code": "MISSING_USER", "message": "user_id 必填"}},
+            status_code=400,
+        )
+    secret = generate_totp_secret()
+    with get_db() as db:
+        target = db.query(User).filter(User.id == int(user_id)).first()
+        if not target:
+            return JSONResponse(
+                {"success": False, "error": {"code": "NOT_FOUND", "message": "用户不存在"}},
+                status_code=404,
+            )
+        target.totp_secret = secret
+        target.mfa_enabled = True
+        db.commit()
+    _ = get_auth_app_service()
+    return {
+        "success": True,
+        "data": {
+            "user_id": int(user_id),
+            "totp_secret": secret,
+            "message": "请将 secret 录入 Authenticator；生产环境勿通过日志传播",
+        },
+    }
+
+
+@router.post("/api/auth/mfa/enroll-self")
+def auth_mfa_enroll_self(user=Depends(get_logged_in_user)):
+    """当前登录用户自助启用 TOTP MFA。"""
+    from app.db.session import get_db
+    from app.infrastructure.auth.mfa_totp import generate_totp_secret
+
+    secret = generate_totp_secret()
+    with get_db() as db:
+        db_user = db.merge(user)
+        db_user.totp_secret = secret
+        db_user.mfa_enabled = True
+        db.commit()
+    return {
+        "success": True,
+        "data": {
+            "user_id": int(user.id),
+            "totp_secret": secret,
+            "recovery_note": "请保存 secret；丢失后需管理员重置",
+        },
+    }
+
+
+@router.get("/api/auth/saml/status")
+def auth_saml_status():
+    from app.infrastructure.auth.saml_provider import saml_enabled
+
+    return {"success": True, "data": {"enabled": saml_enabled()}}
+
+
+@router.get("/api/auth/saml/login")
+async def auth_saml_login():
+    from app.infrastructure.auth.saml_provider import build_login_redirect_url, saml_enabled
+    from fastapi.responses import RedirectResponse
+
+    if not saml_enabled():
+        return JSONResponse(
+            {"success": False, "error": {"code": "SAML_DISABLED", "message": "未启用 SAML"}},
+            status_code=404,
+        )
+    try:
+        url, _rid = await build_login_redirect_url()
+    except Exception as exc:
+        logger.exception("SAML login redirect failed")
+        return JSONResponse(
+            {"success": False, "error": {"code": "SAML_CONFIG", "message": str(exc)}},
+            status_code=503,
+        )
+    return RedirectResponse(url, status_code=302)
+
+
+@router.post("/api/auth/saml/acs")
+async def auth_saml_acs(SAMLResponse: str = Form(default="")):
+    from app.application.auth_app_service import get_auth_app_service
+    from app.infrastructure.auth.saml_provider import (
+        map_saml_name_to_username,
+        parse_name_id_from_response,
+        saml_enabled,
+    )
+
+    if not saml_enabled():
+        return JSONResponse(
+            {"success": False, "error": {"code": "SAML_DISABLED", "message": "未启用 SAML"}},
+            status_code=404,
+        )
+    if not SAMLResponse:
+        return JSONResponse(
+            {"success": False, "error": {"code": "SAML_RESPONSE", "message": "缺少 SAMLResponse"}},
+            status_code=400,
+        )
+    try:
+        name_id = parse_name_id_from_response(SAMLResponse)
+        username = map_saml_name_to_username(name_id)
+    except Exception as exc:
+        logger.exception("SAML ACS parse failed")
+        return JSONResponse(
+            {"success": False, "error": {"code": "SAML_PARSE", "message": str(exc)}},
+            status_code=400,
+        )
+    auth_app_service = get_auth_app_service()
+    result = auth_app_service.authenticate_oidc_user(
+        username,
+        email=f"{username}@saml.local",
+        display_name=username,
+    )
+    if not result.get("success"):
+        return JSONResponse(result, status_code=401)
+    return _attach_session_cookie(JSONResponse({"success": True, **result}), result.get("session_id"))

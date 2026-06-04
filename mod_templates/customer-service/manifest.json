@@ -1,0 +1,40 @@
+{
+  "sdk_version": "2.0",
+  "id": "template-customer-service",
+  "name": "行业模板 · 客服",
+  "version": "1.0.0",
+  "author": "<your-name>",
+  "description": "客服行业模板：工单 / 会话 / 知识库 + AI 客服员工双发布脚手架。",
+  "artifact": "mod",
+  "release_targets": ["mod", "ai"],
+  "capabilities": ["cs.tickets", "cs.sessions", "chat", "intent"],
+  "compat": { "min_host_version": "9.0.0", "max_host_version": "" },
+  "dependencies": { "xcagi": ">=9.0.0" },
+  "backend": { "entry": "blueprints", "init": "mod_init" },
+  "frontend": {
+    "routes": "frontend/routes",
+    "menu": [
+      { "id": "tpl-cs-tickets", "label": "工单", "icon": "fa-ticket", "path": "/mod/template-customer-service/tickets" },
+      { "id": "tpl-cs-sessions", "label": "会话", "icon": "fa-comments", "path": "/mod/template-customer-service/sessions" }
+    ]
+  },
+  "hooks": {
+    "cs.ticket.created": "backend/hooks.on_ticket_created",
+    "cs.message.received": "backend/hooks.on_message_received"
+  },
+  "comms": { "exports": ["cs.create_ticket", "cs.reply"] },
+  "ai": {
+    "employee_id": "cs-agent",
+    "model": "deepseek-chat",
+    "tier": "cloud",
+    "prompt": "你是客服 AI 员工，礼貌、准确地回答用户问题并在需要时创建工单。",
+    "tools": ["cs.create_ticket", "cs.reply"]
+  },
+  "industry": {
+    "id": "customer_service",
+    "name": "客服",
+    "description": "工单 / 会话 / 知识库",
+    "intent_keywords": ["客服", "工单", "投诉", "咨询", "售后"]
+  },
+  "config": { "phase": "template" }
+}

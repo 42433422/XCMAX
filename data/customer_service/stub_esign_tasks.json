@@ -1,0 +1,112 @@
+{
+  "tasks": {
+    "stub-f8175a6fca9d": {
+      "task_id": "stub-f8175a6fca9d",
+      "market_user_id": 7,
+      "party_a": "甲方",
+      "party_b": "乙方",
+      "subject": "甲方与乙方合同签署",
+      "amount_cents": null,
+      "status": "signing",
+      "created_at": "2026-06-04T12:45:06.642565+00:00",
+      "signed_at": "",
+      "signer_name": ""
+    },
+    "stub-2c57563a79f0": {
+      "task_id": "stub-2c57563a79f0",
+      "market_user_id": 7,
+      "party_a": "甲方",
+      "party_b": "乙方",
+      "subject": "甲方与乙方合同签署",
+      "amount_cents": null,
+      "status": "signing",
+      "created_at": "2026-06-04T12:50:25.916073+00:00",
+      "signed_at": "",
+      "signer_name": ""
+    },
+    "stub-49223d4c2d4c": {
+      "task_id": "stub-49223d4c2d4c",
+      "market_user_id": 7,
+      "party_a": "甲方",
+      "party_b": "乙方",
+      "subject": "甲方与乙方合同签署",
+      "amount_cents": null,
+      "status": "signing",
+      "created_at": "2026-06-04T12:55:48.549441+00:00",
+      "signed_at": "",
+      "signer_name": ""
+    },
+    "stub-8dfce0841fe5": {
+      "task_id": "stub-8dfce0841fe5",
+      "market_user_id": 7,
+      "party_a": "甲方",
+      "party_b": "乙方",
+      "subject": "甲方与乙方合同签署",
+      "amount_cents": null,
+      "status": "signing",
+      "created_at": "2026-06-04T13:31:57.281472+00:00",
+      "signed_at": "",
+      "signer_name": ""
+    },
+    "stub-3b0d94423a14": {
+      "task_id": "stub-3b0d94423a14",
+      "market_user_id": 7,
+      "party_a": "甲方",
+      "party_b": "乙方",
+      "subject": "甲方与乙方合同签署",
+      "amount_cents": null,
+      "status": "signing",
+      "created_at": "2026-06-04T13:59:41.754179+00:00",
+      "signed_at": "",
+      "signer_name": ""
+    },
+    "stub-4b9c5725d380": {
+      "task_id": "stub-4b9c5725d380",
+      "market_user_id": 7,
+      "party_a": "甲方",
+      "party_b": "乙方",
+      "subject": "甲方与乙方合同签署",
+      "amount_cents": null,
+      "status": "signing",
+      "created_at": "2026-06-04T14:47:18.087182+00:00",
+      "signed_at": "",
+      "signer_name": ""
+    },
+    "stub-e8cf86e6b691": {
+      "task_id": "stub-e8cf86e6b691",
+      "market_user_id": 7,
+      "party_a": "甲方",
+      "party_b": "乙方",
+      "subject": "甲方与乙方合同签署",
+      "amount_cents": null,
+      "status": "signing",
+      "created_at": "2026-06-04T17:20:27.522682+00:00",
+      "signed_at": "",
+      "signer_name": ""
+    },
+    "stub-86c1cfeaa0eb": {
+      "task_id": "stub-86c1cfeaa0eb",
+      "market_user_id": 7,
+      "party_a": "甲方",
+      "party_b": "乙方",
+      "subject": "甲方与乙方合同签署",
+      "amount_cents": null,
+      "status": "signing",
+      "created_at": "2026-06-04T17:21:13.590048+00:00",
+      "signed_at": "",
+      "signer_name": ""
+    },
+    "stub-046769ded495": {
+      "task_id": "stub-046769ded495",
+      "market_user_id": 7,
+      "party_a": "甲方",
+      "party_b": "乙方",
+      "subject": "甲方与乙方合同签署",
+      "amount_cents": null,
+      "status": "signing",
+      "created_at": "2026-06-04T17:23:47.220905+00:00",
+      "signed_at": "",
+      "signer_name": ""
+    }
+  }
+}

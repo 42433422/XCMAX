@@ -6,7 +6,7 @@
   "description": "对话开单 → 确认执行 → 开始打印 → 出货记录审计建议。",
   "primary": false,
   "dependencies": {
-    "xcagi": ">=8.0.0"
+    "xcagi": ">=10.0.0"
   },
   "backend": {
     "entry": "blueprints",

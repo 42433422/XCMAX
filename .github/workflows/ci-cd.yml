@@ -96,8 +96,9 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           # ⚠️ 已统一主入口至 XCAGI/，使用 XCAGI/requirements.txt
-          pip install -r XCAGI/requirements.txt
-          pip install pytest pytest-cov pytest-mock black isort mypy flake8
+          pip install -e ".[dev,ml]"
+          pip install -r XCAGI/requirements.lock.txt
+          pip install black isort flake8
 
       - name: Run Black formatter check
         run: black --check --diff app/ XCAGI/xcagi_tests/ tests/
@@ -108,11 +109,17 @@ jobs:
       - name: Run Flake8 linting
         run: flake8 app/ XCAGI/xcagi_tests/ tests/
 
-      - name: Run mypy type checking
-        continue-on-error: true  # 新引入的类型门禁，后续会改为阻塞
-        run: |
-          pip install mypy types-redis types-requests types-pyyaml types-psutil types-aiofiles types-python-dotenv types-pillow types-openpyxl
-          mypy app/ XCAGI/xcagi_tests/ tests/ --no-error-summary
+      - name: Run mypy (strict gate)
+        run: bash scripts/ci/mypy_strict_gate.sh
+
+      - name: Bare except gate (critical paths)
+        run: python scripts/ci/check_bare_except_gate.py
+
+      - name: Run mypy (full app — informational)
+        run: mypy app/ --no-error-summary || true
+
+      - name: Architecture fitness
+        run: python scripts/arch_fitness.py
 
       - name: Run tests with coverage
         env:
@@ -120,10 +127,9 @@ jobs:
         run: |
           mkdir -p coverage
           python -m pytest tests/ -v \
-            --cov=app.neuro_bus --cov=app.middleware --cov=app.fastapi_routes \
-            --cov=app.utils.rate_limiter --cov=app.utils.password_hash --cov=app.config \
+            --cov=app \
             --cov-report=xml --cov-report=html --cov-report=term-missing \
-            --cov-fail-under=25 \
+            --cov-fail-under=77 \
             --ignore=tests/test_intent.py
 
       - name: Upload coverage report

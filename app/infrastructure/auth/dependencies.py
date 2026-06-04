@@ -12,9 +12,10 @@ Phase 计划：等待正式会话/JWT 层就绪后，替换为标准 OAuth2 Bear
 from __future__ import annotations
 
 import os
+from collections.abc import Callable
 from typing import Any
 
-from fastapi import Header, Request
+from fastapi import Depends, Header, HTTPException, Request
 
 
 def _write_lock_enabled() -> bool:
@@ -73,3 +74,88 @@ def require_identified_user(
             },
         )
     return user
+
+
+def session_id_from_request(request: Request) -> str | None:
+    """从 Authorization Bearer 或 session cookie 解析会话 ID。"""
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        token = auth_header[7:].strip()
+        return token or None
+    from app.config import Config
+
+    cookie_name = getattr(Config, "SESSION_COOKIE_NAME", "session_id")
+    sid = request.cookies.get(cookie_name)
+    return str(sid).strip() if sid else None
+
+
+def resolve_session_user(request: Request) -> Any | None:
+    """解析当前请求关联的 User，未登录返回 None。"""
+    sid = session_id_from_request(request)
+    if not sid:
+        return None
+    from app.services import get_session_service
+
+    return get_session_service().validate_session(sid)
+
+
+def get_logged_in_user(request: Request) -> Any:
+    """FastAPI Depends：要求有效会话，否则 401。"""
+    user = resolve_session_user(request)
+    if user is None:
+        raise HTTPException(
+            status_code=401,
+            detail={
+                "message": {
+                    "code": "UNAUTHORIZED",
+                    "message": "请先登录",
+                },
+            },
+        )
+    if not getattr(user, "is_active", True):
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "message": {
+                    "code": "ACCOUNT_DISABLED",
+                    "message": "账户已被禁用",
+                },
+            },
+        )
+    return user
+
+
+def require_permission(permission_code: str) -> Callable[..., Any]:
+    """FastAPI Depends 工厂：校验 RBAC 权限码。"""
+
+    def _check(user: Any = Depends(get_logged_in_user)) -> Any:
+        from app.application.facades.session_facade import get_auth_service
+        from app.infrastructure.auth.enterprise_roles import role_has_permission
+
+        if role_has_permission(getattr(user, "role", None), permission_code):
+            return user
+        auth_service = get_auth_service()
+        if not auth_service.has_permission(user, permission_code):
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "message": {
+                        "code": "FORBIDDEN",
+                        "message": "权限不足",
+                    },
+                },
+            )
+        return user
+
+    return _check
+
+
+__all__ = [
+    "CurrentUser",
+    "get_current_user",
+    "require_identified_user",
+    "session_id_from_request",
+    "resolve_session_user",
+    "get_logged_in_user",
+    "require_permission",
+]

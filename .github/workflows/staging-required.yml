@@ -1,0 +1,33 @@
+name: Staging gate (daily PR)
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+    branches: [main, master]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  staging-required:
+    runs-on: ubuntu-latest
+    if: >-
+      contains(github.head_ref, 'auto/daily-') ||
+      contains(github.event.pull_request.labels.*.name, 'staging-required')
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Require staging-required label or green staging check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          labels="$(gh pr view "${{ github.event.pull_request.number }}" --json labels -q '.labels[].name' || true)"
+          if echo "$labels" | grep -qx 'staging-passed'; then
+            echo "staging-passed label present — OK"
+            exit 0
+          fi
+          echo "::error::Daily/auto PR must pass staging (label staging-passed) before merge."
+          echo "Run k8s-staging-e2e.yml workflow_dispatch or CVM staging deploy, then add label staging-passed."
+          exit 1

@@ -13,9 +13,9 @@ router = APIRouter(tags=["legacy-products"], deprecated=True)
 
 @router.delete("/api/products/{product_id}")
 def products_delete(product_id: int):
-    from app.bootstrap import get_products_service
+    from app.bootstrap import get_product_app_service
 
-    return get_products_service().delete_product(product_id)
+    return get_product_app_service().delete_product(product_id)
 
 
 @router.post("/api/products/import/price-list-template")
@@ -67,9 +67,9 @@ def products_export_xlsx(
 ):
     import os as _os
 
-    from app.bootstrap import get_products_service
+    from app.application.product_app_service import get_product_application_service
 
-    service = get_products_service()
+    service = get_product_application_service()
     result = service.export_to_excel(unit_name=unit, keyword=keyword, template_id=template_id)
     if not result.get("success"):
         return JSONResponse(result, status_code=400)
@@ -86,28 +86,28 @@ def products_export_xlsx(
 
 @router.get("/api/products/product_names")
 def products_product_names():
-    from app.bootstrap import get_products_service
+    from app.application.product_app_service import get_product_application_service
 
-    return get_products_service().get_product_names()
+    return get_product_application_service().get_product_names()
 
 
 @router.get("/api/products/product_names/search")
 def products_product_names_search(keyword: str = Query(default="")):
-    from app.bootstrap import get_products_service
+    from app.application.product_app_service import get_product_application_service
 
-    return get_products_service().get_product_names(keyword=keyword)
+    return get_product_application_service().get_product_names(keyword=keyword)
 
 
 @router.get("/api/products/search")
 def products_search(keyword: str = Query(default="")):
-    from app.bootstrap import get_products_service
+    from app.application.product_app_service import get_product_application_service
 
-    return get_products_service().get_products(keyword=keyword)
+    return get_product_application_service().get_products(keyword=keyword)
 
 
 @router.post("/api/products/batch")
 def products_batch(body: dict = Body(default_factory=dict)):
-    from app.bootstrap import get_products_service
+    from app.bootstrap import get_product_app_service
 
     data = body or {}
     products = data.get("products") or []
@@ -115,32 +115,28 @@ def products_batch(body: dict = Body(default_factory=dict)):
         return JSONResponse(
             {"success": False, "message": "products 必须为非空数组"}, status_code=400
         )
-    service = get_products_service()
-    return service.batch_add_products(products)
+    return get_product_app_service().batch_add_products(products)
 
 
 @router.post("/api/products/{product_id}")
 def products_update_post(product_id: int, body: dict = Body(default_factory=dict)):
-    from app.bootstrap import get_products_service
+    from app.bootstrap import get_product_app_service
 
-    service = get_products_service()
-    result = service.update_product(product_id, body or {})
+    result = get_product_app_service().update_product(product_id, body or {})
     return JSONResponse(result, status_code=200 if result.get("success") else 400)
 
 
 @router.put("/api/products/{product_id}")
 def products_put(product_id: int, body: dict = Body(default_factory=dict)):
-    from app.bootstrap import get_products_service
+    from app.bootstrap import get_product_app_service
 
-    service = get_products_service()
-    result = service.update_product(product_id, body or {})
+    result = get_product_app_service().update_product(product_id, body or {})
     return JSONResponse(result, status_code=200 if result.get("success") else 400)
 
 
 @router.patch("/api/products/{product_id}")
 def products_patch(product_id: int, body: dict = Body(default_factory=dict)):
-    from app.bootstrap import get_products_service
+    from app.bootstrap import get_product_app_service
 
-    service = get_products_service()
-    result = service.update_product(product_id, body or {})
+    result = get_product_app_service().update_product(product_id, body or {})
     return JSONResponse(result, status_code=200 if result.get("success") else 400)

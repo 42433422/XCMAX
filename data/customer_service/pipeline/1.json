@@ -1,0 +1,38 @@
+{
+  "market_user_id": 1,
+  "username": "test",
+  "stage": "connected",
+  "updated_at": "2026-06-04T17:23:40.243447+00:00",
+  "timeline": [
+    {
+      "stage": "idle",
+      "at": "2026-05-29T07:02:53.572582+00:00",
+      "source": "init"
+    }
+  ],
+  "last_sync_at": null,
+  "last_message_preview": "",
+  "connected_welcome_sent": false,
+  "connected_welcome_sent_at": null,
+  "contract_lifecycle": {
+    "status": "effective",
+    "history": [
+      {
+        "from": "draft",
+        "to": "effective",
+        "at": "2026-06-04T13:59:35.020556+00:00",
+        "source": "esign_webhook",
+        "note": "客户已签署"
+      }
+    ],
+    "updated_at": "2026-06-04T13:59:35.020556+00:00"
+  },
+  "contract_signed_at": "2026-06-04T13:59:35.020556+00:00",
+  "crm_opportunity_id": 5,
+  "crm_db_synced_at": "2026-06-04T17:23:40.244649+00:00",
+  "external_crm_last_at": "2026-06-04T17:23:40.244657+00:00",
+  "external_crm_last_result": {
+    "ok": true,
+    "skipped": true
+  }
+}

@@ -7,28 +7,15 @@ export type CoreMenuCatalogItem = {
   children?: CoreMenuCatalogItem[]
 }
 
-/** 侧栏默认置顶项（行业 Mod 场景下仍保持在业务菜单之上） */
-export const PRIMARY_CHAT_MENU_KEY = 'chat'
-
-export function pinMenuKeyFirst<T extends { key: string }>(
-  items: T[],
-  key: string = PRIMARY_CHAT_MENU_KEY,
-): T[] {
-  const hit = items.find((i) => String(i.key) === key)
-  if (!hit) return items
-  return [hit, ...items.filter((i) => String(i.key) !== key)]
-}
-
 export const CORE_MENU_ITEMS_BASE: CoreMenuCatalogItem[] = [
-  { key: PRIMARY_CHAT_MENU_KEY, name: '智能对话', iconClass: 'fa-comments-o' },
+  { key: 'chat', name: '智能对话', iconClass: 'fa-comments-o' },
   { key: 'ai-ecosystem', name: '智能生态', iconClass: 'fa-sitemap' },
-  { key: 'mod-store', name: '能力库', iconClass: 'fa-puzzle-piece' },
-  { key: 'products', name: '业务对象', iconClass: 'fa-cubes' },
-  { key: 'materials', name: '资源库', iconClass: 'fa-archive' },
+  { key: 'products', name: '人员管理', iconClass: 'fa-cubes' },
+  { key: 'materials', name: '排班资源', iconClass: 'fa-archive' },
   { key: 'traditional-mode', name: '表格模式', iconClass: 'fa-table' },
-  { key: 'orders', name: '业务单据', iconClass: 'fa-file-text-o' },
-  { key: 'shipment-records', name: '业务记录', iconClass: 'fa-industry' },
-  { key: 'customers', name: '组织管理', iconClass: 'fa-users' },
+  { key: 'orders', name: '考勤单管理', iconClass: 'fa-file-text-o' },
+  { key: 'shipment-records', name: '考勤记录', iconClass: 'fa-industry' },
+  { key: 'customers', name: '部门管理', iconClass: 'fa-users' },
   { key: 'data-sources', name: '数据来源', iconClass: 'fa-database' },
   { key: 'printer-list', name: '打印机列表', iconClass: 'fa-print' },
   { key: 'template-preview', name: '模板库', iconClass: 'fa-file-o' },
@@ -87,12 +74,8 @@ export function flattenNavKeys(items: Array<{ key: string; children?: Array<{ ke
 }
 
 export function sidebarLayoutSeedKeys(): string[] {
-  const keys = [
+  return [
     ...CORE_MENU_ITEMS_BASE.map((m) => m.key),
     ...CORE_MENU_ITEMS_TRAILING.map((m) => m.key),
   ]
-  return pinMenuKeyFirst(
-    keys.map((key) => ({ key })),
-    PRIMARY_CHAT_MENU_KEY,
-  ).map((row) => row.key)
 }

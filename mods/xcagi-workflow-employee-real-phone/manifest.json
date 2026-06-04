@@ -6,7 +6,7 @@
   "description": "ADB 设备连通 → 来电检测/接听 → 语音转写与回复（与状态轮询同步）。",
   "primary": false,
   "dependencies": {
-    "xcagi": ">=8.0.0"
+    "xcagi": ">=10.0.0"
   },
   "backend": {
     "entry": "blueprints",

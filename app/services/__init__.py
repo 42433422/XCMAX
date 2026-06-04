@@ -1,5 +1,13 @@
 from __future__ import annotations
 
+import warnings
+
+warnings.warn(
+    "app.services 为过渡兼容层，将于 v10.1 移除；请改用 app.application / app.domain / app.infrastructure",
+    DeprecationWarning,
+    stacklevel=2,
+)
+
 """
 服务层模块
 
@@ -90,7 +98,12 @@ from app.services.products_service import ProductsService
 
 
 def get_products_service() -> ProductsService:
-    """获取产品服务单例"""
+    """已废弃：请使用 ``app.application.get_product_application_service()``。"""
+    warnings.warn(
+        "app.services.get_products_service 已废弃，请改用 get_product_application_service()",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     from app.infrastructure.persistence.product_repository_impl import (
         SQLAlchemyProductRepository,
     )
@@ -108,12 +121,22 @@ def get_printer_service() -> PrinterService:
 
 
 def get_materials_service() -> MaterialsService:
-    """获取材质服务单例"""
+    """已废弃：请使用 ``app.application.get_material_application_service()``。"""
+    warnings.warn(
+        "app.services.get_materials_service 已废弃，请改用 get_material_application_service()",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     return MaterialsService()
 
 
 def get_product_import_service() -> ProductImportService:
-    """获取产品导入服务单例"""
+    """已废弃：请使用 ``app.application.get_product_import_application_service()``。"""
+    warnings.warn(
+        "app.services.get_product_import_service 已废弃，请改用 get_product_import_application_service()",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     return ProductImportService()
 
 

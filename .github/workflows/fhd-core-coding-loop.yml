@@ -1,0 +1,55 @@
+# 制作线 P2：FHD app/ 自动编码任务 → fhd-core-maintainer → CR/PR
+name: FHD core coding loop
+
+on:
+  schedule:
+    - cron: '0 1 * * 1'  # 周一 09:00 UTC+8
+  workflow_dispatch:
+    inputs:
+      task:
+        description: Task description
+        required: false
+        type: string
+  repository_dispatch:
+    types: [fhd_core_coding, coverage_drop, error_spike]
+
+concurrency:
+  group: fhd-core-coding-loop
+  cancel-in-progress: false
+
+jobs:
+  dispatch-fhd-core-maintainer:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch fhd-core-maintainer
+        env:
+          ORCH_URL: ${{ secrets.MODSTORE_ORCHESTRATE_URL }}
+          ORCH_TOKEN: ${{ secrets.MODSTORE_ORCHESTRATE_TOKEN }}
+          TASK_OVERRIDE: ${{ github.event.inputs.task || github.event.client_payload.task || '' }}
+          EVENT_TYPE: ${{ github.event.action || 'workflow_dispatch' }}
+        run: |
+          set -euo pipefail
+          if [ -z "${ORCH_URL:-}" ]; then
+            echo "::warning::MODSTORE_ORCHESTRATE_URL not set"
+            exit 0
+          fi
+          DEFAULT_TASK="【制作线P2】根据最近 CI/遥测 backlog 修复 FHD app/ 缺陷或补全关键路径测试；遵守 NEW_FEATURE_PLACEMENT.md；产出 employees/fhd-core-maintainer/ PR。"
+          TASK="${TASK_OVERRIDE:-$DEFAULT_TASK}"
+          BODY=$(python3 -c "
+          import json, os
+          print(json.dumps({
+            'task_description': os.environ['TASK'],
+            'use_task_router': False,
+            'target_employee_id': 'fhd-core-maintainer',
+            'max_concurrency': 2,
+            'allow_high_risk_real_run': False,
+            'dispatch_source': 'github:fhd-core-coding-loop:' + os.environ.get('EVENT_TYPE',''),
+          }, ensure_ascii=False))
+          ")
+          AUTH=()
+          if [ -n "${ORCH_TOKEN:-}" ]; then
+            AUTH=(-H "Authorization: Bearer ${ORCH_TOKEN}")
+          fi
+          curl -fsS -X POST "${ORCH_URL}" "${AUTH[@]}" \
+            -H 'Content-Type: application/json' \
+            -d "${BODY}" | tee orchestrate_response.json

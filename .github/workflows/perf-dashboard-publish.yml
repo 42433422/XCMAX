@@ -1,0 +1,92 @@
+name: Perf Dashboard Publish
+
+on:
+  workflow_run:
+    workflows: [Performance Smoke Test]
+    types: [completed]
+    branches: [main, master]
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: perf-dashboard-pages
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'schedule' ||
+      (
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.event != 'pull_request'
+      )
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Download k6 artifact from smoke workflow
+        if: github.event_name == 'workflow_run'
+        uses: actions/download-artifact@v4
+        with:
+          name: k6-results
+          path: k6-out
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: ${{ github.event.workflow_run.id }}
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Fetch existing gh-pages metrics
+        continue-on-error: true
+        run: |
+          git fetch origin gh-pages:gh-pages 2>/dev/null || true
+          if git show gh-pages:perf/metrics.json >/dev/null 2>&1; then
+            mkdir -p perf
+            git show gh-pages:perf/metrics.json > perf/metrics.json
+          fi
+
+      - name: Merge k6 results into metrics history
+        if: github.event_name == 'workflow_run'
+        run: |
+          python scripts/loadtest/merge_perf_history.py \
+            --k6-results k6-out/results.json \
+            --metrics-out perf/metrics.json \
+            --run-id "${{ github.event.workflow_run.id }}" \
+            --ref "${{ github.event.workflow_run.head_branch }}" \
+            --sha "${{ github.event.workflow_run.head_sha }}"
+
+      - name: Ensure dashboard static files
+        run: |
+          mkdir -p perf
+          cp perf-dashboard/index.html perf/index.html
+          if [ ! -f perf/metrics.json ]; then
+            echo '{"runs":[],"updated_at":""}' > perf/metrics.json
+          fi
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: perf
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

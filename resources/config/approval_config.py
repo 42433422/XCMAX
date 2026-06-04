@@ -20,7 +20,7 @@ DEFAULT_ATTENDANCE_POLICY: Dict[str, Any] = {
 }
 
 
-_NESTED_ATTENDANCE_KEYS = frozenset()
+_NESTED_ATTENDANCE_KEYS = frozenset[str]()
 
 
 def _merge_attendance_policy(raw: Any) -> Dict[str, Any]:

@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import pandas as pd
+import pandas as pd  # type: ignore[import-untyped]
 
 from app.application.ports.embedder import EmbedderPort
 from app.application.ports.vector_store import VectorStorePort

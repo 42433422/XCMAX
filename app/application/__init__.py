@@ -54,6 +54,23 @@ from .wechat_contact_app_service import (
     get_wechat_contact_app_service,
 )
 from .wechat_task_app_service import WechatTaskApplicationService, get_wechat_task_app_service
+from .inventory_app_service import InventoryApplicationService, get_inventory_app_service
+from .contract_lifecycle_app_service import (
+    ContractLifecycleApplicationService,
+    get_contract_lifecycle_app_service,
+)
+from .user_cs_app_service import UserCsApplicationService, get_user_cs_app_service
+from .wechat_integration_app_service import (
+    WechatIntegrationApplicationService,
+    get_wechat_integration_app_service,
+)
+from .operations_app_service import OperationsApplicationService, get_operations_app_service
+from .admin_sync_app_service import AdminSyncApplicationService, get_admin_sync_app_service
+from .purchase_app_service import PurchaseApplicationService, get_purchase_app_service
+from .report_app_service import ReportApplicationService, get_report_app_service
+from .excel_import_app_service import ExcelImportApplicationService, get_excel_import_app_service
+from .query_app_service import QueryApplicationService, get_query_app_service
+from .kitten_app_service import KittenApplicationService, get_kitten_app_service
 
 __all__ = [
     "AIChatApplicationService",
@@ -102,4 +119,27 @@ __all__ = [
     "get_wechat_contact_app_service",
     "WechatTaskApplicationService",
     "get_wechat_task_app_service",
+    "InventoryApplicationService",
+    "get_inventory_app_service",
+    "ContractLifecycleApplicationService",
+    "get_contract_lifecycle_app_service",
+    "UserCsApplicationService",
+    "get_user_cs_app_service",
+    "WechatIntegrationApplicationService",
+    "get_wechat_integration_app_service",
+    "OperationsApplicationService",
+    "get_operations_app_service",
+    "AdminSyncApplicationService",
+    "get_admin_sync_app_service",
+    "PurchaseApplicationService",
+    "get_purchase_app_service",
+    "ReportApplicationService",
+    "get_report_app_service",
+    "ExcelImportApplicationService",
+    "get_excel_import_app_service",
+    "get_material_application_service",
+    "QueryApplicationService",
+    "get_query_app_service",
+    "KittenApplicationService",
+    "get_kitten_app_service",
 ]

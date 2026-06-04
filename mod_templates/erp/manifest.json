@@ -1,0 +1,43 @@
+{
+  "sdk_version": "2.0",
+  "id": "template-erp",
+  "name": "行业模板 · 通用 ERP",
+  "version": "1.0.0",
+  "author": "<your-name>",
+  "description": "通用 ERP 行业模板：产品 / 客户 / 订单 三域 + AI 助手双发布脚手架。",
+  "artifact": "mod",
+  "release_targets": ["mod", "ai"],
+  "capabilities": ["erp.products", "erp.customers", "erp.orders", "intent", "chat"],
+  "compat": { "min_host_version": "9.0.0", "max_host_version": "" },
+  "dependencies": { "xcagi": ">=9.0.0" },
+  "backend": { "entry": "blueprints", "init": "mod_init" },
+  "frontend": {
+    "routes": "frontend/routes",
+    "menu": [
+      { "id": "tpl-erp-products", "label": "产品", "icon": "fa-cubes", "path": "/mod/template-erp/products" },
+      { "id": "tpl-erp-customers", "label": "客户", "icon": "fa-users", "path": "/mod/template-erp/customers" },
+      { "id": "tpl-erp-orders", "label": "订单", "icon": "fa-file-text-o", "path": "/mod/template-erp/orders" }
+    ]
+  },
+  "hooks": {
+    "order.created": "backend/hooks.on_order_created",
+    "order.paid": "backend/hooks.on_order_paid"
+  },
+  "comms": { "exports": ["erp.query_products", "erp.create_order"] },
+  "ai": {
+    "employee_id": "erp-assistant",
+    "model": "deepseek-chat",
+    "tier": "cloud",
+    "prompt": "你是 ERP 业务助手，帮助用户查询产品、客户与下单。",
+    "tools": ["erp.query_products", "erp.create_order"]
+  },
+  "industry": {
+    "id": "erp_generic",
+    "name": "通用 ERP",
+    "description": "产品 / 客户 / 订单管理",
+    "order_types": ["sale", "purchase"],
+    "product_fields": ["name", "model_number", "spec", "price"],
+    "intent_keywords": ["下单", "客户", "产品", "库存"]
+  },
+  "config": { "phase": "template" }
+}

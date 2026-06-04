@@ -26,7 +26,7 @@ class Percentage:
 
     value: Decimal
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if not isinstance(self.value, Decimal):
             object.__setattr__(self, "value", Decimal(str(self.value)))
         # 标准化：保留两位小数
@@ -123,7 +123,7 @@ class Percentage:
     def __repr__(self) -> str:
         return f"Percentage(value={self.value})"
 
-    def __eq__(self, other) -> bool:
+    def __eq__(self, other: object) -> bool:
         if not isinstance(other, Percentage):
             return False
         return self.value == other.value

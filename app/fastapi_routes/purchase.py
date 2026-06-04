@@ -31,44 +31,44 @@ def purchase_suppliers(
     status: str | None = Query(default=None),
     keyword: str | None = Query(default=None),
 ):
-    from app.application.facades.inventory_facade import PurchaseService
+    from app.application.purchase_app_service import get_purchase_app_service
 
-    return PurchaseService().get_suppliers(status=status, keyword=keyword)
+    return get_purchase_app_service().get_suppliers(status=status, keyword=keyword)
 
 
 @router.get("/api/purchase/suppliers/summary")
 def purchase_suppliers_summary():
-    from app.application.facades.inventory_facade import PurchaseService
+    from app.application.purchase_app_service import get_purchase_app_service
 
-    return PurchaseService().get_supplier_summary()
+    return get_purchase_app_service().get_supplier_summary()
 
 
 @router.get("/api/purchase/suppliers/{supplier_id}")
 def purchase_supplier_get(supplier_id: int):
-    from app.application.facades.inventory_facade import PurchaseService
+    from app.application.purchase_app_service import get_purchase_app_service
 
-    return PurchaseService().get_supplier(supplier_id)
+    return get_purchase_app_service().get_supplier(supplier_id)
 
 
 @router.post("/api/purchase/suppliers")
 def purchase_suppliers_post(body: dict = Body(default_factory=dict)):
-    from app.application.facades.inventory_facade import PurchaseService
+    from app.application.purchase_app_service import get_purchase_app_service
 
-    return PurchaseService().create_supplier(body or {})
+    return get_purchase_app_service().create_supplier(body or {})
 
 
 @router.put("/api/purchase/suppliers/{supplier_id}")
 def purchase_suppliers_put(supplier_id: int, body: dict = Body(default_factory=dict)):
-    from app.application.facades.inventory_facade import PurchaseService
+    from app.application.purchase_app_service import get_purchase_app_service
 
-    return PurchaseService().update_supplier(supplier_id, body or {})
+    return get_purchase_app_service().update_supplier(supplier_id, body or {})
 
 
 @router.delete("/api/purchase/suppliers/{supplier_id}")
 def purchase_supplier_delete(supplier_id: int):
-    from app.application.facades.inventory_facade import PurchaseService
+    from app.application.purchase_app_service import get_purchase_app_service
 
-    return PurchaseService().delete_supplier(supplier_id)
+    return get_purchase_app_service().delete_supplier(supplier_id)
 
 
 # ──────────────────────────── 采购订单 ────────────────────────────
@@ -83,11 +83,11 @@ def purchase_orders(
     page: int = Query(default=1),
     per_page: int = Query(default=20),
 ):
-    from app.application.facades.inventory_facade import PurchaseService
+    from app.application.purchase_app_service import get_purchase_app_service
 
     start_dt = datetime.fromisoformat(start_date) if start_date else None
     end_dt = datetime.fromisoformat(end_date) if end_date else None
-    return PurchaseService().get_purchase_orders(
+    return get_purchase_app_service().get_purchase_orders(
         supplier_id=supplier_id,
         status=status,
         start_date=start_dt,
@@ -99,37 +99,37 @@ def purchase_orders(
 
 @router.get("/api/purchase/orders/{order_id}")
 def purchase_order_get(order_id: int):
-    from app.application.facades.inventory_facade import PurchaseService
+    from app.application.purchase_app_service import get_purchase_app_service
 
-    return PurchaseService().get_purchase_order(order_id)
+    return get_purchase_app_service().get_purchase_order(order_id)
 
 
 @router.post("/api/purchase/orders")
 def purchase_orders_post(body: dict = Body(default_factory=dict)):
-    from app.application.facades.inventory_facade import PurchaseService
+    from app.application.purchase_app_service import get_purchase_app_service
 
-    return PurchaseService().create_purchase_order(body or {})
+    return get_purchase_app_service().create_purchase_order(body or {})
 
 
 @router.put("/api/purchase/orders/{order_id}")
 def purchase_orders_put(order_id: int, body: dict = Body(default_factory=dict)):
-    from app.application.facades.inventory_facade import PurchaseService
+    from app.application.purchase_app_service import get_purchase_app_service
 
-    return PurchaseService().update_purchase_order(order_id, body or {})
+    return get_purchase_app_service().update_purchase_order(order_id, body or {})
 
 
 @router.post("/api/purchase/orders/{order_id}/approve")
 def purchase_orders_approve(order_id: int, approver: str = Query(default="system")):
-    from app.application.facades.inventory_facade import PurchaseService
+    from app.application.purchase_app_service import get_purchase_app_service
 
-    return PurchaseService().approve_purchase_order(order_id, approver)
+    return get_purchase_app_service().approve_purchase_order(order_id, approver)
 
 
 @router.post("/api/purchase/orders/{order_id}/cancel")
 def purchase_orders_cancel(order_id: int):
-    from app.application.facades.inventory_facade import PurchaseService
+    from app.application.purchase_app_service import get_purchase_app_service
 
-    return PurchaseService().cancel_purchase_order(order_id)
+    return get_purchase_app_service().cancel_purchase_order(order_id)
 
 
 # ──────────────────────────── 采购入库 ────────────────────────────
@@ -144,11 +144,11 @@ def purchase_inbounds(
     page: int = Query(default=1),
     per_page: int = Query(default=20),
 ):
-    from app.application.facades.inventory_facade import PurchaseService
+    from app.application.purchase_app_service import get_purchase_app_service
 
     start_dt = datetime.fromisoformat(start_date) if start_date else None
     end_dt = datetime.fromisoformat(end_date) if end_date else None
-    return PurchaseService().get_purchase_inbounds(
+    return get_purchase_app_service().get_purchase_inbounds(
         supplier_id=supplier_id,
         order_id=order_id,
         start_date=start_dt,
@@ -160,9 +160,9 @@ def purchase_inbounds(
 
 @router.post("/api/purchase/inbounds")
 def purchase_inbounds_post(body: dict = Body(default_factory=dict)):
-    from app.application.facades.inventory_facade import PurchaseService
+    from app.application.purchase_app_service import get_purchase_app_service
 
-    return PurchaseService().create_purchase_inbound(body or {})
+    return get_purchase_app_service().create_purchase_inbound(body or {})
 
 
 # ──────────────────────────── 汇总 ────────────────────────────
@@ -170,6 +170,6 @@ def purchase_inbounds_post(body: dict = Body(default_factory=dict)):
 
 @router.get("/api/purchase/summary")
 def purchase_summary():
-    from app.application.facades.inventory_facade import PurchaseService
+    from app.application.purchase_app_service import get_purchase_app_service
 
-    return PurchaseService().get_purchase_summary()
+    return get_purchase_app_service().get_purchase_summary()

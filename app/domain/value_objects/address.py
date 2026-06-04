@@ -24,7 +24,7 @@ class Address:
     detail: str | None = None  # 详细地址
     zip_code: str | None = None  # 邮编
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         # 标准化：去除空格
         object.__setattr__(self, "province", self.province.strip() if self.province else "")
         object.__setattr__(self, "city", self.city.strip() if self.city else "")
@@ -86,7 +86,7 @@ class Address:
     def __repr__(self) -> str:
         return f"Address(province={self.province}, city={self.city})"
 
-    def __eq__(self, other) -> bool:
+    def __eq__(self, other: object) -> bool:
         if not isinstance(other, Address):
             return False
         return (
@@ -115,7 +115,7 @@ class ContactInfo:
     address: Address | None = None  # 地址
     company: str | None = None  # 公司名称
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         object.__setattr__(self, "name", self.name.strip() if self.name else "")
         object.__setattr__(self, "phone", self.phone.strip() if self.phone else None)
         object.__setattr__(self, "email", self.email.strip() if self.email else None)
@@ -154,7 +154,7 @@ class ContactInfo:
     def __repr__(self) -> str:
         return f"ContactInfo(name={self.name}, phone={self.phone})"
 
-    def __eq__(self, other) -> bool:
+    def __eq__(self, other: object) -> bool:
         if not isinstance(other, ContactInfo):
             return False
         return self.name == other.name and self.phone == other.phone and self.email == other.email

@@ -8,6 +8,14 @@ import logging
 
 from fastapi import FastAPI
 
+from app.fastapi_routes.route_registration import (
+    include_router as _include_router_safe,
+    register_callable as _register_callable_safe,
+    reset_skipped_routes,
+    routes_degraded,
+    skipped_route_names,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -19,12 +27,14 @@ def register_all_routes(app: FastAPI) -> None:
         app: FastAPI 应用实例
     """
     logger.info("Registering FastAPI routes...")
+    reset_skipped_routes()
 
     # 注册基础设施路由
     _register_infrastructure_routes(app)
 
     # 注册业务路由
     _register_business_routes(app)
+    _register_scim_routes(app)
 
     # 注册健康检查
     _register_health_routes(app)
@@ -40,6 +50,8 @@ def register_all_routes(app: FastAPI) -> None:
     # 这批路由曾长期挂载在 ``backend/routers/*``,阶段 2–4 已迁至 ``app/fastapi_routes/``。
     _register_legacy_compat_routes(app)
 
+    if routes_degraded():
+        logger.warning("Routes degraded; skipped: %s", ", ".join(skipped_route_names()))
     logger.info("FastAPI routes registered successfully")
 
 
@@ -73,11 +85,20 @@ def _register_infrastructure_routes(app: FastAPI) -> None:
     logger.debug("Infrastructure routes registered (mod_schema_router is utility module)")
 
 
+def _register_scim_routes(app: FastAPI) -> None:
+    try:
+        from app.fastapi_routes.domains.scim.routes import router as scim_router
+
+        _include_router_safe(app, scim_router, name="SCIM (/scim/v2/*)", required=False)
+    except Exception as e:
+        logger.warning("SCIM routes skipped: %s", e)
+
+
 def _register_business_routes(app: FastAPI) -> None:
     """注册业务路由"""
     # ── XCmax 服务器后台控制面 ─────────────────────────────────────
     try:
-        from app.fastapi_routes.xcmax_admin import router as xcmax_admin_router
+        from app.fastapi_routes.domains.xcmax_admin.routes import router as xcmax_admin_router
 
         app.include_router(xcmax_admin_router)
         logger.info("Registered xcmax_admin_router (/api/xcmax/*)")
@@ -94,7 +115,7 @@ def _register_business_routes(app: FastAPI) -> None:
         logger.warning("purchase router not available: %s", e)
 
     try:
-        from app.fastapi_routes.inventory import router as inventory_router
+        from app.fastapi_routes.domains.inventory.routes import router as inventory_router
 
         app.include_router(inventory_router)
         logger.info("Registered inventory router (/api/inventory/*)")
@@ -120,7 +141,7 @@ def _register_business_routes(app: FastAPI) -> None:
         logger.warning("finance invoices router not available: %s", e)
 
     try:
-        from app.fastapi_routes.finance import router as finance_router
+        from app.fastapi_routes.domains.finance.routes import router as finance_router
 
         app.include_router(finance_router)
         logger.info("Registered finance router (/api/finance/*)")
@@ -136,7 +157,7 @@ def _register_business_routes(app: FastAPI) -> None:
         logger.warning("reports router not available: %s", e)
 
     try:
-        from app.fastapi_routes.rbac import router as rbac_router
+        from app.fastapi_routes.domains.rbac.routes import router as rbac_router
 
         app.include_router(rbac_router)
         logger.info("Registered rbac router (/api/rbac/*)")
@@ -211,11 +232,16 @@ def _register_health_routes(app: FastAPI) -> None:
 
     @app.get("/api/health", tags=["health"])
     async def health_check():
+        from app.version import get_version
+
         payload: dict = {
             "status": "healthy",
-            "version": "1.0.0",
+            "version": get_version(),
             "service": "xcagi-fastapi",
+            "routes_degraded": routes_degraded(),
         }
+        if routes_degraded():
+            payload["skipped_routes"] = skipped_route_names()
         try:
             from app.neuro_bus.integrations.fastapi_integration import get_neurobus_health
             from app.neuro_bus.integrations.intent_integration import is_neuro_stack_enabled
@@ -237,13 +263,12 @@ def _register_health_routes(app: FastAPI) -> None:
 
 def _register_neuro_routes(app: FastAPI) -> None:
     """注册 NeuroBus HTTP 诊断路由（与 lifespan 中的总线启动配合）。"""
-    try:
+    def _mount(a: FastAPI) -> None:
         from app.neuro_bus.integrations.fastapi_integration import add_neurobus_routes
 
-        add_neurobus_routes(app)
-        logger.info("Registered NeuroBus routes (/api/neurobus/*)")
-    except Exception as e:
-        logger.warning("NeuroBus routes skipped: %s", e)
+        add_neurobus_routes(a)
+
+    _register_callable_safe(app, _mount, name="NeuroBus routes", required=True)
 
 
 def _register_neuro_migration_routes(app: FastAPI) -> None:
@@ -259,7 +284,7 @@ def _register_neuro_migration_routes(app: FastAPI) -> None:
 def _register_lan_routes(app: FastAPI) -> None:
     """注册局域网授权用户端 + 管理员路由（/api/lan/*）。"""
     try:
-        from app.fastapi_routes.lan_routes import router as lan_router
+        from app.fastapi_routes.domains.lan.user_routes import router as lan_router
 
         app.include_router(lan_router)
         logger.info("Registered LAN routes (/api/lan/*)")
@@ -267,7 +292,7 @@ def _register_lan_routes(app: FastAPI) -> None:
         logger.warning("LAN routes skipped: %s", e)
 
     try:
-        from app.fastapi_routes.lan_admin_routes import router as lan_admin_router
+        from app.fastapi_routes.domains.lan.admin_routes import router as lan_admin_router
 
         app.include_router(lan_admin_router)
         logger.info("Registered LAN admin routes (/api/lan/admin/*)")
@@ -275,7 +300,7 @@ def _register_lan_routes(app: FastAPI) -> None:
         logger.warning("LAN admin routes skipped: %s", e)
 
     try:
-        from app.fastapi_routes.lan_settings_routes import router as lan_settings_router
+        from app.fastapi_routes.domains.lan.settings_routes import router as lan_settings_router
 
         app.include_router(lan_settings_router)
         logger.info("Registered LAN settings routes (/api/lan/admin/settings)")
@@ -292,7 +317,7 @@ def _register_legacy_compat_routes(app: FastAPI) -> None:
 
     # 须早于 xcagi_compat：避免与其它 /api 聚合路由在个别 Starlette 版本下的匹配顺序边缘问题，
     # 并保证 /api/market/* 始终由 market_account 提供（compat 层不再重复注册 llm-catalog）。
-    from app.fastapi_routes.market_account import router as market_account_router
+    from app.fastapi_routes.domains.market_account.routes import router as market_account_router
 
     app.include_router(market_account_router)
     logger.info("Registered market_account (/api/market/*)")
@@ -310,8 +335,9 @@ def _register_legacy_compat_routes(app: FastAPI) -> None:
     # 须早于 xcagi_compat / SPA 兜底：避免 ``GET /api/auth/session/validate`` 等落入 ``/{fallback:path}`` 返回 404。
     from app.fastapi_routes.domains.auth.routes import router as legacy_auth_router
 
-    app.include_router(legacy_auth_router)
-    logger.info("Registered legacy_auth_router early (/api/auth/*)")
+    _include_router_safe(
+        app, legacy_auth_router, name="auth routes (/api/auth/*)", required=True
+    )
 
     try:
         from app.fastapi_routes.system_routes import router as system_router
@@ -345,7 +371,7 @@ def _register_legacy_compat_routes(app: FastAPI) -> None:
         logger.warning("user_cs_wechat_passive compat routes skipped: %s", e)
 
     try:
-        from app.fastapi_routes.wechat_decrypt_routes import router as wechat_decrypt_router
+        from app.fastapi_routes.domains.wechat_decrypt.routes import router as wechat_decrypt_router
 
         app.include_router(wechat_decrypt_router)
         logger.info("Registered wechat_decrypt_router (/api/wechat/decrypt/*)")
@@ -387,7 +413,7 @@ def _register_legacy_compat_routes(app: FastAPI) -> None:
     app.include_router(upload_router)
     logger.info("Registered upload (/api/upload/*)")
 
-    from app.fastapi_routes.ocr import router as ocr_router
+    from app.fastapi_routes.domains.ocr.routes import router as ocr_router
 
     app.include_router(ocr_router)
     logger.info("Registered ocr (/api/ocr/*)")
@@ -482,7 +508,7 @@ def _register_legacy_compat_routes(app: FastAPI) -> None:
     from app.mod_sdk.edition_policy import should_register_host_legacy_routes
 
     if should_register_host_legacy_routes():
-        from app.fastapi_routes.legacy_host_routers import register_legacy_gap_routers
+        from app.fastapi_routes.legacy_gap_registry import register_legacy_gap_routers
 
         register_legacy_gap_routers(app)
     else:
@@ -505,3 +531,9 @@ def _register_legacy_compat_routes(app: FastAPI) -> None:
         logger.info("Registered service_bridge (/api/service-bridge/*)")
     except Exception as e:
         logger.warning("service_bridge router not available: %s", e)
+
+
+# 测试与脚本直挂 legacy gap 域路由（勿经已删除的 legacy_gaps_batch*.py）
+from app.fastapi_routes.legacy_gap_registry import register_legacy_gap_routers
+
+__all__ = ["register_all_routes", "register_legacy_gap_routers"]

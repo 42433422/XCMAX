@@ -1,5 +1,11 @@
 # 开发规范
 
+## 文档（必读入口）
+
+- **日常只读 Tier 1（18 份）**：[docs/START_HERE.md](docs/START_HERE.md)
+- 路径 SSOT：`config/tier1_docs.json`（CI：`scripts/ci/verify_tier1_docs.py`）
+- 新增/移动文档：同步更新 `tier1_docs.json` 或 `tier2_docs.json` 与 `mkdocs.yml` nav；`docs/reports/` 内新建文件会自动打上归档横幅（`scripts/ci/stamp_archive_doc_banners.py`）
+
 ## 代码规范
 
 ### Python 代码规范

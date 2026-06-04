@@ -51,9 +51,11 @@ def build_private_db_assistant_router() -> APIRouter:
 
     @router.get("/status")
     def private_db_status():
-        from app.services.wechat_decrypt_autoconfig import get_wechat_decrypt_status
+        from app.application.wechat_integration_app_service import (
+            get_wechat_integration_app_service,
+        )
 
-        decrypt = get_wechat_decrypt_status()
+        decrypt = get_wechat_integration_app_service().get_wechat_decrypt_status()
         return {
             "success": True,
             "data": {
@@ -94,9 +96,11 @@ def build_private_db_assistant_router() -> APIRouter:
 
     @router.post("/wechat/auto_configure")
     def private_db_wechat_auto_configure(body: dict = Body(default_factory=dict)):
-        from app.services.wechat_decrypt_http import wechat_decrypt_auto_configure_response
+        from app.application.wechat_integration_app_service import (
+            get_wechat_integration_app_service,
+        )
 
-        return wechat_decrypt_auto_configure_response(body)
+        return get_wechat_integration_app_service().wechat_decrypt_auto_configure_response(body)
 
     @router.post("/sources/refresh")
     def private_db_refresh_source(body: dict = Body(default_factory=dict)):
@@ -111,16 +115,18 @@ def build_private_db_assistant_router() -> APIRouter:
             )
 
         if refresh_type in ("contacts", "all"):
-            from app.application.facades.wechat_facade import refresh_wechat_contacts_from_decrypt
+            from app.infrastructure.gateways.wechat import refresh_wechat_contacts_from_decrypt
 
             payload, code = refresh_wechat_contacts_from_decrypt()
             return JSONResponse(payload, status_code=code)
 
         if refresh_type == "messages":
             try:
-                from app.services.wechat_group_customer_bridge import sync_group_messages
+                from app.application.wechat_integration_app_service import (
+                    get_wechat_integration_app_service,
+                )
 
-                payload = sync_group_messages()
+                payload = get_wechat_integration_app_service().sync_group_messages()
                 code = 200 if payload.get("success") else 500
                 return JSONResponse(payload, status_code=code)
             except Exception as exc:

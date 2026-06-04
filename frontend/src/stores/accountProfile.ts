@@ -3,7 +3,7 @@ import { ref, computed } from 'vue';
 import { authApi, type AccountKind } from '@/api/auth';
 
 export const useAccountProfileStore = defineStore('accountProfile', () => {
-  const accountKind = ref<AccountKind>('enterprise');
+  const accountKind = ref<AccountKind>('personal');
   const companyBrand = ref('');
   const marketIsAdmin = ref(false);
   const marketIsEnterprise = ref(false);
@@ -68,7 +68,7 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
   }
 
   function clear() {
-    accountKind.value = 'enterprise';
+    accountKind.value = 'personal';
     companyBrand.value = '';
     marketIsAdmin.value = false;
     marketIsEnterprise.value = false;

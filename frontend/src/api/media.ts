@@ -1,4 +1,4 @@
-import { api } from './core';
+import { api } from './index';
 import type { ApiResponse } from '@/types/api';
 
 export interface MediaFile {

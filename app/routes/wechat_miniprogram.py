@@ -12,7 +12,7 @@ from app.decorators.mp_auth import (
     verify_jwt_token,
 )
 from app.http.wechat_miniprogram_responses import jsonify_response
-from app.application.facades.wechat_facade import (
+from app.infrastructure.gateways.wechat import (
     WechatMiniProgramError,
     get_wechat_config,
     miniprogram_login_data_for_wx_username_binding,

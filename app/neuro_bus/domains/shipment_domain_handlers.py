@@ -8,6 +8,7 @@ import logging
 from typing import Any
 
 from app.bootstrap import get_shipment_application_service_core
+from app.domain.services.shipment_rules_engine import get_shipment_rules_engine
 from app.neuro_bus.bus import get_neuro_bus
 from app.neuro_bus.command_gateway import try_complete_command_reply
 from app.neuro_bus.events.base import NeuroEvent
@@ -43,6 +44,14 @@ class ShipmentDomainHandlers:
         core = get_shipment_application_service_core()
         try:
             p = event.payload
+            validation = get_shipment_rules_engine().validate(
+                {"unit_name": p.get("unit_name"), "items": p.get("items") or []}
+            )
+            if not validation.is_valid:
+                msg = validation.violations[0].message if validation.violations else "校验失败"
+                result = {"success": False, "message": msg}
+                try_complete_command_reply(event, result)
+                return result
             result = core.create_shipment(
                 unit_name=str(p.get("unit_name") or ""),
                 items_data=p.get("items") or [],

@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: xcagi-config
+  labels:
+    {{- include "xcagi.labels" . | nindent 4 }}
+data:
+  redis_url: {{ .Values.config.redis_url | quote }}
+  flask_env: {{ .Values.config.flask_env | quote }}
+  log_level: {{ .Values.config.log_level | quote }}
+  FHD_ENV: {{ .Values.config.FHD_ENV | quote }}
+  LOG_FORMAT: {{ .Values.config.logFormat | quote }}
+  LOG_LEVEL: {{ .Values.config.log_level | quote }}
+  XCAGI_NEURO_BUS_DEDUP: {{ .Values.neuroBus.dedup | quote }}
+  XCAGI_NEURO_BUS_CIRCUIT: {{ .Values.neuroBus.circuit | quote }}
+  XCAGI_NEURO_BUS_RATE_LIMIT: {{ .Values.neuroBus.rateLimit | quote }}
+  XCAGI_NEURO_BUS_TRACE: {{ .Values.neuroBus.trace | quote }}
+  XCAGI_NEURO_BUS_TRACE_SAMPLE_RATE: {{ .Values.neuroBus.traceSampleRate | quote }}
+  XCAGI_NEURO_BUS_LIFELINE: {{ .Values.neuroBus.lifeline | quote }}
+  XCAGI_NEURO_BUS_DLQ_AUTO: {{ .Values.neuroBus.dlqAuto | quote }}
+  XCAGI_NEURO_BUS_SLA_LOG: {{ .Values.neuroBus.slaLog | quote }}
+  XCAGI_RELEASE_SLO_HALT: {{ .Values.release.sloHalt | default "1" | quote }}
+  LLM_PROVIDER: {{ .Values.llm.provider | default "" | quote }}
+  LLM_ROUTING_ORDER: {{ .Values.llm.routingOrder | default "modstore,openai_compatible,deepseek_legacy" | quote }}
+  XCAGI_GLOBAL_RATE_LIMIT: {{ .Values.rateLimit.global | quote }}
+  XCAGI_GLOBAL_RATE_LIMIT_MAX: {{ .Values.rateLimit.globalMax | quote }}
+  XCAGI_GLOBAL_RATE_LIMIT_WINDOW: {{ .Values.rateLimit.globalWindow | quote }}
+  XCAGI_AUTH_RATE_LIMIT: {{ .Values.rateLimit.auth | quote }}
+  XCAGI_AUTH_RATE_LIMIT_MAX: {{ .Values.rateLimit.authMax | quote }}
+  XCAGI_AUTH_RATE_LIMIT_WINDOW: {{ .Values.rateLimit.authWindow | quote }}
+  CACHE_REDIS_URL: {{ .Values.config.redis_url | quote }}

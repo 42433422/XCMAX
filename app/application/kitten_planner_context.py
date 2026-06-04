@@ -28,7 +28,7 @@ async def enrich_kitten_analyzer_runtime(
 
     if rc.get("kitten_include_business_db"):
         try:
-            from app.services.kitten_business_snapshot import build_kitten_business_snapshot
+            from app.infrastructure.gateways.kitten import build_kitten_business_snapshot
 
             rc["kitten_business_snapshot"] = build_kitten_business_snapshot()
         except Exception as exc:

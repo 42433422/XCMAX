@@ -52,7 +52,8 @@ if [[ "${CHECK_ONLY}" == true ]]; then
 fi
 
 K6_OUT="${K6_OUT:-${ROOT}/scripts/loadtest/results-smoke.json}"
+export BASE_URL
 log "开始 k6 smoke → 结果写入 ${K6_OUT}"
 cd "${ROOT}"
-k6 run --summary-export="${K6_OUT}" "${SMOKE_JS}"
+k6 run -e "BASE_URL=${BASE_URL}" --summary-export="${K6_OUT}" "${SMOKE_JS}"
 log "完成。压测期间请在 Grafana xcagi-api-overview 观察 P95 / 错误率。"

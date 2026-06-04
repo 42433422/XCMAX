@@ -21,15 +21,15 @@ const ENTRY_BG_WORKFLOW_PNG = YUANGONG_ENTRY_WORKFLOW_PNG
 const ENTRY_BG_WORKFLOW_SVG = YUANGONG_ENTRY_WORKFLOW_SVG
 
 const wfEmp = useWorkflowAiEmployeesStore()
-const { desks, onDutyDesks, statusLine, ariaLabel, isBusy } = useWorkflowEmployeeDesks()
+const { desks, statusLine, ariaLabel, isBusy } = useWorkflowEmployeeDesks()
 const nowMs = useNowMsTicker(30000)
 
 const selectedEmpId = ref<string | null>(null)
 
 watch(
-  () => onDutyDesks.value.map((d) => d.empId).join('\0'),
+  () => desks.value.map((d) => d.empId).join('\0'),
   () => {
-    const list = onDutyDesks.value
+    const list = desks.value
     if (!list.length) {
       selectedEmpId.value = null
       return
@@ -45,7 +45,7 @@ watch(
 const selectedRow = computed<WorkflowEmployeeDeskRow | null>(() => {
   const id = selectedEmpId.value
   if (!id) return null
-  return onDutyDesks.value.find((d) => d.empId === id) ?? null
+  return desks.value.find((d) => d.empId === id) ?? null
 })
 
 function selectDesk(empId: string) {
@@ -133,7 +133,7 @@ function workShort(row: WorkflowEmployeeDeskRow): string {
       <div class="ews-stat" role="listitem">
         <p class="ews-stat-k">总工位</p>
         <p class="ews-stat-v">{{ totalCount }}</p>
-        <p class="ews-stat-sub">仅已安装工作流员工 Mod</p>
+        <p class="ews-stat-sub">含固定四类与扩展</p>
       </div>
       <div class="ews-stat" role="listitem">
         <p class="ews-stat-k">已托管</p>
@@ -171,7 +171,7 @@ function workShort(row: WorkflowEmployeeDeskRow): string {
       <div class="ews-layout">
         <div class="ews-grid" role="list" aria-label="工位卡片列表">
           <div
-            v-for="row in onDutyDesks"
+            v-for="row in desks"
             :key="row.empId"
             class="ews-desk"
             :class="{

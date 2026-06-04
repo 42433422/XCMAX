@@ -16,16 +16,6 @@ export interface PrintSummary {
   message: string
 }
 
-type ApiResultPayload = {
-  success?: boolean
-  message?: string
-  updated?: boolean
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error || '未知错误')
-}
-
 export function usePrintService() {
   const isPrinting = ref(false)
 
@@ -36,7 +26,7 @@ export function usePrintService() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ file_path: filePath, copies })
       })
-      const data = (await resp.json().catch(() => ({}))) as ApiResultPayload
+      const data = await resp.json().catch(() => ({}))
 
       if (resp.ok && data?.success) {
         return { success: true, message: '标签打印成功' }
@@ -46,10 +36,10 @@ export function usePrintService() {
           message: data?.message || `HTTP ${resp.status}`
         }
       }
-    } catch (e: unknown) {
+    } catch (e) {
       return {
         success: false,
-        message: errorMessage(e)
+        message: e?.message || '未知错误'
       }
     }
   }
@@ -61,7 +51,7 @@ export function usePrintService() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ file_path: filePath })
       })
-      const data = (await resp.json().catch(() => ({}))) as ApiResultPayload
+      const data = await resp.json().catch(() => ({}))
 
       if (resp.ok && data?.success) {
         return { success: true, message: '发货单打印成功' }
@@ -71,10 +61,10 @@ export function usePrintService() {
           message: data?.message || `HTTP ${resp.status}`
         }
       }
-    } catch (e: unknown) {
+    } catch (e) {
       return {
         success: false,
-        message: errorMessage(e)
+        message: e?.message || '未知错误'
       }
     }
   }
@@ -91,7 +81,7 @@ export function usePrintService() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       })
-      const data = (await resp.json().catch(() => ({}))) as ApiResultPayload
+      const data = await resp.json().catch(() => ({}))
 
       if (resp.ok && data?.success && data?.updated !== false) {
         return { success: true, message: '打印状态已更新' }
@@ -101,10 +91,10 @@ export function usePrintService() {
           message: data?.message || '更新失败'
         }
       }
-    } catch (e: unknown) {
+    } catch (e) {
       return {
         success: false,
-        message: errorMessage(e)
+        message: e?.message || '未知错误'
       }
     }
   }

@@ -1,0 +1,91 @@
+name: DORA metrics collect (daily)
+
+on:
+  schedule:
+    - cron: "0 7 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: dora-metrics-collect
+  cancel-in-progress: false
+
+jobs:
+  collect-and-snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: FHD
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Collect deploy events from GitHub Actions
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python3 scripts/dora_metrics_collect_events.py \
+            --out metrics/deploy_events.jsonl \
+            --max-runs 250
+
+      - name: Write daily DORA JSON snapshot
+        run: |
+          set -euo pipefail
+          DAY="$(date -u +%Y%m%d)"
+          REPORT_JSON="$(python3 scripts/dora_metrics.py --events metrics/deploy_events.jsonl --window-days 30)"
+          EVENTS_COUNT="$(wc -l < metrics/deploy_events.jsonl | tr -d ' ')"
+          export DAY REPORT_JSON EVENTS_COUNT
+          python3 - <<'PY'
+          import json
+          import os
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          day = os.environ["DAY"]
+          report = json.loads(os.environ["REPORT_JSON"])
+          events_count = int(os.environ["EVENTS_COUNT"])
+          out = Path("metrics") / f"dora-{day}.json"
+          payload = {
+              "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+              "date": day,
+              "window_days": 30,
+              "report": report,
+              "data_sources": {
+                  "deployment_frequency": "GitHub Actions: Deploy + CI/CD Pipeline 成功运行次数 / 30 天",
+                  "lead_time_hours_median": "workflow run updated_at − commit author date（head_sha）",
+                  "change_failure_rate": "失败或 cancelled 记为 failed 的 run / 总 run",
+                  "mttr_hours_median": "失败 run 至下一次成功 Deploy/CI-CD run 的时间差（中位）",
+              },
+              "events_file": "metrics/deploy_events.jsonl",
+              "events_count": events_count,
+              "documentation": "metrics/DORA_DATA_SOURCES.md",
+          }
+          out.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+          print(f"wrote {out}")
+          PY
+
+      - name: Render monthly report (current UTC month)
+        run: |
+          MONTH="$(date -u +%Y%m)"
+          python3 scripts/dora_metrics_render.py --month "${MONTH}" --events metrics/deploy_events.jsonl
+
+      - name: Commit metrics artifacts
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add metrics/deploy_events.jsonl metrics/dora-*.json metrics/dora-monthly-*.md
+          if git diff --staged --quiet; then
+            echo "no metrics changes"
+            exit 0
+          fi
+          git commit -m "chore(metrics): daily DORA snapshot $(date -u +%Y-%m-%d)"
+          git push

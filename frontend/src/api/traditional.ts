@@ -1,4 +1,4 @@
-import { api } from './core';
+import { api } from './index';
 import type { RequestOptions } from './core';
 
 export interface FileInfo {

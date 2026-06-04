@@ -2,7 +2,7 @@
 
 import logging
 import uuid
-from typing import Any
+from typing import Any, cast
 
 from app.db.models import Permission, Role, User
 from app.db.session import get_db
@@ -55,11 +55,13 @@ class AuthApplicationService:
     def __init__(self):
         self.session_manager = get_session_manager()
 
-    def login(self, username: str, password: str) -> dict[str, Any]:
+    def login(self, username: str, password: str, *, totp_code: str | None = None) -> dict[str, Any]:
         """登录方法，调用 authenticate"""
-        return self.authenticate(username, password)
+        return self.authenticate(username, password, totp_code=totp_code)
 
-    def authenticate(self, username: str, password: str) -> dict[str, Any]:
+    def authenticate(
+        self, username: str, password: str, *, totp_code: str | None = None
+    ) -> dict[str, Any]:
         try:
             from app.db.init_db import ensure_runtime_auth_bootstrap
 
@@ -78,6 +80,19 @@ class AuthApplicationService:
 
                 if not check_password_hash(user.password, password):
                     return {"success": False, "message": "用户名或密码错误"}
+
+                from app.infrastructure.auth.mfa_totp import user_requires_mfa, verify_totp
+
+                totp_secret = getattr(user, "totp_secret", None)
+                mfa_enabled = bool(getattr(user, "mfa_enabled", False))
+                if user_requires_mfa(mfa_enabled=mfa_enabled, totp_secret=totp_secret):
+                    if not totp_code or not verify_totp(str(totp_secret or ""), totp_code):
+                        return {
+                            "success": False,
+                            "message": "需要 MFA 验证码",
+                            "mfa_required": True,
+                            "error": {"code": "MFA_REQUIRED", "message": "请输入 Authenticator 六位验证码"},
+                        }
 
                 user.last_login = utc_now_naive()
                 session_result = self.session_manager.create_session_with_db(db, user.id)
@@ -106,10 +121,10 @@ class AuthApplicationService:
             }
 
     def logout(self, session_id: str) -> bool:
-        return self.session_manager.delete_session(session_id)
+        return bool(self.session_manager.delete_session(session_id))
 
     def get_current_user(self, session_id: str) -> User | None:
-        return self.session_manager.validate_session(session_id)
+        return cast(User | None, self.session_manager.validate_session(session_id))
 
     def get_user_permissions(self, user: User) -> list:
         try:
@@ -182,9 +197,79 @@ class AuthApplicationService:
                 logger.exception("reset_password failed (error_id=%s user_id=%s)", err_id, user_id)
                 return {
                     "success": False,
-                    "message": "密码重置失败，请稍后重试",
+                    "message": f"密码重置失败，请稍后重试",
                     "error_id": err_id,
                 }
+
+    def authenticate_oidc_user(
+        self,
+        username: str,
+        *,
+        email: str = "",
+        display_name: str = "",
+    ) -> dict[str, Any]:
+        """OIDC 联邦登录：按 username 查找或 JIT 创建本地用户并签发会话。"""
+        import secrets
+
+        username = username.strip().lower()
+        if not username:
+            return {"success": False, "message": "OIDC 用户标识无效"}
+
+        try:
+            from app.db.init_db import ensure_runtime_auth_bootstrap
+
+            ensure_runtime_auth_bootstrap(swallow_errors=True)
+        except Exception as bootstrap_exc:
+            logger.warning("OIDC 登录前 auth 表自检跳过: %s", bootstrap_exc)
+
+        try:
+            with get_db() as db:
+                user = db.query(User).filter(User.username == username).first()
+                if not user:
+                    user = User(
+                        username=username,
+                        password=generate_password_hash(secrets.token_urlsafe(32)),
+                        display_name=(display_name or username).strip(),
+                        email=(email or "").strip(),
+                        role="user",
+                        is_active=True,
+                    )
+                    db.add(user)
+                    db.flush()
+                elif not user.is_active:
+                    return {"success": False, "message": "账户已被禁用"}
+
+                if email and not (user.email or "").strip():
+                    user.email = email.strip()
+                if display_name and not (user.display_name or "").strip():
+                    user.display_name = display_name.strip()
+
+                user.last_login = utc_now_naive()
+                session_result = self.session_manager.create_session_with_db(db, user.id)
+                if not session_result["success"]:
+                    return {"success": False, "message": "会话创建失败"}
+
+                return {
+                    "success": True,
+                    "user": {
+                        "id": user.id,
+                        "username": user.username,
+                        "display_name": user.display_name,
+                        "email": user.email,
+                        "role": user.role,
+                    },
+                    "session_id": session_result["session_id"],
+                    "expires_at": session_result["expires_at"],
+                    "auth_method": "oidc",
+                }
+        except Exception as exc:
+            err_id = uuid.uuid4().hex[:12]
+            logger.exception("authenticate_oidc_user failed (error_id=%s)", err_id)
+            return {
+                "success": False,
+                "message": _authenticate_failure_message(exc),
+                "error_id": err_id,
+            }
 
 
 from app.neuro_bus.neuro_application_instrumentation import instrument_application_service_class

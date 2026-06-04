@@ -83,6 +83,12 @@ def initialize_databases(db_files: Iterable[str] = DEFAULT_DB_FILES) -> None:
             logger.warning("复制数据库失败 %s -> %s: %s", source_path, target_path, e)
 
 
+def sqlite_per_mod_copies_enabled() -> bool:
+    """XCAGI_SQLITE_PER_MOD_COPIES=0 时跳过按 Mod 复制母库（测试/单机可关）。"""
+    raw = os.environ.get("XCAGI_SQLITE_PER_MOD_COPIES", "1").strip().lower()
+    return raw not in {"0", "false", "no", "off"}
+
+
 def ensure_sqlite_per_mod_database_copies(
     mod_ids: Sequence[str],
     db_files: Iterable[str] = DEFAULT_DB_FILES,
@@ -94,6 +100,9 @@ def ensure_sqlite_per_mod_database_copies(
     ``resources/db_seed`` 首次复制而来）。这样 ``DATABASE_URL`` 按请求头改写为
     ``products__<mod>.db`` 时，各包有独立文件，不会在空文件上直接建表导致与母库「串数据」。
     """
+    if not sqlite_per_mod_copies_enabled():
+        return
+
     from app.db.sqlite_mod_paths import sqlite_filename_with_mod_suffix
 
     work_dir = get_app_data_dir()
@@ -582,39 +591,38 @@ def _resolve_auth_bootstrap_engine(
 
 
 def _seed_default_admin_user(real_engine: Engine) -> None:
-    from sqlalchemy import text
+    from sqlalchemy.orm import sessionmaker
 
+    from app.db.models.user import User
     from app.utils.password_hash import generate_password_hash
     from app.utils.time import utc_now_naive
 
-    with real_engine.connect() as conn:
-        n = conn.execute(text("SELECT COUNT(*) FROM users")).scalar()
-    if int(n or 0) != 0:
-        return
+    SessionLocal = sessionmaker(bind=real_engine)
+    with SessionLocal() as session:
+        if session.query(User).count() > 0:
+            return
 
-    username = (os.environ.get("ADMIN_USERNAME") or "admin").strip()
-    password = (os.environ.get("ADMIN_PASSWORD") or "admin123").strip()
-    display_name = (os.environ.get("ADMIN_DISPLAY_NAME") or "管理员").strip() or "管理员"
-    if not username or not password:
-        logger.warning("auth bootstrap: users 为空但未配置 ADMIN_USERNAME/ADMIN_PASSWORD，跳过种子")
-        return
-    hp = generate_password_hash(password)
-    with real_engine.begin() as conn:
-        conn.execute(
-            text(
-                """
-                INSERT INTO users (username, password, display_name, email, role, is_active, created_at)
-                VALUES (:username, :password, :display_name, :email, 'admin', TRUE, :now)
-                """
-            ),
-            {
-                "username": username,
-                "password": hp,
-                "display_name": display_name,
-                "email": f"{username}@local",
-                "now": utc_now_naive(),
-            },
+        username = (os.environ.get("ADMIN_USERNAME") or "admin").strip()
+        password = (os.environ.get("ADMIN_PASSWORD") or "admin123").strip()
+        display_name = (os.environ.get("ADMIN_DISPLAY_NAME") or "管理员").strip() or "管理员"
+        if not username or not password:
+            logger.warning(
+                "auth bootstrap: users 为空但未配置 ADMIN_USERNAME/ADMIN_PASSWORD，跳过种子"
+            )
+            return
+        session.add(
+            User(
+                username=username,
+                password=generate_password_hash(password),
+                display_name=display_name,
+                email=f"{username}@local",
+                role="admin",
+                is_active=True,
+                mfa_enabled=False,
+                created_at=utc_now_naive(),
+            )
         )
+        session.commit()
     logger.info("已写入初始管理员账户（username=%s）", username)
 
 
@@ -643,6 +651,8 @@ def ensure_sqlite_auth_bootstrap(
                 tables=[User.__table__, Session.__table__],
                 checkfirst=True,
             )
+        ensure_users_mfa_columns(engine=real_engine, database_url=database_url)
+        ensure_users_mp_profile_columns(engine=real_engine, database_url=database_url)
         _seed_default_admin_user(real_engine)
     except Exception as exc:
         if swallow_errors:
@@ -798,6 +808,81 @@ def ensure_runtime_auth_bootstrap(
         )
     else:
         ensure_postgresql_auth_bootstrap(engine, database_url=url)
+    ensure_users_mfa_columns(engine, database_url=url)
+    ensure_users_mp_profile_columns(engine, database_url=url)
+
+
+def ensure_users_mp_profile_columns(
+    engine: Engine | None = None,
+    *,
+    database_url: str | None = None,
+) -> None:
+    """幂等补齐 users.mp_phone / users.mp_nickname（与 Alembic ``xcagi_v5_miniprogram`` 一致）。"""
+    from sqlalchemy import inspect, text
+
+    real_engine = _resolve_auth_bootstrap_engine(engine, database_url=database_url)
+    if real_engine is None:
+        return
+    try:
+        insp = inspect(real_engine)
+        if "users" not in set(insp.get_table_names() or []):
+            return
+        cols = {c["name"] for c in insp.get_columns("users")}
+        with real_engine.begin() as conn:
+            if "mp_phone" not in cols:
+                if real_engine.dialect.name == "postgresql":
+                    conn.execute(
+                        text("ALTER TABLE users ADD COLUMN IF NOT EXISTS mp_phone VARCHAR(20)")
+                    )
+                else:
+                    conn.execute(text("ALTER TABLE users ADD COLUMN mp_phone VARCHAR(20)"))
+            if "mp_nickname" not in cols:
+                if real_engine.dialect.name == "postgresql":
+                    conn.execute(
+                        text("ALTER TABLE users ADD COLUMN IF NOT EXISTS mp_nickname VARCHAR(64)")
+                    )
+                else:
+                    conn.execute(text("ALTER TABLE users ADD COLUMN mp_nickname VARCHAR(64)"))
+    except Exception as exc:
+        logger.warning("users 小程序资料列补齐失败（可执行 alembic upgrade head）：%s", exc)
+
+
+def ensure_users_mfa_columns(
+    engine: Engine | None = None,
+    *,
+    database_url: str | None = None,
+) -> None:
+    """幂等补齐 users.totp_secret / users.mfa_enabled（MFA 可选列）。"""
+    from sqlalchemy import inspect, text
+
+    real_engine = _resolve_auth_bootstrap_engine(engine, database_url=database_url)
+    if real_engine is None:
+        return
+    try:
+        insp = inspect(real_engine)
+        if "users" not in set(insp.get_table_names() or []):
+            return
+        cols = {c["name"] for c in insp.get_columns("users")}
+        with real_engine.begin() as conn:
+            if "totp_secret" not in cols:
+                if real_engine.dialect.name == "postgresql":
+                    conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_secret VARCHAR(64)"))
+                else:
+                    conn.execute(text("ALTER TABLE users ADD COLUMN totp_secret VARCHAR(64)"))
+            if "mfa_enabled" not in cols:
+                if real_engine.dialect.name == "postgresql":
+                    conn.execute(
+                        text(
+                            "ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_enabled BOOLEAN "
+                            "NOT NULL DEFAULT FALSE"
+                        )
+                    )
+                else:
+                    conn.execute(
+                        text("ALTER TABLE users ADD COLUMN mfa_enabled BOOLEAN NOT NULL DEFAULT 0")
+                    )
+    except Exception as exc:
+        logger.warning("users MFA 列补齐失败（可执行 alembic upgrade head）：%s", exc)
 
 
 def ensure_postgresql_auth_bootstrap(

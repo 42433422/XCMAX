@@ -26,6 +26,7 @@ android {
         buildConfigField("int", "FHD_DEFAULT_PORT", "5000")
         buildConfigField("String", "MODSTORE_BASE_URL", "\"https://xiu-ci.com\"")
         buildConfigField("String", "COMPANY_NAME", "\"成都修茈科技有限公司\"")
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     flavorDimensions += "sku"
@@ -194,6 +195,10 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.9.0")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
+
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.test:rules:1.6.2")
 }
 
 val localProps = Properties().apply {

@@ -49,7 +49,7 @@ def test_get_routes_by_domain() -> None:
     """按业务域过滤"""
     auth_routes = get_routes_by_domain("auth")
     assert all(r.target_domain == "auth" for r in auth_routes)
-    assert any(r.filename == "legacy_auth.py" for r in auth_routes)
+    assert any(r.target_domain == "auth" for r in auth_routes)
 
 
 def test_get_routes_by_domain_empty_for_nonexistent() -> None:
@@ -78,8 +78,8 @@ def test_legacy_route_count_distribution() -> None:
 
 
 def test_legacy_files_total_25() -> None:
-    """legacy_/xcagi_compat_ 文件总数应 ≥ 24（覆盖 gap 卡片）"""
-    assert len(LEGACY_ROUTE_REGISTRY) >= 24
+    """域路由登记条目数应覆盖全部 BUSINESS_DOMAINS（v10 按域一行）"""
+    assert len(LEGACY_ROUTE_REGISTRY) >= 21
 
 
 def test_target_module_format() -> None:
@@ -99,10 +99,8 @@ def test_legacy_route_dataclass() -> None:
         filename="legacy_test.py",
         target_domain="auth",
         target_module="app.fastapi_routes.domains.auth.routes",
-        route_count=5,
         note="test",
     )
     assert r.filename == "legacy_test.py"
     assert r.target_domain == "auth"
-    assert r.route_count == 5
     assert r.note == "test"

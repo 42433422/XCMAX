@@ -7,29 +7,34 @@
 from __future__ import annotations
 
 import logging
-import os
 import time
 from collections import OrderedDict
+from collections.abc import Callable
 from threading import Lock
 from typing import Any
 
+from app.utils.deployment import distributed_rate_limit_required, redis_url_from_env
+
 logger = logging.getLogger(__name__)
+
+
+class RateLimitBackendError(RuntimeError):
+    """生产环境缺少 Redis 等分布式限流后端。"""
+
+
+def _fail_closed_without_redis() -> bool:
+    return distributed_rate_limit_required()
 
 _redis_client: Any | None = None
 _redis_init_attempted = False
 
 
-def _get_redis_client():
+def _get_redis_client() -> Any | None:
     global _redis_client, _redis_init_attempted
     if _redis_init_attempted:
         return _redis_client
     _redis_init_attempted = True
-    url = (
-        os.environ.get("CACHE_REDIS_URL")
-        or os.environ.get("REDIS_URL")
-        or os.environ.get("XCAGI_REDIS_URL")
-        or ""
-    ).strip()
+    url = redis_url_from_env()
     if not url:
         return None
     try:
@@ -80,7 +85,7 @@ class _InMemoryRateLimiter:
         with self._lock:
             self._clean_old(key)
             if key in self._requests and self._requests[key]:
-                return self._requests[key][0] + self._window_seconds
+                return float(self._requests[key][0]) + float(self._window_seconds)
             return None
 
 
@@ -98,6 +103,9 @@ class _RedisRateLimiter:
 
     def is_allowed(self, key: str) -> bool:
         if self._redis is None:
+            if _fail_closed_without_redis():
+                logger.error("Rate limit deny (fail-closed): Redis unavailable for key=%s", key)
+                return False
             return True
         rk = self._window_key(key)
         pipe = self._redis.pipeline()
@@ -128,7 +136,7 @@ class _CircuitBreaker:
         self,
         failure_threshold: int = 5,
         recovery_timeout: int = 60,
-        expected_exception: type = Exception,
+        expected_exception: type[BaseException] = Exception,
     ):
         self._failure_threshold = failure_threshold
         self._recovery_timeout = recovery_timeout
@@ -150,7 +158,7 @@ class _CircuitBreaker:
                     logger.info("Circuit breaker transitioning to half-open")
             return self._state
 
-    def call(self, func, *args, **kwargs):
+    def call(self, func: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
         if self.state == "open":
             raise Exception("Circuit breaker is open")
 
@@ -188,11 +196,26 @@ def get_rate_limiter(
 ) -> _InMemoryRateLimiter | _RedisRateLimiter:
     with _limiter_lock:
         if name not in _rate_limiters:
-            if _get_redis_client() is not None:
+            redis = _get_redis_client()
+            if redis is not None:
                 _rate_limiters[name] = _RedisRateLimiter(max_requests, window_seconds)
+            elif _fail_closed_without_redis():
+                raise RateLimitBackendError(
+                    "分布式限流需要 Redis；请配置 CACHE_REDIS_URL 或使用桌面/开发模式"
+                )
             else:
                 _rate_limiters[name] = _InMemoryRateLimiter(max_requests, window_seconds)
         return _rate_limiters[name]
+
+
+def ensure_rate_limit_backend() -> None:
+    """启动自检：生产/staging 必须可用 Redis 限流。"""
+    if not distributed_rate_limit_required():
+        return
+    if _get_redis_client() is None:
+        raise RateLimitBackendError(
+            "生产/staging 启动失败：未配置或无法连接 Redis（CACHE_REDIS_URL）"
+        )
 
 
 def check_rate_limit(

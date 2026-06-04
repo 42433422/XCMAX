@@ -26,12 +26,21 @@ logger = logging.getLogger(__name__)
 
 
 def _neuro_env_flag(name: str) -> bool:
-    return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
+    from app.utils.deployment import env_flag
+
+    return env_flag(name)
 
 
 def _deployment_is_staging() -> bool:
-    """k8s/CI：设置 FHD_ENV=staging；与本仓库 staging 部署约定一致。"""
-    return os.environ.get("FHD_ENV", "").strip().lower() == "staging"
+    from app.utils.deployment import deployment_is_staging
+
+    return deployment_is_staging()
+
+
+def _deployment_is_production() -> bool:
+    from app.utils.deployment import deployment_is_production
+
+    return deployment_is_production()
 
 
 def _neuro_trace_sample_rate() -> float:
@@ -56,16 +65,23 @@ def _should_trace_event() -> bool:
     return random.random() < rate
 
 
-def _neuro_reliability_wanted(env_name: str, *, staging_default: bool) -> bool:
+def _neuro_reliability_wanted(
+    env_name: str,
+    *,
+    staging_default: bool,
+    production_default: bool = False,
+) -> bool:
     """
-    可靠性层开关：显式设置环境变量时以变量为准；未设置时在 staging 采用默认值（默认可关）。
+    可靠性层开关：显式设置环境变量时以变量为准；未设置时按 FHD_ENV 分层默认。
     """
     raw = os.environ.get(env_name)
     if raw is not None and str(raw).strip() != "":
         return _neuro_env_flag(env_name)
+    if _deployment_is_production():
+        return production_default
     if _deployment_is_staging():
         return staging_default
-    return False
+    return staging_default
 
 
 class HandlerSubscription:
@@ -254,7 +270,9 @@ class NeuroBus:
         self._rel_tracer = None
         self._rel_sla_log = _neuro_env_flag("XCAGI_NEURO_BUS_SLA_LOG")
         self._trace_by_event_id: dict[str, str] = {}
-        if _neuro_reliability_wanted("XCAGI_NEURO_BUS_DEDUP", staging_default=True):
+        if _neuro_reliability_wanted(
+            "XCAGI_NEURO_BUS_DEDUP", staging_default=True, production_default=True
+        ):
             from app.neuro_bus.deduplicator import EventDeduplicator
 
             self._rel_dedup = EventDeduplicator()
@@ -262,7 +280,9 @@ class NeuroBus:
             from app.neuro_bus.rate_limiter import NeuroRateLimiter
 
             self._rel_rate = NeuroRateLimiter()
-        if _neuro_reliability_wanted("XCAGI_NEURO_BUS_CIRCUIT", staging_default=True):
+        if _neuro_reliability_wanted(
+            "XCAGI_NEURO_BUS_CIRCUIT", staging_default=True, production_default=True
+        ):
             from app.neuro_bus.circuit_breaker import CircuitBreaker
 
             self._rel_circuit = CircuitBreaker("neuro_dispatch")

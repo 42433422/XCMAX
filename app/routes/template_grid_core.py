@@ -1,11 +1,12 @@
 """
-import logging
-
-logger = logging.getLogger(__name__)
 Excel 模板网格与客户抬头解析（供聊天导入、工具链与 legacy 归档逻辑引用）。
 
 历史上此模块在迁移中遗漏，导致 ``_customer_hint_from_preview_grid`` 等逻辑静默失败。
 """
+
+import logging
+
+logger = logging.getLogger(__name__)
 
 from __future__ import annotations
 
@@ -106,16 +107,16 @@ def _extract_inline_customer_hits_from_cell(text: str) -> list[str]:
         seen.add(key)
         hits.append(c)
 
-    for m in _CUSTOMER_LABEL_RE.finditer(raw):
-        _push(m.group("name"))
+    for m_label in _CUSTOMER_LABEL_RE.finditer(raw):
+        _push(m_label.group("name"))
     if not hits:
-        m = _PURCHASE_UNIT_PAREN_RE.search(raw)
-        if m:
-            _push(m.group("name"))
+        m_paren = _PURCHASE_UNIT_PAREN_RE.search(raw)
+        if m_paren:
+            _push(m_paren.group("name"))
     if not hits:
-        m = _PURCHASE_UNIT_PLAIN_RE.search(raw)
-        if m:
-            _push(m.group("name"))
+        m_plain = _PURCHASE_UNIT_PLAIN_RE.search(raw)
+        if m_plain:
+            _push(m_plain.group("name"))
 
     return hits
 
@@ -123,7 +124,7 @@ def _extract_inline_customer_hits_from_cell(text: str) -> list[str]:
 def _extract_customer_hint_from_excel(file_path: str, sheet_name: str | None = None) -> str:
     """扫描表头区单元格，提取客户公司全称。"""
     try:
-        from openpyxl import load_workbook
+        from openpyxl import load_workbook  # type: ignore[import-untyped]
     except Exception:
         return ""
 
@@ -175,8 +176,8 @@ def _extract_rectangular_excel_preview(
 ) -> dict[str, Any]:
     """按列字母键读取矩形区域（parse_mode=rectangular），供导入重读。"""
     try:
-        from openpyxl import load_workbook
-        from openpyxl.utils import get_column_letter
+        from openpyxl import load_workbook  # type: ignore[import-untyped]
+        from openpyxl.utils import get_column_letter  # type: ignore[import-untyped]
     except Exception:
         return {"fields": [], "sample_rows": [], "sheet_name": sheet_name or ""}
 
@@ -218,24 +219,24 @@ def _extract_structured_excel_preview(
 ) -> dict[str, Any]:
     """结构化预览：默认同 ``document_templates_service``；可强制指定表头行。"""
     if force_header_row_1based is None:
-        from app.application.facades.template_facade import (
+        from app.infrastructure.gateways.templates import (
             _extract_structured_excel_preview as _legacy,
         )
 
-        return _legacy(file_path, sheet_name=sheet_name, sample_limit=sample_limit)
+        return _legacy(file_path, sheet_name=sheet_name or "", sample_limit=sample_limit)
 
     try:
-        from openpyxl import load_workbook
+        from openpyxl import load_workbook  # type: ignore[import-untyped]
     except Exception:
         return {"fields": [], "sample_rows": [], "sheet_name": sheet_name or ""}
 
     hdr = int(force_header_row_1based)
     if hdr < 1:
-        from app.application.facades.template_facade import (
+        from app.infrastructure.gateways.templates import (
             _extract_structured_excel_preview as _legacy,
         )
 
-        return _legacy(file_path, sheet_name=sheet_name, sample_limit=sample_limit)
+        return _legacy(file_path, sheet_name=sheet_name or "", sample_limit=sample_limit)
 
     try:
         wb = load_workbook(file_path, data_only=True)

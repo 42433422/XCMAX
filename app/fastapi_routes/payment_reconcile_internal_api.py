@@ -8,6 +8,8 @@ import secrets
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 
+from app.application.operations_app_service import get_operations_app_service
+
 router = APIRouter(prefix="/api/internal/payment", tags=["payment-internal"])
 
 
@@ -32,18 +34,15 @@ def api_fhd_reconciliation_period(
     period_end: str = Query(..., description="ISO 8601"),
 ):
     _require_internal_api_key(request)
-    from app.services.fhd_payment_reconciliation import (
-        _parse_dt,
-        compute_fhd_period_snapshot,
-    )
+    recon = get_operations_app_service().fhd_payment_reconciliation()
 
-    start = _parse_dt(period_start)
-    end = _parse_dt(period_end)
+    start = recon._parse_dt(period_start)
+    end = recon._parse_dt(period_end)
     if not start or not end:
         raise HTTPException(400, detail="invalid period_start or period_end")
     if end <= start:
         raise HTTPException(400, detail="period_end must be after period_start")
-    snap = compute_fhd_period_snapshot(start, end)
+    snap = recon.compute_fhd_period_snapshot(start, end)
     return JSONResponse(
         {
             "ok": True,

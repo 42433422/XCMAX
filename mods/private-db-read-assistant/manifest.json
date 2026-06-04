@@ -1,0 +1,19 @@
+{
+  "id": "private-db-read-assistant",
+  "name": "私人数据库读取助手",
+  "version": "1.0.0",
+  "author": "成都修茈科技有限公司",
+  "description": "数据来源页私人数据库读取助手：当前提供微信本地数据库适配器（联系人、消息缓存、搜索与桌面发送）。",
+  "primary": false,
+  "dependencies": {
+    "xcagi": ">=9.0.0"
+  },
+  "backend": {
+    "entry": "blueprints",
+    "init": "mod_init"
+  },
+  "hooks": {},
+  "comms": {
+    "exports": []
+  }
+}

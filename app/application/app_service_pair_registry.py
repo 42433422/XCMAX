@@ -1,9 +1,8 @@
 """
 AppService V1 / V2 成对登记与 HTTP 层选型说明。
 
-V2 模块多为 NeuroBus 事件驱动入口（execute_command / publish），与 FastAPI/legacy
-路由直接调用的 V1 同步 API（login、get_session_messages 等）**签名不一致**。
-在 V2 补齐同等 HTTP 契约前，路由与 planner 工具链应继续使用 V1 getter。
+核心域（shipment/product/customer/inventory）HTTP mutation 经 event-primary + CommandGateway。
+其余域在 V2 补齐同等 HTTP 契约前，路由仍使用 V1 getter。
 
 本模块供架构巡检与迁移脚本引用；新增 *_app_service_v2 时请同步更新 APP_SERVICE_PAIRS。
 """
@@ -54,8 +53,8 @@ APP_SERVICE_PAIRS: tuple[AppServicePair, ...] = (
         "get_customer_app_service",
         "customer_app_service_v2",
         "get_customer_app_service_v2",
-        "v1",
-        "HTTP 与 planner 大量调用 V1 CustomerApplicationService。",
+        "v2",
+        "HTTP mutation 经 bootstrap.get_customer_app_service() event-primary。",
     ),
     AppServicePair(
         "conversation",
@@ -72,8 +71,8 @@ APP_SERVICE_PAIRS: tuple[AppServicePair, ...] = (
         "get_shipment_application_service",
         "shipment_app_service_v2",
         "get_shipment_app_service_v2",
-        "v1",
-        "miniprogram 使用 query_shipment_orders/get_order；V2 为异步事件 API。",
+        "v2",
+        "HTTP mutation 经 get_shipment_application_service_core()。",
     ),
     AppServicePair(
         "template",
@@ -117,8 +116,17 @@ APP_SERVICE_PAIRS: tuple[AppServicePair, ...] = (
         "get_product_app_service",
         "product_app_service_v2",
         "get_product_app_service_v2",
-        "v1",
-        "",
+        "v2",
+        "HTTP mutation 经 get_product_app_service() event-primary。",
+    ),
+    AppServicePair(
+        "inventory",
+        "inventory_app_service_v2",
+        "get_inventory_mutation_service",
+        "inventory_app_service_v2",
+        "get_inventory_app_service_v2",
+        "v2",
+        "入库/出库/调拨经 get_inventory_mutation_service() event-primary。",
     ),
     AppServicePair(
         "material",

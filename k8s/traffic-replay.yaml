@@ -1,0 +1,133 @@
+# 流量录制与回放（阶段 10）
+#
+# 用于灰度/蓝绿发布前的「影子流量」验证：将生产入站流量镜像到候选版本（green/canary），
+# 对比响应而不影响真实用户。基于 GoReplay（gor）。
+#
+# 两种接入方式（择一）：
+#  A. ingress-nginx mirror：在 stable Ingress 上加 mirror 注解，把请求镜像到 shadow service。
+#  B. GoReplay sidecar/Deployment：监听节点流量并转发到候选版本，支持录制到文件后离线回放。
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: xcagi-blue-green
+  labels:
+    xcagi.io/purpose: release-validation
+---
+# 方式 A：ingress-nginx 将 stable 流量镜像到 shadow（候选 green）服务。
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: xcagi-stable-mirror
+  namespace: xcagi-blue-green
+  annotations:
+    nginx.ingress.kubernetes.io/mirror-target: "https://xcagi-shadow-service.xcagi-blue-green.svc.cluster.local$request_uri"
+    nginx.ingress.kubernetes.io/mirror-request-body: "on"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: xcagi.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: xcagi-service
+                port:
+                  number: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: xcagi-shadow-service
+  namespace: xcagi-blue-green
+spec:
+  selector:
+    track: green
+  ports:
+    - port: 80
+      targetPort: 5000
+---
+# 方式 B：GoReplay 录制器 —— 监听 stable service 流量，录制到 PVC 供离线回放。
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: xcagi-traffic-recorder
+  namespace: xcagi-blue-green
+  labels:
+    app: xcagi-traffic-recorder
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: xcagi-traffic-recorder
+  template:
+    metadata:
+      labels:
+        app: xcagi-traffic-recorder
+    spec:
+      containers:
+        - name: goreplay
+          image: buger/goreplay:latest
+          args:
+            - "--input-raw"
+            - ":5000"
+            - "--output-file"
+            - "/data/requests_%Y-%m-%d.gor"
+            - "--output-http"
+            - "http://xcagi-shadow-service.xcagi-blue-green.svc.cluster.local"
+            - "--output-http-track-response"
+          volumeMounts:
+            - name: capture
+              mountPath: /data
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+      volumes:
+        - name: capture
+          persistentVolumeClaim:
+            claimName: xcagi-traffic-capture
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: xcagi-traffic-capture
+  namespace: xcagi-blue-green
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 10Gi
+---
+# 离线回放 Job：把录制文件以指定倍速回放到候选版本（绿/金丝雀）。
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: xcagi-traffic-replay
+  namespace: xcagi-blue-green
+spec:
+  ttlSecondsAfterFinished: 3600
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: goreplay-replay
+          image: buger/goreplay:latest
+          args:
+            - "--input-file"
+            - "/data/requests_*.gor|200%"
+            - "--output-http"
+            - "http://xcagi-green-service.xcagi-blue-green.svc.cluster.local"
+            - "--output-http-track-response"
+          volumeMounts:
+            - name: capture
+              mountPath: /data
+      volumes:
+        - name: capture
+          persistentVolumeClaim:
+            claimName: xcagi-traffic-capture

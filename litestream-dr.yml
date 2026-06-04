@@ -1,0 +1,51 @@
+# Litestream 多区域（异地容灾）配置 · 阶段 10
+# https://litestream.io/
+#
+# 在主区域基础上增加异地 DR 副本：每个母库同时复制到主对象存储与异地对象存储，
+# 任一区域失效时可从另一区域恢复。
+#
+# 启用：
+#   export LITESTREAM_DATA_DIR=/data
+#   export LITESTREAM_REPLICA_URL=s3://xcagi-primary/<host>      # 主区域
+#   export LITESTREAM_REPLICA_URL_DR=s3://xcagi-dr/<host>        # 异地灾备区域
+#   litestream replicate -config FHD/litestream-dr.yml
+#
+# 恢复演练见 scripts/dev/litestream-restore-drill.sh 与 docs/guides/DR_RUNBOOK.md。
+
+dbs:
+  - path: $LITESTREAM_DATA_DIR/products.db
+    replicas:
+      - name: primary
+        url: $LITESTREAM_REPLICA_URL
+        retention: 72h
+        snapshot-interval: 12h
+      - name: dr
+        url: $LITESTREAM_REPLICA_URL_DR
+        retention: 168h
+        snapshot-interval: 24h
+  - path: $LITESTREAM_DATA_DIR/orders.db
+    replicas:
+      - name: primary
+        url: $LITESTREAM_REPLICA_URL
+        retention: 72h
+        snapshot-interval: 12h
+      - name: dr
+        url: $LITESTREAM_REPLICA_URL_DR
+        retention: 168h
+        snapshot-interval: 24h
+  - path: $LITESTREAM_DATA_DIR/analytics.db
+    replicas:
+      - name: primary
+        url: $LITESTREAM_REPLICA_URL
+        retention: 72h
+        snapshot-interval: 12h
+      - name: dr
+        url: $LITESTREAM_REPLICA_URL_DR
+        retention: 168h
+        snapshot-interval: 24h
+
+# 监控：与 K8s 监控栈统一（Prometheus 抓取 litestream_* 指标）
+metrics-addr: ":9090"
+snapshot-level: full
+# DR 场景下更频繁校验，及早发现损坏。
+validation-interval: 6h

@@ -321,7 +321,7 @@ def build_customers_query_response_dict(route_result: dict[str, Any]) -> dict[st
         return None
     keyword = str((route_result.get("slots") or {}).get("keyword") or "").strip()
     try:
-        from app.services.customers_service import CustomerService
+        from app.infrastructure.gateways.customers import CustomerService
 
         svc = CustomerService()
         customers = svc.search(keyword=keyword) if keyword else svc.get_all()

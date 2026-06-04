@@ -5,7 +5,7 @@
   "author": "成都修茈科技有限公司",
   "description": "Planner 对话/工具 API 门面（3d/B）+ 主对话与智能生态/智脑业务页（K/O+/P 物理视图）。",
   "primary": true,
-  "dependencies": { "xcagi": ">=8.0.0" },
+  "dependencies": { "xcagi": ">=10.0.0" },
   "backend": { "entry": "blueprints", "init": "mod_init" },
   "frontend": {
     "routes": "frontend/routes",

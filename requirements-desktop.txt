@@ -1,0 +1,8 @@
+# 桌面版依赖（音频/视频/ASR）· 由 scripts/sync_requirements.py 从 pyproject.toml 生成
+# ⚠️ 不要手工编辑！请改 pyproject.toml 后运行 python scripts/sync_requirements.py --write
+-r requirements-base.txt
+miniaudio>=1.59
+imageio-ffmpeg>=0.4.0
+soundcard>=0.4.3; sys_platform == 'win32'
+PyAudio>=0.2.14; sys_platform == 'win32'
+faster-whisper>=1.0.0

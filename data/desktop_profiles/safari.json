@@ -1,0 +1,40 @@
+{
+  "app_id": "safari",
+  "label": "Safari 浏览器",
+  "window_match": {
+    "mac": ["Safari"],
+    "win": ["Chrome_WidgetWin_1"],
+    "win_titles": ["Google Chrome", "Microsoft Edge"]
+  },
+  "driver_preference": "native",
+  "elements": {
+    "address_bar": {
+      "role": "input",
+      "vlm_hint": "地址栏/URL 输入框",
+      "fallback_norm": [0.5, 0.06]
+    },
+    "go_button": {
+      "role": "button",
+      "vlm_hint": "前往/刷新按钮区域",
+      "fallback_norm": [0.08, 0.06]
+    },
+    "page_body": {
+      "role": "panel",
+      "vlm_hint": "页面主内容区",
+      "fallback_norm": [0.5, 0.5]
+    }
+  },
+  "workflows": {
+    "open_url": [
+      "focus_window",
+      "click:address_bar",
+      "paste:url",
+      "press:enter",
+      "wait:1.0"
+    ],
+    "focus_page": [
+      "focus_window",
+      "click:page_body"
+    ]
+  }
+}

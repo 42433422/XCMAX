@@ -6,7 +6,7 @@ from typing import Any
 
 import httpx
 
-from app.services import get_ai_conversation_service
+from app.infrastructure.gateways.ai import get_ai_conversation_service
 
 from .types import NodeExecutionResult, PlanGraph, WorkflowNode, WorkflowRunResult
 

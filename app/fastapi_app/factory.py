@@ -21,7 +21,11 @@ from app.security import LanCidrGuard, LanLicenseGuard
 from .cors import lan_origin_regex_enabled, resolve_cors_allow_origin_regex, resolve_cors_allow_origins
 from .lifespan import lifespan
 from .middleware_extra import register_extra_middleware, register_prometheus_metrics
-from .static_mounts import mount_vue_dist_assets_dir, mount_vue_dist_public_static
+from .static_mounts import (
+    mount_vue_dist_assets_dir,
+    mount_vue_dist_public_static,
+    mount_xcmax_dashboard_static,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -58,13 +62,17 @@ def create_fastapi_app(
     app = FastAPI(
         title="XCAGI FastAPI",
         description="XCAGI 企业 AI 员工平台 - FastAPI 版本",
-        version="8.0.0",
+        version=__import__("app.version", fromlist=["get_version"]).get_version(),
         docs_url="/docs" if enable_docs else None,
         redoc_url="/redoc" if enable_docs else None,
         lifespan=lifespan,
     )
 
     app.state.config = config_object
+
+    from app.di.registry import get_service_registry
+
+    app.state.services = get_service_registry()
 
     app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(CSRFMiddleware)
@@ -93,6 +101,9 @@ def create_fastapi_app(
     app.add_middleware(LanCidrGuard)
     app.add_middleware(GlobalRateLimitMiddleware)
     app.add_middleware(AuthRateLimitMiddleware)
+    from app.middleware.mfa_required import MfaRequiredMiddleware
+
+    app.add_middleware(MfaRequiredMiddleware)
 
     logging.basicConfig(
         level=getattr(config_object, "LOG_LEVEL", "INFO"),
@@ -100,6 +111,18 @@ def create_fastapi_app(
             config_object, "LOG_FORMAT", "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
         ),
     )
+
+    try:
+        from app.desktop_runtime import is_desktop_mode
+
+        if is_desktop_mode():
+            log_dir = os.environ.get("XCAGI_LOG_DIR")
+            if log_dir:
+                from app.desktop_runtime.logging_setup import attach_desktop_file_logging
+
+                attach_desktop_file_logging(log_dir)
+    except Exception as exc:
+        logger.warning("Desktop file logging not configured: %s", exc)
 
     from app.fastapi_routes import register_all_routes
 
@@ -121,6 +144,7 @@ def create_fastapi_app(
 
     mount_vue_dist_public_static(app)
     mount_vue_dist_assets_dir(app)
+    mount_xcmax_dashboard_static(app)
 
     try:
         from app.fastapi_routes.spa_fallback import register_spa_history_fallback

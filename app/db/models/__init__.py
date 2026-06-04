@@ -32,6 +32,7 @@ from app.db.models.miniprogram import (
     MpOrderItem,
 )
 from app.db.models.permission import Permission, Role, role_permissions
+from app.db.models.tenant import DataScope, Tenant
 from app.db.models.product import Product
 from app.db.models.purchase import (
     PurchaseInbound,
@@ -61,6 +62,8 @@ __all__ = [
     "UserSession",
     "Permission",
     "Role",
+    "Tenant",
+    "DataScope",
     "AIToolCategory",
     "AITool",
     "AIConversation",

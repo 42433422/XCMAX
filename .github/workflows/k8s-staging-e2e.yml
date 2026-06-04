@@ -1,0 +1,259 @@
+# P2-1（2026-06-02）：K8s 真实环境端到端 e2e + chaos 验证
+#
+# 验证项目：
+# 1. helm chart 渲染正确
+# 2. 在 kind/k3d 起的本地集群里能 install + 启动
+# 3. 探针 (liveness/readiness) 正确响应
+# 4. Playwright 跑核心业务流（登录 / API 健康 / Mod 商店加载）
+# 5. chaos 注入：随机 kill pod → 验证自愈（pdb + hpa + retry）
+#
+# 频率：手动触发 + 每周一次（cron 周日 02:00 UTC）
+# 配合 docs/SLO.md 4 个核心 SLO 验证
+
+name: k8s-staging-e2e
+
+on:
+  workflow_dispatch:
+    inputs:
+      cluster_provider:
+        description: '本地 K8s 提供商'
+        required: true
+        default: 'kind'
+        type: choice
+        options:
+          - kind
+          - k3d
+      chaos_enabled:
+        description: '启用 chaos 注入（kill pod / 网络分区）'
+        required: true
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+  schedule:
+    # 每周日凌晨 02:00 UTC（亚洲时区周一上午 10:00）
+    - cron: '0 2 * * 0'
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  helm-template-render:
+    name: Helm Template Render
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.14.0
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: v1.29.0
+
+      - name: Lint Helm Chart
+        run: |
+          helm lint ./charts/xcagi/ --strict
+
+      - name: Render Templates
+        run: |
+          helm template xcagi ./charts/xcagi/ \
+            --set global.environment=staging \
+            --set global.image.tag=e2e-${{ github.run_id }} \
+            --set postgresql.enabled=true \
+            --set redis.enabled=true \
+            > /tmp/rendered.yaml
+          echo "✅ 渲染 $(wc -l < /tmp/rendered.yaml) 行"
+          # 关键资源必须存在
+          grep -q "kind: Deployment" /tmp/rendered.yaml || (echo "❌ 无 Deployment"; exit 1)
+          grep -q "kind: Service" /tmp/rendered.yaml || (echo "❌ 无 Service"; exit 1)
+          grep -q "kind: Ingress" /tmp/rendered.yaml || (echo "❌ 无 Ingress"; exit 1)
+          grep -q "kind: HorizontalPodAutoscaler" /tmp/rendered.yaml || (echo "❌ 无 HPA"; exit 1)
+          grep -q "kind: PodDisruptionBudget" /tmp/rendered.yaml || (echo "❌ 无 PDB"; exit 1)
+
+  k8s-staging-e2e:
+    name: K8s Staging E2E + Chaos
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    needs: helm-template-render
+    strategy:
+      fail-fast: false
+      matrix:
+        provider: ${{ fromJSON(inputs.cluster_provider == 'kind' && '[\"kind\"]' || '[\"k3d\"]') }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Tools
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y curl
+          # kubectl
+          curl -LO "https://dl.k8s.io/release/v1.29.0/bin/linux/amd64/kubectl"
+          sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+          # helm
+          curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+          # kind
+          curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.23.0/kind-linux-amd64
+          chmod +x ./kind
+          sudo mv ./kind /usr/local/bin/kind
+
+      - name: Create Kind Cluster
+        if: ${{ inputs.cluster_provider == 'kind' }}
+        run: |
+          cat > /tmp/kind-config.yaml <<'EOF'
+          kind: Cluster
+          apiVersion: kind.x-k8s.io/v1alpha4
+          nodes:
+            - role: control-plane
+              kubeadmConfigPatches:
+                - |
+                  kind: InitConfiguration
+                  nodeRegistration:
+                    kubeletExtraArgs:
+                      node-labels: "ingress-ready=true"
+              extraPortMappings:
+                - containerPort: 80
+                  hostPort: 8080
+                  protocol: TCP
+                - containerPort: 443
+                  hostPort: 8443
+                  protocol: TCP
+            - role: worker
+            - role: worker
+          EOF
+          kind create cluster --name xcagi-staging --config /tmp/kind-config.yaml --wait 5m
+
+      - name: Install NGINX Ingress
+        if: ${{ inputs.cluster_provider == 'kind' }}
+        run: |
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
+          kubectl wait --namespace ingress-nginx \
+            --for=condition=ready pod \
+            --selector=app.kubernetes.io/component=controller \
+            --timeout=180s
+
+      - name: Build Test Image
+        run: |
+          docker build -t xcagi/api:e2e-${{ github.run_id }} -f Dockerfile .
+
+      - name: Load Image to Kind
+        if: ${{ inputs.cluster_provider == 'kind' }}
+        run: |
+          kind load docker-image xcagi/api:e2e-${{ github.run_id }} --name xcagi-staging
+
+      - name: Setup Helm Dependencies
+        run: |
+          cd charts/xcagi/
+          helm dependency update || true
+
+      - name: Helm Install XCAGI
+        run: |
+          helm install xcagi ./charts/xcagi/ \
+            --create-namespace --namespace xcagi-staging \
+            --set global.environment=staging \
+            --set global.image.tag=e2e-${{ github.run_id }} \
+            --set postgresql.enabled=true \
+            --set redis.enabled=true \
+            --wait --timeout 10m
+
+      - name: Wait for Pods Ready
+        run: |
+          echo "等待 Pods 就绪..."
+          kubectl wait --namespace xcagi-staging \
+            --for=condition=ready pod \
+            --selector=app.kubernetes.io/name=xcagi \
+            --timeout=300s
+          kubectl get pods -n xcagi-staging
+
+      - name: Verify Probes
+        run: |
+          # 端口转发以便本机访问
+          kubectl port-forward -n xcagi-staging svc/xcagi 5000:5000 &
+          PORT_FORWARD_PID=$!
+          sleep 5
+          # liveness
+          curl -fsSL http://127.0.0.1:5000/api/health/live
+          # readiness
+          curl -fsSL http://127.0.0.1:5000/api/health/ready
+          # metrics（如果启用）
+          curl -fsSL http://127.0.0.1:5000/metrics | head -5
+          kill $PORT_FORWARD_PID
+
+      - name: Playwright E2E Tests
+        run: |
+          cd frontend
+          npm ci --no-audit --no-fund
+          npx playwright install --with-deps chromium
+          npx playwright test e2e/critical-paths.spec.ts \
+            --reporter=line \
+            --timeout=60000
+
+      - name: Chaos: Random Pod Kill
+        if: ${{ inputs.chaos_enabled == 'true' }}
+        run: |
+          echo "=== 注入 Chaos：随机删除一个 Pod ==="
+          # 随机选一个 Pod 并删除（验证 PDB/HPA 自愈）
+          RANDOM_POD=$(kubectl get pods -n xcagi-staging -l app.kubernetes.io/name=xcagi -o name | shuf -n 1)
+          if [ -z "$RANDOM_POD" ]; then
+            echo "未找到 Pod，跳过 chaos"
+            exit 0
+          fi
+          echo "删除 Pod: $RANDOM_POD"
+          kubectl delete $RANDOM_POD -n xcagi-staging
+          # 等待自愈（30s 内应有新 Pod 起来）
+          sleep 30
+          NEW_POD=$(kubectl get pods -n xcagi-staging -l app.kubernetes.io/name=xcagi -o name | head -1)
+          if [ -z "$NEW_POD" ]; then
+            echo "❌ 自愈失败：未找到新 Pod"
+            exit 1
+          fi
+          # 等待就绪
+          kubectl wait --namespace xcagi-staging \
+            --for=condition=ready pod \
+            -l app.kubernetes.io/name=xcagi \
+            --timeout=120s
+          echo "✅ 自愈成功，新 Pod: $NEW_POD"
+
+      - name: Verify After Chaos
+        if: ${{ inputs.chaos_enabled == 'true' }}
+        run: |
+          kubectl port-forward -n xcagi-staging svc/xcagi 5000:5000 &
+          PORT_FORWARD_PID=$!
+          sleep 5
+          # 重新跑 critical path 确认自愈后业务正常
+          cd frontend
+          npx playwright test e2e/critical-paths.spec.ts \
+            --reporter=line \
+            --timeout=60000
+          kill $PORT_FORWARD_PID
+
+      - name: Collect Logs
+        if: always()
+        run: |
+          mkdir -p /tmp/xcagi-logs
+          kubectl logs -n xcagi-staging -l app.kubernetes.io/name=xcagi --tail=1000 > /tmp/xcagi-logs/api.log || true
+          kubectl get events -n xcagi-staging --sort-by='.lastTimestamp' > /tmp/xcagi-logs/events.log || true
+          kubectl describe pods -n xcagi-staging > /tmp/xcagi-logs/pods-describe.log || true
+
+      - name: Upload Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: k8s-staging-logs
+          path: /tmp/xcagi-logs/
+          retention-days: 7
+
+      - name: Cleanup
+        if: always()
+        run: |
+          helm uninstall xcagi -n xcagi-staging || true
+          if [ "${{ inputs.cluster_provider }}" = "kind" ]; then
+            kind delete cluster --name xcagi-staging || true
+          fi

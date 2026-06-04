@@ -48,7 +48,7 @@ def _consume_print_confirm_token(token: str) -> dict[str, Any]:
 
 def _svc():
     # 仅打印相关接口应保持轻量，避免 `import app.services` 触发重型依赖/循环导入导致卡死。
-    from app.application.facades.print_facade import printer_service
+    from app.infrastructure.gateways.print import printer_service
 
     return printer_service
 

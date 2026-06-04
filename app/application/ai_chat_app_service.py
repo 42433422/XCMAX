@@ -35,7 +35,7 @@ from app.application.workflow import (
     WorkflowEngine,
     get_approval_service,
 )
-from app.services import get_ai_conversation_service
+from app.infrastructure.gateways.ai import get_ai_conversation_service
 from app.utils.path_utils import resolve_fhd_repo_root
 
 logger = logging.getLogger(__name__)
@@ -288,7 +288,7 @@ class AIChatApplicationService:
         if not session_id:
             return
 
-        from app.services import get_conversation_service
+        from app.infrastructure.gateways.conversation import get_conversation_service
 
         inner = response_data.get("data") if isinstance(response_data.get("data"), dict) else {}
         inner_payload = inner.get("data") if isinstance(inner.get("data"), dict) else {}
@@ -818,7 +818,7 @@ class AIChatApplicationService:
         ``products`` 各列的 ``excel_synonyms_zh`` / ``api_aliases``，可按业务增删而无需改 Python。
         """
         try:
-            from app.services.ai_db_schema_index import match_excel_import_roles_from_field_index
+            from app.infrastructure.gateways.ai import match_excel_import_roles_from_field_index
 
             return match_excel_import_roles_from_field_index(list(keys))
         except Exception as err:
@@ -1043,7 +1043,7 @@ class AIChatApplicationService:
     def _price_column_buckets(keys: list[str]) -> tuple[list[str], list[str], list[str]]:
         """将列名划分为 调价前类 / 调价后类 / 其它价格类（词条与 ``ai_db_field_index.json`` 同步）。"""
         try:
-            from app.services.ai_db_schema_index import price_column_buckets_for_keys
+            from app.infrastructure.gateways.ai import price_column_buckets_for_keys
 
             return price_column_buckets_for_keys(list(keys))
         except Exception as err:
@@ -2712,14 +2712,14 @@ class AIChatApplicationService:
     ) -> dict[str, Any]:
         """执行发货单生成"""
         try:
-            from app.bootstrap import get_shipment_app_service
+            from app.bootstrap import get_shipment_application_service_core
             from app.routes.tools import _parse_order_text
 
             order_text = parsed_params.get("order_text") or ai_result.get("text", "")
             parsed = _parse_order_text(order_text)
 
             if parsed.get("success"):
-                app_service = get_shipment_app_service()
+                app_service = get_shipment_application_service_core()
                 doc_result = app_service.generate_shipment_document(
                     unit_name=parsed.get("unit_name", ""),
                     products=parsed.get("products") or [],
@@ -2745,9 +2745,9 @@ class AIChatApplicationService:
     def _execute_shipments_query(self, response_data: dict[str, Any]) -> dict[str, Any]:
         """执行发货记录查询"""
         try:
-            from app.bootstrap import get_shipment_app_service
+            from app.bootstrap import get_shipment_application_service_core
 
-            app_service = get_shipment_app_service()
+            app_service = get_shipment_application_service_core()
             orders = app_service.get_orders(10) or []
 
             lines = ["最新出货/订单记录（最近 10 条）："]

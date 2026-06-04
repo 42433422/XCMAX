@@ -6,7 +6,7 @@
   "description": "星标微信 → 意图命中「标签/打印」→ 对话执行打印。执行业务链在宿主；本 Mod 提供 run/status。",
   "primary": false,
   "dependencies": {
-    "xcagi": ">=8.0.0"
+    "xcagi": ">=10.0.0"
   },
   "backend": {
     "entry": "blueprints",

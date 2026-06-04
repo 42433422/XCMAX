@@ -6,7 +6,7 @@
   "description": "仅提供流程全景物理页路由；工作流员工由商店安装的 6 个独立 Mod 注入。",
   "primary": false,
   "dependencies": {
-    "xcagi": ">=8.0.0"
+    "xcagi": ">=10.0.0"
   },
   "backend": {
     "entry": "blueprints",

@@ -23,7 +23,8 @@
     "forceConsistentCasingInFileNames": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@amin/*": ["../AMIN/*"]
     },
     "types": ["vite/client"]
   },
@@ -31,7 +32,8 @@
     "src/**/*.ts",
     "src/**/*.d.ts",
     "src/**/*.tsx",
-    "src/**/*.vue"
+    "src/**/*.vue",
+    "../AMIN/**/*.ts"
   ],
   "exclude": ["src/views/temp2.vue"],
   "references": [{ "path": "./tsconfig.node.json" }]

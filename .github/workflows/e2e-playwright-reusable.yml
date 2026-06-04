@@ -1,0 +1,163 @@
+# Reusable Playwright job (plan-2026-06 T31). Called from:
+# - 仓根 `.github/workflows/e2e.yml`
+# - `FHD/.github/workflows/e2e.yml` (workflow_dispatch / FHD 独立仓)
+# Do not duplicate steps elsewhere — extend this file only.
+
+name: e2e-playwright-reusable
+
+on:
+  workflow_call:
+    inputs:
+      run_skeleton:
+        description: "Include plan2026-skeleton.spec.ts (skipped unless E2E_FULL_STACK=1)"
+        required: false
+        type: boolean
+        default: true
+
+env:
+  PYTHON_VERSION: "3.11"
+  NODE_VERSION: "20"
+  E2E_API_PORT: "5000"
+  E2E_WEB_PORT: "5001"
+  PLAYWRIGHT_BASE_URL: "http://127.0.0.1:5001"
+
+jobs:
+  playwright:
+    name: Playwright (smoke + P0 paths)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: xcagi_e2e
+          POSTGRES_PASSWORD: testpass
+          POSTGRES_DB: xcagi_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: FHD/frontend/package-lock.json
+
+      - name: Install Python deps
+        working-directory: FHD
+        env:
+          DATABASE_URL: postgresql+psycopg://xcagi_e2e:testpass@localhost:5432/xcagi_e2e
+          PYTHONUNBUFFERED: "1"
+          FHD_DB_READ_TOKEN: "e2e-test-token"
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Install frontend deps
+        working-directory: FHD/frontend
+        run: npm ci --no-audit --no-fund
+
+      - name: Install Playwright browsers
+        working-directory: FHD/frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Run DB migrations
+        working-directory: FHD
+        env:
+          DATABASE_URL: postgresql+psycopg://xcagi_e2e:testpass@localhost:5432/xcagi_e2e
+        run: |
+          alembic upgrade head || python -c "from app.db.init_db import init_db; init_db()"
+
+      - name: Start FastAPI backend
+        working-directory: FHD
+        env:
+          DATABASE_URL: postgresql+psycopg://xcagi_e2e:testpass@localhost:5432/xcagi_e2e
+          FHD_DB_READ_TOKEN: "e2e-test-token"
+          ADMIN_USERNAME: admin
+          ADMIN_PASSWORD: admin123
+        run: |
+          nohup uvicorn app.fastapi_app:app \
+            --host 127.0.0.1 --port ${{ env.E2E_API_PORT }} \
+            --log-level warning \
+            > /tmp/api.log 2>&1 &
+          echo "API_PID=$!" >> $GITHUB_ENV
+          for i in {1..30}; do
+            curl -s -o /dev/null http://127.0.0.1:${{ env.E2E_API_PORT }}/api/health && break
+            sleep 2
+          done
+
+      - name: Start Vite dev server
+        working-directory: FHD/frontend
+        env:
+          E2E_VITE_MOCK_API: "1"
+        run: |
+          nohup npm run dev -- --port ${{ env.E2E_WEB_PORT }} --host 127.0.0.1 \
+            > /tmp/web.log 2>&1 &
+          echo "WEB_PID=$!" >> $GITHUB_ENV
+          for i in {1..30}; do
+            curl -s -o /dev/null http://127.0.0.1:${{ env.E2E_WEB_PORT }}/ && break
+            sleep 2
+          done
+
+      - name: Run Playwright (smoke + critical paths)
+        working-directory: FHD/frontend
+        env:
+          PLAYWRIGHT_BASE_URL: ${{ env.PLAYWRIGHT_BASE_URL }}
+          E2E_FULL_STACK: "1"
+          E2E_USER: admin
+          E2E_PASSWORD: admin123
+        run: npm run test:e2e:p0
+
+      - name: Capture smoke screenshot for docs (T32)
+        if: success()
+        working-directory: FHD/frontend
+        env:
+          PLAYWRIGHT_BASE_URL: ${{ env.PLAYWRIGHT_BASE_URL }}
+        run: |
+          mkdir -p ../docs/screenshots
+          npx playwright test e2e/smoke.spec.ts -g "首页可加载" --reporter=line || true
+          if [ -d test-results ]; then
+            find test-results -name '*.png' -print -quit | head -1 | xargs -I{} cp {} ../docs/screenshots/v10-e2e-smoke-ci.png 2>/dev/null || true
+          fi
+          if [ ! -f ../docs/screenshots/v10-e2e-smoke-ci.png ]; then
+            echo "no png captured; see playwright-report artifact" > ../docs/screenshots/.ci-screenshot-placeholder
+          fi
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-${{ github.run_id }}
+          path: |
+            FHD/frontend/playwright-report/
+            FHD/frontend/test-results/
+            FHD/docs/screenshots/
+          retention-days: 14
+
+      - name: Dump logs on failure
+        if: failure()
+        run: |
+          echo "==== /tmp/api.log (tail) ===="
+          tail -100 /tmp/api.log || true
+          echo "==== /tmp/web.log (tail) ===="
+          tail -100 /tmp/web.log || true
+
+      - name: Cleanup
+        if: always()
+        run: |
+          [ -n "$API_PID" ] && kill $API_PID 2>/dev/null || true
+          [ -n "$WEB_PID" ] && kill $WEB_PID 2>/dev/null || true

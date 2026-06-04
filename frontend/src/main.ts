@@ -1,15 +1,20 @@
 import { createApp } from 'vue';
 import { createPinia } from 'pinia';
+import type { Router } from 'vue-router';
+import ElementPlus from 'element-plus';
+import 'element-plus/dist/index.css';
 import * as ElementPlusIconsVue from '@element-plus/icons-vue';
 import './fhd/installFetchDbReadToken';
 import { useAppShellStore } from '@/stores/appShell';
 import {
   bootstrapEditionDefaults,
   bootstrapEnterpriseShellDefaults,
+  bootstrapPersonalShellDefaults,
 } from '@/constants/platformShellMode';
 
 bootstrapEditionDefaults();
 bootstrapEnterpriseShellDefaults();
+bootstrapPersonalShellDefaults();
 
 import App from './App.vue';
 import router from './router';
@@ -51,7 +56,21 @@ function readVanillaNoModUi(): boolean {
  * 与 mount 并行预取 Mod 路由，避免在 bootstrap 里 await 网络导致整页长时间不挂载（用户感觉「卡死」）。
  * 深链直达 Mod 页时若此请求晚于首跳，仍可由 modsStore.initialize 内 registerModRoutes 补齐。
  */
-async function bootstrap() {
+async function prefetchModRoutesAfterMount(appRouter: Router): Promise<void> {
+  if (readVanillaNoModUi()) return;
+
+  try {
+    await registerAllModRoutesFromGlob(appRouter);
+    const entries = await fetchModRoutesPayloadShared();
+    if (entries?.length) {
+      await registerModRoutes(appRouter, entries);
+    }
+  } catch (e) {
+    console.warn('[mods] Prefetch mod routes failed (offline or API error):', e);
+  }
+}
+
+function bootstrap() {
   bootstrapEditionDefaults();
   void bootstrapHostConfig();
   applySidebarThemeFromStorage();
@@ -65,7 +84,9 @@ async function bootstrap() {
       host === '127.0.0.1' ||
       host === 'localhost' ||
       port === '5000' ||
-      port === '5001';
+      port === '5001' ||
+      port === '5100' ||
+      port === '5101';
 
     if (isLocalHost) {
       // 打包页走 127.0.0.1:5000 时 main 不会注册 SW，但必须清掉历史残留，否则会劫持 fetch 并报 206 cache 错
@@ -105,8 +126,8 @@ async function bootstrap() {
   } catch {
     // ignore if store import fails in legacy environments
   }
-
   app.use(router);
+  app.use(ElementPlus);
 
   for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
     app.component(key, component);
@@ -114,31 +135,7 @@ async function bootstrap() {
 
   app.mount('#app');
 
-  if (typeof performance !== 'undefined' && performance.mark) {
-    performance.mark('bootstrap_mount');
-  }
-
-  if (!readVanillaNoModUi()) {
-    void (async () => {
-      try {
-        await registerAllModRoutesFromGlob(router);
-      } catch (e) {
-        console.warn('[bootstrap] mod routes (glob) after mount failed:', e);
-      }
-    })();
-  }
-
-  void (async () => {
-    if (readVanillaNoModUi()) return;
-    try {
-      const entries = await fetchModRoutesPayloadShared();
-      if (entries?.length) {
-        await registerModRoutes(router, entries);
-      }
-    } catch (e) {
-      console.warn('[bootstrap] Mod routes (API) register failed:', e);
-    }
-  })();
+  void prefetchModRoutesAfterMount(router);
 }
 
-void bootstrap();
+bootstrap();

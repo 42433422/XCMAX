@@ -5,7 +5,7 @@
   "author": "成都修茈科技有限公司",
   "description": "里程碑 3b：办公 CSV/Excel/PDF/PPT/Word 员工包目录与已安装清单。家具由 MODstore seed 生成，安装于 mods/_employees/<pack_id>/。",
   "primary": false,
-  "dependencies": { "xcagi": ">=8.0.0" },
+  "dependencies": { "xcagi": ">=10.0.0" },
   "backend": { "entry": "blueprints", "init": "mod_init" },
   "frontend": {
     "routes": "frontend/routes",

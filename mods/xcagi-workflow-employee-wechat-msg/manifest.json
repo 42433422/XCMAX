@@ -6,7 +6,7 @@
   "description": "星标自动刷新 → 新消息 → 意图 API 或本地规则 → 任务列表。",
   "primary": false,
   "dependencies": {
-    "xcagi": ">=8.0.0"
+    "xcagi": ">=10.0.0"
   },
   "backend": {
     "entry": "blueprints",

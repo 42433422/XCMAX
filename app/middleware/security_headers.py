@@ -18,12 +18,20 @@ class SecurityHeadersMiddleware:
                     for pair in scope.get("query_string", b"").split(b"&")
                     if b"=" in pair
                 )
+                path = (scope.get("path") or "").encode()
                 is_sandbox = qs.get(b"sandbox") in (b"1", b"true")
-                if is_sandbox:
+                is_xcmax_dashboard = path == b"/xcmax-dashboard" or path.startswith(b"/xcmax-dashboard/")
+                if is_sandbox or is_xcmax_dashboard:
                     security_headers = {
                         b"x-content-type-options": b"nosniff",
                         b"referrer-policy": b"strict-origin-when-cross-origin",
-                        b"content-security-policy": b"default-src 'self' 'unsafe-inline' 'unsafe-eval'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' ws: wss: http: https:; frame-ancestors *;",
+                        b"content-security-policy": (
+                            b"default-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+                            b"script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; "
+                            b"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+                            b"img-src 'self' data: blob:; font-src 'self' data: https://fonts.gstatic.com; "
+                            b"connect-src 'self' ws: wss: http: https:; frame-ancestors 'self';"
+                        ),
                     }
                 else:
                     security_headers = {

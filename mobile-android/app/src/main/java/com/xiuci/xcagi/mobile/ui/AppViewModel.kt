@@ -34,6 +34,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
+import com.xiuci.xcagi.mobile.core.update.ApkUpdateInstaller
 import javax.inject.Inject
 
 data class UiMessage(val text: String, val isError: Boolean = false)
@@ -42,6 +43,11 @@ data class UpdatePrompt(
     val force: Boolean,
     val versionName: String,
     val downloadUrl: String,
+)
+
+data class UpdateDownloadState(
+    val downloading: Boolean = false,
+    val progress: Int = 0,
 )
 
 @HiltViewModel
@@ -150,6 +156,9 @@ class AppViewModel @Inject constructor(
     private val _updatePrompt = MutableStateFlow<UpdatePrompt?>(null)
     val updatePrompt: StateFlow<UpdatePrompt?> = _updatePrompt.asStateFlow()
 
+    private val _updateDownload = MutableStateFlow(UpdateDownloadState())
+    val updateDownload: StateFlow<UpdateDownloadState> = _updateDownload.asStateFlow()
+
     val biometricEnabled = sessionStore.biometricEnabledFlow.stateIn(
         viewModelScope,
         SharingStarted.WhileSubscribed(5_000),
@@ -243,6 +252,31 @@ class AppViewModel @Inject constructor(
 
     fun dismissUpdatePrompt() {
         _updatePrompt.value = null
+        _updateDownload.value = UpdateDownloadState()
+    }
+
+    fun downloadAndInstallUpdate() {
+        val url = _updatePrompt.value?.downloadUrl?.trim().orEmpty()
+        if (url.isBlank()) {
+            snack("下载地址无效", isError = true)
+            return
+        }
+        viewModelScope.launch {
+            _updateDownload.value = UpdateDownloadState(downloading = true, progress = 0)
+            val downloaded = ApkUpdateInstaller.download(appContext, url) { pct ->
+                _updateDownload.value = UpdateDownloadState(downloading = true, progress = pct)
+            }
+            _updateDownload.value = UpdateDownloadState(downloading = false)
+            downloaded
+                .onSuccess { apk ->
+                    ApkUpdateInstaller.install(appContext, apk).onFailure { err ->
+                        snack(err.message ?: "无法启动安装程序", isError = true)
+                    }
+                }
+                .onFailure { err ->
+                    snack(err.message ?: "下载失败", isError = true)
+                }
+        }
     }
 
     fun setBiometricEnabled(enabled: Boolean) = viewModelScope.launch {

@@ -59,7 +59,7 @@ def _map_create_body(body: dict[str, Any]) -> dict[str, Any]:
 
 
 def _write_gate(request: Request | None) -> dict | None:
-    from app.fastapi_routes.xcagi_compat_db_base import (
+    from app.fastapi_routes.domains.db.base import (
         _business_mod_json_block,
         _products_write_raise,
     )
@@ -154,7 +154,7 @@ def products_add(request: Request, body: dict[str, Any]) -> dict[str, Any]:
 
 
 def products_update(request: Request, body: dict[str, Any]) -> dict[str, Any]:
-    from app.fastapi_routes.xcagi_compat_db_base import _product_parse_id
+    from app.fastapi_routes.domains.db.base import _product_parse_id
 
     gate = _write_gate(request)
     if gate:
@@ -179,7 +179,7 @@ def products_update(request: Request, body: dict[str, Any]) -> dict[str, Any]:
 
 
 def products_delete(request: Request, body: dict[str, Any]) -> dict[str, Any]:
-    from app.fastapi_routes.xcagi_compat_db_base import _product_parse_id
+    from app.fastapi_routes.domains.db.base import _product_parse_id
 
     gate = _write_gate(request)
     if gate:
@@ -199,7 +199,7 @@ def products_delete(request: Request, body: dict[str, Any]) -> dict[str, Any]:
 
 
 def products_batch_delete(request: Request, body: dict[str, Any]) -> dict[str, Any]:
-    from app.fastapi_routes.xcagi_compat_db_base import _product_parse_id
+    from app.fastapi_routes.domains.db.base import _product_parse_id
 
     gate = _write_gate(request)
     if gate:

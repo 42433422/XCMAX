@@ -131,9 +131,9 @@ def dispatch_legacy_tool_payload(
         )
 
     elif tool_id == "shipment_records":
-        from app.bootstrap import get_shipment_app_service
+        from app.bootstrap import get_shipment_application_service_core
 
-        svc = get_shipment_app_service()
+        svc = get_shipment_application_service_core()
         if action in ("list", "query"):
             unit = str(params.get("unit") or params.get("unit_name") or "").strip() or None
             return _j({"success": True, "data": svc.get_shipment_records(unit)}, 200)

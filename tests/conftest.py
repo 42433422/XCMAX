@@ -15,6 +15,7 @@ pytest 配置与 fixtures（FastAPI 版）
 
 from __future__ import annotations
 
+import importlib
 import os
 import shutil
 import sys
@@ -23,6 +24,22 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
+
+# 全量 pytest 默认 SQLite（在 app.config 加载 .env 之前），与本机/CI 无 Postgres 时一致。
+if os.environ.get("XCAGI_PYTEST_USE_POSTGRES", "").strip().lower() not in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}:
+    os.environ["DATABASE_URL"] = os.environ.get("XCAGI_TEST_DATABASE_URL", "sqlite://")
+os.environ.setdefault("FHD_ENV", "development")
+os.environ.setdefault("XCAGI_TESTING", "1")
+
+
+def pytest_configure(config) -> None:  # noqa: ARG001
+    # 使 @patch('app.services.*') 在 importlib 模式下可解析子包。
+    importlib.import_module("app.services")
 
 # 遗留脚本或尚未对齐 FastAPI 的用例，避免阻塞 CI（见 docs/reports/COVERAGE_RAMP.md）
 collect_ignore = [

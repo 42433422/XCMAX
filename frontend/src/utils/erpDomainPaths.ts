@@ -3,9 +3,7 @@ import {
   LEGACY_CLIENT_ERP_MOD_ID,
   readErpDomainModFacadeEnabled,
 } from '@/constants/erpDomainMod'
-import { CLIENT_PRIMARY_ERP_MOD_ID } from '@/constants/genericModPack'
 import { isProtectedClientModId } from '@/constants/protectedMods'
-import { clientModPolicies } from '@/stores/hostConfig'
 import { useModsStore } from '@/stores/mods'
 import { XCAGI_ACTIVE_EXTENSION_MOD_ID_KEY } from '@/utils/xcagiStorageKeys'
 
@@ -31,7 +29,8 @@ const ERP_ON_BRIDGE_WHEN_CLIENT_ACTIVE: readonly string[] = [
  * 与 app.mod_sdk.erp_domain_compat.DOMAIN_SPECS 及 Mod blueprints 实际挂载路径对齐。
  * 按 host 前缀长度降序匹配（最长前缀优先）。
  */
-const ERP_DOMAIN_PREFIX_SOURCE = [
+const ERP_DOMAIN_PREFIX_MAP: ReadonlyArray<readonly [hostPrefix: string, facadePrefix: string]> =
+  [
     ['/api/shipment', `${MOD_FACADE_BASE}/shipment`],
     ['/api/wechat_contacts', `${MOD_FACADE_BASE}/wechat_contacts`],
     ['/api/products', `${MOD_FACADE_BASE}/products`],
@@ -39,10 +38,7 @@ const ERP_DOMAIN_PREFIX_SOURCE = [
     ['/api/purchase_units', `${MOD_FACADE_BASE}/purchase_units`],
     ['/api/orders', `${MOD_FACADE_BASE}/orders`],
     ['/api/wechat', `${MOD_FACADE_BASE}/wechat`],
-  ] as const
-
-const ERP_DOMAIN_PREFIX_MAP: ReadonlyArray<readonly [hostPrefix: string, facadePrefix: string]> =
-  [...ERP_DOMAIN_PREFIX_SOURCE].sort((a, b) => b[0].length - a[0].length)
+  ].sort((a, b) => b[0].length - a[0].length)
 
 /** 门面开启时仍走宿主 /api 的路径（Mod 未提供门面或 materials/print 等扩展 API） */
 /** 客户 Mod（太阳鸟等）未实现的 API，继续走宿主 /api */
@@ -143,25 +139,11 @@ function isHostOnlyApiPath(pathOnly: string): boolean {
  * ERP 领域 API 根路径（不含尾部路径段）。
  * 优先级：当前选中的客户 Mod > 通用领域门面 Mod > 宿主 /api
  */
-function readHostClientPrimaryErpModId(): string {
-  const pol = clientModPolicies.value
-  return String(pol?.client_primary_erp_mod_id || CLIENT_PRIMARY_ERP_MOD_ID).trim()
-}
-
 export function resolveErpApiBase(installedModIds?: string[]): string {
   const ids = readInstalledModIds(installedModIds)
   const activeClient = readActiveExtensionModId()
   if (activeClient && isProtectedClientModId(activeClient)) {
     return resolveErpBaseForClientMod(activeClient, ids)
-  }
-  const primary = readHostClientPrimaryErpModId()
-  if (
-    !activeClient &&
-    primary &&
-    isProtectedClientModId(primary) &&
-    ids.includes(primary)
-  ) {
-    return resolveErpBaseForClientMod(primary, ids)
   }
   if (readErpDomainModFacadeEnabled()) {
     return MOD_FACADE_BASE

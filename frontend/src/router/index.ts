@@ -7,13 +7,10 @@ import {
 } from '@/constants/platformShellMode';
 import { shouldRouteToProductOnboarding } from '@/composables/useProductFlow';
 import { resolveHostBusinessPageRedirect } from '@/utils/hostBusinessPageRedirect';
-import { customerServiceHostPathFromModPath } from '@/utils/customerServicePagePaths';
 import { readErpDomainModFacadeEnabled } from '@/constants/erpDomainMod';
 import { readCoreWorkflowModPagesEnabled } from '@/constants/coreWorkflowMod';
 import { resolveWorkflowPageRedirectForRouteName } from '@/utils/workflowPagePaths';
 import { resolvePlannerChatHomePath, resolvePlannerPagePath } from '@/utils/plannerPagePaths';
-import { readActiveExtensionModId } from '@/utils/erpDomainPaths';
-import { isProtectedClientModId } from '@/constants/protectedMods';
 import { fetchProductSku, isEnterpriseEdition } from '@/utils/productSku';
 import { validateEnterpriseSessionCached } from '@/utils/authSessionCache';
 import { useModsStore } from '@/stores/mods';
@@ -115,13 +112,13 @@ if (import.meta.env.VITE_XCAGI_EDITION !== 'minimal') {
       path: '/products',
       name: 'products',
       component: () => import('../views/ProductsView.vue'),
-      meta: { title: '业务对象' },
+      meta: { title: '人员管理' },
     },
     {
       path: '/materials',
       name: 'materials',
       component: () => import('../views/MaterialsView.vue'),
-      meta: { title: '资源库' },
+      meta: { title: '排班资源' },
     },
     {
       path: '/materials-list',
@@ -131,7 +128,7 @@ if (import.meta.env.VITE_XCAGI_EDITION !== 'minimal') {
       path: '/orders',
       name: 'orders',
       component: () => import('../views/OrdersView.vue'),
-      meta: { title: '业务单据' },
+      meta: { title: '考勤单管理' },
     },
     {
       path: '/traditional-mode',
@@ -147,19 +144,19 @@ if (import.meta.env.VITE_XCAGI_EDITION !== 'minimal') {
       path: '/orders/create',
       name: 'orders-create',
       component: () => import('../views/CreateOrderView.vue'),
-      meta: { title: '新建业务单据' },
+      meta: { title: '新建考勤单' },
     },
     {
       path: '/shipment-records',
       name: 'shipment-records',
       component: () => import('../views/ShipmentRecordsView.vue'),
-      meta: { title: '业务记录' },
+      meta: { title: '考勤记录' },
     },
     {
       path: '/customers',
       name: 'customers',
       component: () => import('../views/CustomersView.vue'),
-      meta: { title: '组织管理' },
+      meta: { title: '部门管理' },
     },
     {
       path: '/data-sources',
@@ -177,7 +174,7 @@ if (import.meta.env.VITE_XCAGI_EDITION !== 'minimal') {
       path: '/print',
       name: 'print',
       component: () => import('../views/PrintView.vue'),
-      meta: { title: '模板与打印' },
+      meta: { title: '考勤表打印' },
     },
     {
       path: '/printer-list',
@@ -284,7 +281,7 @@ allRoutes.push(
     path: '/mod-store',
     name: 'mod-store',
     component: () => import('../views/ModStore.vue'),
-    meta: { title: '能力库' }
+    meta: { title: '扩展市场' }
   },
   {
     path: '/settings',
@@ -358,6 +355,24 @@ allRoutes.push(
     component: () => import('../views/ModLandingView.vue'),
     meta: { title: 'Mod 详情', mod: true }
   },
+  {
+    path: '/xcmax-admin',
+    name: 'xcmax-admin',
+    component: () => import('../views/XCmaxAdminView.vue'),
+    meta: { title: '服务器后台' },
+  },
+  {
+    path: '/server-functions',
+    name: 'server-functions',
+    component: () => import('../views/ServerFunctionsView.vue'),
+    meta: { title: '服务器功能模块' },
+  },
+  {
+    path: '/other-tools/employee-load-remove',
+    name: 'workflow-employee-load-remove',
+    component: () => import('../views/WorkflowEmployeeLoadRemoveView.vue'),
+    meta: { title: '加载和去除员工' },
+  },
 );
 
 function filterSandboxRoutes(routes: RouteRecordRaw[]): RouteRecordRaw[] {
@@ -398,31 +413,6 @@ router.beforeEach(async (to, _from, next) => {
     document.title = `${to.meta.title} - XCAGI`;
   }
 
-  if (to.matched.length === 0 && to.path.startsWith('/mod/')) {
-    const csHost = customerServiceHostPathFromModPath(to.path);
-    if (csHost) {
-      next({ path: csHost, query: to.query, hash: to.hash, replace: true });
-      return;
-    }
-    if (
-      to.path.startsWith('/mod/xcagi-planner-bridge/') &&
-      isProtectedClientModId(readActiveExtensionModId())
-    ) {
-      next({ path: '/', query: to.query, hash: to.hash, replace: true });
-      return;
-    }
-    next({ path: '/', replace: true });
-    return;
-  }
-
-  if (
-    to.path.startsWith('/mod/xcagi-planner-bridge/') &&
-    isProtectedClientModId(readActiveExtensionModId())
-  ) {
-    next({ path: '/', query: to.query, hash: to.hash, replace: true });
-    return;
-  }
-
   // 局域网授权守卫仅作用于主机管理员控制台（避免影响其他业务页面）
   const requiresLanGate = to.matched.some((r) => Boolean(r.meta?.hostAdmin));
   if (requiresLanGate && !to.meta.publicAccess) {
@@ -451,12 +441,7 @@ router.beforeEach(async (to, _from, next) => {
 
   if (to.path === '/' || to.name === 'chat') {
     const modChat = resolvePlannerPagePath('/');
-    const modChatPath = modChat.split('?')[0] || modChat;
-    if (modChat !== '/' && to.path !== modChatPath) {
-      if (router.resolve(modChatPath).matched.length === 0) {
-        next();
-        return;
-      }
+    if (modChat !== '/' && to.path !== modChat.split('?')[0]) {
       next({ path: modChat, query: to.query, hash: to.hash });
       return;
     }

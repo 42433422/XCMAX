@@ -1,0 +1,31 @@
+{{- if .Values.resourceQuota.enabled }}
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: {{ include "xcagi.fullname" . }}-quota
+  namespace: {{ include "xcagi.namespace" . }}
+  labels:
+    {{- include "xcagi.labels" . | nindent 4 }}
+    {{- include "xcagi.tenantLabels" . | nindent 4 }}
+spec:
+  hard:
+    {{- toYaml .Values.resourceQuota.hard | nindent 4 }}
+{{- end }}
+{{- if .Values.limitRange.enabled }}
+---
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: {{ include "xcagi.fullname" . }}-limits
+  namespace: {{ include "xcagi.namespace" . }}
+  labels:
+    {{- include "xcagi.labels" . | nindent 4 }}
+    {{- include "xcagi.tenantLabels" . | nindent 4 }}
+spec:
+  limits:
+    - type: Container
+      default:
+        {{- toYaml .Values.limitRange.default | nindent 8 }}
+      defaultRequest:
+        {{- toYaml .Values.limitRange.defaultRequest | nindent 8 }}
+{{- end }}

@@ -2,6 +2,6 @@
 
 from __future__ import annotations
 
-from app.services.conversation.modstore_adapter import create_modstore_openai_client_from_request
+from app.infrastructure.gateways.conversation import create_modstore_openai_client_from_request
 
 __all__ = ["create_modstore_openai_client_from_request"]

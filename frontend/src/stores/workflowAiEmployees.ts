@@ -1,24 +1,14 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref } from 'vue'
 import type { ModWithWorkflowEmployees } from '@/utils/modWorkflowEmployees'
-import type { WorkflowEmployeeRegistryEntry } from '@/types/workflow-employee'
-import {
-  filterWorkflowRegistrySourceMods,
-  isNonWorkflowDeskEmployeeId,
-} from '@/utils/modWorkflowEmployees'
-import {
-  loadWorkflowEmployeeRegistry,
-  mergeModManifestEntries,
-  resolveLabel,
-  invalidateWorkflowEmployeeRegistryCache,
-} from '@/utils/workflowEmployeeRegistry'
+import { aminDefaultEnabledMap, aminPluginIds } from '@/utils/aminRegistry'
 
 function collectManifestWorkflowEmployeeIds(mods: ModWithWorkflowEmployees[] | undefined): Set<string> {
   const ids = new Set<string>()
-  for (const m of filterWorkflowRegistrySourceMods(mods)) {
+  for (const m of mods || []) {
     for (const e of m.workflow_employees || []) {
       const id = String(e?.id || '').trim()
-      if (id && !isNonWorkflowDeskEmployeeId(id)) ids.add(id)
+      if (id) ids.add(id)
     }
   }
   return ids
@@ -27,11 +17,7 @@ function collectManifestWorkflowEmployeeIds(mods: ModWithWorkflowEmployees[] | u
 export const WORKFLOW_AI_EMPLOYEES_STORAGE_KEY = 'xcagi_workflow_ai_employees'
 
 export function defaultWorkflowBuiltinEnabled(): Record<string, boolean> {
-  return {}
-}
-
-export function coreWorkflowEmployeeIdSet(): Set<string> {
-  return new Set()
+  return aminDefaultEnabledMap()
 }
 
 function readWorkflowEnabledFromLocalStorage(): Record<string, boolean> {
@@ -55,14 +41,14 @@ function readWorkflowEnabledFromLocalStorage(): Record<string, boolean> {
 
 function mergeModWorkflowIds(
   cur: Record<string, boolean>,
-  mods: ModWithWorkflowEmployees[] | undefined,
+  mods: ModWithWorkflowEmployees[] | undefined
 ): Record<string, boolean> {
+  const builtin = new Set(aminPluginIds())
   const next = { ...cur }
-  for (const m of filterWorkflowRegistrySourceMods(mods)) {
+  for (const m of mods || []) {
     for (const e of m.workflow_employees || []) {
       const id = String(e?.id || '').trim()
-      if (!id || isNonWorkflowDeskEmployeeId(id) || id in next) continue
-      next[id] = false
+      if (id && !builtin.has(id) && !(id in next)) next[id] = false
     }
   }
   return next
@@ -70,10 +56,6 @@ function mergeModWorkflowIds(
 
 export const useWorkflowAiEmployeesStore = defineStore('workflowAiEmployees', () => {
   const enabled = ref<Record<string, boolean>>(readWorkflowEnabledFromLocalStorage())
-  const registryEntries = ref<WorkflowEmployeeRegistryEntry[]>([])
-  const registryLoaded = ref(false)
-
-  const registeredIds = computed(() => new Set(registryEntries.value.map((e) => e.id)))
 
   function persistAndNotify() {
     try {
@@ -84,62 +66,8 @@ export const useWorkflowAiEmployeesStore = defineStore('workflowAiEmployees', ()
     window.dispatchEvent(
       new CustomEvent('xcagi:workflow-ai-employees-changed', {
         detail: { enabled: { ...enabled.value } },
-      }),
+      })
     )
-  }
-
-  async function loadRegistry(mods?: ModWithWorkflowEmployees[]) {
-    try {
-      const registry = await loadWorkflowEmployeeRegistry()
-      const merged = mods ? mergeModManifestEntries(registry, mods) : registry.employees
-      registryEntries.value = merged
-      registryLoaded.value = true
-      ensureEnabledKeys()
-    } catch (e) {
-      console.warn('[workflowAiEmployees] loadRegistry failed:', e)
-    }
-  }
-
-  function registerEmployee(entry: WorkflowEmployeeRegistryEntry) {
-    const idx = registryEntries.value.findIndex((e) => e.id === entry.id)
-    if (idx >= 0) {
-      registryEntries.value[idx] = entry
-    } else {
-      registryEntries.value.push(entry)
-      registryEntries.value.sort((a, b) => a.order - b.order)
-    }
-    if (!(entry.id in enabled.value)) {
-      enabled.value = { ...enabled.value, [entry.id]: false }
-      persistAndNotify()
-    }
-  }
-
-  function unregisterEmployee(id: string) {
-    const idx = registryEntries.value.findIndex((e) => e.id === id)
-    if (idx >= 0) {
-      registryEntries.value.splice(idx, 1)
-    }
-    const next = { ...enabled.value }
-    delete next[id]
-    if (JSON.stringify(next) !== JSON.stringify(enabled.value)) {
-      enabled.value = next
-      persistAndNotify()
-    }
-  }
-
-  function ensureEnabledKeys() {
-    const next = { ...enabled.value }
-    let changed = false
-    for (const entry of registryEntries.value) {
-      if (!(entry.id in next)) {
-        next[entry.id] = false
-        changed = true
-      }
-    }
-    if (changed) {
-      enabled.value = next
-      persistAndNotify()
-    }
   }
 
   function hydrateFromMods(mods: ModWithWorkflowEmployees[] | undefined) {
@@ -150,23 +78,21 @@ export const useWorkflowAiEmployeesStore = defineStore('workflowAiEmployees', ()
   }
 
   function stripModWorkflowEmployeeKeys() {
-    const registryIds = registeredIds.value
-    const next: Record<string, boolean> = {}
-    for (const k of Object.keys(enabled.value)) {
-      if (registryIds.has(k)) next[k] = enabled.value[k]
+    const builtins = defaultWorkflowBuiltinEnabled()
+    const next: Record<string, boolean> = { ...builtins }
+    for (const k of Object.keys(builtins)) {
+      if (k in enabled.value) next[k] = enabled.value[k]
     }
-    if (JSON.stringify(next) !== JSON.stringify(enabled.value)) {
-      enabled.value = next
-      persistAndNotify()
-    }
+    enabled.value = next
+    persistAndNotify()
   }
 
   function pruneOrphanWorkflowEmployeeToggles(mods: ModWithWorkflowEmployees[] | undefined) {
+    const builtins = defaultWorkflowBuiltinEnabled()
     const manifestIds = collectManifestWorkflowEmployeeIds(mods)
-    const registryIds = registeredIds.value
     const next: Record<string, boolean> = { ...enabled.value }
     for (const k of Object.keys(next)) {
-      if (registryIds.has(k)) continue
+      if (k in builtins) continue
       if (!manifestIds.has(k)) delete next[k]
     }
     if (JSON.stringify(next) !== JSON.stringify(enabled.value)) {
@@ -199,27 +125,8 @@ export const useWorkflowAiEmployeesStore = defineStore('workflowAiEmployees', ()
     setAll(next)
   }
 
-  function getEmployeeLabel(id: string, i18nResolver?: (key: string) => string): string {
-    const entry = registryEntries.value.find((e) => e.id === id)
-    if (entry) return resolveLabel(entry, i18nResolver)
-    return id
-  }
-
-  async function refreshRegistry(mods?: ModWithWorkflowEmployees[]) {
-    invalidateWorkflowEmployeeRegistryCache()
-    registryLoaded.value = false
-    await loadRegistry(mods)
-  }
-
   return {
     enabled,
-    registryEntries,
-    registryLoaded,
-    registeredIds,
-    loadRegistry,
-    registerEmployee,
-    unregisterEmployee,
-    ensureEnabledKeys,
     hydrateFromMods,
     stripModWorkflowEmployeeKeys,
     pruneOrphanWorkflowEmployeeToggles,
@@ -228,7 +135,5 @@ export const useWorkflowAiEmployeesStore = defineStore('workflowAiEmployees', ()
     toggle,
     enableAllOn,
     persistAndNotify,
-    getEmployeeLabel,
-    refreshRegistry,
   }
 })

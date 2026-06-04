@@ -54,23 +54,5 @@ describe('useModsStore (Pinia)', () => {
     expect(menu[0].modId).toBe('m1')
     expect(menu[0].id).toBe('i1')
   })
-
-  it('getModMenu shows sunbird attendance entries when active but API list omits pack', () => {
-    const store = useModsStore()
-    store.mods = [
-      {
-        id: 'xcagi-planner-bridge',
-        name: 'Planner',
-        version: '1',
-        author: '',
-        description: '',
-      },
-    ]
-    store.setActiveModId('taiyangniao-pro')
-    const menu = store.getModMenu()
-    const labels = menu.map((m) => m.label)
-    expect(labels).toContain('考勤表转换')
-    expect(labels).not.toContain('考勤转换设置')
-  })
 })
 

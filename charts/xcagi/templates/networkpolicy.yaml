@@ -1,0 +1,53 @@
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: xcagi-network-policy
+  labels:
+    {{- include "xcagi.labels" . | nindent 4 }}
+    {{- include "xcagi.tenantLabels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "xcagi.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+{{- if .Values.networkPolicy.strict }}
+    # 仅放行 ingress 控制器 namespace + 同租户 pod（多租户隔离）。
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              {{ .Values.networkPolicy.ingressNamespaceLabel }}: {{ .Values.networkPolicy.ingressNamespace }}
+        - podSelector:
+            matchLabels:
+              {{- include "xcagi.tenantLabels" . | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.service.targetPort }}
+{{- else }}
+    # 兼容模式：放行全 namespace（旧行为）。
+    - from:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.service.targetPort }}
+{{- end }}
+  egress:
+    # DNS（kube-dns）始终放行。
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        - namespaceSelector: {}
+      ports:
+{{- range .Values.networkPolicy.egressPorts }}
+        - protocol: TCP
+          port: {{ . }}
+{{- end }}
+{{- end }}

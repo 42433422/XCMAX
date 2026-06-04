@@ -1,0 +1,49 @@
+{
+  "market_user_id": 7,
+  "username": "",
+  "stage": "idle",
+  "updated_at": "2026-06-04T17:23:47.222188+00:00",
+  "timeline": [
+    {
+      "stage": "idle",
+      "at": "2026-06-04T12:45:06.642536+00:00",
+      "source": "init"
+    }
+  ],
+  "last_sync_at": null,
+  "last_message_preview": "",
+  "connected_welcome_sent": false,
+  "connected_welcome_sent_at": null,
+  "contract_lifecycle": {
+    "status": "signing",
+    "history": [
+      {
+        "from": "draft",
+        "to": "signing",
+        "at": "2026-06-04T12:45:06.642936+00:00",
+        "source": "esign",
+        "note": "电子签任务已创建"
+      }
+    ],
+    "updated_at": "2026-06-04T12:45:06.642936+00:00",
+    "esign_ref": "stub-f8175a6fca9d",
+    "esign_provider": "stub",
+    "esign_task": {
+      "provider": "stub",
+      "task_id": "stub-046769ded495",
+      "sign_url": "https://xiu-ci.com/contract/sign/stub-046769ded495?token=bfe06a59c6ce1da46a31e5376a988312",
+      "status": "signing",
+      "market_user_id": 7,
+      "subject": "甲方与乙方合同签署",
+      "party_a": "甲方",
+      "party_b": "乙方"
+    }
+  },
+  "crm_opportunity_id": 4,
+  "crm_db_synced_at": "2026-06-04T17:23:47.222686+00:00",
+  "external_crm_last_at": "2026-06-04T17:23:47.222693+00:00",
+  "external_crm_last_result": {
+    "ok": true,
+    "skipped": true
+  }
+}

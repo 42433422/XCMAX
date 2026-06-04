@@ -42,7 +42,7 @@ def system_config_get():
 @router.get("/api/system/info")
 def system_info_get():
     try:
-        from app.application.facades.session_facade import get_system_service
+        from app.infrastructure.gateways.session import get_system_service
 
         return {"success": True, "data": get_system_service().get_system_info()}
     except Exception as e:
@@ -52,7 +52,7 @@ def system_info_get():
 @router.get("/api/system/printer")
 def system_printer_get():
     try:
-        from app.application.facades.session_facade import get_system_service
+        from app.infrastructure.gateways.session import get_system_service
 
         return {"success": True, "data": get_system_service().get_printer_config()}
     except Exception as e:
@@ -61,7 +61,7 @@ def system_printer_get():
 
 @router.post("/api/system/printer")
 def system_printer_post(body: dict = Body(default_factory=dict)):
-    from app.application.facades.session_facade import get_system_service
+    from app.infrastructure.gateways.session import get_system_service
 
     data = body or {}
     if not data:
@@ -78,7 +78,7 @@ def system_printer_post(body: dict = Body(default_factory=dict)):
 @router.get("/api/system/startup")
 def system_startup_get():
     try:
-        from app.application.facades.session_facade import get_system_service
+        from app.infrastructure.gateways.session import get_system_service
 
         return {"success": True, "data": get_system_service().get_startup_config()}
     except Exception as e:
@@ -87,7 +87,7 @@ def system_startup_get():
 
 @router.post("/api/system/startup")
 def system_startup_post():
-    from app.application.facades.session_facade import get_system_service
+    from app.infrastructure.gateways.session import get_system_service
 
     result = get_system_service().enable_startup()
     return JSONResponse(result, status_code=200 if result.get("success") else 500)
@@ -96,7 +96,7 @@ def system_startup_post():
 @router.delete("/api/system/startup")
 def system_startup_delete():
     try:
-        from app.application.facades.session_facade import get_system_service
+        from app.infrastructure.gateways.session import get_system_service
 
         result = get_system_service().disable_startup()
         return JSONResponse(result, status_code=200 if result.get("success") else 500)
@@ -107,7 +107,7 @@ def system_startup_delete():
 @router.get("/api/database/backups")
 def database_backups_list():
     try:
-        from app.application.facades.session_facade import get_database_service
+        from app.infrastructure.gateways.session import get_database_service
 
         return get_database_service().list_backups()
     except Exception as e:
@@ -117,7 +117,7 @@ def database_backups_list():
 @router.delete("/api/database/backup/{backup_file:path}")
 def database_backup_delete(backup_file: str):
     try:
-        from app.application.facades.session_facade import get_database_service
+        from app.infrastructure.gateways.session import get_database_service
 
         result = get_database_service().delete_backup(backup_file)
         return JSONResponse(result, status_code=200 if result.get("success") else 500)
@@ -128,7 +128,7 @@ def database_backup_delete(backup_file: str):
 @router.post("/api/database/backup")
 def database_backup():
     try:
-        from app.application.facades.session_facade import get_database_service
+        from app.infrastructure.gateways.session import get_database_service
 
         db_service = get_database_service()
         result = db_service.backup_database()
@@ -140,7 +140,7 @@ def database_backup():
 @router.post("/api/database/restore")
 def database_restore(body: dict = Body(default_factory=dict)):
     try:
-        from app.application.facades.session_facade import get_database_service
+        from app.infrastructure.gateways.session import get_database_service
 
         data = body or {}
         backup_file = data.get("backup_file")

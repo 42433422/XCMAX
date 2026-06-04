@@ -187,9 +187,9 @@ def _registered_router_materials(
 def _registered_router_shipment_records(
     action: str, params: dict, runtime_context: dict, profile: str, user_message: str
 ) -> dict:
-    from app.bootstrap import get_shipment_app_service
+    from app.bootstrap import get_shipment_application_service_core
 
-    svc = get_shipment_app_service()
+    svc = get_shipment_application_service_core()
     if action in ("list", "query"):
         unit = str(params.get("unit") or params.get("unit_name") or "").strip() or None
         return {"success": True, "data": svc.get_shipment_records(unit)}

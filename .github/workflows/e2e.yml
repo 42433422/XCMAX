@@ -1,0 +1,38 @@
+# FHD Playwright E2E（plan-2026-06 T31）
+#
+# Monorepo 日常 PR：仓根 `.github/workflows/e2e.yml` 调用同一 reusable job。
+# 本子 workflow：FHD 路径变更 / 手动触发；避免与 test.yml 的 frontend-e2e 重复跑全量套件。
+
+name: e2e (FHD)
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_skeleton:
+        description: "Include plan2026-skeleton.spec.ts (default skip without E2E_FULL_STACK)"
+        type: boolean
+        default: true
+  push:
+    branches: [main, master]
+    paths:
+      - "FHD/frontend/**"
+      - "FHD/app/**"
+      - "FHD/.github/workflows/e2e.yml"
+      - "FHD/.github/workflows/e2e-playwright-reusable.yml"
+  pull_request:
+    branches: [main, master]
+    paths:
+      - "FHD/frontend/**"
+      - "FHD/app/**"
+      - "FHD/.github/workflows/e2e.yml"
+      - "FHD/.github/workflows/e2e-playwright-reusable.yml"
+
+concurrency:
+  group: fhd-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  playwright:
+    uses: ./e2e-playwright-reusable.yml
+    with:
+      run_skeleton: ${{ github.event_name != 'workflow_dispatch' || inputs.run_skeleton }}

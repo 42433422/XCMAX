@@ -45,7 +45,7 @@ def _require_permission(request: Request, permission_code: str):
     user, err = _require_login_user(request)
     if err:
         return None, err
-    from app.application.facades.session_facade import get_auth_service
+    from app.infrastructure.gateways.session import get_auth_service
 
     auth_service = get_auth_service()
     if not auth_service.has_permission(user, permission_code):

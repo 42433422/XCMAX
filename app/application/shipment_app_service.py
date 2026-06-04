@@ -11,10 +11,12 @@ from app.application.ports import (
     ShipmentRecordStorePort,
     ShipmentRepository,
 )
+from app.domain.services.shipment_rules_engine import get_shipment_rules_engine
 from app.domain.shipment.aggregates import Shipment, ShipmentItem
 from app.domain.shipment.legacy_vo import ContactInfo
 
 logger = logging.getLogger(__name__)
+_rules_engine = get_shipment_rules_engine()
 
 
 class ShipmentApplicationService:
@@ -58,6 +60,15 @@ class ShipmentApplicationService:
                     logger.warning(f"跳过无效产品: {e}")
                     continue
 
+            validation = _rules_engine.validate(
+                {
+                    "unit_name": unit_name,
+                    "items": items_data,
+                }
+            )
+            if not validation.is_valid:
+                first = validation.violations[0].message if validation.violations else "校验失败"
+                return {"success": False, "message": first}
             if not shipment.is_valid():
                 return {"success": False, "message": "发货单无效：缺少购买单位或产品"}
 
@@ -232,20 +243,7 @@ class ShipmentApplicationService:
             from app.utils.template_export_utils import fill_workbook_from_template
 
             records = self.get_shipment_records(unit_name)
-            normalized_status = str(status_filter or "").strip().lower()
-            if normalized_status:
-                if normalized_status in ("printed", "已打印"):
-                    records = [
-                        r
-                        for r in records
-                        if str(r.get("status") or "").strip().lower() == "printed"
-                    ]
-                elif normalized_status in ("pending", "未打印"):
-                    records = [
-                        r
-                        for r in records
-                        if str(r.get("status") or "").strip().lower() in ("pending", "")
-                    ]
+            records = _rules_engine.filter_records_by_status(records, status_filter)
 
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             unit_prefix = unit_name if unit_name else "all"
@@ -498,26 +496,8 @@ class ShipmentApplicationService:
             return {"success": False, "message": str(e)}
 
     def calculate_totals(self, items_data: list[dict[str, Any]]) -> dict[str, Any]:
-        """计算发货单汇总"""
-        total_amount = 0.0
-        total_tins = 0
-        total_kg = 0.0
-
-        for item_data in items_data:
-            tins = item_data.get("quantity_tins", 0)
-            spec = item_data.get("tin_spec", 10.0)
-            kg = tins * spec
-            price = item_data.get("unit_price", 0)
-
-            total_tins += tins
-            total_kg += kg
-            total_amount += price * kg
-
-        return {
-            "total_tins": total_tins,
-            "total_kg": total_kg,
-            "total_amount": total_amount,
-        }
+        """计算发货单汇总（委托领域规则引擎）。"""
+        return _rules_engine.calculate_totals_from_line_items(items_data)
 
     def generate_shipment_document(
         self,
