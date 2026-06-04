@@ -27,6 +27,7 @@ MANIFEST
 venv/
 env/
 ENV/
+.venv
 .venv/
 .venv-cov/
 .venv-hardening/
