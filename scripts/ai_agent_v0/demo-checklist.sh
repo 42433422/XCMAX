@@ -8,6 +8,11 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 EVIDENCE="${ROOT}/docs/evidence/ai-agent-v0"
 PLAN="${ROOT}/docs/ai-agent-v0-plan.md"
 RUN_DEMO="${ROOT}/scripts/ai_agent_v0/run_demo.py"
+if [[ -x "${ROOT}/.venv/bin/python" ]]; then
+  PYTHON="${ROOT}/.venv/bin/python"
+else
+  PYTHON="python3"
+fi
 
 mode="${1:---check-only}"
 
@@ -37,7 +42,7 @@ verify_evidence() {
   fi
   local latest
   latest="$(find "$EVIDENCE" -maxdepth 1 -name 'demo-run-*.json' -print | sort | tail -1)"
-  python3 - "$latest" <<'PY'
+  "$PYTHON" - "$latest" <<'PY'
 import json, sys
 path = sys.argv[1]
 with open(path, encoding="utf-8") as f:
