@@ -28,6 +28,10 @@ venv/
 env/
 ENV/
 .venv/
+.venv-cov/
+.venv-hardening/
+.venv-mypy/
+.venv-governance/
 
 # ============================================================================
 # IDE / editor metadata
@@ -36,6 +40,17 @@ ENV/
 .vscode/
 .trae/
 .cursor/logs/
+.cursor/debug*.log
+
+# 传统模式托管目录：仅忽略重复扫描/报告产物
+bang/dup*.txt
+bang/report*.txt
+
+# 软著申请材料：本地生成物不入库
+XCAGI/软著申请/*源代码*.txt
+XCAGI/软著申请/完整源代码.txt
+XCAGI/软著申请/*.pdf
+XCAGI/软著申请/源代码统计报告.md
 *.swp
 *.swo
 *.bak
@@ -52,6 +67,18 @@ coverage.xml
 coverage/
 .tox/
 .vector_index/
+
+# 生成的覆盖率产物（仓根快照；权威副本见 CI artifact backend-full-app-coverage）
+coverage-*.xml
+coverage-*.json
+coverage.json
+
+# 微信开发者工具本地配置
+project.private.config.json
+
+# 运行态
+login_out.json
+wechat_decrypt_runtime.json
 
 # ============================================================================
 # Database files (runtime data - keep code references to schemas)
