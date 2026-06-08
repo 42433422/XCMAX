@@ -1,0 +1,164 @@
+# CI SSOT: generated from FHD/.github/workflows/neuro_migration_check.yml — edit root copy only.
+name: Neuro-DDD Migration Check
+
+on:
+  push:
+    branches: [ main, develop, feature/neuro-migration ]
+  pull_request:
+    branches: [ main, develop ]
+  schedule:
+    # 每天凌晨 2 点运行
+    - cron: '0 2 * * *'
+
+
+defaults:
+  run:
+    working-directory: FHD
+jobs:
+  migration-status-check:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        # 安装项目依赖
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+    
+    - name: Run migration detection
+      run: |
+        python scripts/detect_migration_status.py
+      continue-on-error: true
+    
+    - name: Check migration thresholds
+      run: |
+        # 这里可以添加阈值检查逻辑
+        # 例如：如果迁移率低于 10%，发出警告
+        
+        echo "检查迁移阈值..."
+        
+        # 读取报告中的百分比
+        # 这是一个简化示例，实际应该解析报告文件
+        
+        SERVICE_THRESHOLD=10
+        APP_THRESHOLD=20
+        
+        # 获取实际的迁移率（这里使用占位符）
+        SERVICE_RATE=7.8
+        APP_RATE=0
+        
+        echo "Services 层迁移率: ${SERVICE_RATE}% (阈值: ${SERVICE_THRESHOLD}%)"
+        echo "Application 层迁移率: ${APP_RATE}% (阈值: ${APP_THRESHOLD}%)"
+        
+        if (( $(echo "$SERVICE_RATE < $SERVICE_THRESHOLD" | bc -l) )); then
+          echo "::warning::Services 层迁移率低于阈值 ${SERVICE_THRESHOLD}%"
+        fi
+        
+        if (( $(echo "$APP_RATE < $APP_THRESHOLD" | bc -l) )); then
+          echo "::warning::Application 层迁移率低于阈值 ${APP_THRESHOLD}%"
+        fi
+      continue-on-error: true
+    
+    - name: Upload migration report
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: migration-report
+        path: migration_status_report.txt
+    
+    - name: Comment PR with migration status
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const fs = require('fs');
+          
+          // 读取迁移报告
+          let report = '';
+          try {
+            report = fs.readFileSync('migration_status_report.txt', 'utf8');
+          } catch (e) {
+            report = '迁移报告生成失败';
+          }
+          
+          // 截取摘要部分
+          const summary = report.split('================================================================================')[0] || report.substring(0, 1000);
+          
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: `## Neuro-DDD 迁移状态检查
+            
+            ${'```'}
+            ${summary}
+            ${'```'}
+            
+            完整报告请查看 Artifacts。
+            `
+          });
+
+  code-cleanup-check:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Run cleanup analysis
+      run: |
+        python scripts/cleanup_legacy_code.py <<< "n"
+      continue-on-error: true
+    
+    - name: Check for legacy code warnings
+      run: |
+        # 检查是否有新增的传统代码
+        if [ -f cleanup_report.txt ]; then
+          LEGACY_COUNT=$(grep -c "is_legacy" cleanup_report.txt || echo "0")
+          echo "发现 ${LEGACY_COUNT} 个传统代码文件"
+          
+          if [ "$LEGACY_COUNT" -gt 10 ]; then
+            echo "::warning::传统代码文件数量较多，建议规划清理"
+          fi
+        fi
+      continue-on-error: true
+
+  migration-progress-badge:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.ref == 'refs/heads/main'
+    
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        ref: main
+    
+    - name: Update migration badge
+      run: |
+        # 生成迁移进度徽章
+        SERVICE_RATE=7.8
+        
+        # 根据迁移率设置颜色
+        if (( $(echo "$SERVICE_RATE >= 80" | bc -l) )); then
+          COLOR=brightgreen
+        elif (( $(echo "$SERVICE_RATE >= 50" | bc -l) )); then
+          COLOR=green
+        elif (( $(echo "$SERVICE_RATE >= 20" | bc -l) )); then
+          COLOR=yellow
+        else
+          COLOR=red
+        fi
+        
+        # 这里可以更新 README 中的徽章链接
+        echo "迁移进度: ${SERVICE_RATE}%"
+        echo "徽章颜色: ${COLOR}"

@@ -1,0 +1,95 @@
+# CI SSOT: generated from FHD/.github/workflows/release-desktop.yml — edit root copy only.
+name: Release Desktop
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version"
+        required: true
+        default: "10.0.0"
+  push:
+    tags:
+      - "FHD/v8.*"
+
+permissions:
+  contents: write
+
+
+defaults:
+  run:
+    working-directory: FHD
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: |
+            frontend/package-lock.json
+            desktop/package-lock.json
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - name: Build Windows installers (2 SKUs)
+        shell: pwsh
+        run: |
+          $v = "${{ github.event.inputs.version || github.ref_name }}".TrimStart('v','V')
+          scripts/package/build-all-skus.ps1 -Version $v
+      - uses: actions/upload-artifact@v4
+        with:
+          name: xcagi-desktop-windows
+          path: |
+            release/xcagi-v*/personal/**
+            release/xcagi-v*/enterprise/**
+
+  macos:
+    runs-on: macos-latest
+    env:
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: |
+            frontend/package-lock.json
+            desktop/package-lock.json
+      - name: Build macOS installers (2 SKUs)
+        shell: bash
+        run: |
+          v="${{ github.event.inputs.version || github.ref_name }}"
+          v="${v#v}"
+          scripts/package/build-installer.sh "$v" all
+      - uses: actions/upload-artifact@v4
+        with:
+          name: xcagi-desktop-macos
+          path: |
+            release/xcagi-v*/personal/**
+            release/xcagi-v*/enterprise/**
+
+  github-release:
+    needs: [windows, macos]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*

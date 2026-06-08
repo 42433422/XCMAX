@@ -1,16 +1,16 @@
 # XCMAX 工作区地图
 
-**最后更新**：2026-06-05
+**最后更新**：2026-06-08
 
-> **版本控制**：**`XCMAX/` 根目录为 SSOT 单仓**（`git clone` 即得 FHD + MODstore + specs 全栈）。历史子仓 `.git` 备份于 `~/XCMAX-archives/nested-git-backup-20260608/`。远程：**[`42433422/XCMAX`](https://github.com/42433422/XCMAX)**。周度归档见 [`specs/weekly/`](specs/weekly/)。
+> **版本控制**：**`XCMAX/` 根目录为 SSOT 单仓**（`git clone` 即得 FHD + MODstore + specs 全栈）。历史子仓 `.git` 备份于 `~/XCMAX-archives/nested-git-backup-20260608/`。远程：**[`42433422/XCMAX`](https://github.com/42433422/XCMAX)**。CI 入口见 [`docs/CI_SSOT.md`](docs/CI_SSOT.md)。周度归档见 [`specs/weekly/`](specs/weekly/)。
 
 ## 项目状态表（仓库根 → 子项目）
 
 | 子项目 | 路径 | 活跃度 | 日常入口 | CI 主 workflow |
 |--------|------|--------|----------|----------------|
-| **XCAGI 主产品** | [`FHD/`](FHD/) | **活跃** — 后端 / 前端 / 桌面 / 双 SKU | [`FHD/docs/START_HERE.md`](FHD/docs/START_HERE.md) | [`FHD/.github/workflows/test.yml`](FHD/.github/workflows/test.yml) |
+| **XCAGI 主产品** | [`FHD/`](FHD/) | **活跃** — 后端 / 前端 / 桌面 / 双 SKU | [`FHD/docs/START_HERE.md`](FHD/docs/START_HERE.md) | [`fhd-ci-cd.yml`](.github/workflows/fhd-ci-cd.yml) |
 | **Android（签约级）** | [`FHD/mobile-android/`](FHD/mobile-android/) | **签约级移动产品** — 双 SKU · IM V0 · `release-android.yml` | [`FHD/docs/guides/MOBILE_ANDROID.md`](FHD/docs/guides/MOBILE_ANDROID.md) | [`.github/workflows/android-build.yml`](.github/workflows/android-build.yml) |
-| **MODstore 姊妹栈** | [`成都修茈科技有限公司/`](成都修茈科技有限公司/) | **活跃** — 市场前端 / modstore_server / 支付 | [`MODstore_deploy/docs/developer/README.md`](成都修茈科技有限公司/MODstore_deploy/docs/developer/README.md) | [`ci-backend-python.yml`](成都修茈科技有限公司/.github/workflows/ci-backend-python.yml) |
+| **MODstore 姊妹栈** | [`成都修茈科技有限公司/`](成都修茈科技有限公司/) | **活跃** — 市场前端 / modstore_server / 支付 | [`MODstore_deploy/docs/developer/README.md`](成都修茈科技有限公司/MODstore_deploy/docs/developer/README.md) | [`modstore-ci-backend-python.yml`](.github/workflows/modstore-ci-backend-python.yml) |
 | **技术债与计划** | [`specs/`](specs/) | **活跃** — 规范与 checklist | [`specs/plan-2026-06.md`](specs/plan-2026-06.md) | — |
 | **FHD 历史副本** | [`FHD/MODstore/`](FHD/MODstore/) | **废弃** — 仅保留防断引用 | 见 redirect README | 勿在此开发 |
 | **个人版归档** | [`FHD/docs/_archive/FHD-个人/`](FHD/docs/_archive/FHD-个人/) | **只读归档** — 仓根 [`FHD-个人/`](FHD-个人/) 为 stub | [`FHD/docs/_archive/FHD-个人/ARCHIVED.md`](FHD/docs/_archive/FHD-个人/ARCHIVED.md) | 已迁（T45，2026-06） |
@@ -65,8 +65,8 @@ make -f Makefile.win dev
 
 | 项目 | 套件路径 | 本地命令 | CI |
 |------|----------|----------|-----|
-| FHD / XCAGI | [`FHD/tests/`](FHD/tests/)（索引：[`FHD/tests/INDEX.md`](FHD/tests/INDEX.md)） | `cd FHD && python -m pytest tests/ -q` | [`FHD/.github/workflows/test.yml`](FHD/.github/workflows/test.yml) |
-| MODstore | [`MODstore_deploy/tests/`](成都修茈科技有限公司/MODstore_deploy/tests/) | `cd 成都修茈科技有限公司/MODstore_deploy && python -m pytest tests/ -q` | [`ci-backend-python.yml`](成都修茈科技有限公司/.github/workflows/ci-backend-python.yml) |
+| FHD / XCAGI | [`FHD/tests/`](FHD/tests/)（索引：[`FHD/tests/INDEX.md`](FHD/tests/INDEX.md)） | `cd FHD && python -m pytest tests/ -q` | [`fhd-ci-cd.yml`](.github/workflows/fhd-ci-cd.yml) |
+| MODstore | [`MODstore_deploy/tests/`](成都修茈科技有限公司/MODstore_deploy/tests/) | `cd 成都修茈科技有限公司/MODstore_deploy && python -m pytest tests/ -q` | [`modstore-ci-backend-python.yml`](.github/workflows/modstore-ci-backend-python.yml) |
 | vibe-coding | [`vibe-coding/tests/`](成都修茈科技有限公司/vibe-coding/tests/) | `cd 成都修茈科技有限公司/vibe-coding && python -m pytest tests/agent/ -q` | 见 yuangon test-qa-runner |
 | xcagi_common | [`packages/xcagi_common/tests/`](packages/xcagi_common/tests/) | `cd packages/xcagi_common && python -m pytest tests/ -q` | 随 FHD 变更 |
 

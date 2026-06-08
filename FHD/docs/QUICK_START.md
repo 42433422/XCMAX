@@ -35,8 +35,8 @@
 ### 1. 克隆与依赖
 
 ```bash
-git clone https://github.com/42433422/ai-excel-helper.git
-cd ai-excel-helper
+git clone https://github.com/42433422/XCMAX.git
+cd XCMAX/FHD
 python -m venv .venv
 # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
