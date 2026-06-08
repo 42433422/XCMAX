@@ -6,10 +6,36 @@
 
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
+### 部署工程化（2026-06-08 · v10 线内迭代）
+- **Phase 2 compose 双模**：CI `docker-build-fhd-api` 构建 `xcagi-fhd-api` 推 GHCR（`sha-<git_sha>` 标签）；manifest v2 含 `image` / `image_digest`；`fhd-apply-release-compose.sh` + `docker-compose.fhd-prod.yml`（digest 钉扎、5100→5000）；`fhd-auto-update.sh` 按 `deploy_mode` 路由
+- **tarball 拉取式发布链**（Phase 1 默认）：`fhd-pack-release.sh` → `fhd-push-release.sh` → 服务器 `fhd-auto-update.sh` cron → `fhd-apply-release.sh`（健康检查 + 自动回滚）
+- **fix(deploy)**：`fhd-apply-release.sh` 同步 tarball 内 `docker/`（含 `docker-compose.fhd-prod.yml`），供 Phase 2 compose 切换
+- 打包前强制 `verify_version_anchors.py`；制品含 `git_sha` + `sha256` manifest
+- 替代生产机 `git_auto_update.sh`：`fhd-install-server-cron.sh` 幂等安装 cron
+- CI `pack-verify` job：锚点校验 + 打 server tarball + Actions artifact（不含生产 SSH key）
+- 发布 tag 统一为 `FHD/v10.*`；runbook 见 [`docs/CI_SSOT.md`](../../docs/CI_SSOT.md)
+- **fix(db)**：`sqlalchemy.inspect(engine)` 支持 `_EngineProxy`，修复生产 tarball 启动 `NoInspectionAvailable`
+- **fix(deploy)**：Mod 分库无 CREATEDB 权限时不阻塞主库启动；补全 `app/services/contract_lifecycle.py`；apply 回滚不再覆盖 deploy 脚本
+
 ### 仓根 SSOT（2026-06-08）
 - Git 起源迁至 [`42433422/XCMAX`](https://github.com/42433422/XCMAX) 根仓；`FHD/`、`MODstore_deploy/` 为子路径
 - CI 调度统一在根 `.github/workflows/`（见 [`docs/CI_SSOT.md`](../../docs/CI_SSOT.md)）
 - `WechatDecrypt` 去 gitlink，纳入普通文件；子仓 `.git` 备份于 `~/XCMAX-archives/nested-git-backup-20260608/`
+
+### 尽调治理（2026-06-08 · v10 线内迭代）
+- **许可证**：`LICENSE` 全文对齐 **Apache-2.0**；README / LICENSING / 商业文档社区版表述一致
+- **安全红线**：`git rm --cached` MODstore `payment_orders/order_*.json`（10 个）；`.gitignore` 补 `payment_orders/`、`.env.fhd-docker`；[`SECURITY.md`](SECURITY.md) 增密钥轮换 / 历史扫描 / 投资前 gitleaks 指引
+- **覆盖率诚实口径**：`full_app` **60.63%**（SSOT）；CI 窄包 **70%**；修正 CLAIMED / 周报误报 ≥88%
+
+### 仓卫生 / 安全（2026-06-08 · v10 线内迭代）
+- 自 Git 索引移除 `frontend/.nm-e2e/` 依赖缓存（~11k 文件）；`.gitignore` 已覆盖 `.nm-*` / chroma / `.der`
+- 非 example 的 `.env*`、`secret.yaml`、chroma/`.der` 出仓；补 `START_HERE.md`、`MIGRATION_v2_DROP_PLAN.md`、`XCAGI/k8s/secret.yaml.example`
+- 轻量 smoke CI：`FHD/.github/workflows/test.yml` → 根 `fhd-test.yml`（Ruff + pytest 路由烟测 + 前端 lint/Vitest smoke + 仓卫生守卫）
+- 恢复只读校验 `scripts/dev/verify_version_anchors.py`（v10 锚点 `10.0.0`）
+
+### 技术债（记录，非本批大规模重构）
+- 遗留 `*_v2` 应用服务与占位实现：见 [`docs/MIGRATION_v2_DROP_PLAN.md`](docs/MIGRATION_v2_DROP_PLAN.md)
+- 宽泛 `except Exception`、自动生成桩代码：优先在新改动中收紧；存量按模块逐步替换
 
 ### 行业引导 / Mod SSOT（Phase 2）
 - 行业包中性 mod id：`attendance-industry` / `coating-industry`（`industry_baseline.json` 仅改 `mod_id`）
@@ -348,7 +374,7 @@ docker-compose pull && docker-compose up -d
 
 | 版本 | 价格 | 包含内容 |
 |------|------|---------|
-| **社区版** | 免费 | AGPL 协议，功能受限 |
+| **社区版** | 免费 | Apache-2.0 协议，功能受限 |
 | **标准版** | ¥10,000–30,000/年 | 完整功能，单实例 |
 | **企业版** | ¥50,000–100,000/年 | 多实例、优先支持、定制开发 |
 
@@ -719,7 +745,7 @@ cd XCAGI && python run.py
 
 ## 许可证
 
-本项目采用 **GNU Affero General Public License v3.0 (AGPL-3.0)** 开源许可证。
+本项目社区版采用 **Apache License 2.0** 开源许可证（2026-06 由 AGPL-3.0 对齐；历史 commit 仍可能标注旧协议，以 HEAD [`LICENSE`](LICENSE) 为准）。
 
 ---
 

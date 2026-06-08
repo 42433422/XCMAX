@@ -90,6 +90,12 @@ def ensure_postgres_per_mod_databases(
                     logger.info("Creating empty mod database: %s (mod=%s)", dbn, mid)
                     boot._create_db_empty(conn, dbn, owner)
                 created_dbnames.append(dbn)
+    except Exception as exc:
+        logger.warning(
+            "ensure_postgres_per_mod_databases: skip (no CREATEDB or maintenance error): %s",
+            exc,
+        )
+        return []
     finally:
         admin_engine.dispose()
 

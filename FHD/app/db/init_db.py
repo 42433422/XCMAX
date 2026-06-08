@@ -571,7 +571,15 @@ def _resolve_auth_bootstrap_engine(
         except OPERATIONAL_ERRORS as exc:
             logger.warning("auth bootstrap: 无法按 DATABASE_URL 创建引擎: %s", exc)
     if real_engine is None and engine is not None:
-        real_engine = engine
+        if isinstance(engine, _Engine):
+            real_engine = engine
+        else:
+            try:
+                from app.db import _get_engine as _get_real_engine
+
+                real_engine = _get_real_engine()
+            except OPERATIONAL_ERRORS:
+                real_engine = None
     if real_engine is None:
         try:
             from app.db import _get_engine as _get_real_engine
