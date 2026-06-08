@@ -9,7 +9,6 @@ ContextFacade - 统一上下文门面
 3. 决策处理方式
 """
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 from dataclasses import dataclass
 from enum import Enum
@@ -27,6 +26,7 @@ from app.domain.services.conversation.context.intent_context import (
     PendingIntent,
     get_intent_context,
 )
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

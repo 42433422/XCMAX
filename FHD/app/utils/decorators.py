@@ -10,13 +10,14 @@ XCAGI 服务优化装饰器集合
 - 熔断装饰器
 """
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import functools
 import hashlib
 import logging
 import time
 from collections.abc import Callable
 from typing import TypeVar
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

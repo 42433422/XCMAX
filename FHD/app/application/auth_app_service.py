@@ -1,6 +1,5 @@
 """认证应用服务：登录/改密/重置密码，委托 SessionManager 与会话基础设施。"""
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import uuid
 from typing import Any
@@ -8,6 +7,7 @@ from typing import Any
 from app.db.models import Permission, Role, User
 from app.db.session import get_db
 from app.infrastructure.session import get_session_manager
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 from app.utils.password_hash import check_password_hash, generate_password_hash
 from app.utils.time import utc_now_naive
 
@@ -105,10 +105,7 @@ class AuthApplicationService:
         from app.utils.password_hash import generate_password_hash
 
         username = str(
-            profile.get("preferred_username")
-            or profile.get("email")
-            or profile.get("sub")
-            or ""
+            profile.get("preferred_username") or profile.get("email") or profile.get("sub") or ""
         ).strip()
         if not username:
             return {"success": False, "message": "OIDC 未返回可用用户名"}

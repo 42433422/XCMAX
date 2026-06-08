@@ -1,8 +1,8 @@
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import json
 import logging
 import os
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 from app.utils.path_utils import get_app_data_dir
 from app.utils.print_utils import PrinterUtils
 from app.utils.printer_automation import EnhancedPrinterUtils

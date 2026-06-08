@@ -11,7 +11,6 @@
     python -m app.services.distillation_data_collector
 """
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import json
 import logging
 import os
@@ -25,6 +24,7 @@ from app.utils.distillation_paths import (
     get_distillation_logs_dir,
     get_distillation_root_dir,
 )
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DISTILL_DIR = get_distillation_root_dir()

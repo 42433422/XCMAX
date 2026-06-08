@@ -14,11 +14,12 @@ Supported syntax examples:
 DO NOT use this for complex business logic that requires external function calls.
 """
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import ast
 import logging
 import operator
 from typing import Any
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

@@ -6,7 +6,6 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import functools
 import logging
 import time
@@ -18,6 +17,7 @@ from fastapi import Request
 
 from app.neuro_bus.application_neuro_bridge import publish_neuro_event
 from app.neuro_bus.integrations.intent_integration import is_neuro_stack_enabled
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

@@ -9,7 +9,6 @@
 - 批量处理优化
 """
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import asyncio
 import logging
 import time
@@ -20,6 +19,7 @@ from typing import Any
 
 from app.neuro_bus.bus import NeuroBus, get_neuro_bus
 from app.neuro_bus.events.base import NeuroEvent
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

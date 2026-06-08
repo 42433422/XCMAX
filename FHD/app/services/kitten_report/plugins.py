@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from statistics import mean
 from typing import Any
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 
 def _safe_float(value: Any) -> float | None:

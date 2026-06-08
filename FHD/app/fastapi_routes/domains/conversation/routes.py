@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import os
 
@@ -14,6 +13,7 @@ from app.fastapi_routes.domains.misc.helpers import (
     _session_to_dict,
 )
 from app.utils.json_safe import json_safe
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

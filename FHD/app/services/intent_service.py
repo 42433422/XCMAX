@@ -16,7 +16,6 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import hashlib
 import logging
 import re
@@ -25,6 +24,7 @@ from typing import Any
 from app.domain.neuro.reflex_arc import ReflexType, get_reflex_arc
 from app.services.rule_engine import get_rule_engine, reload_rule_engine
 from app.utils.cache_manager import get_intent_rule_cache
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 from resources.config.intent_config import get_intent_config, reload_intent_config
 
 _intent_cache = get_intent_rule_cache()

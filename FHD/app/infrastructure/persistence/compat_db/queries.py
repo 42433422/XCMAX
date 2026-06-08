@@ -6,20 +6,20 @@ xcagi_compat 共享 DB 查询辅助函数。
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 
 from sqlalchemy import inspect, text
 from sqlalchemy.exc import OperationalError
 
+from app.infrastructure.db.sync_engine import get_sync_engine
 from app.infrastructure.persistence.compat_db.base import (
     TRIVIAL_MEASURE_UNITS,
     _exc_chain_has_undefined_table,
     _insp_table_exists,
     _sql_ident,
 )
-from app.infrastructure.db.sync_engine import get_sync_engine
 from app.shell.mod_row_scope import append_mod_scope_where
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

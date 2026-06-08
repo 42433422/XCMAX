@@ -3,12 +3,13 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import asyncio
 import logging
 import os
 
 from fastapi import FastAPI
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

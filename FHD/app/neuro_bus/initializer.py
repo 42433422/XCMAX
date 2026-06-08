@@ -4,7 +4,6 @@ NeuroBus 初始化器
 确保所有 Level 4 可靠性机制在应用启动时正确初始化。
 """
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 
 from app.neuro_bus.bus import get_neuro_bus
@@ -14,6 +13,7 @@ from app.neuro_bus.deduplicator import get_deduplicator
 from app.neuro_bus.event_store import EventStoreMode, get_event_store
 from app.neuro_bus.health_monitor import get_health_monitor
 from app.neuro_bus.retry_handler import get_retry_handler
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

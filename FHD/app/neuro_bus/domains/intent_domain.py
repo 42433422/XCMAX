@@ -4,13 +4,13 @@
 意图识别事件通道，优先级最高
 """
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 from dataclasses import dataclass
 from typing import Any
 
 from app.neuro_bus.domains.base import DomainChannel, NeuroDomain, get_domain_registry
 from app.neuro_bus.events.base import EventPriority, NeuroEvent
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

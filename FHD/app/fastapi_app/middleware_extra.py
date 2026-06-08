@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import time
 
@@ -13,6 +12,7 @@ from app.request_active_mod_ctx import (
     reset_request_active_mod_id,
     set_request_active_mod_id,
 )
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

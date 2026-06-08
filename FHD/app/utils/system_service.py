@@ -6,11 +6,12 @@
 此模块已迁移到 app/utils/
 """
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import os
 import sys
 from typing import Any
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

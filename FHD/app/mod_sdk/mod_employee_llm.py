@@ -12,10 +12,11 @@ Mod 员工脚本用的窄 LLM 入口（经 ``app.mod_sdk`` 暴露）。
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import os
 from typing import Any
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -143,7 +144,11 @@ async def mod_employee_complete(
         from app.services.ai_conversation_service import get_ai_conversation_service
     except ImportError as e:
         logger.warning("mod_employee_complete: get_ai_conversation_service 不可用: %s", e)
-        return {"success": False, "content": "", "error": "get_ai_conversation_service not available"}
+        return {
+            "success": False,
+            "content": "",
+            "error": "get_ai_conversation_service not available",
+        }
 
     svc = get_ai_conversation_service()
     if not getattr(svc, "api_key", None):

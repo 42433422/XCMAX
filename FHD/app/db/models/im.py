@@ -33,9 +33,7 @@ class ImConversation(Base):
 
 class ImConversationMember(Base):
     __tablename__ = "im_conversation_members"
-    __table_args__ = (
-        UniqueConstraint("conversation_id", "user_id", name="uq_im_conv_member"),
-    )
+    __table_args__ = (UniqueConstraint("conversation_id", "user_id", name="uq_im_conv_member"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     conversation_id: Mapped[int] = mapped_column(

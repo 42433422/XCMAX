@@ -1,6 +1,5 @@
 """用户 CRUD 服务：列表/查询/创建/更新/软删，不负责认证与权限策略。"""
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import uuid
 from typing import Any
@@ -8,6 +7,7 @@ from typing import Any
 from app.db.models import User
 from app.db.session import get_db
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 from app.utils.password_hash import generate_password_hash
 from app.utils.time import utc_now_naive
 

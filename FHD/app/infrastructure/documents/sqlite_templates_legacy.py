@@ -57,7 +57,6 @@ class TemplateField(Base):
 
     template = relationship("Template", back_populates="fields")
 
-
     def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,

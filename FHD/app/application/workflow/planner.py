@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import json
 import logging
 import uuid
@@ -10,6 +9,7 @@ from typing import Any
 import httpx
 
 from app.services import get_ai_conversation_service
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 from app.utils.path_utils import ensure_fhd_repo_on_syspath
 
 from .types import PlanGraph, WorkflowNode, validate_plan_graph

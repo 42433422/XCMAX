@@ -4,7 +4,6 @@
 提供供应商、采购订单、采购入库等业务逻辑。
 """
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 from datetime import datetime
 from decimal import Decimal
@@ -23,6 +22,7 @@ from app.db.models import (
 from app.db.session import get_db
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
 from app.services.inventory_service import InventoryService
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

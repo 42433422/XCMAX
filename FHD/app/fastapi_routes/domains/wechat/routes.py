@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import os
 import sys
 
 from fastapi import APIRouter, Body, Query
 from fastapi.responses import JSONResponse
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

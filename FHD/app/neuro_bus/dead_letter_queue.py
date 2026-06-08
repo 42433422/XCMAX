@@ -15,7 +15,6 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import asyncio
 import logging
 import time
@@ -27,6 +26,7 @@ from typing import Any
 from uuid import uuid4
 
 from app.neuro_bus.events.base import NeuroEvent
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

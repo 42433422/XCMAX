@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
 
 from sqlalchemy import func
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 from .plugins import AnalysisPlugin, PluginResult
 

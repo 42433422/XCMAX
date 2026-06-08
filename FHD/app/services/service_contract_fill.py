@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -71,9 +71,11 @@ def build_merged_fields(market_user_id: int, *, username: str = "") -> dict[str,
         key = field["key"]
         merged[key] = str(overrides.get(key) or stored.get(key) or "")
     if not merged.get("party_a_name"):
-        merged["party_a_name"] = str(doc.get("erp_customer_name") or doc.get("username") or username or "")
+        merged["party_a_name"] = str(
+            doc.get("erp_customer_name") or doc.get("username") or username or ""
+        )
     if not merged.get("sign_date"):
-        merged["sign_date"] = datetime.now(timezone.utc).date().isoformat()
+        merged["sign_date"] = datetime.now(UTC).date().isoformat()
     return merged
 
 
@@ -104,7 +106,7 @@ def generate_contract_docx(
     values = field_values or build_merged_fields(int(market_user_id), username=username)
     party_a = str(values.get("party_a_name") or username or f"客户{market_user_id}")
     amount = str(values.get("total_amount_number") or "")
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    stamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
     filename = f"contract_{int(market_user_id)}_{stamp}.docx"
     path = generated_contracts_dir() / filename
     # 最小占位：写入 UTF-8 文本文件并改扩展名供下载链路；完整 docx 模板后续可替换

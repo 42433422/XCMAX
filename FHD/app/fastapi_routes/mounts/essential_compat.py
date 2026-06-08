@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
-import os
 
 from fastapi import FastAPI
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
+
 logger = logging.getLogger(__name__)
+
 
 def register_essential_compat_routes(app: FastAPI) -> None:
     """CI/E2E 在跳过完整 legacy 栈时仍须可用的最小 API（避免 payment_sot 等重依赖）。"""
@@ -27,5 +28,3 @@ def register_essential_compat_routes(app: FastAPI) -> None:
         logger.info("Registered product compat (essential, /api/products/*)")
     except OPERATIONAL_ERRORS as e:
         logger.warning("essential product compat skipped: %s", e)
-
-

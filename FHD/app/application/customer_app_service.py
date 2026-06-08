@@ -1,9 +1,9 @@
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 from datetime import datetime
 from typing import Any
 
 from app.domain.customer.entities import PurchaseUnit
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

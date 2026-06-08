@@ -7,7 +7,6 @@ FHD compact 栈（backend.http_app）不加载完整 XCAGI 时，至少避免 40
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import time
 from typing import Any
@@ -15,6 +14,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Request
 
 from app.neuro_bus.application_neuro_bridge import publish_neuro_event
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

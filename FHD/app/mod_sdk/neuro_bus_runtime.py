@@ -3,12 +3,12 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 from functools import lru_cache
 from typing import Any
 
 from app.mod_sdk.neuro_bus_compat import NEURO_BUS_BRIDGE_MOD_ID, is_neuro_bus_via_mod_enabled
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

@@ -3,10 +3,10 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 from typing import Any
 
 from app.mod_sdk.duty_roster import all_planned_duty_employee_ids, load_duty_roster_document
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 
 def _installed_employee_pack_ids() -> set[str]:

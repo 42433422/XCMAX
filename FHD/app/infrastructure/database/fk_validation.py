@@ -4,10 +4,10 @@
 当迁移到 PostgreSQL 统一 schema 后，可以改用数据库级外键约束。
 """
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 
 from app.db import SessionLocal
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import json
 import logging
 import os
@@ -12,6 +11,7 @@ from sqlalchemy import text
 
 from app.application.ports.template_store import TemplateStorePort
 from app.db.session import get_db
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import os
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 from app.utils.path_utils import get_base_dir, resolve_fhd_repo_root
 
 logger = logging.getLogger(__name__)

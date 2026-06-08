@@ -5,7 +5,6 @@ Label Template Generator - 从图片生成标签模板代码
 支持 OCR 识别固定标签和可变数据。
 """
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import re
 from datetime import datetime
@@ -13,6 +12,8 @@ from pathlib import Path
 from typing import Any
 
 from PIL import Image
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

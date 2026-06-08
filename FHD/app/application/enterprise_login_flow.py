@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import secrets
 from typing import Any
@@ -16,6 +15,7 @@ from app.application.session_account_meta import (
     persist_session_account_meta,
     validate_account_kind_for_market,
 )
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -181,7 +181,6 @@ async def finalize_enterprise_login(
 ) -> dict[str, Any]:
     """绑定市场 token、会话元数据、Mod 权益与租户信息。"""
     from app.fastapi_routes.market_account import (
-        login_market_with_password,
         save_session_market_token,
     )
 
@@ -258,7 +257,9 @@ async def finalize_enterprise_login(
                     str(session_id),
                     account_kind=account_kind,
                     company_brand=str(result.get("company_brand") or ""),
-                    tenant_id=int(tenant_info["tenant_id"]) if tenant_info.get("tenant_id") else None,
+                    tenant_id=int(tenant_info["tenant_id"])
+                    if tenant_info.get("tenant_id")
+                    else None,
                 )
             result["account_kind"] = account_kind
 
@@ -347,7 +348,7 @@ async def run_market_first_login(
     login_market_fn: Any | None = None,
 ) -> tuple[dict[str, Any] | None, JSONResponse | None]:
     """企业 SKU：市场先行，再本地 session + finalize。"""
-    from app.application.session_account_meta import persist_session_account_meta, validate_account_kind_for_market
+    from app.application.session_account_meta import persist_session_account_meta
 
     login_username = username
     if sku == "enterprise":

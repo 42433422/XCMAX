@@ -26,7 +26,6 @@
     adapter = create_modstore_adapter_from_env()
 """
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import json
 import logging
 import os
@@ -36,6 +35,8 @@ from types import SimpleNamespace
 from typing import Any, Dict, List, Optional
 
 import httpx
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

@@ -4,13 +4,13 @@
 提供系统配置、开机自启等业务逻辑。
 """
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import os
 import sys
 from typing import Any
 
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

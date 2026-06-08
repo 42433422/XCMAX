@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import json
 from datetime import datetime
 from typing import Any
@@ -8,6 +7,7 @@ from typing import Any
 from app.application.ports.shipment_record_store import ShipmentRecordStorePort
 from app.db.models import ShipmentRecord
 from app.db.session import get_db
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 
 class SQLAlchemyShipmentRecordStore(ShipmentRecordStorePort):

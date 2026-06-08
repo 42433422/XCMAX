@@ -9,12 +9,12 @@
 2. 启动服务时设置环境变量：USE_DISTILLED_MODEL=1
 """
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import os
 from typing import Any
 
 from app.utils.distillation_paths import get_distillation_checkpoints_dir
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

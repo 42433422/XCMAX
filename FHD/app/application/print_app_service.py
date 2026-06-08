@@ -19,7 +19,11 @@ class PrintApplicationService:
         self,
         printer_service: PrinterService | None = None,
     ):
-        self._printer_service = printer_service or get_printer_service()  # type: ignore
+        if printer_service is None:
+            from app.services import get_printer_service
+
+            printer_service = get_printer_service()
+        self._printer_service = printer_service
 
     def print_labels(self, label_data: list[dict[str, Any]]) -> dict[str, Any]:
         """

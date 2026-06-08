@@ -5,7 +5,6 @@
 支持 CLOSED/OPEN/HALF_OPEN 三种状态
 """
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import time
 from collections.abc import Callable
@@ -13,6 +12,8 @@ from dataclasses import dataclass
 from enum import Enum
 from threading import RLock
 from typing import Any
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

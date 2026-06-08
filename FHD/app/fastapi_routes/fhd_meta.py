@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 from fastapi import APIRouter
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 router = APIRouter(prefix="/api/fhd", tags=["fhd"])
 

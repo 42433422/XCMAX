@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import uuid
 from typing import Any
@@ -21,6 +20,7 @@ from app.infrastructure.payment.payment_sot import (
     model_payment_backend,
     modstore_payment_hint,
 )
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

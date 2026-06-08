@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import os
 import platform
 from pathlib import Path
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 DESKTOP_ENV = "XCAGI_DESKTOP_MODE"
 DATA_DIR_ENV = "XCAGI_DATA_DIR"

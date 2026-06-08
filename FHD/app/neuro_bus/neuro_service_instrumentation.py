@@ -6,7 +6,6 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import inspect
 import threading
 import time
@@ -14,6 +13,7 @@ from collections.abc import Callable
 from typing import Any
 
 from app.neuro_bus.application_neuro_bridge import neuro_trace_service_call
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 _tls = threading.local()
 

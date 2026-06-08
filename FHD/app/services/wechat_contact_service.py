@@ -4,7 +4,6 @@
 提供微信联系人管理、业务逻辑处理。
 """
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import difflib
 import json
 import logging
@@ -18,6 +17,7 @@ from app.db.models import WechatContact, WechatContactContext
 from app.db.session import get_db
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
 from app.utils.external_sqlite import sqlite_conn
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -145,6 +145,7 @@ class WechatContactService(NeuroEventPublisherMixin):
 
             # 先尝试从 contact.db 直接匹配联系人（通常“昵称/备注/微信号”都在这里）
             try:
+                wechat_decrypt_dir = os.path.dirname(db_path)
                 wechat_decrypt_base = os.path.dirname(wechat_decrypt_dir)  # .../decrypted
                 contact_db_path = os.path.join(wechat_decrypt_base, "contact", "contact.db")
                 logger.info(

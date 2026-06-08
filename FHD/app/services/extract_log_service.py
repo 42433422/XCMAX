@@ -4,7 +4,6 @@
 记录和管理 Excel 数据提取操作的日志。
 """
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import json
 import logging
 from datetime import datetime
@@ -12,6 +11,7 @@ from typing import Any
 
 from app.db.session import get_db
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

@@ -8,7 +8,6 @@
 - 批量导入产品到主库
 """
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import os
 import sqlite3
@@ -18,6 +17,7 @@ from app.db.models.customer import Customer
 from app.db.models.product import Product
 from app.db.session import get_db
 from app.utils.external_sqlite import sqlite_conn
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 from app.utils.path_utils import get_upload_dir
 
 logger = logging.getLogger(__name__)

@@ -3,13 +3,13 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import sqlite3
 from typing import Any
 
 from app.mod_sdk.host_profile import get_client_mod_policies
 from app.mod_sdk.platform_shell import PROTECTED_CLIENT_MOD_IDS
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

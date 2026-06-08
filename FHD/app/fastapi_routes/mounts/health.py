@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
-import os
 
 from fastapi import FastAPI
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
+
 logger = logging.getLogger(__name__)
+
 
 def register_health_routes(app: FastAPI) -> None:
     """注册健康检查路由"""
@@ -37,5 +38,3 @@ def register_health_routes(app: FastAPI) -> None:
         return {"pong": True}
 
     logger.info("Registered health check routes")
-
-

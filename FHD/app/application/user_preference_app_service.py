@@ -4,8 +4,9 @@
 此模块已迁移到 app/application/
 """
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 from typing import Any
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 
 class UserPreferenceApplicationService:

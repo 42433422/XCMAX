@@ -3,11 +3,12 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import json
 import os
 from pathlib import Path
 from typing import Any
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 CUSTOMER_SERVICE_BRIDGE_MOD_ID = "xcagi-customer-service-bridge"
 MOD_PAGE_PREFIX = f"/mod/{CUSTOMER_SERVICE_BRIDGE_MOD_ID}"

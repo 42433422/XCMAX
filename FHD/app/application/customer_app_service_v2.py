@@ -4,7 +4,6 @@ customer_app_service V2 - 事件驱动版本
 基于 Neuro-DDD 架构的事件驱动实现。
 """
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
@@ -12,6 +11,7 @@ from typing import TYPE_CHECKING, Any
 from app.neuro_bus.bus import get_neuro_bus
 from app.neuro_bus.events.base import EventPriority, NeuroEvent
 from app.neuro_bus.events.customer_events import *
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 if TYPE_CHECKING:
     pass

@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import math
 import re
@@ -13,6 +12,8 @@ from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import json
 import logging
 from typing import Any
@@ -8,6 +7,7 @@ from typing import Any
 import httpx
 
 from app.services import get_ai_conversation_service
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 from .types import NodeExecutionResult, PlanGraph, WorkflowNode, WorkflowRunResult
 

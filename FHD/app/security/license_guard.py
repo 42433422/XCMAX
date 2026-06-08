@@ -8,7 +8,6 @@ ASGI 中间件：cookie / header token 校验。
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import json
 import logging
 import os
@@ -28,6 +27,7 @@ from app.security.license_store import (
     touch_session,
 )
 from app.security.license_token import TokenError, parse_token
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import os
 import sys
 from datetime import UTC, datetime
@@ -12,6 +11,8 @@ import psutil
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 router = APIRouter(tags=["health-k8s"])
 

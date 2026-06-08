@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import json
 import logging
 import os
@@ -14,6 +13,8 @@ from typing import Any
 from fastapi import Body, File, Query, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy import text
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

@@ -5,7 +5,6 @@
 支持分布式追踪和性能分析
 """
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import time
 import uuid
@@ -15,6 +14,7 @@ from enum import Enum
 from typing import Any
 
 from app.neuro_bus.events.base import NeuroEvent
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

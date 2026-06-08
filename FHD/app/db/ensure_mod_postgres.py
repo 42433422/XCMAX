@@ -9,6 +9,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
+
 logger = logging.getLogger(__name__)
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -90,7 +92,7 @@ def ensure_postgres_per_mod_databases(
                     logger.info("Creating empty mod database: %s (mod=%s)", dbn, mid)
                     boot._create_db_empty(conn, dbn, owner)
                 created_dbnames.append(dbn)
-    except Exception as exc:
+    except OPERATIONAL_ERRORS as exc:
         logger.warning(
             "ensure_postgres_per_mod_databases: skip (no CREATEDB or maintenance error): %s",
             exc,

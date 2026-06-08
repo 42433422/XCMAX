@@ -3,11 +3,12 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import json
 import logging
 from pathlib import Path
 from typing import Any
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 OFFICE_PACK_BRIDGE_MOD_ID = "xcagi-office-employee-pack-bridge"
 

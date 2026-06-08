@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import json
 import logging
 from datetime import datetime
@@ -10,6 +9,7 @@ from sqlalchemy import text
 
 from app.application.ports.extract_log_store import ExtractLogStorePort
 from app.db.session import get_db
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

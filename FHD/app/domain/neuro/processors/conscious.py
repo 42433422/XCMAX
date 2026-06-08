@@ -8,7 +8,6 @@
 - 完整可靠性机制栈
 """
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import asyncio
 import logging
 import time
@@ -24,6 +23,7 @@ from app.neuro_bus.events.base import EventPriority, NeuroEvent
 from app.neuro_bus.retry_handler import NeuroRetryHandler
 from app.neuro_bus.sandbox import NeuroSandbox
 from app.neuro_bus.sla_controller import SLAController
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

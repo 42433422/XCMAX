@@ -12,7 +12,6 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import base64
 import hashlib
 import hmac
@@ -22,6 +21,7 @@ import time
 from dataclasses import dataclass
 
 from app.security.lan_config import LAN_LICENSE_SECRET_MIN_LENGTH
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 
 def _b64u_encode(raw: bytes) -> str:

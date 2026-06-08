@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import os
 import re
@@ -22,6 +21,7 @@ from app.template_analysis_progress import (
     clear_template_analysis_progress,
     set_template_analysis_progress,
 )
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

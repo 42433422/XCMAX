@@ -11,7 +11,6 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
@@ -21,6 +20,7 @@ from typing import Any
 from uuid import uuid4
 
 from app.neuro_bus.events.base import NeuroEvent
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

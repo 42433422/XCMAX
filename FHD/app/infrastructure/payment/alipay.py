@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import os
 from pathlib import Path
 from typing import Any
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 # 兜底加载 .env（如果尚未加载）
 try:
@@ -268,7 +269,13 @@ def _try_page_pay(
     try:
         client = build_client()
     except RuntimeError as e:
-        return {"success": False, "order_string": None, "gateway": "", "message": str(e), "raw": None}
+        return {
+            "success": False,
+            "order_string": None,
+            "gateway": "",
+            "message": str(e),
+            "raw": None,
+        }
 
     kwargs = _build_common_kwargs(
         out_trade_no=out_trade_no,
@@ -329,7 +336,13 @@ def _try_wap_pay(
     try:
         client = build_client()
     except RuntimeError as e:
-        return {"success": False, "order_string": None, "gateway": "", "message": str(e), "raw": None}
+        return {
+            "success": False,
+            "order_string": None,
+            "gateway": "",
+            "message": str(e),
+            "raw": None,
+        }
 
     kwargs = _build_common_kwargs(
         out_trade_no=out_trade_no,

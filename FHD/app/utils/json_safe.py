@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 from collections.abc import Mapping
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 
 def json_safe(value: Any) -> Any:

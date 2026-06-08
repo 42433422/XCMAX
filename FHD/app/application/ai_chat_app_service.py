@@ -17,7 +17,6 @@ AI 聊天应用服务
 ``XCAGI_DISABLE_PRO_EXCEL_IMPORT_SHORTCUT=1`` / ``context.excel_import_skip_deterministic_shortcut``（等价跳过捷径）。
 """
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import asyncio
 import json
 import logging
@@ -37,6 +36,7 @@ from app.application.workflow import (
     get_approval_service,
 )
 from app.services import get_ai_conversation_service
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 from app.utils.path_utils import resolve_fhd_repo_root
 
 logger = logging.getLogger(__name__)

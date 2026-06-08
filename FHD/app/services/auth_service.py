@@ -1,6 +1,5 @@
 """用户认证与会话编排（密码校验、审计日志、委托 SessionService）。"""
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import uuid
 from typing import Any
@@ -10,6 +9,7 @@ from app.db.session import get_db
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
 from app.services.session_service import get_session_service
 from app.utils import audit_logger
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 from app.utils.password_hash import check_password_hash, generate_password_hash
 from app.utils.time import utc_now_naive
 

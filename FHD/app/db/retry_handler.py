@@ -5,12 +5,13 @@ Provides retry logic for SQLite database operations to handle "database is locke
 that occur under concurrent write scenarios.
 """
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import functools
 import logging
 import time
 from collections.abc import Callable
 from typing import Any, TypeVar
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

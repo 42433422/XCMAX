@@ -2,17 +2,18 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import secrets
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _base_payload(doc: dict[str, Any], *, username: str = "") -> dict[str, Any]:
@@ -35,9 +36,13 @@ def get_enterprise_credentials(market_user_id: int, *, username: str = "") -> di
 
     doc = load_pipeline(int(market_user_id), username=username)
     payload = _base_payload(doc, username=username)
-    base = (  # optional market sync
-        __import__("os").environ.get("XCAGI_MARKET_BASE_URL") or ""
-    ).strip().rstrip("/")
+    base = (
+        (  # optional market sync
+            __import__("os").environ.get("XCAGI_MARKET_BASE_URL") or ""
+        )
+        .strip()
+        .rstrip("/")
+    )
     if not base:
         return payload
     try:

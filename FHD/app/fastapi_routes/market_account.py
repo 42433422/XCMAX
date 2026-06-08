@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import json
 import logging
 import os
@@ -13,6 +12,8 @@ from typing import Any
 import httpx
 from fastapi import APIRouter, Body, Request
 from fastapi.responses import JSONResponse
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 router = APIRouter(prefix="/api/market", tags=["market-account"])
 logger = logging.getLogger(__name__)
@@ -904,7 +905,8 @@ async def _normalize_market_auth_payload(
             "success": False,
             "message": message,
             "status_code": status_code,
-            "error_code": code or ("MARKET_AUTH_UNAVAILABLE" if status_code >= 500 else "MARKET_AUTH_FAILED"),
+            "error_code": code
+            or ("MARKET_AUTH_UNAVAILABLE" if status_code >= 500 else "MARKET_AUTH_FAILED"),
             "raw": raw_body,
             "market_base_url": market_base or _market_base_url(),
         }

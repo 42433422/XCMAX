@@ -1,4 +1,3 @@
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import os
 from datetime import datetime
@@ -14,6 +13,7 @@ from app.application.ports import (
 )
 from app.domain.shipment.aggregates import Shipment, ShipmentItem
 from app.domain.shipment.legacy_vo import ContactInfo
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

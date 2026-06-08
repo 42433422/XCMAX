@@ -3,7 +3,6 @@
 为 AI生态提供文件解析、统计分析和图表数据生成服务
 """
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import uuid
 from pathlib import Path
@@ -12,6 +11,7 @@ from typing import Any
 import pandas as pd
 
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

@@ -6,7 +6,6 @@ XCAGI 前端兼容 API（FastAPI APIRouter）— 聚合入口。
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 
 from fastapi import APIRouter
@@ -20,6 +19,7 @@ from app.fastapi_routes.domains.product.routes import router as product_legacy_r
 from app.fastapi_routes.domains.template.routes import router as template_router
 from app.fastapi_routes.domains.wechat.compat_routes import router as wechat_compat_router
 from app.fastapi_routes.domains.wechat.routes import router as wechat_legacy_router
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

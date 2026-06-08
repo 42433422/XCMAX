@@ -4,7 +4,15 @@ set -euo pipefail
 
 PROXY_HOST="127.0.0.1"
 PROXY_PORT="7890"
-CURSOR_APP="/Applications/Cursor.app"
+# 优先用 /Applications 正式安装；勿从 DMG 挂载目录长期运行
+if [[ -d "/Applications/Cursor.app" ]]; then
+  CURSOR_APP="/Applications/Cursor.app"
+elif [[ -d "/Volumes/Cursor Installer/Cursor.app" ]]; then
+  echo "警告：当前从 DMG 临时目录启动，建议将 Cursor 拖入「应用程序」后重装。" >&2
+  CURSOR_APP="/Volumes/Cursor Installer/Cursor.app"
+else
+  CURSOR_APP="/Applications/Cursor.app"
+fi
 
 if ! curl -sS --connect-timeout 2 "http://${PROXY_HOST}:${PROXY_PORT}" -o /dev/null 2>/dev/null; then
   echo "FlClash 代理 ${PROXY_HOST}:${PROXY_PORT} 未就绪，请先启动 FlClash。" >&2

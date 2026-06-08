@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
-import os
 
 from fastapi import FastAPI
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
+
 logger = logging.getLogger(__name__)
+
 
 def register_lan_routes(app: FastAPI) -> None:
     """注册局域网授权用户端 + 管理员路由（/api/lan/*）。"""
@@ -35,5 +36,3 @@ def register_lan_routes(app: FastAPI) -> None:
         logger.info("Registered LAN settings routes (/api/lan/admin/settings)")
     except OPERATIONAL_ERRORS as e:
         logger.warning("LAN settings routes skipped: %s", e)
-
-

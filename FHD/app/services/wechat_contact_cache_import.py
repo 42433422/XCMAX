@@ -6,7 +6,6 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import json
 import logging
 import os
@@ -17,6 +16,7 @@ from typing import Any
 from app.db.models import WechatContact
 from app.db.session import get_db
 from app.utils.external_sqlite import sqlite_conn
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 from app.utils.path_utils import get_resource_path
 
 logger = logging.getLogger(__name__)

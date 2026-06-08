@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import json
 import logging
 import os
@@ -11,6 +10,8 @@ from copy import deepcopy
 from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 if TYPE_CHECKING:
     pass

@@ -7,7 +7,6 @@ Phase 5B 从 ``app.legacy.database`` + ``app.legacy.mod_database_url`` 吸收。
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import os
 import threading
@@ -20,6 +19,7 @@ from sqlalchemy.engine import Engine
 
 from app.infrastructure.db.mod_database_url import resolve_database_url_for_active_mod
 from app.shell import mod_database_gate
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

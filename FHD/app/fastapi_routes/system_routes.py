@@ -16,12 +16,13 @@ resources/config/industry_config.py::_mod_industries_dict 与
 app/infrastructure/mods/manifest.py::ModMetadata.industry。
 """
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

@@ -6,7 +6,7 @@ import json
 import logging
 import os
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -21,7 +21,7 @@ _THINKING_MARKERS = re.compile(
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _config_root() -> Path:
@@ -37,11 +37,19 @@ def _config_file(market_user_id: int) -> Path:
 def _load_config(market_user_id: int) -> dict[str, Any]:
     path = _config_file(market_user_id)
     if not path.is_file():
-        return {"market_user_id": int(market_user_id), "poll_enabled": False, "poll_interval_sec": 60}
+        return {
+            "market_user_id": int(market_user_id),
+            "poll_enabled": False,
+            "poll_interval_sec": 60,
+        }
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        return {"market_user_id": int(market_user_id), "poll_enabled": False, "poll_interval_sec": 60}
+        return {
+            "market_user_id": int(market_user_id),
+            "poll_enabled": False,
+            "poll_interval_sec": 60,
+        }
     return raw if isinstance(raw, dict) else {}
 
 
@@ -138,7 +146,10 @@ def passive_poll_once(
     session_id: str = "",
     request: Any = None,
 ) -> dict[str, Any]:
-    from app.services.wechat_group_customer_bridge import build_starred_group_feed, sync_group_messages
+    from app.services.wechat_group_customer_bridge import (
+        build_starred_group_feed,
+        sync_group_messages,
+    )
 
     _ = username
     _ = refresh_count_new
@@ -150,7 +161,11 @@ def passive_poll_once(
     if not skip_sync:
         sync_group_messages(market_user_id=uid)
     feed = build_starred_group_feed(limit=20, market_user_id=uid)
-    texts = [str(x.get("content") or x.get("message") or "") for x in feed if x.get("content") or x.get("message")]
+    texts = [
+        str(x.get("content") or x.get("message") or "")
+        for x in feed
+        if x.get("content") or x.get("message")
+    ]
     detected = len(texts)
     ready, llm_msg = _llm_configured()
     llm_error = "" if ready or not use_llm else llm_msg

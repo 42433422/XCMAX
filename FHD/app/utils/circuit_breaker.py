@@ -4,7 +4,6 @@
 防止级联失败的熔断器模式实现。
 """
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import threading
 import time
@@ -12,6 +11,8 @@ from collections.abc import Callable
 from enum import Enum
 from functools import wraps
 from typing import Any
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

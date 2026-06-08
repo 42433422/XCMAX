@@ -3,16 +3,14 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
 from typing import Any
 
 from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
 
-from app.utils.time import utc_now_naive
-
 from app.db.models.im import ImConversation, ImConversationMember, ImMessage
 from app.db.models.user import User
+from app.utils.time import utc_now_naive
 
 logger = logging.getLogger(__name__)
 

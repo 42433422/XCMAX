@@ -5,8 +5,9 @@
 避免循环导入问题
 """
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 from typing import Any
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 _current_industry: str = "涂料"
 

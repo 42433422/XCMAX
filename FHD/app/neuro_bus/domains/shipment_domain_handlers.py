@@ -4,7 +4,6 @@ Shipment 领域事件处理器
 处理所有 shipment.* 事件的业务逻辑。
 """
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 from typing import Any
 
@@ -17,6 +16,7 @@ from app.neuro_bus.events.shipment_events import (
     ShipmentInventoryDeductedEvent,
     ShipmentItemAddedEvent,
 )
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

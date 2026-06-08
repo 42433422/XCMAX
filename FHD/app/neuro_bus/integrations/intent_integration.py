@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import os
 import time
@@ -14,6 +13,7 @@ from typing import Any
 from app.domain.neuro.processors.coordinator import ProcessorType
 from app.domain.neuro.reflex_arc import IntentReflexArc, ReflexResult, ReflexType, get_reflex_arc
 from app.neuro_bus.domains.intent_domain import get_intent_domain
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

@@ -7,7 +7,6 @@ URL：XCAGI_NEURO_BUS_REDIS_URL 或 CACHE_REDIS_URL / REDIS_URL（db 默认 3）
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import json
 import logging
 import os
@@ -16,6 +15,7 @@ import uuid
 from typing import TYPE_CHECKING, Any
 
 from app.neuro_bus.events.base import NeuroEvent
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 if TYPE_CHECKING:
     from app.neuro_bus.bus import NeuroBus

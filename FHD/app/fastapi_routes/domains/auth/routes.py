@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import os
 from typing import Any
@@ -15,6 +14,7 @@ from app.infrastructure.auth.dependencies import (
     require_permission,
     session_id_from_request,
 )
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +64,9 @@ def auth_me(request: Request, user=Depends(get_logged_in_user)):
             "market_is_admin": bool(session_meta.get("market_is_admin")),
             "market_is_enterprise": bool(session_meta.get("market_is_enterprise")),
             "tenant_id": session_meta.get("tenant_id"),
-            "tenant_name": session_meta.get("tenant_name") or session_meta.get("company_brand") or "",
+            "tenant_name": session_meta.get("tenant_name")
+            or session_meta.get("company_brand")
+            or "",
             "impersonating_market_user_id": session_meta.get("impersonating_market_user_id"),
             "impersonating_username": session_meta.get("impersonating_username") or "",
         },

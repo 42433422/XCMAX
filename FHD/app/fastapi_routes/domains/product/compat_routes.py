@@ -4,7 +4,6 @@ XCAGI 前端兼容 API — 产品 / 库存 / 报价表导出路由。
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 from datetime import date
 from urllib.parse import quote
@@ -35,6 +34,7 @@ from app.shell.mod_row_scope import (
     products_update_or_delete_mod_and,
     scoped_mod_id,
 )
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 router = APIRouter(tags=["xcagi-compat"])
 logger = logging.getLogger(__name__)

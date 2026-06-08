@@ -6,7 +6,6 @@
 - 添加处理器协调
 """
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 from dataclasses import dataclass
 from typing import Any
@@ -22,6 +21,7 @@ from app.domain.services.conversation.coordinator import (
     get_conversation_coordinator as get_base_coordinator,
 )
 from app.neuro_bus.domains.intent_domain import get_intent_domain
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

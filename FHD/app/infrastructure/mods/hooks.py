@@ -2,9 +2,10 @@
 Mod Hook System - Event subscription and trigger mechanism
 """
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 from collections.abc import Callable
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

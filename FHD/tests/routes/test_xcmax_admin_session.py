@@ -13,10 +13,11 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-import app.fastapi_routes.xcmax_admin as admin_routes
-from app.fastapi_routes.xcmax_admin import router
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+
+import app.fastapi_routes.xcmax_admin as admin_routes
+from app.fastapi_routes.xcmax_admin import router
 
 
 @pytest.fixture

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 from typing import Any
 
@@ -11,6 +10,7 @@ from app.infrastructure.persistence.shipment_audit_repository import (
     ShipmentAuditRepository,
     get_shipment_audit_repository,
 )
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

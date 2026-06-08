@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 from typing import Any, Literal
 
 from app.db.models.user import Session as UserSession
 from app.db.session import get_db
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

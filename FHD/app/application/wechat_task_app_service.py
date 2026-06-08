@@ -4,7 +4,6 @@
 此模块已迁移到 app/application/
 """
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import os
 import re
@@ -17,6 +16,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.db.models import WechatTask
 from app.db.session import get_db
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

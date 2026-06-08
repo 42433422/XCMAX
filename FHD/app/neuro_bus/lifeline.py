@@ -8,7 +8,6 @@
 - 关键路径保护
 """
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import time
 from collections.abc import Callable
@@ -17,6 +16,7 @@ from enum import Enum
 from threading import RLock
 
 from app.neuro_bus.events.base import EventPriority, NeuroEvent
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

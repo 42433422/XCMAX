@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import base64
 import logging
 import os
@@ -24,6 +23,7 @@ from app.traditional_mode_fs import (
     write_base64_response,
     write_text_response,
 )
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 from app.utils.path_utils import get_base_dir
 from app.utils.secure_filename import secure_filename
 

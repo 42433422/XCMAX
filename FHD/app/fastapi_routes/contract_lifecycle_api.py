@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
 
@@ -12,6 +11,7 @@ from app.schemas.contract_lifecycle_schemas import (
     EsignStartBody,
     EsignWebhookBody,
 )
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 router = APIRouter(prefix="/api/contract-lifecycle", tags=["contract-lifecycle"])
 

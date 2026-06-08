@@ -4,7 +4,6 @@ Prometheus 指标模块
 提供应用指标采集和暴露功能。
 """
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import time
 from collections.abc import Callable
 from functools import wraps
@@ -12,6 +11,8 @@ from typing import Any
 
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, Info, generate_latest
 from starlette.responses import Response
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 materials_created_total = Counter(
     "materials_created_total", "Total number of materials created", ["category"]

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import asyncio
 import json
 import logging
@@ -10,6 +9,8 @@ from collections import defaultdict
 from typing import Any
 
 from fastapi import WebSocket
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

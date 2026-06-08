@@ -5,7 +5,6 @@ OCR服务模块
 默认优先 PaddleOCR，与「识别模板」标签图走同一引擎；可通过环境变量切换或回退 EasyOCR/Tesseract。
 """
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import os
 import re
@@ -14,6 +13,8 @@ from io import BytesIO
 from typing import Any
 
 import numpy as np
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -96,7 +97,7 @@ class OCRService:
             pytesseract.get_tesseract_version()
             self.tesseract_available = True
             logger.info("OCR 回退引擎：Tesseract")
-        except (ImportError, Exception):
+        except (ImportError, OPERATIONAL_ERRORS):
             self.tesseract_available = False
 
     def recognize(self, image) -> str:

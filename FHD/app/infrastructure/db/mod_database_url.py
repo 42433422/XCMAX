@@ -16,11 +16,12 @@ Phase 5B 从 ``app.legacy.mod_database_url`` 吸收而来。
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import json
 import os
 from pathlib import Path
 from urllib.parse import quote, unquote
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 
 def _normalize_mod_for_env(mod_id: str) -> str:

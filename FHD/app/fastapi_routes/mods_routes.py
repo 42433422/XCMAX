@@ -7,7 +7,6 @@ Provides endpoints for:
 - GET /api/mods/routes - Get mod routes
 """
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import hashlib
 import json
 import logging
@@ -16,6 +15,8 @@ from typing import Any
 
 from fastapi import Request
 from fastapi.responses import JSONResponse, Response
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

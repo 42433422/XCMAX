@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import time
 from typing import Any
@@ -11,6 +10,7 @@ import httpx
 
 from app.infrastructure.llm.providers.credentials import resolve_deepseek_credentials
 from app.utils.metrics import record_ai_call
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

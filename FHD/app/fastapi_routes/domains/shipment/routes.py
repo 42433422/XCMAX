@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 from typing import Any
 
@@ -10,6 +9,7 @@ from fastapi import APIRouter, Body
 from fastapi.responses import JSONResponse
 
 from app.fastapi_routes.domains.misc.helpers import _dispatch_tool_for_approval
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

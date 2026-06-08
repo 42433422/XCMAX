@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import dataclasses
 import logging
 import os
@@ -23,6 +22,7 @@ from app.application.mod_store_catalog_app import (
     sync_modstore_library_to_local,
 )
 from app.shell.mods_catalog import list_mod_items
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

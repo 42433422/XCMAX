@@ -1,6 +1,15 @@
 # 覆盖率分阶段提升与补测清单
 
-本文档与根目录及 `XCAGI/pyproject.toml` 中的 `tool.coverage.report.fail_under` 对齐。
+本文档与 [`pyproject.toml`](../../pyproject.toml) 中的 `tool.coverage.report.fail_under` 对齐。
+
+## 双口径 SSOT（禁止混报）
+
+| 口径 | 含义 | 当前实测（2026-06-04） | 门禁 |
+|------|------|------------------------|------|
+| **`full_app`** | `pytest --cov=app` 整棵 `app/` | **60.63%**（`metrics/coverage-dual-summary.json`） | 观测 only，**无** CI fail |
+| **CI 窄包** | `pyproject.toml` `[tool.coverage.run]` include/omit 子集 | 与 `full_app` 同次跑分可能不同 | **`fail_under=70`**（`ci-cd.yml`） |
+
+对外材料（周报、尽调、CLAIMED）须引用 **`full_app.pct`** 作为全量真实值；不得将 plan 目标 88% 或窄包达标误报为全量覆盖率。
 
 ## 阶段目标
 

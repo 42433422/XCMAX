@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import inspect
 import logging
 import os
@@ -18,6 +17,7 @@ from app.middleware.global_rate_limit import GlobalRateLimitMiddleware
 from app.middleware.security_headers import SecurityHeadersMiddleware
 from app.middleware.xss_sanitizer import XSSSanitizerMiddleware
 from app.security import LanCidrGuard, LanLicenseGuard
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 from .cors import (
     lan_origin_regex_enabled,

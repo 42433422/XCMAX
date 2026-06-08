@@ -11,12 +11,13 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import os
 from dataclasses import dataclass, field
 from functools import lru_cache
 from ipaddress import ip_network
 from pathlib import Path
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 LAN_LICENSE_SECRET_MIN_LENGTH = 8
 

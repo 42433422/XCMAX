@@ -3,11 +3,11 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 from functools import lru_cache
 from typing import Any
 
 from app.mod_sdk.host_profile import resolve_fhd_config_dir
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 
 def _load_json(path):
@@ -30,7 +30,9 @@ def load_industry_baseline_document() -> dict[str, Any]:
         "schema_version": 1,
         "core_mod_ids": ["xcagi-planner-bridge", "xcagi-neuro-bus-bridge"],
         "mod_labels": {},
-        "industries": {"通用": {"host_mod_ids": [], "optional_host_mod_ids": [], "industry_mod_ids": []}},
+        "industries": {
+            "通用": {"host_mod_ids": [], "optional_host_mod_ids": [], "industry_mod_ids": []}
+        },
     }
 
 
@@ -167,9 +169,7 @@ def _label_for_custom_mod(mod_id: str, industry_key: str, labels: dict[str, str]
 
 def build_onboarding_industry_catalog() -> dict[str, Any]:
     doc = load_industry_baseline_document()
-    open_ids = _dedupe(
-        [str(x) for x in (doc.get("onboarding_open_industry_ids") or []) if x]
-    )
+    open_ids = _dedupe([str(x) for x in (doc.get("onboarding_open_industry_ids") or []) if x])
     open_packages: list[dict[str, Any]] = []
     for iid in open_ids:
         pkg = _industry_package(iid)
@@ -192,17 +192,12 @@ def build_industry_baseline_plan(
     installed_mod_ids: list[str] | None = None,
 ) -> dict[str, Any]:
     doc = load_industry_baseline_document()
-    labels: dict[str, str] = {
-        str(k): str(v) for k, v in (doc.get("mod_labels") or {}).items() if k
-    }
+    labels: dict[str, str] = {str(k): str(v) for k, v in (doc.get("mod_labels") or {}).items() if k}
     core_ids = _dedupe([str(x) for x in (doc.get("core_mod_ids") or []) if x])
     row = _industry_row(industry_id)
     industry_key = str(industry_id or "").strip() or "通用"
 
-    required_ids = _dedupe(
-        core_ids
-        + [str(x) for x in (row.get("host_mod_ids") or []) if x]
-    )
+    required_ids = _dedupe(core_ids + [str(x) for x in (row.get("host_mod_ids") or []) if x])
     optional_ids = _dedupe(
         [
             str(x).strip()
@@ -214,7 +209,9 @@ def build_industry_baseline_plan(
 
     installed = set(installed_mod_ids or _installed_mod_ids())
 
-    def _item(mod_id: str, tier: str, required: bool, *, show_mod_id: bool | None = None) -> dict[str, Any]:
+    def _item(
+        mod_id: str, tier: str, required: bool, *, show_mod_id: bool | None = None
+    ) -> dict[str, Any]:
         if show_mod_id is None:
             show_mod_id = tier in ("core", "host", "optional")
         return {
@@ -228,7 +225,9 @@ def build_industry_baseline_plan(
             "show_mod_id": show_mod_id,
         }
 
-    custom_hint, custom_extra_ids = _custom_line_spec(industry_mod_ids[0] if industry_mod_ids else "")
+    custom_hint, custom_extra_ids = _custom_line_spec(
+        industry_mod_ids[0] if industry_mod_ids else ""
+    )
     custom_mod_ids = _dedupe(industry_mod_ids + custom_extra_ids)
 
     groups: list[dict[str, Any]] = [
@@ -242,11 +241,7 @@ def build_industry_baseline_plan(
             "id": "host",
             "title": "行业基础线",
             "hint": "按所选行业建议安装的宿主 Mod",
-            "items": [
-                _item(mid, "host", True)
-                for mid in required_ids
-                if mid not in core_ids
-            ],
+            "items": [_item(mid, "host", True) for mid in required_ids if mid not in core_ids],
         },
     ]
     if custom_mod_ids:
@@ -281,9 +276,7 @@ def build_industry_baseline_plan(
         it["mod_id"] for it in flat_items if not it["required"] and not it["installed"]
     ]
     missing_industry = [
-        it["mod_id"]
-        for it in flat_items
-        if it["tier"] == "custom" and not it["installed"]
+        it["mod_id"] for it in flat_items if it["tier"] == "custom" and not it["installed"]
     ]
 
     pkg = _industry_package(industry_key)

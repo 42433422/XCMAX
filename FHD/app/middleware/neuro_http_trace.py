@@ -4,13 +4,14 @@ HTTP 层 Neuro 读写 trace：采样、无 body 默认、不记敏感头。
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import time
 import uuid
 from typing import Any
 
 from starlette.requests import Request
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 
