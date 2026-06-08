@@ -63,7 +63,10 @@ FHD/mobile-android/.toolchain/
 .trae/
 .runtime/
 
-# 本地测试素材与一次性导出（非交付树）
+# 根目录本地素材（非交付树）
+/*.jpg
+/*.png
+/*.jpeg
 测试/
 mods-export-*/
 v7-reference/
