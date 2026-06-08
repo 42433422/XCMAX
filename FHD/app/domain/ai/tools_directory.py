@@ -6,6 +6,7 @@ Phase 3 从 ``app.legacy.tools_directory_compat`` 迁入。
 from __future__ import annotations
 
 from app.utils.operational_errors import OPERATIONAL_ERRORS
+
 DEFAULT_TOOL_CATEGORIES = [
     {
         "id": 10,

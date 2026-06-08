@@ -4,7 +4,6 @@ XCAGI 前端兼容 API — 客户管理路由。
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 
 from fastapi import APIRouter, Body, File, HTTPException, Query, Request, UploadFile
@@ -33,6 +32,7 @@ from app.neuro_bus.route_event_publisher import (
     publish_route_event,
     publish_simple_event,
 )
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 router = APIRouter(tags=["xcagi-compat"])
 logger = logging.getLogger(__name__)

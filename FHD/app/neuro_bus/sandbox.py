@@ -8,7 +8,6 @@
 - 预检报告生成
 """
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import copy
 import logging
 from collections.abc import Callable
@@ -17,6 +16,7 @@ from enum import Enum
 from typing import Any
 
 from app.neuro_bus.events.base import NeuroEvent
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

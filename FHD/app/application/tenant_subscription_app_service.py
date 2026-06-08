@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import re
 from datetime import timedelta
@@ -12,6 +11,7 @@ from app.db.models.tenant import Tenant
 from app.db.models.user import User
 from app.db.session import get_db
 from app.infrastructure.billing.saas_plans import is_saas_plan_id, trial_days
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 from app.utils.time import utc_now_naive
 
 logger = logging.getLogger(__name__)

@@ -9,7 +9,7 @@
 ### 部署工程化（2026-06-08 · v10 线内迭代）
 - **Phase 2 compose 双模**：CI `docker-build-fhd-api` 构建 `xcagi-fhd-api` 推 GHCR（`sha-<git_sha>` 标签）；manifest v2 含 `image` / `image_digest`；`fhd-apply-release-compose.sh` + `docker-compose.fhd-prod.yml`（digest 钉扎、5100→5000）；`fhd-auto-update.sh` 按 `deploy_mode` 路由
 - **tarball 拉取式发布链**（Phase 1 默认）：`fhd-pack-release.sh` → `fhd-push-release.sh` → 服务器 `fhd-auto-update.sh` cron → `fhd-apply-release.sh`（健康检查 + 自动回滚）
-- **fix(deploy)**：`fhd-apply-release.sh` 同步 tarball 内 `docker/`（含 `docker-compose.fhd-prod.yml`），供 Phase 2 compose 切换
+- **fix(ci)**：移除 PyPI 不存在的 `types-python-dotenv`；bump `python-dotenv`/`gevent`/`gunicorn` 过 safety；arch baseline +45；npm cache 路径 `FHD/frontend/package-lock.json`
 - 打包前强制 `verify_version_anchors.py`；制品含 `git_sha` + `sha256` manifest
 - 替代生产机 `git_auto_update.sh`：`fhd-install-server-cron.sh` 幂等安装 cron
 - CI `pack-verify` job：锚点校验 + 打 server tarball + Actions artifact（不含生产 SSH key）

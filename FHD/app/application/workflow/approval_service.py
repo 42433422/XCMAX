@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import uuid
 from datetime import datetime
@@ -12,6 +11,7 @@ from app.application.workflow.types import (
     PlanGraph,
     WorkflowNode,
 )
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 from resources.config.approval_config import (
     ApprovalConfig,
     get_approval_config,

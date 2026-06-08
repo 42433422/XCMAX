@@ -9,11 +9,11 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 from typing import Any
 
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 from .intent_service import recognize_intents as rule_recognize_intents
 from .rasa_nlu_service import RasaNLUService, get_rasa_nlu_service

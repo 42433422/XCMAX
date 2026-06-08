@@ -10,7 +10,6 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import asyncio
 import logging
 import time
@@ -22,6 +21,7 @@ from enum import Enum
 from typing import Any
 
 from app.neuro_bus.bus import get_neuro_bus
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

@@ -136,7 +136,6 @@ async def exchange_code_for_userinfo(code: str) -> dict[str, Any]:
         "client_id": _client_id(),
     }
     secret = _client_secret()
-    auth = None
     if secret:
         data["client_secret"] = secret
 

@@ -1,8 +1,9 @@
 """Excel 处理工具函数模块 — 读写、合并单元格处理等。"""
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 from collections.abc import Iterable
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 from typing import Any

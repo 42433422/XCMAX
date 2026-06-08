@@ -4,7 +4,6 @@ NeuroBus 初始化配置
 提供总线启动、关闭和与 FastAPI 生命周期集成
 """
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import asyncio
 import logging
 from contextlib import asynccontextmanager
@@ -13,6 +12,7 @@ from fastapi import FastAPI
 
 from app.neuro_bus.bus import NeuroBus, get_neuro_bus
 from app.neuro_bus.events.base import EventPriority, NeuroEvent
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

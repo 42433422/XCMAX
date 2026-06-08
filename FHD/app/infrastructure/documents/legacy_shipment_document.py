@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import importlib.util
 import os
 import sys
 from dataclasses import dataclass
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 
 @dataclass(frozen=True)

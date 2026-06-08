@@ -17,7 +17,6 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import time
 from ipaddress import ip_address, ip_network
@@ -33,6 +32,7 @@ from app.security.lan_config import (
 from app.security.lan_ip import get_client_ip
 from app.security.lan_settings_store import LanSettingsOverride, load_overrides, save_overrides
 from app.security.license_store import write_audit
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

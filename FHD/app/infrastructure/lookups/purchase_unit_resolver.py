@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import re
 from dataclasses import dataclass
 from difflib import SequenceMatcher, get_close_matches
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 try:
     from pypinyin import Style, pinyin

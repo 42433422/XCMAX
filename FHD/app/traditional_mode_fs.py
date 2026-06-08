@@ -6,7 +6,6 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import base64
 import json
 import logging
@@ -18,6 +17,7 @@ from collections.abc import Iterator
 from datetime import UTC, datetime
 from typing import Any
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 from app.utils.path_utils import get_base_dir
 
 logger = logging.getLogger(__name__)

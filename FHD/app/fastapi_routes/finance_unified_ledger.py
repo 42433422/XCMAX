@@ -1,12 +1,13 @@
 """自建财务统一归档 API（独立路由，避免 finance.py 依赖 finance_schema 导入链）。"""
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 from typing import Optional
 
 from fastapi import APIRouter, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

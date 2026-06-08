@@ -9,7 +9,6 @@ DeepSeek 意图识别服务 v2
 原始模块位于 app/services/deepseek_intent_service.py
 """
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import hashlib
 import logging
 import os
@@ -18,6 +17,7 @@ from collections import OrderedDict
 from typing import Any
 
 from app.utils.cache_manager import get_intent_deepseek_cache
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

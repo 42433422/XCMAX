@@ -4,12 +4,12 @@
 包含大批量发货单生成、打印等异步任务。
 """
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import os
 from typing import Any
 
 from app.extensions import celery_app
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

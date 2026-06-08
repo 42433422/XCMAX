@@ -51,4 +51,6 @@ def operations_reconciliation_run(dry_run: bool = False):
     )
 
     data = run_reconciliation_preview_cycle() if dry_run else run_reconciliation_full_cycle()
-    return JSONResponse(from_legacy_ok_payload({"success": data.get("success", True), "data": data}))
+    return JSONResponse(
+        from_legacy_ok_payload({"success": data.get("success", True), "data": data})
+    )

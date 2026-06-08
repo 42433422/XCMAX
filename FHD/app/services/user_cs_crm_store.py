@@ -6,7 +6,7 @@ import json
 import sqlite3
 import uuid
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -64,7 +64,9 @@ def sync_crm_from_pipeline_doc(doc: dict[str, Any]) -> dict[str, Any]:
     return doc
 
 
-async def push_external_crm_for_market_user(market_user_id: int, *, username: str = "") -> dict[str, Any]:
+async def push_external_crm_for_market_user(
+    market_user_id: int, *, username: str = ""
+) -> dict[str, Any]:
     from app.services.user_cs_pipeline import load_pipeline, save_pipeline
 
     doc = load_pipeline(int(market_user_id), username=username)
@@ -74,7 +76,9 @@ async def push_external_crm_for_market_user(market_user_id: int, *, username: st
     return {"pipeline": doc, "pushed": True}
 
 
-async def pull_external_crm_for_market_user(market_user_id: int, *, username: str = "") -> dict[str, Any]:
+async def pull_external_crm_for_market_user(
+    market_user_id: int, *, username: str = ""
+) -> dict[str, Any]:
     from app.services.user_cs_pipeline import save_pipeline
 
     doc = load_pipeline(int(market_user_id), username=username)
@@ -137,7 +141,7 @@ def ensure_crm_schema() -> None:
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def get_opportunity_by_market_user(market_user_id: int) -> dict[str, Any] | None:

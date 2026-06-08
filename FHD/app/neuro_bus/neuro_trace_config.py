@@ -6,10 +6,11 @@ Neuro 读写全量 trace 的环境开关与采样（HTTP / Application 分层）
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import os
 import random
 from functools import lru_cache
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 
 def _truthy(raw: str) -> bool:

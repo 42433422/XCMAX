@@ -51,7 +51,7 @@ build_one_sku() {
   python3 scripts/package/generate-desktop-resources.py
 
   (cd desktop && [ -d node_modules ] || npm install)
-  (cd desktop && npm version "${VERSION}" --no-git-tag-version)
+  (cd desktop && npm version "${VERSION}" --no-git-tag-version --allow-same-version)
   (cd desktop && npx electron-builder --mac dmg zip \
     "--config.directories.output=../release/xcagi-v${VERSION}/${sku}" \
     "--config.appId=$(sku_app_id "$sku")" \

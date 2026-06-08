@@ -5,7 +5,6 @@ Read/query methods delegate to the core application service via __getattr__.
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import uuid
 from typing import Any
@@ -16,6 +15,7 @@ from app.neuro_async_bridge import run_coroutine_on_neuro_loop
 from app.neuro_bus.bus import get_neuro_bus
 from app.neuro_bus.command_gateway import get_command_gateway
 from app.neuro_bus.events.base import EventPriority, NeuroEvent
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

@@ -1,6 +1,7 @@
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import os
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

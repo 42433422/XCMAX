@@ -15,5 +15,6 @@
   "pass_stub_files": 145,
   "omit_excluded_lines_approx": 0,
   "ci_gate_narrow_pct": 70,
-  "notes": "full_app 为整棵 app/ 权威口径；measured_core_c1 为 COVERAGE_RAMP C1 窄包，不得与 full_app 混报。pass_stub_files 含独立 pass 行，由 exclude_lines 排除。"
+  "plan_target_full_app_pct": 88,
+  "notes": "full_app 为整棵 app/ 权威口径（尽调/CLAIMED 须引用 full_app.pct，当前 60.63%）。ci_gate_narrow_pct=70 为 CI 窄包门禁，不得与 full_app 混报。plan_target_full_app_pct=88 仅为路线图目标，非实测。pass_stub_files 含独立 pass 行，由 exclude_lines 排除。"
 }

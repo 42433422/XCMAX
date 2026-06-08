@@ -4,7 +4,6 @@
 提供微信消息扫描、处理、任务管理等业务逻辑。
 """
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import os
 import re
@@ -18,6 +17,7 @@ from sqlalchemy.exc import IntegrityError
 from app.db.models import WechatTask
 from app.db.session import get_db
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

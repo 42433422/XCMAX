@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import socket
 from typing import Any
@@ -14,6 +13,7 @@ from pydantic import BaseModel, Field
 from app.fastapi_routes.mobile_api import get_mobile_user
 from app.security.mobile_pairing import consume_pairing_nonce, issue_pairing_nonce
 from app.utils.mobile_api import format_mobile_response, paginate_list
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -635,7 +635,9 @@ async def mobile_auth_oidc_exchange(body: OidcExchangeBody):
             status_code=401,
         )
     sku = resolve_product_sku()
-    account_kind = normalize_account_kind(None, default="enterprise" if sku == "enterprise" else "personal")
+    account_kind = normalize_account_kind(
+        None, default="enterprise" if sku == "enterprise" else "personal"
+    )
     username = str((auth_result.get("user") or {}).get("username") or "")
     session_id = auth_result.get("session_id")
     payload = await finalize_enterprise_login(
@@ -797,7 +799,9 @@ async def mobile_auth_oidc_exchange(body: OidcExchangeBody):
             status_code=401,
         )
     sku = resolve_product_sku()
-    account_kind = normalize_account_kind(None, default="enterprise" if sku == "enterprise" else "personal")
+    account_kind = normalize_account_kind(
+        None, default="enterprise" if sku == "enterprise" else "personal"
+    )
     username = str((auth_result.get("user") or {}).get("username") or "")
     session_id = auth_result.get("session_id")
     payload = await finalize_enterprise_login(

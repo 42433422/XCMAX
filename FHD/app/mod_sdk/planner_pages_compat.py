@@ -3,11 +3,12 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import json
 import os
 from pathlib import Path
 from typing import Any
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 PLANNER_BRIDGE_MOD_ID = "xcagi-planner-bridge"
 MOD_PAGE_PREFIX = f"/mod/{PLANNER_BRIDGE_MOD_ID}"

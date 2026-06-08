@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 from typing import Any
 
 from fastapi import Request
 
 from app.infrastructure.auth.dependencies import session_id_from_request
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 
 def resolve_tenant_id(request: Request) -> int | None:
@@ -16,8 +16,8 @@ def resolve_tenant_id(request: Request) -> int | None:
     if not sid:
         return None
     try:
-        from app.application.session_account_meta import load_session_account_meta
         from app.application.facades.session_facade import get_session_service
+        from app.application.session_account_meta import load_session_account_meta
 
         meta = load_session_account_meta(sid) or {}
         session_tenant = meta.get("tenant_id")

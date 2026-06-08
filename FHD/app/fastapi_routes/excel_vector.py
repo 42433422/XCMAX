@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import os
 from datetime import datetime
@@ -12,6 +11,7 @@ from fastapi import APIRouter, Body, Request
 from fastapi.responses import JSONResponse
 
 from app.application import get_excel_vector_ingest_app_service, get_excel_vector_search_app_service
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 from app.utils.path_utils import get_upload_dir
 
 logger = logging.getLogger(__name__)

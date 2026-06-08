@@ -12,7 +12,6 @@ Usage in engine setup:
 This fulfills the postgres-foundation todo and solves cross-database FK and concurrency issues.
 """
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 
 from sqlalchemy import event
@@ -21,6 +20,7 @@ from sqlalchemy.orm import Session
 
 from app.db.sqlite_mod_paths import mod_suffix_token
 from app.request_active_mod_ctx import get_request_active_mod_id
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

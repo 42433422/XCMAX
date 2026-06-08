@@ -16,11 +16,11 @@
 12. material - 物料领域
 """
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import asyncio
 import logging
 
 from app.neuro_bus.bus import NeuroBus, get_neuro_bus
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

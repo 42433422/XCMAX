@@ -8,7 +8,6 @@ Usage:
     from app.infrastructure.mods.mod_auth import ModContext, mod_context_middleware
 """
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import hashlib
 import hmac
 import logging
@@ -20,6 +19,8 @@ from typing import Any
 from fastapi import HTTPException, Request
 from starlette.requests import Request as StarletteRequest
 from starlette.types import ASGIApp, Receive, Scope, Send
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

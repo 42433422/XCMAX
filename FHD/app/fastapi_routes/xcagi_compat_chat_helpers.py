@@ -6,7 +6,6 @@ XCAGI 前端兼容 API — AI 聊天辅助函数与数据模型。
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import asyncio
 import hashlib
 import json
@@ -32,6 +31,7 @@ from app.domain.context.session_context import (
 from app.infrastructure.auth.db_token import effective_db_read_token
 from app.infrastructure.llm.client import set_mode as set_llm_mode
 from app.services.conversation.modstore_adapter import create_modstore_openai_client_from_request
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

@@ -1,7 +1,8 @@
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import subprocess
 import time
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 try:
     import win32api

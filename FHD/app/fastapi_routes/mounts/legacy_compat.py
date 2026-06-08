@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import os
 
@@ -10,8 +9,10 @@ from fastapi import FastAPI
 
 from app.fastapi_routes._route_helpers import is_ci_strict
 from app.fastapi_routes.mounts.legacy_gap import register_legacy_gap_routers
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
+
 
 def register_legacy_compat_routes(app: FastAPI) -> None:
     """注册 XCAGI 前端依赖的历史兼容路由(原 backend.routers.*,2026-04-20 已全部迁至本包)。
@@ -243,4 +244,3 @@ def register_legacy_compat_routes(app: FastAPI) -> None:
         if is_ci_strict():
             raise RuntimeError("service_bridge router required in CI") from exc
         logger.warning("service_bridge router not available: %s", exc)
-

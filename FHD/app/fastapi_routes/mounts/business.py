@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 
 from fastapi import FastAPI
 
 from app.fastapi_routes._route_helpers import is_ci_strict
 from app.fastapi_routes.registry import RouteRegistry
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -47,17 +47,13 @@ def register_business_routes(app: FastAPI, registry: RouteRegistry) -> None:
     _mount(
         registry,
         "xcmax_admin",
-        lambda: __import__(
-            "app.fastapi_routes.xcmax_admin", fromlist=["router"]
-        ).router,
+        lambda: __import__("app.fastapi_routes.xcmax_admin", fromlist=["router"]).router,
         priority=10,
     )
     _mount(
         registry,
         "aibiz_terminal",
-        lambda: __import__(
-            "app.fastapi_routes.aibiz_terminal_api", fromlist=["router"]
-        ).router,
+        lambda: __import__("app.fastapi_routes.aibiz_terminal_api", fromlist=["router"]).router,
         priority=11,
     )
     _mount(
@@ -73,16 +69,12 @@ def register_business_routes(app: FastAPI, registry: RouteRegistry) -> None:
     _mount(
         registry,
         "finance_unified_ledger",
-        lambda: __import__(
-            "app.fastapi_routes.finance_unified_ledger", fromlist=["router"]
-        ).router,
+        lambda: __import__("app.fastapi_routes.finance_unified_ledger", fromlist=["router"]).router,
     )
     _mount(
         registry,
         "finance_invoices",
-        lambda: __import__(
-            "app.fastapi_routes.finance_invoices_api", fromlist=["router"]
-        ).router,
+        lambda: __import__("app.fastapi_routes.finance_invoices_api", fromlist=["router"]).router,
     )
     _mount(
         registry,
@@ -102,14 +94,14 @@ def register_business_routes(app: FastAPI, registry: RouteRegistry) -> None:
     _mount(
         registry,
         "mods",
-        lambda: __import__("app.fastapi_routes.mods_routes", fromlist=["get_mods_router"]).get_mods_router(),
+        lambda: __import__(
+            "app.fastapi_routes.mods_routes", fromlist=["get_mods_router"]
+        ).get_mods_router(),
     )
     _mount(
         registry,
         "platform_shell",
-        lambda: __import__(
-            "app.fastapi_routes.platform_shell_routes", fromlist=["router"]
-        ).router,
+        lambda: __import__("app.fastapi_routes.platform_shell_routes", fromlist=["router"]).router,
     )
     _mount(
         registry,
@@ -119,9 +111,7 @@ def register_business_routes(app: FastAPI, registry: RouteRegistry) -> None:
     _mount(
         registry,
         "mod_store",
-        lambda: __import__(
-            "app.fastapi_routes.mod_store_routes", fromlist=["router"]
-        ).router,
+        lambda: __import__("app.fastapi_routes.mod_store_routes", fromlist=["router"]).router,
         prefix="/api/mod-store",
     )
     _mount(

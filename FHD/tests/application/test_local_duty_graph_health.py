@@ -3,10 +3,11 @@ from __future__ import annotations
 from unittest.mock import patch
 
 import pytest
-from app.application.local_duty_graph_health import build_local_duty_graph_health
-from app.fastapi_routes.xcmax_admin import router
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+
+from app.application.local_duty_graph_health import build_local_duty_graph_health
+from app.fastapi_routes.xcmax_admin import router
 
 
 @pytest.fixture

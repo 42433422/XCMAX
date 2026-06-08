@@ -1,8 +1,9 @@
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import time
 from dataclasses import dataclass, field
 from typing import Any
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

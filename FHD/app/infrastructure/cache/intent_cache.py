@@ -20,7 +20,6 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import hashlib
 import logging
 import os
@@ -29,6 +28,7 @@ import time
 from collections.abc import Callable
 from typing import Any
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 from app.utils.redis_cache import RedisCache, get_redis_cache
 
 logger = logging.getLogger(__name__)

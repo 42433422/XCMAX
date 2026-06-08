@@ -12,6 +12,7 @@
 | `release-web.yml` | [`fhd-release-web.yml`](../../.github/workflows/fhd-release-web.yml) |
 | `release-android.yml` | [`fhd-release-android.yml`](../../.github/workflows/fhd-release-android.yml) |
 | 其余 `*.yml` | 同名加 `fhd-` 前缀，见根 `.github/workflows/` |
+| `test.yml` | [`fhd-test.yml`](../../.github/workflows/fhd-test.yml) — 轻量 smoke（Ruff / 路由 pytest / 前端 lint+Vitest / 仓卫生） |
 
 重新生成根 workflow：`python scripts/dev/publish_ci_workflows_to_root.py`
 

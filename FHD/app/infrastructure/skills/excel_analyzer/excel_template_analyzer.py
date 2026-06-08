@@ -7,11 +7,12 @@ Excel Analyzer Skill - Excel模板结构分析工具
 - 分析单元格类型（模板内容/可编辑内容/公式）
 """
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import json
 import logging
 from pathlib import Path
 from typing import Any
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

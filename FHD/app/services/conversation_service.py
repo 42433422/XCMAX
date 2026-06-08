@@ -4,7 +4,6 @@
 提供对话历史和会话管理的业务逻辑。
 """
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import uuid
 from datetime import datetime
@@ -13,6 +12,7 @@ from typing import Any
 from app.db.models import AIConversation, AIConversationSession
 from app.db.session import get_db
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

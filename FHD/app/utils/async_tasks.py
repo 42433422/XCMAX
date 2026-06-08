@@ -10,7 +10,6 @@
 - 进度追踪
 """
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import functools
 import logging
 import os
@@ -19,6 +18,8 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, TypeVar
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

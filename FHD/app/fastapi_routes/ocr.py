@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 from functools import lru_cache
 
@@ -16,6 +15,7 @@ from app.schemas.ocr_schema import (
     OcrRecognizeResponse,
     OcrTestResponse,
 )
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 from app.utils.upload_helpers import save_upload_file
 
 logger = logging.getLogger(__name__)

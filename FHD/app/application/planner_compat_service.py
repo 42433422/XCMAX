@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import asyncio
 import json
 import logging
@@ -37,6 +36,7 @@ from app.fastapi_routes.xcagi_compat_chat_helpers import (
 )
 from app.infrastructure.llm.client import set_mode as set_llm_mode
 from app.services.conversation.modstore_adapter import create_modstore_openai_client_from_request
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

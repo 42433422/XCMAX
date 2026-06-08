@@ -22,15 +22,20 @@ if [ "${SKIP_FRONTEND:-0}" != "1" ]; then
   esac
 fi
 
-python -m pip install --upgrade pip
+PYTHON="${PYTHON:-python3}"
+
+"${PYTHON}" -m pip install --upgrade pip
+"${PYTHON}" -m pip install -e .
 RUNTIME_REQUIREMENTS="$(mktemp)"
-grep -Ev '^[[:space:]]*pytest($|[-=<>])' XCAGI/requirements.txt > "${RUNTIME_REQUIREMENTS}"
-python -m pip install -r "${RUNTIME_REQUIREMENTS}"
-python -m pip install "pyinstaller>=6.0" appdirs
+grep -Ev '^[[:space:]]*(#|-e|pytest($|[-=<>]))' XCAGI/requirements.txt | grep -Ev '^[[:space:]]*$' > "${RUNTIME_REQUIREMENTS}" || true
+if [ -s "${RUNTIME_REQUIREMENTS}" ]; then
+  "${PYTHON}" -m pip install -r "${RUNTIME_REQUIREMENTS}"
+fi
+"${PYTHON}" -m pip install "pyinstaller>=6.0" appdirs
 
 export XCAGI_VERSION="${VERSION}"
 mkdir -p release
 printf '%s\n' "${VERSION}" > release/VERSION
-python -m PyInstaller --noconfirm --clean scripts/package/xcagi_backend.spec
+"${PYTHON}" -m PyInstaller --noconfirm --clean scripts/package/xcagi_backend.spec
 
 echo "Backend build complete: dist/xcagi-backend"

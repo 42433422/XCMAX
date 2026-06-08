@@ -7,7 +7,6 @@ xcagi_compat 共享 DB 常量与 SQL 工具函数。
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import re
 
@@ -15,6 +14,7 @@ from fastapi import HTTPException, Request
 
 from app.infrastructure.auth.db_token import verify_db_write_token_header
 from app.infrastructure.db.sync_engine import get_sync_engine
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

@@ -14,13 +14,14 @@
     python -m app.services.train_intent --mode test --model models/intent_bert/final --texts "生成发货单|查看客户列表"
 """
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import argparse
 import logging
 import sys
 from pathlib import Path
 
 import torch
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logging.basicConfig(
     level=logging.INFO,

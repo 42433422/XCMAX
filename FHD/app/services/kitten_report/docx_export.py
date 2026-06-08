@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import json
 from datetime import datetime
 from io import BytesIO
 from typing import Any
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 from .service import KittenReportExportService
 

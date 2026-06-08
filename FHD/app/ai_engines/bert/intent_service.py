@@ -6,7 +6,6 @@ BERT 意图分类推理服务
 原始模块位于 app/services/bert_intent_service.py
 """
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import os
 from typing import Any
@@ -18,6 +17,8 @@ from transformers import (
     AutoTokenizer,
     BertTokenizer,
 )
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

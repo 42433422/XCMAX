@@ -9,7 +9,6 @@ NeuroBus - 神经总线核心实现
 - 领域隔离
 """
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import asyncio
 import logging
 import os
@@ -22,6 +21,7 @@ from heapq import heappop, heappush
 from typing import Any
 
 from app.neuro_bus.events.base import AsyncEventHandler, EventHandler, NeuroEvent
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -535,10 +535,7 @@ class NeuroBus:
         success = self._event_queue.put(event)
         if success:
             self._published_count += 1
-            if (
-                self._redis_bridge is not None
-                and not event.payload.get("_neuro_remote_ingest")
-            ):
+            if self._redis_bridge is not None and not event.payload.get("_neuro_remote_ingest"):
                 self._redis_bridge.publish_remote(event)
             # wake processing loop if it's waiting
             ev = getattr(self, "_event_available", None)

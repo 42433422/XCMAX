@@ -8,7 +8,6 @@
 - 可重试异常类型判断
 """
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import asyncio
 import logging
 import random
@@ -16,6 +15,8 @@ import time
 from collections.abc import Callable
 from functools import wraps
 from typing import Any
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

@@ -3,11 +3,12 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import json
 import os
 from pathlib import Path
 from typing import Any
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 PHYSICAL_VIEW_MODS: dict[str, list[str]] = {
     "xcagi-lan-license-bridge": ["LanGateView.vue"],

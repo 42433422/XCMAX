@@ -10,13 +10,13 @@ user_memory_vector_app_service V2 - 事件驱动版本
 生成时间: 自动生成
 """
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from app.neuro_bus.bus import get_neuro_bus
 from app.neuro_bus.events.auth_events import *
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 if TYPE_CHECKING:
     pass  # 根据实际需要添加类型引用

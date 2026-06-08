@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import time
 from typing import Any
 
 from app.utils.metrics import record_ai_call
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 
 class OpenAISdkProvider:

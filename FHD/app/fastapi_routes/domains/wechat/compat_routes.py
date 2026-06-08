@@ -4,7 +4,6 @@ XCAGI 前端兼容 API — 微信联系人相关路由。
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import json
 import logging
 import os
@@ -15,6 +14,8 @@ from datetime import datetime
 
 from fastapi import APIRouter, Body, HTTPException, Query
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 router = APIRouter(tags=["xcagi-compat"])
 logger = logging.getLogger(__name__)

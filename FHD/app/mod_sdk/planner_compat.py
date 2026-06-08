@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 from typing import Any
 
 from fastapi import Request
@@ -17,6 +16,7 @@ from app.fastapi_routes.xcagi_compat_chat_helpers import (
     XcagiCompatChatBatchBody,
     XcagiCompatChatBody,
 )
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 PLANNER_FACADE_MOD_ID = "xcagi-planner-bridge"
 

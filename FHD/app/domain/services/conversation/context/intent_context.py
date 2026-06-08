@@ -8,12 +8,13 @@ IntentContext - 任务上下文
 2. merge_slots() - 合并槽位并更新状态
 """
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import time
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

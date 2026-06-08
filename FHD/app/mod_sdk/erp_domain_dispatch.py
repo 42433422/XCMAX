@@ -3,13 +3,13 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import json
 import logging
 from functools import lru_cache
 from typing import Any
 
 from app.mod_sdk.erp_domain_compat import ERP_DOMAIN_BRIDGE_MOD_ID, is_erp_domain_via_mod_enabled
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 from collections.abc import Iterable
 from datetime import date, datetime
 from typing import Any
 
 from openpyxl import load_workbook
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 
 def _normalize_header(value: Any) -> str:

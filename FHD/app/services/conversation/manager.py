@@ -1,4 +1,3 @@
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import os
 import time
@@ -9,6 +8,7 @@ from app.services.conversation.context import ContextMixin, ConversationContext
 from app.services.conversation.handlers import HandlersMixin
 from app.services.conversation.intent import IntentMixin
 from app.services.conversation.prompts import PromptsMixin
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

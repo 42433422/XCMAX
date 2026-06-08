@@ -7,9 +7,10 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import os
 from pathlib import Path
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 
 def _find_existing_mod_db_in_workspace(filename: str) -> Path | None:

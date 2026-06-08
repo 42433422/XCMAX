@@ -2,7 +2,6 @@
 MOD Package Management - ZIP packaging, signing, and verification
 """
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import hashlib
 import json
 import logging
@@ -10,6 +9,7 @@ import os
 import zipfile
 from typing import Any
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 from app.utils.time import utc_now_iso_z
 
 logger = logging.getLogger(__name__)

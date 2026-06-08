@@ -4,13 +4,13 @@ BERT 意图分类推理服务
 基于预训练 Transformer 模型的意图识别推理
 """
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import json
 import logging
 import os
 from typing import TYPE_CHECKING, Any
 
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 if TYPE_CHECKING:
     pass

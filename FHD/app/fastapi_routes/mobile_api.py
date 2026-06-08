@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import json
 import logging
 import os
@@ -19,6 +18,7 @@ from app.security.mobile_jwt import (
     verify_mobile_jwt,
 )
 from app.utils.mobile_api import format_mobile_response
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -187,18 +187,30 @@ async def mobile_auth_login_with_phone(body: dict):
     phone = str(body.get("phone") or "").strip()
     code = str(body.get("code") or "").strip()
     account_kind = normalize_account_kind(body.get("account_kind"), default=default_kind)
-    scope = {"type": "http", "method": "POST", "path": "/api/auth/login-with-phone-code", "headers": []}
+    scope = {
+        "type": "http",
+        "method": "POST",
+        "path": "/api/auth/login-with-phone-code",
+        "headers": [],
+    }
     request = Request(scope)
     web_resp = await auth_login_with_phone_code(
         request,
-        {"phone": phone, "code": code, "account_kind": account_kind, "username": body.get("username")},
+        {
+            "phone": phone,
+            "code": code,
+            "account_kind": account_kind,
+            "username": body.get("username"),
+        },
     )
     payload, status = _parse_web_auth_login_response(web_resp)
     if not payload.get("success"):
         message = _web_login_error_message(payload)
         code_out = status if status >= 400 else 401
         return JSONResponse(
-            format_mobile_response(data={"error": message}, message=message, success=False, code=code_out),
+            format_mobile_response(
+                data={"error": message}, message=message, success=False, code=code_out
+            ),
             status_code=code_out,
         )
     session_id = str(payload.get("session_id") or "").strip()

@@ -10,13 +10,14 @@ Phase 4B 从 ``app.legacy.runtime_context`` 吸收实现。
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import json
 import logging
 import os
 import re
 from collections.abc import Mapping
 from typing import Any
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

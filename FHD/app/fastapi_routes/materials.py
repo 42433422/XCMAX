@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import os
 import uuid
@@ -12,6 +11,7 @@ from fastapi import APIRouter, Body, Query
 from fastapi.responses import FileResponse, JSONResponse
 
 from app.application import get_material_application_service
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import difflib
 import re
 from collections.abc import Callable
@@ -9,6 +8,7 @@ from typing import Any
 from app.bootstrap import get_shipment_app_service
 from app.db.models import Product
 from app.db.session import get_db
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 
 class ShipmentNumberModeService:

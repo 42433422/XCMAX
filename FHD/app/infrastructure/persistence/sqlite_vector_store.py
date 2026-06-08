@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import json
 import logging
 import sqlite3
@@ -11,6 +10,7 @@ import numpy as np
 
 from app.application.ports.vector_store import VectorStorePort
 from app.utils.external_sqlite import connect_sqlite
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

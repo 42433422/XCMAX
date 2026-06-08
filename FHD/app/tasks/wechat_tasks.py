@@ -4,7 +4,6 @@
 包含微信消息处理、任务扫描等异步任务。
 """
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 from typing import Any
 
@@ -12,6 +11,7 @@ from sqlalchemy import text
 
 from app.db import SessionLocal
 from app.extensions import celery_app
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

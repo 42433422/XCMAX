@@ -13,7 +13,6 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import os
 import re
@@ -26,6 +25,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from app.application.facades.query_facade import query_service
 from app.bootstrap import get_shipment_application_service_core
 from app.db.models import ShipmentRecord
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

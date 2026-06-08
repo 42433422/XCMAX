@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import json
 import logging
 import os
@@ -13,6 +12,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from app.db.session import get_db
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -436,4 +436,9 @@ async def ping_main_server():
             resp.raise_for_status()
             return {"success": True, "connected": True, "main_server": main_server_url}
     except OPERATIONAL_ERRORS as e:
-        return {"success": False, "connected": False, "main_server": main_server_url, "error": str(e)}
+        return {
+            "success": False,
+            "connected": False,
+            "main_server": main_server_url,
+            "error": str(e),
+        }

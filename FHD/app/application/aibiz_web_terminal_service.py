@@ -10,7 +10,6 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import asyncio
 import logging
 import os
@@ -20,6 +19,8 @@ from typing import Any
 
 from fastapi import Request
 from fastapi.responses import JSONResponse, Response
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

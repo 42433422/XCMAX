@@ -8,7 +8,6 @@ ASGI 中间件：网段白名单。
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import json
 import logging
 from ipaddress import ip_address
@@ -18,6 +17,7 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 from app.security.lan_config import get_lan_config, lan_guard_path_is_bypassed
 from app.security.lan_ip import get_client_ip
 from app.security.license_store import is_ip_explicitly_allowed, touch_allowed_client
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

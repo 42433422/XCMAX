@@ -2,7 +2,6 @@
 Mod Manager - Core manager for scanning, loading, and managing mods
 """
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import importlib
 import importlib.util
 import json
@@ -15,6 +14,8 @@ import time
 import zipfile
 from pathlib import Path
 from typing import Any
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 from .artifact_constants import ARTIFACT_BUNDLE, ARTIFACT_EMPLOYEE_PACK, normalize_artifact
 from .artifact_package import (
@@ -335,7 +336,9 @@ class ModManager:
                 return None
             for root in self.all_mods_roots():
                 mod_path = os.path.join(root, cid)
-                if os.path.isdir(mod_path) and os.path.isfile(os.path.join(mod_path, "manifest.json")):
+                if os.path.isdir(mod_path) and os.path.isfile(
+                    os.path.join(mod_path, "manifest.json")
+                ):
                     return mod_path
             return None
 
@@ -1135,12 +1138,12 @@ def _mod_allowed_for_api_load(mod_id: str, session_id: str | None = None) -> boo
             SUNBIRD_CLIENT_MOD_ID,
             is_sunbird_local_username,
         )
-        from app.mod_sdk.industry_mod_aliases import canonical_mod_id
         from app.enterprise.mod_entitlements import (
             _session_username_for_entitlements,
             enterprise_mod_filter_active,
             is_mod_visible_for_enterprise,
         )
+        from app.mod_sdk.industry_mod_aliases import canonical_mod_id
 
         if not enterprise_mod_filter_active():
             return True

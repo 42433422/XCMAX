@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import os
 from datetime import UTC, datetime
 from io import BytesIO
@@ -19,6 +18,7 @@ from app.desktop_runtime import (
 )
 from app.desktop_runtime.model_downloader import ModelAsset, download_model, load_manifest
 from app.desktop_runtime.support_bundle import build_support_bundle_zip
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 router = APIRouter(prefix="/api/desktop", tags=["desktop-runtime"])
 

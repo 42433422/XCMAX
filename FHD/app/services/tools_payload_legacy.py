@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import os
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -716,8 +717,6 @@ def dispatch_legacy_tool_payload(
         if not file_path:
             return _j({"success": False, "message": "缺少参数：file_path（Excel文件路径）"}, 400)
         try:
-            import os
-
             from app.services.document_templates_service import (
                 _extract_excel_grid_preview,
                 _extract_structured_excel_preview,

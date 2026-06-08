@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import json
 import logging
 import os
 import shutil
 import tempfile
 from typing import Any
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 from .artifact_constants import ARTIFACT_EMPLOYEE_PACK, normalize_artifact
 from .artifact_package import validate_employee_pack_manifest

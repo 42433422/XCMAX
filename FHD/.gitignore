@@ -70,6 +70,11 @@ customer_products_final_corrected.db
 
 # Stray local scratch (historical)
 XCAGI/dy
+login_out.json
+project.private.config.json
+**/secret.yaml
+!**/secret.yaml.example
+scripts/ai_agent_v0/demo.local.env
 
 # ============================================================================
 # Logs & temporary output
@@ -103,10 +108,25 @@ Thumbs.db
 # Secrets & payment keys
 # ============================================================================
 .env
+.env.*
+!.env.example
+!.env.*.example
+.env.fhd-docker
+**/payment_orders/
+!**/payment_orders/README.md
+**/payment_orders/order_*.json
+**/keys_staging/
 .env.local
 .env.*.local
+# Vite build-mode presets (no secrets; safe to track)
+!frontend/.env.generic
+!frontend/.env.minimal
 scripts/package/upload-release.env
 .secrets/
+*.der
+**/chroma/
+**/chroma_db/
+**/login_out.json
 **/alipay_app_private.pem
 **/alipay_*_private*.pem
 **/应用私钥*.txt
@@ -150,6 +170,9 @@ wechat-decrypt/build/
 # ============================================================================
 node_modules/
 frontend/node_modules/
+frontend/.nm-e2e/
+frontend/.nm-*/
+**/.nm-*/
 frontend/.vite/
 frontend/dist/
 templates/vue-dist/

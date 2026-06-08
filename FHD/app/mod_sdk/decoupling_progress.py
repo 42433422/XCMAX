@@ -3,8 +3,9 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 from typing import Any
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 
 def _safe(fn, default: dict[str, Any] | None = None) -> dict[str, Any]:

@@ -4,11 +4,12 @@ Barcode Generator - 条形码生成器
 支持多种条形码格式：EAN-13, Code128, Code39, UPC-A, ITF 等
 """
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import io
 import logging
 
 from PIL import Image
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

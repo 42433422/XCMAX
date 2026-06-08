@@ -8,7 +8,6 @@ AI 对话服务性能优化装饰器
 - 异步处理支持
 """
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import functools
 import hashlib
 import logging
@@ -16,6 +15,7 @@ import time
 from typing import Any
 
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

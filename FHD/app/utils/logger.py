@@ -4,7 +4,6 @@
 提供 JSON 格式的结构化日志，支持标准字段和上下文传递。
 """
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import json
 import logging
 import sys
@@ -15,6 +14,8 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from functools import wraps
 from typing import Any
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 
 class StructuredLogFormatter(logging.Formatter):

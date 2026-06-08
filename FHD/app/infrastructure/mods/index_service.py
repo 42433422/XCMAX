@@ -4,7 +4,6 @@ MOD Metadata Index Service - MOD 元数据索引与搜索服务
 提供 MOD 元数据的持久化存储、索引构建、搜索查询功能。
 """
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import json
 import logging
 import os
@@ -12,6 +11,7 @@ import sqlite3
 from contextlib import contextmanager
 from typing import Any, Optional
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 from app.utils.time import utc_now_naive
 
 logger = logging.getLogger(__name__)

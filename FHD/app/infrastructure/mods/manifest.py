@@ -2,12 +2,13 @@
 Mod Manifest Definition and Parsing
 """
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import json
 import logging
 import os
 from dataclasses import dataclass, field
 from typing import Any
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 from .artifact_constants import ARTIFACT_MOD, normalize_artifact
 

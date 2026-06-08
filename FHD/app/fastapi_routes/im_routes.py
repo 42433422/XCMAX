@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 
 from fastapi import APIRouter, Body, Depends, Query, WebSocket, WebSocketDisconnect
@@ -16,6 +15,7 @@ from app.infrastructure.auth.dependencies import (
     require_identified_user,
 )
 from app.infrastructure.im.ws_hub import im_ws_hub
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

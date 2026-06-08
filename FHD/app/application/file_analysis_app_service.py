@@ -7,7 +7,6 @@
 - 返回分析结果和建议用途
 """
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import os
 import sqlite3
@@ -15,6 +14,7 @@ import uuid
 from typing import Any
 
 from app.utils.external_sqlite import sqlite_conn
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 from app.utils.path_utils import get_upload_dir
 from app.utils.secure_filename import secure_filename
 

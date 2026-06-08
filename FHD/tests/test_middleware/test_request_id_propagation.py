@@ -12,9 +12,10 @@ from __future__ import annotations
 import uuid
 
 import pytest
-from app.middleware.request_id import RequestIdMiddleware
 from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
+
+from app.middleware.request_id import RequestIdMiddleware
 
 
 @pytest.fixture

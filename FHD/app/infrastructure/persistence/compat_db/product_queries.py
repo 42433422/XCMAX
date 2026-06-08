@@ -6,7 +6,6 @@ xcagi_compat 共享 DB 产品列表查询辅助函数。
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import os
 from typing import Any
@@ -14,9 +13,10 @@ from typing import Any
 from sqlalchemy import inspect, text
 from sqlalchemy.exc import OperationalError
 
-from app.infrastructure.persistence.compat_db.base import _EXPORT_MAX_ROWS
 from app.infrastructure.db.sync_engine import get_sync_engine
+from app.infrastructure.persistence.compat_db.base import _EXPORT_MAX_ROWS
 from app.shell.mod_row_scope import append_mod_scope_where
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

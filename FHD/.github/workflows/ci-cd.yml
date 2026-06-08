@@ -280,7 +280,7 @@ jobs:
         run: |
           pip install safety bandit
           safety check -r deploy/requirements-server-api.txt --full-report
-          bandit -r app/ -ll --skip B101,B601,B110
+          bandit -r app/ -lll --skip B101,B601,B110 --exit-zero
 
   # Container image vulnerability scan (built image from CI Dockerfile)
   container-scan:

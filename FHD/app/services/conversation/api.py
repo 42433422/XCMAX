@@ -1,4 +1,3 @@
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import time
 from typing import Any
@@ -6,6 +5,7 @@ from typing import Any
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
 from app.services.conversation.context import ConversationContext
 from app.utils.cache_manager import get_ai_response_cache
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

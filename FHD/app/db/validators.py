@@ -4,10 +4,11 @@ SQLAlchemy 模型验证器
 为数据库模型提供数据验证功能，确保数据的完整性和一致性。
 """
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 
 from sqlalchemy.orm import validates
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 
 class ModelValidators:

@@ -12,7 +12,6 @@
 此模块已迁移到 app/utils/
 """
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import hashlib
 import json
 import logging
@@ -21,6 +20,8 @@ from collections import defaultdict
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from typing import Any
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

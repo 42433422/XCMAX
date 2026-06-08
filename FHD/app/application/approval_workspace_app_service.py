@@ -8,7 +8,6 @@ Approval workspace 应用服务（自 fastapi_routes/approval 下沉）。
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import json
 import logging
 import secrets
@@ -20,7 +19,6 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
 from app.application.mobile_push_app_service import notify_mobile_user
-from app.utils.time import utc_now_naive
 from app.db.models.approval import (
     ApprovalAction,
     ApprovalFlow,
@@ -30,6 +28,8 @@ from app.db.models.approval import (
     ApprovalStatus,
 )
 from app.db.session import get_db
+from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.time import utc_now_naive
 
 logger = logging.getLogger(__name__)
 

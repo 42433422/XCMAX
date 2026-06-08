@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import difflib
 import hashlib
 import os
@@ -14,6 +13,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from app.domain.ai.tier import assert_p2_elevated_claim_or_raise, resolve_ai_tier
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 router = APIRouter(prefix="/api/code-editor", tags=["code-editor"])
 

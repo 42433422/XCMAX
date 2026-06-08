@@ -17,13 +17,14 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import os
 import sys
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from resources.config.intent_config import reload_intent_config

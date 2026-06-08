@@ -11,10 +11,11 @@ Tests:
     - Architecture statistics
 """
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import asyncio
 import sys
 import time
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 
 def test_imports():

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import os
 from datetime import datetime
@@ -11,6 +10,8 @@ from typing import Any
 
 from fastapi import APIRouter, Body, File, Form, Query, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 

@@ -35,9 +35,7 @@ async def aibiz_web_terminal(
     refresh: bool = Query(False),
     compact: bool = Query(True),
 ):
-    return await build_terminal_payload(
-        request, terminal="web", refresh=refresh, compact=compact
-    )
+    return await build_terminal_payload(request, terminal="web", refresh=refresh, compact=compact)
 
 
 @router.get("/desk-terminal")
@@ -57,9 +55,7 @@ async def aibiz_app_terminal(
     refresh: bool = Query(False),
     compact: bool = Query(True),
 ):
-    return await build_terminal_payload(
-        request, terminal="app", refresh=refresh, compact=compact
-    )
+    return await build_terminal_payload(request, terminal="app", refresh=refresh, compact=compact)
 
 
 @router.get("/surface-image")
@@ -69,9 +65,7 @@ async def aibiz_surface_image(
     index: int = Query(0, ge=0),
     view: str = Query(""),
 ) -> Response:
-    return await serve_surface_image(
-        request, terminal=terminal, index=index, view=view
-    )
+    return await serve_surface_image(request, terminal=terminal, index=index, view=view)
 
 
 @router.get("/surface-page", response_model=None)

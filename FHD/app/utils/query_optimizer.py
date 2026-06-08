@@ -10,7 +10,6 @@
 - 分页优化
 """
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
 import functools
 import logging
 import time
@@ -19,6 +18,8 @@ from collections.abc import Callable
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any, TypeVar
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 
