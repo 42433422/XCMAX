@@ -4,6 +4,7 @@ BERT 意图分类推理服务
 基于预训练 Transformer 模型的意图识别推理
 """
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import json
 import logging
 import os
@@ -147,7 +148,7 @@ class BertIntentClassifier:
                 actual_name = model_name
             try:
                 self._load_model(actual_name, local_files_only=False)
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 logger.warning(f"无法加载模型 {actual_name}: {e}")
                 self._setup_dummy_model()
 

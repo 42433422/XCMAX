@@ -29,6 +29,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import asyncio
 import glob
 import logging
@@ -144,7 +145,7 @@ class RasaNLUService:
 
         try:
             from rasa.core.agent import Agent  # type: ignore
-        except Exception as e:  # ImportError or its downstream side effects
+        except OPERATIONAL_ERRORS as e:  # ImportError or its downstream side effects
             self._load_error = f"rasa_import_failed: {e}"
             return False
 
@@ -152,7 +153,7 @@ class RasaNLUService:
             self._agent = Agent.load(self.model_path)
             self._last_status["agent_loaded"] = True
             return True
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             self._load_error = f"agent_load_failed: {e}"
             self._agent = None
             return False
@@ -185,7 +186,7 @@ class RasaNLUService:
     def _parse_via_server(self, text: str) -> dict[str, Any]:
         try:
             import requests  # type: ignore
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             return self._empty_result(f"requests_unavailable: {e}")
 
         try:
@@ -194,7 +195,7 @@ class RasaNLUService:
                 json={"text": text},
                 timeout=5,
             )
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             self._last_status["server_reachable"] = False
             return self._empty_result(f"server_unreachable: {e}")
 
@@ -204,7 +205,7 @@ class RasaNLUService:
 
         try:
             return resp.json()
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             return self._empty_result(f"server_bad_json: {e}")
 
     def _parse_via_embedded(self, text: str) -> dict[str, Any]:
@@ -219,7 +220,7 @@ class RasaNLUService:
                 return loop.run_until_complete(self._agent.parse_message(text))
             finally:
                 loop.close()
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             return self._empty_result(f"parse_failed: {e}")
 
     # ------------------------------------------------------------------
@@ -245,7 +246,7 @@ class RasaNLUService:
                 resp = requests.get(f"{self.rasa_url}/status", timeout=2)
                 self._last_status["server_reachable"] = resp.status_code == 200
                 return resp.status_code == 200
-            except Exception:
+            except OPERATIONAL_ERRORS:
                 self._last_status["server_reachable"] = False
                 return False
         if self._agent is None:

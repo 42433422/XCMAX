@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import json
 import logging
 import uuid
@@ -735,7 +736,7 @@ def _execute_excel_schema_tool(params: dict[str, Any]) -> dict[str, Any]:
         )
     except ImportError:
         pass
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.warning("excel_analysis_app_service 不可用，降级 openpyxl: %s", e)
 
     try:
@@ -819,7 +820,7 @@ def _execute_excel_analysis_tool(params: dict[str, Any]) -> dict[str, Any]:
         )
     except ImportError:
         pass
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.warning("excel_analysis_app_service 不可用，降级 openpyxl: %s", e)
 
     try:

@@ -1,3 +1,4 @@
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import os
 import time
@@ -72,7 +73,7 @@ class AIConversationService(
                 else:
                     logger.warning(f"⚠️ 直连适配器已创建但 [{llm_provider}] API Key未配置")
 
-        except Exception as adapter_err:
+        except OPERATIONAL_ERRORS as adapter_err:
             logger.error(f"❌ LLM适配器初始化失败: {adapter_err}")
             self.llm_adapter = None
             self.modstore_adapter = None
@@ -94,7 +95,7 @@ class AIConversationService(
                         config_module = importlib.util.module_from_spec(spec)
                         spec.loader.exec_module(config_module)
                         self.api_key = getattr(config_module, "DEEPSEEK_API_KEY", "") or ""
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 logger.warning(f"无法读取 resources/config/deepseek_config.py: {e}")
 
         if self.api_key and llm_init_mode == "none":
@@ -181,7 +182,7 @@ class AIConversationService(
                 corrected_intent=corrected_intent,
                 slots=slots or {},
             )
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"添加意图反馈失败: {e}")
 
     def record_user_action(
@@ -198,7 +199,7 @@ class AIConversationService(
                 slots=slots,
                 message=message,
             )
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"记录用户操作失败: {e}")
 
     def apply_memory_preferences(
@@ -206,7 +207,7 @@ class AIConversationService(
     ) -> dict[str, Any]:
         try:
             return self.user_memory.apply_preference_to_slots(user_id, intent, slots)
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"应用用户偏好失败: {e}")
             return slots
 
@@ -215,14 +216,14 @@ class AIConversationService(
     ) -> dict[str, Any] | None:
         try:
             return self.user_memory.get_similar_pattern(user_id, intent, slots)
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"获取相似操作失败: {e}")
             return None
 
     def get_habit_suggestions(self, user_id: str) -> list[dict[str, Any]]:
         try:
             return self.user_memory.get_habit_suggestions(user_id)
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"获取习惯建议失败: {e}")
             return []
 
@@ -269,7 +270,7 @@ class AIConversationService(
                 for action in actions:
                     if action.get("intent") == current_intent:
                         return f"💡 根据您的习惯，您可能还需要：{action.get('description', '')}"
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"检查习惯建议失败: {e}")
 
         return None
@@ -307,7 +308,7 @@ class AIConversationService(
             )
             return self._maybe_attach_kitten_web(conv_context, out)
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"处理聊天消息失败：{e}")
             return {
                 "text": f"抱歉，处理消息时出现问题：{str(e)}",

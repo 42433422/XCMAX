@@ -2,6 +2,7 @@
 Mod Hook System - Event subscription and trigger mechanism
 """
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 from collections.abc import Callable
 
@@ -41,7 +42,7 @@ class HookManager:
         for handler in self._subscribers[event]:
             try:
                 handler(*args, **kwargs)
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 logger.error(f"Hook handler failed: {event} -> {handler.__name__}: {e}")
 
     def list_subscribers(self, event: str) -> list[str]:
@@ -66,7 +67,7 @@ def trigger(event: str, *args, **kwargs) -> None:
         if read_client_mods_off_state():
             logger.debug(f"Hook skipped (client_mods_off=True): {event}")
             return
-    except Exception:
+    except OPERATIONAL_ERRORS:
         pass
 
     get_hook_manager().trigger(event, *args, **kwargs)

@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import os
 from dataclasses import dataclass, field
 from functools import lru_cache
@@ -244,7 +245,7 @@ def get_lan_config() -> LanConfig:
             bootstrap_key = overrides.admin_bootstrap_key.strip()
         if overrides.allowed_cidrs is not None:
             cidrs = [str(x).strip() for x in overrides.allowed_cidrs if str(x).strip()]
-    except Exception:
+    except OPERATIONAL_ERRORS:
         # 任何读/解析失败都不阻断系统启动，只走 env 路径。
         pass
 

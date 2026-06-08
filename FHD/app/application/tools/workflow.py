@@ -16,6 +16,7 @@ Phase 4B 从 ``app.legacy.tools`` 吸收实现。本模块汇总所有工作流�
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import json
 import os
 import re
@@ -143,7 +144,7 @@ def run_natural_language_pandas(
             out = local_ns.get("result", local_ns.get("df"))
             if isinstance(out, pd.DataFrame):
                 result_df = out
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         error_msg = str(e)
 
     records = json.loads(
@@ -173,7 +174,7 @@ def handle_excel_analysis(
     root = workspace_root or str(Path.cwd())
     try:
         p = resolve_safe_excel_path(root, file_path)
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         return {"success": False, "error": str(e), "workspace_root": root, "file_path": file_path}
     if not p.exists():
         return {
@@ -185,7 +186,7 @@ def handle_excel_analysis(
         }
     try:
         df = _read_excel_dataframe(p, sheet_name=sheet_name, header_row_1based=header_1b)
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         return {
             "success": False,
             "error": f"read failed: {e}",
@@ -221,7 +222,7 @@ def handle_excel_analysis(
             ).strip()
             if customer_hint:
                 out["customer_hint"] = customer_hint
-        except Exception:
+        except OPERATIONAL_ERRORS:
             logger.debug("suppressed exception", exc_info=True)
         if header_1b is not None:
             out["header_row"] = header_1b
@@ -558,7 +559,7 @@ def execute_workflow_tool(
     if isinstance(args, str):
         try:
             args = json.loads(args or "{}")
-        except Exception:
+        except OPERATIONAL_ERRORS:
             args = {}
     try:
         from app.mod_sdk.planner_native_tools import try_execute_native_planner_tool
@@ -568,7 +569,7 @@ def execute_workflow_tool(
         )
         if native_raw is not None:
             return native_raw
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.debug("planner native tool dispatch skipped", exc_info=True)
     if name == "excel_analysis":
         return json.dumps(
@@ -659,7 +660,7 @@ def execute_workflow_tool(
                 return json.dumps(
                     {"success": False, "error": f"unknown action: {action}"}, ensure_ascii=False
                 )
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             return json.dumps({"success": False, "error": str(e)}, ensure_ascii=False)
     if name == "excel_prophet":
         try:
@@ -717,7 +718,7 @@ def execute_workflow_tool(
                 },
                 ensure_ascii=False,
             )
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             return json.dumps(
                 {"action": "forecast", "future_forecast": [], "error": str(e)}, ensure_ascii=False
             )
@@ -744,7 +745,7 @@ def execute_workflow_tool(
             svc = ExcelSchemaUnderstandingService()
             out = svc.understand_dataframe(df, file_path=file_path)
             return json.dumps(out, ensure_ascii=False)
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             return json.dumps(
                 {"success": False, "error": str(e), "message": f"读取 Excel 文件失败: {e}"},
                 ensure_ascii=False,
@@ -826,7 +827,7 @@ def execute_workflow_tool(
                 },
                 ensure_ascii=False,
             )
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             return json.dumps({"success": False, "error": str(e)}, ensure_ascii=False)
     return json.dumps({"success": False, "error": "unknown_tool", "tool": name}, ensure_ascii=False)
 
@@ -932,7 +933,7 @@ def _handle_import_excel_to_database(
                             if hits:
                                 unit_name = str(hits[0]).strip()
                                 break
-                except Exception:
+                except OPERATIONAL_ERRORS:
                     logger.debug("suppressed exception", exc_info=True)
             if not unit_name:
                 try:
@@ -942,7 +943,7 @@ def _handle_import_excel_to_database(
                         _extract_customer_hint_from_excel(str(p), sheet_n if sheet_n else None)
                         or ""
                     ).strip()
-                except Exception:
+                except OPERATIONAL_ERRORS:
                     logger.debug("suppressed exception", exc_info=True)
 
         preview_only = bool(args.get("preview_only", False))
@@ -961,11 +962,11 @@ def _handle_import_excel_to_database(
                     excel_analysis_ctx,
                     preferred_sheet_name=str(sheet_n or "").strip() or None,
                 )
-            except Exception:
+            except OPERATIONAL_ERRORS:
                 header_1b = None
         try:
             df = _read_excel_dataframe(p, sheet_name=sheet_n, header_row_1based=header_1b)
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             return json.dumps(
                 {
                     "success": False,
@@ -1044,7 +1045,7 @@ def _handle_import_excel_to_database(
                 ensure_ascii=False,
             )
 
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         return json.dumps({"success": False, "error": str(e)}, ensure_ascii=False)
 
 
@@ -1412,7 +1413,7 @@ def _import_products_preview_or_execute(
             ensure_ascii=False,
         )
 
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         return json.dumps({"success": False, "error": f"导入失败: {str(e)}"}, ensure_ascii=False)
 
 
@@ -1476,7 +1477,7 @@ def _import_customers_preview_or_execute(df, columns, confirm, row_count):
             ensure_ascii=False,
         )
 
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         return json.dumps({"success": False, "error": f"导入失败: {str(e)}"}, ensure_ascii=False)
 
 
@@ -1568,7 +1569,7 @@ def _import_orders_preview_or_execute(df, columns, unit_name, confirm, row_count
                     imported += 1
                 else:
                     failed += 1
-            except Exception:
+            except OPERATIONAL_ERRORS:
                 failed += 1
 
         return json.dumps(
@@ -1581,7 +1582,7 @@ def _import_orders_preview_or_execute(df, columns, unit_name, confirm, row_count
             },
             ensure_ascii=False,
         )
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         return json.dumps(
             {"success": False, "error": f"订单导入失败: {str(e)}"}, ensure_ascii=False
         )

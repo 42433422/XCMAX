@@ -6,6 +6,7 @@ BERT 意图分类推理服务
 原始模块位于 app/services/bert_intent_service.py
 """
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import os
 from typing import Any
@@ -136,7 +137,7 @@ class BertIntentClassifier:
             logger.info("BERT 模型加载成功")
             return True
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"BERT 模型加载失败：{e}")
             return False
 
@@ -181,7 +182,7 @@ class BertIntentClassifier:
 
             return result
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"BERT 预测失败：{e}")
             return {"intent": "unk", "confidence": 0.0, "message": str(e)}
 

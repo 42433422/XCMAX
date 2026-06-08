@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import asyncio
 import logging
 import os
@@ -32,7 +33,7 @@ async def ensure_deliverable_runtime(app: FastAPI) -> None:
         seeded = await asyncio.to_thread(seed_edition_mods_from_bundle, edition)
         if seeded:
             logger.info("Deliverable seed: %s", seeded)
-    except Exception as exc:
+    except OPERATIONAL_ERRORS as exc:
         logger.warning("Deliverable mod seed failed: %s", exc)
 
     if getattr(app.state, "mods_full_load_done", False):
@@ -49,7 +50,7 @@ async def ensure_deliverable_runtime(app: FastAPI) -> None:
                 load_mod_routes(app, mm)
                 app.state.mods_routes_loaded = True
             app.state.mods_full_load_done = True
-        except Exception as exc:
+        except OPERATIONAL_ERRORS as exc:
             logger.warning("Deliverable mod load failed: %s", exc)
             return
 
@@ -78,7 +79,7 @@ async def ensure_deliverable_runtime(app: FastAPI) -> None:
         result = await bootstrap_edition_pack(edition)  # type: ignore[arg-type]
         app.state.deliverable_bootstrap = result
         logger.info("Auto bootstrap edition pack: ready=%s", result.get("ready"))
-    except Exception as exc:
+    except OPERATIONAL_ERRORS as exc:
         logger.warning("Auto bootstrap edition pack failed: %s", exc)
 
 

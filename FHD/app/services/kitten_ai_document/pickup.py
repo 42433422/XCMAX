@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import json
 import logging
 import os
@@ -61,7 +62,7 @@ def _pickup_base_dir() -> Path:
             if p == candidates[-1] and wr and not env_dir:
                 logger.info("kitten document pickup dir (fallback temp): %s", p)
             return p
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             last_err = e
             continue
 
@@ -78,7 +79,7 @@ def _prune_disk(base: Path) -> None:
             meta_path = child / "meta.json"
             try:
                 ts = float(json.loads(meta_path.read_text(encoding="utf-8")).get("ts", 0))
-            except Exception:
+            except OPERATIONAL_ERRORS:
                 ts = 0.0
             if now - ts > _TTL_SEC:
                 shutil.rmtree(child, ignore_errors=True)
@@ -90,7 +91,7 @@ def _prune_disk(base: Path) -> None:
             entries.sort(key=lambda x: x[0])
             for _, path in entries[:overflow]:
                 shutil.rmtree(path, ignore_errors=True)
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.debug("kitten pickup prune skipped", exc_info=True)
 
 
@@ -110,7 +111,7 @@ def store_document_pickup(content: bytes, file_name: str, mime: str) -> str:
             with _LOCK:
                 _prune_disk(base)
             return tok
-        except Exception:
+        except OPERATIONAL_ERRORS:
             shutil.rmtree(dest, ignore_errors=True)
             raise
     raise RuntimeError("kitten pickup: token collision after retries")
@@ -139,7 +140,7 @@ def pop_document_pickup(token: str) -> tuple[bytes, str, str] | None:
         fname = str(meta.get("file_name") or "download.bin")
         mime = str(meta.get("mime") or "application/octet-stream")
         return content, fname, mime
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.debug("kitten pickup read failed for token prefix=%s", key[:6], exc_info=True)
         return None
     finally:

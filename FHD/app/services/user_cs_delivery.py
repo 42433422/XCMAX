@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import re
 from datetime import datetime, timezone
 from typing import Any
@@ -115,6 +116,6 @@ def try_confirm_payment_and_invoice(
             doc = issue_crm_invoice_for_pipeline(doc)
             outcome["invoice"] = doc.get("invoice")
             outcome["invoice_created"] = bool(outcome["invoice"])
-        except Exception as exc:
+        except OPERATIONAL_ERRORS as exc:
             outcome["error"] = str(exc)[:300]
     return outcome

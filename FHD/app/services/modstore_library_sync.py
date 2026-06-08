@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import os
 import tempfile
@@ -102,7 +103,7 @@ async def sync_modstore_library_to_local(
                 installed.append(mid)
             else:
                 errors.append(f"{mid}: {message}")
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception("modstore sync failed for %s", mid)
             errors.append(f"{mid}: {e}")
         finally:

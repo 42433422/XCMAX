@@ -5,6 +5,7 @@
 支持 CLOSED/OPEN/HALF_OPEN 三种状态
 """
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import time
 from collections.abc import Callable
@@ -155,7 +156,7 @@ class CircuitBreaker:
             result = fn(*args, **kwargs)
             self.record_success()
             return result
-        except Exception:
+        except OPERATIONAL_ERRORS:
             self.record_failure()
             raise
 
@@ -168,7 +169,7 @@ class CircuitBreaker:
             result = await fn(*args, **kwargs)
             self.record_success()
             return result
-        except Exception:
+        except OPERATIONAL_ERRORS:
             self.record_failure()
             raise
 

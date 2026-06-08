@@ -4,6 +4,7 @@ XCAGI 前端兼容 API — 微信联系人相关路由。
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import json
 import logging
 import os
@@ -201,7 +202,7 @@ def wechat_work_mode_feed(per_contact: int = Query(default=1, ge=1, le=100)) -> 
                     uname, nick, remark = r
                     contact_names[uname] = remark if remark else nick if nick else uname
                 cconn.close()
-            except Exception:
+            except OPERATIONAL_ERRORS:
                 logger.debug("suppressed exception", exc_info=True)
 
         items = []
@@ -239,12 +240,12 @@ def wechat_work_mode_feed(per_contact: int = Query(default=1, ge=1, le=100)) -> 
                                 summary = zstd_dctx.decompress(summary).decode(
                                     "utf-8", errors="replace"
                                 )
-                            except Exception:
+                            except OPERATIONAL_ERRORS:
                                 summary = "(compressed)"
                         else:
                             try:
                                 summary = summary.decode("utf-8", errors="replace")
-                            except Exception:
+                            except OPERATIONAL_ERRORS:
                                 summary = "(compressed; pip install zstandard)"
                     if isinstance(summary, str) and ":\n" in summary:
                         summary = summary.split(":\n", 1)[1]
@@ -289,12 +290,12 @@ def wechat_work_mode_feed(per_contact: int = Query(default=1, ge=1, le=100)) -> 
         finally:
             try:
                 os.remove(tmp_path)
-            except Exception:
+            except OPERATIONAL_ERRORS:
                 logger.debug("suppressed exception", exc_info=True)
 
         return {"items": items[:per_contact], "per_contact": per_contact, "total": len(items)}
 
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.exception("wechat_work_mode_feed error")
         return {"items": [], "per_contact": per_contact, "error": str(e)}
 

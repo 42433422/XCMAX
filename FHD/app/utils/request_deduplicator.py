@@ -13,6 +13,7 @@
 - 幂等性保证
 """
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import hashlib
 import logging
 import os
@@ -130,7 +131,7 @@ class RequestDeduplicator:
 
             return (False, result)
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             with self._lock:
                 if key in self._records:
                     del self._records[key]
@@ -177,7 +178,7 @@ class RequestDeduplicator:
 
             return (False, result)
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             with self._lock:
                 if key in self._records:
                     del self._records[key]

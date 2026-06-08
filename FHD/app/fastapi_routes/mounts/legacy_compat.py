@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import os
 
@@ -61,7 +62,7 @@ def register_legacy_compat_routes(app: FastAPI) -> None:
         )
 
         register_private_db_read_assistant_routes(app)
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.warning("private_db_read_assistant compat routes skipped: %s", e)
 
     try:
@@ -70,7 +71,7 @@ def register_legacy_compat_routes(app: FastAPI) -> None:
         )
 
         register_user_cs_wechat_passive_routes(app)
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.warning("user_cs_wechat_passive compat routes skipped: %s", e)
 
     try:
@@ -78,7 +79,7 @@ def register_legacy_compat_routes(app: FastAPI) -> None:
 
         app.include_router(wechat_decrypt_router)
         logger.info("Registered wechat_decrypt_router (/api/wechat/decrypt/*)")
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.warning("wechat_decrypt routes skipped: %s", e)
 
     from app.fastapi_routes.xcagi_compat import router as xcagi_compat_router
@@ -136,7 +137,7 @@ def register_legacy_compat_routes(app: FastAPI) -> None:
 
         app.include_router(tts_install_router)
         logger.info("Registered tts_install (/api/tts/install-system-voice)")
-    except Exception as e:  # pragma: no cover — Windows-only 可选功能
+    except OPERATIONAL_ERRORS as e:  # pragma: no cover — Windows-only 可选功能
         logger.warning("tts_install route skipped: %s", e)
 
     from app.fastapi_routes.excel_templates import router as excel_templates_router
@@ -169,7 +170,7 @@ def register_legacy_compat_routes(app: FastAPI) -> None:
 
         app.include_router(model_payment_router)
         logger.info("Registered model_payment (/api/model-payment/*)")
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.warning("model_payment routes skipped: %s", e)
 
     from app.fastapi_routes.payment_reconcile_internal_api import (
@@ -235,7 +236,7 @@ def register_legacy_compat_routes(app: FastAPI) -> None:
 
         app.include_router(service_bridge_router)
         logger.info("Registered service_bridge (/api/service-bridge/*)")
-    except Exception as exc:
+    except OPERATIONAL_ERRORS as exc:
         if is_ci_strict():
             raise RuntimeError("service_bridge router required in CI") from exc
         logger.warning("service_bridge router not available: %s", exc)

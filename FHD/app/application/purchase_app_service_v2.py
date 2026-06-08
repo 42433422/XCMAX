@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 from datetime import datetime
 from typing import Any
@@ -51,7 +52,7 @@ class PurchaseAppServiceV2:
                 priority=EventPriority.NORMAL,
             )
             bus.publish(event)
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.debug("NeuroBus 事件发布失败（非阻塞）: %s", e)
 
     # ── 供应商 ────────────────────────────────────────────────────

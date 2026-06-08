@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import asyncio
 import base64
 import re
@@ -161,7 +162,7 @@ def trigger_common_tts_warmup() -> None:
         for phrase in _build_warmup_phrases(_CACHE_MAX_SIZE):
             try:
                 synthesize_to_data_uri(text=phrase, lang="zh", voice=DEFAULT_EDGE_VOICE)
-            except Exception:
+            except OPERATIONAL_ERRORS:
                 # 预热失败不影响主流程；首次真实请求仍可按需合成。
                 continue
 

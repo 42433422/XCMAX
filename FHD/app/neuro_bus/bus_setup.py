@@ -4,6 +4,7 @@ NeuroBus 初始化配置
 提供总线启动、关闭和与 FastAPI 生命周期集成
 """
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import asyncio
 import logging
 from contextlib import asynccontextmanager
@@ -122,7 +123,7 @@ def init_neuro_bus(app: FastAPI | None = None) -> NeuroBus | None:
         from app.neuro_bus.domains.intent_domain import get_intent_domain
 
         get_intent_domain()
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.warning("init_neuro_bus: intent domain setup: %s", e)
 
     return get_neuro_bus()

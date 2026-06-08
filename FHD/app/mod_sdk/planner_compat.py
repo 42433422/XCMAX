@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 from typing import Any
 
 from fastapi import Request
@@ -56,7 +57,7 @@ def intent_test(body: dict[str, Any] | None) -> dict[str, Any]:
         return JSONResponse({"success": False, "message": "消息内容不能为空"}, status_code=400)
     try:
         return {"success": True, "data": recognize_intents(message)}
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         return JSONResponse(
             {"success": False, "message": f"意图识别失败：{str(e)}"},
             status_code=500,

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from statistics import mean
@@ -11,7 +12,7 @@ def _safe_float(value: Any) -> float | None:
         if value is None or value == "":
             return None
         return float(value)
-    except Exception:
+    except OPERATIONAL_ERRORS:
         return None
 
 
@@ -136,7 +137,7 @@ class TimeSeriesModelPlugin(AnalysisPlugin):
         try:
             import pandas as pd
             from prophet import Prophet
-        except Exception:
+        except OPERATIONAL_ERRORS:
             return None
         if len(values) < 3:
             return None
@@ -157,7 +158,7 @@ class TimeSeriesModelPlugin(AnalysisPlugin):
         try:
             import numpy as np
             from statsmodels.tsa.arima.model import ARIMA
-        except Exception:
+        except OPERATIONAL_ERRORS:
             return None
         if len(values) < 4:
             return None

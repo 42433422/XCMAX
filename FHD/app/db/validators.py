@@ -4,6 +4,7 @@ SQLAlchemy 模型验证器
 为数据库模型提供数据验证功能，确保数据的完整性和一致性。
 """
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 
 from sqlalchemy.orm import validates
@@ -92,7 +93,7 @@ def register_model_validators():
         logger.info(f"模型验证器已初始化 ({validated_count} 个模型)")
         return True
 
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.warning(f"模型验证器初始化跳过: {e}")
         return False
 

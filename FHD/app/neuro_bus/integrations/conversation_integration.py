@@ -6,6 +6,7 @@
 - 添加处理器协调
 """
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 from dataclasses import dataclass
 from typing import Any
@@ -102,7 +103,7 @@ class NeuroConversationCoordinator:
                 processor_used="legacy_coordinator",
                 latency_ms=0.0,
             )
-        except Exception:
+        except OPERATIONAL_ERRORS:
             logger.debug("intent emit skipped for legacy coordinator path", exc_info=True)
 
         return NeuroProcessingResult(

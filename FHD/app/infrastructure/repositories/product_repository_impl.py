@@ -1,3 +1,4 @@
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import re
 from datetime import datetime
@@ -277,7 +278,7 @@ class SQLAlchemyProductRepository(ProductRepository):
                                 add_label(r[0], from_products=False)
             finally:
                 cs.close()
-        except Exception:
+        except OPERATIONAL_ERRORS:
             logger.debug("suppressed exception", exc_info=True)
 
         if purchase_units_authoritative:
@@ -290,7 +291,7 @@ class SQLAlchemyProductRepository(ProductRepository):
                     for u in db.query(ProductModel.unit).distinct().all():
                         if u and u[0] is not None:
                             add_label(u[0], from_products=True)
-        except Exception:
+        except OPERATIONAL_ERRORS:
             logger.debug("suppressed exception", exc_info=True)
 
         return ordered

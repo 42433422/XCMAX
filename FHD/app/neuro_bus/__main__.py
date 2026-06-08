@@ -11,6 +11,7 @@ Tests:
     - Architecture statistics
 """
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import asyncio
 import sys
 import time
@@ -43,7 +44,7 @@ def test_imports():
 
         return True
 
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         print(f"  [FAIL] Import failed: {e}")
         import traceback
 
@@ -91,7 +92,7 @@ def test_reflex_arc():
 
         return avg_latency < 1000
 
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         print(f"  [FAIL] Test failed: {e}")
         return False
 
@@ -140,7 +141,7 @@ async def test_neurobus():
 
         return len(received_events) > 0
 
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         print(f"  [FAIL] Test failed: {e}")
         import traceback
 
@@ -175,7 +176,7 @@ def test_domains():
 
         return len(domains) >= 3
 
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         print(f"  [FAIL] Test failed: {e}")
         import traceback
 
@@ -210,7 +211,7 @@ async def test_processors():
 
         return True
 
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         print(f"  [FAIL] Test failed: {e}")
         import traceback
 

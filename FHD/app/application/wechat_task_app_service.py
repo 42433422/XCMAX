@@ -4,6 +4,7 @@
 此模块已迁移到 app/application/
 """
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import os
 import re
@@ -80,7 +81,7 @@ class WechatTaskApplicationService:
                     if existing:
                         return existing.id
             return None
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"插入 wechat_task 失败：{e}")
             return None
 
@@ -107,7 +108,7 @@ class WechatTaskApplicationService:
                 if os.path.isdir(wechat_cv_path) and wechat_cv_path not in sys.path:
                     sys.path.insert(0, wechat_cv_path)
                 from wechat_db_read import get_recent_messages
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 logger.warning("导入 wechat_db_read 失败，无法扫描微信消息：%s", e)
                 return []
 
@@ -161,7 +162,7 @@ class WechatTaskApplicationService:
             logger.info("微信消息扫描完成，新任务数量：%d", len(new_tasks))
             return new_tasks
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception("扫描微信消息失败：%s", e)
             return []
 
@@ -204,7 +205,7 @@ class WechatTaskApplicationService:
 
             return result
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"处理微信消息失败：{e}")
             return {"success": False, "message": f"处理失败：{str(e)}"}
 
@@ -238,7 +239,7 @@ class WechatTaskApplicationService:
 
             return None
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"识别订单失败：{e}")
             return None
 
@@ -266,7 +267,7 @@ class WechatTaskApplicationService:
 
             return None
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"识别发货单失败：{e}")
             return None
 
@@ -279,7 +280,7 @@ class WechatTaskApplicationService:
 
             return {"success": True, "message": "任务已确认"}
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"确认任务失败：{e}")
             return {"success": False, "message": f"确认失败：{str(e)}"}
 
@@ -292,7 +293,7 @@ class WechatTaskApplicationService:
 
             return {"success": True, "message": "任务已忽略"}
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"忽略任务失败：{e}")
             return {"success": False, "message": f"忽略失败：{str(e)}"}
 
@@ -333,7 +334,7 @@ class WechatTaskApplicationService:
                     for t in tasks
                 ]
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"查询任务列表失败：{e}")
             return []
 
@@ -383,7 +384,7 @@ class WechatTaskApplicationService:
             logger.info(f"查询到 {len(contacts)} 个联系人")
             return contacts
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"查询联系人列表失败：{e}")
             return []
 
@@ -407,7 +408,7 @@ class WechatTaskApplicationService:
                         "updated_at": task.updated_at,
                     }
                 return None
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"获取任务失败：{e}")
             return None
 
@@ -418,7 +419,7 @@ class WechatTaskApplicationService:
                     db.query(WechatTask.id).filter(WechatTask.id == task_id).first() is not None
                 )
                 return exists
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"检查任务存在失败：{e}")
             return False
 
@@ -436,7 +437,7 @@ class WechatTaskApplicationService:
                     db.commit()
                     return True
                 return False
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"更新任务状态失败：{e}")
             return False
 
@@ -465,7 +466,7 @@ class WechatTaskApplicationService:
 
             return {"success": True, "message": "订单已记录", "order_info": order_info}
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"处理订单消息失败：{e}")
             return {"success": False, "message": f"处理失败：{str(e)}"}
 
@@ -483,7 +484,7 @@ class WechatTaskApplicationService:
 
             return {"success": True, "message": "发货单已记录", "shipment_info": shipment_info}
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"处理发货单消息失败：{e}")
             return {"success": False, "message": f"处理失败：{str(e)}"}
 

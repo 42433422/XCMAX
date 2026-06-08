@@ -8,6 +8,7 @@
 - 预检报告生成
 """
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import copy
 import logging
 from collections.abc import Callable
@@ -201,7 +202,7 @@ class Sandbox:
         # 执行模拟
         try:
             simulator(context)
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"Sandbox simulation error: {e}")
             return SandboxReport(
                 event_id=event.metadata.event_id,

@@ -4,6 +4,7 @@ NeuroBus 初始化器
 确保所有 Level 4 可靠性机制在应用启动时正确初始化。
 """
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 
 from app.neuro_bus.bus import get_neuro_bus
@@ -102,7 +103,7 @@ class NeuroBusInitializer:
 
             return True
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"[NeuroBusInitializer] 初始化失败: {e}")
             return False
 
@@ -121,7 +122,7 @@ class NeuroBusInitializer:
             self._initialized = False
             logger.info("[NeuroBusInitializer] ✓ NeuroBus 系统已关闭")
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"[NeuroBusInitializer] 关闭时出错: {e}")
 
     def get_status(self) -> dict:

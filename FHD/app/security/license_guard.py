@@ -8,6 +8,7 @@ ASGI 中间件：cookie / header token 校验。
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import json
 import logging
 import os
@@ -36,13 +37,13 @@ def _read_cookie(scope: Scope, name: str) -> str | None:
     for k, v in headers:
         try:
             key = k.decode("latin-1") if isinstance(k, bytes) else str(k)
-        except Exception:
+        except OPERATIONAL_ERRORS:
             continue
         if key.lower() != "cookie":
             continue
         try:
             raw = v.decode("latin-1") if isinstance(v, bytes) else str(v)
-        except Exception:
+        except OPERATIONAL_ERRORS:
             continue
         for part in raw.split(";"):
             part = part.strip()
@@ -61,7 +62,7 @@ def _read_header(scope: Scope, name: str) -> str | None:
         if isinstance(k, bytes) and k.lower() == target:
             try:
                 return v.decode("latin-1") if isinstance(v, bytes) else str(v)
-            except Exception:
+            except OPERATIONAL_ERRORS:
                 return None
     return None
 
@@ -209,7 +210,7 @@ class LanLicenseGuard:
 
         try:
             touch_session(payload.jti)
-        except Exception:
+        except OPERATIONAL_ERRORS:
             logger.debug("touch_session failed for jti=%s", payload.jti, exc_info=True)
 
         await self.app(scope, receive, send)

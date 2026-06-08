@@ -4,6 +4,7 @@ Skills 注册与管理服务
 提供技能的注册、发现和调用接口
 """
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import os
 from pathlib import Path
@@ -92,7 +93,7 @@ class SkillRegistry:
                     metadata["module_path"] = str(skill_folder)
                     self.register(skill_id, metadata)
                     logger.info(f"加载技能定义: {skill_id}")
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 logger.error(f"加载技能失败 {skill_id}: {e}")
 
         self._initialized = True
@@ -193,6 +194,6 @@ def execute_skill(skill_id: str, **params) -> dict[str, Any]:
             return skill.execute(**params)
         else:
             return {"success": False, "message": f"未知技能类型：{skill_id}"}
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error(f"执行技能失败 {skill_id}: {e}")
         return {"success": False, "message": str(e)}

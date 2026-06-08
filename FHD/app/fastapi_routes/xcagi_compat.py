@@ -6,6 +6,7 @@ XCAGI 前端兼容 API（FastAPI APIRouter）— 聚合入口。
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 
 from fastapi import APIRouter
@@ -50,7 +51,7 @@ def _register_router_events():
             "[XCAGICompat] 路由已注册到 NeuroBus，当前订阅者: %s",
             len(bus.subscribers),
         )
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.debug("[XCAGICompat] NeuroBus 注册跳过: %s", e)
 
 

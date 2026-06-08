@@ -8,6 +8,7 @@
 - 完整可靠性机制栈
 """
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import asyncio
 import logging
 import time
@@ -215,7 +216,7 @@ class ConsciousProcessor:
                 stage_reached=stage,
             )
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             elapsed_ms = (time.perf_counter() - start_time) * 1000
 
             # 记录失败

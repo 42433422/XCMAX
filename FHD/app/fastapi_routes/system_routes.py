@@ -16,6 +16,7 @@ resources/config/industry_config.py::_mod_industries_dict 与
 app/infrastructure/mods/manifest.py::ModMetadata.industry。
 """
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 from typing import Any
 
@@ -90,7 +91,7 @@ async def get_industries():
                 "current": current,
             },
         }
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error(f"Failed to get industries: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -108,7 +109,7 @@ async def get_current_industry_endpoint():
         profile = get_industry_profile(current_id)
 
         return {"success": True, "data": _build_industry_response(current_id, profile)}
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.exception("Failed to get current industry: %s", e)
         # 避免 Mod manifest / YAML 异常时侧栏整页 500：回退到内置「涂料」档案
         try:
@@ -117,7 +118,7 @@ async def get_current_industry_endpoint():
             fid = "涂料"
             profile = get_industry_profile(fid)
             return {"success": True, "data": _build_industry_response(fid, profile)}
-        except Exception:
+        except OPERATIONAL_ERRORS:
             raise HTTPException(status_code=500, detail=str(e)) from e
 
 
@@ -139,7 +140,7 @@ async def set_industry_endpoint(request: SetIndustryRequest):
         return {"success": True, "data": _build_industry_response(request.industry_id, profile)}
     except HTTPException:
         raise
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error(f"Failed to set industry: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -151,7 +152,7 @@ async def get_host_profile():
         from app.mod_sdk.host_profile import build_host_profile_api_payload
 
         return {"success": True, "data": build_host_profile_api_payload()}
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error("Failed to get host profile: %s", e)
         raise HTTPException(status_code=500, detail=str(e)) from e
 
@@ -171,7 +172,7 @@ async def get_industry_presets():
                 "presets": doc.get("presets") or {},
             },
         }
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error("Failed to get industry presets: %s", e)
         raise HTTPException(status_code=500, detail=str(e)) from e
 
@@ -198,7 +199,7 @@ async def get_workflow_employee_catalog():
                 "static_catalog": load_workflow_employee_catalog(),
             },
         }
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error("Failed to get workflow employee catalog: %s", e)
         raise HTTPException(status_code=500, detail=str(e)) from e
 
@@ -210,7 +211,7 @@ async def get_employee_registry_rules():
         from app.mod_sdk.host_profile import get_employee_registry_rules
 
         return {"success": True, "data": get_employee_registry_rules()}
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error("Failed to get employee registry rules: %s", e)
         raise HTTPException(status_code=500, detail=str(e)) from e
 
@@ -235,6 +236,6 @@ async def get_industry_detail(industry_id: str):
         return {"success": True, "data": _build_industry_response(industry_id, profile)}
     except HTTPException:
         raise
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error(f"Failed to get industry {industry_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))

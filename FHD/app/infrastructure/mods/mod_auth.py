@@ -8,6 +8,7 @@ Usage:
     from app.infrastructure.mods.mod_auth import ModContext, mod_context_middleware
 """
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import hashlib
 import hmac
 import logging
@@ -180,7 +181,7 @@ class ModContextMiddleware:
                     from app.infrastructure.mods.mod_manager import ensure_mod_api_ready
 
                     ensure_mod_api_ready(mod_context.mod_id, session_id=sid or None)
-                except Exception as exc:
+                except OPERATIONAL_ERRORS as exc:
                     logger.warning(
                         "ensure_mod_api_ready(%s) failed: %s",
                         mod_context.mod_id,

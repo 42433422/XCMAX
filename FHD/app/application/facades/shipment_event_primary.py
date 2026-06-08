@@ -5,6 +5,7 @@ Read/query methods delegate to the core application service via __getattr__.
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import uuid
 from typing import Any
@@ -44,7 +45,7 @@ class ShipmentApplicationServiceEventPrimary:
     def _run_cmd(self, coro):
         try:
             return run_coroutine_on_neuro_loop(coro, timeout=120.0)
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception("event-primary shipment command failed: %s", e)
             return {"success": False, "message": str(e)}
 

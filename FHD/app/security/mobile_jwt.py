@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import base64
 import hashlib
 import hmac
@@ -49,7 +50,7 @@ def verify_mobile_jwt(token: str) -> dict[str, Any] | None:
         if payload.get("aud") != MOBILE_JWT_AUD:
             return None
         return payload
-    except Exception as exc:
+    except OPERATIONAL_ERRORS as exc:
         logger.debug("mobile jwt verify failed: %s", exc)
         return None
 

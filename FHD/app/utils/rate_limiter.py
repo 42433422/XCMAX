@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import os
 import time
@@ -38,7 +39,7 @@ def _get_redis_client():
         _redis_client = redis.from_url(url, decode_responses=True)
         _redis_client.ping()
         logger.info("Rate limiter using Redis backend")
-    except Exception as exc:
+    except OPERATIONAL_ERRORS as exc:
         logger.warning("Rate limiter Redis unavailable, using in-memory: %s", exc)
         _redis_client = None
     return _redis_client
@@ -111,7 +112,7 @@ class _RedisRateLimiter:
             return self._max_requests
         try:
             count = int(self._redis.get(self._window_key(key)) or 0)
-        except Exception:
+        except OPERATIONAL_ERRORS:
             return 0
         return max(0, self._max_requests - count)
 

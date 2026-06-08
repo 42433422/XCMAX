@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import json
 import logging
 import os
@@ -35,7 +36,7 @@ def _resolve_db_path() -> Path:
         from app.mod_sdk.private_sqlite import resolve_mod_private_sqlite_path
 
         _db_path = resolve_mod_private_sqlite_path(_DB_FILENAME)
-    except Exception:
+    except OPERATIONAL_ERRORS:
         base = os.environ.get("DATABASE_PATH") or os.environ.get("XCAGI_DATA_DIR") or os.getcwd()
         _db_path = Path(base) / "mod_dbs" / _DB_FILENAME
         _db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -258,7 +259,7 @@ class SyncDb:
             d = dict(row)
             try:
                 d["payload"] = json.loads(d.pop("payload_json") or "{}")
-            except Exception:
+            except OPERATIONAL_ERRORS:
                 d["payload"] = {}
             result.append(d)
         return result
@@ -277,7 +278,7 @@ class SyncDb:
             d = dict(row)
             try:
                 d["payload"] = json.loads(d.pop("payload_json") or "{}")
-            except Exception:
+            except OPERATIONAL_ERRORS:
                 d["payload"] = {}
             result.append(d)
         return result

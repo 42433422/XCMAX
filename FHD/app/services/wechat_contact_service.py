@@ -4,6 +4,7 @@
 提供微信联系人管理、业务逻辑处理。
 """
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import difflib
 import json
 import logging
@@ -91,12 +92,12 @@ class WechatContactService(NeuroEventPublisherMixin):
                     try:
                         extra = self._search_contacts_from_wechat_db(keyword=keyword, limit=limit)
                         results.extend(extra)
-                    except Exception as e:
+                    except OPERATIONAL_ERRORS as e:
                         logger.warning("从微信数据库搜索联系人失败：%s", e)
 
                 return results
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"获取联系人列表失败：{e}")
             return []
 
@@ -189,7 +190,7 @@ class WechatContactService(NeuroEventPublisherMixin):
                             )
                         if contacts:
                             return contacts
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 # contact.db 不可用时继续走 message db 回退
                 logger.warning("contact.db 搜索联系人失败：%s", e)
 
@@ -204,7 +205,7 @@ class WechatContactService(NeuroEventPublisherMixin):
 
             try:
                 from wechat_db_read import get_recent_messages  # type: ignore
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 logger.warning("导入 wechat_db_read 失败，无法从微信 DB 搜索联系人：%s", e)
                 return []
 
@@ -235,7 +236,7 @@ class WechatContactService(NeuroEventPublisherMixin):
                         ).fetchall()
                         colnames = [d[0] for d in (cur.description or [])]
                         rows = [dict(zip(colnames, r)) for r in raw]
-            except Exception:
+            except OPERATIONAL_ERRORS:
                 # 退化：走原本 wechat_db_read 的逻辑（可能会失败，但不影响主流程）
                 out = get_recent_messages(
                     db_path,
@@ -307,7 +308,7 @@ class WechatContactService(NeuroEventPublisherMixin):
                     break
 
             return list(contacts_map.values())
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception("从微信 DB 搜索联系人时异常：%s", e)
             return []
 
@@ -336,7 +337,7 @@ class WechatContactService(NeuroEventPublisherMixin):
                     "updated_at": contact.updated_at.isoformat() if contact.updated_at else None,
                 }
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"获取联系人失败：{e}")
             return None
 
@@ -386,7 +387,7 @@ class WechatContactService(NeuroEventPublisherMixin):
 
                 return {"success": True, "message": "联系人添加成功", "contact_id": contact.id}
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"添加联系人失败：{e}")
             return {"success": False, "message": str(e)}
 
@@ -435,7 +436,7 @@ class WechatContactService(NeuroEventPublisherMixin):
 
                 return {"success": True, "message": "联系人更新成功"}
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"更新联系人失败：{e}")
             return {"success": False, "message": str(e)}
 
@@ -458,7 +459,7 @@ class WechatContactService(NeuroEventPublisherMixin):
 
                 return {"success": True, "message": "联系人已删除"}
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"删除联系人失败：{e}")
             return {"success": False, "message": str(e)}
 
@@ -483,7 +484,7 @@ class WechatContactService(NeuroEventPublisherMixin):
                     "count": count,
                 }
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"取消星标失败：{e}")
             return {"success": False, "message": str(e)}
 
@@ -502,10 +503,10 @@ class WechatContactService(NeuroEventPublisherMixin):
 
                 try:
                     return json.loads(context.context_json)
-                except Exception:
+                except OPERATIONAL_ERRORS:
                     return []
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"获取联系人上下文失败：{e}")
             return []
 
@@ -538,7 +539,7 @@ class WechatContactService(NeuroEventPublisherMixin):
                 db.commit()
                 return True
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"保存联系人上下文失败：{e}")
             return False
 
@@ -656,7 +657,7 @@ class WechatContactService(NeuroEventPublisherMixin):
                         get_messages_for_contact,
                         get_wechat_contact_db_path,
                     )
-                except Exception as e:
+                except OPERATIONAL_ERRORS as e:
                     logger.warning("导入 wechat_db_read 失败：%s", e)
                     return {"success": False, "message": f"导入微信数据库模块失败：{str(e)}"}
 
@@ -699,7 +700,7 @@ class WechatContactService(NeuroEventPublisherMixin):
                     "count": len(messages),
                 }
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"刷新联系人消息失败：{e}")
             return {"success": False, "message": f"刷新失败：{str(e)}"}
 

@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import json
 import logging
 from functools import lru_cache
@@ -45,7 +46,7 @@ def _discover_native_tool_mods() -> list[dict[str, Any]]:
                         "tool_names": tools,
                     }
                 )
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.debug("discover native planner mods via loaded failed", exc_info=True)
 
     if rows:
@@ -70,7 +71,7 @@ def _discover_native_tool_mods() -> list[dict[str, Any]]:
             tools = _native_tools_from_metadata(meta)
             if tools:
                 rows.append({"mod_id": meta.id, "mod_path": meta.mod_path, "tool_names": tools})
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.debug("discover native planner mods via disk failed", exc_info=True)
     return rows
 
@@ -85,7 +86,7 @@ def _native_tools_from_metadata(meta: Any) -> list[str]:
         raw = cfg.get("native_planner_tools") or cfg.get("planner_native_tools") or []
         if isinstance(raw, list):
             return [str(x).strip() for x in raw if str(x).strip()]
-    except Exception:
+    except OPERATIONAL_ERRORS:
         pass
     return []
 
@@ -133,7 +134,7 @@ def try_execute_native_planner_tool(
             if out is None:
                 continue
             return str(out), mod_id
-        except Exception:
+        except OPERATIONAL_ERRORS:
             logger.exception("native planner tool failed mod=%s tool=%s", mod_id, tool)
             return (
                 json.dumps(

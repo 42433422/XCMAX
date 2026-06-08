@@ -7,6 +7,7 @@
 - 内存级缓存
 """
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import re
 import time
@@ -312,7 +313,7 @@ class IntentReflexArc:
 
             return result
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             elapsed_us = (time.perf_counter() - start_time) * 1_000_000
             logger.exception(f"Reflex arc error after {elapsed_us:.0f}us: {e}")
             return ReflexResult(

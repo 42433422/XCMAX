@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import hashlib
 import hmac
 import logging
@@ -135,6 +136,6 @@ async def sync_intake_from_market_if_newer(
             **{k: data.get(k) for k in ("name", "email", "phone", "company", "message", "submitted_at", "landing_contact_id")},
         }
         return apply_landing_submission_to_pipeline(payload)
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.debug("sync_intake_from_market_if_newer skipped", exc_info=True)
         return None

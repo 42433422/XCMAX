@@ -9,6 +9,7 @@ ContextFacade - 统一上下文门面
 3. 决策处理方式
 """
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 from dataclasses import dataclass
 from enum import Enum
@@ -563,7 +564,7 @@ class ContextFacade:
             if notifier and pending:
                 pending_data = pending.to_dict()
                 notifier.notify_pending_preserved(user_id, pending_data, action)
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.warning(f"[CONTEXT_FACADE] Failed to notify preserved: {e}")
 
     def _get_notifier(self):

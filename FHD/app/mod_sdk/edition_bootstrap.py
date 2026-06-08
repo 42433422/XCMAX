@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 from typing import Any
 
@@ -68,7 +69,7 @@ async def bootstrap_edition_pack(edition: Edition | None = None) -> dict[str, An
                         {"mod_id": mod_id, "status": "loaded", "message": "loaded after seed"}
                     )
                     continue
-            except Exception as exc:
+            except OPERATIONAL_ERRORS as exc:
                 logger.warning("load_mod after seed failed %s: %s", mod_id, exc)
 
         try:
@@ -82,7 +83,7 @@ async def bootstrap_edition_pack(edition: Edition | None = None) -> dict[str, An
                     "message": result.message,
                 }
             )
-        except Exception as exc:
+        except OPERATIONAL_ERRORS as exc:
             catalog_results.append(
                 {"mod_id": mod_id, "status": "catalog_failed", "message": str(exc)}
             )

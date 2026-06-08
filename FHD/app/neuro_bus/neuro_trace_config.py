@@ -6,6 +6,7 @@ Neuro 读写全量 trace 的环境开关与采样（HTTP / Application 分层）
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import os
 import random
 from functools import lru_cache
@@ -95,7 +96,7 @@ def bump_domain_handler_metric(metric_key: str) -> None:
         return
     try:
         _DOMAIN_HANDLER_METRICS[metric_key] = _DOMAIN_HANDLER_METRICS.get(metric_key, 0) + 1
-    except Exception:
+    except OPERATIONAL_ERRORS:
         pass
 
 

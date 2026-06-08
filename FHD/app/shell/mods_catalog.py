@@ -12,6 +12,7 @@ Mod 列表数据源：优先读取静态 JSON（由 MODstore ``modman export-fhd
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import json
 import logging
 import os
@@ -98,6 +99,6 @@ def list_mod_items() -> list[ModItem]:
     combined = [*discovered, *tail]
     try:
         return [ModItem.model_validate(x) for x in combined]
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.warning("ModItem 校验失败，回退内置列表: %s", e)
         return [ModItem.model_validate(row) for row in _BUILTIN_RAW]

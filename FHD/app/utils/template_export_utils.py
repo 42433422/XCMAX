@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 from collections.abc import Iterable
 from datetime import date, datetime
 from typing import Any
@@ -123,7 +124,7 @@ def fill_workbook_from_template(
         try:
             ws.delete_rows(1, header_row - 1)
             header_row = 1
-        except Exception:
+        except OPERATIONAL_ERRORS:
             for clear_r in range(1, header_row):
                 for col_idx in range(1, (ws.max_column or 1) + 1):
                     ws.cell(clear_r, col_idx).value = None

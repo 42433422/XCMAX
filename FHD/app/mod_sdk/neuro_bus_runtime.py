@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 from functools import lru_cache
 from typing import Any
@@ -30,7 +31,7 @@ def _resolve_mod_path() -> tuple[str, str] | tuple[None, None]:
         mod_dir = _resolve_mod_dir()
         if mod_dir:
             return NEURO_BUS_BRIDGE_MOD_ID, str(mod_dir)
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.debug("neuro bus runtime mod path failed", exc_info=True)
     return None, None
 

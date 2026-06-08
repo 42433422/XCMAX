@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 from collections.abc import Mapping
 from datetime import date, datetime
 from decimal import Decimal
@@ -25,7 +26,7 @@ def json_safe(value: Any) -> Any:
     if isinstance(value, bytes):
         try:
             return value.decode("utf-8", errors="replace")
-        except Exception:
+        except OPERATIONAL_ERRORS:
             return ""
     try:
         import numpy as np  # type: ignore

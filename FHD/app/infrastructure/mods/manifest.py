@@ -2,6 +2,7 @@
 Mod Manifest Definition and Parsing
 """
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import json
 import logging
 import os
@@ -147,7 +148,7 @@ def parse_manifest(mod_path: str) -> ModMetadata | None:
     except json.JSONDecodeError as e:
         logger.error(f"[parse_manifest] Failed to parse manifest JSON: {e}")
         return None
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error(f"[parse_manifest] Failed to read manifest: {e}")
         return None
 

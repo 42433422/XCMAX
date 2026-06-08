@@ -5,6 +5,7 @@ Phase 3 从 ``app.legacy.tools_directory_compat`` 迁入。
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 DEFAULT_TOOL_CATEGORIES = [
     {
         "id": 10,
@@ -87,7 +88,7 @@ def _planner_tools_from_registry() -> list[dict]:
             from app.application.tools.workflow import get_workflow_tool_registry
 
             reg = get_workflow_tool_registry()
-    except Exception:
+    except OPERATIONAL_ERRORS:
         return []
     out: list[dict] = []
     for spec in reg:

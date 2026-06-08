@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 from typing import Any
 
 from fastapi import Request
@@ -28,7 +29,7 @@ def resolve_tenant_id(request: Request) -> int | None:
             return None
         tid = getattr(user, "tenant_id", None)
         return int(tid) if tid is not None else None
-    except Exception:
+    except OPERATIONAL_ERRORS:
         return None
 
 

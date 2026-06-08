@@ -8,6 +8,7 @@ Phase 2C 从 :mod:`app.fastapi_routes.archive_gap_batch2` 拆分而出。
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import os
 
@@ -125,5 +126,5 @@ def ensure_spa_fallback_last(app: FastAPI) -> None:
             "Reordered %d Vue history fallback route(s) to end of app.router.routes",
             len(fallback_routes),
         )
-    except Exception as exc:
+    except OPERATIONAL_ERRORS as exc:
         logger.warning("Failed to reorder history fallback routes: %s", exc)

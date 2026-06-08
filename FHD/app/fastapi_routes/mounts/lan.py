@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import os
 
@@ -16,7 +17,7 @@ def register_lan_routes(app: FastAPI) -> None:
 
         app.include_router(lan_router)
         logger.info("Registered LAN routes (/api/lan/*)")
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.warning("LAN routes skipped: %s", e)
 
     try:
@@ -24,7 +25,7 @@ def register_lan_routes(app: FastAPI) -> None:
 
         app.include_router(lan_admin_router)
         logger.info("Registered LAN admin routes (/api/lan/admin/*)")
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.warning("LAN admin routes skipped: %s", e)
 
     try:
@@ -32,7 +33,7 @@ def register_lan_routes(app: FastAPI) -> None:
 
         app.include_router(lan_settings_router)
         logger.info("Registered LAN settings routes (/api/lan/admin/settings)")
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.warning("LAN settings routes skipped: %s", e)
 
 

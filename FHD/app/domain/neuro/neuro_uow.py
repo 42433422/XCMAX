@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
@@ -48,7 +49,7 @@ class NeuroUnitOfWork:
                 if self._on_commit is not None:
                     try:
                         self._on_commit()
-                    except Exception:
+                    except OPERATIONAL_ERRORS:
                         logger.exception("NeuroUnitOfWork on_commit hook failed")
             else:
                 self._session.rollback()

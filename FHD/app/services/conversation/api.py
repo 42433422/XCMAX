@@ -1,3 +1,4 @@
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import time
 from typing import Any
@@ -30,7 +31,7 @@ class ApiMixin(NeuroEventPublisherMixin):
             if self._deepseek_async_client is not None:
                 try:
                     await self._deepseek_async_client.aclose()
-                except Exception:
+                except OPERATIONAL_ERRORS:
                     logger.debug("suppressed exception", exc_info=True)
                 self._deepseek_async_client = None
             self._deepseek_async_loop = loop
@@ -116,11 +117,11 @@ class ApiMixin(NeuroEventPublisherMixin):
                             getattr(getattr(self, "modstore_adapter", None), "user_id", "") or ""
                         ),
                     )
-                except Exception:
+                except OPERATIONAL_ERRORS:
                     pass
             return result
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error("❌ LLM API调用异常: %s", e, exc_info=True)
             return None
 
@@ -171,7 +172,7 @@ class ApiMixin(NeuroEventPublisherMixin):
                         token_count=0,
                         user_id="",
                     )
-                except Exception:
+                except OPERATIONAL_ERRORS:
                     logger.debug("neuro_notify_ai_model_roundtrip skipped", exc_info=True)
                 return result
             logger.warning(f"DeepSeek API 返回空响应：{result}")
@@ -180,7 +181,7 @@ class ApiMixin(NeuroEventPublisherMixin):
         except httpx.HTTPError as e:
             logger.error(f"DeepSeek API 请求失败：{e}")
             return None
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"调用 DeepSeek API 异常：{e}")
             return None
 

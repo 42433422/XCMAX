@@ -2,6 +2,7 @@
 Mod Manager - Core manager for scanning, loading, and managing mods
 """
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import importlib
 import importlib.util
 import json
@@ -177,7 +178,7 @@ def _register_mod_hooks(mod_id: str, metadata: ModMetadata) -> None:
                 continue
             subscribe(event, handler)
             logger.info("Mod %s hook registered: %s -> %s", mod_id, event, spec)
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error("Failed to register hook %r for mod %s: %s", event, mod_id, e)
 
 
@@ -308,7 +309,7 @@ class ModManager:
             )
             self.load_all_mods()
             load_mod_routes(app, self)
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             # 避免扫描/加载异常导致 /api/mods、/api/mods/routes 等整段 500，前端 Mod 列表与路由永久拉取失败
             logger.exception(
                 "[ModManager] ensure_mods_loaded failed (mods_root=%s): %s",
@@ -362,7 +363,7 @@ class ModManager:
                 continue
             try:
                 payload = json.loads(Path(index_path).read_text(encoding="utf-8"))
-            except Exception:
+            except OPERATIONAL_ERRORS:
                 continue
             if str(payload.get("fingerprint") or "") != fp:
                 continue
@@ -535,7 +536,7 @@ class ModManager:
                 f" (requested {mod_id})" if effective_id != mod_id else "",
             )
             return True
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"[ModManager] Failed to load mod {mod_id}: {e}", exc_info=True)
             self._record_load_failure(mod_id, "backend", _short_exc_message(e))
             return False
@@ -557,7 +558,7 @@ class ModManager:
                     init_fn = getattr(module, metadata.backend_init)
                     if callable(init_fn):
                         init_fn()
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 logger.error(
                     f"Failed to load backend entry for {mod_id}: {e}",
                     exc_info=True,
@@ -573,7 +574,7 @@ class ModManager:
         if instance and hasattr(instance, "cleanup"):
             try:
                 instance.cleanup()
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 logger.error(f"Error cleaning up mod {mod_id}: {e}")
 
         registry.unregister_mod(mod_id)
@@ -584,7 +585,7 @@ class ModManager:
             from app.infrastructure.mods.comms import get_mod_comms
 
             get_mod_comms().unregister_all(mod_id)
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.warning("Mod comms cleanup failed for %s: %s", mod_id, e)
 
         logger.info(f"Mod unloaded: {mod_id}")
@@ -659,7 +660,7 @@ class ModManager:
                     metadata = parse_manifest(target_path)
                     return True, f"MOD {mod_id} 安装成功（未激活）", metadata
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception("MOD installation failed")
             return False, f"安装失败：{e}", None
 
@@ -701,7 +702,7 @@ class ModManager:
 
             return True, f"MOD {mod_id} 卸载成功"
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception("MOD uninstallation failed")
             return False, f"卸载失败：{e}"
 
@@ -752,7 +753,7 @@ class ModManager:
                         package_path, temp_dir, verify_signature=verify_signature
                     )
                     shutil.copytree(extract_path, mod_path)
-                except Exception as e:
+                except OPERATIONAL_ERRORS as e:
                     logger.error(f"Failed to extract package: {e}")
                     if was_loaded:
                         self.load_mod(mod_id)
@@ -768,7 +769,7 @@ class ModManager:
                 metadata = parse_manifest(mod_path)
                 return True, f"MOD {mod_id} 更新成功 (v{new_version})", metadata
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception("MOD update failed")
             return False, f"更新失败：{e}", None
 
@@ -848,7 +849,7 @@ class ModManager:
 
         except ModPackageError as e:
             return False, str(e), {}
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception("MOD validation failed")
             return False, f"验证失败：{e}", {}
 
@@ -911,13 +912,13 @@ class ModManager:
             from .employee_registry import get_employee_registry
 
             rows = rows + get_employee_registry(self.mods_root).list_for_mods_api()
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.warning("employee registry merge skipped: %s", e)
         try:
             from app.enterprise.mod_entitlements import filter_mod_rows_for_enterprise
 
             rows = filter_mod_rows_for_enterprise(rows)
-        except Exception:
+        except OPERATIONAL_ERRORS:
             pass
         return rows
 
@@ -936,7 +937,7 @@ class ModManager:
 
                 if not is_mod_visible_for_enterprise(m.id):
                     continue
-            except Exception:
+            except OPERATIONAL_ERRORS:
                 pass
             rp = (m.frontend_routes or "").strip()
             if rp:
@@ -962,7 +963,7 @@ class ModManager:
                         metadata.id,
                     )
                     continue
-            except Exception:
+            except OPERATIONAL_ERRORS:
                 pass
             logger.info(f"[ModManager] Checking dependencies for mod: {metadata.id}")
             if metadata.dependencies:
@@ -1038,7 +1039,7 @@ def load_employee_pack_routes(app, mod_manager: ModManager | None = None) -> Non
             if callable(reg):
                 reg(app, pack_id)
                 logger.info("FastAPI routes registered for employee_pack: %s", pack_id)
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(
                 "employee_pack route registration failed %s: %s", pack_id, e, exc_info=True
             )
@@ -1094,7 +1095,7 @@ def _register_single_mod_http_routes(
             return True
         logger.info("Mod %s has no HTTP route registrar, skip", mid)
         return False
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error("Failed to register routes for %s: %s", mid, e, exc_info=True)
         mod_manager.record_blueprint_failure(mid, _short_exc_message(e))
         return False
@@ -1121,7 +1122,7 @@ def _restore_entitlements_from_session_id(session_id: str | None) -> None:
         )
         if cached:
             set_session_entitlements(entitled_client_mod_ids=cached)
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.debug("restore entitlements from session failed", exc_info=True)
 
 
@@ -1152,7 +1153,7 @@ def _mod_allowed_for_api_load(mod_id: str, session_id: str | None = None) -> boo
             uname = (_session_username_for_entitlements(session_id or "") or "").strip()
             if is_sunbird_local_username(uname):
                 return True
-    except Exception:
+    except OPERATIONAL_ERRORS:
         pass
     return False
 
@@ -1183,7 +1184,7 @@ def ensure_mod_api_ready(mod_id: str, session_id: str | None = None) -> bool:
         from app.fastapi_app import get_fastapi_app
 
         app = get_fastapi_app()
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.warning("ensure_mod_api_ready: cannot get FastAPI app: %s", e)
         return False
 

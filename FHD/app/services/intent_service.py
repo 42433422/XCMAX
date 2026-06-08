@@ -16,6 +16,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import hashlib
 import logging
 import re
@@ -251,7 +252,7 @@ def recognize_intents(message: str) -> dict[str, Any]:
     """对外接口：全流程意图识别入口（带异常兜底）"""
     try:
         return _recognize_intents_impl(message)
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.exception("recognize_intents failed: %s", e)
         return {
             "primary_intent": None,
@@ -309,7 +310,7 @@ def _recognize_intents_impl(message: str) -> dict[str, Any]:
 
     try:
         basic_intents = _reflex_basic_intents(message)
-    except Exception as exc:
+    except OPERATIONAL_ERRORS as exc:
         logger.warning("reflex basic intents skipped: %s", exc)
         basic_intents = {
             "is_greeting": False,
@@ -458,7 +459,7 @@ def _recognize_intents_impl(message: str) -> dict[str, Any]:
 
         try:
             resolved = resolve_purchase_unit(potential_unit)
-        except Exception as exc:
+        except OPERATIONAL_ERRORS as exc:
             logger.warning("resolve_purchase_unit skipped: %s", exc)
             resolved = None
         if resolved:

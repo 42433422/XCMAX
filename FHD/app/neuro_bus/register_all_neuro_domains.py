@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 
 logger = logging.getLogger(__name__)
@@ -46,7 +47,7 @@ def register_all_neuro_domains() -> list[str]:
     for g in getters:
         try:
             g()
-        except Exception as exc:
+        except OPERATIONAL_ERRORS as exc:
             logger.warning("NeuroDomain init skipped for %s: %s", g.__name__, exc)
 
     names = get_domain_registry().list_domains()

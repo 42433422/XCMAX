@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import json
 import logging
 import re
@@ -106,7 +107,7 @@ def execute_http_request_node(
                 )
             try:
                 data = resp.json()
-            except Exception:
+            except OPERATIONAL_ERRORS:
                 data = {"raw": resp.text}
             return {
                 "success": resp.status_code < 400,

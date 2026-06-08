@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 from functools import lru_cache
 from typing import Any
 
@@ -14,7 +15,7 @@ def _load_json(path):
 
     try:
         return json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
+    except OPERATIONAL_ERRORS:
         return None
 
 
@@ -42,7 +43,7 @@ def _installed_mod_ids() -> list[str]:
         if ids:
             return ids
         return [m.id for m in mm.scan_mods() if getattr(m, "id", None)]
-    except Exception:
+    except OPERATIONAL_ERRORS:
         return []
 
 
@@ -108,7 +109,7 @@ def _read_mod_manifest_json(mod_id: str) -> dict[str, Any]:
             return {}
         data = json.loads(mf.read_text(encoding="utf-8"))
         return data if isinstance(data, dict) else {}
-    except Exception:
+    except OPERATIONAL_ERRORS:
         return {}
 
 
@@ -150,7 +151,7 @@ def _mod_installed(mod_id: str, installed: set[str]) -> bool:
         for leg in legacy_mod_ids_for(cid):
             if leg in installed:
                 return True
-    except Exception:
+    except OPERATIONAL_ERRORS:
         pass
     return False
 

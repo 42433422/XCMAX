@@ -4,6 +4,7 @@
 提供仓库、库位、库存台账、库存流水等业务逻辑。
 """
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 from datetime import datetime
 from decimal import Decimal
@@ -77,7 +78,7 @@ class InventoryService:
                 db.commit()
                 db.refresh(warehouse)
                 return {"success": True, "data": self._model_to_dict(warehouse)}
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 db.rollback()
                 logger.error(f"创建仓库失败: {e}")
                 return {"success": False, "message": str(e)}
@@ -97,7 +98,7 @@ class InventoryService:
                 db.commit()
                 db.refresh(warehouse)
                 return {"success": True, "data": self._model_to_dict(warehouse)}
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 db.rollback()
                 logger.error(f"更新仓库失败: {e}")
                 return {"success": False, "message": str(e)}
@@ -111,7 +112,7 @@ class InventoryService:
                 warehouse.status = "deleted"
                 db.commit()
                 return {"success": True, "message": "仓库已删除"}
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 db.rollback()
                 logger.error(f"删除仓库失败: {e}")
                 return {"success": False, "message": str(e)}
@@ -144,7 +145,7 @@ class InventoryService:
                 db.commit()
                 db.refresh(location)
                 return {"success": True, "data": self._model_to_dict(location)}
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 db.rollback()
                 logger.error(f"创建库位失败: {e}")
                 return {"success": False, "message": str(e)}
@@ -167,7 +168,7 @@ class InventoryService:
                 db.commit()
                 db.refresh(location)
                 return {"success": True, "data": self._model_to_dict(location)}
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 db.rollback()
                 logger.error(f"更新库位失败: {e}")
                 return {"success": False, "message": str(e)}
@@ -328,7 +329,7 @@ class InventoryService:
                         "total_quantity": float(ledger.quantity),
                     },
                 }
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 db.rollback()
                 logger.error(f"入库失败: {e}")
                 return {"success": False, "message": str(e)}
@@ -396,7 +397,7 @@ class InventoryService:
                         "remaining_quantity": float(ledger.quantity),
                     },
                 }
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 db.rollback()
                 logger.error(f"出库失败: {e}")
                 return {"success": False, "message": str(e)}
@@ -513,7 +514,7 @@ class InventoryService:
                         "quantity": quantity,
                     },
                 }
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 db.rollback()
                 logger.error(f"调拨失败: {e}")
                 return {"success": False, "message": str(e)}

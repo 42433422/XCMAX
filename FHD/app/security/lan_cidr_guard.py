@@ -8,6 +8,7 @@ ASGI 中间件：网段白名单。
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import json
 import logging
 from ipaddress import ip_address
@@ -89,7 +90,7 @@ class LanCidrGuard:
                 pass
             try:
                 touch_allowed_client(client_ip or "")
-            except Exception:
+            except OPERATIONAL_ERRORS:
                 logger.debug("touch_allowed_client failed for ip=%s", client_ip, exc_info=True)
             await self.app(scope, receive, send)
             return

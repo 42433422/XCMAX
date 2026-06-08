@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import json
 import logging
 import os
@@ -54,7 +55,7 @@ def _resolve_mod_dir() -> Path | None:
             p = Path(meta.mod_path)
             if (p / "manifest.json").is_file():
                 return p
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.debug("erp domain mod path lookup failed", exc_info=True)
 
     for key in ("XCAGI_MODS_ROOT", "XCAGI_MODS_DIR"):
@@ -77,7 +78,7 @@ def _read_manifest() -> dict[str, Any]:
     try:
         data = json.loads((mod_dir / "manifest.json").read_text(encoding="utf-8"))
         return data if isinstance(data, dict) else {}
-    except Exception:
+    except OPERATIONAL_ERRORS:
         return {}
 
 
@@ -90,7 +91,7 @@ def is_erp_domain_mod_installed() -> bool:
         for row in get_mod_manager().list_all_mods():
             if str(row.get("id") or "").strip() == ERP_DOMAIN_BRIDGE_MOD_ID:
                 return True
-    except Exception:
+    except OPERATIONAL_ERRORS:
         pass
     return _resolve_mod_dir() is not None
 
@@ -121,7 +122,7 @@ def load_erp_domains_config() -> dict[str, Any]:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
         return data if isinstance(data, dict) else {}
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.warning("erp_domains.json parse failed")
         return {}
 
@@ -132,7 +133,7 @@ def _mod_handler_domains() -> set[str]:
         raw = cfg.get("mod_domain_handlers") or cfg.get("erp_domain_handlers") or []
         if isinstance(raw, list):
             return {str(x).strip() for x in raw if str(x).strip()}
-    except Exception:
+    except OPERATIONAL_ERRORS:
         pass
     return set()
 

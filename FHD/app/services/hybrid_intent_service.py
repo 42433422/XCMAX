@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 from typing import Any
 
@@ -147,7 +148,7 @@ class HybridIntentService(NeuroEventPublisherMixin):
                 use_fallback=self.bert_fallback_to_rule,
             )
             logger.info(f"BERT 意图服务已初始化，模型路径: {self.bert_model_path}")
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.warning(f"无法初始化 BERT 服务: {e}")
             self.use_bert = False
 
@@ -241,7 +242,7 @@ class HybridIntentService(NeuroEventPublisherMixin):
             return rule_recognize_intents(message)
         except RuntimeError:
             return asyncio.run(self.recognize(message))
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"混合意图识别失败: {e}")
             return rule_recognize_intents(message)
 

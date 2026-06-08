@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import time
 from typing import Any
@@ -64,7 +65,7 @@ class DeepSeekLegacyProvider:
                 time.perf_counter() - t0,
             )
             return result
-        except Exception as exc:
+        except OPERATIONAL_ERRORS as exc:
             record_ai_call(self.provider_id, "chat", "error", time.perf_counter() - t0)
             logger.error("DeepSeekLegacyProvider failed: %s", exc)
             return None

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 from typing import Any
 
@@ -32,6 +33,6 @@ class NeuroEventPublisherMixin:
             )
             bus.publish(event)
             return event.metadata.event_id
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.warning("发布事件失败 %s: %s", event_type, e)
             return ""

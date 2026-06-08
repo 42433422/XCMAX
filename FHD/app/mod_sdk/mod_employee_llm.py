@@ -12,6 +12,7 @@ Mod 员工脚本用的窄 LLM 入口（经 ``app.mod_sdk`` 暴露）。
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import os
 from typing import Any
@@ -94,7 +95,7 @@ async def _call_openai_compatible_chat(
             r = await client.post(chat_url, headers=headers, json=payload)
             r.raise_for_status()
             return r.json()
-    except Exception as e:  # noqa: BLE001
+    except OPERATIONAL_ERRORS as e:  # noqa: BLE001
         logger.exception("mod_employee_complete: OpenAI-compatible chat 请求失败: %s", e)
         return None
 
@@ -163,7 +164,7 @@ async def mod_employee_complete(
             max_tokens=int(max_tokens),
             **kwargs,
         )
-    except Exception as e:  # noqa: BLE001
+    except OPERATIONAL_ERRORS as e:  # noqa: BLE001
         logger.exception("mod_employee_complete: call_deepseek_api 异常")
         return {"success": False, "content": "", "error": str(e)[:500]}
 

@@ -8,6 +8,7 @@
 - 关键路径保护
 """
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import time
 from collections.abc import Callable
@@ -134,7 +135,7 @@ class Lifeline:
                 if self._on_load_change:
                     try:
                         self._on_load_change(old_load, new_load)
-                    except Exception as e:
+                    except OPERATIONAL_ERRORS as e:
                         logger.exception(f"Load change callback error: {e}")
 
             return self._current_load

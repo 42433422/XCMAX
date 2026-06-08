@@ -5,6 +5,7 @@ OCR服务模块
 默认优先 PaddleOCR，与「识别模板」标签图走同一引擎；可通过环境变量切换或回退 EasyOCR/Tesseract。
 """
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import os
 import re
@@ -57,7 +58,7 @@ class OCRService:
                     get_paddle_ocr_instance()
                     self._paddle_enabled = True
                     logger.info("OCR 主引擎：PaddleOCR")
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 logger.warning("PaddleOCR 初始化失败: %s", e)
 
         if backend == "paddle" and not self._paddle_enabled:
@@ -83,7 +84,7 @@ class OCRService:
         except ImportError:
             logger.warning("EasyOCR 未安装")
             self.reader = None
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error("EasyOCR 初始化失败: %s", e)
             self.reader = None
 
@@ -141,7 +142,7 @@ class OCRService:
                 text = pytesseract.image_to_string(pil_image, lang="chi_sim+eng")
                 return self._clean_text(text)
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error("OCR识别失败: %s", e)
 
         return ""
@@ -191,7 +192,7 @@ class OCRService:
                         "y_center": cy,
                     }
                 )
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error("EasyOCR 分块识别失败: %s", e)
         return blocks
 
@@ -217,7 +218,7 @@ class OCRService:
 
             return {"success": True, "message": "识别成功", "text": text, "file_path": file_path}
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"识别文件失败: {e}")
             return {"success": False, "message": f"识别失败: {str(e)}", "text": ""}
 
@@ -257,7 +258,7 @@ class OCRService:
                 )
                 results.append(ocr_result)
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error("OCR识别失败: %s", e)
 
         return results
@@ -283,7 +284,7 @@ class OCRService:
                 return {"success": bool(text.strip()), "text": text, "confidence": avg}
             text = self.recognize(img)
             return {"success": bool(text.strip()), "text": text, "confidence": 0.0}
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception("从字节 OCR 失败: %s", e)
             return {"success": False, "message": str(e), "text": "", "confidence": 0.0}
 

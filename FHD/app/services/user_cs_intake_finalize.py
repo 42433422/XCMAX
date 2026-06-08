@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 from datetime import datetime, timezone
 from typing import Any
 
@@ -52,6 +53,6 @@ def finalize_intake_submission(
             if out.get("sent"):
                 doc["intake_done_notice_sent"] = True
                 doc = save_pipeline(doc)
-        except Exception:
+        except OPERATIONAL_ERRORS:
             pass
     return doc, meta

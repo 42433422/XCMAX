@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 
 from fastapi import FastAPI
@@ -33,7 +34,7 @@ def _mount(
             tags=tags,
             **kwargs,
         )
-    except Exception as exc:
+    except OPERATIONAL_ERRORS as exc:
         if is_ci_strict() and required_in_ci:
             raise RuntimeError(f"Required route mount failed in CI: {name}") from exc
         logger.warning("%s not available: %s", name, exc)

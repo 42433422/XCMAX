@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 from functools import lru_cache
 
@@ -60,7 +61,7 @@ async def ocr_recognize(
         result = service.recognize_file(resolved_path)
         status_code = 200 if result.get("success") else 400
         return JSONResponse(result, status_code=status_code)
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.exception("OCR识别失败: %s", e)
         return JSONResponse({"success": False, "message": f"识别失败: {str(e)}"}, status_code=500)
 
@@ -74,7 +75,7 @@ def ocr_extract(data: dict = Body(default_factory=dict)):
         service = _get_ocr_service()
         result = service.extract_structured_data(text)
         return OcrExtractResponse(data=result)
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.exception("提取结构化数据失败: %s", e)
         return JSONResponse({"success": False, "message": f"提取失败: {str(e)}"}, status_code=500)
 
@@ -88,7 +89,7 @@ def ocr_analyze(data: dict = Body(default_factory=dict)):
         service = _get_ocr_service()
         result = service.analyze_text(text)
         return OcrAnalyzeResponse(data=result)
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.exception("分析文本失败: %s", e)
         return JSONResponse({"success": False, "message": f"分析失败: {str(e)}"}, status_code=500)
 
@@ -119,7 +120,7 @@ async def ocr_recognize_and_extract(
             data=structured_data,
             analysis=analysis,
         )
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.exception("OCR识别和提取失败: %s", e)
         return JSONResponse({"success": False, "message": f"处理失败: {str(e)}"}, status_code=500)
 
@@ -129,6 +130,6 @@ def ocr_test():
     try:
         svc = _get_ocr_service()
         backend = svc.get_active_ocr_backend()
-    except Exception:
+    except OPERATIONAL_ERRORS:
         backend = "unknown"
     return OcrTestResponse(active_backend=backend)

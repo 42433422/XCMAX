@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 from datetime import datetime
 from typing import Any
 
@@ -33,7 +34,7 @@ class InventoryAppService:
 
             mat_result = get_material_application_service().get_low_stock_materials(threshold=threshold)
             mat_items = mat_result.get("data") or []
-        except Exception:
+        except OPERATIONAL_ERRORS:
             pass
         return {
             "success": True,

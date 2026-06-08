@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 
 from fastapi import APIRouter, Body, File, Query, UploadFile
@@ -25,7 +26,7 @@ async def products_import_price_list_template(
 ):
     try:
         from app.infrastructure.documents.template_registry import fhd_repo_root
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.exception("template_registry import failed")
         return JSONResponse({"success": False, "message": str(e)}, status_code=500)
 
@@ -35,7 +36,7 @@ async def products_import_price_list_template(
         return JSONResponse({"success": False, "message": "只支持 .docx 格式"}, status_code=400)
     try:
         body = await template_file.read()
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.exception("price list template read failed")
         return JSONResponse({"success": False, "message": str(e)}, status_code=500)
     if len(body) < 64:
@@ -51,7 +52,7 @@ async def products_import_price_list_template(
         dest = dest_dir / "price_list_default.docx"
         dest.write_bytes(body)
         rel = dest.relative_to(fhd_repo_root())
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.exception("price list template write failed")
         return JSONResponse({"success": False, "message": f"保存失败：{e}"}, status_code=500)
     return {

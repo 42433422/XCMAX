@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import json
 import os
 from pathlib import Path
@@ -25,7 +26,7 @@ def _resolve_mod_dir() -> Path | None:
         meta = get_mod_manager().get_mod(PLANNER_BRIDGE_MOD_ID)
         if meta and meta.mod_path and (Path(meta.mod_path) / "manifest.json").is_file():
             return Path(meta.mod_path)
-    except Exception:
+    except OPERATIONAL_ERRORS:
         pass
     trial = Path(__file__).resolve().parents[2] / "mods" / PLANNER_BRIDGE_MOD_ID
     return trial if (trial / "manifest.json").is_file() else None
@@ -44,7 +45,7 @@ def is_planner_pages_via_mod_enabled() -> bool:
             json.loads((mod_dir / "manifest.json").read_text(encoding="utf-8")).get("config") or {}
         )
         return isinstance(cfg, dict) and cfg.get("planner_pages_via_mod") is True
-    except Exception:
+    except OPERATIONAL_ERRORS:
         return False
 
 

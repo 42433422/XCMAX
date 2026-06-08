@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import re
 
@@ -428,7 +429,7 @@ def _parse_order_text(order_text: str) -> dict:
                                     }
                                 ],
                             }
-        except Exception as ai_err:
+        except OPERATIONAL_ERRORS as ai_err:
             logger.warning(f"AI 结构化抽取兜底失败，回退规则流程: {ai_err}")
 
         parts = text.split()
@@ -451,6 +452,6 @@ def _parse_order_text(order_text: str) -> dict:
             "message": f"无法解析订单文本：{order_text}，请使用格式：发货单 + 单位名 + 数量 + 桶 + 型号 + 规格",
         }
 
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error(f"解析订单文本失败：{e}")
         return {"success": False, "message": f"解析失败：{str(e)}"}

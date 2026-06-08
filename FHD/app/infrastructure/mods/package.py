@@ -2,6 +2,7 @@
 MOD Package Management - ZIP packaging, signing, and verification
 """
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import hashlib
 import json
 import logging
@@ -186,7 +187,7 @@ class ModPackage:
             except ImportError:
                 logger.warning("cryptography 库未安装，使用无签名模式")
                 signature["signature"] = ""
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 logger.error(f"签名生成失败：{e}")
                 signature["signature"] = ""
         else:
@@ -295,7 +296,7 @@ class ModPackage:
 
         except ModSignatureError:
             raise
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"签名验证失败：{e}")
             return False
 

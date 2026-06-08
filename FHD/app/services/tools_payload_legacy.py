@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import os
 
@@ -259,7 +260,7 @@ def dispatch_legacy_tool_payload(
                 try:
                     tid = int(target_id)
                     deleted_count = query_service.delete(PurchaseUnit, id=tid)
-                except Exception:
+                except OPERATIONAL_ERRORS:
                     deleted_count = 0
             elif target_name:
                 deleted_count = query_service.delete(PurchaseUnit, unit_name=target_name)
@@ -278,7 +279,7 @@ def dispatch_legacy_tool_payload(
                             deleted_count = query_service.delete(
                                 PurchaseUnit, unit_name=resolved.unit_name
                             )
-                    except Exception as e:
+                    except OPERATIONAL_ERRORS as e:
                         logger.warning(f"解析购买单位失败: {e}")
 
             return _j(
@@ -544,7 +545,7 @@ def dispatch_legacy_tool_payload(
             )
             return _j(payload, status_code)
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"生成发货单失败：{e}", exc_info=True)
             return _j({"success": False, "message": f"生成失败：{str(e)}"}, 500)
     elif tool_id == "print":
@@ -696,7 +697,7 @@ def dispatch_legacy_tool_payload(
             return _j(
                 {"success": False, "message": "Excel分析技能未正确安装，请检查openpyxl库"}, 500
             )
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"Excel Analyzer执行失败: {e}")
             return _j({"success": False, "message": f"分析失败: {str(e)}"}, 500)
     elif tool_id == "template_extract":
@@ -758,7 +759,7 @@ def dispatch_legacy_tool_payload(
                 },
                 200,
             )
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"template_extract 执行失败: {e}", exc_info=True)
             return _j({"success": False, "message": f"提取失败: {str(e)}"}, 500)
     elif tool_id == "excel_toolkit":
@@ -783,7 +784,7 @@ def dispatch_legacy_tool_payload(
             return _j(
                 {"success": False, "message": "Excel工具技能未正确安装，请检查openpyxl库"}, 500
             )
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"Excel Toolkit执行失败: {e}")
             return _j({"success": False, "message": f"执行失败: {str(e)}"}, 500)
     elif tool_id == "shipment_template":

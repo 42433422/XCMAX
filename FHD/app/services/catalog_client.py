@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import os
 from pathlib import Path
@@ -177,7 +178,7 @@ async def iter_catalog_packages() -> AsyncIterator[dict[str, Any]]:
             logger.warning(
                 "market catalog unavailable, falling back to /v1/index.json", exc_info=True
             )
-        except Exception as exc:
+        except OPERATIONAL_ERRORS as exc:
             logger.warning("market catalog failed: %s; fallback to index.json", exc)
 
     data = await catalog_get_json("/index.json")

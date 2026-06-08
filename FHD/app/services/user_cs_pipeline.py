@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import json
 import logging
 import os
@@ -69,7 +70,7 @@ def _resolve_data_roots() -> list[Path]:
         base = get_desktop_data_dir()
         add(base / "data" / "user_cs_pipelines")
         add(base / "user_cs_pipelines")
-    except Exception:
+    except OPERATIONAL_ERRORS:
         pass
 
     if not roots:

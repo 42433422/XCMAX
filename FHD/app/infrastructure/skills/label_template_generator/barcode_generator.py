@@ -4,6 +4,7 @@ Barcode Generator - 条形码生成器
 支持多种条形码格式：EAN-13, Code128, Code39, UPC-A, ITF 等
 """
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import io
 import logging
 
@@ -99,7 +100,7 @@ class BarcodeGenerator:
         except ImportError:
             logger.error("需要安装 python-barcode 库：pip install python-barcode")
             return self._generate_fallback_barcode(data, options)
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"生成条码失败：{e}")
             return self._generate_fallback_barcode(data, options)
 
@@ -194,7 +195,7 @@ class BarcodeGenerator:
                 logger.info(f"条码已保存：{filename}")
                 return True
             return False
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"保存条码失败：{e}")
             return False
 

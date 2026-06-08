@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import os
 
@@ -27,7 +28,7 @@ def register_health_routes(app: FastAPI) -> None:
                 payload["neuro"] = get_neurobus_health()
             else:
                 payload["neuro"] = {"enabled": False}
-        except Exception as exc:
+        except OPERATIONAL_ERRORS as exc:
             payload["neuro"] = {"enabled": True, "error": str(exc)}
         return payload
 

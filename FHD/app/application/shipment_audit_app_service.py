@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 from typing import Any
 
@@ -54,7 +55,7 @@ class ShipmentAuditAppService:
                 shipment_id=int(shipment_id) if shipment_id else None,
                 source="shipment",
             )
-        except Exception as exc:
+        except OPERATIONAL_ERRORS as exc:
             logger.exception("audit_from_shipment failed")
             return self._persist_decision("manual", f"审单异常: {exc}", source="shipment")
 

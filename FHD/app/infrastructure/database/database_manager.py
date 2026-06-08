@@ -4,6 +4,7 @@
 负责数据库连接和会话管理
 """
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import os
 from contextlib import contextmanager
 
@@ -68,7 +69,7 @@ class DatabaseManager:
         try:
             yield session
             session.commit()
-        except Exception:
+        except OPERATIONAL_ERRORS:
             session.rollback()
             raise
         finally:

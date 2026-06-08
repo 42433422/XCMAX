@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import asyncio
 import json
 import logging
@@ -42,7 +43,7 @@ class ImWsHub:
         for ws in targets:
             try:
                 await ws.send_text(text)
-            except Exception:
+            except OPERATIONAL_ERRORS:
                 dead.append(ws)
         for ws in dead:
             await self.disconnect(user_id, ws)

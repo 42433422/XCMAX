@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import os
 from collections.abc import Callable
@@ -39,7 +40,7 @@ def try_include_router(
         app.include_router(router, **kwargs)
         logger.info("Registered %s", name)
         return True
-    except Exception as exc:
+    except OPERATIONAL_ERRORS as exc:
         if is_ci_strict() and required_in_ci:
             raise RuntimeError(f"Required route mount failed in CI: {name}") from exc
         logger.log(log_level, "%s not available: %s", name, exc)
@@ -58,7 +59,7 @@ def try_call_register(
         register_fn(app)
         logger.info("Registered %s", name)
         return True
-    except Exception as exc:
+    except OPERATIONAL_ERRORS as exc:
         if is_ci_strict() and required_in_ci:
             raise RuntimeError(f"Required route registration failed in CI: {name}") from exc
         logger.warning("%s skipped: %s", name, exc)

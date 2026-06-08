@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 # products.unit 历史上常被误填为计量单位；客户筛选项应对齐 purchase_units，故从「产品表去重」里排除这些纯计量词（精确匹配）。
 # 供其它仓储实现复用（如 domain 版 SQLAlchemyProductRepository）。
 import logging
@@ -118,7 +119,7 @@ class SQLAlchemyProductRepository(ProductRepository):
                         table_names = inspector.get_table_names() or []
                     if not isinstance(table_names, (list, tuple, set)):
                         table_names = []
-                except Exception:
+                except OPERATIONAL_ERRORS:
                     table_names = []
 
                 if "products" not in table_names:
@@ -215,7 +216,7 @@ class SQLAlchemyProductRepository(ProductRepository):
                 "per_page": per_page,
             }
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             return {
                 "success": False,
                 "message": f"查询失败：{str(e)}",
@@ -234,7 +235,7 @@ class SQLAlchemyProductRepository(ProductRepository):
                     return self._product_to_dict(product)
                 return None
 
-        except Exception:
+        except OPERATIONAL_ERRORS:
             return None
 
     def find_product_units(self) -> list[str]:
@@ -284,7 +285,7 @@ class SQLAlchemyProductRepository(ProductRepository):
                                 add_label(r[0], from_products=False)
             finally:
                 cs.close()
-        except Exception:
+        except OPERATIONAL_ERRORS:
             logger.debug("suppressed exception", exc_info=True)
 
         if purchase_units_authoritative:
@@ -297,7 +298,7 @@ class SQLAlchemyProductRepository(ProductRepository):
                     for u in db.query(Product.unit).distinct().all():
                         if u and u[0] is not None:
                             add_label(u[0], from_products=True)
-        except Exception:
+        except OPERATIONAL_ERRORS:
             logger.debug("suppressed exception", exc_info=True)
 
         return ordered
@@ -333,7 +334,7 @@ class SQLAlchemyProductRepository(ProductRepository):
 
             return {"success": True, "message": "产品创建成功", "product_id": product.id}
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             return {"success": False, "message": f"创建失败：{str(e)}"}
 
     def update(self, product_id: int, data: dict[str, Any]) -> dict[str, Any]:
@@ -384,7 +385,7 @@ class SQLAlchemyProductRepository(ProductRepository):
 
             return {"success": True, "message": "产品更新成功"}
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             return {"success": False, "message": f"更新失败：{str(e)}"}
 
     def delete(self, product_id: int) -> bool:
@@ -399,7 +400,7 @@ class SQLAlchemyProductRepository(ProductRepository):
                 db.commit()
                 return True
 
-        except Exception:
+        except OPERATIONAL_ERRORS:
             return False
 
     def batch_create(self, products_data: list[dict[str, Any]]) -> dict[str, Any]:
@@ -448,7 +449,7 @@ class SQLAlchemyProductRepository(ProductRepository):
                                 }
                             )
 
-                        except Exception as e:
+                        except OPERATIONAL_ERRORS as e:
                             failed_products.append({"index": batch_start + index, "reason": str(e)})
 
                     if batch_records:
@@ -465,7 +466,7 @@ class SQLAlchemyProductRepository(ProductRepository):
                                     db.flush()
                                     product_ids.append(product.id)
                                     success_count += 1
-                                except Exception:
+                                except OPERATIONAL_ERRORS:
                                     failed_products.append(
                                         {"index": batch_start + idx, "reason": "单条插入失败"}
                                     )
@@ -488,7 +489,7 @@ class SQLAlchemyProductRepository(ProductRepository):
 
             return result
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             return {"success": False, "message": f"批量添加失败：{str(e)}"}
 
     def batch_delete(self, product_ids: list[int]) -> dict[str, Any]:
@@ -513,7 +514,7 @@ class SQLAlchemyProductRepository(ProductRepository):
                     "deleted_count": len(products),
                 }
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             return {"success": False, "message": f"批量删除失败：{str(e)}"}
 
     def exists(self, product_id: int) -> bool:
@@ -521,7 +522,7 @@ class SQLAlchemyProductRepository(ProductRepository):
             with get_db() as db:
                 product = db.query(Product).filter(Product.id == product_id).first()
                 return product is not None
-        except Exception:
+        except OPERATIONAL_ERRORS:
             return False
 
     def find_names(self, keyword: str | None = None) -> list[str]:
@@ -541,7 +542,7 @@ class SQLAlchemyProductRepository(ProductRepository):
 
                 return names
 
-        except Exception:
+        except OPERATIONAL_ERRORS:
             return []
 
     def export_to_excel(
@@ -606,7 +607,7 @@ class SQLAlchemyProductRepository(ProductRepository):
                             ).strip()
                             if candidate_path and os.path.exists(candidate_path):
                                 template_path = candidate_path
-                    except Exception:
+                    except OPERATIONAL_ERRORS:
                         template_path = None
 
                 records = [
@@ -657,7 +658,7 @@ class SQLAlchemyProductRepository(ProductRepository):
                     "count": len(products),
                 }
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             return {
                 "success": False,
                 "message": f"导出失败：{str(e)}",

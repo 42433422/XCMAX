@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import base64
 import hashlib
 import hmac
@@ -86,13 +87,13 @@ def parse_token(secret: str, token: str) -> TokenPayload:
     expected = hmac.new(secret.encode("utf-8"), body_b64.encode("ascii"), hashlib.sha256).digest()
     try:
         provided = _b64u_decode(sig_b64)
-    except Exception as exc:
+    except OPERATIONAL_ERRORS as exc:
         raise TokenError("invalid signature encoding") from exc
     if not hmac.compare_digest(expected, provided):
         raise TokenError("signature mismatch")
     try:
         body = json.loads(_b64u_decode(body_b64))
-    except Exception as exc:
+    except OPERATIONAL_ERRORS as exc:
         raise TokenError("invalid payload encoding") from exc
     try:
         return TokenPayload(

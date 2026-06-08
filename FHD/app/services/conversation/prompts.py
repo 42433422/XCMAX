@@ -1,3 +1,4 @@
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import hashlib
 import json
 import logging
@@ -162,7 +163,7 @@ class PromptsMixin:
                 if len(dumped) > 4096:
                     dumped = dumped[:4096] + "…"
                 blocks.append(f"【附加上下文】\n{dumped}")
-            except Exception:
+            except OPERATIONAL_ERRORS:
                 logger.debug("suppressed exception", exc_info=True)
         merged = "\n\n".join(b for b in blocks if b)
         return merged
@@ -207,7 +208,7 @@ class PromptsMixin:
                     "utf-8"
                 )
             ).hexdigest()
-        except Exception:
+        except OPERATIONAL_ERRORS:
             return str(hash(frozenset(metadata.keys())))
 
     def _build_context_prompt(self, context) -> str:

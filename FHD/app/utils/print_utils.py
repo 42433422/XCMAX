@@ -1,3 +1,4 @@
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import os
 import time
@@ -9,7 +10,7 @@ try:
 
     _PRINT_BACKEND_AVAILABLE = True
     _PRINT_BACKEND_ERROR = ""
-except Exception as _print_import_error:
+except ImportError as _print_import_error:
     pythoncom = None  # type: ignore[assignment]
     win32api = None  # type: ignore[assignment]
     win32print = None  # type: ignore[assignment]
@@ -41,7 +42,7 @@ class PrinterUtils:
             try:
                 pythoncom.CoInitialize()
                 self._com_initialized = True
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 logger.warning(f"COM初始化警告: {e}")
 
     def get_available_printers(self) -> list[dict[str, str]]:
@@ -93,7 +94,7 @@ class PrinterUtils:
 
             return printers
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"获取打印机列表失败: {e}", exc_info=True)
             return []
 
@@ -152,7 +153,7 @@ class PrinterUtils:
                     finally:
                         win32print.ClosePrinter(hPrinter)
 
-                except Exception as e:
+                except OPERATIONAL_ERRORS as e:
                     logger.warning(f"监控打印任务失败: {e}")
 
                 time.sleep(1)
@@ -160,7 +161,7 @@ class PrinterUtils:
             logger.warning(f"监控打印任务超时（{timeout}秒）")
             return False
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"监控打印任务时发生错误: {e}")
             return False
 
@@ -196,7 +197,7 @@ class PrinterUtils:
                         try:
                             win32print.SetDefaultPrinter(printer_name)
                             logger.info("SetDefaultPrinter 调用完成")
-                        except Exception as e:
+                        except OPERATIONAL_ERRORS as e:
                             logger.error(f"SetDefaultPrinter 调用失败: {e}")
                             import traceback
 
@@ -206,7 +207,7 @@ class PrinterUtils:
                         try:
                             new_default = win32print.GetDefaultPrinter()
                             logger.info(f"验证 - 当前默认打印机: {new_default}")
-                        except Exception as e:
+                        except OPERATIONAL_ERRORS as e:
                             logger.error(f"GetDefaultPrinter 调用失败: {e}")
                             new_default = original_default_printer
 
@@ -221,11 +222,11 @@ class PrinterUtils:
                                 time.sleep(0.5)
                                 new_default = win32print.GetDefaultPrinter()
                                 logger.info(f"第二次修改后默认打印机: {new_default}")
-                            except Exception as e:
+                            except OPERATIONAL_ERRORS as e:
                                 logger.error(f"第二次修改失败: {e}")
                     else:
                         logger.info("当前默认打印机已经是目标打印机，无需修改")
-                except Exception as e:
+                except OPERATIONAL_ERRORS as e:
                     logger.error(f"修改默认打印机失败: {e}")
                     import traceback
 
@@ -251,12 +252,12 @@ class PrinterUtils:
                             logger.info(f"恢复默认打印机为: {original_default_printer}")
                             win32print.SetDefaultPrinter(original_default_printer)
                             logger.info("默认打印机恢复成功")
-                    except Exception as e:
+                    except OPERATIONAL_ERRORS as e:
                         logger.warning(f"恢复默认打印机失败: {e}")
 
             return print_result
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"打印文件失败: {e}")
             return {"success": False, "message": f"打印失败: {str(e)}"}
 
@@ -277,7 +278,7 @@ class PrinterUtils:
                     "file": os.path.basename(file_path),
                     "printer": printer_name,
                 }
-            except Exception as e1:
+            except OPERATIONAL_ERRORS as e1:
                 logger.warning(f"方法1失败: {e1}")
 
                 try:
@@ -295,7 +296,7 @@ class PrinterUtils:
                     else:
                         raise Exception(f"ShellExecute失败，错误代码: {result}")
 
-                except Exception as e2:
+                except OPERATIONAL_ERRORS as e2:
                     logger.warning(f"方法2失败: {e2}")
 
                     try:
@@ -309,11 +310,11 @@ class PrinterUtils:
                             "printer": printer_name,
                             "manual": True,
                         }
-                    except Exception as e3:
+                    except OPERATIONAL_ERRORS as e3:
                         logger.error(f"方法3也失败: {e3}")
                         raise Exception(f"所有打印方法都失败: {e1}; {e2}; {e3}")
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"打印Excel文件失败: {e}")
             return {"success": False, "message": f"打印失败: {str(e)}"}
 
@@ -347,7 +348,7 @@ class PrinterUtils:
                 finally:
                     win32print.ClosePrinter(hprinter)
 
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 logger.warning(f"win32print打印失败: {e}")
 
             logger.info("尝试使用subprocess调用外部程序")
@@ -381,12 +382,12 @@ class PrinterUtils:
 
                 logger.warning("未找到Adobe Reader")
 
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 logger.warning(f"subprocess方法失败: {e}")
 
             raise Exception("所有PDF打印方法都失败")
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"打印PDF文件失败: {e}")
             return {"success": False, "message": f"打印PDF失败: {str(e)}"}
 
@@ -408,7 +409,7 @@ class PrinterUtils:
                 "show_app": show_app,
             }
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"打印文件失败: {e}")
             return {"success": False, "message": f"打印失败: {str(e)}"}
 
@@ -418,7 +419,7 @@ class PrinterUtils:
             return None
         try:
             return win32print.GetDefaultPrinter()
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"获取默认打印机失败: {e}")
             return None
 
@@ -441,7 +442,7 @@ class PrinterUtils:
                 "status": status_text,
             }
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"测试打印机失败: {e}")
             return {
                 "success": False,
@@ -479,7 +480,7 @@ class PrinterUtils:
 
             return printers[0]["name"] if printers else None
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"获取发货单打印机失败: {e}")
             return None
 
@@ -502,6 +503,6 @@ class PrinterUtils:
 
             return printers[-1]["name"] if printers else None
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"获取标签打印机失败: {e}")
             return None

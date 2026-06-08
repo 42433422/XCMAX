@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import json
 import logging
 import os
@@ -307,7 +308,7 @@ async def mobile_me(request: Request, user=Depends(get_mobile_user)):
             mid = str(entry.get("id") or entry.get("mod_id") or "")
             if mid:
                 mods_summary.append({"id": mid})
-    except Exception as exc:
+    except OPERATIONAL_ERRORS as exc:
         logger.debug("mods list for mobile me: %s", exc)
 
     return format_mobile_response(

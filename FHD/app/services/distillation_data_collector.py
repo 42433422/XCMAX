@@ -11,6 +11,7 @@
     python -m app.services.distillation_data_collector
 """
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import json
 import logging
 import os
@@ -202,7 +203,7 @@ def get_deepseek_api_key() -> str:
                 config_module = importlib.util.module_from_spec(spec)
                 spec.loader.exec_module(config_module)
                 return getattr(config_module, "DEEPSEEK_API_KEY", "") or ""
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.warning(f"读取配置文件失败: {e}")
 
     return ""
@@ -281,7 +282,7 @@ async def call_deepseek_intent(api_key: str, message: str) -> dict[str, Any] | N
                 "slots": data.get("slots", {}),
                 "confidence": 1.0,
             }
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error(f"DeepSeek API 调用失败: {e}")
 
     return None

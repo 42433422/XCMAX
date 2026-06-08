@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import json
 from functools import lru_cache
 from typing import Any
@@ -19,7 +20,7 @@ def load_customer_delivery_document() -> dict[str, Any]:
             data = json.loads(path.read_text(encoding="utf-8"))
             if isinstance(data, dict):
                 return data
-        except Exception:
+        except OPERATIONAL_ERRORS:
             pass
     return {"schema_version": 1, "deliveries": []}
 

@@ -12,6 +12,7 @@
 - 线程安全
 """
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import hashlib
 import logging
 import os
@@ -38,7 +39,7 @@ def _read_env_int(name: str, default: int) -> int:
         if value <= 0:
             raise ValueError("must be > 0")
         return value
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.warning("无效环境变量 %s=%r，回退默认值 %s", name, raw, default)
         return default
 

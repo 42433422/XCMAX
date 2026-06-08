@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import sqlite3
 from typing import Any
@@ -71,7 +72,7 @@ def try_invoke_client_mod_customers_list(
     if not active and request is not None:
         try:
             active = parse_active_mod_header(request.headers)
-        except Exception:
+        except OPERATIONAL_ERRORS:
             active = ""
 
     target = resolve_client_erp_mod_for_request(active)
@@ -94,7 +95,7 @@ def try_invoke_client_mod_customers_list(
         out["source"] = f"mod:{target}"
         out["execution_path"] = "client_primary_mod_sqlite"
         return out
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.exception("client mod customers.list failed mod=%s", target)
         return None
 
@@ -114,7 +115,7 @@ def client_primary_mod_on_disk_visible(mod_id: str) -> bool:
         if not is_desktop_mode() and resolve_product_sku() != "enterprise":
             return False
         return bool(get_mod_manager().resolve_mod_directory(mid))
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.debug("client_primary_mod_on_disk_visible check failed", exc_info=True)
         return False
 

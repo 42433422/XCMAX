@@ -10,6 +10,7 @@ shipment_app_service V2 - 事件驱动版本
 生成时间: 自动生成
 """
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
@@ -61,7 +62,7 @@ class ShipmentAppServiceV2:
             )
             self._bus.publish(event)
             return event
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"[ShipmentAppServiceV2] 发布事件失败: {e}")
             return None
 
@@ -107,7 +108,7 @@ class ShipmentAppServiceV2:
                 "mode": "event_driven",  # Level 2 标志
             }
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"[ShipmentAppServiceV2] 创建发货单失败: {e}")
             return {"success": False, "message": str(e), "error": str(e)}
 
@@ -145,7 +146,7 @@ class ShipmentAppServiceV2:
                 "mode": "event_driven",
             }
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"[ShipmentAppServiceV2] 添加产品失败: {e}")
             return {"success": False, "message": str(e)}
 
@@ -184,7 +185,7 @@ class ShipmentAppServiceV2:
                 "mode": "event_driven",
             }
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"[ShipmentAppServiceV2] 打印发货单失败: {e}")
             return {"success": False, "message": str(e)}
 
@@ -222,7 +223,7 @@ class ShipmentAppServiceV2:
                 "mode": "event_driven",
             }
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"[ShipmentAppServiceV2] 取消发货单失败: {e}")
             return {"success": False, "message": str(e)}
 
@@ -247,7 +248,7 @@ class ShipmentAppServiceV2:
                 "mode": "event_driven",
             }
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"[ShipmentAppServiceV2] 删除发货单失败: {e}")
             return {"success": False, "message": str(e)}
 
@@ -283,7 +284,7 @@ class ShipmentAppServiceV2:
                 "mode": "event_driven",
             }
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"[ShipmentAppServiceV2] 导出发货单失败: {e}")
             return {"success": False, "message": str(e)}
 
@@ -334,7 +335,7 @@ class ShipmentAppServiceV2:
                 "mode": "event_driven",
             }
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"[ShipmentAppServiceV2] 执行命令失败: {e}")
             return {"success": False, "message": str(e)}
 

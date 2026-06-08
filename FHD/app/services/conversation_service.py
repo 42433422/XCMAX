@@ -4,6 +4,7 @@
 提供对话历史和会话管理的业务逻辑。
 """
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import uuid
 from datetime import datetime
@@ -98,7 +99,7 @@ class ConversationService(NeuroEventPublisherMixin):
 
                 db.commit()
                 return conversation.id
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 db.rollback()
                 logger.error(f"保存对话消息失败: {e}")
                 raise
@@ -139,7 +140,7 @@ class ConversationService(NeuroEventPublisherMixin):
                         )
                     )
                 return result
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 logger.error(f"获取会话消息失败: {e}")
                 raise
 
@@ -183,7 +184,7 @@ class ConversationService(NeuroEventPublisherMixin):
                         )
                     )
                 return result
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 logger.error(f"获取会话列表失败: {e}")
                 raise
 
@@ -211,7 +212,7 @@ class ConversationService(NeuroEventPublisherMixin):
                     db.commit()
                     return True
                 return False
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 db.rollback()
                 logger.error(f"更新会话标题失败: {e}")
                 raise
@@ -240,7 +241,7 @@ class ConversationService(NeuroEventPublisherMixin):
 
                 db.commit()
                 return True
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 db.rollback()
                 logger.error(f"删除会话失败：{e}")
                 raise
@@ -270,7 +271,7 @@ class ConversationService(NeuroEventPublisherMixin):
                 db.add(session)
                 db.commit()
                 return session_id
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 db.rollback()
                 logger.error(f"创建会话失败：{e}")
                 raise
