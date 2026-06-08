@@ -2,6 +2,7 @@
 name = "xcagi"
 version = "10.0.0"
 description = "XCAGI - 企业 AI 员工平台（桌面版 + Web 版并行交付）"
+license = "Apache-2.0"
 requires-python = ">=3.11"
 # 运行时依赖见 optional-dependencies；CI/生产安装：deploy/requirements-server-api.txt（与 server-api extra 对齐）
 dependencies = []
@@ -19,9 +20,9 @@ server-api = [
     "python-docx>=1.1.0",
     "pdfplumber>=0.11.0",
     "Pillow>=10.2.0",
-    "gunicorn==21.2.0",
-    "gevent==24.2.1",
-    "python-dotenv==1.0.0",
+    "gunicorn>=22.0.0",
+    "gevent>=25.4.2",
+    "python-dotenv>=1.2.2",
     "httpx==0.26.0",
     "requests>=2.31.0",
     "python-alipay-sdk>=3.3.0",
@@ -63,7 +64,6 @@ dev = [
     "types-pyyaml",
     "types-psutil",
     "types-aiofiles",
-    "types-python-dotenv",
     "types-pillow",
     "types-openpyxl",
     "safety>=3.0",

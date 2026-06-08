@@ -88,6 +88,11 @@ def _prefix_fhd_paths(content: str, out_name: str) -> str:
                [[ "${rel}" =~ ^(fix_|check_|final_).+\\.py$ ]]; then"""
     content = content.replace(guard_old2, guard_new2)
 
+    content = content.replace(
+        "cache-dependency-path: frontend/package-lock.json",
+        "cache-dependency-path: FHD/frontend/package-lock.json",
+    )
+
     return content
 
 
