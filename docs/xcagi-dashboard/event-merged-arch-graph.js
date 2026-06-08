@@ -1,0 +1,111 @@
+/**
+ * 事件轨 · 获客→交付→维护 合并架构（阶段 A–D，与时间轨 emp-wf-radial-stage 同风格）
+ * 节点对齐：xcagi-customer-service-bridge 内部客服 pipeline、six_line_event_routes、six_line_employee_map
+ */
+const EventMergedArchGraph = (() => {
+  const PIPELINE_EDGE_KEYS = new Set([
+    'O1->CS_CONN', 'CS_CONN->CS_INTK', 'CS_INTK->INT_DISP', 'INT_DISP->O3',
+    'O3->O4', 'O4->PHASE_B',
+    'PM_Craft->PM_OTA', 'PS->O8_prep', 'PM_OTA->O8_prep',
+    'O8_prep->O8', 'O8->O9', 'O9->O10', 'O10->GOV', 'O8->PHASE_C', 'O6->O7',
+  ]);
+
+  const HUB_EDGE_KEYS = new Set([
+    'O7->Vibe08', 'O7->PM_Craft', 'O7->CS_CHG', 'O5->PS', 'O5->PM_Craft',
+    'PM_OTA->O6', 'O8_prep->O6', 'CS_CHG->INT_DISP',
+    'O4_FAIL->CS_CHG', 'O8_REJ->O5', 'GOV->O7',
+  ]);
+
+  const NODES = [
+    { id: 'PHASE_A', label: '阶段 A · 获客签约 O-A', kind: 'phase', phase: 't0' },
+    { id: 'O1', label: 'O1 获客引流\nlanding.signup · P-W/market', kind: 'step', phase: 't0' },
+    { id: 'CS_CONN', label: '内部客服 · 建联\nconnected · 微信绑定/欢迎语', kind: 'step', phase: 't0' },
+    { id: 'CS_INTK', label: '需求采集 · 表单/审核码\nintake · demand-intake', kind: 'step', phase: 't0' },
+    { id: 'INT_DISP', label: 'intake-dispatcher\nintake.submitted → 归一化', kind: 'step', phase: 't0' },
+    { id: 'O3', label: 'O3 商机合同\nquoted · ContractEsign', kind: 'step', phase: 't0' },
+    { id: 'O4', label: 'O4 收费\npayment · billing-reconciler', kind: 'decision', phase: 't0' },
+    { id: 'O4_FAIL', label: '收费失败 → 挂起/退款\n告警 + 回客服跟进', kind: 'step', phase: 't0' },
+    { id: 'PHASE_B', label: '阶段 B · 双轨交付 O5 分叉', kind: 'phase', phase: 't1' },
+    { id: 'O5', label: 'O5 交付编排\ndelivery.started · mod_bundle', kind: 'decision', phase: 't1' },
+    { id: 'PS', label: 'P-S 通用软件发布\ndeploy-release-officer', kind: 'step', phase: 't1' },
+    { id: 'PM_Craft', label: 'P-M Craft 13 步\ncraft.pipeline.start', kind: 'step', phase: 't1' },
+    { id: 'PM_OTA', label: 'P-M Mod OTA\nmod.ota.publish', kind: 'step', phase: 't1' },
+    { id: 'O8_prep', label: '交付汇合\n交付期可并行试用', kind: 'step', phase: 't1' },
+    { id: 'PHASE_D', label: '阶段 D · 收尾 O-A', kind: 'phase', phase: 't4' },
+    { id: 'O8', label: 'O8 里程碑签收\ndelivery.signoff', kind: 'decision', phase: 't4' },
+    { id: 'O8_REJ', label: '签收驳回 → 返工\n回 O5 交付编排', kind: 'step', phase: 't4' },
+    { id: 'O9', label: 'O9 单据开票\ninvoice.issued', kind: 'step', phase: 't4' },
+    { id: 'O10', label: 'O10 对账报表\nreconciliation', kind: 'step', phase: 't4' },
+    { id: 'GOV', label: '经营治理\nSLA·风控·变更审计', kind: 'step', phase: 't2' },
+    { id: 'PHASE_C', label: '阶段 C · 签收后使用维护', kind: 'phase', phase: 't2' },
+    { id: 'O6', label: 'O6 企业使用\nenterprise.adoption · 内部客服伴随', kind: 'step', phase: 't2' },
+    { id: 'O7', label: 'O7 变更反馈\nchange_request · 微信群', kind: 'decision', phase: 't2' },
+    { id: 'CS_CHG', label: '变更工单 · ops-dispatch\n/user-cs/change-requests', kind: 'step', phase: 't2' },
+    { id: 'Vibe08', label: '08:00 补丁清单 P-S\ndigest_backlog', kind: 'step', phase: 'merge' },
+  ];
+
+  const EDGES = [
+    ['PHASE_A', 'O1', 'branch'],
+    ['O1', 'CS_CONN', 'pipe'],
+    ['CS_CONN', 'CS_INTK', 'pipe'],
+    ['CS_INTK', 'INT_DISP', 'pipe'],
+    ['INT_DISP', 'O3', 'pipe'],
+    ['O3', 'O4', 'pipe'],
+    ['O4', 'PHASE_B', 'pipe'],
+    ['O4', 'O4_FAIL', 'branch'],
+    ['O4_FAIL', 'CS_CHG', 'hub'],
+    ['PHASE_B', 'O5', 'branch'],
+    ['O5', 'PS', 'hub'],
+    ['O5', 'PM_Craft', 'hub'],
+    ['PM_Craft', 'PM_OTA', 'pipe'],
+    ['PS', 'O8_prep', 'pipe'],
+    ['PM_OTA', 'O8_prep', 'pipe'],
+    ['PM_OTA', 'O6', 'hub'],
+    ['O8_prep', 'O6', 'branch'],
+    ['O8_prep', 'PHASE_D', 'pipe'],
+    ['PHASE_D', 'O8', 'branch'],
+    ['O8', 'O9', 'pipe'],
+    ['O8', 'O8_REJ', 'branch'],
+    ['O8_REJ', 'O5', 'hub'],
+    ['O9', 'O10', 'pipe'],
+    ['O10', 'GOV', 'pipe'],
+    ['O6', 'GOV', 'branch'],
+    ['GOV', 'O7', 'hub'],
+    ['O8', 'PHASE_C', 'pipe'],
+    ['PHASE_C', 'O6', 'branch'],
+    ['O6', 'O7', 'pipe'],
+    ['O7', 'CS_CHG', 'hub'],
+    ['CS_CHG', 'INT_DISP', 'hub'],
+    ['O7', 'Vibe08', 'hub'],
+    ['O7', 'PM_Craft', 'hub'],
+  ];
+
+  function spec() {
+    return {
+      nodes: NODES,
+      edges: EDGES.map(([a, b, kind]) => [a, b, kind]),
+      pipelineKeys: PIPELINE_EDGE_KEYS,
+      hubKeys: HUB_EDGE_KEYS,
+    };
+  }
+
+  async function render(root, opts) {
+    if (!root || !window.ArchGraphDraw) return;
+    const s = spec();
+    await ArchGraphDraw.renderStage(root, s, {
+      stageClass: 'emp-wf-radial-stage event-merged-arch-stage',
+      rankdir: 'TB',
+      ranksep: 56,
+      nodesep: 32,
+      edgeMode: 'radial-tb',
+      pipelineKeys: s.pipelineKeys,
+      hubKeys: s.hubKeys,
+      highlightIds: opts && opts.highlightIds,
+      panZoom: true,
+    });
+  }
+
+  return { render, spec, NODES, EDGES };
+})();
+
+window.EventMergedArchGraph = EventMergedArchGraph;

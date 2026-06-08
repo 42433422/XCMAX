@@ -1,0 +1,11 @@
+{
+  "active_version": "0",
+  "policies": [
+    {
+      "version": "0",
+      "path": "policy_v0.pt",
+      "sha256": "",
+      "trained_at": ""
+    }
+  ]
+}

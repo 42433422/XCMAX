@@ -1,0 +1,43 @@
+{
+  "name": "xcagi-desktop",
+  "productName": "XCAGI",
+  "version": "10.0.0",
+  "description": "XCAGI 桌面客户端（精简 Web 客户端 · v10 · 干净构建链）",
+  "main": "main.js",
+  "author": "成都修茈科技有限公司",
+  "license": "UNLICENSED",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/42433422/xcagi-modstore.git"
+  },
+  "scripts": {
+    "start": "electron .",
+    "dist:win": "electron-builder --win --x64"
+  },
+  "devDependencies": {
+    "electron": "^31.7.6",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.xiuci.xcagi.desktop",
+    "productName": "XCAGI",
+    "artifactName": "XCAGI-Personal-Setup-${version}-${arch}.${ext}",
+    "publish": [
+      { "provider": "generic", "url": "https://xiu-ci.com/xcagi-v10.0.0/personal/" }
+    ],
+    "directories": { "output": "dist" },
+    "files": ["main.js", "preload.js", "package.json"],
+    "win": {
+      "target": [{ "target": "nsis", "arch": ["x64"] }]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "XCAGI"
+    }
+  }
+}

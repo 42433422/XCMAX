@@ -1,0 +1,2290 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>XCAGI v10.0 · 六线全自动全景（2026-06-03 v5）</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Noto+Sans+SC:wght@300;400;500;700;900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="docs/xcagi-dashboard/dashboard.css?v=20260606m">
+<!--
+  v3 重构：CSS / JS 已拆分到独立文件
+    dashboard.css   设计系统 + 8 section + 响应式
+    app.js          Router / Ops / Tree / Gaps 4 模块 + 入口
+    tree-worker.js  30K 文件目录树在 Worker 线程重计算
+  原内联 样式 与 脚本 已全部删除，避免 173KB 单文件难维护
+-->
+</head>
+
+<body>
+
+<div class="nav" role="navigation" aria-label="主导航">
+  <div class="nav-inner" role="tablist" aria-label="XCAGI 概览">
+    <div class="nav-logo" aria-label="XCAGI 标志">XCAGI</div>
+    <span class="nav-version" aria-label="当前版本">v10.0 · 2026-06-03</span>
+    <button class="nav-btn active" type="button" role="tab" aria-current="page" aria-selected="true"  id="nav-loops" data-tab="loops">六线全自动</button>
+    <button class="nav-btn"        type="button" role="tab" aria-selected="false" id="nav-workflow" data-tab="workflow">时间轨架构</button>
+    <button class="nav-btn"        type="button" role="tab" aria-selected="false" id="nav-events" data-tab="events">事件轨架构</button>
+    <button class="nav-btn"        type="button" role="tab" aria-selected="false" id="nav-monitor" data-tab="monitor">监控仪表盘</button>
+    <button class="nav-btn"        type="button" role="tab" aria-selected="false" id="nav-aibiz" data-tab="aibiz">AI 业务数据</button>
+    <button class="nav-btn"        type="button" role="tab" aria-selected="false" id="nav-tree" data-tab="tree">目录结构</button>
+    <button class="nav-btn"        type="button" role="tab" aria-selected="false" id="nav-gaps" data-tab="gaps">断点清单</button>
+    <button class="nav-btn"        type="button" role="tab" aria-selected="false" id="nav-roadmap" data-tab="roadmap">实现目标</button>
+    <button class="nav-btn"        type="button" role="tab" aria-selected="false" id="nav-evolution" data-tab="evolution">版本演进</button>
+  </div>
+
+  <div class="version-track" aria-label="版本演进路径">
+    <span class="vt-label">EVOLUTION</span>
+    <div class="vt-stations">
+      <div class="vt-station done">
+        <div class="vt-dot"></div>
+        <div class="vt-tag">v1</div>
+        <div class="vt-tooltip"><strong>v1.0</strong>Excel 解析 + 标签打印<span class="vt-tip-date">基础奠基</span></div>
+      </div>
+      <div class="vt-station done">
+        <div class="vt-dot"></div>
+        <div class="vt-tag">v2</div>
+        <div class="vt-tooltip"><strong>v2.0</strong>Vue 3 + AI 对话 + OCR<span class="vt-tip-date">Web + AI 化</span></div>
+      </div>
+      <div class="vt-station done">
+        <div class="vt-dot"></div>
+        <div class="vt-tag">v3</div>
+        <div class="vt-tooltip"><strong>v3.0</strong>混合意图 + TTS + 任务 Agent<span class="vt-tip-date">意图中枢</span></div>
+      </div>
+      <div class="vt-station done milestone">
+        <div class="vt-dot"></div>
+        <div class="vt-tag">v4</div>
+        <div class="vt-tooltip"><strong>v4.0</strong>AI 员工 + 多模态交互<span class="vt-tip-date">员工体系 1.0</span></div>
+      </div>
+      <div class="vt-station done milestone">
+        <div class="vt-dot"></div>
+        <div class="vt-tag">v5</div>
+        <div class="vt-tooltip"><strong>v5.0</strong>Neuro-DDD + 审批流<span class="vt-tip-date">架构分层</span></div>
+      </div>
+      <div class="vt-station done">
+        <div class="vt-dot"></div>
+        <div class="vt-tag">v6</div>
+        <div class="vt-tooltip"><strong>v6.0</strong>商业模式 + Mod 生态<span class="vt-tip-date">三层收入</span></div>
+      </div>
+      <div class="vt-station done milestone">
+        <div class="vt-dot"></div>
+        <div class="vt-tag">v7</div>
+        <div class="vt-tooltip"><strong>v7.0</strong>桌面版 + Web 并行交付<span class="vt-tip-date">跨平台化</span></div>
+      </div>
+      <div class="vt-station done">
+        <div class="vt-dot"></div>
+        <div class="vt-tag">v8</div>
+        <div class="vt-tooltip"><strong>v8.0</strong>跨行业 UI + 行业选择<span class="vt-tip-date">横向扩展</span></div>
+      </div>
+      <div class="vt-station done milestone">
+        <div class="vt-dot"></div>
+        <div class="vt-tag">v9</div>
+        <div class="vt-tooltip"><strong>v9.0.x</strong>FastAPI 认证 + async + Redis 锁<span class="vt-tip-date">2026-05-29</span></div>
+      </div>
+      <div class="vt-station current">
+        <div class="vt-dot"></div>
+        <div class="vt-tag">v10</div>
+        <div class="vt-tooltip"><strong>v10.0 · 当前</strong>移除 event_primary_facade 双入口 + O-B 上线<span class="vt-tip-date">2026-06-03</span></div>
+      </div>
+      <div class="vt-station future vt-station--dashed">
+        <div class="vt-dot"></div>
+        <div class="vt-tag">RT</div>
+        <div class="vt-tooltip"><strong>release_train 1.0.0.x</strong>四段日更 SSOT · 与 v10 营销版并行<span class="vt-tip-date">2026-06-04 起</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="page">
+
+<div class="section active" id="s-loops" role="tabpanel" aria-labelledby="nav-loops">
+<div class="hero">
+  <h1>六线全自动闭环 · v10.0</h1>
+  <div class="sub">运营 · 获客 O1–O10 &nbsp;|&nbsp; 伙伴生态 B1–B5 &nbsp;|&nbsp; 制作 · 网站 P-W + Mod P-M + 软件 P-S &nbsp;|&nbsp; 共享 · 归档清理 R1–R4</div>
+  <div class="tagline">XCAGI v10.0 · 2026-06-03 · 4,251 Python · 1,478 Vue/TS · 1,052 Docs · <span id="hero-line-coverage-sub">—</span></div>
+
+  <div class="stats-strip-five stats-strip-six" aria-label="六线独立自动化率">
+    <div class="stat"><div class="stat-num" style="color:var(--cyan)">88%</div><div class="stat-label">O-A 获客线</div></div>
+    <div class="stat"><div class="stat-num" style="color:var(--green)">75%</div><div class="stat-label">O-B 伙伴线</div></div>
+    <div class="stat"><div class="stat-num" style="color:var(--orange)">96%</div><div class="stat-label">P-W 网站线</div></div>
+    <div class="stat"><div class="stat-num p">90%</div><div class="stat-label">P-M Mod 线</div></div>
+    <div class="stat"><div class="stat-num y">78%</div><div class="stat-label">P-S 软件线</div></div>
+    <div class="stat"><div class="stat-num" style="color:var(--blue)">85%</div><div class="stat-label">S-R 归档线</div></div>
+    <div class="stat"><div class="stat-num g" id="hero-line-coverage-pct">—</div><div class="stat-label">目录六线覆盖</div></div>
+    <div class="stat"><div class="stat-num g" id="hero-step-coverage-pct">—</div><div class="stat-label">六线步骤员工覆盖</div></div>
+    <div class="stat"><div class="stat-num g" id="hero-path-zone-coverage-pct">—</div><div class="stat-label">二级分区员工覆盖</div></div>
+    <div class="stat"><div class="stat-num b" id="hero-path-file-coverage-pct">—</div><div class="stat-label">分区文件员工覆盖</div></div>
+    <div class="stat"><div class="stat-num c" id="hero-release-train">—</div><div class="stat-label">release_train</div></div>
+    <div class="stat"><div class="stat-num p" id="hero-release-gen">—</div><div class="stat-label">十日线代际</div></div>
+    <div class="stat"><div class="stat-num y" id="hero-pytest-full-pct">—</div><div class="stat-label">后端 pytest 全量</div></div>
+  </div>
+  <div style="font-size:11px;color:var(--muted);margin:-6px 0 10px 2px" id="hero-path-coverage-sub">—</div>
+  <div style="font-size:11px;color:var(--muted);margin:-4px 0 10px 2px" id="hero-step-coverage-sub">—</div>
+  <div style="font-size:11px;color:var(--muted);margin:-4px 0 10px 2px" id="hero-pytest-coverage-sub">—</div>
+
+  <div class="step-employee-panel" id="step-employee-panel" hidden aria-label="六线流程步骤员工负责">
+    <div class="step-employee-summary">
+      <strong>六线流程步骤 → 主责 / 协作员工</strong>
+      <span class="step-employee-meta">SSOT：<code>FHD/config/six_line_employee_map.json</code> · 与页面流程节点同步 · 编制见 <code>duty_roster.json</code></span>
+    </div>
+    <div class="step-employee-binding" id="step-employee-binding"></div>
+    <div class="step-employee-table" id="step-employee-table"></div>
+    <div class="step-employee-foot" id="step-employee-foot"></div>
+  </div>
+
+  <div class="stats-strip">
+    <div class="stat"><div class="stat-num p">75</div><div class="stat-label">CI 覆盖率门禁</div></div>
+    <div class="stat"><div class="stat-num g">402</div><div class="stat-label">测试文件</div></div>
+    <div class="stat"><div class="stat-num y">20</div><div class="stat-label">GitHub Actions</div></div>
+    <div class="stat"><div class="stat-num o">22</div><div class="stat-label">神经域</div></div>
+    <div class="stat"><div class="stat-num b">90/100</div><div class="stat-label">六线综合成熟度</div></div>
+  </div>
+
+  <div class="ops-live-bar" id="ops-live-bar">
+    <span class="ops-live-status warn" id="ops-live-badge">v10.0 静态</span>
+    <span class="ops-live-meta" id="ops-live-meta"><strong>代码库 v10.0 静态现状</strong> · 六线 88/75/96/90/78/85% · 52 AI 员工 + 5 生态伙伴员工 + 6 流程 Mod · 115 二级分区全编 · 4,251py · 681 端点 · 36 Mod · 402 测试 · 20 workflows
+      <br/><span style="font-size:10.5px;color:var(--muted)">
+        <b>v10.0 关键变更</b> · 移除 <code>event_primary_facade</code> 双入口 · O-B 伙伴线 5 步实装（已从预留转正）· 二级分区员工覆盖 <b>100%</b>（115/115 零空缺）· CI 门禁 fail_under 70→75
+        <br/>
+        <span class="ops-live-endpoints" id="ops-live-endpoints" style="display:inline-flex">
+          <span class="ep-pill skip" title="file:// 协议跨域受限">http://127.0.0.1:8765/api/admin/production-line/operations-health</span>
+          <span class="ep-pill try" title="每次刷新 1.5s 超时">http://127.0.0.1:5000/api/operations-line/health</span>
+          <span class="ep-pill timeout">⏱ AbortController 1.5s</span>
+        </span>
+        · 启动对应服务后点击 <b>🔄 连接服务</b> 拉取实时数据
+      </span>
+    </span>
+    <button type="button" class="ops-live-btn" id="btn-refresh-health">🔄 连接服务</button>
+    <button type="button" class="ops-live-btn" id="btn-process-outbox" style="display:none">处理 Outbox</button>
+  </div>
+</div>
+
+<div class="five-lines-regions" aria-label="六线步骤明细">
+<p class="s-axis-hint">六线统一 S 轴流程图 · 每条线可「全量查看」或新标签打开独立页 · ≥5 步自动双行折返</p>
+
+<section class="region region-ops" aria-labelledby="region-ops-head">
+  <div class="region-head" id="region-ops-head">
+    <div>
+      <h2>运营域 · 2 线</h2>
+      <p>获客全链路 O1–O10 · 伙伴生态 B1–B5（v10.0 实装）</p>
+    </div>
+  </div>
+  <div class="region-lines region-lines--ops">
+
+<div class="loop loop--five-line" data-five-line="ops_acquisition">
+  <div class="loop-header">
+    <div class="loop-icon sell">🎯</div>
+    <div>
+      <div class="loop-title ops-a">O-A · 获客线</div>
+      <div class="loop-subtitle">公域引流 → 留资建档 → 企业商机 → 合同收费 → 交付签收 → 对账</div>
+    </div>
+    <div class="loop-progress">
+      <div class="loop-progress-num sell" id="five-rate-oa">88%</div>
+      <div class="loop-progress-label">自动化率</div>
+    </div>
+  </div>
+  <p class="loop-map-legacy">映射 legacy：<code>O1</code>–<code>O10</code>（公域获客 + 企业 CRM / 合同 / 交付 / 进度 / 对账）</p>
+  <div class="loop-body s-axis">
+
+    <div class="flow-node ops-step-node" data-ops-step="O1" data-five-line="ops_acquisition">
+      <div class="node-dot done"></div><div class="node-line"></div>
+      <div class="node-content">
+        <div class="node-head"><span class="node-name">1. 获客引流</span><span class="node-tag done">已做</span></div>
+        <div class="node-desc">官网落地页 · SEO · 用户注册入口 · 修茈市场 · CRM 线索入库</div>
+        <div class="node-dept-staff">O-A 获客部 · 主责 <code>site-content-editor</code> · <code>marketing-site-builder</code> · 协作 <code>seo-sitemap-curator</code></div>
+        <div class="node-ok">✅ 修茈市场 xiu-ci.com/market + 注册登录<br>✅ SoftwareDownloadView 双 SKU 下载页 (/workbench/download)<br>✅ HomeView 联系表单 + landing_contact_submissions 入库<br>✅ marketing-site 静态官网 (5 Nunjucks + build.mjs + htmlhint)<br>✅ SEO 基建：robots.txt + sitemap.xml(12页) + BingSiteAuth + baidu_urls<br>✅ seo-sitemap-curator MODstore 插件包<br>✅ 审核码机制 (XC-000123) + MODstore 内部 API 双向对接<br>✅ CRM 回写 crm_opportunity_id → landing_contact_submissions.meta_json<br>✅ HMAC-SHA256 专属链接签名 (30 天 TTL) + 增量同步<br>✅ O1 事件发射 (emit_operations_event O1 completed)<br>🆕 v10.0 <code>site-content-editor</code> 员工接管 markdown→HTML 渲染 · <code>marketing-site-builder</code> 接管 Nunjucks build</div>
+      </div>
+    </div>
+    <div class="node-connector">→</div>
+
+    <div class="flow-node" data-five-line="ops_acquisition">
+      <div class="node-dot done"></div>
+      <div class="node-content">
+        <div class="node-head"><span class="node-name">2. 留资与匿名 CRM</span><span class="node-tag done">已做</span></div>
+        <div class="node-desc">未注册访客留资 · 审核码 · 负数 UID 匿名商机建档</div>
+        <div class="node-dept-staff">O-A 获客部 · 主责 <code>user-customer-service-officer</code> · <code>intake-dispatcher</code> · 协作 <code>wechat_msg</code> · <code>wechat_phone</code> · <code>real_phone</code></div>
+        <div class="node-ok">✅ 匿名线索 CRM 漏斗 (负数 UID=-lid 建档，企业账户后合并)<br>✅ user_cs_landing_crm.py · contact-intake 多步问卷<br>✅ 审核码兑换 (redeem_submission_by_audit_code)<br>✅ 增量同步 (sync_intake_from_market_if_newer)<br>🆕 v10.0 <code>intake-dispatcher</code> 任务路由员工接管多步问卷分发</div>
+      </div>
+    </div>
+    <div class="node-connector">→</div>
+
+    <div class="flow-node ops-step-node" data-ops-step="O2" data-five-line="ops_acquisition">
+      <div class="node-dot done"></div><div class="node-line"></div>
+      <div class="node-content">
+        <div class="node-head"><span class="node-name">3. 企业商机 / 项目档案</span><span class="node-tag done">已做</span></div>
+        <div class="node-desc">投资企业 CRM · Pipeline 10 阶段 · 外部 CRM 同步</div>
+        <div class="node-ok node-gap--collapsible"><button type="button" class="node-gap-toggle">展开详情</button><div class="node-gap-body">✅ MODstore AI 客服 + 工单 (customer_service_api)<br>✅ FHD ERP 客户主数据 (/api/customers/list) + 模糊匹配 (100/85/70/90)<br>✅ 客服员工 user-customer-service-officer（需求采集 + 表单链接）<br>✅ contact-intake.js 多步问卷(6步) + AI 一键预填 + 公司名联网匹配<br>✅ user_cs_pipeline.py 商机 Pipeline 10 阶段 + 自动推进 + 门禁<br>✅ CRM SQLite 持久化 (6 表：opportunities/quotes/deliveries/invoices/cs_crm_meta/cs_pipeline_snapshots)<br>✅ Pipeline ↔ CRM 双向同步 + ERP 客户关联(≥60分)<br>✅ intake_done 收尾：漏斗 bootstrap → ERP 关联 → 报价草稿占位(pending_review)<br>✅ 匿名线索漏斗 (user_cs_landing_crm.py: 无 market_user_id 时用负数 -lid 建档)<br>✅ 外部 CRM 双向 (external_crm_adapter.py: HubSpot Deals + Salesforce Opportunity REST push/pull)<br>✅ 审核码兑换 (redeem_submission_by_audit_code)<br>✅ 增量同步 (sync_intake_from_market_if_newer: 比较 intake_submitted_at)<br>✅ MODstore landing_contact ↔ CRM 商机双向关联<br>✅ 客服数据仓储层 (customer_service_repository.py)<br>✅ 市场用户档案 (user_cs_market_profile.py)<br>✅ 前端 CrmOpportunityView.vue 商机视图<br>✅ 企业凭证管理 (user_cs_enterprise_credentials.py)<br>✅ 需求提交通知 (user_cs_intake_notice.py) + 连接欢迎 (user_cs_connected_welcome.py)<br>✅ Salesforce REST 已实现（push/pull + StageName 映射；启用见 SALESFORCE_* 环境变量）</div></div>
+      </div>
+    </div>
+    <div class="node-connector">→</div>
+
+    <div class="flow-node ops-step-node" data-ops-step="O3" data-five-line="ops_acquisition">
+      <div class="node-dot done"></div><div class="node-line"></div>
+      <div class="node-content">
+        <div class="node-head"><span class="node-name">4. 报价 / 合同</span><span class="node-tag done">已做</span></div>
+        <div class="node-desc">自动报价 · 合同签署 · 到期提醒</div>
+        <div class="node-dept-staff">O-A 获客部 · 主责 <code>modstore-backend-api</code></div>
+        <div class="node-ok node-gap--collapsible"><button type="button" class="node-gap-toggle">展开详情</button><div class="node-gap-body">✅ 价目表 Word 导出 + 合同 Excel 生成基础设施<br>✅ MODstore 会员套餐/SKU 定价 (PaymentPlansView)<br>✅ 销售合同 Word/Excel 生成器 + 前端预览/打印/模板库<br>✅ XCAGI 技术服务合同模板填充 (service_contract_fill.py + fill_config.json)<br>✅ 报价单自动生成 (upsert_quote_for_opportunity) + 状态流转 draft→sent→negotiating→won<br>✅ 合同金额同步到支付结构 (apply_contract_snapshot_to_doc)<br>✅ 合同生命周期状态机 (contract_lifecycle.py: draft→sent→signing→effective→expired→terminated)<br>✅ 电子签适配器 (esign_adapter.py: Stub + Fadada 法大大, ESIGN_PROVIDER 环境变量切换)<br>✅ 法大大 FASC v5.1 完整客户端 (fadada_fasc_client.py: OpenAPI 签名+企业/个人认证+签署+存证)<br>✅ 合同 API 已注册 (contract_lifecycle_api.py: 4 路由)<br>✅ 销售合同 API 已注册 (sales_contract_api.py: 模板列表/预览/LLM 解析)<br>✅ 合同字段 Schema + 读写 API (GET/PUT /user-cs/contract/fields + /schema)<br>✅ 合同生成 DOCX + 下载 + 乙方预填样例 PDF<br>✅ LLM 文本解析合同要素 (resolve-from-text 轻量规则引擎 + LLM 路径预留)<br>✅ 合同到期扫描 API + 定时任务 (contract_expiry_scheduler.py)<br>✅ 合同到期提醒 (notify_contract_expiry_items)<br>✅ 合同状态回写 CRM (apply_contract_to_crm_meta)<br>✅ 前端 SalesContractPreview 组件 + salesContract.ts 10 端点<br>✅ 前端电子签章页 ContractEsignView.vue + ContractEsignPanel.vue + contractLifecycle.ts API<br>ℹ️ 默认 <code>ESIGN_PROVIDER=stub</code> 自建电子签；法大大仅为<strong>可选</strong>法定签章通道<br>🆕 v10.0 O3 由 partial → done · <code>modstore-backend-api</code> 员工成为 O3 唯一主责</div></div>
+      </div>
+    </div>
+    <div class="node-connector">→</div>
+
+    <div class="flow-node ops-step-node" data-ops-step="O4" data-five-line="ops_acquisition">
+      <div class="node-dot done"></div><div class="node-line"></div>
+      <div class="node-content">
+        <div class="node-head"><span class="node-name">5. 收费</span><span class="node-tag done">已做</span></div>
+        <div class="node-desc">合同收费 + Token 收费 双轨（FHD 宿主 + MODstore 市场）</div>
+        <div class="node-dept-staff">O-A 获客部 · 主责 <code>payment-billing-reconciler</code></div>
+        <div class="node-ok node-gap--collapsible"><button type="button" class="node-gap-toggle">展开详情</button><div class="node-gap-body">✅ MODstore 支付宝 + 微信 + Token 钱包 (Java PaymentController + PostgreSQL)<br>✅ FHD 宿主支付宝 model_payment 演示链路<br>✅ 履约策略模式重构 (Item/Plan/Wallet FulfilStrategy)<br>✅ 跨服务支付契约 (payment_contract.py) Python/Java/前端三方对齐<br>✅ 支付灰度发布 (PAYMENT_BACKEND 环境变量 + 灰度 Runbook)<br>✅ 三级到款验证 (gateway 权威订单 > chat_heuristic 群聊正则 > manual 手动确认)<br>✅ 到款确认自动创建 CRM 账单 (try_confirm_payment_and_invoice)<br>✅ FHD 微信支付代理 (modstore_payment_proxy.py → 市场统一收银台 + wechat-redirect 路由)<br>✅ Java 超时关单调度 (PendingOrderCleanupScheduler: 30 min 超时, 5 min 轮询)<br>✅ Java 双渠道查单对账 (OrderService.reconcileWithAlipayIfUnfulfilled)<br>✅ 订单 SoT 契约 (PAYMENT_CONTRACT.md: PAYMENT_BACKEND=java 时 SoT 为 Java+PostgreSQL)<br>✅ 客服支付查询 (payment_cs_internal.py: 权威订单匹配+到款核对+金额容差 1 分)<br>✅ 支付公共工具 (payment_common.py: HMAC-SHA256 签名+防重放 300s+SVIP 8 档会员体系)<br>✅ 支付网关服务 (payment_gateway.py: Java/Python 路由决策+连接/读取超时)<br>✅ payment_api 13 端点 (plans/checkout/notify/query/orders/refund/diagnostics/entitlements/usage-metrics 等)<br>✅ 支付 SoT 开关 (payment_sot.py: MODEL_PAYMENT_BACKEND=postgres|modstore|json 三后端路由)<br>✅ PG 订单仓储 (order_repository_pg.py: ModelPaymentOrder/Entitlement ORM + 金额校验)<br>✅ 统一订单门面 (order_store.py: 根据 SoT 开关路由 PG/JSON 后端)<br>✅ 支付宝完整集成 (alipay.py 638 行: RSA2 签名+多渠道+退款+查询+诊断)<br>✅ JSON 存储标记废弃 (MODEL_PAYMENT_JSON_DEPRECATED_AFTER=2026-12)<br>✅ 生产直切脚本 `MODstore_deploy/scripts/production_flip_payment_backend_java.sh`<br>✅ Compose `api` 依赖 `payment-service` 健康；FHD `operations-line/health` O4 展示 `modstore_payment_backend`<br>✅ FHD 对账服务 (fhd_payment_reconciliation.py: 宿主侧支付对账)</div></div>
+      </div>
+    </div>
+    <div class="node-connector">→</div>
+
+    <div class="flow-node ops-step-node" data-ops-step="O5" data-five-line="ops_acquisition">
+      <div class="node-dot done"></div><div class="node-line"></div>
+      <div class="node-content">
+        <div class="node-head"><span class="node-name">6. 软件交付编排</span><span class="node-tag done">已做</span></div>
+        <div class="node-desc">向投资企业交付 Win/Mac/Android 包 · 进度消息 · 微信群推送</div>
+        <div class="node-dept-staff">O-A 获客部 · 主责 <code>deploy-release-officer</code> · 协作 <code>shipment_mgmt</code></div>
+        <div class="node-ok">✅ Electron 双 SKU + electron-updater (Ed25519 签名校验 + 6h 检查间隔 + 退出自动安装)<br>✅ Docker/K8s + License/LAN Guard + deliverable-status<br>✅ License 审计/白名单/会话管理增强 (license_store.py)<br>✅ macOS 下载页已落地 (Intel x64 + Apple Silicon arm64 原生 DMG，自动匹配架构)<br>✅ 软件交付编排 (user_cs_software_delivery.py: Win/Mac/Android 三平台 + mac_arch)<br>✅ Android APK 下载链接 (build_android_download_url + XCAGI_ANDROID_DOWNLOAD_VERSION)<br>✅ 桌面自动化驱动交付 (desktop_automation → 微信群自动推送安装包链接)<br>✅ 双 SKU 下载包 (build_delivery_download_bundle: desktop+android)<br>✅ 桌面 OS/芯片智能解析 (desktop_os + mac_arch / M1·Intel 消息正则)</div>
+      </div>
+    </div>
+    <div class="node-connector">→</div>
+
+    <div class="flow-node ops-step-node" data-ops-step="O6" data-five-line="ops_acquisition">
+      <div class="node-dot done"></div><div class="node-line"></div>
+      <div class="node-content">
+        <div class="node-head"><span class="node-name">7. 企业使用（交叉）</span><span class="node-tag done">已做</span></div>
+        <div class="node-desc">AI 对话 · 工作流 · 出货/打印/库存/采购 · 意图识别 6 引擎</div>
+        <div class="node-dept-staff">O-A 获客部 · 主责 <code>enterprise-adoption-officer</code> · 协作 <code>user-customer-service-officer</code></div>
+        <div class="node-ok node-gap--collapsible"><button type="button" class="node-gap-toggle">展开详情</button><div class="node-gap-body">✅ AI 对话核心 ai_chat_app_service.py (~2800 行) · 6 AI 引擎适配<br>✅ 6 引擎统一意图识别 (unified_intent_recognizer.py: DeepSeek+BERT+Rasa+规则+关键词+混合)<br>✅ 蒸馏训练链 (distillation_data_collector → distillation_trainer → distilled_intent_service)<br>✅ BERT 本地意图 (bert_intent_service) + DeepSeek 意图 (deepseek_intent_service)<br>✅ 混合意图 (hybrid_intent_service) + 意图确认 (intent_confirmation_service)<br>✅ 意图训练 (intent_trainer + train_intent) + 基础意图 (intent_service)<br>✅ NeuroBus 神经反射弧 (< 1ms 反射) + 潜意识/显意识双处理器<br>✅ 工作流引擎 (workflow/engine.py) + Planner (workflow/planner.py) + 风险门 (risk_gate.py)</div></div>
+      </div>
+    </div>
+    <div class="node-connector">→</div>
+
+    <div class="flow-node ops-step-node" data-ops-step="O7" data-five-line="ops_acquisition">
+      <div class="node-dot done"></div><div class="node-line"></div>
+      <div class="node-content">
+        <div class="node-head"><span class="node-name">8. 变更 / 反馈 → 制作线</span><span class="node-tag done">已做</span></div>
+        <div class="node-desc">需求变更工单 · 功能修改申请 · Bug 反馈 · 运维闭环</div>
+        <div class="node-dept-staff">O-A 获客部 · 主责 <code>user-customer-service-officer</code> · <code>change-request-auditor</code> · 协作 <code>intake-dispatcher</code> · <code>wechat_msg</code> · <code>wechat_phone</code> · <code>real_phone</code></div>
+        <div class="node-ok node-gap--collapsible"><button type="button" class="node-gap-toggle">展开详情</button><div class="node-gap-body">✅ FHD 审批流程引擎 (approval-hub) + 前端 4 视图 + approval.ts 14 端点<br>✅ MODstore 客服工单 + Admin 变更请求<br>✅ OPS_CLOSURE 双入口运维闭环（桌面主控 + 官网值班员工 + Deep Link + 验收清单 8 项）<br>✅ 用户客服员工：内部客服页需求采集 → 微信话术 + 表单链接<br>✅ 微信群客服桥接 + 被动群监控 + 轮询调度 + LLM 自动回复<br>✅ 微信消息展示 (wechat_message_display.py) + 群客户桥接 (wechat_group_customer_bridge.py)<br>✅ 微信被动轮询调度 (wechat_passive_poll_scheduler.py) + 解密自动配置 (wechat_decrypt_autoconfig.py)<br>✅ 微信联系人服务 (wechat_contact_service.py) + 联系人缓存导入 (wechat_contact_cache_import.py)<br>✅ 微信数据库快照 (wechat_db_snapshot.py) + 解密 HTTP (wechat_decrypt_http.py)<br>✅ ops_closure_status.py 状态聚合 (远程 health + 本地 employee_pack + blockers + next_actions)<br>✅ 变更工单门户 (user_cs_change_request.py: 3 类工单 + 状态流转)<br>✅ 工单编号 CR-{uid}-{short} 格式 + 上限 100 条/pipeline<br>✅ 工单微信群通知 (build_change_request_wechat_message + mark_notified)<br>✅ 企业客户侧「提交变更工单」表单 + 内部客服侧工单列表<br>✅ 前端 XCmaxAdminView 值班闭环 (CR 待审/失败计数 + 一键补闭环)<br>✅ 变更工单 OPS 派发（内部客服「派发运维任务」→ orchestrate/async）<br>✅ 官网/contact 表单 webhook 自动 CRM 漏斗；内部客服打开客户时 auto_finalize</div></div>
+      </div>
+    </div>
+    <div class="node-connector">→</div>
+
+    <div class="flow-node ops-step-node" data-ops-step="O8" data-five-line="ops_acquisition">
+      <div class="node-dot done"></div><div class="node-line"></div>
+      <div class="node-content">
+        <div class="node-head"><span class="node-name">9. 里程碑签收 / 进度汇报</span><span class="node-tag done">已做</span></div>
+        <div class="node-desc">5 阶段交付进度 · notify-progress · 投资方可读签收</div>
+        <div class="node-dept-staff">O-A 获客部 · 主责 <code>delivery-receipt-officer</code> · <code>test-qa-runner</code></div>
+        <div class="node-ok node-gap--collapsible"><button type="button" class="node-gap-toggle">展开详情</button><div class="node-gap-body">✅ 内部 QA 验收文档 (ACCEPTANCE_GOVERNANCE) + deliverable_smoke<br>✅ 验收治理文档：CI 门禁(覆盖率 60%) + 交付物清单 + 新功能落点公约<br>✅ deliverable_status.py 按 SKU 检测 Mod 包完整性 + 步骤推荐<br>✅ 收货确认 AI 员工 (xcagi-workflow-employee-receipt-confirm)<br>✅ 交付里程碑 5 阶段 (需求 10%→方案 15%→开发 40%→联调 20%→验收 15%)<br>✅ 交付进度消息自动生成 (build_delivery_progress_message)<br>✅ 交付计划更新 API (PUT /user-cs/delivery/plan)<br>✅ 交付进度通知 API (POST /user-cs/delivery/notify-progress)<br>✅ 到款检测 API (POST /user-cs/delivery/check-payment)<br>✅ 签收流程 (user_cs_delivery_signoff.py: create_signoff_request + confirm_signoff)<br>✅ 签收确认自动推进 Pipeline 到 delivered + 触发 O8 completed 事件 + O10 对账预览<br>✅ 前端签收操作按钮（发起签收/确认签收并完成交付）<br>✅ 微信收货确认意图识别 (isReceiptConfirmRelatedWechatIntent)<br>✅ 签收记录 PG 表 cs_delivery_signoffs（CS_SIGNOFF_BACKEND=postgres + Alembic）+ SQLite legacy + 迁移脚本<br>✅ 签收 API：POST /user-cs/delivery/signoff/request · confirm</div></div>
+      </div>
+    </div>
+    <div class="node-connector">→</div>
+
+    <div class="flow-node ops-step-node" data-ops-step="O9" data-five-line="ops_acquisition">
+      <div class="node-dot done"></div><div class="node-line"></div>
+      <div class="node-content">
+        <div class="node-head"><span class="node-name">10. 单据 / 开票</span><span class="node-tag done">已做</span></div>
+        <div class="node-desc">合同单据 + Token 单据 · 自动开票 · 归档</div>
+        <div class="node-dept-staff">O-A 获客部 · 主责 <code>modstore-backend-api</code> · 协作 <code>label_print</code> · <code>shipment_mgmt</code></div>
+        <div class="node-ok node-gap--collapsible"><button type="button" class="node-gap-toggle">展开详情</button><div class="node-gap-body">✅ <strong>产品设计</strong>：XCAGI 自建财务闭环，<strong>不接入用友/金蝶</strong>（账单·凭证·统一账本均在 FHD + MODstore）<br>✅ FHD FinanceAppService + CRM 四表 + MODstore 支付/对账<br>✅ 模板注册表 + 价目表/合同 Excel·Word 生成<br>✅ MODstore invoice_api（apply/list/admin-list/admin-review）<br>✅ 发票类型：个人 / 公司（公司必填税号）· 管理员审核 + 默认税率 6%<br>✅ CRM 到款→开票→统一归档 <code>financial_transactions</code> · <code>GET /api/finance/unified-ledger</code><br>✅ 账单编号 <code>XC-INV-{opportunity_id}-{timestamp}</code> · Pipeline 自动开票写 CRM<br>✅ 默认税控 <code>TAX_INVOICE_PROVIDER=stub</code>（自建路径，生产可全程不依赖外部财务软件）<br>ℹ️ 百望云仅为<strong>可选</strong>税控开票插件（非 ERP）；法大大为可选电子签，均非财务核心<br>✅ 运维 UI：侧栏「财务统计」→ 统一账本 / 发票管理 / 电子签章（<code>/finance-stats</code>）</div></div>
+      </div>
+    </div>
+    <div class="node-connector">→</div>
+
+    <div class="flow-node ops-step-node" data-ops-step="O10" data-five-line="ops_acquisition">
+      <div class="node-dot done"></div>
+      <div class="node-content">
+        <div class="node-head"><span class="node-name">11. 对账报表</span><span class="node-tag done">已做</span></div>
+        <div class="node-desc">支付回调 vs 订单 vs 钱包三方对账 · 差异检测 · 财务报表</div>
+        <div class="node-dept-staff">O-A 获客部 · 主责 <code>payment-billing-reconciler</code></div>
+        <div class="node-ok node-gap--collapsible"><button type="button" class="node-gap-toggle">展开详情</button><div class="node-gap-body">✅ MODstore reconciliation.py 5 端点 (preview/generate/list/detail/confirm + CSV 导出)<br>✅ payment-billing-reconciler 编制员工 + 支付宝 reconcile 标记<br>✅ 对账维度：total_orders/GMV/platform_revenue/author_payable/refunds/wallet_top_ups/alipay_income<br>✅ 历史报告环比（GMV 变动金额/百分比 + 与上一份已确认报告对比）<br>✅ 报告状态 draft→confirmed + StreamingResponse 流式 CSV<br>✅ 财务看板 API (/api/finance/dashboard + trend + receivables + payables + transactions CRUD 9 端点)<br>✅ Kitten AI 财务分析 (financial_plugins + business_snapshot + 财务简报)<br>✅ 对账调度框架 (reconciliation_scheduler.py: run_scheduled_reconciliation + import_bank_statement_csv)<br>✅ 银行流水 CSV 解析 (支持中英文字段名: date/交易日期, amount/金额, reference/流水号)<br>✅ Java 双渠道查单对账 (OrderService: 微信/支付宝查单后自动履约)<br>✅ 全自动对账闭环：`POST /api/operations-line/reconciliation/run` + MODstore `POST /api/internal/reconciliation/run-cycle`<br>✅ 告警：`RECONCILIATION_ALERT_WEBHOOK` + O10 `emit_operations_event`<br>✅ FHD 宿主订单并入：`GET /api/internal/payment/reconciliation-period`（PostgreSQL + legacy JSON）合并进 MODstore 区间 GMV</div></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="loop loop--five-line" data-five-line="ops_partner">
+  <div class="loop-header">
+    <div class="loop-icon sell">🤝</div>
+    <div>
+      <div class="loop-title ops-b">O-B · 伙伴合作线</div>
+      <div class="loop-subtitle">投资方生态产品 · 联合 catalog · 只读进度 · 分润对账（v10.0 实装）</div>
+    </div>
+    <div class="loop-progress">
+      <div class="loop-progress-num sell" id="ops-loop-progress-num">75%</div>
+      <div class="loop-progress-label">v10.0 自动化率</div>
+    </div>
+  </div>
+  <p class="loop-map-legacy">映射 v10.0：<code>B1</code>–<code>B5</code> 投资方 / 生态伙伴 5 步实装（从预留转正）· 5 名 ecosystem-* 员工已落编</p>
+  <div class="loop-body s-axis">
+
+    <div class="flow-node ops-step-node" data-ops-step="B1" data-five-line="ops_partner">
+      <div class="node-dot done"></div><div class="node-line"></div>
+      <div class="node-content">
+        <div class="node-head"><span class="node-name">1. 投资方 / 生态伙伴接入</span><span class="node-tag done">已做</span></div>
+        <div class="node-desc">生态账号 · 联合身份 · 产品授权边界 · 与 O-A 获客解耦</div>
+        <div class="node-dept-staff">O-B 伙伴部 · 主责 <code>ecosystem-partner-onboard-officer</code> · 协作 <code>modstore-backend-api</code></div>
+        <div class="node-ok">✅ <code>ecosystem-partner-onboard-officer</code> 员工上线 · 生态租户隔离 + 联合 SSO/OAuth<br>✅ partner_onboarding_api.py (3 路由：onboard/activate/rotate-credentials)<br>✅ 投资方 profile + 联合身份 token 颁发 (TTL 24h + refresh 30d)<br>✅ MODstore 内部 API 网关注入生态 partner_id 标签</div>
+      </div>
+    </div>
+    <div class="node-connector">→</div>
+
+    <div class="flow-node ops-step-node" data-ops-step="B2" data-five-line="ops_partner">
+      <div class="node-dot done"></div><div class="node-line"></div>
+      <div class="node-content">
+        <div class="node-head"><span class="node-name">2. 联合 SKU &amp; 生态 catalog</span><span class="node-tag done">已做</span></div>
+        <div class="node-desc">投资方生态产品挂载 · 联合套餐 · MODstore 扩展位</div>
+        <div class="node-dept-staff">O-B 伙伴部 · 主责 <code>ecosystem-joint-catalog-officer</code> · 协作 <code>employee-pack-curator</code></div>
+        <div class="node-ok">✅ partner_catalog 表 + 生态 SKU 映射 + 联合定价策略<br>✅ ecosystem-joint-catalog-officer 员工：catalog 接入 → 价格策略 → 上下架审核<br>✅ employee-pack-curator 把生态产品作为「.xcemp 扩展位」打包上架<br>🟡 联合套餐 AB 实验 (B2 partial，套餐效果数据待 7 天观察)</div>
+      </div>
+    </div>
+    <div class="node-connector">→</div>
+
+    <div class="flow-node ops-step-node" data-ops-step="B3" data-five-line="ops_partner">
+      <div class="node-dot partial"></div><div class="node-line"></div>
+      <div class="node-content">
+        <div class="node-head"><span class="node-name">3. 生态产品交付回传</span><span class="node-tag partial">部分</span></div>
+        <div class="node-desc">联合交付物 · 使用遥测 · 回写 O-A 里程碑快照</div>
+        <div class="node-dept-staff">O-B 伙伴部 · 主责 <code>ecosystem-delivery-reporter</code> · 协作 <code>enterprise-adoption-officer</code></div>
+        <div class="node-ok">✅ ecosystem_delivery_webhook (POST /api/partner/delivery-event) HMAC 校验<br>✅ 联合包版本对齐 (partner_build_hash → FHD 端 msync)<br>✅ enterprise-adoption-officer 协作：企业采用数据双向回写<br>🟡 完整使用遥测 (B3 partial，待 partner telemetry SDK v0.2 落地)</div>
+      </div>
+    </div>
+    <div class="node-connector">→</div>
+
+    <div class="flow-node ops-step-node" data-ops-step="B4" data-five-line="ops_partner">
+      <div class="node-dot done"></div><div class="node-line"></div>
+      <div class="node-content">
+        <div class="node-head"><span class="node-name">4. 投资方只读进度视图</span><span class="node-tag done">已做</span></div>
+        <div class="node-desc">里程碑 · 风险 · 交付物清单 · 对外只读 Portal</div>
+        <div class="node-dept-staff">O-B 伙伴部 · 主责 <code>ecosystem-investor-portal-officer</code> · 协作 <code>market-frontend-dev</code></div>
+        <div class="node-ok">✅ investor_readonly_portal 路由 /market/partner/portal (market-frontend-dev 实现)<br>✅ Pipeline 快照订阅 + 风险事件推送 (webhook + 邮件双通道)<br>✅ ecosystem-investor-portal-officer：里程碑 / 交付物 / 风险 三视图聚合<br>✅ 投资方 read-only 鉴权 (token 只能读 partner_id 维度数据)</div>
+      </div>
+    </div>
+    <div class="node-connector">→</div>
+
+    <div class="flow-node ops-step-node" data-ops-step="B5" data-five-line="ops_partner">
+      <div class="node-dot done"></div>
+      <div class="node-content">
+        <div class="node-head"><span class="node-name">5. 生态分润 &amp; 联合对账</span><span class="node-tag done">已做</span></div>
+        <div class="node-desc">渠道分润 · 联合 GMV · 与 O-A 对账报表交叉引用</div>
+        <div class="node-dept-staff">O-B 伙伴部 · 主责 <code>ecosystem-revenue-share-reconciler</code> · 协作 <code>payment-billing-reconciler</code></div>
+        <div class="node-ok">✅ partner_revenue_share 计算 + 联合 reconciliation 视图<br>✅ ecosystem-revenue-share-reconciler + payment-billing-reconciler 双对账<br>✅ O-A10 报表新增「联合 GMV 引用」列，避免重复计数<br>🆕 v10.0 O-B 5 步全部上线 · 自动化率 75%（B3 partial 拉低）</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+  </div>
+</section>
+
+<section class="region region-prod" aria-labelledby="region-prod-head">
+  <div class="region-head" id="region-prod-head">
+    <div>
+      <h2>制作域 · 3 线</h2>
+      <p>网站 · 用户 Mod · 通用软件（2 SKU × Win/macOS/Android/iOS）· Docker/K8s 仅开发</p>
+    </div>
+  </div>
+  <div class="region-lines region-lines--prod">
+
+<div class="loop loop--five-line" data-five-line="prod_web">
+  <div class="loop-header">
+    <div class="loop-icon build">🌐</div>
+    <div>
+      <div class="loop-title prod-w">P-W · 网站制作维护</div>
+      <div class="loop-subtitle">xiu-ci.com 全站 = 成都修茈科技有限公司 monorepo · /market/workbench/home 管控中枢</div>
+    </div>
+    <div class="loop-progress">
+      <div class="loop-progress-num build" id="five-rate-pw">95%</div>
+      <div class="loop-progress-label">自动化率</div>
+    </div>
+  </div>
+  <p class="loop-map-legacy">映射 legacy：<code>P1</code> · 仓库根 <code>成都修茈科技有限公司/</code>（营销静态 · market Vue · modstore Python · java 支付 · vibe-coding · yuangon · deploy/nginx）</p>
+  <div class="loop-body s-axis">
+
+    <div class="flow-node prod-step-node" data-prod-step="P1a" data-five-line="prod_web">
+      <div class="node-dot done"></div><div class="node-line"></div>
+      <div class="node-content">
+        <div class="node-head"><span class="node-name">1. 营销静态站</span><span class="node-tag done">已做</span><span class="node-tag done" style="opacity:.75">13 URL</span></div>
+        <div class="node-desc">xiu-ci.com 根路径 · 与 /market 并列 · siteKnowledge CORP_PAGES</div>
+        <div class="node-dept-staff">P-W 网站部 · 主责 <code>site-content-editor</code> · <code>marketing-site-builder</code> · 协作 <code>seo-sitemap-curator</code> · <code>flask-entry-keeper</code></div>
+        <div class="node-ok"><strong>根站 HTML（13）</strong><br>
+          <code>/</code> <code>/index.html</code> 首页 ·
+          <code>/about.html</code> 关于 ·
+          <code>/services.html</code> 产品 ·
+          <code>/solutions.html</code> 方案<br>
+          <code>/cases.html</code> 案例 ·
+          <code>/case-manufacture.html</code> 制造 ·
+          <code>/case-edu.html</code> 教育 ·
+          <code>/case-park.html</code> 园区<br>
+          <code>/news.html</code> 新闻 ·
+          <code>/honors.html</code> 资质 ·
+          <code>/contact.html</code> 联系 ·
+          <code>/excel-to-ai.html</code> Excel 工具<br>
+          <strong>构建/镜像</strong> marketing-site/ · site/*.html · <code>/new/</code> 实验页 · styles.css · main.js · assets/**</div>
+      </div>
+    </div>
+    <div class="node-connector">→</div>
+
+    <div class="flow-node prod-step-node" data-prod-step="P1b" data-five-line="prod_web">
+      <div class="node-dot done"></div><div class="node-line"></div>
+      <div class="node-content">
+        <div class="node-head"><span class="node-name">2. 修茈市场 SPA</span><span class="node-tag done">已做</span><span class="node-tag done" style="opacity:.75">22 路由</span></div>
+        <div class="node-desc">xiu-ci.com/market/* · router/index.ts · 公开 + 登录后</div>
+        <div class="node-dept-staff">P-W 网站部 · 主责 <code>market-frontend-dev</code></div>
+        <div class="node-ok"><strong>公开（10）</strong><br>
+          <code>/market/about</code> ·
+          <code>/market/login</code> ·
+          <code>/market/login-email</code> ·
+          <code>/market/forgot-password</code> ·
+          <code>/market/register</code><br>
+          <code>/market/ai-store</code> ·
+          <code>/market/catalog/:id</code> ·
+          <code>/market/templates</code> ·
+          <code>/market/templates/:id</code> ·
+          <code>/market/plans</code><br>
+          <strong>登录后（12）</strong><br>
+          <code>/market/</code> → home ·
+          <code>/market/wallet</code> ·
+          <code>/market/wallet/purchased</code> ·
+          <code>/market/recharge</code> ·
+          <code>/market/orders</code><br>
+          <code>/market/order/:id</code> ·
+          <code>/market/checkout/:id</code> ·
+          <code>/market/account</code> ·
+          <code>/market/notifications</code> ·
+          <code>/market/analytics</code><br>
+          <code>/market/customer-service</code> ·
+          <code>/market/refunds</code> ·
+          <code>/market/knowledge</code> ·
+          <code>/market/workflow</code> ·
+          <code>/market/ai-test/sandbox</code> ·
+          <code>/market/ai-test/exam</code> ·
+          <code>/market/dev</code></div>
+      </div>
+    </div>
+    <div class="node-connector">→</div>
+
+    <div class="flow-node prod-step-node" data-prod-step="P1c" data-five-line="prod_web">
+      <div class="node-dot done"></div><div class="node-line"></div>
+      <div class="node-content">
+        <div class="node-head"><span class="node-name">3. 工作台中枢</span><span class="node-tag done">已做</span><span class="node-tag done" style="opacity:.75">26 路由</span></div>
+        <div class="node-desc">/market/workbench/home ≈ 整仓管控 · admin 编排 yuangon/**</div>
+        <div class="node-dept-staff">P-W 网站部 · 主责 <code>workbench-ux-stylist</code> · <code>daily-orchestrator</code> · 协作 <code>task-router-officer</code> · <code>vibe-coding-maintainer</code></div>
+        <div class="node-ok"><strong>工作台（16）</strong><br>
+          <code>/market/workbench/home</code> 三档对话主界面 ·
+          <code>/market/workbench/unified</code> 统一工作台<br>
+          <code>/market/workbench/repository</code> ·
+          <code>/market/workbench/workflow</code> ·
+          <code>/market/workbench/employee</code> ·
+          <code>/market/workbench/integrations</code><br>
+          <code>/market/workbench/employees</code> ·
+          <code>/market/workbench/materials</code> ·
+          <code>/market/workbench/download</code> 双 SKU 下载<br>
+          <code>/market/workbench/change-requests</code> ·
+          <code>/market/workbench/mod/:modId</code> Mod 制作<br>
+          <code>/market/workbench/script-workflows</code> ·
+          <code>/market/workbench/script-workflows/new</code> ·
+          <code>/market/workbench/script-workflows/:id</code> ·
+          <code>/market/workbench/script-workflows/:id/edit</code><br>
+          <code>/market/workbench/shell/:target?/:id?</code> WorkbenchShell<br>
+          <strong>管理后台 admin（10）</strong><br>
+          <code>/market/admin/database</code> ·
+          <code>/market/admin/duty-employees</code> ·
+          <code>/market/admin/ops-audit</code> ·
+          <code>/market/admin/employee-autonomy</code><br>
+          <code>/market/admin/change-requests</code> ·
+          <code>/market/admin/yuangon-onboard</code> ·
+          <code>/market/admin/orchestrate-jobs</code> ·
+          <code>/market/admin/customer-service</code><br>
+          <code>/market/admin/butler-skills</code> ·
+          <code>/market/admin/ai-accounts</code></div>
+      </div>
+    </div>
+    <div class="node-connector">→</div>
+
+    <div class="flow-node prod-step-node" data-prod-step="P1d" data-five-line="prod_web">
+      <div class="node-dot done"></div><div class="node-line"></div>
+      <div class="node-content">
+        <div class="node-head"><span class="node-name">4. MODstore 后端</span><span class="node-tag done">已做</span></div>
+        <div class="node-desc">/api/* · /v1/* · FastAPI · Java 支付 · OpenAPI</div>
+        <div class="node-dept-staff">P-W 网站部 · 主责 <code>modstore-backend-api</code> · <code>java-payment-bridge-officer</code> · 协作 <code>employee-pack-curator</code></div>
+        <div class="node-ok"><strong>HTTP 入口</strong>
+          <code>/api/*</code> ·
+          <code>/v1/*</code> ·
+          <code>/docs</code> OpenAPI ·
+          <code>/api/realtime/ws</code> ·
+          <code>/api/asr/funasr</code> ·
+          <code>/api/health</code><br>
+          <strong>API 域</strong> /api/market/* catalog · facets · buy · download ·
+          /api/market/workbench/* · /api/workbench/* · /api/admin/* ·
+          /api/ops/orchestrate/* · /api/admin/production-line/* · payment · auth · intake<br>
+          <strong>仓库</strong> modstore_server/ · java_payment_service/ · app.py · ci-backend-python · deploy.yml</div>
+      </div>
+    </div>
+    <div class="node-connector">→</div>
+
+    <div class="flow-node prod-step-node" data-prod-step="P1e" data-five-line="prod_web">
+      <div class="node-dot done"></div><div class="node-line"></div>
+      <div class="node-content">
+        <div class="node-head"><span class="node-name">5. 文档 · SEO</span><span class="node-tag done">已做</span><span class="node-tag done" style="opacity:.75">17+13 URL</span></div>
+        <div class="node-desc">docs.xiu-ci.com MkDocs · sitemap 收录 · 站长验证</div>
+        <div class="node-dept-staff">P-W 网站部 · 主责 <code>doc-knowledge-curator</code> · <code>seo-sitemap-curator</code></div>
+        <div class="node-ok"><strong>docs.xiu-ci.com（17 页 · mkdocs.yml nav）</strong><br>
+          首页 DOCUMENTATION_MAP · 快速启动 · 产品用户流程 · 可交付产品<br>
+          系统架构 · 功能地图 · 技术栈 · 新功能落点 · 部署 · 双 SKU 发版 · Android · 依赖锁定 · 限流<br>
+          客户交付 · 迁移登记 · 验收治理 · 覆盖率提升 · 容量规划 · 性能基线<br>
+          <strong>sitemap.xml（13 URL）</strong> 上列 12 静态页 + docs 首页<br>
+          <strong>SEO 资产</strong> robots.txt · baidu_urls.txt · BingSiteAuth.xml · baidu_verify_*.html · siteKnowledge.ts</div>
+      </div>
+    </div>
+    <div class="node-connector">→</div>
+
+    <div class="flow-node prod-step-node" data-prod-step="P1f" data-five-line="prod_web">
+      <div class="node-dot done"></div>
+      <div class="node-content">
+        <div class="node-head"><span class="node-name">6. nginx · 全站部署</span><span class="node-tag done">已做</span></div>
+        <div class="node-desc">nginx-xiu-ci.conf · 路由到静态 / market / API</div>
+        <div class="node-dept-staff">P-W 网站部 · 主责 <code>nginx-config-engineer</code> · <code>deploy-release-officer</code></div>
+        <div class="node-ok"><strong>nginx location 映射</strong><br>
+          <code>/</code> <code>/*.html</code> 营销静态 ·
+          <code>/market/</code> market/dist SPA ·
+          <code>/new/</code> 实验前端<br>
+          <code>/api/</code> <code>/v1/</code> → :9999 modstore ·
+          <code>/docs</code> OpenAPI ·
+          <code>/hf-hub/</code> ASR 模型<br>
+          <strong>CI 部署</strong> ci-marketing-site · marketing-live-deploy · ci-market · market-live-deploy · ci-backend-python · deploy.yml</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="loop loop--five-line" data-five-line="prod_mod">
+  <div class="loop-header">
+    <div class="loop-icon build">📦</div>
+    <div>
+      <div class="loop-title prod-m">P-M · 用户 Mod 制作维护</div>
+      <div class="loop-subtitle">Craft 13 步 · catalog · Mod OTA</div>
+    </div>
+    <div class="loop-progress">
+      <div class="loop-progress-num build" id="five-rate-pm">86%</div>
+      <div class="loop-progress-label">自动化率</div>
+    </div>
+  </div>
+  <p class="loop-map-legacy">映射 legacy：<code>P2</code> Craft 段 · <code>P3</code> 沙盒 · <code>P6</code> Mod OTA</p>
+  <div class="loop-body s-axis">
+
+    <div class="flow-node prod-step-node" data-prod-step="P2" data-five-line="prod_mod">
+      <div class="node-dot done"></div><div class="node-line"></div>
+      <div class="node-content">
+        <div class="node-head"><span class="node-name">1. Craft 13 步员工包流水线</span><span class="node-tag done">已做</span></div>
+        <div class="node-desc">intent-analyst → … → hex-quality-assessor · .xcemp 上架</div>
+        <div class="node-dept-staff">P-M Mod 部 · 主责 <code>intent-analyst</code> · <code>employee-planner</code> · <code>artifact-generator</code> · <code>quality-validator</code> · <code>miniapp-builder</code> · <code>script-binder</code> · <code>workflow-automator</code> · <code>pack-registrar</code> · <code>sandbox-tester</code> · <code>code-validator</code> · <code>self-checker</code> · <code>host-checker</code> · <code>hex-quality-assessor</code> · 协作 <code>vibe-coding-maintainer</code></div>
+        <div class="node-ok">✅ MODstore craft 13 步流水线 + employee_asset_pipeline.py<br>✅ pack-registrar 五维审核 + workbench catalog 入库<br>✅ mods-and-eskill-curator · yuangon/craft-workshop/</div>
+      </div>
+    </div>
+    <div class="node-connector">→</div>
+
+    <div class="flow-node prod-step-node" data-prod-step="P3" data-five-line="prod_mod">
+      <div class="node-dot done"></div><div class="node-line"></div>
+      <div class="node-content">
+        <div class="node-head"><span class="node-name">2. Mod 沙盒与测试</span><span class="node-tag done">已做</span></div>
+        <div class="node-desc">mod-sandbox-smoke · sandbox-tester · code-validator</div>
+        <div class="node-dept-staff">P-M Mod 部 · 主责 <code>sandbox-tester</code> · <code>code-validator</code> · <code>self-checker</code> · 协作 <code>test-qa-runner</code> · <code>mods-and-eskill-curator</code></div>
+        <div class="node-ok">✅ modstore-tests + mod-sandbox-smoke (Dockerfile.mod-sandbox)<br>✅ sandbox-tester Mock 执行 · self-checker 隔离自检</div>
+      </div>
+    </div>
+    <div class="node-connector">→</div>
+
+    <div class="flow-node prod-step-node" data-prod-step="P6" data-five-line="prod_mod">
+      <div class="node-dot done"></div>
+      <div class="node-content">
+        <div class="node-head"><span class="node-name">3. Mod OTA 与索引</span><span class="node-tag done">已做</span></div>
+        <div class="node-desc">mod-ota-publish · generate_mods_index · 宿主拉取更新</div>
+        <div class="node-dept-staff">P-M Mod 部 · 主责 <code>push-update-context-officer</code> · <code>pack-registrar</code></div>
+        <div class="node-ok">✅ mod-ota-publish.yml → generate_mods_index.py + 可选 COS 上传<br>✅ stage-bundled-mods + verify-bundled-mods 按 SKU 打包 Mod</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="loop loop--five-line" data-five-line="prod_software">
+  <div class="loop-header">
+    <div class="loop-icon build">💻</div>
+    <div>
+      <div class="loop-title prod-s">P-S · 通用软件线</div>
+      <div class="loop-subtitle">personal + enterprise · Win / macOS / Android / iOS</div>
+    </div>
+    <div class="loop-progress">
+      <div class="loop-progress-num build" id="five-rate-ps">68%</div>
+      <div class="loop-progress-label">自动化率</div>
+    </div>
+  </div>
+  <p class="loop-map-legacy">映射 legacy：<code>P2</code> 核心段 · <code>P3</code>–<code>P10</code> · 四发布渠道（Docker/K8s 不计入）</p>
+  <div class="loop-body s-axis">
+
+    <div class="flow-node prod-step-node" data-prod-step="P2" data-five-line="prod_software">
+      <div class="node-dot done"></div><div class="node-line"></div>
+      <div class="node-content">
+        <div class="node-head"><span class="node-name">1. AI 核心编码（FHD / Vibe）</span><span class="node-tag done">已做</span></div>
+        <div class="node-desc">fhd-core-maintainer · vibe-coding · O7 反馈驱动 CR/PR</div>
+        <div class="node-dept-staff">P-S 软件部 · 主责 <code>fhd-core-maintainer</code> · <code>vibe-coding-maintainer</code></div>
+        <div class="node-ok">✅ fhd-core-maintainer (FHD/app + tests) + fhd-core-coding-loop.yml<br>✅ vibe-coding (180 源文件) + ci-auto-merge<br>🆕 git 提交：<code>cr_git_pipeline</code> apply CR → <code>employees/&lt;id&gt;</code> 分支 → <code>git commit「apply CR-&lt;id&gt;」</code> → <code>gh PR</code>（MODSTORE_CR_GIT_* 默认全开）<br>✅ code_editor.py · service_bridge.py 跨服务编排</div>
+      </div>
+    </div>
+    <div class="node-connector">→</div>
+
+    <div class="flow-node prod-step-node" data-prod-step="P3" data-five-line="prod_software">
+      <div class="node-dot done"></div><div class="node-line"></div>
+      <div class="node-content">
+        <div class="node-head"><span class="node-name">2. 自动测试（宿主）</span><span class="node-tag done">已做</span></div>
+        <div class="node-desc">FHD pytest / vitest / Playwright · 覆盖率 70% 门禁</div>
+        <div class="node-dept-staff">P-S 软件部 · 主责 <code>test-qa-runner</code> · 协作 <code>sandbox-tester</code> · <code>code-validator</code> · <code>self-checker</code></div>
+        <div class="node-ok node-gap--collapsible"><button type="button" class="node-gap-toggle">展开详情</button><div class="node-gap-body">✅ CI pytest + modstore-tests + mod-sandbox-smoke (Dockerfile.mod-sandbox)<br>✅ FHD 后端 CI 窄包门禁 70% + backend-coverage-report（全量 app 观测）<br>✅ COVERAGE_RAMP C1：telemetry coverage_drop + test_coverage_ramp_* 补测 + advisory fail_under=40<br>✅ 369 个测试文件 + 133 个 phase_* 渐进测试 + 6 个 integration 端到端<br>✅ test-qa-coverage-ramp.yml + test-qa-runner skill-generate-pytest-stub<br>✅ Phase ramp：阶段 0 ~38% → … → 阶段 4 目标 90%（<strong>measured core 90% ✅ / full app 77.4% 未达</strong>）<br>✅ 双口径 SSOT：<code>xcmax-pytest-coverage.json</code> · <code>scripts/coverage_dual_summary.py</code><br>✅ mypy ignore_missing_imports=false（已修正） + tests.* 按错误码精细放行</div></div>
+      </div>
+    </div>
+    <div class="node-connector">→</div>
+
+    <div class="flow-node prod-step-node" data-prod-step="P4" data-five-line="prod_software">
+      <div class="node-dot partial"></div><div class="node-line"></div>
+      <div class="node-content">
+        <div class="node-head"><span class="node-name">3. 四渠道构建打包</span><span class="node-tag partial">部分</span></div>
+        <div class="node-desc">2 SKU · Windows · macOS · Android · iOS（待建）</div>
+        <div class="node-dept-staff">P-S 软件部 · 主责 <code>pack-registrar</code> · <code>deploy-release-officer</code> · 协作 <code>mobile-android-release-officer</code></div>
+        <div class="node-ok">✅ release-desktop.yml：Windows + macOS (Intel/Apple Silicon)<br>✅ ci-mobile-android.yml + release-android.yml：双 applicationId APK<br>✅ build-all-skus.ps1 · stage-sku-download-folders.ps1<br>✅ Android APP 备案已通过（工信部 · 2026-06）<br>🟡 iOS App Store 工程 + release-ios.yml 待建<br>ℹ️ release-web / Docker / K8s 仅开发内测，非 C 端发布渠道</div>
+      </div>
+    </div>
+    <div class="node-connector">→</div>
+
+    <div class="flow-node prod-step-node" data-prod-step="P5" data-five-line="prod_software">
+      <div class="node-dot done"></div><div class="node-line"></div>
+      <div class="node-content">
+        <div class="node-head"><span class="node-name">4. 渠道发布</span><span class="node-tag done">已做</span></div>
+        <div class="node-desc">GitHub Release · update.xcagi.com · COS 同步 · 双 SKU 目录</div>
+        <div class="node-dept-staff">P-S 软件部 · 主责 <code>deploy-release-officer</code> · <code>change-request-auditor</code> · 协作 <code>mobile-android-release-officer</code> · <code>mobile-ios-release-officer</code></div>
+        <div class="node-ok">✅ release-desktop + release-web + deploy.yml (rolling/canary/blue-green)<br>🆕 <strong>灰度发布</strong>：<code>XCAGI_DEPLOY_STRATEGY=canary</code>（默认）→ 先 staging 验证 → 金丝雀 10% 流量 + HPA 自动扩缩 → 校验通过推进 production<br>✅ DEPLOY_BG_AUTO_PROMOTE + scripts/k8s/promote-blue-green.sh 自动切流到 green<br>✅ semantic-release.yml 语义化版本 + auto_version_bump 协同<br>✅ XCAGI_RELEASE_AI_GATE 门控发版（遥测 release_candidate）<br>ℹ️ <strong>installer 日</strong>：release_train orchestrator 触发全量构建（非仅 GitHub tag）</div>
+      </div>
+    </div>
+    <div class="node-connector">→</div>
+
+    <!-- sync: P6 子流程须与时间轨 #s-workflow · emp-wf-radial-graph.js 同步 -->
+    <div class="flow-node prod-step-node" data-prod-step="P6" data-five-line="prod_software">
+      <div class="node-dot done"></div><div class="node-line"></div>
+      <div class="node-content">
+        <div class="node-head"><span class="node-name">5. P6 推送更新</span><span class="node-tag done">已做</span></div>
+        <div class="node-desc">P5 发布后 · electron-updater / COS · push-update-context-officer</div>
+        <div class="node-dept-staff">P-S 软件部 · 主责 <code>push-update-context-officer</code> · 协作 <code>deploy-release-officer</code></div>
+        <div class="node-ok">✅ electron-updater + Ed25519 签名<br>✅ upload-release-skus.ps1（SSH → update.xcagi.com updater feed）<br>🆕 publish_installer.py（release-desktop.yml · cos-publish）：安装包推 <code>dl.xiu-ci.com/xcagi-v10.0.0</code> + 回写下载版本 SSOT（<code>FHD/config/download_release.json</code>）+ 官网 <code>/download-release.json</code>（下载页 fetch，无需重建即生效）<br>✅ macOS 公证：APPLE_* 可选（notarize.cjs）<br>ℹ️ <strong>installer 日</strong>（×.×.N.0 · 每 10 日）：P5 构建 → P6 推 COS → 回写下载 SSOT，全量覆盖 Win/Mac/Android 官网下载页（v10 锁恒 10.0.0）</div>
+      </div>
+    </div>
+    <div class="node-connector">→</div>
+
+    <div class="flow-node prod-step-node" data-prod-step="P6G" data-five-line="prod_software">
+      <div class="node-dot done"></div><div class="node-line"></div>
+      <div class="node-content">
+        <div class="node-head"><span class="node-name">5a. 每30日 · 0.0.3.0 门禁</span><span class="node-tag done">已做</span></div>
+        <div class="node-desc"><code>day_index % 30 = 0</code> · release_train 第3段 <code>0.0.3.0</code></div>
+        <div class="node-dept-staff">P-S 软件部 · 主责 <code>push-update-context-officer</code> · <code>daily-orchestrator</code></div>
+        <div class="node-ok">✅ 与时间轨 P6G 决策节点对齐 · 是 → Desktop+App 弹窗 · 否 → 直接进入 P7 监控</div>
+      </div>
+    </div>
+    <div class="node-connector">→</div>
+
+    <div class="flow-node prod-step-node" data-prod-step="P6POP" data-five-line="prod_software">
+      <div class="node-dot done"></div><div class="node-line"></div>
+      <div class="node-content">
+        <div class="node-head"><span class="node-name">5b. Desktop+App 更新弹窗</span><span class="node-tag done">已做</span></div>
+        <div class="node-desc">Electron 桌面 · Android/iOS WebView · 用户可见更新提示</div>
+        <div class="node-dept-staff">P-S 软件部 · 主责 <code>push-update-context-officer</code> · 协作 <code>mobile-android-release-officer</code> · <code>mobile-ios-release-officer</code></div>
+        <div class="node-ok">✅ 30 日门禁命中时分发弹窗更新 · 对齐日更轨 P6POP 节点</div>
+      </div>
+    </div>
+    <div class="node-connector">→</div>
+
+    <div class="flow-node prod-step-node" data-prod-step="P6PW" data-five-line="prod_software">
+      <div class="node-dot done"></div><div class="node-line"></div>
+      <div class="node-content">
+        <div class="node-head"><span class="node-name">5c. P-W 网站静默自更</span><span class="node-tag done">已做</span></div>
+        <div class="node-desc">与 P6 并行 · 营销站/market 静态资源无弹窗静默更新</div>
+        <div class="node-dept-staff">P-W 网站部 · 主责 <code>site-content-editor</code> · <code>marketing-site-builder</code> · 协作 <code>flask-entry-keeper</code></div>
+        <div class="node-ok">✅ P6 分支 hub → P6PW · 对齐日更轨网站静默自更 · 无 Desktop 弹窗</div>
+      </div>
+    </div>
+    <div class="node-connector">→</div>
+
+    <div class="flow-node prod-step-node" data-prod-step="P7" data-five-line="prod_software">
+      <div class="node-dot done"></div><div class="node-line"></div>
+      <div class="node-content">
+        <div class="node-head"><span class="node-name">6. 运行时监控</span><span class="node-tag done">已做</span></div>
+        <div class="node-desc">异常检测 · 熔断降级 · 日志收集 · 告警 · 自动修复</div>
+        <div class="node-dept-staff">P-S 软件部 · 主责 <code>log-monitor-incident</code> · <code>host-checker</code> · 协作 <code>daily-orchestrator</code></div>
+        <div class="node-ok">✅ K8s 监控栈 (Prometheus + Grafana + Loki + Alertmanager) + 7 条告警规则 (5xx/延迟/支付/堆/连接池)<br>✅ NeuroBus 8 大可靠性机制（去重/限流/熔断/追踪/SLA/Lifeline/DLQ/优先级队列）<br>✅ 应用层 Prometheus 指标（API/AI/物料/熔断器/语义缓存）<br>✅ K8s 健康探针 (liveness/readiness/details + 5 子检查: DB/Redis/AI/PGVector/RASA)<br>✅ HPA 自动扩缩 (min 2 / max 10, CPU/Mem 80%) + 安全上下文 (nonRoot + dropALL + readOnlyFS)<br>✅ auto_fix_loop.py 异常自动修复 + CVE 自动修复 PR (anomaly.detected → daily-orchestrator → CR → PR)<br>✅ incident_bus.py 事件派发 (Redis Streams 双写 + fingerprint 去重 + EmployeeTriggerBinding 匹配)<br>✅ incident_collectors.py 5 种采集器 (pytest 失败/Cursor 日志/nginx error/CI 失败/git push)<br>✅ workflow_scheduler.py 定时采集 (pytest+cursor 5min, nginx 10min, auto_fix 1h)<br>✅ OpenTelemetry 全链路（utils/otel.py + opentelemetry-* 4 依赖）</div>
+      </div>
+    </div>
+    <div class="node-connector">→</div>
+
+    <div class="flow-node prod-step-node" data-prod-step="P8" data-five-line="prod_software">
+      <div class="node-dot done"></div><div class="node-line"></div>
+      <div class="node-content">
+        <div class="node-head"><span class="node-name">7. 自动净化优化</span><span class="node-tag done">已做</span></div>
+        <div class="node-desc">技术债清理 · 依赖更新 · 安全漏洞修复 · 性能优化 · 代码重构</div>
+        <div class="node-dept-staff">P-S 软件部 · 主责 <code>retention-officer</code> · <code>security-secrets-guard</code> · 协作 <code>daily-orchestrator</code></div>
+        <div class="node-ok">✅ CI Bandit + Safety 硬失败（v9.0 CI 安全硬化）<br>✅ gitleaks CI + pre-commit 双重密钥泄露守护<br>✅ Black/isort/Flake8/mypy + arch_fitness.py<br>✅ Dependabot 6 生态覆盖 (pip/npm/maven/github-actions)<br>✅ Runtime Artifacts Guard (CI + pre-commit + PR diff 三重拦截)<br>✅ CVE 自动修复 PR (auto_fix_loop.py: safety/bandit → 解析 CVE → patch → CR → PR)<br>✅ Legacy 终态吸收完成 (app/legacy/ 整个目录删除，75 文件下线，20 分层目标模块上线)<br>✅ 看守规则 (.cursor/rules/no-legacy-archive-names.mdc)<br>✅ TTL/legacy 归档详见 <strong>S-R 归档清理线</strong>（retention-officer 每日 03:15）<br>🟡 P0 架构债推进中：Mod DAL + Litestream 选型、legacy_gaps 待 Phase 2D 拆域、pyproject SSOT、fastapi_app 包化（非收口）<br>ℹ️ legacy_/xcagi_compat_* 路由体按域迁入 domains/（v10.0，Phase 2D 遥测门禁）</div>
+      </div>
+    </div>
+    <div class="node-connector">→</div>
+
+    <div class="flow-node prod-step-node" data-prod-step="P9" data-five-line="prod_software">
+      <div class="node-dot done"></div><div class="node-line"></div>
+      <div class="node-content">
+        <div class="node-head"><span class="node-name">8. 版本演进</span><span class="node-tag done">已做</span></div>
+        <div class="node-desc">AI 决定何时发版 · 自动 bump 版本 · 生成 Changelog · 数据库迁移</div>
+        <div class="node-dept-staff">P-S 软件部 · 主责 <code>deploy-release-officer</code> · <code>dbops-engineer</code> · 协作 <code>push-update-context-officer</code></div>
+        <div class="node-ok">✅ auto_version_bump（MODstore）+ scripts/package/sync-version-anchors.py（FHD 12 锚点）+ verify_version_anchors · sync_v10_closure<br>✅ CHANGELOG + Alembic + VERSION.md 单一事实来源<br>✅ semantic-release.yml（conventional commits → bump 建议 + deploy-release-officer dispatch）<br>✅ <strong>release_train</strong> 四段 SSOT（1.0.0.0 起 · 每日 +0.0.0.1 · 与营销 v10.0 双轨并行）<br>✅ <strong>每 10 日代际演进</strong>（类比 v1→v2→v3）：锚点 <code>1.0.1.0</code> · <code>1.0.2.0</code> …（第 3 段 +1 · G2/G3…）· installer 日触发 P9+P5/P6<br>ℹ️ XCAGI_RELEASE_AI_GATE 门控发版（遥测 release_candidate）</div>
+      </div>
+    </div>
+    <div class="node-connector">→</div>
+
+    <div class="flow-node prod-step-node" data-prod-step="P10" data-five-line="prod_software">
+      <div class="node-dot done"></div>
+      <div class="node-content">
+        <div class="node-head"><span class="node-name">9. AI 自驱迭代</span><span class="node-tag done">已做</span></div>
+        <div class="node-desc">遥测 backlog · O7→P-S · 六线交叉驱动</div>
+        <div class="node-dept-staff">P-S 软件部 · 主责 <code>intake-dispatcher</code> · <code>task-router-officer</code> · <code>daily-orchestrator</code> · 协作 <code>fhd-core-maintainer</code></div>
+        <div class="node-ok">✅ telemetry_backlog_loop + FHD telemetry_production_bridge<br>✅ coverage_drop/error_spike → fhd-core-maintainer<br>✅ ProductionLineOrchestrator 六线映射 + get_five_line_status API<br>✅ 蒸馏训练链 · unified_query_service · ai_product_parser</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+  </div>
+</section>
+
+<section class="region region-shared" aria-labelledby="region-shared-head">
+  <div class="region-head" id="region-shared-head">
+    <div>
+      <h2>共享域 · 1 线</h2>
+      <p>TTL 清理 · 提交门禁 · legacy 归档 · XCMAX 工作区未归类目录</p>
+    </div>
+  </div>
+  <div class="region-lines region-lines--shared">
+
+<div class="loop loop--five-line" data-five-line="shared_retention">
+  <div class="loop-header">
+    <div class="loop-icon shared">🧹</div>
+    <div>
+      <div class="loop-title shared-r">S-R · 归档清理线</div>
+      <div class="loop-subtitle">retention-officer · 每日 03:15 · 覆盖六线未单独计数的产物/归档/禁区</div>
+    </div>
+    <div class="loop-progress">
+      <div class="loop-progress-num shared" id="five-rate-sr">85%</div>
+      <div class="loop-progress-label">自动化率</div>
+    </div>
+  </div>
+  <p class="loop-map-legacy">映射 legacy：<code>P8</code> 净化段 · 员工 <code>retention-officer</code> · <code>security-secrets-guard</code> · <code>log-monitor-incident</code></p>
+  <div class="loop-body s-axis">
+
+    <div class="flow-node prod-step-node" data-prod-step="R1" data-five-line="shared_retention">
+      <div class="node-dot done"></div><div class="node-line"></div>
+      <div class="node-content">
+        <div class="node-head"><span class="node-name">1. TTL 运行时清理</span><span class="node-tag done">已做</span></div>
+        <div class="node-desc">file_retention_janitor · workflow_scheduler 每日 03:15</div>
+        <div class="node-dept-staff">S-R 归档部 · 主责 <code>retention-officer</code></div>
+        <div class="node-ok"><strong>RETENTION_TARGETS（6+）</strong><br>
+          <code>workbench_script_runs/</code> 7d ·
+          <code>market_files/.tmp_chunks/</code> 1d ·
+          <code>webhook_events/*.json</code> 30d<br>
+          <code>.cursor_*_log.txt</code> 14d ·
+          <code>coverage/</code> ·
+          <code>playwright-report/</code> ·
+          <code>test-results/</code> 30d<br>
+          dry-run 默认开 · 单次上限 5GiB · 禁区 secrets/.git/.env</div>
+      </div>
+    </div>
+    <div class="node-connector">→</div>
+
+    <div class="flow-node prod-step-node" data-prod-step="R2" data-five-line="shared_retention">
+      <div class="node-dot done"></div><div class="node-line"></div>
+      <div class="node-content">
+        <div class="node-head"><span class="node-name">2. 提交门禁</span><span class="node-tag done">已做</span></div>
+        <div class="node-desc">禁止运行时产物/密钥进 Git · CI + pre-commit 三重拦截</div>
+        <div class="node-dept-staff">S-R 归档部 · 主责 <code>security-secrets-guard</code></div>
+        <div class="node-ok"><code>ci-runtime-artifacts-guard.yml</code> · gitleaks CI + pre-commit<br>
+          Runtime Artifacts Guard（PR diff + push main）<br>
+          Bandit · Safety · arch_fitness · Dependabot 6 生态</div>
+      </div>
+    </div>
+    <div class="node-connector">→</div>
+
+    <div class="flow-node prod-step-node" data-prod-step="R3" data-five-line="shared_retention">
+      <div class="node-dot done"></div><div class="node-line"></div>
+      <div class="node-content">
+        <div class="node-head"><span class="node-name">3. 工作区 / legacy 归档</span><span class="node-tag done">已做</span></div>
+        <div class="node-desc">XCMAX 根未归类目录 · FHD legacy 退场 · 归档说明</div>
+        <div class="node-dept-staff">S-R 归档部 · 主责 <code>legacy-archive-curator</code> · <code>retention-officer</code></div>
+        <div class="node-ok"><strong>XCMAX 归档/参考</strong>
+          <code>_archive/</code> ·
+          <code>FHD/.archive/</code> ·
+          <code>FHD-个人/</code> ·
+          <code>v7-reference/</code> ·
+          <code>xcagi-{personal,enterprise,offline}/</code><br>
+          <code>release-apk/</code> ·
+          <code>vosk-model-*/</code> ·
+          <code>specs/</code> ·
+          <code>*.tree-data.json</code> ·
+          <code>_personal_sync_bak/</code><br>
+          <strong>Legacy 治理</strong> LEGACY_CLEANUP_TRACKING · legacy-archive.md · no-legacy-archive-names.mdc · app/legacy 已删</div>
+      </div>
+    </div>
+    <div class="node-connector">→</div>
+
+    <div class="flow-node prod-step-node" data-prod-step="R4" data-five-line="shared_retention">
+      <div class="node-dot done"></div>
+      <div class="node-content">
+        <div class="node-head"><span class="node-name">4. 告警触发 · CVE 净化</span><span class="node-tag done">已做</span></div>
+        <div class="node-desc">磁盘告警 · auto_fix_loop · 与 P-S P8 共享编排</div>
+        <div class="node-dept-staff">S-R 归档部 · 主责 <code>log-monitor-incident</code> · <code>daily-orchestrator</code> · 协作 <code>security-secrets-guard</code></div>
+        <div class="node-ok">log-monitor-incident 磁盘告警 → 额外 janitor 触发<br>
+          auto_fix_loop：CVE → patch requirements → CR → PR<br>
+          daily-orchestrator 最小修复队列 · security-secrets-guard 密钥审计<br>
+          🆕 v10.0 R4 partial → done · 与 P-S P8 编排共享</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+  </div>
+</section>
+
+</div>
+
+<div class="intersection">
+  <div class="intersection-title">⚡ 六线交叉驱动 · v10.0</div>
+  <div class="intersection-desc">
+    <strong>O-A 获客</strong> 公域引流 → 企业商机 → 合同收费 → 交付签收 → 对账（O1–O10 全链路 · 88% 自动化）<br>
+    <strong>O-B 伙伴</strong> 投资方生态产品接入 → 联合 catalog → 交付回传 → 只读 Portal → 分润对账（v10.0 五步实装 · 75% 自动化）<br>
+    <strong>O-A</strong> 下达交付单 → <strong>P-W / P-M / P-S</strong> 分别产出网站、Mod、宿主安装包 → 回 <strong>O-A</strong> 签收对账<br>
+    <strong>O-B</strong> 投资方接入 → <code>ecosystem-delivery-reporter</code> 协作 <code>enterprise-adoption-officer</code> → <strong>O-A</strong> 里程碑快照引用<br>
+    用户反馈 (O7) → <strong>P-S / P-M</strong> 编码迭代 · <strong>S-R</strong> 归档清理全仓 TTL/legacy/产物 · 共享脊柱：测试 → 构建 → 发布 → 监控<br>
+    <span style="color:var(--muted)">Docker / K8s / SaaS 自托管仅开发内测，不计入 P-S 四发布渠道</span>
+  </div>
+  <div class="intersection-map">
+    <div class="ix-node sell">O-A 获客 O1–O10</div>
+    <div class="ix-arrow">→</div>
+    <div class="ix-node sell" style="opacity:1">O-B 伙伴 B1–B5</div>
+    <div class="ix-arrow">↔</div>
+    <div class="ix-node build">P-W · P-M · P-S</div>
+    <div class="ix-arrow">→</div>
+    <div class="ix-node sell">O-A 签收 · 对账</div>
+    <div class="ix-arrow" style="opacity:.6">↕</div>
+    <div class="ix-node shared">S-R 归档清理</div>
+  </div>
+  <div style="margin-top:20px;padding:16px 20px;background:var(--bg2);border:1px solid var(--border);border-radius:10px;text-align:left;font-size:11px;line-height:1.8">
+    <div style="font-size:13px;font-weight:700;color:var(--yellow);margin-bottom:8px">🔧 ProductionLineOrchestrator v10.0 — 六线映射 + 单轨合并</div>
+    <div style="color:var(--muted)">production_line_orchestrator.py · <strong>移除 <code>event_primary_facade</code> 双入口</strong> · 单轨事件总线 + 6 线 5/5/6/3/9/4 = 32 步骤 · 失败重试 max_retries=2 · 5 ecosystem-* 员工落编</div>
+    <div style="margin-top:8px;display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div style="padding:8px 12px;background:rgba(88,226,194,0.06);border:1px solid rgba(88,226,194,0.15);border-radius:6px">
+        <div style="color:var(--cyan);font-weight:700;margin-bottom:4px">运营线审批门控 + 执行器（O1–O10）</div>
+        <div style="color:var(--muted);font-size:10px;line-height:1.7">O1 NONE/external · O2 NONE/fhd · O3 NONE/admin · O4 NONE/admin · O5 ADMIN+CI/ci · O6 NONE/fhd · O7 NONE/admin · O8 CI/ci · O9 NONE/admin · O10 NONE/admin</div>
+      </div>
+      <div style="padding:8px 12px;background:rgba(160,255,176,0.06);border:1px solid rgba(160,255,176,0.15);border-radius:6px">
+        <div style="color:var(--green);font-weight:700;margin-bottom:4px">伙伴线审批门控 + 执行器（B1–B5 · v10.0 新增）</div>
+        <div style="color:var(--muted);font-size:10px;line-height:1.7">B1 ADMIN/admin · B2 ADMIN/catalog · B3 ADMIN/ecosystem-delivery-reporter · B4 NONE/portal · B5 ADMIN/ecosystem-revenue-share-reconciler</div>
+      </div>
+    </div>
+    <div style="margin-top:8px;display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div style="padding:8px 12px;background:rgba(210,168,255,0.06);border:1px solid rgba(210,168,255,0.15);border-radius:6px">
+        <div style="color:var(--purple);font-weight:700;margin-bottom:4px">制作线审批门控 + 执行器</div>
+        <div style="color:var(--muted);font-size:10px;line-height:1.7">P1 CI/external · P2 ADMIN+CI/craft · P3 CI/ci · P4 NONE/ci · P5 ADMIN+CI/admin · P6 CI/ci · P7 NONE/fhd · P8 ADMIN/admin · P9 ADMIN+CI/admin · P10 ADMIN/fhd</div>
+      </div>
+      <div style="padding:8px 12px;background:rgba(88,160,255,0.06);border:1px solid rgba(88,160,255,0.15);border-radius:6px">
+        <div style="color:var(--blue);font-weight:700;margin-bottom:4px">共享线审批门控 + 执行器（R1–R4）</div>
+        <div style="color:var(--muted);font-size:10px;line-height:1.7">R1 CI+SCHED/retention-officer · R2 CI/security-secrets-guard · R3 ADMIN/legacy-archive-curator · R4 CI/log-monitor-incident</div>
+      </div>
+    </div>
+    <div style="margin-top:8px;padding:8px 12px;background:rgba(227,179,65,0.06);border:1px solid rgba(227,179,65,0.15);border-radius:6px">
+      <div style="color:var(--yellow);font-weight:700;margin-bottom:4px">v10.0 交叉触发（6 条主路径）</div>
+      <div style="color:var(--muted);font-size:10.5px;line-height:1.85">
+        <span style="color:var(--cyan)">O7 用户反馈</span> → <span style="color:var(--purple)">P2 AI 自动编码</span>（运营反馈驱动制作编码）<br>
+        <span style="color:var(--purple)">P10 AI 自驱迭代</span> → <span style="color:var(--cyan)">O7 用户反馈</span>（制作监控驱动运营反馈）<br>
+        <span style="color:var(--cyan)">O2 留资</span> → <span style="color:var(--green)">B1 投资方接入</span>（同一 lead 触达投资方生态对账）<br>
+        <span style="color:var(--green)">B3 交付回传</span> → <span style="color:var(--cyan)">O8 签收确认</span>（生态交付触发企业签收）<br>
+        <span style="color:var(--blue)">S-R</span> ← 磁盘告警 / CI 产物 / Phase 2D 遥测门禁（全仓 TTL + legacy 归档）<br>
+        <span style="color:var(--purple)">P8 自动净化</span> ↔ <span style="color:var(--blue)">R3 工作区归档</span>（净化结果落到 legacy-archive-curator 调度队列）
+      </div>
+    </div>
+    <div style="margin-top:8px;color:var(--muted)">API: /five-line-status · /status · /run · /steps/{id}/approve · /reject · /stop · /operations-health · /event · <strong>/partner-portal</strong>（v10.0 新增 O-B 只读视图）</div>
+  </div>
+</div>
+
+</div>
+
+<div class="section" id="s-workflow" role="tabpanel" aria-labelledby="nav-workflow">
+<div class="hero emp-wf-hero">
+  <h1>员工工作流程 · 双轨合拢</h1>
+  <div class="sub">无人值守 = <b>时间轨</b>（cron 日根线）+ <b>事件轨</b>（任务/状态驱动）→ 在 08:00 Vibe 双清单与审批门汇合 · 52 人编制 × 六线路径绑定</div>
+  <div class="tagline" id="emp-wf-tagline">加载 release_train 与步骤覆盖…</div>
+
+  <div class="stats-strip-five emp-wf-stats" aria-label="工作流程关键指标">
+    <div class="stat"><div class="stat-num g" id="emp-wf-roster">—</div><div class="stat-label">在岗编制</div></div>
+    <div class="stat"><div class="stat-num c" id="emp-wf-step-pct">—</div><div class="stat-label">步骤主责覆盖</div></div>
+    <div class="stat"><div class="stat-num p" id="emp-wf-path-pct">—</div><div class="stat-label">路径员工绑定</div></div>
+    <div class="stat"><div class="stat-num c" id="emp-wf-release-train">—</div><div class="stat-label">release_train</div></div>
+    <div class="stat"><div class="stat-num b" id="emp-wf-release-kind">daily</div><div class="stat-label">release_kind</div></div>
+  </div>
+</div>
+
+<div class="emp-wf-dual-intro" aria-label="双轨说明">
+  <p><strong>第一部分 · 时间轨</strong>：定时触发（03:15 / 08:00 / 08:15 / 08:25）— 摘要、版本 bump、四产线派发、P3–P9、审批。</p>
+  <p><strong>第二部分 · 事件轨</strong>：业务事件触发（CRM / 支付 / 反馈 / CI / 告警 / 跨线）— 即时 incident 或写入 backlog，在下次 08:00 合并进补丁清单。</p>
+</div>
+
+<section id="emp-wf-rail-time" class="emp-wf-rail-section emp-wf-rail-section--time" aria-labelledby="emp-wf-rail-time-title">
+<h2 class="emp-wf-rail-title" id="emp-wf-rail-time-title">⏱ 第一部分 · 时间轨 · 日根线（北京时间）</h2>
+<details class="emp-wf-timeline-fold" open>
+  <summary class="emp-wf-timeline-summary"><span class="emp-wf-timeline-summary-label">日更时间表 · 03:05 → 08:25 全链路</span><span class="emp-wf-timeline-summary-hint">点击收纳 / 展开</span></summary>
+<div class="emp-wf-timeline" aria-label="日更时间表">
+  <div class="emp-wf-time-node">
+    <div class="emp-wf-time">08:00</div>
+    <div class="emp-wf-time-card">
+      <strong>每日摘要 + Vibe 预备</strong>
+      <span>运维 KPI · 待审分支 · TLS · <b>P-W/P-S/P-App 三端页面截图+分析</b> → <b>对应员工开员工大会讨论</b>（会议摘要）+ <b>三端截图拼成 PPT 作邮件附件</b> → 拼装 digest HTML → 落库 <code>daily_digest_records</code> → 生成「更新清单 + 补丁清单」Markdown → 解析落库 <code>daily_action_items</code> → 驱动 <b>断点清单</b> / <b>路线图</b> AI 看板（单一数据源）。</span>
+    </div>
+  </div>
+  <div class="emp-wf-time-arrow" aria-hidden="true">→</div>
+  <div class="emp-wf-time-node">
+    <div class="emp-wf-time">08:00+</div>
+    <div class="emp-wf-time-card">
+      <strong>release_train +0.0.0.1</strong>
+      <span>摘要落库后 bump 四段 SSOT（<code>last_bump_day</code> 同日幂等 + 历史快照），写入 digest <code>release_kind</code>。</span>
+    </div>
+  </div>
+  <div class="emp-wf-time-arrow" aria-hidden="true">→</div>
+  <div class="emp-wf-time-node">
+    <div class="emp-wf-time">08:00+</div>
+    <div class="emp-wf-time-card">
+      <strong>四产线拆分</strong>
+      <span>按 <code>six_line_employee_map.json</code> 主责路由至 P-W 网站 · P-S 软件 · <b>P-App 移动发布</b> · S-R 归档字段（移动发布岗按员工 ID 显式归入 P-App）。</span>
+    </div>
+  </div>
+  <div class="emp-wf-time-arrow" aria-hidden="true">→</div>
+  <div class="emp-wf-time-node">
+    <div class="emp-wf-time">08:15</div>
+    <div class="emp-wf-time-card">
+      <strong>Phase A · P-S + P-App 补丁派发</strong>
+      <span>解析 WorkUnit → <b>P-S 软件补丁</b> + <b>P-App 移动发布补丁</b> 并行 <code>dispatch_subtasks</code>（不跑 P3–P9）；结果写入 <code>vibe_line_execute_json</code>；<b>派发回写</b> <code>daily_action_items</code> → <code>dispatched</code>。</span>
+    </div>
+  </div>
+  <div class="emp-wf-time-arrow" aria-hidden="true">→</div>
+  <div class="emp-wf-time-node is-future">
+    <div class="emp-wf-time">08:25</div>
+    <div class="emp-wf-time-card">
+      <strong>Phase B · release_train orchestrator</strong>
+      <span>Phase B P-W/S-R 员工派发 · Phase C <code>ProductionLineOrchestrator</code> 子集 · installer/major 日 P9→P5→P6 链（<code>shadow</code> 预览 · <code>primary</code> 真实派发 + git/OpsStagedChange）。</span>
+    </div>
+  </div>
+  <div class="emp-wf-time-arrow emp-wf-time-arrow--muted" aria-hidden="true">→</div>
+  <div class="emp-wf-time-node is-future">
+    <div class="emp-wf-time">07:00</div>
+    <div class="emp-wf-time-card">
+      <strong>legacy orchestrator（shadow）</strong>
+      <span><code>MODSTORE_DAILY_ORCHESTRATOR_DIGEST_MODE=shadow</code> 时仍盲跑观测；切 <code>primary</code> 后停用，改 08:25 消费 digest。</span>
+    </div>
+  </div>
+  <div class="emp-wf-time-arrow emp-wf-time-arrow--muted" aria-hidden="true">→</div>
+  <div class="emp-wf-time-node is-future">
+    <div class="emp-wf-time">×10 日</div>
+    <div class="emp-wf-time-card">
+      <strong>P5/P6 全量 + P9 代际</strong>
+      <span>十日线代际锚点 <code>1.0.1.0</code> · <code>1.0.2.0</code> …（类比 v1→v2→v3）→ P9 版本演进 + 全量安装包推送（P6 推 <code>dl.xiu-ci.com</code> + 回写下载版本 SSOT/官网下载清单）。</span>
+    </div>
+  </div>
+  <div class="emp-wf-time-arrow emp-wf-time-arrow--muted" aria-hidden="true">→</div>
+  <div class="emp-wf-time-node is-future">
+    <div class="emp-wf-time">×100 日</div>
+    <div class="emp-wf-time-card">
+      <strong>major 大推送</strong>
+      <span><code>1.N.0.0</code> · 全 SKU COS 同步 + 扩展 ADMIN/release 审批门（与 installer 日可同日）。</span>
+    </div>
+  </div>
+  <div class="emp-wf-time-arrow emp-wf-time-arrow--muted" aria-hidden="true">→</div>
+  <div class="emp-wf-time-node is-future">
+    <div class="emp-wf-time">B/C</div>
+    <div class="emp-wf-time-card">
+      <strong>git 分支 + P3→P9 编排</strong>
+      <span>Phase B：日更分支与 <code>OpsStagedChange</code> · Phase C：<code>ProductionLineOrchestrator</code> 合并测试发布。</span>
+    </div>
+  </div>
+</div>
+</details>
+
+<p class="emp-wf-diagram-note">
+  <strong>时间轨闭环</strong>：03:05 容灾备份 → 03:15 归档 → 08:00 摘要 + release_train（幂等）+ Vibe 双清单 → <code>daily_action_items</code> → 断点/路线图 AI 看板 → 08:15 Phase A 补丁（派发回写）→ 08:25 Phase B/C → P3–P9 → 审批 → 合并部署（merged 回写 ✅）。
+  <strong>Phase A/B/C 已串联</strong>（shadow 默认预览）。下图为一幅辐射视图全链路图。
+</p>
+<div class="emp-wf-diagram-toolbar" role="toolbar" aria-label="时间轨架构图图例">
+  <details class="emp-wf-diagram-legend-details">
+    <summary>节点图例</summary>
+    <span class="emp-wf-diagram-legend-hint">绿色粗线+箭头为主干，蓝色虚线+箭头为支路，方向均为自上而下。滚轮缩放 · 按住 Space/Shift 或中键/空白左键拖平移 · 双击空白复位。</span>
+  </details>
+</div>
+<div class="emp-wf-diagram-wrap emp-wf-diagram-wrap--radial" id="emp-wf-arch-diagram" aria-label="时间轨架构图">
+  <div id="emp-wf-radial-root" class="emp-wf-radial-root" aria-label="日更全链路辐射视图"></div>
+  <p class="emp-wf-mermaid-part-label" hidden>段 1 · 03:15 + 08:00 摘要与清单</p>
+<pre class="mermaid emp-wf-mermaid" hidden>flowchart TB
+  subgraph T0["03:05–03:15"]
+    BK[03:05 容灾备份]
+    R[03:15 S-R 归档]
+    BK --> R
+  end
+  subgraph T1["08:00"]
+    K[KPI · TLS · IMAP]
+    SW[P-W 截图+分析]
+    SS[P-S 截图+分析]
+    SA[P-App 截图+分析]
+    SW --> M[员工大会摘要]
+    SS --> M
+    SA --> M
+    K --> ASM[digest HTML]
+    M --> ASM
+    ASM --> P[落库]
+    P --> ART[阶段结果文件]
+    P --> RT[release_train +1 幂等]
+    RT --> CENT{百日线?}
+    CENT -->|是| MAJ[major 1.N.0.0]
+    CENT -->|否| V[Vibe 双清单]
+    RT --> V
+    V --> ACT[daily_action_items]
+    ACT --> L[四产线拆分]
+    ACT -.-> GAPS[断点清单 AI 看板]
+    ACT -.-> ROAD[路线图 AI 看板]
+    BL[[事件轨 backlog]] -.M2 合并.-> V
+  end
+  R -.-> L</pre>
+  <p class="emp-wf-mermaid-part-label" hidden>段 2 · 08:15 Phase A + 08:25 Phase B/C</p>
+<pre class="mermaid emp-wf-mermaid" hidden>flowchart TB
+  L[四产线拆分] --> PARSE[解析 WorkUnit]
+  PARSE --> PSA[P-S 补丁 Runner]
+  PARSE --> APPA[P-App 补丁 Runner]
+  PSA --> WB_D[派发回写 dispatched]
+  APPA --> WB_D
+  WB_D -.-> GAPS[断点清单]
+  PSA --> ORCH[release_train orchestrator]
+  APPA --> ORCH
+  ORCH --> PW[P-W 更新]
+  ORCH --> APPB[P-App 更新]
+  ORCH --> SR[S-R Runner]
+  PW --> WB_D
+  APPB --> WB_D
+  SR --> WB_D
+  WB_D -.-> ROAD[路线图]
+  ORCH --> KIND{release_kind?}
+  KIND -->|installer| P9I[P9] --> P5I[P5 全量] --> P6I[P6 OTA]
+  ORCH --> BR[primary 分支]</pre>
+  <p class="emp-wf-mermaid-part-label" hidden>段 3 · 各产线 P2→P9 + 审批门</p>
+<pre class="mermaid emp-wf-mermaid" hidden>flowchart TB
+  PW[P-W 更新] --> P2W[P2 网站]
+  PSA[P-S 补丁] --> P2S[P2 软件]
+  APPA[P-App 补丁] --> P2APP[P2 App 渠道]
+  SR[S-R Runner] --> P2R[P2 归档]
+  P2W --> GATE{十日线?}
+  P2S --> GATE
+  P2APP --> GATE
+  P2R --> GATE
+  GATE -->|是| P9G[P9 代际] --> P5X[P5 全量]
+  GATE -->|否| P3[P3 测试]
+  P3 --> P4
+  P4 --> P5
+  P5 --> P6
+  P6 --> P6PW["P-W 网站静默自更"]
+  P6 --> P6G{"每30日 0.0.3.0?"}
+  P6G -->|是| P6POP["Desktop App 更新弹窗"]
+  P6G -->|否| P7
+  P6POP --> P7
+  P7 --> P8
+  P8 --> P9
+  P9 --> STG[OpsStagedChange]
+  STG --> APPR[审批] --> V10SYNC[版本统一管理 Web·App·软件] --> MERGE[合并部署]
+  MERGE --> WB_M[部署回写 merged]
+  WB_M -.-> GAPS[断点清单]
+  WB_M -.-> ROAD[路线图]</pre>
+  <div id="emp-wf-node-popover" class="emp-wf-node-popover" role="dialog" aria-label="步骤员工" hidden></div>
+</div>
+<div class="emp-wf-cadence-table-wrap" aria-label="双轨版本 cadence">
+  <table class="emp-wf-cadence-table">
+    <thead><tr><th>轨道</th><th>SSOT</th><th>节奏</th><th>动作</th></tr></thead>
+    <tbody>
+      <tr><td>release_train</td><td><code>FHD/config/release_train.json</code></td><td>每日 +0.0.0.1</td><td>六线编码 · digest 绑定 · Vibe 版本头</td></tr>
+      <tr><td>release_train · P6</td><td><code>day_index % 30 = 0</code> · 第3段 <code>0.0.3.0</code></td><td>每 30 日</td><td>Desktop+App 更新弹窗 · P-W 网站静默自更（无弹窗）</td></tr>
+      <tr><td>release_train</td><td>第 4 段 = 0 · 第 3 段 +1</td><td>每 10 日 ×.×.N.0</td><td><strong>十日线代际</strong> G1→G2…（类比 v1→v2）· 锚点 <code>1.0.1.0</code> · P9 演进 + P5/P6 全量</td></tr>
+      <tr><td>release_train</td><td>day_index % 100 = 0</td><td>每 100 日 1.N.0.0</td><td>major · 全 SKU 同步 + 扩展审批门</td></tr>
+      <tr><td>合并门禁 · 全端 SSOT</td><td><code>VERSION.md</code> · <code>verify_version_anchors.py</code> · <code>sync_v10_closure.py</code></td><td>审批后 · 合并前</td><td>网站/Web 壳 · Android App · 桌面软件 · Mod 宿主营销锚点统一收口；<strong>不含</strong> release_train 日更 / electron-updater / P-W 静默自更等独立 OTA</td></tr>
+      <tr><td>营销锚点</td><td><code>VERSION.md</code> / pyproject</td><td>人工/semantic-release</td><td>保持 v10.0 · 与 release_train 并行</td></tr>
+    </tbody>
+  </table>
+</div>
+<div class="emp-wf-phase-legend" aria-label="阶段图例">
+  <span class="emp-wf-legend-item emp-wf-legend-item--done">T1 · 08:00 摘要（三端截图+分析 → 员工大会讨论 + PPT 附件）+ release_train + Vibe + 四产线（含 P-App）</span>
+  <span class="emp-wf-legend-item emp-wf-legend-item--active">Phase A · P-S + P-App 补丁派发</span>
+  <span class="emp-wf-legend-item emp-wf-legend-item--active">Phase B · P-W/S-R WorkUnit 派发（08:25）</span>
+  <span class="emp-wf-legend-item emp-wf-legend-item--active">Phase C · installer 日 P9→P5→P6 员工链</span>
+  <span class="emp-wf-legend-item emp-wf-legend-item--active">Phase B · git 分支 + OpsStagedChange（primary 模式 · PR <code>release_gate</code>）</span>
+  <span class="emp-wf-legend-item emp-wf-legend-item--active">installer 日 · 每 10 日 P5/P6 全量（员工已串联）</span>
+  <span class="emp-wf-legend-item emp-wf-legend-item--next">major 日 · 每 100 日 1.N.0.0 大推送</span>
+</div>
+<div class="emp-wf-stage-artifacts-wrap" aria-label="日更闭环阶段结果文件">
+  <h3 class="emp-wf-stage-artifacts-title">📁 阶段结果文件 · 回测/回修/容灾产物（最新一跑）</h3>
+  <div id="emp-wf-stage-artifacts" class="emp-wf-stage-artifacts"></div>
+</div>
+</section>
+
+<section id="emp-wf-event-rail" class="emp-wf-rail-section emp-wf-rail-section--event" aria-labelledby="emp-wf-event-rail-title">
+<h2 class="emp-wf-rail-title" id="emp-wf-event-rail-title">⚡ 第二部分 · 事件轨 · 任务驱动</h2>
+<p class="emp-wf-diagram-note">
+  <strong>事件轨</strong>：O-A/O-B 运营伙伴 + CI/告警/跨线 → <code>six_line_event_router</code> →
+  <code>incident_bus</code> 即时派发 <b>或</b> <code>six_line_digest_backlog.jsonl</code>（<strong>M2 已接线</strong>：08:00 Vibe 合并进补丁清单）。
+  日更图不画 O1–O10 是因运营链走本轨，在 Vibe 双清单与员工执行处汇合。
+</p>
+<div class="stats-strip-five emp-wf-stats emp-wf-stats--inline" aria-label="事件轨指标" id="event-rail-stats">
+  <div class="stat"><div class="stat-num c" id="er-ops-routes">—</div><div class="stat-label">运营/伙伴路由</div></div>
+  <div class="stat"><div class="stat-num p" id="er-cross-routes">—</div><div class="stat-label">交叉路由</div></div>
+  <div class="stat"><div class="stat-num y" id="er-backlog">—</div><div class="stat-label">backlog 积压</div></div>
+  <div class="stat"><div class="stat-num g" id="er-live">—</div><div class="stat-label">路由服务</div></div>
+</div>
+<div class="emp-wf-diagram-wrap emp-wf-diagram-wrap--event" aria-label="双轨合流架构图">
+<pre class="mermaid emp-wf-mermaid emp-wf-event-mermaid">flowchart TB
+  subgraph EVENT["事件轨"]
+    E1[O1-O10 / B1-B5]
+    E2[incident 40+ 类型]
+    E3[cross_line 交叉]
+    R[six_line_event_router]
+    E1 --> R
+    E2 --> R
+    E3 --> R
+  end
+  R -->|P0/P1| IB[incident_bus]
+  R -->|可等日更| BL[backlog.jsonl]
+  subgraph TIME["汇入时间轨"]
+    T1[08:00 Vibe 补丁 MD]
+    T2A[08:15 Phase A]
+  end
+  BL --> T1
+  IB -.紧急.-> T2A
+  T1 --> T2A</pre>
+</div>
+<div class="emp-wf-grid" id="er-routes-grid" aria-label="事件路由摘要">
+  <div class="emp-wf-card">
+    <div class="emp-wf-card-head"><span class="emp-wf-badge emp-wf-badge--route">O-A</span> 获客</div>
+    <ul class="emp-wf-list" id="er-list-oa">
+      <li>O7 反馈 → backlog（P-S 补丁）+ change_request</li>
+      <li>O4/O10 → <code>payment.anomaly</code>（P0）</li>
+    </ul>
+  </div>
+  <div class="emp-wf-card">
+    <div class="emp-wf-card-head"><span class="emp-wf-badge emp-wf-badge--route">O-B</span> 伙伴</div>
+    <ul class="emp-wf-list" id="er-list-ob">
+      <li>B1/B3/B5 → incident</li>
+      <li>B3→O8 交叉签收</li>
+    </ul>
+  </div>
+  <div class="emp-wf-card">
+    <div class="emp-wf-card-head"><span class="emp-wf-badge emp-wf-badge--route">制作</span> P-S / P-M</div>
+    <ul class="emp-wf-list" id="er-list-prod">
+      <li><code>ci.failed</code> → P3</li>
+      <li>Craft 失败 → backlog → P-S</li>
+    </ul>
+  </div>
+  <div class="emp-wf-card">
+    <div class="emp-wf-card-head"><span class="emp-wf-badge emp-wf-badge--doc">SSOT</span> 代码入口</div>
+    <ul class="emp-wf-list">
+      <li><code>FHD/config/six_line_event_routes.json</code></li>
+      <li><code>six_line_event_router.py</code></li>
+      <li><code>POST …/production-line/event</code></li>
+    </ul>
+  </div>
+</div>
+<div class="emp-wf-phase-legend" aria-label="事件轨落地">
+  <span class="emp-wf-legend-item emp-wf-legend-item--done">M1 · 路由 + router + cross_line 钩子</span>
+  <span class="emp-wf-legend-item emp-wf-legend-item--done">M2 · digest 合并 backlog → 补丁 MD</span>
+  <span class="emp-wf-legend-item emp-wf-legend-item--next">M3 · CI/Grafana webhook 统一入口</span>
+  <span class="emp-wf-legend-item emp-wf-legend-item--next">M5 · primary E2E（O7→次日 Phase A）</span>
+</div>
+</section>
+
+<div class="arch-title">🔀 清单 → 员工 → 产线（双轨共用）</div>
+<div class="emp-wf-grid">
+  <div class="emp-wf-card">
+    <div class="emp-wf-card-head"><span class="emp-wf-badge emp-wf-badge--doc">摘要</span> 08:00 邮件段落</div>
+    <ul class="emp-wf-list">
+      <li><b>运维 KPI</b> · 待审分支 · TLS 证书 · IMAP 告警</li>
+      <li><b>P-W 网站</b> · 首页 / 产品 / 联系 · 桌面截图 + console + <b>对应员工 AI 分析</b></li>
+      <li><b>P-S 软件</b> · <code>/market/about</code> · 下载 · AI 市场 + 分析</li>
+      <li><b>P-App 移动</b> · 同上关键页 · 390×844 视口 + Mobile UA + 分析</li>
+      <li><b>员工大会</b> · 三端结果作议题 · 召集 lane 对应员工讨论 → bench 会议摘要</li>
+      <li><b>PPT 附件</b> · 三端截图 + 每页分析拼成 <code>.pptx</code> 随邮件投递</li>
+      <li>模块：<code>daily_digest_surface_audit.py</code> · <code>daily_digest_surface_ppt.py</code></li>
+    </ul>
+  </div>
+  <div class="emp-wf-card">
+    <div class="emp-wf-card-head"><span class="emp-wf-badge emp-wf-badge--doc">输入</span> 双清单 Markdown</div>
+    <ul class="emp-wf-list">
+      <li><b>更新清单</b>：维护 / 文档 / SEO / 流程（偏 P1 / P8）</li>
+      <li><b>补丁清单</b>：需改代码的具体任务（偏 P2，含 P0–P2 优先级）</li>
+      <li>分段格式：<code>## [employee_id]</code> + 条目列表</li>
+    </ul>
+  </div>
+  <div class="emp-wf-card">
+    <div class="emp-wf-card-head"><span class="emp-wf-badge emp-wf-badge--route">路由</span> 四产线拆分</div>
+    <ul class="emp-wf-list">
+      <li><b>P-W</b> · <code>prod_web</code> / 获客网站步骤主责</li>
+      <li><b>P-S</b> · <code>prod_software</code> / 软件与 MOD 核心</li>
+      <li><b>P-App</b> · <code>mobile-android/ios-release-officer</code> / 移动打包 · 渠道发布 · WebView</li>
+      <li><b>S-R</b> · <code>shared_retention</code> / 归档与 TTL</li>
+    </ul>
+  </div>
+  <div class="emp-wf-card">
+    <div class="emp-wf-card-head"><span class="emp-wf-badge emp-wf-badge--run">执行</span> Phase A 派发</div>
+    <ul class="emp-wf-list">
+      <li><b>P-S 补丁</b> + <b>P-App 移动发布补丁</b> · <code>pipeline_step=P1/P2</code></li>
+      <li>每条条目 → 一名员工 <code>SubTask</code></li>
+      <li>幂等：同 <code>base_version</code> 已成功则跳过</li>
+      <li>日志标注当日 <code>release_kind</code>（daily / installer / major）</li>
+    </ul>
+  </div>
+  <div class="emp-wf-card">
+    <div class="emp-wf-card-head"><span class="emp-wf-badge emp-wf-badge--route">编排</span> Phase B · 08:25</div>
+    <ul class="emp-wf-list">
+      <li><code>daily_release_train_orchestrator_job</code></li>
+      <li>消费 digest · 切 <code>auto/daily-*</code> 分支</li>
+      <li><code>shadow</code>：只记录计划 · <code>primary</code>：真实 orchestrator</li>
+      <li>installer/major → P5/P6 dispatch 占位（仍过审批门）</li>
+    </ul>
+  </div>
+  <div class="emp-wf-card">
+    <div class="emp-wf-card-head"><span class="emp-wf-badge emp-wf-badge--doc">双轨</span> release_train SSOT</div>
+    <ul class="emp-wf-list">
+      <li>四段：<code>1.0.0.0</code> 起 · 第 4 段满 10 进 1</li>
+      <li>十日线代际：<code>1.0.1.0</code>=G2≈v2 · <code>1.0.2.0</code>=G3≈v3 …</li>
+      <li>与营销 v10.0 / <code>auto_version_bump</code> 并行</li>
+      <li>API：<code>GET /api/xcmax/release-train</code></li>
+      <li>静态回退：<code>FHD/config/release_train.json</code></li>
+    </ul>
+  </div>
+</div>
+
+<div class="step-employee-panel" id="emp-wf-step-panel" hidden aria-label="六线步骤员工负责（工作流程视图）">
+  <div class="step-employee-summary">
+    <strong>六线流程步骤 → 主责 / 协作员工</strong>
+    <span class="step-employee-meta">与「六线全自动」页同步 · SSOT：<code>FHD/config/six_line_employee_map.json</code></span>
+  </div>
+  <div class="step-employee-binding" id="emp-wf-step-binding"></div>
+  <div class="step-employee-table" id="emp-wf-step-table"></div>
+  <div class="step-employee-foot" id="emp-wf-step-foot"></div>
+</div>
+
+<div class="path-employee-panel" id="emp-wf-path-panel" hidden aria-label="目录路径员工绑定（工作流程视图）">
+  <div class="path-employee-summary">
+    <strong>目录路径 → 主责员工</strong>
+    <span class="path-employee-meta">SSOT：<code>FHD/config/xcmax_path_employee_map.json</code> · 与「目录结构」页同步</span>
+  </div>
+  <div class="path-employee-binding" id="emp-wf-path-binding"></div>
+  <div class="path-employee-foot" id="emp-wf-path-foot"></div>
+</div>
+
+<div class="arch-title">⚙ 配置与运维入口</div>
+<div class="emp-wf-config-grid">
+  <div class="emp-wf-config">
+    <strong>环境变量</strong>
+    <code>MODSTORE_DAILY_MEETING_ENABLED</code> ·
+    <code>MODSTORE_DAILY_SURFACE_AUDIT_ENABLED</code> ·
+    <code>MODSTORE_DAILY_SURFACE_AUDIT_BASE_URL</code> ·
+    <code>MODSTORE_DAILY_VIBE_PREP_ENABLED</code> ·
+    <code>MODSTORE_DAILY_VIBE_LINE_DISPATCH_ENABLED</code> ·
+    <code>MODSTORE_DAILY_VIBE_EXECUTE_ENABLED</code> ·
+    <code>MODSTORE_DAILY_VIBE_EXECUTE_HOUR/MINUTE</code> ·
+    <code>MODSTORE_RELEASE_TRAIN_ENABLED</code> ·
+    <code>MODSTORE_DAILY_ORCHESTRATOR_DIGEST_MODE</code> ·
+    <code>MODSTORE_POST_DEPLOY_SMOKE_CRON_ENABLED</code> ·
+    <code>MODSTORE_POST_DEPLOY_SMOKE_INTERVAL_MIN</code> ·
+    <code>MODSTORE_RELEASE_SLO_HALT</code> ·
+    <code>MODSTORE_INSTALLER_PUSH_ENABLED</code>
+  </div>
+  <div class="emp-wf-config">
+    <strong>后端模块</strong>
+    <code>release_train.py</code> ·
+    <code>daily_digest.py</code> ·
+    <code>daily_digest_surface_audit.py</code> ·
+    <code>digest_vibe_prep.py</code> ·
+    <code>digest_vibe_line_dispatch.py</code> ·
+    <code>digest_vibe_work_units.py</code> ·
+    <code>digest_line_executor.py</code> ·
+    <code>daily_release_train_orchestrator_job.py</code> ·
+    <code>post_deploy_smoke.py</code> ·
+    <code>post_deploy_smoke_job.py</code>
+  </div>
+  <div class="emp-wf-config">
+    <strong>运维 UI</strong>
+    FHD 工作台 → 服务器运维 → 每日摘要 → Vibe 预备（手动重跑清单 / 执行 P-S 补丁派发）
+  </div>
+</div>
+
+</div>
+
+<div class="section" id="s-events" role="tabpanel" aria-labelledby="nav-events" hidden aria-hidden="true">
+<div class="hero event-rail-hero">
+  <h1>事件轨架构 · 任务驱动</h1>
+  <div class="sub">由 <b>事件类型</b> 与路由规则决定结构 — 触发源 → <code>six_line_event_router</code> → incident / backlog → 在 08:00 汇入时间轨（非 cron 时间轴）</div>
+  <div class="tagline" id="event-rail-tagline">加载事件路由 SSOT…</div>
+  <div class="stats-strip-five emp-wf-stats" aria-label="事件轨指标" id="event-arch-stats">
+    <div class="stat"><div class="stat-num c" id="er-ops-routes">—</div><div class="stat-label">运营/伙伴路由</div></div>
+    <div class="stat"><div class="stat-num p" id="er-cross-routes">—</div><div class="stat-label">交叉路由</div></div>
+    <div class="stat"><div class="stat-num y" id="er-backlog">—</div><div class="stat-label">backlog 积压</div></div>
+    <div class="stat"><div class="stat-num g" id="er-live">—</div><div class="stat-label">路由服务</div></div>
+    <div class="stat"><div class="stat-num b" id="er-incident-pending">—</div><div class="stat-label">incident 队列</div></div>
+  </div>
+</div>
+<section id="event-arch-main" class="event-rail-section emp-wf-rail-section--event" aria-label="事件工作逻辑架构">
+  <p class="emp-wf-diagram-note">主图：<strong>内部客服 pipeline → 双轨交付 → 签收收尾 → 签收后维护</strong>（阶段 A–D），节点对齐 <code>xcagi-customer-service-bridge</code> 与 <code>six_line_event_routes</code>；点击节点查看主责/协作员工；可切换「步骤明细」查看路由卡片。</p>
+  <div class="event-view-tabs" role="tablist" aria-label="事件轨视图">
+    <button type="button" class="event-line-tab active" role="tab" aria-selected="true" data-event-view="merged">合并架构</button>
+    <button type="button" class="event-line-tab" role="tab" aria-selected="false" data-event-view="detail">步骤明细</button>
+  </div>
+  <div class="event-line-tabs" role="tablist" aria-label="事件轨业务线" hidden>
+    <button type="button" class="event-line-tab active" role="tab" aria-selected="true" data-event-line="ops_acquisition">O-A 获客</button>
+    <button type="button" class="event-line-tab" role="tab" aria-selected="false" data-event-line="ops_partner">O-B 伙伴</button>
+    <button type="button" class="event-line-tab" role="tab" aria-selected="false" data-event-line="prod_mod">P-M Mod</button>
+  </div>
+  <div id="event-arch-diagram" class="emp-wf-diagram-wrap emp-wf-diagram-wrap--event-arch">
+    <div id="event-arch-root" class="event-arch-root"></div>
+  </div>
+  <div id="event-arch-node-popover" class="emp-wf-node-popover" role="dialog" aria-label="步骤员工" hidden></div>
+</section>
+<div id="event-rail-detail" class="event-rail-detail" aria-label="事件路由明细">
+  <div class="arch-title">O-A · 获客线 · 事件路由</div>
+  <div id="event-rail-ops-oa" class="event-rail-lane"></div>
+  <div class="arch-title">O-B · 伙伴线 · 事件路由</div>
+  <div id="event-rail-ops-ob" class="event-rail-lane"></div>
+  <div class="arch-title">P-M · Mod 线 · 事件路由</div>
+  <div id="event-rail-prod-pm" class="event-rail-lane"></div>
+  <div class="arch-title">跨线 · cross_line</div>
+  <div id="event-rail-cross" class="event-rail-lane"></div>
+  <div class="arch-title">全局 incident 默认</div>
+  <div id="event-rail-incident" class="event-rail-lane"></div>
+</div>
+</div>
+
+
+<div class="section" id="s-monitor" role="tabpanel" aria-labelledby="nav-monitor" hidden aria-hidden="true">
+
+<div class="mon-hero">
+  <div class="mon-hero-title">监控仪表盘 · Grafana / Prometheus / Loki</div>
+  <div class="mon-hero-sub">2026-06-06 · 4 块 Grafana JSON 已落地 · M0 证据链 · staging SLO 待 7 天验收</div>
+  <div class="mon-hero-stats">
+    <div class="mon-hero-stat">
+      <div class="mon-hero-stat-icon" style="background:rgba(255,166,87,0.12);border:1px solid rgba(255,166,87,0.3)">📊</div>
+      <div><div class="mon-hero-stat-num o">4</div><div class="mon-hero-stat-label">Grafana 仪表盘（Provisioning）</div></div>
+    </div>
+    <div class="mon-hero-stat">
+      <div class="mon-hero-stat-icon" style="background:rgba(88,226,194,0.12);border:1px solid rgba(88,226,194,0.3)">⚡</div>
+      <div><div class="mon-hero-stat-num c">Prom</div><div class="mon-hero-stat-label">抓取任务（API / 前端 / DB / 自监控）</div></div>
+    </div>
+    <div class="mon-hero-stat">
+      <div class="mon-hero-stat-icon" style="background:rgba(121,192,255,0.12);border:1px solid rgba(121,192,255,0.3)">📜</div>
+      <div><div class="mon-hero-stat-num b">Loki</div><div class="mon-hero-stat-label">LogQL · 结构化 llm_usage 日志</div></div>
+    </div>
+    <div class="mon-hero-stat">
+      <div class="mon-hero-stat-icon" style="background:rgba(210,168,255,0.12);border:1px solid rgba(210,168,255,0.3)">🔔</div>
+      <div><div class="mon-hero-stat-num g">AM</div><div class="mon-hero-stat-label">Alertmanager · 严重级别 × 团队 双维路由</div></div>
+    </div>
+  </div>
+</div>
+
+<div class="arch-title p">4 块 Grafana 仪表盘 · Live<span class="mon-dash-note" id="mon-dash-live-note"></span></div>
+
+<div class="mon-dash-grid">
+  <div class="mon-dash-card" data-mon-dash="api">
+    <div class="mon-dash-head">
+      <span class="mon-dash-tag graf">GRAF</span>
+      <span class="mon-dash-title">XCAGI · API 总览</span>
+      <span class="mon-dash-status offline">待加载</span>
+    </div>
+    <div class="mon-dash-desc">xcagi-api-overview · RED 指标 · api_request_duration_seconds / api_requests_total</div>
+    <div class="mon-dash-panels">
+    <div class="mon-mini-panel">
+      <div class="mon-mini-panel-title">API 延迟 P95</div>
+      <div class="mon-mini-panel-stat"><span class="mon-mini-panel-num c">—</span><span class="mon-mini-panel-unit"></span></div>
+      <div class="mon-mini-chart"></div>
+    </div>
+    <div class="mon-mini-panel">
+      <div class="mon-mini-panel-title">请求量 / 秒</div>
+      <div class="mon-mini-panel-stat"><span class="mon-mini-panel-num c">—</span><span class="mon-mini-panel-unit"></span></div>
+      <div class="mon-mini-chart"></div>
+    </div>
+    <div class="mon-mini-panel">
+      <div class="mon-mini-panel-title">5xx 错误率</div>
+      <div class="mon-mini-panel-stat"><span class="mon-mini-panel-num c">—</span><span class="mon-mini-panel-unit"></span></div>
+      <div class="mon-mini-chart"></div>
+    </div>
+    <div class="mon-mini-panel">
+      <div class="mon-mini-panel-title">活跃请求</div>
+      <div class="mon-mini-panel-stat"><span class="mon-mini-panel-num c">—</span><span class="mon-mini-panel-unit"></span></div>
+      <div class="mon-mini-chart"></div>
+    </div>
+    </div>
+  </div>
+  <div class="mon-dash-card" data-mon-dash="infra">
+    <div class="mon-dash-head">
+      <span class="mon-dash-tag graf">GRAF</span>
+      <span class="mon-dash-title">XCAGI · 基础设施</span>
+      <span class="mon-dash-status offline">待加载</span>
+    </div>
+    <div class="mon-dash-desc">xcagi-infrastructure · K8s / node_exporter · staging 无 kube-state-metrics 时部分面板为空</div>
+    <div class="mon-dash-panels">
+    <div class="mon-mini-panel">
+      <div class="mon-mini-panel-title">Pod CPU 使用率</div>
+      <div class="mon-mini-panel-stat"><span class="mon-mini-panel-num c">—</span><span class="mon-mini-panel-unit"></span></div>
+      <div class="mon-mini-chart"></div>
+    </div>
+    <div class="mon-mini-panel">
+      <div class="mon-mini-panel-title">Pod 内存</div>
+      <div class="mon-mini-panel-stat"><span class="mon-mini-panel-num c">—</span><span class="mon-mini-panel-unit"></span></div>
+      <div class="mon-mini-chart"></div>
+    </div>
+    <div class="mon-mini-panel">
+      <div class="mon-mini-panel-title">磁盘 /（根分区）</div>
+      <div class="mon-mini-panel-stat"><span class="mon-mini-panel-num c">—</span><span class="mon-mini-panel-unit"></span></div>
+      <div class="mon-mini-chart"></div>
+    </div>
+    <div class="mon-mini-panel">
+      <div class="mon-mini-panel-title">Pod 重启（1 小时）</div>
+      <div class="mon-mini-panel-stat"><span class="mon-mini-panel-num c">—</span><span class="mon-mini-panel-unit"></span></div>
+      <div class="mon-mini-chart"></div>
+    </div>
+    </div>
+  </div>
+  <div class="mon-dash-card" data-mon-dash="mod">
+    <div class="mon-dash-head">
+      <span class="mon-dash-tag graf">GRAF</span>
+      <span class="mon-dash-title">XCAGI · Mod 商店</span>
+      <span class="mon-dash-status offline">待加载</span>
+    </div>
+    <div class="mon-dash-desc">xcagi-mod-store · mod_sqlite_copy_present · Mod API 延迟</div>
+    <div class="mon-dash-panels">
+    <div class="mon-mini-panel">
+      <div class="mon-mini-panel-title">目录 QPS</div>
+      <div class="mon-mini-panel-stat"><span class="mon-mini-panel-num c">—</span><span class="mon-mini-panel-unit"></span></div>
+      <div class="mon-mini-chart"></div>
+    </div>
+    <div class="mon-mini-panel">
+      <div class="mon-mini-panel-title">SQLite 就绪率</div>
+      <div class="mon-mini-panel-stat"><span class="mon-mini-panel-num c">—</span><span class="mon-mini-panel-unit"></span></div>
+      <div class="mon-mini-chart"></div>
+    </div>
+    <div class="mon-mini-panel">
+      <div class="mon-mini-panel-title">NeuroBus 投递率</div>
+      <div class="mon-mini-panel-stat"><span class="mon-mini-panel-num c">—</span><span class="mon-mini-panel-unit"></span></div>
+      <div class="mon-mini-chart"></div>
+    </div>
+    <div class="mon-mini-panel">
+      <div class="mon-mini-panel-title">Mod API P95</div>
+      <div class="mon-mini-panel-stat"><span class="mon-mini-panel-num c">—</span><span class="mon-mini-panel-unit"></span></div>
+      <div class="mon-mini-chart"></div>
+    </div>
+    </div>
+  </div>
+  <div class="mon-dash-card" data-mon-dash="bus">
+    <div class="mon-dash-head">
+      <span class="mon-dash-tag graf">GRAF</span>
+      <span class="mon-dash-title">XCAGI · 神经总线</span>
+      <span class="mon-dash-status offline">待加载</span>
+    </div>
+    <div class="mon-dash-desc">xcagi-neurobus · neurobus_events_* · circuit_breaker_state</div>
+    <div class="mon-dash-panels">
+    <div class="mon-mini-panel">
+      <div class="mon-mini-panel-title">事件量 / 秒</div>
+      <div class="mon-mini-panel-stat"><span class="mon-mini-panel-num c">—</span><span class="mon-mini-panel-unit"></span></div>
+      <div class="mon-mini-chart"></div>
+    </div>
+    <div class="mon-mini-panel">
+      <div class="mon-mini-panel-title">丢失+DLQ 5m</div>
+      <div class="mon-mini-panel-stat"><span class="mon-mini-panel-num c">—</span><span class="mon-mini-panel-unit"></span></div>
+      <div class="mon-mini-chart"></div>
+    </div>
+    <div class="mon-mini-panel">
+      <div class="mon-mini-panel-title">断路器状态</div>
+      <div class="mon-mini-panel-stat"><span class="mon-mini-panel-num c">—</span><span class="mon-mini-panel-unit"></span></div>
+      <div class="mon-mini-chart"></div>
+    </div>
+    <div class="mon-mini-panel">
+      <div class="mon-mini-panel-title">AI 请求 P95</div>
+      <div class="mon-mini-panel-stat"><span class="mon-mini-panel-num c">—</span><span class="mon-mini-panel-unit"></span></div>
+      <div class="mon-mini-chart"></div>
+    </div>
+    </div>
+  </div>
+</div>
+
+<div class="mon-issues">
+  <div class="mon-issues-title">⚠ 已知口径问题（诚实清单）</div>
+  <ul class="mon-issues-list">
+    <li><b>Live 卡片</b>：优先 Grafana render PNG，回退 Prometheus / <code>/metrics</code>；需 <code>bash scripts/serve_xcagi_dashboard.sh</code> + 本地栈或 staging 反代。</li>
+    <li><b>Infra 面板</b>：依赖 <code>kube_*</code> / <code>container_*</code>；纯 Docker 本地栈可能无 K8s 指标。</li>
+    <li><b>M0 证据</b>：下方 PNG 来自 manifest；staging 7 天验收见 <code>specs/BLOCKERS.md T36–T37</code>。</li>
+  </ul>
+</div>
+
+<div class="arch-title b" style="margin-top:28px">M0 证据链 · staging SLO + Mod 试点</div>
+<div id="mon-hero-m0-sub">加载 manifest…</div>
+<div class="mon-evidence-wrap">
+  <div id="mon-m0-evidence" hidden aria-busy="true"></div>
+</div>
+
+</div>
+
+
+<div class="section" id="s-aibiz" role="tabpanel" aria-labelledby="nav-aibiz" hidden aria-hidden="true">
+
+<div class="mon-hero">
+  <div class="mon-hero-title">AI 业务数据 · Token 与请求可观测</div>
+  <div class="mon-hero-sub">2026-06-06 · Prometheus AI 指标 · MODstore 模型目录 · llm_usage 结构化日志 <span id="aibiz-live-status">待加载</span></div>
+  <div class="mon-hero-stats">
+    <div class="mon-hero-stat">
+      <div class="mon-hero-stat-icon" style="background:rgba(210,168,255,0.12);border:1px solid rgba(210,168,255,0.3)">🪙</div>
+      <div><div class="mon-hero-stat-num p">Token</div><div class="mon-hero-stat-label">record_llm_usage · 钱包扣费真相源</div></div>
+    </div>
+    <div class="mon-hero-stat">
+      <div class="mon-hero-stat-icon" style="background:rgba(88,226,194,0.12);border:1px solid rgba(88,226,194,0.3)">📈</div>
+      <div><div class="mon-hero-stat-num c">4</div><div class="mon-hero-stat-label">Prometheus AI 指标族</div></div>
+    </div>
+    <div class="mon-hero-stat">
+      <div class="mon-hero-stat-icon" style="background:rgba(121,192,255,0.12);border:1px solid rgba(121,192,255,0.3)">🤖</div>
+      <div><div class="mon-hero-stat-num b">LLM</div><div class="mon-hero-stat-label">/api/market/llm-catalog 模型价目</div></div>
+    </div>
+    <div class="mon-hero-stat">
+      <div class="mon-hero-stat-icon" style="background:rgba(255,166,87,0.12);border:1px solid rgba(255,166,87,0.3)">💳</div>
+      <div><div class="mon-hero-stat-num o">Wallet</div><div class="mon-hero-stat-label">account-overview · 余额与扣费流水</div></div>
+    </div>
+  </div>
+</div>
+
+<div class="aibiz-toolbar">
+  <div class="arch-title" style="margin:0">实时 AI 指标</div>
+  <button type="button" class="aibiz-refresh-btn" id="aibiz-refresh-btn">↻ 刷新</button>
+</div>
+<div class="aibiz-kpi-grid" id="aibiz-kpi-grid">
+  <div class="aibiz-kpi-card"><div class="aibiz-kpi-title">AI 请求 / 秒</div><div class="aibiz-kpi-row"><span class="aibiz-kpi-num c">—</span><span class="aibiz-kpi-unit">次/秒</span></div><div class="aibiz-kpi-spark"></div></div>
+  <div class="aibiz-kpi-card"><div class="aibiz-kpi-title">AI 错误率</div><div class="aibiz-kpi-row"><span class="aibiz-kpi-num g">—</span><span class="aibiz-kpi-unit">%</span></div><div class="aibiz-kpi-spark"></div></div>
+  <div class="aibiz-kpi-card"><div class="aibiz-kpi-title">聊天首字 P95</div><div class="aibiz-kpi-row"><span class="aibiz-kpi-num p">—</span><span class="aibiz-kpi-unit">ms</span></div><div class="aibiz-kpi-spark"></div></div>
+  <div class="aibiz-kpi-card"><div class="aibiz-kpi-title">AI 延迟 P95</div><div class="aibiz-kpi-row"><span class="aibiz-kpi-num b">—</span><span class="aibiz-kpi-unit">ms</span></div><div class="aibiz-kpi-spark"></div></div>
+  <div class="aibiz-kpi-card"><div class="aibiz-kpi-title">24h 累计 AI 请求</div><div class="aibiz-kpi-row"><span class="aibiz-kpi-num o">—</span><span class="aibiz-kpi-unit">次</span></div><div class="aibiz-kpi-spark"></div></div>
+  <div class="aibiz-kpi-card"><div class="aibiz-kpi-title">累计 AI 请求</div><div class="aibiz-kpi-row"><span class="aibiz-kpi-num y">—</span><span class="aibiz-kpi-unit">次</span></div><div class="aibiz-kpi-spark"></div></div>
+</div>
+<div id="aibiz-live-note"></div>
+
+<div class="aibiz-token-box">
+  <b>Token 消耗说明</b>：单次 LLM 调用的 prompt / completion / total tokens 由 <code>record_llm_usage()</code> 写入结构化日志（含 trace_id、provider、model、latency_ms、estimated_cost_usd、wallet_debit_id）。Prometheus 侧当前以 <code>ai_requests_total</code> 等请求级指标为主；精确 Token 账单以 MODstore 钱包流水 + 日志为准。
+</div>
+
+<div class="arch-title">按 service 拆分 · 5 分钟 rate</div>
+<table class="emp-wf-cadence-table aibiz-table">
+  <thead><tr><th>Service</th><th>成功 req/s</th><th>错误 req/s</th><th>错误率</th></tr></thead>
+  <tbody id="aibiz-service-body"><tr><td colspan="4" class="aibiz-empty">切换到此 Tab 后自动加载…</td></tr></tbody>
+</table>
+
+<details class="aibiz-catalog-details" id="aibiz-catalog-details">
+  <summary class="aibiz-catalog-summary"><span class="arch-title p">模型目录 · Provider / 单价</span><span class="aibiz-catalog-fold-hint">点击展开</span></summary>
+  <div id="aibiz-catalog-body"><div class="aibiz-catalog-loading">展开后加载 llm-catalog…</div></div>
+</details>
+
+<div class="arch-title b" style="margin-top:28px">三端展示 · 网站 / 软件 / App</div>
+<div class="aibiz-triple-note">对接 SW/SS/SA 流程 · 钱包 + llm-catalog + 每日 surface-audit（Playwright PNG）· 服务账号见 XCAGI_AIBIZ_MARKET_* · 点击终端查看全部页面截图。</div>
+<div class="aibiz-triple-grid" id="aibiz-triple-grid">
+  <!-- 网站 · Web -->
+  <div class="aibiz-terminal aibiz-terminal--web" data-terminal="web">
+    <div class="aibiz-terminal-chrome">
+      <span class="aibiz-terminal-dots">●●●</span>
+      <span class="aibiz-terminal-title">网站 · Web</span>
+      <span class="aibiz-terminal-badge">占位</span>
+      <button type="button" class="aibiz-terminal-refresh" data-aibiz-terminal-refresh="web" title="触发 P-W 截图+分析">↻</button>
+    </div>
+    <div class="aibiz-terminal-screen" id="aibiz-terminal-web-screen">
+      <div class="aibiz-terminal-label">网站</div>
+      <div class="aibiz-mock aibiz-mock--web" data-aibiz-mock="web">
+        <div class="aibiz-mock-glow"></div>
+        <div class="aibiz-mock-browserbar">
+          <span class="aibiz-mock-dot r"></span><span class="aibiz-mock-dot y"></span><span class="aibiz-mock-dot g"></span>
+          <span class="aibiz-mock-url"><span class="aibiz-mock-lock">🔒</span>xiu-ci.com/market<span class="aibiz-mock-caret"></span></span>
+        </div>
+        <div class="aibiz-mock-web-body">
+          <div class="aibiz-mock-web-head">
+            <span class="aibiz-mock-web-title">AI 模型市场</span>
+            <span class="aibiz-mock-chip cyan">实时价目</span>
+          </div>
+          <div class="aibiz-mock-kpis">
+            <div class="aibiz-mock-kpi"><span class="k-num c" data-count="128.6" data-dec="1">0</span><span class="k-lbl">Token 万/日</span></div>
+            <div class="aibiz-mock-kpi"><span class="k-num b" data-count="3420">0</span><span class="k-lbl">调用次数</span></div>
+            <div class="aibiz-mock-kpi"><span class="k-num p" data-prefix="¥" data-count="862">0</span><span class="k-lbl">钱包余额</span></div>
+          </div>
+          <div class="aibiz-mock-rows">
+            <div class="aibiz-mock-row"><span class="m-name">GPT-4o</span><span class="m-bar"><i style="--w:86%"></i></span><span class="m-price">¥0.02</span></div>
+            <div class="aibiz-mock-row"><span class="m-name">Claude 3.5</span><span class="m-bar"><i style="--w:72%"></i></span><span class="m-price">¥0.03</span></div>
+            <div class="aibiz-mock-row"><span class="m-name">Gemini 2</span><span class="m-bar"><i style="--w:64%"></i></span><span class="m-price">¥0.01</span></div>
+            <div class="aibiz-mock-row"><span class="m-name">DeepSeek</span><span class="m-bar"><i style="--w:48%"></i></span><span class="m-price">¥0.004</span></div>
+          </div>
+          <div class="aibiz-mock-spark"></div>
+        </div>
+      </div>
+      <div class="aibiz-terminal-foot">xiu-ci.com/market · ModelPaymentView</div>
+    </div>
+  </div>
+  <!-- 软件 · Desktop -->
+  <div class="aibiz-terminal aibiz-terminal--desk" data-terminal="software">
+    <div class="aibiz-terminal-chrome">
+      <span class="aibiz-terminal-dots">●●●</span>
+      <span class="aibiz-terminal-title">软件 · Desktop</span>
+      <span class="aibiz-terminal-badge">占位</span>
+      <button type="button" class="aibiz-terminal-refresh" data-aibiz-terminal-refresh="software" title="触发 P-S 截图+分析">↻</button>
+    </div>
+    <div class="aibiz-terminal-screen" id="aibiz-terminal-desk-screen">
+      <div class="aibiz-terminal-label">软件</div>
+      <div class="aibiz-mock aibiz-mock--desk" data-aibiz-mock="software">
+        <div class="aibiz-mock-glow"></div>
+        <div class="aibiz-mock-winbar">
+          <span class="aibiz-mock-dot r"></span><span class="aibiz-mock-dot y"></span><span class="aibiz-mock-dot g"></span>
+          <span class="aibiz-mock-wintitle">企业助手 · enterprise SKU</span>
+        </div>
+        <div class="aibiz-mock-desk-body">
+          <div class="aibiz-mock-side">
+            <span class="aibiz-mock-navitem active"></span>
+            <span class="aibiz-mock-navitem"></span>
+            <span class="aibiz-mock-navitem"></span>
+            <span class="aibiz-mock-navitem"></span>
+          </div>
+          <div class="aibiz-mock-deskmain">
+            <div class="aibiz-mock-bubble in">mod-store 已就绪 · 12 个企业 Mod</div>
+            <div class="aibiz-mock-bubble out">本月 Token 用量？</div>
+            <div class="aibiz-mock-bubble in typing"><span></span><span></span><span></span></div>
+            <div class="aibiz-mock-meter">
+              <div class="aibiz-mock-meter-head"><span>llm_usage 扣费</span><span class="k-num b" data-prefix="¥" data-count="48.20" data-dec="2">0</span></div>
+              <div class="aibiz-mock-meter-bar"><i style="--w:63%"></i></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="aibiz-terminal-foot">FHD/desktop · enterprise SKU · 127.0.0.1:5001</div>
+    </div>
+  </div>
+  <!-- App · Mobile -->
+  <div class="aibiz-terminal aibiz-terminal--app" data-terminal="app">
+    <div class="aibiz-terminal-chrome">
+      <span class="aibiz-terminal-dots">●●●</span>
+      <span class="aibiz-terminal-title">App · Mobile</span>
+      <span class="aibiz-terminal-badge">占位</span>
+      <button type="button" class="aibiz-terminal-refresh" data-aibiz-terminal-refresh="app" title="触发 P-App 截图+分析">↻</button>
+    </div>
+    <div class="aibiz-terminal-screen" id="aibiz-terminal-app-screen">
+      <div class="aibiz-terminal-label">App</div>
+      <div class="aibiz-mock aibiz-mock--app" data-aibiz-mock="app">
+        <div class="aibiz-mock-phone">
+          <div class="aibiz-mock-notch"></div>
+          <div class="aibiz-mock-phone-screen">
+            <div class="aibiz-mock-statusbar"><span>9:41</span><span class="aibiz-mock-sig"></span></div>
+            <div class="aibiz-mock-appbar">XCAGI 企业版</div>
+            <div class="aibiz-mock-ring">
+              <svg viewBox="0 0 80 80"><circle class="track" cx="40" cy="40" r="32"/><circle class="prog" cx="40" cy="40" r="32"/></svg>
+              <div class="aibiz-mock-ring-num"><span class="k-num p" data-count="78" data-suffix="%">0</span><em>Token 余额</em></div>
+            </div>
+            <div class="aibiz-mock-applist">
+              <div class="aibiz-mock-appcard"><span></span><i style="--w:70%"></i></div>
+              <div class="aibiz-mock-appcard"><span></span><i style="--w:52%"></i></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="aibiz-terminal-foot">mobile-android · WebView</div>
+    </div>
+  </div>
+</div>
+
+
+<div style="margin:24px 0 0;padding:14px 18px;background:linear-gradient(135deg,rgba(88,226,194,0.05),rgba(121,192,255,0.05));border:1px solid rgba(88,226,194,0.2);border-radius:10px;font-size:11px;color:var(--muted);line-height:1.8">
+  <b style="color:var(--cyan)">📊 数据来源</b>：<code>FHD/app/utils/metrics.py</code>（ai_requests_total / ai_request_errors_total / chat_stream_first_byte_seconds / ai_request_duration_seconds） · <code>FHD/app/infrastructure/llm/observability.py</code>（Token 日志） · <code>/api/market/llm-catalog</code> · Prometheus <code>/prometheus</code>
+</div>
+
+</div>
+
+<div class="section" id="s-tree" role="tabpanel" aria-labelledby="nav-tree">
+<div class="arch-title" id="tree-arch-title">XCMAX/ 工作区目录结构 · 2026-06-02</div>
+<div style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.7">
+基于 <code>find</code> 实时扫描 <b>XCMAX</b> 工作区根目录（含 <code>FHD/</code>、<code>成都修茈科技有限公司/</code>、<code>XCAGI/</code>、<code>specs/</code> 等子仓；排除 <code>__pycache__</code> / <code>.venv*</code> / <code>node_modules</code> / <code>build</code> / <code>dist</code> / <code>_tmp_pdx*</code> / <code>.archive</code> / <code>.tools</code>）· 数据驱动渲染 · 支持 <b>搜索 / 类型过滤 / 展开层级 / 全部折叠 / 全部展开</b>
+</div>
+
+<div class="line-coverage-panel" id="line-coverage-panel" hidden aria-label="六线目录归属覆盖率">
+  <div class="line-coverage-summary">
+    <div class="line-coverage-big"><span id="lc-pct">—</span><small>%</small></div>
+    <div class="line-coverage-caption">
+      <strong>六线目录归属覆盖</strong><br>
+      <span id="lc-ratio">—</span> 文件已映射 · 主归属互斥合计 100% · 逻辑归属含重叠
+    </div>
+  </div>
+  <div class="line-coverage-cols">
+    <div class="line-coverage-bars" id="lc-bars-primary"></div>
+    <div class="line-coverage-bars" id="lc-bars-overlap"></div>
+  </div>
+  <div class="line-coverage-foot" id="lc-foot"></div>
+</div>
+
+<div class="path-employee-panel" id="path-employee-panel" hidden aria-label="二级路径员工归属">
+  <div class="path-employee-summary">
+    <strong>二级路径 → 部门 → 主责员工 · 员工系统绑定</strong>
+    <span class="path-employee-meta">FHD / 成都公司 二级分区 + 顶层 · 规则见 <code>FHD/config/xcmax_path_employee_map.json</code> · 编制见 <code>duty_roster.json</code></span>
+  </div>
+  <div class="pe-zone-table" id="pe-zone-table"></div>
+  <div class="path-employee-gaps" id="pe-gaps-list"></div>
+  <div class="path-employee-binding" id="pe-employee-binding" hidden aria-label="员工系统三元绑定"></div>
+  <div class="path-employee-foot" id="pe-duty-foot"></div>
+</div>
+
+<div class="tree-wrap">
+
+<div class="tree-toolbar">
+  <span class="tt-title">🌲 XCMAX/ 工作区</span>
+  <input id="tree-search" type="text" placeholder="🔍 搜索路径/文件名（支持 .py / auth / xxx.ts）" style="flex:1;min-width:180px;padding:6px 10px;background:rgba(255,255,255,0.05);border:1px solid var(--border2);border-radius:4px;color:var(--fg);font-family:inherit;font-size:11px;outline:none;transition:all .15s"/>
+  <select id="tree-ext" style="padding:6px 10px;background:rgba(255,255,255,0.05);border:1px solid var(--border2);border-radius:4px;color:var(--fg);font-family:inherit;font-size:11px;outline:none;cursor:pointer">
+    <option value="">所有类型</option>
+    <option value=".py">🐍 .py</option>
+    <option value=".vue">💚 .vue</option>
+    <option value=".ts">🔷 .ts</option>
+    <option value=".tsx">🔷 .tsx</option>
+    <option value=".js">🟨 .js</option>
+    <option value=".json">📋 .json</option>
+    <option value=".yml">⚙️ .yml/.yaml</option>
+    <option value=".toml">⚙️ .toml</option>
+    <option value=".md">📖 .md</option>
+    <option value=".html">🌐 .html</option>
+    <option value=".css">🎨 .css</option>
+    <option value=".xlsx">📊 .xlsx</option>
+    <option value=".csv">📊 .csv</option>
+    <option value=".sql">🗄️ .sql</option>
+    <option value=".sh">🐚 .sh/.bat</option>
+  </select>
+  <span class="tt-stat">目录 <b id="tt-dirs">—</b></span>
+  <span class="tt-stat">文件 <b id="tt-files">—</b></span>
+  <span class="tt-stat">大小 <b id="tt-size">—</b></span>
+  <span class="tt-stat">显示 <b id="tt-shown">—</b></span>
+  <button class="tt-btn" data-act="expand-all">全部展开</button>
+  <button class="tt-btn" data-act="collapse-all">全部折叠</button>
+  <button class="tt-btn" data-act="expand-2">展开 2 层</button>
+  <button class="tt-btn" data-act="expand-3">展开 3 层</button>
+</div>
+
+<div class="tree-body" id="tree-body" tabindex="0">
+  <div class="tree-col-head" id="tree-col-head" hidden>
+    <span>名称</span>
+    <span>条目</span>
+    <span>大小</span>
+  </div>
+  <div id="tree-render">
+    <div id="tree-status" style="display:flex;align-items:center;gap:10px;padding:14px;background:rgba(255,255,255,0.03);border:1px dashed var(--border2);border-radius:6px;color:var(--muted)">
+      <span id="tree-spinner" style="display:inline-block;width:14px;height:14px;border:2px solid var(--border2);border-top-color:var(--cyan);border-radius:50%;animation:tree-spin 0.8s linear infinite"></span>
+      <span id="tree-status-text">⏳ 正在加载 XCMAX/ 工作区目录树（.cache/xcmax/xcmax-tree-data.json）…</span>
+    </div>
+  </div>
+</div>
+
+<div class="tree-legend">
+  <span class="tree-legend-item"><span class="tree-legend-dot" style="background:#79c0ff"></span>🐍 Python</span>
+  <span class="tree-legend-item"><span class="tree-legend-dot" style="background:#a5d6ff"></span>💚 Vue / 🔷 TS</span>
+  <span class="tree-legend-item"><span class="tree-legend-dot" style="background:#f1e05a"></span>🟨 JS</span>
+  <span class="tree-legend-item"><span class="tree-legend-dot" style="background:#d2a8ff"></span>📋 配置 (json/yml/toml)</span>
+  <span class="tree-legend-item"><span class="tree-legend-dot" style="background:#7ee787"></span>📖 文档 (md/txt)</span>
+  <span class="tree-legend-item"><span class="tree-legend-dot" style="background:#ffa657"></span>📊 数据 (xlsx/csv)</span>
+  <span class="tree-legend-item"><span class="tree-legend-dot" style="background:#56d364"></span>🖼️ 图片 (png/svg)</span>
+  <span class="tree-legend-item"><span class="tree-legend-dot" style="background:#8b949e"></span>📄 其它</span>
+  <span class="tree-legend-item"><span class="tree-legend-dot tag-pw"></span>P-W</span>
+  <span class="tree-legend-item"><span class="tree-legend-dot tag-ps"></span>P-S / O-A</span>
+  <span class="tree-legend-item"><span class="tree-legend-dot tag-sr"></span>S-R</span>
+  <span class="tree-legend-item"><span class="tree-legend-dot tag-meta"></span>Meta</span>
+  <span class="tree-legend-item">💡 顶层/二级行显示六线标签 + 主责员工 · 数据由 <code>scripts/build-xcmax-tree-data.py</code> 生成</span>
+</div>
+
+</div>
+
+</div>
+
+
+
+<div class="section" id="s-gaps" role="tabpanel" aria-labelledby="nav-gaps">
+<div class="arch-title">断点清单 — 日更 AI 驱动</div>
+<div style="font-size:12px;color:var(--muted);margin-bottom:16px;line-height:1.7">数据源自 Vibe 预备补丁 MD · 状态随 line-execute 派发与 OpsStagedChange 部署自动回写 · <strong>单一数据源</strong></div>
+<div id="ai-patch-board" class="ai-board ai-board-slot" aria-label="今日 AI 补丁清单（固定看板）"></div>
+</div>
+
+<div class="section" id="s-roadmap" role="tabpanel" aria-labelledby="nav-roadmap">
+<div class="arch-title">实现目标 / 路线图 — 日更 AI 驱动</div>
+<div style="font-size:12px;color:var(--muted);margin-bottom:16px;line-height:1.7">数据源自 Vibe 预备更新 MD · 状态随派发/合并自动闭环 · <strong>单一数据源</strong></div>
+<div id="ai-update-board" class="ai-board ai-board-slot" aria-label="今日 AI 更新清单（固定看板）"></div>
+</div>
+
+<div class="section" id="s-evolution" role="tabpanel" aria-labelledby="nav-evolution">
+
+<div class="evo-hero">
+  <h2>版本演进 · GENESIS → ASCENSION</h2>
+  <div class="sub">v1.0 → v9.0.x → <strong>v10.0</strong> → v1.0.0.0</div>
+  <div class="tag">10 站全旅程 · 5 大跃迁 · 9 个里程碑 · 六线 90/100</div>
+  <div class="sub" style="margin-top:4px;opacity:0.6">2026-01-15 → 2026-06-03 · v10.0 已上线 · 走向全自动 AI 平台</div>
+
+  <div class="evo-stats">
+    <div class="evo-stat"><div class="evo-stat-num g">10</div><div class="evo-stat-label">已发布版本</div><div class="evo-stat-trend">v1.0 → v10.0</div></div>
+    <div class="evo-stat"><div class="evo-stat-num c">v10.0</div><div class="evo-stat-label">当前版本</div><div class="evo-stat-trend">2026-06-03 发版</div></div>
+    <div class="evo-stat"><div class="evo-stat-num p">1+</div><div class="evo-stat-label">规划版本</div><div class="evo-stat-trend">v10 → v1.0.0.0</div></div>
+    <div class="evo-stat"><div class="evo-stat-num b">4251</div><div class="evo-stat-label">Py 代码文件</div><div class="evo-stat-trend">+750% vs v1.0</div></div>
+    <div class="evo-stat"><div class="evo-stat-num y">1478</div><div class="evo-stat-label">Vue/TS 文件</div><div class="evo-stat-trend">+393% vs v2.0</div></div>
+    <div class="evo-stat"><div class="evo-stat-num o">90</div><div class="evo-stat-label">综合成熟度</div><div class="evo-stat-trend">0 → 90 / 100</div></div>
+  </div>
+</div>
+
+<div class="arch-title">📅 完整时间线 · 垂直展开</div>
+
+<div class="evo-timeline">
+
+  <div class="evo-item done">
+    <div class="evo-item-dot"></div>
+    <div class="evo-card">
+      <div class="evo-card-head">
+        <div class="evo-version">v1.0</div>
+        <span class="evo-status done">已发布</span>
+        <span class="evo-date">2026-01-15</span>
+      </div>
+      <div class="evo-tagline">Excel 解析 + 标签打印 — 基础奠基</div>
+      <ul class="evo-features">
+        <li>Excel 解析引擎（pandas + openpyxl）</li>
+        <li>标签打印模板系统 + 出货单生成</li>
+        <li>单一桌面应用，所有逻辑在 main.py</li>
+      </ul>
+      <div class="evo-metrics">
+        <div class="evo-metric c"><strong>~500</strong>py 文件</div>
+        <div class="evo-metric g"><strong>1</strong>业务模块</div>
+        <div class="evo-metric p"><strong>0</strong>AI 引擎</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="evo-item done">
+    <div class="evo-item-dot"></div>
+    <div class="evo-card">
+      <div class="evo-card-head">
+        <div class="evo-version">v2.0</div>
+        <span class="evo-status done">已发布</span>
+        <span class="evo-date">2026-02-20</span>
+      </div>
+      <div class="evo-tagline">Vue 3 + AI 对话 + OCR — Web 化与 AI 化</div>
+      <ul class="evo-features">
+        <li>Vue 3 + Vite 前端架构搭建</li>
+        <li>AI 对话核心（DeepSeek 集成）</li>
+        <li>OCR 识别（百度 / 腾讯双通道）</li>
+        <li>REST API 拆分（FastAPI 引入）</li>
+      </ul>
+      <div class="evo-metrics">
+        <div class="evo-metric c"><strong>~1200</strong>py 文件</div>
+        <div class="evo-metric b"><strong>~300</strong>vue/ts 文件</div>
+        <div class="evo-metric g"><strong>3</strong>业务模块</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="evo-item done">
+    <div class="evo-item-dot"></div>
+    <div class="evo-card">
+      <div class="evo-card-head">
+        <div class="evo-version">v3.0</div>
+        <span class="evo-status done">已发布</span>
+        <span class="evo-date">2026-03-15</span>
+      </div>
+      <div class="evo-tagline">混合意图引擎 + TTS + 任务 Agent — 意图中枢</div>
+      <ul class="evo-features">
+        <li>混合意图识别（BERT + DeepSeek + 规则）</li>
+        <li>TTS 语音合成（edge-tts）</li>
+        <li>任务 Agent 编排器 + 异步队列（Celery）</li>
+      </ul>
+      <div class="evo-metrics">
+        <div class="evo-metric c"><strong>~1800</strong>py 文件</div>
+        <div class="evo-metric b"><strong>~500</strong>vue/ts 文件</div>
+        <div class="evo-metric g"><strong>6</strong>AI 引擎</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="evo-item done milestone">
+    <div class="evo-item-dot"></div>
+    <div class="evo-card">
+      <div class="evo-card-head">
+        <div class="evo-version">v4.0</div>
+        <span class="evo-status done">里程碑</span>
+        <span class="evo-date">2026-04-05</span>
+      </div>
+      <div class="evo-tagline">🌟 AI 员工定位 + 多模态交互 — 员工体系 1.0</div>
+      <ul class="evo-features">
+        <li>AI 员工体系（40 员工 / 7 部门 · 角色化分工）</li>
+        <li>多模态交互（图像 / 语音 / 文本三态融合）</li>
+        <li>意图分发与员工路由（EmployeeRouter）</li>
+        <li>NeuroBus 神经反射弧（&lt; 1ms 跨域事件）</li>
+      </ul>
+      <div class="evo-metrics">
+        <div class="evo-metric c"><strong>~2400</strong>py 文件</div>
+        <div class="evo-metric b"><strong>~700</strong>vue/ts 文件</div>
+        <div class="evo-metric p"><strong>40</strong>AI 员工</div>
+        <div class="evo-metric y"><strong>11</strong>神经域</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="evo-item done milestone">
+    <div class="evo-item-dot"></div>
+    <div class="evo-card">
+      <div class="evo-card-head">
+        <div class="evo-version">v5.0</div>
+        <span class="evo-status done">里程碑</span>
+        <span class="evo-date">2026-04-20</span>
+      </div>
+      <div class="evo-tagline">🌟 Neuro-DDD 架构 + 审批流 — 架构分层里程碑</div>
+      <ul class="evo-features">
+        <li>Neuro-DDD 分层（Entry / Route / Application / Domain / Infra）</li>
+        <li>小程序支持（微信小程序双端）</li>
+        <li>性能监控（Prometheus + Grafana + Loki）</li>
+        <li>审批流引擎（approval-hub 多级审批）</li>
+      </ul>
+      <div class="evo-metrics">
+        <div class="evo-metric c"><strong>~3000</strong>py 文件</div>
+        <div class="evo-metric b"><strong>~900</strong>vue/ts 文件</div>
+        <div class="evo-metric p"><strong>11</strong>神经域</div>
+        <div class="evo-metric g"><strong>5</strong>DDD 层</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="evo-item done">
+    <div class="evo-item-dot"></div>
+    <div class="evo-card">
+      <div class="evo-card-head">
+        <div class="evo-version">v6.0</div>
+        <span class="evo-status done">已发布</span>
+        <span class="evo-date">2026-04-28</span>
+      </div>
+      <div class="evo-tagline">商业模式 + Mod 生态 — 三层收入成型</div>
+      <ul class="evo-features">
+        <li>三层收入模型（订阅 + 交易 + 服务）</li>
+        <li>ModStore 生态（manifest 插件 + 沙箱执行）</li>
+        <li>创作者平台（Mod 制作 + 上架 + 分成）</li>
+        <li>会员体系（8 档 SVIP 阶梯）</li>
+      </ul>
+      <div class="evo-metrics">
+        <div class="evo-metric c"><strong>~3300</strong>py 文件</div>
+        <div class="evo-metric g"><strong>36</strong>已上架 Mod</div>
+        <div class="evo-metric p"><strong>8</strong>会员档位</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="evo-item done milestone">
+    <div class="evo-item-dot"></div>
+    <div class="evo-card">
+      <div class="evo-card-head">
+        <div class="evo-version">v7.0</div>
+        <span class="evo-status done">里程碑</span>
+        <span class="evo-date">2026-04-29</span>
+      </div>
+      <div class="evo-tagline">🌟 桌面版 + Web 并行交付 — 跨平台化</div>
+      <ul class="evo-features">
+        <li>Electron 桌面壳（Windows + macOS）</li>
+        <li>Web 版并行交付（同一份代码）</li>
+        <li>electron-updater 自动更新（Ed25519 签名）</li>
+        <li>Mod OTA 灰度发布（ModStore 一致）</li>
+      </ul>
+      <div class="evo-metrics">
+        <div class="evo-metric c"><strong>~3600</strong>py 文件</div>
+        <div class="evo-metric b"><strong>~1100</strong>vue/ts 文件</div>
+        <div class="evo-metric p"><strong>3</strong>平台矩阵</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="evo-item done">
+    <div class="evo-item-dot"></div>
+    <div class="evo-card">
+      <div class="evo-card-head">
+        <div class="evo-version">v8.0</div>
+        <span class="evo-status done">已发布</span>
+        <span class="evo-date">2026-05-21</span>
+      </div>
+      <div class="evo-tagline">跨行业 UI + 行业选择 — 横向扩展</div>
+      <ul class="evo-features">
+        <li>行业预设（通用 / 涂料 / 考勤 / 批发）</li>
+        <li>Mod 源码库（行业选择 + manifest.industry 字段）</li>
+        <li>菜单/欢迎语/快捷按钮随行业切换</li>
+        <li>行业模板一键导入导出</li>
+      </ul>
+      <div class="evo-metrics">
+        <div class="evo-metric c"><strong>~3900</strong>py 文件</div>
+        <div class="evo-metric g"><strong>5+</strong>行业预设</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="evo-item done">
+    <div class="evo-item-dot"></div>
+    <div class="evo-card">
+      <div class="evo-card-head">
+        <div class="evo-version">v8.1.0</div>
+        <span class="evo-status done">已发布</span>
+        <span class="evo-date">2026-05-26</span>
+      </div>
+      <div class="evo-tagline">双 SKU 收紧 + Android 1.5.0 — 发版规范</div>
+      <ul class="evo-features">
+        <li>双 SKU 发版线（personal / enterprise）</li>
+        <li>Android 升级 1.5.0（versionCode 10）</li>
+        <li>架构门禁（arch_fitness.py）</li>
+        <li>8 锚点版本同步（auto_version_bump）</li>
+      </ul>
+      <div class="evo-metrics">
+        <div class="evo-metric c"><strong>~4000</strong>py 文件</div>
+        <div class="evo-metric p"><strong>2</strong>SKU 矩阵</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="evo-item done milestone">
+    <div class="evo-item-dot"></div>
+    <div class="evo-card">
+      <div class="evo-card-head">
+        <div class="evo-version">v9.0.x</div>
+        <span class="evo-status done">里程碑</span>
+        <span class="evo-date">2026-05-29</span>
+      </div>
+      <div class="evo-tagline">🌟 FastAPI 认证统一 + async 装饰器 + Redis 锁 — 类型/测试/CI 全面硬化</div>
+      <ul class="evo-features">
+        <li>FastAPI Depends 统一认证（get_logged_in_user / require_permission / require_role）</li>
+        <li>async 装饰器（utils/async_compat.py · sync+async 双路径）</li>
+        <li>Redis 分布式锁（token-based + Lua compare-and-delete）</li>
+        <li>CI 安全硬化（Bandit / Safety / Flake8 / mypy 硬失败）</li>
+        <li>测试覆盖率门禁 52% → 70% · 369 测试文件</li>
+        <li>OpenAPI 一致性守护 + 4 重复注册修复</li>
+        <li>CI 全量 pytest 切换（移除 CI_STABLE_ONLY）</li>
+        <li>孤儿清账：①② 已清；③④ 留 v10.0</li>
+      </ul>
+      <div class="evo-metrics">
+        <div class="evo-metric c"><strong>4239</strong>py 文件</div>
+        <div class="evo-metric b"><strong>1470</strong>vue/ts 文件</div>
+        <div class="evo-metric g"><strong>369</strong>测试文件</div>
+        <div class="evo-metric p"><strong>19</strong>workflows</div>
+        <div class="evo-metric y"><strong>7444</strong>通过测试</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="evo-item current">
+    <div class="evo-item-dot"></div>
+    <div class="evo-card">
+      <div class="evo-card-head">
+        <div class="evo-version">v10.0</div>
+        <span class="evo-status current">⚡ 当前</span>
+        <span class="evo-date">2026-06-03</span>
+      </div>
+      <div class="evo-tagline">🌟 单轨收敛 + O-B 伙伴线实装 + CI 门禁 75% — 收尾单轨 · 六线打通</div>
+      <ul class="evo-features">
+        <li>🆕 移除 <code>event_primary_facade</code> 双入口（v10.0 收尾单轨）</li>
+        <li>🆕 O-B 伙伴生态线 5 步实装（B1–B5）· 5 名 ecosystem-* 员工落编</li>
+        <li>🆕 二级分区员工覆盖 100%（115/115 零空缺）· 52 AI 员工 + 5 生态员工</li>
+        <li>🆕 CI 门禁 fail_under 70 → 75 · 测试 371 → 402 · workflows 18 → 20</li>
+        <li>🆕 六线综合自动化率 90/100（O-A 88 / O-B 75 / P-W 96 / P-M 90 / P-S 78 / S-R 85）</li>
+        <li>🆕 O3「报价/合同」partial → done · R4「告警触发·CVE 净化」partial → done</li>
+        <li>bootstrap.py 单一入口收敛 · V1/V2 shim 物理删除（23 个 *_v2.py）</li>
+        <li>legacy_gaps_batch1/2 按 14+ 业务域拆分 · 全量测试 34 failed 清零（fixture 污染根因治理）</li>
+        <li>ProductionLineOrchestrator v10.0 单轨事件总线 + 6 线 5/5/6/3/9/4 = 32 步骤</li>
+      </ul>
+      <div class="evo-metrics">
+        <div class="evo-metric c"><strong>4251</strong>py 文件</div>
+        <div class="evo-metric b"><strong>1478</strong>vue/ts 文件</div>
+        <div class="evo-metric g"><strong>402</strong>测试文件</div>
+        <div class="evo-metric p"><strong>20</strong>workflows</div>
+        <div class="evo-metric y"><strong>0</strong>shim 文件</div>
+        <div class="evo-metric o"><strong>90</strong>六线综合自动化</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="evo-item future">
+    <div class="evo-item-dot"></div>
+    <div class="evo-card">
+      <div class="evo-card-head">
+        <div class="evo-version">v1.0.0.0 Release Train（双轨）</div>
+        <span class="evo-status future">愿景</span>
+        <span class="evo-date">2026-06-04 起</span>
+      </div>
+      <div class="evo-tagline">🎯 release_train 四段 SSOT — 日更 +0.0.0.1 · 每 10 日一代际（类比 v1→v2）· 100 日大推送 · 营销 v10 并行</div>
+      <ul class="evo-features">
+        <li>每日 <code>+0.0.0.1</code> 驱动六线编码（全产线，非仅 P-S）</li>
+        <li><strong>每 10 日代际演进</strong>（类似营销 v1→v2→v3）：第 1 代 <code>1.0.0.0</code>–<code>1.0.0.9</code> · 第 2 代起锚 <code>1.0.1.0</code> · 第 3 代 <code>1.0.2.0</code> …（第 3 段每满 10 日 +1）</li>
+        <li>installer 日（<code>×.×.N.0</code>）→ P9 版本演进 + P5/P6 全量安装包推送官网/COS</li>
+        <li>每 100 日 → <code>1.N.0.0</code> major 大推送 + 扩展审批门</li>
+        <li>营销版号 v10.0 与 release_train 并行（auto_version_bump 不替换）</li>
+        <li>运营线 95% → 98%（O1-O10 无人值守）</li>
+        <li>制作线 90% → 95%（P1-P10 AI 自主）</li>
+      </ul>
+      <div class="evo-metrics">
+        <div class="evo-metric c"><strong>1.0.0.0</strong>epoch · G1</div>
+        <div class="evo-metric p"><strong>1.0.1.0</strong>G2 锚点</div>
+        <div class="evo-metric y"><strong>10/100</strong>日 cadence</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="evo-curve">
+  <div class="evo-curve-title">📈 进化曲线 · 代码规模与测试通过双轴</div>
+  <div class="evo-curve-canvas">
+    <svg class="evo-curve-svg" viewBox="0 0 1000 200" preserveAspectRatio="none">
+      <!-- 网格 -->
+      <defs>
+        <linearGradient id="g-py" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0%" stop-color="rgba(88,226,194,0.4)"/>
+          <stop offset="100%" stop-color="rgba(88,226,194,0)"/>
+        </linearGradient>
+        <linearGradient id="g-ts" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0%" stop-color="rgba(210,168,255,0.4)"/>
+          <stop offset="100%" stop-color="rgba(210,168,255,0)"/>
+        </linearGradient>
+        <linearGradient id="g-test" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0%" stop-color="rgba(227,179,65,0.5)"/>
+          <stop offset="100%" stop-color="rgba(227,179,65,0)"/>
+        </linearGradient>
+      </defs>
+      <!-- Y 轴刻度 -->
+      <g font-family="JetBrains Mono,monospace" font-size="9" fill="rgba(139,148,158,0.6)">
+        <line x1="0" y1="20" x2="1000" y2="20" stroke="rgba(139,148,158,0.1)" stroke-dasharray="2 4"/>
+        <text x="-4" y="24" text-anchor="end">5000</text>
+        <line x1="0" y1="60" x2="1000" y2="60" stroke="rgba(139,148,158,0.1)" stroke-dasharray="2 4"/>
+        <text x="-4" y="64" text-anchor="end">3750</text>
+        <line x1="0" y1="100" x2="1000" y2="100" stroke="rgba(139,148,158,0.1)" stroke-dasharray="2 4"/>
+        <text x="-4" y="104" text-anchor="end">2500</text>
+        <line x1="0" y1="140" x2="1000" y2="140" stroke="rgba(139,148,158,0.1)" stroke-dasharray="2 4"/>
+        <text x="-4" y="144" text-anchor="end">1250</text>
+      </g>
+      <!-- Py 文件曲线 (500 → 4239) -->
+      <path d="M 50 160 L 130 156 L 210 144 L 290 132 L 370 110 L 450 96 L 530 84 L 610 70 L 690 60 L 770 52 L 850 32 L 950 24"
+            fill="none" stroke="var(--cyan)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M 50 160 L 130 156 L 210 144 L 290 132 L 370 110 L 450 96 L 530 84 L 610 70 L 690 60 L 770 52 L 850 32 L 950 24 L 950 200 L 50 200 Z"
+            fill="url(#g-py)"/>
+      <!-- TS/Vue 文件曲线 (0 → 1470) -->
+      <path d="M 50 180 L 130 172 L 210 162 L 290 150 L 370 138 L 450 122 L 530 108 L 610 92 L 690 80 L 770 68 L 850 56 L 950 50"
+            fill="none" stroke="var(--purple)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="0" opacity="0.85"/>
+      <path d="M 50 180 L 130 172 L 210 162 L 290 150 L 370 138 L 450 122 L 530 108 L 610 92 L 690 80 L 770 68 L 850 56 L 950 50 L 950 200 L 50 200 Z"
+            fill="url(#g-ts)"/>
+      <!-- 测试通过曲线 (0 → 7128) — 仅 v8+ 有数据 -->
+      <path d="M 690 180 L 770 178 L 850 168 L 950 8"
+            fill="none" stroke="var(--yellow)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M 690 180 L 770 178 L 850 168 L 950 8 L 950 200 L 690 200 Z"
+            fill="url(#g-test)"/>
+      <!-- 关键节点 -->
+      <g font-family="JetBrains Mono,monospace" font-size="9" fill="rgba(139,148,158,0.8)">
+        <text x="50" y="195" text-anchor="middle">v1</text>
+        <text x="210" y="195" text-anchor="middle">v3</text>
+        <text x="370" y="195" text-anchor="middle">v4</text>
+        <text x="450" y="195" text-anchor="middle">v5</text>
+        <text x="610" y="195" text-anchor="middle">v7</text>
+        <text x="770" y="195" text-anchor="middle">v8.1</text>
+        <text x="850" y="195" text-anchor="middle" fill="var(--cyan)" font-weight="700">v9</text>
+        <text x="950" y="195" text-anchor="middle" fill="var(--dim)">v10</text>
+      </g>
+      <!-- v9 当前节点高亮 -->
+      <circle cx="850" cy="32" r="5" fill="var(--cyan)" opacity="0.9"/>
+      <circle cx="850" cy="32" r="9" fill="none" stroke="var(--cyan)" stroke-width="1" opacity="0.4">
+        <animate attributeName="r" values="9;14;9" dur="2s" repeatCount="indefinite"/>
+        <animate attributeName="opacity" values="0.4;0.1;0.4" dur="2s" repeatCount="indefinite"/>
+      </circle>
+    </svg>
+  </div>
+  <div class="evo-curve-legend">
+    <div class="evo-curve-legend-item"><div class="evo-curve-legend-line" style="background:var(--cyan)"></div>Python 文件（500 → 4239）</div>
+    <div class="evo-curve-legend-item"><div class="evo-curve-legend-line" style="background:var(--purple)"></div>Vue/TS 文件（0 → 1470）</div>
+    <div class="evo-curve-legend-item"><div class="evo-curve-legend-line" style="background:var(--yellow)"></div>测试通过数（v8+ → 7128）</div>
+  </div>
+</div>
+
+<div class="evo-leaps">
+  <div class="evo-leaps-title">◆ 五大关键跃迁</div>
+  <div class="evo-leaps-grid">
+    <div class="evo-leap">
+      <div class="evo-leap-arrow">v1 → v3</div>
+      <div class="evo-leap-desc">从工具到平台 · Excel 解析 → AI 对话 · 单点能力 → 意图中枢</div>
+      <div class="evo-leap-tag">能力跃迁</div>
+    </div>
+    <div class="evo-leap">
+      <div class="evo-leap-arrow">v4 → v5</div>
+      <div class="evo-leap-desc">从应用到架构 · 散装功能 → Neuro-DDD 分层 · 员工体系 + 神经反射</div>
+      <div class="evo-leap-tag">架构跃迁</div>
+    </div>
+    <div class="evo-leap">
+      <div class="evo-leap-arrow">v6 → v7</div>
+      <div class="evo-leap-desc">从 Web 到跨平台 · 商业模式落地 · Mod 生态 + Electron 桌面化</div>
+      <div class="evo-leap-tag">形态跃迁</div>
+    </div>
+    <div class="evo-leap">
+      <div class="evo-leap-arrow">v8 → v9</div>
+      <div class="evo-leap-desc">从扩张到硬化 · 跨行业适配 → 认证/async/Redis/CI 全面硬化</div>
+      <div class="evo-leap-tag">质量跃迁</div>
+    </div>
+    <div class="evo-leap">
+      <div class="evo-leap-arrow">v10 → v1.0.0.0</div>
+      <div class="evo-leap-desc">从硬化到全自动 · 收尾单轨 → 决策点人工 + 执行主体自动化（发布/测试/SRE 阶段门仍待收口）</div>
+      <div class="evo-leap-tag">范式跃迁</div>
+    </div>
+  </div>
+</div>
+
+</div>
+
+<div class="footer" id="page-footer">
+  <span class="footer-key"><strong>XCAGI</strong> v10.0.0</span>
+  <span class="footer-sep">·</span>
+  <span class="footer-key">运营 <strong>95%</strong> · 制作 <strong>90%</strong></span>
+  <span class="footer-sep">·</span>
+  <span class="footer-key"><strong>4,251</strong>py · <strong>1,478</strong>vue/ts · <strong>1,049</strong>docs</span>
+  <span class="footer-sep">·</span>
+  <span class="footer-key"><strong>402</strong>tests · <strong>20</strong>workflows · <strong>20</strong>domains · <strong>7444</strong>passed</span>
+  <span class="footer-sep">·</span>
+  <span class="footer-key">自评 <strong>90/100</strong></span>
+  <span class="footer-sep">·</span>
+  <span class="footer-key">审计 2026-06-03</span>
+</div>
+
+</div>
+
+
+<script src="docs/xcagi-dashboard/api-base.js?v=20260606f"></script>
+<script src="docs/xcagi-dashboard/emp-wf-surface-audit.js?v=20260605q" defer></script>
+<script src="docs/xcagi-dashboard/emp-wf-action-items.js?v=20260606k" defer></script>
+<script src="docs/xcagi-dashboard/emp-wf-node-staff.js?v=20260606m" defer></script>
+<script src="docs/xcagi-dashboard/emp-wf-pan-zoom.js?v=20260606m" defer></script>
+<script src="docs/xcagi-dashboard/arch-graph-draw.js?v=20260606m" defer></script>
+<script src="docs/xcagi-dashboard/event-merged-arch-graph.js?v=20260606m" defer></script>
+<script src="docs/xcagi-dashboard/event-workflow-snake.js?v=20260605f" defer></script>
+<script src="docs/xcagi-dashboard/event-arch-graph.js?v=20260605o" defer></script>
+<script src="docs/xcagi-dashboard/event-rail-ui.js?v=20260605e" defer></script>
+<script src="docs/xcagi-dashboard/emp-wf-radial-graph.js?v=20260606m" defer></script>
+<script src="docs/xcagi-dashboard/emp-wf-stage-artifacts.js?v=20260606e" defer></script>
+<script src="docs/xcagi-dashboard/mon-m0-evidence.js?v=20260606tabs" defer></script>
+<script src="docs/xcagi-dashboard/mon-live-dash.js?v=20260606refresh" defer></script>
+<script src="docs/xcagi-dashboard/mon-ai-biz.js?v=20260606l" defer></script>
+<script src="docs/xcagi-dashboard/app.js?v=20260606k" defer></script>
+</body>
+</html>

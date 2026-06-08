@@ -1,0 +1,77 @@
+appId: com.xcagi.desktop
+productName: XCAGI
+copyright: Copyright © 2026 XCAGI
+artifactName: ${productName}-${version}-${os}-${arch}.${ext}
+beforePack: build/before-pack.cjs
+# 正式产物仅写入 release/xcagi-v{version}/{personal|enterprise}/（build-installer.ps1 -ProductSku 必填）
+directories:
+  output: ../release/_electron-staging
+files:
+  - dist/**
+  - package.json
+  - resources/icon.ico
+  - resources/icon.png
+extraResources:
+  - from: ../dist/xcagi-backend
+    to: backend
+    filter:
+      - "**/*"
+  - from: ../templates/vue-dist
+    to: frontend
+    filter:
+      - "**/*"
+  - from: resources/product-sku.json
+    to: product-sku.json
+publish:
+  provider: generic
+  url: https://update.xcagi.com/releases/stable/
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+    - target: zip
+      arch:
+        - x64
+  icon: resources/icon.ico
+  signAndEditExecutable: true
+nsis:
+  artifactName: XCAGI-Setup-${version}-${arch}.${ext}
+  shortcutName: XCAGI
+  uninstallDisplayName: XCAGI 桌面版
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  allowElevation: true
+  displayLanguageSelector: false
+  installerLanguages:
+    - zh_CN
+  language: "2052"
+  unicode: true
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  menuCategory: XCAGI
+  runAfterFinish: true
+  deleteAppDataOnUninstall: false
+  installerIcon: resources/icon.ico
+  uninstallerIcon: resources/icon.ico
+  installerHeader: resources/installer-header.bmp
+  installerSidebar: resources/installer-sidebar.bmp
+  include: build/installer.nsh
+  license: ../LICENSE
+  warningsAsErrors: false
+mac:
+  target:
+    - dmg
+    - pkg
+    - zip
+  category: public.app-category.business
+  icon: resources/icon.icns
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  notarize: false
+dmg:
+  sign: false
+afterSign: build/notarize.cjs

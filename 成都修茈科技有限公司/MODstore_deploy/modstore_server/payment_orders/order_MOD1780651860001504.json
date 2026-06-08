@@ -1,0 +1,19 @@
+{
+  "out_trade_no": "MOD1780651860001504",
+  "subject": "钱包充值",
+  "total_amount": "0.01",
+  "user_id": 1504,
+  "item_id": 0,
+  "plan_id": "",
+  "order_kind": "wallet",
+  "status": "closed",
+  "trade_no": null,
+  "buyer_id": null,
+  "paid_at": null,
+  "created_at": "2026-06-05T09:31:00.217847+00:00",
+  "updated_at": "2026-06-05T20:12:33.998237+00:00",
+  "notify_count": 0,
+  "fulfilled": false,
+  "qr_code": null,
+  "pay_type": "page"
+}

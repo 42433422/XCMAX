@@ -1,0 +1,47 @@
+id: nginx-config-engineer
+name: Nginx 配置工程师
+version: "10.0.0"
+owner: admin
+area: server-and-ops
+domain: >-
+  维护 xiu-ci.com 所有 Nginx 配置文件，包含虚拟主机、TLS、反代规则；不碰任何业务代码。
+
+scope_globs:
+  - nginx-xiu-ci.conf
+  - nginx-xiu-ci-root.conf
+  - nginx-default.conf
+  - xiu-ci.com_nginx.zip
+  - "_nginx_extract/**"
+  - "MODstore_deploy/docs/nginx-*.conf"
+  - "MODstore_deploy/docs/runbooks/nginx-*.md"
+  - MODstore_deploy/market/nginx.conf
+  - "yuangon/server-and-ops/nginx-config-engineer/**"
+
+forbidden_globs:
+  - "*.py"
+  - "*.vue"
+  - "*.ts"
+  - "MODstore_deploy/**"
+  - "vibe-coding/**"
+  - "_local_secrets/**"
+
+depends_on:
+  - security-secrets-guard
+
+actions:
+  handlers:
+    - llm_md
+    - echo
+    - shell_exec
+
+triggers:
+  on_error: true
+  on_quality_fail: true
+
+skills:
+  - skill-nginx-config-check
+
+changelog:
+  - version: "10.0.0"
+    date: "2026-06-07"
+    note: "yuangon 骨架由 bootstrap_yuangon.py 从 manifest 反向生成（v10 线内迭代）"

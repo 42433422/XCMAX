@@ -1,0 +1,59 @@
+---
+description: Forbid creating new `app/legacy/*` or `*/archive_*` modules; code must land in the proper layer (app/domain, app/application, app/infrastructure, or app/fastapi_routes/<domain>).
+alwaysApply: true
+---
+
+# 禁止重建 `app/legacy/*` 与 `archive_*` 命名
+
+背景：2026-04 的 "清理 legacy 与 archive 代码" 工程把 `app/legacy/` 与
+`app/fastapi_routes/archive_*`、`app/services/archive_*`、`app/routes/archive_*`
+按业务域拆分到了 `app/domain/`、`app/application/`、`app/infrastructure/`、
+`app/fastapi_routes/<domain>.py` 等正确位置。详见
+`docs/reports/LEGACY_CLEANUP_TRACKING.md` 与
+`docs/architecture/target-structure.md`。
+
+## 硬性规则
+
+1. **不允许新增** 以下任何命名的文件、模块、目录：
+   - `app/legacy/**`
+   - `app/fastapi_routes/archive_*.py`
+   - `app/services/archive_*.py`
+   - `app/routes/archive_*.py`
+   - `app/**/archive_*_legacy.py`
+   - `app/**/archive_*_compat.py`
+   - 新增带 `archive_` 前缀命名的 Python 包/模块
+2. **不允许新增** 对 `app.legacy.*` 的 import。新代码必须引用
+   `app/domain/`、`app/application/`、`app/infrastructure/` 或对应
+   `app/fastapi_routes/<domain>.py` 下的接口。
+3. **不允许** 在 `app/legacy/*` 里新增功能或扩大现有模块行为；
+   该目录只做 re-export shim，等待 Phase 4B/5B 最终删除。
+
+## 当你确实需要一个"过渡兼容层"时
+
+- 写成 **facade/adapter** 模块，放到对应目标层：
+  - 应用层：`app/application/<domain>/` 或 `app/application/workflow/`
+  - 领域层：`app/domain/<domain>/`
+  - 基础设施层：`app/infrastructure/<category>/`
+- 命名使用业务含义，不使用 `archive_` / `legacy_` 前缀（除非是明确的
+  `legacy_chat_adapter.py` 之类"我就是在过渡"的适配器，且必须写明消失时间）。
+- 文件头 docstring 必须写明：
+  - 来源（从哪个模块迁出）；
+  - 预计消失时间或条件（接入新实现 / Phase N）。
+
+## URL 契约不变原则（当拆 `legacy_gaps_batch*.py` 时）
+
+- 前端依赖的 `/api/...` 路径在拆分过程中必须 **完全保持**，否则会打断
+  Vue/Miniprogram 前端。
+- 新路由文件命名：`app/fastapi_routes/<business_domain>.py`，
+  tag 用 `ai-<name>` / `<domain>`。
+- 注册顺序关键点：`xcagi_compat` 必须先于 `miniprogram`；
+  `spa_fallback.register_spa_history_fallback(app)` 必须在 **所有 API 路由之后** 调用
+  （见 `app/fastapi_app.py` 末尾）。
+
+## Code review 拒绝清单（PR 含以下内容须打回）
+
+- 新增 `app/legacy/*.py` 非 shim
+- 新增 `archive_*` 命名的任何运行时文件
+- 代码里 `from app.legacy.X import ...`（路由/应用服务/领域服务/基础设施均不允许）
+- 绕过 `app/application/tools/` / `app/domain/context/session_context.py` /
+  `app/application/workflow/legacy_chat_adapter.py` 等适配器，直接到 legacy

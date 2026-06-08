@@ -1,0 +1,116 @@
+"""将 Word 员工包发布到 catalog 并设为 AI 市场公开展示。"""
+from __future__ import annotations
+
+import json
+import sys
+import tempfile
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+PACK_IDS = ("word-full-read-employee", "word-generate-employee")
+META = {
+    "word-full-read-employee": {
+        "name": "Word全量读取员工",
+        "description": "全量解析 docx：正文、标题层级、表格、列表、分章节、字体段落；输出 document_full.json + txt + images。",
+        "industry": "文档/知识",
+    },
+    "word-generate-employee": {
+        "name": "Word生成员工",
+        "description": "由 document_full.json（可选 template.docx）生成 Word 文档，JSON 为中介。",
+        "industry": "文档/知识",
+    },
+}
+
+
+def main() -> int:
+    from modstore_server.catalog_store import append_package, package_manifest_alignment_errors
+    from modstore_server.catalog_sync import upsert_catalog_item_from_xc_package_dict
+    from modstore_server.employee_asset_pipeline import build_employee_pack_zip_for_library
+    from modstore_server.models import CatalogItem, User, get_session_factory, init_db
+    from modstore_server.mod_scaffold_runner import modstore_library_path
+
+    init_db()
+    sf = get_session_factory()
+    lib = modstore_library_path()
+    published: list[dict] = []
+
+    with sf() as db:
+        admin = db.query(User).filter(User.username == "admin").first()
+        if not admin:
+            admin = db.query(User).order_by(User.id.asc()).first()
+        if not admin:
+            print(json.dumps({"ok": False, "error": "no user in db"}, ensure_ascii=False))
+            return 2
+        author_id = int(admin.id)
+
+        for pkg_id in PACK_IDS:
+            pack_dir = lib / pkg_id
+            mf_path = pack_dir / "manifest.json"
+            if not mf_path.is_file():
+                print(json.dumps({"ok": False, "pkg_id": pkg_id, "error": "missing manifest"}, ensure_ascii=False))
+                return 1
+            raw_mf = json.loads(mf_path.read_text(encoding="utf-8"))
+            meta = META[pkg_id]
+            zip_bytes = build_employee_pack_zip_for_library(pkg_id, raw_mf, pack_dir=pack_dir)
+            rec = {
+                "id": pkg_id,
+                "name": meta["name"],
+                "version": str(raw_mf.get("version") or "1.0.0"),
+                "description": meta["description"],
+                "artifact": "employee_pack",
+                "industry": meta["industry"],
+                "release_channel": "stable",
+                "commerce": {"mode": "free", "price": 0},
+                "license": {"type": "personal", "verify_url": None},
+            }
+            with tempfile.NamedTemporaryFile(suffix=".xcemp", delete=False) as tmp:
+                tmp.write(zip_bytes)
+                tmp_path = Path(tmp.name)
+            try:
+                align_errs = package_manifest_alignment_errors(rec, tmp_path)
+                if align_errs:
+                    raise RuntimeError("; ".join(align_errs))
+                saved = append_package(rec, tmp_path)
+            finally:
+                tmp_path.unlink(missing_ok=True)
+
+            upsert_catalog_item_from_xc_package_dict(db, saved, author_id=author_id)
+            row = db.query(CatalogItem).filter(CatalogItem.pkg_id == pkg_id).first()
+            if not row:
+                row = CatalogItem(pkg_id=pkg_id, author_id=author_id)
+                db.add(row)
+            row.version = saved.get("version") or rec["version"]
+            row.name = saved.get("name") or rec["name"]
+            row.description = saved.get("description") or rec["description"]
+            row.price = 0.0
+            row.artifact = "employee_pack"
+            row.industry = saved.get("industry") or rec["industry"]
+            row.stored_filename = saved.get("stored_filename") or ""
+            row.sha256 = saved.get("sha256") or ""
+            row.is_public = True
+            row.compliance_status = "approved"
+            db.commit()
+            try:
+                from modstore_server.employee_asset_pipeline import mirror_catalog_file_to_market_files
+
+                mirror_catalog_file_to_market_files(row.stored_filename)
+            except Exception:
+                pass
+            published.append({"pkg_id": pkg_id, "catalog_item_id": row.id, "is_public": True, "stored_filename": row.stored_filename})
+
+    try:
+        from modstore_server.market_catalog_api import _invalidate_market_catalog_caches
+
+        _invalidate_market_catalog_caches()
+    except Exception:
+        pass
+
+    print(json.dumps({"ok": True, "published": published}, ensure_ascii=False, indent=2))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

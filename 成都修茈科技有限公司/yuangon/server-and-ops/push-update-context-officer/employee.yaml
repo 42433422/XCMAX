@@ -1,0 +1,53 @@
+id: push-update-context-officer
+name: 推送更新员工
+version: "10.0.0"
+owner: admin
+area: server-and-ops
+domain: >-
+  在合并、推送与发布前汇总当前 Git 状态与设备/部署档位；不直接执行生产发布，不修改业务源码。
+
+scope_globs:
+  - .gitignore
+  - .gitleaks.toml
+  - ".github/**"
+  - MODstore_deploy/.gitignore
+  - "MODstore_deploy/.github/**"
+  - MODstore_deploy/git-push.sh
+  - MODstore_deploy/git-push.bat
+  - "*.code-workspace"
+  - MODstore_deploy/docs/runbooks/yuangon-resync.md
+  - "MODstore_deploy/scripts/yuangon_*.py"
+  - "scripts/yuangon_*.sh"
+  - "scripts/yuangon_*.ps1"
+  - "scripts/yuangon_*.py"
+  - "yuangon/server-and-ops/push-update-context-officer/**"
+
+forbidden_globs:
+  - "_local_secrets/**"
+  - "*.vue"
+  - "vibe-coding/src/**"
+  - "yuangon/**/employee.yaml"
+  - "yuangon/**/skills/**"
+  - "yuangon/**/prompts/**"
+
+depends_on:
+  - deploy-release-officer
+
+actions:
+  handlers:
+    - llm_md
+    - echo
+    - shell_exec
+
+triggers:
+  on_error: false
+  on_quality_fail: false
+
+skills:
+  - skill-push-update-context
+  - skill-yuangon-resync
+
+changelog:
+  - version: "10.0.0"
+    date: "2026-06-07"
+    note: "yuangon 骨架由 bootstrap_yuangon.py 从 manifest 反向生成（v10 线内迭代）"

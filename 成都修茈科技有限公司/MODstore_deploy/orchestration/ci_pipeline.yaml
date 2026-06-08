@@ -1,0 +1,57 @@
+# CI / deploy workflow graph aligned with .github/workflows/*.yml (documentation contract).
+# Schema: docs/contracts/orchestration/ci_pipeline.schema.json
+
+schema_version: "1.0"
+description: >
+  Component CI workflows gate matching deploy workflows via workflow_run on main.
+  Manual workflow_dispatch exists on each deploy workflow for break-glass rollout.
+
+workflows:
+  - name: CI - Backend Python
+    file: .github/workflows/ci-backend-python.yml
+    role: ci
+    triggers:
+      - type: push_paths
+        notes: Paths filtered to MODstore_deploy Python tree (see workflow file).
+      - type: pull_request
+      - type: workflow_dispatch
+
+  - name: Deploy backend (MODstore)
+    file: .github/workflows/deploy.yml
+    role: deploy
+    triggers:
+      - type: workflow_run
+        upstream_workflow: CI - Backend Python
+      - type: workflow_dispatch
+
+  - name: CI - Market
+    file: .github/workflows/ci-market.yml
+    role: ci
+    triggers:
+      - type: push_paths
+      - type: pull_request
+      - type: workflow_dispatch
+
+  - name: Market live deploy
+    file: .github/workflows/market-live-deploy.yml
+    role: deploy
+    triggers:
+      - type: workflow_run
+        upstream_workflow: CI - Market
+      - type: workflow_dispatch
+
+  - name: CI - Payment Java
+    file: .github/workflows/ci-payment-java.yml
+    role: ci
+    triggers:
+      - type: push_paths
+      - type: pull_request
+      - type: workflow_dispatch
+
+  - name: Deploy payment (Java)
+    file: .github/workflows/deploy-payment-java.yml
+    role: deploy
+    triggers:
+      - type: workflow_run
+        upstream_workflow: CI - Payment Java
+      - type: workflow_dispatch

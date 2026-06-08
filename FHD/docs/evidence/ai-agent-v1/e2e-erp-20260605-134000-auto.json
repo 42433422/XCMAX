@@ -1,0 +1,257 @@
+{
+  "_comment": "Phase 4.2 留证 — ERP 端到端：客户下单 → AI 审单 → 发货 → 通知 → Excel。strategy=auto（自动批准 + 完整执行）。",
+  "generated_at": "2026-06-05T13:40:00Z",
+  "input_message": "ERP 端到端：客户下单 → AI 审单 → 发货 → 通知 → Excel",
+  "execution_mode": "mock",
+  "approval_strategy": "auto",
+  "plan_id": "e2e-erp-20260605134000",
+  "intent": "erp_order_to_shipment",
+  "e2e_scenario": "erp_order_to_shipment",
+  "risk_level": "medium",
+  "todo_steps": [
+    "解析客户下单文本",
+    "AI 审单（业务规则）",
+    "写发货单",
+    "标记发货",
+    "微信通知客户",
+    "导出当日 Excel"
+  ],
+  "nodes": [
+    {
+      "node_id": "parse_order",
+      "tool_id": "order_parse",
+      "action": "run",
+      "risk": "low",
+      "depends_on": [],
+      "params": {
+        "order_text": "上海宏达 9702-C 1000个 @12.5 / 北京天元 8801-A 500个 @25.0"
+      }
+    },
+    {
+      "node_id": "ai_audit",
+      "tool_id": "audit_engine",
+      "action": "check",
+      "risk": "low",
+      "depends_on": ["parse_order"],
+      "params": {"input_from": "parse_order", "rule_set": "v1_standard"}
+    },
+    {
+      "node_id": "ensure_customers",
+      "tool_id": "customers",
+      "action": "ensure_exists",
+      "risk": "medium",
+      "depends_on": ["parse_order"],
+      "params": {"input_from": "parse_order.customers"}
+    },
+    {
+      "node_id": "create_shipments",
+      "tool_id": "shipment_generate",
+      "action": "generate",
+      "risk": "medium",
+      "depends_on": ["ai_audit", "ensure_customers"],
+      "params": {"input_from": "parse_order.items"}
+    },
+    {
+      "node_id": "mark_shipped",
+      "tool_id": "shipment_records",
+      "action": "update",
+      "risk": "medium",
+      "depends_on": ["create_shipments"],
+      "params": {"input_from": "create_shipments", "status": "shipped"}
+    },
+    {
+      "node_id": "notify_customers",
+      "tool_id": "wechat_send",
+      "action": "send",
+      "risk": "medium",
+      "depends_on": ["mark_shipped"],
+      "params": {"template": "shipped_notification", "input_from": "mark_shipped"}
+    },
+    {
+      "node_id": "export_daily_excel",
+      "tool_id": "excel_export",
+      "action": "run",
+      "risk": "low",
+      "depends_on": ["mark_shipped"],
+      "params": {"report": "daily_shipment"}
+    }
+  ],
+  "gated_decision": {
+    "plan_id": "e2e-erp-20260605134000",
+    "risk_decision": {
+      "requires_confirmation": true,
+      "reason": "计划包含 medium 风险写操作（客户/发货/通知）",
+      "blocking_nodes": ["ensure_customers", "create_shipments", "mark_shipped", "notify_customers"]
+    },
+    "node_decisions": [
+      {
+        "node_id": "parse_order",
+        "tool_id": "order_parse",
+        "action": "run",
+        "risk": "low",
+        "requires_approval": false,
+        "approved": true,
+        "reason": "low-risk auto-approved"
+      },
+      {
+        "node_id": "ai_audit",
+        "tool_id": "audit_engine",
+        "action": "check",
+        "risk": "low",
+        "requires_approval": false,
+        "approved": true,
+        "reason": "low-risk auto-approved"
+      },
+      {
+        "node_id": "ensure_customers",
+        "tool_id": "customers",
+        "action": "ensure_exists",
+        "risk": "medium",
+        "requires_approval": true,
+        "approval_request_id": "e2e-erp-req-1",
+        "approved": true,
+        "rejected": false,
+        "reason": "auto-approved"
+      },
+      {
+        "node_id": "create_shipments",
+        "tool_id": "shipment_generate",
+        "action": "generate",
+        "risk": "medium",
+        "requires_approval": true,
+        "approval_request_id": "e2e-erp-req-2",
+        "approved": true,
+        "rejected": false,
+        "reason": "auto-approved"
+      },
+      {
+        "node_id": "mark_shipped",
+        "tool_id": "shipment_records",
+        "action": "update",
+        "risk": "medium",
+        "requires_approval": true,
+        "approval_request_id": "e2e-erp-req-3",
+        "approved": true,
+        "rejected": false,
+        "reason": "auto-approved"
+      },
+      {
+        "node_id": "notify_customers",
+        "tool_id": "wechat_send",
+        "action": "send",
+        "risk": "medium",
+        "requires_approval": true,
+        "approval_request_id": "e2e-erp-req-4",
+        "approved": true,
+        "rejected": false,
+        "reason": "auto-approved"
+      },
+      {
+        "node_id": "export_daily_excel",
+        "tool_id": "excel_export",
+        "action": "run",
+        "risk": "low",
+        "requires_approval": false,
+        "approved": true,
+        "reason": "low-risk auto-approved"
+      }
+    ],
+    "approval_request_ids": ["e2e-erp-req-1", "e2e-erp-req-2", "e2e-erp-req-3", "e2e-erp-req-4"],
+    "all_approved": true,
+    "any_rejected": false,
+    "pending_approval": false
+  },
+  "success": true,
+  "message": "工作流执行完成",
+  "node_results_summary": [
+    {
+      "node_id": "parse_order",
+      "tool_id": "order_parse",
+      "action": "run",
+      "success": true,
+      "error": "",
+      "output_summary": {
+        "success": true,
+        "data_count": 2,
+        "data_sample_keys": ["customer", "model_number", "quantity", "unit_price"],
+        "message": "mock: 解析 2 个客户 2 条商品"
+      }
+    },
+    {
+      "node_id": "ai_audit",
+      "tool_id": "audit_engine",
+      "action": "check",
+      "success": true,
+      "error": "",
+      "output_summary": {
+        "success": true,
+        "audit_decision": "auto_approve",
+        "risk_score": 0.12,
+        "anomalies": 0,
+        "message": "mock: AI 审单通过"
+      }
+    },
+    {
+      "node_id": "ensure_customers",
+      "tool_id": "customers",
+      "action": "ensure_exists",
+      "success": true,
+      "error": "",
+      "output_summary": {
+        "success": true,
+        "data_count": 2,
+        "data_sample_keys": ["unit_name", "id"],
+        "message": "mock: 2 客户已确认"
+      }
+    },
+    {
+      "node_id": "create_shipments",
+      "tool_id": "shipment_generate",
+      "action": "generate",
+      "success": true,
+      "error": "",
+      "output_summary": {
+        "success": true,
+        "data_count": 2,
+        "data_sample_keys": ["order_number", "amount"],
+        "message": "mock: 已生成 2 张发货单"
+      }
+    },
+    {
+      "node_id": "mark_shipped",
+      "tool_id": "shipment_records",
+      "action": "update",
+      "success": true,
+      "error": "",
+      "output_summary": {
+        "success": true,
+        "updated": 2,
+        "message": "mock: 2 张发货单标记为已发货"
+      }
+    },
+    {
+      "node_id": "notify_customers",
+      "tool_id": "wechat_send",
+      "action": "send",
+      "success": true,
+      "error": "",
+      "output_summary": {
+        "success": true,
+        "message_ids": ["wx-msg-001", "wx-msg-002"],
+        "message": "mock: 2 条微信通知已发"
+      }
+    },
+    {
+      "node_id": "export_daily_excel",
+      "tool_id": "excel_export",
+      "action": "run",
+      "success": true,
+      "error": "",
+      "output_summary": {
+        "success": true,
+        "rows": 32,
+        "message": "mock: 当日发货 Excel 已导出"
+      }
+    }
+  ]
+}

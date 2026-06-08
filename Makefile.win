@@ -1,0 +1,46 @@
+# XCMAX monorepo — Windows（PowerShell / cmd + GNU Make）
+# 用法：make -f Makefile.win setup && make -f Makefile.win dev
+# 需已安装 make（Git for Windows、Chocolatey gmake 等）。
+
+.PHONY: help setup dev test test-coverage lint openapi-check e2e
+
+FHD := FHD
+VENV := $(abspath $(FHD)/.venv)
+PY := $(VENV)/Scripts/python.exe
+PIP := $(VENV)/Scripts/pip.exe
+REQ_DEV := $(FHD)/requirements-dev.txt
+REQ := $(FHD)/requirements.txt
+REQUIREMENTS := $(if $(wildcard $(REQ_DEV)),$(REQ_DEV),$(REQ))
+
+help:
+	@echo XCMAX Makefile.win
+	@echo   setup          - FHD/.venv + pip install
+	@echo   dev            - XCAGI run.py
+	@echo   test           - pytest FHD/tests/
+	@echo   test-coverage  - pytest + coverage
+	@echo   lint           - ruff check app/
+	@echo   openapi-check  - OpenAPI consistency
+	@echo   e2e            - Playwright frontend
+
+setup:
+	cd $(FHD) && python -m venv .venv
+	$(PIP) install -r $(REQUIREMENTS)
+	@echo Done. Next: make -f Makefile.win dev
+
+dev:
+	cd $(FHD)/XCAGI && $(PY) run.py
+
+test:
+	cd $(FHD) && $(PY) -m pytest tests/ -q
+
+test-coverage:
+	cd $(FHD) && $(PY) -m pytest tests/ --cov=app --cov-report=term-missing
+
+lint:
+	cd $(FHD) && $(PY) -m ruff check app/
+
+openapi-check:
+	cd $(FHD) && PYTHONPATH=. $(PY) scripts/ci/check_openapi_consistency.py
+
+e2e:
+	cd $(FHD)/frontend && npm run test:e2e

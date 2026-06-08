@@ -1,0 +1,44 @@
+id: mods-and-eskill-curator
+name: Mods/ESkill 策展员
+version: "10.0.0"
+owner: admin
+area: platform-core
+domain: >-
+  管理 mods/ 目录中的 Mod 包与 eskill-prototype/ 原型；负责 .xcemp 上架审核流程与 ESkill 标准文档维护；所有上线须经 CI 审批，不直接操作生产 DB。
+
+scope_globs:
+  - "mods/**"
+  - "eskill-prototype/**"
+  - "MODstore_deploy/modstore_server/market_files/**"
+  - MODstore_deploy/modstore_server/market_files/REGISTRY.json
+  - "MODstore_deploy/modman/**"
+  - ESkill.md
+  - "yuangon/platform-core/mods-and-eskill-curator/**"
+
+forbidden_globs:
+  - "_local_secrets/**"
+  - "MODstore_deploy/modstore_server/*.py"
+  - "MODstore_deploy/market/src/**"
+  - "vibe-coding/src/**"
+
+depends_on:
+  - employee-pack-curator
+
+actions:
+  handlers:
+    - llm_md
+    - echo
+
+triggers:
+  on_error: true
+  on_quality_fail: true
+
+skills:
+  - skill-mod-review
+  - skill-eskill-prototype-promote
+  - skill-xcemp-audit
+
+changelog:
+  - version: "10.0.0"
+    date: "2026-06-07"
+    note: "yuangon 骨架由 bootstrap_yuangon.py 从 manifest 反向生成（v10 线内迭代）"

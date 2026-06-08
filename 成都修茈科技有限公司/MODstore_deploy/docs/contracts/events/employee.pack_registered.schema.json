@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://modstore.local/schemas/events/employee.pack_registered.schema.json",
+  "title": "employee.pack_registered payload",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["pack_id", "author_id", "mod_id", "version"],
+  "properties": {
+    "pack_id": { "type": "string" },
+    "author_id": { "type": ["integer", "string"] },
+    "mod_id": { "type": "string" },
+    "version": { "type": "string" }
+  }
+}

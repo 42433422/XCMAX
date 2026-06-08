@@ -1,0 +1,1 @@
+import e from"./InternalCustomerServiceView-BInKnejk.js";import{d as r,c as o,H as t}from"./index-DmoO6vrN.js";import"./xcmaxAdmin-AZJ4i1MO.js";import"./useServiceBridge-4tgqY7el.js";import"./appDialog-BEIBMk6k.js";const u=r({__name:"InternalCustomerServiceView",setup(n){return(m,a)=>(o(),t(e))}});export{u as default};

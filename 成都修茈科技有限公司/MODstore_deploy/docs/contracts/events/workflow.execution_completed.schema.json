@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://modstore.local/schemas/events/workflow.execution_completed.schema.json",
+  "title": "workflow.execution_completed payload",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["workflow_id", "execution_id", "user_id", "status"],
+  "properties": {
+    "workflow_id": { "type": ["integer", "string"] },
+    "execution_id": { "type": ["integer", "string"] },
+    "user_id": { "type": ["integer", "string"] },
+    "status": { "type": "string" }
+  }
+}

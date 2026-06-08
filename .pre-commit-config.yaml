@@ -1,0 +1,76 @@
+# ============================================================================
+# XCMAX 根目录 pre-commit 配置
+# ----------------------------------------------------------------------------
+# 触发时机：git commit 之前
+# 安装方式：pip install pre-commit && pre-commit install
+# 手动跑：  pre-commit run --all-files
+# ----------------------------------------------------------------------------
+# v9.0.0 整改：archive-hygiene 钩子保证"零裸 .env / 零裸 db 提交"——任何
+# 在 _archive/ 下新增的真实 .env、login_out.json、客户数据库等敏感文件
+# 都会被 commit 阶段拦截，提示用户先跑 scripts/cleanup_archive_secrets.py。
+# ============================================================================
+repos:
+  # ----- 自定义钩子：XCAGI archive 卫生检查 -----
+  - repo: local
+    hooks:
+      - id: guard-no-new-coverage-ramp
+        name: Block new test_coverage_ramp_phase* files
+        entry: python3 scripts/guard_no_new_coverage_ramp.py
+        language: system
+        types: [python]
+        files: '^FHD/tests/|^成都修茈科技有限公司/(MODstore_deploy|vibe-coding)/tests/|^packages/.*/tests/'
+        pass_filenames: true
+        stages: [pre-commit]
+      - id: guard-no-new-v2-files
+        name: Block new FHD/app/**/*_vN.py files
+        entry: python3 scripts/guard_no_new_v2_files.py
+        language: system
+        types: [python]
+        files: '^FHD/app/.*_v[0-9]+\.py$'
+        pass_filenames: true
+        stages: [pre-commit]
+      - id: xcagi-archive-hygiene
+        name: XCAGI archive hygiene (--check 模式)
+        # 仅当 _archive/ 或清理脚本本身变化时才触发，避免无谓开销
+        files: '^_archive/.*$|^scripts/cleanup_archive_secrets\.py$'
+        entry: python3 scripts/cleanup_archive_secrets.py --check
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+        # pre-commit 框架的退出码语义：非零即视为失败
+        # 我们的 --check 模式在发现未脱敏文件时已正确返回 1
+
+  # ----- 代码格式化 -----
+  - repo: https://github.com/psf/black
+    rev: 24.10.0
+    hooks:
+      - id: black
+        language_version: python3.11
+        args: [--line-length=100]
+
+  - repo: https://github.com/pycqa/isort
+    rev: 5.13.2
+    hooks:
+      - id: isort
+        args: [--profile=black, --line-length=100]
+
+  # ----- 类型检查 -----
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.13.0
+    hooks:
+      - id: mypy
+        additional_dependencies: [types-all]
+        args: [--ignore-missing-imports, --no-strict-optional]
+        files: '^FHD/app/'
+
+  # ----- 通用检查：禁止提交超大文件 -----
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: [--maxkb=2048]  # 2MB 上限，xcmod / dist 二进制应走 .gitignore
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: mixed-line-ending
+        args: [--fix=lf]

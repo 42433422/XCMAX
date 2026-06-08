@@ -1,0 +1,1 @@
+import e from"./InventoryView-DqhXX2PV.js";import{d as o,c as r,H as t}from"./index-DmoO6vrN.js";import"./appDialog-BEIBMk6k.js";const _=o({__name:"InventoryView",setup(n){return(a,c)=>(r(),t(e))}});export{_ as default};

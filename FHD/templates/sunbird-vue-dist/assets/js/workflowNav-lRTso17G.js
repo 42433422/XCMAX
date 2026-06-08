@@ -1,0 +1,1 @@
+import{bm as o,bn as a,bo as e,bp as r}from"./index-DmoO6vrN.js";const t=`/mod/${r}/workflow-visualization`,n=`/mod/${a}/other-tools`;function s(){return e()?{path:t}:{name:"workflow-visualization"}}function l(){return o()?{path:n}:{name:"other-tools"}}export{l as a,s as r};

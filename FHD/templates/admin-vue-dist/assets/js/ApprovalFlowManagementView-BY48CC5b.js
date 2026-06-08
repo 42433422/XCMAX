@@ -1,0 +1,1 @@
+import e from"./ApprovalFlowManagementView-D9cl1Y_i.js";import{E as o,d as a,Q as r}from"./index-BM0eyJ6q.js";import"./approval-B7lVKiqw.js";const _=o({__name:"ApprovalFlowManagementView",setup(t){return(n,p)=>(a(),r(e))}});export{_ as default};

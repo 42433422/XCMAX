@@ -1,0 +1,42 @@
+{
+  "schema": "xcagi.download_release/v1",
+  "_doc": "官网下载版本单一真相源（SSOT）。全产品线 v10 锁：marketing/download/android 锚点恒 10.0.0（见 FHD/VERSION.md）。installer 日由 P5 构建 → P6 推 COS → 回写本文件 last_push；market SPA 运行时读取 /download-release.json（本文件的公开子集），无需重建即生效。",
+  "version_lock": "v10",
+  "marketing_version": "10.0.0",
+  "download_version": "10.0.0",
+  "android_version": "10.0.0",
+  "win_installer_mb": 654,
+  "cos_base_url": "https://xiu-ci.com",
+  "_cos_base_note": "下载主机：xiu-ci.com（nginx 别名 /xcagi-v{version}/ → /var/www/update/releases/stable/，本机直供）；dl.xiu-ci.com(COS) 当前为空，待 CI 上传后可切回。",
+  "release_root_template": "{cos_base_url}/xcagi-v{download_version}",
+  "channels": {
+    "desktop": "stable",
+    "android": "stable"
+  },
+  "artifacts": {
+    "personal": {
+      "win": "XCAGI-Personal-Setup-10.0.0-x64.exe",
+      "mac_arm64": "XCAGI-Personal-10.0.0-mac-arm64.dmg",
+      "mac_x64": "XCAGI-Personal-10.0.0-mac-x64.dmg",
+      "android": "XCAGI-Personal-Android-10.0.0.apk"
+    },
+    "enterprise": {
+      "win": "XCAGI-Enterprise-Setup-10.0.0-x64.exe",
+      "mac_arm64": "XCAGI-Enterprise-10.0.0-mac-arm64.dmg",
+      "mac_x64": "XCAGI-Enterprise-10.0.0-mac-x64.dmg",
+      "android": "XCAGI-Enterprise-Android-10.0.0.apk"
+    }
+  },
+  "updater_manifests": {
+    "win": "latest.yml",
+    "mac": "latest-mac.yml"
+  },
+  "last_push": {
+    "at": null,
+    "release_train": null,
+    "release_kind": null,
+    "git_sha": null,
+    "cos_uploaded": false,
+    "by": null
+  }
+}

@@ -1,0 +1,37 @@
+id: host-checker
+name: 运维员工
+version: "10.0.0"
+owner: admin
+area: craft-workshop
+domain: >-
+  探测宿主环境连通性，验证 LLM 密钥状态、API 版本兼容性与服务可达性
+
+scope_globs:
+  - "workbench/sessions/*"
+  - "workbench/hostcheck/*"
+  - "yuangon/craft-workshop/host-checker/**"
+
+forbidden_globs:
+  - "*.py"
+  - "*.vue"
+  - "*.ts"
+
+depends_on:
+  - self-checker
+
+actions:
+  handlers:
+    - llm_md
+    - echo
+
+triggers:
+  on_error: true
+  on_quality_fail: true
+
+skills:
+  - skill-host-check
+
+changelog:
+  - version: "10.0.0"
+    date: "2026-06-07"
+    note: "yuangon 骨架由 bootstrap_yuangon.py 从 manifest 反向生成（v10 线内迭代）"

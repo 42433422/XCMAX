@@ -1,0 +1,1 @@
+import o from"./TraditionalModeView-Xg1iYSh9.js";import{E as e,d as r,Q as t}from"./index-BM0eyJ6q.js";import"./templatePreview-CjCQYra9.js";const m=e({__name:"TraditionalModeView",setup(a){return(i,n)=>(r(),t(o))}});export{m as default};

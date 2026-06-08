@@ -1,0 +1,1 @@
+import o from"./BusinessDockingView-BnaMuy7G.js";import{E as e,d as r,Q as s}from"./index-BM0eyJ6q.js";import"./templatePreview-CjCQYra9.js";import"./templateScopeRules-DMyKvWia.js";import"./templatePreviewSanitize-CcMAshdc.js";const u=e({__name:"BusinessDockingView",setup(t){return(i,n)=>(r(),s(o))}});export{u as default};

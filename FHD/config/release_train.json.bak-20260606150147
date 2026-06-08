@@ -1,0 +1,9 @@
+{
+  "epoch": "1.0.0.0",
+  "current": "1.0.0.8",
+  "started_at": "2026-06-04",
+  "day_index": 8,
+  "last_bump_at": "2026-06-06T00:03:00.733954+00:00",
+  "last_installer_push_at": null,
+  "last_major_push_at": null
+}

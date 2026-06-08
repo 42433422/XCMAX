@@ -1,0 +1,13 @@
+{
+  "toolkit_dir": "/Users/a4243342/Desktop/XCMAX/FHD/XCAGI/resources/wechat-decrypt",
+  "db_dir": "/Users/a4243342/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/wxid_tfxzqdqt87oa22_62ce/db_storage",
+  "config_path": "/Users/a4243342/Desktop/XCMAX/FHD/XCAGI/resources/wechat-decrypt/config.json",
+  "keys_file": "/Users/a4243342/Desktop/XCMAX/FHD/XCAGI/resources/wechat-decrypt/all_keys.json",
+  "contact_db_path": "/Users/a4243342/Desktop/XCMAX/FHD/XCAGI/resources/wechat-decrypt/decrypted/contact/contact.db",
+  "message_db_path": "/Users/a4243342/Desktop/XCMAX/FHD/XCAGI/resources/wechat-decrypt/decrypted/message/message_0.db",
+  "db_candidates": [
+    "/Users/a4243342/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/wxid_tfxzqdqt87oa22_62ce/db_storage"
+  ],
+  "keys_scan_ok": false,
+  "updated_at": "2026-05-29T05:33:31.789339+00:00"
+}

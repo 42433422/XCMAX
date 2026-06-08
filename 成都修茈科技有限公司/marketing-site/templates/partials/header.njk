@@ -1,0 +1,42 @@
+<header class="site-header">
+  <div class="container header-inner">
+    <a class="brand-mark" href="/index.html"{%- if activeNav === 'home' %} aria-label="成都修茈科技有限公司官网首页"{% endif %}>
+      <span class="brand-seal"><img src="/assets/xiu-ci-logo.png" alt="修茈科技 Logo" /></span>
+      <span class="brand-name"><strong>成都修茈科技有限公司</strong><span>XCAGI Automation</span></span>
+    </a>
+    <nav class="nav"{% if activeNav === 'home' %} id="main-nav"{% endif %} aria-label="站点导航">
+      <div class="nav-menu">
+        <a {% if activeNav === 'home' %}class="active" {% endif %}href="/index.html">首页</a>
+        <a {% if activeNav === 'about' %}class="active" {% endif %}href="/about.html">关于修茈</a>
+        <a {% if activeNav === 'services' %}class="active" {% endif %}href="/services.html">产品中心</a>
+        <a {% if activeNav === 'solutions' %}class="active" {% endif %}href="/solutions.html">解决方案</a>
+        <a {% if activeNav === 'cases' %}class="active" {% endif %}href="/cases.html">客户案例</a>
+        <a class="nav-optional{% if activeNav === 'news' %} active{% endif %}" href="/news.html">新闻资讯</a>
+        <a class="nav-optional{% if activeNav === 'honors' %} active{% endif %}" href="/honors.html">资质与能力</a>
+        <a {% if activeNav === 'contact' %}class="active" {% endif %}href="/contact.html">联系我们</a>
+        <a {% if activeNav === 'developer' %}class="active" {% endif %}href="/developer.html">开发者门户</a>
+      </div>
+      <div class="nav-actions">
+        <a class="nav-action nav-action--primary" href="/market/">AI 市场</a>
+        <a class="nav-action nav-action--outline" href="/market/download">软件下载</a>
+      </div>
+    </nav>
+    <button class="mobile-menu-toggle" id="mobile-menu-toggle" type="button" aria-controls="mobile-menu" aria-label="打开菜单" aria-expanded="false"><span></span><span></span><span></span></button>
+  </div>
+</header>
+<div class="mobile-menu-overlay" id="mobile-menu-overlay"></div>
+<nav class="mobile-menu" id="mobile-menu" aria-hidden="true" inert>
+  <a href="/index.html" class="mobile-menu-link">首页</a>
+  <a href="/about.html" class="mobile-menu-link">关于修茈</a>
+  <a href="/services.html" class="mobile-menu-link">产品中心</a>
+  <a href="/solutions.html" class="mobile-menu-link">解决方案</a>
+  <a href="/cases.html" class="mobile-menu-link">客户案例</a>
+  <a href="/news.html" class="mobile-menu-link">新闻资讯</a>
+  <a href="/honors.html" class="mobile-menu-link">资质与能力</a>
+  <a href="/contact.html" class="mobile-menu-link">联系我们</a>
+  <a href="/developer.html" class="mobile-menu-link">开发者门户</a>
+  <div class="mobile-menu-actions">
+    <a href="/market/" class="mobile-menu-link mobile-menu-link--primary">AI 市场</a>
+    <a href="/market/download" class="mobile-menu-link mobile-menu-link--outline">软件下载</a>
+  </div>
+</nav>

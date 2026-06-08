@@ -1,0 +1,7 @@
+{
+  "action": "check_status",
+  "scope": "all",
+  "include_mod_mappings": true,
+  "include_sessions": true,
+  "include_audit_log": true
+}

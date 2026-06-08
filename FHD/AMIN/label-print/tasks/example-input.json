@@ -1,0 +1,7 @@
+{
+  "action": "print",
+  "model": "XY-300",
+  "quantity": 5,
+  "template": "default",
+  "source": "wechat_star"
+}

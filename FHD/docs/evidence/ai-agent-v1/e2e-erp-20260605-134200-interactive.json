@@ -1,0 +1,164 @@
+{
+  "_comment": "Phase 4.2 留证 — ERP 端到端。strategy=interactive（挂起审批 + 不执行）。",
+  "generated_at": "2026-06-05T13:42:00Z",
+  "input_message": "ERP 端到端：客户下单 → AI 审单 → 发货 → 通知 → Excel",
+  "execution_mode": "mock",
+  "approval_strategy": "interactive",
+  "plan_id": "e2e-erp-20260605134200",
+  "intent": "erp_order_to_shipment",
+  "e2e_scenario": "erp_order_to_shipment",
+  "risk_level": "medium",
+  "todo_steps": [
+    "解析客户下单文本",
+    "AI 审单（业务规则）",
+    "写发货单",
+    "标记发货",
+    "微信通知客户",
+    "导出当日 Excel"
+  ],
+  "nodes": [
+    {
+      "node_id": "parse_order",
+      "tool_id": "order_parse",
+      "action": "run",
+      "risk": "low",
+      "depends_on": [],
+      "params": {"order_text": "上海宏达 9702-C 1000个 @12.5 / 北京天元 8801-A 500个 @25.0"}
+    },
+    {
+      "node_id": "ai_audit",
+      "tool_id": "audit_engine",
+      "action": "check",
+      "risk": "low",
+      "depends_on": ["parse_order"],
+      "params": {"input_from": "parse_order", "rule_set": "v1_standard"}
+    },
+    {
+      "node_id": "ensure_customers",
+      "tool_id": "customers",
+      "action": "ensure_exists",
+      "risk": "medium",
+      "depends_on": ["parse_order"],
+      "params": {"input_from": "parse_order.customers"}
+    },
+    {
+      "node_id": "create_shipments",
+      "tool_id": "shipment_generate",
+      "action": "generate",
+      "risk": "medium",
+      "depends_on": ["ai_audit", "ensure_customers"],
+      "params": {"input_from": "parse_order.items"}
+    },
+    {
+      "node_id": "mark_shipped",
+      "tool_id": "shipment_records",
+      "action": "update",
+      "risk": "medium",
+      "depends_on": ["create_shipments"],
+      "params": {"input_from": "create_shipments", "status": "shipped"}
+    },
+    {
+      "node_id": "notify_customers",
+      "tool_id": "wechat_send",
+      "action": "send",
+      "risk": "medium",
+      "depends_on": ["mark_shipped"],
+      "params": {"template": "shipped_notification", "input_from": "mark_shipped"}
+    },
+    {
+      "node_id": "export_daily_excel",
+      "tool_id": "excel_export",
+      "action": "run",
+      "risk": "low",
+      "depends_on": ["mark_shipped"],
+      "params": {"report": "daily_shipment"}
+    }
+  ],
+  "gated_decision": {
+    "plan_id": "e2e-erp-20260605134200",
+    "risk_decision": {
+      "requires_confirmation": true,
+      "reason": "计划包含 medium 风险写操作（客户/发货/通知）",
+      "blocking_nodes": ["ensure_customers", "create_shipments", "mark_shipped", "notify_customers"]
+    },
+    "node_decisions": [
+      {
+        "node_id": "parse_order",
+        "tool_id": "order_parse",
+        "action": "run",
+        "risk": "low",
+        "requires_approval": false,
+        "approved": true,
+        "reason": "low-risk auto-approved"
+      },
+      {
+        "node_id": "ai_audit",
+        "tool_id": "audit_engine",
+        "action": "check",
+        "risk": "low",
+        "requires_approval": false,
+        "approved": true,
+        "reason": "low-risk auto-approved"
+      },
+      {
+        "node_id": "ensure_customers",
+        "tool_id": "customers",
+        "action": "ensure_exists",
+        "risk": "medium",
+        "requires_approval": true,
+        "approval_request_id": "e2e-erp-req-5",
+        "approved": null,
+        "rejected": false,
+        "reason": "pending human approval"
+      },
+      {
+        "node_id": "create_shipments",
+        "tool_id": "shipment_generate",
+        "action": "generate",
+        "risk": "medium",
+        "requires_approval": true,
+        "approval_request_id": "e2e-erp-req-6",
+        "approved": null,
+        "rejected": false,
+        "reason": "pending human approval"
+      },
+      {
+        "node_id": "mark_shipped",
+        "tool_id": "shipment_records",
+        "action": "update",
+        "risk": "medium",
+        "requires_approval": true,
+        "approval_request_id": "e2e-erp-req-7",
+        "approved": null,
+        "rejected": false,
+        "reason": "pending human approval"
+      },
+      {
+        "node_id": "notify_customers",
+        "tool_id": "wechat_send",
+        "action": "send",
+        "risk": "medium",
+        "requires_approval": true,
+        "approval_request_id": "e2e-erp-req-8",
+        "approved": null,
+        "rejected": false,
+        "reason": "pending human approval"
+      },
+      {
+        "node_id": "export_daily_excel",
+        "tool_id": "excel_export",
+        "action": "run",
+        "risk": "low",
+        "requires_approval": false,
+        "approved": true,
+        "reason": "low-risk auto-approved"
+      }
+    ],
+    "approval_request_ids": ["e2e-erp-req-5", "e2e-erp-req-6", "e2e-erp-req-7", "e2e-erp-req-8"],
+    "all_approved": false,
+    "any_rejected": false,
+    "pending_approval": true
+  },
+  "success": false,
+  "message": "plan pending approval; not executed"
+}

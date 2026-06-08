@@ -1,0 +1,101 @@
+# ===========================================
+# Prometheus 监控配置
+# ===========================================
+# 用于监控 XCAGI 应用性能指标
+
+global:
+  scrape_interval: 15s          # 默认抓取间隔
+  evaluation_interval: 15s     # 评估规则间隔
+  scrape_timeout: 10s           # 单次抓取超时时间
+
+# 告警规则文件
+rule_files:
+  # - "xcagi_alerts.yml"
+
+# 抓取配置
+scrape_configs:
+  # ---- XCAGI 应用性能指标 ----
+  - job_name: 'xcagi-performance'
+    metrics_path: '/api/performance/metrics/prometheus'
+    scheme: http
+    static_configs:
+      - targets: ['localhost:5000']
+        labels:
+          instance: 'xcagi-app'
+          environment: 'development'
+
+  # ---- XCAGI 健康检查 ----
+  - job_name: 'xcagi-health'
+    metrics_path: '/api/performance/health'
+    scheme: http
+    static_configs:
+      - targets: ['localhost:5000']
+        labels:
+          instance: 'xcagi-health'
+          check_type: 'liveness'
+
+# 告警管理（可选启用）
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+          # - 'alertmanager:9093'
+
+# 远程写入（可选，用于长期存储）
+# remote_write:
+#   - url: 'http://prometheus-remote:19291/api/v1/write'
+
+# 远程读取（可选）
+# remote_read:
+#   - url: 'http://prometheus-remote:19291/api/v1/read'
+
+# 存储配置（本地）
+storage:
+  tsdb:
+    retention.time: 15d         # 数据保留时间
+    retention.size: 10GB        # 最大存储大小
+    wal_compression: gzip       # WAL压缩
+
+
+# ===========================================
+# Grafana Dashboard 配置建议
+# ===========================================
+#
+# 在 Grafana 中导入以下面板：
+#
+# 1. **API 性能概览**
+#    - 查询: xcagi_request_duration_seconds{instance="xcagi-app"}
+#    - 面板: P50/P95/P99延迟、QPS、错误率
+#
+# 2. **缓存命中率**
+#    - 自定义查询或从 /api/performance/cache/stats 获取
+#    - 面板: 命中率、缓存大小、过期数
+#
+# 3. **系统资源**
+#    - node_exporter 指标（如已安装）
+#    - 面板: CPU、内存、磁盘I/O
+#
+# 4. **业务指标**
+#    - API请求计数: xcagi_api_requests_total
+#    - 面板: 各端点请求量、成功率
+#
+# ===========================================
+# 快速启动命令
+# ===========================================
+#
+# 1. 启动 Prometheus:
+#    docker run -d \
+#      --name prometheus \
+#      -p 9090:9090 \
+#      -v $(pwd)/prometheus.yml:/etc/prometheus/prometheus.yml \
+#      prom/prometheus
+#
+# 2. 访问 Web UI:
+#    http://localhost:9090
+#
+# 3. 验证抓取目标:
+#    Status -> Targets -> 查看 xcagi-performance 状态
+#
+# 4. 测试查询:
+#    在 Graph 页面输入: xcagi_request_duration_seconds
+#

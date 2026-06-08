@@ -1,0 +1,64 @@
+# V2 服务导入映射
+# 使用方法: 在路由文件中替换这些导入
+
+## 旧导入 -> 新导入
+
+# product
+from app.application.product_app_service import get_product_app_service
+->
+from app.application.product_app_service_v2 import get_product_app_service_v2
+
+# shipment_application_service
+from app.application.shipment_application_service_app_service import get_shipment_application_service
+->
+from app.application.shipment_application_service_app_service_v2 import get_shipment_app_service_v2
+
+# auth
+from app.application.auth_app_service import get_auth_app_service
+->
+from app.application.auth_app_service_v2 import get_auth_app_service_v2
+
+# user
+from app.application.user_app_service import get_user_app_service
+->
+from app.application.user_app_service_v2 import get_user_app_service_v2
+
+# customer
+from app.application.customer_app_service import get_customer_app_service
+->
+from app.application.customer_app_service_v2 import get_customer_app_service_v2
+
+# print
+from app.application.print_app_service import get_print_app_service
+->
+from app.application.print_app_service_v2 import get_print_app_service_v2
+
+# ocr
+from app.application.ocr_app_service import get_ocr_app_service
+->
+from app.application.ocr_app_service_v2 import get_ocr_app_service_v2
+
+# ai_chat
+from app.application.ai_chat_app_service import get_ai_chat_app_service
+->
+from app.application.ai_chat_app_service_v2 import get_ai_chat_app_service_v2
+
+# conversation
+from app.application.conversation_app_service import get_conversation_app_service
+->
+from app.application.conversation_app_service_v2 import get_conversation_app_service_v2
+
+# wechat_task
+from app.application.wechat_task_app_service import get_wechat_task_app_service
+->
+from app.application.wechat_task_app_service_v2 import get_wechat_task_app_service_v2
+
+# wechat_contact
+from app.application.wechat_contact_app_service import get_wechat_contact_app_service
+->
+from app.application.wechat_contact_app_service_v2 import get_wechat_contact_app_service_v2
+
+# material
+from app.application.material_app_service import get_material_app_service
+->
+from app.application.material_app_service_v2 import get_material_app_service_v2

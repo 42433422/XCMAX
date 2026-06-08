@@ -1,0 +1,614 @@
+From 8a8723ab6cad429f8448728a32a3bba4fe27a8a2 Mon Sep 17 00:00:00 2001
+From: 42433422 <1499383833@qq.com>
+Date: Mon, 11 May 2026 22:24:26 +0800
+Subject: [PATCH] feat(modstore): add XCmax admin and sync API for FHD nodes
+
+---
+ .../modstore_server/api/app_factory.py        |   6 +
+ .../modstore_server/xcmax_admin_api.py        | 570 ++++++++++++++++++
+ 2 files changed, 576 insertions(+)
+ create mode 100644 MODstore_deploy/modstore_server/xcmax_admin_api.py
+
+diff --git a/MODstore_deploy/modstore_server/api/app_factory.py b/MODstore_deploy/modstore_server/api/app_factory.py
+index 52cc7d0..b7d6963 100644
+--- a/MODstore_deploy/modstore_server/api/app_factory.py
++++ b/MODstore_deploy/modstore_server/api/app_factory.py
+@@ -46,6 +46,10 @@ _OPENAPI_TAGS = [
+     {"name": "refunds", "description": "退款申请与审核"},
+     {"name": "catalog", "description": "公开目录与市场检索"},
+     {"name": "catalog-mod-sync", "description": "公网机器令牌：库与 XCAGI/mods 推送/拉回（/v1/mod-sync）"},
++    {
++        "name": "xcmax-admin",
++        "description": "XCmax 服务器后台与双向同步（/api/xcmax/admin、/api/xcmax/sync）",
++    },
+ ]
+ 
+ 
+@@ -211,6 +215,8 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
+         "modstore_server.invoice_api",
+         "modstore_server.reconciliation",
+         "modstore_server.subscription_renewer",
++        # XCmax 服务器后台 / 双向同步（与本地节点 app/fastapi_routes/xcmax_admin.py 对称）
++        "modstore_server.xcmax_admin_api",
+     )
+     if cfg.profile == "llm-only":
+         from modstore_server.api import health as health_routes
+diff --git a/MODstore_deploy/modstore_server/xcmax_admin_api.py b/MODstore_deploy/modstore_server/xcmax_admin_api.py
+new file mode 100644
+index 0000000..4385b6f
+--- /dev/null
++++ b/MODstore_deploy/modstore_server/xcmax_admin_api.py
+@@ -0,0 +1,570 @@
++"""XCmax 服务器后台 / 双向同步 服务端实现。
++
++为本地节点（FHD-个人 等）提供与 ``app/fastapi_routes/xcmax_admin.py`` 对称的
++服务器端接口：
++
++  GET  /api/xcmax/admin/modules        — 服务器侧已上架的 Mod / 员工包
++  GET  /api/xcmax/admin/remote-status  — 自身存活与版本（供同名节点级联探测）
++  GET  /api/xcmax/sync/status          — 同步指针 / outbox / inbox 概览
++  GET  /api/xcmax/sync/changes         — 服务器变更日志（供本地节点拉取）
++  POST /api/xcmax/sync/receive         — 接收来自本地节点的变更（写入 inbox）
++  POST /api/xcmax/sync/push            — （服务器端通常不需要主动 push，占位）
++  POST /api/xcmax/sync/pull            — （同上）
++  GET  /api/xcmax/sync/conflicts       — 冲突清单（与本地客户端同名）
++  POST /api/xcmax/sync/conflicts/{id}/resolve — 冲突处理
++  GET  /api/xcmax/sync/stream          — SSE 心跳（与本地 SSE 对称）
++
++存储：使用与 ``modstore.db`` 同目录的独立 SQLite 文件 ``xcmax_sync.db``，
++避免侵入 ORM 元数据。可由 ``XCMAX_SYNC_DB_PATH`` 环境变量覆盖。
++"""
++
++from __future__ import annotations
++
++import asyncio
++import json
++import logging
++import os
++import sqlite3
++import threading
++import time
++from datetime import datetime, timezone
++from pathlib import Path
++from typing import Any
++
++from fastapi import APIRouter, Body, Query, Request
++from fastapi.responses import JSONResponse, StreamingResponse
++
++logger = logging.getLogger(__name__)
++
++router = APIRouter(prefix="/api/xcmax", tags=["xcmax-admin"])
++
++
++# ---------------------------------------------------------------------------
++# 存储：独立 SQLite，避开 ORM 元数据；多 worker 下 WAL 模式即可够用
++# ---------------------------------------------------------------------------
++
++_db_lock = threading.Lock()
++
++
++def _resolve_sync_db_path() -> Path:
++    raw = (os.environ.get("XCMAX_SYNC_DB_PATH") or "").strip()
++    if raw:
++        p = Path(raw).expanduser().resolve()
++    else:
++        try:
++            from modstore_server.db.base import default_db_path
++
++            p = default_db_path().parent / "xcmax_sync.db"
++        except Exception:
++            p = Path(__file__).resolve().parent / "xcmax_sync.db"
++    p.parent.mkdir(parents=True, exist_ok=True)
++    return p
++
++
++def _connect() -> sqlite3.Connection:
++    conn = sqlite3.connect(str(_resolve_sync_db_path()), timeout=10)
++    conn.row_factory = sqlite3.Row
++    return conn
++
++
++def _init_schema_once() -> None:
++    """幂等建表 + WAL；多 worker 安全。"""
++    with _db_lock:
++        with _connect() as conn:
++            conn.executescript(
++                """
++                PRAGMA journal_mode=WAL;
++                PRAGMA synchronous=NORMAL;
++                CREATE TABLE IF NOT EXISTS xcmax_changes (
++                    id INTEGER PRIMARY KEY AUTOINCREMENT,
++                    entity_type TEXT NOT NULL,
++                    entity_id TEXT NOT NULL,
++                    operation TEXT NOT NULL,
++                    payload_json TEXT NOT NULL DEFAULT '{}',
++                    version INTEGER NOT NULL DEFAULT 1,
++                    actor TEXT NOT NULL DEFAULT 'system',
++                    origin_node TEXT NOT NULL DEFAULT 'server',
++                    created_at TEXT NOT NULL
++                );
++                CREATE INDEX IF NOT EXISTS idx_xcmax_changes_entity
++                    ON xcmax_changes(entity_type, entity_id);
++                CREATE TABLE IF NOT EXISTS xcmax_inbox (
++                    id INTEGER PRIMARY KEY AUTOINCREMENT,
++                    entity_type TEXT NOT NULL,
++                    entity_id TEXT NOT NULL,
++                    operation TEXT NOT NULL,
++                    payload_json TEXT NOT NULL DEFAULT '{}',
++                    origin_node TEXT NOT NULL DEFAULT 'remote',
++                    status TEXT NOT NULL DEFAULT 'pending',
++                    conflict_note TEXT DEFAULT NULL,
++                    received_at TEXT NOT NULL
++                );
++                CREATE INDEX IF NOT EXISTS idx_xcmax_inbox_status
++                    ON xcmax_inbox(status, id);
++                CREATE TABLE IF NOT EXISTS xcmax_meta (
++                    key TEXT PRIMARY KEY,
++                    value TEXT NOT NULL DEFAULT ''
++                );
++                """
++            )
++            conn.commit()
++
++
++_schema_ready = False
++
++
++def _ensure_schema() -> None:
++    global _schema_ready
++    if _schema_ready:
++        return
++    try:
++        _init_schema_once()
++        _schema_ready = True
++    except Exception:
++        logger.exception("xcmax_sync schema init failed")
++
++
++def _meta_get(conn: sqlite3.Connection, key: str, default: str = "") -> str:
++    row = conn.execute("SELECT value FROM xcmax_meta WHERE key=?", (key,)).fetchone()
++    return row["value"] if row else default
++
++
++def _meta_set(conn: sqlite3.Connection, key: str, value: str) -> None:
++    conn.execute(
++        "INSERT INTO xcmax_meta(key, value) VALUES(?, ?) "
++        "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
++        (key, value),
++    )
++
++
++# ---------------------------------------------------------------------------
++# 后端模块清单（来自 Mod 目录 + 员工包，作为服务器侧的「模块注册表」）
++# ---------------------------------------------------------------------------
++
++CORE_SERVER_MODULES: list[dict[str, Any]] = [
++    {
++        "module_id": "modstore-core",
++        "display_name": "ModStore 核心",
++        "route": "",
++        "source": "core",
++        "sync_scope": "system",
++        "active": True,
++        "version": "0.2.0",
++    },
++    {
++        "module_id": "xcmax-sync",
++        "display_name": "XCmax 双向同步",
++        "route": "/api/xcmax/sync",
++        "source": "core",
++        "sync_scope": "system",
++        "active": True,
++        "version": "1.0",
++    },
++    {
++        "module_id": "agent-butler",
++        "display_name": "数字管家",
++        "route": "/api/agent/butler",
++        "source": "core",
++        "sync_scope": "none",
++        "active": True,
++        "version": "1.0",
++    },
++    {
++        "module_id": "workflow",
++        "display_name": "工作流编排",
++        "route": "/api/workflow",
++        "source": "core",
++        "sync_scope": "workflow",
++        "active": True,
++        "version": "1.0",
++    },
++]
++
++
++def _collect_catalog_modules() -> list[dict[str, Any]]:
++    """从 ModStore catalog 读取已上架的包，转换为 XCmax 模块视图。"""
++    rows: list[dict[str, Any]] = []
++    try:
++        from modstore_server.catalog_store import list_packages
++
++        items, _ = list_packages(limit=500, offset=0)
++        for it in items:
++            pid = str(it.get("id") or "").strip()
++            if not pid:
++                continue
++            artifact = str(it.get("artifact") or "mod").strip().lower()
++            source = "employee" if artifact == "employee" else "remote"
++            rows.append(
++                {
++                    "module_id": pid,
++                    "display_name": str(it.get("name") or pid),
++                    "route": "",
++                    "source": source,
++                    "sync_scope": "module_info",
++                    "active": bool(it.get("status", "active") not in ("delisted", "draft")),
++                    "version": str(it.get("version") or ""),
++                }
++            )
++    except Exception as exc:
++        logger.debug("xcmax modules: catalog_store unavailable: %s", exc)
++    return rows
++
++
++@router.get("/admin/modules", response_model=None)
++async def list_modules() -> dict[str, Any]:
++    """获取服务器模块注册表（核心 + ModStore 已上架 + 员工包）。"""
++    modules: list[dict[str, Any]] = list(CORE_SERVER_MODULES)
++    modules.extend(_collect_catalog_modules())
++    return {"success": True, "data": modules, "total": len(modules)}
++
++
++# ---------------------------------------------------------------------------
++# 远端状态：从本进程角度报告自身存活，便于级联节点探测
++# ---------------------------------------------------------------------------
++
++_PROCESS_START_TS = time.time()
++
++
++@router.get("/admin/remote-status", response_model=None)
++async def remote_status() -> dict[str, Any]:
++    try:
++        from modstore_server.deploy_context import health_payload
++    except Exception:
++        health_payload = lambda: {}  # noqa: E731
++
++    ctx = {}
++    try:
++        ctx = health_payload() or {}
++    except Exception:
++        ctx = {}
++
++    return {
++        "success": True,
++        "data": {
++            "reachable": True,
++            "latency_ms": 0,
++            "version": str(ctx.get("git_sha") or "0.2.0"),
++            "deploy_time": datetime.fromtimestamp(_PROCESS_START_TS, tz=timezone.utc).isoformat(),
++            "hostname": str(ctx.get("hostname") or ""),
++            "deploy_tier": str(ctx.get("deploy_tier") or "local"),
++        },
++    }
++
++
++# ---------------------------------------------------------------------------
++# 同步状态 / 变更日志 / 接收
++# ---------------------------------------------------------------------------
++
++
++def _last_change_id(conn: sqlite3.Connection) -> int:
++    row = conn.execute("SELECT MAX(id) AS mx FROM xcmax_changes").fetchone()
++    return int(row["mx"] or 0)
++
++
++def _inbox_pending_count(conn: sqlite3.Connection) -> int:
++    row = conn.execute(
++        "SELECT COUNT(1) AS c FROM xcmax_inbox WHERE status='pending'"
++    ).fetchone()
++    return int(row["c"] or 0)
++
++
++def _inbox_conflict_count(conn: sqlite3.Connection) -> int:
++    row = conn.execute(
++        "SELECT COUNT(1) AS c FROM xcmax_inbox WHERE status='conflict'"
++    ).fetchone()
++    return int(row["c"] or 0)
++
++
++@router.get("/sync/status", response_model=None)
++async def sync_status() -> dict[str, Any]:
++    _ensure_schema()
++    try:
++        with _connect() as conn:
++            local_cursor = _last_change_id(conn)
++            remote_cursor = int(_meta_get(conn, "remote_cursor", "0") or 0)
++            outbox_count = _inbox_pending_count(conn)
++            conflict_count = _inbox_conflict_count(conn)
++            last_sync_at = _meta_get(conn, "last_sync_at", "")
++        return {
++            "success": True,
++            "data": {
++                "healthy": True,
++                "local_cursor": local_cursor,
++                "remote_cursor": remote_cursor,
++                "outbox_count": outbox_count,
++                "last_sync_at": last_sync_at or None,
++                "conflict_count": conflict_count,
++                "role": "server",
++            },
++        }
++    except Exception as exc:
++        logger.warning("sync_status failed: %s", exc)
++        return {
++            "success": True,
++            "data": {
++                "healthy": False,
++                "local_cursor": None,
++                "remote_cursor": None,
++                "outbox_count": 0,
++                "last_sync_at": None,
++                "conflict_count": 0,
++                "role": "server",
++                "note": str(exc),
++            },
++        }
++
++
++@router.get("/sync/changes", response_model=None)
++async def sync_changes(
++    since_cursor: int = Query(0, ge=0),
++    limit: int = Query(100, ge=1, le=1000),
++) -> dict[str, Any]:
++    """供本地节点拉取增量。"""
++    _ensure_schema()
++    try:
++        with _connect() as conn:
++            rows = conn.execute(
++                "SELECT id, entity_type, entity_id, operation, payload_json, "
++                "version, actor, origin_node, created_at "
++                "FROM xcmax_changes WHERE id > ? ORDER BY id ASC LIMIT ?",
++                (int(since_cursor), int(limit)),
++            ).fetchall()
++        data: list[dict[str, Any]] = []
++        for r in rows:
++            try:
++                payload = json.loads(r["payload_json"] or "{}")
++            except Exception:
++                payload = {}
++            data.append(
++                {
++                    "id": r["id"],
++                    "entity_type": r["entity_type"],
++                    "entity_id": r["entity_id"],
++                    "operation": r["operation"],
++                    "payload": payload,
++                    "version": r["version"],
++                    "actor": r["actor"],
++                    "origin_node": r["origin_node"],
++                    "created_at": r["created_at"],
++                }
++            )
++        return {"success": True, "data": data, "count": len(data)}
++    except Exception as exc:
++        logger.warning("sync_changes failed: %s", exc)
++        return {"success": True, "data": [], "count": 0, "note": str(exc)}
++
++
++@router.post("/sync/receive", response_model=None)
++async def sync_receive(body: dict | list = Body(default=None)) -> dict[str, Any]:
++    """接收来自本地节点的变更。
++
++    兼容 ``app/services/xcmax_sync_service.py`` 的单条 payload 与批量数组。"""
++    _ensure_schema()
++    if body is None:
++        return JSONResponse(
++            {"success": False, "message": "missing body"}, status_code=400
++        )
++
++    items = body if isinstance(body, list) else [body]
++    written = 0
++    now_iso = datetime.now(timezone.utc).isoformat()
++    try:
++        with _db_lock, _connect() as conn:
++            for raw in items:
++                if not isinstance(raw, dict):
++                    continue
++                entity_type = str(raw.get("entity_type") or "").strip()
++                entity_id = str(raw.get("entity_id") or "").strip()
++                operation = str(raw.get("operation") or "sync").strip()
++                if not entity_type or not entity_id:
++                    continue
++                payload = raw.get("payload") or {}
++                try:
++                    payload_json = json.dumps(
++                        payload, ensure_ascii=False, default=str
++                    )
++                except Exception:
++                    payload_json = "{}"
++                origin_node = str(raw.get("origin_node") or "remote").strip() or "remote"
++                conn.execute(
++                    "INSERT INTO xcmax_inbox(entity_type, entity_id, operation, "
++                    "payload_json, origin_node, status, received_at) "
++                    "VALUES(?, ?, ?, ?, ?, 'pending', ?)",
++                    (entity_type, entity_id, operation, payload_json, origin_node, now_iso),
++                )
++                # 同时镜像到 changes，便于其它节点级联拉取（“服务器作为信源”）。
++                conn.execute(
++                    "INSERT INTO xcmax_changes(entity_type, entity_id, operation, "
++                    "payload_json, version, actor, origin_node, created_at) "
++                    "VALUES(?, ?, ?, ?, 1, ?, ?, ?)",
++                    (
++                        entity_type,
++                        entity_id,
++                        operation,
++                        payload_json,
++                        str(raw.get("actor") or "remote"),
++                        origin_node,
++                        now_iso,
++                    ),
++                )
++                written += 1
++            _meta_set(conn, "last_sync_at", now_iso)
++            conn.commit()
++        return {
++            "success": True,
++            "received": written,
++            "apply_result": {"applied": written, "conflicts": 0},
++        }
++    except Exception as exc:
++        logger.warning("sync_receive failed: %s", exc)
++        return JSONResponse(
++            {"success": False, "message": str(exc)}, status_code=500
++        )
++
++
++@router.post("/sync/push", response_model=None)
++async def sync_push() -> dict[str, Any]:
++    """服务器端通常不需要主动 push，但保留接口以便 UI 调用一致。"""
++    _ensure_schema()
++    return {
++        "success": True,
++        "data": {"sent": 0, "failed": 0, "total_pending": 0, "note": "server-side noop"},
++    }
++
++
++@router.post("/sync/pull", response_model=None)
++async def sync_pull() -> dict[str, Any]:
++    """占位：服务器端无远端可拉，返回空摘要。"""
++    _ensure_schema()
++    return {
++        "success": True,
++        "data": {"pull": {"pulled": 0}, "apply": {"applied": 0, "conflicts": 0}},
++    }
++
++
++# ---------------------------------------------------------------------------
++# 冲突
++# ---------------------------------------------------------------------------
++
++
++@router.get("/sync/conflicts", response_model=None)
++async def list_conflicts(limit: int = Query(50, ge=1, le=500)) -> dict[str, Any]:
++    _ensure_schema()
++    try:
++        with _connect() as conn:
++            rows = conn.execute(
++                "SELECT id, entity_type, entity_id, operation, payload_json, "
++                "conflict_note, received_at "
++                "FROM xcmax_inbox WHERE status='conflict' "
++                "ORDER BY id DESC LIMIT ?",
++                (int(limit),),
++            ).fetchall()
++        data: list[dict[str, Any]] = []
++        for r in rows:
++            try:
++                payload = json.loads(r["payload_json"] or "{}")
++            except Exception:
++                payload = {}
++            data.append(
++                {
++                    "id": r["id"],
++                    "entity_type": r["entity_type"],
++                    "entity_id": r["entity_id"],
++                    "operation": r["operation"],
++                    "payload": payload,
++                    "conflict_note": r["conflict_note"],
++                    "received_at": r["received_at"],
++                }
++            )
++        return {"success": True, "data": data, "count": len(data)}
++    except Exception as exc:
++        return {"success": True, "data": [], "count": 0, "note": str(exc)}
++
++
++@router.post("/sync/conflicts/{inbox_id}/resolve", response_model=None)
++async def resolve_conflict(inbox_id: int, body: dict = Body(default_factory=dict)) -> dict[str, Any]:
++    _ensure_schema()
++    action = str((body or {}).get("action") or "skip").strip()
++    new_status = "applied" if action == "apply" else "skipped"
++    try:
++        with _db_lock, _connect() as conn:
++            conn.execute(
++                "UPDATE xcmax_inbox SET status=? WHERE id=?", (new_status, int(inbox_id))
++            )
++            conn.commit()
++        return {"success": True, "inbox_id": int(inbox_id), "action": action}
++    except Exception as exc:
++        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
++
++
++# ---------------------------------------------------------------------------
++# SSE 心跳：与本地端 /sync/stream 对称，方便客户端复用同一前端组件
++# ---------------------------------------------------------------------------
++
++SYNC_POLL_INTERVAL_S = float(os.environ.get("XCMAX_SYNC_POLL_S", "10"))
++
++
++async def _sse_generator(request: Request, since_cursor: int):
++    cursor = int(since_cursor)
++    while True:
++        if await request.is_disconnected():
++            break
++        try:
++            _ensure_schema()
++            with _connect() as conn:
++                rows = conn.execute(
++                    "SELECT id, entity_type, entity_id, operation, payload_json, "
++                    "created_at FROM xcmax_changes WHERE id > ? "
++                    "ORDER BY id ASC LIMIT 50",
++                    (cursor,),
++                ).fetchall()
++                if rows:
++                    cursor = int(rows[-1]["id"])
++                    payload = {
++                        "cursor": cursor,
++                        "changes": [
++                            {
++                                "id": r["id"],
++                                "entity_type": r["entity_type"],
++                                "entity_id": r["entity_id"],
++                                "operation": r["operation"],
++                                "created_at": r["created_at"],
++                            }
++                            for r in rows
++                        ],
++                    }
++                    yield f"data: {json.dumps(payload, ensure_ascii=False, default=str)}\n\n"
++                else:
++                    status = {
++                        "healthy": True,
++                        "local_cursor": _last_change_id(conn),
++                        "remote_cursor": int(_meta_get(conn, "remote_cursor", "0") or 0),
++                        "outbox_count": _inbox_pending_count(conn),
++                        "last_sync_at": _meta_get(conn, "last_sync_at", "") or None,
++                        "conflict_count": _inbox_conflict_count(conn),
++                        "role": "server",
++                    }
++                    heartbeat = {"type": "heartbeat", "cursor": cursor, "status": status}
++                    yield f"data: {json.dumps(heartbeat, ensure_ascii=False, default=str)}\n\n"
++        except Exception as exc:
++            err = {"type": "error", "message": str(exc)}
++            yield f"data: {json.dumps(err, ensure_ascii=False)}\n\n"
++        await asyncio.sleep(SYNC_POLL_INTERVAL_S)
++
++
++@router.get("/sync/stream", response_model=None)
++async def sync_stream(
++    request: Request,
++    since_cursor: int = Query(0, ge=0),
++):
++    return StreamingResponse(
++        _sse_generator(request, since_cursor),
++        media_type="text/event-stream",
++        headers={
++            "Cache-Control": "no-cache",
++            "X-Accel-Buffering": "no",
++        },
++    )
++
++
++__all__ = ["router"]
+-- 
+2.43.7
+

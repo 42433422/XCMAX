@@ -1,0 +1,1 @@
+import e from"./ApprovalFlowManagementView-DtrIHIsy.js";import{d as o,c as a,H as r}from"./index-DmoO6vrN.js";import"./appDialog-BEIBMk6k.js";const _=o({__name:"ApprovalFlowManagementView",setup(t){return(n,p)=>(a(),r(e))}});export{_ as default};

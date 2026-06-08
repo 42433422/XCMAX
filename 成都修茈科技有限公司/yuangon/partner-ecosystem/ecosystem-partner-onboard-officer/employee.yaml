@@ -1,0 +1,39 @@
+id: ecosystem-partner-onboard-officer
+name: 生态伙伴接入员
+version: "10.0.0"
+owner: admin
+area: partner-ecosystem
+domain: >-
+  O-B B1 生态伙伴 onboarding · 租户隔离 · 联合 SSO 与伙伴档案建档。
+
+scope_globs:
+  - "MODstore_deploy/modstore_server/**/partner*"
+  - "MODstore_deploy/modstore_server/**/tenant**"
+  - "FHD/app/**/external_crm*"
+  - "yuangon/partner-ecosystem/ecosystem-partner-onboard-officer/**"
+
+forbidden_globs:
+  - "_local_secrets/**"
+  - "*.env*"
+
+depends_on:
+  - modstore-backend-api
+
+actions:
+  handlers:
+    - llm_md
+    - echo
+
+triggers:
+  on_error: true
+  on_quality_fail: true
+
+skills:
+  - task.analyze
+  - llm.markdown
+  - workflow.assist
+
+changelog:
+  - version: "10.0.0"
+    date: "2026-06-07"
+    note: "yuangon 骨架由 bootstrap_yuangon.py 从 manifest 反向生成（v10 线内迭代）"

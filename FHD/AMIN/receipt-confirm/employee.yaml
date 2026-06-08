@@ -1,0 +1,71 @@
+id: receipt-confirm
+name: 收货确认 AI 员工
+version: "1.0.0"
+domain: 与微信消息员工共用星标轮询与意图规则；客户消息命中收货、到货、签收、对账等时，将联系人及业务进程摘要写入工作流，便于内部在对话中跟进。
+owner: admin
+area: workflow-core
+security_level: personal
+is_public: true
+
+scope_globs:
+  - FHD-个人/frontend/src/components/TopAssistantFloat.vue
+  - FHD-个人/frontend/src/stores/workflowAiEmployees.ts
+  - FHD-个人/frontend/src/composables/useWorkflowEmployeeDesks.ts
+  - FHD-个人/frontend/src/constants/workflowEmployeeDocIds.ts
+  - FHD-个人/frontend/src/constants/workflowEmployeeDatabaseLinks.ts
+  - FHD-个人/frontend/src/stores/workflowEmployeeSpace.ts
+  - FHD-个人/frontend/src/constants/yuangongStitchPlacements.ts
+  - FHD-个人/frontend/src/data/workflow-employee-docs.json
+
+forbidden_globs:
+  - FHD-个人/app/fastapi_routes/xcagi_compat_chat_helpers.py
+
+triggers:
+  on_error: true
+  on_quality_fail: true
+  on_coverage_miss: false
+  max_patch_budget_tokens: 4000
+  max_patch_steps: 5
+
+sla:
+  timeout_seconds: 120
+  retry_max: 2
+  escalate_to_human: true
+
+llm_default: "auto"
+llm_reasoning: "auto"
+
+skills:
+  - skills/skill-receipt-intent.md
+  - skills/skill-receipt-followup.md
+
+capabilities:
+  - label: 收货意图识别
+    description: 从星标微信消息中识别收货、到货、签收、对账等意图，命中后派发 xcagi:workflow-receipt-feedback-signal
+  - label: 客户业务进程管理
+    description: 将联系人及业务进程摘要写入工作流条目，便于内部跟进
+  - label: 对账与确认跟进
+    description: 结合智能对话继续确认、对账或转交
+
+examples:
+  - title: 收货意图命中
+    description: 客户微信消息命中收货/到货意图后自动写入工作流
+    input:
+      action: signal
+      signal_type: workflow-receipt-feedback-signal
+      contact: "客户名称"
+      intent: "receipt_confirm"
+  - title: 对话跟进确认
+    description: 在智能对话中继续确认收货或对账
+    input:
+      action: followup
+      contact: "客户名称"
+      type: "reconciliation"
+
+depends_on:
+  - wechat-msg
+
+changelog:
+  - version: "1.0.0"
+    date: "2026-05-14"
+    note: "初始创建：从 FHD-个人 程序硬编码中提取"

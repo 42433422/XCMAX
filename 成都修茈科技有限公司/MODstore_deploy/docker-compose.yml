@@ -1,0 +1,325 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-modstore}
+      POSTGRES_USER: ${POSTGRES_USER:-modstore}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-modstore}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-modstore} -d ${POSTGRES_DB:-modstore}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:-modstore-redis}"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-modstore-redis}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-modstore}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-modstore-rabbit}
+    ports:
+      - "${RABBITMQ_PORT:-5672}:5672"
+      - "${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  payment-service:
+    build:
+      context: ./java_payment_service
+    profiles: ["app"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      SERVER_PORT: 8080
+      JAVA_DATABASE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-modstore}
+      DATABASE_USER: ${POSTGRES_USER:-modstore}
+      DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-modstore}
+      REDIS_URL: redis://:${REDIS_PASSWORD:-modstore-redis}@redis:6379
+      RABBITMQ_URL: amqp://rabbitmq:5672
+      RABBITMQ_USER: ${RABBITMQ_USER:-modstore}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-modstore-rabbit}
+      MODSTORE_JWT_SECRET: ${MODSTORE_JWT_SECRET:?MODSTORE_JWT_SECRET must be set in .env}
+      PAYMENT_SECRET_KEY: ${PAYMENT_SECRET_KEY:?PAYMENT_SECRET_KEY must be set in .env}
+      MODSTORE_PUBLIC_ORIGIN: ${MODSTORE_PUBLIC_ORIGIN:-http://localhost:8765}
+      MODSTORE_WEBHOOK_URL: ${MODSTORE_WEBHOOK_URL:-}
+      MODSTORE_WEBHOOK_SECRET: ${MODSTORE_WEBHOOK_SECRET:-}
+      ALIPAY_APP_ID: ${ALIPAY_APP_ID:-}
+      ALIPAY_PRIVATE_KEY: ${ALIPAY_PRIVATE_KEY:-}
+      ALIPAY_APP_PRIVATE_KEY: ${ALIPAY_APP_PRIVATE_KEY:-}
+      ALIPAY_PRIVATE_KEY_PATH: ${ALIPAY_PRIVATE_KEY_PATH:-}
+      ALIPAY_APP_PRIVATE_KEY_PATH: ${ALIPAY_APP_PRIVATE_KEY_PATH:-}
+      ALIPAY_PUBLIC_KEY: ${ALIPAY_PUBLIC_KEY:-}
+      ALIPAY_ALIPAY_PUBLIC_KEY: ${ALIPAY_ALIPAY_PUBLIC_KEY:-}
+      ALIPAY_PUBLIC_KEY_PATH: ${ALIPAY_PUBLIC_KEY_PATH:-}
+      ALIPAY_ALIPAY_PUBLIC_KEY_PATH: ${ALIPAY_ALIPAY_PUBLIC_KEY_PATH:-}
+      ALIPAY_NOTIFY_URL: ${ALIPAY_NOTIFY_URL:-}
+      ALIPAY_DEBUG: ${ALIPAY_DEBUG:-false}
+      ALIPAY_GATEWAY_URL: ${ALIPAY_GATEWAY_URL:-}
+      ALIPAY_SANDBOX_GATEWAY_URL: ${ALIPAY_SANDBOX_GATEWAY_URL:-https://openapi-sandbox.dl.alipaydev.com/gateway.do}
+      FLYWAY_ENABLED: ${FLYWAY_ENABLED:-true}
+      JPA_DDL_AUTO: ${JPA_DDL_AUTO:-validate}
+    ports:
+      - "${JAVA_PAYMENT_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/actuator/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      args:
+        APT_MIRROR: ${APT_MIRROR:-}
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-}
+        # 镜像内无 git 时写入 /app/.modstore_build.json；可与下方 environment 同源变量
+        MODSTORE_GIT_BRANCH: ${MODSTORE_GIT_BRANCH:-}
+        MODSTORE_GIT_COMMIT: ${MODSTORE_GIT_COMMIT:-${MODSTORE_GIT_SHA:-}}
+    profiles: ["app"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      payment-service:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-modstore}:${POSTGRES_PASSWORD:-modstore}@postgres:5432/${POSTGRES_DB:-modstore}
+      REDIS_URL: redis://:${REDIS_PASSWORD:-modstore-redis}@redis:6379
+      MODSTORE_RABBITMQ_URL: amqp://${RABBITMQ_USER:-modstore}:${RABBITMQ_PASSWORD:-modstore-rabbit}@rabbitmq:5672/
+      PAYMENT_BACKEND: ${PAYMENT_BACKEND:-python}
+      JAVA_PAYMENT_SERVICE_URL: http://payment-service:8080
+      PAYMENT_PROXY_CONNECT_TIMEOUT_SECONDS: ${PAYMENT_PROXY_CONNECT_TIMEOUT_SECONDS:-5}
+      PAYMENT_PROXY_READ_TIMEOUT_SECONDS: ${PAYMENT_PROXY_READ_TIMEOUT_SECONDS:-30}
+      MODSTORE_JWT_SECRET: ${MODSTORE_JWT_SECRET:?MODSTORE_JWT_SECRET must be set in .env}
+      MODSTORE_ADMIN_RECHARGE_TOKEN: ${MODSTORE_ADMIN_RECHARGE_TOKEN:?MODSTORE_ADMIN_RECHARGE_TOKEN must be set in .env}
+      MODSTORE_EMAIL_DEBUG: ${MODSTORE_EMAIL_DEBUG:-1}
+      MODSTORE_PUBLIC_ORIGIN: ${MODSTORE_PUBLIC_ORIGIN:-http://localhost:8765}
+      MODSTORE_MARKET_PREFIX: ${MODSTORE_MARKET_PREFIX:-/market}
+      MODSTORE_WEBHOOK_URL: ${MODSTORE_WEBHOOK_URL:-}
+      MODSTORE_WEBHOOK_SECRET: ${MODSTORE_WEBHOOK_SECRET:-}
+      # Runtime 产物统一落在 /data 数据盘，避免写入源码树
+      MODSTORE_RUNTIME_DIR: /data
+      MODSTORE_WEBHOOK_EVENTS_DIR: /data/webhook_events
+      MODSTORE_EVENT_OUTBOX_PATH: /data/event_outbox.jsonl
+      MODSTORE_PAYMENT_ORDERS_DIR: /data/payment_orders
+      MODSTORE_VECTOR_DB_DIR: /data/chroma
+      MODSTORE_VECTOR_BACKEND: ${MODSTORE_VECTOR_BACKEND:-chroma}
+      # 空库时自动创建首个管理员；生产请设 MODSTORE_BOOTSTRAP_ADMIN=0 或删除下列变量
+      MODSTORE_BOOTSTRAP_ADMIN: ${MODSTORE_BOOTSTRAP_ADMIN:-1}
+      MODSTORE_BOOTSTRAP_ADMIN_USERNAME: ${MODSTORE_BOOTSTRAP_ADMIN_USERNAME:-admin}
+      MODSTORE_BOOTSTRAP_ADMIN_PASSWORD: ${MODSTORE_BOOTSTRAP_ADMIN_PASSWORD:?MODSTORE_BOOTSTRAP_ADMIN_PASSWORD must be set in .env}
+      MODSTORE_BOOTSTRAP_ADMIN_EMAIL: ${MODSTORE_BOOTSTRAP_ADMIN_EMAIL:-admin@localhost}
+      # 数据库连接池（PostgreSQL 时生效；见 modstore_server/models.py:get_engine）
+      MODSTORE_DB_POOL_SIZE: ${MODSTORE_DB_POOL_SIZE:-30}
+      MODSTORE_DB_MAX_OVERFLOW: ${MODSTORE_DB_MAX_OVERFLOW:-40}
+      # 多 worker 安全：事件总线必须用 rabbitmq 以保证跨 worker 可见性
+      MODSTORE_BUS: ${MODSTORE_BUS:-rabbitmq}
+      # 后台任务（outbox/scheduler）由独立 modstore-scheduler 容器负责，API worker 不运行
+      MODSTORE_RUN_BACKGROUND_JOBS: "0"
+      # 小米 MiMo / OpenAI 兼容平台密钥（用户 BYOK 仍优先）
+      MIMO_API_KEY: ${MIMO_API_KEY:-}
+      XIAOMI_API_KEY: ${XIAOMI_API_KEY:-}
+      XIAOMI_MIMO_API_KEY: ${XIAOMI_MIMO_API_KEY:-}
+      MIMO_BASE_URL: ${MIMO_BASE_URL:-}
+      XIAOMI_BASE_URL: ${XIAOMI_BASE_URL:-}
+      XIAOMI_MIMO_BASE_URL: ${XIAOMI_MIMO_BASE_URL:-}
+      MODSTORE_TAVILY_API_KEY: ${MODSTORE_TAVILY_API_KEY:-}
+      # GitHub API（联网调研 github_repo_snapshot、提高 REST 限额）；与 .env 中 MODSTORE_GITHUB_TOKEN 一致
+      MODSTORE_GITHUB_TOKEN: ${MODSTORE_GITHUB_TOKEN:-}
+      # 每日摘要「仓库分支 / 最新提交」；与 /api/health 的 git_sha 可共用 MODSTORE_GIT_SHA
+      MODSTORE_GIT_BRANCH: ${MODSTORE_GIT_BRANCH:-}
+      MODSTORE_GIT_COMMIT: ${MODSTORE_GIT_COMMIT:-${MODSTORE_GIT_SHA:-}}
+      FUNASR_HOST: ${FUNASR_HOST:-}
+      FUNASR_PORT: ${FUNASR_PORT:-10095}
+      FUNASR_USE_SSL: ${FUNASR_USE_SSL:-0}
+    ports:
+      - "${MODSTORE_API_PORT:-8765}:8765"
+    volumes:
+      - modstore_data:/data
+      # 可选：复制 modstore_build.json.example 为 .modstore_build.json 并填写后取消下一行注释
+      # - ./.modstore_build.json:/app/.modstore_build.json:ro
+    healthcheck:
+      test: ["CMD-SHELL", "python - <<'PY'\nimport urllib.request\nurllib.request.urlopen('http://127.0.0.1:8765/api/health', timeout=3)\nPY"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  # 后台任务专用 worker：outbox drainer + 订阅续费 + workflow_scheduler（每日摘要、工作流 cron 等）。
+  # 与 api 共享镜像，但仅运行 1 个 uvicorn worker 且不对外暴露端口。
+  # 生产须与 api 一并启动（docker compose --profile app up -d）；仅起 api 会导致 MODSTORE_RUN_BACKGROUND_JOBS 永不执行。
+  scheduler:
+    build:
+      context: .
+      args:
+        APT_MIRROR: ${APT_MIRROR:-}
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-}
+        MODSTORE_GIT_BRANCH: ${MODSTORE_GIT_BRANCH:-}
+        MODSTORE_GIT_COMMIT: ${MODSTORE_GIT_COMMIT:-${MODSTORE_GIT_SHA:-}}
+    profiles: ["app"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    # 载入宿主机 .env 中的 SMTP、MODSTORE_DAILY_DIGEST_* 等；下方 environment 仍可覆盖占位项
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-modstore}:${POSTGRES_PASSWORD:-modstore}@postgres:5432/${POSTGRES_DB:-modstore}
+      REDIS_URL: redis://:${REDIS_PASSWORD:-modstore-redis}@redis:6379
+      MODSTORE_RABBITMQ_URL: amqp://${RABBITMQ_USER:-modstore}:${RABBITMQ_PASSWORD:-modstore-rabbit}@rabbitmq:5672/
+      MODSTORE_BUS: rabbitmq
+      MODSTORE_RUN_BACKGROUND_JOBS: "1"
+      MODSTORE_JWT_SECRET: ${MODSTORE_JWT_SECRET:?MODSTORE_JWT_SECRET must be set in .env}
+      MODSTORE_RUNTIME_DIR: /data
+      MODSTORE_WEBHOOK_EVENTS_DIR: /data/webhook_events
+      MODSTORE_EVENT_OUTBOX_PATH: /data/event_outbox.jsonl
+      MODSTORE_PAYMENT_ORDERS_DIR: /data/payment_orders
+      MODSTORE_DB_POOL_SIZE: ${MODSTORE_DB_POOL_SIZE:-10}
+      MODSTORE_DB_MAX_OVERFLOW: ${MODSTORE_DB_MAX_OVERFLOW:-5}
+      MODSTORE_TAVILY_API_KEY: ${MODSTORE_TAVILY_API_KEY:-}
+      MODSTORE_GITHUB_TOKEN: ${MODSTORE_GITHUB_TOKEN:-}
+      MODSTORE_GIT_BRANCH: ${MODSTORE_GIT_BRANCH:-}
+      MODSTORE_GIT_COMMIT: ${MODSTORE_GIT_COMMIT:-${MODSTORE_GIT_SHA:-}}
+    command: ["python", "-m", "uvicorn", "modstore_server.app:app", "--host", "127.0.0.1", "--port", "9990", "--workers", "1"]
+    volumes:
+      - modstore_data:/data
+      # - ./.modstore_build.json:/app/.modstore_build.json:ro
+    healthcheck:
+      test: ["CMD-SHELL", "python - <<'PY'\nimport urllib.request, json\nr = urllib.request.urlopen('http://127.0.0.1:9990/api/health', timeout=3)\ndata = json.loads(r.read())\nif not data.get('ok'):\n    raise SystemExit('health: ok=false')\nif data.get('scheduler_running') is False:\n    raise SystemExit('health: scheduler not running')\nPY"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  funasr:
+    image: registry.cn-hangzhou.aliyuncs.com/funasr_repo/funasr:funasr-runtime-sdk-online-cpu-0.1.13
+    profiles: ["asr", "app"]
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${FUNASR_PORT:-10095}:10095"
+    volumes:
+      - funasr_models:/workspace/models
+    # run_server_2pass.sh 内部用 & 后台启动后会立刻退出；直接 exec 前台进程保持容器存活
+    command:
+      - bash
+      - -c
+      - |
+        set -e
+        cd FunASR/runtime
+        exec ./websocket/build/bin/funasr-wss-server-2pass \
+          --download-model-dir /workspace/models \
+          --model-dir damo/speech_paraformer-large_asr_nat-zh-cn-16k-common-vocab8404-onnx \
+          --online-model-dir damo/speech_paraformer-large_asr_nat-zh-cn-16k-common-vocab8404-online-onnx \
+          --vad-dir damo/speech_fsmn_vad_zh-cn-16k-common-onnx \
+          --punc-dir damo/punc_ct-transformer_zh-cn-common-vad_realtime-vocab272727-onnx \
+          --decoder-thread-num 4 \
+          --model-thread-num 1 \
+          --io-thread-num 1 \
+          --port 10095 \
+          --certfile 0 \
+          --keyfile 0 \
+          --hotword ./websocket/hotwords.txt
+
+  market:
+    build:
+      context: ./market
+      args:
+        VITE_XCAGI_DOWNLOAD_VERSION: ${VITE_XCAGI_DOWNLOAD_VERSION:-10.0.0}
+        VITE_XCAGI_ANDROID_VERSION: ${VITE_XCAGI_ANDROID_VERSION:-10.0.0}
+        VITE_XCAGI_DOWNLOAD_BASE_URL: ${VITE_XCAGI_DOWNLOAD_BASE_URL:-https://xiu-ci.com/xcagi-v10.0.0}
+    profiles: ["app"]
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "${MODSTORE_MARKET_PORT:-4173}:80"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/nginx-health >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    profiles: ["monitoring", "app"]
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus/rules:/etc/prometheus/rules:ro
+      - prometheus_data:/prometheus
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    profiles: ["monitoring", "app"]
+    depends_on:
+      - prometheus
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+
+  loadtest:
+    image: grafana/k6:0.54.0
+    profiles: ["loadtest"]
+    depends_on:
+      market:
+        condition: service_healthy
+    environment:
+      BASE_URL: ${LOADTEST_BASE_URL:-http://market}
+      WS_URL: ${LOADTEST_WS_URL:-ws://market}
+      K6_STAGE: ${K6_STAGE:-smoke}
+    volumes:
+      - ./perf:/scripts:ro
+    entrypoint: ["k6"]
+    command: ["run", "/scripts/full_link_smoke.js"]
+
+volumes:
+  postgres_data:
+  redis_data:
+  rabbitmq_data:
+  modstore_data:
+  funasr_models:
+  prometheus_data:
+  grafana_data:

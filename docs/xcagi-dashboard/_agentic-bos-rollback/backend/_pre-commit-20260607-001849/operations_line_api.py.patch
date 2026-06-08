@@ -1,0 +1,19 @@
+diff --git a/Users/a4243342/Desktop/XCMAX/FHD/../docs/xcagi-dashboard/_agentic-bos-rollback/backend/operations_line_api.py.orig b/app/fastapi_routes/operations_line_api.py
+index d6b67e06..de491273 100644
+--- a/app/fastapi_routes/operations_line_api.py
++++ b/app/fastapi_routes/operations_line_api.py
+@@ -18,6 +18,14 @@ def operations_health():
+     )
+ 
+ 
++@router.get("/governance/summary")
++def operations_governance_summary():
++    """GOV 统一治理聚合：对账/收费/签收/断点 → SLA + 风控标记 + 总体状态。"""
++    return JSONResponse(
++        {"success": True, "data": get_operations_app_service().compute_governance_summary()}
++    )
++
++
+ @router.post("/contracts/scan-expiry")
+ def operations_scan_contract_expiry(
+     days_ahead: int = 30, dry_run: bool = True, push: bool = False

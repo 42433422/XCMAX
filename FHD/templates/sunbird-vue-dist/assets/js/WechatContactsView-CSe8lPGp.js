@@ -1,0 +1,1 @@
+import{_ as e}from"./WechatContactsView.vue_vue_type_script_setup_true_lang-DujVUGF8.js";import{d as t,c as a,H as o}from"./index-DmoO6vrN.js";const m=t({__name:"WechatContactsView",setup(c){return(n,r)=>(a(),o(e))}});export{m as default};

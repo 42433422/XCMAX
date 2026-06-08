@@ -1,0 +1,11 @@
+{
+  "username": "xcagi-enterprise-demo",
+  "password": "Demo@2026",
+  "display_name": "企业版演示",
+  "company_brand": "修茈演示企业",
+  "email": "enterprise-demo@xiu-ci.com",
+  "market_user_id": 33,
+  "market_base_url_official": "https://xiu-ci.com",
+  "market_token": "xcagi-local-surface-audit-demo",
+  "_note": "P-S 企业版演示 · 已在官网 xiu-ci.com 注册（is_enterprise=true）· 本地 :8788 未启动时设 XCAGI_USE_REMOTE_MARKET=1 或走本地 shim"
+}

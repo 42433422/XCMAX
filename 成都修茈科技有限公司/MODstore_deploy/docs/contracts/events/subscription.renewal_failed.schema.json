@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://modstore.local/schemas/events/subscription.renewal_failed.schema.json",
+  "title": "subscription.renewal_failed payload",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["user_id", "plan_id", "reason"],
+  "properties": {
+    "user_id": { "type": ["integer", "string"] },
+    "plan_id": { "type": ["integer", "string"] },
+    "reason": { "type": "string" }
+  }
+}

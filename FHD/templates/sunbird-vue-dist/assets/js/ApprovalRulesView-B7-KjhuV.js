@@ -1,0 +1,1 @@
+import e from"./ApprovalRulesView-mp6w9wH-.js";import{d as o,c as r,H as p}from"./index-DmoO6vrN.js";import"./appDialog-BEIBMk6k.js";const _=o({__name:"ApprovalRulesView",setup(t){return(a,s)=>(r(),p(e))}});export{_ as default};

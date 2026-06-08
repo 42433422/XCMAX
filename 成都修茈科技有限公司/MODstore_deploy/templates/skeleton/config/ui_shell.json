@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "target": "traditional-mode",
+  "mod_id": "__MOD_ID__",
+  "mod_name": "__MOD_NAME__",
+  "industry": "通用",
+  "sidebar_menu": [],
+  "menu_overrides": [],
+  "settings": {
+    "default_industry": "通用",
+    "industry_options": ["通用"]
+  },
+  "make_scene": {
+    "title": "将__MOD_NAME__做成可运行工作流",
+    "description": "先澄清需求，再生成执行清单、制作草稿与校验报告。"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://modstore.local/schemas/events/invoice.created.schema.json",
+  "title": "invoice.created payload",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["invoice_id", "user_id", "order_no", "amount"],
+  "properties": {
+    "invoice_id": { "type": ["integer", "string"] },
+    "user_id": { "type": ["integer", "string"] },
+    "order_no": { "type": "string" },
+    "amount": { "type": "number" }
+  }
+}

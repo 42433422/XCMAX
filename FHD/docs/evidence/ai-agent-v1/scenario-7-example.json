@@ -1,0 +1,30 @@
+{
+  "_comment": "Phase 2 场景 7 留证样例 — 导出 Excel（low 风险）。",
+  "generated_at": "2026-06-05T12:16:00Z",
+  "input_message": "把本周的发货数据导成 Excel",
+  "execution_mode": "mock",
+  "approval_strategy": "auto",
+  "plan_id": "v1-s7-20260605-121600",
+  "intent": "export_shipment_excel",
+  "risk_level": "low",
+  "scenario_id": 7,
+  "scenario_title": "导出 Excel",
+  "nodes": [
+    {"node_id": "export_excel", "tool_id": "excel_export", "action": "run", "risk": "low", "depends_on": [], "params": {"date_from": "2026-06-01", "date_to": "2026-06-07"}}
+  ],
+  "gated_decision": {
+    "risk_decision": {"requires_confirmation": false, "reason": "计划仅包含低风险读操作", "blocking_nodes": []},
+    "node_decisions": [
+      {"node_id": "export_excel", "tool_id": "excel_export", "action": "run", "risk": "low", "requires_approval": false, "approved": true, "reason": "low-risk auto-approved"}
+    ],
+    "approval_request_ids": [],
+    "all_approved": true,
+    "any_rejected": false,
+    "pending_approval": false
+  },
+  "success": true,
+  "message": "工作流执行完成",
+  "node_results_summary": [
+    {"node_id": "export_excel", "tool_id": "excel_export", "action": "run", "success": true, "error": "", "output_summary": {"success": true, "file_path": "/tmp/mock-shipment-week.xlsx", "rows": 25, "message": "mock: 已导出 25 行"}}
+  ]
+}

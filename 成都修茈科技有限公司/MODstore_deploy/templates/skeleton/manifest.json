@@ -1,0 +1,52 @@
+{
+  "id": "__MOD_ID__",
+  "name": "__MOD_NAME__",
+  "version": "1.0.0",
+  "author": "",
+  "description": "",
+  "primary": false,
+  "dependencies": {
+    "xcagi": ">=1.0.0"
+  },
+  "backend": {
+    "entry": "blueprints",
+    "init": "mod_init"
+  },
+  "frontend": {
+    "routes": "frontend/routes",
+    "menu": [
+      {
+        "id": "__MOD_ID__-home",
+        "label": "__MOD_NAME__",
+        "icon": "fa-cube",
+        "path": "/__MOD_ID__"
+      }
+    ],
+    "menu_overrides": [],
+    "shell": {
+      "ui_shell": "config/ui_shell.json",
+      "sidebar_menu": [],
+      "settings": {
+        "default_industry": "通用",
+        "industry_options": ["通用"]
+      },
+      "make_scene": {
+        "title": "将__MOD_NAME__做成可运行工作流",
+        "description": "先澄清需求，再生成执行清单、制作草稿与校验报告。"
+      }
+    }
+  },
+  "industry": {
+    "id": "通用",
+    "name": "通用",
+    "scenario": ""
+  },
+  "config": {
+    "industry_card": "config/industry_card.json",
+    "ui_shell": "config/ui_shell.json"
+  },
+  "hooks": {},
+  "comms": {
+    "exports": []
+  }
+}

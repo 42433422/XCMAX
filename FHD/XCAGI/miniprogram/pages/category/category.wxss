@@ -1,0 +1,23 @@
+.cat-page { display: flex; height: 100vh; background: #f5f5f5; }
+.cat-layout { display: flex; width: 100%; }
+
+.cat-left {
+  width: 180rpx; background: #ffffff;
+  flex-shrink: 0; border-right: 1rpx solid #eeeeee;
+}
+.ci {
+  display: block; padding: 28rpx 20rpx; font-size: 26rpx;
+  color: #666666; text-align: center; border-left: 4rpx solid transparent;
+}
+.ci.on { color: #0052d9; font-weight: 700; border-left-color: #0052d9; background: #f8faff; }
+
+.cat-right { flex: 1; padding: 16rpx 24rpx; }
+.rg-head { padding: 12rpx 0 18rpx; margin-bottom: 10rpx; }
+.rg-head text { font-size: 29rpx; font-weight: 700; color: #333333; }
+
+.pg { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14rpx; }
+.pi { overflow: hidden; padding-bottom: 14rpx; }
+.pi-img { width: 100%; aspect-ratio: 1/1; background: #fafafa; border-radius: 8rpx; margin-bottom: 12rpx; }
+.pi-name { font-size: 25rpx; font-weight: 500; line-height: 36rpx; height: 72rpx; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.pi-bot { display: flex; align-items: baseline; padding-top: 10rpx; border-top: 1rpx solid #f5f5f5; }
+.pi-unit { font-size: 20rpx; color: #999999; margin-left: 4rpx; }

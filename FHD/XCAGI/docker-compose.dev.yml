@@ -1,0 +1,91 @@
+services:
+  backend:
+    build:
+      context: .
+      target: development
+    container_name: xcagi-backend-dev
+    ports:
+      - "5000:5000"
+    environment:
+      - XCAGI_ENV=development
+      - XCAGI_DEBUG=1
+      - XCAGI_DEBUG=1
+      - SECRET_KEY=dev-secret-key
+      - DATABASE_URL=${DATABASE_URL:-postgresql+psycopg://xcagi:xcagi@postgres:5432/xcagi_dev}
+      - VECTOR_DB_URL=${VECTOR_DB_URL:-postgresql+psycopg://xcagi:xcagi@postgres:5432/xcagi_dev}
+      - DATABASE_PATH=/app/data
+      - UPLOAD_FOLDER=/app/uploads
+      - CACHE_REDIS_URL=redis://redis:6379/1
+      - CELERY_BROKER_URL=redis://redis:6379/3
+      - CELERY_RESULT_BACKEND=redis://redis:6379/4
+      - LOG_LEVEL=DEBUG
+    volumes:
+      - .:/app
+      - xcagi-dev-data:/app/data
+      - xcagi-dev-uploads:/app/uploads
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - xcagi-dev-network
+
+  celery-worker:
+    build:
+      context: .
+      target: development
+    container_name: xcagi-celery-worker-dev
+    command: celery -A celery_app worker --loglevel=debug --concurrency=1
+    environment:
+      - XCAGI_ENV=development
+      - SECRET_KEY=dev-secret-key
+      - DATABASE_URL=${DATABASE_URL:-postgresql+psycopg://xcagi:xcagi@postgres:5432/xcagi_dev}
+      - VECTOR_DB_URL=${VECTOR_DB_URL:-postgresql+psycopg://xcagi:xcagi@postgres:5432/xcagi_dev}
+      - DATABASE_PATH=/app/data
+      - UPLOAD_FOLDER=/app/uploads
+      - CACHE_REDIS_URL=redis://redis:6379/1
+      - CELERY_BROKER_URL=redis://redis:6379/3
+      - CELERY_RESULT_BACKEND=redis://redis:6379/4
+      - LOG_LEVEL=DEBUG
+    volumes:
+      - .:/app
+      - xcagi-dev-data:/app/data
+      - xcagi-dev-uploads:/app/uploads
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - xcagi-dev-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: xcagi-redis-dev
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-dev-data:/data
+    networks:
+      - xcagi-dev-network
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: xcagi-postgres-dev
+    environment:
+      - POSTGRES_DB=xcagi_dev
+      - POSTGRES_USER=xcagi
+      - POSTGRES_PASSWORD=xcagi
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-dev-data:/var/lib/postgresql/data
+    networks:
+      - xcagi-dev-network
+
+volumes:
+  xcagi-dev-data:
+  xcagi-dev-uploads:
+  redis-dev-data:
+  postgres-dev-data:
+
+networks:
+  xcagi-dev-network:
+    driver: bridge

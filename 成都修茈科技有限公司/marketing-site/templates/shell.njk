@@ -1,0 +1,14 @@
+{{ headHtml | safe }}
+<body>
+{% include "partials/header.njk" %}
+{{ mainHtml | safe }}
+{{ footerHtml | safe }}
+<button id="back-to-top" class="back-to-top" aria-label="回到顶部"></button>
+<script src="./main.js?v={{ assetVer }}"></script>
+{% if activeNav == 'contact' %}
+<script src="./contact-intake.js?v={{ assetVer }}"></script>
+{% include "partials/contact-intake-fallback.njk" %}
+{% endif %}
+{% include "partials/corp-butler.njk" %}
+</body>
+</html>

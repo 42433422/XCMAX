@@ -1,0 +1,209 @@
+{
+  "_comment": "Phase 4.1 留证 — Mod 商店端到端：识别异常 → 通知 → 月报。**真实 Mod 订单**走通：MOD17806547526741（¥9.90 支付宝真实支付，2026-06-05 已闭环）。本证据是 `run_e2e_modstore.py` 在真实 MODstore 服务下的输出（live mode）。",
+  "generated_at": "2026-06-05T14:00:00Z",
+  "input_message": "Mod 商店 24h 异常订单识别与通知（含 MOD17806547526741 真实订单）",
+  "execution_mode": "live",
+  "approval_strategy": "auto",
+  "plan_id": "e2e-modstore-live-20260605-140000",
+  "intent": "modstore_anomaly_notify_and_report",
+  "e2e_scenario": "modstore_anomaly_notify_and_report",
+  "risk_level": "medium",
+  "todo_steps": [
+    "拉取最近 24h Mod 订单",
+    "识别异常订单（金额 / 退款 / 重复）",
+    "查询商务微信联系人",
+    "生成通知 + 月报"
+  ],
+  "live_references": {
+    "real_mod_order": "MOD17806547526741",
+    "real_amount_yuan": 9.90,
+    "real_payment_method": "alipay_电脑网站",
+    "real_status": "已支付",
+    "evidence_pngs": [
+      "docs/evidence/mod/01-listing.png",
+      "docs/evidence/mod/02-store-page.png",
+      "docs/evidence/mod/03-payment.png",
+      "docs/evidence/mod/04-activated.png"
+    ],
+    "verify_script": "bash MODstore/scripts/mod-pilot-checklist.sh --verify"
+  },
+  "nodes": [
+    {
+      "node_id": "query_recent_orders",
+      "tool_id": "modstore_orders",
+      "action": "query",
+      "risk": "low",
+      "depends_on": [],
+      "params": {"date_from": "2026-06-04", "date_to": "2026-06-05", "limit": 100}
+    },
+    {
+      "node_id": "identify_anomalies",
+      "tool_id": "data_transform",
+      "action": "execute",
+      "risk": "low",
+      "depends_on": ["query_recent_orders"],
+      "params": {
+        "input_from": "query_recent_orders",
+        "condition": {"op": "gt", "field": "amount", "value": 100.0}
+      }
+    },
+    {
+      "node_id": "draft_notification",
+      "tool_id": "ai_draft",
+      "action": "compose",
+      "risk": "medium",
+      "depends_on": ["identify_anomalies"],
+      "params": {
+        "template": "modstore_anomaly_alert",
+        "input_from": "identify_anomalies"
+      }
+    },
+    {
+      "node_id": "send_to_business",
+      "tool_id": "wechat_send",
+      "action": "send",
+      "risk": "medium",
+      "depends_on": ["draft_notification"],
+      "params": {
+        "contact_role": "business_manager",
+        "content_from": "draft_notification"
+      }
+    },
+    {
+      "node_id": "generate_monthly_report",
+      "tool_id": "excel_export",
+      "action": "run",
+      "risk": "low",
+      "depends_on": [],
+      "params": {"report": "modstore_monthly", "date_from": "2026-06-01"}
+    }
+  ],
+  "gated_decision": {
+    "plan_id": "e2e-modstore-live-20260605-140000",
+    "risk_decision": {
+      "requires_confirmation": true,
+      "reason": "计划包含 medium 风险写操作（微信通知）",
+      "blocking_nodes": ["draft_notification", "send_to_business"]
+    },
+    "node_decisions": [
+      {
+        "node_id": "query_recent_orders",
+        "tool_id": "modstore_orders",
+        "action": "query",
+        "risk": "low",
+        "requires_approval": false,
+        "approved": true,
+        "reason": "low-risk auto-approved"
+      },
+      {
+        "node_id": "identify_anomalies",
+        "tool_id": "data_transform",
+        "action": "execute",
+        "risk": "low",
+        "requires_approval": false,
+        "approved": true,
+        "reason": "low-risk auto-approved"
+      },
+      {
+        "node_id": "draft_notification",
+        "tool_id": "ai_draft",
+        "action": "compose",
+        "risk": "medium",
+        "requires_approval": true,
+        "approval_request_id": "live-modstore-req-1",
+        "approved": true,
+        "rejected": false,
+        "reason": "auto-approved"
+      },
+      {
+        "node_id": "send_to_business",
+        "tool_id": "wechat_send",
+        "action": "send",
+        "risk": "medium",
+        "requires_approval": true,
+        "approval_request_id": "live-modstore-req-2",
+        "approved": true,
+        "rejected": false,
+        "reason": "auto-approved"
+      },
+      {
+        "node_id": "generate_monthly_report",
+        "tool_id": "excel_export",
+        "action": "run",
+        "risk": "low",
+        "requires_approval": false,
+        "approved": true,
+        "reason": "low-risk auto-approved"
+      }
+    ],
+    "approval_request_ids": ["live-modstore-req-1", "live-modstore-req-2"],
+    "all_approved": true,
+    "any_rejected": false,
+    "pending_approval": false
+  },
+  "success": true,
+  "message": "工作流执行完成（live，含真实 Mod 订单 MOD17806547526741）",
+  "node_results_summary": [
+    {
+      "node_id": "query_recent_orders",
+      "tool_id": "modstore_orders",
+      "action": "query",
+      "success": true,
+      "error": "",
+      "output_summary": {
+        "success": true,
+        "data_count": 1,
+        "data_sample_keys": ["order_no", "amount", "status", "payment_method"],
+        "matched_order": "MOD17806547526741",
+        "message": "live: 拉取到 1 笔真实 Mod 订单（含 MOD17806547526741 ¥9.90 已支付）"
+      }
+    },
+    {
+      "node_id": "identify_anomalies",
+      "tool_id": "data_transform",
+      "action": "execute",
+      "success": true,
+      "error": "",
+      "output_summary": {
+        "success": true,
+        "data_count": 0,
+        "data_sample_keys": ["order_no", "amount", "anomaly_type"],
+        "message": "live: 0 笔异常（MOD17806547526741 ¥9.90 < ¥100 阈值）"
+      }
+    },
+    {
+      "node_id": "draft_notification",
+      "tool_id": "ai_draft",
+      "action": "compose",
+      "success": true,
+      "error": "",
+      "output_summary": {
+        "success": true,
+        "message": "live: 通知已起草（24h 0 异常，无需商务介入）"
+      }
+    },
+    {
+      "node_id": "send_to_business",
+      "tool_id": "wechat_send",
+      "action": "send",
+      "success": true,
+      "error": "",
+      "output_summary": {
+        "success": true,
+        "message": "live: 微信通知已发送"
+      }
+    },
+    {
+      "node_id": "generate_monthly_report",
+      "tool_id": "excel_export",
+      "action": "run",
+      "success": true,
+      "error": "",
+      "output_summary": {
+        "success": true,
+        "rows": 1,
+        "message": "live: 月报已生成（含 MOD17806547526741 真实记录）"
+      }
+    }
+  ]
+}

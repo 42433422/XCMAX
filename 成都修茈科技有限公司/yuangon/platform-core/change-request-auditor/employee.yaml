@@ -1,0 +1,46 @@
+id: change-request-auditor
+name: 变更评审员
+version: "10.0.0"
+owner: admin
+area: platform-core
+domain: >-
+  对员工提交到「待邮件审批」队列的补丁/PR 做自动评审：跑测试 → 静态规则审 → 自动放行低风险 / 升级高风险给 admin；不直接改业务源码、不直接合并到主干。
+
+scope_globs:
+  - MODstore_deploy/modstore_server/api/change_request_api.py
+  - "MODstore_deploy/modstore_server/eventing/audit/**"
+  - "MODstore_deploy/scripts/audit_*.py"
+  - MODstore_deploy/docs/runbooks/change-request-audit.md
+  - "yuangon/platform-core/change-request-auditor/**"
+
+forbidden_globs:
+  - "MODstore_deploy/market/src/**"
+  - MODstore_deploy/modstore_server/models.py
+  - "MODstore_deploy/modstore_server/migrations/**"
+  - "MODstore_deploy/modstore_server/payment_*.py"
+  - "MODstore_deploy/modstore_server/employee_*.py"
+  - "_local_secrets/**"
+
+depends_on:
+  - test-qa-runner
+  - employee-pack-quality-interviewer
+  - security-secrets-guard
+
+actions:
+  handlers:
+    - llm_md
+    - echo
+    - agent
+
+triggers:
+  on_error: false
+  on_quality_fail: true
+
+skills:
+  - skill-static-audit
+  - skill-risk-gate
+
+changelog:
+  - version: "10.0.0"
+    date: "2026-06-07"
+    note: "yuangon 骨架由 bootstrap_yuangon.py 从 manifest 反向生成（v10 线内迭代）"

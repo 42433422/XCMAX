@@ -1,0 +1,22 @@
+.detail-page { display: flex; flex-direction: column; height: 100vh; }
+.swiper { width: 100%; height: 600rpx; background: #fafafa; }
+.swiper-inner { display: flex; align-items: center; justify-content: center; height: 100%; }
+.swiper-img { width: 80%; height: 80%; border-radius: 12rpx; }
+.detail-body { flex: 1; overflow: hidden; }
+
+.price-block { padding: 32rpx 28rpx 24rpx; }
+.p-unit { font-size: 26rpx; color: #999999; margin-left: 4rpx; }
+.tags-row { margin-top: 14rpx; display: flex; gap: 10rpx; }
+
+.info-card { margin-top: 16rpx; }
+.info-title { font-size: 34rpx; font-weight: 700; color: #333333; line-height: 48rpx; display: block; margin-bottom: 20rpx; }
+.info-list { display: flex; flex-direction: column; gap: 16rpx; }
+.info-line { display: flex; align-items: center; font-size: 27rpx; }
+.il-label { min-width: 72rpx; color: #999999; margin-right: 24rpx; }
+.sec-title { font-size: 29rpx; font-weight: 600; color: #333333; display: block; margin-bottom: 18rpx; padding-left: 16rpx; border-left: 6rpx solid #0052d9; line-height: 1.2; }
+
+.b-left { display: flex; gap: 8rpx; }
+.b-icon-btn { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4rpx; padding: 12rpx 22rpx; position: relative; color: #666666; font-size: 20rpx; }
+.b-icon-btn text:first-child { font-size: 40rpx; line-height: 1; }
+.b-icon-btn.active { color: #ed7b2f; }
+.b-right { display: flex; gap: 14rpx; }

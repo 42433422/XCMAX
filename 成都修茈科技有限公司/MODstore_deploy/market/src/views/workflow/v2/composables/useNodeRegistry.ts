@@ -1,0 +1,478 @@
+/**
+ * 工作流节点类型注册表。
+ *
+ * 与后端 `WorkflowNode.node_type`（modstore_server/models.py）对齐：
+ * start, end, employee, condition, openapi_operation, knowledge_search,
+ * webhook_trigger, cron_trigger, variable_set, eskill。
+ *
+ * 任何新增节点类型都应在此处登记 metadata + 属性字段 schema，
+ * 编辑器不需要为每种节点单独写 Vue 组件。
+ *
+ * 纯类型定义（NodeKind / NodeCategory / FieldSchema / NodeMeta）已迁移至
+ * `domain/workflow/nodeKinds.ts`，此处重新导出保持向后兼容。
+ */
+
+export type { NodeKind, NodeCategory, FieldSchema, NodeMeta } from '../../../../domain/workflow/nodeKinds'
+import type { NodeKind, NodeCategory, NodeMeta } from '../../../../domain/workflow/nodeKinds'
+
+const REGISTRY: Record<NodeKind, NodeMeta> = {
+  start: {
+    kind: 'start',
+    label: '开始',
+    category: 'flow',
+    description: '工作流入口，接收 input_data',
+    accent: '#22c55e',
+    icon: '▶',
+    hasInput: false,
+    hasOutput: true,
+    defaultConfig: {},
+    fields: [],
+  },
+  end: {
+    kind: 'end',
+    label: '结束',
+    category: 'flow',
+    description: '工作流终点，输出当前变量上下文',
+    accent: '#64748b',
+    icon: '■',
+    hasInput: true,
+    hasOutput: false,
+    defaultConfig: {},
+    fields: [
+      {
+        key: 'output_template',
+        label: '输出模板',
+        type: 'textarea',
+        placeholder: '可用 {{ var }} 引用变量；为空时返回完整上下文',
+        helper: '留空时返回执行上下文 JSON',
+      },
+    ],
+  },
+  employee: {
+    kind: 'employee',
+    label: 'AI 员工',
+    category: 'employee',
+    description: '调用一个 AI 员工执行任务',
+    accent: '#6366f1',
+    icon: '⚙️',
+    hasInput: true,
+    hasOutput: true,
+    defaultConfig: { employee_id: '', task: '', input_mapping: {} },
+    fields: [
+      {
+        key: 'employee_id',
+        label: '员工 ID',
+        type: 'employee-picker',
+        required: true,
+        helper: '从已购/自有员工中选择，或手动填写 employee_id',
+      },
+      { key: 'task', label: '任务描述', type: 'textarea', placeholder: '该员工要完成的任务，可使用 {{ input.field }}' },
+      { key: 'output_var', label: '输出变量名', type: 'text', placeholder: '默认写入 last_output' },
+    ],
+  },
+  eskill: {
+    kind: 'eskill',
+    label: 'ESkill',
+    category: 'employee',
+    description: '静态优先、必要时动态适配并固化的新型 Skill',
+    accent: '#8b5cf6',
+    icon: 'E',
+    hasInput: true,
+    hasOutput: true,
+    defaultConfig: {
+      skill_id: '',
+      task: '',
+      output_var: 'eskill_output',
+      quality_gate: {},
+      trigger_policy: {},
+      force_dynamic: false,
+      solidify: true,
+    },
+    fields: [
+      {
+        key: 'skill_id',
+        label: 'ESkill',
+        type: 'eskill-picker',
+        required: true,
+        helper: '选择已创建的 ESkill；运行时会使用其 active version',
+      },
+      { key: 'task', label: '任务覆盖', type: 'textarea', placeholder: '可选：覆盖 Skill 内部 task_template' },
+      { key: 'output_var', label: '输出变量名', type: 'text', placeholder: '默认 eskill_output' },
+      { key: 'quality_gate', label: '质量门槛 (JSON)', type: 'json', placeholder: '{"min_length": 24}' },
+      { key: 'trigger_policy', label: '触发策略 (JSON)', type: 'json', placeholder: '{"on_error": true}' },
+      { key: 'force_dynamic', label: '强制动态阶段', type: 'switch' },
+      { key: 'solidify', label: '成功后固化', type: 'switch' },
+    ],
+  },
+  condition: {
+    kind: 'condition',
+    label: '条件分支',
+    category: 'logic',
+    description: '基于表达式选择 true/false 出边',
+    accent: '#f59e0b',
+    icon: '◇',
+    hasInput: true,
+    hasOutput: true,
+    branchOutputs: true,
+    defaultConfig: { expression: '' },
+    fields: [
+      {
+        key: 'expression',
+        label: '判断表达式',
+        type: 'textarea',
+        required: true,
+        placeholder: '例：{{ score }} > 0.6  或  {{ status }} == "ok"',
+        helper: '与 workflow_engine 中的条件求值器对齐',
+      },
+    ],
+  },
+  openapi_operation: {
+    kind: 'openapi_operation',
+    label: 'OpenAPI 调用',
+    category: 'integration',
+    description: '调用第三方 OpenAPI 连接器中的 operation',
+    accent: '#0ea5e9',
+    icon: '🔌',
+    hasInput: true,
+    hasOutput: true,
+    defaultConfig: { connector_id: 0, operation_id: '', params: {}, output_var: 'api_result' },
+    fields: [
+      { key: 'connector_id', label: '连接器 ID', type: 'number', required: true, helper: '从 /api/openapi-connectors 中选取' },
+      { key: 'operation_id', label: 'Operation ID', type: 'text', required: true },
+      { key: 'params', label: '入参 (JSON)', type: 'json', placeholder: '{"key":"{{ var }}"}' },
+      { key: 'output_var', label: '输出变量名', type: 'text' },
+    ],
+  },
+  knowledge_search: {
+    kind: 'knowledge_search',
+    label: '知识检索',
+    category: 'integration',
+    description: '在知识库 V2 中检索 top-k 片段',
+    accent: '#10b981',
+    icon: '📚',
+    hasInput: true,
+    hasOutput: true,
+    defaultConfig: { kb_id: '', query: '', top_k: 5, output_var: 'kb_chunks' },
+    fields: [
+      { key: 'kb_id', label: '知识库 ID', type: 'text', required: true },
+      { key: 'query', label: '查询语句', type: 'textarea', placeholder: '可使用 {{ var }} 模板' },
+      { key: 'top_k', label: 'Top-K', type: 'number' },
+      { key: 'output_var', label: '输出变量名', type: 'text' },
+    ],
+  },
+  webhook_trigger: {
+    kind: 'webhook_trigger',
+    label: 'Webhook 触发器',
+    category: 'trigger',
+    description: '通过外部 HTTP 调用启动该工作流',
+    accent: '#ec4899',
+    icon: '🪝',
+    hasInput: false,
+    hasOutput: true,
+    defaultConfig: { secret: '', payload_var: 'webhook_payload' },
+    fields: [
+      { key: 'secret', label: 'HMAC 共享密钥', type: 'text', helper: '留空则使用全局默认密钥；建议每个工作流独立设置' },
+      { key: 'payload_var', label: '负载写入变量名', type: 'text' },
+    ],
+  },
+  cron_trigger: {
+    kind: 'cron_trigger',
+    label: '定时触发器',
+    category: 'trigger',
+    description: '按 cron 表达式自动执行',
+    accent: '#a855f7',
+    icon: '⏰',
+    hasInput: false,
+    hasOutput: true,
+    defaultConfig: { cron: '0 * * * *', timezone: 'Asia/Shanghai' },
+    fields: [
+      { key: 'cron', label: 'Cron 表达式', type: 'text', required: true, placeholder: '0 * * * *' },
+      {
+        key: 'timezone',
+        label: '时区',
+        type: 'select',
+        options: [
+          { label: 'Asia/Shanghai', value: 'Asia/Shanghai' },
+          { label: 'UTC', value: 'UTC' },
+        ],
+      },
+    ],
+  },
+  variable_set: {
+    kind: 'variable_set',
+    label: '变量赋值',
+    category: 'data',
+    description: '向上下文写入或覆盖一个变量',
+    accent: '#14b8a6',
+    icon: '✎',
+    hasInput: true,
+    hasOutput: true,
+    defaultConfig: { name: '', value: '' },
+    fields: [
+      { key: 'name', label: '变量名', type: 'text', required: true },
+      { key: 'value', label: '值（支持 {{ var }} 模板）', type: 'textarea' },
+    ],
+  },
+  vibe_skill: {
+    kind: 'vibe_skill',
+    label: 'AI 代码技能 (vibe)',
+    category: 'employee',
+    description: 'NL → CodeSkill：vibe-coding 生成 Python 函数并按 input 跑一次',
+    accent: '#f97316',
+    icon: '✨',
+    hasInput: true,
+    hasOutput: true,
+    defaultConfig: {
+      brief: '',
+      skill_id: '',
+      mode: 'brief_first',
+      run_immediately: true,
+      output_var: 'vibe_result',
+      provider: '',
+      model: '',
+    },
+    fields: [
+      {
+        key: 'brief',
+        label: '需求 brief',
+        type: 'textarea',
+        required: true,
+        placeholder: '例：把字符串反转 / 解析 csv 并求和 / 把 input.text 翻成英文',
+        helper: '会调用 vibe-coding 的 NLCodeSkillFactory(brief_first) 生成代码并自带沙箱校验',
+      },
+      {
+        key: 'skill_id',
+        label: '技能 ID（可选，留空则按 vc-<random>）',
+        type: 'text',
+        helper: '同名 skill_id 可在多次执行间复用 PatchLedger',
+      },
+      {
+        key: 'mode',
+        label: '生成模式',
+        type: 'select',
+        options: [
+          { label: 'brief-first（先约束后写代码，推荐）', value: 'brief_first' },
+          { label: 'direct（直接生成）', value: 'direct' },
+        ],
+      },
+      { key: 'run_immediately', label: '立即用 input 跑一次', type: 'switch' },
+      { key: 'output_var', label: '输出变量名', type: 'text' },
+      { key: 'provider', label: 'LLM provider 覆盖（可选）', type: 'text' },
+      { key: 'model', label: 'LLM model 覆盖（可选）', type: 'text' },
+    ],
+  },
+  vibe_workflow: {
+    kind: 'vibe_workflow',
+    label: 'AI 子工作流 (vibe)',
+    category: 'employee',
+    description: 'NL → VibeWorkflowGraph：让 vibe-coding 自动拆成多技能小图后执行',
+    accent: '#fb923c',
+    icon: '🌀',
+    hasInput: true,
+    hasOutput: true,
+    defaultConfig: {
+      brief: '',
+      output_var: 'vibe_workflow_result',
+      provider: '',
+      model: '',
+    },
+    fields: [
+      {
+        key: 'brief',
+        label: '子工作流 brief',
+        type: 'textarea',
+        required: true,
+        placeholder: '例：先抓页面、再抽人物列表、再写一段 markdown 总结',
+        helper: '会调用 vibe_coding.NLWorkflowFactory，再交给 VibeWorkflowEngine 执行',
+      },
+      { key: 'output_var', label: '输出变量名', type: 'text' },
+      { key: 'provider', label: 'LLM provider 覆盖（可选）', type: 'text' },
+      { key: 'model', label: 'LLM model 覆盖（可选）', type: 'text' },
+    ],
+  },
+  http_request: {
+    kind: 'http_request',
+    label: 'HTTP 请求',
+    category: 'integration',
+    description: '发送 HTTP 请求并解析响应',
+    accent: '#0284c7',
+    icon: '🌐',
+    hasInput: true,
+    hasOutput: true,
+    defaultConfig: {
+      method: 'GET',
+      url: '',
+      headers: {},
+      body: null,
+      timeout: 30,
+      retries: 0,
+      output_var: '',
+    },
+    fields: [
+      {
+        key: 'method',
+        label: '请求方法',
+        type: 'select',
+        required: true,
+        options: [
+          { label: 'GET', value: 'GET' },
+          { label: 'POST', value: 'POST' },
+          { label: 'PUT', value: 'PUT' },
+          { label: 'DELETE', value: 'DELETE' },
+        ],
+      },
+      { key: 'url', label: 'URL', type: 'text', required: true, placeholder: 'https://api.example.com/data，支持 {{ var }}' },
+      { key: 'headers', label: '请求头 (JSON)', type: 'json', placeholder: '{"Authorization": "Bearer {{ token }}"}' },
+      { key: 'body', label: '请求体 (JSON)', type: 'json', placeholder: '{"key": "{{ value }}"}' },
+      { key: 'timeout', label: '超时(秒)', type: 'number' },
+      { key: 'retries', label: '重试次数', type: 'number' },
+      { key: 'output_var', label: '输出变量名', type: 'text' },
+    ],
+  },
+  code_execute: {
+    kind: 'code_execute',
+    label: '代码执行',
+    category: 'data',
+    description: '执行 Python 代码片段，输入/输出通过上下文变量传递',
+    accent: '#7c3aed',
+    icon: '⚡',
+    hasInput: true,
+    hasOutput: true,
+    defaultConfig: {
+      code: '',
+      output_var: 'code_result',
+      timeout: 60,
+    },
+    fields: [
+      { key: 'code', label: 'Python 代码', type: 'textarea', required: true, placeholder: 'result = input.get("key", "default")' },
+      { key: 'output_var', label: '输出变量名', type: 'text' },
+      { key: 'timeout', label: '超时(秒)', type: 'number' },
+    ],
+  },
+  data_transform: {
+    kind: 'data_transform',
+    label: '数据转换',
+    category: 'data',
+    description: 'JSONPath 提取、字段映射、类型转换、数组过滤',
+    accent: '#0891b2',
+    icon: '🔄',
+    hasInput: true,
+    hasOutput: true,
+    defaultConfig: {
+      transforms: [],
+      output_var: 'transform_result',
+    },
+    fields: [
+      { key: 'transforms', label: '转换规则 (JSON)', type: 'json', required: true, placeholder: '[{"type": "field_map", "mapping": {"name": "user_name"}}]' },
+      { key: 'output_var', label: '输出变量名', type: 'text' },
+    ],
+  },
+  loop: {
+    kind: 'loop',
+    label: '循环',
+    category: 'logic',
+    description: 'for_each 遍历数组或 while 条件循环',
+    accent: '#ea580c',
+    icon: '🔁',
+    hasInput: true,
+    hasOutput: true,
+    defaultConfig: {
+      loop_type: 'for_each',
+      items_path: '',
+      condition: '',
+      max_iterations: 100,
+      output_var: 'loop_result',
+    },
+    fields: [
+      {
+        key: 'loop_type',
+        label: '循环类型',
+        type: 'select',
+        required: true,
+        options: [
+          { label: '遍历数组 (for_each)', value: 'for_each' },
+          { label: '条件循环 (while)', value: 'while' },
+        ],
+      },
+      { key: 'items_path', label: '数组路径 (for_each)', type: 'text', placeholder: '{{ items }}' },
+      { key: 'condition', label: '条件表达式 (while)', type: 'textarea', placeholder: '{{ loop_index }} < 10' },
+      { key: 'max_iterations', label: '最大迭代次数', type: 'number' },
+      { key: 'output_var', label: '输出变量名', type: 'text' },
+    ],
+  },
+  parallel: {
+    kind: 'parallel',
+    label: '并行执行',
+    category: 'logic',
+    description: '多分支并行执行，所有分支完成后合并结果',
+    accent: '#d946ef',
+    icon: '⇶',
+    hasInput: true,
+    hasOutput: true,
+    defaultConfig: {
+      branches: [],
+      output_var: 'parallel_result',
+    },
+    fields: [
+      { key: 'branches', label: '并行分支 (JSON)', type: 'json', required: true, placeholder: '[{"name": "branch_a", "type": "pass"}]' },
+      { key: 'output_var', label: '输出变量名', type: 'text' },
+    ],
+  },
+  sub_workflow: {
+    kind: 'sub_workflow',
+    label: '子工作流',
+    category: 'logic',
+    description: '调用另一个工作流，递归深度限制 3 层',
+    accent: '#be185d',
+    icon: '📦',
+    hasInput: true,
+    hasOutput: true,
+    defaultConfig: {
+      workflow_id: '',
+      input_mapping: {},
+      output_var: 'sub_workflow_result',
+      max_depth: 3,
+    },
+    fields: [
+      { key: 'workflow_id', label: '目标工作流 ID', type: 'number', required: true },
+      { key: 'input_mapping', label: '输入映射 (JSON)', type: 'json', placeholder: '{"key": "{{ var }}"}' },
+      { key: 'output_var', label: '输出变量名', type: 'text' },
+      { key: 'max_depth', label: '最大递归深度', type: 'number' },
+    ],
+  },
+}
+
+export const KNOWN_KINDS = Object.keys(REGISTRY) as NodeKind[]
+
+export function getNodeMeta(kind: string): NodeMeta {
+  if ((KNOWN_KINDS as string[]).includes(kind)) {
+    return REGISTRY[kind as NodeKind]
+  }
+  return {
+    kind: kind as NodeKind,
+    label: kind || '未知节点',
+    category: 'logic',
+    description: '未注册的节点类型',
+    accent: '#94a3b8',
+    icon: '?',
+    hasInput: true,
+    hasOutput: true,
+    defaultConfig: {},
+    fields: [],
+  }
+}
+
+export function listByCategory(): { category: NodeCategory; label: string; items: NodeMeta[] }[] {
+  const groups: { category: NodeCategory; label: string }[] = [
+    { category: 'flow', label: '基础流程' },
+    { category: 'trigger', label: '触发器' },
+    { category: 'employee', label: 'AI 员工' },
+    { category: 'logic', label: '逻辑' },
+    { category: 'integration', label: '集成' },
+    { category: 'data', label: '数据' },
+  ]
+  return groups.map((g) => ({
+    ...g,
+    items: KNOWN_KINDS.map((k) => REGISTRY[k]).filter((m) => m.category === g.category),
+  }))
+}

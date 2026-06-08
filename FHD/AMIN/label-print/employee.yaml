@@ -1,0 +1,70 @@
+id: label-print
+name: 标签打印 AI 员工
+version: "1.0.0"
+domain: 接收星标微信中识别到的「标签/打印」意图信号，在智能对话中补充型号、张数等信息后执行打印链路；未命中前任务面板进度为 0，不计为已执行。
+owner: admin
+area: workflow-core
+security_level: personal
+is_public: true
+
+scope_globs:
+  - FHD-个人/frontend/src/components/TopAssistantFloat.vue
+  - FHD-个人/frontend/src/stores/workflowAiEmployees.ts
+  - FHD-个人/frontend/src/composables/useWorkflowEmployeeDesks.ts
+  - FHD-个人/frontend/src/constants/workflowEmployeeDocIds.ts
+  - FHD-个人/frontend/src/constants/workflowEmployeeDatabaseLinks.ts
+  - FHD-个人/frontend/src/stores/workflowEmployeeSpace.ts
+  - FHD-个人/frontend/src/constants/yuangongStitchPlacements.ts
+  - FHD-个人/frontend/src/data/workflow-employee-docs.json
+
+forbidden_globs:
+  - FHD-个人/app/fastapi_routes/xcagi_compat_chat_helpers.py
+
+triggers:
+  on_error: true
+  on_quality_fail: true
+  on_coverage_miss: false
+  max_patch_budget_tokens: 4000
+  max_patch_steps: 5
+
+sla:
+  timeout_seconds: 120
+  retry_max: 2
+  escalate_to_human: true
+
+llm_default: "auto"
+llm_reasoning: "auto"
+
+skills:
+  - skills/skill-label-print.md
+
+capabilities:
+  - label: 意图识别与信号派发
+    description: 从星标微信消息中识别「标签/打印」意图，命中后派发 xcagi:workflow-label-print-signal
+  - label: 对话式打印参数收集
+    description: 在智能对话中引导用户补充型号、张数等打印参数
+  - label: 打印机与模板配置执行
+    description: 结合打印机配置与模板执行实际打印链路
+
+examples:
+  - title: 星标消息触发标签打印
+    description: 客户微信消息命中打印意图后自动派发信号
+    input:
+      action: signal
+      signal_type: workflow-label-print-signal
+      source: wechat_star
+  - title: 对话补充打印参数
+    description: 在智能对话中发送型号和数量完成打印
+    input:
+      action: print
+      model: "XY-300"
+      quantity: 5
+      template: "default"
+
+depends_on:
+  - wechat-msg
+
+changelog:
+  - version: "1.0.0"
+    date: "2026-05-14"
+    note: "初始创建：从 FHD-个人 程序硬编码中提取"

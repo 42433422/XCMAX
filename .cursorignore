@@ -1,0 +1,72 @@
+# XCMAX — Cursor 索引/上下文排除（加快 Agent、Tab、@Codebase）
+# 与 .gitignore 互补；不影响 Git，只影响 Cursor 检索
+
+# === 依赖 ===
+**/node_modules/
+**/.venv/
+**/.venv-*/
+**/.venv-mypy/
+**/.tools/
+
+# === 构建产物 ===
+**/dist/
+**/build/
+**/vue-dist/
+**/__pycache__/
+**/*.py[cod]
+**/*.min.js
+**/*.min.css
+**/*.map
+
+# === Git / 缓存 ===
+**/.git/
+**/.cache/
+**/.trae/
+**/.DS_Store
+
+# === 日志与临时 ===
+**/*.log
+**/_scp_tmp/
+**/_personal_sync_bak/
+**/release-apk/
+**/_archive/
+
+# === 大二进制 / 媒体 ===
+**/*.png
+**/*.jpg
+**/*.jpeg
+**/*.gif
+**/*.webp
+**/*.ico
+**/*.apk
+**/*.tar
+**/*.tar.gz
+**/*.zip
+**/*.xlsx
+**/*.pdf
+**/*.wasm
+
+# === 大型静态 HTML / 报告（需要时 @ 手动引用）===
+# 2026-06-06 解开：XCAGI 全景图 / 架构图 纳入 Cursor 索引，便于 cross-ref
+# XCAGI-Full-Pipeline.html
+# XCAGI-Architecture-Map.html
+**/SECURITY_CLEANUP_REPORT.md
+
+# === 归档与废弃 ===
+FHD/MODstore/
+FHD/docs/_archive/
+FHD/_archived/
+FHD/_archived_removed_mods/
+FHD-个人/
+
+# === ML 模型 ===
+vosk-model*/
+**/*.onnx
+**/*.pt
+**/*.pth
+
+# === 测试 / 覆盖率 ===
+**/htmlcov/
+**/.coverage
+**/coverage/
+**/.pytest_cache/

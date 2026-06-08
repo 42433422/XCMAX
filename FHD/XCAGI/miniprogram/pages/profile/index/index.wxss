@@ -1,0 +1,33 @@
+.header {
+  display: flex; align-items: center; gap: 24rpx;
+  padding: 48rpx 32rpx 36rpx; background: #ffffff;
+}
+.avatar { width: 120rpx; height: 120rpx; border-radius: 50%; border: 4rpx solid #f5f5f5; flex-shrink: 0; }
+.user { flex: 1; min-width: 0; }
+.name { font-size: 34rpx; font-weight: 700; color: #333333; display: block; margin-bottom: 6rpx; }
+.id { font-size: 23rpx; color: #bbbbbb; display: block; margin-bottom: 8rpx; }
+.edit-btn { font-size: 26rpx; color: #0052d9; font-weight: 500; white-space: nowrap; }
+
+.shortcut-card { margin-top: 16rpx; }
+.sc-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24rpx; }
+.sc-head text:first-child { font-size: 30rpx; font-weight: 700; color: #333333; }
+.sc-more { font-size: 24rpx; color: #999999; }
+
+.sc-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8rpx; }
+.sc-item { display: flex; flex-direction: column; align-items: center; padding: 18rpx 4rpx 14rpx; position: relative; }
+.sc-num { position: absolute; top: 10rpx; right: 6rpx; font-size: 20rpx; font-weight: 700; min-width: 30rpx; height: 30rpx; line-height: 30rpx; text-align: center; background: #fff1f0; border-radius: 15rpx; }
+.sc-icon { font-size: 40rpx; line-height: 1; margin-bottom: 8rpx; }
+.sc-label { font-size: 23rpx; color: #666666; }
+
+.menu-card { margin-top: 16rpx; }
+.mi {
+  display: flex; align-items: center; gap: 16rpx;
+  padding: 28rpx 8rpx; position: relative;
+}
+.mi text:nth-child(1) { width: 44rpx; text-align: center; font-size: 34rpx; flex-shrink: 0; }
+.mi text:nth-child(2) { flex: 1; font-size: 29rpx; color: #333333; font-weight: 500; }
+.mi-arrow { color: #cccccc; font-size: 30rpx; }
+.mi-new { margin-left: auto !important; margin-right: 12rpx !important; vertical-align: middle; }
+.mi-divider { height: 1rpx; background: #f5f5f5; margin-left: 68rpx; }
+
+.ver { text-align: center; padding: 40rpx 0 16rpx; font-size: 22rpx; color: #dddddd; }

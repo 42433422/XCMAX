@@ -1,0 +1,39 @@
+id: employee-pack-quality-interviewer
+name: 员工包质询员
+version: "10.0.0"
+owner: admin
+area: quality-and-docs
+domain: >-
+  对候选 employee_pack（.xcemp）做结构化「入职面试」：基于用户粘贴的 manifest 节选、同步测试日志或 沙盒 JSON，对照职责边界与平台契约给出录用/有条件录用/驳回结论与可执行修改清单。 不替代渗透测试、法务合规或正式 HR 录用；不编造未出现在输入中的文件路径、接口或密钥。
+
+scope_globs:
+  - "yuangon/**/employee.yaml"
+  - "yuangon/**/prompts/*.md"
+  - "yuangon/**/skills/*.md"
+  - "yuangon/quality-and-docs/employee-pack-quality-interviewer/**"
+
+forbidden_globs:
+  - "_local_secrets/**"
+  - "*.key"
+  - .env
+
+depends_on:
+  - employee-interview-assistant
+  - employee-pack-curator
+
+actions:
+  handlers:
+    - llm_md
+    - echo
+
+triggers:
+  on_error: false
+  on_quality_fail: false
+
+skills:
+  - skill-xcemp-interview-rubric
+
+changelog:
+  - version: "10.0.0"
+    date: "2026-06-07"
+    note: "yuangon 骨架由 bootstrap_yuangon.py 从 manifest 反向生成（v10 线内迭代）"

@@ -1,0 +1,38 @@
+# 示例：MODstore 后台任务专用 worker（outbox + 订阅续费调度器）
+# 只运行单个 uvicorn 进程；不暴露 HTTP 端口；不接收外部流量。
+#
+# 必须在主 modstore.service 之外单独启动，确保多 API worker 下后台任务只跑一次。
+#
+# 安装：
+#   sudo cp modstore-scheduler.service.example /etc/systemd/system/modstore-scheduler.service
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now modstore-scheduler
+#
+# 验证：
+#   journalctl -u modstore-scheduler -f
+#   # 每天 02:00 应只出现一条 "subscription auto-renew" 日志
+#   # 每 5 分钟应出现 payment_orders_expire 心跳（或 closed N expired）
+
+[Unit]
+Description=MODstore Background Jobs (outbox + scheduler)
+After=network.target
+# 先等 API worker 完成 DB 初始化后再启动
+After=modstore.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/modstore-git/MODstore_deploy
+EnvironmentFile=-/root/modstore-git/MODstore_deploy/.env
+Environment=PYTHONUNBUFFERED=1
+# 启用后台任务
+Environment=MODSTORE_RUN_BACKGROUND_JOBS=1
+# 无 HTTP 流量，worker 数固定为 1
+Environment=MODSTORE_BUS=rabbitmq
+# 绑定内网回环，Nginx 不转发至此端口
+ExecStart=/root/modstore-git/MODstore_deploy/.venv/bin/python -m uvicorn modstore_server.app:app --host 127.0.0.1 --port 9990 --workers 1
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

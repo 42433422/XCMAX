@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://modstore.local/schemas/events/refund.rejected.schema.json",
+  "title": "refund.rejected payload",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["refund_id", "order_no", "user_id", "amount", "status"],
+  "properties": {
+    "refund_id": { "type": ["integer", "string"] },
+    "order_no": { "type": "string" },
+    "user_id": { "type": ["integer", "string"] },
+    "amount": { "type": ["number", "string"] },
+    "status": { "type": "string" }
+  }
+}

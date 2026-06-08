@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://modstore.local/schemas/events/workflow.event_trigger.schema.json",
+  "title": "workflow.event_trigger payload",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["workflow_id", "user_id"],
+  "properties": {
+    "workflow_id": { "type": ["integer", "string"] },
+    "user_id": { "type": ["integer", "string"] }
+  }
+}

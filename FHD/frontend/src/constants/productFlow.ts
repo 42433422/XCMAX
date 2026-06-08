@@ -1,0 +1,130 @@
+/**
+ * 可交付宿主标准用户流程（与 docs/guides/PRODUCT_USER_FLOW.md 对齐）
+ */
+
+export const LS_PRODUCT_FLOW_COMPLETED = 'xcagi_product_flow_completed'
+export const LS_PRODUCT_FLOW_HOST_ACK = 'xcagi_product_flow_host_ack'
+
+/** 副窗「新手教程」默认路线 id（宿主三步引导，原基础教程） */
+export const DEFAULT_TUTORIAL_TRACK_ID = 'basic'
+
+export function isTutorialReplayQuery(raw: unknown): boolean {
+  return String(raw || '').trim().toLowerCase() === 'tutorial'
+}
+
+export function readOnboardingReturnPath(raw: unknown): string {
+  const p = String(raw || '').trim()
+  if (p.startsWith('/')) return p
+  return '/'
+}
+
+export type ProductFlowStepId = 'welcome' | 'host-pack' | 'industry' | 'done'
+
+export interface ProductFlowStepMeta {
+  id: ProductFlowStepId
+  index: number
+  title: string
+  subtitle: string
+}
+
+export const PRODUCT_FLOW_STEPS: ProductFlowStepMeta[] = [
+  {
+    id: 'welcome',
+    index: 1,
+    title: '认识XC',
+    subtitle: '专属于您的数字公司 · 先装 Mod，AI 员工按需再来',
+  },
+  {
+    id: 'industry',
+    index: 2,
+    title: '行业定型',
+    subtitle: '先定行业方向；日常默认只有智能对话与智能生态',
+  },
+  {
+    id: 'host-pack',
+    index: 3,
+    title: '补基础线',
+    subtitle: '按所选行业查看还缺哪些基础 Mod，按需装齐（可跳过）',
+  },
+  {
+    id: 'done',
+    index: 4,
+    title: '开始使用',
+    subtitle: '进入智能对话与日常操作',
+  },
+]
+
+/** 引导「行业定型」当前开放可选（其余仅展示） */
+export const ONBOARDING_OPEN_INDUSTRY_IDS = ['涂料', '考勤'] as const
+
+export type OnboardingOpenIndustryId = (typeof ONBOARDING_OPEN_INDUSTRY_IDS)[number]
+
+export function isOnboardingIndustryOpen(industryId: string): boolean {
+  const id = String(industryId || '').trim()
+  return (ONBOARDING_OPEN_INDUSTRY_IDS as readonly string[]).includes(id)
+}
+
+export function defaultOnboardingIndustryId(): OnboardingOpenIndustryId {
+  return '涂料'
+}
+
+/** @deprecated 用 industry-baseline API summary；保留作离线兜底 */
+export function industryBaselineHint(industryId: string): string {
+  const id = String(industryId || '').trim() || '通用'
+  const hints: Record<string, string> = {
+    通用:
+      '通用场景：工作流员工、Planner 工具、企微与局域网入口等基础线，用到哪补哪即可。',
+    涂料: '涂料/批发类：在通用基础线上，出货、客户、标签打印等行业 Mod 可按需从扩展市场安装。',
+    批发: '批发分销：基础线装齐后，库存与客户相关 Mod 建议从扩展市场按需加载。',
+    考勤: '考勤排班：基础线装齐后，排班与考勤单等行业 Mod 可按需安装。',
+    烤禽: '烤禽冷链：基础线装齐后，配送与货品管理 Mod 可按需安装。',
+    电商: '电商零售：基础线装齐后，订单与 SKU 相关 Mod 可按需安装。',
+    餐饮: '餐饮门店：基础线装齐后，食材与订货 Mod 可按需安装。',
+    物流: '物流运单：基础线装齐后，运单与客户 Mod 可按需安装。',
+  }
+  return hints[id] || hints['通用']
+}
+
+export function readProductFlowCompleted(): boolean {
+  if (typeof localStorage === 'undefined') return true
+  try {
+    return localStorage.getItem(LS_PRODUCT_FLOW_COMPLETED) === '1'
+  } catch {
+    return true
+  }
+}
+
+export function markProductFlowCompleted(): void {
+  if (typeof localStorage === 'undefined') return
+  try {
+    localStorage.setItem(LS_PRODUCT_FLOW_COMPLETED, '1')
+  } catch {
+    /* ignore */
+  }
+}
+
+export function readHostPackAcknowledged(): boolean {
+  if (typeof localStorage === 'undefined') return true
+  try {
+    return localStorage.getItem(LS_PRODUCT_FLOW_HOST_ACK) === '1'
+  } catch {
+    return true
+  }
+}
+
+export function markHostPackAcknowledged(): void {
+  if (typeof localStorage === 'undefined') return
+  try {
+    localStorage.setItem(LS_PRODUCT_FLOW_HOST_ACK, '1')
+  } catch {
+    /* ignore */
+  }
+}
+
+export function parseFlowStepQuery(raw: unknown): ProductFlowStepId {
+  const s = String(raw || '').trim().toLowerCase()
+  if (s === 'host-pack' || s === 'host') return 'host-pack'
+  if (s === 'industry' || s === 'mod') return 'industry'
+  if (s === 'done' || s === 'finish') return 'done'
+  return 'welcome'
+}

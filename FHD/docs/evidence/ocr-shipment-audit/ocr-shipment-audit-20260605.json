@@ -1,0 +1,38 @@
+{
+  "generated_at": "2026-06-05T07:56:16Z",
+  "text_preview": "购货单位：深圳市Evidence测试公司\n    联系人：李四\n    联系电话：13800138000\n    订单编号：ORD202606050001\n    ABC001 七彩涂料 10 100.00 1000.00\n    合计：1000.00",
+  "structured_fields": {
+    "purchase_unit": "深圳市Evidence测试公司",
+    "contact_person": "李四",
+    "contact_phone": "13800138000",
+    "purchase_date": null,
+    "order_number": "ORD202606050001",
+    "total_amount": 1000.0,
+    "products": [
+      {
+        "model": "ORD202606050001",
+        "name": "ABC001 七彩涂料",
+        "quantity": 10,
+        "unit_price": 100.0,
+        "total_price": 1000.0
+      }
+    ],
+    "raw_text": "\n    购货单位：深圳市Evidence测试公司\n    联系人：李四\n    联系电话：13800138000\n    订单编号：ORD202606050001\n    ABC001 七彩涂料 10 100.00 1000.00\n    合计：1000.00\n    "
+  },
+  "confidence": 0.88,
+  "latency_ms": 56,
+  "audit": {
+    "success": true,
+    "event": {
+      "id": 1,
+      "created_at": "2026-06-05T07:56:16.441948",
+      "shipment_id": null,
+      "decision": "auto_approve",
+      "reason": "规则校验通过",
+      "ocr_confidence": 0.88,
+      "source": "ocr"
+    },
+    "decision": "auto_approve",
+    "reason": "规则校验通过"
+  }
+}

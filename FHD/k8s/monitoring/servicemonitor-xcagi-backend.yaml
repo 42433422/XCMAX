@@ -1,0 +1,17 @@
+# Requires Prometheus Operator (kube-prometheus-stack). Static scrape: see prometheus/prometheus.yml
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: xcagi-backend
+  labels:
+    app: xcagi
+    release: kube-prometheus-stack
+spec:
+  selector:
+    matchLabels:
+      app: xcagi
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 10s

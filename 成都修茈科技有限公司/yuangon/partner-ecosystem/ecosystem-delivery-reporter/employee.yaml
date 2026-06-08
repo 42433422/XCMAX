@@ -1,0 +1,39 @@
+id: ecosystem-delivery-reporter
+name: 生态交付回传员
+version: "10.0.0"
+owner: admin
+area: partner-ecosystem
+domain: >-
+  O-B B3 联合包交付遥测 · 里程碑回写 O-A CRM 快照 · 生态进度事件。
+
+scope_globs:
+  - "MODstore_deploy/modstore_server/**/production_line*"
+  - "MODstore_deploy/modstore_server/**/operations*"
+  - "FHD/app/**/telemetry/**"
+  - "yuangon/partner-ecosystem/ecosystem-delivery-reporter/**"
+
+forbidden_globs:
+  - "_local_secrets/**"
+
+depends_on:
+  - enterprise-adoption-officer
+  - deploy-release-officer
+
+actions:
+  handlers:
+    - llm_md
+    - echo
+
+triggers:
+  on_error: true
+  on_quality_fail: true
+
+skills:
+  - task.analyze
+  - llm.markdown
+  - workflow.assist
+
+changelog:
+  - version: "10.0.0"
+    date: "2026-06-07"
+    note: "yuangon 骨架由 bootstrap_yuangon.py 从 manifest 反向生成（v10 线内迭代）"

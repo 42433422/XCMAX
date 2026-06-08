@@ -1,0 +1,8 @@
+# Generated from FHD/pyproject.toml — do not edit by hand.
+# 生产（仅运行时）：cd .. && pip install -e .
+# 或：pip install -r ../requirements-base.txt
+# 桌面音频/ASR：pip install -e "..[desktop]"
+# 开发+ML（CI）：pip install -e "..[dev,ml]"
+# 可复现 CI：pip install -r XCAGI/requirements.lock.txt
+
+-e ..

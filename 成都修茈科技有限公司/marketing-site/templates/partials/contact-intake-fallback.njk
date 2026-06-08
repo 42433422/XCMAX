@@ -1,0 +1,11 @@
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  setTimeout(function () {
+    var form = document.getElementById('contact-form');
+    if (!form || form.dataset.intakeWizard !== 'true') return;
+    if (form.dataset.intakeReady === 'true') return;
+    var err = document.getElementById('form-api-error');
+    if (err) err.textContent = '问卷脚本未加载成功，请按 Ctrl+F5（Mac：Cmd+Shift+R）强制刷新后再试。';
+  }, 600);
+});
+</script>

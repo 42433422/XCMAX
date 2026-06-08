@@ -1,0 +1,71 @@
+id: shipment-mgmt
+name: 出货管理 AI 员工
+version: "1.0.0"
+domain: 围绕发货单生成、打印与出货记录核对；打印成功后可自动拉取本单位出货记录做统计与审计建议。
+owner: admin
+area: workflow-core
+security_level: personal
+is_public: true
+
+scope_globs:
+  - FHD-个人/frontend/src/components/TopAssistantFloat.vue
+  - FHD-个人/frontend/src/stores/workflowAiEmployees.ts
+  - FHD-个人/frontend/src/composables/useWorkflowEmployeeDesks.ts
+  - FHD-个人/frontend/src/constants/workflowEmployeeDocIds.ts
+  - FHD-个人/frontend/src/constants/workflowEmployeeDatabaseLinks.ts
+  - FHD-个人/frontend/src/constants/yuangongStitchPlacements.ts
+  - FHD-个人/frontend/src/data/workflow-employee-docs.json
+
+forbidden_globs:
+  - FHD-个人/app/fastapi_routes/xcagi_compat_chat_helpers.py
+
+triggers:
+  on_error: true
+  on_quality_fail: true
+  on_coverage_miss: false
+  max_patch_budget_tokens: 4000
+  max_patch_steps: 5
+
+sla:
+  timeout_seconds: 120
+  retry_max: 2
+  escalate_to_human: true
+
+llm_default: "auto"
+llm_reasoning: "auto"
+
+skills:
+  - skills/skill-shipment-order.md
+  - skills/skill-shipment-audit.md
+
+capabilities:
+  - label: 对话生成发货单
+    description: 通过对话触发发货单生成，预览确认后写库并生成文档
+  - label: 打印标签与单据
+    description: 对话或任务卡片触发打印标签和发货单据
+  - label: 出货记录审计与核对
+    description: 请求出货记录列表，汇总条数与今日增量，提示核对、导出 Excel 与推送同事
+
+examples:
+  - title: 对话生成发货单
+    description: 在智能对话中触发发货单生成流程
+    input:
+      action: shipment_generate
+      customer: "客户名称"
+      items:
+        - product: "产品A"
+          quantity: 10
+  - title: 出货记录审计
+    description: 打印成功后自动拉取出货记录做统计与审计建议
+    input:
+      action: audit
+      date_range: "today"
+      include_stats: true
+
+depends_on:
+  - label-print
+
+changelog:
+  - version: "1.0.0"
+    date: "2026-05-14"
+    note: "初始创建：从 FHD-个人 程序硬编码中提取"

@@ -1,0 +1,30 @@
+{
+  "_comment": "Phase 2 场景 6 留证样例 — 发货通知（low 风险，只读联系人）。",
+  "generated_at": "2026-06-05T12:15:00Z",
+  "input_message": "给上海宏达发送发货通知",
+  "execution_mode": "mock",
+  "approval_strategy": "auto",
+  "plan_id": "v1-s6-20260605-121500",
+  "intent": "notify_customer_shipped",
+  "risk_level": "low",
+  "scenario_id": 6,
+  "scenario_title": "发货通知",
+  "nodes": [
+    {"node_id": "lookup_contact", "tool_id": "wechat_send", "action": "preview", "risk": "low", "depends_on": [], "params": {"keyword": "上海宏达"}}
+  ],
+  "gated_decision": {
+    "risk_decision": {"requires_confirmation": false, "reason": "计划仅包含低风险读操作", "blocking_nodes": []},
+    "node_decisions": [
+      {"node_id": "lookup_contact", "tool_id": "wechat_send", "action": "preview", "risk": "low", "requires_approval": false, "approved": true, "reason": "low-risk auto-approved"}
+    ],
+    "approval_request_ids": [],
+    "all_approved": true,
+    "any_rejected": false,
+    "pending_approval": false
+  },
+  "success": true,
+  "message": "工作流执行完成",
+  "node_results_summary": [
+    {"node_id": "lookup_contact", "tool_id": "wechat_send", "action": "preview", "success": true, "error": "", "output_summary": {"success": true, "data_count": 1, "data_sample_keys": ["contact_id", "name", "wechat_id"]}}
+  ]
+}

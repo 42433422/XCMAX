@@ -1,0 +1,37 @@
+id: marketing-site-builder
+name: 营销站点构建员
+version: "10.0.0"
+owner: admin
+area: site-and-marketing
+domain: >-
+  维护 marketing-site/ Nunjucks 模板与构建脚本（build.mjs、package.json）；与根静态站 site-content-editor 分工：本岗只管独立营销站子项目，不碰 MODstore 与市场 Vue 源码。
+
+scope_globs:
+  - "marketing-site/**"
+  - "yuangon/site-and-marketing/marketing-site-builder/**"
+
+forbidden_globs:
+  - "_local_secrets/**"
+  - "MODstore_deploy/**"
+  - "site/**"
+
+depends_on:
+  - site-content-editor
+  - seo-sitemap-curator
+
+actions:
+  handlers:
+    - llm_md
+    - echo
+
+triggers:
+  on_error: true
+  on_quality_fail: true
+
+skills:
+  - skill-marketing-site-build
+
+changelog:
+  - version: "10.0.0"
+    date: "2026-06-07"
+    note: "yuangon 骨架由 bootstrap_yuangon.py 从 manifest 反向生成（v10 线内迭代）"

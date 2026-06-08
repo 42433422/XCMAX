@@ -1,0 +1,420 @@
+{
+  "version": "2026-06-03",
+  "description": "XCMAX 路径 → 六线部门 → 主责员工（最长前缀匹配；二级分区见 zones 统计）",
+  "rules": [
+    {
+      "prefix": "成都修茈科技有限公司/MODstore_deploy/market/",
+      "department": "prod_web",
+      "primary": ["market-frontend-dev"],
+      "step": "P1b"
+    },
+    {
+      "prefix": "成都修茈科技有限公司/MODstore_deploy/workbench/",
+      "department": "prod_web",
+      "primary": ["workbench-ux-stylist", "daily-orchestrator"],
+      "step": "P1c"
+    },
+    {
+      "prefix": "成都修茈科技有限公司/MODstore_deploy/modstore_server/",
+      "department": "prod_web",
+      "primary": ["modstore-backend-api", "employee-pack-curator"],
+      "step": "P1d"
+    },
+    {
+      "prefix": "成都修茈科技有限公司/MODstore_deploy/java_payment_service/",
+      "department": "prod_web",
+      "primary": ["java-payment-bridge-officer"],
+      "step": "P1d"
+    },
+    {
+      "prefix": "成都修茈科技有限公司/MODstore_deploy/",
+      "department": "prod_web",
+      "primary": ["deploy-release-officer", "nginx-config-engineer"],
+      "step": "P1f"
+    },
+    {
+      "prefix": "成都修茈科技有限公司/marketing-site/",
+      "department": "prod_web",
+      "primary": ["marketing-site-builder", "site-content-editor"],
+      "step": "P1a"
+    },
+    {
+      "prefix": "FHD/app/fastapi_routes/domains/auth/",
+      "department": "prod_software",
+      "primary": ["fhd-core-maintainer"],
+      "step": "P2",
+      "domain": "auth"
+    },
+    {
+      "prefix": "FHD/app/fastapi_routes/domains/conversation/",
+      "department": "prod_software",
+      "primary": ["fhd-core-maintainer"],
+      "step": "P2",
+      "domain": "conversation"
+    },
+    {
+      "prefix": "FHD/app/fastapi_routes/domains/customer/",
+      "department": "ops_acquisition",
+      "primary": ["user-customer-service-officer"],
+      "step": "O2",
+      "domain": "customer"
+    },
+    {
+      "prefix": "FHD/app/fastapi_routes/domains/excel/",
+      "department": "prod_software",
+      "primary": ["fhd-core-maintainer"],
+      "step": "P2",
+      "domain": "excel"
+    },
+    {
+      "prefix": "FHD/app/fastapi_routes/domains/inventory/",
+      "department": "prod_software",
+      "primary": ["fhd-core-maintainer"],
+      "step": "P2",
+      "domain": "inventory"
+    },
+    {
+      "prefix": "FHD/app/fastapi_routes/domains/misc/",
+      "department": "prod_software",
+      "primary": ["fhd-core-maintainer"],
+      "step": "P2",
+      "domain": "misc"
+    },
+    {
+      "prefix": "FHD/app/fastapi_routes/domains/product/",
+      "department": "prod_software",
+      "primary": ["fhd-core-maintainer"],
+      "step": "P2",
+      "domain": "product"
+    },
+    {
+      "prefix": "FHD/app/fastapi_routes/domains/shipment/",
+      "department": "ops_acquisition",
+      "primary": ["fhd-core-maintainer"],
+      "step": "O9",
+      "domain": "shipment"
+    },
+    {
+      "prefix": "FHD/app/fastapi_routes/domains/static/",
+      "department": "prod_software",
+      "primary": ["fhd-core-maintainer"],
+      "step": "P2",
+      "domain": "static"
+    },
+    {
+      "prefix": "FHD/app/fastapi_routes/domains/system/",
+      "department": "prod_software",
+      "primary": ["fhd-core-maintainer", "daily-orchestrator"],
+      "step": "P7",
+      "domain": "system"
+    },
+    {
+      "prefix": "FHD/app/fastapi_routes/domains/template/",
+      "department": "prod_software",
+      "primary": ["fhd-core-maintainer"],
+      "step": "P2",
+      "domain": "template"
+    },
+    {
+      "prefix": "FHD/app/fastapi_routes/domains/wechat/",
+      "department": "ops_acquisition",
+      "primary": ["fhd-core-maintainer"],
+      "step": "O7",
+      "domain": "wechat"
+    },
+    {
+      "prefix": "FHD/app/fastapi_routes/domains/workflow/",
+      "department": "prod_mod",
+      "primary": ["workflow-automator", "fhd-core-maintainer"],
+      "step": "P2",
+      "domain": "workflow"
+    },
+    {
+      "prefix": "FHD/app/fastapi_routes/domains/db/",
+      "department": "prod_software",
+      "primary": ["dbops-engineer"],
+      "step": "P9",
+      "domain": "db"
+    },
+    {
+      "prefix": "成都修茈科技有限公司/yuangon/partner-ecosystem/",
+      "department": "ops_partner",
+      "primary": ["ecosystem-partner-onboard-officer"],
+      "step": "B1"
+    },
+    {
+      "prefix": "成都修茈科技有限公司/yuangon/",
+      "department": "prod_mod",
+      "primary": ["employee-pack-curator"],
+      "step": "P2"
+    },
+    {
+      "prefix": "成都修茈科技有限公司/vibe-coding/",
+      "department": "prod_web",
+      "primary": ["vibe-coding-maintainer"],
+      "step": "P1c"
+    },
+    {
+      "prefix": "成都修茈科技有限公司/docs/",
+      "department": "prod_web",
+      "primary": ["doc-knowledge-curator"],
+      "step": "P1e"
+    },
+    {
+      "prefix": "成都修茈科技有限公司/",
+      "department": "prod_web",
+      "primary": ["flask-entry-keeper", "site-content-editor", "seo-sitemap-curator"],
+      "step": "P1a",
+      "fallback": true
+    },
+    {
+      "prefix": "FHD/app/",
+      "department": "prod_software",
+      "primary": ["fhd-core-maintainer"],
+      "step": "P2"
+    },
+    {
+      "prefix": "FHD/frontend/",
+      "department": "prod_software",
+      "primary": ["fhd-core-maintainer"],
+      "step": "P2"
+    },
+    {
+      "prefix": "FHD/tests/",
+      "department": "prod_software",
+      "primary": ["test-qa-runner", "fhd-core-maintainer"],
+      "step": "P3"
+    },
+    {
+      "prefix": "FHD/docs/",
+      "department": "prod_software",
+      "primary": ["doc-knowledge-curator"],
+      "step": "P1e"
+    },
+    {
+      "prefix": "FHD/deploy/",
+      "department": "prod_software",
+      "primary": ["deploy-release-officer"],
+      "step": "P4"
+    },
+    {
+      "prefix": "FHD/data/",
+      "department": "prod_software",
+      "primary": ["fhd-core-maintainer"],
+      "step": "P2"
+    },
+    {
+      "prefix": "FHD/config/",
+      "department": "prod_software",
+      "primary": ["fhd-core-maintainer", "daily-orchestrator"],
+      "step": "P10"
+    },
+    {
+      "prefix": "FHD/MODstore/",
+      "department": "prod_mod",
+      "primary": ["mods-and-eskill-curator"],
+      "step": "P3"
+    },
+    {
+      "prefix": "FHD/alembic/",
+      "department": "prod_software",
+      "primary": ["dbops-engineer"],
+      "step": "P9"
+    },
+    {
+      "prefix": "FHD/desktop/",
+      "department": "prod_software",
+      "primary": ["mobile-android-release-officer", "pack-registrar"],
+      "step": "P4"
+    },
+    {
+      "prefix": "FHD/_archived_removed_mods/",
+      "department": "shared_retention",
+      "primary": ["legacy-archive-curator"],
+      "step": "R3"
+    },
+    {
+      "prefix": "FHD/",
+      "department": "prod_software",
+      "primary": ["fhd-core-maintainer"],
+      "step": "P2",
+      "fallback": true
+    },
+    {
+      "prefix": "_archive/",
+      "department": "shared_retention",
+      "primary": ["legacy-archive-curator", "retention-officer"],
+      "step": "R3"
+    },
+    {
+      "prefix": "v7-reference/",
+      "department": "shared_retention",
+      "primary": ["legacy-archive-curator"],
+      "step": "R3"
+    },
+    {
+      "prefix": "release-apk/",
+      "department": "shared_retention",
+      "primary": ["mobile-android-release-officer"],
+      "step": "P5"
+    },
+    {
+      "prefix": "FHD/docs/_archive/FHD-个人/",
+      "department": "shared_retention",
+      "primary": ["retention-officer"],
+      "step": "R1",
+      "archived": true
+    },
+    {
+      "prefix": "_personal_sync_bak/",
+      "department": "shared_retention",
+      "primary": ["retention-officer"],
+      "step": "R1"
+    },
+    {
+      "prefix": "xcagi-offline/",
+      "department": "shared_retention",
+      "primary": ["legacy-archive-curator"],
+      "step": "R3"
+    },
+    {
+      "prefix": "xcagi-enterprise/",
+      "department": "shared_retention",
+      "primary": ["legacy-archive-curator"],
+      "step": "R3"
+    },
+    {
+      "prefix": "xcagi-personal/",
+      "department": "shared_retention",
+      "primary": ["legacy-archive-curator"],
+      "step": "R3"
+    },
+    {
+      "prefix": "specs/",
+      "department": "shared_retention",
+      "primary": ["doc-knowledge-curator", "legacy-archive-curator"],
+      "step": "R3"
+    },
+    {
+      "prefix": ".github/",
+      "department": "shared_retention",
+      "primary": ["security-secrets-guard"],
+      "step": "R2"
+    },
+    {
+      "prefix": ".cursor/",
+      "department": "shared_retention",
+      "primary": ["daily-orchestrator"],
+      "step": "R4"
+    },
+    {
+      "prefix": ".trae/",
+      "department": "shared_retention",
+      "primary": ["daily-orchestrator"],
+      "step": "R4"
+    },
+    {
+      "prefix": "scripts/",
+      "department": "meta",
+      "primary": ["daily-orchestrator"],
+      "step": "meta"
+    },
+    {
+      "prefix": "wbview/",
+      "department": "meta",
+      "primary": ["daily-orchestrator"],
+      "step": "meta"
+    },
+    {
+      "prefix": "_scp_tmp/",
+      "department": "meta",
+      "primary": ["retention-officer"],
+      "step": "R1"
+    },
+    {
+      "prefix": "XCAGI/",
+      "department": "prod_software",
+      "primary": ["fhd-core-maintainer"],
+      "step": "P2"
+    },
+    {
+      "prefix": "测试/",
+      "department": "prod_software",
+      "primary": ["test-qa-runner"],
+      "step": "P3"
+    }
+  ],
+  "root_meta_files": {
+    "department": "meta",
+    "primary": ["daily-orchestrator"],
+    "step": "meta",
+    "files": [
+      "XCAGI-Full-Pipeline.html",
+      "XCAGI-Five-Line.html",
+      "XCAGI-Architecture-Map.html",
+      "docs/xcagi-dashboard/app.js",
+      "docs/xcagi-dashboard/dashboard.css",
+      "docs/xcagi-dashboard/tree-worker.js",
+      "README.md",
+      "SECURITY_CLEANUP_REPORT.md",
+      "six_line_employee_map.json",
+      "xcmax-line-coverage.json",
+      "xcmax_path_employee_map.json",
+      "xcmax-path-employee-coverage.json",
+      "xcmax-yuangon-duty-gaps.json"
+    ]
+  },
+  "zone_roots": ["FHD", "成都修茈科技有限公司"],
+  "zone_depth3_roots": ["FHD/app/fastapi_routes/domains"],
+  "workflow_mods": [
+    {
+      "mod_id": "xcagi-workflow-employee-label-print",
+      "employee_id": "label_print",
+      "name": "标签打印",
+      "department": "ops_acquisition",
+      "steps": ["O9"],
+      "domain": "FHD 单据/标签打印域"
+    },
+    {
+      "mod_id": "xcagi-workflow-employee-shipment-mgmt",
+      "employee_id": "shipment_mgmt",
+      "name": "出货管理",
+      "department": "ops_acquisition",
+      "steps": ["O5", "O9"],
+      "domain": "FHD 出货/物流域"
+    },
+    {
+      "mod_id": "xcagi-workflow-employee-receipt-confirm",
+      "employee_id": "receipt_confirm",
+      "name": "签收确认",
+      "department": "ops_acquisition",
+      "steps": ["O8"],
+      "domain": "交付签收 · 与 delivery-receipt-officer 协作"
+    },
+    {
+      "mod_id": "xcagi-workflow-employee-wechat-msg",
+      "employee_id": "wechat_msg",
+      "name": "微信消息",
+      "department": "ops_acquisition",
+      "steps": ["O2", "O7"],
+      "domain": "CRM/客服微信触达"
+    },
+    {
+      "mod_id": "xcagi-workflow-employee-wechat-phone",
+      "employee_id": "wechat_phone",
+      "name": "微信电话",
+      "department": "ops_acquisition",
+      "steps": ["O2", "O7"],
+      "domain": "CRM/客服微信语音"
+    },
+    {
+      "mod_id": "xcagi-workflow-employee-real-phone",
+      "employee_id": "real_phone",
+      "name": "真实电话",
+      "department": "ops_acquisition",
+      "steps": ["O2", "O7"],
+      "domain": "CRM/客服电话触达"
+    }
+  ],
+  "reserved_departments": {}
+}

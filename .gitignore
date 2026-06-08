@@ -1,0 +1,70 @@
+# ============================================================================
+# XCMAX 根目录 .gitignore（XCAGI v9.0.0 整改配套）
+# ============================================================================
+# 子模块各自维护专属 .gitignore（如 FHD/.gitignore）。
+# 本文件仅放跨子模块的全局豁免，避免重复声明。
+# ============================================================================
+
+# 历史归档已迁出工作区（见 ARCHIVE_POINTER.md）；禁止提交 _archive 实体目录。
+_archive/
+!ARCHIVE_POINTER.md
+
+# 脱敏快照：scripts/cleanup_archive_secrets.py 把敏感文件原内容迁移至此。
+_archive/.redacted-snapshots/
+
+# 本地 APK 构建产物（发版见 FHD/.github/workflows/release-android.yml）
+release-apk/
+
+# 全局 Python/IDE/构建产物（FHD/.gitignore 已覆盖大多数，此处为根级兜底）
+__pycache__/
+*.py[cod]
+.venv/
+.venv-*/
+.coverage
+htmlcov/
+.idea/
+.vscode/
+.DS_Store
+
+# 本地 ML/语音模型与 v7 参考包（外置存储，不入仓）
+vosk-model-small-cn-0.22/
+v7-reference/*.tar
+v7-reference/v7-server-extract/
+
+# 临时同步/SCP 残留
+_scp_tmp/
+_personal_sync_bak/
+
+# XCMAX 工作区分析产物（由 scripts/build-xcmax-tree-data.py 等生成）
+.cache/
+xcmax-*.json
+fhd-tree-data.json
+.cursor/*.log
+
+# M0 仓根卫生（2026-06-05）：本地归档与依赖树不入库
+FHD/_archived/
+**/node_modules/
+成都修茈科技有限公司/**/node_modules/
+FHD/.venv-mypy/
+.tools/*.tar.gz
+
+# 根仓 SSOT（2026-06-08）：子仓 .git 已迁出至 ~/XCMAX-archives/nested-git-backup-*/
+**/.git/
+*.bundle
+playwright-report/
+*.db-shm
+*.db-wal
+modstore_server/payment_orders/
+FHD/.tools/
+FHD/mobile-android/.toolchain/
+
+# 本地 IDE / 运行时（不入库）
+.cursor/settings.json
+.trae/
+.runtime/
+
+# 本地测试素材与一次性导出（非交付树）
+测试/
+mods-export-*/
+v7-reference/
+data/

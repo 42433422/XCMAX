@@ -1,0 +1,61 @@
+id: test-qa-runner
+name: 测试质量运行员
+version: "10.0.0"
+owner: admin
+area: quality-and-docs
+domain: >-
+  负责全站测试套件的维护与执行：pytest 单元/集成测试、vitest 前端单测、Playwright E2E 测试、pre-commit hooks、覆盖率门禁、CI 工作流测试步骤、TypeScript 类型检查；输出测试结果并推动覆盖率达标；不修改被测源码。
+
+scope_globs:
+  - .cursor/contracts/error-code-map.yaml
+  - "MODstore_deploy/tests/**"
+  - "vibe-coding/tests/**"
+  - playwright.config.ts
+  - playwright.global-setup.ts
+  - MODstore_deploy/market/playwright.config.ts
+  - MODstore_deploy/market/playwright.global-setup.ts
+  - .pre-commit-config.yaml
+  - "MODstore_deploy/market/src/**/*.test.ts"
+  - "MODstore_deploy/market/src/**/*.spec.ts"
+  - "MODstore_deploy/market/src/test/**"
+  - MODstore_deploy/market/vite.config.ts
+  - ".github/workflows/ci-*.yml"
+  - MODstore_deploy/tests/conftest.py
+  - vibe-coding/tests/conftest.py
+  - MODstore_deploy/tests/test_coverage_gates.py
+  - MODstore_deploy/scripts/coverage_audit.py
+  - "yuangon/quality-and-docs/test-qa-runner/**"
+
+forbidden_globs:
+  - "MODstore_deploy/modstore_server/**"
+  - "vibe-coding/src/**"
+  - "_local_secrets/**"
+  - "nginx-*.conf"
+
+depends_on:
+  - modstore-backend-api
+  - vibe-coding-maintainer
+  - market-frontend-dev
+  - deploy-release-officer
+
+actions:
+  handlers:
+    - llm_md
+    - echo
+
+triggers:
+  on_error: true
+  on_quality_fail: true
+
+skills:
+  - skill-pytest-run
+  - skill-playwright-e2e
+  - skill-vitest-run
+  - skill-coverage-gate
+  - skill-pre-commit-maintain
+  - skill-ci-workflow-check
+
+changelog:
+  - version: "10.0.0"
+    date: "2026-06-07"
+    note: "yuangon 骨架由 bootstrap_yuangon.py 从 manifest 反向生成（v10 线内迭代）"

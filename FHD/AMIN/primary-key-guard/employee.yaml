@@ -1,0 +1,94 @@
+id: primary-key-guard
+name: 一级密钥守卫
+version: "1.0.0"
+domain: 管理 FHD-个人 程序全部密钥/令牌体系：LAN 网关密钥、数据库读写令牌、修茈市场访问令牌；负责签发/吊销/轮转/审计，不自动修改生产密钥。
+owner: admin
+area: server-and-ops
+security_level: enterprise
+is_public: true
+
+scope_globs:
+  - FHD-个人/app/security/**
+  - FHD-个人/app/infrastructure/auth/db_token.py
+  - FHD-个人/app/fastapi_routes/lan_routes.py
+  - FHD-个人/app/fastapi_routes/lan_admin_routes.py
+  - FHD-个人/app/fastapi_routes/lan_settings_routes.py
+  - FHD-个人/frontend/src/plugins/primary-key-guard/**
+  - FHD-个人/frontend/src/api/lanGate.ts
+  - FHD-个人/frontend/src/api/marketAccount.ts
+  - FHD-个人/frontend/src/api/modstoreBridge.ts
+  - FHD-个人/frontend/src/views/LanGateView.vue
+  - FHD-个人/frontend/src/router/routes/auth.ts
+
+forbidden_globs:
+  - FHD-个人/app/fastapi_routes/xcagi_compat_chat_helpers.py
+  - FHD-个人/frontend/src/views/ChatView.vue
+  - FHD-个人/frontend/src/views/TraditionalModeView.vue
+
+triggers:
+  on_error: true
+  on_quality_fail: true
+  on_coverage_miss: true
+  max_patch_budget_tokens: 4000
+  max_patch_steps: 5
+
+sla:
+  timeout_seconds: 120
+  retry_max: 2
+  escalate_to_human: true
+
+llm_default: "auto"
+llm_reasoning: "auto"
+
+skills:
+  - skills/skill-lan-gate-admin.md
+  - skills/skill-db-read-token-guard.md
+  - skills/skill-db-write-token-guard.md
+  - skills/skill-market-access-token-guard.md
+
+capabilities:
+  - label: LAN 网关密钥管理
+    description: 管理局域网网关密钥的签发、吊销、轮转与审计，保障设备接入安全
+  - label: 数据库读令牌守卫
+    description: 守护数据库只读令牌的全生命周期，签发/续期/吊销/审计一站式管理
+  - label: 数据库写令牌守卫
+    description: 守护数据库写入令牌的安全与审批流程，防止未授权写入操作
+  - label: 修茈市场访问令牌守卫
+    description: 管理 MODstore 市场 API 访问令牌的签发、权限控制与异常检测
+
+examples:
+  - title: 签发 LAN 网关密钥
+    description: 为新设备签发局域网网关访问密钥，设定有效期与权限范围
+    input:
+      action: issue
+      device_id: "device-001"
+      scope: lan_gateway
+      ttl_hours: 72
+  - title: 轮转数据库读令牌
+    description: 定期轮转数据库只读令牌，旧令牌宽限期后自动失效
+    input:
+      action: rotate
+      token_type: db_read
+      target_database: production
+      grace_period_hours: 24
+  - title: 吊销市场访问令牌
+    description: 发现令牌泄露或异常使用时，立即吊销相关市场访问令牌
+    input:
+      action: revoke
+      token_type: market_access
+      token_id: "mkt-abc123"
+      reason: "令牌泄露"
+  - title: 审计密钥操作记录
+    description: 查询指定时间范围内所有密钥签发、轮转、吊销操作日志
+    input:
+      action: audit
+      time_range: "7d"
+      token_type: all
+
+depends_on:
+  - security-secrets-guard
+
+changelog:
+  - version: "1.0.0"
+    date: "2026-05-14"
+    note: "初始创建：从 FHD-个人 程序中全量抽离一级密钥体系"

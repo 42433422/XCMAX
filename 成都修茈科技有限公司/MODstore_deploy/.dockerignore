@@ -1,0 +1,13 @@
+.venv
+__pycache__
+*.pyc
+.pytest_cache
+.coverage
+htmlcov
+market/node_modules
+market/dist
+java_payment_service/target
+modstore_server/modstore.db
+modstore_server/payment_orders
+modstore_server/webhook_events
+*.log

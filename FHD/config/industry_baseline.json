@@ -1,0 +1,113 @@
+{
+  "schema_version": 2,
+  "core_mod_ids": [
+    "xcagi-planner-bridge",
+    "xcagi-neuro-bus-bridge"
+  ],
+  "onboarding_open_industry_ids": ["涂料", "考勤"],
+  "industry_packages": {
+    "考勤": {
+      "mod_id": "attendance-industry",
+      "product_name": "考勤行业包",
+      "note": "客户品牌见 config/customer_delivery.json"
+    },
+    "涂料": {
+      "mod_id": "coating-industry",
+      "product_name": "涂料行业包",
+      "note": "客户品牌见 config/customer_delivery.json"
+    }
+  },
+  "mod_labels": {
+    "xcagi-planner-bridge": "智能对话 / Planner 底座",
+    "xcagi-neuro-bus-bridge": "智能生态事件总线",
+    "xcagi-erp-domain-bridge": "ERP 业务菜单与 API 门面",
+    "xcagi-core-workflow-employees": "核心工作流 AI 员工",
+    "xcagi-planner-excel-tools": "Planner 表格与文档工具",
+    "xcagi-approval-bridge": "审批中心",
+    "xcagi-office-employee-pack-bridge": "员工工作流桥接",
+    "xcagi-customer-service-bridge": "客服能力桥接",
+    "xcagi-lan-license-bridge": "局域网许可",
+    "wechat-contacts-ai-employee": "企微联系人 AI 员工",
+    "lan-gate-ai-employee": "局域网网关 AI 员工"
+  },
+  "industries": {
+    "通用": {
+      "summary": "保持干净页面：对话与智能生态即可起步，其它能力按需再补。",
+      "host_mod_ids": [],
+      "optional_host_mod_ids": [
+        "xcagi-planner-excel-tools",
+        "xcagi-core-workflow-employees",
+        "xcagi-erp-domain-bridge"
+      ]
+    },
+    "考勤": {
+      "summary": "考勤排班：建议先补 ERP 门面、工作流与表格工具，再安装考勤行业包。",
+      "host_mod_ids": [
+        "xcagi-erp-domain-bridge",
+        "xcagi-core-workflow-employees",
+        "xcagi-planner-excel-tools",
+        "xcagi-office-employee-pack-bridge"
+      ],
+      "optional_host_mod_ids": [
+        "xcagi-approval-bridge",
+        "wechat-contacts-ai-employee"
+      ]
+    },
+    "涂料": {
+      "summary": "涂料化工：建议先补 ERP、工作流与审批，再安装涂料行业包。",
+      "host_mod_ids": [
+        "xcagi-erp-domain-bridge",
+        "xcagi-core-workflow-employees",
+        "xcagi-planner-excel-tools",
+        "xcagi-approval-bridge",
+        "xcagi-customer-service-bridge"
+      ],
+      "optional_host_mod_ids": ["wechat-contacts-ai-employee"]
+    },
+    "批发": {
+      "summary": "批发分销：基础线装齐后，可从扩展市场按需选行业 Mod。",
+      "host_mod_ids": [
+        "xcagi-erp-domain-bridge",
+        "xcagi-core-workflow-employees",
+        "xcagi-planner-excel-tools"
+      ],
+      "optional_host_mod_ids": ["xcagi-approval-bridge"]
+    },
+    "电商": {
+      "summary": "电商零售：基础线装齐后，订单类 Mod 可按需安装。",
+      "host_mod_ids": [
+        "xcagi-erp-domain-bridge",
+        "xcagi-core-workflow-employees",
+        "xcagi-planner-excel-tools"
+      ],
+      "optional_host_mod_ids": ["xcagi-customer-service-bridge"]
+    },
+    "烤禽": {
+      "summary": "烤禽冷链：基础线装齐后，配送类 Mod 可按需安装。",
+      "host_mod_ids": [
+        "xcagi-erp-domain-bridge",
+        "xcagi-core-workflow-employees",
+        "xcagi-planner-excel-tools"
+      ],
+      "optional_host_mod_ids": []
+    },
+    "餐饮": {
+      "summary": "餐饮门店：基础线装齐后，食材订货 Mod 可按需安装。",
+      "host_mod_ids": [
+        "xcagi-erp-domain-bridge",
+        "xcagi-core-workflow-employees",
+        "xcagi-planner-excel-tools"
+      ],
+      "optional_host_mod_ids": []
+    },
+    "物流": {
+      "summary": "物流运单：基础线装齐后，运单类 Mod 可按需安装。",
+      "host_mod_ids": [
+        "xcagi-erp-domain-bridge",
+        "xcagi-core-workflow-employees",
+        "xcagi-planner-excel-tools"
+      ],
+      "optional_host_mod_ids": []
+    }
+  }
+}

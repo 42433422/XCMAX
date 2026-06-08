@@ -1,0 +1,37 @@
+id: employee-planner
+name: 规划设计员工
+version: "10.0.0"
+owner: admin
+area: craft-workshop
+domain: >-
+  根据结构化需求规划员工包架构，拆分员工职责、脚本工作流与 Skill 组；输出一站式员工蓝图
+
+scope_globs:
+  - "workbench/sessions/*"
+  - "workbench/plans/*"
+  - "yuangon/craft-workshop/employee-planner/**"
+
+forbidden_globs:
+  - "*.py"
+  - "*.vue"
+  - "*.ts"
+
+depends_on:
+  - intent-analyst
+
+actions:
+  handlers:
+    - llm_md
+    - echo
+
+triggers:
+  on_error: true
+  on_quality_fail: true
+
+skills:
+  - skill-employee-planning
+
+changelog:
+  - version: "10.0.0"
+    date: "2026-06-07"
+    note: "yuangon 骨架由 bootstrap_yuangon.py 从 manifest 反向生成（v10 线内迭代）"

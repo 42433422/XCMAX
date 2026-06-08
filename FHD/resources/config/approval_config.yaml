@@ -1,0 +1,45 @@
+approval_rules:
+- action: execute
+  conditions: {}
+  description: 发货单生成需要审批
+  tool_id: shipment_generate
+  trigger: always
+- action: execute
+  conditions: {}
+  description: 打印操作需要审批
+  tool_id: print
+  trigger: always
+- action: create
+  conditions: {}
+  description: 创建产品需要审批
+  tool_id: products
+  trigger: always
+- action: delete
+  conditions: {}
+  description: 删除产品需要审批
+  tool_id: products
+  trigger: always
+- action: create
+  conditions: {}
+  description: 创建客户需要审批
+  tool_id: customers
+  trigger: always
+- action: import
+  conditions: {}
+  description: Excel导入数据库需要审批
+  tool_id: import_excel
+  trigger: always
+- action: ensure_exists
+  conditions: {}
+  description: 创建/确认客户需要审批
+  tool_id: customers
+  trigger: always
+attendance_policy:
+  company_factory_group_keywords:
+  - test
+  sunday_empty_schedule: true
+  sunday_map_sqrt_to_star: true
+  weekday_segments:
+  - 08:00-12:00
+  - 13:30-17:30
+enabled: true

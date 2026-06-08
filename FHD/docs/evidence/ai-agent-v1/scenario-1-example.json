@@ -1,0 +1,60 @@
+{
+  "_comment": "Phase 2 场景 1 留证样例 — 本周销售情况（low 风险，无审批）。",
+  "generated_at": "2026-06-05T12:10:00Z",
+  "input_message": "看看本周销售情况怎么样",
+  "execution_mode": "mock",
+  "approval_strategy": "auto",
+  "plan_id": "v1-s1-20260605-121000",
+  "intent": "weekly_sales_summary",
+  "risk_level": "low",
+  "scenario_id": 1,
+  "scenario_title": "本周销售情况",
+  "nodes": [
+    {
+      "node_id": "query_shipments",
+      "tool_id": "shipment_records",
+      "action": "query",
+      "risk": "low",
+      "depends_on": [],
+      "params": {"limit": 50, "date_from": "2026-06-01", "date_to": "2026-06-07"}
+    }
+  ],
+  "gated_decision": {
+    "risk_decision": {
+      "requires_confirmation": false,
+      "reason": "计划仅包含低风险读操作",
+      "blocking_nodes": []
+    },
+    "node_decisions": [
+      {
+        "node_id": "query_shipments",
+        "tool_id": "shipment_records",
+        "action": "query",
+        "risk": "low",
+        "requires_approval": false,
+        "approved": true,
+        "reason": "low-risk auto-approved"
+      }
+    ],
+    "approval_request_ids": [],
+    "all_approved": true,
+    "any_rejected": false,
+    "pending_approval": false
+  },
+  "success": true,
+  "message": "工作流执行完成",
+  "node_results_summary": [
+    {
+      "node_id": "query_shipments",
+      "tool_id": "shipment_records",
+      "action": "query",
+      "success": true,
+      "error": "",
+      "output_summary": {
+        "success": true,
+        "data_count": 2,
+        "data_sample_keys": ["order_number", "unit_name", "amount"]
+      }
+    }
+  ]
+}

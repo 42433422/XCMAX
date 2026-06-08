@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>XCAGI · 登录</title>
+    <!-- 与服务器 PostgreSQL 账号库一致：登录等 /api 请求走 Nginx 前缀（如 /fhd-api）。构建时设 VITE_XCMAX_PUBLIC_API_PREFIX=/fhd-api 可自动注入下一行；或手动取消注释： -->
+    <!-- <script>window.__XCMAX_API_BASE__='/fhd-api'</script> -->
+    <script>
+      (function () {
+        if (!('serviceWorker' in navigator)) return;
+        var h = location.hostname;
+        /* 桌面壳 17500 / dev 5001 等本机端口均需注销，避免 SW 缓存旧 chunk */
+        if (h !== '127.0.0.1' && h !== 'localhost') return;
+        navigator.serviceWorker.getRegistrations().then(function (regs) {
+          regs.forEach(function (r) {
+            r.unregister();
+          });
+        });
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+    <script>
+      // Legacy static JS — opt-in only (Vue SPA is default). Set __ENABLE_LEGACY__ = true for old Flask shells.
+      window.__ENABLE_LEGACY__ = window.__ENABLE_LEGACY__ === true
+      window.addEventListener('load', () => {
+        if (!window.__ENABLE_LEGACY__) return
+
+        const legacyScripts = [
+          '/static/js/core/config.js',
+          '/static/js/core/utils.js',
+          '/static/js/modules/file-import.js',
+          '/static/js/modules/wechat.js',
+          '/static/js/pro_feature_widget.js',
+          '/static/js/modules/pro-mode.js?v=2'
+        ]
+
+        const loadSequentially = (index) => {
+          if (index >= legacyScripts.length) return
+          const script = document.createElement('script')
+          script.src = legacyScripts[index]
+          script.onload = () => loadSequentially(index + 1)
+          script.onerror = () => loadSequentially(index + 1)
+          document.body.appendChild(script)
+        }
+
+        console.log('[XCAGI] Loading legacy static JS for compatibility...')
+        loadSequentially(0)
+      })
+    </script>
+  </body>
+</html>

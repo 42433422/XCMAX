@@ -1,0 +1,1 @@
+import e from"./ChatView-BHQlrX8T.js";import{d as o,H as t,c as r}from"./index-DmoO6vrN.js";import"./pretext-CNSu088h.js";const _=o({__name:"ChatView",setup(a){return(c,n)=>(r(),t(e))}});export{_ as default};

@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ci_pipeline.schema.json",
+  "title": "MODstore CI/CD pipeline graph",
+  "description": "Maps GitHub Actions workflows to CI vs deploy roles and trigger chains (workflow_run, etc.). Does not replace .github/workflows YAML — this document is the human/machine contract aligned with those files.",
+  "type": "object",
+  "required": ["schema_version", "workflows"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^1\\.0$"
+    },
+    "description": { "type": "string" },
+    "workflows": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["name", "role"],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Must match the `name:` field inside the workflow file."
+          },
+          "file": {
+            "type": "string",
+            "description": "Path from repository root to workflow YAML.",
+            "pattern": "^\\.github/workflows/[a-zA-Z0-9_.-]+\\.ya?ml$"
+          },
+          "role": {
+            "type": "string",
+            "enum": ["ci", "deploy", "composite"],
+            "description": "ci: tests/lint; deploy: SSH/K8s rollout; composite: meta/guard workflows."
+          },
+          "triggers": {
+            "type": "array",
+            "description": "Logical triggers (subset of GitHub events).",
+            "items": {
+              "type": "object",
+              "required": ["type"],
+              "additionalProperties": false,
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": ["workflow_run", "push_paths", "workflow_dispatch", "pull_request", "schedule"]
+                },
+                "upstream_workflow": {
+                  "type": "string",
+                  "description": "For workflow_run: the `name:` of the upstream workflow."
+                },
+                "notes": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

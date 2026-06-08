@@ -1,0 +1,27 @@
+{
+  "generated_at": "2026-06-05T07:58:07Z",
+  "query": "测试",
+  "scope": "all",
+  "success": true,
+  "data_count": 0,
+  "results": {
+    "products": {
+      "success": true,
+      "data": [],
+      "total": 0,
+      "count": 0,
+      "_cached": false
+    },
+    "customers": {
+      "success": false,
+      "message": "(sqlite3.OperationalError) no such table: purchase_units\n[SQL: SELECT count(*) AS count_1 \nFROM (SELECT purchase_units.id AS purchase_units_id, purchase_units.unit_name AS purchase_units_unit_name, purchase_units.contact_person AS purchase_units_contact_person, purchase_units.contact_phone AS purchase_units_contact_phone, purchase_units.address AS purchase_units_address, purchase_units.is_active AS purchase_units_is_active, purchase_units.created_at AS purchase_units_created_at, purchase_units.updated_at AS purchase_units_updated_at \nFROM purchase_units \nWHERE purchase_units.is_active = 1 AND purchase_units.unit_name LIKE ?) AS anon_1]\n[parameters: ('%测试%',)]\n(Background on this error at: https://sqlalche.me/e/20/e3q8)",
+      "data": [],
+      "total": 0
+    },
+    "excel_vector": {
+      "success": false,
+      "message": "(sqlite3.OperationalError) near \"EXTENSION\": syntax error\n[SQL: CREATE EXTENSION IF NOT EXISTS vector]\n(Background on this error at: https://sqlalche.me/e/20/e3q8)",
+      "hits": []
+    }
+  }
+}

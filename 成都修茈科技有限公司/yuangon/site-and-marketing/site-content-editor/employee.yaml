@@ -1,0 +1,71 @@
+id: site-content-editor
+name: 静态站内容编辑员
+version: "10.0.0"
+owner: admin
+area: site-and-marketing
+domain: >-
+  维护 xiu-ci.com 营销静态页面的内容、文案、图片引用与数据 JSON；不涉及服务器配置或后端逻辑。
+
+scope_globs:
+  - index.html
+  - about.html
+  - cases.html
+  - services.html
+  - solutions.html
+  - news.html
+  - contact.html
+  - honors.html
+  - case-edu.html
+  - case-manufacture.html
+  - case-park.html
+  - excel-to-ai.html
+  - styles.css
+  - main.js
+  - news.json
+  - activities.json
+  - "assets/**"
+  - "src/**"
+  - package.json
+  - package-lock.json
+  - vite.config.ts
+  - tsconfig.json
+  - tsconfig.node.json
+  - tsconfig.strict.json
+  - tsconfig.strict-baseline.json
+  - eslint.config.js
+  - .prettierrc
+  - .prettierignore
+  - env.d.ts
+  - "yuangon/site-and-marketing/site-content-editor/**"
+
+forbidden_globs:
+  - app.py
+  - requirements.txt
+  - "nginx-*.conf"
+  - "MODstore_deploy/**"
+  - "vibe-coding/**"
+  - "_local_secrets/**"
+  - "deploy/**"
+  - "docker/**"
+  - sitemap.xml
+  - robots.txt
+
+depends_on:
+  - seo-sitemap-curator
+
+actions:
+  handlers:
+    - llm_md
+    - echo
+
+triggers:
+  on_error: true
+  on_quality_fail: true
+
+skills:
+  - skill-static-page-update
+
+changelog:
+  - version: "10.0.0"
+    date: "2026-06-07"
+    note: "yuangon 骨架由 bootstrap_yuangon.py 从 manifest 反向生成（v10 线内迭代）"

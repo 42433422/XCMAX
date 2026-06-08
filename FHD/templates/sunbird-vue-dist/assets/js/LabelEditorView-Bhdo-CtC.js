@@ -1,0 +1,1 @@
+import e from"./LabelEditorView-CY6Y4ygP.js";import{d as o,c as r,H as t}from"./index-DmoO6vrN.js";import"./appDialog-BEIBMk6k.js";const s=o({__name:"LabelEditorView",setup(a){return(c,i)=>(r(),t(e))}});export{s as default};

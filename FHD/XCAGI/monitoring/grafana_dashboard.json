@@ -1,0 +1,198 @@
+{
+  "dashboard": {
+    "id": null,
+    "uid": "xcagi-performance",
+    "title": "XCAGI 性能监控",
+    "tags": ["xcagi", "performance"],
+    "timezone": "browser",
+    "schemaVersion": 16,
+    "version": 0,
+    "refresh": "10s",
+    "panels": [
+      {
+        "id": 1,
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+        "type": "graph",
+        "title": "P95 响应时间趋势",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(xcagi_api_request_latency_seconds_bucket[5m])) * 1000",
+            "legendFormat": "{{endpoint}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {"label": "毫秒", "format": "ms"},
+          {"format": "short"}
+        ],
+        "thresholds": [
+          {"value": 100, "color": "red"},
+          {"value": 75, "color": "yellow"}
+        ]
+      },
+      {
+        "id": 2,
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+        "type": "graph",
+        "title": "QPS 趋势",
+        "targets": [
+          {
+            "expr": "xcagi_qps",
+            "legendFormat": "{{endpoint}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {"label": "请求/秒", "format": "reqps"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 3,
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+        "type": "graph",
+        "title": "缓存命中率",
+        "targets": [
+          {
+            "expr": "xcagi_cache_hit_ratio",
+            "legendFormat": "{{cache_type}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {"label": "百分比", "format": "percent"},
+          {"format": "short"}
+        ],
+        "thresholds": [
+          {"value": 60, "color": "green"},
+          {"value": 40, "color": "yellow"},
+          {"value": 20, "color": "red"}
+        ]
+      },
+      {
+        "id": 4,
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+        "type": "graph",
+        "title": "错误率",
+        "targets": [
+          {
+            "expr": "xcagi_error_rate",
+            "legendFormat": "{{endpoint}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {"label": "百分比", "format": "percent"},
+          {"format": "short"}
+        ],
+        "thresholds": [
+          {"value": 1, "color": "red"},
+          {"value": 0.5, "color": "yellow"}
+        ]
+      },
+      {
+        "id": 5,
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+        "type": "graph",
+        "title": "意图预测性能",
+        "targets": [
+          {
+            "expr": "rate(xcagi_intent_predictions_total[5m])",
+            "legendFormat": "{{result}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {"label": "预测/秒", "format": "reqps"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 6,
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+        "type": "graph",
+        "title": "批量处理时间",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(xcagi_batch_processing_time_seconds_bucket[5m])) * 1000",
+            "legendFormat": "{{size_bucket}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {"label": "毫秒", "format": "ms"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 7,
+        "gridPos": {"h": 8, "w": 6, "x": 0, "y": 24},
+        "type": "singlestat",
+        "title": "系统运行时间",
+        "targets": [
+          {
+            "expr": "time() - process_start_time_seconds{job=\"xcagi\"}",
+            "legendFormat": "",
+            "refId": "A"
+          }
+        ],
+        "format": "s",
+        "valueName": "current"
+      },
+      {
+        "id": 8,
+        "gridPos": {"h": 8, "w": 6, "x": 6, "y": 24},
+        "type": "singlestat",
+        "title": "CPU 使用率",
+        "targets": [
+          {
+            "expr": "xcagi_system_cpu_usage_percent",
+            "legendFormat": "",
+            "refId": "A"
+          }
+        ],
+        "format": "percent",
+        "valueName": "current",
+        "colorBackground": true,
+        "thresholds": "60,80"
+      },
+      {
+        "id": 9,
+        "gridPos": {"h": 8, "w": 6, "x": 12, "y": 24},
+        "type": "singlestat",
+        "title": "内存使用量",
+        "targets": [
+          {
+            "expr": "xcagi_system_memory_usage_bytes",
+            "legendFormat": "",
+            "refId": "A"
+          }
+        ],
+        "format": "bytes",
+        "valueName": "current"
+      },
+      {
+        "id": 10,
+        "gridPos": {"h": 8, "w": 6, "x": 18, "y": 24},
+        "type": "singlestat",
+        "title": "活跃连接数",
+        "targets": [
+          {
+            "expr": "xcagi_active_connections",
+            "legendFormat": "",
+            "refId": "A"
+          }
+        ],
+        "format": "short",
+        "valueName": "current"
+      }
+    ],
+    "templating": {
+      "list": []
+    },
+    "time": {"from": "now-1h", "to": "now"},
+    "timepicker": {
+      "refresh_intervals": ["5s", "10s", "30s", "1m", "5m", "15m", "30m", "1h", "2h", "1d"]
+    }
+  }
+}

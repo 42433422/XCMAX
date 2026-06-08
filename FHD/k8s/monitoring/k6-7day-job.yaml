@@ -1,0 +1,71 @@
+# k6 7-day SLO contract traffic — apply ConfigMap first (see STAGING_RUNBOOK.md)
+#   bash FHD/scripts/observability/sync_k6_configmap.sh
+#   kubectl apply -f k8s/monitoring/k6-configmap.yaml
+#   kubectl apply -f k8s/monitoring/k6-7day-job.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: k6-7day
+  namespace: xcagi-staging
+  labels:
+    app: k6
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app: k6
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: k6
+          image: grafana/k6:0.54.0
+          args:
+            - run
+            - /scripts/k6_7d_contract.js
+          env:
+            - name: XCAGI_BASE_URL
+              value: "http://xcagi-api.xcagi-staging.svc.cluster.local:5000"
+            - name: K6_DURATION
+              value: "168h"
+            - name: K6_PROMETHEUS_RW_SERVER_URL
+              value: "http://prometheus.monitoring.svc.cluster.local:9090/api/v1/write"
+            - name: E2E_USER
+              valueFrom:
+                secretKeyRef:
+                  name: xcagi-e2e-creds
+                  key: username
+                  optional: true
+            - name: E2E_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: xcagi-e2e-creds
+                  key: password
+                  optional: true
+          volumeMounts:
+            - name: k6-script
+              mountPath: /scripts
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+      volumes:
+        - name: k6-script
+          configMap:
+            name: k6-7day-contract
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: k6-service
+  namespace: xcagi-staging
+spec:
+  type: ClusterIP
+  ports:
+    - port: 6565
+      targetPort: 6565
+  selector:
+    app: k6

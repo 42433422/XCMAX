@@ -1,0 +1,32 @@
+[flake8]
+max-line-length = 100
+extend-ignore =
+    # E203 - whitespace before ':' — conflicts with black formatter
+    E203,
+    # E402 - module level import not at top — lazy imports are intentional
+    E402,
+    # E501 - line too long — handled by black
+    E501,
+    # E712 - comparison to True/False — style preference
+    E712,
+    # W391 - blank line at end of file
+    W391,
+    # W503/W504 - line break before/after binary operator — conflicts with black
+    W503,
+    W504,
+    # F401 - unused imports — common in legacy code and typing imports
+    F401,
+    # F821 - undefined name — false positives from lazy imports
+    F821,
+    # F824 - global never assigned — common pattern for module-level singletons
+    F824,
+    # F841 - local variable assigned but never used
+    F841,
+    # E731 - lambda assignment — sometimes clearer than def
+    E731,
+per-file-ignores =
+    # tests can have unused imports and undefined names
+    tests/*:F401,F811,F821,F841
+    modstore_server/api/app_factory.py:F401
+    modstore_server/models*.py:F401
+    modstore_server/integrations/vibe_adapter.py:F811

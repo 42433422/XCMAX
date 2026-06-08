@@ -1,0 +1,37 @@
+{
+  "_comment": "Phase 2 场景 2 留证样例 — 创建订单（medium 风险，需审批）。",
+  "generated_at": "2026-06-05T12:11:00Z",
+  "input_message": "给客户上海宏达公司创建一张订单：1000 个 9702-C 型号，单价 12.5",
+  "execution_mode": "mock",
+  "approval_strategy": "auto",
+  "plan_id": "v1-s2-20260605-121100",
+  "intent": "create_order_for_unit",
+  "risk_level": "medium",
+  "scenario_id": 2,
+  "scenario_title": "创建订单",
+  "nodes": [
+    {"node_id": "ensure_customer", "tool_id": "customers", "action": "ensure_exists", "risk": "medium", "depends_on": [], "params": {"unit_name": "上海宏达公司"}},
+    {"node_id": "generate_shipment", "tool_id": "shipment_generate", "action": "generate", "risk": "medium", "depends_on": ["ensure_customer"], "params": {"unit_name": "上海宏达公司", "products": [{"model_number": "9702-C", "quantity": 1000, "unit_price": 12.5}]}}
+  ],
+  "gated_decision": {
+    "risk_decision": {
+      "requires_confirmation": true,
+      "reason": "计划包含中高风险写操作",
+      "blocking_nodes": ["ensure_customer", "generate_shipment"]
+    },
+    "node_decisions": [
+      {"node_id": "ensure_customer", "tool_id": "customers", "action": "ensure_exists", "risk": "medium", "requires_approval": true, "approval_request_id": "s2-uuid-1", "approved": true, "reason": "auto-approved"},
+      {"node_id": "generate_shipment", "tool_id": "shipment_generate", "action": "generate", "risk": "medium", "requires_approval": true, "approval_request_id": "s2-uuid-2", "approved": true, "reason": "auto-approved"}
+    ],
+    "approval_request_ids": ["s2-uuid-1", "s2-uuid-2"],
+    "all_approved": true,
+    "any_rejected": false,
+    "pending_approval": false
+  },
+  "success": true,
+  "message": "工作流执行完成",
+  "node_results_summary": [
+    {"node_id": "ensure_customer", "tool_id": "customers", "action": "ensure_exists", "success": true, "error": "", "output_summary": {"success": true, "id": 1001, "customer_name": "上海宏达公司"}},
+    {"node_id": "generate_shipment", "tool_id": "shipment_generate", "action": "generate", "success": true, "error": "", "output_summary": {"success": true, "id": 5001, "order_number": "MOCK-20260605-001"}}
+  ]
+}

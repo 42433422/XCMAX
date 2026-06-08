@@ -1,0 +1,67 @@
+---
+description: XCMAX 写代码提速 — 缩小范围、选对层、少读废话
+alwaysApply: true
+---
+
+# XCMAX 快速写代码
+
+## 工作区地图
+
+- **主产品**：`FHD/` — Python FastAPI + Vue 前端 + 桌面；日常 commit 在此
+- **姊妹栈**：`成都修茈科技有限公司/` — MODstore / 支付
+- **规范**：`specs/` · 入口文档 `FHD/docs/START_HERE.md`
+
+## 版本锁定（v10 · 全产品线）
+
+桌面 / Web / 后端 / Android / Mod / 发版包 **全部**不升版本号，锚点恒 `10.0.0`（非仅 App）。唯一例外：AI 全自动化自主迭代版本。见 `.cursor/rules/version-v10-lock.mdc` 与 `FHD/VERSION.md`。
+
+## 提速原则
+
+1. **先 @ 具体文件**，避免 `@Codebase` 全库搜索；一次任务只涉及 2–5 个文件
+2. **小步改**：单文件用 Tab / Cmd+K；跨文件才开 Agent
+3. **只读必要上下文**：不打开、不总结 `node_modules`、`*-dist/`、归档目录
+4. **改 FHD 后端**时遵守分层，禁止新建 `app/legacy/*`（见 `FHD/.cursor/rules/`）
+
+## FHD 后端分层（新代码落位）
+
+| 层 | 路径 |
+|----|------|
+| 领域 | `FHD/app/domain/` |
+| 应用 | `FHD/app/application/` |
+| 基础设施 | `FHD/app/infrastructure/` |
+| HTTP 路由 | `FHD/app/fastapi_routes/<domain>.py` |
+
+## Mod SSOT（禁止双份手改）
+
+- **唯一编辑源**：`FHD/mods/<mod-id>/`（Vite 与 `start-enterprise-dev.sh` 均优先读此处）
+- **导出副本**：`FHD/XCAGI/mods/` — 仅打包/Docker 路径；**不要在此手改**
+- 改完 Mod 后执行：`python FHD/scripts/dev/mods_ssot.py sync`（或 `bash FHD/scripts/dev/sync-mods-to-xcagi.sh`）
+- 发版前检查：`python FHD/scripts/dev/mods_ssot.py check`
+
+## 常见路径
+
+- 前端：`FHD/frontend/`
+- Mod（SSOT）：`FHD/mods/`
+- 桌面：`FHD/desktop/`
+- 迁移：`FHD/alembic/`
+- 测试：`FHD/tests/`
+- OpenAPI / 启动：`FHD/docs/START_HERE.md`
+- 全景仪表盘：`XCAGI-Full-Pipeline.html` · `docs/xcagi-dashboard/`
+
+## 双轨仪表盘（时间轨 ↔ 事件轨）
+
+改 **时间轨**（`#s-workflow` / `emp-wf-radial-graph.js`）的 P6 推送子流程时，**必须同步** `#s-loops` 六线全自动 Tab：
+
+| 必改 | 路径 |
+|------|------|
+| 六线 P-S 步骤卡片 | `XCAGI-Full-Pipeline.html` → `#s-loops` · `data-five-line="prod_software"` · P6/P6G/P6POP/P6PW |
+| 时间轨辐射图 | `docs/xcagi-dashboard/emp-wf-radial-graph.js` |
+| 员工映射 | `docs/xcagi-dashboard/daily_digest_node_employees.json` |
+| 时间轨 HTML | 同文件 → `#s-workflow`（Mermaid P6 段 + cadence 表 P6 行） |
+| 事件轨员工弹层 | `#s-events` · `emp-wf-node-staff.js`（仅弹层，不改事件拓扑） |
+
+## 输出要求
+
+- 最小 diff，不重构无关代码
+- 改完说明改了哪些文件，不重复贴全文
+- 不确定业务域时，先问或查 `FHD/docs/architecture/`，不要猜路径

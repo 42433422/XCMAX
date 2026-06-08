@@ -1,0 +1,15 @@
+# 复制为 .deploy-ssh.local（已 gitignore），勿提交仓库、勿在聊天里发密码
+#
+# 公网一键部署（需显式允许）:
+#   DEPLOY_ALLOW_PUBLIC=1 ./scripts/deploy-production.sh
+#
+# 推荐：不走公网 → ./scripts/deploy-internal.sh（OrcaTerm 机内构建 / 补丁）
+# 内网 SSH：填腾讯云「私有网络 IP」
+DEPLOY_SSH_HOST=119.27.178.147
+DEPLOY_SSH_USER=root
+DEPLOY_SSH_PORT=22
+DEPLOY_SSH_PASSWORD=你的CVM-root密码
+DEPLOY_REMOTE_DIST=/root/成都修茈科技有限公司/MODstore_deploy/market/dist
+DEPLOY_REMOTE_DIST_EXTRA=/root/modstore-git/MODstore_deploy/market/dist
+DEPLOY_ROOT=/root/modstore-git/MODstore_deploy
+# 可选私钥（有则优先于密码）: DEPLOY_SSH_KEY=/path/to/id_ed25519

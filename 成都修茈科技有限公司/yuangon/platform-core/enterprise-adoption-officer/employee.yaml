@@ -1,0 +1,39 @@
+id: enterprise-adoption-officer
+name: 企业使用跟踪员
+version: "10.0.0"
+owner: admin
+area: platform-core
+domain: >-
+  跟踪 O6 企业使用阶段：租户激活、功能采纳、用量遥测与回访触发；与 user-customer-service-officer 分工（本岗偏数据与里程碑，客服偏交互）。
+
+scope_globs:
+  - "FHD/app/**/telemetry/**"
+  - "FHD/app/**/crm/**"
+  - "MODstore_deploy/modstore_server/**/tenant**"
+  - "yuangon/platform-core/enterprise-adoption-officer/**"
+
+forbidden_globs:
+  - "_local_secrets/**"
+  - "*.env*"
+
+depends_on:
+  - user-customer-service-officer
+
+actions:
+  handlers:
+    - llm_md
+    - echo
+
+triggers:
+  on_error: true
+  on_quality_fail: true
+
+skills:
+  - task.analyze
+  - llm.markdown
+  - workflow.assist
+
+changelog:
+  - version: "10.0.0"
+    date: "2026-06-07"
+    note: "yuangon 骨架由 bootstrap_yuangon.py 从 manifest 反向生成（v10 线内迭代）"

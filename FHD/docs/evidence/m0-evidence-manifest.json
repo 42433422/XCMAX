@@ -1,0 +1,197 @@
+{
+  "generated_at": "2026-06-06T11:01:00Z",
+  "staging_slo": {
+    "label": "staging SLO 四域",
+    "blocker": "7d 连续观测计时中 · Day 1/7（起算 2026-06-06）· 实时 Grafana 真图已接入 k3s xcagi-staging",
+    "ready": 4,
+    "total": 4,
+    "scaffold_ready": 0,
+    "live_ready": 4,
+    "acceptance_ready": 0,
+    "status": "observing",
+    "window_started_at": "2026-06-06",
+    "window_target_days": 7,
+    "window_elapsed_days": 1,
+    "window_source": "k3s-119.27.178.147:30300 · ns xcagi-staging · render now-7d",
+    "panels": [
+      {
+        "uid": "xcagi-slo",
+        "panel_id": 1,
+        "suffix": "api-availability",
+        "title": "SLO-API-01 · Availability (30d)",
+        "target": "99.9%",
+        "slo_id": "SLO-API-01",
+        "kind": "staging",
+        "filename": "grafana-staging-m0-api-availability-202606.png",
+        "preview": "staging_live",
+        "present": true,
+        "bytes": 13760,
+        "path": "docs/evidence/slo/grafana-staging-m0-api-availability-202606.png"
+      },
+      {
+        "uid": "xcagi-mod-store",
+        "panel_id": 5,
+        "suffix": "db-mod-sqlite-copies",
+        "title": "Per-mod SQLite DB copies",
+        "target": "M0 路径图",
+        "slo_id": null,
+        "kind": "staging",
+        "filename": "grafana-staging-m0-db-mod-sqlite-copies-202606.png",
+        "preview": "staging_live",
+        "present": true,
+        "bytes": 14473,
+        "path": "docs/evidence/slo/grafana-staging-m0-db-mod-sqlite-copies-202606.png"
+      },
+      {
+        "uid": "xcagi-slo",
+        "panel_id": 3,
+        "suffix": "ai-chat-p95",
+        "title": "SLO-AI-01 · Chat first-byte P95",
+        "target": "< 1500ms",
+        "slo_id": "SLO-AI-01",
+        "kind": "staging",
+        "filename": "grafana-staging-m0-ai-chat-p95-202606.png",
+        "preview": "staging_live",
+        "present": true,
+        "bytes": 11443,
+        "path": "docs/evidence/slo/grafana-staging-m0-ai-chat-p95-202606.png"
+      },
+      {
+        "uid": "xcagi-slo",
+        "panel_id": 7,
+        "suffix": "neurobus-delivery",
+        "title": "NeuroBus delivery success",
+        "target": ">= 99.95%",
+        "slo_id": "SLO-BUS-01",
+        "kind": "staging",
+        "filename": "grafana-staging-m0-neurobus-delivery-202606.png",
+        "preview": "staging_live",
+        "present": true,
+        "bytes": 24477,
+        "path": "docs/evidence/slo/grafana-staging-m0-neurobus-delivery-202606.png"
+      }
+    ]
+  },
+  "local_slo": {
+    "label": "本地 SLO 四域预览",
+    "ready": 4,
+    "total": 4,
+    "grafana_ready": 4,
+    "status": "pass",
+    "panels": [
+      {
+        "uid": "xcagi-slo",
+        "panel_id": 1,
+        "suffix": "api-availability",
+        "title": "SLO-API-01 · Availability (30d)",
+        "target": "99.9%",
+        "slo_id": "SLO-API-01",
+        "kind": "local",
+        "filename": "grafana-local-m0-api-availability-202606.png",
+        "preview": "grafana",
+        "present": true,
+        "bytes": 14815,
+        "path": "docs/evidence/slo/grafana-local-m0-api-availability-202606.png"
+      },
+      {
+        "uid": "xcagi-mod-store",
+        "panel_id": 5,
+        "suffix": "db-mod-sqlite-copies",
+        "title": "Per-mod SQLite DB copies",
+        "target": "M0 路径图",
+        "slo_id": null,
+        "kind": "local",
+        "filename": "grafana-local-m0-db-mod-sqlite-copies-202606.png",
+        "preview": "grafana",
+        "present": true,
+        "bytes": 14450,
+        "path": "docs/evidence/slo/grafana-local-m0-db-mod-sqlite-copies-202606.png"
+      },
+      {
+        "uid": "xcagi-slo",
+        "panel_id": 3,
+        "suffix": "ai-chat-p95",
+        "title": "SLO-AI-01 · Chat first-byte P95",
+        "target": "< 1500ms",
+        "slo_id": "SLO-AI-01",
+        "kind": "local",
+        "filename": "grafana-local-m0-ai-chat-p95-202606.png",
+        "preview": "grafana",
+        "present": true,
+        "bytes": 11363,
+        "path": "docs/evidence/slo/grafana-local-m0-ai-chat-p95-202606.png"
+      },
+      {
+        "uid": "xcagi-slo",
+        "panel_id": 7,
+        "suffix": "neurobus-delivery",
+        "title": "NeuroBus delivery success",
+        "target": ">= 99.95%",
+        "slo_id": "SLO-BUS-01",
+        "kind": "local",
+        "filename": "grafana-local-m0-neurobus-delivery-202606.png",
+        "preview": "grafana",
+        "present": true,
+        "bytes": 27843,
+        "path": "docs/evidence/slo/grafana-local-m0-neurobus-delivery-202606.png"
+      }
+    ],
+    "note": "Grafana 真图 4/4（本地栈 :3000 实时 render，xcagi-slo / xcagi-mod-store 有真实数据）；≠ staging 7d 验收"
+  },
+  "mod_pilot": {
+    "label": "Mod 商家试点四图",
+    "blocker": "需 MODstore + 0.01 元沙箱 + FHD 激活 · mod-pilot-checklist.sh --verify",
+    "ready": 4,
+    "total": 4,
+    "path_ready": 0,
+    "verified_ready": 4,
+    "status": "pass",
+    "steps": [
+      {
+        "file": "01-listing.png",
+        "step": 1,
+        "title": "商家入驻 / Mod 上架",
+        "action": "审核通过",
+        "preview": "verified",
+        "present": true,
+        "bytes": 102537,
+        "path": "docs/evidence/mod/01-listing.png"
+      },
+      {
+        "file": "02-store-page.png",
+        "step": 2,
+        "title": "市场页可见",
+        "action": "可安装",
+        "preview": "verified",
+        "present": true,
+        "bytes": 53156,
+        "path": "docs/evidence/mod/02-store-page.png"
+      },
+      {
+        "file": "03-payment.png",
+        "step": 3,
+        "title": "0.01 元支付",
+        "action": "沙箱/约定环境",
+        "preview": "verified",
+        "present": true,
+        "bytes": 81854,
+        "path": "docs/evidence/mod/03-payment.png"
+      },
+      {
+        "file": "04-activated.png",
+        "step": 4,
+        "title": "FHD 宿主开通",
+        "action": "安装并激活 Mod",
+        "preview": "verified",
+        "present": true,
+        "bytes": 373841,
+        "path": "docs/evidence/mod/04-activated.png"
+      }
+    ]
+  },
+  "display": {
+    "staging_slo_headline": "⏳ staging SLO 四图 · 实时真图 4/4 · 7d 验收计时 Day 1/7（起算 2026-06-06）",
+    "mod_pilot_headline": "✅ Mod 四图 · 商家流水 4/4",
+    "local_slo_headline": "✅ 本地 SLO · Grafana 真图 4/4"
+  }
+}

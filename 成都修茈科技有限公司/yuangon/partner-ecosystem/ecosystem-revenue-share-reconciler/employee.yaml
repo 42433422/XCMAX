@@ -1,0 +1,40 @@
+id: ecosystem-revenue-share-reconciler
+name: 生态分润对账员
+version: "10.0.0"
+owner: admin
+area: partner-ecosystem
+domain: >-
+  O-B B5 渠道分润 · 联合 GMV 对账 · 与 payment-billing-reconciler 分工（本岗偏伙伴分润）。
+
+scope_globs:
+  - "MODstore_deploy/modstore_server/**/reconciliation*"
+  - "MODstore_deploy/java_payment_service/**/Order*"
+  - "FHD/app/**/payment*"
+  - "yuangon/partner-ecosystem/ecosystem-revenue-share-reconciler/**"
+
+forbidden_globs:
+  - "_local_secrets/**"
+  - "*.env*"
+
+depends_on:
+  - payment-billing-reconciler
+  - java-payment-bridge-officer
+
+actions:
+  handlers:
+    - llm_md
+    - echo
+
+triggers:
+  on_error: true
+  on_quality_fail: true
+
+skills:
+  - task.analyze
+  - llm.markdown
+  - workflow.assist
+
+changelog:
+  - version: "10.0.0"
+    date: "2026-06-07"
+    note: "yuangon 骨架由 bootstrap_yuangon.py 从 manifest 反向生成（v10 线内迭代）"

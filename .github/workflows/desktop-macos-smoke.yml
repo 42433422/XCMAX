@@ -1,0 +1,102 @@
+# T47 — macOS Electron 壳冒烟（不打出完整安装包，验证 tsc + electron 可启动）
+# full_build 手动触发时产 arm64+x64 双架构 dmg，并跑可交付冒烟
+name: desktop-macos-smoke
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - "FHD/desktop/**"
+      - ".github/workflows/desktop-macos-smoke.yml"
+  pull_request:
+    branches: [main, master]
+    paths:
+      - "FHD/desktop/**"
+  workflow_dispatch:
+    inputs:
+      full_build:
+        description: "Build dmg + deliverable smoke for arm64+x64 (requires signing secrets)"
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: desktop-macos-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  electron-smoke:
+    name: Electron build + launch (macOS)
+    runs-on: macos-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: FHD/desktop
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: FHD/desktop/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript build
+        run: npm run build
+
+      - name: Electron smoke (headless CI)
+        env:
+          ELECTRON_DISABLE_SECURITY_WARNINGS: "true"
+        run: |
+          npx electron --version
+          # 无显示器环境：短时启动后退出；124 = timeout 正常结束
+          perl -e 'alarm 25; exec @ARGV' npx electron . --no-sandbox || code=$?
+          if [ "${code:-0}" -eq 124 ] || [ "${code:-0}" -eq 0 ]; then
+            echo "[smoke] electron . exited (code=${code:-0}) — OK for CI"
+            exit 0
+          fi
+          exit "${code}"
+
+  # 手动触发 full_build 时：双架构矩阵各出 personal SKU dmg + 可交付冒烟
+  macos-deliverable-build:
+    name: macOS dmg + deliverable smoke (${{ matrix.arch }})
+    if: github.event_name == 'workflow_dispatch' && inputs.full_build == true
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-14
+            arch: arm64
+          - runner: macos-13
+            arch: x64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    defaults:
+      run:
+        working-directory: FHD
+    env:
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      CSC_LINK: ${{ secrets.CSC_LINK }}
+      CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+      XCAGI_MAC_ARCH: ${{ matrix.arch }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Build personal SKU (${{ matrix.arch }}) smoke
+        run: |
+          chmod +x scripts/package/build-installer.sh scripts/dev/mac_deliverable_smoke.sh
+          scripts/package/build-installer.sh 10.0.0 personal
+      - name: Deliverable smoke
+        run: bash scripts/dev/mac_deliverable_smoke.sh

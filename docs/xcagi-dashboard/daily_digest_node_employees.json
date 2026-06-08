@@ -1,0 +1,542 @@
+{
+  "version": "2026-06-06",
+  "description": "日更全链路架构图节点 → 主责/协作员工（与 six_line_employee_map 对齐，可叠加 six_line 引用）",
+  "employee_labels": {
+    "daily-orchestrator": "每日编排员",
+    "workbench-ux-stylist": "工作台体验",
+    "task-router-officer": "任务路由官",
+    "retention-officer": "归档清理员",
+    "legacy-archive-curator": "遗留归档员",
+    "log-monitor-incident": "日志监控员",
+    "security-secrets-guard": "密钥门禁员",
+    "site-content-editor": "网站内容编辑",
+    "marketing-site-builder": "营销站构建",
+    "seo-sitemap-curator": "SEO 站点图",
+    "market-frontend-dev": "市场前端开发",
+    "fhd-core-maintainer": "FHD 核心维护",
+    "vibe-coding-maintainer": "Vibe 编码维护",
+    "test-qa-runner": "测试质检员",
+    "deploy-release-officer": "发布交付官",
+    "push-update-context-officer": "OTA 推送官",
+    "mobile-android-release-officer": "Android 发布",
+    "mobile-ios-release-officer": "iOS 发布",
+    "pack-registrar": "打包登记员",
+    "dbops-engineer": "数据库运维",
+    "modstore-backend-api": "MODstore 后端",
+    "doc-knowledge-curator": "文档知识库",
+    "nginx-config-engineer": "Nginx 工程师",
+    "change-request-auditor": "变更审计员",
+    "intake-dispatcher": "需求分发员",
+    "employee-planner": "员工规划师",
+    "intent-analyst": "意图分析师",
+    "host-checker": "主机巡检员"
+  },
+  "nodes": {
+    "daily-hub": {
+      "name": "日更闭环",
+      "primary": ["daily-orchestrator"],
+      "support": ["task-router-officer", "deploy-release-officer"]
+    },
+    "R": {
+      "name": "03:15 retention-officer 归档清理",
+      "primary": ["retention-officer"],
+      "support": ["legacy-archive-curator"],
+      "six_line": [{ "line": "shared_retention", "step": "R1" }]
+    },
+    "K": {
+      "name": "运维 KPI · 待审 · TLS · IMAP",
+      "primary": ["log-monitor-incident", "security-secrets-guard"],
+      "support": ["daily-orchestrator"],
+      "six_line": [{ "line": "shared_retention", "step": "R4" }]
+    },
+    "SW": {
+      "name": "P-W 网站截图+分析",
+      "primary": ["site-content-editor", "marketing-site-builder"],
+      "support": ["seo-sitemap-curator"],
+      "six_line": [{ "line": "prod_web", "step": "P1a" }]
+    },
+    "SS": {
+      "name": "P-S 软件截图+分析",
+      "primary": ["fhd-core-maintainer", "test-qa-runner"],
+      "support": ["market-frontend-dev", "workbench-ux-stylist"],
+      "six_line": [{ "line": "prod_software", "step": "P3" }]
+    },
+    "SA": {
+      "name": "P-App 移动/WebView 截图+分析",
+      "scope": "FHD 本地巡检 lane=P-App（Playwright Web/WebView + adb 模拟器原生屏）· API /api/xcmax/aibiz/app-terminal · make surface-audit-app",
+      "primary": ["mobile-android-release-officer", "mobile-ios-release-officer"],
+      "support": ["workbench-ux-stylist"],
+      "six_line": [{ "line": "prod_software", "step": "P4" }]
+    },
+    "M": {
+      "name": "员工大会 → 会议摘要",
+      "primary": ["workbench-ux-stylist", "task-router-officer"],
+      "support": ["daily-orchestrator", "vibe-coding-maintainer"],
+      "six_line": [{ "line": "prod_web", "step": "P1c" }]
+    },
+    "PPTX": {
+      "name": "三端截图 → PPT 邮件附件",
+      "primary": ["workbench-ux-stylist"],
+      "support": ["site-content-editor", "market-frontend-dev", "mobile-android-release-officer"]
+    },
+    "ASM": {
+      "name": "拼装 digest HTML",
+      "primary": ["daily-orchestrator", "workbench-ux-stylist"],
+      "support": ["log-monitor-incident", "doc-knowledge-curator"]
+    },
+    "P": {
+      "name": "落库 DailyDigestRecord",
+      "primary": ["daily-orchestrator"],
+      "support": ["modstore-backend-api", "dbops-engineer"]
+    },
+    "RT": {
+      "name": "release_train +0.0.0.1",
+      "primary": ["daily-orchestrator", "deploy-release-officer"],
+      "support": ["dbops-engineer"]
+    },
+    "CENT": {
+      "name": "day_index % 100 = 0?",
+      "primary": ["daily-orchestrator"],
+      "support": ["deploy-release-officer", "change-request-auditor"]
+    },
+    "MAJ": {
+      "name": "major 大推送 1.N.0.0",
+      "primary": ["deploy-release-officer"],
+      "support": ["push-update-context-officer", "change-request-auditor"],
+      "six_line": [{ "line": "prod_software", "step": "P5" }]
+    },
+    "V": {
+      "name": "Vibe 预备 更新+补丁 MD",
+      "primary": ["vibe-coding-maintainer", "task-router-officer"],
+      "support": ["daily-orchestrator", "fhd-core-maintainer"],
+      "six_line": [{ "line": "prod_software", "step": "P10" }]
+    },
+    "ACT": {
+      "name": "双清单解析 → daily_action_items",
+      "scope": "digest_action_items.parse_and_store_action_items · 同日 dedupe_key 幂等",
+      "primary": ["daily-orchestrator", "modstore-backend-api"],
+      "support": ["vibe-coding-maintainer", "dbops-engineer"]
+    },
+    "GAPS": {
+      "name": "断点清单 · AI 补丁看板",
+      "scope": "#s-gaps · emp-wf-action-items.js · kind=patch · 固定卡片模板",
+      "primary": ["workbench-ux-stylist", "daily-orchestrator"],
+      "support": ["fhd-core-maintainer", "test-qa-runner"]
+    },
+    "ROAD": {
+      "name": "路线图 · AI 更新看板",
+      "scope": "#s-roadmap · emp-wf-action-items.js · kind=update",
+      "primary": ["workbench-ux-stylist", "employee-planner"],
+      "support": ["daily-orchestrator", "doc-knowledge-curator"]
+    },
+    "ART": {
+      "name": "阶段结果文件面板",
+      "scope": "emp-wf-stage-artifacts.js · GET /daily-digests/{id}/artifacts",
+      "primary": ["daily-orchestrator", "workbench-ux-stylist"],
+      "support": ["modstore-backend-api", "dbops-engineer"]
+    },
+    "WB_D": {
+      "name": "派发回写 · dispatched",
+      "scope": "digest_line_executor → sync_dispatched_for_work_units",
+      "primary": ["task-router-officer", "daily-orchestrator"],
+      "support": ["fhd-core-maintainer", "vibe-coding-maintainer"]
+    },
+    "WB_M": {
+      "name": "部署回写 · merged 已闭环",
+      "scope": "approval_dispatcher.deploy_staged_change → sync_merged_on_deploy",
+      "primary": ["deploy-release-officer", "change-request-auditor"],
+      "support": ["daily-orchestrator", "workbench-ux-stylist"]
+    },
+    "BK": {
+      "name": "03:05 容灾备份",
+      "scope": "daily_backup_job · modstore.db + release_train.json → backups/",
+      "primary": ["dbops-engineer", "retention-officer"],
+      "support": ["daily-orchestrator"]
+    },
+    "DRFAIL": {
+      "name": "灾备失败 → 降级（告警 + 跳过当日 bump）",
+      "scope": "备份失败熔断：告警 + 保留上一份快照 + 当日不递增 release_train，人工确认后恢复",
+      "primary": ["dbops-engineer"],
+      "support": ["log-monitor-incident", "daily-orchestrator"]
+    },
+    "L": {
+      "name": "四产线拆分 P-W/P-S/P-App/S-R",
+      "primary": ["daily-orchestrator", "task-router-officer"],
+      "support": ["intake-dispatcher"]
+    },
+    "PARSE": {
+      "name": "08:15 解析 WorkUnit",
+      "primary": ["daily-orchestrator"],
+      "support": ["employee-planner", "intent-analyst"]
+    },
+    "PSA": {
+      "name": "P-S Runner 补丁 dispatch_subtasks",
+      "primary": ["fhd-core-maintainer", "vibe-coding-maintainer"],
+      "support": ["test-qa-runner"],
+      "six_line": [{ "line": "prod_software", "step": "P2" }]
+    },
+    "APPA": {
+      "name": "P-App Runner 补丁 dispatch_subtasks",
+      "primary": ["mobile-android-release-officer", "mobile-ios-release-officer"],
+      "support": ["pack-registrar"],
+      "six_line": [{ "line": "prod_software", "step": "P4" }]
+    },
+    "GITCR": {
+      "name": "CR → 员工分支 git commit + gh PR",
+      "primary": ["vibe-coding-maintainer"],
+      "support": ["change-request-auditor", "code-validator"],
+      "six_line": [{ "line": "prod_software", "step": "P2" }]
+    },
+    "CANARY": {
+      "name": "灰度发布 staging→canary 10%→prod",
+      "primary": ["deploy-release-officer"],
+      "support": ["test-qa-runner", "self-checker"],
+      "six_line": [{ "line": "prod_software", "step": "P5" }]
+    },
+    "ROLLBACK": {
+      "name": "校验不过 → 自动回滚（回上一稳定版 + 告警）",
+      "scope": "灰度/即时门禁失败统一回滚：回退上一稳定 release_train + COS/OTA 撤包 + 告警 + 落 OpsStagedChange 复盘",
+      "primary": ["deploy-release-officer"],
+      "support": ["push-update-context-officer", "log-monitor-incident"]
+    },
+    "HEAL": {
+      "name": "P7 异常 → 自愈（重启/扩缩/熔断）",
+      "scope": "监控触发自愈：HPA 扩缩 + pod 重启 + 失败熔断；无效则升级 OpsStagedChange 人工介入",
+      "primary": ["log-monitor-incident", "host-checker"],
+      "support": ["daily-orchestrator"]
+    },
+    "ORCH": {
+      "name": "08:25 release_train orchestrator",
+      "primary": ["daily-orchestrator"],
+      "support": ["task-router-officer", "deploy-release-officer"]
+    },
+    "PW": {
+      "name": "P-W Runner 更新 dispatch_subtasks",
+      "primary": ["site-content-editor", "market-frontend-dev"],
+      "support": ["nginx-config-engineer"],
+      "six_line": [{ "line": "prod_web", "step": "P1f" }]
+    },
+    "APPB": {
+      "name": "P-App Runner 更新 dispatch_subtasks",
+      "primary": ["mobile-android-release-officer", "mobile-ios-release-officer"],
+      "support": ["push-update-context-officer"]
+    },
+    "SR": {
+      "name": "S-R Runner dispatch_subtasks",
+      "primary": ["retention-officer", "legacy-archive-curator"],
+      "support": ["security-secrets-guard"],
+      "six_line": [{ "line": "shared_retention", "step": "R3" }]
+    },
+    "KIND": {
+      "name": "release_kind?",
+      "primary": ["daily-orchestrator"],
+      "support": ["deploy-release-officer"]
+    },
+    "P9I": {
+      "name": "deploy-release-officer P9",
+      "primary": ["deploy-release-officer"],
+      "support": ["dbops-engineer"],
+      "six_line": [{ "line": "prod_software", "step": "P9" }]
+    },
+    "P5I": {
+      "name": "deploy-release-officer P5 全量",
+      "primary": ["deploy-release-officer"],
+      "support": ["change-request-auditor", "mobile-android-release-officer"],
+      "six_line": [{ "line": "prod_software", "step": "P5" }]
+    },
+    "P6I": {
+      "name": "push-update-context-officer P6 OTA/COS",
+      "primary": ["push-update-context-officer"],
+      "support": ["pack-registrar"],
+      "six_line": [{ "line": "prod_software", "step": "P6" }]
+    },
+    "DLSSOT": {
+      "name": "安装包推 COS + 回写下载版本 SSOT",
+      "primary": ["push-update-context-officer"],
+      "support": ["deploy-release-officer", "marketing-site-builder", "seo-sitemap-curator"],
+      "six_line": [{ "line": "prod_software", "step": "P6" }]
+    },
+    "FASTGATE": {
+      "name": "即时推送门禁（staging + 健康检查通过?）",
+      "scope": "快路径全量推送前置门禁：staging 验收 + /healthz + smoke 通过才放行 DLSSOT，否则转 ROLLBACK",
+      "primary": ["deploy-release-officer"],
+      "support": ["test-qa-runner", "self-checker", "host-checker"]
+    },
+    "BR": {
+      "name": "切日更分支 primary 模式",
+      "primary": ["daily-orchestrator"],
+      "support": ["fhd-core-maintainer", "security-secrets-guard"]
+    },
+    "P2W": {
+      "name": "P2 网站编码",
+      "primary": ["site-content-editor", "marketing-site-builder"],
+      "support": ["flask-entry-keeper"],
+      "six_line": [{ "line": "prod_web", "step": "P1a" }]
+    },
+    "P2S": {
+      "name": "P2 软件编码",
+      "primary": ["fhd-core-maintainer", "vibe-coding-maintainer"],
+      "support": ["artifact-generator"],
+      "six_line": [{ "line": "prod_software", "step": "P2" }]
+    },
+    "P2APP": {
+      "name": "P2 App 打包/渠道",
+      "primary": ["mobile-android-release-officer", "mobile-ios-release-officer"],
+      "support": ["pack-registrar"],
+      "six_line": [{ "line": "prod_software", "step": "P4" }]
+    },
+    "P2R": {
+      "name": "P2 归档/文档",
+      "primary": ["legacy-archive-curator", "doc-knowledge-curator"],
+      "support": ["retention-officer"],
+      "six_line": [{ "line": "shared_retention", "step": "R3" }]
+    },
+    "GATE": {
+      "name": "第4段=0 且非首日?",
+      "primary": ["daily-orchestrator", "deploy-release-officer"],
+      "support": ["dbops-engineer"]
+    },
+    "P9G": {
+      "name": "P9 十日线代际 Gn→Gn+1",
+      "primary": ["deploy-release-officer"],
+      "support": ["push-update-context-officer"],
+      "six_line": [{ "line": "prod_software", "step": "P9" }]
+    },
+    "P3": {
+      "name": "P3 测试",
+      "primary": ["test-qa-runner"],
+      "support": ["sandbox-tester", "code-validator"],
+      "six_line": [{ "line": "prod_software", "step": "P3" }]
+    },
+    "P4": {
+      "name": "P4 CI 构建",
+      "primary": ["pack-registrar", "deploy-release-officer"],
+      "support": ["mobile-android-release-officer"],
+      "six_line": [{ "line": "prod_software", "step": "P4" }]
+    },
+    "P5": {
+      "name": "P5 发布",
+      "primary": ["deploy-release-officer"],
+      "support": ["change-request-auditor"],
+      "six_line": [{ "line": "prod_software", "step": "P5" }]
+    },
+    "P6": {
+      "name": "P6 推送更新",
+      "primary": ["push-update-context-officer"],
+      "support": ["deploy-release-officer"],
+      "six_line": [{ "line": "prod_software", "step": "P6" }]
+    },
+    "P6G": {
+      "name": "每30日 · 0.0.3.0 迭代门禁",
+      "primary": ["push-update-context-officer", "daily-orchestrator"],
+      "support": ["dbops-engineer"],
+      "six_line": [{ "line": "prod_software", "step": "P6" }]
+    },
+    "P6POP": {
+      "name": "Desktop+App 更新弹窗",
+      "primary": ["push-update-context-officer"],
+      "support": ["mobile-android-release-officer", "mobile-ios-release-officer"],
+      "six_line": [{ "line": "prod_software", "step": "P6" }]
+    },
+    "P6PW": {
+      "name": "P-W 网站静默自更",
+      "primary": ["site-content-editor", "marketing-site-builder"],
+      "support": ["flask-entry-keeper"],
+      "six_line": [{ "line": "prod_web", "step": "P1a" }]
+    },
+    "P7": {
+      "name": "P7 监控",
+      "primary": ["log-monitor-incident", "host-checker"],
+      "support": ["daily-orchestrator"],
+      "six_line": [{ "line": "prod_software", "step": "P7" }]
+    },
+    "P8": {
+      "name": "P8 净化",
+      "primary": ["retention-officer", "security-secrets-guard"],
+      "support": ["daily-orchestrator"],
+      "six_line": [{ "line": "prod_software", "step": "P8" }]
+    },
+    "P9": {
+      "name": "P9 版本演进 · SSOT",
+      "primary": ["deploy-release-officer", "dbops-engineer"],
+      "support": ["push-update-context-officer"],
+      "six_line": [{ "line": "prod_software", "step": "P9" }]
+    },
+    "STG": {
+      "name": "OpsStagedChange pending",
+      "primary": ["daily-orchestrator"],
+      "support": ["change-request-auditor"]
+    },
+    "APPR": {
+      "name": "邮件/工作台审批",
+      "primary": ["workbench-ux-stylist", "daily-orchestrator"],
+      "support": ["change-request-auditor"]
+    },
+    "V10SYNC": {
+      "name": "版本统一管理（Web · App · 软件）",
+      "scope": "除各端独立 OTA（release_train 日更、electron-updater、P-W 静默自更）外，统一管理网站、App、软件及 Mod 的营销版本锚点与宿主依赖。",
+      "primary": ["code-validator", "deploy-release-officer"],
+      "support": ["test-qa-runner", "fhd-core-maintainer"]
+    },
+    "MERGE": {
+      "name": "合并 + 部署",
+      "primary": ["deploy-release-officer", "daily-orchestrator"],
+      "support": ["nginx-config-engineer", "fhd-core-maintainer"]
+    },
+    "PHASE_A": {
+      "name": "阶段 A · 获客签约 O-A",
+      "primary": ["daily-orchestrator"],
+      "support": ["user-customer-service-officer", "intake-dispatcher"]
+    },
+    "O1": {
+      "name": "O1 获客引流",
+      "primary": ["site-content-editor", "marketing-site-builder"],
+      "support": ["seo-sitemap-curator"],
+      "six_line": [{ "line": "ops_acquisition", "step": "O1" }]
+    },
+    "CS_CONN": {
+      "name": "内部客服 · 建联",
+      "primary": ["user-customer-service-officer"],
+      "support": ["wechat_msg", "wechat_phone", "real_phone"]
+    },
+    "CS_INTK": {
+      "name": "需求采集 · 表单/审核码",
+      "primary": ["user-customer-service-officer", "intake-dispatcher"],
+      "support": ["modstore-backend-api"]
+    },
+    "INT_DISP": {
+      "name": "intake-dispatcher 归一化",
+      "primary": ["intake-dispatcher"],
+      "support": ["modstore-backend-api"]
+    },
+    "O3": {
+      "name": "O3 商机合同",
+      "primary": ["modstore-backend-api"],
+      "support": [],
+      "six_line": [{ "line": "ops_acquisition", "step": "O3" }]
+    },
+    "O4": {
+      "name": "O4 收费",
+      "primary": ["payment-billing-reconciler"],
+      "support": [],
+      "six_line": [{ "line": "ops_acquisition", "step": "O4" }]
+    },
+    "O4_FAIL": {
+      "name": "收费失败 → 挂起/退款（告警 + 回客服跟进）",
+      "scope": "支付失败/超时熔断：挂起交付 + 退款 + 告警，回客服变更工单跟进",
+      "primary": ["payment-billing-reconciler"],
+      "support": ["user-customer-service-officer", "change-request-auditor"]
+    },
+    "PHASE_B": {
+      "name": "阶段 B · 双轨交付 O5 分叉",
+      "primary": ["deploy-release-officer", "daily-orchestrator"],
+      "support": ["pack-registrar"]
+    },
+    "O5": {
+      "name": "O5 交付编排",
+      "primary": ["deploy-release-officer"],
+      "support": ["shipment_mgmt"],
+      "six_line": [{ "line": "ops_acquisition", "step": "O5" }]
+    },
+    "PS": {
+      "name": "P-S 通用软件发布",
+      "primary": ["deploy-release-officer", "fhd-core-maintainer"],
+      "support": ["test-qa-runner", "pack-registrar"],
+      "six_line": [{ "line": "prod_software", "step": "P5" }]
+    },
+    "PM_Craft": {
+      "name": "P-M Craft 13 步",
+      "primary": [
+        "intent-analyst",
+        "employee-planner",
+        "artifact-generator",
+        "quality-validator",
+        "miniapp-builder",
+        "script-binder",
+        "workflow-automator",
+        "pack-registrar",
+        "sandbox-tester",
+        "code-validator",
+        "self-checker",
+        "host-checker",
+        "hex-quality-assessor"
+      ],
+      "support": ["vibe-coding-maintainer"],
+      "six_line": [{ "line": "prod_mod", "step": "P2" }]
+    },
+    "PM_OTA": {
+      "name": "P-M Mod OTA",
+      "primary": ["push-update-context-officer", "pack-registrar"],
+      "support": [],
+      "six_line": [{ "line": "prod_mod", "step": "P6" }]
+    },
+    "O8_prep": {
+      "name": "交付汇合 · 交付期可并行试用",
+      "primary": ["deploy-release-officer", "enterprise-adoption-officer"],
+      "support": ["user-customer-service-officer", "test-qa-runner"]
+    },
+    "PHASE_D": {
+      "name": "阶段 D · 收尾 O-A",
+      "primary": ["delivery-receipt-officer", "payment-billing-reconciler"],
+      "support": ["modstore-backend-api"]
+    },
+    "O8": {
+      "name": "O8 里程碑签收",
+      "primary": ["delivery-receipt-officer", "test-qa-runner"],
+      "support": ["receipt_confirm"],
+      "six_line": [{ "line": "ops_acquisition", "step": "O8" }]
+    },
+    "O8_REJ": {
+      "name": "签收驳回 → 返工（回 O5 交付编排）",
+      "scope": "里程碑签收不通过：记录验收意见 + 回 O5 交付编排重新交付，闭环至再次签收",
+      "primary": ["delivery-receipt-officer"],
+      "support": ["deploy-release-officer", "test-qa-runner"]
+    },
+    "O9": {
+      "name": "O9 单据开票",
+      "primary": ["modstore-backend-api"],
+      "support": ["label_print", "shipment_mgmt"],
+      "six_line": [{ "line": "ops_acquisition", "step": "O9" }]
+    },
+    "O10": {
+      "name": "O10 对账报表",
+      "primary": ["payment-billing-reconciler"],
+      "support": [],
+      "six_line": [{ "line": "ops_acquisition", "step": "O10" }]
+    },
+    "GOV": {
+      "name": "经营治理（SLA · 风控 · 变更审计）",
+      "scope": "聚合 O10 对账 + O6 使用信号 → SLA/风控/审计看板，发现风险驱动 O7 变更反馈闭环",
+      "primary": ["change-request-auditor"],
+      "support": ["payment-billing-reconciler", "daily-orchestrator"]
+    },
+    "PHASE_C": {
+      "name": "阶段 C · 签收后使用维护",
+      "primary": ["enterprise-adoption-officer"],
+      "support": ["user-customer-service-officer", "change-request-auditor"]
+    },
+    "O6": {
+      "name": "O6 企业使用",
+      "primary": ["enterprise-adoption-officer"],
+      "support": ["user-customer-service-officer"],
+      "six_line": [{ "line": "ops_acquisition", "step": "O6" }]
+    },
+    "O7": {
+      "name": "O7 变更反馈",
+      "primary": ["user-customer-service-officer", "change-request-auditor"],
+      "support": ["intake-dispatcher", "wechat_msg", "wechat_phone", "real_phone"],
+      "six_line": [{ "line": "ops_acquisition", "step": "O7" }]
+    },
+    "CS_CHG": {
+      "name": "变更工单 · ops-dispatch",
+      "primary": ["user-customer-service-officer", "change-request-auditor"],
+      "support": ["intake-dispatcher"]
+    },
+    "Vibe08": {
+      "name": "08:00 补丁清单 P-S",
+      "primary": ["fhd-core-maintainer", "vibe-coding-maintainer"],
+      "support": ["test-qa-runner", "daily-orchestrator"],
+      "six_line": [{ "line": "prod_software", "step": "P2" }]
+    }
+  }
+}

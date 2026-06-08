@@ -1,0 +1,69 @@
+id: wechat-msg
+name: 微信消息处理 AI 员工
+version: "1.0.0"
+domain: 依赖「星标聊天自动刷新」轮询 work_mode_feed；新消息签名变化时跑意图，并写入对话页任务列表。
+owner: admin
+area: workflow-core
+security_level: personal
+is_public: true
+
+scope_globs:
+  - FHD-个人/frontend/src/components/TopAssistantFloat.vue
+  - FHD-个人/frontend/src/stores/workflowAiEmployees.ts
+  - FHD-个人/frontend/src/composables/useWorkflowEmployeeDesks.ts
+  - FHD-个人/frontend/src/constants/workflowEmployeeDocIds.ts
+  - FHD-个人/frontend/src/constants/workflowEmployeeDatabaseLinks.ts
+  - FHD-个人/frontend/src/stores/workflowEmployeeSpace.ts
+  - FHD-个人/frontend/src/constants/yuangongStitchPlacements.ts
+  - FHD-个人/frontend/src/data/workflow-employee-docs.json
+
+forbidden_globs:
+  - FHD-个人/app/fastapi_routes/xcagi_compat_chat_helpers.py
+
+triggers:
+  on_error: true
+  on_quality_fail: true
+  on_coverage_miss: false
+  max_patch_budget_tokens: 4000
+  max_patch_steps: 5
+
+sla:
+  timeout_seconds: 120
+  retry_max: 2
+  escalate_to_human: true
+
+llm_default: "auto"
+llm_reasoning: "auto"
+
+skills:
+  - skills/skill-wechat-intent.md
+  - skills/skill-wechat-star-feed.md
+
+capabilities:
+  - label: 星标消息轮询与推送
+    description: 约每分钟拉取星标联系人最新消息，有新消息时助手推送提醒
+  - label: 意图预处理
+    description: 可开启专业模式走 /api/ai/intent/test，否则使用 inferWechatCustomerIntent 本地规则
+  - label: 任务列表管理
+    description: 派发 xcagi:wechat-ai-task-enqueue，右侧出现微信消息处理类条目
+
+examples:
+  - title: 新消息意图处理
+    description: 星标联系人有新消息时自动跑意图并写入任务列表
+    input:
+      action: process_message
+      contact: "客户名称"
+      message: "你好，我想确认一下到货情况"
+  - title: 发货单预览触发
+    description: 命中发货类话术且同时启用出货管理时触发预览
+    input:
+      action: shipment_preview
+      contact: "客户名称"
+      message: "帮我发一批货"
+
+depends_on: []
+
+changelog:
+  - version: "1.0.0"
+    date: "2026-05-14"
+    note: "初始创建：从 FHD-个人 程序硬编码中提取"

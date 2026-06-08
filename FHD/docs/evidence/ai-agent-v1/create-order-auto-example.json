@@ -1,0 +1,99 @@
+{
+  "_comment": "Phase 1.1 留证样例 — strategy=auto（自动批准 + 完整执行）。实际跑通后会写到 create-order-auto-<stamp>.json。结构与 V0 demo-run-*.json 兼容，新增 gated_decision 字段。",
+  "generated_at": "2026-06-05T12:00:00Z",
+  "input_message": "给客户上海宏达公司创建一张订单：1000 个 9702-C 型号，单价 12.5",
+  "execution_mode": "mock",
+  "approval_strategy": "auto",
+  "plan_id": "v1-create-order-20260605-120000",
+  "intent": "create_order_for_unit",
+  "risk_level": "medium",
+  "nodes": [
+    {
+      "node_id": "ensure_customer",
+      "tool_id": "customers",
+      "action": "ensure_exists",
+      "risk": "medium",
+      "depends_on": [],
+      "params": {"unit_name": "上海宏达公司"}
+    },
+    {
+      "node_id": "generate_shipment",
+      "tool_id": "shipment_generate",
+      "action": "generate",
+      "risk": "medium",
+      "depends_on": ["ensure_customer"],
+      "params": {
+        "unit_name": "上海宏达公司",
+        "products": [{"model_number": "9702-C", "quantity": 1000, "unit_price": 12.5}]
+      }
+    }
+  ],
+  "gated_decision": {
+    "plan_id": "v1-create-order-20260605-120000",
+    "risk_decision": {
+      "requires_confirmation": true,
+      "reason": "计划包含中高风险写操作",
+      "blocking_nodes": ["ensure_customer", "generate_shipment"]
+    },
+    "node_decisions": [
+      {
+        "node_id": "ensure_customer",
+        "tool_id": "customers",
+        "action": "ensure_exists",
+        "risk": "medium",
+        "requires_approval": true,
+        "approval_request_id": "auto-generated-uuid-1",
+        "approved": true,
+        "rejected": false,
+        "reason": "auto-approved"
+      },
+      {
+        "node_id": "generate_shipment",
+        "tool_id": "shipment_generate",
+        "action": "generate",
+        "risk": "medium",
+        "requires_approval": true,
+        "approval_request_id": "auto-generated-uuid-2",
+        "approved": true,
+        "rejected": false,
+        "reason": "auto-approved"
+      }
+    ],
+    "approval_request_ids": ["auto-generated-uuid-1", "auto-generated-uuid-2"],
+    "all_approved": true,
+    "any_rejected": false,
+    "pending_approval": false
+  },
+  "success": true,
+  "message": "工作流执行完成",
+  "node_results_summary": [
+    {
+      "node_id": "ensure_customer",
+      "tool_id": "customers",
+      "action": "ensure_exists",
+      "success": true,
+      "error": "",
+      "output_summary": {
+        "success": true,
+        "id": 1001,
+        "customer_name": "上海宏达公司",
+        "unit_name": "上海宏达公司",
+        "created": false,
+        "message": "mock: 单位已存在 上海宏达公司"
+      }
+    },
+    {
+      "node_id": "generate_shipment",
+      "tool_id": "shipment_generate",
+      "action": "generate",
+      "success": true,
+      "error": "",
+      "output_summary": {
+        "success": true,
+        "id": 5001,
+        "order_number": "MOCK-20260605-001",
+        "message": "mock: 发货单已生成"
+      }
+    }
+  ]
+}

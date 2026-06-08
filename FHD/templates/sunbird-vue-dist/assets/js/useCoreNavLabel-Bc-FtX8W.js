@@ -1,0 +1,1 @@
+import{y as t,J as a,K as n,q as u,an as d,ao as c}from"./index-DmoO6vrN.js";function i(o){const s=t(),e=a(),{modsForUi:r}=n(e);return u(()=>d(o,String(s.currentIndustryId||c),r.value))}export{i as u};

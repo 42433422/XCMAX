@@ -1,0 +1,1 @@
+import o from"./ProductsView-Bpc-iOAW.js";import{d as r,c as t,H as e}from"./index-DmoO6vrN.js";import"./ConfirmDialog-BW9SIKIZ.js";import"./appDialog-BEIBMk6k.js";import"./useCoreNavLabel-Bc-FtX8W.js";const d=r({__name:"ProductsView",setup(c){return(p,m)=>(t(),e(o))}});export{d as default};

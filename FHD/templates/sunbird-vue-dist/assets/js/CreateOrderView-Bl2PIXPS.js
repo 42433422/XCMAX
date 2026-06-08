@@ -1,0 +1,1 @@
+import e from"./CreateOrderView-Dq8C0LjP.js";import{d as r,c as o,H as t}from"./index-DmoO6vrN.js";import"./appDialog-BEIBMk6k.js";const _=r({__name:"CreateOrderView",setup(a){return(c,n)=>(o(),t(e))}});export{_ as default};

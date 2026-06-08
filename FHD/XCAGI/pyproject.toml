@@ -1,0 +1,14 @@
+# 工具链与依赖的唯一真相源在仓库根目录 ../pyproject.toml
+# 安装：cd .. && pip install -e ".[dev,ml]"
+# 本文件仅保留 pytest 默认路径等 XCAGI 子目录局部覆盖。
+
+[project]
+name = "xcagi-runtime"
+version = "10.0.0"
+description = "XCAGI 运行时子树（pytest 路径局部覆盖）"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+testpaths = ["xcagi_tests"]
+python_files = ["test_*.py"]
+addopts = "-v --tb=short -p no:xdist --import-mode=importlib --cov=app"

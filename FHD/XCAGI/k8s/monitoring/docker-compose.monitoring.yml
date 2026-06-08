@@ -1,0 +1,120 @@
+version: '3.8'
+
+services:
+  # ===========================================
+  # Prometheus - 指标收集和存储
+  # ===========================================
+  prometheus:
+    image: prom/prometheus:v2.45.0
+    container_name: xcagi-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=15d'
+      - '--storage.tsdb.retention.size=10GB'
+      - '--web.enable-lifecycle'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    restart: unless-stopped
+    networks:
+      - monitoring
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ===========================================
+  # Grafana - 可视化仪表盘
+  # ===========================================
+  grafana:
+    image: grafana/grafana:10.2.0
+    container_name: xcagi-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GF_SECURITY_ADMIN_PASSWORD:?GF_SECURITY_ADMIN_PASSWORD is required}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_ROOT_URL=http://localhost:3000
+      - GF_INSTALL_PLUGINS=
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+    networks:
+      - monitoring
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ===========================================
+  # Redis (用于缓存和Celery)
+  # ===========================================
+  redis:
+    image: redis:7-alpine
+    container_name: xcagi-redis
+    ports:
+      - "6379:6379"
+    command: >
+      redis-server
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --save 900 1
+      --save 300 10
+      --save 60 10000
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    networks:
+      - monitoring
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  monitoring:
+    driver: bridge
+
+# ===========================================
+# 使用说明：
+#
+# 1. 启动所有服务：
+#    docker-compose up -d
+#
+# 2. 访问地址：
+#    - Prometheus: http://localhost:9090
+#    - Grafana: http://localhost:3000 (set GF_SECURITY_ADMIN_PASSWORD in .env)
+#    - Redis: localhost:6379
+#
+# 3. 验证状态：
+#    docker-compose ps
+#    docker-compose logs -f
+#
+# 4. 停止服务：
+#    docker-compose down
+#
+# 5. 清理数据（谨慎）：
+#    docker-compose down -v
+#
+# ===========================================

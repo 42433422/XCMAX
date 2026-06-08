@@ -1,0 +1,132 @@
+/**
+ * XCAGI 企业版 · 统一设计 Token（SSOT）
+ *
+ * 用法规范：
+ *  - 所有组件、视图、页面使用 --xc-* 变量，禁止在组件 <style scoped> 中直接写 hex 色值
+ *  - --app-* 变量供 base.css 背景/布局系统使用，不要在业务组件中引用
+ *  - 如需覆盖主题，通过 body[data-theme="dark"] 或 .pro-mode-active 选择器（不污染默认值）
+ */
+
+/* ─── 企业主色（蓝） ─────────────────────────────────────────── */
+:root {
+  --xc-color-primary:           #0d47a1;   /* 企业蓝 · 主按钮 / 强调 */
+  --xc-color-primary-light:     #1565c0;   /* hover 态 */
+  --xc-color-primary-hover:     #0a3880;   /* active 态 */
+  --xc-color-primary-soft:      #e3eaf8;   /* 选中行 / 浅背景 */
+  --xc-color-primary-surface:   #f0f4ff;   /* 卡片内强调背景 */
+
+  /* ─── 功能色 ────────────────────────────────────────────── */
+  --xc-color-success:           #00875a;
+  --xc-color-success-bg:        #e3fcef;
+  --xc-color-warning:           #d97706;
+  --xc-color-warning-bg:        #fffbeb;
+  --xc-color-danger:            #c0392b;
+  --xc-color-danger-bg:         #fff1f0;
+  --xc-color-info:              #0d47a1;
+  --xc-color-info-bg:           #e8eef8;
+
+  /* ─── 中性色阶（灰） ─────────────────────────────────────── */
+  --xc-color-text:              #1a1f2e;   /* 主文字 */
+  --xc-color-text-secondary:    #374151;   /* 副文字 */
+  --xc-color-muted:             #6b7280;   /* 辅助/占位 */
+  --xc-color-disabled:          #9ca3af;
+  --xc-color-border:            #dde1e9;
+  --xc-color-border-strong:     #c4c9d4;
+  --xc-color-surface:           #ffffff;
+  --xc-color-surface-2:         #f8f9fb;   /* 侧栏/列表背景 */
+  --xc-color-surface-3:         #f1f3f7;   /* 输入框背景 */
+  --xc-color-page-bg:           #f0f2f7;
+
+  /* ─── 排版 ───────────────────────────────────────────────── */
+  --xc-font-family:             'Inter', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+  --xc-font-xs:                 11px;
+  --xc-font-sm:                 12px;
+  --xc-font-md:                 14px;
+  --xc-font-lg:                 16px;
+  --xc-font-xl:                 18px;
+  --xc-font-2xl:                20px;
+  --xc-font-weight-regular:     400;
+  --xc-font-weight-medium:      500;
+  --xc-font-weight-semibold:    600;
+  --xc-font-weight-bold:        700;
+  --xc-line-height:             1.6;
+
+  /* ─── 间距 ───────────────────────────────────────────────── */
+  --xc-space-1:  4px;
+  --xc-space-2:  8px;
+  --xc-space-3:  12px;
+  --xc-space-4:  16px;
+  --xc-space-5:  20px;
+  --xc-space-6:  24px;
+  --xc-space-8:  32px;
+  --xc-space-10: 40px;
+  --xc-space-xs: var(--xc-space-2);   /* 向后兼容 */
+  --xc-space-sm: var(--xc-space-3);
+  --xc-space-md: var(--xc-space-4);
+  --xc-space-lg: var(--xc-space-6);
+
+  /* ─── 圆角 ───────────────────────────────────────────────── */
+  --xc-radius-xs:  4px;
+  --xc-radius-sm:  6px;
+  --xc-radius-md:  8px;
+  --xc-radius-lg:  12px;
+  --xc-radius-xl:  16px;
+  --xc-radius-full: 9999px;
+
+  /* ─── 阴影 ───────────────────────────────────────────────── */
+  --xc-shadow-xs:  0 1px 2px rgba(10, 20, 50, 0.06);
+  --xc-shadow-sm:  0 2px 8px rgba(10, 20, 50, 0.09);
+  --xc-shadow-md:  0 8px 24px rgba(10, 20, 50, 0.12);
+  --xc-shadow-lg:  0 16px 48px rgba(10, 20, 50, 0.15);
+
+  /* ─── 动效 ───────────────────────────────────────────────── */
+  --xc-transition-fast:   150ms ease;
+  --xc-transition-base:   200ms cubic-bezier(0.2, 0, 0, 1);
+  --xc-transition-slow:   300ms cubic-bezier(0.2, 0, 0, 1);
+
+  /* ─── 顶栏/布局尺寸 ─────────────────────────────────────── */
+  --xc-topbar-height:     52px;
+  --xc-sidebar-width:     220px;
+  --xc-content-max-width: 1280px;
+
+  /* ─── Element Plus 覆盖（对齐企业蓝） ──────────────────── */
+  --el-color-primary:       var(--xc-color-primary);
+  --el-border-radius-base:  var(--xc-radius-md);
+  --el-font-size-base:      var(--xc-font-md);
+}
+
+/* ─── 全局基础 ──────────────────────────────────────────────── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  font-size: 16px;
+}
+
+body {
+  font-family: var(--xc-font-family);
+  font-size: var(--xc-font-md);
+  line-height: var(--xc-line-height);
+  color: var(--xc-color-text);
+  background: var(--xc-color-page-bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* ─── Pro 霓虹模式（独立命名空间，不污染默认） ─────────────── */
+body.pro-mode-active {
+  --xc-color-primary:      #00e5ff;
+  --xc-color-primary-light:#18ffff;
+  --xc-color-primary-hover:#00b8d4;
+  --xc-color-text:         #e8f4ff;
+  --xc-color-text-secondary:#b0c4de;
+  --xc-color-muted:        #7a9ab2;
+  --xc-color-border:       rgba(0, 229, 255, 0.18);
+  --xc-color-surface:      rgba(8, 12, 36, 0.96);
+  --xc-color-surface-2:    rgba(10, 18, 48, 0.92);
+  --xc-color-page-bg:      #060a18;
+}

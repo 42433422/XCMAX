@@ -1,0 +1,58 @@
+<view class="page profile-page">
+  <scroll-view scroll-y style="height: 100vh;" enhanced show-scrollbar="{{false}}">
+    <!-- 头部 -->
+    <view class="header">
+      <image class="avatar" src="{{userInfo.avatar || '/assets/default-avatar.png'}}" mode="aspectFill"
+             bindtap="goInfo" />
+      <view class="user">
+        <text class="name">{{userInfo.display_name || '微信用户'}}</text>
+        <text class="id">ID: {{userInfo.id || '-'}}</text>
+        <text class="tag tag-primary" wx:if="{{userInfo.phone}}">已认证</text>
+      </view>
+      <text class="edit-btn" bindtap="goInfo">编辑 ›</text>
+    </view>
+
+    <!-- 订单入口 -->
+    <view class="card shortcut-card">
+      <view class="sc-head"><text>我的订单</text><text class="sc-more" bindtap="goOrders">全部 ›</text></view>
+      <view class="sc-grid">
+        <view class="sc-item" bindtap="goOrders" data-status="pending">
+          <text class="sc-num text-danger" wx:if="{{orderStats.pending > 0}}">{{orderStats.pending}}</text>
+          <text class="sc-icon">💳</text>
+          <text class="sc-label">待付款</text>
+        </view>
+        <view class="sc-item" bindtap="goOrders" data-status="shipped">
+          <text class="sc-num text-warning" wx:if="{{orderStats.shipped > 0}}">{{orderStats.shipped}}</text>
+          <text class="sc-icon">🚚</text>
+          <text class="sc-label">待收货</text>
+        </view>
+        <view class="sc-item" bindtap="goOrders" data-status="completed">
+          <text class="sc-icon">✅</text>
+          <text class="sc-label">已完成</text>
+        </view>
+        <view class="sc-item" bindtap="goOrders" data-status="">
+          <text class="sc-icon">📋</text>
+          <text class="sc-label">全部</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 功能菜单 -->
+    <view class="card menu-card">
+      <view class="mi" bindtap="goFavorite"><text>⭐</text><text>我的收藏</text><text class="mi-arrow">›</text></view>
+      <view class="mi-divider"></view>
+      <view class="mi" bindtap="goHistory"><text>🕐</text><text>浏览记录</text><text class="mi-arrow">›</text></view>
+      <view class="mi-divider"></view>
+      <view class="mi" bindtap="goAddress"><text>📍</text><text>收货地址</text><text class="mi-arrow">›</text></view>
+      <view class="mi-divider"></view>
+      <view class="mi" bindtap="goMessage"><text>🔔</text><text>消息通知</text><view class="badge-dot" wx:if="{{unreadCount > 0}}"></view><text class="mi-arrow">›</text></view>
+      <view class="mi-divider"></view>
+      <view class="mi" bindtap="goFeedback"><text>💬</text><text>意见反馈</text><text class="mi-arrow">›</text></view>
+      <view class="mi-divider"></view>
+      <view class="mi" bindtap="goChat"><text>🤖</text><text>AI 客服</text><text class="tag tag-outline mi-new">新</text><text class="mi-arrow">›</text></view>
+    </view>
+
+    <view class="ver">XCAGI v1.0.0</view>
+    <view style="height: 60rpx;" class="safe-bottom"></view>
+  </scroll-view>
+</view>

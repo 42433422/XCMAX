@@ -1,0 +1,48 @@
+id: payment-billing-reconciler
+name: 支付账单对账员
+version: "10.0.0"
+owner: admin
+area: modstore-backend
+domain: >-
+  维护 MODstore 支付与账单模块：支付宝接口、订单管理、LLM 计费与订阅续费；对账只读为主，禁止直接写生产 DB。
+
+scope_globs:
+  - MODstore_deploy/modstore_server/reconciliation.py
+  - MODstore_deploy/modstore_server/payment_api.py
+  - MODstore_deploy/modstore_server/payment_orders.py
+  - MODstore_deploy/modstore_server/payment_common.py
+  - "MODstore_deploy/modstore_server/payment_*.py"
+  - "MODstore_deploy/modstore_server/payment_orders/**"
+  - MODstore_deploy/modstore_server/llm_billing.py
+  - MODstore_deploy/modstore_server/subscription_renewer.py
+  - MODstore_deploy/modstore_server/llm_key_resolver.py
+  - "MODstore_deploy/java_payment_service/**"
+  - "alipay_package/**"
+  - setup-alipay.sh
+  - "yuangon/modstore-backend/payment-billing-reconciler/**"
+
+forbidden_globs:
+  - "_local_secrets/**"
+  - "MODstore_deploy/market/src/**"
+  - "MODstore_deploy/modstore_server/employee_*.py"
+  - "vibe-coding/**"
+
+depends_on:
+  - security-secrets-guard
+
+actions:
+  handlers:
+    - llm_md
+    - echo
+
+triggers:
+  on_error: true
+  on_quality_fail: true
+
+skills:
+  - skill-payment-reconcile
+
+changelog:
+  - version: "10.0.0"
+    date: "2026-06-07"
+    note: "yuangon 骨架由 bootstrap_yuangon.py 从 manifest 反向生成（v10 线内迭代）"

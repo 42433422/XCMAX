@@ -1,0 +1,42 @@
+<view class="page order-page">
+  <!-- Tab -->
+  <view class="tabs">
+    <text class="tab {{currentTab === item.key ? 'on' : ''}}" wx:for="{{tabs}}" wx:key="key"
+          bindtap="switchTab" data-tab="{{item.key}}">{{item.label}}</text>
+  </view>
+
+  <!-- 列表 -->
+  <scroll-view scroll-y style="height: calc(100vh - 88rpx);" enhanced show-scrollbar="{{false}}"
+                refresher-enabled bindrefresherrefresh="onRefresh">
+    <view class="order-list" wx:if="{{orders.length}}">
+      <view class="ocard card" wx:for="{{orders}}" wx:key="id"
+            bindtap="goDetail" data-id="{{item.id}}">
+        <view class="oc-head">
+          <text>XCAGI 官方</text>
+          <text class="ostatus s-{{item.status}}">{{item._statusText}}</text>
+        </view>
+        <view class="oc-body">
+          <image src="/assets/product-placeholder.png" mode="aspectFill" class="o-img" />
+          <view class="o-info">
+            <text class="o-name text-ellipsis">{{item.first_item_name}}</text>
+            <text class="o-count text-hint" wx:if="{{item.item_count > 1}}">共{{item.item_count}}件</text>
+            <text class="price price-md">¥{{item.total_amount}}</text>
+          </view>
+        </view>
+        <view class="oc-foot">
+          <text class="o-time text-hint">{{item.created_at}}</text>
+          <view class="o-btns">
+            <button wx:if="{{item.status === 'pending'}}" size="mini" class="btn btn-default btn-sm" catchtap="cancelOrder" data-id="{{item.id}}">取消</button>
+            <button wx:if="{{item.status === 'pending'}}" size="mini" class="btn btn-primary btn-sm" catchtap="payOrder" data-id="{{item.id}}">支付</button>
+            <button wx:if="{{item.status === 'shipped'}}" size="mini" class="btn btn-primary btn-sm" catchtap="confirmReceive" data-id="{{item.id}}">确认收货</button>
+            <button size="mini" class="btn btn-text btn-sm" catchtap="rebuyOrder" data-id="{{item.id}}">再买一单</button>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <view class="empty" wx:if="{{!loading && !orders.length}}">
+      <text>暂无订单</text>
+    </view>
+  </scroll-view>
+</view>

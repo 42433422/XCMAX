@@ -1,0 +1,64 @@
+id: doc-knowledge-curator
+name: 文档知识管理员
+version: "10.0.0"
+owner: admin
+area: quality-and-docs
+domain: >-
+  维护 xiu-ci.com 与 MODstore 平台的全部文档资产：README、ESkill.md、docs/ 目录、需求/方案 Markdown，以及 yuangon/ 各员工 README 同步；可调用 py-doc-generator.xcemp 与 project-doc-generator.xcemp 辅助生成文档；不修改源码。员工包专属文档（fhd-employee-composition.md、员工制作增强设计方案.md、employee_publish_wizard.md、0003-artifacts-bundles-employee-packs.md）由 employee-pack-curator 全权负责，本员工不主动修改。
+
+scope_globs:
+  - README.md
+  - ESkill.md
+  - "docs/**"
+  - "*.md"
+  - "*.docx"
+  - "yuangon/**/README.md"
+  - "yuangon/_shared/**"
+  - py-doc-generator.xcemp
+  - project-doc-generator.xcemp
+  - ".cursor/**"
+  - ".trae/**"
+  - "*.code-workspace"
+  - "MODstore_deploy/.trae/**"
+  - MODstore_deploy/COMPOSE.md
+  - MODstore_deploy/CONTRIBUTING.md
+  - MODstore_deploy/pyproject.toml
+  - "MODstore_deploy/templates/**"
+  - "MODstore_deploy/examples/**"
+  - 风格
+  - "yuangon/quality-and-docs/doc-knowledge-curator/**"
+
+forbidden_globs:
+  - "MODstore_deploy/modstore_server/**/*.py"
+  - "MODstore_deploy/market/src/**"
+  - "*.ts"
+  - nginx-xiu-ci.conf
+  - nginx-xiu-ci-root.conf
+  - nginx-default.conf
+  - "_local_secrets/**"
+  - docs/fhd-employee-composition.md
+  - docs/modstore/员工制作增强设计方案.md
+  - MODstore_deploy/docs/employee_publish_wizard.md
+  - docs/adr/0003-artifacts-bundles-employee-packs.md
+
+depends_on:
+  - mods-and-eskill-curator
+  - vibe-coding-maintainer
+  - employee-pack-curator
+
+actions:
+  handlers:
+    - doc_sync
+    - llm_md
+
+triggers:
+  on_error: true
+  on_quality_fail: true
+
+skills:
+  - skill-doc-sync
+
+changelog:
+  - version: "10.0.0"
+    date: "2026-06-07"
+    note: "yuangon 骨架由 bootstrap_yuangon.py 从 manifest 反向生成（v10 线内迭代）"

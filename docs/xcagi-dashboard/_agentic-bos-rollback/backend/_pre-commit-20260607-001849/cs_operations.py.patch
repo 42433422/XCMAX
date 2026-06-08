@@ -1,0 +1,24 @@
+diff --git a/Users/a4243342/Desktop/XCMAX/FHD/../docs/xcagi-dashboard/_agentic-bos-rollback/backend/cs_operations.py.orig b/app/infrastructure/gateways/cs_operations.py
+index f418bf93..20a2b8c7 100644
+--- a/app/infrastructure/gateways/cs_operations.py
++++ b/app/infrastructure/gateways/cs_operations.py
+@@ -67,7 +67,10 @@ from app.services.wechat_passive_group_monitor import (  # noqa: F401
+ )
+ 
+ # 运营 / 对账
+-from app.services.operations_line_bridge import compute_operations_health  # noqa: F401
++from app.services.operations_line_bridge import (  # noqa: F401
++    compute_governance_summary,
++    compute_operations_health,
++)
+ from app.services.contract_expiry_scheduler import run_contract_expiry_scan  # noqa: F401
+ from app.services.reconciliation_scheduler import (  # noqa: F401
+     get_reconciliation_status,
+@@ -127,6 +130,7 @@ __all__ = [
+     "reset_passive_watch",
+     "save_passive_poll_config",
+     "compute_operations_health",
++    "compute_governance_summary",
+     "run_contract_expiry_scan",
+     "get_reconciliation_status",
+     "run_reconciliation_full_cycle",

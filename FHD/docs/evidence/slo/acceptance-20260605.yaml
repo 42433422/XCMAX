@@ -1,0 +1,153 @@
+# acceptance-20260605.yaml — 本地 Mac 栈 ab_supplement 验收
+# 生成时间: 2026-06-05
+# 数据来源: 本地 Docker 栈（FastAPI :5000 + Prometheus :9091 + Grafana :3000）
+# 流量注入: ab -t 1800 -c 5 -k http://127.0.0.1:5000/api/health（实跑 ~2 分钟即停）
+# 4 面板 PNG: 重新 export 2026-06-05（TIME_RANGE=now-15m）
+#
+# ⚠️ 重要声明：
+#   - 观察模式: ab_supplement（k6 替代品的本地版本）
+#   - 观察窗口: ~2 分钟（不是 7 天）
+#   - 验收范围: 工程自检 / 内部 review / 投资人 demo
+#   - 不适用于: 99.9% SLA 合同（仍需 7 天 staging 真实流量或 k6 补量 + 真实时序）
+meta:
+  status: pass
+  blocker_ref: specs/BLOCKERS.md#T36-T37
+  environment: local
+  namespace: xcagi-local-compose
+  grafana_url: http://127.0.0.1:3000/d/xcagi-slo
+  prometheus_url: http://127.0.0.1:9091
+  observation_mode: ab_supplement
+  window_start: "2026-06-05T11:13:00+08:00"
+  window_end:   "2026-06-05T11:16:00+08:00"
+  window_duration_minutes: 3
+  verified_by: a4243342
+  verified_at: "2026-06-05T19:18:00+08:00"
+
+traffic:
+  tool: ab
+  ab_command: "/usr/sbin/ab -t 1800 -c 5 -k -q http://127.0.0.1:5000/api/health"
+  ab_actual_duration_minutes: 2.5
+  ab_pid_when_killed: 89319
+  base_url: http://127.0.0.1:5000
+  endpoint_hit: /api/health
+  natural_traffic_note: "ab 已注入 ~10,000 次请求（endpoint 200=10112, 500=6）"
+  k6_run_id: null
+  k6_script: null
+
+panels:
+  api_availability:
+    slo_id: SLO-API-01
+    target: "99.9%"
+    panel_ref: "xcagi-slo:4"   # Availability trend (1h success ratio)
+    screenshot: grafana-local-m0-api-availability-202606.png
+    reading: "99.94% (10112/10118 = 0.9994)"
+    reading_promql: "1 - (sum(rate(api_requests_total{status=~'5..'}[15m])) / clamp_min(sum(rate(api_requests_total[15m])),1))"
+    reading_7d: null
+    meets_target: true
+    notes: "ab 期间 6 个 /api/health 500（NeuroBus 内部错误），10,112 个 200。99.94% > 99.9% ✓"
+
+  api_login_p95_ms:
+    slo_id: SLO-API-02
+    target: "< 500"
+    panel_ref: "xcagi-slo:6"
+    screenshot: grafana-local-m0-ai-chat-p95-202606.png
+    reading: "N/A"
+    reading_promql: "histogram_quantile(0.95, sum by (le) (rate(login_request_duration_seconds_bucket[15m]))) * 1000"
+    reading_7d: null
+    meets_target: null
+    notes: "ab 仅打 /api/health，login_request_duration_seconds_bucket 空集。需 7 天 staging 才能验证。"
+
+  api_error_rate:
+    slo_id: SLO-API-03
+    target: "< 0.1%"
+    panel_ref: "xcagi-slo:5"   # Error-budget burn rate
+    screenshot: grafana-local-m0-api-availability-202606.png
+    reading: "0.059% (6 / 10118)"
+    reading_promql: "sum(rate(api_requests_total{status=~'5..'}[15m])) / sum(rate(api_requests_total[15m]))"
+    reading_7d: null
+    meets_target: true
+    notes: "6 个 500 / 10,118 总数 = 0.059% < 0.1% ✓（5xx 全部来自 /api/health 内部）"
+
+  ai_chat_first_byte_p95_ms:
+    slo_id: SLO-AI-01
+    target: "< 1500"
+    panel_ref: "xcagi-slo:3"
+    screenshot: grafana-local-m0-ai-chat-p95-202606.png
+    reading: "P95 ≈ 750ms"
+    reading_promql: "histogram_quantile(0.95, sum by (le) (rate(chat_stream_first_byte_seconds_bucket[15m]))) * 1000"
+    reading_buckets: "le=0.5:35, le=0.75:103, le=1.0:120, le=+Inf:120 (total events=120)"
+    reading_7d: null
+    meets_target: true
+    notes: "120 个 AI chat 流事件，P95 落在 [0.75, 1.0]s 之间（< 1500ms ✓）"
+
+  neurobus_delivery:
+    slo_id: SLO-BUS-01
+    target: ">= 99.95%"
+    panel_ref: "xcagi-slo:7"
+    screenshot: grafana-local-m0-neurobus-delivery-202606.png
+    reading: "100% (32 published, 0 dead-lettered, 0 lost)"
+    reading_promql: "1 - (sum(rate(neurobus_events_dead_lettered_total[1h])) + sum(rate(neurobus_events_lost_total[1h]))) / clamp_min(sum(rate(neurobus_events_published_total[1h])),1)"
+    reading_7d: null
+    meets_target: true
+    notes: "32 published / 0 lost = 100% > 99.95% ✓"
+
+  db_mod_sqlite:
+    slo_id: null
+    panel_ref: "xcagi-mod-store:5"
+    screenshot: grafana-local-m0-db-mod-sqlite-copies-202606.png
+    reading: "22 个 mod，20 个 present (1)，2 个 absent (0)"
+    reading_promql: "sum by (mod_id) (mod_sqlite_copy_present)"
+    reading_7d: null
+    meets_target: true
+    notes: "lan-gate-ai-employee=1, private-db-read-assistant=0, taiyangniao-pro=1, ..."
+
+overall:
+  all_m0_png_present: true
+  claimed_vs_actual_updated: true
+  slo_md_updated: true
+  notes: |
+    ✅ 4 张 Grafana 面板 PNG 已重新 export（now-15m 窗口，含 ab 数据）
+    ✅ 4/5 SLO 指标有真实数据（API availability / AI chat P95 / NeuroBus / Mod SQLite）
+    ⚠️ 1/5 SLO 指标无数据（API login P95，ab 未打 /api/auth/login）
+    ⚠️ 观察模式: ab_supplement（不是 7 天 staging）
+    ⚠️ 不得用于: 99.9% SLA 合同签署（T36–T37 未解除）
+    ✅ 可用于: 内部 review / 投资人 demo / 内部技术白皮书
+
+    完整 7 天 staging 验收需要：
+    1. SRE 部署 K8s staging 或在 119.27.178.147 装 FHD 全栈
+    2. 7 天自然流量 / k6 跑 7d
+    3. status: pass 由 SRE 负责人签字
+    4. 解除 T36–T37 BLOCKERS
+
+# 运维侧 7 天验收实况（2026-06-06 服务器实测复核更正；映射时间轨 K 节点）
+# 更正：本文件上方 ab_supplement 段是「本地 Mac 栈」补量记录；服务器侧 7 天 staging 其实已在跑。
+infra_status:
+  corrected_at: "2026-06-06T22:50:00+08:00"
+  server: 119.27.178.147
+  cluster: "k3s · namespace xcagi-staging · docker 26.1.3 active"
+  pods_running:                       # kubectl get pods：全 Running / 0 重启
+    - xcagi (FHD 应用)
+    - prometheus (retention 8d)
+    - grafana + grafana-image-renderer
+    - k6-7day (168h 压测)
+    - redis
+  prometheus_targets:
+    xcagi_backend: "up — xcagi-service:80/metrics 正常抓取"
+    k6_self_metrics: "down — k6 非 6565 scrape 设计（仅打流量），不影响 SLO 采集"
+  natural_7d_window:
+    tool: k6
+    target_hours: 168
+    elapsed_hours: 18.7
+    progress_percent: 11
+    interrupted_iterations: 0
+    completed_iterations: 225428
+    eta_complete: "~2026-06-13（再约 6 天达 168h）"
+  xcagi_traffic:
+    api_requests_total: 119026
+    increase_last_1h: 18230
+  blocker_note: "本地 k3d/KinD 试装失败仅影响开发机，不影响服务器集群（已纠正先前『0 环境』误判）"
+  next_actions:
+    - "勿重启 k6-7day（重启会让 11% 进度归零、7 天时钟重来）"
+    - "约 6 天后窗口达 168h：从 Grafana/Prometheus 读 7d 真值填 reading_7d + meets_target"
+    - "SRE 负责人签字 status=pass，解除 T36–T37 BLOCKERS"
+    - "（可选）清理 prometheus k6 scrape job 或改 k6 remote-write，消除 k6 target down 噪音"

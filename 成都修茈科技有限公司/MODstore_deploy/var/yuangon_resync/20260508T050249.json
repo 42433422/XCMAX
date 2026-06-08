@@ -1,0 +1,25 @@
+{
+  "pkg_ids": [
+    "dbops-engineer",
+    "intake-dispatcher",
+    "task-router-officer",
+    "change-request-auditor",
+    "push-update-context-officer",
+    "workbench-ux-stylist",
+    "market-frontend-dev",
+    "site-content-editor",
+    "deploy-release-officer",
+    "security-secrets-guard",
+    "log-monitor-incident",
+    "nginx-config-engineer",
+    "modstore-backend-api",
+    "payment-billing-reconciler",
+    "mods-and-eskill-curator",
+    "vibe-coding-maintainer",
+    "doc-knowledge-curator",
+    "daily-orchestrator",
+    "retention-officer"
+  ],
+  "rc": 0,
+  "rc_routing": 0
+}

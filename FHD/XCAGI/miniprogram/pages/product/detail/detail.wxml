@@ -1,0 +1,51 @@
+<view class="page detail-page">
+  <swiper class="swiper" indicator-dots indicator-color="rgba(0,0,0,0.12)" indicator-active-color="#0052d9" circular>
+    <swiper-item wx:for="{{[1,2,3]}}" wx:key="*this">
+      <view class="swiper-inner">
+        <image src="/assets/product-placeholder.png" mode="aspectFit" class="swiper-img" />
+      </view>
+    </swiper-item>
+  </swiper>
+
+  <scroll-view scroll-y class="detail-body">
+    <!-- 价格 -->
+    <view class="price-block">
+      <text class="price price-lg">¥{{product.price}}</text>
+      <text class="p-unit">/{{product.unit || '件'}}</text>
+      <view class="tags-row">
+        <text class="tag tag-success">有货</text>
+        <text class="tag tag-primary">正品</text>
+      </view>
+    </view>
+
+    <!-- 信息 -->
+    <view class="card info-card">
+      <text class="info-title">{{product.name}}</text>
+      <view class="info-list">
+        <view class="info-line"><text class="il-label">型号</text><text>{{product.model_number || '-'}}</text></view>
+        <view class="info-line"><text class="il-label">规格</text><text>{{product.specification || '-'}}</text></view>
+        <view class="info-line"><text class="il-label">品牌</text><text>{{product.brand || 'XCAGI'}}</text></view>
+      </view>
+    </view>
+
+    <!-- 介绍 -->
+    <view class="card">
+      <text class="sec-title">商品介绍</text>
+      <rich-text nodes="{{product.description || '暂无详细介绍'}}" />
+    </view>
+
+    <view style="height: 140rpx;"></view>
+  </scroll-view>
+
+  <!-- 底部栏 -->
+  <view class="bottom-bar safe-bottom">
+    <view class="b-left">
+      <view class="b-icon-btn" bindtap="goCart"><text>🛒</text><text>购物车</text><view class="badge" wx:if="{{cartCount > 0}}">{{cartCount > 99 ? '99+' : cartCount}}</view></view>
+      <view class="b-icon-btn {{isFavorited ? 'active' : ''}}" bindtap="toggleFavorite"><text>{{isFavorited ? '★' : '☆'}}</text><text>{{isFavorited ? '已收藏' : '收藏'}}</text></view>
+    </view>
+    <view class="b-right">
+      <button class="btn btn-default btn-sm" catchtap="addToCart">加入购物车</button>
+      <button class="btn btn-primary btn-sm" catchtap="buyNow">立即购买</button>
+    </view>
+  </view>
+</view>
