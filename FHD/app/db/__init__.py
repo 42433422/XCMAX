@@ -4,7 +4,7 @@ import os
 import threading
 from pathlib import Path
 
-from sqlalchemy import create_engine, event, pool
+from sqlalchemy import create_engine, event, inspection, pool
 from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.orm import scoped_session, sessionmaker
 from sqlalchemy.pool import NullPool
@@ -285,6 +285,12 @@ class _EngineProxy:
 
     def __getattr__(self, name):
         return getattr(_get_engine(), name)
+
+
+@inspection._inspects(_EngineProxy)
+def _inspect_engine_proxy(_proxy: _EngineProxy):
+    """让 sqlalchemy.inspect(engine) 在 lazy 代理上可用（lifespan / init_db 启动路径）。"""
+    return inspection.inspect(_get_engine())
 
 
 engine = _EngineProxy()

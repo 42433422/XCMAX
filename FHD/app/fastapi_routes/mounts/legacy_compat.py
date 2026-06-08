@@ -185,10 +185,13 @@ def register_legacy_compat_routes(app: FastAPI) -> None:
     app.include_router(sales_contract_router)
     logger.info("Registered sales_contract (/api/sales-contract/*)")
 
-    from app.fastapi_routes.contract_lifecycle_api import router as contract_lifecycle_router
+    try:
+        from app.fastapi_routes.contract_lifecycle_api import router as contract_lifecycle_router
 
-    app.include_router(contract_lifecycle_router)
-    logger.info("Registered contract_lifecycle (/api/contract-lifecycle/*)")
+        app.include_router(contract_lifecycle_router)
+        logger.info("Registered contract_lifecycle (/api/contract-lifecycle/*)")
+    except ImportError as exc:
+        logger.warning("contract_lifecycle routes skipped: %s", exc)
 
     from app.fastapi_routes.operations_line_api import router as operations_line_router
 

@@ -171,7 +171,7 @@ def _initialize_databases_sync(app: FastAPI):
                 created = ensure_postgres_per_mod_databases(mod_ids=mod_ids, migrate_new=True)
                 if created:
                     logger.info("已自动创建并迁移 Mod 分库: %s", ", ".join(created))
-            except OPERATIONAL_ERRORS as mod_pg_exc:
+            except Exception as mod_pg_exc:
                 logger.warning("PostgreSQL Mod 分库自检跳过: %s", mod_pg_exc)
 
         try:
