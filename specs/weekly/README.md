@@ -7,7 +7,7 @@
 
 - 文件：`YYYY-Www.md`（ISO 周，例如 `2026-W23.md`）
 - 一周一份；周末或周一补「完成 / 证据」
-- **提交位置**：`XCMAX/` 根无 `.git`；`specs/weekly/` 与仓根 `Makefile` 等需备份或在上层父仓提交；产品代码与 e2e 证据在 [`FHD/`](../../FHD/) 提交
+- **提交位置**：在 **`XCMAX/` 仓根** commit / push（[`42433422/XCMAX`](https://github.com/42433422/XCMAX)）；`specs/weekly/`、`FHD/`、`Makefile` 等同仓提交。CI 见 [`docs/CI_SSOT.md`](../../docs/CI_SSOT.md)。
 
 ## 模板来源
 

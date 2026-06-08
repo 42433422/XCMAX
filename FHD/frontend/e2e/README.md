@@ -39,4 +39,4 @@ ln -sfn .nm-e2e FHD/frontend/node_modules
 
 ## CI
 
-仓根 [`.github/workflows/e2e.yml`](../../../.github/workflows/e2e.yml) → [`e2e-playwright-reusable.yml`](../.github/workflows/e2e-playwright-reusable.yml)。
+仓根 [`.github/workflows/e2e.yml`](../../../.github/workflows/e2e.yml) → [`e2e-playwright-reusable.yml`](../../../.github/workflows/e2e-playwright-reusable.yml)。

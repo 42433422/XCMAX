@@ -6,6 +6,11 @@
 
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
+### 仓根 SSOT（2026-06-08）
+- Git 起源迁至 [`42433422/XCMAX`](https://github.com/42433422/XCMAX) 根仓；`FHD/`、`MODstore_deploy/` 为子路径
+- CI 调度统一在根 `.github/workflows/`（见 [`docs/CI_SSOT.md`](../../docs/CI_SSOT.md)）
+- `WechatDecrypt` 去 gitlink，纳入普通文件；子仓 `.git` 备份于 `~/XCMAX-archives/nested-git-backup-20260608/`
+
 ### 行业引导 / Mod SSOT（Phase 2）
 - 行业包中性 mod id：`attendance-industry` / `coating-industry`（`industry_baseline.json` 仅改 `mod_id`）
 - 客户品牌迁入 `config/customer_delivery.json`；legacy 别名见 `config/industry_mod_aliases.json`

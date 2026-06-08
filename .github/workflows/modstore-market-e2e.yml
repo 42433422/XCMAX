@@ -1,0 +1,51 @@
+# CI SSOT: generated from MODstore_deploy/.github/workflows/market-e2e.yml — edit root copy only.
+name: Market E2E (Playwright)
+
+# P1-4 · market 表层 Playwright E2E 接入 PR（日更 PR 表层冒烟）
+on:
+  push:
+    paths:
+      - "成都修茈科技有限公司/MODstore_deploy/market/**"
+      - ".github/workflows/market-e2e.yml"
+  pull_request:
+    paths:
+      - "成都修茈科技有限公司/MODstore_deploy/market/**"
+      - ".github/workflows/market-e2e.yml"
+
+
+defaults:
+  run:
+    working-directory: 成都修茈科技有限公司/MODstore_deploy
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: market
+    env:
+      CI: "true"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: market/package-lock.json
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npm run test:e2e:install
+
+      - name: Run Playwright E2E
+        run: npm run test:e2e
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: market-playwright-report
+          path: market/playwright-report/
+          retention-days: 7

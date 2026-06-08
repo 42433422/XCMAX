@@ -1,0 +1,34 @@
+# CI SSOT: generated from FHD/.github/workflows/modstore-tests.yml — edit root copy only.
+name: MODstore tests
+
+on:
+  push:
+    paths:
+      - "FHD/MODstore/**"
+      - ".github/workflows/modstore-tests.yml"
+  pull_request:
+    paths:
+      - "FHD/MODstore/**"
+      - ".github/workflows/modstore-tests.yml"
+
+
+defaults:
+  run:
+    working-directory: FHD
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: MODstore
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install
+        run: pip install -e ".[web,dev]"
+      - name: Test
+        run: pytest tests -q
+      - name: Coverage
+        run: pytest tests --cov=modman --cov=modstore_server --cov-report=term-missing -q --cov-fail-under=40

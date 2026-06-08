@@ -1,0 +1,79 @@
+# CI SSOT: generated from MODstore_deploy/.github/workflows/build-desktop.yml — edit root copy only.
+name: Build Desktop (clean v10)
+
+# 干净桌面构建链（替代损坏的 FHD 链）：electron-builder 出真 v10 安装包。
+# v10 锁：版本恒 10.0.0；产物名对齐下载 SSOT（XCAGI-Personal-Setup-10.0.0-x64.exe）。
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (v10 锁，恒 10.0.0)"
+        required: false
+        default: "10.0.0"
+
+permissions:
+  contents: read
+
+
+defaults:
+  run:
+    working-directory: 成都修茈科技有限公司/MODstore_deploy
+jobs:
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: desktop-shell
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install deps
+        run: npm install --no-audit --no-fund
+      - name: Build Windows installer (NSIS · x64)
+        run: npx --no-install electron-builder --win --x64 --publish never
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      - name: List artifacts
+        shell: bash
+        run: ls -la dist/ || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: xcagi-desktop-win
+          path: |
+            desktop-shell/dist/*.exe
+            desktop-shell/dist/latest.yml
+            desktop-shell/dist/*.blockmap
+          if-no-files-found: error
+
+  # 部署到服务器（v10 安装包 → nginx /xcagi-v10.0.0/personal/ 实际目录）
+  deploy:
+    needs: windows
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: xcagi-desktop-win
+          path: dist
+      - name: Setup SSH (server deploy key)
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.SERVER_SSH_KEY }}" > ~/.ssh/id_ci
+          chmod 600 ~/.ssh/id_ci
+          ssh-keyscan -H 119.27.178.147 >> ~/.ssh/known_hosts 2>/dev/null || true
+      - name: Upload v10 installer to server (atomic)
+        run: |
+          set -e
+          ls -la dist/
+          DEST=/var/www/update/releases/stable/personal
+          SSH="ssh -i ~/.ssh/id_ci -o StrictHostKeyChecking=no -o ServerAliveInterval=30"
+          EXE=$(ls dist/*.exe | head -1); BASE=$(basename "$EXE")
+          # 原子上传：先传 .part，校验大小后 mv 到正式名，避免传输中被下载到半截文件
+          scp -i ~/.ssh/id_ci -o StrictHostKeyChecking=no -o ServerAliveInterval=30 "$EXE" "root@119.27.178.147:$DEST/$BASE.part"
+          LOCAL_SZ=$(wc -c < "$EXE")
+          $SSH root@119.27.178.147 "REMOTE_SZ=\$(wc -c < '$DEST/$BASE.part'); if [ \"\$REMOTE_SZ\" = '$LOCAL_SZ' ]; then mv -f '$DEST/$BASE.part' '$DEST/$BASE'; echo OK_MOVED; else echo SIZE_MISMATCH \$REMOTE_SZ vs $LOCAL_SZ; exit 1; fi"
+          if [ -f dist/latest.yml ]; then scp -i ~/.ssh/id_ci -o StrictHostKeyChecking=no dist/latest.yml "root@119.27.178.147:$DEST/"; fi
+          if ls dist/*.blockmap >/dev/null 2>&1; then scp -i ~/.ssh/id_ci -o StrictHostKeyChecking=no dist/*.blockmap "root@119.27.178.147:$DEST/" || true; fi
+          $SSH root@119.27.178.147 "ls -lh $DEST/"

@@ -1,5 +1,24 @@
 # Git 工作树恢复指南（迁移/重组期）
 
+> **2026-06-08 更新**：Git SSOT 已迁至 **`XCMAX/` 仓根**（[`42433422/XCMAX`](https://github.com/42433422/XCMAX)）。`FHD/` 不再含独立 `.git`；下文 Windows / 子模块段落为**历史**参考。
+
+## 当前（根仓 SSOT）
+
+```bash
+cd /path/to/XCMAX   # 或 Desktop/XCMAX
+git rev-parse --show-toplevel   # 应输出 XCMAX 根
+git status -sb
+git remote -v                   # origin → github.com/42433422/XCMAX.git
+```
+
+- 日常 commit / push：**仅在仓根**执行。
+- 旧子仓历史：本机 `~/XCMAX-archives/nested-git-backup-20260608/`（`FHD.git`、`MODstore_deploy.git` 等）。
+- CI：见 [`docs/CI_SSOT.md`](../../../docs/CI_SSOT.md)（根 `.github/workflows/`）。
+
+---
+
+## 历史：FHD 独立仓 / worktree（迁移前）
+
 ## 症状
 
 - `git status` 报：`fatal: not a git repository: E:/FHD/.git/worktrees/...`
@@ -62,5 +81,5 @@ git status -sb
 
 ## 与 CI 的关系
 
-GitHub remote：`https://github.com/42433422/ai-excel-helper.git`（见 `.git/config`）。  
-推送前在本地跑：`CI_STABLE_ONLY=1` pytest + `npm run build:generic`。
+GitHub remote（当前 SSOT）：`https://github.com/42433422/XCMAX.git`。  
+推送前在本地跑：`cd FHD && CI_STABLE_ONLY=1 pytest` + `cd frontend && npm run build:generic`。

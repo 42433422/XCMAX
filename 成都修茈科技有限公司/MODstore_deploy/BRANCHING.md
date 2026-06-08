@@ -2,13 +2,16 @@
 
 > 目标：让「流程1（时间轨 · 日根线）」每天**可靠、可回滚、不爆分支**。全产品线 **v10 锁**，版本锚点恒 `10.0.0`。
 
-## 仓库边界
+## 仓库边界（2026-06-08 起 · XCMAX 根仓 SSOT）
 
-| 仓库 | 角色 | 远端 |
+| 路径 | 角色 | 远端 |
 |---|---|---|
-| **xcagi-modstore**（本仓） | 姊妹栈 MODstore 部署源码 · 日更编排 + `cr_git_pipeline` 实际操作仓 | `github.com/42433422/xcagi-modstore`（private） |
-| **FHD**（`../../FHD`） | XCAGI 主产品（后端/前端/桌面/移动/CI） | `github.com/42433422/ai-excel-helper` |
-| 服务器 `/root/modstore-git` | 生产部署镜像 | 与本仓对齐 |
+| **XCMAX/**（仓根） | FHD + MODstore + specs 单仓起源 | [`github.com/42433422/XCMAX`](https://github.com/42433422/XCMAX)（`main`） |
+| **MODstore_deploy/**（本目录） | 姊妹栈 MODstore 部署源码 | 同上（子路径 `成都修茈科技有限公司/MODstore_deploy/`） |
+| **FHD/**（`../../FHD`） | XCAGI 主产品 | 同上（子路径 `FHD/`） |
+| 服务器 `/root/modstore-git` | 生产部署镜像 | 与根仓 `main` 对齐 |
+
+> 历史独立仓 **xcagi-modstore** / **ai-excel-helper** 已退役；旧 `.git` 备份：`~/XCMAX-archives/nested-git-backup-20260608/`。CI 见 [`docs/CI_SSOT.md`](../../../docs/CI_SSOT.md)。
 
 > 密钥零入库：`.env*` / `*.local` / `*.pem` / `*.key` / `_local_secrets/` 全部 `.gitignore`，只提交 `*.example` 模板。
 

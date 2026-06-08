@@ -16,7 +16,7 @@
 [Vue](https://vuejs.org/)
 [Platform](https://www.microsoft.com/windows/)
 [Code style: black](https://github.com/psf/black)
-[Contributions welcome](https://github.com/42433422/ai-excel-helper/blob/master/.github/CONTRIBUTING.md)
+[Contributions welcome](https://github.com/42433422/XCMAX/blob/main/FHD/.github/CONTRIBUTING.md)
 
 ## 🌟 项目简介
 
@@ -26,7 +26,7 @@
 > 🎯 **从「工具」到「员工」**: 侧重可编排的用例与可替换的基础设施实现，而不是把业务规则堆在路由里。  
 > 🧠 **Neuro-DDD 在本仓库的含义**: **DDD 分层**（`application` / `domain` / `infrastructure`）+ **AI 对话与工作流的用例编排**；HTTP 层尽量薄，装配集中在 Composition Root（`app/bootstrap.py`）。**神经域 + NeuroBus 大图及组件摘录**与 `**[XCAGI/README.md](XCAGI/README.md)`** 同构展示；**以源码为准**。
 
-**仓库**: 默认以 **[ai-excel-helper](https://github.com/42433422/ai-excel-helper)** 为一体化交付树（与历史 **xcagi** 发行说明互通，克隆地址见下文）。
+**仓库**: 源码位于 **[XCMAX](https://github.com/42433422/XCMAX)**  monorepo 的 **`FHD/`** 子树（与历史 **ai-excel-helper** / **xcagi** 发行说明互通，克隆地址见下文）。
 
 **快速链接**:
 
@@ -106,15 +106,15 @@ rg -n --hidden -g '!node_modules' -g '!.archive' -g '!XCAGI/node_modules' \
 rg -n 'version\s*=\s*"[0-9]' app/fastapi_app/factory.py app/infrastructure/mods/manifest.py
 ```
 
-### Git 与 GitHub 展示仓库（README 扩展说明）
+### Git 与 GitHub（XCMAX 根仓 SSOT）
 
 | 项目 | 说明 |
 |------|------|
-| **一体化展示仓库** | **[ai-excel-helper](https://github.com/42433422/ai-excel-helper)**，**主库默认分支为 `master`**，用于公开展示与协作克隆（`git clone` 后默认检出 `master`）。 |
-| **Git 标签** | 附注标签 **`v10.0.0`** 指向与上表 **语义化 `10.0.0`** 一致的提交；在 **`master`** 上执行 `git describe --tags` 应得到 **`v10.0.0`**（[标签页](https://github.com/42433422/ai-excel-helper/releases/tag/v10.0.0)）。 |
-| **与 xcagi 发行说明** | 历史与发行说明仍可与 **[xcagi/releases](https://github.com/42433422/xcagi/releases)** 对照；本仓库 `CHANGELOG` 为一体化树的主变更记录。 |
-| **展示克隆体积控制** | 向 **`origin/master`** 推送时采用**在 `master` 上增量提交**的方式，避免附带历史中的超大二进制（如旧快照 zip）；**`QClaw/resources/app.asar` 等运行时大包不纳入该分支**，本地完整体验需自行构建或取发行物。 |
-| **CI 触发** | 推送符合 **`v8.*`** 模式的标签会触发 `.github/workflows/` 中桌面/Web 相关流水线；若仅浏览源码、不需要 CI，请避免误推此类标签或按需调整 workflow。 |
+| **SSOT 仓库** | **[XCMAX](https://github.com/42433422/XCMAX)**，默认分支 **`main`**；`git clone` 后产品代码在 **`FHD/`** 子目录。 |
+| **历史仓库** | **[ai-excel-helper](https://github.com/42433422/ai-excel-helper)** / **[XCMAX-roadmap](https://github.com/42433422/XCMAX-roadmap)** 已归档；旧 commit 备份于本机 `~/XCMAX-archives/nested-git-backup-20260608/`。 |
+| **Git 标签** | 附注标签 **`v10.0.0`** 与语义化 **`10.0.0`** 对齐（发版时打在根仓 `main`）。 |
+| **与 xcagi 发行说明** | 历史仍可与 **[xcagi/releases](https://github.com/42433422/xcagi/releases)** 对照；[`CHANGELOG.md`](CHANGELOG.md) 为主变更记录。 |
+| **CI 入口** | 仓根 [`.github/workflows/`](../../.github/workflows/)（见 [`docs/CI_SSOT.md`](../../docs/CI_SSOT.md)），**非** `FHD/.github/workflows/`。 |
 
 ---
 
@@ -430,8 +430,8 @@ NeuroBus：生产级异步事件总线；上表为可选 publish/分发增强。
 ### 克隆本仓库（一体化树）
 
 ```bash
-git clone https://github.com/42433422/ai-excel-helper.git
-cd ai-excel-helper
+git clone https://github.com/42433422/XCMAX.git
+cd XCMAX/FHD
 ```
 
 （历史文档中若出现 `xcagi` 仓库名，多为同源发行说明；**以你实际推送的远程为准**。）
@@ -623,15 +623,15 @@ cd XCAGI && python run.py
 
 ## 🤝 贡献指南
 
-1. Fork **[ai-excel-helper](https://github.com/42433422/ai-excel-helper)**
+1. Fork **[XCMAX](https://github.com/42433422/XCMAX)**
 2. 新建分支 `feature/...`
 3. 提交并推送后开启 Pull Request
 
 开发环境示例：
 
 ```bash
-git clone https://github.com/42433422/ai-excel-helper.git
-cd ai-excel-helper
+git clone https://github.com/42433422/XCMAX.git
+cd XCMAX/FHD
 pip install -r requirements.txt
 pytest
 ```
@@ -676,7 +676,7 @@ pytest
 ## 📬 联系方式
 
 - **作者**: [@42433422](https://github.com/42433422)  
-- **Issues**: [ai-excel-helper Issues](https://github.com/42433422/ai-excel-helper/issues)
+- **Issues**: [XCMAX Issues](https://github.com/42433422/XCMAX/issues)
 
 ---
 
