@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import secrets
 from typing import Any
@@ -82,7 +83,7 @@ async def ensure_local_user_after_market(
         ensure_runtime_auth_bootstrap(swallow_errors=True)
         with get_db() as db:
             exists = db.query(User).filter(User.username == username).first()
-    except Exception as db_exc:
+    except OPERATIONAL_ERRORS as db_exc:
         logger.exception("enterprise login user lookup failed")
         return None, JSONResponse(
             {
@@ -163,7 +164,7 @@ def bind_tenant_for_login(
             out["tenant_name"] = name
         elif company_brand:
             out["tenant_name"] = company_brand
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.exception("bind_tenant_for_login failed user_id=%s", user_id)
     return out
 
@@ -295,7 +296,7 @@ async def finalize_enterprise_login(
                 "is_enterprise": bool(market_result.get("is_enterprise")),
                 "is_market_admin": bool(market_result.get("is_market_admin")),
             }
-    except Exception as exc:
+    except OPERATIONAL_ERRORS as exc:
         result["market_account"] = {
             "success": False,
             "message": f"市场账号自动同步失败：{exc}",
@@ -327,7 +328,7 @@ async def finalize_enterprise_login(
                 cached = get_cached_entitled_client_mod_ids()
                 if cached:
                     result["entitled_mod_ids"] = sorted(cached)
-        except Exception:
+        except OPERATIONAL_ERRORS:
             logger.exception("account_mod_binding fallback on login failed")
 
     return result

@@ -3,6 +3,7 @@
 为 AI生态提供文件解析、统计分析和图表数据生成服务
 """
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import uuid
 from pathlib import Path
@@ -38,7 +39,7 @@ class DataAnalysisService(NeuroEventPublisherMixin):
                 "download_url": f"/api/ai/analyze/export/{uuid.uuid4().hex[:12]}",
             }
             return result
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             return {"success": False, "message": f"分析失败: {str(e)}"}
 
     def _load_file(self, file_path: str) -> pd.DataFrame | None:
@@ -58,7 +59,7 @@ class DataAnalysisService(NeuroEventPublisherMixin):
                 return pd.read_csv(file_path, sep="\t")
             else:
                 return None
-        except Exception:
+        except OPERATIONAL_ERRORS:
             return None
 
     def _generate_statistics(self, df: pd.DataFrame) -> dict:
@@ -128,7 +129,7 @@ class DataAnalysisService(NeuroEventPublisherMixin):
             df = pd.DataFrame({"分析结果": ["导出成功"]})
             df.to_excel(output_path, index=False)
             return True
-        except Exception:
+        except OPERATIONAL_ERRORS:
             return False
 
 

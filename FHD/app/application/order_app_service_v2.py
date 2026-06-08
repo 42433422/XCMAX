@@ -10,6 +10,7 @@ order_app_service V2 - 事件驱动版本
 生成时间: 自动生成
 """
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
@@ -61,7 +62,7 @@ class OrderAppServiceV2:
             )
             self._bus.publish(event)
             return event
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"[OrderAppServiceV2] 发布事件失败: {e}")
             return None
 
@@ -108,7 +109,7 @@ class OrderAppServiceV2:
                 "mode": "event_driven",
             }
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"[OrderAppServiceV2] 提交订单失败: {e}")
             return {"success": False, "message": str(e), "error": str(e)}
 
@@ -150,7 +151,7 @@ class OrderAppServiceV2:
                 "mode": "event_driven",
             }
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"[OrderAppServiceV2] 确认订单失败: {e}")
             return {"success": False, "message": str(e), "error": str(e)}
 
@@ -201,7 +202,7 @@ class OrderAppServiceV2:
                 "mode": "event_driven",
             }
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"[OrderAppServiceV2] 支付订单失败: {e}")
             return {"success": False, "message": str(e), "error": str(e)}
 
@@ -253,7 +254,7 @@ class OrderAppServiceV2:
                 "mode": "event_driven",
             }
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"[OrderAppServiceV2] 订单发货失败: {e}")
             return {"success": False, "message": str(e), "error": str(e)}
 
@@ -294,7 +295,7 @@ class OrderAppServiceV2:
                 "mode": "event_driven",
             }
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"[OrderAppServiceV2] 完成订单失败: {e}")
             return {"success": False, "message": str(e), "error": str(e)}
 
@@ -338,7 +339,7 @@ class OrderAppServiceV2:
                 "mode": "event_driven",
             }
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"[OrderAppServiceV2] 取消订单失败: {e}")
             return {"success": False, "message": str(e), "error": str(e)}
 
@@ -388,7 +389,7 @@ class OrderAppServiceV2:
                 "mode": "event_driven",
             }
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"[OrderAppServiceV2] 订单退款失败: {e}")
             return {"success": False, "message": str(e), "error": str(e)}
 
@@ -430,7 +431,7 @@ class OrderAppServiceV2:
         except TypeError as e:
             logger.error(f"[OrderAppServiceV2] 命令参数错误: {e}")
             return {"success": False, "message": f"命令参数错误: {e}", "command": command}
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"[OrderAppServiceV2] 执行命令失败: {command}")
             return {"success": False, "message": f"执行命令失败: {str(e)}", "command": command}
 

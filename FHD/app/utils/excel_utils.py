@@ -1,5 +1,6 @@
 """Excel 处理工具函数模块 — 读写、合并单元格处理等。"""
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 from collections.abc import Iterable
 
@@ -75,9 +76,9 @@ def merged_cell_value(ws, row: int, col: int) -> Any:
                     min_col, min_row, max_col, max_row = range_boundaries(rng)
                     if min_row <= row <= max_row and min_col <= col <= max_col:
                         return ws.cell(row=min_row, column=min_col).value
-            except Exception:
+            except OPERATIONAL_ERRORS:
                 continue
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.debug("suppressed exception", exc_info=True)
 
     return ws.cell(row=row, column=col).value

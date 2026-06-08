@@ -4,6 +4,7 @@
 提供从 Excel 提取的数据导入到数据库的服务。
 """
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 from datetime import datetime
 from typing import Any
@@ -214,7 +215,7 @@ class ProductImportService(NeuroEventPublisherMixin):
                         )
                         db.add(product)
                         result["imported"] += 1
-                    except Exception as e:
+                    except OPERATIONAL_ERRORS as e:
                         logger.error(f"导入产品失败：{e}")
                         result["failed"] += 1
                         result["details"]["failed_items"].append({"data": row, "error": str(e)})
@@ -225,7 +226,7 @@ class ProductImportService(NeuroEventPublisherMixin):
                 from app.infrastructure.mods.hooks import trigger
 
                 trigger("product.imported", count=result["imported"], products=data)
-            except Exception as hook_err:
+            except OPERATIONAL_ERRORS as hook_err:
                 logger.warning(f"Hook trigger failed: {hook_err}")
 
             logger.info(
@@ -233,7 +234,7 @@ class ProductImportService(NeuroEventPublisherMixin):
                 f"跳过{result['skipped']}, 失败{result['failed']}"
             )
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"导入产品数据失败：{e}")
             result["error"] = str(e)
 

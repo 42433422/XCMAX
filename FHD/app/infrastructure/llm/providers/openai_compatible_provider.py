@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import os
 import time
 from typing import Any
@@ -68,6 +69,6 @@ class OpenAICompatibleProvider:
             )
             record_ai_call(self.provider_id, "chat", "success", time.perf_counter() - t0)
             return result
-        except Exception:
+        except OPERATIONAL_ERRORS:
             record_ai_call(self.provider_id, "chat", "error", time.perf_counter() - t0)
             raise

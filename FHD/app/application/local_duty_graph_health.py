@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import json
 import os
 from typing import Any
@@ -89,7 +90,7 @@ def read_local_employee_manifest(employee_id: str) -> dict[str, Any] | None:
                         "manifest": data,
                         **data,
                     }
-    except Exception:
+    except OPERATIONAL_ERRORS:
         pass
     return None
 

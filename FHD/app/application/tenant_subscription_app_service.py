@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import re
 from datetime import timedelta
@@ -100,7 +101,7 @@ def subscription_status_for_user(user_id: int) -> dict[str, Any]:
                     "reason": "surface_audit_demo",
                     "plan_id": "saas-enterprise",
                 }
-        except Exception:
+        except OPERATIONAL_ERRORS:
             logger.debug("surface audit demo subscription bypass skipped", exc_info=True)
 
         tenant: Tenant | None = None

@@ -1,0 +1,142 @@
+# CI SSOT: generated from FHD/.github/workflows/test.yml — edit root copy only.
+# Lightweight smoke CI for FHD (published to root as fhd-test.yml).
+# Full pipeline: ci-cd.yml → fhd-ci-cd.yml
+name: Smoke Tests
+
+on:
+  push:
+    branches: [main, develop, master]
+    paths:
+      - "FHD/app/**"
+      - "FHD/tests/**"
+      - "FHD/frontend/**"
+      - "FHD/deploy/requirements*.txt"
+      - "FHD/scripts/dev/verify_version_anchors.py"
+      - "scripts/ci/**"
+      - "scripts/remediate_broad_except.py"
+      - "scripts/add_operational_imports.py"
+      - "scripts/fix_operational_import_order.py"
+      - ".github/workflows/fhd-test.yml"
+  pull_request:
+    branches: [main, develop, master]
+    paths:
+      - "FHD/app/**"
+      - "FHD/tests/**"
+      - "FHD/frontend/**"
+      - "FHD/deploy/requirements*.txt"
+      - "FHD/scripts/dev/verify_version_anchors.py"
+      - "scripts/ci/**"
+      - "scripts/remediate_broad_except.py"
+      - "scripts/add_operational_imports.py"
+      - "scripts/fix_operational_import_order.py"
+      - ".github/workflows/fhd-test.yml"
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: "3.11"
+
+
+defaults:
+  run:
+    working-directory: FHD
+
+jobs:
+  repo-hygiene:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fail on tracked secrets or dependency caches
+        shell: bash
+        run: |
+          set -euo pipefail
+          bad=""
+          while IFS= read -r f; do
+            [ -z "${f}" ] && continue
+            [[ "${f}" =~ \.example$ ]] && continue
+            [[ "${f}" =~ /\.env\.generic$ ]] && continue
+            [[ "${f}" =~ /\.env\.minimal$ ]] && continue
+            if [[ "${f}" =~ (^|/)\.env(\.|$) ]] || \
+               [[ "${f}" =~ (^|/)secret\.yaml$ ]] || \
+               [[ "${f}" =~ login_out\.json$ ]] || \
+               [[ "${f}" =~ \.der$ ]] || \
+               [[ "${f}" =~ /\.nm- ]] || \
+               [[ "${f}" =~ /node_modules/ ]] || \
+               [[ "${f}" =~ /__pycache__/ ]] || \
+               [[ "${f}" =~ /chroma/ ]] || \
+               [[ "${f}" =~ /chroma_db/ ]] || \
+               [[ "${f}" =~ /vector_data/.*\.sqlite ]]; then
+              bad+="${f}"$'\n'
+            fi
+          done < <(git ls-files)
+          if [ -n "${bad}" ]; then
+            echo "Tracked paths that must stay gitignored:"
+            printf '%s' "${bad}"
+            exit 1
+          fi
+          echo "Repo hygiene check passed."
+
+  backend-smoke:
+    needs: repo-hygiene
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r deploy/requirements-server-api.txt
+          pip install -r deploy/requirements-dev.txt
+
+      - name: Verify v10 version anchors
+        run: python scripts/dev/verify_version_anchors.py
+
+      - name: Tech debt gates (broad except / v2 / placeholder tests)
+        working-directory: ${{ github.workspace }}
+        run: |
+          python scripts/ci/check_broad_except_gate.py
+          python scripts/ci/guard_no_placeholder_tests.py
+          git ls-files 'FHD/app/**/*_v*.py' | while read -r f; do
+            python scripts/guard_no_new_v2_files.py "$f" || exit 1
+          done
+
+      - name: Ruff lint (app + tests)
+        run: ruff check app/ tests/
+
+      - name: Pytest smoke (route registry + health)
+        env:
+          XCAGI_SKIP_LEGACY_COMPAT_ROUTES: "1"
+        run: |
+          python -m pytest tests/test_routes/test_route_registry.py \
+            tests/test_routes/test_registry_unit.py -x -q --tb=short
+
+  frontend-smoke:
+    needs: repo-hygiene
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: ESLint
+        working-directory: frontend
+        run: npm run lint
+
+      - name: Vitest smoke
+        working-directory: frontend
+        run: npm run test:smoke

@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import json
 import logging
 import os
@@ -189,7 +190,7 @@ def _load_json(path: Path) -> dict[str, Any] | None:
             return None
         data = json.loads(path.read_text(encoding="utf-8"))
         return data if isinstance(data, dict) else None
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.debug("host_profile: failed to read %s", path, exc_info=True)
         return None
 
@@ -460,7 +461,7 @@ def scan_workflow_employee_catalog_from_mods(mods_root: Path | None = None) -> d
     for manifest_path in sorted(root.glob("xcagi-workflow-employee-*/manifest.json")):
         try:
             data = json.loads(manifest_path.read_text(encoding="utf-8"))
-        except Exception:
+        except OPERATIONAL_ERRORS:
             continue
         wf_list = data.get("workflow_employees") or []
         wf = wf_list[0] if wf_list else {}

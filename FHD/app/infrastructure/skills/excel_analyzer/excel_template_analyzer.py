@@ -7,6 +7,7 @@ Excel Analyzer Skill - Excel模板结构分析工具
 - 分析单元格类型（模板内容/可编辑内容/公式）
 """
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import json
 import logging
 from pathlib import Path
@@ -112,7 +113,7 @@ def analyze_template(
         return {"success": False, "message": "需要安装 openpyxl 库: pip install openpyxl"}
     except FileNotFoundError:
         return {"success": False, "message": f"文件不存在: {file_path}"}
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error(f"分析Excel模板失败: {e}")
         return {"success": False, "message": f"分析失败: {str(e)}"}
 
@@ -139,7 +140,7 @@ def analyze_to_json(
 
         result["output_file"] = output_path
         return result
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         return {"success": False, "message": f"保存JSON失败: {str(e)}"}
 
 

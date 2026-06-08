@@ -4,6 +4,7 @@
 记录和管理 Excel 数据提取操作的日志。
 """
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import json
 import logging
 from datetime import datetime
@@ -71,7 +72,7 @@ class ExtractLogService(NeuroEventPublisherMixin):
                 logger.info(f"创建提取日志：id={log_id}, file={file_name}")
                 return log_id
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"创建提取日志失败：{e}")
             return -1
 
@@ -136,7 +137,7 @@ class ExtractLogService(NeuroEventPublisherMixin):
                 logger.info(f"更新提取日志：id={log_id}, status={status}")
                 return True
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"更新提取日志失败：{e}")
             return False
 
@@ -179,7 +180,7 @@ class ExtractLogService(NeuroEventPublisherMixin):
                     }
                 return None
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"获取提取日志失败：{e}")
             return None
 
@@ -249,7 +250,7 @@ class ExtractLogService(NeuroEventPublisherMixin):
 
                 return logs
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"获取提取日志列表失败：{e}")
             return []
 

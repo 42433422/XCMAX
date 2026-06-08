@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 from typing import Any
 
@@ -143,7 +144,7 @@ class SixLineEventAppService:
                 timeout=5.0,
             )
             return r.is_success
-        except Exception:
+        except OPERATIONAL_ERRORS:
             logger.debug("incident remote post skipped", exc_info=True)
             return False
 

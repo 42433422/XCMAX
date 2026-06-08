@@ -4,6 +4,7 @@
 提供 JSON 格式的结构化日志，支持标准字段和上下文传递。
 """
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import json
 import logging
 import sys
@@ -153,7 +154,7 @@ def log_operation(operation_name: str):
                     duration=duration,
                 )
                 return result
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 duration = (time.time() - start_time) * 1000
                 logger.error(
                     f"Operation failed: {operation_name}",
@@ -185,7 +186,7 @@ def log_operation(operation_name: str):
                     duration=duration,
                 )
                 return result
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 duration = (time.time() - start_time) * 1000
                 logger.error(
                     f"Operation failed: {operation_name}",

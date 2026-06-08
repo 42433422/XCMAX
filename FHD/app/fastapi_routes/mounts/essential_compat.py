@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import os
 
@@ -16,7 +17,7 @@ def register_essential_compat_routes(app: FastAPI) -> None:
 
         app.include_router(system_router)
         logger.info("Registered system_router (essential compat, /api/system/*)")
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.warning("essential system routes skipped: %s", e)
 
     try:
@@ -24,7 +25,7 @@ def register_essential_compat_routes(app: FastAPI) -> None:
 
         app.include_router(product_compat_router, prefix="/api")
         logger.info("Registered product compat (essential, /api/products/*)")
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.warning("essential product compat skipped: %s", e)
 
 

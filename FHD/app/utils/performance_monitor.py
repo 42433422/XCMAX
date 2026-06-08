@@ -10,6 +10,7 @@
 - Prometheus 指标导出
 """
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import functools
 import logging
 import os
@@ -200,7 +201,7 @@ class PerformanceMonitor:
 
         try:
             yield
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             error_occurred = True
             metadata["error"] = str(e)
             raise
@@ -233,7 +234,7 @@ class PerformanceMonitor:
                     self.record_metric(metric_name, duration_ms, success=True)
                     return result
 
-                except Exception as e:
+                except OPERATIONAL_ERRORS as e:
                     duration_ms = (time.perf_counter() - start_time) * 1000
                     self.record_metric(metric_name, duration_ms, success=False, error=str(e))
                     raise
@@ -263,7 +264,7 @@ class PerformanceMonitor:
                         ip=None,
                     )
                     return result
-                except Exception:
+                except OPERATIONAL_ERRORS:
                     duration_ms = (time.perf_counter() - start_time) * 1000
                     self.record_api_call(
                         endpoint=func.__name__,

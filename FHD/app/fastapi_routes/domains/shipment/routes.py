@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 from typing import Any
 
@@ -70,7 +71,7 @@ def ai_config_approval_post(body: dict = Body(default_factory=dict)):
 
         reload_approval_service()
         return {"success": True, "message": "保存成功"}
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.exception("save approval config: %s", e)
         return JSONResponse({"success": False, "message": f"保存失败：{str(e)}"}, status_code=500)
 
@@ -108,7 +109,7 @@ def ai_approval_request(body: dict = Body(default_factory=dict)):
                 ),
             },
         }
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.exception("approval request: %s", e)
         return JSONResponse(
             {"success": False, "message": f"创建审批请求失败：{str(e)}"}, status_code=500
@@ -183,7 +184,7 @@ def ai_approval_approve(body: dict = Body(default_factory=dict)):
             "message": "审批已通过" + ("，工作流已执行" if workflow_data else ""),
             "data": response_data,
         }
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.exception("approval approve: %s", e)
         return JSONResponse({"success": False, "message": f"审批失败：{str(e)}"}, status_code=500)
 
@@ -214,7 +215,7 @@ def ai_approval_reject(body: dict = Body(default_factory=dict)):
         if success:
             return {"success": True, "message": "审批已拒绝", "data": {"status": "rejected"}}
         return JSONResponse({"success": False, "message": "审批拒绝失败"}, status_code=400)
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.exception("approval reject: %s", e)
         return JSONResponse(
             {"success": False, "message": f"审批拒绝失败：{str(e)}"}, status_code=500

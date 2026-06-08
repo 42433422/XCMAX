@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import json
 from functools import lru_cache
 from typing import Any
@@ -14,7 +15,7 @@ def _load_json(path) -> dict[str, Any] | None:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
         return data if isinstance(data, dict) else None
-    except Exception:
+    except OPERATIONAL_ERRORS:
         return None
 
 

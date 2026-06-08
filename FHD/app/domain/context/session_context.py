@@ -10,6 +10,7 @@ Phase 4B 从 ``app.legacy.runtime_context`` 吸收实现。
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import json
 import logging
 import os
@@ -470,7 +471,7 @@ def format_excel_analysis_for_llm(runtime_context: Mapping[str, Any] | None) -> 
         if isinstance(rows, list) and rows:
             try:
                 lines.append(f"- 样例行: {json.dumps(rows[:3], ensure_ascii=False)}")
-            except Exception:
+            except OPERATIONAL_ERRORS:
                 logger.debug("sample_rows json encode failed", exc_info=True)
     linked_preview = runtime_context.get("excel_linked_grid_preview")
     if isinstance(linked_preview, dict):

@@ -5,6 +5,7 @@
 合并为单一声明式接口，确保所有 API 端点都有一致的安全策略。
 """
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import json
 from collections.abc import Callable
 from functools import wraps
@@ -71,7 +72,7 @@ def api_security(
                     if raw is not None:
                         try:
                             json.loads(raw.decode())
-                        except Exception:
+                        except OPERATIONAL_ERRORS:
                             return (
                                 json_response(
                                     {

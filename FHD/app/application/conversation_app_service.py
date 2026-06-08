@@ -4,6 +4,7 @@
 此模块已迁移到 app/application/
 """
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 
 from app.db.models import AIConversation, AIConversationSession
@@ -45,7 +46,7 @@ class ConversationApplicationService:
                 )
 
                 neuro_notify_conversation_message_saved(session_id, user_id, role, intent)
-            except Exception:
+            except OPERATIONAL_ERRORS:
                 logger.debug("neuro_notify_conversation_message_saved skipped", exc_info=True)
             return message.id
 

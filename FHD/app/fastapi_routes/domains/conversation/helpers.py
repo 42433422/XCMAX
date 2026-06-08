@@ -6,6 +6,7 @@ XCAGI 前端兼容 API — AI 聊天辅助函数与数据模型。
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import asyncio
 import hashlib
 import json
@@ -229,7 +230,7 @@ def _xcagi_compat_reply_payload(
                 tool_data["errors_preview"] = joined[:2000]
                 if len(errs) > 5:
                     tool_data["errors_truncated"] = True
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.debug("compat: last tool result unavailable", exc_info=True)
 
     err_code = str(last_result.get("error") or "").strip()
@@ -361,7 +362,7 @@ def _ensure_vector_index_if_needed(message: str, runtime_context: dict) -> str |
             workspace_root=root,
         )
         result = json.loads(raw)
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.exception("xcagi vector pre-index failed")
         return f"我尝试为 `{file_path}` 建立向量索引时失败：{e}。请确认文件路径是否存在，或告诉我要索引的工作表名。"
     if isinstance(result, dict) and result.get("error"):
@@ -518,7 +519,7 @@ async def _xcagi_planner_stream_bytes_async(
         try:
             for chunk in _xcagi_planner_stream_bytes(request, body, ai_tier=ai_tier):
                 asyncio.run_coroutine_threadsafe(async_q.put(chunk), loop).result(timeout=120)
-        except Exception as exc:
+        except OPERATIONAL_ERRORS as exc:
             asyncio.run_coroutine_threadsafe(async_q.put(exc), loop).result(timeout=5)
         finally:
             asyncio.run_coroutine_threadsafe(async_q.put(_SENTINEL), loop).result(timeout=5)
@@ -609,7 +610,7 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
         else:
             done_reply = merged
         yield _sse_event_line({"type": "done", "result": _xcagi_compat_reply_payload(done_reply)})
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         exc = _xcagi_chat_http_exc(e)
         yield _sse_event_line(
             {

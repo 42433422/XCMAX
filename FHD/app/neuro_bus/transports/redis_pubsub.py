@@ -7,6 +7,7 @@ URL：XCAGI_NEURO_BUS_REDIS_URL 或 CACHE_REDIS_URL / REDIS_URL（db 默认 3）
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import json
 import logging
 import os
@@ -76,7 +77,7 @@ class RedisPubSubBridge:
             self._pubsub.subscribe(CHANNEL)
             logger.info("NeuroBus Redis Pub/Sub connected channel=%s", CHANNEL)
             return True
-        except Exception as exc:
+        except OPERATIONAL_ERRORS as exc:
             logger.error("NeuroBus Redis Pub/Sub connect failed: %s", exc)
             self._redis = None
             self._pubsub = None
@@ -94,7 +95,7 @@ class RedisPubSubBridge:
                     if not message or message.get("type") != "message":
                         continue
                     self._handle_message(message.get("data"))
-                except Exception as exc:
+                except OPERATIONAL_ERRORS as exc:
                     if not self._stop.is_set():
                         logger.warning("NeuroBus Redis listener error: %s", exc)
 
@@ -111,7 +112,7 @@ class RedisPubSubBridge:
             try:
                 self._pubsub.unsubscribe(CHANNEL)
                 self._pubsub.close()
-            except Exception:
+            except OPERATIONAL_ERRORS:
                 pass
         if self._listener_thread is not None:
             self._listener_thread.join(timeout=2.0)
@@ -120,7 +121,7 @@ class RedisPubSubBridge:
         if self._redis is not None:
             try:
                 self._redis.close()
-            except Exception:
+            except OPERATIONAL_ERRORS:
                 pass
         self._redis = None
 
@@ -135,7 +136,7 @@ class RedisPubSubBridge:
         }
         try:
             self._redis.publish(CHANNEL, json.dumps(envelope, ensure_ascii=False))
-        except Exception as exc:
+        except OPERATIONAL_ERRORS as exc:
             logger.warning("NeuroBus Redis publish failed: %s", exc)
 
     def _handle_message(self, raw: Any) -> None:

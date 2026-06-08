@@ -8,6 +8,7 @@ X-Forwarded-For 默认 **不信任**。只有当上游代理 IP 命中
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 from collections.abc import Iterable
 from ipaddress import ip_address, ip_network
 
@@ -66,12 +67,12 @@ def _xff_chain(scope: Scope) -> list[str]:
     for k, v in headers:
         try:
             name = k.decode("latin-1") if isinstance(k, bytes) else str(k)
-        except Exception:
+        except OPERATIONAL_ERRORS:
             continue
         if name.lower() == "x-forwarded-for":
             try:
                 raw = v.decode("latin-1") if isinstance(v, bytes) else str(v)
-            except Exception:
+            except OPERATIONAL_ERRORS:
                 return []
             return [seg.strip() for seg in raw.split(",") if seg.strip()]
     return []
@@ -82,12 +83,12 @@ def _real_ip_header(scope: Scope) -> str | None:
     for k, v in headers:
         try:
             name = k.decode("latin-1") if isinstance(k, bytes) else str(k)
-        except Exception:
+        except OPERATIONAL_ERRORS:
             continue
         if name.lower() == "x-real-ip":
             try:
                 return v.decode("latin-1") if isinstance(v, bytes) else str(v)
-            except Exception:
+            except OPERATIONAL_ERRORS:
                 return None
     return None
 

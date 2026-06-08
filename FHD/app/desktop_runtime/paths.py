@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import os
 import platform
 from pathlib import Path
@@ -115,7 +116,7 @@ def configure_desktop_environment(data_dir: str | os.PathLike[str] | None = None
     configure_edition_defaults(desktop=True)
     try:
         seed_edition_mods_from_bundle()
-    except Exception as exc:
+    except OPERATIONAL_ERRORS as exc:
         import logging
 
         logging.getLogger(__name__).warning("Desktop mod seed skipped: %s", exc)

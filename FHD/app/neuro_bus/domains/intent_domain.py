@@ -4,6 +4,7 @@
 意图识别事件通道，优先级最高
 """
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 from dataclasses import dataclass
 from typing import Any
@@ -72,7 +73,7 @@ class IntentNeuroDomain(NeuroDomain):
                 from app.neuro_bus.neuro_trace_config import bump_domain_handler_metric
 
                 bump_domain_handler_metric("intent.recognized")
-            except Exception:
+            except OPERATIONAL_ERRORS:
                 pass
 
         @self.on("intent.processing", priority=1, channel=DomainChannel.FAST)
@@ -84,7 +85,7 @@ class IntentNeuroDomain(NeuroDomain):
                 from app.neuro_bus.neuro_trace_config import bump_domain_handler_metric
 
                 bump_domain_handler_metric("intent.processing")
-            except Exception:
+            except OPERATIONAL_ERRORS:
                 pass
 
         @self.on("intent.failed", priority=0, channel=DomainChannel.STANDARD)
@@ -98,7 +99,7 @@ class IntentNeuroDomain(NeuroDomain):
                 from app.neuro_bus.neuro_trace_config import bump_domain_handler_metric
 
                 bump_domain_handler_metric("intent.failed")
-            except Exception:
+            except OPERATIONAL_ERRORS:
                 pass
 
         @self.on("intent.reflex_triggered", priority=0, channel=DomainChannel.FAST)
@@ -112,7 +113,7 @@ class IntentNeuroDomain(NeuroDomain):
                 from app.neuro_bus.neuro_trace_config import bump_domain_handler_metric
 
                 bump_domain_handler_metric("intent.reflex_triggered")
-            except Exception:
+            except OPERATIONAL_ERRORS:
                 pass
 
     async def initialize(self):
@@ -228,7 +229,7 @@ class IntentNeuroDomain(NeuroDomain):
                 intent_only = {k: v for k, v in allm.items() if k.startswith("intent.")}
                 if intent_only:
                     out["handler_metrics"] = intent_only
-        except Exception:
+        except OPERATIONAL_ERRORS:
             pass
         return out
 

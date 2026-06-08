@@ -10,6 +10,7 @@ auth_app_service V2 - 事件驱动版本
 生成时间: 自动生成
 """
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
@@ -77,7 +78,7 @@ class AuthAppServiceV2:
                 "message": f"{command_type} 命令已提交",
             }
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"[AuthAppServiceV2] 执行命令失败: {e}")
             return {"success": False, "message": str(e)}
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 
 from app.services.tools_execution.context import _hdr, _j
@@ -65,6 +66,6 @@ def _execute_tool_from_payload_inner(data):
             parse_order_text_fn=_parse_order_text,
         )
 
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error(f"执行工具失败: {e}")
         return _j({"success": False, "message": str(e)}, 500)

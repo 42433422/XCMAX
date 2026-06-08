@@ -4,6 +4,7 @@
 生成客户价格表 PDF 文档并支持打印
 """
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import os
 from datetime import datetime
@@ -74,7 +75,7 @@ class PriceListGenerator:
                 "message": "价格表已生成",
             }
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"[PriceListGenerator] 生成失败：{e}", exc_info=True)
             return {"success": False, "message": str(e)}
 
@@ -242,7 +243,7 @@ class PriceListGenerator:
 
                 logger.info(f"[PriceListGenerator] 文本文件生成成功：{txt_filepath}")
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"[PriceListGenerator] 创建 Word 失败：{e}", exc_info=True)
             raise
 
@@ -254,7 +255,7 @@ class PriceListGenerator:
 
                 default_printer = win32print.GetDefaultPrinter()
                 return default_printer
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.warning(f"[PriceListGenerator] 获取默认打印机失败：{e}")
         return None
 
@@ -300,7 +301,7 @@ class PriceListGenerator:
                         word.Quit()
                         logger.info(f"[PriceListGenerator] 使用 Word COM 打印成功：{printer_name}")
                         return
-                    except Exception as e:
+                    except OPERATIONAL_ERRORS as e:
                         logger.warning(
                             f"[PriceListGenerator] Word COM 打印失败：{e}，使用 Shell 打印"
                         )
@@ -312,6 +313,6 @@ class PriceListGenerator:
             else:
                 logger.warning("[PriceListGenerator] 非 Windows 系统，跳过打印")
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"[PriceListGenerator] 打印失败：{e}", exc_info=True)
             raise

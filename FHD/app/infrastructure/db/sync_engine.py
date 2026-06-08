@@ -7,6 +7,7 @@ Phase 5B 从 ``app.legacy.database`` + ``app.legacy.mod_database_url`` 吸收。
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import os
 import threading
@@ -90,7 +91,7 @@ def _urls_equivalent(a: str | None, b: str) -> bool:
         return make_url(a).render_as_string(hide_password=True) == make_url(b).render_as_string(
             hide_password=True
         )
-    except Exception:
+    except OPERATIONAL_ERRORS:
         return (a or "").strip() == (b or "").strip()
 
 
@@ -133,7 +134,7 @@ def redact_database_url(url: str) -> str:
             host = p.hostname or ""
             port = f":{p.port}" if p.port else ""
             return f"{p.scheme}://{user}:***@{host}{port}{p.path or ''}"
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.debug("suppressed exception", exc_info=True)
     return url
 

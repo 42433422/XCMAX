@@ -1,5 +1,6 @@
 """用户 CRUD 服务：列表/查询/创建/更新/软删，不负责认证与权限策略。"""
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import uuid
 from typing import Any
@@ -68,7 +69,7 @@ class UserService(NeuroEventPublisherMixin):
                 db.commit()
                 db.refresh(user)
                 return {"success": True, "user": self._user_to_dict(user)}
-            except Exception:
+            except OPERATIONAL_ERRORS:
                 db.rollback()
                 err_id = uuid.uuid4().hex[:12]
                 logger.exception("create_user failed (error_id=%s username=%s)", err_id, username)
@@ -104,7 +105,7 @@ class UserService(NeuroEventPublisherMixin):
                 db.commit()
                 db.refresh(user)
                 return {"success": True, "user": self._user_to_dict(user)}
-            except Exception:
+            except OPERATIONAL_ERRORS:
                 db.rollback()
                 err_id = uuid.uuid4().hex[:12]
                 logger.exception("update_user failed (error_id=%s user_id=%s)", err_id, user_id)
@@ -124,7 +125,7 @@ class UserService(NeuroEventPublisherMixin):
                 user.is_active = False
                 db.commit()
                 return {"success": True, "message": "用户已删除"}
-            except Exception:
+            except OPERATIONAL_ERRORS:
                 db.rollback()
                 err_id = uuid.uuid4().hex[:12]
                 logger.exception("delete_user failed (error_id=%s user_id=%s)", err_id, user_id)

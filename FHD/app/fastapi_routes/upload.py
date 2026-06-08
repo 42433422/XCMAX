@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import os
 import uuid
@@ -80,7 +81,7 @@ async def upload_temp(file: UploadFile | None = File(default=None)):
                 "size": os.path.getsize(file_path),
             }
         )
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error("文件上传失败：%s", e, exc_info=True)
         return JSONResponse({"success": False, "message": f"上传失败：{str(e)}"}, status_code=500)
 
@@ -93,7 +94,7 @@ def delete_temp_file(filename: str):
             return JSONResponse({"success": False, "message": "文件不存在"}, status_code=404)
         os.remove(file_path)
         return JSONResponse({"success": True, "message": "文件已删除"})
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error("删除文件失败：%s", e)
         return JSONResponse({"success": False, "message": f"删除失败：{str(e)}"}, status_code=500)
 

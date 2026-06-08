@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import asyncio
 import json
 import logging
@@ -57,7 +58,7 @@ async def execute_compat_chat(request: Request, body: XcagiCompatChatBody) -> di
 
         runtime_context = await enrich_kitten_analyzer_runtime(runtime_context, body.message)
         kitten_extra = kitten_reply_attachments(runtime_context)
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.debug("kitten planner context enrich skipped", exc_info=True)
         kitten_extra = {}
     ok_read, read_req = _ensure_chat_db_read_authorized(
@@ -130,7 +131,7 @@ async def execute_compat_chat(request: Request, body: XcagiCompatChatBody) -> di
             pass
     except TimeoutError:
         return _xcagi_chat_timeout_error_payload(timeout)
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         raise _xcagi_chat_http_exc(e) from e
     return _xcagi_compat_reply_payload(reply, kitten_attachments=kitten_extra or None)
 
@@ -202,7 +203,7 @@ async def execute_compat_chat_batch(
             results.append(_xcagi_compat_reply_payload(reply))
         except TimeoutError:
             results.append(_xcagi_chat_timeout_error_payload(timeout))
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             err = _xcagi_chat_http_exc(e)
             results.append(
                 {

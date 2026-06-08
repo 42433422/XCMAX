@@ -8,6 +8,7 @@
 - 批量导入产品到主库
 """
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import os
 import sqlite3
@@ -107,7 +108,7 @@ class UnitProductsImportService:
                 "failed_products": failed_products,
             }
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"导入购买单位+产品列表失败：{e}")
             return {"success": False, "message": f"导入失败：{str(e)}"}
 
@@ -206,14 +207,14 @@ class UnitProductsImportService:
         """安全解析浮点数"""
         try:
             return float(value) if value is not None and str(value).strip() != "" else 0.0
-        except Exception:
+        except OPERATIONAL_ERRORS:
             return 0.0
 
     def _parse_int(self, value: Any) -> int | None:
         """安全解析整数"""
         try:
             return int(value) if value is not None and str(value).strip() != "" else None
-        except Exception:
+        except OPERATIONAL_ERRORS:
             return None
 
     def _ensure_unit_exists(self, unit_name: str, create_purchase_unit: bool) -> bool:

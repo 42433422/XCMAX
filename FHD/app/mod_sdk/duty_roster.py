@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import json
 from functools import lru_cache
 from pathlib import Path
@@ -81,7 +82,7 @@ def _read_json(path: Path) -> dict[str, Any] | None:
             return None
         data = json.loads(path.read_text(encoding="utf-8"))
         return data if isinstance(data, dict) else None
-    except Exception:
+    except OPERATIONAL_ERRORS:
         return None
 
 

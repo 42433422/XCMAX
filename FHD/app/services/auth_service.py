@@ -1,5 +1,6 @@
 """用户认证与会话编排（密码校验、审计日志、委托 SessionService）。"""
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import uuid
 from typing import Any
@@ -77,7 +78,7 @@ class AuthService(NeuroEventPublisherMixin):
                     "session_id": session_result["session_id"],
                     "expires_at": session_result["expires_at"],
                 }
-            except Exception:
+            except OPERATIONAL_ERRORS:
                 db.rollback()
                 err_id = uuid.uuid4().hex[:12]
                 logger.exception("authenticate failed (error_id=%s)", err_id)
@@ -134,7 +135,7 @@ class AuthService(NeuroEventPublisherMixin):
                 db.commit()
                 audit_logger.audit_log("change_password", user_id, "", {"username": user.username})
                 return {"success": True, "message": "密码修改成功"}
-            except Exception:
+            except OPERATIONAL_ERRORS:
                 db.rollback()
                 err_id = uuid.uuid4().hex[:12]
                 logger.exception("change_password failed (error_id=%s user_id=%s)", err_id, user_id)
@@ -156,7 +157,7 @@ class AuthService(NeuroEventPublisherMixin):
                 self.session_service.delete_user_sessions(user_id)
                 audit_logger.audit_log("reset_password", user_id, "", {"username": user.username})
                 return {"success": True, "message": "密码已重置，请使用新密码登录"}
-            except Exception:
+            except OPERATIONAL_ERRORS:
                 db.rollback()
                 err_id = uuid.uuid4().hex[:12]
                 logger.exception("reset_password failed (error_id=%s user_id=%s)", err_id, user_id)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import json
 import logging
 import os
@@ -63,7 +64,7 @@ def send_jpush(
             logger.warning("jpush failed: %s %s", r.status_code, r.text[:500])
             return False
         return True
-    except Exception as exc:
+    except OPERATIONAL_ERRORS as exc:
         logger.warning("jpush error: %s", exc)
         return False
 
@@ -124,7 +125,7 @@ def send_fcm(
             else:
                 logger.warning("fcm token fail: %s", r.text[:300])
         return ok_any
-    except Exception as exc:
+    except OPERATIONAL_ERRORS as exc:
         logger.warning("fcm error: %s", exc)
         return False
 

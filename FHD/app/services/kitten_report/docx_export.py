@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import json
 from datetime import datetime
 from io import BytesIO
@@ -89,7 +90,7 @@ def build_kitten_docx(payload: dict[str, Any]) -> dict[str, Any]:
         if details:
             try:
                 detail_txt = json.dumps(details, ensure_ascii=False, default=str)
-            except Exception:
+            except OPERATIONAL_ERRORS:
                 detail_txt = str(details)
             if len(detail_txt) > 6000:
                 detail_txt = detail_txt[:6000] + "…"

@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import json
 import logging
 import os
@@ -99,7 +100,7 @@ def _read_product_sku_file() -> ProductSku | None:
             meipass = Path(getattr(sys, "_MEIPASS", ""))
             if meipass:
                 candidates.append(meipass / "product-sku.json")
-    except Exception:
+    except OPERATIONAL_ERRORS:
         pass
     for path in candidates:
         try:
@@ -109,7 +110,7 @@ def _read_product_sku_file() -> ProductSku | None:
             sku = normalize_product_sku(str(data.get("sku") or data.get("product_sku") or ""))
             if sku:
                 return sku
-        except Exception:
+        except OPERATIONAL_ERRORS:
             logger.debug("product-sku.json read failed: %s", path, exc_info=True)
     return None
 

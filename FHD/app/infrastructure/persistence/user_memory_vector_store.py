@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import json
 import logging
 import os
@@ -224,7 +225,7 @@ class SQLiteUserMemoryVectorStore(VectorStorePort):
         # SQLite 默认不开启外键约束；不启用会导致 ON DELETE CASCADE 无效。
         try:
             conn.execute("PRAGMA foreign_keys = ON")
-        except Exception:
+        except OPERATIONAL_ERRORS:
             pass
         conn.row_factory = None
         return conn
@@ -350,7 +351,7 @@ class SQLiteUserMemoryVectorStore(VectorStorePort):
                         "score": score,
                     }
                 )
-            except Exception:
+            except OPERATIONAL_ERRORS:
                 continue
 
         scored.sort(key=lambda item: item["score"], reverse=True)
@@ -397,7 +398,7 @@ def _clear_user_memory_vector_app_singletons() -> None:
 
         um._user_memory_vector_ingest_service = None
         um._user_memory_rag_service = None
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.debug("clear user_memory_vector_app_service singletons skipped", exc_info=True)
 
 
@@ -435,7 +436,7 @@ def get_user_memory_pg_vector_store() -> PgUserMemoryVectorStore:
         if _user_memory_pg_vector_store_instance is not None:
             try:
                 _user_memory_pg_vector_store_instance._engine.dispose()
-            except Exception:
+            except OPERATIONAL_ERRORS:
                 logger.debug("user_memory pg vector engine dispose failed", exc_info=True)
             _clear_user_memory_vector_app_singletons()
         _user_memory_pg_vector_store_instance = PgUserMemoryVectorStore(database_url=want)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import os
 
@@ -15,7 +16,7 @@ def register_neuro_migration_routes(app: FastAPI) -> None:
 
         app.include_router(neuro_migration_router)
         logger.info("Registered neuro migration routes (/api/neuro/*)")
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.warning("Neuro migration routes skipped: %s", e)
 
 

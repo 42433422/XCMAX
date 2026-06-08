@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import os
 
 
@@ -15,7 +16,7 @@ def resolve_effective_database_url(config_url: str | None = None) -> str:
         from app.db import _get_database_url
 
         runtime = (_get_database_url() or "").strip()
-    except Exception:
+    except OPERATIONAL_ERRORS:
         runtime = ""
     cfg = str(config_url or "").strip()
     if runtime:

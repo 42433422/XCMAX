@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import threading
 from typing import Any
@@ -29,9 +30,9 @@ def _load_bundled_host_mods(mm: Any) -> list[str]:
             try:
                 if mm.load_mod(mid):
                     loaded.append(mid)
-            except Exception:
+            except OPERATIONAL_ERRORS:
                 logger.debug("bundled mod load skipped: %s", mid, exc_info=True)
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.debug("bundled mod ids resolve skipped", exc_info=True)
     return loaded
 
@@ -59,7 +60,7 @@ def schedule_background_mod_load(app: Any) -> None:
                 "[mod_startup] background load_all_mods done (%s ids)",
                 len(loaded),
             )
-        except Exception:
+        except OPERATIONAL_ERRORS:
             logger.exception("[mod_startup] background load_all_mods failed")
 
     threading.Thread(
@@ -99,7 +100,7 @@ def bootstrap_mod_extensions_sync(app: Any) -> None:
         from app.fastapi_app.startup_timing import mark_startup
 
         mark_startup("mod_staged")
-    except Exception:
+    except OPERATIONAL_ERRORS:
         pass
     logger.info(
         "Mod extensions staged (client=%s, bundled=%s); scheduling background load",

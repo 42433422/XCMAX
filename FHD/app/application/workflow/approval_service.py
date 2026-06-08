@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import uuid
 from datetime import datetime
@@ -148,7 +149,7 @@ class ApprovalService:
                             "created": (request.created_at or datetime.now()).isoformat(),
                         },
                     )
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.debug("AI 审批持久化到 DB 失败（非致命）: %s", e)
 
     def get_pending_workflow(self, request_id: str) -> dict[str, Any] | None:
@@ -292,7 +293,7 @@ def process_approval_timeouts() -> dict[str, Any]:
 
             if results:
                 db.commit()
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error("审批超时处理失败: %s", e, exc_info=True)
         return {"success": False, "error": str(e), "processed": 0}
 

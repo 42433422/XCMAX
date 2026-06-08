@@ -4,6 +4,7 @@
 防止级联失败的熔断器模式实现。
 """
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import threading
 import time
@@ -85,7 +86,7 @@ class CircuitBreaker:
                 circuit_breaker_failures_total.labels(
                     name=self.name, circuit_state=self._state.value
                 ).inc(self._failure_count_total)
-        except Exception:
+        except OPERATIONAL_ERRORS:
             pass
 
     def _record_success(self):

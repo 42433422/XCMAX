@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import os
 
@@ -19,7 +20,7 @@ def register_neuro_routes(app: FastAPI) -> None:
 
         add_neurobus_routes(app)
         logger.info("Registered NeuroBus routes (/api/neurobus/*)")
-    except Exception as exc:
+    except OPERATIONAL_ERRORS as exc:
         if is_ci_strict():
             raise RuntimeError("NeuroBus routes required in CI") from exc
         logger.warning("NeuroBus routes skipped: %s", exc)

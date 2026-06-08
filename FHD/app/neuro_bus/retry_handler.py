@@ -8,6 +8,7 @@
 - 可重试异常类型判断
 """
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import asyncio
 import logging
 import random
@@ -138,7 +139,7 @@ class RetryHandler:
 
                 return result
 
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 if not context.should_retry(e):
                     # 不可重试或次数耗尽
                     report = context.get_report()
@@ -180,7 +181,7 @@ class RetryHandler:
                 context.record_success()
                 return result
 
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 if not context.should_retry(e):
                     raise
 

@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 from datetime import datetime
 from decimal import Decimal
@@ -269,7 +270,7 @@ class FinanceAppService:
                 db.commit()
                 db.refresh(txn)
                 return {"success": True, "data": txn.to_dict()}
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 db.rollback()
                 logger.error("create_transaction failed: %s", e)
                 return {"success": False, "message": str(e)}
@@ -306,7 +307,7 @@ class FinanceAppService:
                 db.commit()
                 db.refresh(txn)
                 return {"success": True, "data": txn.to_dict()}
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 db.rollback()
                 logger.error("update_transaction failed: %s", e)
                 return {"success": False, "message": str(e)}
@@ -322,7 +323,7 @@ class FinanceAppService:
                 db.delete(txn)
                 db.commit()
                 return {"success": True, "message": "凭证已删除"}
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 db.rollback()
                 logger.error("delete_transaction failed: %s", e)
                 return {"success": False, "message": str(e)}

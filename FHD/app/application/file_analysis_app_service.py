@@ -7,6 +7,7 @@
 - 返回分析结果和建议用途
 """
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import os
 import sqlite3
@@ -86,7 +87,7 @@ class FileAnalysisService:
                 header = f.read(16)
             if header.startswith(b"SQLite format 3"):
                 return ".db"
-        except Exception:
+        except OPERATIONAL_ERRORS:
             pass
         return ext
 
@@ -109,7 +110,7 @@ class FileAnalysisService:
                     try:
                         cols = cur.execute(f"PRAGMA table_info('{t}')").fetchall()
                         table_columns[t] = [c[1] for c in cols if c and len(c) >= 2]
-                    except Exception:
+                    except OPERATIONAL_ERRORS:
                         table_columns[t] = []
 
                 suggested_use = self._determine_suggested_use(table_names, table_columns)
@@ -145,7 +146,7 @@ class FileAnalysisService:
                         "table_columns": table_columns,
                     },
                 }
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"SQLite 数据库分析失败：{e}")
             return {"success": False, "message": f"文件分析失败：{str(e)}"}
 
@@ -186,7 +187,7 @@ class FileAnalysisService:
         try:
             base = os.path.splitext(raw_filename or "")[0] or os.path.splitext(filename or "")[0]
             return (base or "").strip()
-        except Exception:
+        except OPERATIONAL_ERRORS:
             return ""
 
     def _extract_unit_candidates(self, cur: sqlite3.Cursor, table_names: list) -> list:
@@ -206,7 +207,7 @@ class FileAnalysisService:
                 if r and r[0]
             ]
             return candidates
-        except Exception:
+        except OPERATIONAL_ERRORS:
             return []
 
 

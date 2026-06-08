@@ -14,6 +14,7 @@
     python -m app.services.train_intent --mode test --model models/intent_bert/final --texts "生成发货单|查看客户列表"
 """
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import argparse
 import logging
 import sys
@@ -84,7 +85,7 @@ def train_model(
         logger.info("=" * 60)
         return str(model_path)
 
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error(f"训练失败: {e}", exc_info=True)
         return None
 

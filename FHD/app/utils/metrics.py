@@ -4,6 +4,7 @@ Prometheus 指标模块
 提供应用指标采集和暴露功能。
 """
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import time
 from collections.abc import Callable
 from functools import wraps
@@ -124,7 +125,7 @@ def record_http_request(method: str, path: str, status_code: int, duration_secon
         api_request_duration_seconds.labels(method=method, endpoint=endpoint).observe(
             duration_seconds
         )
-    except Exception:
+    except OPERATIONAL_ERRORS:
         pass
 
 
@@ -174,7 +175,7 @@ def track_ai_request(service: str):
                 ai_requests_total.labels(service=service, status="success").inc()
                 ai_request_duration_seconds.labels(service=service).observe(duration)
                 return result
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 ai_requests_total.labels(service=service, status="error").inc()
                 ai_request_errors_total.labels(service=service, error_type=type(e).__name__).inc()
                 raise

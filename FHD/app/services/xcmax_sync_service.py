@@ -21,6 +21,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import json
 import logging
 import os
@@ -67,7 +68,7 @@ def record_change(
             origin_node=_NODE_ID,
             enqueue_outbox=True,
         )
-    except Exception as exc:
+    except OPERATIONAL_ERRORS as exc:
         logger.warning("record_change failed (entity=%s id=%s): %s", entity_type, entity_id, exc)
         return -1
 
@@ -118,7 +119,7 @@ def push_outbox(
             logger.warning("outbox push item %s failed: %s", outbox_id, err_msg)
             db.mark_outbox_failed(outbox_id, err_msg, retry=exc.code >= 500)
             failed += 1
-        except Exception as exc:
+        except OPERATIONAL_ERRORS as exc:
             err_msg = str(exc)
             logger.warning("outbox push item %s failed: %s", outbox_id, err_msg)
             db.mark_outbox_failed(outbox_id, err_msg, retry=True)
@@ -157,7 +158,7 @@ def pull_from_remote(
             db.enqueue_inbox(changes, remote_cursor=int(changes[-1].get("id") or 0))
             db.update_remote_cursor(int(changes[-1].get("id") or 0))
         return {"pulled": len(changes), "since_cursor": cursor}
-    except Exception as exc:
+    except OPERATIONAL_ERRORS as exc:
         logger.warning("pull_from_remote failed: %s", exc)
         return {"pulled": 0, "error": str(exc)}
 
@@ -232,7 +233,7 @@ def _apply_personnel(item: dict[str, Any]) -> None:
         )
         conn.commit()
         conn.close()
-    except Exception as exc:
+    except OPERATIONAL_ERRORS as exc:
         logger.warning("apply_personnel failed for %s: %s", name, exc)
 
 
@@ -270,7 +271,7 @@ def _apply_department(item: dict[str, Any]) -> None:
         )
         conn.commit()
         conn.close()
-    except Exception as exc:
+    except OPERATIONAL_ERRORS as exc:
         logger.warning("apply_department failed for %s: %s", dept, exc)
 
 
@@ -326,7 +327,7 @@ def _apply_attendance(item: dict[str, Any]) -> None:
                 )
                 db.add(obj)
             db.commit()
-    except Exception as exc:
+    except OPERATIONAL_ERRORS as exc:
         logger.warning("apply_attendance failed: %s", exc)
 
 
@@ -356,7 +357,7 @@ def _apply_approval(item: dict[str, Any]) -> None:
                         setattr(obj, col, payload[col])
                 obj.updated_at = _dt.now()
             db.commit()
-    except Exception as exc:
+    except OPERATIONAL_ERRORS as exc:
         logger.warning("apply_approval failed: %s", exc)
 
 
@@ -381,7 +382,7 @@ def _apply_approval_flow(item: dict[str, Any]) -> None:
                         setattr(obj, col, payload[col])
                 obj.updated_at = _dt.now()
                 db.commit()
-    except Exception as exc:
+    except OPERATIONAL_ERRORS as exc:
         logger.warning("apply_approval_flow failed: %s", exc)
 
 
@@ -415,7 +416,7 @@ def _apply_print_job(item: dict[str, Any]) -> None:
                 },
             )
             db.commit()
-    except Exception:
+    except OPERATIONAL_ERRORS:
         # 降级：仅写结构化日志
         logger.info(
             "print_job sync [%s] entity=%s status=%s",
@@ -461,7 +462,7 @@ def _apply_template(item: dict[str, Any]) -> None:
                     },
                 )
             db.commit()
-    except Exception as exc:
+    except OPERATIONAL_ERRORS as exc:
         logger.debug("apply_template non-fatal: %s", exc)
 
 
@@ -483,7 +484,7 @@ def _apply_model_config(item: dict[str, Any]) -> None:
                     payload.get("llm_config") or {}, ensure_ascii=False
                 )
                 db.commit()
-    except Exception as exc:
+    except OPERATIONAL_ERRORS as exc:
         logger.warning("apply_model_config failed: %s", exc)
 
 
@@ -504,7 +505,7 @@ def _apply_ecosystem(item: dict[str, Any]) -> None:
         )
         conn.commit()
         conn.close()
-    except Exception as exc:
+    except OPERATIONAL_ERRORS as exc:
         logger.debug("apply_ecosystem non-fatal: %s", exc)
 
 
@@ -532,7 +533,7 @@ def _apply_workflow_employee(item: dict[str, Any]) -> None:
             )
         conn.commit()
         conn.close()
-    except Exception as exc:
+    except OPERATIONAL_ERRORS as exc:
         logger.debug("apply_workflow_employee non-fatal: %s", exc)
 
 
@@ -555,7 +556,7 @@ def apply_inbox(limit: int = 200) -> dict[str, Any]:
             (limit,),
         ).fetchall()
         conn.close()
-    except Exception as exc:
+    except OPERATIONAL_ERRORS as exc:
         logger.warning("apply_inbox read failed: %s", exc)
         return {"applied": 0, "errors": 1}
 
@@ -580,7 +581,7 @@ def apply_inbox(limit: int = 200) -> dict[str, Any]:
                 logger.debug("no applier for entity_type=%s, skipping", entity_type)
                 db.mark_inbox_applied(inbox_id)
                 applied += 1
-        except Exception as exc:
+        except OPERATIONAL_ERRORS as exc:
             db.mark_inbox_conflict(inbox_id, str(exc))
             conflicts += 1
             errors += 1

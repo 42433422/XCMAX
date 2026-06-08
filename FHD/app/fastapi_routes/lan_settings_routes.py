@@ -17,6 +17,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import time
 from ipaddress import ip_address, ip_network
@@ -257,7 +258,7 @@ async def update_settings(
             ip=str(actor.get("ip") or ""),
             detail=", ".join(changed) or "noop",
         )
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.debug("audit write failed", exc_info=True)
 
     _ = time.time()

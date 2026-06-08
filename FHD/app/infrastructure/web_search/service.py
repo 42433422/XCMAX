@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import os
 import time
@@ -188,6 +189,6 @@ async def kitten_web_search(
             "provider": provider,
             "query": q,
         }
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.warning("web search failed: %s", e)
         return {"success": False, "hits": [], "provider": provider, "message": str(e)}

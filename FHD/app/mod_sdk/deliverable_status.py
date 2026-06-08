@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import os
 from typing import Any
 
@@ -29,7 +30,7 @@ def _installed_mod_ids() -> list[str]:
         if ids:
             return ids
         return [m.id for m in mm.scan_mods() if getattr(m, "id", None)]
-    except Exception:
+    except OPERATIONAL_ERRORS:
         return []
 
 
@@ -151,7 +152,7 @@ def build_deliverable_status(installed_mod_ids: list[str] | None = None) -> dict
 
         app = get_fastapi_app()
         mods_routes = bool(getattr(app.state, "mods_routes_loaded", False))
-    except Exception:
+    except OPERATIONAL_ERRORS:
         mods_routes = False
 
     if not mods_routes and expected:

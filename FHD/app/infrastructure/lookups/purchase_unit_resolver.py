@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import re
 from dataclasses import dataclass
 from difflib import SequenceMatcher, get_close_matches
@@ -8,7 +9,7 @@ try:
     from pypinyin import Style, pinyin
 
     _HAS_PYPINYIN = True
-except Exception:
+except ImportError:
     Style = None  # type: ignore[assignment]
     pinyin = None  # type: ignore[assignment]
     _HAS_PYPINYIN = False
@@ -33,7 +34,7 @@ def _to_pinyin(name: str) -> str:
     try:
         pinyins = pinyin(name, style=Style.NORMAL)
         return "".join(p[0] if p and p[0] else "" for p in pinyins)
-    except Exception:
+    except OPERATIONAL_ERRORS:
         return ""
 
 
@@ -45,7 +46,7 @@ def _to_first_letters(name: str) -> str:
     try:
         pinyins = pinyin(name, style=Style.FIRST_LETTER)
         return "".join(p[0] if p and p[0] else "" for p in pinyins)
-    except Exception:
+    except OPERATIONAL_ERRORS:
         return ""
 
 
@@ -58,7 +59,7 @@ def _get_pinyin_parts(name: str) -> list[str]:
     try:
         pinyins = pinyin(name, style=Style.NORMAL)
         return [p[0] if p and p[0] else "" for p in pinyins if p and p[0]]
-    except Exception:
+    except OPERATIONAL_ERRORS:
         return []
 
 

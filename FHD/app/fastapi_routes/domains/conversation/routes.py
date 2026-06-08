@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import os
 
@@ -35,7 +36,7 @@ def conversations_get(session_id: str, limit: int = Query(default=50)):
                 break
         result = [_message_to_dict(m) for m in messages]
         return json_safe({"success": True, "session": session_info, "messages": result})
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error("conversations get: %s", e)
         return JSONResponse({"success": False, "message": str(e)}, status_code=500)
 
@@ -48,7 +49,7 @@ def conversations_delete(session_id: str):
         service = get_conversation_service()
         success = service.delete_session(session_id)
         return {"success": success}
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error("conversations delete: %s", e)
         return JSONResponse({"success": False, "message": str(e)}, status_code=500)
 
@@ -82,7 +83,7 @@ def ai_analyze_export(export_id: str):
                 media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             )
         return JSONResponse({"success": False, "message": "导出失败"}, status_code=500)
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         return JSONResponse({"success": False, "message": str(e)}, status_code=500)
 
 
@@ -116,5 +117,5 @@ def ai_message_save(body: dict = Body(default_factory=dict)):
     try:
         message_id = service.save_message(session_id, user_id_str, role, content, intent, metadata)
         return {"success": True, "message_id": message_id}
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         return JSONResponse({"success": False, "message": str(e)}, status_code=500)

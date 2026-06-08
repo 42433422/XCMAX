@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
 
@@ -202,7 +203,7 @@ async def esign_webhook(request: Request):
 
     try:
         raw = await request.json()
-    except Exception:
+    except OPERATIONAL_ERRORS:
         raw = {}
     if not isinstance(raw, dict):
         raw = {}

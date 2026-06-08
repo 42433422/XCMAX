@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import os
 from datetime import UTC, datetime
 from io import BytesIO
@@ -44,7 +45,7 @@ def desktop_status(request: Request):
         from app.fastapi_app.startup_timing import startup_timing_snapshot
 
         timing = startup_timing_snapshot()
-    except Exception:
+    except OPERATIONAL_ERRORS:
         timing = {}
     return {
         "desktopMode": is_desktop_mode(),

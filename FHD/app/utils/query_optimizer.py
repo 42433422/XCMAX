@@ -10,6 +10,7 @@
 - 分页优化
 """
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import functools
 import logging
 import time
@@ -129,7 +130,7 @@ class QueryOptimizer:
                         from app.utils.redis_cache import get_redis_cache
 
                         cache = get_redis_cache()
-                    except Exception:
+                    except OPERATIONAL_ERRORS:
                         pass
 
                 key = (
@@ -154,7 +155,7 @@ class QueryOptimizer:
                     self.record_query(f"CACHED:{func.__name__}", duration_ms)
                     return result
 
-                except Exception as e:
+                except OPERATIONAL_ERRORS as e:
                     logger.error(f"缓存查询执行失败 [{func.__name__}]: {e}")
                     raise
 
@@ -203,7 +204,7 @@ class QueryOptimizer:
                 try:
                     execute_func(item)
                     result.success_count += 1
-                except Exception as e:
+                except OPERATIONAL_ERRORS as e:
                     result.failed_count += 1
                     error_msg = (
                         f"项目 {i + result.success_count + result.failed_count} 处理失败: {str(e)}"
@@ -241,7 +242,7 @@ class QueryOptimizer:
             result = self.batch_execute(items, insert_item, batch_size)
             session.commit()
             return result
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             session.rollback()
             logger.error(f"批量插入失败: {e}")
             raise
@@ -291,7 +292,7 @@ class QueryOptimizer:
 
             return items, total, metadata
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"分页查询失败: {e}")
             raise
 

@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 
 from fastapi import APIRouter
@@ -22,7 +23,7 @@ async def platform_shell_capabilities():
             mid = str(m.get("id") or "").strip()
             if mid:
                 installed.append(mid)
-    except Exception as exc:
+    except OPERATIONAL_ERRORS as exc:
         logger.warning("platform_shell: list mods failed: %s", exc)
 
     from app.mod_sdk.platform_shell import build_platform_shell_payload
@@ -40,7 +41,7 @@ async def decoupling_progress():
             mid = str(m.get("id") or "").strip()
             if mid:
                 installed.append(mid)
-    except Exception as exc:
+    except OPERATIONAL_ERRORS as exc:
         logger.warning("decoupling-progress: list mods failed: %s", exc)
 
     from app.mod_sdk.decoupling_progress import build_decoupling_progress_payload

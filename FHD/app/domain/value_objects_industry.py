@@ -5,6 +5,7 @@
 避免循环导入问题
 """
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 from typing import Any
 
 _current_industry: str = "涂料"
@@ -42,7 +43,7 @@ def _load_from_yaml():
             _industry_fields_cache[ind_id] = qty_fields
 
         _current_industry = default_ind
-    except Exception:
+    except OPERATIONAL_ERRORS:
         _industry_units_cache = {
             "涂料": {
                 "primary": "桶",

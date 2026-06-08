@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import os
 
@@ -41,7 +42,7 @@ def mount_xcmax_dashboard_static(app: FastAPI) -> None:
             name="xcmax_dashboard",
         )
         logger.info("Mounted xcmax-dashboard: /xcmax-dashboard -> %s", directory)
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.warning("挂载 /xcmax-dashboard 失败: %s", e)
 
 
@@ -59,7 +60,7 @@ def mount_vue_dist_public_static(app: FastAPI) -> None:
         try:
             app.mount(mount_path, StaticFiles(directory=directory), name=f"vue-dist-{sub}")
             logger.info("Mounted Vue static: %s -> %s", mount_path, directory)
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.warning("挂载 %s 失败: %s", mount_path, e)
 
 
@@ -73,5 +74,5 @@ def mount_vue_dist_assets_dir(app: FastAPI) -> None:
     try:
         app.mount("/assets", StaticFiles(directory=assets_dir), name="vue_dist_assets")
         logger.info("Mounted Vue dist assets: /assets -> %s", assets_dir)
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.warning("挂载 /assets 失败: %s", e)

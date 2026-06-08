@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import os
 from functools import lru_cache
@@ -53,7 +54,7 @@ def _resolve_mod_path() -> tuple[str, str] | tuple[None, None]:
         meta = get_mod_manager().get_mod(ERP_DOMAIN_BRIDGE_MOD_ID)
         if meta and meta.mod_path:
             return ERP_DOMAIN_BRIDGE_MOD_ID, str(meta.mod_path)
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.debug("erp repository mod path via manager failed", exc_info=True)
     mod_dir = _resolve_mod_dir()
     if mod_dir:
@@ -163,9 +164,9 @@ def list_erp_repository_registry() -> dict[str, Any]:
                     list_fn = getattr(adapters_mod, "list_adapter_classes", None)
                     if callable(list_fn):
                         adapters = list(list_fn())
-                except Exception:
+                except OPERATIONAL_ERRORS:
                     pass
-        except Exception:
+        except OPERATIONAL_ERRORS:
             logger.debug("list_repository_resolvers failed", exc_info=True)
     cfg = _read_manifest().get("config") or {}
     adapter_kind = cfg.get("repository_adapter") if isinstance(cfg, dict) else None

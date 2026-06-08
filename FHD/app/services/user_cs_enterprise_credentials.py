@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import secrets
 from datetime import datetime, timezone
@@ -58,7 +59,7 @@ def get_enterprise_credentials(market_user_id: int, *, username: str = "") -> di
                 payload["is_enterprise"] = bool(user.get("is_enterprise", payload["is_enterprise"]))
                 if user.get("username"):
                     payload["username"] = str(user["username"])
-    except Exception as exc:
+    except OPERATIONAL_ERRORS as exc:
         logger.debug("market enterprise user fetch failed", exc_info=True)
         payload["market_fetch_error"] = str(exc)[:200]
     return payload

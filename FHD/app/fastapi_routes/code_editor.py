@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import difflib
 import hashlib
 import os
@@ -227,7 +228,7 @@ def code_editor_draft(request: Request, body: DraftBody) -> dict:
     ]
     try:
         out = chat_completion_no_tools(messages)
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         return {"success": False, "message": str(e), "is_new_file": False}
 
     if isinstance(out, str) and out.strip().upper().startswith("ERROR:"):

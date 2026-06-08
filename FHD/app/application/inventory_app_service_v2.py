@@ -4,6 +4,7 @@ inventory_app_service V2 - 事件驱动版本
 基于 Neuro-DDD 架构的事件驱动实现。
 """
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
@@ -55,7 +56,7 @@ class InventoryAppServiceV2:
             )
             self._bus.publish(event)
             return event
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"[InventoryAppServiceV2] 发布事件失败: {e}")
             return None
 
@@ -98,7 +99,7 @@ class InventoryAppServiceV2:
                 "mode": "event_driven",
             }
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"[InventoryAppServiceV2] 入库失败: {e}")
             return {"success": False, "message": str(e), "error": str(e)}
 
@@ -135,7 +136,7 @@ class InventoryAppServiceV2:
                 "mode": "event_driven",
             }
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"[InventoryAppServiceV2] 出库失败: {e}")
             return {"success": False, "message": str(e), "error": str(e)}
 
@@ -172,7 +173,7 @@ class InventoryAppServiceV2:
                 "mode": "event_driven",
             }
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"[InventoryAppServiceV2] 调拨失败: {e}")
             return {"success": False, "message": str(e), "error": str(e)}
 
@@ -206,7 +207,7 @@ class InventoryAppServiceV2:
                 "mode": "event_driven",
             }
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"[InventoryAppServiceV2] 库存调整失败: {e}")
             return {"success": False, "message": str(e), "error": str(e)}
 
@@ -233,7 +234,7 @@ class InventoryAppServiceV2:
             return await handler(**data)
         except TypeError as e:
             return {"success": False, "message": f"命令参数错误: {e}", "command": command}
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             return {"success": False, "message": f"执行命令失败: {str(e)}", "command": command}
 
 

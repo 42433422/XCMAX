@@ -7,6 +7,7 @@ FHD compact 栈（backend.http_app）不加载完整 XCAGI 时，至少避免 40
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import time
 from typing import Any
@@ -26,7 +27,7 @@ def _templates_payload() -> dict:
 
         data = get_template_app_service().get_templates()
         return {"success": True, "templates": data.get("templates") or []}
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.warning("template_api: 模板服务加载失败: %s", e)
         # 返回 503-compatible 错误结构；GET /api/templates 自身不抛异常，
         # 但调用方（前端）可通过 service_unavailable 字段判断需要告警。
@@ -75,7 +76,7 @@ def _publish_template_event(event_type: str, payload: dict[str, Any]) -> None:
             payload,
             domain="template",
         )
-    except Exception:
+    except OPERATIONAL_ERRORS:
         pass  # 静默失败，不影响主流程
 
 
@@ -122,7 +123,7 @@ def templates_list_compat(request: Request):
         if result.get("service_unavailable"):
             return JSONResponse(result, status_code=503)
         return result
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         latency_ms = (time.perf_counter() - t0) * 1000.0
 
         # 发布请求失败事件

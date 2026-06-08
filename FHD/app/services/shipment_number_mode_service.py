@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import difflib
 import re
 from collections.abc import Callable
@@ -185,7 +186,7 @@ class ShipmentNumberModeService:
             if filtered_tokens:
                 try:
                     tin_spec = float(filtered_tokens[0])
-                except Exception:
+                except OPERATIONAL_ERRORS:
                     tin_spec = None
 
         if not (unit_name and model_number and tin_spec and quantity_tins):
@@ -426,7 +427,7 @@ class ShipmentNumberModeService:
 
             try:
                 quantity_value = float(quantity)
-            except Exception:
+            except OPERATIONAL_ERRORS:
                 quantity_value = 0.0
 
             if not model_number:

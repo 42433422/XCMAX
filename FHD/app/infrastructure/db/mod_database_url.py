@@ -16,6 +16,7 @@ Phase 5B 从 ``app.legacy.mod_database_url`` 吸收而来。
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import json
 import os
 from pathlib import Path
@@ -94,7 +95,7 @@ def _postgres_url_with_mod_db(base_url: str, active_mod_id: str) -> str:
             return base_url
         new_db = f"{base_db}__{suffix}"
         return u.set(database=new_db).render_as_string(hide_password=False)
-    except Exception:
+    except OPERATIONAL_ERRORS:
         return base_url
 
 

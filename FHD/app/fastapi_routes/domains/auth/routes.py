@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import os
 from typing import Any
@@ -119,7 +120,7 @@ async def auth_session_validate(request: Request):
                     },
                     status_code=200,
                 )
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.exception("enterprise market session check on validate failed")
 
     entitled_mod_ids: list[str] = []
@@ -136,7 +137,7 @@ async def auth_session_validate(request: Request):
             cached = get_cached_entitled_client_mod_ids()
             if cached is not None:
                 entitled_mod_ids = sorted(cached)
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.exception("sync enterprise entitlements on validate failed")
     session_meta = _session_meta_for_response(request)
     payload: dict[str, Any] = {"success": True, "valid": True, "data": session_info}
@@ -225,7 +226,7 @@ def _jit_create_local_user_for_enterprise(username: str, password: str, email: s
             )
             db.commit()
         return True
-    except Exception as exc:
+    except OPERATIONAL_ERRORS as exc:
         logger.exception("_jit_create_local_user_for_enterprise failed for %s: %s", username, exc)
         return False
 
@@ -502,7 +503,7 @@ async def auth_register(request: Request, body: dict = Body(default_factory=dict
                     result["market_access_token"] = mtok
                     if mrefresh:
                         result["market_refresh_token"] = mrefresh
-        except Exception:
+        except OPERATIONAL_ERRORS:
             logger.exception("optional market sync after local register failed")
 
     payload = {"success": True, **result}
@@ -650,7 +651,7 @@ async def auth_oidc_callback(request: Request):
 
     try:
         profile = await exchange_code_for_userinfo(code)
-    except Exception as exc:
+    except OPERATIONAL_ERRORS as exc:
         logger.exception("OIDC exchange failed")
         return RedirectResponse(
             url=f"{base}?oidc_error=OIDC_EXCHANGE&oidc_message={quote(str(exc))}",
@@ -893,7 +894,7 @@ def auth_logout(request: Request):
         from app.enterprise.mod_entitlements import clear_session_entitlements
 
         clear_session_entitlements()
-    except Exception:
+    except OPERATIONAL_ERRORS:
         pass
     resp = JSONResponse(result)
     cookie_name = os.environ.get("SESSION_COOKIE_NAME", "session_id")

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import json
 import logging
 import os
@@ -64,7 +65,7 @@ def _load_template_scope_required_terms():
             if isinstance(rule, dict) and "requiredTerms" in rule:
                 merged[scope_key] = list((rule or {}).get("requiredTerms") or [])
         return merged
-    except Exception:
+    except OPERATIONAL_ERRORS:
         return default_rules
 
 

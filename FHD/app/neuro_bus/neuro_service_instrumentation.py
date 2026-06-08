@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import inspect
 import threading
 import time
@@ -25,7 +26,7 @@ def _svc_enter() -> bool:
             from app.neuro_bus.neuro_trace_config import should_sample_app_service
 
             _tls.svc_emit = should_sample_app_service()
-        except Exception:
+        except OPERATIONAL_ERRORS:
             _tls.svc_emit = True
     return bool(getattr(_tls, "svc_emit", False))
 
@@ -46,7 +47,7 @@ def _wrap_fn(module_label: str, method_name: str, fn: Callable[..., Any]) -> Cal
                 neuro_trace_service_call(module_label, method_name, "start")
             try:
                 out = await fn(*args, **kwargs)
-            except Exception as exc:
+            except OPERATIONAL_ERRORS as exc:
                 if emit:
                     neuro_trace_service_call(
                         module_label,
@@ -77,7 +78,7 @@ def _wrap_fn(module_label: str, method_name: str, fn: Callable[..., Any]) -> Cal
             neuro_trace_service_call(module_label, method_name, "start")
         try:
             out = fn(*args, **kwargs)
-        except Exception as exc:
+        except OPERATIONAL_ERRORS as exc:
             if emit:
                 neuro_trace_service_call(
                     module_label,

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import os
 from datetime import datetime
@@ -72,7 +73,7 @@ def _extract_from_excel(file_path, sheet_name=None, header_row=1) -> tuple[dict,
             "total_rows": len(rows),
         }, 200
 
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error("提取 Excel 数据失败: %s", e)
         return {"success": False, "message": str(e)}, 500
 
@@ -116,7 +117,7 @@ def _generate_excel(data, filename=None, sheet_name="Sheet1") -> tuple[dict, int
             "rows": len(data),
         }, 200
 
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error("生成 Excel 文件失败: %s", e)
         return {"success": False, "message": str(e)}, 500
 
@@ -181,7 +182,7 @@ def _extract_attendance_detail_roster(
             }, 200
         finally:
             wb.close()
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error("考勤明细人员提取失败: %s", e)
         return {"success": False, "message": str(e)}, 500
 
@@ -198,7 +199,7 @@ def extract_from_excel(data: dict[str, Any] = Body(default_factory=dict)):
             )
         result, status = _extract_from_excel(file_path, sheet_name, header_row)
         return JSONResponse(result, status_code=status)
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error("提取 Excel 数据失败: %s", e)
         return JSONResponse({"success": False, "message": str(e)}, status_code=500)
 
@@ -231,7 +232,7 @@ async def extract_upload(
         if os.path.exists(file_path):
             os.remove(file_path)
         return JSONResponse(result, status_code=status)
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error("上传并提取 Excel 数据失败: %s", e)
         return JSONResponse({"success": False, "message": str(e)}, status_code=500)
 
@@ -248,7 +249,7 @@ def generate_excel(data: dict[str, Any] = Body(default_factory=dict)):
             )
         result, status = _generate_excel(excel_data, filename, sheet_name)
         return JSONResponse(result, status_code=status)
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error("生成 Excel 文件失败: %s", e)
         return JSONResponse({"success": False, "message": str(e)}, status_code=500)
 
@@ -275,7 +276,7 @@ def download_generated_excel(data: dict[str, Any] = Body(default_factory=dict)):
             filename=download_filename,
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error("生成并下载 Excel 文件失败: %s", e)
         return JSONResponse({"success": False, "message": str(e)}, status_code=500)
 
@@ -363,7 +364,7 @@ def import_products(data: dict[str, Any] = Body(default_factory=dict)):
                 "details": result["details"],
             }
         )
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error("导入产品数据失败：%s", e)
         return JSONResponse({"success": False, "message": f"导入失败：{str(e)}"}, status_code=500)
 
@@ -412,7 +413,7 @@ def import_customers(data: dict[str, Any] = Body(default_factory=dict)):
                 "details": result["details"],
             }
         )
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error("导入客户数据失败：%s", e)
         return JSONResponse({"success": False, "message": f"导入失败：{str(e)}"}, status_code=500)
 
@@ -435,7 +436,7 @@ def get_extract_logs(
             offset=offset,
         )
         return JSONResponse({"success": True, "logs": logs, "total": len(logs)})
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error("获取提取日志失败：%s", e)
         return JSONResponse({"success": False, "message": f"获取失败：{str(e)}"}, status_code=500)
 
@@ -450,7 +451,7 @@ def get_extract_log(log_id: int):
         if not log:
             return JSONResponse({"success": False, "message": "日志不存在"}, status_code=404)
         return JSONResponse({"success": True, "log": log})
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error("获取提取日志详情失败：%s", e)
         return JSONResponse({"success": False, "message": f"获取失败：{str(e)}"}, status_code=500)
 
@@ -471,6 +472,6 @@ def get_preview(log_id: int):
                 "message": "预览数据需要从提取源获取",
             }
         )
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error("获取预览失败：%s", e)
         return JSONResponse({"success": False, "message": f"获取失败：{str(e)}"}, status_code=500)

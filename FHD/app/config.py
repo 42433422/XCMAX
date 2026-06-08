@@ -1,3 +1,4 @@
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import os
 
@@ -23,7 +24,7 @@ try:
 
     if is_desktop_mode():
         configure_desktop_environment(os.environ.get("XCAGI_DATA_DIR"))
-except Exception:
+except OPERATIONAL_ERRORS:
     # Config import must stay side-effect tolerant for tests and management scripts.
     pass
 

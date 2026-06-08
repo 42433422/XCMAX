@@ -4,6 +4,7 @@
 提供销售、库存、采购等统计报表。
 """
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 from datetime import datetime
 from decimal import Decimal
@@ -349,7 +350,7 @@ class ReportService(NeuroEventPublisherMixin):
                 "filename": f"{filename}.xlsx",
                 "content_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             }
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"导出Excel失败: {e}")
             return {"success": False, "message": str(e)}
 

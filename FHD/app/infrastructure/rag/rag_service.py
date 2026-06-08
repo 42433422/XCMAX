@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import os
 from collections.abc import Callable
@@ -118,7 +119,7 @@ def get_default_embedder() -> Callable[[str], list[float]] | None:
 
         svc = get_default_embedding_service()
         return lambda text: svc.embed(text)
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.debug("默认 embedder 不可用: %s", e)
         return None
 

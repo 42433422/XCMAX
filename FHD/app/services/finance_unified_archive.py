@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -69,7 +70,7 @@ def _items_from_db(market_user_id: int | None, *, track: str | None, limit: int)
     try:
         from app.db import SessionLocal
         from app.db.models.finance import FinancialTransaction
-    except Exception:
+    except OPERATIONAL_ERRORS:
         return []
     items: list[dict[str, Any]] = []
     try:
@@ -95,7 +96,7 @@ def _items_from_db(market_user_id: int | None, *, track: str | None, limit: int)
                 if track and entry["track"] != track:
                     continue
                 items.append(entry)
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.debug("financial_transactions query skipped", exc_info=True)
     return items
 
@@ -120,7 +121,7 @@ def list_ledger(
             items = [x for x in items if x.get("track") == track]
         if items:
             return items[:cap]
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.debug("crm invoice ledger fallback skipped", exc_info=True)
     return _items_from_pipeline(market_user_id, limit=cap)
 
@@ -159,7 +160,7 @@ def archive_from_crm_invoice(inv: dict[str, Any], *, market_user_id: int | None 
             db.commit()
             db.refresh(txn)
             return {"archived": True, "transaction_id": txn.id}
-    except Exception as exc:
+    except OPERATIONAL_ERRORS as exc:
         logger.debug("DB archive skipped: %s", exc)
         return {"archived": True, "transaction_id": None, "local_only": True, "entry": entry}
 

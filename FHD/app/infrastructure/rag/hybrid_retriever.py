@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import math
 import re
@@ -137,7 +138,7 @@ class HybridRetriever:
         if self._embedder is not None:
             try:
                 self._embeddings = [self._embedder(c.text) for c in chunks]
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 logger.warning("embedder 计算失败，混合检索降级为 BM25: %s", e)
                 self._embeddings = []
         else:
@@ -166,7 +167,7 @@ class HybridRetriever:
                     key=lambda i: sims[i],
                     reverse=True,
                 )[: self._top_k_vector]
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 logger.warning("向量检索失败: %s", e)
 
         # 3) RRF

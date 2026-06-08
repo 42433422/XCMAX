@@ -9,6 +9,7 @@ AI 产品解析服务
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import re
 from typing import Any
@@ -246,7 +247,7 @@ class AIProductParser:
                 compute_fn=lambda: self._call_ai_api(text),
                 should_cache=self._should_cache_ai_result,
             )
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.debug("product-parse cache path failed, falling back: %s", e)
             return self._call_ai_api(text)
 
@@ -347,7 +348,7 @@ class AIProductParser:
                     "parse_method": "ai",
                 }
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"AI 解析失败: {e}")
 
         return None

@@ -11,6 +11,7 @@ Redis 分布式缓存层
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import functools
 import hashlib
 import json
@@ -63,7 +64,7 @@ class RedisCache:
             return False
         try:
             return self._redis.ping()
-        except Exception:
+        except OPERATIONAL_ERRORS:
             return False
 
     def _make_key(self, key: str) -> str:
@@ -78,7 +79,7 @@ class RedisCache:
             raise TypeError(
                 f"Redis cache only supports JSON-serializable types, got {type(value).__name__}"
             )
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error("序列化失败: %s", e)
             return json.dumps(str(value), ensure_ascii=False)
 
@@ -127,7 +128,7 @@ class RedisCache:
             self._stats["hits"] += 1
             return value
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error("Redis GET 失败 [%s]: %s", key, e)
             self._stats["errors"] += 1
             return default
@@ -163,7 +164,7 @@ class RedisCache:
                 self._stats["sets"] += 1
             return bool(result)
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error("Redis SET 失败 [%s]: %s", key, e)
             self._stats["errors"] += 1
             return False
@@ -175,7 +176,7 @@ class RedisCache:
             return True
         try:
             return bool(self._redis.set(full_key, _NULL_MARKER, ex=effective_ttl))
-        except Exception:
+        except OPERATIONAL_ERRORS:
             return False
 
     def delete(self, *keys: str) -> bool:
@@ -193,7 +194,7 @@ class RedisCache:
             deleted = self._redis.delete(*full_keys)
             self._stats["deletes"] += deleted
             return deleted > 0
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error("Redis DELETE 失败: %s", e)
             self._stats["errors"] += 1
             return False
@@ -209,7 +210,7 @@ class RedisCache:
         try:
             full_keys = [self._make_key(k) for k in keys]
             return bool(self._redis.exists(*full_keys))
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error("Redis EXISTS 失败: %s", e)
             return False
 
@@ -231,7 +232,7 @@ class RedisCache:
                     continue
                 out[key] = self._deserialize(raw)
             return out
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error("Redis MGET 失败: %s", e)
             self._stats["errors"] += 1
             return {}
@@ -250,7 +251,7 @@ class RedisCache:
             success_count = sum(1 for r in results if r)
             self._stats["sets"] += success_count
             return all(results)
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error("Redis MSET 失败: %s", e)
             self._stats["errors"] += 1
             return False
@@ -266,7 +267,7 @@ class RedisCache:
                 pipe.expire(full_key, ttl)
             results = pipe.execute()
             return results[0]
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error("Redis INCR 失败 [%s]: %s", key, e)
             self._stats["errors"] += 1
             return 0
@@ -276,7 +277,7 @@ class RedisCache:
             return False
         try:
             return bool(self._redis.expire(self._make_key(key), ttl))
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error("Redis EXPIRE 失败 [%s]: %s", key, e)
             return False
 
@@ -285,7 +286,7 @@ class RedisCache:
             return -1
         try:
             return self._redis.ttl(self._make_key(key))
-        except Exception:
+        except OPERATIONAL_ERRORS:
             return -1
 
     def acquire_lock(self, key: str, ttl: int = 10) -> str | None:
@@ -299,7 +300,7 @@ class RedisCache:
                 self._lock_tokens[key] = token
                 return token
             return None
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error("获取分布式锁失败 [%s]: %s", key, e)
             return None
 
@@ -312,7 +313,7 @@ class RedisCache:
             if result:
                 self._lock_tokens.pop(key, None)
             return bool(result)
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error("释放分布式锁失败 [%s]: %s", key, e)
             return False
 
@@ -354,7 +355,7 @@ class RedisCache:
                 if k.startswith(prefix_stub):
                     del self._local_cache[k]
             return deleted
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error("清除模式失败 [%s]: %s", pattern, e)
             return 0
 
@@ -422,7 +423,7 @@ def cache_decorator(
                 result = func(*args, **kwargs)
                 cache_instance.set(cache_key, result, ttl=ttl)
                 return result
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 logger.error("缓存装饰器执行失败 [%s]: %s", func.__name__, e)
                 return func(*args, **kwargs)
 
@@ -448,7 +449,7 @@ def async_cache_decorator(
                 result = func(*args, **kwargs)
                 cache_instance.set(cache_key, result, ttl=ttl)
                 return {"cached": False, "data": result}
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 logger.error("异步缓存装饰器失败 [%s]: %s", func.__name__, e)
                 raise
 
@@ -480,7 +481,7 @@ def init_redis_cache_from_app(app) -> RedisCache | None:
 
             redis_url = app.config.get("CACHE_REDIS_URL", "redis://localhost:6379/0")
             redis_client = redis.from_url(redis_url, decode_responses=True)
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.warning("无法连接 Redis: %s", e)
             return None
     _redis_cache_instance = RedisCache(redis_client)

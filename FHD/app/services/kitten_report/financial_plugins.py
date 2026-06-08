@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
@@ -56,7 +57,7 @@ class FinancialReportPlugin(AnalysisPlugin):
                     "customer_analysis": customer_analysis[:10],
                 },
             )
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             return PluginResult(
                 key=self.key,
                 title=self.title,
@@ -124,7 +125,7 @@ class FinancialReportPlugin(AnalysisPlugin):
             )
 
             return float(inv_val or 0) * 0.3
-        except Exception:
+        except OPERATIONAL_ERRORS:
             return 0.0
 
     def _get_monthly_breakdown(self) -> list[dict[str, Any]]:
@@ -165,7 +166,7 @@ class FinancialReportPlugin(AnalysisPlugin):
                     )
 
             return list(reversed(monthly_data))
-        except Exception:
+        except OPERATIONAL_ERRORS:
             return []
 
     def _get_product_profitability(self) -> list[dict[str, Any]]:
@@ -202,7 +203,7 @@ class FinancialReportPlugin(AnalysisPlugin):
                     }
                     for r in results
                 ]
-        except Exception:
+        except OPERATIONAL_ERRORS:
             return []
 
     def _get_customer_analysis(self) -> list[dict[str, Any]]:
@@ -237,7 +238,7 @@ class FinancialReportPlugin(AnalysisPlugin):
                     }
                     for r in results
                 ]
-        except Exception:
+        except OPERATIONAL_ERRORS:
             return []
 
 
@@ -271,7 +272,7 @@ class InventoryValuationPlugin(AnalysisPlugin):
                     "total_inventory_value": round(total_value, 2),
                 },
             )
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             return PluginResult(
                 key=self.key,
                 title=self.title,
@@ -336,7 +337,7 @@ class InventoryValuationPlugin(AnalysisPlugin):
                         for c in category_breakdown
                     ],
                 }
-        except Exception:
+        except OPERATIONAL_ERRORS:
             return {"total_items": 0, "total_value": 0.0, "categories": []}
 
     def _get_product_valuation(self) -> dict[str, Any]:
@@ -369,7 +370,7 @@ class InventoryValuationPlugin(AnalysisPlugin):
                     "total_items": int(total_items),
                     "total_value": round(float(total_value or 0), 2),
                 }
-        except Exception:
+        except OPERATIONAL_ERRORS:
             return {"total_items": 0, "total_value": 0.0}
 
     def _get_low_stock_items(self) -> dict[str, Any]:
@@ -408,5 +409,5 @@ class InventoryValuationPlugin(AnalysisPlugin):
                         for m in items
                     ],
                 }
-        except Exception:
+        except OPERATIONAL_ERRORS:
             return {"count": 0, "items": []}

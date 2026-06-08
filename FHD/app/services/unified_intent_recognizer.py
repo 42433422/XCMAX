@@ -17,6 +17,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import logging
 import os
 import sys
@@ -105,7 +106,7 @@ class UnifiedIntentRecognizer:
             else:
                 logger.info("蒸馏模型不可用")
                 self._distilled_recognizer = None
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.warning(f"蒸馏模型加载失败: {e}")
             self._distilled_recognizer = None
 
@@ -143,7 +144,7 @@ class UnifiedIntentRecognizer:
             else:
                 logger.warning("BERT识别器不可用")
                 self._bert_recognizer = None
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.warning(f"BERT识别器加载失败: {e}")
             self._bert_recognizer = None
 
@@ -152,7 +153,7 @@ class UnifiedIntentRecognizer:
 
             self._deepseek_recognizer = DeepSeekIntentRecognizer()
             logger.info("DeepSeek识别器已加载")
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.warning(f"DeepSeek识别器加载失败: {e}")
             self._deepseek_recognizer = None
 
@@ -161,7 +162,7 @@ class UnifiedIntentRecognizer:
 
             self._rasa_service = RasaNLUService()
             logger.info("RASA NLU已加载")
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.warning(f"RASA NLU加载失败: {e}")
             self._rasa_service = None
 
@@ -170,7 +171,7 @@ class UnifiedIntentRecognizer:
 
             self._hybrid_service = HybridIntentService()
             logger.info("混合意图服务已加载")
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.warning(f"混合意图服务加载失败: {e}")
             self._hybrid_service = None
 
@@ -227,7 +228,7 @@ class UnifiedIntentRecognizer:
                         sources_used=sources_used,
                         raw_results={"quick_result": quick_result},
                     )
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.warning(f"快速识别失败: {e}")
 
         rule_result = self._recognize_rule(message)
@@ -330,7 +331,7 @@ class UnifiedIntentRecognizer:
                     "source": "context_recent",
                 }
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.warning(f"上下文识别失败: {e}")
 
         return None
@@ -341,7 +342,7 @@ class UnifiedIntentRecognizer:
             from app.services.intent_service import recognize_intents
 
             return recognize_intents(message)
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"规则识别失败: {e}")
             return None
 
@@ -359,7 +360,7 @@ class UnifiedIntentRecognizer:
                     "slots": {},
                 }
             return None
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"蒸馏模型识别失败: {e}")
             return None
 
@@ -377,7 +378,7 @@ class UnifiedIntentRecognizer:
                     "slots": {},
                 }
             return None
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"BERT识别失败: {e}")
             return None
 
@@ -406,7 +407,7 @@ class UnifiedIntentRecognizer:
                     "slots": result.get("slots", {}),
                 }
             return None
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"DeepSeek识别失败: {e}")
             return None
 

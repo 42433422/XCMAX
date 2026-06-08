@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import json
 import logging
 import os
@@ -156,7 +157,7 @@ class EmployeeRegistry:
             return False, f"签名验证失败：{e}"
         except ModPackageError as e:
             return False, str(e)
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception("employee pack install failed")
             return False, str(e)
 

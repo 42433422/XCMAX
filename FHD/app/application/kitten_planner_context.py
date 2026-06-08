@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 import hashlib
 import logging
 from typing import Any
@@ -31,7 +32,7 @@ async def enrich_kitten_analyzer_runtime(
             from app.services.kitten_business_snapshot import build_kitten_business_snapshot
 
             rc["kitten_business_snapshot"] = build_kitten_business_snapshot()
-        except Exception as exc:
+        except OPERATIONAL_ERRORS as exc:
             logger.warning("kitten business snapshot (planner): %s", exc)
             rc["kitten_business_snapshot"] = {
                 "success": False,
@@ -56,7 +57,7 @@ async def enrich_kitten_analyzer_runtime(
                 rc["web_search_error"] = result.get("message") or "search failed"
             else:
                 rc.pop("web_search_error", None)
-        except Exception as exc:
+        except OPERATIONAL_ERRORS as exc:
             logger.warning("kitten web search (planner): %s", exc)
             rc["web_search_results"] = []
             rc["web_search_error"] = str(exc)

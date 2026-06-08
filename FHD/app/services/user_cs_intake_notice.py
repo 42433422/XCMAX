@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 from datetime import datetime, timezone
 from typing import Any
 
@@ -74,7 +75,7 @@ def maybe_send_intake_form_notice(
 
         result = get_desktop_automation_service().send_wechat_message(contact, text)
         ok = bool(result.get("success")) and bool(result.get("message_sent", result.get("success")))
-    except Exception as exc:
+    except OPERATIONAL_ERRORS as exc:
         return {"sent": False, "error": str(exc)[:300]}
     if ok:
         doc["intake_form_notice_sent"] = True
