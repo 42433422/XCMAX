@@ -1,0 +1,71 @@
+name: frontend-unit
+
+# Vitest 单元测试（store / composable / 工具 / Vue 组件）
+# 触发：push 到 main、PR 打开、每日 03:00 定时
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - "FHD/frontend/src/**"
+      - "FHD/frontend/vitest.config.*"
+      - "FHD/frontend/package.json"
+      - ".github/workflows/frontend-unit.yml"
+  pull_request:
+    branches: [main, master]
+    paths:
+      - "FHD/frontend/src/**"
+  workflow_dispatch:
+  schedule:
+    - cron: "0 19 * * *"  # 每日 UTC 19:00 = 北京时间 03:00
+
+concurrency:
+  group: frontend-unit-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "20"
+
+jobs:
+  vitest:
+    name: Vitest (173 文件 · jsdom)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: FHD/frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: FHD/frontend
+        run: npm ci --no-audit --no-fund
+
+      - name: Run Vitest unit tests
+        working-directory: FHD/frontend
+        run: npm test -- --reporter=default --reporter=junit --outputFile.junit=./test-results/junit.xml
+
+      - name: Run Vitest with coverage
+        working-directory: FHD/frontend
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: npm run test:coverage -- --reporter=default
+
+      - name: Upload JUnit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vitest-junit-${{ github.run_id }}
+          path: FHD/frontend/test-results/junit.xml
+          retention-days: 14
+
+      - name: Upload coverage report
+        if: success() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: vitest-coverage-${{ github.run_id }}
+          path: FHD/frontend/coverage/
+          retention-days: 30

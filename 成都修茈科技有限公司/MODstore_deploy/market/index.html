@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<!-- market-build: 20260531-ppt-read-to-generate-bridge -->
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content"
+    />
+    <title>XC AGI 市场</title>
+    <meta
+      name="description"
+      content="修茈科技 AI 市场：组合 Mod 与 AI 员工，处理单据、流程与报表；支持注册试用与进入工作台。"
+    />
+    <script>
+      (function () {
+        try {
+          var raw = localStorage.getItem('workbench_personal_settings_v1')
+          var theme = 'dark'
+          if (raw) {
+            var parsed = JSON.parse(raw)
+            if (parsed && (parsed.theme === 'light' || parsed.theme === 'dark' || parsed.theme === 'auto')) {
+              theme = parsed.theme
+            }
+          }
+          var resolved = theme
+          if (theme === 'auto') {
+            resolved =
+              window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'
+          }
+          document.documentElement.setAttribute('data-workbench-theme', resolved)
+        } catch (e) {
+          document.documentElement.setAttribute('data-workbench-theme', 'dark')
+        }
+      })()
+    </script>
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23222'/%3E%3Ctext x='16' y='21' text-anchor='middle' fill='%23fff' font-size='12' font-family='system-ui,sans-serif' font-weight='600' letter-spacing='-0.02em'%3Exc%3C/text%3E%3C/svg%3E"
+    />
+    <style>
+      /* 语音模式底部勿显示 PTT 麦克风（兼容旧 JS 缓存） */
+      .wb-voice-scene .wb-voice-direct-box .wb-direct-voice-btn {
+        display: none !important;
+        pointer-events: none !important;
+        width: 0 !important;
+        height: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: hidden !important;
+        opacity: 0 !important;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

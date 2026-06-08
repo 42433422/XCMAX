@@ -1,0 +1,317 @@
+/**
+ * 与 modstore_server/duty_roster.py、AdminDutyEmployeeGraph 编制矩阵一致。
+ * 用于工作台等场景判断「MODstore 在岗」编制内员工包，以便 UI 标记与删除保护。
+ */
+export const YUANGON_AREAS: Record<string, { label: string; ids: string[] }> = {
+  'site-and-marketing': {
+    label: '对外网站与 SEO',
+    ids: ['site-content-editor', 'seo-sitemap-curator', 'flask-entry-keeper', 'marketing-site-builder'],
+  },
+  'server-and-ops': {
+    label: '服务器与运维',
+    ids: [
+      'nginx-config-engineer',
+      'push-update-context-officer',
+      'deploy-release-officer',
+      'security-secrets-guard',
+      'log-monitor-incident',
+      'retention-officer',
+      'dbops-engineer',
+      'legacy-archive-curator',
+    ],
+  },
+  'modstore-backend': {
+    label: 'MODstore 后端',
+    ids: [
+      'modstore-backend-api',
+      'employee-pack-curator',
+      'payment-billing-reconciler',
+      'java-payment-bridge-officer',
+    ],
+  },
+  'modstore-frontend': {
+    label: 'MODstore 前端',
+    ids: ['market-frontend-dev', 'workbench-ux-stylist'],
+  },
+  'platform-core': {
+    label: '平台核心',
+    ids: [
+      'fhd-core-maintainer',
+      'vibe-coding-maintainer',
+      'mods-and-eskill-curator',
+      'change-request-auditor',
+      'daily-orchestrator',
+      'intake-dispatcher',
+      'task-router-officer',
+      'user-customer-service-officer',
+      'enterprise-adoption-officer',
+      'delivery-receipt-officer',
+      'mobile-android-release-officer',
+      'mobile-ios-release-officer',
+    ],
+  },
+  'quality-and-docs': {
+    label: '质量与文档',
+    ids: [
+      'test-qa-runner',
+      'doc-knowledge-curator',
+      'employee-interview-assistant',
+      'employee-pack-quality-interviewer',
+    ],
+  },
+  'craft-workshop': {
+    label: '制作车间',
+    ids: [
+      'intent-analyst',
+      'employee-planner',
+      'artifact-generator',
+      'quality-validator',
+      'miniapp-builder',
+      'script-binder',
+      'workflow-automator',
+      'pack-registrar',
+      'sandbox-tester',
+      'code-validator',
+      'self-checker',
+      'host-checker',
+      'hex-quality-assessor',
+    ],
+  },
+  'partner-ecosystem': {
+    label: '生态伙伴 O-B',
+    ids: [
+      'ecosystem-partner-onboard-officer',
+      'ecosystem-joint-catalog-officer',
+      'ecosystem-delivery-reporter',
+      'ecosystem-investor-portal-officer',
+      'ecosystem-revenue-share-reconciler',
+    ],
+  },
+}
+
+/** 编制内全部 pkg_id（与后端 duty_roster.all_planned_employee_ids 对齐） */
+export const ALL_PLANNED_YUANGON_PKG_IDS: ReadonlySet<string> = new Set(
+  Object.values(YUANGON_AREAS).flatMap((a) => a.ids),
+)
+
+/**
+ * 管理端值班图固定展示名（与 docs/routing-table.md 索引列中文名一致），
+ * 不依赖 catalog 数据库里的 name 字段。
+ */
+export const YUANGON_PKG_ROLE_LABELS: Record<string, string> = {
+  'site-content-editor': '静态站内容编辑员',
+  'seo-sitemap-curator': 'SEO 站点地图管理员',
+  'flask-entry-keeper': 'Flask 入口维护员',
+  'marketing-site-builder': '营销站点构建员',
+  'nginx-config-engineer': 'Nginx 配置工程师',
+  'push-update-context-officer': '推送更新员工',
+  'deploy-release-officer': '发布部署主管',
+  'security-secrets-guard': '安全密钥守卫',
+  'log-monitor-incident': '日志监控与事故响应员',
+  'retention-officer': '档案清理员',
+  'dbops-engineer': '数据库运维工程师',
+  'modstore-backend-api': 'MODstore 后端 API 员',
+  'employee-pack-curator': '员工包策展员',
+  'payment-billing-reconciler': '支付账单对账员',
+  'market-frontend-dev': '市场前端开发员',
+  'workbench-ux-stylist': '工作台 UX 设计员',
+  'fhd-core-maintainer': 'FHD 核心应用维护员',
+  'vibe-coding-maintainer': 'Vibe-Coding 维护员',
+  'mods-and-eskill-curator': 'Mods/ESkill 策展员',
+  'change-request-auditor': '变更评审员',
+  'daily-orchestrator': '每日编排员',
+  'intake-dispatcher': '需求接入员',
+  'task-router-officer': '任务派发员',
+  'user-customer-service-officer': '用户客服员工',
+  'test-qa-runner': '测试质量运行员',
+  'doc-knowledge-curator': '文档知识管理员',
+  'employee-interview-assistant': '员工信息访谈员',
+  'employee-pack-quality-interviewer': '员工包质询员',
+  'intent-analyst': '需求分析员工',
+  'employee-planner': '规划设计员工',
+  'artifact-generator': '产物生成员工',
+  'quality-validator': '质检员工',
+  'miniapp-builder': '小程序员工',
+  'script-binder': '配置绑定员工',
+  'workflow-automator': '流程自动化员工',
+  'pack-registrar': '打包登记员工',
+  'sandbox-tester': '测试员工',
+  'code-validator': '代码校验员工',
+  'self-checker': '自检员工',
+  'host-checker': '运维员工',
+  'hex-quality-assessor': '六维质检员工',
+  'enterprise-adoption-officer': '企业使用跟踪员',
+  'delivery-receipt-officer': '交付签收员',
+  'mobile-android-release-officer': 'Android 发版员',
+  'mobile-ios-release-officer': 'iOS 发版员',
+  'java-payment-bridge-officer': 'Java 支付桥接员',
+  'legacy-archive-curator': '工作区归档管理员',
+  'ecosystem-partner-onboard-officer': '生态伙伴接入员',
+  'ecosystem-joint-catalog-officer': '联合 Catalog 策展员',
+  'ecosystem-delivery-reporter': '生态交付回传员',
+  'ecosystem-investor-portal-officer': '投资方只读门户员',
+  'ecosystem-revenue-share-reconciler': '生态分润对账员',
+}
+
+export type DutySubzone = { label: string; ids: string[] }
+export type DutyDepartment = {
+  label: string
+  five_line_id: string
+  reserved?: boolean
+  subzones: Record<string, DutySubzone>
+}
+
+export const SIX_LINE_DEPARTMENTS: Record<string, DutyDepartment> = {
+  ops_acquisition: {
+    label: 'O-A 获客部',
+    five_line_id: 'ops_acquisition',
+    subzones: {
+      'public-acquisition': {
+        label: '公域获客 O1',
+        ids: ['site-content-editor', 'seo-sitemap-curator', 'marketing-site-builder'],
+      },
+      'crm-pipeline': {
+        label: 'CRM 与商机 O2-O3',
+        ids: ['user-customer-service-officer', 'intake-dispatcher', 'modstore-backend-api'],
+      },
+      billing: { label: '收费对账 O4/O10', ids: ['payment-billing-reconciler'] },
+      'delivery-feedback': {
+        label: '交付反馈签收 O5/O7-O8',
+        ids: [
+          'deploy-release-officer',
+          'change-request-auditor',
+          'test-qa-runner',
+          'enterprise-adoption-officer',
+          'delivery-receipt-officer',
+        ],
+      },
+    },
+  },
+  ops_partner: {
+    label: 'O-B 伙伴部',
+    five_line_id: 'ops_partner',
+    subzones: {
+      'partner-onboard': { label: '生态接入 B1', ids: ['ecosystem-partner-onboard-officer'] },
+      'joint-catalog': { label: '联合 catalog B2', ids: ['ecosystem-joint-catalog-officer'] },
+      'delivery-bridge': { label: '生态交付 B3', ids: ['ecosystem-delivery-reporter'] },
+      'investor-portal': { label: '投资方视图 B4', ids: ['ecosystem-investor-portal-officer'] },
+      'revenue-share': { label: '分润对账 B5', ids: ['ecosystem-revenue-share-reconciler'] },
+    },
+  },
+  prod_web: {
+    label: 'P-W 网站部',
+    five_line_id: 'prod_web',
+    subzones: {
+      'static-site': {
+        label: '营销静态 P1a',
+        ids: ['site-content-editor', 'seo-sitemap-curator', 'marketing-site-builder', 'flask-entry-keeper'],
+      },
+      'market-spa': { label: '市场 SPA P1b', ids: ['market-frontend-dev'] },
+      workbench: {
+        label: '工作台 P1c',
+        ids: ['workbench-ux-stylist', 'daily-orchestrator', 'task-router-officer', 'vibe-coding-maintainer'],
+      },
+      'modstore-api': {
+        label: 'MODstore 后端 P1d',
+        ids: ['modstore-backend-api', 'employee-pack-curator', 'java-payment-bridge-officer'],
+      },
+      'docs-seo': { label: '文档 SEO P1e', ids: ['doc-knowledge-curator', 'seo-sitemap-curator'] },
+      'nginx-deploy': { label: 'nginx 部署 P1f', ids: ['nginx-config-engineer', 'deploy-release-officer'] },
+    },
+  },
+  prod_mod: {
+    label: 'P-M Mod 部',
+    five_line_id: 'prod_mod',
+    subzones: {
+      'craft-pipeline': {
+        label: 'Craft 13 步 P2',
+        ids: [
+          'intent-analyst',
+          'employee-planner',
+          'artifact-generator',
+          'quality-validator',
+          'miniapp-builder',
+          'script-binder',
+          'workflow-automator',
+          'pack-registrar',
+          'sandbox-tester',
+          'code-validator',
+          'self-checker',
+          'host-checker',
+          'hex-quality-assessor',
+        ],
+      },
+      'sandbox-catalog': {
+        label: '沙盒 catalog P3',
+        ids: ['sandbox-tester', 'code-validator', 'self-checker', 'mods-and-eskill-curator', 'test-qa-runner'],
+      },
+      'mod-ota': { label: 'Mod OTA P6', ids: ['push-update-context-officer', 'pack-registrar'] },
+      'roster-quality': {
+        label: '编制质检',
+        ids: ['employee-interview-assistant', 'employee-pack-quality-interviewer'],
+      },
+    },
+  },
+  prod_software: {
+    label: 'P-S 软件部',
+    five_line_id: 'prod_software',
+    subzones: {
+      'core-coding': { label: '核心编码 P2', ids: ['fhd-core-maintainer', 'vibe-coding-maintainer'] },
+      testing: {
+        label: '自动测试 P3',
+        ids: ['test-qa-runner', 'sandbox-tester', 'code-validator', 'self-checker'],
+      },
+      'build-release': {
+        label: '构建发布 P4-P5',
+        ids: [
+          'pack-registrar',
+          'deploy-release-officer',
+          'change-request-auditor',
+          'mobile-android-release-officer',
+          'mobile-ios-release-officer',
+        ],
+      },
+      'ota-monitor': {
+        label: 'OTA 监控 P6-P7',
+        ids: ['push-update-context-officer', 'log-monitor-incident', 'host-checker'],
+      },
+      orchestration: {
+        label: '编排迭代 P9-P10',
+        ids: ['daily-orchestrator', 'intake-dispatcher', 'task-router-officer', 'dbops-engineer'],
+      },
+    },
+  },
+  shared_retention: {
+    label: 'S-R 归档部',
+    five_line_id: 'shared_retention',
+    subzones: {
+      'ttl-janitor': { label: 'TTL 清理 R1', ids: ['retention-officer'] },
+      'commit-guards': { label: '提交门禁 R2', ids: ['security-secrets-guard'] },
+      'legacy-archive': { label: 'legacy 归档 R3', ids: ['retention-officer', 'legacy-archive-curator'] },
+      'alert-cve': {
+        label: '告警 CVE R4',
+        ids: ['log-monitor-incident', 'daily-orchestrator', 'security-secrets-guard'],
+      },
+    },
+  },
+}
+
+export const DEPARTMENT_ORDER = [
+  'ops_acquisition',
+  'ops_partner',
+  'prod_web',
+  'prod_mod',
+  'prod_software',
+  'shared_retention',
+] as const
+
+export const DEPARTMENT_COLORS: Record<string, string> = {
+  ops_acquisition: '#22d3ee',
+  ops_partner: '#4ade80',
+  prod_web: '#fb923c',
+  prod_mod: '#a78bfa',
+  prod_software: '#facc15',
+  shared_retention: '#79c0ff',
+}
+
+export const CRAFT_SUBZONE_ID = 'craft-pipeline'

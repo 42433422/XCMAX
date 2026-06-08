@@ -1,0 +1,379 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop, master ]
+  pull_request:
+    branches: [ main, develop, master ]
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: "3.11"
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  # Guard against temporary scripts in business directories
+  guard-temp-scripts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Block new temporary scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE_REF="${{ github.base_ref }}"
+            git fetch origin "${BASE_REF}" --depth=1
+            ADDED_FILES="$(git diff --name-only --diff-filter=A "origin/${BASE_REF}"...HEAD || true)"
+          else
+            BEFORE_SHA="${{ github.event.before }}"
+            if [ -z "${BEFORE_SHA}" ] || [ "${BEFORE_SHA}" = "0000000000000000000000000000000000000000" ]; then
+              ADDED_FILES="$(git ls-files)"
+            else
+              ADDED_FILES="$(git diff --name-only --diff-filter=A "${BEFORE_SHA}" "${{ github.sha }}" || true)"
+            fi
+          fi
+
+          echo "Added files:"
+          echo "${ADDED_FILES}"
+
+          VIOLATIONS=""
+          while IFS= read -r file; do
+            [ -z "${file}" ] && continue
+            if [[ "${file}" == XCAGI/tools/* ]] || [[ "${file}" == XCAGI/archive/* ]] || \
+               [[ "${file}" == tools/* ]] || [[ "${file}" == archive/* ]]; then
+              continue
+            fi
+            if [[ "${file}" =~ (^|/)_fail.*\.txt$ ]]; then
+              VIOLATIONS+="${file}"$'\n'
+            fi
+            if [[ "${file}" =~ (^|/)产品文件夹/(fix_|check_|final_).+\.py$ ]] || \
+               [[ "${file}" =~ ^(fix_|check_|final_).+\.py$ ]]; then
+              VIOLATIONS+="${file}"$'\n'
+            fi
+            if [[ "${file}" =~ \.v1_backup$ ]]; then
+              VIOLATIONS+="${file}"$'\n'
+            fi
+          done <<< "${ADDED_FILES}"
+
+          if [ -n "${VIOLATIONS}" ]; then
+            echo "❌ Found forbidden new artifacts or temporary scripts:"
+            echo "${VIOLATIONS}"
+            echo "Use tools/, scripts/launchers/, or archive/; do not commit _fail*.txt, fix_*.py, or *.v1_backup files."
+            exit 1
+          fi
+          echo "✅ Temporary script location guard passed."
+
+  # Backend Tests & Quality
+  backend-test:
+    needs: guard-temp-scripts
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r deploy/requirements-server-api.txt
+          pip install -r deploy/requirements-dev.txt
+
+      - name: Verify requirements lock is in sync
+        run: |
+          python scripts/dev/check_requirements_lock.py
+
+      - name: Run Ruff lint
+        run: ruff check app/ tests/
+
+      - name: Run Ruff format check
+        run: ruff format --check app/ tests/
+
+      - name: Helm chart lint
+        run: |
+          if command -v helm >/dev/null 2>&1; then
+            bash scripts/observability/helm_lint.sh
+          else
+            echo "helm not on runner; skip chart lint"
+          fi
+
+      - name: Run Black formatter check
+        run: black --check --diff app/ tests/
+
+      - name: Run isort check
+        run: isort --check-only --diff app/ tests/
+
+      - name: Run mypy type checking
+        run: mypy app/ tests/ --no-error-summary
+
+      - name: Route integrity tests
+        env:
+          XCAGI_SKIP_LEGACY_COMPAT_ROUTES: "1"
+        run: python -m pytest tests/test_routes/test_route_registry.py tests/test_routes/test_registry_unit.py tests/test_routes/test_route_golden.py -x -q
+
+      - name: Run tests with coverage
+        env:
+          CI_STABLE_ONLY: "1"
+          XCAGI_SKIP_LEGACY_COMPAT_ROUTES: "1"
+        run: |
+          mkdir -p coverage
+          python -m pytest tests/ -v \
+            --cov=app.neuro_bus --cov=app.middleware --cov=app.fastapi_routes \
+            --cov=app.application --cov=app.domain.shipment --cov=app.http \
+            --cov=app.utils.rate_limiter --cov=app.utils.password_hash --cov=app.config \
+            --cov=app.db.session_cache --cov=app.utils.redis_cache \
+            --cov=app.infrastructure.templates \
+            --cov-report=xml --cov-report=html --cov-report=term-missing \
+            --cov-fail-under=70 \
+            --ignore=tests/test_intent.py
+
+      - name: Upload coverage report
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage.xml
+          flags: backend
+          name: xcagi-backend
+          fail_ci_if_error: true
+
+  frontend-test:
+    needs: guard-temp-scripts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Run ESLint
+        working-directory: frontend
+        run: npm run lint
+
+      - name: Run unit tests
+        working-directory: frontend
+        run: npm run test
+
+      - name: Run unit tests with coverage
+        working-directory: frontend
+        run: npm run test:coverage
+
+      - name: Run vue-tsc
+        working-directory: frontend
+        run: npm run type-check
+
+      - name: Upload frontend coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-coverage
+          path: frontend/coverage/
+          retention-days: 7
+
+  frontend-e2e:
+    needs: [backend-test, frontend-test]
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Start backend API
+        env:
+          SECRET_KEY: ci-e2e-secret-key-minimum-32-characters-long
+          DATABASE_URL: sqlite:///./e2e_ci.db
+          XCAGI_SKIP_INTENT_LLM: "1"
+          XCAGI_SKIP_LEGACY_COMPAT_ROUTES: "1"
+        run: |
+          pip install -r deploy/requirements-server-api.txt
+          python run.py &
+          for i in $(seq 1 40); do
+            curl -sf http://127.0.0.1:5000/api/health && exit 0
+            sleep 2
+          done
+          exit 1
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Playwright and build frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npx playwright install chromium --with-deps
+          npm run build
+          npm run preview -- --host 127.0.0.1 --port 5001 &
+          sleep 8
+
+      - name: Run E2E tests
+        working-directory: frontend
+        env:
+          PLAYWRIGHT_BASE_URL: http://127.0.0.1:5001
+        run: npm run test:e2e
+
+  # Architecture Fitness Check
+  arch-fitness:
+    needs: guard-temp-scripts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Run architecture fitness checks
+        run: python scripts/arch_fitness.py
+
+  # Security & Dependency Scanning
+  security-scan:
+    needs: guard-temp-scripts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Run security checks
+        run: |
+          pip install safety bandit
+          safety check -r deploy/requirements-server-api.txt --full-report
+          bandit -r app/ -ll --skip B101,B601,B110
+
+  # Container image vulnerability scan (built image from CI Dockerfile)
+  container-scan:
+    needs: [backend-test, frontend-test, frontend-e2e, security-scan]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image for scanning
+        run: docker build -f Dockerfile -t xcagi-ci-scan:local .
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: xcagi-ci-scan:local
+          format: table
+          exit-code: 1
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+
+  # Docker Build & Push
+  docker-build:
+    needs: [backend-test, frontend-test, frontend-e2e, security-scan, container-scan]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,prefix=sha-
+            type=semver,pattern={{version}}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: ${{ github.ref == format('refs/heads/{0}', 'main') }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            BUILD_DATE=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.created'] }}
+
+  # Release on tags
+  release:
+    needs: docker-build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          draft: false
+          prerelease: ${{ contains(github.ref, '-rc') || contains(github.ref, '-beta') }}
+
+  # Tag 发版时串联 deploy workflow（lint → test → scan → build → deploy）
+  trigger-deploy:
+    needs: [docker-build]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Trigger Deploy workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run deploy.yml \
+            -f environment=production \
+            --ref "${{ github.ref_name }}"

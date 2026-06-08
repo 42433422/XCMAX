@@ -1,0 +1,6 @@
+{
+  "action": "signal",
+  "signal_type": "workflow-receipt-feedback-signal",
+  "contact": "测试客户",
+  "intent": "receipt_confirm"
+}

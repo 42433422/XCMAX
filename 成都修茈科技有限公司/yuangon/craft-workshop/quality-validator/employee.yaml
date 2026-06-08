@@ -1,0 +1,37 @@
+id: quality-validator
+name: 质检员工
+version: "10.0.0"
+owner: admin
+area: craft-workshop
+domain: >-
+  对生成的产物进行服务端校验，包括 manifest 合规性、Python 语法、资产完整性与一致性检查
+
+scope_globs:
+  - "workbench/sessions/*"
+  - "workbench/validation/*"
+  - "yuangon/craft-workshop/quality-validator/**"
+
+forbidden_globs:
+  - "*.py"
+  - "*.vue"
+  - "*.ts"
+
+depends_on:
+  - artifact-generator
+
+actions:
+  handlers:
+    - llm_md
+    - echo
+
+triggers:
+  on_error: true
+  on_quality_fail: true
+
+skills:
+  - skill-quality-validation
+
+changelog:
+  - version: "10.0.0"
+    date: "2026-06-07"
+    note: "yuangon 骨架由 bootstrap_yuangon.py 从 manifest 反向生成（v10 线内迭代）"

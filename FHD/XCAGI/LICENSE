@@ -1,0 +1,28 @@
+                                 Apache License
+                           Version 2.0, January 2004
+                        http://www.apache.org/licenses/
+
+   Copyright 2026 成都修茈科技有限公司 (ChengDu XiuCi Technology Co., Ltd.)
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+
+---
+
+> **本目录（`FHD/XCAGI/`）** 是 XCAGI 旧版子树的归档/对照副本；正式开发请在 `FHD/app/`、`FHD/frontend/`、`FHD/desktop/` 进行。
+>
+> 完整许可证说明参见：
+> - [`FHD/LICENSE`](../../LICENSE) — Apache License 2.0 全文（社区版）
+> - [`FHD/COMMERCIAL_LICENSE.md`](../../COMMERCIAL_LICENSE.md) — 商业 EULA（企业版）
+> - [`FHD/docs/guides/LICENSING.md`](../../docs/guides/LICENSING.md) — 社区版 vs 商业版对比
+>
+> 商标与商业许可（年收入 ≥ ¥10 万、≥ 50 员工、SaaS 转售、合规审计等）须另行签署 EULA。

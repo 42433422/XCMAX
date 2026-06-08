@@ -1,0 +1,3 @@
+const api = require('../../../api/index')
+const app = getApp()
+Page({data:{userInfo:{}},onShow(){this.setData({userInfo:app.globalData.userInfo||{}})},onNickname(e){this.setData({'userInfo.display_name':e.detail.value})},chooseAvatar(){wx.chooseMedia({count:1,mediaType['image'],success(r)=>{this.setData({'userInfo.avatar':r.tempFiles[0].tempFilePath}})})},async saveInfo(){try{await api.updateUserInfo({display_name:this.data.userInfo.display_name,avatar:this.data.userInfo.avatar});wx.showToast({title:'保存成功'});app.globalData.userInfo=this.data.userInfo}catch(e){wx.showToast({title:'保存失败',icon:'none'})}})

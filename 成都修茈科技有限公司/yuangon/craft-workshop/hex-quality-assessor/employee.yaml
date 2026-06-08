@@ -1,0 +1,38 @@
+id: hex-quality-assessor
+name: 六维质检员工
+version: "10.0.0"
+owner: admin
+area: craft-workshop
+domain: >-
+  对制作车间产物执行六维质量评估与放行建议
+
+scope_globs:
+  - "FHD/mods/_employees/hex-quality-assessor/**"
+  - "yuangon/craft-workshop/hex-quality-assessor/**"
+  - "workbench/sessions/*"
+  - "workbench/validation/*"
+
+forbidden_globs:
+  - "*.py"
+  - "*.vue"
+  - "*.ts"
+
+depends_on:
+  - quality-validator
+
+actions:
+  handlers:
+    - llm_md
+    - echo
+
+triggers:
+  on_error: true
+  on_quality_fail: true
+
+skills:
+  - skill-hex-quality-assessment
+
+changelog:
+  - version: "10.0.0"
+    date: "2026-06-07"
+    note: "yuangon 骨架由 bootstrap_yuangon.py 从 manifest 反向生成（v10 线内迭代）"

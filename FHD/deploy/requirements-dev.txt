@@ -1,0 +1,19 @@
+# CI / 开发工具链（与 pyproject.toml [project.optional-dependencies].dev 对齐）
+pytest>=7.4
+pytest-cov>=4.1
+pytest-mock>=3.12
+pytest-asyncio>=0.23
+ruff>=0.8
+mypy>=1.8
+black==25.11.0
+isort>=5.13
+types-redis
+types-requests
+types-pyyaml
+types-psutil
+types-aiofiles
+types-python-dotenv
+types-pillow
+types-openpyxl
+safety>=3.0
+bandit>=1.7

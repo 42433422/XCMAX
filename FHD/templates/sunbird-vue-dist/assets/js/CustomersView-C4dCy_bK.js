@@ -1,0 +1,1 @@
+import o from"./CustomersView-CP-m-Rdh.js";import{d as e,c as r,H as t}from"./index-DmoO6vrN.js";import"./ConfirmDialog-BW9SIKIZ.js";import"./appDialog-BEIBMk6k.js";import"./useCoreNavLabel-Bc-FtX8W.js";const u=e({__name:"CustomersView",setup(m){return(s,p)=>(r(),t(o))}});export{u as default};

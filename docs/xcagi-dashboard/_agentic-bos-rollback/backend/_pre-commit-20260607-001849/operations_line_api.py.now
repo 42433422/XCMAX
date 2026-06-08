@@ -1,0 +1,116 @@
+"""运营线健康度 API（供全景页 / MODstore admin 拉取）。"""
+
+from __future__ import annotations
+
+from fastapi import APIRouter, Body
+from fastapi.responses import JSONResponse
+
+from app.application.operations_app_service import get_operations_app_service
+from app.application.user_cs_app_service import get_user_cs_app_service
+
+router = APIRouter(prefix="/api/operations-line", tags=["operations-line"])
+
+
+@router.get("/health")
+def operations_health():
+    return JSONResponse(
+        {"success": True, "data": get_operations_app_service().compute_operations_health()}
+    )
+
+
+@router.get("/governance/summary")
+def operations_governance_summary():
+    """GOV 统一治理聚合：对账/收费/签收/断点 → SLA + 风控标记 + 总体状态。"""
+    return JSONResponse(
+        {"success": True, "data": get_operations_app_service().compute_governance_summary()}
+    )
+
+
+@router.post("/contracts/scan-expiry")
+def operations_scan_contract_expiry(
+    days_ahead: int = 30, dry_run: bool = True, push: bool = False
+):
+    return JSONResponse(
+        {
+            "success": True,
+            "data": get_operations_app_service().run_contract_expiry_scan(
+                days_ahead=days_ahead, dry_run=dry_run, push=push
+            ),
+        }
+    )
+
+
+@router.post("/shipment-audit/run")
+def operations_shipment_audit_run(body: dict = Body(default_factory=dict)):
+    from app.application.shipment_audit_app_service import get_shipment_audit_app_service
+
+    unit_name = str(body.get("unit_name") or body.get("purchase_unit") or "")
+    items = body.get("items") if isinstance(body.get("items"), list) else []
+    shipment_id = body.get("shipment_id")
+    sid = int(shipment_id) if shipment_id is not None and str(shipment_id).isdigit() else None
+    return JSONResponse(
+        {
+            "success": True,
+            "data": get_shipment_audit_app_service().run_manual_audit(
+                unit_name=unit_name,
+                items=items,
+                shipment_id=sid,
+            ),
+        }
+    )
+
+
+@router.post("/shipment-audit/from-ocr")
+def operations_shipment_audit_from_ocr(body: dict = Body(default_factory=dict)):
+    from app.application.shipment_audit_app_service import get_shipment_audit_app_service
+
+    text = str(body.get("text") or "")
+    ocr_confidence = body.get("ocr_confidence")
+    shipment_id = body.get("shipment_id")
+    sid = int(shipment_id) if shipment_id is not None and str(shipment_id).isdigit() else None
+    conf = float(ocr_confidence) if ocr_confidence is not None else None
+    return JSONResponse(
+        {
+            "success": True,
+            "data": get_shipment_audit_app_service().audit_from_ocr_text(
+                text,
+                ocr_confidence=conf,
+                shipment_id=sid,
+            ),
+        }
+    )
+
+
+@router.get("/shipment-audit/monthly")
+def operations_shipment_audit_monthly(month: str | None = None):
+    from app.application.shipment_audit_app_service import get_shipment_audit_app_service
+
+    return JSONResponse(
+        {"success": True, "data": get_shipment_audit_app_service().monthly_counts(month=month)}
+    )
+
+
+@router.get("/signoff/status")
+def operations_signoff_status():
+    return JSONResponse(
+        {"success": True, "data": get_user_cs_app_service().signoff_backend_info()}
+    )
+
+
+@router.get("/reconciliation/status")
+def operations_reconciliation_status():
+    sched = get_operations_app_service().reconciliation_scheduler()
+    return JSONResponse(
+        {"success": True, "data": sched.get_reconciliation_status()}
+    )
+
+
+@router.post("/reconciliation/run")
+def operations_reconciliation_run(dry_run: bool = False):
+    sched = get_operations_app_service().reconciliation_scheduler()
+    data = (
+        sched.run_reconciliation_preview_cycle()
+        if dry_run
+        else sched.run_reconciliation_full_cycle()
+    )
+    return JSONResponse({"success": bool(data.get("ok")), "data": data})

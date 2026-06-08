@@ -1,0 +1,46 @@
+id: intake-dispatcher
+name: 需求接入员
+version: "10.0.0"
+owner: admin
+area: platform-core
+domain: >-
+  把外部输入（admin 自然语言下达、邮件、微信、客服工单、`mianshi/` 候补包、外部 webhook）规整成结构化 task，写入「待派发」队列；本岗只做语义解析与归一化，不直接选员工、不直接改业务代码。
+
+scope_globs:
+  - "MODstore_deploy/modstore_server/eventing/intake/**"
+  - MODstore_deploy/modstore_server/api/intake_api.py
+  - "MODstore_deploy/modstore_server/webhook_events/intake/**"
+  - "mianshi/**"
+  - "yuangon/platform-core/intake-dispatcher/**"
+  - MODstore_deploy/docs/yuangon-process-loop.md
+  - MODstore_deploy/scripts/intake_watcher.py
+
+forbidden_globs:
+  - "MODstore_deploy/market/src/**"
+  - MODstore_deploy/modstore_server/models.py
+  - "MODstore_deploy/modstore_server/migrations/**"
+  - "MODstore_deploy/modstore_server/payment_*.py"
+  - "_local_secrets/**"
+  - "*.env*"
+
+depends_on:
+  - doc-knowledge-curator
+  - task-router-officer
+
+actions:
+  handlers:
+    - llm_md
+    - echo
+    - agent
+
+triggers:
+  on_error: true
+  on_quality_fail: true
+
+skills:
+  - skill-intake-normalize
+
+changelog:
+  - version: "10.0.0"
+    date: "2026-06-07"
+    note: "yuangon 骨架由 bootstrap_yuangon.py 从 manifest 反向生成（v10 线内迭代）"

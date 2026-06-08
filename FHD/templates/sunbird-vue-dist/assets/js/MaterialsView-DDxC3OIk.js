@@ -1,0 +1,1 @@
+import e from"./MaterialsView-DvGvnstb.js";import{d as o,c as r,H as t}from"./index-DmoO6vrN.js";import"./appDialog-BEIBMk6k.js";const m=o({__name:"MaterialsView",setup(a){return(s,c)=>(r(),t(e))}});export{m as default};

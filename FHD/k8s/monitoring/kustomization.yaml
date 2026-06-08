@@ -1,0 +1,7 @@
+# Optional overlay — apply when cluster has Prometheus Operator installed:
+#   kubectl apply -k k8s/monitoring/
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - servicemonitor-xcagi-backend.yaml
+  - prometheusrule-xcagi-alerts.yaml

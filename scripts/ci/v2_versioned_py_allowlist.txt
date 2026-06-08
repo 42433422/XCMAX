@@ -1,0 +1,26 @@
+# One path per line (repo-relative). Updated 2026-06-04 (T11).
+# Used by scripts/guard_no_new_v2_files.py — do not add new lines without plan review.
+FHD/app/application/ai_chat_app_service_v2.py
+FHD/app/application/auth_app_service_v2.py
+FHD/app/application/conversation_app_service_v2.py
+FHD/app/application/customer_app_service_v2.py
+FHD/app/application/excel_vector_app_service_v2.py
+FHD/app/application/extract_log_app_service_v2.py
+FHD/app/application/file_analysis_app_service_v2.py
+FHD/app/application/inventory_app_service_v2.py
+FHD/app/application/material_app_service_v2.py
+FHD/app/application/ocr_app_service_v2.py
+FHD/app/application/order_app_service_v2.py
+FHD/app/application/print_app_service_v2.py
+FHD/app/application/product_app_service_v2.py
+FHD/app/application/product_import_app_service_v2.py
+FHD/app/application/purchase_app_service_v2.py
+FHD/app/application/shipment_app_service_v2.py
+FHD/app/application/template_app_service_v2.py
+FHD/app/application/unit_products_import_app_service_v2.py
+FHD/app/application/user_app_service_v2.py
+FHD/app/application/user_memory_vector_app_service_v2.py
+FHD/app/application/user_preference_app_service_v2.py
+FHD/app/application/wechat_contact_app_service_v2.py
+FHD/app/application/wechat_task_app_service_v2.py
+FHD/app/mod_sdk/sdk_v2.py

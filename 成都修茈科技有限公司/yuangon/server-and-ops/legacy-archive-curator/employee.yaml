@@ -1,0 +1,40 @@
+id: legacy-archive-curator
+name: 工作区归档管理员
+version: "10.0.0"
+owner: admin
+area: server-and-ops
+domain: >-
+  S-R R3 工作区与 legacy 归档：_archive/、FHD/.archive/、LEGACY_CLEANUP_TRACKING、xcmax-tree 排除项治理。
+
+scope_globs:
+  - "_archive/**"
+  - "FHD/.archive/**"
+  - FHD/docs/reports/LEGACY_CLEANUP_TRACKING.md
+  - scripts/cleanup_archive_secrets.py
+  - scripts/build-xcmax-tree-data.py
+  - "yuangon/server-and-ops/legacy-archive-curator/**"
+
+forbidden_globs:
+  - "_local_secrets/**"
+
+depends_on:
+  - retention-officer
+
+actions:
+  handlers:
+    - llm_md
+    - echo
+
+triggers:
+  on_error: true
+  on_quality_fail: true
+
+skills:
+  - task.analyze
+  - llm.markdown
+  - workflow.assist
+
+changelog:
+  - version: "10.0.0"
+    date: "2026-06-07"
+    note: "yuangon 骨架由 bootstrap_yuangon.py 从 manifest 反向生成（v10 线内迭代）"

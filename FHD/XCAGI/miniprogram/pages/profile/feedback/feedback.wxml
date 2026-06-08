@@ -1,0 +1,6 @@
+<view class="page"><form bindsubmit="submit">
+  <view class="card form-row"><label>反馈类型</label><picker range="{{types}}" value="{{typeIdx}}" bindchange="onTypeChange"><text>{{types[typeIdx]}}</text></picker></view>
+  <view class="card"><textarea name="content" placeholder="请描述您的问题或建议（最多1000字）" maxlength="1000" bindinput="onInput"></textarea></view>
+  <view class="card image-area"><text>添加图片(可选)</text><view class="img-list"><image wx:for="{{images}}" wx:key="*this" src="{{item}}" mode="aspectFill" catchtap="removeImg" data-index="{{index}}"/></view><button size="mini" bindtap="chooseImage" wx:if="{{images.length<9}}">+ 添加</button></view>
+  <button form-type="submit" class="submit-btn">提交反馈</button>
+</form></view>

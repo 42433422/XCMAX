@@ -1,0 +1,146 @@
+# Production stack — requires .env with SECRET_KEY, POSTGRES_PASSWORD, REDIS_PASSWORD
+# See .env.production.example. For local dev use docker-compose.dev.yml (weak defaults OK).
+
+services:
+  backend:
+    image: xcagi-backend:${XCAGI_VERSION:-latest}
+    build:
+      # ⚠️ 已统一主入口至 XCAGI/，构建上下文指向 XCAGI/
+      context: ./XCAGI
+      dockerfile: Dockerfile
+      target: production
+    container_name: xcagi-backend
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5000:5000"
+    environment:
+      - XCAGI_ENV=production
+      - SECRET_KEY=${SECRET_KEY:?SECRET_KEY is required — see .env.production.example}
+      - DATABASE_URL=${DATABASE_URL:-postgresql+psycopg://xcagi:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/xcagi}
+      - VECTOR_DB_URL=${VECTOR_DB_URL:-postgresql+psycopg://xcagi:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/xcagi}
+      - DATABASE_PATH=/app/data
+      - UPLOAD_FOLDER=/app/uploads
+      - CACHE_REDIS_URL=${CACHE_REDIS_URL:-redis://:${REDIS_PASSWORD:?REDIS_PASSWORD is required}@redis:6379/0}
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL:-redis://:${REDIS_PASSWORD:?REDIS_PASSWORD is required}@redis:6379/1}
+      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND:-redis://:${REDIS_PASSWORD:?REDIS_PASSWORD is required}@redis:6379/2}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    volumes:
+      - xcagi-data:/app/data
+      - xcagi-uploads:/app/uploads
+      - xcagi-logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - xcagi-network
+    command: >
+      gunicorn --config gunicorn_config.py run:app
+
+  celery-worker:
+    image: xcagi-celery-worker:${XCAGI_VERSION:-latest}
+    build:
+      # ⚠️ 已统一主入口至 XCAGI/，构建上下文指向 XCAGI/
+      context: ./XCAGI
+      dockerfile: Dockerfile
+      target: production
+    container_name: xcagi-celery-worker
+    restart: unless-stopped
+    command: >
+      celery -A celery_app worker --loglevel=info --concurrency=2
+    environment:
+      - XCAGI_ENV=production
+      - SECRET_KEY=${SECRET_KEY:?SECRET_KEY is required — see .env.production.example}
+      - DATABASE_URL=${DATABASE_URL:-postgresql+psycopg://xcagi:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/xcagi}
+      - VECTOR_DB_URL=${VECTOR_DB_URL:-postgresql+psycopg://xcagi:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/xcagi}
+      - DATABASE_PATH=/app/data
+      - UPLOAD_FOLDER=/app/uploads
+      - CACHE_REDIS_URL=${CACHE_REDIS_URL:-redis://:${REDIS_PASSWORD:?REDIS_PASSWORD is required}@redis:6379/0}
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL:-redis://:${REDIS_PASSWORD:?REDIS_PASSWORD is required}@redis:6379/1}
+      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND:-redis://:${REDIS_PASSWORD:?REDIS_PASSWORD is required}@redis:6379/2}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    volumes:
+      - xcagi-data:/app/data
+      - xcagi-uploads:/app/uploads
+      - xcagi-logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - xcagi-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: xcagi-redis
+    restart: unless-stopped
+    command: redis-server --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:?REDIS_PASSWORD is required}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - xcagi-network
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: xcagi-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=xcagi
+      - POSTGRES_USER=xcagi
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U xcagi -d xcagi"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - xcagi-network
+
+  frontend:
+    image: xcagi-frontend:${XCAGI_VERSION:-latest}
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: xcagi-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - xcagi-network
+
+volumes:
+  xcagi-data:
+    driver: local
+  xcagi-uploads:
+    driver: local
+  xcagi-logs:
+    driver: local
+  redis-data:
+    driver: local
+  postgres-data:
+    driver: local
+
+networks:
+  xcagi-network:
+    driver: bridge

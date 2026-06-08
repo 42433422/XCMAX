@@ -1,0 +1,37 @@
+id: pack-registrar
+name: 打包登记员工
+version: "10.0.0"
+owner: admin
+area: craft-workshop
+domain: >-
+  将员工包登记到 Catalog 目录，执行五维审核，生成 .xcemp 发布包
+
+scope_globs:
+  - "workbench/sessions/*"
+  - "catalog/*"
+  - "yuangon/craft-workshop/pack-registrar/**"
+
+forbidden_globs:
+  - "*.py"
+  - "*.vue"
+  - "*.ts"
+
+depends_on:
+  - workflow-automator
+
+actions:
+  handlers:
+    - llm_md
+    - echo
+
+triggers:
+  on_error: true
+  on_quality_fail: true
+
+skills:
+  - skill-pack-registration
+
+changelog:
+  - version: "10.0.0"
+    date: "2026-06-07"
+    note: "yuangon 骨架由 bootstrap_yuangon.py 从 manifest 反向生成（v10 线内迭代）"

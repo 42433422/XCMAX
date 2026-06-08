@@ -1,0 +1,60 @@
+# Prometheus Operator CRD — mirrors k8s/monitoring/prometheus/alert_rules.yml
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: xcagi-alerts
+  labels:
+    app: xcagi
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: xcagi_alerts
+      rules:
+        - alert: XCAGIHighErrorRate
+          expr: rate(api_requests_total{status=~"5.."}[5m]) > 0.05
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: High error rate detected
+            description: Error rate is {{ $value | humanizePercentage }}
+        - alert: XCAGIHighLatency
+          expr: histogram_quantile(0.95, rate(api_request_duration_seconds_bucket[5m])) > 2
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: High API latency
+            description: P95 latency is {{ $value }}s
+        - alert: XCAGIServiceDown
+          expr: up{job="xcagi-backend"} == 0
+          for: 1m
+          labels:
+            severity: critical
+          annotations:
+            summary: XCAGI backend is down
+            description: Backend service has been down for more than 1 minute
+        - alert: XCAGIHighMemoryUsage
+          expr: (container_memory_usage_bytes{pod=~"xcagi.*"} / container_spec_memory_limit_bytes{pod=~"xcagi.*"}) > 0.85
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: High memory usage
+            description: Memory usage is {{ $value | humanizePercentage }}
+        - alert: XCAGIHighCPUUsage
+          expr: rate(container_cpu_usage_seconds_total{pod=~"xcagi.*"}[5m]) > 0.85
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: High CPU usage
+            description: CPU usage is {{ $value | humanizePercentage }}
+        - alert: XCAGIDatabaseConnectionFailure
+          expr: rate(db_connection_errors_total[5m]) > 0
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: Database connection failures
+            description: Database connection errors detected

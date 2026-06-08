@@ -1,0 +1,72 @@
+id: real-phone
+name: 真实电话业务员
+version: "1.0.0"
+domain: 固定扩展员工，ADB 安卓真机链路：设备检测、来电识别、自动接听、音频转写、意图回复与播报；任务面板按阶段展示进度与异常。
+owner: admin
+area: workflow-extension
+security_level: personal
+is_public: true
+
+scope_globs:
+  - FHD-个人/frontend/src/constants/workflowEmployeeDocIds.ts
+  - FHD-个人/frontend/src/constants/workflowEmployeeDatabaseLinks.ts
+  - FHD-个人/frontend/src/data/workflow-employee-docs.json
+
+forbidden_globs:
+  - FHD-个人/app/fastapi_routes/xcagi_compat_chat_helpers.py
+
+triggers:
+  on_error: true
+  on_quality_fail: true
+  on_coverage_miss: false
+  max_patch_budget_tokens: 4000
+  max_patch_steps: 5
+
+sla:
+  timeout_seconds: 180
+  retry_max: 2
+  escalate_to_human: true
+
+llm_default: "auto"
+llm_reasoning: "auto"
+
+skills:
+  - skills/skill-adb-device.md
+  - skills/skill-real-phone-call.md
+
+capabilities:
+  - label: ADB 设备连通检查
+    description: 检查 adb 连接状态、目标设备在线与通话权限；异常时提示重连与授权
+  - label: 来电检测与自动接听
+    description: 监听来电状态（振铃/接通/挂断）；命中规则后执行接听动作，失败重试并记录原因
+  - label: 通话音频采集与 ASR
+    description: 接通后采集通话音频并实时转写，提取客户诉求、关键信息与上下文
+  - label: 意图生成与回复播报
+    description: 基于话术与意图结果生成回复，执行 TTS 播报；必要时保留人工接管入口
+
+examples:
+  - title: ADB 设备连通检查
+    description: 启用员工后检查 ADB 设备连接状态
+    input:
+      action: check_device
+      device_id: "android-device-001"
+  - title: 来电自动接听
+    description: 检测到来电后自动接听并开始处理
+    input:
+      action: on_call
+      caller: "客户号码"
+      auto_answer: true
+  - title: 通话转写与回复
+    description: 通话过程中实时转写并生成回复
+    input:
+      action: process_call
+      call_id: "call-001"
+      asr_enabled: true
+      tts_enabled: true
+
+depends_on: []
+
+changelog:
+  - version: "1.0.0"
+    date: "2026-05-14"
+    note: "初始创建：从 FHD-个人 程序硬编码中提取"

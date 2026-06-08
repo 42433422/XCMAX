@@ -1,0 +1,54 @@
+id,area,name,depends_on,collab_depends_match,handlers,scope_count
+artifact-generator,craft-workshop,产物生成员工,employee-planner,True,"llm_md,echo",3
+change-request-auditor,platform-core,变更评审员,"test-qa-runner,employee-pack-quality-interviewer,security-secrets-guard",True,"llm_md,echo,agent",5
+code-validator,craft-workshop,代码校验员工,sandbox-tester,True,"llm_md,echo",2
+daily-orchestrator,platform-core,每日编排员,"test-qa-runner,dbops-engineer",True,agent,4
+dbops-engineer,server-and-ops,数据库运维工程师,"test-qa-runner,security-secrets-guard",True,"llm_md,echo,agent",9
+delivery-receipt-officer,platform-core,交付签收员,"test-qa-runner,change-request-auditor",True,"llm_md,echo",3
+deploy-release-officer,server-and-ops,发布部署主管,"nginx-config-engineer,security-secrets-guard",True,"llm_md,echo,shell_exec,ssh_exec",23
+doc-knowledge-curator,quality-and-docs,文档知识管理员,"mods-and-eskill-curator,vibe-coding-maintainer,employee-pack-curator",True,"doc_sync,llm_md",19
+ecosystem-delivery-reporter,partner-ecosystem,生态交付回传员,"enterprise-adoption-officer,deploy-release-officer",True,"llm_md,echo",3
+ecosystem-investor-portal-officer,partner-ecosystem,投资方只读门户员,"market-frontend-dev,ecosystem-delivery-reporter",True,"llm_md,echo",3
+ecosystem-joint-catalog-officer,partner-ecosystem,联合 Catalog 策展员,"employee-pack-curator,modstore-backend-api",True,"llm_md,echo",3
+ecosystem-partner-onboard-officer,partner-ecosystem,生态伙伴接入员,modstore-backend-api,True,"llm_md,echo",3
+ecosystem-revenue-share-reconciler,partner-ecosystem,生态分润对账员,"payment-billing-reconciler,java-payment-bridge-officer",True,"llm_md,echo",3
+employee-interview-assistant,quality-and-docs,员工信息访谈员,"doc-knowledge-curator,employee-pack-curator",True,"llm_md,echo",5
+employee-pack-curator,modstore-backend,员工包策展员,"mods-and-eskill-curator,vibe-coding-maintainer",True,"llm_md,echo",26
+employee-pack-quality-interviewer,quality-and-docs,员工包质询员,"employee-interview-assistant,employee-pack-curator",True,"llm_md,echo",3
+employee-planner,craft-workshop,规划设计员工,intent-analyst,True,"llm_md,echo",2
+enterprise-adoption-officer,platform-core,企业使用跟踪员,user-customer-service-officer,True,"llm_md,echo",3
+fhd-core-maintainer,platform-core,FHD 核心应用维护员,test-qa-runner,True,"llm_md,echo",8
+flask-entry-keeper,site-and-marketing,Flask 入口维护员,nginx-config-engineer,True,"llm_md,echo",6
+hex-quality-assessor,craft-workshop,六维质检员工,quality-validator,True,"llm_md,echo",4
+host-checker,craft-workshop,运维员工,self-checker,True,"llm_md,echo",2
+intake-dispatcher,platform-core,需求接入员,"doc-knowledge-curator,task-router-officer",True,"llm_md,echo,agent",7
+intent-analyst,craft-workshop,需求分析员工,,True,"llm_md,echo",2
+java-payment-bridge-officer,modstore-backend,Java 支付桥接员,"modstore-backend-api,payment-billing-reconciler",True,"llm_md,echo",3
+legacy-archive-curator,server-and-ops,工作区归档管理员,retention-officer,True,"llm_md,echo",5
+log-monitor-incident,server-and-ops,日志监控与事故响应员,test-qa-runner,True,"llm_md,echo,shell_exec",19
+market-frontend-dev,modstore-frontend,市场前端开发员,"modstore-backend-api,workbench-ux-stylist",True,"llm_md,echo",18
+marketing-site-builder,site-and-marketing,营销站点构建员,"site-content-editor,seo-sitemap-curator",True,"llm_md,echo",1
+miniapp-builder,craft-workshop,小程序员工,quality-validator,True,"llm_md,echo",2
+mobile-android-release-officer,platform-core,Android 发版员,"test-qa-runner,deploy-release-officer",True,"llm_md,echo",4
+mobile-ios-release-officer,platform-core,iOS 发版员,"deploy-release-officer,mobile-android-release-officer",True,"llm_md,echo",3
+mods-and-eskill-curator,platform-core,Mods/ESkill 策展员,employee-pack-curator,True,"llm_md,echo",6
+modstore-backend-api,modstore-backend,MODstore 后端 API 员,"test-qa-runner,log-monitor-incident,deploy-release-officer,dbops-engineer",True,"llm_md,echo",22
+nginx-config-engineer,server-and-ops,Nginx 配置工程师,security-secrets-guard,True,"llm_md,echo,shell_exec",8
+pack-registrar,craft-workshop,打包登记员工,workflow-automator,True,"llm_md,echo",2
+payment-billing-reconciler,modstore-backend,支付账单对账员,security-secrets-guard,True,"llm_md,echo",12
+push-update-context-officer,server-and-ops,推送更新员工,deploy-release-officer,True,"llm_md,echo,shell_exec",13
+quality-validator,craft-workshop,质检员工,artifact-generator,True,"llm_md,echo",2
+retention-officer,server-and-ops,档案清理员,log-monitor-incident,True,"llm_md,echo,shell_exec",37
+sandbox-tester,craft-workshop,测试员工,pack-registrar,True,"llm_md,echo",2
+script-binder,craft-workshop,配置绑定员工,miniapp-builder,True,"llm_md,echo",2
+security-secrets-guard,server-and-ops,安全密钥守卫,,True,"llm_md,echo,shell_exec",16
+self-checker,craft-workshop,自检员工,code-validator,True,"llm_md,echo",2
+seo-sitemap-curator,site-and-marketing,SEO 站点地图管理员,site-content-editor,True,"llm_md,echo",5
+site-content-editor,site-and-marketing,静态站内容编辑员,seo-sitemap-curator,True,"llm_md,echo",29
+task-router-officer,platform-core,任务派发员,"intake-dispatcher,employee-pack-curator",True,"llm_md,echo,agent",6
+test-qa-runner,quality-and-docs,测试质量运行员,"modstore-backend-api,vibe-coding-maintainer,market-frontend-dev,deploy-release-officer",True,"llm_md,echo",17
+user-customer-service-officer,platform-core,用户客服员工,intake-dispatcher,True,"llm_md,echo",4
+vibe-coding-maintainer,platform-core,Vibe-Coding 维护员,,True,"vibe_edit,direct_python,agent,llm_md,echo",14
+workbench-ux-stylist,modstore-frontend,工作台 UX 设计员,market-frontend-dev,True,"llm_md,echo",6
+workflow-automator,craft-workshop,流程自动化员工,script-binder,True,"llm_md,echo",2
+xcagi-host-foundation-employee,,宿主基础能力（预装员工）,,True,,0

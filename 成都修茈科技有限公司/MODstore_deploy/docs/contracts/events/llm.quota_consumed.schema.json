@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://modstore.local/schemas/events/llm.quota_consumed.schema.json",
+  "title": "llm.quota_consumed payload",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["user_id", "provider", "model", "tokens", "cost"],
+  "properties": {
+    "user_id": { "type": ["integer", "string"] },
+    "provider": { "type": "string" },
+    "model": { "type": "string" },
+    "tokens": { "type": ["integer", "number"] },
+    "cost": { "type": ["number", "string"] }
+  }
+}

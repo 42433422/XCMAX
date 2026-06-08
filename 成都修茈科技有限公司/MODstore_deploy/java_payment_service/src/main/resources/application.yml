@@ -1,0 +1,121 @@
+spring:
+  application:
+    name: payment-service
+  
+  # 数据库配置
+  datasource:
+    url: ${JAVA_DATABASE_URL:jdbc:postgresql://localhost:5432/payment_db}
+    username: ${DATABASE_USER:admin}
+    password: ${DATABASE_PASSWORD:password}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 50
+      minimum-idle: 10
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+
+  # JPA配置
+  jpa:
+    hibernate:
+      ddl-auto: ${JPA_DDL_AUTO:validate}
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+  flyway:
+    enabled: ${FLYWAY_ENABLED:true}
+    baseline-on-migrate: true
+
+  # Redis配置
+  data:
+    redis:
+      url: ${REDIS_URL:redis://localhost:6379}
+      timeout: 10000
+
+  # RabbitMQ配置
+  rabbitmq:
+    addresses: ${RABBITMQ_URL:amqp://localhost:5672}
+    username: ${RABBITMQ_USER:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+
+# 服务器配置
+server:
+  port: ${SERVER_PORT:8080}
+  servlet:
+    context-path: /
+  compression:
+    enabled: true
+  http2:
+    enabled: true
+
+# 支付宝配置
+alipay:
+  app-id: ${ALIPAY_APP_ID:}
+  private-key: ${ALIPAY_PRIVATE_KEY:${ALIPAY_APP_PRIVATE_KEY:}}
+  private-key-path: ${ALIPAY_PRIVATE_KEY_PATH:${ALIPAY_APP_PRIVATE_KEY_PATH:}}
+  public-key: ${ALIPAY_PUBLIC_KEY:${ALIPAY_ALIPAY_PUBLIC_KEY:}}
+  public-key-path: ${ALIPAY_PUBLIC_KEY_PATH:${ALIPAY_ALIPAY_PUBLIC_KEY_PATH:}}
+  notify-url: ${ALIPAY_NOTIFY_URL:}
+  debug: ${ALIPAY_DEBUG:false}
+  # 非空则强制使用该网关（沙箱/正式均需与 APPID、密钥一致）。未设置且 debug=true 时用 sandbox-gateway-url。
+  gateway-url: ${ALIPAY_GATEWAY_URL:}
+  sandbox-gateway-url: ${ALIPAY_SANDBOX_GATEWAY_URL:https://openapi-sandbox.dl.alipaydev.com/gateway.do}
+
+wechatpay:
+  app-id: ${WECHATPAY_APP_ID:}
+  mch-id: ${WECHATPAY_MCH_ID:}
+  private-key-path: ${WECHATPAY_PRIVATE_KEY_PATH:}
+  merchant-serial-no: ${WECHATPAY_MERCHANT_SERIAL_NO:}
+  api-v3-key: ${WECHATPAY_API_V3_KEY:}
+  notify-url: ${WECHATPAY_NOTIFY_URL:}
+
+# JWT配置
+jwt:
+  secret: ${MODSTORE_JWT_SECRET:${JWT_SECRET:modstore-dev-secret-change-in-prod}}
+  expiration: 86400
+
+payment:
+  secret-key: ${PAYMENT_SECRET_KEY:default_secret_key}
+  public-origin: ${MODSTORE_PUBLIC_ORIGIN:http://localhost:8765}
+  market-prefix: ${MODSTORE_MARKET_PREFIX:/market}
+  pending-order-max-age-minutes: ${PAYMENT_PENDING_ORDER_MAX_AGE_MINUTES:30}
+  pending-order-cleanup-interval-ms: ${PAYMENT_PENDING_ORDER_CLEANUP_INTERVAL_MS:300000}
+
+modstore:
+  admin-recharge-token: ${MODSTORE_ADMIN_RECHARGE_TOKEN:}
+  internal-api-key: ${MODSTORE_INTERNAL_API_KEY:${XCAGI_MARKET_INTERNAL_API_KEY:}}
+
+webhook:
+  url: ${MODSTORE_WEBHOOK_URL:}
+  secret: ${MODSTORE_WEBHOOK_SECRET:}
+  timeout-seconds: ${MODSTORE_WEBHOOK_TIMEOUT_SECONDS:5}
+  retries: ${MODSTORE_WEBHOOK_RETRIES:2}
+
+# Actuator配置
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+# 日志配置
+logging:
+  level:
+    root: info
+    com.modstore: debug
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+  file:
+    name: logs/payment-service.log

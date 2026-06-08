@@ -1,0 +1,40 @@
+# Logical deploy components for this monorepo (SSH-based production rollout).
+# Schema: docs/contracts/orchestration/deploy_topology.schema.json
+#
+# These ids are infrastructure units — not employee_pack ids. Collaboration edges
+# belong in manifest depends_on / employee_config_v2.collaboration.depends_on only.
+
+schema_version: "1.0"
+description: >
+  Three independent CI→deploy pipelines share one production host and secrets.
+  No enforced ordering between components at deploy time unless ops adds edges below.
+
+components:
+  - id: modstore-backend
+    display_name: MODstore FastAPI (Python)
+    description: Uvicorn/modstore_server API on the host venv or systemd unit.
+    repo_paths:
+      - MODstore_deploy/modstore_server
+      - MODstore_deploy/modman
+      - MODstore_deploy/tests
+    ci_workflow_name: CI - Backend Python
+    deploy_workflow_name: Deploy backend (MODstore)
+
+  - id: market-static
+    display_name: Market SPA (Vue)
+    description: Built assets served by nginx or equivalent on the host.
+    repo_paths:
+      - MODstore_deploy/market
+    ci_workflow_name: CI - Market
+    deploy_workflow_name: Market live deploy
+
+  - id: payment-java
+    display_name: Payment microservice (Spring Boot)
+    description: Java payment service; separate deploy directory from Python backend.
+    repo_paths:
+      - MODstore_deploy/java_payment_service
+    ci_workflow_name: CI - Payment Java
+    deploy_workflow_name: Deploy payment (Java)
+
+# Empty: pipelines are parallel after each CI succeeds; no shared DAG edge in Actions.
+edges: []

@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://modstore.local/schemas/events/subscription.renewed.schema.json",
+  "title": "subscription.renewed payload",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["user_id", "plan_id", "out_trade_no", "amount", "expires_at"],
+  "properties": {
+    "user_id": { "type": ["integer", "string"] },
+    "plan_id": { "type": ["integer", "string"] },
+    "out_trade_no": { "type": "string" },
+    "amount": { "type": "number" },
+    "expires_at": { "type": "string" }
+  }
+}

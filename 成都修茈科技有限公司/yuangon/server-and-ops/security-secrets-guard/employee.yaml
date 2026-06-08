@@ -1,0 +1,53 @@
+id: security-secrets-guard
+name: 安全密钥守卫
+version: "10.0.0"
+owner: admin
+area: server-and-ops
+domain: >-
+  保护 xiu-ci.com 所有密钥、证书与敏感配置；进行依赖 CVE 扫描、CSP/Headers 审计；发现问题时告警，不自动修改生产配置。
+
+scope_globs:
+  - "_local_secrets/**"
+  - .cursor_admin_token.txt
+  - "alipay_package/**"
+  - requirements.txt
+  - "MODstore_deploy/modstore_server/requirements*.txt"
+  - "MODstore_deploy/keys/**"
+  - "MODstore_deploy/keys_staging/**"
+  - MODstore_deploy/.env
+  - MODstore_deploy/.env.example
+  - MODstore_deploy/.env.local
+  - "MODstore_deploy/.env.local.bak-*"
+  - MODstore_deploy/.env.production
+  - MODstore_deploy/.env.production.example
+  - MODstore_deploy/env.database.local.example
+  - MODstore_deploy/runtime_allowlist.json
+  - MODstore_deploy/deploy-target.local.ps1.example
+  - "yuangon/server-and-ops/security-secrets-guard/**"
+
+forbidden_globs:
+  - "*.vue"
+  - "*.ts"
+  - "MODstore_deploy/modstore_server/*.py"
+  - "vibe-coding/**"
+
+depends_on:
+  []
+
+actions:
+  handlers:
+    - llm_md
+    - echo
+    - shell_exec
+
+triggers:
+  on_error: true
+  on_quality_fail: true
+
+skills:
+  - skill-secret-audit
+
+changelog:
+  - version: "10.0.0"
+    date: "2026-06-07"
+    note: "yuangon 骨架由 bootstrap_yuangon.py 从 manifest 反向生成（v10 线内迭代）"

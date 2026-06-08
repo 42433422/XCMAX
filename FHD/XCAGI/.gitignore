@@ -1,0 +1,215 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+*.cover
+coverage.xml
+coverage/
+.tox/
+
+# Database files
+*.db
+*.db.backup
+*.sqlite
+*.sqlite3
+*.db-shm
+*.db-wal
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Excel temporary files
+~$*.xlsx
+~$*.xls
+
+# Output files
+outputs/
+*.exe
+
+# Unit databases with customer data
+unit_databases/
+
+# Customer data
+customer_products_final_corrected.db
+出货记录/
+
+# Python 32bit distribution
+python32/
+
+# Build artifacts
+build/
+dist/*.exe
+*.spec
+
+# Test files
+test_*.html
+current_page.html
+custom_mode_test.html
+
+# Project specific
+*.xlsx
+*.xls
+output/
+temp/
+uploads/
+
+# Large files and directories to exclude from tracking
+resources/ai_assistant/*.png
+resources/ai_assistant/*.jpg
+resources/ai_assistant/*.jpeg
+frontend/node_modules/
+frontend/.vite/
+templates/vue-dist/assets/
+*.db-shm
+*.db-wal
+
+# Model checkpoints (exceeds GitHub 100MB limit)
+distillation/checkpoints/*.pt
+distillation/checkpoints/**/*.pt
+distillation/checkpoints/*.safetensors
+distillation/checkpoints/**/*.safetensors
+checkpoints/
+*.pt
+*.safetensors
+
+# Database files (runtime data)
+customers.db*
+products.db*
+shipment_records.db*
+
+# Test files
+test_*.py
+test_*.js
+test_*.vue
+*_test.py
+tests/
+pytest.ini
+.smoke_test.py
+quick_*.py
+verify_*.py
+inspect_*.py
+check_*.py
+analyze_*.py
+debug*.py
+debug/
+test*/
+*.test.json
+test_basic.json
+
+# Product data files
+浜у搧鏂囦欢澶?
+鍑鸿揣璁板綍/
+
+# Labels generated files
+labels/*.png
+labels/*.jpg
+
+# Resources ai_assistant exported files
+resources/ai_assistant/鍟嗘爣瀵煎嚭/
+resources/ai_assistant/閸熷棙鐖ｇ€电厧鍤?
+
+# Vue dist files
+templates/vue-dist/
+vue-dist/
+
+# Frontend node modules and build
+frontend/node_modules/
+frontend/.vite/
+frontend/dist/
+
+# Documentation
+.trae/
+_backup_icon_system/
+ENTERPRISE_GUIDE.md
+docs/
+
+# PaddleOCR local inference models (use scripts/download_paddleocr_ch_models.py)
+paddleocr_local_models/
+
+# Large backup/bundle files (exceed GitHub 100MB limit)
+git-backup/
+release-bundle/
+archive/
+reports/
+saved_analyses/
+_tmp_*/
+_perf_*.json
+
+# Wechat decrypt binary
+wechat-decrypt
+
+# Misc test/debug/utility scripts
+check_*.py
+find_*.py
+smoke_*.py
+run_*.py
+force_sync*.py
+clear_ctx.py
+do_patch.py
+md_to_pdf.py
+sample_messages.py
+search_all_*.py
+verify_*.py
+final_test.*
+hash研究.py
+_convert_*.py
+_gen_*.py
+_check_*.py
+_tmp_*.*
+
+# Test labels directory
+test_labels/
+
+# AI report (generated)
+AI企业解决方案对比分析报告.*
+
+# Local junction/symlink to repo-root ../app (create via ../scripts/ensure_xcagi_app_link.*)
+/app
+# Duplicate frontend tree; authoritative code is repo-root ../frontend/
+/frontend

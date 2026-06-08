@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://modstore.local/schemas/events/wallet.balance_changed.schema.json",
+  "title": "wallet.balance_changed payload",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["user_id", "amount", "source_order_id", "transaction_type"],
+  "properties": {
+    "user_id": { "type": ["integer", "string"] },
+    "amount": { "type": ["number", "string"] },
+    "source_order_id": { "type": ["integer", "string"] },
+    "transaction_type": { "type": "string" }
+  }
+}

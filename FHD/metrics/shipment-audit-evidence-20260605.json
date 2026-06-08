@@ -1,0 +1,53 @@
+{
+  "generated_at": "2026-06-05T07:58:06Z",
+  "samples": [
+    {
+      "success": true,
+      "event": {
+        "id": 1,
+        "created_at": "2026-06-05T07:58:06.632046",
+        "shipment_id": 9001,
+        "decision": "auto_approve",
+        "reason": "规则校验通过",
+        "ocr_confidence": null,
+        "source": "api"
+      },
+      "decision": "auto_approve",
+      "reason": "规则校验通过"
+    },
+    {
+      "success": true,
+      "event": {
+        "id": 2,
+        "created_at": "2026-06-05T07:58:06.667968",
+        "shipment_id": 9002,
+        "decision": "manual",
+        "reason": "缺少购货单位",
+        "ocr_confidence": null,
+        "source": "api"
+      },
+      "decision": "manual",
+      "reason": "缺少购货单位"
+    },
+    {
+      "success": true,
+      "event": {
+        "id": 3,
+        "created_at": "2026-06-05T07:58:06.718595",
+        "shipment_id": 9003,
+        "decision": "auto_approve",
+        "reason": "规则校验通过",
+        "ocr_confidence": 0.92,
+        "source": "ocr"
+      },
+      "decision": "auto_approve",
+      "reason": "规则校验通过"
+    }
+  ],
+  "counts": {
+    "auto_approve": 2,
+    "manual": 1,
+    "ocr_failed": 0,
+    "total": 3
+  }
+}

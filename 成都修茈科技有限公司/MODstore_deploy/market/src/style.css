@@ -1,0 +1,541 @@
+/* global styles — tokens + resets; shell/nav rules live in App.vue */
+@import './tokens.css';
+
+/* ── Light-theme global element overrides ── */
+html[data-workbench-theme='light'] {
+  background: #f5f5f7;
+  color: #1d1d1f;
+}
+
+html[data-workbench-theme='light'] body {
+  background: #f5f5f7;
+  color: #1d1d1f;
+}
+
+html[data-workbench-theme='light'] a {
+  color: #0071e3;
+}
+
+html[data-workbench-theme='light'] a:hover {
+  color: #0060c0;
+}
+
+html[data-workbench-theme='light'] h1,
+html[data-workbench-theme='light'] h2,
+html[data-workbench-theme='light'] h3,
+html[data-workbench-theme='light'] h4,
+html[data-workbench-theme='light'] h5,
+html[data-workbench-theme='light'] h6 {
+  color: #1d1d1f;
+}
+
+html[data-workbench-theme='light'] code {
+  background: rgba(0, 0, 0, 0.04);
+  color: #1d1d1f;
+}
+
+html[data-workbench-theme='light'] pre {
+  background: rgba(0, 0, 0, 0.04);
+  color: #1d1d1f;
+}
+
+html[data-workbench-theme='light'] pre code {
+  background: transparent;
+}
+
+html[data-workbench-theme='light'] hr {
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+html[data-workbench-theme='light'] blockquote {
+  border-left-color: rgba(0, 0, 0, 0.1);
+  color: #86868b;
+}
+
+html[data-workbench-theme='light'] table {
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+html[data-workbench-theme='light'] th {
+  background: rgba(0, 0, 0, 0.03);
+  color: #1d1d1f;
+}
+
+html[data-workbench-theme='light'] td {
+  border-color: rgba(0, 0, 0, 0.06);
+}
+
+html[data-workbench-theme='light'] img {
+  opacity: 1;
+}
+
+html[data-workbench-theme='light'] input,
+html[data-workbench-theme='light'] textarea,
+html[data-workbench-theme='light'] select {
+  background: #ffffff;
+  color: #1d1d1f;
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+/* 暗色工作台：原生 select 下拉列表避免系统白底 */
+html:not([data-workbench-theme='light']) select {
+  color-scheme: dark;
+}
+
+html:not([data-workbench-theme='light']) select option {
+  background-color: #141820;
+  color: #f1f5f9;
+}
+
+html[data-workbench-theme='light'] input::placeholder,
+html[data-workbench-theme='light'] textarea::placeholder {
+  color: #86868b;
+}
+
+html[data-workbench-theme='light'] button {
+  color: #1d1d1f;
+}
+
+html[data-workbench-theme='light'] ::selection {
+  background: rgba(0, 113, 227, 0.15);
+  color: #1d1d1f;
+}
+
+html[data-workbench-theme='light'] ::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 4px;
+}
+
+html[data-workbench-theme='light'] ::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.25);
+}
+
+html[data-workbench-theme='light'] ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ── Admin duty graph (global — avoids scoped selector gaps) ── */
+html[data-workbench-theme='light'] .dg-panel,
+html[data-workbench-theme='light'] .dg-header {
+  background: var(--dg-header-bg, #ffffff);
+  border-color: rgba(0, 0, 0, 0.08);
+  color: #1d1d1f;
+}
+
+html[data-workbench-theme='light'] .dg-panel {
+  box-shadow: var(--dg-panel-shadow, 0 2px 12px rgba(0, 0, 0, 0.06));
+}
+
+html[data-workbench-theme='light'] .dg-title,
+html[data-workbench-theme='light'] .dg-roster-hint,
+html[data-workbench-theme='light'] .dg-stat strong,
+html[data-workbench-theme='light'] .dg-close--text {
+  color: #1d1d1f;
+}
+
+html[data-workbench-theme='light'] .dg-roster-hint,
+html[data-workbench-theme='light'] .dg-stat,
+html[data-workbench-theme='light'] .dg-toggle,
+html[data-workbench-theme='light'] .dg-close {
+  color: #64748b;
+}
+
+html[data-workbench-theme='light'] .dg-stat {
+  background: var(--dg-stat-bg, rgba(0, 0, 0, 0.04));
+}
+
+html[data-workbench-theme='light'] .dg-stat--ok {
+  color: #059669;
+  background: var(--dg-stat-bg-ok, rgba(52, 168, 83, 0.10));
+}
+
+html[data-workbench-theme='light'] .dg-stat--healthy {
+  color: #059669;
+  background: var(--dg-stat-bg-healthy, rgba(52, 168, 83, 0.10));
+}
+
+html[data-workbench-theme='light'] .dg-stat--warn {
+  color: #d97706;
+  background: var(--dg-stat-bg-warn, rgba(217, 119, 6, 0.10));
+}
+
+html[data-workbench-theme='light'] .dg-stat--dep,
+html[data-workbench-theme='light'] .dg-stat--llm-ok {
+  color: #0071e3;
+  background: var(--dg-stat-bg-dep, rgba(0, 113, 227, 0.10));
+}
+
+html[data-workbench-theme='light'] .dg-stat--llm-err {
+  color: #d70015;
+  background: var(--dg-stat-bg-err, rgba(215, 0, 21, 0.10));
+}
+
+html[data-workbench-theme='light'] .dg-stat--clickable:hover {
+  background: rgba(215, 0, 21, 0.12);
+}
+
+html[data-workbench-theme='light'] .dg-toggle-group {
+  border-color: rgba(0, 0, 0, 0.12);
+  background: rgba(0, 0, 0, 0.02);
+}
+
+html[data-workbench-theme='light'] .dg-toggle.active {
+  background: var(--color-primary, #0071e3);
+  color: #fff;
+}
+
+html[data-workbench-theme='light'] .dg-btn--ghost,
+html[data-workbench-theme='light'] .dg-btn--outline {
+  background: #fff;
+  border-color: rgba(0, 0, 0, 0.12);
+  color: #475569;
+}
+
+html[data-workbench-theme='light'] .dg-btn--ghost:hover:not(:disabled),
+html[data-workbench-theme='light'] .dg-btn--outline:hover,
+html[data-workbench-theme='light'] .dg-close:hover,
+html[data-workbench-theme='light'] .dg-stat--toggle:hover,
+html[data-workbench-theme='light'] .dg-more-item:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+html[data-workbench-theme='light'] .dg-more-menu {
+  background: #fff;
+  border-color: rgba(0, 0, 0, 0.1);
+  box-shadow: var(--dg-menu-shadow, 0 12px 28px rgba(0, 0, 0, 0.10));
+}
+
+html[data-workbench-theme='light'] .dg-more-item {
+  color: #475569;
+}
+
+html[data-workbench-theme='light'] .dg-flow {
+  background: var(--dg-flow-bg, #f5f5f7);
+}
+
+html[data-workbench-theme='light'] .vue-flow__controls {
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+html[data-workbench-theme='light'] .vue-flow__controls-button {
+  background: #fff;
+  border-bottom-color: rgba(0, 0, 0, 0.06);
+  fill: #475569;
+}
+
+html[data-workbench-theme='light'] .vue-flow__controls-button:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+html[data-workbench-theme='light'] .vue-flow__minimap {
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+html[data-workbench-theme='light'] .dg-detail,
+html[data-workbench-theme='light'] .dg-gap-panel,
+html[data-workbench-theme='light'] .dg-run-panel,
+html[data-workbench-theme='light'] .dg-nokey-panel,
+html[data-workbench-theme='light'] .dg-loading {
+  background: #fff;
+  border-color: rgba(0, 0, 0, 0.08);
+  color: #64748b;
+}
+
+html[data-workbench-theme='light'] .dg-section-toggle {
+  background: rgba(0, 0, 0, 0.02);
+  border-top-color: rgba(0, 0, 0, 0.08);
+  color: #64748b;
+}
+
+html[data-workbench-theme='light'] .dg-section-toggle:hover {
+  background: rgba(0, 0, 0, 0.04);
+  color: #1d1d1f;
+}
+
+html[data-workbench-theme='light'] .dg-spinner {
+  border-color: rgba(0, 0, 0, 0.08);
+  border-top-color: var(--color-primary, #0071e3);
+}
+
+/* ── Admin shell sidebar (App.vue — not scoped via GlobalSidebar) ── */
+html[data-workbench-theme='light'] .wb-sidebar {
+  border-right: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+html[data-workbench-theme='light'] .wb-sidebar-toggle,
+html[data-workbench-theme='light'] .wb-sidebar-new-chat,
+html[data-workbench-theme='light'] .wb-sidebar-mode-btn,
+html[data-workbench-theme='light'] .wb-sidebar-balance,
+html[data-workbench-theme='light'] .wb-sidebar-logout-btn {
+  color: #86868b;
+}
+
+html[data-workbench-theme='light'] .wb-sidebar-toggle:hover,
+html[data-workbench-theme='light'] .wb-sidebar-new-chat:hover,
+html[data-workbench-theme='light'] .wb-sidebar-mode-btn:hover {
+  background: rgba(0, 113, 227, 0.06);
+  color: #1d1d1f;
+}
+
+html[data-workbench-theme='light'] .wb-sidebar-mode-btn--active,
+html[data-workbench-theme='light'] .wb-sidebar-back-btn {
+  background: rgba(0, 113, 227, 0.1);
+  color: #1d1d1f;
+}
+
+html[data-workbench-theme='light'] .wb-sidebar-admin-nav-title,
+html[data-workbench-theme='light'] .wb-sidebar-admin-label {
+  color: #0071e3;
+}
+
+html[data-workbench-theme='light'] .wb-sidebar-divider,
+html[data-workbench-theme='light'] .wb-sidebar-bottom {
+  border-color: rgba(0, 0, 0, 0.06);
+}
+
+html[data-workbench-theme='light'] .wb-sidebar-user-link {
+  color: #1d1d1f;
+}
+
+html[data-workbench-theme='light'] .wb-sidebar-level-badge {
+  background: rgba(0, 113, 227, 0.12);
+  color: rgba(0, 113, 227, 0.9);
+}
+
+html[data-workbench-theme='light'] .wb-user-menu__trigger {
+  background: rgba(0, 0, 0, 0.04);
+  color: #1d1d1f;
+}
+
+html[data-workbench-theme='light'] .wb-user-menu__trigger:hover {
+  background: rgba(0, 113, 227, 0.06);
+}
+
+html[data-workbench-theme='light'] .wb-user-menu__panel {
+  border-color: rgba(0, 0, 0, 0.1);
+  box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.12);
+}
+
+html[data-workbench-theme='light'] .wb-user-menu__item:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+html[data-workbench-theme='light'] .wb-user-menu__balance {
+  color: #86868b;
+}
+
+html[data-workbench-theme='light'] .wb-user-menu__divider {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+/* ── Admin pages (global — avoids scoped selector gaps) ── */
+html[data-workbench-theme='light'] .page-title,
+html[data-workbench-theme='light'] .db-title,
+html[data-workbench-theme='light'] .username,
+html[data-workbench-theme='light'] .name,
+html[data-workbench-theme='light'] .mod-editor-title,
+html[data-workbench-theme='light'] .mod-editor-option-label,
+html[data-workbench-theme='light'] .skill-market__title,
+html[data-workbench-theme='light'] .skill-card__name {
+  color: #1d1d1f;
+}
+
+html[data-workbench-theme='light'] .access-denied,
+html[data-workbench-theme='light'] .db-table,
+html[data-workbench-theme='light'] .aa-card,
+html[data-workbench-theme='light'] .oj-list,
+html[data-workbench-theme='light'] .oj-detail,
+html[data-workbench-theme='light'] .cr-drawer,
+html[data-workbench-theme='light'] .yo-card,
+html[data-workbench-theme='light'] .panel,
+html[data-workbench-theme='light'] .mod-editor-panel,
+html[data-workbench-theme='light'] .skill-card {
+  background: #ffffff;
+  border-color: #e2e8f0;
+}
+
+html[data-workbench-theme='light'] .db-table th,
+html[data-workbench-theme='light'] .aa-table th,
+html[data-workbench-theme='light'] .oj-table thead th,
+html[data-workbench-theme='light'] .ops-audit-table th,
+html[data-workbench-theme='light'] .cr-table th,
+html[data-workbench-theme='light'] .table th {
+  background: #f8f9fa;
+  color: #64748b;
+  border-color: #e2e8f0;
+}
+
+html[data-workbench-theme='light'] .db-table td,
+html[data-workbench-theme='light'] .aa-table td,
+html[data-workbench-theme='light'] .oj-table td,
+html[data-workbench-theme='light'] .ops-audit-table td,
+html[data-workbench-theme='light'] .cr-table td,
+html[data-workbench-theme='light'] .table td {
+  color: #334155;
+  border-color: rgba(0, 0, 0, 0.06);
+}
+
+html[data-workbench-theme='light'] .db-count,
+html[data-workbench-theme='light'] .pkg,
+html[data-workbench-theme='light'] .time,
+html[data-workbench-theme='light'] .db-empty,
+html[data-workbench-theme='light'] .loading,
+html[data-workbench-theme='light'] .user-filter-label,
+html[data-workbench-theme='light'] .mod-editor-hint,
+html[data-workbench-theme='light'] .mod-editor-loading,
+html[data-workbench-theme='light'] .mod-editor-option-id,
+html[data-workbench-theme='light'] .skill-market__sub,
+html[data-workbench-theme='light'] .skill-market__loading,
+html[data-workbench-theme='light'] .skill-market__empty,
+html[data-workbench-theme='light'] .skill-card__meta,
+html[data-workbench-theme='light'] .skill-card__version,
+html[data-workbench-theme='light'] .skill-card__desc {
+  color: #64748b;
+}
+
+html[data-workbench-theme='light'] .filter-chip {
+  border-color: #d1d5db;
+  color: #475569;
+}
+
+html[data-workbench-theme='light'] .filter-chip--active {
+  background: rgba(217, 119, 6, 0.08);
+  border-color: rgba(217, 119, 6, 0.3);
+  color: #d97706;
+}
+
+html[data-workbench-theme='light'] .badge-user {
+  background: rgba(0, 0, 0, 0.04);
+  color: #64748b;
+}
+
+html[data-workbench-theme='light'] .mod-editor-overlay,
+html[data-workbench-theme='light'] .aa-modal,
+html[data-workbench-theme='light'] .cr-drawer-backdrop {
+  background: rgba(0, 0, 0, 0.25);
+}
+
+html[data-workbench-theme='light'] .mod-editor-option {
+  border-color: #e2e8f0;
+}
+
+html[data-workbench-theme='light'] .mod-editor-option:hover {
+  background: rgba(0, 0, 0, 0.03);
+}
+
+html[data-workbench-theme='light'] .admin-cs {
+  background: #f8f9fa;
+  color: #1d1d1f;
+}
+
+html[data-workbench-theme='light'] .admin-cs__header p {
+  color: #d97706;
+}
+
+html[data-workbench-theme='light'] .admin-cs .panel {
+  background: #ffffff;
+  border-color: #e2e8f0;
+}
+
+html[data-workbench-theme='light'] .admin-cs input,
+html[data-workbench-theme='light'] .admin-cs select,
+html[data-workbench-theme='light'] .admin-cs textarea {
+  background: #ffffff;
+  color: #1d1d1f;
+  border-color: #d1d5db;
+}
+
+/* Duty employees toolbar (slot content in graph header) */
+html[data-workbench-theme='light'] .adt-stat {
+  background: #ffffff;
+  color: #64748b;
+  border-color: #e2e8f0;
+}
+
+html[data-workbench-theme='light'] .adt-stat--btn:hover:not(:disabled) {
+  background: rgba(99, 102, 241, 0.06);
+  border-color: #6366f1;
+}
+
+html[data-workbench-theme='light'] .adt-stat strong {
+  color: #1d1d1f;
+}
+
+html[data-workbench-theme='light'] .adt-btn {
+  background: #ffffff;
+  color: #1d1d1f;
+  border-color: #d1d5db;
+}
+
+html[data-workbench-theme='light'] .adt-btn:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.03);
+}
+
+html[data-workbench-theme='light'] .adt-btn--primary {
+  background: rgba(99, 102, 241, 0.08);
+  color: #4f46e5;
+  border-color: #6366f1;
+}
+
+html[data-workbench-theme='light'] .adt-btn--primary:hover:not(:disabled) {
+  background: rgba(99, 102, 241, 0.14);
+}
+
+html[data-workbench-theme='light'] .adt-btn--ghost {
+  color: #64748b;
+  border-color: #d1d5db;
+}
+
+html[data-workbench-theme='light'] .adt-btn--active {
+  background: rgba(99, 102, 241, 0.08);
+  color: #4f46e5;
+  border-color: #6366f1;
+}
+
+html[data-workbench-theme='light'] .adt-popover {
+  background: #ffffff;
+  border-color: #e2e8f0;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.1);
+}
+
+html[data-workbench-theme='light'] .adt-popover__hint,
+html[data-workbench-theme='light'] .adt-popover__label,
+html[data-workbench-theme='light'] .adt-msg {
+  color: #64748b;
+}
+
+html[data-workbench-theme='light'] .adt-msg--err {
+  color: #dc2626;
+}
+
+html[data-workbench-theme='light'] .admin-duty-dispatch {
+  background: rgba(99, 102, 241, 0.03);
+  border-color: #e2e8f0;
+}
+
+html[data-workbench-theme='light'] .admin-duty-dispatch textarea {
+  background: #ffffff;
+  color: #1d1d1f;
+  border-color: #d1d5db;
+}
+
+html[data-workbench-theme='light'] .sm-btn {
+  background: #ffffff;
+  border-color: #d1d5db;
+  color: #475569;
+}
+
+html[data-workbench-theme='light'] .sm-btn:hover {
+  background: rgba(0, 0, 0, 0.03);
+}
+
+html[data-workbench-theme='light'] .dg-header-actions .adt-btn,
+html[data-workbench-theme='light'] .dg-header-actions .adt-stat,
+html[data-workbench-theme='light'] .dg-header-actions .adt-stat--btn,
+html[data-workbench-theme='light'] .dg-header-actions a {
+  pointer-events: auto;
+  cursor: pointer;
+}

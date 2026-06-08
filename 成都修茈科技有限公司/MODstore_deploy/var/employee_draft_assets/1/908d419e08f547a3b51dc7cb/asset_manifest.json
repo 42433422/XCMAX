@@ -1,0 +1,19 @@
+{
+  "session_id": "908d419e08f547a3b51dc7cb",
+  "user_id": 1,
+  "root": "E:\\XCMAX\\成都修茈科技有限公司\\MODstore_deploy\\var\\employee_draft_assets\\1\\908d419e08f547a3b51dc7cb",
+  "assets": [
+    {
+      "id": "asset_0",
+      "filename": "AI技术服务合同max(3).docx",
+      "kind": "asset",
+      "suffix": ".docx",
+      "size": 50299,
+      "path": "E:\\XCMAX\\成都修茈科技有限公司\\MODstore_deploy\\var\\employee_draft_assets\\1\\908d419e08f547a3b51dc7cb\\00_AI技术服务合同max(3).docx"
+    }
+  ],
+  "templates": [],
+  "example_inputs": [],
+  "expected_outputs": [],
+  "rules": []
+}

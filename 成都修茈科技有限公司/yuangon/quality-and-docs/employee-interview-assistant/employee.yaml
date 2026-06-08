@@ -1,0 +1,42 @@
+id: employee-interview-assistant
+name: 员工信息访谈员
+version: "10.0.0"
+owner: admin
+area: quality-and-docs
+domain: >-
+  面向内部编制与协作场景：通过结构化提问与表单补全，帮助其他员工（及岗位包）补全元数据、能力说明、 运行依赖与风险字段；不替代 HR 正式录用流程，不存储敏感个人身份信息于未授权位置。
+
+scope_globs:
+  - "yuangon/**/README.md"
+  - "yuangon/**/employee.yaml"
+  - "yuangon/**/runbook.md"
+  - "yuangon/**/skills/*.md"
+  - "yuangon/**/tasks/**"
+  - "yuangon/quality-and-docs/employee-interview-assistant/**"
+
+forbidden_globs:
+  - "_local_secrets/**"
+  - "*.key"
+  - .env
+  - "payments/**"
+
+depends_on:
+  - doc-knowledge-curator
+  - employee-pack-curator
+
+actions:
+  handlers:
+    - llm_md
+    - echo
+
+triggers:
+  on_error: false
+  on_quality_fail: false
+
+skills:
+  - skill-employee-intake
+
+changelog:
+  - version: "10.0.0"
+    date: "2026-06-07"
+    note: "yuangon 骨架由 bootstrap_yuangon.py 从 manifest 反向生成（v10 线内迭代）"

@@ -1,0 +1,15 @@
+# 本地全景仪表盘 · Docker Prometheus（:9091 → 容器 :9090）
+# 抓取宿主机 FHD（默认桌面开发 :5100；AirPlay 占 :5000 时改 targets 端口）
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: [localhost:9090]
+
+  - job_name: xcagi-backend
+    metrics_path: /metrics
+    static_configs:
+      - targets: [host.docker.internal:5100]

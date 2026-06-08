@@ -1,0 +1,46 @@
+id: task-router-officer
+name: 任务派发员
+version: "10.0.0"
+owner: admin
+area: platform-core
+domain: >-
+  把 `intake-dispatcher` 产出的结构化 task 派发给最合适的员工：基于 task.files_hint 与各员工 scope_globs 做匹配，命中多人时按仲裁规则选一人，无人匹配则升级 admin；本岗只做路由决策，不直接改业务代码、不执行任务。
+
+scope_globs:
+  - "MODstore_deploy/modstore_server/eventing/router/**"
+  - MODstore_deploy/modstore_server/api/router_api.py
+  - MODstore_deploy/modstore_server/scripts/build_routing_table.py
+  - MODstore_deploy/scripts/build_routing_table.py
+  - MODstore_deploy/docs/routing-table.md
+  - "yuangon/platform-core/task-router-officer/**"
+
+forbidden_globs:
+  - "MODstore_deploy/market/src/**"
+  - MODstore_deploy/modstore_server/models.py
+  - "MODstore_deploy/modstore_server/migrations/**"
+  - "MODstore_deploy/modstore_server/payment_*.py"
+  - "MODstore_deploy/modstore_server/employee_*.py"
+  - "_local_secrets/**"
+
+depends_on:
+  - intake-dispatcher
+  - employee-pack-curator
+
+actions:
+  handlers:
+    - llm_md
+    - echo
+    - agent
+
+triggers:
+  on_error: true
+  on_quality_fail: true
+
+skills:
+  - skill-route-task
+  - skill-arbitrate-overlap
+
+changelog:
+  - version: "10.0.0"
+    date: "2026-06-07"
+    note: "yuangon 骨架由 bootstrap_yuangon.py 从 manifest 反向生成（v10 线内迭代）"

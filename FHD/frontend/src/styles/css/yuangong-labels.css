@@ -1,0 +1,13 @@
+/**
+ * 员工空间标签区：默认不设字体/颜色，便于项目侧自行覆盖。
+ * 结构类名：.ews-label-slot、.ews-label-slot__name、.ews-label-slot__status
+ */
+.ews-label-slot {
+  width: 100%;
+  text-align: center;
+}
+
+.ews-label-slot__name,
+.ews-label-slot__status {
+  margin: 0;
+}

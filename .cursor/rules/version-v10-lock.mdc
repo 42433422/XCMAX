@@ -1,0 +1,50 @@
+---
+description: XCMAX 全产品线版本锁定 v10 — 非仅 App；禁止升版；例外仅 AI 全自动化自主迭代
+alwaysApply: true
+---
+
+# 版本锁定 v10（全产品线 · 强约束）
+
+## 适用范围（**全部**，不仅 Android App）
+
+本锁覆盖 **XCMAX 工作区内所有对外交付面**，同一 v10 线、同一锚点 **`10.0.0`**（及 Android `versionCode` **10** 等）：
+
+| 域 | 包含 |
+|----|------|
+| **后端** | FastAPI `app/version.py`、PyInstaller 后端包、Alembic 发版标签 |
+| **Web** | `frontend/` Vue SPA、`build:full` / minimal 构建产物 |
+| **桌面** | Windows `.exe`、macOS `.dmg`、Electron `desktop/`、electron-updater 通道 |
+| **移动** | `mobile-android/` 双 SKU（personal + enterprise）APK |
+| **运维/壳** | `admin-console/`、`sunbird-console/` |
+| **Mod 生态** | `mods/**/manifest.json`、`mod_templates/**`、员工包依赖基线 |
+| **XCAGI 子树** | `FHD/XCAGI/` 包版本与 `XCAGI/VERSION.md` |
+| **发版产物** | `release/xcagi-v10.*`、`XCAGI_ANDROID_DOWNLOAD_VERSION`、安装包元数据 |
+| **全景/文档** | `XCAGI-Full-Pipeline.html`、`docs/` 中写明的 GA 版本、客服交付链接 |
+| **姊妹栈** | `成都修茈科技有限公司/`、MODstore 等若作为 **XCAGI v10 一并交付**，对外版本表述与宿主 **10.0.0** 对齐，不得单独飙 v11/v12 |
+
+**不是**「只锁 App」：桌面/Web/后端/Mod/安装包/文档版本号**同样**不得因功能完成而 bump。
+
+## 铁律
+
+**后续所有更新 = v10 线内迭代。** 除非满足下方**唯一例外**，否则禁止升主版本或产品版本号。
+
+1. 已实现 **AI 全自动化**（非人工、非 Cursor Agent 手改）
+2. 自动化能**自主**开发、测试、发版，并**自主更新全部锚点**（见 `FHD/VERSION.md` 表 + `verify_version_anchors.py`）
+
+未满足例外前：
+
+- **不要**改 `VERSION.md`、`package.json`、`pyproject.toml`、`build.gradle.kts`、`app/version.py`、Mod manifest 主版本、`CHANGELOG` 新大号节（v11+）
+- **不要**建议「发 v11」「桌面升版」「仅升 Android」— **全栈同锁**
+- 变更记 `FHD/CHANGELOG.md` **Unreleased**，标注「v10 线内迭代」
+- 发版前：`python FHD/scripts/dev/verify_version_anchors.py` 必须绿
+
+## Agent 行为
+
+- 用户要求升版：先说明**全产品线 v10 锁**，仅当用户明确「AI 全自动化已就绪」且给出 SSOT 入口时才执行
+- 重构、商用化、单端完成（App/桌面/Web 任一）：**均非**升版理由
+- 改一端时**不得**只 bump 该端版本号，须保持全锚点 `10.0.0`
+
+## SSOT
+
+- [`FHD/VERSION.md`](FHD/VERSION.md) — 锚点表 +「版本锁定政策」
+- [`FHD/scripts/dev/verify_version_anchors.py`](FHD/scripts/dev/verify_version_anchors.py)

@@ -1,0 +1,14 @@
+diff --git a/Users/a4243342/Desktop/XCMAX/FHD/../docs/xcagi-dashboard/_agentic-bos-rollback/backend/operations_app_service.py.orig b/app/application/operations_app_service.py
+index 239218f3..7500514e 100644
+--- a/app/application/operations_app_service.py
++++ b/app/application/operations_app_service.py
+@@ -13,6 +13,9 @@ class OperationsApplicationService:
+     def compute_operations_health(self, *args: Any, **kwargs: Any) -> Any:
+         return cs.compute_operations_health(*args, **kwargs)
+ 
++    def compute_governance_summary(self, *args: Any, **kwargs: Any) -> Any:
++        return cs.compute_governance_summary(*args, **kwargs)
++
+     def run_contract_expiry_scan(self, *args: Any, **kwargs: Any) -> Any:
+         return cs.run_contract_expiry_scan(*args, **kwargs)
+ 

@@ -1,0 +1,19 @@
+{
+  "out_trade_no": "MODPILOT17806500370001",
+  "subject": "Mod试点沙箱充值0.01元",
+  "total_amount": "0.01",
+  "user_id": 1,
+  "item_id": 0,
+  "plan_id": "",
+  "order_kind": "wallet",
+  "status": "paid",
+  "trade_no": "SANDBOX-1780650037",
+  "buyer_id": "sandbox-buyer",
+  "paid_at": "2026-06-05T09:00:37Z",
+  "created_at": "2026-06-05T09:00:37.534813+00:00",
+  "updated_at": "2026-06-05T09:00:37.535031+00:00",
+  "notify_count": 1,
+  "fulfilled": false,
+  "qr_code": null,
+  "pay_type": null
+}

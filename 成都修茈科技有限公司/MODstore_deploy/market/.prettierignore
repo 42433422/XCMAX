@@ -1,0 +1,9 @@
+dist/
+node_modules/
+coverage/
+playwright-report/
+test-results/
+package-lock.json
+public/
+*.min.js
+*.min.css

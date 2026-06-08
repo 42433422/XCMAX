@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://modstore.local/schemas/events/employee.execution_completed.schema.json",
+  "title": "employee.execution_completed payload",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["employee_id", "user_id", "task", "status"],
+  "properties": {
+    "employee_id": { "type": "string" },
+    "user_id": { "type": ["integer", "string"] },
+    "task": { "type": "string" },
+    "status": { "type": "string" }
+  }
+}

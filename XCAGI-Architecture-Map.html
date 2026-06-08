@@ -1,0 +1,1106 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>XCAGI v8.1 代码架构图</title>
+<style>
+:root {
+  --bg: #0b0f19;
+  --bg2: #131a2b;
+  --fg: #e2e8f0;
+  --muted: #64748b;
+  --accent: #22d3ee;
+  --green: #34d399;
+  --purple: #a78bfa;
+  --orange: #fb923c;
+  --red: #f87171;
+  --pink: #f472b6;
+  --yellow: #fbbf24;
+  --card: rgba(19, 26, 43, 0.92);
+  --border: rgba(34, 211, 238, 0.12);
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: 'SF Mono', 'Fira Code', 'Menlo', monospace;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+.page { max-width: 1800px; margin: 0 auto; padding: 32px 20px 80px; }
+
+header { text-align: center; margin-bottom: 48px; }
+header h1 {
+  font-size: clamp(24px, 4vw, 40px);
+  font-weight: 900;
+  letter-spacing: 3px;
+  background: linear-gradient(135deg, var(--accent), var(--purple));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+header p { color: var(--muted); font-size: 13px; margin-top: 8px; letter-spacing: 1px; }
+
+.tabs {
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+  margin-bottom: 40px;
+  flex-wrap: wrap;
+}
+.tab-btn {
+  padding: 10px 20px;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: all 0.25s;
+  letter-spacing: 0.5px;
+}
+.tab-btn:hover { border-color: var(--accent); color: var(--fg); }
+.tab-btn.active { background: rgba(34, 211, 238, 0.1); border-color: var(--accent); color: var(--accent); }
+
+.tab-content { display: none; }
+.tab-content.active { display: block; animation: fadeIn 0.4s ease; }
+
+@keyframes fadeIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+
+/* ====== Directory Tree ====== */
+.tree-section { margin-bottom: 32px; }
+.tree-title {
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 16px;
+  padding-left: 12px;
+  border-left: 3px solid var(--accent);
+}
+.tree-container {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px 24px;
+  overflow-x: auto;
+}
+.tree-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+  font-size: 13px;
+  white-space: nowrap;
+  line-height: 1.8;
+}
+.tree-line:hover { background: rgba(255,255,255,0.02); border-radius: 3px; }
+.tree-indent { color: var(--muted); }
+.tree-dir { color: var(--accent); font-weight: 700; }
+.tree-file { color: var(--fg); }
+.tree-comment { color: var(--muted); font-size: 11px; margin-left: 12px; }
+.tree-key { color: var(--purple); font-weight: 600; }
+.tree-badge {
+  font-size: 9px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-weight: 700;
+  margin-left: 8px;
+}
+.badge-entry { background: rgba(34, 211, 238, 0.15); color: var(--accent); }
+.badge-core { background: rgba(167, 139, 250, 0.15); color: var(--purple); }
+.badge-infra { background: rgba(52, 211, 153, 0.15); color: var(--green); }
+.badge-mod { background: rgba(251, 146, 60, 0.15); color: var(--orange); }
+
+/* ====== Architecture Diagram ====== */
+.arch-diagram {
+  position: relative;
+  width: 100%;
+  overflow-x: auto;
+  padding: 20px 0;
+}
+.arch-flow {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 900px;
+}
+.arch-layer {
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
+  position: relative;
+}
+.arch-layer-label {
+  width: 140px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 16px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  text-align: right;
+}
+.arch-layer-label.l-entry { color: var(--accent); }
+.arch-layer-label.l-route { color: var(--green); }
+.arch-layer-label.l-app { color: var(--purple); }
+.arch-layer-label.l-domain { color: var(--orange); }
+.arch-layer-label.l-infra { color: var(--pink); }
+.arch-layer-label.l-data { color: var(--yellow); }
+
+.arch-boxes {
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  position: relative;
+}
+.arch-boxes.b-entry { border-color: rgba(34, 211, 238, 0.25); }
+.arch-boxes.b-route { border-color: rgba(52, 211, 153, 0.25); }
+.arch-boxes.b-app { border-color: rgba(167, 139, 250, 0.25); }
+.arch-boxes.b-domain { border-color: rgba(251, 146, 60, 0.25); }
+.arch-boxes.b-infra { border-color: rgba(244, 114, 182, 0.25); }
+.arch-boxes.b-data { border-color: rgba(251, 191, 36, 0.25); }
+
+.arch-box {
+  padding: 8px 14px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+  white-space: nowrap;
+}
+.arch-box:hover { transform: translateY(-2px); }
+.arch-box.e { background: rgba(34, 211, 238, 0.1); border: 1px solid rgba(34, 211, 238, 0.3); color: var(--accent); }
+.arch-box.e:hover { box-shadow: 0 0 16px rgba(34, 211, 238, 0.2); }
+.arch-box.r { background: rgba(52, 211, 153, 0.1); border: 1px solid rgba(52, 211, 153, 0.3); color: var(--green); }
+.arch-box.r:hover { box-shadow: 0 0 16px rgba(52, 211, 153, 0.2); }
+.arch-box.a { background: rgba(167, 139, 250, 0.1); border: 1px solid rgba(167, 139, 250, 0.3); color: var(--purple); }
+.arch-box.a:hover { box-shadow: 0 0 16px rgba(167, 139, 250, 0.2); }
+.arch-box.d { background: rgba(251, 146, 60, 0.1); border: 1px solid rgba(251, 146, 60, 0.3); color: var(--orange); }
+.arch-box.d:hover { box-shadow: 0 0 16px rgba(251, 146, 60, 0.2); }
+.arch-box.i { background: rgba(244, 114, 182, 0.1); border: 1px solid rgba(244, 114, 182, 0.3); color: var(--pink); }
+.arch-box.i:hover { box-shadow: 0 0 16px rgba(244, 114, 182, 0.2); }
+.arch-box.s { background: rgba(251, 191, 36, 0.1); border: 1px solid rgba(251, 191, 36, 0.3); color: var(--yellow); }
+.arch-box.s:hover { box-shadow: 0 0 16px rgba(251, 191, 36, 0.2); }
+
+.arch-arrow-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 900px;
+}
+.arch-arrow-spacer { width: 140px; flex-shrink: 0; }
+.arch-arrow-line {
+  flex: 1;
+  text-align: center;
+  color: var(--muted);
+  font-size: 18px;
+  letter-spacing: 8px;
+  padding: 2px 0;
+}
+.arch-arrow-label {
+  font-size: 10px;
+  color: var(--muted);
+  letter-spacing: 1px;
+}
+
+/* ====== Request Flow ====== */
+.flow-diagram {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 24px;
+  overflow-x: auto;
+}
+.flow-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 4px;
+  position: relative;
+}
+.flow-step:last-child { margin-bottom: 0; }
+.flow-num {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 900;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 1;
+}
+.flow-num.n1 { background: rgba(34, 211, 238, 0.2); color: var(--accent); }
+.flow-num.n2 { background: rgba(52, 211, 153, 0.2); color: var(--green); }
+.flow-num.n3 { background: rgba(167, 139, 250, 0.2); color: var(--purple); }
+.flow-num.n4 { background: rgba(251, 146, 60, 0.2); color: var(--orange); }
+.flow-num.n5 { background: rgba(244, 114, 182, 0.2); color: var(--pink); }
+.flow-num.n6 { background: rgba(251, 191, 36, 0.2); color: var(--yellow); }
+
+.flow-connector {
+  position: absolute;
+  left: 15px;
+  top: 32px;
+  width: 2px;
+  height: calc(100% + 4px);
+  background: rgba(255,255,255,0.06);
+}
+.flow-step:last-child .flow-connector { display: none; }
+
+.flow-content { flex: 1; padding-bottom: 20px; }
+.flow-title {
+  font-size: 14px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+.flow-path {
+  font-size: 12px;
+  color: var(--accent);
+  margin-bottom: 6px;
+}
+.flow-desc {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.7;
+}
+.flow-desc code {
+  background: rgba(255,255,255,0.06);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 11px;
+  color: var(--fg);
+}
+
+/* ====== NeuroBus ====== */
+.neuro-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+}
+.neuro-bus-core {
+  width: 100%;
+  max-width: 800px;
+  background: var(--card);
+  border: 1px solid rgba(167, 139, 250, 0.25);
+  border-radius: 12px;
+  padding: 24px;
+  text-align: center;
+}
+.neuro-bus-title {
+  font-size: 18px;
+  font-weight: 900;
+  color: var(--purple);
+  margin-bottom: 8px;
+  letter-spacing: 2px;
+}
+.neuro-bus-path { font-size: 12px; color: var(--muted); margin-bottom: 16px; }
+.neuro-mechanisms {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: center;
+}
+.neuro-mech {
+  padding: 4px 12px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(167, 139, 250, 0.1);
+  border: 1px solid rgba(167, 139, 250, 0.2);
+  color: var(--purple);
+}
+.neuro-domains-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 10px;
+  width: 100%;
+  max-width: 1000px;
+}
+.neuro-dom-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  transition: all 0.2s;
+  cursor: pointer;
+}
+.neuro-dom-card:hover {
+  border-color: rgba(167, 139, 250, 0.4);
+  box-shadow: 0 0 12px rgba(167, 139, 250, 0.15);
+  transform: translateY(-2px);
+}
+.neuro-dom-name { font-size: 13px; font-weight: 700; color: var(--purple); margin-bottom: 4px; }
+.neuro-dom-file { font-size: 10px; color: var(--muted); margin-bottom: 4px; }
+.neuro-dom-events { display: flex; flex-wrap: wrap; gap: 3px; }
+.neuro-dom-ev {
+  font-size: 9px;
+  padding: 1px 5px;
+  border-radius: 2px;
+  background: rgba(167, 139, 250, 0.08);
+  color: var(--muted);
+}
+
+/* ====== Mod System ====== */
+.mod-flow {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.mod-row {
+  display: flex;
+  gap: 12px;
+  align-items: stretch;
+  flex-wrap: wrap;
+}
+.mod-card {
+  flex: 1;
+  min-width: 200px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+}
+.mod-card-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--orange);
+  margin-bottom: 6px;
+}
+.mod-card-file { font-size: 11px; color: var(--accent); margin-bottom: 8px; }
+.mod-card-desc { font-size: 11px; color: var(--muted); line-height: 1.6; }
+.mod-card-desc code {
+  background: rgba(255,255,255,0.06);
+  padding: 1px 4px;
+  border-radius: 2px;
+  font-size: 10px;
+  color: var(--fg);
+}
+.mod-arrow {
+  text-align: center;
+  color: var(--muted);
+  font-size: 16px;
+  padding: 4px 0;
+}
+
+/* ====== Dependency Rules ====== */
+.dep-rules {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 12px;
+}
+.dep-rule {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+}
+.dep-rule-title {
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+.dep-rule-body {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.8;
+}
+.dep-rule-body code {
+  background: rgba(255,255,255,0.06);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 11px;
+  color: var(--fg);
+}
+.dep-arrow { color: var(--accent); font-weight: 700; }
+.dep-forbidden { color: var(--red); text-decoration: line-through; opacity: 0.7; }
+
+.footer {
+  text-align: center;
+  margin-top: 60px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 1px;
+}
+
+@media (max-width: 768px) {
+  .page { padding: 16px 10px 40px; }
+  .arch-layer-label { width: 80px; font-size: 9px; padding-right: 8px; }
+  .arch-box { font-size: 10px; padding: 6px 10px; }
+  .dep-rules { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+<header>
+  <h1>XCAGI v8.1 CODE ARCHITECTURE</h1>
+  <p>代码架构 · 模块依赖 · 请求流转 · NeuroBus拓扑 · Mod系统</p>
+</header>
+
+<div class="tabs">
+  <button class="tab-btn active" onclick="switchTab('tree')">目录结构</button>
+  <button class="tab-btn" onclick="switchTab('arch')">分层架构</button>
+  <button class="tab-btn" onclick="switchTab('flow')">请求流转</button>
+  <button class="tab-btn" onclick="switchTab('neuro')">NeuroBus</button>
+  <button class="tab-btn" onclick="switchTab('mod')">Mod系统</button>
+  <button class="tab-btn" onclick="switchTab('dep')">依赖规则</button>
+</div>
+
+<!-- ====== TAB 1: 目录结构 ====== -->
+<div class="tab-content active" id="tab-tree">
+
+<div class="tree-section">
+<div class="tree-title">FHD/  — 仓库根（一体化主仓）</div>
+<div class="tree-container">
+<div class="tree-line"><span class="tree-indent">├── </span><span class="tree-dir">app/</span><span class="tree-comment">← 后端核心代码（唯一服务端落点）</span><span class="tree-badge badge-entry">ENTRY</span></div>
+<div class="tree-line"><span class="tree-indent">│   ├── </span><span class="tree-dir">fastapi_app.py</span><span class="tree-comment">← FastAPI应用工厂 + lifespan</span><span class="tree-badge badge-entry">ENTRY</span></div>
+<div class="tree-line"><span class="tree-indent">│   ├── </span><span class="tree-dir">bootstrap.py</span><span class="tree-comment">← Composition Root / 装配入口</span><span class="tree-badge badge-core">CORE</span></div>
+<div class="tree-line"><span class="tree-indent">│   ├── </span><span class="tree-dir">config.py</span><span class="tree-comment">← 配置中心（DB/Redis/Celery/Secret）</span></div>
+<div class="tree-line"><span class="tree-indent">│   ├── </span><span class="tree-key">fastapi_routes/</span><span class="tree-comment">← HTTP路由层（~50个路由模块）</span><span class="tree-badge badge-entry">ROUTE</span></div>
+<div class="tree-line"><span class="tree-indent">│   │   ├── </span><span class="tree-file">legacy_auth.py</span><span class="tree-comment">← 认证（登录/注册/Session）</span></div>
+<div class="tree-line"><span class="tree-indent">│   │   ├── </span><span class="tree-file">ai_assistant.py</span><span class="tree-comment">← AI对话入口</span></div>
+<div class="tree-line"><span class="tree-indent">│   │   ├── </span><span class="tree-file">shipment_orders.py</span><span class="tree-comment">← 出货单API</span></div>
+<div class="tree-line"><span class="tree-indent">│   │   ├── </span><span class="tree-file">mod_store_routes.py</span><span class="tree-comment">← Mod商店API</span></div>
+<div class="tree-line"><span class="tree-indent">│   │   ├── </span><span class="tree-file">xcagi_compat_*.py</span><span class="tree-comment">← 兼容路由（~15个）</span></div>
+<div class="tree-line"><span class="tree-indent">│   │   └── </span><span class="tree-file">legacy_*.py</span><span class="tree-comment">← 遗留路由（~10个）</span></div>
+<div class="tree-line"><span class="tree-indent">│   ├── </span><span class="tree-key">application/</span><span class="tree-comment">← 应用服务层（用例编排）</span><span class="tree-badge badge-core">CORE</span></div>
+<div class="tree-line"><span class="tree-indent">│   │   ├── </span><span class="tree-dir">facades/</span><span class="tree-comment">← 门面模式（15个Facade）</span></div>
+<div class="tree-line"><span class="tree-indent">│   │   ├── </span><span class="tree-dir">ports/</span><span class="tree-comment">← DDD端口抽象（14个Port）</span></div>
+<div class="tree-line"><span class="tree-indent">│   │   ├── </span><span class="tree-dir">workflow/</span><span class="tree-comment">← 工作流引擎（planner/engine/risk_gate/approval）</span></div>
+<div class="tree-line"><span class="tree-indent">│   │   ├── </span><span class="tree-file">ai_chat_app_service.py</span><span class="tree-comment">← AI对话核心编排（~2800行）</span></div>
+<div class="tree-line"><span class="tree-indent">│   │   ├── </span><span class="tree-file">shipment_app_service.py</span><span class="tree-comment">← 出货用例</span></div>
+<div class="tree-line"><span class="tree-indent">│   │   └── </span><span class="tree-file">*_v2.py</span><span class="tree-comment">← V2版本服务（与V1并存）</span></div>
+<div class="tree-line"><span class="tree-indent">│   ├── </span><span class="tree-key">domain/</span><span class="tree-comment">← 领域层（规则/实体/值对象）</span><span class="tree-badge badge-core">CORE</span></div>
+<div class="tree-line"><span class="tree-indent">│   │   ├── </span><span class="tree-dir">neuro/</span><span class="tree-comment">← 神经处理器（reflex_arc/processors/）</span></div>
+<div class="tree-line"><span class="tree-indent">│   │   ├── </span><span class="tree-dir">shipment/</span><span class="tree-comment">← 出货聚合根 + 产品匹配</span></div>
+<div class="tree-line"><span class="tree-indent">│   │   ├── </span><span class="tree-dir">services/</span><span class="tree-comment">← 领域服务（意图识别/定价/校验）</span></div>
+<div class="tree-line"><span class="tree-indent">│   │   └── </span><span class="tree-dir">value_objects/</span><span class="tree-comment">← 值对象（Money/Quantity/Address...）</span></div>
+<div class="tree-line"><span class="tree-indent">│   ├── </span><span class="tree-key">infrastructure/</span><span class="tree-comment">← 基础设施层（持久化/外部系统）</span><span class="tree-badge badge-infra">INFRA</span></div>
+<div class="tree-line"><span class="tree-indent">│   │   ├── </span><span class="tree-dir">mods/</span><span class="tree-comment">← Mod管理器（manifest/manager/hooks/comms/registry）</span><span class="tree-badge badge-mod">MOD</span></div>
+<div class="tree-line"><span class="tree-indent">│   │   ├── </span><span class="tree-dir">persistence/</span><span class="tree-comment">← 仓储实现（SQLAlchemy/SQLite/PGVector）</span></div>
+<div class="tree-line"><span class="tree-indent">│   │   ├── </span><span class="tree-dir">payment/</span><span class="tree-comment">← 支付（alipay/order_store）</span></div>
+<div class="tree-line"><span class="tree-indent">│   │   ├── </span><span class="tree-dir">printing/</span><span class="tree-comment">← 打印适配器</span></div>
+<div class="tree-line"><span class="tree-indent">│   │   ├── </span><span class="tree-dir">ocr/</span><span class="tree-comment">← OCR适配器</span></div>
+<div class="tree-line"><span class="tree-indent">│   │   ├── </span><span class="tree-dir">llm/</span><span class="tree-comment">← LLM客户端</span></div>
+<div class="tree-line"><span class="tree-indent">│   │   ├── </span><span class="tree-dir">skills/</span><span class="tree-comment">← 技能插件（8个Skill）</span></div>
+<div class="tree-line"><span class="tree-indent">│   │   └── </span><span class="tree-dir">templates/</span><span class="tree-comment">← 模板存储实现</span></div>
+<div class="tree-line"><span class="tree-indent">│   ├── </span><span class="tree-key">neuro_bus/</span><span class="tree-comment">← 神经总线（事件驱动核心）</span><span class="tree-badge badge-core">CORE</span></div>
+<div class="tree-line"><span class="tree-indent">│   │   ├── </span><span class="tree-file">bus.py</span><span class="tree-comment">← 异步事件总线（~700行）</span></div>
+<div class="tree-line"><span class="tree-indent">│   │   ├── </span><span class="tree-dir">domains/</span><span class="tree-comment">← 12个神经域实现</span></div>
+<div class="tree-line"><span class="tree-indent">│   │   ├── </span><span class="tree-dir">events/</span><span class="tree-comment">← 事件定义（12类事件）</span></div>
+<div class="tree-line"><span class="tree-indent">│   │   ├── </span><span class="tree-dir">integrations/</span><span class="tree-comment">← FastAPI/对话/意图集成</span></div>
+<div class="tree-line"><span class="tree-indent">│   │   └── </span><span class="tree-file">circuit_breaker.py deduplicator.py rate_limiter.py tracer.py lifeline.py sandbox.py</span><span class="tree-comment">← 可靠性机制</span></div>
+<div class="tree-line"><span class="tree-indent">│   ├── </span><span class="tree-key">mod_sdk/</span><span class="tree-comment">← Mod SDK（Mod开发者接口）</span><span class="tree-badge badge-mod">MOD</span></div>
+<div class="tree-line"><span class="tree-indent">│   │   ├── </span><span class="tree-file">comms.py</span><span class="tree-comment">← Mod间通信</span></div>
+<div class="tree-line"><span class="tree-indent">│   │   ├── </span><span class="tree-file">db.py db_models.py</span><span class="tree-comment">← Mod数据库</span></div>
+<div class="tree-line"><span class="tree-indent">│   │   ├── </span><span class="tree-file">edition_policy.py product_skus.py</span><span class="tree-comment">← SKU/Edition策略</span></div>
+<div class="tree-line"><span class="tree-indent">│   │   └── </span><span class="tree-file">*_compat.py</span><span class="tree-comment">← Mod桥接兼容层（~15个）</span></div>
+<div class="tree-line"><span class="tree-indent">│   ├── </span><span class="tree-key">db/</span><span class="tree-comment">← 数据层</span></div>
+<div class="tree-line"><span class="tree-indent">│   │   ├── </span><span class="tree-dir">models/</span><span class="tree-comment">← ORM模型（15个表）</span></div>
+<div class="tree-line"><span class="tree-indent">│   │   ├── </span><span class="tree-file">session.py</span><span class="tree-comment">← SQLAlchemy Session</span></div>
+<div class="tree-line"><span class="tree-indent">│   │   └── </span><span class="tree-file">init_db.py</span><span class="tree-comment">← 数据库初始化 + 迁移</span></div>
+<div class="tree-line"><span class="tree-indent">│   ├── </span><span class="tree-key">security/</span><span class="tree-comment">← 安全层</span></div>
+<div class="tree-line"><span class="tree-indent">│   │   ├── </span><span class="tree-file">lan_config.py lan_cidr_guard.py license_guard.py</span><span class="tree-comment">← LAN门禁</span></div>
+<div class="tree-line"><span class="tree-indent">│   │   ├── </span><span class="tree-file">mobile_jwt.py mobile_pairing.py</span><span class="tree-comment">← 移动端认证</span></div>
+<div class="tree-line"><span class="tree-indent">│   │   └── </span><span class="tree-file">license_token.py license_store.py</span><span class="tree-comment">← 许可证持久化</span></div>
+<div class="tree-line"><span class="tree-indent">│   ├── </span><span class="tree-key">middleware/</span><span class="tree-comment">← 中间件</span></div>
+<div class="tree-line"><span class="tree-indent">│   │   └── </span><span class="tree-file">csrf.py security_headers.py xss_sanitizer.py error_handler.py</span></div>
+<div class="tree-line"><span class="tree-indent">│   ├── </span><span class="tree-key">di/</span><span class="tree-comment">← 依赖注入</span></div>
+<div class="tree-line"><span class="tree-indent">│   │   ├── </span><span class="tree-file">registry.py</span><span class="tree-comment">← ServiceContainer（重型单例）</span></div>
+<div class="tree-line"><span class="tree-indent">│   │   └── </span><span class="tree-file">fastapi_deps.py</span><span class="tree-comment">← FastAPI Depends</span></div>
+<div class="tree-line"><span class="tree-indent">│   └── </span><span class="tree-key">utils/</span><span class="tree-comment">← 工具集</span></div>
+<div class="tree-line"><span class="tree-indent">│       └── </span><span class="tree-file">logger.py retry.py audit_logger.py rate_limiter.py excel_utils.py ...</span></div>
+<div class="tree-line"><span class="tree-indent">├── </span><span class="tree-dir">frontend/</span><span class="tree-comment">← 前端SPA（Vue3 + Vite + TS）</span><span class="tree-badge badge-entry">ENTRY</span></div>
+<div class="tree-line"><span class="tree-indent">│   ├── </span><span class="tree-dir">src/views/</span><span class="tree-comment">← 50+视图页面</span></div>
+<div class="tree-line"><span class="tree-indent">│   ├── </span><span class="tree-dir">src/composables/</span><span class="tree-comment">← 30+组合式函数</span></div>
+<div class="tree-line"><span class="tree-indent">│   ├── </span><span class="tree-dir">src/stores/</span><span class="tree-comment">← 20+Pinia状态仓库</span></div>
+<div class="tree-line"><span class="tree-indent">│   ├── </span><span class="tree-dir">src/api/</span><span class="tree-comment">← API封装层（30+模块）</span></div>
+<div class="tree-line"><span class="tree-indent">│   ├── </span><span class="tree-dir">src/constants/</span><span class="tree-comment">← 常量/菜单/Mod路由定义</span></div>
+<div class="tree-line"><span class="tree-indent">│   ├── </span><span class="tree-dir">src/components/</span><span class="tree-comment">← 组件（ProMode/Workflow/Sidebar...）</span></div>
+<div class="tree-line"><span class="tree-indent">│   └── </span><span class="tree-dir">src/router/</span><span class="tree-comment">← 路由 + Mod动态注册</span></div>
+<div class="tree-line"><span class="tree-indent">├── </span><span class="tree-dir">desktop/</span><span class="tree-comment">← Electron桌面壳</span><span class="tree-badge badge-entry">ENTRY</span></div>
+<div class="tree-line"><span class="tree-indent">│   ├── </span><span class="tree-file">main.ts</span><span class="tree-comment">← 主进程（SKU/后端子进程/托盘/深度链接）</span></div>
+<div class="tree-line"><span class="tree-indent">│   ├── </span><span class="tree-file">preload.ts</span><span class="tree-comment">← contextBridge API</span></div>
+<div class="tree-line"><span class="tree-indent">│   └── </span><span class="tree-file">updater.ts</span><span class="tree-comment">← electron-updater + Ed25519</span></div>
+<div class="tree-line"><span class="tree-indent">├── </span><span class="tree-dir">MODstore/</span><span class="tree-comment">← Mod商店独立子工程</span><span class="tree-badge badge-mod">MOD</span></div>
+<div class="tree-line"><span class="tree-indent">│   ├── </span><span class="tree-dir">modstore_server/</span><span class="tree-comment">← 商店后端（catalog_api/market_api/auth）</span></div>
+<div class="tree-line"><span class="tree-indent">│   └── </span><span class="tree-dir">modman/</span><span class="tree-comment">← 本地Mod管理CLI</span></div>
+<div class="tree-line"><span class="tree-indent">├── </span><span class="tree-dir">mods/</span><span class="tree-comment">← 已安装的Mod包</span><span class="tree-badge badge-mod">MOD</span></div>
+<div class="tree-line"><span class="tree-indent">├── </span><span class="tree-dir">XCAGI/</span><span class="tree-comment">← 运行入口子树</span></div>
+<div class="tree-line"><span class="tree-indent">│   └── </span><span class="tree-file">run.py</span><span class="tree-comment">← uvicorn启动（0.0.0.0:5000）</span><span class="tree-badge badge-entry">ENTRY</span></div>
+<div class="tree-line"><span class="tree-indent">├── </span><span class="tree-dir">alembic/</span><span class="tree-comment">← 数据库迁移</span></div>
+<div class="tree-line"><span class="tree-indent">├── </span><span class="tree-dir">k8s/</span><span class="tree-comment">← K8s清单（deployment/hpa/ingress/canary）</span></div>
+<div class="tree-line"><span class="tree-indent">├── </span><span class="tree-dir">scripts/</span><span class="tree-comment">← 运维/打包/测试脚本</span></div>
+<div class="tree-line"><span class="tree-indent">├── </span><span class="tree-dir">tests/</span><span class="tree-comment">← 测试套件</span></div>
+<div class="tree-line"><span class="tree-indent">├── </span><span class="tree-file">pyproject.toml</span><span class="tree-comment">← Python包配置 + ruff/mypy/pytest</span></div>
+<div class="tree-line"><span class="tree-indent">├── </span><span class="tree-file">docker-compose.yml</span><span class="tree-comment">← 5服务编排</span></div>
+<div class="tree-line"><span class="tree-indent">└── </span><span class="tree-file">Dockerfile</span><span class="tree-comment">← 三阶段构建</span></div>
+</div>
+</div>
+
+</div>
+
+<!-- ====== TAB 2: 分层架构 ====== -->
+<div class="tab-content" id="tab-arch">
+<div class="arch-diagram">
+<div class="arch-flow">
+
+<div class="arch-layer">
+  <div class="arch-layer-label l-entry">Entry 入口</div>
+  <div class="arch-boxes b-entry">
+    <div class="arch-box e">XCAGI/run.py</div>
+    <div class="arch-box e">desktop/main.ts</div>
+    <div class="arch-box e">Dockerfile</div>
+    <div class="arch-box e">docker-compose.yml</div>
+  </div>
+</div>
+
+<div class="arch-arrow-row">
+  <div class="arch-arrow-spacer"></div>
+  <div class="arch-arrow-line">▼ <span class="arch-arrow-label">uvicorn / electron spawn</span> ▼</div>
+</div>
+
+<div class="arch-layer">
+  <div class="arch-layer-label l-route">Route 路由</div>
+  <div class="arch-boxes b-route">
+    <div class="arch-box r">fastapi_app.py</div>
+    <div class="arch-box r">fastapi_routes/</div>
+    <div class="arch-box r">middleware/</div>
+    <div class="arch-box r">security/</div>
+    <div class="arch-box r">auth_decorators.py</div>
+  </div>
+</div>
+
+<div class="arch-arrow-row">
+  <div class="arch-arrow-spacer"></div>
+  <div class="arch-arrow-line">▼ <span class="arch-arrow-label">调用应用服务，路由层尽量薄</span> ▼</div>
+</div>
+
+<div class="arch-layer">
+  <div class="arch-layer-label l-app">Application 应用</div>
+  <div class="arch-boxes b-app">
+    <div class="arch-box a">bootstrap.py</div>
+    <div class="arch-box a">di/registry.py</div>
+    <div class="arch-box a">application/facades/</div>
+    <div class="arch-box a">application/ports/</div>
+    <div class="arch-box a">application/workflow/</div>
+    <div class="arch-box a">ai_chat_app_service.py</div>
+    <div class="arch-box a">shipment_app_service.py</div>
+    <div class="arch-box a">*_app_service.py</div>
+  </div>
+</div>
+
+<div class="arch-arrow-row">
+  <div class="arch-arrow-spacer"></div>
+  <div class="arch-arrow-line">▼ <span class="arch-arrow-label">调用领域规则 + 基础设施抽象</span> ▼</div>
+</div>
+
+<div class="arch-layer">
+  <div class="arch-layer-label l-domain">Domain 领域</div>
+  <div class="arch-boxes b-domain">
+    <div class="arch-box d">domain/neuro/</div>
+    <div class="arch-box d">domain/shipment/</div>
+    <div class="arch-box d">domain/services/</div>
+    <div class="arch-box d">domain/value_objects/</div>
+    <div class="arch-box d">domain/approval/</div>
+    <div class="arch-box d">domain/context/</div>
+  </div>
+</div>
+
+<div class="arch-arrow-row">
+  <div class="arch-arrow-spacer"></div>
+  <div class="arch-arrow-line">▼ <span class="arch-arrow-label">领域通过Port调用基础设施</span> ▼</div>
+</div>
+
+<div class="arch-layer">
+  <div class="arch-layer-label l-infra">Infra 基础设施</div>
+  <div class="arch-boxes b-infra">
+    <div class="arch-box i">infrastructure/persistence/</div>
+    <div class="arch-box i">infrastructure/mods/</div>
+    <div class="arch-box i">infrastructure/payment/</div>
+    <div class="arch-box i">infrastructure/ocr/</div>
+    <div class="arch-box i">infrastructure/printing/</div>
+    <div class="arch-box i">infrastructure/llm/</div>
+    <div class="arch-box i">infrastructure/skills/</div>
+    <div class="arch-box i">infrastructure/templates/</div>
+  </div>
+</div>
+
+<div class="arch-arrow-row">
+  <div class="arch-arrow-spacer"></div>
+  <div class="arch-arrow-line">▼ <span class="arch-arrow-label">基础设施操作外部存储</span> ▼</div>
+</div>
+
+<div class="arch-layer">
+  <div class="arch-layer-label l-data">Data 数据</div>
+  <div class="arch-boxes b-data">
+    <div class="arch-box s">db/models/ (15表)</div>
+    <div class="arch-box s">db/session.py</div>
+    <div class="arch-box s">PostgreSQL</div>
+    <div class="arch-box s">SQLite (桌面)</div>
+    <div class="arch-box s">Redis</div>
+    <div class="arch-box s">PGVector</div>
+  </div>
+</div>
+
+<div class="arch-arrow-row">
+  <div class="arch-arrow-spacer"></div>
+  <div class="arch-arrow-line" style="letter-spacing:4px;">⟷ <span class="arch-arrow-label">横切关注点（贯穿所有层）</span> ⟷</div>
+</div>
+
+<div class="arch-layer">
+  <div class="arch-layer-label" style="color:var(--purple);">Cross-cutting</div>
+  <div class="arch-boxes" style="border-color:rgba(167,139,250,0.25);">
+    <div class="arch-box a">neuro_bus/</div>
+    <div class="arch-box a">mod_sdk/</div>
+    <div class="arch-box a">contexts/</div>
+    <div class="arch-box a">utils/</div>
+    <div class="arch-box a">config.py</div>
+    <div class="arch-box a">errors.py</div>
+  </div>
+</div>
+
+</div>
+</div>
+</div>
+
+<!-- ====== TAB 3: 请求流转 ====== -->
+<div class="tab-content" id="tab-flow">
+
+<h3 style="color:var(--accent);margin-bottom:20px;font-size:16px;">典型请求：用户发送聊天消息 → 出货单生成</h3>
+
+<div class="flow-diagram">
+
+<div class="flow-step">
+  <div class="flow-num n1">1</div>
+  <div class="flow-connector"></div>
+  <div class="flow-content">
+    <div class="flow-title" style="color:var(--accent);">HTTP 请求到达</div>
+    <div class="flow-path">POST /api/chat → fastapi_app.py → middleware链</div>
+    <div class="flow-desc">
+      <code>XCAGI/run.py</code> 启动 uvicorn → <code>app/fastapi_app.py:get_fastapi_app()</code> 工厂创建应用<br>
+      请求依次经过: <code>CSRFMiddleware</code> → <code>SecurityHeadersMiddleware</code> → <code>XSSSanitizerMiddleware</code> → <code>ModContextMiddleware</code> → <code>LanCidrGuard</code> → <code>LanLicenseGuard</code><br>
+      最终路由到 <code>app/fastapi_routes/ai_assistant.py</code>
+    </div>
+  </div>
+</div>
+
+<div class="flow-step">
+  <div class="flow-num n2">2</div>
+  <div class="flow-connector"></div>
+  <div class="flow-content">
+    <div class="flow-title" style="color:var(--green);">路由层 → 应用服务</div>
+    <div class="flow-path">ai_assistant.py → ai_chat_app_service.py</div>
+    <div class="flow-desc">
+      路由层薄封装，通过 <code>bootstrap.py</code> 或 <code>di/registry.py</code> 获取应用服务实例<br>
+      <code>@login_required</code> 装饰器验证身份 → 调用 <code>AiChatAppService.process_chat()</code>
+    </div>
+  </div>
+</div>
+
+<div class="flow-step">
+  <div class="flow-num n3">3</div>
+  <div class="flow-connector"></div>
+  <div class="flow-content">
+    <div class="flow-title" style="color:var(--purple);">应用服务编排用例</div>
+    <div class="flow-path">ai_chat_app_service.py → workflow/ → facades/</div>
+    <div class="flow-desc">
+      <code>process_chat()</code> 核心流程（~2800行）：<br>
+      1. 确认流程检查 → 2. 动态工作流分发 → 3. AI服务调用 → 4. 响应构建<br>
+      Pro模式: <code>workflow/planner.py</code> LLM规划 → <code>workflow/engine.py</code> 执行<br>
+      Normal模式: 槽位路由 → 即时工具执行<br>
+      工具调用通过 <code>facades/</code> 门面（如 <code>ShipmentFacade</code>、<code>PrintFacade</code>）
+    </div>
+  </div>
+</div>
+
+<div class="flow-step">
+  <div class="flow-num n4">4</div>
+  <div class="flow-connector"></div>
+  <div class="flow-content">
+    <div class="flow-title" style="color:var(--orange);">领域层执行业务规则</div>
+    <div class="flow-path">domain/shipment/ → domain/services/ → domain/neuro/</div>
+    <div class="flow-desc">
+      <code>domain/shipment/aggregates.py</code> Shipment聚合根 + ShipmentItem实体<br>
+      <code>domain/shipment/shipment_product_parser.py</code> 四级产品匹配（型号精确→名称包含）<br>
+      <code>domain/services/unified_intent_recognizer.py</code> 四引擎级联意图识别<br>
+      <code>domain/neuro/processors/coordinator.py</code> 三级处理器协调（Reflex→Subconscious→Conscious）
+    </div>
+  </div>
+</div>
+
+<div class="flow-step">
+  <div class="flow-num n5">5</div>
+  <div class="flow-connector"></div>
+  <div class="flow-content">
+    <div class="flow-title" style="color:var(--pink);">基础设施层执行 I/O</div>
+    <div class="flow-path">infrastructure/persistence/ → infrastructure/llm/ → infrastructure/printing/</div>
+    <div class="flow-desc">
+      <code>infrastructure/persistence/shipment_record_command_impl.py</code> 写入出货记录<br>
+      <code>infrastructure/persistence/shipment_record_store_impl.py</code> 持久化存储<br>
+      <code>infrastructure/llm/client.py</code> 调用DeepSeek等LLM<br>
+      <code>infrastructure/printing/printer_adapter.py</code> 打印适配器<br>
+      所有基础设施实现 <code>application/ports/</code> 中定义的Port接口
+    </div>
+  </div>
+</div>
+
+<div class="flow-step">
+  <div class="flow-num n6">6</div>
+  <div class="flow-content">
+    <div class="flow-title" style="color:var(--yellow);">NeuroBus 事件发布 + 数据落库</div>
+    <div class="flow-path">neuro_bus/domains/shipment_domain.py → db/models/shipment.py → PostgreSQL</div>
+    <div class="flow-desc">
+      出货创建后发布 <code>shipment.created</code> 事件到NeuroBus<br>
+      库存域订阅该事件 → 自动扣减库存（<code>inventory_domain_handlers.py</code>）<br>
+      审批服务检查是否需要审批（<code>workflow/approval_service.py</code>）<br>
+      数据通过 <code>db/session.py</code> 的 SQLAlchemy Session 写入 PostgreSQL
+    </div>
+  </div>
+</div>
+
+</div>
+</div>
+
+<!-- ====== TAB 4: NeuroBus ====== -->
+<div class="tab-content" id="tab-neuro">
+
+<div class="neuro-center">
+
+<div class="neuro-bus-core">
+  <div class="neuro-bus-title">NEUROBUS 神经总线</div>
+  <div class="neuro-bus-path">app/neuro_bus/bus.py (~700行) · PriorityEventQueue · asyncio异步处理循环</div>
+  <div class="neuro-mechanisms">
+    <div class="neuro-mech">去重 Deduplicator</div>
+    <div class="neuro-mech">限流 RateLimiter</div>
+    <div class="neuro-mech">熔断 CircuitBreaker</div>
+    <div class="neuro-mech">追踪 Tracer</div>
+    <div class="neuro-mech">SLA日志</div>
+    <div class="neuro-mech">保命通道 Lifeline</div>
+    <div class="neuro-mech">死信队列 DLQ</div>
+    <div class="neuro-mech">重试 RetryHandler</div>
+  </div>
+</div>
+
+<h3 style="color:var(--purple);font-size:14px;margin-top:24px;">12 神经域 → 事件定义 → 处理器</h3>
+
+<div class="neuro-domains-grid">
+  <div class="neuro-dom-card">
+    <div class="neuro-dom-name">Intent</div>
+    <div class="neuro-dom-file">domains/intent_domain.py</div>
+    <div class="neuro-dom-events"><span class="neuro-dom-ev">intent.matched</span><span class="neuro-dom-ev">intent.failed</span></div>
+  </div>
+  <div class="neuro-dom-card">
+    <div class="neuro-dom-name">Order</div>
+    <div class="neuro-dom-file">domains/order_domain.py</div>
+    <div class="neuro-dom-events"><span class="neuro-dom-ev">order.created</span><span class="neuro-dom-ev">order.updated</span></div>
+  </div>
+  <div class="neuro-dom-card">
+    <div class="neuro-dom-name">Inventory</div>
+    <div class="neuro-dom-file">domains/inventory_domain.py</div>
+    <div class="neuro-dom-events"><span class="neuro-dom-ev">inventory.changed</span><span class="neuro-dom-ev">low_stock ⚠</span><span class="neuro-dom-ev">out_of_stock ⚠</span></div>
+  </div>
+  <div class="neuro-dom-card">
+    <div class="neuro-dom-name">Product</div>
+    <div class="neuro-dom-file">domains/product_domain.py + handlers</div>
+    <div class="neuro-dom-events"><span class="neuro-dom-ev">product.created</span><span class="neuro-dom-ev">price_changed</span></div>
+  </div>
+  <div class="neuro-dom-card">
+    <div class="neuro-dom-name">Customer</div>
+    <div class="neuro-dom-file">domains/customer_domain.py</div>
+    <div class="neuro-dom-events"><span class="neuro-dom-ev">customer.synced</span></div>
+  </div>
+  <div class="neuro-dom-card">
+    <div class="neuro-dom-name">AIService</div>
+    <div class="neuro-dom-file">domains/ai_service_domain.py</div>
+    <div class="neuro-dom-events"><span class="neuro-dom-ev">llm.call</span><span class="neuro-dom-ev">llm.error</span></div>
+  </div>
+  <div class="neuro-dom-card">
+    <div class="neuro-dom-name">Wechat</div>
+    <div class="neuro-dom-file">domains/wechat_domain.py</div>
+    <div class="neuro-dom-events"><span class="neuro-dom-ev">msg.received</span><span class="neuro-dom-ev">contact.synced</span></div>
+  </div>
+  <div class="neuro-dom-card">
+    <div class="neuro-dom-name">Print</div>
+    <div class="neuro-dom-file">domains/print_domain.py + handlers</div>
+    <div class="neuro-dom-events"><span class="neuro-dom-ev">print.submitted</span><span class="neuro-dom-ev">print.done</span></div>
+  </div>
+  <div class="neuro-dom-card">
+    <div class="neuro-dom-name">OCR</div>
+    <div class="neuro-dom-file">domains/ocr_domain.py + handlers</div>
+    <div class="neuro-dom-events"><span class="neuro-dom-ev">ocr.complete</span></div>
+  </div>
+  <div class="neuro-dom-card">
+    <div class="neuro-dom-name">Payment</div>
+    <div class="neuro-dom-file">domains/payment_domain.py</div>
+    <div class="neuro-dom-events"><span class="neuro-dom-ev">payment.confirmed</span></div>
+  </div>
+  <div class="neuro-dom-card">
+    <div class="neuro-dom-name">Safety</div>
+    <div class="neuro-dom-file">domains/safety_domain.py</div>
+    <div class="neuro-dom-events"><span class="neuro-dom-ev">safety.alert</span><span class="neuro-dom-ev">safety.breach</span></div>
+  </div>
+  <div class="neuro-dom-card">
+    <div class="neuro-dom-name">Shipment</div>
+    <div class="neuro-dom-file">domains/shipment_domain.py + handlers</div>
+    <div class="neuro-dom-events"><span class="neuro-dom-ev">shipment.created</span><span class="neuro-dom-ev">shipment.printed</span><span class="neuro-dom-ev">inventory_deducted</span></div>
+  </div>
+</div>
+
+<h3 style="color:var(--muted);font-size:12px;margin-top:24px;">事件流转示例：出货创建 → 库存扣减</h3>
+<div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:16px;font-size:12px;line-height:2;color:var(--muted);max-width:800px;text-align:center;">
+  <span style="color:var(--orange)">ShipmentAppService</span>
+  <span style="color:var(--accent)">.create_shipment()</span>
+  → <span style="color:var(--purple)">ShipmentNeuroDomain</span>
+  .emit(<span style="color:var(--green)">shipment.created</span>)
+  → <span style="color:var(--purple)">NeuroBus</span>.publish()
+  → <span style="color:var(--purple)">InventoryNeuroDomain</span>
+  .on_shipment_created()
+  → <span style="color:var(--pink)">InventoryAppService</span>
+  .stock_out()
+</div>
+
+</div>
+</div>
+
+<!-- ====== TAB 5: Mod系统 ====== -->
+<div class="tab-content" id="tab-mod">
+
+<div class="mod-flow">
+
+<div class="mod-row">
+  <div class="mod-card">
+    <div class="mod-card-title">Mod Manifest</div>
+    <div class="mod-card-file">infrastructure/mods/manifest.py</div>
+    <div class="mod-card-desc">
+      <code>ModMetadata</code> 数据类定义Mod完整元数据<br>
+      id/name/version/author/artifact/dependencies<br>
+      backend_entry/frontend_routes/hooks/comms_exports<br>
+      workflow_employees/industry/ui_labels<br>
+      <code>parse_manifest()</code> 从 manifest.json 解析<br>
+      <code>validate_dependencies()</code> 版本约束校验
+    </div>
+  </div>
+  <div class="mod-card">
+    <div class="mod-card-title">Mod Manager</div>
+    <div class="mod-card-file">infrastructure/mods/mod_manager.py</div>
+    <div class="mod-card-desc">
+      核心调度器，管理Mod完整生命周期：<br>
+      <code>scan_mods()</code> 扫描mods根目录<br>
+      <code>load_mod()</code> SKU检查→依赖校验→后端加载→Hook注册<br>
+      <code>install_mod_package()</code> 签名验证→解压→SKU检查→激活<br>
+      <code>load_mod_routes()</code> 挂载 <code>/api/mod/{id}/*</code><br>
+      <code>unload_mod()</code> 清理实例→注销→清理Comms
+    </div>
+  </div>
+</div>
+
+<div class="mod-arrow">▼ Hook + Comms + Route ▼</div>
+
+<div class="mod-row">
+  <div class="mod-card">
+    <div class="mod-card-title">Hook 系统</div>
+    <div class="mod-card-file">infrastructure/mods/hooks.py</div>
+    <div class="mod-card-desc">
+      广播式事件订阅/触发<br>
+      <code>HookManager</code> 单例<br>
+      <code>subscribe(event, handler)</code><br>
+      <code>trigger(event, *args)</code><br>
+      client_mods_off 时跳过所有hooks
+    </div>
+  </div>
+  <div class="mod-card">
+    <div class="mod-card-title">Comms 通信</div>
+    <div class="mod-card-file">infrastructure/mods/comms.py</div>
+    <div class="mod-card-desc">
+      点对点同步调用<br>
+      <code>register(mod_id, channel, handler)</code><br>
+      <code>call(source, target, channel, *args)</code><br>
+      基于 <code>contextvars</code> 的调用方识别
+    </div>
+  </div>
+  <div class="mod-card">
+    <div class="mod-card-title">Registry 注册表</div>
+    <div class="mod-card-file">infrastructure/mods/registry.py</div>
+    <div class="mod-card-desc">
+      <code>ModRegistry</code> 单例<br>
+      维护已加载Mod的元数据和实例<br>
+      <code>register_mod(metadata)</code><br>
+      <code>get_mod_instance(mod_id)</code>
+    </div>
+  </div>
+</div>
+
+<div class="mod-arrow">▼ SKU + Edition + Entitlement ▼</div>
+
+<div class="mod-row">
+  <div class="mod-card">
+    <div class="mod-card-title">SKU 策略</div>
+    <div class="mod-card-file">mod_sdk/product_skus.py</div>
+    <div class="mod-card-desc">
+      三档: <code>personal</code> / <code>enterprise</code> / <code>admin</code><br>
+      <code>assert_mod_allowed_for_sku()</code> 权限断言<br>
+      personal阻断ERP模块
+    </div>
+  </div>
+  <div class="mod-card">
+    <div class="mod-card-title">Edition 策略</div>
+    <div class="mod-card-file">mod_sdk/edition_policy.py</div>
+    <div class="mod-card-desc">
+      三档: <code>minimal</code> / <code>generic</code> / <code>full</code><br>
+      <code>edition_mod_ids()</code> 返回应加载的Mod列表<br>
+      <code>seed_edition_mods_from_bundle()</code> 内置Mod种子
+    </div>
+  </div>
+  <div class="mod-card">
+    <div class="mod-card-title">企业权益</div>
+    <div class="mod-card-file">enterprise/mod_entitlements.py</div>
+    <div class="mod-card-desc">
+      <code>fetch_entitled_client_mod_ids_from_market()</code><br>
+      <code>sync_entitlements_for_session()</code><br>
+      <code>reload_enterprise_mods_after_login()</code>
+    </div>
+  </div>
+</div>
+
+<div class="mod-arrow">▼ 前端路由动态注册 ▼</div>
+
+<div class="mod-row">
+  <div class="mod-card" style="max-width:600px;">
+    <div class="mod-card-title">前端 Mod 路由注册</div>
+    <div class="mod-card-file">frontend/src/router/modViews.ts + registerModRoutes.ts</div>
+    <div class="mod-card-desc">
+      Mod声明 <code>frontend_routes</code> → 宿主运行时动态注册到 Vue Router<br>
+      Mod声明 <code>frontend_menu</code> → 宿主侧边栏动态添加菜单项<br>
+      Mod声明 <code>workflow_employees</code> → 工作流员工面板动态加载<br>
+      <code>useModRoutes()</code> composable 管理路由生命周期
+    </div>
+  </div>
+</div>
+
+</div>
+</div>
+
+<!-- ====== TAB 6: 依赖规则 ====== -->
+<div class="tab-content" id="tab-dep">
+
+<h3 style="color:var(--accent);margin-bottom:20px;font-size:16px;">代码依赖方向规则（DDD分层约束）</h3>
+
+<div class="dep-rules">
+
+<div class="dep-rule">
+  <div class="dep-rule-title" style="color:var(--green);">Route → Application</div>
+  <div class="dep-rule-body">
+    <code>fastapi_routes/</code> <span class="dep-arrow">→</span> <code>application/</code><br>
+    路由层只调用应用服务，不直接操作领域或基础设施<br>
+    通过 <code>bootstrap.py</code> 或 <code>di/registry.py</code> 获取服务实例
+  </div>
+</div>
+
+<div class="dep-rule">
+  <div class="dep-rule-title" style="color:var(--purple);">Application → Domain + Port</div>
+  <div class="dep-rule-body">
+    <code>application/</code> <span class="dep-arrow">→</span> <code>domain/</code> + <code>application/ports/</code><br>
+    应用服务调用领域规则，通过Port抽象访问基础设施<br>
+    <span class="dep-forbidden">application → infrastructure（禁止直接依赖）</span>
+  </div>
+</div>
+
+<div class="dep-rule">
+  <div class="dep-rule-title" style="color:var(--orange);">Domain → 无外部依赖</div>
+  <div class="dep-rule-body">
+    <code>domain/</code> 不依赖任何外部模块<br>
+    纯领域规则、实体、值对象<br>
+    <span class="dep-forbidden">domain → infrastructure（禁止）</span><br>
+    <span class="dep-forbidden">domain → application（禁止反向依赖）</span>
+  </div>
+</div>
+
+<div class="dep-rule">
+  <div class="dep-rule-title" style="color:var(--pink);">Infrastructure → Port + Domain</div>
+  <div class="dep-rule-body">
+    <code>infrastructure/</code> 实现 <code>application/ports/</code> 定义的接口<br>
+    仓储实现使用 <code>db/models/</code> ORM模型<br>
+    适配器封装外部系统（LLM/OCR/打印/支付）
+  </div>
+</div>
+
+<div class="dep-rule">
+  <div class="dep-rule-title" style="color:var(--accent);">NeuroBus 横切</div>
+  <div class="dep-rule-body">
+    <code>neuro_bus/</code> 贯穿所有层，但不被领域层直接依赖<br>
+    应用服务通过 <code>instrument_*()</code> 插桩<br>
+    神经域通过 <code>emit()</code> 发布事件，处理器在 <code>*_handlers.py</code>
+  </div>
+</div>
+
+<div class="dep-rule">
+  <div class="dep-rule-title" style="color:var(--orange);">Mod SDK 横切</div>
+  <div class="dep-rule-body">
+    <code>mod_sdk/</code> 提供Mod开发接口<br>
+    <code>*_compat.py</code> 桥接宿主与Mod的API/页面<br>
+    Mod通过 <code>hooks</code> 订阅宿主事件<br>
+    Mod通过 <code>comms</code> 与其他Mod点对点通信
+  </div>
+</div>
+
+<div class="dep-rule">
+  <div class="dep-rule-title" style="color:var(--red);">硬约束（提交前自检）</div>
+  <div class="dep-rule-body">
+    1. 服务端代码只许写到 <code>app/</code><br>
+    2. 前端代码只许写到 <code>frontend/</code><br>
+    3. HTTP入口只用 <code>XCAGI/run.py</code>（端口5000）<br>
+    4. <span class="dep-forbidden">禁止新增 backend/ 目录</span>（已删除）<br>
+    5. <span class="dep-forbidden">禁止往 static/ templates/ 写源码</span>
+  </div>
+</div>
+
+<div class="dep-rule">
+  <div class="dep-rule-title" style="color:var(--yellow);">装配根</div>
+  <div class="dep-rule-body">
+    <code>app/bootstrap.py</code> 是 Composition Root<br>
+    使用 <code>@lru_cache</code> 装配应用服务与基础设施<br>
+    <code>app/di/registry.py</code> ServiceContainer 管理重型单例<br>
+    所有接线集中在这两处，不在路由里 new 对象
+  </div>
+</div>
+
+</div>
+</div>
+
+</div>
+
+<div class="footer">
+  XCAGI v8.1 · Code Architecture · Neuro-DDD · FastAPI · Vue3 · 2026-05-26
+</div>
+
+</div>
+
+<script>
+function switchTab(id) {
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+  document.getElementById('tab-' + id).classList.add('active');
+  event.target.classList.add('active');
+}
+</script>
+
+</body>
+</html>

@@ -1,0 +1,33 @@
+{
+  "_comment": "Phase 2 场景 3 留证样例 — 标记发货（medium 风险，含 depends_on 链）。",
+  "generated_at": "2026-06-05T12:12:00Z",
+  "input_message": "把订单 MOCK-20260605-001 标记为已发货",
+  "execution_mode": "mock",
+  "approval_strategy": "auto",
+  "plan_id": "v1-s3-20260605-121200",
+  "intent": "mark_shipment_shipped",
+  "risk_level": "medium",
+  "scenario_id": 3,
+  "scenario_title": "标记发货",
+  "nodes": [
+    {"node_id": "query_order", "tool_id": "shipment_records", "action": "query", "risk": "low", "depends_on": [], "params": {"order_number": "MOCK-20260605-001"}},
+    {"node_id": "update_status", "tool_id": "shipment_records", "action": "update", "risk": "medium", "depends_on": ["query_order"], "params": {"order_number": "MOCK-20260605-001", "status": "shipped"}}
+  ],
+  "gated_decision": {
+    "risk_decision": {"requires_confirmation": true, "reason": "计划包含中高风险写操作", "blocking_nodes": ["update_status"]},
+    "node_decisions": [
+      {"node_id": "query_order", "tool_id": "shipment_records", "action": "query", "risk": "low", "requires_approval": false, "approved": true, "reason": "low-risk auto-approved"},
+      {"node_id": "update_status", "tool_id": "shipment_records", "action": "update", "risk": "medium", "requires_approval": true, "approval_request_id": "s3-uuid-1", "approved": true, "reason": "auto-approved"}
+    ],
+    "approval_request_ids": ["s3-uuid-1"],
+    "all_approved": true,
+    "any_rejected": false,
+    "pending_approval": false
+  },
+  "success": true,
+  "message": "工作流执行完成",
+  "node_results_summary": [
+    {"node_id": "query_order", "tool_id": "shipment_records", "action": "query", "success": true, "error": "", "output_summary": {"success": true, "data_count": 1}},
+    {"node_id": "update_status", "tool_id": "shipment_records", "action": "update", "success": true, "error": "", "output_summary": {"success": true, "updated": 1, "message": "mock: 发货状态已更新"}}
+  ]
+}

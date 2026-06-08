@@ -1,0 +1,27 @@
+{
+  "trial_days": 14,
+  "currency": "CNY",
+  "plans": [
+    {
+      "id": "saas-starter",
+      "title": "入门版",
+      "description": "适合小团队试用转正；含核心 ERP 与 AI 对话。",
+      "amount_cents": 99900,
+      "badge": null
+    },
+    {
+      "id": "saas-growth",
+      "title": "成长版",
+      "description": "多用户协作、审批与工作流；适合成长型企业。",
+      "amount_cents": 299900,
+      "badge": "推荐"
+    },
+    {
+      "id": "saas-enterprise",
+      "title": "企业版",
+      "description": "全功能 + 优先支持；大客户 SSO 与审计。",
+      "amount_cents": 999900,
+      "badge": null
+    }
+  ]
+}

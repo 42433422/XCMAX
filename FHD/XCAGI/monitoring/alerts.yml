@@ -1,0 +1,75 @@
+# Prometheus 告警规则
+
+groups:
+  - name: xcagi_alerts
+    interval: 30s
+    rules:
+      # P95 响应时间告警
+      - alert: HighP95Latency
+        expr: histogram_quantile(0.95, rate(xcagi_api_request_latency_seconds_bucket[5m])) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "P95 响应时间过高"
+          description: "API {{ $labels.endpoint }} 的 P95 响应时间为 {{ $value }}s，超过阈值 0.1s"
+      
+      # 错误率告警
+      - alert: HighErrorRate
+        expr: xcagi_error_rate > 1
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "错误率过高"
+          description: "API {{ $labels.endpoint }} 的错误率为 {{ $value }}%，超过阈值 1%"
+      
+      # QPS 过低告警
+      - alert: LowQPS
+        expr: xcagi_qps < 100
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "QPS 过低"
+          description: "API {{ $labels.endpoint }} 的 QPS 为 {{ $value }}，低于阈值 100"
+      
+      # 缓存命中率过低告警
+      - alert: LowCacheHitRatio
+        expr: xcagi_cache_hit_ratio < 40
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "缓存命中率过低"
+          description: "缓存命中率仅为 {{ $value }}%，低于阈值 40%"
+      
+      # CPU 使用率过高告警
+      - alert: HighCPUUsage
+        expr: xcagi_system_cpu_usage_percent > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "CPU 使用率过高"
+          description: "CPU 使用率为 {{ $value }}%，超过阈值 80%"
+      
+      # 批量处理时间过长告警
+      - alert: SlowBatchProcessing
+        expr: histogram_quantile(0.95, rate(xcagi_batch_processing_time_seconds_bucket[5m])) > 5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "批量处理时间过长"
+          description: "批量处理 P95 时间为 {{ $value }}s，超过阈值 5s"
+      
+      # 意图预测失败率告警
+      - alert: HighIntentPredictionFailureRate
+        expr: rate(xcagi_intent_predictions_total{result="failure"}[5m]) / rate(xcagi_intent_predictions_total[5m]) > 0.05
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "意图预测失败率过高"
+          description: "意图预测失败率为 {{ $value | humanizePercentage }}，超过阈值 5%"

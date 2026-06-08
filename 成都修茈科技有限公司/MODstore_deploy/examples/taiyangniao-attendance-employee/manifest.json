@@ -1,0 +1,150 @@
+{
+  "id": "taiyangniao-attendance-employee",
+  "name": "太阳鸟考勤员",
+  "version": "1.0.0",
+  "author": "XCAGI",
+  "description": "封装太阳鸟考勤转换能力：接收钉钉考勤 Excel 与输出参数，使用员工包内置 Python 转换模块生成考勤结果。",
+  "artifact": "employee_pack",
+  "scope": "global",
+  "dependencies": {
+    "xcagi": ">=1.0.0"
+  },
+  "employee": {
+    "id": "taiyangniao-attendance",
+    "label": "太阳鸟考勤员",
+    "capabilities": [
+      "attendance.rules",
+      "attendance.convert_upload",
+      "attendance.template_fill",
+      "attendance.download_hint"
+    ]
+  },
+  "workflow_employees": [
+    {
+      "id": "taiyangniao-attendance",
+      "label": "太阳鸟考勤员",
+      "panel_title": "太阳鸟考勤员",
+      "panel_summary": "上传钉钉考勤表，按太阳鸟 pro 固定规则和人员管理名单回填考勤明细。",
+      "capabilities": [
+        "attendance.rules",
+        "attendance.convert_upload",
+        "attendance.template_fill",
+        "attendance.download_hint"
+      ],
+      "api_base_path": "/api/mod/taiyangniao-attendance-employee/employees/taiyangniao-attendance",
+      "entry_action": "run"
+    }
+  ],
+  "backend": {
+    "entry": "blueprints",
+    "init": "mod_init"
+  },
+  "employee_config_v2": {
+    "identity": {
+      "id": "taiyangniao-attendance-employee",
+      "version": "1.0.0",
+      "artifact": "employee_pack",
+      "name": "太阳鸟考勤员",
+      "description": "把太阳鸟 pro 的考勤转换程序封装成纯 Python 脚本型员工包。"
+    },
+    "perception": {
+      "type": "file_or_text",
+      "accepted_extensions": [
+        ".xlsx",
+        ".xlsm",
+        ".xls"
+      ]
+    },
+    "memory": {
+      "type": "session"
+    },
+    "cognition": {
+      "agent": {
+        "system_prompt": "你是太阳鸟考勤员。你负责协助用户把钉钉导出的考勤 xlsx 转成太阳鸟考勤模板结果。必须直接使用员工包内置 taiyangniao_attendance Python 转换模块。输入不足、模板缺失或无法导入模块时明确指出原因；不能编造转换成功。",
+        "role": {
+          "name": "太阳鸟考勤员",
+          "persona": "严谨的行政考勤数据处理员工",
+          "tone": "professional",
+          "expertise": [
+            "钉钉考勤导出",
+            "固定模板回填",
+            "人员管理名单匹配",
+            "考勤规则解释"
+          ]
+        },
+        "behavior_rules": [
+          "没有考勤文件时只返回待办清单，不声称已转换。",
+          "直接 Python 转换失败时保留原始错误和下一步建议。",
+          "默认输出路径为 424/考勤转换输出.xlsx，默认模板为 424/考勤-2026-3月份考勤统计表.xlsx。",
+          "默认启用人员管理名单重排，除非用户明确关闭。"
+        ],
+        "few_shot_examples": [
+          {
+            "input": {
+              "action": "rules"
+            },
+            "output": {
+              "ok": true,
+              "summary": "返回太阳鸟 pro 当前考勤规则。"
+            }
+          },
+          {
+            "input": {
+              "action": "convert",
+              "file_path": "uploads/dingtalk.xlsx",
+              "output_relpath": "424/考勤转换输出.xlsx"
+            },
+            "output": {
+              "ok": true,
+              "summary": "直接执行 Python 转换并返回输出路径、源表行数和统计行数。"
+            }
+          }
+        ],
+        "model": {
+          "provider": "auto",
+          "model_name": "auto",
+          "temperature": 0.1,
+          "max_tokens": 2000,
+          "top_p": 0.9
+        }
+      },
+      "skills": [
+        {
+          "name": "attendance.rules",
+          "brief": "读取太阳鸟考勤员内置规则和默认参数。"
+        },
+        {
+          "name": "attendance.convert_upload",
+          "brief": "把钉钉 Excel 交给员工包内置 Python 转换模块处理。"
+        },
+        {
+          "name": "attendance.download_hint",
+          "brief": "返回转换结果的本机输出路径。"
+        }
+      ]
+    },
+    "collaboration": {
+      "workflow": {
+        "workflow_id": 0,
+        "name": "太阳鸟考勤转换"
+      }
+    },
+    "actions": {
+      "handlers": [
+        "direct_python"
+      ],
+      "direct_python": {
+        "mod_id": "taiyangniao-pro",
+        "default_backend_path": "e:/FHD/mods/taiyangniao-pro/backend",
+        "default_output_relpath": "424/考勤转换输出.xlsx",
+        "default_template_relpath": "424/考勤-2026-3月份考勤统计表.xlsx",
+        "default_use_personnel_roster": true
+      }
+    },
+    "metadata": {
+      "framework_version": "2.0.0",
+      "created_by": "manual_answer_for_workbench_employee_test",
+      "source_mod_id": "taiyangniao-pro"
+    }
+  }
+}

@@ -1,0 +1,38 @@
+id: artifact-generator
+name: 产物生成员工
+version: "10.0.0"
+owner: admin
+area: craft-workshop
+domain: >-
+  根据规划蓝图生成员工包产物（manifest、Python 实现、资产文件）；支持 LLM 驱动和资产驱动两种模式
+
+scope_globs:
+  - "workbench/sessions/*"
+  - "workbench/artifacts/*"
+  - "yuangon/**"
+  - "yuangon/craft-workshop/artifact-generator/**"
+
+forbidden_globs:
+  - "*.py"
+  - "*.vue"
+  - "*.ts"
+
+depends_on:
+  - employee-planner
+
+actions:
+  handlers:
+    - llm_md
+    - echo
+
+triggers:
+  on_error: true
+  on_quality_fail: true
+
+skills:
+  - skill-artifact-generation
+
+changelog:
+  - version: "10.0.0"
+    date: "2026-06-07"
+    note: "yuangon 骨架由 bootstrap_yuangon.py 从 manifest 反向生成（v10 线内迭代）"

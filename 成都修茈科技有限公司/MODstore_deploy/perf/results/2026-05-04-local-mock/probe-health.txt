@@ -1,0 +1,4 @@
+url=http://127.0.0.1:18000/api/health
+total=1000 workers=50 wall_s=1.713 rps=583.8
+status_codes={200: 1000} http_200=1000
+latency_ms p50=15.76 p95=524.74 p99=1027.46

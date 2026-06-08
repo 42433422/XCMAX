@@ -1,0 +1,40 @@
+id: mobile-android-release-officer
+name: Android 发版员
+version: "10.0.0"
+owner: admin
+area: platform-core
+domain: >-
+  P-S Android 渠道构建与发布：ci-mobile-android.yml、release-android.yml、APK/AAB 产出与 smoke。
+
+scope_globs:
+  - "FHD/mobile-android/**"
+  - FHD/.github/workflows/ci-mobile-android.yml
+  - FHD/.github/workflows/release-android.yml
+  - "release-apk/**"
+  - "yuangon/platform-core/mobile-android-release-officer/**"
+
+forbidden_globs:
+  - "_local_secrets/**"
+
+depends_on:
+  - test-qa-runner
+  - deploy-release-officer
+
+actions:
+  handlers:
+    - llm_md
+    - echo
+
+triggers:
+  on_error: true
+  on_quality_fail: true
+
+skills:
+  - task.analyze
+  - llm.markdown
+  - workflow.assist
+
+changelog:
+  - version: "10.0.0"
+    date: "2026-06-07"
+    note: "yuangon 骨架由 bootstrap_yuangon.py 从 manifest 反向生成（v10 线内迭代）"

@@ -1,0 +1,44 @@
+id: flask-entry-keeper
+name: Flask 入口维护员
+version: "10.0.0"
+owner: admin
+area: site-and-marketing
+domain: >-
+  维护根目录 Flask 应用 app.py 的路由、表单处理、excel-to-ai 动态页与依赖 requirements.txt；对接静态站，不涉及 MODstore 或 Nginx 配置。
+
+scope_globs:
+  - app.py
+  - requirements.txt
+  - "public/**"
+  - "uploads/**"
+  - "site/**"
+  - excel-to-ai.html
+  - "yuangon/site-and-marketing/flask-entry-keeper/**"
+
+forbidden_globs:
+  - "nginx-*.conf"
+  - "MODstore_deploy/**"
+  - "vibe-coding/**"
+  - "_local_secrets/**"
+  - "docker/**"
+  - "deploy/**"
+
+depends_on:
+  - nginx-config-engineer
+
+actions:
+  handlers:
+    - llm_md
+    - echo
+
+triggers:
+  on_error: true
+  on_quality_fail: true
+
+skills:
+  - skill-flask-route-health
+
+changelog:
+  - version: "10.0.0"
+    date: "2026-06-07"
+    note: "yuangon 骨架由 bootstrap_yuangon.py 从 manifest 反向生成（v10 线内迭代）"

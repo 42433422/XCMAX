@@ -1,0 +1,85 @@
+name: archive-hygiene
+
+# XCAGI v9.0.0 安全整改：archive 卫生 CI 门禁
+# ----------------------------------------------------------------------------
+# 目标：保证 main / master 分支永远保持"零裸 .env / 零裸 db"状态。
+# 任何 PR 若在 _archive/ 下新增未被 scripts/cleanup_archive_secrets.py 脱敏的
+# 真实 .env、login_out.json、客户数据库、二进制 xcmod 等高风险文件，将被本
+# workflow 拒绝合入。
+#
+# 对应清理脚本：scripts/cleanup_archive_secrets.py（--check / --strict 双模式）
+# 详细规则：    SECURITY_CLEANUP_REPORT.md
+# 设计取舍：
+#   - 仅依赖 Python 3 stdlib，无第三方依赖，CI 启动 < 5s。
+#   - 把脚本执行结果 + 报告以 artifact 形式上传，便于审计/排错。
+#   - 定时每日 03:00 跑一次（北京时间），防止有人绕过 pre-commit 强推。
+# ----------------------------------------------------------------------------
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+  schedule:
+    - cron: "0 19 * * *"  # 每日 UTC 19:00 = 北京时间 03:00 兜底扫描
+
+concurrency:
+  group: archive-hygiene-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  no-workspace-archive:
+    name: Forbid _archive in workspace
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify _archive not in tree
+        run: bash scripts/verify_no_archive_in_tree.sh
+
+  check:
+    name: archive secret scan (--check --strict)
+    if: false  # 仅当工作区仍含 _archive/ 时手动启用；尽调默认已迁出
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # 完整历史，方便审计"是哪次 commit 引入的敏感文件"
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Locate sensitive files (informational)
+        id: scan
+        run: |
+          echo "扫描 _archive/ 下所有高风险文件（含已脱敏）..."
+          python3 scripts/cleanup_archive_secrets.py --report-only 2>&1 | tail -20
+
+      - name: Enforce archive hygiene (fail on leak)
+        id: enforce
+        # --check: 仅扫描不修改；--strict: 占位文件缺元数据也算失败
+        # 退出码 1 即视为 PR 阻断
+        run: |
+          set -euo pipefail
+          python3 scripts/cleanup_archive_secrets.py --check --strict
+        # 不加 `if: always()`，让非零退出码直接 fail job
+
+      - name: Upload scan report (always)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: archive-hygiene-report-${{ github.run_id }}
+          path: |
+            SECURITY_CLEANUP_REPORT.md
+            _archive/.redacted-snapshots/
+          retention-days: 30
+          if-no-files-found: ignore

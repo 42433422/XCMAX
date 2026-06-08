@@ -1,0 +1,34 @@
+{
+  "id": "coating-industry",
+  "name": "涂料行业包",
+  "version": "1.0.0",
+  "author": "XCAGI",
+  "description": "涂料化工行业通用包占位；完整实现由客户 .xcmod 交付，客户品牌见 customer_delivery.json。",
+  "primary": true,
+  "legacy_mod_ids": ["sz-qsm-pro"],
+  "dependencies": {
+    "xcagi": ">=1.0.0"
+  },
+  "backend": {
+    "entry": "blueprints",
+    "init": "mod_init"
+  },
+  "frontend": {
+    "routes": "frontend/routes",
+    "pro_entry_path": "/coating-industry",
+    "menu": []
+  },
+  "onboarding": {
+    "custom_line_hint": "涂料配方、批次与客户服务；完整能力由定制 Mod 交付",
+    "custom_mod_ids": []
+  },
+  "hooks": {},
+  "industry": {
+    "id": "涂料",
+    "name": "涂料/化工行业",
+    "description": "适用于涂料配方、批次、质检与客户服务等场景"
+  },
+  "comms": {
+    "exports": []
+  }
+}

@@ -1,0 +1,5 @@
+{
+  "action": "query",
+  "employee_id": "EMP-001",
+  "date_range": "2026-05"
+}

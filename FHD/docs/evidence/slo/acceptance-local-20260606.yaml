@@ -1,0 +1,38 @@
+meta:
+  status: pass
+  observation_mode: local_contract
+  window_duration_days: 1
+  verified_at: "2026-06-05T16:58:56.885324+00:00"
+  environment: local
+
+panels:
+  api_availability:
+    slo_id: SLO-API-01
+    target: "99.9%"
+    reading: "N/A"
+    reading_7d: "N/A"
+    screenshot: grafana-local-m0-api_availability-20260606.png
+  api_login_p95_ms:
+    slo_id: SLO-API-02
+    target: "< 500"
+    reading: "N/A"
+    reading_7d: "N/A"
+    screenshot: grafana-local-m0-api_login_p95_ms-20260606.png
+  api_error_rate:
+    slo_id: SLO-API-03
+    target: "< 0.1%"
+    reading: "N/A"
+    reading_7d: "N/A"
+    screenshot: grafana-local-m0-api_error_rate-20260606.png
+  ai_chat_first_byte_p95_ms:
+    slo_id: SLO-AI-01
+    target: "< 1500"
+    reading: "N/A"
+    reading_7d: "N/A"
+    screenshot: grafana-local-m0-ai_chat_first_byte_p95_ms-20260606.png
+  neurobus_delivery:
+    slo_id: SLO-BUS-01
+    target: ">= 99.95%"
+    reading: "N/A"
+    reading_7d: "N/A"
+    screenshot: grafana-local-m0-neurobus_delivery-20260606.png

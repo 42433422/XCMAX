@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://modstore.local/schemas/events/workflow.sandbox_completed.schema.json",
+  "title": "workflow.sandbox_completed payload",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["workflow_id", "user_id", "status", "duration_ms"],
+  "properties": {
+    "workflow_id": { "type": ["integer", "string"] },
+    "user_id": { "type": ["integer", "string"] },
+    "status": { "type": "string" },
+    "duration_ms": { "type": ["integer", "number"] }
+  }
+}

@@ -1,0 +1,43 @@
+id: seo-sitemap-curator
+name: SEO 站点地图管理员
+version: "10.0.0"
+owner: admin
+area: site-and-marketing
+domain: >-
+  维护 xiu-ci.com 的 SEO 资产：sitemap.xml、robots.txt、百度/必应站长校验文件与结构化数据，确保收录与排名质量。
+
+scope_globs:
+  - sitemap.xml
+  - robots.txt
+  - baidu_urls.txt
+  - BingSiteAuth.xml
+  - "baidu_verify_*.html"
+  - "yuangon/site-and-marketing/seo-sitemap-curator/**"
+
+forbidden_globs:
+  - "*.py"
+  - "nginx-*.conf"
+  - "MODstore_deploy/**"
+  - "_local_secrets/**"
+  - styles.css
+  - main.js
+
+depends_on:
+  - site-content-editor
+
+actions:
+  handlers:
+    - llm_md
+    - echo
+
+triggers:
+  on_error: true
+  on_quality_fail: true
+
+skills:
+  - skill-sitemap-update
+
+changelog:
+  - version: "10.0.0"
+    date: "2026-06-07"
+    note: "yuangon 骨架由 bootstrap_yuangon.py 从 manifest 反向生成（v10 线内迭代）"

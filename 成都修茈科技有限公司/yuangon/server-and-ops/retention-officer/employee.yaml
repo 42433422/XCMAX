@@ -1,0 +1,79 @@
+id: retention-officer
+name: 档案清理员
+version: "10.0.0"
+owner: admin
+area: server-and-ops
+domain: >-
+  周期性清理 workbench_script_runs、上传分片、旋转日志、知识缓存等过期文件，并把每次清理结果写回员工执行流水，作为「定时档案清理」岗位在员工大会上发言。
+
+scope_globs:
+  - "MODstore_deploy/modstore_server/workbench_script_runs/**"
+  - "MODstore_deploy/modstore_server/market_files/.tmp_chunks/**"
+  - "MODstore_deploy/modstore_server/webhook_events/**"
+  - ".cursor_*_log.txt"
+  - ".cursor_paths_check*.txt"
+  - ".cursor_*.txt"
+  - "coverage/**"
+  - "playwright-report/**"
+  - "test-results/**"
+  - "__tmp_xcemp/**"
+  - "__tmp_emp_*.json"
+  - "_nginx_extract/**"
+  - "new/**"
+  - "alipay_package/**"
+  - "taiyangniao-pro/**"
+  - "dist/**"
+  - "site/**"
+  - "*.mp4"
+  - test_image.jpg
+  - MODstore_deploy.zip
+  - xiu-ci.com_nginx.zip
+  - .cursor_inspect_purge.py
+  - "MODstore_deploy/market_vue_baseline/**"
+  - "MODstore_deploy/market_vue_baseline*.tar.gz"
+  - "MODstore_deploy/market-dist-*.zip"
+  - MODstore_deploy/hero-video.mp4
+  - "MODstore_deploy/modstore.egg-info/**"
+  - "MODstore_deploy/market/dist/**"
+  - "vibe-coding/test_vibe_*_data/**"
+  - "vibe-coding/test_vibe_data/**"
+  - "vibe-coding/test_vibe_data*/**"
+  - "**/__pycache__/**"
+  - "**/.pytest_cache/**"
+  - "**/.mypy_cache/**"
+  - "**/.ruff_cache/**"
+  - MODstore_deploy/docs/runbooks/file-retention.md
+  - MODstore_deploy/docs/runbooks/legacy-archive.md
+  - "yuangon/server-and-ops/retention-officer/**"
+
+forbidden_globs:
+  - "MODstore_deploy/modstore_server/**/*.py"
+  - "vibe-coding/src/**/*.py"
+  - "MODstore_deploy/market/src/**/*.vue"
+  - "MODstore_deploy/market/src/**/*.ts"
+  - "vibe-coding/src/**/*.vue"
+  - "vibe-coding/src/**/*.ts"
+  - "_local_secrets/**"
+  - ".env*"
+  - "**/secrets/**"
+
+depends_on:
+  - log-monitor-incident
+
+actions:
+  handlers:
+    - llm_md
+    - echo
+    - shell_exec
+
+triggers:
+  on_error: false
+  on_quality_fail: false
+
+skills:
+  - skill-disk-retention
+
+changelog:
+  - version: "10.0.0"
+    date: "2026-06-07"
+    note: "yuangon 骨架由 bootstrap_yuangon.py 从 manifest 反向生成（v10 线内迭代）"

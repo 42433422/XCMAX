@@ -1,0 +1,39 @@
+id: ecosystem-investor-portal-officer
+name: 投资方只读门户员
+version: "10.0.0"
+owner: admin
+area: partner-ecosystem
+domain: >-
+  O-B B4 投资方/伙伴只读 Portal · 里程碑与风险视图 · 进度只读 API。
+
+scope_globs:
+  - "MODstore_deploy/market/src/**/admin/**"
+  - "MODstore_deploy/market/src/views/**/Investor*"
+  - "MODstore_deploy/modstore_server/**/investor*"
+  - "yuangon/partner-ecosystem/ecosystem-investor-portal-officer/**"
+
+forbidden_globs:
+  - "_local_secrets/**"
+
+depends_on:
+  - market-frontend-dev
+  - ecosystem-delivery-reporter
+
+actions:
+  handlers:
+    - llm_md
+    - echo
+
+triggers:
+  on_error: true
+  on_quality_fail: true
+
+skills:
+  - task.analyze
+  - llm.markdown
+  - workflow.assist
+
+changelog:
+  - version: "10.0.0"
+    date: "2026-06-07"
+    note: "yuangon 骨架由 bootstrap_yuangon.py 从 manifest 反向生成（v10 线内迭代）"

@@ -1,0 +1,60 @@
+id: market-frontend-dev
+name: 市场前端开发员
+version: "10.0.0"
+owner: admin
+area: modstore-frontend
+domain: >-
+  维护 MODstore 市场前端（非工作台视图）：路由视图、API 对接层、Pinia store、HTTP client；严格遵守 Vue 3 Only，禁止引入 React。
+
+scope_globs:
+  - "MODstore_deploy/market/src/views/*.vue"
+  - "MODstore_deploy/market/src/views/workflow/**"
+  - MODstore_deploy/market/src/views/WorkbenchHomeView.vue
+  - MODstore_deploy/market/src/api.ts
+  - MODstore_deploy/market/src/infrastructure/http/client.ts
+  - MODstore_deploy/market/src/App.vue
+  - "MODstore_deploy/market/src/components/**"
+  - "MODstore_deploy/market/src/stores/**"
+  - "MODstore_deploy/market/src/router/**"
+  - MODstore_deploy/market/package.json
+  - "MODstore_deploy/market/vite.config.*"
+  - "MODstore_deploy/market/tsconfig*.json"
+  - MODstore_deploy/market/index.html
+  - MODstore_deploy/market/.prettierrc
+  - MODstore_deploy/market/.prettierignore
+  - MODstore_deploy/market/env.d.ts
+  - MODstore_deploy/market/eslint.config.js
+  - MODstore_deploy/market/package-lock.json
+  - "yuangon/modstore-frontend/market-frontend-dev/**"
+
+forbidden_globs:
+  - "MODstore_deploy/market/src/views/workbench/**"
+  - "MODstore_deploy/market/src/views/Admin*View.vue"
+  - "MODstore_deploy/market/src/views/admin/**"
+  - "MODstore_deploy/market/src/components/admin/**"
+  - "MODstore_deploy/modstore_server/**"
+  - "*.py"
+  - "_local_secrets/**"
+  - react
+
+depends_on:
+  - modstore-backend-api
+  - workbench-ux-stylist
+
+actions:
+  handlers:
+    - llm_md
+    - echo
+
+triggers:
+  on_error: true
+  on_quality_fail: true
+
+skills:
+  - skill-vue-view-update
+  - skill-api-ts-sync
+
+changelog:
+  - version: "10.0.0"
+    date: "2026-06-07"
+    note: "yuangon 骨架由 bootstrap_yuangon.py 从 manifest 反向生成（v10 线内迭代）"

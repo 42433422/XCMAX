@@ -1,0 +1,74 @@
+name: SLO metrics collect (daily)
+
+on:
+  schedule:
+    - cron: "0 8 * * *"
+  workflow_dispatch:
+    inputs:
+      window:
+        description: "Prometheus window"
+        required: false
+        default: "30d"
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: slo-metrics-collect
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Collect SLO from Prometheus
+        env:
+          PROMETHEUS_URL: ${{ secrets.STAGING_PROMETHEUS_URL || 'http://127.0.0.1:9091' }}
+        run: |
+          WINDOW="${{ github.event.inputs.window || '30d' }}"
+          python3 scripts/observability/collect_slo_metrics.py --window "$WINDOW" || {
+            echo "Prometheus unreachable; writing seed slo-measured from sla-snapshot"
+            DAY="$(date -u +%Y%m%d)"
+            python3 - <<'PY'
+          import json
+          from datetime import datetime, timezone
+          from pathlib import Path
+          snap = json.loads(Path("metrics/sla-snapshot.json").read_text())
+          out = {
+              "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+              "prometheus_url": "unavailable",
+              "window": "seed",
+              "readings": {s["id"]: {"reading": s.get("baseline"), "meets_target": None} for s in snap.get("slos", [])},
+              "note": "Prometheus unreachable; bootstrap from sla-snapshot.json",
+          }
+          Path(f"metrics/slo-measured-{datetime.now(timezone.utc):%Y%m%d}.json").write_text(
+              json.dumps(out, indent=2) + "\n"
+          )
+          PY
+          }
+
+      - name: Ensure deploy_events.jsonl exists
+        run: |
+          if [ ! -f metrics/deploy_events.jsonl ]; then
+            cp metrics/deploy_events.seed.jsonl metrics/deploy_events.jsonl
+            echo "Bootstrapped deploy_events.jsonl from seed"
+          fi
+
+      - name: Commit metrics
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add metrics/slo-measured-*.json metrics/sla-snapshot.json metrics/deploy_events.jsonl
+          git diff --staged --quiet || git commit -m "chore(metrics): slo measured $(date -u +%Y%m%d)"
+          git push || true

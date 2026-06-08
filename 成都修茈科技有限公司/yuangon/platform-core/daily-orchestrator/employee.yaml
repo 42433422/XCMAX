@@ -1,0 +1,44 @@
+id: daily-orchestrator
+name: 每日编排员
+version: "10.0.0"
+owner: admin
+area: platform-core
+domain: >-
+  每日定时：在独立分支上做最小修复（测试失败、日志告警），提交后进入「待邮件审批」队列；不触达用户数据目录与 ORM 模型定义。
+
+scope_globs:
+  - "MODstore_deploy/market/src/**"
+  - "MODstore_deploy/modstore_server/**"
+  - "MODstore_deploy/tests/**"
+  - MODstore_deploy/pyproject.toml
+  - "yuangon/platform-core/daily-orchestrator/**"
+
+forbidden_globs:
+  - MODstore_deploy/modstore_server/models.py
+  - "MODstore_deploy/modstore_server/migrations/**"
+  - "MODstore_deploy/alembic/**"
+  - "**/*.db"
+  - "MODstore_deploy/modstore_server/catalog_data/**"
+  - "MODstore_deploy/modstore_server/library/**"
+  - "MODstore_deploy/var/**"
+  - "_local_secrets/**"
+
+depends_on:
+  - test-qa-runner
+  - dbops-engineer
+
+actions:
+  handlers:
+    - agent
+
+triggers:
+  on_error: true
+  on_quality_fail: true
+
+skills:
+  - skill-daily-orchestrator
+
+changelog:
+  - version: "10.0.0"
+    date: "2026-06-07"
+    note: "yuangon 骨架由 bootstrap_yuangon.py 从 manifest 反向生成（v10 线内迭代）"

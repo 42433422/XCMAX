@@ -1,0 +1,1061 @@
+"""Migrated from legacy_auth.py (v10)."""
+
+from __future__ import annotations
+
+import logging
+import os
+from typing import Any
+
+from fastapi import APIRouter, Body, Depends, File, Query, Request, UploadFile
+from fastapi.responses import FileResponse, JSONResponse
+
+from app.infrastructure.auth.dependencies import (
+    get_logged_in_user,
+    require_permission,
+    session_id_from_request,
+)
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(tags=["legacy-auth"], deprecated=True)
+
+_require_admin = require_permission("admin.manage_users")
+
+
+def _user_public_dict(user) -> dict[str, Any]:
+    from app.utils.user_avatar_storage import public_avatar_url
+
+    return {
+        "id": user.id,
+        "username": user.username,
+        "display_name": user.display_name,
+        "email": user.email,
+        "role": user.role,
+        "is_active": user.is_active,
+        "avatar_url": public_avatar_url(getattr(user, "wx_avatar_url", None)),
+    }
+
+
+def _session_meta_for_response(request: Request) -> dict[str, Any]:
+    from app.application.session_account_meta import load_session_account_meta
+
+    sid = session_id_from_request(request)
+    if not sid:
+        return {}
+    meta = load_session_account_meta(sid)
+    return meta if meta else {}
+
+
+@router.get("/api/auth/me")
+def auth_me(request: Request, user=Depends(get_logged_in_user)):
+    from app.application.auth_app_service import get_auth_app_service
+
+    auth_app_service = get_auth_app_service()
+    permissions = auth_app_service.get_user_permissions(user)
+    session_meta = _session_meta_for_response(request)
+    return {
+        "success": True,
+        "data": {
+            "user": _user_public_dict(user),
+            "permissions": permissions,
+            "account_kind": session_meta.get("account_kind") or "enterprise",
+            "company_brand": session_meta.get("company_brand") or "",
+            "market_is_admin": bool(session_meta.get("market_is_admin")),
+            "market_is_enterprise": bool(session_meta.get("market_is_enterprise")),
+            "tenant_id": session_meta.get("tenant_id"),
+            "tenant_name": session_meta.get("tenant_name") or session_meta.get("company_brand") or "",
+            "impersonating_market_user_id": session_meta.get("impersonating_market_user_id"),
+            "impersonating_username": session_meta.get("impersonating_username") or "",
+        },
+    }
+
+
+@router.get("/api/auth/session/validate")
+async def auth_session_validate(request: Request):
+    from app.application.auth_app_service import get_auth_app_service
+
+    session_id = session_id_from_request(request)
+    if not session_id:
+        # 使用 200：避免前端 api.get 将「未登录」当成 HTTP 错误刷屏；语义由 success/valid 表达。
+        return JSONResponse(
+            {
+                "success": False,
+                "valid": False,
+                "error": {"code": "NO_SESSION", "message": "无会话信息"},
+            },
+            status_code=200,
+        )
+    auth_app_service = get_auth_app_service()
+    session_info = auth_app_service.session_manager.get_session_info(session_id)
+    if not session_info:
+        return JSONResponse(
+            {
+                "success": False,
+                "valid": False,
+                "error": {"code": "INVALID_SESSION", "message": "会话无效或已过期"},
+            },
+            status_code=200,
+        )
+
+    try:
+        from app.mod_sdk.product_skus import resolve_product_sku
+
+        if resolve_product_sku() == "enterprise":
+            from app.fastapi_routes.market_account import resolve_valid_market_access_token
+
+            market_tok = await resolve_valid_market_access_token(session_id)
+            if not market_tok:
+                return JSONResponse(
+                    {
+                        "success": False,
+                        "valid": False,
+                        "error": {
+                            "code": "MARKET_NOT_BOUND",
+                            "message": (
+                                "企业版需使用修茈市场企业级账号登录。"
+                                "若此前仅用本地管理员进入，请退出后重新登录。"
+                            ),
+                        },
+                    },
+                    status_code=200,
+                )
+    except Exception:
+        logger.exception("enterprise market session check on validate failed")
+
+    entitled_mod_ids: list[str] = []
+    try:
+        from app.enterprise.mod_entitlements import (
+            get_cached_entitled_client_mod_ids,
+            sync_entitlements_for_session,
+        )
+
+        entitled = await sync_entitlements_for_session(session_id)
+        if entitled:
+            entitled_mod_ids = sorted(entitled)
+        else:
+            cached = get_cached_entitled_client_mod_ids()
+            if cached is not None:
+                entitled_mod_ids = sorted(cached)
+    except Exception:
+        logger.exception("sync enterprise entitlements on validate failed")
+    session_meta = _session_meta_for_response(request)
+    payload: dict[str, Any] = {"success": True, "valid": True, "data": session_info}
+    if entitled_mod_ids:
+        payload["entitled_mod_ids"] = entitled_mod_ids
+    if session_meta:
+        payload["account_kind"] = session_meta.get("account_kind")
+        payload["company_brand"] = session_meta.get("company_brand")
+        payload["market_is_admin"] = session_meta.get("market_is_admin")
+        payload["market_is_enterprise"] = session_meta.get("market_is_enterprise")
+        payload["impersonating_market_user_id"] = session_meta.get("impersonating_market_user_id")
+        payload["impersonating_username"] = session_meta.get("impersonating_username")
+    return payload
+
+
+def _market_user_email_from_raw(raw: Any) -> str:
+    if not isinstance(raw, dict):
+        return ""
+    user = raw.get("user")
+    if isinstance(user, dict) and user.get("email"):
+        return str(user.get("email") or "").strip()
+    data = raw.get("data")
+    if isinstance(data, dict):
+        inner = data.get("user")
+        if isinstance(inner, dict) and inner.get("email"):
+            return str(inner.get("email") or "").strip()
+    return ""
+
+
+def _normalize_auth_email(email: str) -> str:
+    return (email or "").strip().lower()
+
+
+def _find_local_users_by_email(email: str) -> list:
+    from sqlalchemy import func
+
+    from app.db.models.user import User
+    from app.db.session import get_db
+
+    norm = _normalize_auth_email(email)
+    if not norm or "@" not in norm:
+        return []
+    with get_db() as db:
+        return (
+            db.query(User)
+            .filter(func.lower(User.email) == norm)
+            .filter(User.is_active.is_(True))
+            .order_by(User.id.asc())
+            .all()
+        )
+
+
+def _sync_local_password_for_email(email: str, new_password: str) -> int:
+    from app.application.auth_app_service import get_auth_app_service
+
+    auth_app_service = get_auth_app_service()
+    updated = 0
+    for user in _find_local_users_by_email(email):
+        result = auth_app_service.reset_password(int(user.id), new_password)
+        if result.get("success"):
+            updated += 1
+    return updated
+
+
+def _jit_create_local_user_for_enterprise(username: str, password: str, email: str = "") -> bool:
+    from app.db.models.user import User
+    from app.db.session import get_db
+    from app.utils.password_hash import generate_password_hash
+    from app.utils.time import utc_now_naive
+
+    try:
+        with get_db() as db:
+            if db.query(User).filter(User.username == username).first():
+                return False
+            db.add(
+                User(
+                    username=username,
+                    password=generate_password_hash(password),
+                    display_name=username,
+                    email=email or "",
+                    role="user",
+                    is_active=True,
+                    mfa_enabled=False,
+                    created_at=utc_now_naive(),
+                )
+            )
+            db.commit()
+        return True
+    except Exception as exc:
+        logger.exception("_jit_create_local_user_for_enterprise failed for %s: %s", username, exc)
+        return False
+
+
+@router.get("/api/runtime/product-sku")
+def runtime_product_sku():
+    from app.mod_sdk.product_skus import resolve_product_sku
+
+    sku = resolve_product_sku()
+    return {
+        "success": True,
+        "data": {"sku": sku or "generic", "is_enterprise_edition": sku == "enterprise"},
+    }
+
+
+def _open_registration_allowed(sku: str) -> bool:
+    raw = (os.environ.get("FHD_ALLOW_OPEN_REGISTRATION") or "").strip().lower()
+    if raw in ("0", "false", "no"):
+        return False
+    if raw in ("1", "true", "yes"):
+        return True
+    return sku != "enterprise"
+
+
+def _attach_session_cookie(response: JSONResponse, session_id: str | None) -> JSONResponse:
+    sid = (session_id or "").strip()
+    if not sid:
+        return response
+    cookie_name = os.environ.get("SESSION_COOKIE_NAME", "session_id")
+    max_age = int(os.environ.get("SESSION_COOKIE_MAX_AGE", "315360000"))
+    response.set_cookie(
+        key=cookie_name,
+        value=sid,
+        max_age=max_age,
+        httponly=os.environ.get("SESSION_COOKIE_HTTPONLY", "1") not in ("0", "false", "False"),
+        secure=os.environ.get("SESSION_COOKIE_SECURE", "").lower() in ("1", "true", "yes"),
+        samesite=os.environ.get("SESSION_COOKIE_SAMESITE", "Lax"),
+        path="/",
+    )
+    return response
+
+
+@router.post("/api/auth/forgot-account")
+def auth_forgot_account(body: dict = Body(default_factory=dict)):
+    """Look up local PostgreSQL users by email (same DB as login)."""
+    email = _normalize_auth_email(str(body.get("email") or ""))
+    if not email or "@" not in email:
+        return JSONResponse(
+            {
+                "success": False,
+                "error": {"code": "INVALID_INPUT", "message": "请填写有效邮箱"},
+            },
+            status_code=400,
+        )
+    users = _find_local_users_by_email(email)
+    usernames = [str(u.username) for u in users if u.username]
+    if usernames:
+        message = f"找到 {len(usernames)} 个与本机数据库关联的账号"
+    else:
+        message = "本机数据库中未找到该邮箱对应的账号，可尝试注册或联系管理员"
+    return {
+        "success": True,
+        "message": message,
+        "data": {"usernames": usernames, "found": bool(usernames)},
+    }
+
+
+@router.post("/api/auth/forgot-password/send-code")
+async def auth_forgot_password_send_code(body: dict = Body(default_factory=dict)):
+    """Send reset code via Xiuci market API; uses XCAGI_MARKET_BASE_URL (e.g. production server)."""
+    from app.fastapi_routes.market_account import send_market_reset_password_code
+
+    email = _normalize_auth_email(str(body.get("email") or ""))
+    if not email or "@" not in email:
+        return JSONResponse(
+            {
+                "success": False,
+                "error": {"code": "INVALID_INPUT", "message": "请填写有效邮箱"},
+            },
+            status_code=400,
+        )
+    local_users = _find_local_users_by_email(email)
+    result = await send_market_reset_password_code(email)
+    if not result.get("success"):
+        hint = result.get("message", "发送失败")
+        if local_users:
+            hint = f"{hint}（本机库中有该邮箱用户，请确认修茈市场服务与邮件配置正常）"
+        return JSONResponse(
+            {"success": False, "error": {"code": "SEND_CODE_FAILED", "message": hint}},
+            status_code=502,
+        )
+    return {
+        "success": True,
+        "message": result.get("message", "若该邮箱已注册，将收到验证码"),
+        "data": {
+            "market_base_url": result.get("market_base_url"),
+            "local_user_count": len(local_users),
+        },
+    }
+
+
+@router.post("/api/auth/forgot-password/reset")
+async def auth_forgot_password_reset(body: dict = Body(default_factory=dict)):
+    """Reset password on market, then sync matching users in local PostgreSQL."""
+    from app.fastapi_routes.market_account import reset_market_password_with_code
+
+    email = _normalize_auth_email(str(body.get("email") or ""))
+    code = str(body.get("code") or body.get("verification_code") or "").strip()
+    new_password = str(body.get("new_password") or body.get("password") or "")
+    if not email or "@" not in email:
+        return JSONResponse(
+            {
+                "success": False,
+                "error": {"code": "INVALID_INPUT", "message": "请填写有效邮箱"},
+            },
+            status_code=400,
+        )
+    if len(new_password) < 6:
+        return JSONResponse(
+            {
+                "success": False,
+                "error": {"code": "WEAK_PASSWORD", "message": "新密码至少 6 个字符"},
+            },
+            status_code=400,
+        )
+    market_result = await reset_market_password_with_code(email, code, new_password)
+    if not market_result.get("success"):
+        return JSONResponse(
+            {
+                "success": False,
+                "error": {
+                    "code": "MARKET_RESET_FAILED",
+                    "message": market_result.get("message", "重置失败"),
+                },
+            },
+            status_code=400,
+        )
+    local_updated = _sync_local_password_for_email(email, new_password)
+    return {
+        "success": True,
+        "message": "密码已重置，请使用新密码登录",
+        "data": {"local_users_updated": local_updated},
+    }
+
+
+@router.post("/api/auth/register")
+async def auth_register(request: Request, body: dict = Body(default_factory=dict)):
+    """Register locally (PostgreSQL users) and optionally on Xiuci market; then create session."""
+    from app.application import get_user_app_service
+    from app.application.auth_app_service import get_auth_app_service
+    from app.fastapi_routes.market_account import (
+        login_market_with_password,
+        register_market_user,
+        save_session_market_token,
+    )
+    from app.mod_sdk.product_skus import resolve_product_sku
+
+    username = (body.get("username") or "").strip()
+    password = body.get("password", "")
+    email = (body.get("email") or "").strip()
+    verification_code = str(body.get("verification_code") or body.get("code") or "").strip()
+
+    if not username or not password:
+        return JSONResponse(
+            {
+                "success": False,
+                "error": {"code": "INVALID_INPUT", "message": "用户名和密码不能为空"},
+            },
+            status_code=400,
+        )
+    if len(password) < 6:
+        return JSONResponse(
+            {
+                "success": False,
+                "error": {"code": "WEAK_PASSWORD", "message": "密码至少 6 个字符"},
+            },
+            status_code=400,
+        )
+
+    sku = resolve_product_sku() or "generic"
+    auth_app_service = get_auth_app_service()
+
+    if sku == "enterprise":
+        if not email:
+            return JSONResponse(
+                {
+                    "success": False,
+                    "error": {"code": "INVALID_INPUT", "message": "企业版注册需填写邮箱"},
+                },
+                status_code=400,
+            )
+        market_reg = await register_market_user(username, password, email, verification_code)
+        if not market_reg.get("success"):
+            return JSONResponse(
+                {
+                    "success": False,
+                    "error": {
+                        "code": "MARKET_REGISTER_FAILED",
+                        "message": market_reg.get("message", "修茈市场注册失败"),
+                    },
+                },
+                status_code=400,
+            )
+        email_market = _market_user_email_from_raw(market_reg.get("raw")) or email
+        _jit_create_local_user_for_enterprise(username, password, email_market)
+        result = auth_app_service.login(username, password)
+        if not result.get("success"):
+            return JSONResponse(
+                {
+                    "success": False,
+                    "error": {
+                        "code": "LOCAL_LOGIN_AFTER_REGISTER",
+                        "message": result.get("message", "注册成功但本地登录失败"),
+                    },
+                },
+                status_code=500,
+            )
+        session_id = result.get("session_id")
+        mtok = str(market_reg.get("token") or "").strip()
+        mrefresh = str(market_reg.get("refresh_token") or "").strip()
+        if session_id and mtok:
+            save_session_market_token(str(session_id), mtok, mrefresh or None)
+            result["market_access_token"] = mtok
+            if mrefresh:
+                result["market_refresh_token"] = mrefresh
+    else:
+        if not _open_registration_allowed(sku):
+            return JSONResponse(
+                {
+                    "success": False,
+                    "error": {
+                        "code": "REGISTRATION_DISABLED",
+                        "message": "本部署未开放自助注册，请联系管理员创建账号",
+                    },
+                },
+                status_code=403,
+            )
+        user_service = get_user_app_service()
+        created = user_service.create_user(
+            username=username,
+            password=password,
+            display_name=(body.get("display_name") or username),
+            email=email,
+            role="viewer",
+        )
+        if not created.get("success"):
+            msg = created.get("message", "创建用户失败")
+            if "已存在" in msg or "unique" in msg.lower():
+                msg = "用户名已存在"
+            return JSONResponse(
+                {"success": False, "error": {"code": "CREATE_FAILED", "message": msg}},
+                status_code=400,
+            )
+        result = auth_app_service.login(username, password)
+        if not result.get("success"):
+            return JSONResponse(
+                {
+                    "success": False,
+                    "error": {
+                        "code": "LOGIN_AFTER_REGISTER",
+                        "message": result.get("message", "注册成功但登录失败"),
+                    },
+                },
+                status_code=500,
+            )
+        session_id = result.get("session_id")
+        try:
+            market_result = await login_market_with_password(username, password)
+            if market_result.get("success"):
+                mtok = str(market_result.get("token") or "").strip()
+                mrefresh = str(market_result.get("refresh_token") or "").strip()
+                if session_id and mtok:
+                    save_session_market_token(str(session_id), mtok, mrefresh or None)
+                    result["market_access_token"] = mtok
+                    if mrefresh:
+                        result["market_refresh_token"] = mrefresh
+        except Exception:
+            logger.exception("optional market sync after local register failed")
+
+    payload = {"success": True, **result}
+    return _attach_session_cookie(JSONResponse(payload), result.get("session_id"))
+
+
+@router.post("/api/auth/login")
+async def auth_login(request: Request, body: dict = Body(default_factory=dict)):
+    from app.application.auth_app_service import get_auth_app_service
+    from app.application.enterprise_login_flow import run_market_first_login
+    from app.application.session_account_meta import normalize_account_kind
+    from app.fastapi_routes.market_account import login_market_with_password
+    from app.mod_sdk.product_skus import resolve_product_sku
+
+    username = (body.get("username") or "").strip()
+    password = body.get("password", "")
+    if not username or not password:
+        return JSONResponse(
+            {
+                "success": False,
+                "error": {"code": "INVALID_INPUT", "message": "用户名和密码不能为空"},
+            },
+            status_code=400,
+        )
+
+    auth_app_service = get_auth_app_service()
+    sku = resolve_product_sku()
+    account_kind = normalize_account_kind(
+        body.get("account_kind"),
+        default="enterprise" if sku == "enterprise" else "personal",
+    )
+    result, err = await run_market_first_login(
+        username=username,
+        password=password,
+        account_kind=account_kind,
+        market_result=None,
+        auth_app_service=auth_app_service,
+        sku=sku,
+        jit_create_fn=_jit_create_local_user_for_enterprise,
+        market_user_email_from_raw=_market_user_email_from_raw,
+        login_market_fn=login_market_with_password,
+    )
+    if err:
+        return err
+    return _attach_session_cookie(JSONResponse(result or {}), (result or {}).get("session_id"))
+
+
+@router.post("/api/auth/login-with-phone-code")
+async def auth_login_with_phone_code(request: Request, body: dict = Body(default_factory=dict)):
+    from app.application.auth_app_service import get_auth_app_service
+    from app.application.enterprise_login_flow import run_market_first_login
+    from app.application.session_account_meta import normalize_account_kind
+    from app.fastapi_routes.market_account import login_market_with_phone_code
+    from app.mod_sdk.product_skus import resolve_product_sku
+
+    phone = str(body.get("phone") or "").strip()
+    code = str(body.get("code") or "").strip()
+    if not phone or not code:
+        return JSONResponse(
+            {
+                "success": False,
+                "error": {"code": "INVALID_INPUT", "message": "手机号和验证码不能为空"},
+            },
+            status_code=400,
+        )
+
+    auth_app_service = get_auth_app_service()
+    sku = resolve_product_sku()
+    account_kind = normalize_account_kind(
+        body.get("account_kind"),
+        default="enterprise" if sku == "enterprise" else "personal",
+    )
+    market_result = await login_market_with_phone_code(phone, code)
+    username = str(body.get("username") or "").strip()
+    result, err = await run_market_first_login(
+        username=username,
+        password=None,
+        account_kind=account_kind,
+        market_result=market_result,
+        auth_app_service=auth_app_service,
+        sku=sku,
+        jit_create_fn=_jit_create_local_user_for_enterprise,
+        market_user_email_from_raw=_market_user_email_from_raw,
+        login_market_fn=None,
+    )
+    if err:
+        return err
+    return _attach_session_cookie(JSONResponse(result or {}), (result or {}).get("session_id"))
+
+
+@router.get("/api/auth/oidc/status")
+def auth_oidc_status():
+    from app.infrastructure.auth.oidc_provider import oidc_enabled
+
+    return {"success": True, "data": {"enabled": oidc_enabled()}}
+
+
+@router.get("/api/auth/oidc/start")
+async def auth_oidc_start(request: Request):
+    from fastapi.responses import RedirectResponse
+
+    from app.infrastructure.auth.oidc_provider import (
+        build_authorize_url,
+        oidc_enabled,
+        sign_oidc_state,
+    )
+
+    if not oidc_enabled():
+        return JSONResponse({"success": False, "message": "OIDC 未启用"}, status_code=404)
+    return_to = str(request.query_params.get("return") or "").strip()
+    state = sign_oidc_state(return_to=return_to)
+    url = await build_authorize_url(state=state)
+    return RedirectResponse(url=url, status_code=302)
+
+
+@router.get("/api/auth/oidc/callback")
+async def auth_oidc_callback(request: Request):
+    from urllib.parse import quote
+
+    from fastapi.responses import RedirectResponse
+
+    from app.application.auth_app_service import get_auth_app_service
+    from app.application.enterprise_login_flow import finalize_enterprise_login
+    from app.application.session_account_meta import normalize_account_kind
+    from app.infrastructure.auth.oidc_provider import (
+        exchange_code_for_userinfo,
+        frontend_redirect_path,
+        oidc_enabled,
+        verify_oidc_state,
+    )
+    from app.mod_sdk.product_skus import resolve_product_sku
+
+    base = frontend_redirect_path()
+    if not oidc_enabled():
+        return RedirectResponse(url=f"{base}?oidc_error=OIDC_DISABLED", status_code=302)
+
+    code = str(request.query_params.get("code") or "").strip()
+    state = str(request.query_params.get("state") or "").strip()
+    ok, _rt = verify_oidc_state(state)
+    if not ok or not code:
+        return RedirectResponse(
+            url=f"{base}?oidc_error=OIDC_STATE&oidc_message={quote('状态校验失败')}",
+            status_code=302,
+        )
+
+    try:
+        profile = await exchange_code_for_userinfo(code)
+    except Exception as exc:
+        logger.exception("OIDC exchange failed")
+        return RedirectResponse(
+            url=f"{base}?oidc_error=OIDC_EXCHANGE&oidc_message={quote(str(exc))}",
+            status_code=302,
+        )
+
+    auth_app_service = get_auth_app_service()
+    auth_result = auth_app_service.authenticate_oidc_user(profile)
+    if not auth_result.get("success"):
+        msg = str(auth_result.get("message") or "OIDC 登录失败")
+        return RedirectResponse(
+            url=f"{base}?oidc_error=OIDC_AUTH&oidc_message={quote(msg)}",
+            status_code=302,
+        )
+
+    sku = resolve_product_sku()
+    account_kind = normalize_account_kind(
+        request.query_params.get("account_kind"),
+        default="enterprise" if sku == "enterprise" else "personal",
+    )
+    username = str((auth_result.get("user") or {}).get("username") or "")
+    session_id = auth_result.get("session_id")
+    payload = await finalize_enterprise_login(
+        result=auth_result,
+        session_id=str(session_id) if session_id else None,
+        market_result={"success": False, "message": "SSO 会话未绑定市场 token"},
+        account_kind=account_kind,
+        username=username,
+        sku=sku,
+        skip_market_sync=True,
+    )
+    resp = RedirectResponse(url=f"{base}?oidc=ok", status_code=302)
+    return _attach_session_cookie(resp, payload.get("session_id"))
+
+
+@router.post("/api/auth/qr/issue")
+async def auth_qr_issue(request: Request, body: dict = Body(default_factory=dict)):
+    from app.security.auth_qr_login import issue_auth_qr
+
+    client_hint = str(body.get("client_hint") or request.headers.get("User-Agent") or "")[:256]
+    data = issue_auth_qr(client_hint=client_hint)
+    return {"success": True, "data": data}
+
+
+@router.get("/api/auth/qr/status")
+async def auth_qr_status(qr_id: str = Query(""), poll_secret: str = Query("")):
+    from app.security.auth_qr_login import consume_confirmed_qr, poll_auth_qr
+
+    rec = poll_auth_qr(qr_id, poll_secret)
+    if not rec:
+        return JSONResponse(
+            {"success": False, "error": {"code": "QR_NOT_FOUND", "message": "二维码无效"}},
+            status_code=404,
+        )
+    status = str(rec.get("status") or "pending")
+    if status == "confirmed":
+        confirmed = consume_confirmed_qr(qr_id, poll_secret)
+        if confirmed and confirmed.get("session_id"):
+            payload = confirmed.get("login_payload") or {}
+            resp = JSONResponse(
+                {
+                    "success": True,
+                    "data": {
+                        "status": "confirmed",
+                        "session_id": confirmed.get("session_id"),
+                        **payload,
+                    },
+                }
+            )
+            return _attach_session_cookie(resp, str(confirmed.get("session_id")))
+    if status == "expired":
+        return {"success": True, "data": {"status": "expired"}}
+    return {"success": True, "data": {"status": status}}
+
+
+@router.get("/api/auth/profile")
+def auth_profile_get(user=Depends(get_logged_in_user)):
+    """当前用户个人资料（展示名、邮箱、头像）。"""
+    return {"success": True, "data": {"user": _user_public_dict(user)}}
+
+
+@router.patch("/api/auth/profile")
+def auth_profile_patch(body: dict = Body(default_factory=dict), user=Depends(get_logged_in_user)):
+    """更新当前用户展示名与邮箱。"""
+    from app.application.user_app_service import get_user_app_service
+
+    display_name = body.get("display_name")
+    email = body.get("email")
+    kwargs: dict[str, Any] = {}
+    if display_name is not None:
+        kwargs["display_name"] = str(display_name).strip()[:64]
+    if email is not None:
+        kwargs["email"] = str(email).strip()[:128]
+    if not kwargs:
+        return JSONResponse(
+            {"success": False, "error": {"code": "INVALID_INPUT", "message": "无有效字段"}},
+            status_code=400,
+        )
+    result = get_user_app_service().update_user(user.id, **kwargs)
+    if not result.get("success"):
+        return JSONResponse(
+            {
+                "success": False,
+                "error": {"code": "UPDATE_FAILED", "message": result.get("message", "更新失败")},
+            },
+            status_code=400,
+        )
+    from app.db.models.user import User
+    from app.db.session import get_db
+
+    with get_db() as db:
+        row = db.query(User).filter(User.id == user.id).first()
+        if row is None:
+            return JSONResponse(
+                {"success": False, "error": {"code": "NOT_FOUND", "message": "用户不存在"}},
+                status_code=404,
+            )
+        payload = _user_public_dict(row)
+    return {"success": True, "data": {"user": payload}}
+
+
+@router.post("/api/auth/profile/avatar")
+async def auth_profile_avatar_upload(
+    file: UploadFile | None = File(default=None),
+    user=Depends(get_logged_in_user),
+):
+    """上传并替换当前用户头像（png/jpg/gif/webp，≤4MB）。"""
+    if file is None or not file.filename:
+        return JSONResponse(
+            {"success": False, "error": {"code": "INVALID_INPUT", "message": "请选择图片文件"}},
+            status_code=400,
+        )
+    from app.utils.secure_filename import secure_filename
+    from app.utils.user_avatar_storage import (
+        AVATAR_API_PATH,
+        save_user_avatar_file,
+    )
+
+    safe_name = secure_filename(file.filename) or "avatar.png"
+    ext = safe_name.rsplit(".", 1)[-1].lower() if "." in safe_name else "png"
+    content = await file.read()
+    try:
+        save_user_avatar_file(user.id, content, ext)
+    except ValueError as exc:
+        return JSONResponse(
+            {"success": False, "error": {"code": "INVALID_FILE", "message": str(exc)}},
+            status_code=400,
+        )
+    except OSError as exc:
+        logger.exception("avatar save failed user_id=%s", user.id)
+        return JSONResponse(
+            {
+                "success": False,
+                "error": {"code": "SAVE_FAILED", "message": f"头像保存失败：{exc}"},
+            },
+            status_code=500,
+        )
+
+    from app.db.models.user import User
+    from app.db.session import get_db
+
+    with get_db() as db:
+        row = db.query(User).filter(User.id == user.id).first()
+        if row is not None:
+            row.wx_avatar_url = AVATAR_API_PATH
+    return {
+        "success": True,
+        "data": {"avatar_url": AVATAR_API_PATH},
+    }
+
+
+@router.get("/api/auth/avatar")
+def auth_profile_avatar_get(user=Depends(get_logged_in_user)):
+    """返回当前登录用户的头像文件（依赖会话 Cookie 或 Bearer）。"""
+    from app.utils.user_avatar_storage import avatar_file_for_user, media_type_for_path
+
+    path = avatar_file_for_user(user.id)
+    if path is None:
+        return JSONResponse(status_code=404, content={"success": False, "message": "未设置头像"})
+    return FileResponse(str(path), media_type=media_type_for_path(path))
+
+
+@router.post("/api/auth/company-brand")
+async def auth_update_company_brand(
+    request: Request, body: dict = Body(default_factory=dict), user=Depends(get_logged_in_user)
+):
+    """更新企业品牌名（写入 session，并同步修茈市场 user.company）。"""
+    brand = str(body.get("company_brand") or body.get("company") or "").strip()[:256]
+    sid = session_id_from_request(request)
+    if not sid:
+        return JSONResponse(
+            {"success": False, "error": {"code": "NO_SESSION", "message": "无会话"}},
+            status_code=400,
+        )
+    from app.application.session_account_meta import (
+        load_session_account_meta,
+        persist_session_account_meta,
+    )
+    from app.fastapi_routes.market_account import _proxy_json, resolve_valid_market_access_token
+
+    meta = load_session_account_meta(sid) or {}
+    persist_session_account_meta(
+        sid,
+        account_kind=str(meta.get("account_kind") or "enterprise"),
+        company_brand=brand,
+        market_user_id=meta.get("market_user_id"),
+        market_is_admin=bool(meta.get("market_is_admin")),
+        market_is_enterprise=bool(meta.get("market_is_enterprise")),
+        impersonating_market_user_id=meta.get("impersonating_market_user_id"),
+        impersonating_username=str(meta.get("impersonating_username") or ""),
+    )
+    tok = await resolve_valid_market_access_token(sid)
+    if tok:
+        auth = tok if tok.lower().startswith("bearer ") else f"Bearer {tok}"
+        await _proxy_json(
+            "PUT",
+            "/api/auth/profile",
+            json_body={"company": brand},
+            authorization=auth,
+            return_error_payload=True,
+        )
+    return {"success": True, "company_brand": brand}
+
+
+@router.post("/api/auth/logout")
+def auth_logout(request: Request):
+    from app.application.auth_app_service import get_auth_app_service
+    from app.fastapi_routes.market_account import clear_session_market_token
+
+    sid = session_id_from_request(request)
+    if not sid:
+        return JSONResponse(
+            {"success": False, "error": {"code": "NO_SESSION", "message": "无有效会话"}},
+            status_code=400,
+        )
+    auth_app_service = get_auth_app_service()
+    result = auth_app_service.logout(sid)
+    clear_session_market_token(sid)
+    try:
+        from app.enterprise.mod_entitlements import clear_session_entitlements
+
+        clear_session_entitlements()
+    except Exception:
+        pass
+    resp = JSONResponse(result)
+    cookie_name = os.environ.get("SESSION_COOKIE_NAME", "session_id")
+    resp.delete_cookie(cookie_name, path="/")
+    return resp
+
+
+@router.post("/api/auth/password/change")
+def auth_password_change(body: dict = Body(default_factory=dict), user=Depends(get_logged_in_user)):
+    from app.application.auth_app_service import get_auth_app_service
+
+    old_password = body.get("old_password", "")
+    new_password = body.get("new_password", "")
+    if not old_password or not new_password:
+        return JSONResponse(
+            {"success": False, "error": {"code": "INVALID_INPUT", "message": "请填写完整信息"}},
+            status_code=400,
+        )
+    if len(new_password) < 6:
+        return JSONResponse(
+            {
+                "success": False,
+                "error": {"code": "WEAK_PASSWORD", "message": "新密码至少 6 个字符"},
+            },
+            status_code=400,
+        )
+    auth_app_service = get_auth_app_service()
+    result = auth_app_service.change_password(user.id, old_password, new_password)
+    if not result["success"]:
+        return JSONResponse(result, status_code=400)
+    return result
+
+
+@router.get("/api/users")
+def users_list(include_inactive: str = Query(default="false"), _user=Depends(_require_admin)):
+    from app.application import get_user_app_service
+
+    user_service = get_user_app_service()
+    users = user_service.list_users(skip=0, limit=100)
+    if include_inactive.lower() != "true":
+        users = [u for u in users if u.get("is_active", True)]
+    return {"success": True, "data": {"users": users, "count": len(users)}}
+
+
+@router.get("/api/users/{user_id}")
+def users_get(user_id: int, _user=Depends(_require_admin)):
+    from app.application import get_user_app_service
+
+    user_service = get_user_app_service()
+    user = user_service.get_user(user_id)
+    if not user:
+        return JSONResponse(
+            {"success": False, "error": {"code": "NOT_FOUND", "message": "用户不存在"}},
+            status_code=404,
+        )
+    return {"success": True, "data": {"user": user}}
+
+
+@router.post("/api/users")
+def users_create(body: dict = Body(default_factory=dict), _user=Depends(_require_admin)):
+    from app.application import get_user_app_service
+
+    username = (body.get("username") or "").strip()
+    password = body.get("password", "")
+    if not username or not password:
+        return JSONResponse(
+            {
+                "success": False,
+                "error": {"code": "INVALID_INPUT", "message": "用户名和密码不能为空"},
+            },
+            status_code=400,
+        )
+    if len(password) < 6:
+        return JSONResponse(
+            {"success": False, "error": {"code": "WEAK_PASSWORD", "message": "密码至少6个字符"}},
+            status_code=400,
+        )
+    role = body.get("role", "viewer")
+    if role not in ["viewer", "operator", "admin"]:
+        return JSONResponse(
+            {"success": False, "error": {"code": "INVALID_ROLE", "message": "无效的角色"}},
+            status_code=400,
+        )
+    user_service = get_user_app_service()
+    result = user_service.create_user(
+        username=username,
+        password=password,
+        display_name=body.get("display_name", ""),
+        email=body.get("email", ""),
+        role=role,
+    )
+    if not result["success"]:
+        return JSONResponse(
+            {"success": False, "error": {"code": "CREATE_FAILED", "message": result["error"]}},
+            status_code=400,
+        )
+    return JSONResponse({"success": True, "data": {"user": result["user"]}}, status_code=201)
+
+
+@router.put("/api/users/{user_id}")
+def users_update(
+    user_id: int, body: dict = Body(default_factory=dict), _user=Depends(_require_admin)
+):
+    from app.application import get_user_app_service
+
+    role = body.get("role")
+    if role and role not in ["viewer", "operator", "admin"]:
+        return JSONResponse(
+            {"success": False, "error": {"code": "INVALID_ROLE", "message": "无效的角色"}},
+            status_code=400,
+        )
+    user_service = get_user_app_service()
+    result = user_service.update_user(
+        user_id=user_id,
+        display_name=body.get("display_name"),
+        email=body.get("email"),
+        role=role,
+        is_active=body.get("is_active"),
+    )
+    if not result["success"]:
+        return JSONResponse(
+            {"success": False, "error": {"code": "UPDATE_FAILED", "message": result["error"]}},
+            status_code=400,
+        )
+    return {"success": True, "data": {"user": result["user"]}}
+
+
+@router.delete("/api/users/{user_id}")
+def users_delete(user_id: int, user=Depends(_require_admin)):
+    if user.id == user_id:
+        return JSONResponse(
+            {"success": False, "error": {"code": "SELF_DELETE", "message": "不能删除自己"}},
+            status_code=400,
+        )
+    from app.application import get_user_app_service
+
+    user_service = get_user_app_service()
+    result = user_service.delete_user(user_id)
+    if not result.get("success"):
+        return JSONResponse(result, status_code=400)
+    return result
+
+
+@router.post("/api/users/{user_id}/reset-password")
+def users_reset_password(
+    user_id: int, body: dict = Body(default_factory=dict), _user=Depends(_require_admin)
+):
+    from app.application.auth_app_service import get_auth_app_service
+
+    new_password = body.get("new_password", "")
+    if not new_password:
+        return JSONResponse(
+            {"success": False, "error": {"code": "MISSING_PASSWORD", "message": "新密码不能为空"}},
+            status_code=400,
+        )
+    if len(new_password) < 6:
+        return JSONResponse(
+            {"success": False, "error": {"code": "WEAK_PASSWORD", "message": "密码至少6个字符"}},
+            status_code=400,
+        )
+    auth_app_service = get_auth_app_service()
+    result = auth_app_service.reset_password(user_id, new_password)
+    if not result["success"]:
+        return JSONResponse(result, status_code=400)
+    return result

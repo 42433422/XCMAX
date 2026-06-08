@@ -1,0 +1,18 @@
+---
+description: FHD 全产品线 v10 锁 — 桌面/Web/后端/Android/Mod 同锁，非仅 App
+alwaysApply: true
+---
+
+# 版本锁定 v10（FHD · 全产品线）
+
+与仓根 [`.cursor/rules/version-v10-lock.mdc`](../../.cursor/rules/version-v10-lock.mdc) 一致。
+
+**锁的是整条 XCAGI 交付栈，不是只锁 `mobile-android/`。**
+
+| 必须保持 `10.0.0`（或表内约定） |
+|--------------------------------|
+| FastAPI · Vue 前端 · Electron 桌面 Win/Mac · Android 双 SKU · Admin/Sunbird 壳 · Mod manifest · PyInstaller · 发版脚本 `-Version` |
+
+- 改功能、重构、单端商用化 → **Unreleased**，不升号
+- **禁止**只升 Android 或只升桌面；锚点表见 `VERSION.md`
+- 升版唯一出口：AI 全自动化自主迭代 + `VERSION.md` 登记 SSOT

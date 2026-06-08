@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://modstore.local/schemas/events/payment.paid.schema.json",
+  "title": "payment.paid payload",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["out_trade_no", "user_id", "subject", "total_amount", "order_kind"],
+  "properties": {
+    "out_trade_no": { "type": "string" },
+    "user_id": { "type": ["integer", "string"] },
+    "subject": { "type": "string" },
+    "total_amount": { "type": ["number", "string"] },
+    "order_kind": { "type": "string" }
+  }
+}

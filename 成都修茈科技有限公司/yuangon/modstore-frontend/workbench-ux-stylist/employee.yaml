@@ -1,0 +1,47 @@
+id: workbench-ux-stylist
+name: 工作台 UX 设计员
+version: "10.0.0"
+owner: admin
+area: modstore-frontend
+domain: >-
+  专注维护 MODstore 工作台（Workbench）的 UX 与交互：画布、右侧边栏、工作台 Shell、AI 草稿审核组件与整体暗色设计系统；严格遵守 Vue 3 Only。
+
+scope_globs:
+  - "MODstore_deploy/market/src/views/workbench/**"
+  - "MODstore_deploy/market/src/components/workbench/**"
+  - "MODstore_deploy/market/src/components/admin/**"
+  - MODstore_deploy/market/src/views/WorkbenchHomeView.vue
+  - "MODstore_deploy/market/src/views/Admin*View.vue"
+  - "MODstore_deploy/market/src/views/admin/**"
+  - "yuangon/modstore-frontend/workbench-ux-stylist/**"
+
+forbidden_globs:
+  - "MODstore_deploy/market/src/views/Home*.vue"
+  - "MODstore_deploy/market/src/views/Login*.vue"
+  - "MODstore_deploy/market/src/views/Payment*.vue"
+  - "MODstore_deploy/market/src/views/Order*.vue"
+  - MODstore_deploy/market/src/api.ts
+  - "MODstore_deploy/modstore_server/**"
+  - "*.py"
+  - "_local_secrets/**"
+  - react
+
+depends_on:
+  - market-frontend-dev
+
+actions:
+  handlers:
+    - llm_md
+    - echo
+
+triggers:
+  on_error: true
+  on_quality_fail: true
+
+skills:
+  - skill-workbench-component-fix
+
+changelog:
+  - version: "10.0.0"
+    date: "2026-06-07"
+    note: "yuangon 骨架由 bootstrap_yuangon.py 从 manifest 反向生成（v10 线内迭代）"

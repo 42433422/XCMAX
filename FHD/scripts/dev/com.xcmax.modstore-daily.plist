@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.xcmax.modstore-daily</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>__XCMAX_RUN_MODSTORE_DAILY__</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>MODSTORE_DAILY_FOREGROUND</key>
+    <string>1</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <dict>
+    <key>SuccessfulExit</key>
+    <false/>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>__XCMAX_LOG_DIR__/modstore-daily.launchd.log</string>
+  <key>StandardErrorPath</key>
+  <string>__XCMAX_LOG_DIR__/modstore-daily.launchd.err.log</string>
+  <key>WorkingDirectory</key>
+  <string>__XCMAX_ROOT__</string>
+</dict>
+</plist>

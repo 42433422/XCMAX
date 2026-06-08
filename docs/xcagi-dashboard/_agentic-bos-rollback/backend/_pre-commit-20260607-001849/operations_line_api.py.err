@@ -1,0 +1,2 @@
+error: patch failed: app/fastapi_routes/operations_line_api.py:18
+error: app/fastapi_routes/operations_line_api.py: patch does not apply

@@ -1,0 +1,12 @@
+# 单页巡检：Maestro CLI 调用示例
+# maestro test capture_page.yaml -e PAGE_ROUTE=about -e APP_ID=com.xiuci.xcagi.mobile.personal
+appId: ${APP_ID}
+---
+- launchApp:
+    clearState: false
+- openLink: xcagi://audit/nav/${PAGE_ROUTE}?fhd_host=${FHD_HOST}
+- extendedWaitUntil:
+    visible:
+      id: ".*"
+    timeout: 15000
+- takeScreenshot: ${PAGE_ROUTE}

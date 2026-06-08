@@ -1,0 +1,33 @@
+{
+  "_comment": "Phase 2 场景 4 留证样例 — 库存补货（medium 风险，条件触发）。",
+  "generated_at": "2026-06-05T12:13:00Z",
+  "input_message": "查一下库存，低于阈值的起草采购单",
+  "execution_mode": "mock",
+  "approval_strategy": "auto",
+  "plan_id": "v1-s4-20260605-121300",
+  "intent": "reorder_low_stock",
+  "risk_level": "medium",
+  "scenario_id": 4,
+  "scenario_title": "库存补货",
+  "nodes": [
+    {"node_id": "query_inventory", "tool_id": "inventory", "action": "query", "risk": "low", "depends_on": [], "params": {"below_threshold": true}},
+    {"node_id": "draft_po", "tool_id": "purchase", "action": "draft", "risk": "medium", "depends_on": ["query_inventory"], "params": {"model_number": "9702-C", "quantity": 500, "supplier": "默认供应商"}}
+  ],
+  "gated_decision": {
+    "risk_decision": {"requires_confirmation": true, "reason": "计划包含中高风险写操作", "blocking_nodes": ["draft_po"]},
+    "node_decisions": [
+      {"node_id": "query_inventory", "tool_id": "inventory", "action": "query", "risk": "low", "requires_approval": false, "approved": true, "reason": "low-risk auto-approved"},
+      {"node_id": "draft_po", "tool_id": "purchase", "action": "draft", "risk": "medium", "requires_approval": true, "approval_request_id": "s4-uuid-1", "approved": true, "reason": "auto-approved"}
+    ],
+    "approval_request_ids": ["s4-uuid-1"],
+    "all_approved": true,
+    "any_rejected": false,
+    "pending_approval": false
+  },
+  "success": true,
+  "message": "工作流执行完成",
+  "node_results_summary": [
+    {"node_id": "query_inventory", "tool_id": "inventory", "action": "query", "success": true, "error": "", "output_summary": {"success": true, "data_count": 1}},
+    {"node_id": "draft_po", "tool_id": "purchase", "action": "draft", "success": true, "error": "", "output_summary": {"success": true, "purchase_order_id": "MOCK-PO-001"}}
+  ]
+}

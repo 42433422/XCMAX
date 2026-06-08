@@ -1,0 +1,24 @@
+{
+  "$schema_version": 1,
+  "comment": "审核通过可在脚本沙箱里 import 的第三方包白名单。每次新增包必须经过安全 review；初始集合是项目 pyproject.toml 已声明的依赖。键 = 顶层模块名；值 = {version_spec, approved_by, approved_at, notes}。",
+  "packages": {
+    "openpyxl": {
+      "version_spec": ">=3.1",
+      "approved_by": "system-default",
+      "approved_at": "2026-04-28",
+      "notes": "项目已声明依赖；用于 Excel 读写"
+    },
+    "docx": {
+      "version_spec": ">=1.0",
+      "approved_by": "system-default",
+      "approved_at": "2026-05-20",
+      "notes": "python-docx；用于 Word docx 全量解析"
+    },
+    "lxml": {
+      "version_spec": ">=4.9",
+      "approved_by": "system-default",
+      "approved_at": "2026-05-20",
+      "notes": "OOXML 辅助解析（可选）"
+    }
+  }
+}

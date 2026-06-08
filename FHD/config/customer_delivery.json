@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "description": "客户交付清单：客户品牌与合同/metadata 专用，不进 industry_baseline 通用配置",
+  "deliveries": [
+    {
+      "delivery_id": "customer-taiyangniao",
+      "industry_id": "考勤",
+      "industry_mod_id": "attendance-industry",
+      "legacy_mod_id": "taiyangniao-pro",
+      "customer_brand": "太阳鸟 PRO",
+      "customer_name": "太阳鸟",
+      "notes": "首家考勤客户定制实现；产品引导仅展示「考勤行业包」"
+    },
+    {
+      "delivery_id": "customer-qishimei",
+      "industry_id": "涂料",
+      "industry_mod_id": "coating-industry",
+      "legacy_mod_id": "sz-qsm-pro",
+      "customer_brand": "奇士美 PRO",
+      "customer_name": "奇士美",
+      "notes": "首家涂料客户定制实现；产品引导仅展示「涂料行业包」"
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+# Strict TypeScript rollout (Roadmap M3.1)
+#
+# Today: CI uses `npm run typecheck` against `tsconfig.json` (pragmatic defaults).
+# The strict toolchain is exercised via `npm run typecheck:strict` (~1k errors remain).
+#
+# Incremental playbook:
+#   1) Fix batches of files surfaced by `npm run typecheck:strict`
+#   2) Remove matching globs/lines here as directories go green
+#   3) When this file contains only commentary, collapse `tsconfig.strict-baseline.json`
+#      into the default compiler options and gate CI on strict `vue-tac`.
+#
+# Optional per-file escapes (add one path per line, repo-relative to market/)
+# Example (do not uncomment unless intentional):
+#   src/views/LegacyHugeView.vue
+src/views/WorkbenchHomeView.vue

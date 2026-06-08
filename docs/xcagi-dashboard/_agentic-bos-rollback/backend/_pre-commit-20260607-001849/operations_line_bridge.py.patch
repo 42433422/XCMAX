@@ -1,0 +1,81 @@
+diff --git a/Users/a4243342/Desktop/XCMAX/FHD/../docs/xcagi-dashboard/_agentic-bos-rollback/backend/operations_line_bridge.py.orig b/app/services/operations_line_bridge.py
+index 535e8ae4..f4eceb4f 100644
+--- a/app/services/operations_line_bridge.py
++++ b/app/services/operations_line_bridge.py
+@@ -316,3 +316,76 @@ def compute_operations_health() -> dict[str, Any]:
+         "payment_backend": pay_backend,
+         "market_payment_health": market_payment_health,
+     }
++
++
++def compute_governance_summary() -> dict[str, Any]:
++    """GOV 统一治理聚合：对账 / 收费 / 签收 / 断点 → SLA + 风控标记 + 总体状态。
++
++    对齐事件轨 event-merged-arch-graph.js 的 GOV 节点：聚合 O4/O8/O10 + 断点计数，
++    产出 sla / risks[] / overall，作为经营线治理单一观测入口（只读，不触发写操作）。
++    """
++    health = compute_operations_health()
++    steps = health.get("steps") if isinstance(health.get("steps"), dict) else {}
++
++    def _step_status(key: str) -> str:
++        step = steps.get(key) if isinstance(steps.get(key), dict) else {}
++        return str(step.get("status") or "unknown")
++
++    o4 = _step_status("O4")  # 收费
++    o8 = _step_status("O8")  # 签收
++    o10 = _step_status("O10")  # 对账
++    breakpoints = int(health.get("breakpoint_count") or 0)
++
++    recon: dict[str, Any] = {}
++    try:
++        from app.services.reconciliation_scheduler import get_reconciliation_status
++
++        recon = get_reconciliation_status() or {}
++    except Exception:
++        logger.debug("governance: reconciliation status unavailable", exc_info=True)
++
++    signoff: dict[str, Any] = {}
++    try:
++        from app.services.user_cs_delivery_signoff import signoff_backend_info
++
++        signoff = signoff_backend_info() or {}
++    except Exception:
++        logger.debug("governance: signoff backend info unavailable", exc_info=True)
++
++    risks: list[dict[str, Any]] = []
++    if breakpoints > 0:
++        risks.append({"code": "pipeline_breakpoints", "level": "warn", "count": breakpoints,
++                      "note": "存在 CRM/ERP 断点未补齐"})
++    if o4 == "blocked":
++        risks.append({"code": "payment_blocked", "level": "high", "note": "O4 收费链路阻塞"})
++    elif o4 == "partial":
++        risks.append({"code": "payment_partial", "level": "warn", "note": "O4 收费后端未完全直切"})
++    if o10 != "done":
++        risks.append({"code": "reconciliation_not_clean", "level": "warn",
++                      "note": "O10 对账未运行/未自动确认/存在差异"})
++    if o8 == "blocked":
++        risks.append({"code": "signoff_blocked", "level": "warn", "note": "O8 签收链路阻塞"})
++
++    high = sum(1 for r in risks if r.get("level") == "high")
++    warn = sum(1 for r in risks if r.get("level") == "warn")
++    overall = "critical" if high else ("at_risk" if warn else "healthy")
++
++    return {
++        "generated_at": datetime.now(timezone.utc).isoformat(),
++        "overall": overall,
++        "sla": {
++            "payment": o4,
++            "signoff": o8,
++            "reconciliation": o10,
++            "reconciliation_auto_confirm": recon.get("auto_confirm_enabled"),
++            "reconciliation_last_run_ok": bool(
++                isinstance(recon.get("last_run"), dict) and recon["last_run"].get("ok")
++            ),
++        },
++        "risks": risks,
++        "risk_count": {"high": high, "warn": warn},
++        "breakpoint_count": breakpoints,
++        "signoff_backend": signoff,
++        "payment_backend": health.get("payment_backend"),
++        "source_health_generated_at": health.get("generated_at"),
++    }

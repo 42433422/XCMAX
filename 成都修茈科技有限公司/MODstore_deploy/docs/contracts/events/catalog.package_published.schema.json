@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://modstore.local/schemas/events/catalog.package_published.schema.json",
+  "title": "catalog.package_published payload",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["pkg_id", "author_id", "version", "artifact", "name"],
+  "properties": {
+    "pkg_id": { "type": "string" },
+    "author_id": { "type": ["integer", "string"] },
+    "version": { "type": "string" },
+    "artifact": { "type": "string" },
+    "name": { "type": "string" }
+  }
+}

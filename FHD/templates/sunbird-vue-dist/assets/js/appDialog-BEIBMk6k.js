@@ -1,0 +1,1 @@
+import{ad as t}from"./index-DmoO6vrN.js";function a(r,o){return t().showAlert(r,o)}function e(r,o){return t().showConfirm(r,o)}function s(r,o,p){return t().showPrompt(r,o??"",p)}export{a,e as b,s as c};

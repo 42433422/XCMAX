@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "deploy_topology.schema.json",
+  "title": "MODstore deploy topology",
+  "description": "Logical deploy units (services/components) and preferred rollout relationships. This is infrastructure semantics — do not encode AI employee pack collaboration here (use manifest depends_on / collaboration.depends_on instead).",
+  "type": "object",
+  "required": ["schema_version", "components"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "description": "Contract version for this file.",
+      "pattern": "^1\\.0$"
+    },
+    "description": {
+      "type": "string",
+      "description": "Human-readable scope for this topology document."
+    },
+    "components": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Deployable units (not employee_pack ids).",
+      "items": {
+        "type": "object",
+        "required": ["id", "display_name"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Stable machine-readable id (matches release_hints.component_id pointers).",
+            "pattern": "^[a-z0-9][a-z0-9_-]*$"
+          },
+          "display_name": { "type": "string" },
+          "description": { "type": "string" },
+          "repo_paths": {
+            "type": "array",
+            "description": "Monorepo paths owned by this component (documentation aid).",
+            "items": { "type": "string", "minLength": 1 }
+          },
+          "ci_workflow_name": {
+            "type": "string",
+            "description": "GitHub Actions workflow `name:` for component CI (must match .github/workflows)."
+          },
+          "deploy_workflow_name": {
+            "type": "string",
+            "description": "GitHub Actions workflow `name:` for deploy job if applicable."
+          }
+        }
+      }
+    },
+    "edges": {
+      "type": "array",
+      "description": "Directed edges between component ids. Must form a DAG.",
+      "items": {
+        "type": "object",
+        "required": ["from", "to", "kind"],
+        "additionalProperties": false,
+        "properties": {
+          "from": {
+            "type": "string",
+            "description": "Upstream component id (deploy/provision before `to` when kind implies ordering)."
+          },
+          "to": { "type": "string", "description": "Downstream component id." },
+          "kind": {
+            "type": "string",
+            "enum": ["rollout_order", "health_gate", "soft_dependency"],
+            "description": "rollout_order: preferred sequence; health_gate: gate before continuing; soft_dependency: documentation-only coupling."
+          },
+          "notes": { "type": "string" }
+        }
+      }
+    }
+  }
+}

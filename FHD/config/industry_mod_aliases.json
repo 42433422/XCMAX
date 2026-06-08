@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "legacy_to_canonical": {
+    "taiyangniao-pro": "attendance-industry",
+    "sz-qsm-pro": "coating-industry"
+  },
+  "industry_to_canonical_mod_id": {
+    "考勤": "attendance-industry",
+    "涂料": "coating-industry"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "captured_at": "2026-06-04T16:27:10Z",
+  "full_app": {
+    "pct": 60.63,
+    "covered": 46858,
+    "statements": 77286,
+    "source": "coverage-full.xml"
+  },
+  "measured_core_c1": {
+    "pct": 60.63,
+    "covered": 46858,
+    "statements": 77286,
+    "source": "pyproject.toml include+omit (coverage.json totals)"
+  },
+  "pass_stub_files": 145,
+  "omit_excluded_lines_approx": 0,
+  "ci_gate_narrow_pct": 70,
+  "notes": "full_app 为整棵 app/ 权威口径；measured_core_c1 为 COVERAGE_RAMP C1 窄包，不得与 full_app 混报。pass_stub_files 含独立 pass 行，由 exclude_lines 排除。"
+}

@@ -1,0 +1,39 @@
+id: ecosystem-joint-catalog-officer
+name: 联合 Catalog 策展员
+version: "10.0.0"
+owner: admin
+area: partner-ecosystem
+domain: >-
+  O-B B2 生态联合 SKU · MODstore catalog 扩展 · 伙伴商品挂载与可见性策略。
+
+scope_globs:
+  - "MODstore_deploy/modstore_server/catalog*"
+  - "MODstore_deploy/modstore_server/**/packages.json"
+  - "MODstore_deploy/market/src/**/catalog*"
+  - "yuangon/partner-ecosystem/ecosystem-joint-catalog-officer/**"
+
+forbidden_globs:
+  - "_local_secrets/**"
+
+depends_on:
+  - employee-pack-curator
+  - modstore-backend-api
+
+actions:
+  handlers:
+    - llm_md
+    - echo
+
+triggers:
+  on_error: true
+  on_quality_fail: true
+
+skills:
+  - task.analyze
+  - llm.markdown
+  - workflow.assist
+
+changelog:
+  - version: "10.0.0"
+    date: "2026-06-07"
+    note: "yuangon 骨架由 bootstrap_yuangon.py 从 manifest 反向生成（v10 线内迭代）"

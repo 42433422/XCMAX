@@ -1,0 +1,12 @@
+{
+  "name": "xiuci-marketing-site-builder",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs"
+  },
+  "dependencies": {
+    "nunjucks": "^3.2.4"
+  }
+}

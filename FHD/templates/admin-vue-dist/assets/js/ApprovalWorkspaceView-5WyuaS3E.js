@@ -1,0 +1,1 @@
+import o from"./ApprovalWorkspaceView-D3dZgrhN.js";import{E as e,d as r,Q as p}from"./index-BM0eyJ6q.js";import"./approval-B7lVKiqw.js";const _=e({__name:"ApprovalWorkspaceView",setup(a){return(t,c)=>(r(),p(o))}});export{_ as default};

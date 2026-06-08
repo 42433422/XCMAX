@@ -1,0 +1,225 @@
+[project]
+name = "modstore"
+version = "0.2.0"
+description = "MODstore：XCAGI Mod 库、制作、调试沙箱与同步"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.optional-dependencies]
+web = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.27",
+    "python-multipart>=0.0.6",
+    "httpx>=0.27",
+    "sqlalchemy>=2.0",
+    "psycopg2-binary>=2.9",
+    "PyJWT>=2.8",
+    "passlib[bcrypt]>=1.7",
+    "python-dotenv>=1.0",
+    "python-alipay-sdk>=3.4",
+    "python-pptx>=0.6.23",
+    "PyYAML>=6.0",
+    "paramiko>=3.4",
+    "cryptography>=42.0",
+    "prometheus-client>=0.20",
+    "pika>=1.3",
+    "edge-tts>=6.1",
+    # 数字管家 QQ 官方机器人桥接：Ed25519 验签 + op=13 回调握手。
+    # 仅在配置了 BUTLER_QQ_* env 后真正启用；未安装则 butler_qq_bridge 路由跳过注册。
+    "pynacl>=1.5",
+    "qq-botpy>=1.2.1",
+    "xcagi-common @ file:../../../packages/xcagi_common",
+]
+knowledge = [
+    "chromadb>=0.5",
+    "pypdf>=4.0",
+    "PyMuPDF>=1.24",
+    "python-docx>=1.0",
+    "openpyxl>=3.1",
+    "rank-bm25>=0.2.2",
+]
+employee-docs = [
+    "pypdf>=4.0",
+    "python-docx>=1.0",
+]
+aliyun-tts = [
+    "dashscope>=1.14",
+]
+vibe = [
+    # vibe-coding 接入：NL → 代码 → 沙盒 → 自愈 + 仓库级 patch / heal。
+    # 与本仓库源码并列时建议在部署/开发机上手动 `pip install -e ../vibe-coding[web]`，
+    # 这样能把 path dep 的解析问题留给 pip。CI / 容器镜像可保留下面的版本约束以
+    # 强制 lockfile 锁版本；运行时由 `modstore_server.integrations.vibe_adapter`
+    # 做 import 失败的优雅降级。
+    "vibe-coding[web]>=0.1.0",
+]
+dev = [
+  "pytest>=7.4",
+  "pytest-cov>=4.1",
+  "black>=24.3",
+  "isort>=5.13",
+  "jsonschema>=4.21",
+  "mypy>=1.8",
+]
+
+[project.scripts]
+modman = "modman.cli:main"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["modman*", "modstore_server*"]
+
+[tool.setuptools.package-data]
+modman = ["data/*.json"]
+
+[tool.black]
+line-length = 100
+target-version = ["py310"]
+
+[tool.isort]
+profile = "black"
+line_length = 100
+skip_gitignore = true
+known_first_party = ["modman", "modstore_server"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q"
+xfail_strict = true
+markers = [
+    "integration: HTTP/webhook integration tests",
+    "release_gate: release train / digest / deploy smoke subset (PR hard gate)",
+]
+
+[tool.coverage.run]
+source = ["modman", "modstore_server"]
+branch = true
+omit = ["*/tests/*", "*/modstore_server/workbench_script_runs/*"]
+
+[tool.coverage.report]
+# 适用于 ``coverage run`` + ``coverage report``；全量 tree 当前约 40%+，抬升需补测后再调。
+fail_under = 80
+
+[tool.mypy]
+python_version = "3.10"
+explicit_package_bases = true
+mypy_path = ["."]
+follow_imports = "normal"
+packages = ["modstore_server", "modman"]
+# 动态产物与沙箱跑一次脚本目录：不参与类型门禁（与 coverage.omit 对齐）。
+exclude = [
+    "(?x)^modstore_server/workbench_script_runs/",
+]
+# 全仓默认检查；以下为当前仍有大量推断债的遗留模块列表（可随时从列表移除以恢复检查）。
+# 重新生成：`python scripts/export_mypy_ignore_modules.py --toml-fragment`
+warn_unused_configs = true
+warn_return_any = true
+no_implicit_optional = true
+show_error_codes = true
+ignore_missing_imports = false
+
+[[tool.mypy.overrides]]
+module = [
+    "modstore_server.infrastructure.library_paths",
+    "modstore_server.infrastructure.notification_repository",
+    "modstore_server.quota_middleware",
+    "modstore_server.catalog_store",
+    "modstore_server.services._circuit_breaker",
+]
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = [
+    "modstore_server.infrastructure.db",
+    "modstore_server.api.deps",
+    "modstore_server.application.*",
+    "modstore_server.domain.*",
+]
+ignore_errors = false
+disallow_untyped_defs = true
+
+# application.catalog has runtime dict access patterns that mypy can't infer — silence for now
+[[tool.mypy.overrides]]
+module = ["modstore_server.application.catalog"]
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = [
+    "modstore_server.api.app_factory",
+    "modstore_server.api.market_routes",
+    "modstore_server.api.payment_routes",
+    "modstore_server.employee_api",
+    "modstore_server.llm_api",
+    "modstore_server.workflow_engine",
+    "modstore_server.workbench_api",
+    "modstore_server.knowledge_ingest",
+    "modstore_server.knowledge_v2_api",
+    "modstore_server.customer_service_api",
+    "modstore_server.customer_service_orchestrator",
+    "modstore_server.agent_butler_api",
+    "modstore_server.agent_butler_orchestrate",
+    "modstore_server.butler_qq_bridge",
+    "modstore_server.script_agent.agent_loop",
+    "modstore_server.script_agent.sandbox_runner",
+    "modstore_server.script_workflow_api",
+    "modstore_server.employee_ai_pipeline",
+    "modstore_server.employee_change_request_service",
+    "modstore_server.mod_employee_agent_runner",
+    "modstore_server.workflow_fhd_bridge",
+    "modstore_server.workflow_nl_graph",
+    "modstore_server.integrations.vibe_adapter",
+    "modstore_server.integrations.vibe_action_handlers",
+    "modstore_server.services.employee",
+    "modstore_server.services.llm",
+    "modstore_server.services.knowledge",
+    "modstore_server.vector_store",
+    "modstore_server.llm_chat_proxy",
+    "modstore_server.employee_executor",
+    "modstore_server.routes_registry",
+    "modstore_server.butler_qq_botpy",
+]
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = [
+    "botpy.*",
+    "fastapi.*",
+    "chromadb.*",
+    "redis.*",
+    "pika.*",
+    "edge_tts.*",
+    "dashscope.*",
+    "pptx.*",
+    "fitz.*",
+    "docx.*",
+    "openpyxl.*",
+    "PIL.*",
+    "alipay.*",
+    "app.*",
+    "apscheduler.*",
+    "bcrypt.*",
+    "dotenv.*",
+    "httpx.*",
+    "jwt.*",
+    "playwright.*",
+    "prometheus_client.*",
+    "psycopg2.*",
+    "pydantic.*",
+    "rank_bm25.*",
+    "sqlalchemy.*",
+    "starlette.*",
+    "uvicorn.*",
+    "websockets.*",
+    "xcagi_common.*",
+]
+ignore_missing_imports = true
+
+# 剩余遗留模块（大量推断债）— 全量静默
+[[tool.mypy.overrides]]
+module = ["modstore_server.*"]
+ignore_errors = true

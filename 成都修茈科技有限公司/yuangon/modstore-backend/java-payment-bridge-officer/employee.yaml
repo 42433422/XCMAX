@@ -1,0 +1,40 @@
+id: java-payment-bridge-officer
+name: Java 支付桥接员
+version: "10.0.0"
+owner: admin
+area: modstore-backend
+domain: >-
+  P-W MODstore Java 支付面：PaymentController、OrderService、PAYMENT_CONTRACT 与 Python 代理对齐。
+
+scope_globs:
+  - "MODstore_deploy/java/**"
+  - "MODstore_deploy/modstore_server/payment_*.py"
+  - MODstore_deploy/docs/PAYMENT_CONTRACT.md
+  - "yuangon/modstore-backend/java-payment-bridge-officer/**"
+
+forbidden_globs:
+  - "_local_secrets/**"
+  - "*.env*"
+
+depends_on:
+  - modstore-backend-api
+  - payment-billing-reconciler
+
+actions:
+  handlers:
+    - llm_md
+    - echo
+
+triggers:
+  on_error: true
+  on_quality_fail: true
+
+skills:
+  - task.analyze
+  - llm.markdown
+  - workflow.assist
+
+changelog:
+  - version: "10.0.0"
+    date: "2026-06-07"
+    note: "yuangon 骨架由 bootstrap_yuangon.py 从 manifest 反向生成（v10 线内迭代）"

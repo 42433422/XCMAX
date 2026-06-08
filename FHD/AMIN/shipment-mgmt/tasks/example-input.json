@@ -1,0 +1,7 @@
+{
+  "action": "shipment_generate",
+  "customer": "测试客户",
+  "items": [
+    {"product": "产品A", "quantity": 10}
+  ]
+}

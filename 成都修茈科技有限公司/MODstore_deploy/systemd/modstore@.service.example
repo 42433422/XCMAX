@@ -1,0 +1,45 @@
+# 示例：MODstore FastAPI 模板化 unit — 多实例 Nginx 负载均衡
+#
+# %i = 实例参数（即监听端口号）
+# 
+# 安装步骤：
+#   sudo cp modstore@.service.example /etc/systemd/system/modstore@.service
+#   sudo systemctl daemon-reload
+#   # 启动两个实例（占用 9999 和 9998 端口）
+#   sudo systemctl enable --now modstore@9999
+#   sudo systemctl enable --now modstore@9998
+#   # 后台任务单独一个实例
+#   sudo systemctl enable --now modstore-scheduler
+#
+# Nginx upstream 配置见 nginx-xiu-ci-root.conf:
+#   upstream modstore_api { server 127.0.0.1:9999; server 127.0.0.1:9998; }
+#
+# 验证：
+#   systemctl status modstore@9999 modstore@9998 modstore-scheduler
+#   for i in {1..10}; do curl -s http://127.0.0.1/api/health; done
+#   # nginx access.log 应轮流出现 9999 和 9998
+
+[Unit]
+Description=MODstore FastAPI instance :%i
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/modstore-git/MODstore_deploy
+EnvironmentFile=-/root/modstore-git/MODstore_deploy/.env
+Environment=PYTHONUNBUFFERED=1
+Environment=MODSTORE_RUN_BACKGROUND_JOBS=0
+Environment=MODSTORE_BUS=rabbitmq
+# 若使用 Python 侧支付（PAYMENT_BACKEND=python），则不能开多实例（_ReplayGuard 不跨进程）。
+# 生产推荐 PAYMENT_BACKEND=java，由 Java 服务以 Redis 实现幂等 nonce。
+ExecStart=/root/modstore-git/MODstore_deploy/.venv/bin/python \
+    -m uvicorn modstore_server.app:app \
+    --host 127.0.0.1 \
+    --port %i \
+    --workers 4
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

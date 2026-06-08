@@ -1,0 +1,6 @@
+<view class="page">
+  <view class="history-item card" wx:for="{{items}}" wx:key="product_id" bindtap="goDetail" data-id="{{item.product_id}}">
+    <image src="/assets/product-placeholder.png" mode="aspectFill"/><view class="info"><text>{{item.product_name}}</text><text class="time">{{item.created_at}}</text></view>
+  </view>
+  <view class="empty" wx:if="{{!items.length}}"><text>暂无浏览记录</text></view>
+</view>

@@ -1,0 +1,37 @@
+id: intent-analyst
+name: 需求分析员工
+version: "10.0.0"
+owner: admin
+area: craft-workshop
+domain: >-
+  解析用户自然语言需求，提取结构化意图、领域关键词与建议能力；识别用户身份与权限
+
+scope_globs:
+  - "workbench/sessions/*"
+  - "workbench/intent/*"
+  - "yuangon/craft-workshop/intent-analyst/**"
+
+forbidden_globs:
+  - "*.py"
+  - "*.vue"
+  - "*.ts"
+
+depends_on:
+  []
+
+actions:
+  handlers:
+    - llm_md
+    - echo
+
+triggers:
+  on_error: true
+  on_quality_fail: true
+
+skills:
+  - skill-intent-analysis
+
+changelog:
+  - version: "10.0.0"
+    date: "2026-06-07"
+    note: "yuangon 骨架由 bootstrap_yuangon.py 从 manifest 反向生成（v10 线内迭代）"

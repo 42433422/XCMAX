@@ -1,0 +1,70 @@
+id: wechat-phone
+name: 微信电话对接业务员
+version: "1.0.0"
+domain: 固定扩展员工，启用后调用 phone-agent：Win32 监控微信来电、接听、采集、ASR、意图、TTS、VB-Cable；与任务面板「电话业务员状态」轮询同步。
+owner: admin
+area: workflow-extension
+security_level: personal
+is_public: true
+
+scope_globs:
+  - FHD-个人/frontend/src/constants/workflowEmployeeDocIds.ts
+  - FHD-个人/frontend/src/constants/workflowEmployeeDatabaseLinks.ts
+  - FHD-个人/frontend/src/data/workflow-employee-docs.json
+  - FHD-个人/mods/sz-qsm-pro/phone-agent
+
+forbidden_globs:
+  - FHD-个人/app/fastapi_routes/xcagi_compat_chat_helpers.py
+
+triggers:
+  on_error: true
+  on_quality_fail: true
+  on_coverage_miss: false
+  max_patch_budget_tokens: 4000
+  max_patch_steps: 5
+
+sla:
+  timeout_seconds: 180
+  retry_max: 2
+  escalate_to_human: true
+
+llm_default: "auto"
+llm_reasoning: "auto"
+
+skills:
+  - skills/skill-phone-agent.md
+  - skills/skill-phone-asr-tts.md
+
+capabilities:
+  - label: 来电监控与自动接听
+    description: Win32 监控微信来电窗口，命中规则后自动点击接听
+  - label: 音频采集与 ASR
+    description: 接听后采集通话音频并实时转写，提取客户诉求与关键信息
+  - label: 意图识别与 TTS 回复
+    description: 基于 ASR 结果进行意图识别，生成回复并执行 TTS 播报
+
+examples:
+  - title: 启动电话业务员
+    description: 启用员工后启动 phone-agent 服务
+    input:
+      action: start
+      mod_id: "sz-qsm-pro"
+      agent: "phone-agent"
+  - title: 来电自动处理
+    description: 来电后自动接听、采集、ASR、意图识别、TTS 回复
+    input:
+      action: on_call
+      caller: "客户号码"
+      auto_answer: true
+  - title: 查询运行状态
+    description: 轮询 phone-agent 运行状态
+    input:
+      action: status
+      mod_id: "sz-qsm-pro"
+
+depends_on: []
+
+changelog:
+  - version: "1.0.0"
+    date: "2026-05-14"
+    note: "初始创建：从 FHD-个人 程序硬编码中提取"

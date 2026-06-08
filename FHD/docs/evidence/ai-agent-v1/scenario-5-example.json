@@ -1,0 +1,30 @@
+{
+  "_comment": "Phase 2 场景 5 留证样例 — OCR 失败重跑（low 风险）。",
+  "generated_at": "2026-06-05T12:14:00Z",
+  "input_message": "把昨天 OCR 识别失败的 3 张发票重跑一下",
+  "execution_mode": "mock",
+  "approval_strategy": "auto",
+  "plan_id": "v1-s5-20260605-121400",
+  "intent": "ocr_retry_failed",
+  "risk_level": "low",
+  "scenario_id": 5,
+  "scenario_title": "OCR 失败重跑",
+  "nodes": [
+    {"node_id": "ocr_retry", "tool_id": "ocr", "action": "retry", "risk": "low", "depends_on": [], "params": {"failed_only": true, "limit": 3}}
+  ],
+  "gated_decision": {
+    "risk_decision": {"requires_confirmation": false, "reason": "计划仅包含低风险读操作", "blocking_nodes": []},
+    "node_decisions": [
+      {"node_id": "ocr_retry", "tool_id": "ocr", "action": "retry", "risk": "low", "requires_approval": false, "approved": true, "reason": "low-risk auto-approved"}
+    ],
+    "approval_request_ids": [],
+    "all_approved": true,
+    "any_rejected": false,
+    "pending_approval": false
+  },
+  "success": true,
+  "message": "工作流执行完成",
+  "node_results_summary": [
+    {"node_id": "ocr_retry", "tool_id": "ocr", "action": "retry", "success": true, "error": "", "output_summary": {"success": true, "reprocessed": 3, "message": "mock: 已重跑 3 张发票"}}
+  ]
+}

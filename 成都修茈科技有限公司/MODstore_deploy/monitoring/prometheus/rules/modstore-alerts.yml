@@ -1,0 +1,92 @@
+groups:
+  - name: modstore.availability
+    rules:
+      - alert: ModstoreTargetDown
+        expr: up{job=~"modstore-api|modstore-payment-service|prometheus"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: "{{ $labels.job }}"
+        annotations:
+          summary: "MODstore target is down"
+          description: "{{ $labels.job }} at {{ $labels.instance }} has been unreachable for more than 2 minutes."
+
+      - alert: ModstoreApiHigh5xxRate
+        expr: sum(rate(modstore_http_requests_total{status=~"5.."}[5m])) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          service: modstore-api
+        annotations:
+          summary: "FastAPI 5xx rate is elevated"
+          description: "FastAPI is returning more than 0.05 5xx responses per second over 5 minutes."
+
+      - alert: ModstoreApiHighP95Latency
+        expr: histogram_quantile(0.95, sum by (le) (rate(modstore_http_request_duration_seconds_bucket[5m]))) > 1
+        for: 10m
+        labels:
+          severity: warning
+          service: modstore-api
+        annotations:
+          summary: "FastAPI p95 latency is high"
+          description: "FastAPI p95 latency has stayed above 1 second for 10 minutes."
+
+  - name: modstore.payment
+    rules:
+      - alert: ModstorePaymentProxyHigh5xxRate
+        expr: sum(rate(modstore_payment_proxy_requests_total{status=~"5.."}[5m])) > 0.02
+        for: 5m
+        labels:
+          severity: critical
+          service: payment-gateway
+        annotations:
+          summary: "Payment gateway proxy is returning 5xx"
+          description: "FastAPI payment proxy has more than 0.02 5xx responses per second over 5 minutes."
+
+      - alert: ModstorePaymentProxyHighP95Latency
+        expr: histogram_quantile(0.95, sum by (le) (rate(modstore_payment_proxy_duration_seconds_bucket[5m]))) > 2
+        for: 10m
+        labels:
+          severity: warning
+          service: payment-gateway
+        annotations:
+          summary: "Payment proxy p95 latency is high"
+          description: "Payment proxy p95 latency has stayed above 2 seconds for 10 minutes."
+
+      - alert: ModstoreJavaPaymentHigh5xxRate
+        expr: sum(rate(http_server_requests_seconds_count{job="modstore-payment-service", status=~"5.."}[5m])) > 0.02
+        for: 5m
+        labels:
+          severity: critical
+          service: payment-service
+        annotations:
+          summary: "Java payment service 5xx rate is elevated"
+          description: "Java payment service is returning more than 0.02 5xx responses per second over 5 minutes."
+
+  - name: modstore.resources
+    rules:
+      - alert: ModstoreJavaHeapHigh
+        expr: |
+          sum(jvm_memory_used_bytes{job="modstore-payment-service", area="heap"})
+          /
+          sum(jvm_memory_max_bytes{job="modstore-payment-service", area="heap"}) > 0.85
+        for: 10m
+        labels:
+          severity: warning
+          service: payment-service
+        annotations:
+          summary: "Java payment heap usage is high"
+          description: "Java payment heap usage has stayed above 85% for 10 minutes."
+
+      - alert: ModstoreHikariPoolNearSaturation
+        expr: |
+          sum(hikaricp_connections_active{job="modstore-payment-service"})
+          /
+          sum(hikaricp_connections_max{job="modstore-payment-service"}) > 0.85
+        for: 5m
+        labels:
+          severity: warning
+          service: payment-service
+        annotations:
+          summary: "Java payment database pool is near saturation"
+          description: "Hikari active connections have stayed above 85% of the configured maximum."

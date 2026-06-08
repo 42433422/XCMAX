@@ -1,0 +1,70 @@
+{
+  "_comment": "Phase 1.3 留证样例 — strategy=reject（自动拒绝 + 不执行）。实际跑通后会写到 create-order-reject-<stamp>.json。",
+  "generated_at": "2026-06-05T12:02:00Z",
+  "input_message": "给客户上海宏达公司创建一张订单：1000 个 9702-C 型号，单价 12.5",
+  "execution_mode": "mock",
+  "approval_strategy": "reject",
+  "plan_id": "v1-create-order-20260605-120200",
+  "intent": "create_order_for_unit",
+  "risk_level": "medium",
+  "nodes": [
+    {
+      "node_id": "ensure_customer",
+      "tool_id": "customers",
+      "action": "ensure_exists",
+      "risk": "medium",
+      "depends_on": [],
+      "params": {"unit_name": "上海宏达公司"}
+    },
+    {
+      "node_id": "generate_shipment",
+      "tool_id": "shipment_generate",
+      "action": "generate",
+      "risk": "medium",
+      "depends_on": ["ensure_customer"],
+      "params": {
+        "unit_name": "上海宏达公司",
+        "products": [{"model_number": "9702-C", "quantity": 1000, "unit_price": 12.5}]
+      }
+    }
+  ],
+  "gated_decision": {
+    "plan_id": "v1-create-order-20260605-120200",
+    "risk_decision": {
+      "requires_confirmation": true,
+      "reason": "计划包含中高风险写操作",
+      "blocking_nodes": ["ensure_customer", "generate_shipment"]
+    },
+    "node_decisions": [
+      {
+        "node_id": "ensure_customer",
+        "tool_id": "customers",
+        "action": "ensure_exists",
+        "risk": "medium",
+        "requires_approval": true,
+        "approval_request_id": "reject-uuid-1",
+        "approved": false,
+        "rejected": true,
+        "reason": "auto-rejected"
+      },
+      {
+        "node_id": "generate_shipment",
+        "tool_id": "shipment_generate",
+        "action": "generate",
+        "risk": "medium",
+        "requires_approval": true,
+        "approval_request_id": "reject-uuid-2",
+        "approved": false,
+        "rejected": true,
+        "reason": "auto-rejected"
+      }
+    ],
+    "approval_request_ids": ["reject-uuid-1", "reject-uuid-2"],
+    "all_approved": false,
+    "any_rejected": true,
+    "pending_approval": false
+  },
+  "success": false,
+  "message": "plan rejected; not executed",
+  "node_results_summary": []
+}

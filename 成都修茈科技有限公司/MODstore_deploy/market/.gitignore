@@ -1,0 +1,22 @@
+# 构建产物目录（保留占位；内容不入库）
+dist/*
+!dist/.gitkeep
+
+# 历史 dist 压缩包（本地调试残留）
+dist*.tar
+dist*.tgz
+dist*.tar.gz
+dist*.zip
+market-dist-upload.tgz
+
+# 覆盖率 / strict 检查文本输出
+cov*.txt
+coverage_output.txt
+strict-*.txt
+
+# 本地运行输出
+out.txt
+err.txt
+test-results.json
+test-*.wav
+voice-e2e-result.png

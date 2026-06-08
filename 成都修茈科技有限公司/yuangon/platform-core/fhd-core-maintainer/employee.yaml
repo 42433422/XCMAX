@@ -1,0 +1,44 @@
+id: fhd-core-maintainer
+name: FHD 核心应用维护员
+version: "10.0.0"
+owner: admin
+area: platform-core
+domain: >-
+  维护 FHD 宿主核心 app/ 与 tests/：应用服务、路由、NeuroBus 集成；产出经 CR Git 管线提交 PR，由 FHD test.yml 与 ci-auto-merge 门控。
+
+scope_globs:
+  - "FHD/app/**"
+  - "FHD/tests/**"
+  - "FHD/frontend/src/**"
+  - FHD/pyproject.toml
+  - "FHD/alembic/**"
+  - FHD/docs/api/openapi.json
+  - "FHD/mods/_employees/fhd-core-maintainer/**"
+  - "yuangon/platform-core/fhd-core-maintainer/**"
+
+forbidden_globs:
+  - "MODstore_deploy/**"
+  - "MODstore_deploy/market/**/*.vue"
+  - "成都修茈科技有限公司/**"
+  - "vibe-coding/**"
+  - "_local_secrets/**"
+
+depends_on:
+  - test-qa-runner
+
+actions:
+  handlers:
+    - llm_md
+    - echo
+
+triggers:
+  on_error: true
+  on_quality_fail: true
+
+skills:
+  - skill-fhd-app-patch
+
+changelog:
+  - version: "10.0.0"
+    date: "2026-06-07"
+    note: "yuangon 骨架由 bootstrap_yuangon.py 从 manifest 反向生成（v10 线内迭代）"

@@ -1,0 +1,35 @@
+# Prometheus 配置文件
+
+global:
+  scrape_interval: 15s      # 抓取间隔
+  evaluation_interval: 15s  # 规则评估间隔
+  external_labels:
+    monitor: 'xcagi-monitor'
+
+# 告警规则
+rule_files:
+  - "alerts.yml"
+
+# 抓取配置
+scrape_configs:
+  # XCAGI 应用
+  - job_name: 'xcagi'
+    static_configs:
+      - targets: ['localhost:5000']
+    metrics_path: '/metrics'
+    scrape_interval: 10s    # XCAGI 使用更短的抓取间隔
+    
+  # Node Exporter（系统指标）
+  - job_name: 'node'
+    static_configs:
+      - targets: ['localhost:9100']
+    
+  # Redis Exporter（Redis 指标）
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['localhost:9121']
+    
+  # Prometheus 自监控
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']

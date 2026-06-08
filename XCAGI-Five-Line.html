@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>XCAGI · 五线全量查看</title>
+<link rel="stylesheet" href="docs/xcagi-dashboard/dashboard.css?v=20260603s">
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg, #0a0e14); }
+  .line-page-frame { width: 100%; height: 100%; border: 0; display: block; }
+</style>
+</head>
+<body>
+<script>
+(function () {
+  var VALID = ['ops_acquisition', 'ops_partner', 'prod_web', 'prod_mod', 'prod_software', 'shared_retention'];
+  var LABELS = {
+    ops_acquisition: 'O-A · 获客线',
+    ops_partner: 'O-B · 伙伴合作线（预留）',
+    prod_web: 'P-W · 网站制作维护',
+    prod_mod: 'P-M · 用户 Mod 制作维护',
+    prod_software: 'P-S · 通用软件线',
+    shared_retention: 'S-R · 归档清理线',
+  };
+  var params = new URLSearchParams(location.search);
+  var line = params.get('line') || 'ops_partner';
+  if (VALID.indexOf(line) < 0) line = 'ops_partner';
+  document.title = (LABELS[line] || line) + ' · 全量流程 · XCAGI';
+  var frame = document.createElement('iframe');
+  frame.className = 'line-page-frame';
+  frame.title = '五线全量流程';
+  frame.src = 'XCAGI-Full-Pipeline.html#line/' + line;
+  document.body.appendChild(frame);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,288 @@
+[project]
+name = "xcagi"
+version = "10.0.0"
+description = "XCAGI - 企业 AI 员工平台（桌面版 + Web 版并行交付）"
+requires-python = ">=3.11"
+# 运行时依赖见 optional-dependencies；CI/生产安装：deploy/requirements-server-api.txt（与 server-api extra 对齐）
+dependencies = []
+
+[project.optional-dependencies]
+server-api = [
+    "fastapi>=0.109.0",
+    "uvicorn[standard]>=0.27.0",
+    "starlette>=0.36.0",
+    "python-multipart>=0.0.6",
+    "aiofiles>=23.2.1",
+    "Celery==5.3.4",
+    "redis==5.0.1",
+    "openpyxl==3.1.2",
+    "python-docx>=1.1.0",
+    "pdfplumber>=0.11.0",
+    "Pillow>=10.2.0",
+    "gunicorn==21.2.0",
+    "gevent==24.2.1",
+    "python-dotenv==1.0.0",
+    "httpx==0.26.0",
+    "requests>=2.31.0",
+    "python-alipay-sdk>=3.3.0",
+    "edge-tts>=6.1.10",
+    "SQLAlchemy>=2.0.0",
+    "alembic>=1.13.0",
+    "psycopg[binary]>=3.1.18",
+    "pgvector>=0.2.5",
+    "pandas>=2.0.0",
+    "numpy>=1.24.0",
+    "xlrd>=2.0.1",
+    "scikit-learn>=1.3.0",
+    "openai>=1.40.0",
+    "tenacity>=8.2.0",
+    "prometheus_client>=0.19.0",
+    "psutil>=5.9.0",
+    "protobuf>=4.25.0",
+    "pydantic>=2.0.0",
+    "pydantic-settings>=2.0.0",
+    "email-validator>=2.0.0",
+    "python-jose[cryptography]>=3.3.0",
+    "passlib[bcrypt]>=1.7.4",
+]
+ml = [
+    "torch>=2.0.0",
+    "transformers>=4.35.0",
+]
+dev = [
+    "pytest>=7.4",
+    "pytest-cov>=4.1",
+    "pytest-mock>=3.12",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.8",
+    "mypy>=1.8",
+    "black==25.11.0",
+    "isort>=5.13",
+    "types-redis",
+    "types-requests",
+    "types-pyyaml",
+    "types-psutil",
+    "types-aiofiles",
+    "types-python-dotenv",
+    "types-pillow",
+    "types-openpyxl",
+    "safety>=3.0",
+    "bandit>=1.7",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+exclude = [
+    ".git",
+    ".venv",
+    "venv",
+    "node_modules",
+    "frontend",
+    "build",
+    "dist",
+    "migrations",
+    "alembic/versions",
+    "*.ipynb"
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "C4", "UP", "SIM", "PLC", "BLE001"]
+# ANN201 待 ④-B 测试收口后分批启用（见 MYPY_TECH_DEBT.md）
+ignore = [
+    "E501",    # line too long (handled by formatter)
+    "E402",    # module-import-not-at-top (有意的延迟导入)
+    "E712",    # true-false-comparison
+    "E722",    # bare-except (关键路径由 bare-except gate 单独校验)
+    "E731",    # lambda-assignment
+    "E741",    # ambiguous-variable-name
+    "B008",    # function-call-in-default-argument (FastAPI Depends() 标准用法)
+    "B007",    # unused-loop-control-variable
+    "B904",    # raise-without-from-inside-except
+    "B905",    # zip-without-explicit-strict
+    "B017",    # assert-raises-exception
+    "B023",    # function-uses-loop-variable
+    "B025",    # duplicate-try-block-exception
+    "B027",    # empty-method-without-abstract-decorator
+    "C416",    # unnecessary-comprehension
+    "PLC0415", # import-outside-top-level (延迟导入是有意的启动优化)
+    "PLC2401", # non-ascii-name (中文变量名在业务代码中合理)
+    "PLC0414", # useless-import-alias
+    "PLC0206", # dict-index-missing-items
+    "UP042",   # replace-str-enum (历史兼容)
+    "UP035",   # deprecated-import (历史兼容)
+    "UP045",   # non-pep604-annotation-optional (历史 Optional[X] 写法)
+    "UP009",   # utf8-encoding-declaration (历史文件头编码声明)
+    "UP006",   # non-pep585-annotation (历史 List/Dict/Tuple 类型注解)
+    "SIM102",  # collapsible-if
+    "SIM103",  # needless-bool
+    "SIM105",  # suppressible-exception
+    "SIM108",  # if-else-block-instead-of-if-exp
+    "SIM110",  # reimplemented-builtin
+    "SIM115",  # open-file-with-context-handler
+    "SIM117",  # multiple-with-statements
+    "SIM118",  # in-dict-keys
+    "SIM101",  # duplicate-isinstance-call
+    "SIM210",  # if-expr-with-true-false
+    "SIM222",  # expr-or-true
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["F841", "F401"]
+"app/services/__init__.py" = ["F403", "F405", "F401", "F821"]
+"app/db/__init__.py" = ["F403", "F405", "F401", "F821"]
+"app/db/models/__init__.py" = ["F403", "F405", "F401", "F821"]
+"app/infrastructure/skills/__init__.py" = ["F403", "F405", "F401", "F821"]
+"app/application/neuro_commands/**" = ["F403", "F405", "F401", "F821"]
+"app/utils/__init__.py" = ["F403", "F405", "F401", "F821"]
+"app/legacy/**" = ["BLE001"]
+"app/traditional_mode_fs.py" = ["BLE001"]
+"app/infrastructure/gateways/product.py" = ["F822"]
+"**/__init__.py" = ["F401", "F403", "F405", "F811"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+# 兼容旧配置
+[tool.black]
+line-length = 100
+target-version = ['py311']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+    \.git
+    | \.venv
+    | venv
+    | node_modules
+    | frontend
+    | build
+    | dist
+    | migrations
+    | alembic/versions
+)/
+'''
+
+[tool.isort]
+profile = "black"
+line_length = 100
+multi_line_output = 3
+include_trailing_comma = true
+force_grid_wrap = 0
+use_parentheses = true
+ensure_newline_before_comments = true
+skip_gitignore = true
+skip = [".venv", "venv", "node_modules", "frontend", "migrations", "alembic/versions"]
+
+# mypy 配置唯一真相源（2026-05-04 整合）：
+# - 旧 mypy.ini（strict=True 但拼错过 frontned，且 ignore_missing_imports=False 与本节冲突）已删除。
+# - 当前以 pyproject 的"宽松配置"为准，与 [FHD项目评估报告.md](FHD项目评估报告.md) §四 的认知一致。
+# - 后续严格化路线见 §四 P1 改进项（逐步关闭 ignore_missing_imports、引入 types-* 包）。
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = false
+exclude = [
+    "venv",
+    ".venv",
+    "node_modules",
+    "frontend",
+    "migrations",
+    "alembic/versions",
+]
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+ignore_errors = true
+
+# pytest 配置唯一真相源（2026-05-04 整合）：
+# - 旧 pytest.ini 已删除；当前 addopts 保留为不含 --cov，与历史 pytest.ini 的有效行为一致，
+#   避免本地交互式运行因 fail_under=52 产生噪音。CI 通过显式 --cov=app 等参数生效（见
+#   .github/workflows/ci-cd.yml + test.yml）。
+[tool.pytest.ini_options]
+# 唯一默认后端套件：tests/（与 CI 一致）。勿与 XCAGI/xcagi_tests 同跑——模块名冲突且部分用例已迁移。
+# 遗留 xcagi 用例：pytest XCAGI/xcagi_tests --import-mode=importlib
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short -p no:xdist --import-mode=importlib"
+asyncio_mode = "auto"
+markers = [
+    "integration: 集成测试",
+    "e2e: 端到端测试",
+    "asyncio: 异步测试 (pytest-asyncio)",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::PendingDeprecationWarning",
+]
+
+[tool.coverage.run]
+# 仅统计下列路径（勿与 source=app 并用，否则 include 不生效）
+include = [
+    "app/neuro_bus/*",
+    "app/middleware/*",
+    "app/fastapi_routes/*",
+    "app/application/*",
+    "app/domain/shipment/*",
+    "app/db/session_cache.py",
+    "app/http/*",
+    "app/infrastructure/templates/*",
+    "app/utils/password_hash.py",
+    "app/utils/rate_limiter.py",
+    "app/utils/redis_cache.py",
+    "app/config.py",
+]
+omit = [
+    "*/tests/*",
+    "*/xcagi_tests/*",
+    "*/__pycache__/*",
+    "*/migrations/*",
+    "*/alembic/*",
+    "*/venv/*",
+    "*/virtualenv/*",
+    # COVERAGE_RAMP：非关键路径分阶段纳入（见 docs/reports/COVERAGE_RAMP.md）
+    "app/shell/*",
+    "app/desktop_runtime/*",
+    "app/mod_sdk/*",
+    "app/routes/*",
+    "app/enterprise/*",
+    "app/contexts/*",
+    "app/control/*",
+    "app/models/*",
+    "app/neuro_domains/*",
+    "app/ai_engines/*",
+    "app/utils/performance_*.py",
+    "app/utils/performance_monitor.py",
+    "app/utils/performance_initializer.py",
+    "app/utils/query_optimizer.py",
+    "app/utils/request_deduplicator.py",
+    "app/utils/excel_template_analyzer.py",
+    "app/utils/logging_utils.py",
+    "app/utils/openapi_path.py",
+    "app/utils/mobile_api.py",
+    "app/utils/template_export_utils.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "pass",
+    "@abstractmethod",
+    "if DEBUG:",
+]
+# M3 ramp — see docs/reports/COVERAGE_RAMP.md
+fail_under = 70
+
+[tool.coverage.html]
+directory = "htmlcov"
+show_contexts = true
