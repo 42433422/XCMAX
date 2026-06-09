@@ -55,12 +55,13 @@ function onAction() {
   bottom: 100px;
   right: 24px;
   width: min(320px, calc(100vw - 48px));
-  background: #1a1a2e;
-  border: 1px solid rgba(0, 180, 255, 0.3);
-  border-radius: 14px;
+  background: var(--wb-surface-elevated, #12121a);
+  border: 1px solid var(--wb-card-hover-border, rgba(129, 140, 248, 0.22));
+  border-radius: var(--wb-radius-md, 14px);
   padding: 12px 14px;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--wb-card-shadow, 0 12px 32px rgba(0, 0, 0, 0.45));
   z-index: 11050;
+  backdrop-filter: blur(var(--wb-glass-blur, 12px));
 }
 
 .suggestion-content {
@@ -78,7 +79,7 @@ function onAction() {
 
 .suggestion-content p {
   font-size: 0.84rem;
-  color: rgba(255, 255, 255, 0.82);
+  color: var(--wb-text-secondary, rgba(240, 240, 245, 0.82));
   line-height: 1.45;
   margin: 0;
 }
@@ -100,22 +101,22 @@ function onAction() {
 }
 
 .suggestion-btn--primary {
-  background: rgba(0, 180, 255, 0.15);
-  color: #7dd3fc;
-  border: 1px solid rgba(0, 180, 255, 0.3);
+  background: var(--wb-accent-soft, rgba(129, 140, 248, 0.14));
+  color: var(--wb-accent-primary, #818cf8);
+  border: 1px solid color-mix(in srgb, var(--wb-accent-primary, #818cf8) 32%, transparent);
 }
 
 .suggestion-btn--primary:hover {
-  background: rgba(0, 180, 255, 0.25);
+  background: color-mix(in srgb, var(--wb-accent-primary, #818cf8) 22%, transparent);
 }
 
 .suggestion-btn--ghost {
   background: transparent;
-  color: rgba(255, 255, 255, 0.35);
+  color: var(--wb-text-muted, rgba(240, 240, 245, 0.38));
 }
 
 .suggestion-btn--ghost:hover {
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--wb-text-secondary, rgba(240, 240, 245, 0.68));
 }
 
 .suggestion-slide-enter-active,

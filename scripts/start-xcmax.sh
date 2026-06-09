@@ -34,8 +34,12 @@ FHD_PORT="${FASTAPI_PORT:-5100}"
 MODSTORE_PORT="${MODSTORE_API_PORT:-8788}"
 DASH_PORT="${XCAGI_DASHBOARD_PORT:-8765}"
 
-# 工具
-PY="${PYTHON:-python3}"
+# 工具（系统 python3 常为 3.9，FHD 需 3.10+）
+if [[ -z "${PYTHON:-}" && -x "$FHD_DIR/.venv/bin/python" ]]; then
+  PY="$FHD_DIR/.venv/bin/python"
+else
+  PY="${PYTHON:-python3}"
+fi
 
 # 子进程 pid 写入 / 读取
 pidfile() { echo "$PIDS_DIR/$1.pid"; }

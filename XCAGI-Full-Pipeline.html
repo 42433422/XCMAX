@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>XCAGI v10.0 · 六线全自动全景（2026-06-03 v5）</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Noto+Sans+SC:wght@300;400;500;700;900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="docs/xcagi-dashboard/dashboard.css?v=20260607g">
+<link rel="stylesheet" href="docs/xcagi-dashboard/dashboard.css?v=20260608">
 <!--
   v3 重构：CSS / JS 已拆分到独立文件
     dashboard.css   设计系统 + 8 section + 响应式
@@ -1027,7 +1027,7 @@
 </details>
 
 <p class="emp-wf-diagram-note">
-  <strong>时间轨闭环</strong>：03:05 容灾备份 → 03:15 归档 → 08:00 摘要 + release_train（幂等）+ Vibe 双清单 → <code>daily_action_items</code> → 断点/路线图 AI 看板 → 08:15 Phase A 补丁（派发回写）→ 08:25 Phase B/C → P3–P9 → 审批 → 合并部署（merged 回写 ✅）。
+  <strong>时间轨闭环</strong>：03:05 容灾备份（v2: 按需快照 + 增量轮转 + 事件信号）→ 03:15 归档 → 08:00 摘要 + release_train（幂等）+ Vibe 双清单 → <code>daily_action_items</code> → 断点/路线图 AI 看板 → 08:15 Phase A 补丁（派发回写）→ 08:25 Phase B/C → P3–P9 → 审批 → 合并部署（merged 回写 ✅）。DRFAIL 降级后自动恢复探针每30分钟重试，超8次升级告警。
   <strong>Phase A/B/C 已串联</strong>（shadow 默认预览）。下图为一幅辐射视图全链路图。
 </p>
 <div class="emp-wf-diagram-toolbar" role="toolbar" aria-label="时间轨架构图图例">
@@ -1041,11 +1041,17 @@
   <p class="emp-wf-mermaid-part-label" hidden>段 1 · 03:15 + 08:00 摘要与清单</p>
 <pre class="mermaid emp-wf-mermaid" hidden>flowchart TB
   subgraph T0["03:05–03:15"]
-    BK[03:05 容灾备份]
+    BK[03:05 容灾备份 VACUUM INTO + WAL增量+全量轮转]
+    BKOND[按需快照 交叉升级/回滚前触发 独立目录]
     R[03:15 S-R 归档]
     DRFAIL[灾备失败 → 降级 告警+跳过当日 bump]
-    BK --> R
+    DRPROBE[自动恢复探针 30min重试×8]
+    BK -->|backup.completed 事件| R
     BK -.->|备份失败| DRFAIL
+    DRFAIL -.->|触发| DRPROBE
+    DRPROBE -.->|重试成功 → 双轨dispatch| BK
+    BKOND -.->|独立目录 backups/ondemand/| R
+    BKOND -.->|失败联动| DRFAIL
   end
   subgraph T1["08:00"]
     K[KPI · TLS · IMAP]
@@ -2301,21 +2307,21 @@
 </div>
 
 
-<script src="docs/xcagi-dashboard/api-base.js?v=20260606f"></script>
-<script src="docs/xcagi-dashboard/emp-wf-surface-audit.js?v=20260605q" defer></script>
-<script src="docs/xcagi-dashboard/emp-wf-action-items.js?v=20260606k" defer></script>
-<script src="docs/xcagi-dashboard/emp-wf-node-staff.js?v=20260606m" defer></script>
-<script src="docs/xcagi-dashboard/emp-wf-pan-zoom.js?v=20260606m" defer></script>
-<script src="docs/xcagi-dashboard/arch-graph-draw.js?v=20260606m" defer></script>
-<script src="docs/xcagi-dashboard/event-merged-arch-graph.js?v=20260606m" defer></script>
-<script src="docs/xcagi-dashboard/event-workflow-snake.js?v=20260605f" defer></script>
-<script src="docs/xcagi-dashboard/event-arch-graph.js?v=20260605o" defer></script>
-<script src="docs/xcagi-dashboard/event-rail-ui.js?v=20260605e" defer></script>
-<script src="docs/xcagi-dashboard/emp-wf-radial-graph.js?v=20260606m" defer></script>
-<script src="docs/xcagi-dashboard/emp-wf-stage-artifacts.js?v=20260606e" defer></script>
-<script src="docs/xcagi-dashboard/mon-m0-evidence.js?v=20260606tabs" defer></script>
-<script src="docs/xcagi-dashboard/mon-live-dash.js?v=20260606refresh" defer></script>
-<script src="docs/xcagi-dashboard/mon-ai-biz.js?v=20260606l" defer></script>
-<script src="docs/xcagi-dashboard/app.js?v=20260606k" defer></script>
+<script src="docs/xcagi-dashboard/api-base.js?v=20260608"></script>
+<script src="docs/xcagi-dashboard/emp-wf-surface-audit.js?v=20260608" defer></script>
+<script src="docs/xcagi-dashboard/emp-wf-action-items.js?v=20260608" defer></script>
+<script src="docs/xcagi-dashboard/emp-wf-node-staff.js?v=20260608" defer></script>
+<script src="docs/xcagi-dashboard/emp-wf-pan-zoom.js?v=20260608" defer></script>
+<script src="docs/xcagi-dashboard/arch-graph-draw.js?v=20260608" defer></script>
+<script src="docs/xcagi-dashboard/event-merged-arch-graph.js?v=20260608" defer></script>
+<script src="docs/xcagi-dashboard/event-workflow-snake.js?v=20260608" defer></script>
+<script src="docs/xcagi-dashboard/event-arch-graph.js?v=20260608" defer></script>
+<script src="docs/xcagi-dashboard/event-rail-ui.js?v=20260608" defer></script>
+<script src="docs/xcagi-dashboard/emp-wf-radial-graph.js?v=20260608" defer></script>
+<script src="docs/xcagi-dashboard/emp-wf-stage-artifacts.js?v=20260608" defer></script>
+<script src="docs/xcagi-dashboard/mon-m0-evidence.js?v=20260608" defer></script>
+<script src="docs/xcagi-dashboard/mon-live-dash.js?v=20260608" defer></script>
+<script src="docs/xcagi-dashboard/mon-ai-biz.js?v=20260608" defer></script>
+<script src="docs/xcagi-dashboard/app.js?v=20260608" defer></script>
 </body>
 </html>

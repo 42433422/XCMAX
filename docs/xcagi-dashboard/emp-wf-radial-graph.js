@@ -1,7 +1,23 @@
 /**
  * 日更全链路辐射视图 — dagre LR + 中心「日更闭环」辐射（与编制图一致）
+ *
+ * 对接契约（v2 · SOT_VERSION = 2026-06-08）：
+ *  1. 节点容器 `data-emp-wf-node="<id>"`（所有节点必带；中心=CENTER_ID），
+ *     `data-emp-wf-phase="<phase>"` 仅在节点有 phase 时挂载。
+ *  2. 单击节点派发 `CustomEvent('emp-wf:node-click', { detail: { id, label,
+ *     phase, desc, source: 'radial' }, bubbles: true })`；
+ *     兼容旧名 `emp-wf-node-click`。
+ *  3. 外层容器尺寸变化（iframe/嵌入/缩放）由内部 ResizeObserver 监听，
+ *     自动调 `__empWfPanZoom.reset()` 重置视图。
+ *  4. 标签文本优先走 `setLabelResolver(fn)` 注入的解析器（fn 同步返回
+ *     string 或 Promise<string>），未注入则用 NODES 里写死的 label。
+ *  5. 暴露 `EmpWfRadialGraph.SOT_VERSION` 给宿主做缓存/版本校验。
  */
 const EmpWfRadialGraph = (() => {
+  /* 优先从 xcagi-dashboard-sot.js 单点 SOT 取；未加载时回落到本地常量。 */
+  const SOT_VERSION =
+    (typeof window !== 'undefined' && window.XCAGI_DASHBOARD_SOT && window.XCAGI_DASHBOARD_SOT.version) ||
+    '2026-06-08';
   const CENTER_ID = 'daily-hub';
   const NODE_W = 200;
   const NODE_H = 76;
@@ -13,9 +29,25 @@ const EmpWfRadialGraph = (() => {
   const TOP_RESERVE = HUB_TOP + CENTER_H + HUB_GAP;
   const COMPACT_IDS = new Set([
     'P3', 'P4', 'P5', 'P6', 'P6G', 'P6POP', 'P6PW', 'P7', 'P8', 'P9', 'P9G', 'P9I', 'P5I', 'P6I',
-    'BK', 'ART', 'WB_D', 'WB_M', 'GAPS', 'ROAD',
+    'BK', 'BKOND', 'DRPROBE', 'ART', 'WB_D', 'WB_M', 'GAPS', 'ROAD',
   ]);
   const TAB_LINK_NODES = { GAPS: 'gaps', ROAD: 'roadmap' };
+
+  /** 节点尺寸计算常量 */
+  const DECISION_NODE_MIN_W = 132;
+  const DECISION_NODE_MAX_W = 196;
+  const DECISION_CHAR_WIDTH = 6.8;
+  const DECISION_HEIGHT_RATIO = 0.78;
+  const PHASE_NODE_W = 272;
+  const PHASE_NODE_H = 92;
+  const COMPACT_NODE_W = 112;
+  const COMPACT_NODE_H = 54;
+  const STEP_NODE_CHAR_WIDTH = 6.4;
+  const STEP_NODE_MIN_W = 172;
+  const STEP_NODE_MAX_W = 248;
+  const STEP_NODE_LONG_LABEL_LEN = 26;
+  const STEP_NODE_LONG_H = 86;
+  const STEP_NODE_DEFAULT_H = 72;
 
   const PHASE_COLORS = {
     t0: '#79c0ff',
@@ -29,15 +61,29 @@ const EmpWfRadialGraph = (() => {
 
   const NODES = [
     { id: CENTER_ID, label: '日更闭环', kind: 'center' },
-    { id: 'BK', label: '03:05 容灾备份', kind: 'step', phase: 't0', desc: 'SQLite 在线备份 + release_train 快照 → backups/' },
+    { id: 'BK', label: '03:05 容灾备份', kind: 'step', phase: 't0', desc: 'SQLite 全量备份（VACUUM INTO + wal_checkpoint TRUNCATE）+ release_train 快照 → backups/ · v2.2: 真实 WAL 增量（拷贝 .db-wal/.db-shm）+ 全量轮转' },
+    {
+      id: 'BKOND',
+      label: '按需快照\n交叉升级/回滚触发',
+      kind: 'step',
+      phase: 't0',
+      desc: '交叉升级/回滚前主动触发按需快照，独立目录 backups/ondemand/ + 独立保留策略（默认7份），同时写 release_train 历史快照确保回滚粒度精确 · v2.2: 快照失败联动 DR 守卫',
+    },
     {
       id: 'DRFAIL',
       label: '灾备失败 → 降级\n告警 + 跳过当日 bump',
       kind: 'step',
       phase: 't0',
-      desc: '容灾备份失败时熔断：发告警、保留上一份快照、当日不递增 release_train（last_bump_day 守卫兜底），人工确认后再恢复日更',
+      desc: '容灾备份失败时熔断：发告警、保留上一份快照、当日不递增 release_train（last_bump_day 守卫兜底）· v2.2: 自动恢复探针每30分钟重试，超8次升级告警；clear_backup_guard 双轨发布 dispatch 事件',
     },
-    { id: 'R', label: '03:15 retention-officer 归档', kind: 'step', phase: 't0' },
+    {
+      id: 'DRPROBE',
+      label: '自动恢复探针\n30min 重试 × 8',
+      kind: 'step',
+      phase: 't0',
+      desc: 'DRFAIL 守卫生效后，每30分钟自动重试备份；成功则解除守卫恢复日更（双轨 dispatch backup.dr_guard.cleared 事件），超8次升级告警。retry_count 结构化字段写入 SSOT',
+    },
+    { id: 'R', label: '03:15 retention-officer 归档', kind: 'step', phase: 't0', desc: '日志与过期数据归档清理，释放存储空间，确保备份后数据链路清洁' },
     {
       id: 'K',
       label: '运维 KPI · 待审 · TLS · IMAP',
@@ -243,7 +289,8 @@ const EmpWfRadialGraph = (() => {
     ['P7', 'P8'], ['P8', 'P9'], ['P7', 'HEAL', true], ['HEAL', 'STG', true], ['HEAL', 'P8', true],
     ['MAJ', 'P5I', true], ['P9', 'STG'], ['STG', 'APPR'], ['APPR', 'V10SYNC'], ['V10SYNC', 'MERGE'],
     ['MERGE', 'WB_M'], ['WB_M', 'GAPS', true], ['WB_M', 'ROAD', true],
-    ['BK', 'R'], ['BK', 'DRFAIL', true], ['DRFAIL', 'R', true],
+    ['BK', 'R'], ['BK', 'DRFAIL', true], ['DRFAIL', 'R', true], ['DRFAIL', 'DRPROBE', true],
+    ['DRPROBE', 'BK', true], ['BKOND', 'R', true],
     ['R', 'K', true], ['R', 'SW', true], ['R', 'SS', true], ['R', 'SA', true],
     ['BR', 'P2W'], ['BR', 'P2S'], ['BR', 'P2APP'], ['BR', 'P2R'],
     ['DLSSOT', 'P7'],
@@ -259,6 +306,64 @@ const EmpWfRadialGraph = (() => {
 
   let dagrePromise = null;
   let currentView = 'radial';
+  let labelResolver = null;
+  let resizeObserver = null;
+
+  /**
+   * 注入标签解析器：fn(node) -> string | Promise<string>
+   * 用于多模型协作：接入方可在 fn 里把 `03:15 retention-officer 归档`
+   * 拆成 `03:15 ${zhLabel} ${动作}`，避免每个模型各自拼接漂移。
+   */
+  function setLabelResolver(fn) {
+    labelResolver = typeof fn === 'function' ? fn : null;
+  }
+
+  /**
+   * 启动期 schema 校验：发现 NODES 缺 id / 重复 id / phase 不在色板
+   * 立刻抛错，避免下游接进去后才发现节点没渲染。
+   */
+  function validateSchema() {
+    const seen = new Set();
+    for (const n of NODES) {
+      if (!n || typeof n !== 'object' || !n.id) {
+        throw new Error('emp-wf-radial: NODES 存在缺 id 的条目');
+      }
+      if (seen.has(n.id)) {
+        throw new Error('emp-wf-radial: NODES 存在重复 id = ' + n.id);
+      }
+      seen.add(n.id);
+      if (n.id !== CENTER_ID && !n.kind) {
+        throw new Error('emp-wf-radial: 节点 ' + n.id + ' 缺 kind');
+      }
+      if (n.phase && !PHASE_COLORS[n.phase]) {
+        throw new Error('emp-wf-radial: 节点 ' + n.id + ' 的 phase=' + n.phase + ' 不在 PHASE_COLORS');
+      }
+    }
+  }
+
+  /**
+   * 把节点点击派发为标准 CustomEvent，集成方只需
+   * `host.addEventListener('emp-wf:node-click', e => ...)` 即可。
+   * 旧名 `emp-wf-node-click` 同时派发，避免老集成方漏接。
+   */
+  function dispatchNodeClick(node, originalEvent) {
+    if (!node) return;
+    const detail = {
+      id: node.id,
+      label: node.label,
+      phase: node.phase || '',
+      desc: node.desc || '',
+      kind: node.kind || '',
+      source: 'radial',
+    };
+    const ev = new CustomEvent('emp-wf:node-click', { detail, bubbles: true, cancelable: true });
+    const legacy = new CustomEvent('emp-wf-node-click', { detail, bubbles: true, cancelable: true });
+    if (originalEvent && typeof originalEvent.stopPropagation === 'function') {
+      originalEvent.stopPropagation();
+    }
+    node.dispatchEvent(ev);
+    node.dispatchEvent(legacy);
+  }
 
   const DAGRE_URLS = [
     'docs/xcagi-dashboard/vendor/dagre.min.js',
@@ -293,14 +398,14 @@ const EmpWfRadialGraph = (() => {
   function nodeSize(n) {
     if (n.id === CENTER_ID) return { w: CENTER_W, h: CENTER_H };
     if (n.kind === 'decision') {
-      const w = Math.min(196, Math.max(132, Math.ceil(n.label.length * 6.8)));
-      return { w, h: Math.round(w * 0.78) };
+      const w = Math.min(DECISION_NODE_MAX_W, Math.max(DECISION_NODE_MIN_W, Math.ceil(n.label.length * DECISION_CHAR_WIDTH)));
+      return { w, h: Math.round(w * DECISION_HEIGHT_RATIO) };
     }
-    if (n.kind === 'phase') return { w: 272, h: 92 };
-    if (COMPACT_IDS.has(n.id)) return { w: 112, h: 54 };
-    const long = n.label.length > 26;
-    const w = Math.min(248, Math.max(172, Math.ceil(n.label.length * 6.4)));
-    return { w, h: long ? 86 : 72 };
+    if (n.kind === 'phase') return { w: PHASE_NODE_W, h: PHASE_NODE_H };
+    if (COMPACT_IDS.has(n.id)) return { w: COMPACT_NODE_W, h: COMPACT_NODE_H };
+    const long = n.label.length > STEP_NODE_LONG_LABEL_LEN;
+    const w = Math.min(STEP_NODE_MAX_W, Math.max(STEP_NODE_MIN_W, Math.ceil(n.label.length * STEP_NODE_CHAR_WIDTH)));
+    return { w, h: long ? STEP_NODE_LONG_H : STEP_NODE_DEFAULT_H };
   }
 
   function layoutGraphOpts() {
@@ -347,7 +452,7 @@ const EmpWfRadialGraph = (() => {
 
   const PIPELINE_EDGE_KEYS = new Set([
     'ASM->P', 'P->RT', 'RT->CENT', 'CENT->MAJ', 'RT->V', 'V->ACT', 'ACT->L',
-    'BK->R', 'L->PARSE', 'PARSE->PSA', 'PARSE->APPA', 'PSA->ORCH', 'APPA->ORCH',
+    'BK->R', 'BKOND->R', 'L->PARSE', 'PARSE->PSA', 'PARSE->APPA', 'PSA->ORCH', 'APPA->ORCH',
     'PSA->WB_D', 'APPA->WB_D', 'PW->WB_D', 'APPB->WB_D', 'SR->WB_D',
     'ORCH->PW', 'ORCH->APPB', 'ORCH->SR', 'ORCH->KIND', 'ORCH->BR',
     'KIND->P9I', 'P9I->P5I', 'P5I->P6I',
@@ -475,10 +580,6 @@ const EmpWfRadialGraph = (() => {
     }
   }
 
-  function phaseClass(phase) {
-    return phase ? ' emp-wf-radial-node--' + phase : '';
-  }
-
   function bindPanZoom(host, viewport, stage) {
     if (window.EmpWfPanZoom && typeof window.EmpWfPanZoom.bind === 'function') {
       window.EmpWfPanZoom.bind(host, viewport, stage);
@@ -569,7 +670,7 @@ const EmpWfRadialGraph = (() => {
                 ? ' emp-wf-radial-node--phase'
                 : ' emp-wf-radial-node--step';
         const compactCls = COMPACT_IDS.has(n.id) ? ' emp-wf-radial-node--compact' : '';
-        el.className = 'emp-wf-radial-node' + kindCls + compactCls + phaseClass(n.phase);
+        el.className = 'emp-wf-radial-node' + kindCls + compactCls;
         el.style.left = p.x - minX + pad + 'px';
         el.style.top = p.y - minY + pad + TOP_RESERVE + 'px';
         el.style.width = p.w + 'px';
@@ -577,19 +678,41 @@ const EmpWfRadialGraph = (() => {
         el.style.minHeight = p.h + 'px';
         if (n.phase && PHASE_COLORS[n.phase]) {
           el.style.setProperty('--phase-color', PHASE_COLORS[n.phase]);
+          el.className += ' emp-wf-radial-node--' + n.phase;
         }
         if (n.label.indexOf('\n') >= 0) el.style.whiteSpace = 'pre-line';
         el.textContent = n.label;
         el.title = [n.desc, n.label, '点击查看主责/协作员工'].filter(Boolean).join('\n');
+        /* 对接契约 P0：所有节点必带 data-emp-wf-node；下游 EmpWfNodeStaff / 集成方
+           都靠它定位（之前版本漏挂导致 click 弹层全失效，已修复） */
         el.dataset.empWfNode = n.id;
+        if (n.phase) el.dataset.empWfPhase = n.phase;
+        el.setAttribute('data-emp-wf-bound', '1');
+        el.style.cursor = 'pointer';
+        el.addEventListener('click', (ev) => {
+          const panHost =
+            document.getElementById('emp-wf-radial-root') || document.getElementById('event-arch-root');
+          if (panHost && panHost.dataset.panMoved === '1') return;
+          dispatchNodeClick(el, ev);
+        });
         const tabId = TAB_LINK_NODES[n.id];
         if (tabId) {
-          el.style.cursor = 'pointer';
           el.title += '\n双击打开对应 Tab';
           el.addEventListener('dblclick', (ev) => {
             ev.stopPropagation();
             if (typeof window.go === 'function') window.go(tabId);
           });
+        }
+        /* i18n 解析：labelResolver 注入时用解析结果覆盖 textContent + title 中的 label */
+        if (labelResolver) {
+          try {
+            const resolved = labelResolver(n);
+            if (resolved && typeof resolved.then === 'function') {
+              resolved.then((txt) => { if (txt) el.textContent = txt; }).catch(() => { });
+            } else if (resolved) {
+              el.textContent = String(resolved);
+            }
+          } catch (_err) { /* 解析器失败时回退到原 label */ }
         }
         layer.appendChild(el);
       }
@@ -602,8 +725,17 @@ const EmpWfRadialGraph = (() => {
         hub.style.height = CENTER_H + 'px';
         hub.style.minHeight = CENTER_H + 'px';
         hub.textContent = centerDef.label;
-        hub.title = centerDef.label + '\n点击查看主责/协作员工';
+        hub.title = centerDef.desc
+          ? [centerDef.desc, centerDef.label, '点击查看主责/协作员工'].filter(Boolean).join('\n')
+          : centerDef.label + '\n点击查看主责/协作员工';
         hub.dataset.empWfNode = CENTER_ID;
+        hub.setAttribute('data-emp-wf-bound', '1');
+        hub.style.cursor = 'pointer';
+        hub.addEventListener('click', (ev) => {
+          const panHost = document.getElementById('emp-wf-radial-root');
+          if (panHost && panHost.dataset.panMoved === '1') return;
+          dispatchNodeClick(hub, ev);
+        });
         layer.appendChild(hub);
       }
       stage.appendChild(layer);
@@ -612,6 +744,7 @@ const EmpWfRadialGraph = (() => {
       viewport.appendChild(stage);
       root.appendChild(viewport);
       bindPanZoom(root, viewport, stage);
+      attachResizeObserver(root);
       root.classList.remove('is-error', 'is-loading');
       if (window.EmpWfNodeStaff && typeof window.EmpWfNodeStaff.bindRadial === 'function') {
         window.EmpWfNodeStaff.bindRadial(layer);
@@ -628,46 +761,89 @@ const EmpWfRadialGraph = (() => {
     }
   }
 
+  /**
+   * 容器尺寸变化（iframe 嵌入 / 父级 flex 重排 / 浏览器缩放）时，
+   * 自动调 pan/zoom 的 reset() 把图重新居中缩放，避免节点溢出。
+   * ResizeObserver 在多次 render 时会复用同一个 observer 实例。
+   */
+  function attachResizeObserver(root) {
+    if (typeof ResizeObserver === 'undefined') return; // 老浏览器降级
+    if (resizeObserver) {
+      try { resizeObserver.disconnect(); } catch (_e) { /* ignore */ }
+    }
+    resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const target = entry.target;
+        if (!target || !target.isConnected) continue;
+        const pz = target.__empWfPanZoom;
+        if (pz && typeof pz.reset === 'function') {
+          requestAnimationFrame(() => pz.reset());
+        }
+      }
+    });
+    resizeObserver.observe(root);
+  }
+
   let switchingView = false;
+
+  /**
+   * 派发视图切换事件：集成方只需监听 `emp-wf:view-change`（推荐）
+   * 或旧名 `emp-wf-view-change`，detail 包含 prev/curr + 触发源。
+   * 旧名 `view-change` 同步派发，保留双轨兼容。
+   */
+  function dispatchViewChange(prev, curr, source) {
+    const host =
+      document.getElementById('emp-wf-radial-root') ||
+      document.getElementById('emp-wf-arch-diagram') ||
+      document.body;
+    if (!host) return;
+    const detail = { prev: prev || '', curr: curr || '', source: source || 'unknown', at: Date.now() };
+    const ev = new CustomEvent('emp-wf:view-change', { detail, bubbles: true, cancelable: false });
+    const legacy = new CustomEvent('emp-wf-view-change', { detail, bubbles: true, cancelable: false });
+    host.dispatchEvent(ev);
+    host.dispatchEvent(legacy);
+  }
 
   function setView(mode) {
     if (switchingView) return;
     switchingView = true;
     try {
-    const wasRadial = currentView === 'radial';
-    currentView = mode;
-    const wrap = document.getElementById('emp-wf-arch-diagram');
-    const radialRoot = document.getElementById('emp-wf-radial-root');
-    const mermaidBlocks = wrap ? wrap.querySelectorAll('.mermaid.emp-wf-mermaid, .emp-wf-mermaid-part-label') : [];
-    const toolbar = document.querySelector('.emp-wf-diagram-toolbar');
-    if (toolbar) {
-      toolbar.querySelectorAll('[data-emp-wf-view]').forEach((btn) => {
-        btn.classList.toggle('active', btn.getAttribute('data-emp-wf-view') === mode);
-      });
-    }
-    if (!wrap || !radialRoot) return;
-    if (mode === 'radial') {
-      wrap.classList.add('emp-wf-diagram-wrap--radial');
-      mermaidBlocks.forEach((el) => {
-        el.hidden = true;
-      });
-      radialRoot.hidden = false;
-      renderRadial(radialRoot).catch(() => {});
-    } else {
-      wrap.classList.remove('emp-wf-diagram-wrap--radial');
-      mermaidBlocks.forEach((el) => {
-        el.hidden = false;
-      });
-      radialRoot.hidden = true;
-      if (wasRadial && typeof window.__empWfShowMermaid === 'function') {
-        window.__empWfShowMermaid();
-      } else if (
-        typeof EmployeeWorkflow !== 'undefined' &&
-        typeof EmployeeWorkflow.renderArchitectureDiagram === 'function'
-      ) {
-        EmployeeWorkflow.renderArchitectureDiagram();
+      const wasRadial = currentView === 'radial';
+      const prevView = currentView;
+      currentView = mode;
+      const wrap = document.getElementById('emp-wf-arch-diagram');
+      const radialRoot = document.getElementById('emp-wf-radial-root');
+      const mermaidBlocks = wrap ? wrap.querySelectorAll('.mermaid.emp-wf-mermaid, .emp-wf-mermaid-part-label') : [];
+      const toolbar = document.querySelector('.emp-wf-diagram-toolbar');
+      if (toolbar) {
+        toolbar.querySelectorAll('[data-emp-wf-view]').forEach((btn) => {
+          btn.classList.toggle('active', btn.getAttribute('data-emp-wf-view') === mode);
+        });
       }
-    }
+      if (!wrap || !radialRoot) return;
+      if (mode === 'radial') {
+        wrap.classList.add('emp-wf-diagram-wrap--radial');
+        mermaidBlocks.forEach((el) => {
+          el.hidden = true;
+        });
+        radialRoot.hidden = false;
+        renderRadial(radialRoot).catch(() => { });
+      } else {
+        wrap.classList.remove('emp-wf-diagram-wrap--radial');
+        mermaidBlocks.forEach((el) => {
+          el.hidden = false;
+        });
+        radialRoot.hidden = true;
+        if (wasRadial && typeof window.__empWfShowMermaid === 'function') {
+          window.__empWfShowMermaid();
+        } else if (
+          typeof EmployeeWorkflow !== 'undefined' &&
+          typeof EmployeeWorkflow.renderArchitectureDiagram === 'function'
+        ) {
+          EmployeeWorkflow.renderArchitectureDiagram();
+        }
+      }
+      if (prevView !== mode) dispatchViewChange(prevView, mode, 'setView');
     } finally {
       switchingView = false;
     }
@@ -678,6 +854,7 @@ const EmpWfRadialGraph = (() => {
     const wrap = document.getElementById('emp-wf-arch-diagram');
     const radialRoot = document.getElementById('emp-wf-radial-root');
     if (!wrap || !radialRoot) return;
+    const prev = currentView;
     currentView = 'mermaid';
     wrap.classList.remove('emp-wf-diagram-wrap--radial');
     wrap.querySelectorAll('.mermaid.emp-wf-mermaid, .emp-wf-mermaid-part-label').forEach((el) => {
@@ -690,6 +867,7 @@ const EmpWfRadialGraph = (() => {
         btn.classList.toggle('active', btn.getAttribute('data-emp-wf-view') === 'mermaid');
       });
     }
+    if (prev !== 'mermaid') dispatchViewChange(prev, 'mermaid', 'ensureMermaidView');
   }
 
   /** 嵌入运维台：单条日更时间轴（dagre TB 全链路，非三段 Mermaid） */
@@ -697,6 +875,7 @@ const EmpWfRadialGraph = (() => {
     const wrap = document.getElementById('emp-wf-arch-diagram');
     const radialRoot = document.getElementById('emp-wf-radial-root');
     if (!wrap || !radialRoot) return;
+    const prev = currentView;
     currentView = 'radial';
     wrap.classList.add('emp-wf-diagram-wrap--radial');
     wrap.querySelectorAll('.mermaid.emp-wf-mermaid, .emp-wf-mermaid-part-label').forEach((el) => {
@@ -709,6 +888,7 @@ const EmpWfRadialGraph = (() => {
         btn.classList.toggle('active', btn.getAttribute('data-emp-wf-view') === 'radial');
       });
     }
+    if (prev !== 'radial') dispatchViewChange(prev, 'radial', 'ensureRadialView');
   }
 
   function scrollDiagramToTop() {
@@ -735,10 +915,16 @@ const EmpWfRadialGraph = (() => {
     bindToolbar();
     ensureRadialView();
     const root = document.getElementById('emp-wf-radial-root');
-    if (root) renderRadial(root).catch(() => {});
+    if (root) renderRadial(root).catch(() => { });
   }
 
   function boot() {
+    try {
+      validateSchema();
+    } catch (err) {
+      console.error('[emp-wf-radial] schema 校验失败：', err);
+      throw err;
+    }
     if (document.getElementById('emp-wf-arch-diagram')) bindToolbar();
   }
 
@@ -756,6 +942,9 @@ const EmpWfRadialGraph = (() => {
     bindToolbar,
     renderRadial,
     scrollDiagramToTop,
+    /* 对接契约：版本号 + 标签解析器（多模型协作用） */
+    SOT_VERSION,
+    setLabelResolver,
   };
 })();
 
