@@ -96,9 +96,17 @@ def _prefix_fhd_paths(content: str, out_name: str) -> str:
         "working-directory: frontend",
         "working-directory: FHD/frontend",
     )
-    # upload-artifact / download-artifact ignore defaults.run.working-directory
+    # upload-artifact / download-artifact / build-push-action ignore defaults.run.working-directory
     content = content.replace("dist/deploy/", "FHD/dist/deploy/")
     content = content.replace("path: dist/deploy\n", "path: FHD/dist/deploy\n")
+    content = content.replace(
+        "          context: .\n          file: ./docker/Dockerfile.fhd-api",
+        "          context: FHD\n          file: FHD/docker/Dockerfile.fhd-api",
+    )
+    content = content.replace(
+        "          context: .\n          file: ./Dockerfile",
+        "          context: FHD\n          file: FHD/Dockerfile",
+    )
 
     return content
 
