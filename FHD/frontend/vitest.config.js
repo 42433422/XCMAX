@@ -17,25 +17,25 @@ if (!globalThis.crypto || typeof globalThis.crypto.getRandomValues !== 'function
 export default defineConfig({
   plugins: [vue()],
   resolve: {
-    alias: {
-      '@': path.resolve(__dirname, './src'),
-      '@admin-console-inject/adminHostRoutes': path.resolve(
-        __dirname,
-        './src/router/adminHostRoutes.stub.ts'
-      ),
-      '@/data/workflow-employee-docs.json': path.resolve(
-        __dirname,
-        './public/workflow-employee-docs.json'
-      ),
-      '@/data/workflow-employees.json': path.resolve(
-        __dirname,
-        './public/workflow-employees.json'
-      ),
-      '@mod-views/xcagi-planner-bridge/ChatView.vue': path.resolve(
-        __dirname,
-        './src/test-stubs/ModChatViewStub.vue'
-      ),
-    },
+    alias: [
+      {
+        find: '@/data/workflow-employee-docs.json',
+        replacement: path.resolve(__dirname, './public/workflow-employee-docs.json'),
+      },
+      {
+        find: '@/data/workflow-employees.json',
+        replacement: path.resolve(__dirname, './public/workflow-employees.json'),
+      },
+      {
+        find: '@admin-console-inject/adminHostRoutes',
+        replacement: path.resolve(__dirname, './src/router/adminHostRoutes.stub.ts'),
+      },
+      {
+        find: '@mod-views/xcagi-planner-bridge/ChatView.vue',
+        replacement: path.resolve(__dirname, './src/test-stubs/ModChatViewStub.vue'),
+      },
+      { find: '@', replacement: path.resolve(__dirname, './src') },
+    ],
   },
   test: {
     setupFiles: ['./vitest.setup.ts'],
