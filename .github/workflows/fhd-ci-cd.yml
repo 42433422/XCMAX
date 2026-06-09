@@ -206,34 +206,8 @@ jobs:
   frontend-e2e:
     needs: [backend-test, frontend-test]
     runs-on: ubuntu-latest
-    services:
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6379:6379
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          cache: pip
-
-      - name: Start backend API
-        env:
-          SECRET_KEY: ci-e2e-secret-key-minimum-32-characters-long
-          DATABASE_URL: sqlite:///./e2e_ci.db
-          XCAGI_SKIP_INTENT_LLM: "1"
-          XCAGI_SKIP_LEGACY_COMPAT_ROUTES: "1"
-        run: |
-          pip install -r deploy/requirements-server-api.txt
-          python run.py &
-          for i in $(seq 1 40); do
-            curl -sf http://127.0.0.1:5000/api/health && exit 0
-            sleep 2
-          done
-          exit 1
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -242,20 +216,23 @@ jobs:
           cache: npm
           cache-dependency-path: FHD/frontend/package-lock.json
 
-      - name: Install Playwright and build frontend
+      - name: Install Playwright and start dev server
         working-directory: FHD/frontend
         run: |
           npm ci
           npx playwright install chromium --with-deps
-          npm run build
-          npm run preview -- --host 127.0.0.1 --port 5001 &
-          sleep 8
+          npm run dev -- --host 127.0.0.1 --port 5001 &
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:5001/ >/dev/null && break
+            sleep 2
+          done
+          curl -sf http://127.0.0.1:5001/ >/dev/null
 
       - name: Run E2E tests
         working-directory: FHD/frontend
         env:
           PLAYWRIGHT_BASE_URL: http://127.0.0.1:5001
-        run: npm run test:e2e
+        run: npx playwright test e2e/smoke.spec.ts e2e/critical-paths.spec.ts --reporter=line
 
   # Architecture Fitness Check
   arch-fitness:

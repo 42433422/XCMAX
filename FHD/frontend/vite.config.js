@@ -65,6 +65,14 @@ export default defineConfig(({ mode }) => {
           replacement: path.join(constantsDir, `modRouteGlob.${editionSuffix}.ts`),
         },
         {
+          find: '@/data/workflow-employee-docs.json',
+          replacement: path.resolve(__dirname, './public/workflow-employee-docs.json'),
+        },
+        {
+          find: '@/data/workflow-employees.json',
+          replacement: path.resolve(__dirname, './public/workflow-employees.json'),
+        },
+        {
           find: '@admin-console-inject/adminHostRoutes',
           replacement: path.resolve(__dirname, './src/router/adminHostRoutes.stub.ts'),
         },
