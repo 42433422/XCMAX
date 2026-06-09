@@ -16,4 +16,8 @@
 
 重新生成根 workflow：`python scripts/dev/publish_ci_workflows_to_root.py`
 
+## Python 格式化 / lint
+
+FHD CI 仅跑 **Ruff**（`ruff check` + `ruff format --check`）。**black / isort 不在 CI 中执行**（与 Ruff 规则冲突；勿重新加入除非有统一配置）。
+
 Issue / PR 模板仍保留在本目录（`.github/ISSUE_TEMPLATE/`、`CONTRIBUTING.md`）。

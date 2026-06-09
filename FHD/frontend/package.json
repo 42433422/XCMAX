@@ -26,6 +26,7 @@
     "test:smoke:watch": "node --require ./vitest.polyfill.cjs ./node_modules/vitest/vitest.mjs tests/smoke",
     "test:coverage": "node --require ./vitest.polyfill.cjs ./node_modules/vitest/vitest.mjs run --coverage",
     "test:e2e": "playwright test",
+    "test:e2e:p0": "playwright test e2e/smoke.spec.ts e2e/critical-paths.spec.ts e2e/plan2026-skeleton.spec.ts",
     "test:e2e:smoke": "playwright test e2e/smoke.spec.ts",
     "test:smoke:5001": "playwright test e2e/smoke.spec.ts",
     "lint": "eslint src/"
