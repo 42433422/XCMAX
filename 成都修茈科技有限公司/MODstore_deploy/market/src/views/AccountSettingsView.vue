@@ -119,16 +119,17 @@
     </nav>
 
     <section id="api-keys" class="card account-api-keys" tabindex="-1" aria-labelledby="api-keys-heading">
-      <h2 id="api-keys-heading" class="account-api-keys__h2">API 密钥</h2>
-      <p class="account-api-keys__lead">
-        在此创建、吊销 Personal Access Token，或将多条密钥<strong>加密下发到桌面</strong>（免逐条复制）。调用接口时使用
-        <code>Authorization: Bearer pat_…</code>。
-      </p>
+      <div class="account-api-keys__head">
+        <h2 id="api-keys-heading" class="account-api-keys__h2">API 密钥</h2>
+        <p class="account-api-keys__lead">
+          调用接口：<code>Authorization: Bearer pat_…</code>
+        </p>
+      </div>
       <div class="account-api-keys__embed">
-        <DeveloperTokensPanel />
+        <DeveloperTokensPanel embedded />
       </div>
       <p class="account-api-keys__more">
-        <RouterLink :to="{ name: 'developer-portal' }" class="account-api-keys__link">Webhook 订阅与完整开发者门户 →</RouterLink>
+        <RouterLink :to="{ name: 'developer-portal' }" class="account-api-keys__link">Webhook · 桌面加密导出 · 开发者门户 →</RouterLink>
       </p>
     </section>
 
@@ -866,16 +867,24 @@ async function changePw() {
   margin-bottom: 1.5rem;
   scroll-margin-top: 88px;
 }
+.account-api-keys__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px 16px;
+  margin-bottom: 12px;
+}
 .account-api-keys__h2 {
-  margin: 0 0 0.75rem;
+  margin: 0;
   font-size: 1.15rem;
   font-weight: 600;
   color: rgba(255, 255, 255, 0.95);
 }
 .account-api-keys__lead {
-  margin: 0 0 1rem;
-  font-size: 0.9rem;
-  color: rgba(255, 255, 255, 0.65);
+  margin: 0;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.5);
   line-height: 1.55;
   max-width: 52rem;
 }
