@@ -118,6 +118,13 @@ atomic_upload() {
 atomic_upload "$TARBALL" "${REMOTE_DIR}/${ARTIFACT}"
 atomic_upload "$MANIFEST" "${REMOTE_DIR}/fhd-manifest.json"
 
+IMAGE_TAR="$OUT_DIR/fhd-api-image.tar.gz"
+if [[ -f "$IMAGE_TAR" ]]; then
+  deploy_emit push started "artifact=fhd-api-image.tar.gz"
+  atomic_upload "$IMAGE_TAR" "${REMOTE_DIR}/fhd-api-image.tar.gz"
+  echo "[ok] image_tar=fhd-api-image.tar.gz"
+fi
+
 deploy_emit push ok "version=$VERSION git_sha=$GIT_SHA mode=${DEPLOY_MODE:-tarball}"
 echo "[ok] 已发布至 ${HOST}:${REMOTE_DIR}/"
 echo "[ok] artifact=$ARTIFACT sha256=${SHA256:0:16}... deploy_mode=${DEPLOY_MODE:-tarball}"

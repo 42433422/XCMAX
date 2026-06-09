@@ -2,7 +2,9 @@
 # 服务器路径示例: /opt/fhd-full/docker/docker-compose.fhd-prod.yml
 #
 # 必填环境变量（由 fhd-apply-release-compose.sh 或 shell export）:
-#   FHD_API_IMAGE        例 ghcr.io/42433422/XCMAX/xcagi-fhd-api
+#   FHD_API_IMAGE_REF    完整引用，例 ghcr.io/42433422/xcmax/xcagi-fhd-api@sha256:abc...
+#                        （apply 脚本由 FHD_API_IMAGE + FHD_API_IMAGE_DIGEST 组装）
+#   FHD_API_IMAGE        例 ghcr.io/42433422/xcmax/xcagi-fhd-api（manifest image）
 #   FHD_API_IMAGE_DIGEST 例 sha256:abc...（manifest image_digest）
 #
 # 可选:
@@ -29,7 +31,7 @@ services:
       - fhd-net
 
   fhd-api:
-    image: "${FHD_API_IMAGE:?set FHD_API_IMAGE}@${FHD_API_IMAGE_DIGEST:?set FHD_API_IMAGE_DIGEST}"
+    image: "${FHD_API_IMAGE_REF:?set FHD_API_IMAGE_REF (or run fhd-apply-release-compose.sh)}"
     container_name: fhd-api
     restart: unless-stopped
     extra_hosts:
