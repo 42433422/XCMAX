@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>第三方开发者门户 | 成都修茈科技 XCAGI</title>
+    <meta name="description" content="XCAGI 第三方开发者门户：用 SDK 2.0 把行业经验做成 Mod 或 AI 员工，支持 mod+ai 双发布、灰度发布、评价与作者收益结算，上架修茈 AI 市场触达中小企业客户。" />
+    <meta name="keywords" content="XCAGI 开发者, Mod SDK, AI 员工, 双发布, 灰度发布, 作者分成, 行业模板" />
+    <link rel="stylesheet" href="./styles.css?v=20260619" />
+  </head>
+<body>
+<header class="site-header">
+  <div class="container header-inner">
+    <a class="brand-mark" href="/index.html">
+      <span class="brand-seal"><img src="/assets/xiu-ci-logo.png" alt="修茈科技 Logo" /></span>
+      <span class="brand-name"><strong>成都修茈科技有限公司</strong><span>XCAGI Automation</span></span>
+    </a>
+    <nav class="nav" aria-label="站点导航">
+      <div class="nav-menu">
+        <a href="/index.html">首页</a>
+        <a href="/about.html">关于修茈</a>
+        <a href="/services.html">产品中心</a>
+        <a href="/solutions.html">解决方案</a>
+        <a href="/cases.html">客户案例</a>
+        <a class="nav-optional" href="/news.html">新闻资讯</a>
+        <a class="nav-optional" href="/honors.html">资质与能力</a>
+        <a href="/contact.html">联系我们</a>
+        <a class="active" href="/developer.html">开发者门户</a>
+      </div>
+      <div class="nav-actions">
+        <a class="nav-action nav-action--primary" href="/market/">AI 市场</a>
+        <a class="nav-action nav-action--outline" href="/market/download">软件下载</a>
+      </div>
+    </nav>
+    <button class="mobile-menu-toggle" id="mobile-menu-toggle" type="button" aria-controls="mobile-menu" aria-label="打开菜单" aria-expanded="false"><span></span><span></span><span></span></button>
+  </div>
+</header>
+<div class="mobile-menu-overlay" id="mobile-menu-overlay"></div>
+<nav class="mobile-menu" id="mobile-menu" aria-hidden="true" inert>
+  <a href="/index.html" class="mobile-menu-link">首页</a>
+  <a href="/about.html" class="mobile-menu-link">关于修茈</a>
+  <a href="/services.html" class="mobile-menu-link">产品中心</a>
+  <a href="/solutions.html" class="mobile-menu-link">解决方案</a>
+  <a href="/cases.html" class="mobile-menu-link">客户案例</a>
+  <a href="/news.html" class="mobile-menu-link">新闻资讯</a>
+  <a href="/honors.html" class="mobile-menu-link">资质与能力</a>
+  <a href="/contact.html" class="mobile-menu-link">联系我们</a>
+  <a href="/developer.html" class="mobile-menu-link">开发者门户</a>
+  <div class="mobile-menu-actions">
+    <a href="/market/" class="mobile-menu-link mobile-menu-link--primary">AI 市场</a>
+    <a href="/market/download" class="mobile-menu-link mobile-menu-link--outline">软件下载</a>
+  </div>
+</nav>
+
+<main>
+  <section class="page-hero">
+    <div class="container page-hero-inner">
+      <div class="reveal">
+        <span class="eyebrow">开发者门户 · SDK 2.0</span>
+        <h1>把你的行业经验，做成可上架的 Mod 与 AI 员工</h1>
+        <p>用 XCAGI SDK 2.0 开发功能 Mod 或 AI 员工，支持 mod + ai 双发布，上架修茈 AI 市场，触达正在用 XCAGI 的中小企业客户。</p>
+        <div class="hero-actions">
+          <a class="btn btn-primary" href="/market/">进入 AI 市场</a>
+          <a class="btn btn-secondary" href="/contact.html">申请开发者权限</a>
+        </div>
+      </div>
+      <div class="page-hero-side reveal" data-delay="120">
+        <div class="stats" style="grid-template-columns: repeat(2, 1fr)">
+          <div class="stat"><strong>2</strong><span>发布目标 mod / ai</span></div>
+          <div class="stat"><strong>4</strong><span>行业模板可复用</span></div>
+          <div class="stat"><strong>30%</strong><span>默认平台分成</span></div>
+          <div class="stat"><strong>1</strong><span>稳定契约入口</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <div class="section-head reveal">
+        <div><p class="section-kicker">能做什么</p><h2>一套包，两种发布</h2></div>
+        <p>同一个开发包既能作为功能 Mod 安装进客户工作台，也能上架为 AI 员工，由 manifest 的 <code>release_targets</code> 决定。</p>
+      </div>
+      <div class="grid grid-3">
+        <article class="card reveal">
+          <h3>Mod 功能扩展</h3>
+          <p>为客户的产品、订单、出货、客服等业务页提供新能力，挂接宿主事件与业务工作台。</p>
+        </article>
+        <article class="card reveal" data-delay="80">
+          <h3>AI 员工</h3>
+          <p>声明模型、提示词与可调用工具，把行业知识做成会执行任务的 AI 员工。</p>
+        </article>
+        <article class="card reveal" data-delay="160">
+          <h3>mod + ai 双发布</h3>
+          <p><code>release_targets: ["mod","ai"]</code>，一次开发同时面向功能与 AI 两个上架目标。</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="section section-dark">
+    <div class="container">
+      <div class="section-head reveal">
+        <div><p class="section-kicker">SDK 2.0</p><h2>更好的 manifest、hook 与通信</h2></div>
+        <p>稳定契约层只暴露明确的接口，宿主内部重构不影响你的包。</p>
+      </div>
+      <div class="grid grid-3">
+        <article class="card reveal">
+          <h3>声明式 manifest</h3>
+          <p>能力声明、宿主版本兼容区间、双发布目标与 AI 清单，安装前即可校验。</p>
+        </article>
+        <article class="card reveal" data-delay="80">
+          <h3>事件 hook</h3>
+          <p>订阅业务事件，支持优先级排序、一次性订阅与返回值收集，卸载时自动清理。</p>
+        </article>
+        <article class="card reveal" data-delay="160">
+          <h3>事件通信</h3>
+          <p>经 NeuroBus 发布业务事件，与宿主事件总线对齐，跨 Mod 协作有据可循。</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <div class="section-head reveal">
+        <div><p class="section-kicker">上架与经营</p><h2>从灰度到收益，全链路打通</h2></div>
+      </div>
+      <div class="grid grid-3">
+        <article class="card reveal">
+          <h3>灰度发布</h3>
+          <p>按比例与用户标签放量，观察稳定后逐步全量，异常一键回滚，降低上新风险。</p>
+          <ul class="card-list">
+            <li>比例分桶 + 标签命中</li>
+            <li>全量 / 暂停 / 回滚</li>
+          </ul>
+        </article>
+        <article class="card reveal" data-delay="80">
+          <h3>评价与口碑</h3>
+          <p>用户评分与评论，作者可逐条回复，沉淀真实使用反馈与商品口碑。</p>
+          <ul class="card-list">
+            <li>评分聚合与展示</li>
+            <li>作者回复</li>
+          </ul>
+        </article>
+        <article class="card reveal" data-delay="160">
+          <h3>收益结算</h3>
+          <p>按成交计算分成，平台对账后结算并支持提现，收益明细清晰可查。</p>
+          <ul class="card-list">
+            <li>成交分成（默认平台 30%）</li>
+            <li>对账结算与提现</li>
+          </ul>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="section section-soft">
+    <div class="container">
+      <div class="section-head reveal">
+        <div><p class="section-kicker">行业模板</p><h2>复制即用的四套脚手架</h2></div>
+        <p>从模板起步，改个标识与行业配置就能跑通，不必从零搭骨架。</p>
+      </div>
+      <div class="grid grid-4">
+        <article class="card reveal"><h3>ERP</h3><p>产品 / 客户 / 订单三域 + AI 助手双发布。</p></article>
+        <article class="card reveal" data-delay="60"><h3>出货</h3><p>发货单 / 出货记录 / 标签打印链路。</p></article>
+        <article class="card reveal" data-delay="120"><h3>客服</h3><p>工单 / 会话 / 知识库 + AI 客服员工。</p></article>
+        <article class="card reveal" data-delay="180"><h3>财务</h3><p>对账 / 开票 / 统一账本（仅 Mod 发布）。</p></article>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <div class="section-head reveal">
+        <div><p class="section-kicker">接入步骤</p><h2>四步上架你的第一个包</h2></div>
+      </div>
+      <div class="timeline reveal">
+        <div class="timeline-item"><div class="timeline-year">01</div><div class="timeline-content"><h3>申请开发者权限</h3><p>联系我们开通开发者账号与个人访问令牌（PAT），获取上架资格。</p></div></div>
+        <div class="timeline-item"><div class="timeline-year">02</div><div class="timeline-content"><h3>从模板起步开发</h3><p>复制行业模板，修改 manifest 的标识、能力与行业配置，实现后端 hook 与前端页面。</p></div></div>
+        <div class="timeline-item"><div class="timeline-year">03</div><div class="timeline-content"><h3>灰度上架</h3><p>提交审核，按比例与标签灰度放量，结合稳定性数据逐步全量。</p></div></div>
+        <div class="timeline-item"><div class="timeline-year">04</div><div class="timeline-content"><h3>经营与结算</h3><p>收集评价、迭代版本，按成交分成对账结算并提现。</p></div></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container cta-band reveal">
+      <div><h2>成为修茈生态的开发者</h2><p>把你的行业 Know-how 变成可复用、可上架、可持续获益的 Mod 与 AI 员工。</p></div>
+      <a class="btn btn-primary" href="/contact.html">申请开发者权限</a>
+    </div>
+  </section>
+</main>
+<footer class="site-footer">
+  <div class="container footer-inner">
+    <div>
+      <a class="brand-mark" href="/index.html"><span class="brand-seal"><img src="/assets/xiu-ci-logo.png" alt="修茈科技 Logo" /></span><span class="brand-name"><strong>成都修茈科技有限公司</strong><span>XCAGI Automation</span></span></a>
+      <p class="footer-copy">&copy; <span id="year"></span> 成都修茈科技有限公司 保留所有权利。</p>
+      <p class="footer-meta">邮箱：970882904@qq.com · 面向中小企业的 AI 自动化方案</p>
+      <p class="footer-meta footer-legal"><a href="https://beian.miit.gov.cn/" rel="noopener noreferrer" target="_blank">蜀ICP备2026014056号-1</a></p>
+    </div>
+    <div class="footer-links"><a href="/about.html">关于修茈</a><a href="/services.html">产品中心</a><a href="/solutions.html">解决方案</a><a href="/cases.html">客户案例</a><a href="/news.html">新闻资讯</a><a href="/developer.html">开发者门户</a><a href="/contact.html">联系我们</a></div>
+  </div>
+</footer>
+<button id="back-to-top" class="back-to-top" aria-label="回到顶部"></button>
+<script src="./main.js?v=20260619"></script>
+
+<div id="xc-corp-butler-root"></div>
+<link rel="stylesheet" href="/corp-butler/corp-butler.css?v=20260619" data-xc-corp-butler-css="1" />
+<script type="module" src="/corp-butler/corp-butler.js?v=20260619" data-xc-corp-butler-js="1"></script>
+
+</body>
+</html>
