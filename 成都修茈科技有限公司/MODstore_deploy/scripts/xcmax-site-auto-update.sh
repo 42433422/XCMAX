@@ -135,8 +135,8 @@ sync_corp_butler_assets() {
   if [[ -f "${MODSTORE_ROOT}/market/public/download-release.json" ]]; then
     cp -af "${MODSTORE_ROOT}/market/public/download-release.json" "${corp_dir}/download-release.json"
   fi
-  if [[ -f "${corp_dir}/corp-butler.js" ]]; then
-    log "corp-butler 产物已存在"
+  if [[ -f "${corp_dir}/corp-butler.js" && -f "${corp_dir}/corp-butler.css" ]]; then
+    log "corp-butler 产物已存在（js+css）"
     return 0
   fi
   export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
