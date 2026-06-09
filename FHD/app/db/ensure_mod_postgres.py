@@ -35,6 +35,15 @@ def _mod_isolated_enabled() -> bool:
     )
 
 
+def _skip_mod_db_create() -> bool:
+    return (os.environ.get("FHD_SKIP_MOD_DB_CREATE") or "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+
+
 def ensure_postgres_per_mod_databases(
     *,
     mod_ids: list[str] | None = None,
@@ -47,6 +56,12 @@ def ensure_postgres_per_mod_databases(
         本次新建的库名列表。
     """
     if not _mod_isolated_enabled():
+        return []
+
+    if _skip_mod_db_create():
+        logger.info(
+            "ensure_postgres_per_mod_databases: skipped (FHD_SKIP_MOD_DB_CREATE=1)"
+        )
         return []
 
     base_url = (os.environ.get("DATABASE_URL") or "").strip()
@@ -98,6 +113,17 @@ def ensure_postgres_per_mod_databases(
             exc,
         )
         return []
+    except Exception as exc:
+        from sqlalchemy.exc import SQLAlchemyError
+
+        if isinstance(exc, SQLAlchemyError):
+            logger.warning(
+                "ensure_postgres_per_mod_databases: skip (PostgreSQL error, "
+                "e.g. insufficient CREATEDB privilege): %s",
+                exc,
+            )
+            return []
+        raise
     finally:
         admin_engine.dispose()
 
