@@ -61,7 +61,8 @@ NEW_CRON="$(
     | grep -v 'fhd-auto-update.lock' \
     || true
 )"
-CRON_LINE="${SCHEDULE} flock -xn ${LOCK} -c '${AUTO_SCRIPT}' >> ${LOG} 2>&1"
+# 锁由 fhd-auto-update.sh 内部 flock 负责；cron 外层勿再 flock 同一 lock 文件（会永远「另一实例运行中」）。
+CRON_LINE="${SCHEDULE} ${AUTO_SCRIPT} >> ${LOG} 2>&1"
 
 {
   if [[ -n "$NEW_CRON" ]]; then
