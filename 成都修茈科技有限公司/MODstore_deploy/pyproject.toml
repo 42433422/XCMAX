@@ -28,7 +28,7 @@ web = [
     # 仅在配置了 BUTLER_QQ_* env 后真正启用；未安装则 butler_qq_bridge 路由跳过注册。
     "pynacl>=1.5",
     "qq-botpy>=1.2.1",
-    "xcagi-common @ file:../../../packages/xcagi_common",
+    "xcagi-common @ file:../../packages/xcagi_common",
 ]
 knowledge = [
     "chromadb>=0.5",
