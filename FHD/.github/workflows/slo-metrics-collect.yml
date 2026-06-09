@@ -22,9 +22,6 @@ jobs:
   collect:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    defaults:
-      run:
-        working-directory: .
     steps:
       - uses: actions/checkout@v4
 
@@ -39,7 +36,6 @@ jobs:
           WINDOW="${{ github.event.inputs.window || '30d' }}"
           python3 scripts/observability/collect_slo_metrics.py --window "$WINDOW" || {
             echo "Prometheus unreachable; writing seed slo-measured from sla-snapshot"
-            DAY="$(date -u +%Y%m%d)"
             python3 - <<'PY'
           import json
           from datetime import datetime, timezone
