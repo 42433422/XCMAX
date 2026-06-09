@@ -40,11 +40,6 @@ collect_ignore: list[str] = [
 ]
 
 _LEGACY_SKIP_FRAGMENTS: tuple[str, ...] = (
-    # 领域/应用层 API 与用例漂移，完整回归见 COVERAGE_RAMP.md P1
-    "test_domain/test_shipment_aggregates",
-    "test_application/test_shipment_app_service",
-    "test_services/test_shipment_service",
-    "test_infrastructure/test_shipment_document_generator",
     # essential compat 未挂载完整 auth/product 栈时路由烟测 500
     "test_coverage_ramp_routes",
     "test_routes/test_health_capabilities",
@@ -68,6 +63,10 @@ _CI_STABLE_NODEID_FRAGMENTS = (
     "test_routes/test_route_registry",
     "test_routes/test_registry_unit",
     "test_routes/test_route_golden",
+    "test_domain/test_shipment_aggregates",
+    "test_application/test_shipment_app_service",
+    "test_services/test_shipment_service",
+    "test_infrastructure/test_shipment_document_generator",
     # benchmarks/ 需 DB/完整意图栈，见 intent-benchmark.yml，勿纳入 CI_STABLE_ONLY
 )
 
