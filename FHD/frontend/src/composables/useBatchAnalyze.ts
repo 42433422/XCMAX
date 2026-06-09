@@ -254,7 +254,10 @@ function groupSheetsBySimilarity(sheets: SheetInfo[]): SheetGroup[] {
 
 async function loadTemplates(): Promise<Array<{ id: string; name: string; templateType: string; businessScope: string }>> {
   try {
-    const res = await templatePreviewApi.listTemplates()
+    const res = await templatePreviewApi.listTemplates() as {
+      success?: boolean
+      templates?: Array<{ id: string; name?: string; template_name?: string; template_type?: string; business_scope?: string; category?: string }>
+    }
     if (res?.success && Array.isArray(res.templates)) {
       return res.templates
         .filter((t: any) => t?.category === 'excel')

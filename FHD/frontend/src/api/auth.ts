@@ -99,8 +99,13 @@ export const authApi = {
     pollSecret: string,
   ): Promise<ApiResponse<{ status?: string; session_id?: string }>> {
     return api.get('/api/auth/qr/status', {
-      params: { qr_id: qrId, poll_secret: pollSecret },
+      qr_id: qrId,
+      poll_secret: pollSecret,
     });
+  },
+
+  async getSubscriptionStatus(): Promise<ApiResponse<Record<string, unknown>>> {
+    return api.get<ApiResponse<Record<string, unknown>>>('/api/auth/subscription/status');
   },
 
   async updateCompanyBrand(companyBrand: string) {

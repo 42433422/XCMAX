@@ -198,7 +198,9 @@ async function startQrLogin() {
   qrDataUrl.value = '';
   try {
     const res = await authApi.issueAuthQr(navigator.userAgent.slice(0, 120));
-    const data = (res as { data?: Record<string, unknown> }).data || res;
+    const data =
+      (res as { data?: Record<string, unknown> }).data ??
+      (res as unknown as Record<string, unknown>);
     qrId.value = String(data.qr_id || '');
     qrPollSecret.value = String(data.poll_secret || '');
     qrExpiresAt.value = Number(data.expires_at || 0);

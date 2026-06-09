@@ -1075,8 +1075,8 @@ const desktopDatabaseVisible = ref(false);
 
 async function loadDesktopDatabaseStatus() {
   try {
-    const res = await api.get('/api/desktop/status');
-    const data = res?.data ?? res;
+    const res = await api.get<{ data?: Record<string, unknown>; desktopMode?: boolean; storageMode?: string }>('/api/desktop/status');
+    const data = (res?.data ?? res) as Record<string, unknown>;
     if (!data || data.desktopMode === false) {
       desktopDatabaseVisible.value = false;
       databaseStorageLabel.value = '';
@@ -1270,7 +1270,7 @@ async function loadIntentPackages() {
 
 async function loadPreferences() {
   try {
-    const data = await api.get('/api/preferences', { user_id: 'default' });
+    const data = await api.get<{ success?: boolean; preferences?: Record<string, unknown> }>('/api/preferences', { user_id: 'default' });
     if (!data?.success || !data?.preferences) return;
     const prefs = data.preferences;
 
@@ -1288,7 +1288,7 @@ async function loadPreferences() {
       aiMode.value = preferredMode;
       return;
     }
-    const legacyModel = (prefs.aiModel || '').toLowerCase();
+    const legacyModel = String(prefs.aiModel || '').toLowerCase();
     aiMode.value = legacyModel === 'local' ? 'offline' : 'online';
     if (legacyModel) {
       // 兼容历史键：读取后自动迁移为新键，避免后续逻辑分叉。
