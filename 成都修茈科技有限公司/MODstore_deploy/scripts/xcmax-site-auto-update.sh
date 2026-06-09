@@ -84,6 +84,46 @@ sync_market_public_assets() {
   fi
 }
 
+# 误将 market/dist 作整站 root 时，把官网 *.html 同步进 dist（跳过 index.html，保留 Vue 入口）
+sync_corp_pages_to_dist_fallback() {
+  local corp="${SITE_ROOT}"
+  local dist="${MODSTORE_ROOT}/market/dist"
+  if [[ ! -d "$corp" || ! -d "$dist" ]]; then
+    return 0
+  fi
+  local n=0
+  for f in "$corp"/*.html; do
+    [[ -f "$f" ]] || continue
+    local base
+    base="$(basename "$f")"
+    if [[ "$base" == "index.html" ]]; then
+      continue
+    fi
+    cp -af "$f" "${dist}/"
+    n=$((n + 1))
+  done
+  for f in styles.css main.js contact-intake.js; do
+    if [[ -f "${corp}/${f}" ]]; then
+      cp -af "${corp}/${f}" "${dist}/"
+      n=$((n + 1))
+    fi
+  done
+  for f in sunbird-logo.png partner-emblem-logo.png xiu-ci-logo.png; do
+    if [[ -f "${corp}/assets/${f}" ]]; then
+      cp -af "${corp}/assets/${f}" "${dist}/assets/"
+      n=$((n + 1))
+    fi
+  done
+  if [[ -d "${corp}/assets" ]]; then
+    mkdir -p "${dist}/assets"
+    cp -af "${corp}/assets/." "${dist}/assets/"
+    n=$((n + 1))
+  fi
+  if [[ "$n" -gt 0 ]]; then
+    log "官网静态已镜像到 market/dist（${n} 项，developer.html 等；勿长期依赖此路径）"
+  fi
+}
+
 # 官网 widget：nginx alias /corp-butler/ → 成都修茈科技有限公司/corp-butler/
 sync_corp_butler_assets() {
   local corp_dir="${XCMAX_ROOT}/${SITE_SUBDIR}/corp-butler"
@@ -255,6 +295,7 @@ fi
 
 if [[ "$REPO_CHANGED" != true ]]; then
   sync_market_public_assets
+  sync_corp_pages_to_dist_fallback
   sync_corp_butler_assets
   log "XCMAX 无新提交，已检查 public→dist / corp-butler 静态资源"
   exit 0
@@ -296,9 +337,33 @@ if [[ -z "$OLD_XCMAX_SHA" ]]; then
 fi
 
 sync_market_public_assets
+sync_corp_pages_to_dist_fallback
 sync_corp_butler_assets
 
 restart_app_services
+
+sync_nginx_corp_root() {
+  local conf_src="${SITE_ROOT}/nginx-xiu-ci-root.conf"
+  if [[ ! -f "$conf_src" ]]; then
+    return 0
+  fi
+  if ! command -v nginx >/dev/null 2>&1; then
+    log "WARN: 未找到 nginx，跳过 corp root 配置"
+    return 0
+  fi
+  install -m 644 "$conf_src" /etc/nginx/conf.d/xiu-ci-corp-root.conf
+  if nginx -t >>"$LOG" 2>&1; then
+    systemctl reload nginx >>"$LOG" 2>&1 || true
+    log "nginx xiu-ci-corp-root.conf 已安装并重载"
+  else
+    log "WARN: nginx -t 失败，未 reload"
+  fi
+}
+
+if paths_changed_since "$XCMAX_ROOT" "$OLD_XCMAX_SHA" "$NEW_XCMAX_SHA" \
+  '^'"${SITE_SUBDIR}"'/nginx-xiu-ci.*\.conf$'; then
+  sync_nginx_corp_root
+fi
 
 echo "$NEW_XCMAX_SHA" >"${STATE_DIR}/xcmax.sha"
 # 兼容旧监控

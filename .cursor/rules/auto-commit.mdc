@@ -1,0 +1,38 @@
+---
+description: XCMAX 任务完成后自动 git commit（不自动 push）
+alwaysApply: true
+---
+
+# 自动提交（覆盖「仅用户明确要求才 commit」）
+
+在本仓库 **完成可交付代码/配置改动后，默认自动 `git commit`**，无需用户再说「提交」。
+
+## 何时提交
+
+- 用户要求实现、修复、同步文档/仪表盘等，且 **已改文件** → 任务收尾时 commit
+- 纯问答、代码审查、只读排查 → **不** commit
+
+## 何时不提交
+
+- 无实质改动（`git status` 干净或仅 untracked 日志/pid）
+- 疑似密钥：`.env*`、`secret.yaml`、`keys_staging/`、`payment_orders/order_*.json`、`.der` 等 — 警告用户，**不得**入库
+- 用户明确说「不要提交」「先别 commit」「只改别看」
+
+## 安全协议（与全局 Git 规则一致）
+
+- **禁止** `git push`（除非用户明确要求）
+- **禁止** `push --force`、`reset --hard`、改 `git config`
+- **禁止** `--no-verify` / `--no-gpg-sign`（除非用户明确要求）
+- amend 仅当：用户要求 amend，或 hook 改文件且 HEAD 为本会话提交且未 push
+- commit 失败被 hook 拒绝 → 修问题后 **新 commit**，不要 amend 失败提交
+
+## 执行步骤
+
+1. `git status`、`git diff`、必要时 `git log -3`
+2. `git add` 仅相关文件（排除 secrets / `.xcmax-logs/` / `.xcmax-pids/`）
+3. HEREDOC 写 1–2 句 commit message（why；v10 线内迭代可注明）
+4. `git commit` 后 `git status` 确认
+
+## 说明给用户
+
+commit 后在摘要里写 **commit hash + 改了什么**；未 push 时提醒 `git push` 需用户确认。

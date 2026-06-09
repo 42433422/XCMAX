@@ -14,7 +14,7 @@ const TEMPLATE_DIR = path.join(SITE_DIR, 'templates')
 const DATA_DIR = path.join(SITE_DIR, 'data')
 
 /** 全站静态资源缓存版本（styles / main / corp-butler） */
-const ASSET_VER = '20260619'
+const ASSET_VER = '20260610d'
 
 /** @type {{ file: string, activeNav: string }[]} */
 const WRAP_PAGES = [

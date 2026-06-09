@@ -371,16 +371,22 @@ body.nav-open .site-header { z-index: 90; }
   object-fit: contain;
   box-shadow: none;
   filter: none;
+  background: transparent;
+  display: block;
+  /* 生产 PNG 若仍带白底，乘色与浅蓝渐变融合（透明 PNG 同样安全） */
+  mix-blend-mode: multiply;
 }
 .logo-river__item--sunbird img {
   height: clamp(62px, 8vw, 88px);
   max-width: clamp(170px, 24vw, 320px);
   filter: none;
+  mix-blend-mode: multiply;
 }
 .logo-river__item--emblem img {
   height: clamp(56px, 7vw, 82px);
   max-width: clamp(110px, 15vw, 200px);
   filter: none;
+  mix-blend-mode: multiply;
 }
 @keyframes logoRiverRight {
   from { transform: translate3d(-50%, 0, 0); }
@@ -1151,4 +1157,140 @@ body.page-contact .intake-wizard-actions {
 .corp-intake-modal__form .intake-company-status {
   margin: 4px 0 0;
   min-height: 0;
+}
+
+/* 开发者门户 · 开放 API */
+.dev-api-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px 20px;
+  margin-bottom: 22px;
+  padding: 16px 18px;
+  border-radius: var(--radius-md);
+  background: #fff;
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
+}
+.dev-api-base {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-soft);
+  line-height: 1.5;
+}
+.dev-api-base code,
+.dev-api-footnote code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.88em;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: rgba(11, 99, 246, 0.08);
+  color: #0b4db8;
+}
+.dev-api-doc-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.btn-sm {
+  padding: 8px 14px;
+  font-size: 13px;
+  min-height: auto;
+}
+.dev-api-grid { align-items: stretch; }
+.dev-api-card h3 { margin: 0 0 8px; }
+.dev-api-card-desc {
+  margin: 0 0 14px;
+  font-size: 14px;
+  color: var(--text-soft);
+}
+.dev-api-table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+}
+.dev-api-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.dev-api-table th,
+.dev-api-table td {
+  padding: 10px 12px;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--line);
+}
+.dev-api-table th {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  background: rgba(11, 99, 246, 0.04);
+}
+.dev-api-table tr:last-child td { border-bottom: none; }
+.dev-api-table code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  color: #0b4db8;
+  word-break: break-all;
+}
+.dev-api-method {
+  display: inline-block;
+  min-width: 42px;
+  padding: 2px 7px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-align: center;
+}
+.dev-api-method--get { background: rgba(16, 185, 129, 0.14); color: #047857; }
+.dev-api-method--post { background: rgba(11, 99, 246, 0.14); color: #0b4db8; }
+.dev-api-method--del { background: rgba(239, 51, 64, 0.12); color: #b91c1c; }
+.dev-api-footnote {
+  margin: 14px 0 0;
+  font-size: 13px;
+  color: var(--text-faint);
+}
+.dev-api-footnote--center { text-align: center; }
+.dev-api-examples { margin-top: 28px; }
+.dev-api-examples-title {
+  margin: 0 0 14px;
+  font-size: 18px;
+}
+.dev-api-example-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.dev-api-example { margin: 0; }
+.dev-api-example figcaption {
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-soft);
+}
+.dev-api-pre {
+  margin: 0;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: var(--bg-deep);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  overflow-x: auto;
+}
+.dev-api-pre code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  color: #e8f4ff;
+  white-space: pre;
+}
+@media (max-width: 900px) {
+  .dev-api-example-grid { grid-template-columns: 1fr; }
+  .dev-api-meta { flex-direction: column; align-items: flex-start; }
 }

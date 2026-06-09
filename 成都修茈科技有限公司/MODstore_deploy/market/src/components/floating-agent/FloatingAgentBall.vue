@@ -174,17 +174,17 @@ onBeforeUnmount(() => {
   max-width: calc(100vw - 32px);
   padding: 8px 14px 8px 9px;
   margin: 0;
-  border: 1px solid rgba(96, 165, 250, 0.32);
+  border: 1px solid color-mix(in srgb, var(--wb-accent-primary, #818cf8) 34%, transparent);
   border-radius: 999px;
   background: linear-gradient(
     180deg,
-    rgba(30, 41, 59, 0.94) 0%,
-    rgba(15, 23, 42, 0.98) 100%
+    color-mix(in srgb, var(--wb-surface-elevated, #12121a) 94%, transparent) 0%,
+    color-mix(in srgb, var(--wb-dialog-bg, #0c0c12) 98%, transparent) 100%
   );
-  color: var(--wb-text-primary, #e2e8f0);
+  color: var(--wb-text-primary, #f0f0f5);
   box-shadow:
     0 14px 36px rgba(0, 0, 0, 0.45),
-    0 4px 14px rgba(56, 189, 248, 0.12),
+    var(--wb-glow-accent, 0 4px 14px rgba(99, 102, 241, 0.12)),
     inset 0 1px 0 rgba(255, 255, 255, 0.06);
   cursor: grab;
   touch-action: none;
@@ -202,29 +202,29 @@ onBeforeUnmount(() => {
 }
 
 .butler-ball:hover {
-  border-color: rgba(125, 211, 252, 0.55);
+  border-color: color-mix(in srgb, var(--wb-accent-primary, #818cf8) 52%, transparent);
   background: linear-gradient(
     180deg,
-    rgba(38, 52, 72, 0.96) 0%,
-    rgba(20, 30, 48, 0.99) 100%
+    color-mix(in srgb, var(--wb-card-hover-bg, rgba(240, 240, 245, 0.06)) 96%, #12121a) 0%,
+    color-mix(in srgb, var(--wb-dialog-bg, #0c0c12) 99%, transparent) 100%
   );
   box-shadow:
     0 18px 40px rgba(0, 0, 0, 0.5),
-    0 6px 18px rgba(56, 189, 248, 0.18),
+    var(--wb-glow-accent-strong, 0 6px 18px rgba(99, 102, 241, 0.18)),
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 .butler-ball:focus-visible {
-  outline: 3px solid rgba(56, 189, 248, 0.38);
+  outline: 3px solid color-mix(in srgb, var(--wb-accent-primary, #818cf8) 42%, transparent);
   outline-offset: 2px;
 }
 
 .butler-ball--open {
   z-index: 11020;
-  border-color: rgba(125, 211, 252, 0.62);
+  border-color: color-mix(in srgb, var(--wb-accent-primary, #818cf8) 58%, transparent);
   box-shadow:
     0 18px 40px rgba(0, 0, 0, 0.52),
-    0 0 24px rgba(56, 189, 248, 0.2),
+    var(--wb-glow-accent-strong, 0 0 24px rgba(99, 102, 241, 0.2)),
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
@@ -240,7 +240,7 @@ onBeforeUnmount(() => {
   place-items: center;
   overflow: hidden;
   background: rgba(255, 255, 255, 0.94);
-  border: 1px solid rgba(125, 211, 252, 0.35);
+  border: 1px solid color-mix(in srgb, var(--wb-accent-primary, #818cf8) 36%, transparent);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.28);
   flex: 0 0 auto;
 }
@@ -258,7 +258,7 @@ onBeforeUnmount(() => {
   font-weight: 800;
   letter-spacing: 0.01em;
   white-space: nowrap;
-  color: #e0f2fe;
+  color: var(--wb-text-primary, #f0f0f5);
   flex: 0 1 auto;
 }
 
@@ -292,49 +292,55 @@ onBeforeUnmount(() => {
   left: 50%;
   transform: translateX(-50%);
   font-size: 0.65rem;
-  color: #bae6fd;
+  color: var(--wb-text-secondary, rgba(240, 240, 245, 0.82));
   white-space: nowrap;
   pointer-events: none;
-  background: rgba(15, 23, 42, 0.92);
-  border: 1px solid rgba(96, 165, 250, 0.35);
+  background: color-mix(in srgb, var(--wb-dialog-bg, #0c0c12) 92%, transparent);
+  border: 1px solid color-mix(in srgb, var(--wb-accent-primary, #818cf8) 32%, transparent);
   padding: 3px 8px;
   border-radius: 6px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
 }
 
 .butler-ball.butler-ball--light {
-  border-color: rgba(74, 144, 217, 0.36);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(239, 246, 255, 0.94));
-  color: #172033;
-  box-shadow:
-    0 14px 30px rgba(15, 76, 129, 0.18),
-    0 4px 12px rgba(37, 99, 235, 0.12),
-    inset 0 1px 0 rgba(255, 255, 255, 0.92);
+  border-color: color-mix(in srgb, var(--wb-accent-primary, #0071e3) 34%, transparent);
+  background: linear-gradient(
+    180deg,
+    var(--wb-surface-elevated, rgba(255, 255, 255, 0.96)),
+    color-mix(in srgb, var(--wb-accent-soft, rgba(0, 113, 227, 0.1)) 80%, #fff)
+  );
+  color: var(--wb-text-primary, #1d1d1f);
+  box-shadow: var(--wb-card-shadow, 0 14px 30px rgba(0, 0, 0, 0.08));
   backdrop-filter: none;
 }
 
 .butler-ball.butler-ball--light:hover {
-  border-color: rgba(37, 99, 235, 0.58);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(219, 234, 254, 0.96));
-  box-shadow:
-    0 18px 36px rgba(15, 76, 129, 0.22),
-    0 6px 16px rgba(37, 99, 235, 0.16),
-    inset 0 1px 0 rgba(255, 255, 255, 0.96);
+  border-color: color-mix(in srgb, var(--wb-accent-primary, #0071e3) 52%, transparent);
+  background: linear-gradient(
+    180deg,
+    #fff,
+    color-mix(in srgb, var(--wb-accent-soft, rgba(0, 113, 227, 0.12)) 70%, #fff)
+  );
+  box-shadow: var(--wb-card-shadow, 0 18px 36px rgba(0, 0, 0, 0.1));
 }
 
 .butler-ball.butler-ball--light.butler-ball--open {
-  border-color: rgba(37, 99, 235, 0.62);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(219, 234, 254, 0.98));
+  border-color: color-mix(in srgb, var(--wb-accent-primary, #0071e3) 58%, transparent);
+  background: linear-gradient(
+    180deg,
+    #fff,
+    color-mix(in srgb, var(--wb-accent-soft, rgba(0, 113, 227, 0.14)) 75%, #fff)
+  );
 }
 
 .butler-ball.butler-ball--light .butler-ball__logo-wrap {
   background: rgba(255, 255, 255, 0.88);
-  border-color: rgba(24, 144, 255, 0.42);
-  box-shadow: 0 4px 10px rgba(15, 76, 129, 0.12);
+  border-color: color-mix(in srgb, var(--wb-accent-primary, #0071e3) 38%, transparent);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
 }
 
 .butler-ball.butler-ball--light .butler-ball__label {
-  color: #1e3a8a;
+  color: var(--wb-text-primary, #1d1d1f);
 }
 
 .butler-ball.butler-ball--light .butler-ball__badge {
@@ -342,10 +348,10 @@ onBeforeUnmount(() => {
 }
 
 .butler-ball.butler-ball--light .butler-ball__hint {
-  color: #1e3a8a;
+  color: var(--wb-accent-primary, #0071e3);
   background: rgba(255, 255, 255, 0.95);
-  border-color: rgba(74, 144, 217, 0.35);
-  box-shadow: 0 4px 12px rgba(15, 76, 129, 0.12);
+  border-color: color-mix(in srgb, var(--wb-accent-primary, #0071e3) 32%, transparent);
+  box-shadow: var(--wb-card-shadow, 0 4px 12px rgba(0, 0, 0, 0.08));
 }
 
 /* 官网：默认 top/left 0，实际位置由 transform + xc_butler_pos_corp 决定，可拖动 */

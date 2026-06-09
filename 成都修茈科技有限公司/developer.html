@@ -4,9 +4,9 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>第三方开发者门户 | 成都修茈科技 XCAGI</title>
-    <meta name="description" content="XCAGI 第三方开发者门户：用 SDK 2.0 把行业经验做成 Mod 或 AI 员工，支持 mod+ai 双发布、灰度发布、评价与作者收益结算，上架修茈 AI 市场触达中小企业客户。" />
+    <meta name="description" content="XCAGI 第三方开发者门户：开放 REST API（市场目录、模板、Catalog）、PAT 与 Webhook、Mod 同步；SDK 2.0 双发布与灰度上架修茈 AI 市场。" />
     <meta name="keywords" content="XCAGI 开发者, Mod SDK, AI 员工, 双发布, 灰度发布, 作者分成, 行业模板" />
-    <link rel="stylesheet" href="./styles.css?v=20260619" />
+    <link rel="stylesheet" href="./styles.css?v=20260610d" />
   </head>
 <body>
 <header class="site-header">
@@ -61,6 +61,7 @@
         <p>用 XCAGI SDK 2.0 开发功能 Mod 或 AI 员工，支持 mod + ai 双发布，上架修茈 AI 市场，触达正在用 XCAGI 的中小企业客户。</p>
         <div class="hero-actions">
           <a class="btn btn-primary" href="/market/">进入 AI 市场</a>
+          <a class="btn btn-secondary" href="#open-api">查看开放 API</a>
           <a class="btn btn-secondary" href="/contact.html">申请开发者权限</a>
         </div>
       </div>
@@ -69,7 +70,7 @@
           <div class="stat"><strong>2</strong><span>发布目标 mod / ai</span></div>
           <div class="stat"><strong>4</strong><span>行业模板可复用</span></div>
           <div class="stat"><strong>30%</strong><span>默认平台分成</span></div>
-          <div class="stat"><strong>1</strong><span>稳定契约入口</span></div>
+          <div class="stat"><strong>14+</strong><span>开放只读端点</span></div>
         </div>
       </div>
     </div>
@@ -117,6 +118,94 @@
           <h3>事件通信</h3>
           <p>经 NeuroBus 发布业务事件，与宿主事件总线对齐，跨 Mod 协作有据可循。</p>
         </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="section section-soft" id="open-api">
+    <div class="container">
+      <div class="section-head reveal">
+        <div>
+          <p class="section-kicker">开放 API</p>
+          <h2>只读市场接口无需登录，写操作走 PAT</h2>
+        </div>
+        <p>与 AI 市场同域的 MODstore API。浏览商品、模板与 Catalog 包可直接调用；工作流执行、Mod 同步与 Webhook 需个人访问令牌（PAT）。</p>
+      </div>
+
+      <div class="dev-api-meta reveal">
+        <p class="dev-api-base">API 基址：<code id="dev-api-base">https://xiu-ci.com</code> · 凭证头 <code>Authorization: Bearer &lt;token&gt;</code></p>
+        <div class="dev-api-doc-links">
+          <a class="btn btn-secondary btn-sm" href="/docs" target="_blank" rel="noopener noreferrer">Swagger UI</a>
+          <a class="btn btn-secondary btn-sm" href="/redoc" target="_blank" rel="noopener noreferrer">ReDoc</a>
+          <a class="btn btn-secondary btn-sm" href="/openapi.json" target="_blank" rel="noopener noreferrer">OpenAPI JSON</a>
+        </div>
+      </div>
+
+      <div class="grid grid-2 dev-api-grid reveal" data-delay="60">
+        <article class="card dev-api-card">
+          <h3>公开只读（无需 Token）</h3>
+          <p class="dev-api-card-desc">适合官网、BI、第三方目录聚合；请遵守限流，勿高频爬取。</p>
+          <div class="dev-api-table-wrap">
+            <table class="dev-api-table">
+              <thead><tr><th>方法</th><th>路径</th><th>说明</th></tr></thead>
+              <tbody>
+                <tr><td><span class="dev-api-method dev-api-method--get">GET</span></td><td><code>/api/health</code></td><td>服务健康、版本与调度状态</td></tr>
+                <tr><td><span class="dev-api-method dev-api-method--get">GET</span></td><td><code>/api/market/facets</code></td><td>市场筛选项（行业、素材类型、许可等）</td></tr>
+                <tr><td><span class="dev-api-method dev-api-method--get">GET</span></td><td><code>/api/market/catalog</code></td><td>商品列表（q、artifact、limit、offset）</td></tr>
+                <tr><td><span class="dev-api-method dev-api-method--get">GET</span></td><td><code>/api/market/catalog/{id}</code></td><td>商品详情</td></tr>
+                <tr><td><span class="dev-api-method dev-api-method--get">GET</span></td><td><code>/api/market/catalog/{id}/reviews</code></td><td>用户评价列表</td></tr>
+                <tr><td><span class="dev-api-method dev-api-method--get">GET</span></td><td><code>/api/templates</code></td><td>工作流模板列表（公开模板）</td></tr>
+                <tr><td><span class="dev-api-method dev-api-method--get">GET</span></td><td><code>/api/templates/categories</code></td><td>模板分类与数量</td></tr>
+                <tr><td><span class="dev-api-method dev-api-method--get">GET</span></td><td><code>/api/templates/{id}</code></td><td>模板详情（含节点图预览）</td></tr>
+                <tr><td><span class="dev-api-method dev-api-method--get">GET</span></td><td><code>/v1/packages</code></td><td>Catalog 包分页列表</td></tr>
+                <tr><td><span class="dev-api-method dev-api-method--get">GET</span></td><td><code>/v1/index.json</code></td><td>轻量全量包索引</td></tr>
+                <tr><td><span class="dev-api-method dev-api-method--get">GET</span></td><td><code>/v1/packages/{id}/{ver}</code></td><td>包元数据</td></tr>
+                <tr><td><span class="dev-api-method dev-api-method--get">GET</span></td><td><code>/v1/packages/{id}/{ver}/download</code></td><td>下载包 zip</td></tr>
+                <tr><td><span class="dev-api-method dev-api-method--get">GET</span></td><td><code>/market/download-release.json</code></td><td>客户端安装包版本清单</td></tr>
+                <tr><td><span class="dev-api-method dev-api-method--post">POST</span></td><td><code>/api/public/contact</code></td><td>联系表单（匿名，限流）</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </article>
+
+        <article class="card dev-api-card">
+          <h3>需 PAT / 登录会话</h3>
+          <p class="dev-api-card-desc">在 AI 市场登录后于开发者中心创建 PAT；明文仅返回一次，请妥善保存。</p>
+          <div class="dev-api-table-wrap">
+            <table class="dev-api-table">
+              <thead><tr><th>方法</th><th>路径</th><th>说明</th></tr></thead>
+              <tbody>
+                <tr><td><span class="dev-api-method dev-api-method--get">GET</span></td><td><code>/api/developer/tokens</code></td><td>我的 PAT 列表</td></tr>
+                <tr><td><span class="dev-api-method dev-api-method--post">POST</span></td><td><code>/api/developer/tokens</code></td><td>创建 PAT（含 scopes）</td></tr>
+                <tr><td><span class="dev-api-method dev-api-method--del">DEL</span></td><td><code>/api/developer/tokens/{id}</code></td><td>吊销 PAT</td></tr>
+                <tr><td><span class="dev-api-method dev-api-method--get">GET</span></td><td><code>/api/developer/webhooks</code></td><td>Webhook 订阅列表</td></tr>
+                <tr><td><span class="dev-api-method dev-api-method--post">POST</span></td><td><code>/api/developer/webhooks</code></td><td>创建事件订阅</td></tr>
+                <tr><td><span class="dev-api-method dev-api-method--post">POST</span></td><td><code>/api/developer/webhooks/{id}/test</code></td><td>发送测试事件</td></tr>
+                <tr><td><span class="dev-api-method dev-api-method--post">POST</span></td><td><code>/api/templates/{id}/install</code></td><td>模板一键安装为工作流</td></tr>
+                <tr><td><span class="dev-api-method dev-api-method--post">POST</span></td><td><code>/v1/mod-sync/push</code></td><td>库 → XCAGI mods（scope: mod:sync）</td></tr>
+                <tr><td><span class="dev-api-method dev-api-method--post">POST</span></td><td><code>/v1/mod-sync/pull</code></td><td>XCAGI mods → 库</td></tr>
+                <tr><td><span class="dev-api-method dev-api-method--get">GET</span></td><td><code>/v1/mod-sync/export-zip/{mod_id}</code></td><td>导出与工作台同布局 zip</td></tr>
+                <tr><td><span class="dev-api-method dev-api-method--post">POST</span></td><td><code>/api/workflow/{id}/execute</code></td><td>触发工作流执行</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="dev-api-footnote">常用 scope：<code>catalog:read</code> · <code>workflow:read</code> · <code>workflow:execute</code> · <code>mod:sync</code> · <code>webhook:manage</code></p>
+        </article>
+      </div>
+
+      <div class="dev-api-examples reveal" data-delay="120">
+        <h3 class="dev-api-examples-title">快速试用</h3>
+        <div class="dev-api-example-grid">
+          <figure class="dev-api-example">
+            <figcaption>拉取市场商品（前 5 条）</figcaption>
+            <pre class="dev-api-pre"><code id="dev-api-ex-catalog"></code></pre>
+          </figure>
+          <figure class="dev-api-example">
+            <figcaption>创建 PAT（需已登录 JWT）</figcaption>
+            <pre class="dev-api-pre"><code id="dev-api-ex-pat"></code></pre>
+          </figure>
+        </div>
+        <p class="dev-api-footnote dev-api-footnote--center">完整索引见仓库 <code>MODstore_deploy/docs/developer/03-rest-api.md</code>；Mod 跨机部署可用 <code>python -m modman remote-deploy --base-url … --token pat_xxx</code>。</p>
       </div>
     </div>
   </section>
@@ -176,7 +265,7 @@
         <div><p class="section-kicker">接入步骤</p><h2>四步上架你的第一个包</h2></div>
       </div>
       <div class="timeline reveal">
-        <div class="timeline-item"><div class="timeline-year">01</div><div class="timeline-content"><h3>申请开发者权限</h3><p>联系我们开通开发者账号与个人访问令牌（PAT），获取上架资格。</p></div></div>
+        <div class="timeline-item"><div class="timeline-year">01</div><div class="timeline-content"><h3>申请开发者权限</h3><p>联系我们或在 AI 市场登录后创建 PAT；可先调用上方<a href="#open-api">开放 API</a>只读接口验证连通性。</p></div></div>
         <div class="timeline-item"><div class="timeline-year">02</div><div class="timeline-content"><h3>从模板起步开发</h3><p>复制行业模板，修改 manifest 的标识、能力与行业配置，实现后端 hook 与前端页面。</p></div></div>
         <div class="timeline-item"><div class="timeline-year">03</div><div class="timeline-content"><h3>灰度上架</h3><p>提交审核，按比例与标签灰度放量，结合稳定性数据逐步全量。</p></div></div>
         <div class="timeline-item"><div class="timeline-year">04</div><div class="timeline-content"><h3>经营与结算</h3><p>收集评价、迭代版本，按成交分成对账结算并提现。</p></div></div>
@@ -204,6 +293,26 @@
 </footer>
 <button id="back-to-top" class="back-to-top" aria-label="回到顶部"></button>
 <script src="./main.js?v=20260619"></script>
+<script>
+(function () {
+  var origin = location.origin || 'https://xiu-ci.com';
+  var baseEl = document.getElementById('dev-api-base');
+  if (baseEl) baseEl.textContent = origin;
+  var catalog = document.getElementById('dev-api-ex-catalog');
+  if (catalog) {
+    catalog.textContent =
+      'curl -s "' + origin + '/api/market/catalog?limit=5" | jq .';
+  }
+  var pat = document.getElementById('dev-api-ex-pat');
+  if (pat) {
+    pat.textContent =
+      'curl -X POST ' + origin + '/api/developer/tokens \\\n' +
+      '  -H "Authorization: Bearer <JWT>" \\\n' +
+      '  -H "Content-Type: application/json" \\\n' +
+      '  -d \'{"name":"my-ci","scopes":["catalog:read","mod:sync"],"expires_days":90}\'';
+  }
+})();
+</script>
 
 <div id="xc-corp-butler-root"></div>
 <link rel="stylesheet" href="/corp-butler/corp-butler.css?v=20260619" data-xc-corp-butler-css="1" />
