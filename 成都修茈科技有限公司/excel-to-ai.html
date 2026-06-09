@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Excel → AI 上传工具 | 成都修茈科技有限公司</title>
+<meta name="description" content="在线体验 AI Excel 单据识别：上传出货单、收货单等表格，自动提取关键字段，了解修茈科技单据处理能力。">
+<link rel="stylesheet" href="/styles.css?v=20260603">
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+  :root {
+    --bg: #0f0f0f;
+    --surface: #1a1a1a;
+    --border: #2e2e2e;
+    --accent: #3b82f6;
+    --accent-hover: #60a5fa;
+    --text: #e5e5e5;
+    --muted: #6b7280;
+    --success: #22c55e;
+    --radius: 12px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 40px 20px;
+    gap: 24px;
+  }
+
+  h1 {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--text);
+    letter-spacing: -0.3px;
+  }
+
+  h1 span {
+    color: var(--accent);
+  }
+
+  .drop-zone {
+    width: 100%;
+    max-width: 640px;
+    border: 2px dashed var(--border);
+    border-radius: var(--radius);
+    padding: 48px 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    background: var(--surface);
+    position: relative;
+  }
+
+  .drop-zone:hover,
+  .drop-zone.dragover {
+    border-color: var(--accent);
+    background: rgba(59, 130, 246, 0.05);
+  }
+
+  .drop-zone input[type="file"] {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+    width: 100%;
+    height: 100%;
+  }
+
+  .drop-icon {
+    font-size: 40px;
+    margin-bottom: 12px;
+  }
+
+  .drop-label {
+    font-size: 15px;
+    color: var(--muted);
+  }
+
+  .drop-label strong {
+    color: var(--text);
+  }
+
+  .sheet-tabs {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    width: 100%;
+    max-width: 640px;
+  }
+
+  .sheet-tab {
+    padding: 6px 16px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--muted);
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .sheet-tab:hover { border-color: var(--accent); color: var(--text); }
+
+  .sheet-tab.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+
+  .output-box {
+    width: 100%;
+    max-width: 640px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+
+  .output-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+    color: var(--muted);
+  }
+
+  .copy-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+
+  .copy-btn:hover { background: var(--accent-hover); }
+
+  .copy-btn.copied {
+    background: var(--success);
+  }
+
+  textarea {
+    width: 100%;
+    min-height: 320px;
+    max-height: 520px;
+    background: transparent;
+    border: none;
+    outline: none;
+    resize: vertical;
+    padding: 16px;
+    font-size: 13px;
+    font-family: 'Cascadia Code', 'Consolas', monospace;
+    color: var(--text);
+    line-height: 1.6;
+  }
+
+  .hint {
+    font-size: 12px;
+    color: var(--muted);
+    text-align: center;
+    max-width: 480px;
+  }
+
+  .stats {
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+
+<h1>Excel → <span>AI</span> 上传工具</h1>
+<p class="hint">快速体验修茈科技 AI Excel 单据识别能力：拖入出货单、收货单等 .xlsx / .xls / .csv，自动提取表格内容。完整识别、标签打印与流程联动见 <a href="/services.html" style="color:var(--accent)">产品中心</a>，预约方案见 <a href="/contact.html" style="color:var(--accent)">联系我们</a>。</p>
+
+<div class="drop-zone" id="dropZone">
+  <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" />
+  <div class="drop-icon">📊</div>
+  <div class="drop-label"><strong>点击或拖入 Excel 文件</strong><br>支持 .xlsx · .xls · .csv</div>
+</div>
+
+<div class="sheet-tabs hidden" id="sheetTabs"></div>
+
+<div class="output-box hidden" id="outputBox">
+  <div class="output-header">
+    <span class="stats" id="stats">0 行 · 0 列</span>
+    <button class="copy-btn" id="copyBtn" onclick="copyContent()">
+      <span>📋</span> 复制全部内容
+    </button>
+  </div>
+  <textarea id="output" readonly></textarea>
+</div>
+
+<script>
+  let workbook = null;
+
+  const dropZone = document.getElementById('dropZone');
+  const fileInput = document.getElementById('fileInput');
+  const sheetTabs = document.getElementById('sheetTabs');
+  const outputBox = document.getElementById('outputBox');
+  const output = document.getElementById('output');
+  const stats = document.getElementById('stats');
+
+  dropZone.addEventListener('dragover', e => {
+    e.preventDefault();
+    dropZone.classList.add('dragover');
+  });
+
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.classList.remove('dragover');
+    const file = e.dataTransfer.files[0];
+    if (file) processFile(file);
+  });
+
+  fileInput.addEventListener('change', e => {
+    const file = e.target.files[0];
+    if (file) processFile(file);
+  });
+
+  function processFile(file) {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const data = new Uint8Array(e.target.result);
+      workbook = XLSX.read(data, { type: 'array' });
+      renderSheetTabs();
+      renderSheet(workbook.SheetNames[0]);
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  function renderSheetTabs() {
+    sheetTabs.innerHTML = '';
+    workbook.SheetNames.forEach((name, i) => {
+      const tab = document.createElement('button');
+      tab.className = 'sheet-tab' + (i === 0 ? ' active' : '');
+      tab.textContent = name;
+      tab.onclick = () => {
+        document.querySelectorAll('.sheet-tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        renderSheet(name);
+      };
+      sheetTabs.appendChild(tab);
+    });
+    sheetTabs.classList.remove('hidden');
+  }
+
+  function renderSheet(sheetName) {
+    const sheet = workbook.Sheets[sheetName];
+    const json = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+
+    const rows = json.filter(r => r.some(c => c !== ''));
+    const cols = rows.reduce((max, r) => Math.max(max, r.length), 0);
+
+    // 转为 TSV（制表符分隔，粘贴到 AI 后格式整齐）
+    const tsv = rows.map(row => row.join('\t')).join('\n');
+
+    output.value = tsv;
+    stats.textContent = `${rows.length} 行 · ${cols} 列 · Sheet: ${sheetName}`;
+
+    sheetTabs.classList.remove('hidden');
+    outputBox.classList.remove('hidden');
+  }
+
+  function copyContent() {
+    const btn = document.getElementById('copyBtn');
+    navigator.clipboard.writeText(output.value).then(() => {
+      btn.textContent = '✅ 已复制！';
+      btn.classList.add('copied');
+      setTimeout(() => {
+        btn.innerHTML = '<span>📋</span> 复制全部内容';
+        btn.classList.remove('copied');
+      }, 2000);
+    });
+  }
+</script>
+</body>
+</html>
