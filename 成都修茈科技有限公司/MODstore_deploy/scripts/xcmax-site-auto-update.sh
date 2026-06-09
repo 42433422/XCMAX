@@ -67,6 +67,23 @@ git_sync_repo() {
   echo "$remote_sha"
 }
 
+# Vite build 会把 public/ 根文件复制到 dist/；服务器常无法 npm build，需手动同步避免 SPA 回退 index.html
+sync_market_public_assets() {
+  local pub="${MODSTORE_ROOT}/market/public"
+  local dist="${MODSTORE_ROOT}/market/dist"
+  if [[ ! -d "$pub" || ! -d "$dist" ]]; then
+    return 0
+  fi
+  local n=0
+  while IFS= read -r -d '' f; do
+    cp -af "$f" "$dist/"
+    n=$((n + 1))
+  done < <(find "$pub" -maxdepth 1 -type f -print0)
+  if [[ "$n" -gt 0 ]]; then
+    log "market public 根资源已同步到 dist（${n} 个文件）"
+  fi
+}
+
 build_market() {
   export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
   # shellcheck disable=SC1091
@@ -208,12 +225,20 @@ elif [[ "$REPO_CHANGED" == true && -z "$OLD_XCMAX_SHA" ]]; then
 fi
 
 if [[ "$REPO_CHANGED" != true ]]; then
-  log "XCMAX 无新提交，跳过 build/restart"
+  sync_market_public_assets
+  log "XCMAX 无新提交，已检查 public→dist 静态资源"
   exit 0
 fi
 
 if paths_changed_since "$XCMAX_ROOT" "$OLD_XCMAX_SHA" "$NEW_XCMAX_SHA" "^${MODSTORE_PREFIX}/market/"; then
-  build_market || log "WARN: market build 失败"
+  if build_market; then
+    :
+  else
+    log "WARN: market build 失败，回退 public→dist 同步"
+    sync_market_public_assets
+  fi
+else
+  sync_market_public_assets
 fi
 
 if paths_changed_since "$XCMAX_ROOT" "$OLD_XCMAX_SHA" "$NEW_XCMAX_SHA" "^${MODSTORE_PREFIX}/(modstore_server/|pyproject\\.toml|requirements)"; then
@@ -232,9 +257,15 @@ fi
 if [[ -z "$OLD_XCMAX_SHA" ]]; then
   pip_sync || log "WARN: pip sync 失败"
   if [[ -d "${MODSTORE_ROOT}/market" ]]; then
-    build_market || log "WARN: market build 失败"
+    if build_market; then
+      :
+    else
+      sync_market_public_assets
+    fi
   fi
 fi
+
+sync_market_public_assets
 
 restart_app_services
 
