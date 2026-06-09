@@ -153,6 +153,29 @@ sync_corp_butler_assets() {
   fi
 }
 
+ensure_market_dist() {
+  local dist="${MODSTORE_ROOT}/market/dist"
+  local idx="${dist}/index.html"
+  if [[ -f "$idx" ]]; then
+    return 0
+  fi
+  log "WARN: market/dist 缺失，尝试 npm build"
+  if build_market; then
+    return 0
+  fi
+  local bak
+  bak="$(ls -dt /root/成都修茈科技有限公司.bak.*/MODstore_deploy/market/dist 2>/dev/null | head -1 || true)"
+  if [[ -n "$bak" && -f "${bak}/index.html" ]]; then
+    mkdir -p "$(dirname "$dist")"
+    rm -rf "$dist"
+    cp -a "$bak" "$dist"
+    log "已从备份恢复 market/dist: ${bak}"
+    return 0
+  fi
+  log "ERROR: market/dist 仍缺失，/market/ 将 404"
+  return 1
+}
+
 build_market() {
   export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
   # shellcheck disable=SC1091
@@ -297,7 +320,8 @@ if [[ "$REPO_CHANGED" != true ]]; then
   sync_market_public_assets
   sync_corp_pages_to_dist_fallback
   sync_corp_butler_assets
-  log "XCMAX 无新提交，已检查 public→dist / corp-butler 静态资源"
+  ensure_market_dist || true
+  log "XCMAX 无新提交，已检查 public→dist / corp-butler / market/dist"
   exit 0
 fi
 
@@ -339,6 +363,7 @@ fi
 sync_market_public_assets
 sync_corp_pages_to_dist_fallback
 sync_corp_butler_assets
+ensure_market_dist || true
 
 restart_app_services
 
