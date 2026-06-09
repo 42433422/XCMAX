@@ -19,6 +19,18 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      '@admin-console-inject/adminHostRoutes': path.resolve(
+        __dirname,
+        './src/router/adminHostRoutes.stub.ts'
+      ),
+      '@/data/workflow-employee-docs.json': path.resolve(
+        __dirname,
+        './public/workflow-employee-docs.json'
+      ),
+      '@/data/workflow-employees.json': path.resolve(
+        __dirname,
+        './public/workflow-employees.json'
+      ),
       '@mod-views/xcagi-planner-bridge/ChatView.vue': path.resolve(
         __dirname,
         './src/test-stubs/ModChatViewStub.vue'
