@@ -6,7 +6,7 @@
     <title>第三方开发者门户 | 成都修茈科技 XCAGI</title>
     <meta name="description" content="XCAGI 第三方开发者门户：开放 REST API（市场目录、模板、Catalog）、PAT 与 Webhook、Mod 同步；SDK 2.0 双发布与灰度上架修茈 AI 市场。" />
     <meta name="keywords" content="XCAGI 开发者, Mod SDK, AI 员工, 双发布, 灰度发布, 作者分成, 行业模板" />
-    <link rel="stylesheet" href="./styles.css?v=20260610d" />
+    <link rel="stylesheet" href="./styles.css?v=20260610f" />
   </head>
 <body>
 <header class="site-header">
@@ -57,11 +57,12 @@
     <div class="container page-hero-inner">
       <div class="reveal">
         <span class="eyebrow">开发者门户 · SDK 2.0</span>
-        <h1>把你的行业经验，做成可上架的 Mod 与 AI 员工</h1>
-        <p>用 XCAGI SDK 2.0 开发功能 Mod 或 AI 员工，支持 mod + ai 双发布，上架修茈 AI 市场，触达正在用 XCAGI 的中小企业客户。</p>
+        <h1>开发者文档：Mod、AI 员工与开放 API</h1>
+        <p>基于 XCAGI SDK 2.0 开发功能 Mod 或 AI 员工，支持 mod 与 ai 双发布目标；可在修茈 AI 市场提交上架。</p>
         <div class="hero-actions">
           <a class="btn btn-primary" href="/market/">进入 AI 市场</a>
-          <a class="btn btn-secondary" href="#open-api">查看开放 API</a>
+          <a class="btn btn-secondary" href="#xcauto">XCauto 模型 API</a>
+          <a class="btn btn-secondary" href="#open-api">市场开放 API</a>
           <a class="btn btn-secondary" href="/contact.html">申请开发者权限</a>
         </div>
       </div>
@@ -70,7 +71,7 @@
           <div class="stat"><strong>2</strong><span>发布目标 mod / ai</span></div>
           <div class="stat"><strong>4</strong><span>行业模板可复用</span></div>
           <div class="stat"><strong>30%</strong><span>默认平台分成</span></div>
-          <div class="stat"><strong>14+</strong><span>开放只读端点</span></div>
+          <div class="stat"><strong>XCauto</strong><span>OpenAI 兼容中转</span></div>
         </div>
       </div>
     </div>
@@ -102,8 +103,8 @@
   <section class="section section-dark">
     <div class="container">
       <div class="section-head reveal">
-        <div><p class="section-kicker">SDK 2.0</p><h2>更好的 manifest、hook 与通信</h2></div>
-        <p>稳定契约层只暴露明确的接口，宿主内部重构不影响你的包。</p>
+        <div><p class="section-kicker">SDK 2.0</p><h2>manifest、hook 与事件通信</h2></div>
+        <p>通过声明式 manifest 与事件 hook 对接宿主；对外接口保持稳定，便于版本演进。</p>
       </div>
       <div class="grid grid-3">
         <article class="card reveal">
@@ -118,6 +119,82 @@
           <h3>事件通信</h3>
           <p>经 NeuroBus 发布业务事件，与宿主事件总线对齐，跨 Mod 协作有据可循。</p>
         </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="section section-dark" id="xcauto">
+    <div class="container">
+      <div class="section-head reveal">
+        <div>
+          <p class="section-kicker">XCauto</p>
+          <h2>模型 API（OpenAI 兼容）</h2>
+        </div>
+        <p>XCauto 提供统一的 OpenAI 兼容 REST 接口：固定 Base URL、Bearer 鉴权、按调用量从账户钱包扣费。支持账户默认路由（<code>xcauto-account</code>）或指定 <code>provider/model</code>。</p>
+      </div>
+
+      <div class="dev-api-meta reveal" data-delay="40">
+        <p class="dev-api-base">XCauto 基址：<code id="xcauto-api-base">https://xiu-ci.com/v1</code> · 凭证 <code>Authorization: Bearer &lt;PAT 或 JWT&gt;</code></p>
+        <p class="dev-api-footnote">OpenAI SDK：设 <code>OPENAI_BASE_URL=https://xiu-ci.com/v1</code>、<code>OPENAI_API_KEY=pat_…</code>，模型用 <code>xcauto-account</code> 或 <code>deepseek/deepseek-chat</code>。</p>
+      </div>
+
+      <div class="grid grid-2 dev-api-grid reveal" data-delay="80">
+        <article class="card dev-api-card">
+          <h3>模型与对话（OpenAI 兼容）</h3>
+          <div class="dev-api-table-wrap">
+            <table class="dev-api-table">
+              <thead><tr><th>方法</th><th>路径</th><th>说明</th></tr></thead>
+              <tbody>
+                <tr><td><span class="dev-api-method dev-api-method--get">GET</span></td><td><code>/v1/models</code></td><td>可调用模型列表（含各厂商 <code>provider/model</code>）</td></tr>
+                <tr><td><span class="dev-api-method dev-api-method--post">POST</span></td><td><code>/v1/chat/completions</code></td><td>对话补全；模型 <code>xcauto-account</code> 走账户默认路由</td></tr>
+                <tr><td><span class="dev-api-method dev-api-method--get">GET</span></td><td><code>/api/llm/catalog</code></td><td>模型目录与能力说明</td></tr>
+                <tr><td><span class="dev-api-method dev-api-method--get">GET</span></td><td><code>/api/llm/resolve-chat-default</code></td><td>解析 <code>xcauto-account</code> 实际上游</td></tr>
+                <tr><td><span class="dev-api-method dev-api-method--post">POST</span></td><td><code>/api/llm/chat</code></td><td>原生 JSON 对话（可指定 provider + model）</td></tr>
+                <tr><td><span class="dev-api-method dev-api-method--post">POST</span></td><td><code>/api/llm/chat/stream</code></td><td>SSE 流式输出（推荐长回复）</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="dev-api-footnote">账户路由模型名：<code>xcauto-account</code>（别名 <code>xcauto</code>、<code>xiuci-account</code>）</p>
+        </article>
+
+        <article class="card dev-api-card">
+          <h3>余额 · 计费 · 用量</h3>
+          <div class="dev-api-table-wrap">
+            <table class="dev-api-table">
+              <thead><tr><th>方法</th><th>路径</th><th>说明</th></tr></thead>
+              <tbody>
+                <tr><td><span class="dev-api-method dev-api-method--get">GET</span></td><td><code>/api/wallet/balance</code></td><td>钱包余额（元）</td></tr>
+                <tr><td><span class="dev-api-method dev-api-method--get">GET</span></td><td><code>/api/account/bootstrap</code></td><td>余额 + 会员 + 默认模型偏好</td></tr>
+                <tr><td><span class="dev-api-method dev-api-method--get">GET</span></td><td><code>/api/llm/pricing</code></td><td>各模型计费单价（元/千 Token）</td></tr>
+                <tr><td><span class="dev-api-method dev-api-method--get">GET</span></td><td><code>/api/llm/usage</code></td><td>调用流水：Token、扣费、状态</td></tr>
+                <tr><td><span class="dev-api-method dev-api-method--post">POST</span></td><td><code>/api/developer/tokens</code></td><td>创建 PAT，勾选 <code>llm:use</code></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="dev-api-footnote">计费：调用前预扣、完成后按 Token 结算；响应头 <code>X-Xiuci-Charge-CNY</code> 为本次扣费金额（元）。</p>
+        </article>
+      </div>
+
+      <div class="dev-api-examples reveal" data-delay="120">
+        <h3 class="dev-api-examples-title">XCauto 调用示例</h3>
+        <div class="dev-api-example-grid">
+          <figure class="dev-api-example">
+            <figcaption>列出模型</figcaption>
+            <pre class="dev-api-pre"><code id="xcauto-ex-models"></code></pre>
+          </figure>
+          <figure class="dev-api-example">
+            <figcaption>OpenAI 兼容对话</figcaption>
+            <pre class="dev-api-pre"><code id="xcauto-ex-chat"></code></pre>
+          </figure>
+          <figure class="dev-api-example">
+            <figcaption>查询余额与单价</figcaption>
+            <pre class="dev-api-pre"><code id="xcauto-ex-wallet"></code></pre>
+          </figure>
+          <figure class="dev-api-example">
+            <figcaption>Python（OpenAI SDK）</figcaption>
+            <pre class="dev-api-pre"><code id="xcauto-ex-python"></code></pre>
+          </figure>
+        </div>
       </div>
     </div>
   </section>
@@ -144,7 +221,7 @@
       <div class="grid grid-2 dev-api-grid reveal" data-delay="60">
         <article class="card dev-api-card">
           <h3>公开只读（无需 Token）</h3>
-          <p class="dev-api-card-desc">适合官网、BI、第三方目录聚合；请遵守限流，勿高频爬取。</p>
+          <p class="dev-api-card-desc">供集成与查询使用；请遵守限流策略。</p>
           <div class="dev-api-table-wrap">
             <table class="dev-api-table">
               <thead><tr><th>方法</th><th>路径</th><th>说明</th></tr></thead>
@@ -205,7 +282,7 @@
             <pre class="dev-api-pre"><code id="dev-api-ex-pat"></code></pre>
           </figure>
         </div>
-        <p class="dev-api-footnote dev-api-footnote--center">完整索引见仓库 <code>MODstore_deploy/docs/developer/03-rest-api.md</code>；Mod 跨机部署可用 <code>python -m modman remote-deploy --base-url … --token pat_xxx</code>。</p>
+        <p class="dev-api-footnote dev-api-footnote--center">完整接口定义见本站 <a href="/openapi.json" target="_blank" rel="noopener noreferrer">OpenAPI JSON</a> 与 Swagger / ReDoc。</p>
       </div>
     </div>
   </section>
@@ -213,7 +290,7 @@
   <section class="section">
     <div class="container">
       <div class="section-head reveal">
-        <div><p class="section-kicker">上架与经营</p><h2>从灰度到收益，全链路打通</h2></div>
+        <div><p class="section-kicker">上架与结算</p><h2>发布、评价与分成</h2></div>
       </div>
       <div class="grid grid-3">
         <article class="card reveal">
@@ -226,7 +303,7 @@
         </article>
         <article class="card reveal" data-delay="80">
           <h3>评价与口碑</h3>
-          <p>用户评分与评论，作者可逐条回复，沉淀真实使用反馈与商品口碑。</p>
+          <p>用户可对商品评分与评论；作者可在市场内回复。</p>
           <ul class="card-list">
             <li>评分聚合与展示</li>
             <li>作者回复</li>
@@ -247,8 +324,8 @@
   <section class="section section-soft">
     <div class="container">
       <div class="section-head reveal">
-        <div><p class="section-kicker">行业模板</p><h2>复制即用的四套脚手架</h2></div>
-        <p>从模板起步，改个标识与行业配置就能跑通，不必从零搭骨架。</p>
+        <div><p class="section-kicker">行业模板</p><h2>四套参考模板</h2></div>
+        <p>可从模板修改 manifest 与业务配置后用于开发与测试。</p>
       </div>
       <div class="grid grid-4">
         <article class="card reveal"><h3>ERP</h3><p>产品 / 客户 / 订单三域 + AI 助手双发布。</p></article>
@@ -275,7 +352,7 @@
 
   <section class="section">
     <div class="container cta-band reveal">
-      <div><h2>成为修茈生态的开发者</h2><p>把你的行业 Know-how 变成可复用、可上架、可持续获益的 Mod 与 AI 员工。</p></div>
+      <div><h2>申请开发者权限</h2><p>如需上架 Mod 或 AI 员工，请通过下方入口提交申请或联系我们。</p></div>
       <a class="btn btn-primary" href="/contact.html">申请开发者权限</a>
     </div>
   </section>
@@ -292,12 +369,15 @@
   </div>
 </footer>
 <button id="back-to-top" class="back-to-top" aria-label="回到顶部"></button>
-<script src="./main.js?v=20260619"></script>
+<script src="./main.js?v=20260610f"></script>
 <script>
 (function () {
   var origin = location.origin || 'https://xiu-ci.com';
+  var v1 = origin + '/v1';
   var baseEl = document.getElementById('dev-api-base');
   if (baseEl) baseEl.textContent = origin;
+  var xcBase = document.getElementById('xcauto-api-base');
+  if (xcBase) xcBase.textContent = v1;
   var catalog = document.getElementById('dev-api-ex-catalog');
   if (catalog) {
     catalog.textContent =
@@ -309,14 +389,47 @@
       'curl -X POST ' + origin + '/api/developer/tokens \\\n' +
       '  -H "Authorization: Bearer <JWT>" \\\n' +
       '  -H "Content-Type: application/json" \\\n' +
-      '  -d \'{"name":"my-ci","scopes":["catalog:read","mod:sync"],"expires_days":90}\'';
+      '  -d \'{"name":"xcauto-ci","scopes":["llm:use","catalog:read"],"expires_days":90}\'';
+  }
+  var exModels = document.getElementById('xcauto-ex-models');
+  if (exModels) {
+    exModels.textContent =
+      'curl -s ' + v1 + '/models \\\n' +
+      '  -H "Authorization: Bearer pat_xxx" | jq \'.data[].id\'';
+  }
+  var exChat = document.getElementById('xcauto-ex-chat');
+  if (exChat) {
+    exChat.textContent =
+      'curl -s ' + v1 + '/chat/completions \\\n' +
+      '  -H "Authorization: Bearer pat_xxx" \\\n' +
+      '  -H "Content-Type: application/json" \\\n' +
+      '  -d \'{"model":"xcauto-account","messages":[{"role":"user","content":"你好"}]}\'';
+  }
+  var exWallet = document.getElementById('xcauto-ex-wallet');
+  if (exWallet) {
+    exWallet.textContent =
+      'curl -s ' + origin + '/api/wallet/balance \\\n' +
+      '  -H "Authorization: Bearer pat_xxx"\n\n' +
+      'curl -s ' + origin + '/api/llm/pricing \\\n' +
+      '  -H "Authorization: Bearer pat_xxx" | jq \'.items[:3]\'';
+  }
+  var exPy = document.getElementById('xcauto-ex-python');
+  if (exPy) {
+    exPy.textContent =
+      'from openai import OpenAI\n' +
+      'client = OpenAI(base_url="' + v1 + '", api_key="pat_xxx")\n' +
+      'r = client.chat.completions.create(\n' +
+      '    model="xcauto-account",\n' +
+      '    messages=[{"role":"user","content":"你好"}],\n' +
+      ')\n' +
+      'print(r.choices[0].message.content)';
   }
 })();
 </script>
 
 <div id="xc-corp-butler-root"></div>
-<link rel="stylesheet" href="/corp-butler/corp-butler.css?v=20260619" data-xc-corp-butler-css="1" />
-<script type="module" src="/corp-butler/corp-butler.js?v=20260619" data-xc-corp-butler-js="1"></script>
+<link rel="stylesheet" href="/corp-butler/corp-butler.css?v=20260610f" data-xc-corp-butler-css="1" />
+<script type="module" src="/corp-butler/corp-butler.js?v=20260610f" data-xc-corp-butler-js="1"></script>
 
 </body>
 </html>
