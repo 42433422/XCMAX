@@ -189,6 +189,7 @@ check_*.py
 find_*.py
 smoke_*.py
 run_*.py
+!run_fastapi.py
 force_sync*.py
 clear_ctx.py
 do_patch.py
