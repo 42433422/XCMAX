@@ -684,8 +684,8 @@ def dispatch_legacy_tool_payload(
         if not file_path:
             return _j({"success": False, "message": "缺少参数：file_path（Excel文件路径）"}, 400)
         try:
-            from app.infrastructure.skills.excel_analyzer.excel_template_analyzer import (
-                ExcelAnalyzerSkill,  # noqa: F401
+            from app.infrastructure.skills.excel_analyzer.excel_template_analyzer import (  # noqa: F401
+                ExcelAnalyzerSkill,
                 get_excel_analyzer_skill,
             )
 
@@ -769,8 +769,8 @@ def dispatch_legacy_tool_payload(
         if not file_path:
             return _j({"success": False, "message": "缺少参数：file_path（Excel文件路径）"}, 400)
         try:
-            from app.infrastructure.skills.excel_toolkit.excel_toolkit import (
-                ExcelToolkitSkill,  # noqa: F401
+            from app.infrastructure.skills.excel_toolkit.excel_toolkit import (  # noqa: F401
+                ExcelToolkitSkill,
                 get_excel_toolkit_skill,
             )
 
