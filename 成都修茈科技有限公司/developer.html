@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>第三方开发者门户 | 成都修茈科技 XCAGI</title>
+    <meta name="description" content="XCAGI 第三方开发者门户：开放 REST API（市场目录、模板、Catalog）、PAT 与 Webhook、Mod 同步；SDK 2.0 双发布与灰度上架修茈 AI 市场。" />
+    <meta name="keywords" content="XCAGI 开发者, Mod SDK, AI 员工, 双发布, 灰度发布, 作者分成, 行业模板" />
+    <link rel="stylesheet" href="./styles.css?v=20260619" />
+  </head>
+<body>
+<header class="site-header">
+  <div class="container header-inner">
+    <a class="brand-mark" href="/index.html">
+      <span class="brand-seal"><img src="/assets/xiu-ci-logo.png" alt="修茈科技 Logo" /></span>
+      <span class="brand-name"><strong>成都修茈科技有限公司</strong><span>XCAGI Automation</span></span>
+    </a>
+    <nav class="nav" aria-label="站点导航">
+      <div class="nav-menu">
+        <a href="/index.html">首页</a>
+        <a href="/about.html">关于修茈</a>
+        <a href="/services.html">产品中心</a>
+        <a href="/solutions.html">解决方案</a>
+        <a href="/cases.html">客户案例</a>
+        <a class="nav-optional" href="/news.html">新闻资讯</a>
+        <a class="nav-optional" href="/honors.html">资质与能力</a>
+        <a href="/contact.html">联系我们</a>
+        <a class="active" href="/developer.html">开发者门户</a>
+      </div>
+      <div class="nav-actions">
+        <a class="nav-action nav-action--primary" href="/market/">AI 市场</a>
+        <a class="nav-action nav-action--outline" href="/market/download">软件下载</a>
+      </div>
+    </nav>
+    <button class="mobile-menu-toggle" id="mobile-menu-toggle" type="button" aria-controls="mobile-menu" aria-label="打开菜单" aria-expanded="false"><span></span><span></span><span></span></button>
+  </div>
+</header>
+<div class="mobile-menu-overlay" id="mobile-menu-overlay"></div>
+<nav class="mobile-menu" id="mobile-menu" aria-hidden="true" inert>
+  <a href="/index.html" class="mobile-menu-link">首页</a>
+  <a href="/about.html" class="mobile-menu-link">关于修茈</a>
+  <a href="/services.html" class="mobile-menu-link">产品中心</a>
+  <a href="/solutions.html" class="mobile-menu-link">解决方案</a>
+  <a href="/cases.html" class="mobile-menu-link">客户案例</a>
+  <a href="/news.html" class="mobile-menu-link">新闻资讯</a>
+  <a href="/honors.html" class="mobile-menu-link">资质与能力</a>
+  <a href="/contact.html" class="mobile-menu-link">联系我们</a>
+  <a href="/developer.html" class="mobile-menu-link">开发者门户</a>
+  <div class="mobile-menu-actions">
+    <a href="/market/" class="mobile-menu-link mobile-menu-link--primary">AI 市场</a>
+    <a href="/market/download" class="mobile-menu-link mobile-menu-link--outline">软件下载</a>
+  </div>
+</nav>
+
+<main>
+  <section class="page-hero">
+    <div class="container page-hero-inner">
+      <div class="reveal">
+        <span class="eyebrow">开发者门户 · SDK 2.0</span>
+        <h1>把你的行业经验，做成可上架的 Mod 与 AI 员工</h1>
+        <p>用 XCAGI SDK 2.0 开发功能 Mod 或 AI 员工，支持 mod + ai 双发布，上架修茈 AI 市场，触达正在用 XCAGI 的中小企业客户。</p>
+        <div class="hero-actions">
+          <a class="btn btn-primary" href="/market/">进入 AI 市场</a>
+          <a class="btn btn-secondary" href="#open-api">查看开放 API</a>
+          <a class="btn btn-secondary" href="/contact.html">申请开发者权限</a>
+        </div>
+      </div>
+      <div class="page-hero-side reveal" data-delay="120">
+        <div class="stats" style="grid-template-columns: repeat(2, 1fr)">
+          <div class="stat"><strong>2</strong><span>发布目标 mod / ai</span></div>
+          <div class="stat"><strong>4</strong><span>行业模板可复用</span></div>
+          <div class="stat"><strong>30%</strong><span>默认平台分成</span></div>
+          <div class="stat"><strong>14+</strong><span>开放只读端点</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <div class="section-head reveal">
+        <div><p class="section-kicker">能做什么</p><h2>一套包，两种发布</h2></div>
+        <p>同一个开发包既能作为功能 Mod 安装进客户工作台，也能上架为 AI 员工，由 manifest 的 <code>release_targets</code> 决定。</p>
+      </div>
+      <div class="grid grid-3">
+        <article class="card reveal">
+          <h3>Mod 功能扩展</h3>
+          <p>为客户的产品、订单、出货、客服等业务页提供新能力，挂接宿主事件与业务工作台。</p>
+        </article>
+        <article class="card reveal" data-delay="80">
+          <h3>AI 员工</h3>
+          <p>声明模型、提示词与可调用工具，把行业知识做成会执行任务的 AI 员工。</p>
+        </article>
+        <article class="card reveal" data-delay="160">
+          <h3>mod + ai 双发布</h3>
+          <p><code>release_targets: ["mod","ai"]</code>，一次开发同时面向功能与 AI 两个上架目标。</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="section section-dark">
+    <div class="container">
+      <div class="section-head reveal">
+        <div><p class="section-kicker">SDK 2.0</p><h2>更好的 manifest、hook 与通信</h2></div>
+        <p>稳定契约层只暴露明确的接口，宿主内部重构不影响你的包。</p>
+      </div>
+      <div class="grid grid-3">
+        <article class="card reveal">
+          <h3>声明式 manifest</h3>
+          <p>能力声明、宿主版本兼容区间、双发布目标与 AI 清单，安装前即可校验。</p>
+        </article>
+        <article class="card reveal" data-delay="80">
+          <h3>事件 hook</h3>
+          <p>订阅业务事件，支持优先级排序、一次性订阅与返回值收集，卸载时自动清理。</p>
+        </article>
+        <article class="card reveal" data-delay="160">
+          <h3>事件通信</h3>
+          <p>经 NeuroBus 发布业务事件，与宿主事件总线对齐，跨 Mod 协作有据可循。</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="section section-soft" id="open-api">
+    <div class="container">
+      <div class="section-head reveal">
+        <div>
+          <p class="section-kicker">开放 API</p>
+          <h2>只读市场接口无需登录，写操作走 PAT</h2>
+        </div>
+        <p>与 AI 市场同域的 MODstore API。浏览商品、模板与 Catalog 包可直接调用；工作流执行、Mod 同步与 Webhook 需个人访问令牌（PAT）。</p>
+      </div>
+
+      <div class="dev-api-meta reveal">
+        <p class="dev-api-base">API 基址：<code id="dev-api-base">https://xiu-ci.com</code> · 凭证头 <code>Authorization: Bearer &lt;token&gt;</code></p>
+        <div class="dev-api-doc-links">
+          <a class="btn btn-secondary btn-sm" href="/docs" target="_blank" rel="noopener noreferrer">Swagger UI</a>
+          <a class="btn btn-secondary btn-sm" href="/redoc" target="_blank" rel="noopener noreferrer">ReDoc</a>
+          <a class="btn btn-secondary btn-sm" href="/openapi.json" target="_blank" rel="noopener noreferrer">OpenAPI JSON</a>
+        </div>
+      </div>
+
+      <div class="grid grid-2 dev-api-grid reveal" data-delay="60">
+        <article class="card dev-api-card">
+          <h3>公开只读（无需 Token）</h3>
+          <p class="dev-api-card-desc">适合官网、BI、第三方目录聚合；请遵守限流，勿高频爬取。</p>
+          <div class="dev-api-table-wrap">
+            <table class="dev-api-table">
+              <thead><tr><th>方法</th><th>路径</th><th>说明</th></tr></thead>
+              <tbody>
+                <tr><td><span class="dev-api-method dev-api-method--get">GET</span></td><td><code>/api/health</code></td><td>服务健康、版本与调度状态</td></tr>
+                <tr><td><span class="dev-api-method dev-api-method--get">GET</span></td><td><code>/api/market/facets</code></td><td>市场筛选项（行业、素材类型、许可等）</td></tr>
+                <tr><td><span class="dev-api-method dev-api-method--get">GET</span></td><td><code>/api/market/catalog</code></td><td>商品列表（q、artifact、limit、offset）</td></tr>
+                <tr><td><span class="dev-api-method dev-api-method--get">GET</span></td><td><code>/api/market/catalog/{id}</code></td><td>商品详情</td></tr>
+                <tr><td><span class="dev-api-method dev-api-method--get">GET</span></td><td><code>/api/market/catalog/{id}/reviews</code></td><td>用户评价列表</td></tr>
+                <tr><td><span class="dev-api-method dev-api-method--get">GET</span></td><td><code>/api/templates</code></td><td>工作流模板列表（公开模板）</td></tr>
+                <tr><td><span class="dev-api-method dev-api-method--get">GET</span></td><td><code>/api/templates/categories</code></td><td>模板分类与数量</td></tr>
+                <tr><td><span class="dev-api-method dev-api-method--get">GET</span></td><td><code>/api/templates/{id}</code></td><td>模板详情（含节点图预览）</td></tr>
+                <tr><td><span class="dev-api-method dev-api-method--get">GET</span></td><td><code>/v1/packages</code></td><td>Catalog 包分页列表</td></tr>
+                <tr><td><span class="dev-api-method dev-api-method--get">GET</span></td><td><code>/v1/index.json</code></td><td>轻量全量包索引</td></tr>
+                <tr><td><span class="dev-api-method dev-api-method--get">GET</span></td><td><code>/v1/packages/{id}/{ver}</code></td><td>包元数据</td></tr>
+                <tr><td><span class="dev-api-method dev-api-method--get">GET</span></td><td><code>/v1/packages/{id}/{ver}/download</code></td><td>下载包 zip</td></tr>
+                <tr><td><span class="dev-api-method dev-api-method--get">GET</span></td><td><code>/market/download-release.json</code></td><td>客户端安装包版本清单</td></tr>
+                <tr><td><span class="dev-api-method dev-api-method--post">POST</span></td><td><code>/api/public/contact</code></td><td>联系表单（匿名，限流）</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </article>
+
+        <article class="card dev-api-card">
+          <h3>需 PAT / 登录会话</h3>
+          <p class="dev-api-card-desc">在 AI 市场登录后于开发者中心创建 PAT；明文仅返回一次，请妥善保存。</p>
+          <div class="dev-api-table-wrap">
+            <table class="dev-api-table">
+              <thead><tr><th>方法</th><th>路径</th><th>说明</th></tr></thead>
+              <tbody>
+                <tr><td><span class="dev-api-method dev-api-method--get">GET</span></td><td><code>/api/developer/tokens</code></td><td>我的 PAT 列表</td></tr>
+                <tr><td><span class="dev-api-method dev-api-method--post">POST</span></td><td><code>/api/developer/tokens</code></td><td>创建 PAT（含 scopes）</td></tr>
+                <tr><td><span class="dev-api-method dev-api-method--del">DEL</span></td><td><code>/api/developer/tokens/{id}</code></td><td>吊销 PAT</td></tr>
+                <tr><td><span class="dev-api-method dev-api-method--get">GET</span></td><td><code>/api/developer/webhooks</code></td><td>Webhook 订阅列表</td></tr>
+                <tr><td><span class="dev-api-method dev-api-method--post">POST</span></td><td><code>/api/developer/webhooks</code></td><td>创建事件订阅</td></tr>
+                <tr><td><span class="dev-api-method dev-api-method--post">POST</span></td><td><code>/api/developer/webhooks/{id}/test</code></td><td>发送测试事件</td></tr>
+                <tr><td><span class="dev-api-method dev-api-method--post">POST</span></td><td><code>/api/templates/{id}/install</code></td><td>模板一键安装为工作流</td></tr>
+                <tr><td><span class="dev-api-method dev-api-method--post">POST</span></td><td><code>/v1/mod-sync/push</code></td><td>库 → XCAGI mods（scope: mod:sync）</td></tr>
+                <tr><td><span class="dev-api-method dev-api-method--post">POST</span></td><td><code>/v1/mod-sync/pull</code></td><td>XCAGI mods → 库</td></tr>
+                <tr><td><span class="dev-api-method dev-api-method--get">GET</span></td><td><code>/v1/mod-sync/export-zip/{mod_id}</code></td><td>导出与工作台同布局 zip</td></tr>
+                <tr><td><span class="dev-api-method dev-api-method--post">POST</span></td><td><code>/api/workflow/{id}/execute</code></td><td>触发工作流执行</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="dev-api-footnote">常用 scope：<code>catalog:read</code> · <code>workflow:read</code> · <code>workflow:execute</code> · <code>mod:sync</code> · <code>webhook:manage</code></p>
+        </article>
+      </div>
+
+      <div class="dev-api-examples reveal" data-delay="120">
+        <h3 class="dev-api-examples-title">快速试用</h3>
+        <div class="dev-api-example-grid">
+          <figure class="dev-api-example">
+            <figcaption>拉取市场商品（前 5 条）</figcaption>
+            <pre class="dev-api-pre"><code id="dev-api-ex-catalog"></code></pre>
+          </figure>
+          <figure class="dev-api-example">
+            <figcaption>创建 PAT（需已登录 JWT）</figcaption>
+            <pre class="dev-api-pre"><code id="dev-api-ex-pat"></code></pre>
+          </figure>
+        </div>
+        <p class="dev-api-footnote dev-api-footnote--center">完整索引见仓库 <code>MODstore_deploy/docs/developer/03-rest-api.md</code>；Mod 跨机部署可用 <code>python -m modman remote-deploy --base-url … --token pat_xxx</code>。</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <div class="section-head reveal">
+        <div><p class="section-kicker">上架与经营</p><h2>从灰度到收益，全链路打通</h2></div>
+      </div>
+      <div class="grid grid-3">
+        <article class="card reveal">
+          <h3>灰度发布</h3>
+          <p>按比例与用户标签放量，观察稳定后逐步全量，异常一键回滚，降低上新风险。</p>
+          <ul class="card-list">
+            <li>比例分桶 + 标签命中</li>
+            <li>全量 / 暂停 / 回滚</li>
+          </ul>
+        </article>
+        <article class="card reveal" data-delay="80">
+          <h3>评价与口碑</h3>
+          <p>用户评分与评论，作者可逐条回复，沉淀真实使用反馈与商品口碑。</p>
+          <ul class="card-list">
+            <li>评分聚合与展示</li>
+            <li>作者回复</li>
+          </ul>
+        </article>
+        <article class="card reveal" data-delay="160">
+          <h3>收益结算</h3>
+          <p>按成交计算分成，平台对账后结算并支持提现，收益明细清晰可查。</p>
+          <ul class="card-list">
+            <li>成交分成（默认平台 30%）</li>
+            <li>对账结算与提现</li>
+          </ul>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="section section-soft">
+    <div class="container">
+      <div class="section-head reveal">
+        <div><p class="section-kicker">行业模板</p><h2>复制即用的四套脚手架</h2></div>
+        <p>从模板起步，改个标识与行业配置就能跑通，不必从零搭骨架。</p>
+      </div>
+      <div class="grid grid-4">
+        <article class="card reveal"><h3>ERP</h3><p>产品 / 客户 / 订单三域 + AI 助手双发布。</p></article>
+        <article class="card reveal" data-delay="60"><h3>出货</h3><p>发货单 / 出货记录 / 标签打印链路。</p></article>
+        <article class="card reveal" data-delay="120"><h3>客服</h3><p>工单 / 会话 / 知识库 + AI 客服员工。</p></article>
+        <article class="card reveal" data-delay="180"><h3>财务</h3><p>对账 / 开票 / 统一账本（仅 Mod 发布）。</p></article>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <div class="section-head reveal">
+        <div><p class="section-kicker">接入步骤</p><h2>四步上架你的第一个包</h2></div>
+      </div>
+      <div class="timeline reveal">
+        <div class="timeline-item"><div class="timeline-year">01</div><div class="timeline-content"><h3>申请开发者权限</h3><p>联系我们或在 AI 市场登录后创建 PAT；可先调用上方<a href="#open-api">开放 API</a>只读接口验证连通性。</p></div></div>
+        <div class="timeline-item"><div class="timeline-year">02</div><div class="timeline-content"><h3>从模板起步开发</h3><p>复制行业模板，修改 manifest 的标识、能力与行业配置，实现后端 hook 与前端页面。</p></div></div>
+        <div class="timeline-item"><div class="timeline-year">03</div><div class="timeline-content"><h3>灰度上架</h3><p>提交审核，按比例与标签灰度放量，结合稳定性数据逐步全量。</p></div></div>
+        <div class="timeline-item"><div class="timeline-year">04</div><div class="timeline-content"><h3>经营与结算</h3><p>收集评价、迭代版本，按成交分成对账结算并提现。</p></div></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container cta-band reveal">
+      <div><h2>成为修茈生态的开发者</h2><p>把你的行业 Know-how 变成可复用、可上架、可持续获益的 Mod 与 AI 员工。</p></div>
+      <a class="btn btn-primary" href="/contact.html">申请开发者权限</a>
+    </div>
+  </section>
+</main>
+<footer class="site-footer">
+  <div class="container footer-inner">
+    <div>
+      <a class="brand-mark" href="/index.html"><span class="brand-seal"><img src="/assets/xiu-ci-logo.png" alt="修茈科技 Logo" /></span><span class="brand-name"><strong>成都修茈科技有限公司</strong><span>XCAGI Automation</span></span></a>
+      <p class="footer-copy">&copy; <span id="year"></span> 成都修茈科技有限公司 保留所有权利。</p>
+      <p class="footer-meta">邮箱：970882904@qq.com · 面向中小企业的 AI 自动化方案</p>
+      <p class="footer-meta footer-legal"><a href="https://beian.miit.gov.cn/" rel="noopener noreferrer" target="_blank">蜀ICP备2026014056号-1</a></p>
+    </div>
+    <div class="footer-links"><a href="/about.html">关于修茈</a><a href="/services.html">产品中心</a><a href="/solutions.html">解决方案</a><a href="/cases.html">客户案例</a><a href="/news.html">新闻资讯</a><a href="/developer.html">开发者门户</a><a href="/contact.html">联系我们</a></div>
+  </div>
+</footer>
+<button id="back-to-top" class="back-to-top" aria-label="回到顶部"></button>
+<script src="./main.js?v=20260619"></script>
+<script>
+(function () {
+  var origin = location.origin || 'https://xiu-ci.com';
+  var baseEl = document.getElementById('dev-api-base');
+  if (baseEl) baseEl.textContent = origin;
+  var catalog = document.getElementById('dev-api-ex-catalog');
+  if (catalog) {
+    catalog.textContent =
+      'curl -s "' + origin + '/api/market/catalog?limit=5" | jq .';
+  }
+  var pat = document.getElementById('dev-api-ex-pat');
+  if (pat) {
+    pat.textContent =
+      'curl -X POST ' + origin + '/api/developer/tokens \\\n' +
+      '  -H "Authorization: Bearer <JWT>" \\\n' +
+      '  -H "Content-Type: application/json" \\\n' +
+      '  -d \'{"name":"my-ci","scopes":["catalog:read","mod:sync"],"expires_days":90}\'';
+  }
+})();
+</script>
+
+<div id="xc-corp-butler-root"></div>
+<link rel="stylesheet" href="/corp-butler/corp-butler.css?v=20260619" data-xc-corp-butler-css="1" />
+<script type="module" src="/corp-butler/corp-butler.js?v=20260619" data-xc-corp-butler-js="1"></script>
+
+</body>
+</html>
