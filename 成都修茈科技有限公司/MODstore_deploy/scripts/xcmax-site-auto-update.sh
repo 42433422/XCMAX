@@ -84,6 +84,35 @@ sync_market_public_assets() {
   fi
 }
 
+# 官网 widget：nginx alias /corp-butler/ → 成都修茈科技有限公司/corp-butler/
+sync_corp_butler_assets() {
+  local corp_dir="${XCMAX_ROOT}/${SITE_SUBDIR}/corp-butler"
+  local logo_src="${MODSTORE_ROOT}/market/public/brand-xc-logo.jpg"
+  mkdir -p "$corp_dir"
+  if [[ -f "$logo_src" ]]; then
+    cp -af "$logo_src" "${corp_dir}/brand-xc-logo.jpg"
+  fi
+  if [[ -f "${MODSTORE_ROOT}/market/public/download-release.json" ]]; then
+    cp -af "${MODSTORE_ROOT}/market/public/download-release.json" "${corp_dir}/download-release.json"
+  fi
+  if [[ -f "${corp_dir}/corp-butler.js" ]]; then
+    log "corp-butler 产物已存在"
+    return 0
+  fi
+  export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+  # shellcheck disable=SC1091
+  [[ -s "${NVM_DIR}/nvm.sh" ]] && . "${NVM_DIR}/nvm.sh"
+  if command -v npm >/dev/null 2>&1 && [[ -d "${MODSTORE_ROOT}/market/node_modules" ]]; then
+    if (cd "${MODSTORE_ROOT}/market" && npm run build:corp-butler >>"$LOG" 2>&1); then
+      log "corp-butler 构建完成"
+    else
+      log "WARN: corp-butler 构建失败，官网 AI 管家可能 404"
+    fi
+  else
+    log "WARN: 缺少 node_modules，跳过 corp-butler 构建（需本机 build 后 scp）"
+  fi
+}
+
 build_market() {
   export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
   # shellcheck disable=SC1091
@@ -226,7 +255,8 @@ fi
 
 if [[ "$REPO_CHANGED" != true ]]; then
   sync_market_public_assets
-  log "XCMAX 无新提交，已检查 public→dist 静态资源"
+  sync_corp_butler_assets
+  log "XCMAX 无新提交，已检查 public→dist / corp-butler 静态资源"
   exit 0
 fi
 
@@ -266,6 +296,7 @@ if [[ -z "$OLD_XCMAX_SHA" ]]; then
 fi
 
 sync_market_public_assets
+sync_corp_butler_assets
 
 restart_app_services
 
