@@ -10,7 +10,8 @@ on:
         default: "10.0.0"
   push:
     tags:
-      - "FHD/v8.*"
+      - "FHD/v10.*"
+      - "FHD/v*"
 
 permissions:
   contents: write
@@ -19,6 +20,7 @@ permissions:
 defaults:
   run:
     working-directory: FHD
+
 jobs:
   windows:
     runs-on: windows-latest
