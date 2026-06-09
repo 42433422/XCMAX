@@ -9,6 +9,8 @@
 #   FHD_HEALTH_PORT        默认 5100
 #   FHD_ENV_FILE           默认 /root/fhd-full.env
 #   FHD_USE_BUNDLED_REDIS  1 时加 --profile bundled-redis
+#   FHD_IMAGE_TARBALL      可选，update 站 fhd-api-image.tar.gz（GHCR pull 失败时加载）
+#   FHD_ARTIFACT_DIR       默认同 manifest 目录，用于查找 fhd-api-image.tar.gz
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
@@ -66,6 +68,7 @@ log "开始 compose 发布 image=$IMAGE digest=${DIGEST:0:19}..."
 
 export FHD_API_IMAGE="$IMAGE"
 export FHD_API_IMAGE_DIGEST="$DIGEST"
+export FHD_API_IMAGE_REF="${IMAGE}@${DIGEST}"
 export FHD_DEPLOY_ROOT="$DEPLOY_ROOT"
 export FHD_ENV_FILE="$ENV_FILE"
 
@@ -82,13 +85,35 @@ rollback_compose() {
   fi
   log "compose 回滚至 digest=${digest:0:19}..."
   export FHD_API_IMAGE_DIGEST="$digest"
+  export FHD_API_IMAGE_REF="${FHD_API_IMAGE}@${digest}"
   docker compose "${COMPOSE_OPTS[@]}" pull fhd-api || true
-  docker compose "${COMPOSE_OPTS[@]}" up -d fhd-api || true
+  docker compose "${COMPOSE_OPTS[@]}" up -d --pull never fhd-api || true
 }
 
 deploy_emit pull started
-if ! docker compose "${COMPOSE_OPTS[@]}" pull fhd-api; then
-  log "ERROR: docker compose pull 失败"
+PULL_OK=0
+if docker compose "${COMPOSE_OPTS[@]}" pull fhd-api; then
+  PULL_OK=1
+elif docker image inspect "${IMAGE}@${DIGEST}" >/dev/null 2>&1; then
+  log "WARN: pull 失败但本地已有 digest，继续 up"
+  PULL_OK=1
+else
+  IMAGE_TAR="${FHD_IMAGE_TARBALL:-}"
+  if [[ -z "$IMAGE_TAR" && -n "${FHD_ARTIFACT_DIR:-}" ]]; then
+    IMAGE_TAR="${FHD_ARTIFACT_DIR}/fhd-api-image.tar.gz"
+  fi
+  if [[ -n "$IMAGE_TAR" && -f "$IMAGE_TAR" ]]; then
+    log "尝试从 tar 加载镜像（无 GHCR PAT）: $IMAGE_TAR"
+    if FHD_IMAGE_TARBALL="$IMAGE_TAR" FHD_API_IMAGE="$IMAGE" FHD_API_IMAGE_DIGEST="$DIGEST" \
+      bash "$SCRIPT_DIR/fhd-load-release-image.sh"; then
+      if docker image inspect "${IMAGE}@${DIGEST}" >/dev/null 2>&1; then
+        PULL_OK=1
+      fi
+    fi
+  fi
+fi
+if [[ "$PULL_OK" != "1" ]]; then
+  log "ERROR: docker compose pull 失败且无本地 digest"
   deploy_emit pull failed
   rollback_compose "$PREV_DIGEST"
   deploy_emit apply failed "pull_failed"
@@ -97,7 +122,7 @@ fi
 deploy_emit pull ok
 
 deploy_emit up started
-if ! docker compose "${COMPOSE_OPTS[@]}" up -d fhd-api; then
+if ! docker compose "${COMPOSE_OPTS[@]}" up -d --pull never fhd-api; then
   log "ERROR: docker compose up 失败"
   deploy_emit up failed
   rollback_compose "$PREV_DIGEST"

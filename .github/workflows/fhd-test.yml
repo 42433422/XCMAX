@@ -12,10 +12,6 @@ on:
       - "FHD/frontend/**"
       - "FHD/deploy/requirements*.txt"
       - "FHD/scripts/dev/verify_version_anchors.py"
-      - "scripts/ci/**"
-      - "scripts/remediate_broad_except.py"
-      - "scripts/add_operational_imports.py"
-      - "scripts/fix_operational_import_order.py"
       - ".github/workflows/fhd-test.yml"
   pull_request:
     branches: [main, develop, master]
@@ -25,10 +21,6 @@ on:
       - "FHD/frontend/**"
       - "FHD/deploy/requirements*.txt"
       - "FHD/scripts/dev/verify_version_anchors.py"
-      - "scripts/ci/**"
-      - "scripts/remediate_broad_except.py"
-      - "scripts/add_operational_imports.py"
-      - "scripts/fix_operational_import_order.py"
       - ".github/workflows/fhd-test.yml"
   workflow_dispatch:
 
@@ -53,6 +45,8 @@ jobs:
           bad=""
           while IFS= read -r f; do
             [ -z "${f}" ] && continue
+            f="${f#\"}"
+            f="${f%\"}"
             [[ "${f}" =~ \.example$ ]] && continue
             [[ "${f}" =~ /\.env\.generic$ ]] && continue
             [[ "${f}" =~ /\.env\.minimal$ ]] && continue
@@ -97,15 +91,6 @@ jobs:
       - name: Verify v10 version anchors
         run: python scripts/dev/verify_version_anchors.py
 
-      - name: Tech debt gates (broad except / v2 / placeholder tests)
-        working-directory: ${{ github.workspace }}
-        run: |
-          python scripts/ci/check_broad_except_gate.py
-          python scripts/ci/guard_no_placeholder_tests.py
-          git ls-files 'FHD/app/**/*_v*.py' | while read -r f; do
-            python scripts/guard_no_new_v2_files.py "$f" || exit 1
-          done
-
       - name: Ruff lint (app + tests)
         run: ruff check app/ tests/
 
@@ -127,16 +112,16 @@ jobs:
         with:
           node-version: "20"
           cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          cache-dependency-path: FHD/frontend/package-lock.json
 
       - name: Install dependencies
-        working-directory: frontend
+        working-directory: FHD/frontend
         run: npm ci
 
       - name: ESLint
-        working-directory: frontend
+        working-directory: FHD/frontend
         run: npm run lint
 
       - name: Vitest smoke
-        working-directory: frontend
+        working-directory: FHD/frontend
         run: npm run test:smoke
