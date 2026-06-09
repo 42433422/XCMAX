@@ -975,6 +975,8 @@ def run_employee_evolution_scan(
             if out.get("ok"):
                 suggestion_id = int(out.get("suggestion_id") or 0)
 
+        evolution_record_id = 0
+        apply_meta: Dict[str, Any] = {}
         sf3 = get_session_factory()
         with sf3() as session:
             rec = EmployeeEvolutionRecord(
@@ -991,6 +993,39 @@ def run_employee_evolution_scan(
             )
             session.add(rec)
             session.commit()
+            evolution_record_id = int(rec.id or 0)
+
+        if status == "suggested" and improved:
+            try:
+                from modstore_server.prompt_evolution_ab import maybe_auto_apply_prompt_evolution
+
+                apply_meta = maybe_auto_apply_prompt_evolution(
+                    employee_id=employee_id,
+                    prompt_before=current_prompt,
+                    prompt_after=improved,
+                    evolution_record_id=evolution_record_id,
+                    lookback_hours=lookback_hours,
+                )
+                if apply_meta.get("applied"):
+                    sf4 = get_session_factory()
+                    with sf4() as session:
+                        row = session.get(EmployeeEvolutionRecord, evolution_record_id)
+                        if row is not None:
+                            row.status = "applied"
+                            session.commit()
+                    status = "applied"
+                elif apply_meta.get("ab", {}).get("verdict") == "before":
+                    revert = apply_meta.get("ab", {})
+                    sf4 = get_session_factory()
+                    with sf4() as session:
+                        row = session.get(EmployeeEvolutionRecord, evolution_record_id)
+                        if row is not None:
+                            row.status = "ab_rejected"
+                            row.error = str(revert)[:2000]
+                            session.commit()
+            except Exception:
+                logger.exception("prompt evolution A/B apply failed employee=%s", employee_id)
+
         if status == "suggested":
             created += 1
             _publish_event(

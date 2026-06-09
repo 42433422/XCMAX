@@ -13,6 +13,65 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _evaluate_execution_success(result: Dict[str, Any]) -> tuple[bool, str]:
+    """从 execute_employee_task 返回值判定真实成功与否（非仅「未抛异常」）。"""
+    if not isinstance(result, dict):
+        return False, "invalid result payload"
+    if result.get("blocked_by_risk_gate"):
+        return False, "blocked_by_risk_gate"
+
+    inner = result.get("result") if isinstance(result.get("result"), dict) else {}
+    outputs = inner.get("outputs") if isinstance(inner.get("outputs"), list) else []
+    if not outputs:
+        cog_err = str(result.get("cognition_error") or "").strip()
+        if cog_err:
+            return False, f"cognition_error: {cog_err[:200]}"
+        return True, "no explicit handler outputs"
+
+    failed_handlers: list[str] = []
+    for out in outputs:
+        if not isinstance(out, dict):
+            continue
+        if out.get("ok") is False:
+            handler = str(out.get("handler") or "unknown")
+            err = str(out.get("error") or out.get("reason") or "")[:120]
+            failed_handlers.append(f"{handler}:{err}" if err else handler)
+    if failed_handlers:
+        return False, "handler_failed: " + "; ".join(failed_handlers[:5])
+    return True, "handlers_ok"
+
+
+def _record_dispatch_metric(
+    *,
+    employee_id: str,
+    task_brief: str,
+    user_id: int,
+    ok: bool,
+    reason: str,
+    duration_ms: float = 0.0,
+) -> None:
+    """编排层补充写入 EmployeeExecutionMetric（与 executor 内指标互补）。"""
+    try:
+        from modstore_server.models import EmployeeExecutionMetric, get_session_factory
+
+        sf = get_session_factory()
+        with sf() as session:
+            session.add(
+                EmployeeExecutionMetric(
+                    user_id=int(user_id or 0),
+                    employee_id=str(employee_id or ""),
+                    task=(task_brief or "")[:500],
+                    status="success" if ok else "orchestrator_failed",
+                    duration_ms=round(float(duration_ms or 0), 3),
+                    llm_tokens=0,
+                    error="" if ok else (reason or "")[:2000],
+                )
+            )
+            session.commit()
+    except Exception:
+        logger.debug("record_dispatch_metric failed employee=%s", employee_id, exc_info=True)
+
+
 def _resolve_uid(created_by_user_id: int) -> int:
     from modstore_server.models import User, get_session_factory
 
@@ -196,11 +255,14 @@ def _run_layer(
     from modstore_server.employee_executor import execute_employee_task
 
     def _run_one(st) -> Dict[str, Any]:
+        import time
+
         # 把已完成的依赖结果注入 input_data
         input_data = dict(st.input_data or {})
         for dep_id in st.depends_on or []:
             if dep_id in completed:
                 input_data.setdefault("upstream_results", {})[dep_id] = completed[dep_id]
+        t0 = time.perf_counter()
         try:
             result = execute_employee_task(
                 st.employee_id,
@@ -208,9 +270,35 @@ def _run_layer(
                 input_data,
                 user_id=uid,
             )
-            return {"ok": True, "employee_id": st.employee_id, "result": result}
+            ok, reason = _evaluate_execution_success(result if isinstance(result, dict) else {})
+            duration_ms = round((time.perf_counter() - t0) * 1000, 3)
+            if not ok:
+                _record_dispatch_metric(
+                    employee_id=st.employee_id,
+                    task_brief=st.task_brief,
+                    user_id=uid,
+                    ok=False,
+                    reason=reason,
+                    duration_ms=duration_ms,
+                )
+            return {
+                "ok": ok,
+                "employee_id": st.employee_id,
+                "result": result,
+                "error": None if ok else reason,
+                "validation_reason": reason,
+            }
         except Exception as exc:
+            duration_ms = round((time.perf_counter() - t0) * 1000, 3)
             logger.exception("dispatch_subtasks: employee=%s failed", st.employee_id)
+            _record_dispatch_metric(
+                employee_id=st.employee_id,
+                task_brief=st.task_brief,
+                user_id=uid,
+                ok=False,
+                reason=str(exc),
+                duration_ms=duration_ms,
+            )
             return {"ok": False, "employee_id": st.employee_id, "error": str(exc)}
 
     if len(layer) == 1:
