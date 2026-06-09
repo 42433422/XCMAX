@@ -1,0 +1,82 @@
+# 官网静态（xiu-ci.com）：developer.html、logo-river assets、styles.css、nginx root。
+# 与 market-live-deploy（仅 market/dist）分离；解决「点开发者门户仍是首页」「logo 白底未更新」。
+#
+# Secrets（与 FHD push 共用）：
+#   FHD_PUSH_HOST、FHD_PUSH_SSH_KEY
+# Variables（可选）：
+#   XCMAX_REMOTE_ROOT   默认依次尝试 /root/XCMAX、/root/modstore-git
+#   XCMAX_GIT_BRANCH    默认 main
+
+name: Deploy corp site (xiu-ci.com)
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: Git branch to deploy on server
+        required: false
+        default: main
+  push:
+    branches: [main]
+    paths:
+      - '成都修茈科技有限公司/*.html'
+      - '成都修茈科技有限公司/styles.css'
+      - '成都修茈科技有限公司/main.js'
+      - '成都修茈科技有限公司/assets/**'
+      - '成都修茈科技有限公司/nginx-xiu-ci*.conf'
+      - '成都修茈科技有限公司/MODstore_deploy/scripts/xcmax-site-auto-update.sh'
+      - '成都修茈科技有限公司/MODstore_deploy/scripts/install-site-auto-update-cron.sh'
+      - '.github/workflows/corp-site-deploy.yml'
+
+concurrency:
+  group: corp-site-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH — git sync + xcmax-site-auto-update + nginx reload
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.FHD_PUSH_HOST }}
+          username: root
+          key: ${{ secrets.FHD_PUSH_SSH_KEY }}
+          script_stop: true
+          command_timeout: 25m
+          script: |
+            set -euo pipefail
+            BRANCH="${{ github.event.inputs.branch }}"
+            if [ -z "${BRANCH}" ]; then BRANCH="${{ vars.XCMAX_GIT_BRANCH }}"; fi
+            if [ -z "${BRANCH}" ]; then BRANCH="main"; fi
+            REMOTE_ROOT="${{ vars.XCMAX_REMOTE_ROOT }}"
+            if [ -z "${REMOTE_ROOT}" ]; then
+              for candidate in /root/XCMAX /root/modstore-git; do
+                if [ -d "${candidate}/.git" ]; then REMOTE_ROOT="${candidate}"; break; fi
+              done
+            fi
+            if [ -z "${REMOTE_ROOT}" ] || [ ! -d "${REMOTE_ROOT}/.git" ]; then
+              echo "[err] 未找到 XCMAX git 根（设 Variables XCMAX_REMOTE_ROOT）"
+              exit 1
+            fi
+            echo "[info] XCMAX_ROOT=${REMOTE_ROOT} branch=${BRANCH}"
+            export XCMAX_ROOT="${REMOTE_ROOT}"
+            export XCMAX_GIT_BRANCH="${BRANCH}"
+            export XCMAX_GIT_RESET_HARD=1
+            AUTO_SCRIPT="${REMOTE_ROOT}/成都修茈科技有限公司/MODstore_deploy/scripts/xcmax-site-auto-update.sh"
+            if [ ! -f "${AUTO_SCRIPT}" ]; then
+              echo "[err] 缺少 ${AUTO_SCRIPT}；请先 git pull 含该脚本的提交"
+              git -C "${REMOTE_ROOT}" fetch origin "${BRANCH}"
+              git -C "${REMOTE_ROOT}" reset --hard "origin/${BRANCH}"
+            fi
+            bash "${AUTO_SCRIPT}"
+            SITE_ROOT="${REMOTE_ROOT}/成都修茈科技有限公司"
+            NGINX_SRC="${SITE_ROOT}/nginx-xiu-ci-root.conf"
+            if [ -f "${NGINX_SRC}" ]; then
+              install -m 644 "${NGINX_SRC}" /etc/nginx/conf.d/xiu-ci-corp-root.conf
+              if nginx -t; then systemctl reload nginx; echo "[ok] nginx reloaded"; fi
+            fi
+            echo "[verify] developer.html title:"
+            curl -fsS http://127.0.0.1/developer.html | head -8 | grep -i title || true
+            echo "[verify] logo bytes:"
+            wc -c "${SITE_ROOT}/assets/xiu-ci-logo.png" 2>/dev/null || true
