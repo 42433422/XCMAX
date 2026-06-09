@@ -483,7 +483,9 @@ class TestCreatePayOrderRouting:
         page_result = {"success": False, "order_string": None, "gateway": "", "message": "no perm"}
         precreate_result = {"success": True, "qr_code": "https://qr.alipay.com/x"}
         with (
-            patch.object(alipay_mod, "_try_wap_pay", return_value={"success": False, "message": "x"}),
+            patch.object(
+                alipay_mod, "_try_wap_pay", return_value={"success": False, "message": "x"}
+            ),
             patch.object(alipay_mod, "_try_page_pay", return_value=page_result),
             patch.object(alipay_mod, "_try_precreate", return_value=precreate_result),
         ):
@@ -500,9 +502,15 @@ class TestCreatePayOrderRouting:
 
     def test_all_three_fail(self) -> None:
         with (
-            patch.object(alipay_mod, "_try_wap_pay", return_value={"success": False, "message": "x"}),
-            patch.object(alipay_mod, "_try_page_pay", return_value={"success": False, "message": "y"}),
-            patch.object(alipay_mod, "_try_precreate", return_value={"success": False, "message": "z"}),
+            patch.object(
+                alipay_mod, "_try_wap_pay", return_value={"success": False, "message": "x"}
+            ),
+            patch.object(
+                alipay_mod, "_try_page_pay", return_value={"success": False, "message": "y"}
+            ),
+            patch.object(
+                alipay_mod, "_try_precreate", return_value={"success": False, "message": "z"}
+            ),
         ):
             out = alipay_mod.create_pay_order(
                 out_trade_no="O1",

@@ -6,6 +6,8 @@ import json
 import logging
 from pathlib import Path
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
+
 logger = logging.getLogger(__name__)
 
 try:
@@ -50,7 +52,7 @@ def load_active_policy() -> RoutingMLP | None:
         return None
     try:
         manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.warning("routing manifest read failed: %s", e)
         return None
     ver = (manifest.get("active_version") or "0").strip()
@@ -78,7 +80,7 @@ def load_active_policy() -> RoutingMLP | None:
         _policy.to(_policy_device)
         logger.info("loaded routing policy v%s from %s", ver, weights)
         return _policy
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.warning("failed to load routing policy: %s", e)
         return None
 

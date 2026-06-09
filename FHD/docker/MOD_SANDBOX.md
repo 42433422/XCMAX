@@ -57,7 +57,7 @@ docker run --rm -p 127.0.0.1:5000:5000 \
 - `path/to/your_mods_parent` 下应为**多个 Mod 目录**（每个子目录含 `manifest.json`），与线上一致；若只有一个 Mod，该目录本身应作为 `/mods` 的内容（即挂载点下直接是 `your_mod_id/manifest.json`）。
 - `XCAGI_MOD_SANDBOX=1`：关闭 `/docs`、`/redoc`（见 `XCAGI/run_fastapi.py`）。
 - **Redis**：多数缓存为懒加载；未起 Redis 时，**不保证**所有业务 API 可用。本镜像目标为 **Mod 加载 + 基础 HTTP（如 `/health`）+ 你自行对 Mod 路由的冒烟**。
-- **AGPL**：仓库为 AGPL v3；若向第三方分发镜像或二进制，请自行确认许可证下的源码提供义务。
+- **Apache-2.0**：社区版以 [`LICENSE`](../LICENSE) 为准；若向第三方分发镜像或二进制，请保留许可证与 NOTICE 声明。
 
 ## 可选：docker compose 片段
 

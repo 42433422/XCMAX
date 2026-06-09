@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import logging
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
+
 logger = logging.getLogger(__name__)
 
 
@@ -48,7 +50,7 @@ def _extract_structured_excel_preview(
                 try:
                     float(t)
                     return True
-                except Exception:
+                except OPERATIONAL_ERRORS:
                     return False
 
             def _is_date_like(text: str) -> bool:
@@ -142,7 +144,7 @@ def _extract_structured_excel_preview(
             return {"fields": fields, "sample_rows": sample_rows, "sheet_name": ws.title}
         finally:
             wb.close()
-    except Exception:
+    except OPERATIONAL_ERRORS:
         return {"fields": [], "sample_rows": [], "sheet_name": sheet_name or ""}
 
 
@@ -201,7 +203,7 @@ def _extract_excel_grid_preview(
             return {"sheet_name": ws.title, "rows": rows}
         finally:
             wb.close()
-    except Exception:
+    except OPERATIONAL_ERRORS:
         return {"sheet_name": sheet_name or "", "rows": []}
 
 
@@ -280,7 +282,7 @@ def _extract_excel_grid_style_cache(
             }
         finally:
             wb.close()
-    except Exception:
+    except OPERATIONAL_ERRORS:
         return {"sheet_name": sheet_name or "", "styles": {}, "cell_style_refs": {}}
 
 
@@ -377,7 +379,7 @@ def _extract_logical_tables_from_sheet(
             return tables
         finally:
             wb.close()
-    except Exception:
+    except OPERATIONAL_ERRORS:
         return []
 
 
@@ -392,7 +394,7 @@ def _list_excel_sheet_names(file_path: str):
                 return names
         finally:
             wb.close()
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.debug("suppressed exception", exc_info=True)
 
     try:
@@ -405,7 +407,7 @@ def _list_excel_sheet_names(file_path: str):
                 return names
         finally:
             wb.close()
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.debug("suppressed exception", exc_info=True)
 
     try:
@@ -414,7 +416,7 @@ def _list_excel_sheet_names(file_path: str):
         excel_file = pd.ExcelFile(file_path)
         names = [str(n).strip() for n in (excel_file.sheet_names or []) if str(n).strip()]
         return names
-    except Exception:
+    except OPERATIONAL_ERRORS:
         return []
 
 
@@ -426,7 +428,7 @@ def _parse_json_dict(raw_value):
     try:
         data = json.loads(raw_value)
         return data if isinstance(data, dict) else {}
-    except Exception:
+    except OPERATIONAL_ERRORS:
         return {}
 
 
@@ -438,5 +440,5 @@ def _parse_json_list(raw_value):
     try:
         data = json.loads(raw_value)
         return data if isinstance(data, list) else []
-    except Exception:
+    except OPERATIONAL_ERRORS:
         return []

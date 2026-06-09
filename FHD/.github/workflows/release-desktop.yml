@@ -9,7 +9,8 @@ on:
         default: "10.0.0"
   push:
     tags:
-      - "v8.*"
+      - "FHD/v10.*"
+      - "FHD/v*"
 
 permissions:
   contents: write

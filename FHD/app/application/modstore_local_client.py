@@ -8,8 +8,6 @@ from typing import Any
 
 import httpx
 
-import httpx
-
 logger = logging.getLogger(__name__)
 
 

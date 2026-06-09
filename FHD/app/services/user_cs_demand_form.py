@@ -2,19 +2,20 @@
 
 from __future__ import annotations
 
-import hashlib
 import hmac
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import urlencode
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _landing_base_url(base_url: str = "") -> str:
@@ -69,7 +70,9 @@ def apply_landing_submission_to_pipeline(payload: dict[str, Any]) -> dict[str, A
     doc["intake_submitted_at"] = submitted
     if int(payload.get("landing_contact_id") or 0) > 0:
         doc["landing_contact_id"] = int(payload["landing_contact_id"])
-    doc = set_pipeline_stage(uid, "intake_done", username=doc.get("username") or "", source="landing")
+    doc = set_pipeline_stage(
+        uid, "intake_done", username=doc.get("username") or "", source="landing"
+    )
     return save_pipeline(doc)
 
 
@@ -132,9 +135,20 @@ async def sync_intake_from_market_if_newer(
         payload = {
             "market_user_id": int(market_user_id),
             "username": username,
-            **{k: data.get(k) for k in ("name", "email", "phone", "company", "message", "submitted_at", "landing_contact_id")},
+            **{
+                k: data.get(k)
+                for k in (
+                    "name",
+                    "email",
+                    "phone",
+                    "company",
+                    "message",
+                    "submitted_at",
+                    "landing_contact_id",
+                )
+            },
         }
         return apply_landing_submission_to_pipeline(payload)
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.debug("sync_intake_from_market_if_newer skipped", exc_info=True)
         return None

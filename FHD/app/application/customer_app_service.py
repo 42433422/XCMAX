@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import Any
 
 from app.domain.customer.entities import PurchaseUnit
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +22,7 @@ def get_customers_session():
         from app.mod_sdk.erp_repository_registry import resolve_customers_session
 
         return resolve_customers_session()
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.debug("resolve_customers_session fallback to host SessionLocal", exc_info=True)
     from app.db import SessionLocal
 
@@ -111,7 +112,7 @@ class CustomerApplicationService:
             finally:
                 session.close()
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"获取客户列表失败: {e}")
             return {"success": False, "message": str(e), "data": [], "total": 0}
 
@@ -146,7 +147,7 @@ class CustomerApplicationService:
             finally:
                 session.close()
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"获取客户失败: {e}")
             return {"success": False, "message": str(e), "data": None}
 
@@ -197,7 +198,7 @@ class CustomerApplicationService:
             finally:
                 session.close()
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"创建客户失败: {e}")
             return {"success": False, "message": str(e)}
 
@@ -256,7 +257,7 @@ class CustomerApplicationService:
             finally:
                 session.close()
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"更新客户失败: {e}")
             return {"success": False, "message": str(e)}
 
@@ -305,7 +306,7 @@ class CustomerApplicationService:
                     "shipment_count": total_count,
                     "sample_records": sample_records,
                 }
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.warning(f"检查发货记录关联失败: {e}")
             return {
                 "has_associations": False,
@@ -367,7 +368,7 @@ class CustomerApplicationService:
             finally:
                 session.close()
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"删除客户失败: {e}")
             return {"success": False, "message": str(e), "deleted_count": 0}
 
@@ -428,7 +429,7 @@ class CustomerApplicationService:
             finally:
                 session.close()
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"批量删除失败: {e}")
             return {"success": False, "message": str(e), "deleted_count": 0}
 
@@ -513,7 +514,7 @@ class CustomerApplicationService:
 
                         imported += 1
 
-                    except Exception as item_error:
+                    except OPERATIONAL_ERRORS as item_error:
                         failed += 1
                         failed_items.append({"reason": str(item_error), "item": item})
 
@@ -529,7 +530,7 @@ class CustomerApplicationService:
             finally:
                 session.close()
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"导入客户数据失败: {e}")
             return {
                 "success": False,
@@ -546,7 +547,7 @@ class CustomerApplicationService:
         try:
             with sqlite_write_guard():
                 return self._import_from_excel_locked(file)
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"导入客户数据失败: {e}")
             return {
                 "success": False,
@@ -616,7 +617,7 @@ class CustomerApplicationService:
             finally:
                 session.close()
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"导入失败: {e}")
             return {"success": False, "message": str(e), "updated": 0, "inserted": 0, "skipped": 0}
 
@@ -679,7 +680,7 @@ class CustomerApplicationService:
                             ).strip()
                             if candidate_path and os.path.exists(candidate_path):
                                 template_path = candidate_path
-                    except Exception:
+                    except OPERATIONAL_ERRORS:
                         template_path = None
 
                 if template_path:
@@ -723,7 +724,7 @@ class CustomerApplicationService:
             finally:
                 session.close()
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"导出失败: {e}")
             return {"success": False, "message": str(e)}
 
@@ -758,7 +759,7 @@ class CustomerApplicationService:
             finally:
                 session.close()
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"查询购买单位失败: {e}")
             return None
 
@@ -814,7 +815,7 @@ class CustomerApplicationService:
             finally:
                 session.close()
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"匹配购买单位失败：{e}")
             return None
 

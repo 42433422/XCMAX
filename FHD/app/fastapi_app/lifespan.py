@@ -26,6 +26,7 @@ from app.db.init_db import (
     init_wechat_tasks_table,
     initialize_databases,
 )
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 from .sqlite_paths import is_sqlite_url, resolve_effective_database_url, sqlite_db_file_from_url
 
@@ -58,7 +59,7 @@ async def lifespan(app: FastAPI):
         from app.mod_sdk.desktop_deliverable import ensure_deliverable_runtime
 
         await ensure_deliverable_runtime(app)
-    except Exception as exc:
+    except OPERATIONAL_ERRORS as exc:
         logger.warning("Deliverable runtime setup skipped: %s", exc)
 
     try:
@@ -66,7 +67,7 @@ async def lifespan(app: FastAPI):
 
         init_performance_optimization(app)
         mark_startup("performance_optimizer_ready")
-    except Exception as exc:
+    except OPERATIONAL_ERRORS as exc:
         logger.warning("Performance optimizer init skipped: %s", exc)
 
     await _init_neuro_ddd_async(app)
@@ -82,7 +83,7 @@ async def lifespan(app: FastAPI):
 
         await teardown_neuro_bus()
         logger.info("✅ 神经总线已关闭")
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.warning("⚠️ 神经总线关闭失败: %s", e)
 
 
@@ -128,7 +129,7 @@ def _initialize_databases_sync(app: FastAPI):
                 if not ids:
                     ids = [m.id for m in mm.scan_mods() if getattr(m, "id", None)]
                 ensure_sqlite_per_mod_database_copies(ids)
-            except Exception as mod_db_exc:
+            except OPERATIONAL_ERRORS as mod_db_exc:
                 logger.warning("SQLite 按 Mod 拆分母库副本时跳过: %s", mod_db_exc)
             sqlite_file = sqlite_db_file_from_url(database_url)
             if sqlite_file:
@@ -151,11 +152,11 @@ def _initialize_databases_sync(app: FastAPI):
         ensure_sessions_account_meta_columns(engine, database_url=cfg_db_url or None)
         try:
             init_approval_tables(engine)
-        except Exception as approval_err:
+        except OPERATIONAL_ERRORS as approval_err:
             logger.warning("approval 表初始化失败（不影响主流程）: %s", approval_err)
         try:
             init_service_bridge_tables(engine)
-        except Exception as bridge_err:
+        except OPERATIONAL_ERRORS as bridge_err:
             logger.warning("service_bridge 表初始化失败（不影响主流程）: %s", bridge_err)
 
         if not is_sqlite_url(database_url):
@@ -170,14 +171,14 @@ def _initialize_databases_sync(app: FastAPI):
                 created = ensure_postgres_per_mod_databases(mod_ids=mod_ids, migrate_new=True)
                 if created:
                     logger.info("已自动创建并迁移 Mod 分库: %s", ", ".join(created))
-            except Exception as mod_pg_exc:
+            except OPERATIONAL_ERRORS as mod_pg_exc:
                 logger.warning("PostgreSQL Mod 分库自检跳过: %s", mod_pg_exc)
 
         try:
             _run_ensure_ai_action_audit_table()
-        except Exception as audit_err:
+        except OPERATIONAL_ERRORS as audit_err:
             logger.warning("AI审计表初始化失败（不影响主流程）: %s", audit_err)
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         safe_url = str(database_url or "").strip()
         try:
             if safe_url:
@@ -212,7 +213,7 @@ async def _init_neuro_ddd_async(app: FastAPI):
         app.state.neuro_bus = bus
         app.state.neuro_bus_manager = get_neuro_bus_manager()
         logger.info("✅ 神经总线已启动，域: %s", bus.registered_domains)
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.warning("⚠️ 神经总线初始化失败: %s", e)
 
 
@@ -232,5 +233,5 @@ async def _init_mods_async(app: FastAPI):
 
         await asyncio.to_thread(bootstrap_mod_extensions_sync, app)
         logger.info("✅ Mod 扩展分阶段加载已启动（lifespan 补偿路径）")
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.warning("⚠️ Mod 扩展初始化失败: %s", e)

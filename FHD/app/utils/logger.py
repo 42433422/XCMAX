@@ -15,6 +15,8 @@ from datetime import UTC, datetime
 from functools import wraps
 from typing import Any
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
+
 
 class StructuredLogFormatter(logging.Formatter):
     """JSON 格式日志格式化器"""
@@ -153,7 +155,7 @@ def log_operation(operation_name: str):
                     duration=duration,
                 )
                 return result
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 duration = (time.time() - start_time) * 1000
                 logger.error(
                     f"Operation failed: {operation_name}",
@@ -185,7 +187,7 @@ def log_operation(operation_name: str):
                     duration=duration,
                 )
                 return result
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 duration = (time.time() - start_time) * 1000
                 logger.error(
                     f"Operation failed: {operation_name}",

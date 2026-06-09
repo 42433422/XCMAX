@@ -15,6 +15,7 @@ from typing import Any
 
 from app.application.ports.product_repository import ProductRepository
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +53,7 @@ class ProductsService(NeuroEventPublisherMixin):
                 self._deduplicator = optimizer.request_deduplicator
             if optimizer.performance_monitor:
                 self._monitor = optimizer.performance_monitor
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.debug(f"性能优化组件加载失败: {e}")
 
     def set_repository(self, repository: ProductRepository):
@@ -209,7 +210,7 @@ class ProductsService(NeuroEventPublisherMixin):
                 "success": True,
                 "data": result.to_dict() if hasattr(result, "to_dict") else result,
             }
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"创建产品失败: {e}")
             return {"success": False, "message": str(e)}
 
@@ -269,7 +270,7 @@ class ProductsService(NeuroEventPublisherMixin):
             self._invalidate_product_cache()
             return result
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"批量添加产品失败: {e}")
             return {"success": False, "message": str(e)}
 
@@ -362,7 +363,7 @@ class ProductsService(NeuroEventPublisherMixin):
 
             logger.debug("产品列表缓存已清除")
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.warning(f"清除产品缓存失败: {e}")
 
     def _invalidate_single_product_cache(self, product_id: int):
@@ -373,7 +374,7 @@ class ProductsService(NeuroEventPublisherMixin):
         try:
             cache_key = f"product:{product_id}"
             self._cache.delete(cache_key)
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.warning(f"清除单产品缓存失败 [{product_id}]: {e}")
 
 

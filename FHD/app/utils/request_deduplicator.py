@@ -24,6 +24,8 @@ from functools import wraps
 from threading import Lock
 from typing import Any
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
+
 logger = logging.getLogger(__name__)
 
 DEDUP_WINDOW_SECONDS = int(os.environ.get("XCAGI_DEDUP_WINDOW", "60"))
@@ -130,7 +132,7 @@ class RequestDeduplicator:
 
             return (False, result)
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             with self._lock:
                 if key in self._records:
                     del self._records[key]
@@ -177,7 +179,7 @@ class RequestDeduplicator:
 
             return (False, result)
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             with self._lock:
                 if key in self._records:
                     del self._records[key]

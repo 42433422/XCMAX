@@ -11,6 +11,8 @@ import time
 from collections.abc import Callable
 from typing import Any, TypeVar
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
+
 logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
@@ -94,7 +96,7 @@ def with_sqlite_retry(
             for attempt in range(1, max_attempts + 1):
                 try:
                     return func(*args, **kwargs)
-                except Exception as e:
+                except OPERATIONAL_ERRORS as e:
                     last_exception = e
 
                     # Check if this is a retryable database lock error
@@ -116,7 +118,7 @@ def with_sqlite_retry(
                         if on_retry:
                             try:
                                 on_retry(e, attempt)
-                            except Exception:
+                            except OPERATIONAL_ERRORS:
                                 pass  # Ignore callback errors
 
                         time.sleep(delay)
@@ -191,7 +193,7 @@ def execute_with_retry(
     for attempt in range(1, max_attempts + 1):
         try:
             return operation(*args, **kwargs)
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             if not is_database_locked_error(e):
                 raise
 

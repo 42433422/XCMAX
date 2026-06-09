@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def notify_software_delivery(
@@ -35,7 +37,7 @@ def notify_software_delivery(
 
         result = get_desktop_automation_service().send_wechat_message(contact, text)
         ok = bool(result.get("success")) and bool(result.get("message_sent", result.get("success")))
-    except Exception as exc:
+    except OPERATIONAL_ERRORS as exc:
         return {"success": False, "error": str(exc)[:300]}
     if ok:
         doc["software_delivery_sent_at"] = _now_iso()

@@ -13,6 +13,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
+
 logger = logging.getLogger(__name__)
 
 
@@ -137,7 +139,7 @@ class HybridRetriever:
         if self._embedder is not None:
             try:
                 self._embeddings = [self._embedder(c.text) for c in chunks]
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 logger.warning("embedder 计算失败，混合检索降级为 BM25: %s", e)
                 self._embeddings = []
         else:
@@ -166,7 +168,7 @@ class HybridRetriever:
                     key=lambda i: sims[i],
                     reverse=True,
                 )[: self._top_k_vector]
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 logger.warning("向量检索失败: %s", e)
 
         # 3) RRF
@@ -185,9 +187,11 @@ class HybridRetriever:
                 RetrievedChunk(
                     text=c.text,
                     score=float(score),
-                    source="hybrid"
-                    if (idx in vector_ranked and idx in bm25_ranked)
-                    else ("vector" if idx in vector_ranked else "bm25"),
+                    source=(
+                        "hybrid"
+                        if (idx in vector_ranked and idx in bm25_ranked)
+                        else ("vector" if idx in vector_ranked else "bm25")
+                    ),
                     chunk_index=c.chunk_index,
                     char_start=c.char_start,
                     char_end=c.char_end,

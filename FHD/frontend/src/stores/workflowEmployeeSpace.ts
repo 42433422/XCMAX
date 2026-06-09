@@ -346,7 +346,7 @@ export const useWorkflowEmployeeSpaceStore = defineStore('workflowEmployeeSpace'
     const wf = useWorkflowAiEmployeesStore()
     if (!wf.enabled.wechat_msg) return
     const prev = snapshots.value.wechat_msg
-    const pollOk = detail?.success !== false
+    const pollOk = detail?.ok !== false
     const t = Number(detail?.at) || Date.now()
     const sec = Math.max(1, Math.round((Number(detail?.intervalMs) || 60000) / 1000))
     const n = detail?.contactCount

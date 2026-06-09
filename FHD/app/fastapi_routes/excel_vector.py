@@ -11,6 +11,7 @@ from fastapi import APIRouter, Body, Request
 from fastapi.responses import JSONResponse
 
 from app.application import get_excel_vector_ingest_app_service, get_excel_vector_search_app_service
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 from app.utils.path_utils import get_upload_dir
 
 logger = logging.getLogger(__name__)
@@ -51,7 +52,7 @@ async def ingest_excel_vector(request: Request):
         else:
             try:
                 payload = await request.json()
-            except Exception:
+            except OPERATIONAL_ERRORS:
                 payload = {}
             file_path = str(payload.get("file_path") or "").strip()
             if not file_path:
@@ -72,7 +73,7 @@ async def ingest_excel_vector(request: Request):
             os.remove(file_path)
         status = 200 if result.get("success") else 400
         return JSONResponse(result, status_code=status)
-    except Exception as err:
+    except OPERATIONAL_ERRORS as err:
         logger.exception("Excel 向量化 ingest 失败: %s", err)
         return JSONResponse({"success": False, "message": str(err)}, status_code=500)
 
@@ -87,7 +88,7 @@ def query_excel_vector(data: dict[str, Any] = Body(default_factory=dict)):
         result = search_service.query(index_id=index_id, query_text=query_text, top_k=top_k)
         status = 200 if result.get("success") else 400
         return JSONResponse(result, status_code=status)
-    except Exception as err:
+    except OPERATIONAL_ERRORS as err:
         logger.exception("Excel 向量 query 失败: %s", err)
         return JSONResponse({"success": False, "message": str(err)}, status_code=500)
 
@@ -97,7 +98,7 @@ def list_excel_vector_indexes():
     try:
         search_service = get_excel_vector_search_app_service()
         return JSONResponse(search_service.list_indexes())
-    except Exception as err:
+    except OPERATIONAL_ERRORS as err:
         logger.exception("获取向量索引失败: %s", err)
         return JSONResponse({"success": False, "message": str(err)}, status_code=500)
 
@@ -109,6 +110,6 @@ def delete_excel_vector_index(index_id: str):
         result = search_service.delete_index(index_id=index_id)
         status = 200 if result.get("success") else 404
         return JSONResponse(result, status_code=status)
-    except Exception as err:
+    except OPERATIONAL_ERRORS as err:
         logger.exception("删除向量索引失败: %s", err)
         return JSONResponse({"success": False, "message": str(err)}, status_code=500)

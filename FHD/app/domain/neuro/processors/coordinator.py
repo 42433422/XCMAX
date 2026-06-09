@@ -26,6 +26,7 @@ from app.domain.neuro.processors.subconscious import (
 from app.domain.neuro.reflex_arc import IntentReflexArc, get_reflex_arc
 from app.neuro_bus.domains.intent_domain import get_intent_domain
 from app.neuro_bus.events.base import EventPriority, NeuroEvent
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -190,7 +191,7 @@ class ProcessorCoordinator:
 
             return result
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             self._error_count += 1
             elapsed_ms = (time.perf_counter() - start_time) * 1000
 
@@ -204,7 +205,7 @@ class ProcessorCoordinator:
                     fallback.fallback_used = True
                     fallback.latency_ms = elapsed_ms
                     return fallback
-            except Exception:
+            except OPERATIONAL_ERRORS:
                 pass
 
             fail_report = ProcessingReport(
@@ -337,7 +338,7 @@ class ProcessorCoordinator:
                     raw_text=text,
                 )
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"Failed to emit intent event: {e}")
 
     def get_stats(self) -> dict[str, Any]:

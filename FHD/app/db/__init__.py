@@ -3,7 +3,7 @@ import os
 import threading
 from pathlib import Path
 
-from sqlalchemy import create_engine, event, pool
+from sqlalchemy import create_engine, event, inspection, pool
 from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.orm import scoped_session, sessionmaker
 from sqlalchemy.pool import NullPool
@@ -11,6 +11,7 @@ from sqlalchemy.pool import NullPool
 from app.db.base import Base
 from app.db.sqlite_mod_paths import mod_suffix_token, sqlite_filename_with_mod_suffix
 from app.request_active_mod_ctx import get_request_active_mod_id
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +38,7 @@ def _mod_db_url_from_env(active_mod_id: str) -> str:
                 v = str(obj.get(active_mod_id) or "").strip()
                 if v:
                     return v
-        except Exception:
+        except OPERATIONAL_ERRORS:
             logger.warning("XCAGI_MOD_DATABASE_URLS is invalid JSON; ignored")
     env_key = f"XCAGI_MOD_DATABASE_URL_{_normalize_mod_for_env(active_mod_id)}"
     return str(os.environ.get(env_key) or "").strip()
@@ -49,7 +50,7 @@ def _sqlite_url_with_mod_suffix(base_url: str, active_mod_id: str) -> str:
         return base_url
     try:
         u = make_url(base_url)
-    except Exception:
+    except OPERATIONAL_ERRORS:
         return base_url
     if u.get_dialect().name != "sqlite":
         return base_url
@@ -62,7 +63,7 @@ def _sqlite_url_with_mod_suffix(base_url: str, active_mod_id: str) -> str:
         return base_url
     try:
         return u.set(database=str(p.with_name(new_name))).render_as_string(hide_password=False)
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.warning("无法为 SQLite URL 附加 Mod 后缀，已回退原 URL", exc_info=True)
         return base_url
 
@@ -86,7 +87,7 @@ def _postgres_url_with_mod_db(base_url: str, active_mod_id: str) -> str:
         return base_url
     try:
         u = make_url(base_url)
-    except Exception:
+    except OPERATIONAL_ERRORS:
         return base_url
     if u.get_dialect().name != "postgresql":
         return base_url
@@ -96,7 +97,7 @@ def _postgres_url_with_mod_db(base_url: str, active_mod_id: str) -> str:
     try:
         # 注意：str(URL) 会把密码打成 ***，必须用 render_as_string(hide_password=False)
         return u.set(database=f"{base_db}__{suffix}").render_as_string(hide_password=False)
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.warning("无法为 PostgreSQL URL 附加 Mod 库名后缀，已回退原 URL", exc_info=True)
         return base_url
 
@@ -113,7 +114,7 @@ def _database_url_for_active_mod(base_url: str) -> str:
                 getattr(getattr(req, "url", None), "path", "") or ""
             ):
                 active_mod_id = ""
-        except Exception:
+        except OPERATIONAL_ERRORS:
             pass
     if not active_mod_id:
         return base_url
@@ -122,7 +123,7 @@ def _database_url_for_active_mod(base_url: str) -> str:
         return mapped
     try:
         u = make_url(base_url)
-    except Exception:
+    except OPERATIONAL_ERRORS:
         u = None
     if u is not None and u.get_dialect().name == "sqlite":
         return _sqlite_url_with_mod_suffix(base_url, active_mod_id)
@@ -141,7 +142,7 @@ def _get_test_db_manager():
         from app.db.test_db_manager import get_test_db_manager
 
         return get_test_db_manager()
-    except Exception:
+    except OPERATIONAL_ERRORS:
         return None
 
 
@@ -223,7 +224,7 @@ _session_local_cache: dict[str, sessionmaker] = {}
 def _database_url_cache_key(url: str) -> str:
     try:
         return make_url(url).render_as_string(hide_password=False)
-    except Exception:
+    except OPERATIONAL_ERRORS:
         return str(url)
 
 
@@ -273,7 +274,7 @@ def dispose_and_recreate_engine():
         from app.application.customer_app_service import reset_customers_engine
 
         reset_customers_engine()
-    except Exception:
+    except OPERATIONAL_ERRORS:
         pass
 
 
@@ -284,6 +285,12 @@ class _EngineProxy:
 
     def __getattr__(self, name):
         return getattr(_get_engine(), name)
+
+
+@inspection._inspects(_EngineProxy)
+def _inspect_engine_proxy(_proxy: _EngineProxy):
+    """让 sqlalchemy.inspect(engine) 在 lazy 代理上可用（lifespan / init_db 启动路径）。"""
+    return inspection.inspect(_get_engine())
 
 
 engine = _EngineProxy()

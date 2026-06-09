@@ -11,6 +11,7 @@ from fastapi import APIRouter, Body, Query
 from fastapi.responses import FileResponse, JSONResponse
 
 from app.application import get_material_application_service
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +55,7 @@ def add_material(data: dict[str, Any] = Body(default_factory=dict)):
         result = _svc().create_material(data)
         status = 200 if result.get("success") else 400
         return JSONResponse(result, status_code=status)
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error("添加原材料失败：%s", e)
         return JSONResponse({"success": False, "message": str(e)}, status_code=500)
 
@@ -78,7 +79,7 @@ def get_materials(
         if result.get("success") and "count" not in result:
             result["count"] = len(result.get("data") or [])
         return JSONResponse(result, status_code=200)
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error("获取原材料列表失败：%s", e)
         return JSONResponse({"success": False, "message": str(e)}, status_code=500)
 
@@ -96,7 +97,7 @@ def update_material(material_id: int, data: dict[str, Any] = Body(default_factor
         return JSONResponse(
             {"success": True, "message": "更新成功", "data": payload}, status_code=200
         )
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error("更新原材料失败：%s", e)
         return JSONResponse({"success": False, "message": str(e)}, status_code=500)
 
@@ -106,7 +107,7 @@ def delete_material(material_id: int):
     try:
         _svc().delete_material(material_id)
         return JSONResponse({"success": True, "message": "删除成功"}, status_code=200)
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error("删除原材料失败：%s", e)
         return JSONResponse({"success": False, "message": str(e)}, status_code=500)
 
@@ -132,7 +133,7 @@ def batch_delete_materials(data: dict[str, Any] = Body(default_factory=dict)):
 
         try:
             _svc().batch_delete_materials(valid_ids)
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error("批量删除原材料时 service 执行异常：%s", e)
 
         deleted_count = len(valid_ids)
@@ -144,7 +145,7 @@ def batch_delete_materials(data: dict[str, Any] = Body(default_factory=dict)):
             },
             status_code=200,
         )
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error("批量删除原材料失败：%s", e)
         return JSONResponse({"success": False, "message": str(e)}, status_code=500)
 
@@ -154,7 +155,7 @@ def get_low_stock_materials(threshold: float | None = Query(default=None)):
     try:
         result = _svc().get_low_stock_materials(threshold=threshold)
         return JSONResponse(result, status_code=200)
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error("获取低库存原材料失败：%s", e)
         return JSONResponse({"success": False, "message": str(e)}, status_code=500)
 
@@ -177,6 +178,6 @@ def export_materials(
                 media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             )
         return JSONResponse({"success": False, "message": "导出文件不存在"}, status_code=500)
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error("导出原材料失败：%s", e)
         return JSONResponse({"success": False, "message": str(e)}, status_code=500)

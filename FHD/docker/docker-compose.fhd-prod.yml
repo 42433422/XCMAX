@@ -1,0 +1,59 @@
+# FHD API 生产 compose（镜像 digest 钉扎；不 build）。
+# 服务器路径示例: /opt/fhd-full/docker/docker-compose.fhd-prod.yml
+#
+# 必填环境变量（由 fhd-apply-release-compose.sh 或 shell export）:
+#   FHD_API_IMAGE        例 ghcr.io/42433422/XCMAX/xcagi-fhd-api
+#   FHD_API_IMAGE_DIGEST 例 sha256:abc...（manifest image_digest）
+#
+# 可选:
+#   FHD_ENV_FILE         默认 /root/fhd-full.env
+#   FHD_DEPLOY_ROOT      默认 /opt/fhd-full
+#   FHD_API_BIND         默认 127.0.0.1
+#   FHD_API_PORT         宿主机端口，默认 5100（容器内恒 5000）
+#
+# 启动（digest 已由 apply 脚本注入）:
+#   docker compose -f docker/docker-compose.fhd-prod.yml up -d
+#
+#  bundled Redis（仅当 env 未指向外部 Redis 时）:
+#   docker compose -f docker/docker-compose.fhd-prod.yml --profile bundled-redis up -d
+
+services:
+  fhd-redis:
+    profiles: ["bundled-redis"]
+    image: redis:7-alpine
+    container_name: fhd-redis
+    restart: unless-stopped
+    volumes:
+      - fhd-redis-data:/data
+    networks:
+      - fhd-net
+
+  fhd-api:
+    image: "${FHD_API_IMAGE:?set FHD_API_IMAGE}@${FHD_API_IMAGE_DIGEST:?set FHD_API_IMAGE_DIGEST}"
+    container_name: fhd-api
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "${FHD_API_BIND:-127.0.0.1}:${FHD_API_PORT:-5100}:5000"
+    environment:
+      WORKSPACE_ROOT: /app
+      PYTHONPATH: /app
+      XCAGI_UVICORN_RELOAD: "0"
+      XCAGI_ENV: production
+    env_file:
+      - ${FHD_ENV_FILE:-/root/fhd-full.env}
+    volumes:
+      - ${FHD_DEPLOY_ROOT:-/opt/fhd-full}/data:/app/data
+      - ${FHD_DEPLOY_ROOT:-/opt/fhd-full}/uploads:/app/uploads
+      - ${FHD_DEPLOY_ROOT:-/opt/fhd-full}/logs:/app/logs
+      - ${FHD_DEPLOY_ROOT:-/opt/fhd-full}/mods:/app/XCAGI/mods:ro
+    networks:
+      - fhd-net
+
+volumes:
+  fhd-redis-data:
+
+networks:
+  fhd-net:
+    name: fhd-prod-net

@@ -10,6 +10,7 @@ import os
 from typing import TYPE_CHECKING, Any
 
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 if TYPE_CHECKING:
     pass
@@ -147,7 +148,7 @@ class BertIntentClassifier:
                 actual_name = model_name
             try:
                 self._load_model(actual_name, local_files_only=False)
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 logger.warning(f"无法加载模型 {actual_name}: {e}")
                 self._setup_dummy_model()
 

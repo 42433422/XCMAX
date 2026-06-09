@@ -24,6 +24,7 @@ interface ChatContextParams {
   user_id?: string;
   source?: string;
   mode?: string;
+  [key: string]: string | undefined;
 }
 
 export type ChatStreamRequestInit = RequestInit & {

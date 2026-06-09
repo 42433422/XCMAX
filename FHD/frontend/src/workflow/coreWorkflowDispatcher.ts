@@ -98,7 +98,7 @@ export function buildWechatMonitorUpdate(detail: WechatStarPolledDetail): {
       lastPolledAt: Number(detail.at) || Date.now(),
       pollIntervalMs: Number(detail.intervalMs) || 60000,
       starredContactCount: typeof detail.contactCount === 'number' ? detail.contactCount : undefined,
-      pollOk: detail.success !== false,
+      pollOk: detail.ok !== false,
     },
   }
 }

@@ -23,6 +23,8 @@ import time
 from fastapi import APIRouter, Body, Request
 from fastapi.responses import JSONResponse
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["ai-intent"])
@@ -97,7 +99,7 @@ def ai_intent_test(body: dict = Body(default_factory=dict)):
         return JSONResponse({"success": False, "message": "消息内容不能为空"}, status_code=400)
     try:
         return {"success": True, "data": recognize_intents(message)}
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         return JSONResponse(
             {"success": False, "message": f"意图识别失败：{str(e)}"}, status_code=500
         )
@@ -113,7 +115,7 @@ def intent_health():
             BertIntentClassifier(model_path=model_path) if model_path else BertIntentClassifier()
         )
         return {"status": "ok", "model_available": classifier.is_available()}
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error("intent health: %s", e)
         return JSONResponse(
             {"status": "error", "model_available": False, "error": str(e)},
@@ -169,7 +171,7 @@ def intent_predict(body: dict = Body(default_factory=dict)):
     try:
         classifier = _bert_intent_classifier()
         return classifier.predict(text, return_probs=True)
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error("intent predict: %s", e)
         return JSONResponse({"error": str(e)}, status_code=500)
 
@@ -184,6 +186,6 @@ def intent_predict_batch(body: dict = Body(default_factory=dict)):
         classifier = _bert_intent_classifier()
         results = classifier.predict_batch(texts, return_probs=True)
         return {"results": results}
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error("intent predict_batch: %s", e)
         return JSONResponse({"error": str(e)}, status_code=500)

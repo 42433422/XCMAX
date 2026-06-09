@@ -14,6 +14,7 @@ from enum import Enum
 from typing import Any
 
 from app.neuro_bus.events.base import NeuroEvent
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -284,7 +285,7 @@ def traced(name: str | None = None, tags: dict[str, Any] | None = None):
                 result = await func(*args, **kwargs)
                 span.finish(SpanStatus.OK)
                 return result
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 span.finish(SpanStatus.ERROR)
                 span.set_tag("error", str(e))
                 raise

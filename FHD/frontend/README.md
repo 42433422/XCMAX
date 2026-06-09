@@ -419,7 +419,7 @@ npm run type-check
 
 ## 📄 许可证
 
-本项目采用 **AGPL-3.0** 许可证。
+本项目采用 **Apache-2.0** 许可证（见 [`../LICENSE`](../LICENSE)）。
 
 ---
 

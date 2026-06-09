@@ -10,6 +10,7 @@ from app.application.ports.shipment_record_command import ShipmentRecordCommandP
 from app.db.models import ShipmentRecord
 from app.db.session import get_db
 from app.infrastructure.lookups import resolve_purchase_unit
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +33,7 @@ class SQLAlchemyShipmentRecordCommand(ShipmentRecordCommandPort):
                 "success": True,
                 "message": f"已清空所有订单，共 {count} 条记录",
             }
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             return {"success": False, "message": f"清空失败：{str(e)}"}
 
     def clear_by_unit(self, purchase_unit: str) -> dict[str, Any]:
@@ -45,7 +46,7 @@ class SQLAlchemyShipmentRecordCommand(ShipmentRecordCommandPort):
                 resolved = resolve_purchase_unit(purchase_unit)
                 if resolved:
                     purchase_unit = resolved.unit_name
-            except Exception:
+            except OPERATIONAL_ERRORS:
                 logger.debug("suppressed exception", exc_info=True)
 
             with get_db() as db:
@@ -69,7 +70,7 @@ class SQLAlchemyShipmentRecordCommand(ShipmentRecordCommandPort):
                         try:
                             r = resolve_purchase_unit(val)
                             memo[val] = r.unit_name if r else None
-                        except Exception:
+                        except OPERATIONAL_ERRORS:
                             memo[val] = None
                         return memo[val]
 
@@ -102,7 +103,7 @@ class SQLAlchemyShipmentRecordCommand(ShipmentRecordCommandPort):
                 "message": f"已清理 {purchase_unit} 的出货记录",
                 "deleted_orders": int(count or 0),
             }
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             return {"success": False, "message": f"清理失败：{str(e)}"}
 
     def update_record(
@@ -136,7 +137,7 @@ class SQLAlchemyShipmentRecordCommand(ShipmentRecordCommandPort):
                 db.commit()
 
             return {"success": True, "message": "出货记录已更新"}
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             return {"success": False, "message": f"更新失败：{str(e)}"}
 
     def delete_record(self, record_id: int) -> dict[str, Any]:
@@ -154,5 +155,5 @@ class SQLAlchemyShipmentRecordCommand(ShipmentRecordCommandPort):
                 db.commit()
 
             return {"success": True, "message": "出货记录已删除"}
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             return {"success": False, "message": f"删除失败：{str(e)}"}

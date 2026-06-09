@@ -19,7 +19,6 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
 from app.application.mobile_push_app_service import notify_mobile_user
-from app.utils.time import utc_now_naive
 from app.db.models.approval import (
     ApprovalAction,
     ApprovalFlow,
@@ -29,6 +28,8 @@ from app.db.models.approval import (
     ApprovalStatus,
 )
 from app.db.session import get_db
+from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.time import utc_now_naive
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +64,7 @@ def _audit(db, *, actor: int | None, action: str, payload: dict) -> None:
                 "payload": json.dumps(payload, ensure_ascii=False, default=str),
             },
         )
-    except Exception as exc:  # pragma: no cover - 审计失败不应阻塞主流程
+    except OPERATIONAL_ERRORS as exc:  # pragma: no cover - 审计失败不应阻塞主流程
         logger.warning("ai_action_audit 写入失败 action=%s: %s", action, exc)
 
 
@@ -752,7 +753,7 @@ def get_approval_users():
                 }
                 for u in rows
             ]
-    except Exception:
+    except OPERATIONAL_ERRORS:
         pass
 
     if not users:
@@ -765,7 +766,7 @@ def get_approval_users():
                     name = str(p.get("name") or p.get("product_name") or "").strip()
                     if name:
                         users.append({"id": p.get("id"), "name": name, "source": "roster"})
-        except Exception:
+        except OPERATIONAL_ERRORS:
             pass
 
     return {"success": True, "data": users, "count": len(users)}
@@ -788,7 +789,7 @@ def check_approver_orphan(user_id: int):
                 ids = []
                 try:
                     ids = json.loads(node.approver_ids or "[]")
-                except Exception:
+                except OPERATIONAL_ERRORS:
                     pass
                 if user_id in ids:
                     orphan_flows.append(

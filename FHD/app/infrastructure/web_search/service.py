@@ -6,6 +6,8 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
+
 logger = logging.getLogger(__name__)
 
 _MAX_QUERY_LEN = 400
@@ -188,6 +190,6 @@ async def kitten_web_search(
             "provider": provider,
             "query": q,
         }
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.warning("web search failed: %s", e)
         return {"success": False, "hits": [], "provider": provider, "message": str(e)}

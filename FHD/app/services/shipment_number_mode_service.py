@@ -8,6 +8,7 @@ from typing import Any
 from app.bootstrap import get_shipment_app_service
 from app.db.models import Product
 from app.db.session import get_db
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 
 class ShipmentNumberModeService:
@@ -185,7 +186,7 @@ class ShipmentNumberModeService:
             if filtered_tokens:
                 try:
                     tin_spec = float(filtered_tokens[0])
-                except Exception:
+                except OPERATIONAL_ERRORS:
                     tin_spec = None
 
         if not (unit_name and model_number and tin_spec and quantity_tins):
@@ -426,7 +427,7 @@ class ShipmentNumberModeService:
 
             try:
                 quantity_value = float(quantity)
-            except Exception:
+            except OPERATIONAL_ERRORS:
                 quantity_value = 0.0
 
             if not model_number:

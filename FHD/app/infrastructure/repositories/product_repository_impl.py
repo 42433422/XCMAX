@@ -11,6 +11,7 @@ from app.domain.product.entities import Product
 from app.infrastructure.mappers.product_mapper import product_to_db, product_to_domain
 from app.infrastructure.persistence.product_repository_impl import TRIVIAL_MEASURE_UNITS
 from app.infrastructure.repositories.product_repository import ProductRepository
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -277,7 +278,7 @@ class SQLAlchemyProductRepository(ProductRepository):
                                 add_label(r[0], from_products=False)
             finally:
                 cs.close()
-        except Exception:
+        except OPERATIONAL_ERRORS:
             logger.debug("suppressed exception", exc_info=True)
 
         if purchase_units_authoritative:
@@ -290,7 +291,7 @@ class SQLAlchemyProductRepository(ProductRepository):
                     for u in db.query(ProductModel.unit).distinct().all():
                         if u and u[0] is not None:
                             add_label(u[0], from_products=True)
-        except Exception:
+        except OPERATIONAL_ERRORS:
             logger.debug("suppressed exception", exc_info=True)
 
         return ordered

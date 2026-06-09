@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def ensure_delivery_on_doc(doc: dict[str, Any]) -> dict[str, Any]:
@@ -115,6 +117,6 @@ def try_confirm_payment_and_invoice(
             doc = issue_crm_invoice_for_pipeline(doc)
             outcome["invoice"] = doc.get("invoice")
             outcome["invoice_created"] = bool(outcome["invoice"])
-        except Exception as exc:
+        except OPERATIONAL_ERRORS as exc:
             outcome["error"] = str(exc)[:300]
     return outcome

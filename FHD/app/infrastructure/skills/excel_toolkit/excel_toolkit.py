@@ -8,6 +8,8 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
+
 logger = logging.getLogger(__name__)
 
 
@@ -73,7 +75,7 @@ def view_excel_content(
         return {"success": False, "message": "需要安装 openpyxl 库: pip install openpyxl"}
     except FileNotFoundError:
         return {"success": False, "message": f"文件不存在: {file_path}"}
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error(f"查看Excel内容失败: {e}")
         return {"success": False, "message": f"读取失败: {str(e)}"}
 
@@ -124,7 +126,7 @@ def get_merged_cells(file_path: str, sheet_name: str | None = None) -> dict[str,
 
     except ImportError:
         return {"success": False, "message": "需要安装 openpyxl 库"}
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         return {"success": False, "message": str(e)}
 
 
@@ -178,7 +180,7 @@ def get_cell_styles(
 
         return {"success": True, "file": Path(file_path).name, "sheet": ws.title, "styles": styles}
 
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         return {"success": False, "message": str(e)}
 
 
@@ -227,7 +229,7 @@ def analyze_structure(file_path: str, sheet_name: str | None = None) -> dict[str
             "columns": column_info,
         }
 
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         return {"success": False, "message": str(e)}
 
 

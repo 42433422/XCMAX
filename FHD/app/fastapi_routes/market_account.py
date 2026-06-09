@@ -13,6 +13,8 @@ import httpx
 from fastapi import APIRouter, Body, Request
 from fastapi.responses import JSONResponse
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
+
 router = APIRouter(prefix="/api/market", tags=["market-account"])
 logger = logging.getLogger(__name__)
 _MARKET_SESSION_TOKENS: dict[str, str] = {}
@@ -75,7 +77,7 @@ def save_session_market_token(
                 if rtok:
                     row.market_refresh_token = rtok
                 db.commit()
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.exception(
             "save_session_market_token: failed to persist market token for session_id=%s", sid
         )
@@ -98,7 +100,7 @@ def clear_session_market_token(session_id: str) -> None:
                 if getattr(row, "market_refresh_token", None):
                     row.market_refresh_token = None
                 db.commit()
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.exception(
             "clear_session_market_token: failed to clear persisted token for session_id=%s", sid
         )
@@ -122,7 +124,7 @@ def session_market_token(session_id: str) -> str:
             if t:
                 _MARKET_SESSION_TOKENS[sid] = t
                 return t
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.exception("session_market_token: DB read failed for session_id=%s", sid)
     return ""
 
@@ -145,7 +147,7 @@ def session_market_refresh_token(session_id: str) -> str:
             if t:
                 _MARKET_SESSION_REFRESH_TOKENS[sid] = t
                 return t
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.exception("session_market_refresh_token: DB read failed for session_id=%s", sid)
     return ""
 
@@ -167,7 +169,7 @@ def latest_session_market_refresh_token() -> str:
                 tok = str(getattr(row, "market_refresh_token", "") or "").strip()
                 if tok:
                     return tok
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.exception("latest_session_market_refresh_token: DB read failed")
     return ""
 
@@ -195,7 +197,7 @@ def latest_session_market_token() -> str:
                 tok = str(getattr(row, "market_access_token", "") or "").strip()
                 if tok:
                     return tok
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.exception("latest_session_market_token: DB read failed")
     return ""
 
@@ -282,10 +284,10 @@ async def market_session_handoff(request: Request):
                 from app.enterprise.mod_entitlements import sync_entitlements_for_session
 
                 await sync_entitlements_for_session(sid)
-        except Exception:
+        except OPERATIONAL_ERRORS:
             logger.exception("enterprise entitlements refresh on session-handoff failed")
         return {"success": True, "data": data}
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.exception("market_session_handoff failed")
         sid = session_id_from_request(request)
         fallback_tok = _normalize_bearer_token(
@@ -354,7 +356,7 @@ def _body_snippet(payload: Any, limit: int = 240) -> str:
             import json as _json
 
             text = _json.dumps(payload, ensure_ascii=False)
-        except Exception:
+        except OPERATIONAL_ERRORS:
             text = str(payload)
     else:
         text = str(payload or "")
@@ -448,7 +450,7 @@ async def _proxy_json(
                     },
                     status_code=status_code,
                 )
-        except Exception as exc:
+        except OPERATIONAL_ERRORS as exc:
             logger.warning("_proxy_json transport error to %s: %s", url, exc)
             message, status_code = _transport_error_message(exc)
             return JSONResponse(
@@ -887,7 +889,7 @@ async def _normalize_market_auth_payload(
     if isinstance(payload, JSONResponse):
         try:
             raw_body = json.loads(payload.body.decode("utf-8") if payload.body else "{}")
-        except Exception:
+        except OPERATIONAL_ERRORS:
             raw_body = {}
         status_code = int(payload.status_code or 502)
         message = (
@@ -903,7 +905,8 @@ async def _normalize_market_auth_payload(
             "success": False,
             "message": message,
             "status_code": status_code,
-            "error_code": code or ("MARKET_AUTH_UNAVAILABLE" if status_code >= 500 else "MARKET_AUTH_FAILED"),
+            "error_code": code
+            or ("MARKET_AUTH_UNAVAILABLE" if status_code >= 500 else "MARKET_AUTH_FAILED"),
             "raw": raw_body,
             "market_base_url": market_base or _market_base_url(),
         }
@@ -977,7 +980,7 @@ async def send_market_phone_code(phone: str) -> dict[str, Any]:
     if isinstance(payload, JSONResponse):
         try:
             raw_body = json.loads(payload.body.decode("utf-8") if payload.body else "{}")
-        except Exception:
+        except OPERATIONAL_ERRORS:
             raw_body = {}
         return {
             "success": False,
@@ -1091,7 +1094,7 @@ async def market_account_overview(
 ):
     try:
         authorization = await _authorization_from_request_resolved(request, body)
-    except Exception as exc:
+    except OPERATIONAL_ERRORS as exc:
         logger.exception("market_account_overview: resolve authorization failed")
         return {
             "success": True,
@@ -1115,7 +1118,7 @@ async def market_account_overview(
 
                 proxy_body = _json.loads(payload.body.decode() if payload.body else "{}")
                 err = str(proxy_body.get("message") or proxy_body.get("detail") or "市场服务不可用")
-            except Exception:
+            except OPERATIONAL_ERRORS:
                 err = "市场服务不可用"
             data = _degraded_account_overview(err)
             sync_warning = err
@@ -1159,7 +1162,7 @@ async def market_account_overview(
         if sync_warning and not data.get("sync_warning"):
             data["sync_warning"] = sync_warning
         return {"success": True, "data": data}
-    except Exception as exc:
+    except OPERATIONAL_ERRORS as exc:
         logger.exception("market_account_overview failed")
         return {
             "success": True,

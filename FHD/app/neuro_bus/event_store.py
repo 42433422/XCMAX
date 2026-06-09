@@ -20,6 +20,7 @@ from typing import Any
 from uuid import uuid4
 
 from app.neuro_bus.events.base import NeuroEvent
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -152,7 +153,7 @@ class EventStore:
         for callback in self._append_callbacks:
             try:
                 callback(stored)
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 logger.error(f"[EventStore] 回调失败: {e}")
 
         return store_id
@@ -305,7 +306,7 @@ class EventStore:
                 try:
                     callback(stored.event)
                     count += 1
-                except Exception as e:
+                except OPERATIONAL_ERRORS as e:
                     logger.error(f"[EventStore] 重播失败: {e}")
             else:
                 # 默认：只记录

@@ -9,6 +9,7 @@ from functools import lru_cache
 from typing import Any
 
 from app.mod_sdk.erp_domain_compat import ERP_DOMAIN_BRIDGE_MOD_ID, is_erp_domain_via_mod_enabled
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +42,7 @@ def _mod_domain_handler_domains() -> list[str]:
         raw = cfg.get("mod_domain_handlers") or cfg.get("erp_domain_handlers") or []
         if isinstance(raw, list):
             return [str(x).strip() for x in raw if str(x).strip()]
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.debug("read mod_domain_handlers failed", exc_info=True)
     return []
 
@@ -60,7 +61,7 @@ def _resolve_mod_path() -> tuple[str, str] | tuple[None, None]:
         meta = get_mod_manager().get_mod(ERP_DOMAIN_BRIDGE_MOD_ID)
         if meta and meta.mod_path:
             return ERP_DOMAIN_BRIDGE_MOD_ID, str(meta.mod_path)
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.debug("erp domain mod path via manager failed", exc_info=True)
 
     from app.mod_sdk.erp_domain_compat import _resolve_mod_dir
@@ -102,7 +103,7 @@ def try_invoke_erp_domain_handler(
         if out is None:
             return None
         return out
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.exception("erp domain handler failed domain=%s action=%s", dom, act)
         return {
             "success": False,
@@ -132,7 +133,7 @@ def list_erp_domain_handlers_summary() -> dict[str, Any]:
             reg = getattr(mod, "list_registered_actions", None)
             if callable(reg):
                 actions = list(reg())
-        except Exception:
+        except OPERATIONAL_ERRORS:
             logger.debug("list_registered_actions failed", exc_info=True)
     return {
         "enabled": is_erp_domain_handlers_enabled(),

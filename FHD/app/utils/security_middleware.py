@@ -13,6 +13,7 @@ from typing import Any
 from app.auth_decorators import get_current_user, login_required
 from app.http.json_response import json_response
 from app.http.request_context import get_current_http_request
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 from app.utils.rate_limiter import check_rate_limit
 
 SECURITY_HEADERS = {
@@ -71,7 +72,7 @@ def api_security(
                     if raw is not None:
                         try:
                             json.loads(raw.decode())
-                        except Exception:
+                        except OPERATIONAL_ERRORS:
                             return (
                                 json_response(
                                     {

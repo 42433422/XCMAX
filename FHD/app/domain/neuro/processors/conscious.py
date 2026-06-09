@@ -23,6 +23,7 @@ from app.neuro_bus.events.base import EventPriority, NeuroEvent
 from app.neuro_bus.retry_handler import NeuroRetryHandler
 from app.neuro_bus.sandbox import NeuroSandbox
 from app.neuro_bus.sla_controller import SLAController
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -215,7 +216,7 @@ class ConsciousProcessor:
                 stage_reached=stage,
             )
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             elapsed_ms = (time.perf_counter() - start_time) * 1000
 
             # 记录失败

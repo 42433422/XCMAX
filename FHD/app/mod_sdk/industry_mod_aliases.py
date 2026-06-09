@@ -8,13 +8,14 @@ from functools import lru_cache
 from typing import Any
 
 from app.mod_sdk.host_profile import resolve_fhd_config_dir
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 
 def _load_json(path) -> dict[str, Any] | None:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
         return data if isinstance(data, dict) else None
-    except Exception:
+    except OPERATIONAL_ERRORS:
         return None
 
 

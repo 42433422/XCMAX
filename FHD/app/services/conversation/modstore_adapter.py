@@ -36,6 +36,8 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
+
 logger = logging.getLogger(__name__)
 
 
@@ -214,7 +216,7 @@ class ModstorePlatformAdapter:
         if request is not None:
             try:
                 request_auth = str(request.headers.get("Authorization") or "").strip()
-            except Exception:
+            except OPERATIONAL_ERRORS:
                 request_auth = ""
 
         auth_token = (
@@ -257,7 +259,7 @@ class ModstorePlatformAdapter:
                         logger.debug("使用最近一次持久化的修茈市场Token作为模型服务凭据")
             except ImportError as e:
                 logger.error(f"无法导入market_account模块: {e}")
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 logger.error(f"从Session获取Token失败: {e}", exc_info=True)
 
         instance = cls(
@@ -331,7 +333,7 @@ class ModstorePlatformAdapter:
                 logger.warning("Session中未找到新Token")
                 return False
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"刷新Token失败: {e}", exc_info=True)
             return False
 
@@ -462,7 +464,7 @@ class ModstorePlatformAdapter:
                     token_count=0,
                     user_id=str(self.user_id or ""),
                 )
-            except Exception:
+            except OPERATIONAL_ERRORS:
                 pass
 
             # 标准化响应格式为OpenAI兼容格式
@@ -479,7 +481,7 @@ class ModstorePlatformAdapter:
         except httpx.HTTPError as e:
             logger.error(f"[Modstore] HTTP请求失败: {e}")
             raise
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"[Modstore] 调用异常: {e}", exc_info=True)
             raise
 
@@ -576,7 +578,7 @@ class ModstorePlatformAdapter:
                 token_count=0,
                 user_id=str(self.user_id or ""),
             )
-        except Exception:
+        except OPERATIONAL_ERRORS:
             pass
 
         return self._normalize_response(result, effective_provider, effective_model)
@@ -764,7 +766,7 @@ class ModstorePlatformAdapter:
                 logger.warning(f"[Modstore] 获取供应商列表失败: {response.status_code}")
                 return []
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"[Modstore] 查询供应商异常: {e}")
             return []
 
@@ -790,7 +792,7 @@ class ModstorePlatformAdapter:
             else:
                 return {"error": f"HTTP {response.status_code}"}
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             return {"error": str(e)}
 
     async def close(self):

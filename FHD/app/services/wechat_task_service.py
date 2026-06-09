@@ -17,6 +17,7 @@ from sqlalchemy.exc import IntegrityError
 from app.db.models import WechatTask
 from app.db.session import get_db
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +84,7 @@ class WechatTaskService(NeuroEventPublisherMixin):
                     if existing:
                         return existing.id
             return None
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"插入 wechat_task 失败：{e}")
             return None
 
@@ -116,7 +117,7 @@ class WechatTaskService(NeuroEventPublisherMixin):
                 if os.path.isdir(wechat_cv_path) and wechat_cv_path not in sys.path:
                     sys.path.insert(0, wechat_cv_path)
                 from wechat_db_read import get_recent_messages
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 logger.warning("导入 wechat_db_read 失败，无法扫描微信消息：%s", e)
                 return []
 
@@ -173,7 +174,7 @@ class WechatTaskService(NeuroEventPublisherMixin):
             logger.info("微信消息扫描完成，新任务数量：%d", len(new_tasks))
             return new_tasks
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception("扫描微信消息失败：%s", e)
             return []
 
@@ -231,7 +232,7 @@ class WechatTaskService(NeuroEventPublisherMixin):
 
             return result
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"处理微信消息失败：{e}")
             return {"success": False, "message": f"处理失败：{str(e)}"}
 
@@ -279,7 +280,7 @@ class WechatTaskService(NeuroEventPublisherMixin):
 
             return None
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"识别订单失败：{e}")
             return None
 
@@ -323,7 +324,7 @@ class WechatTaskService(NeuroEventPublisherMixin):
 
             return None
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"识别发货单失败：{e}")
             return None
 
@@ -345,7 +346,7 @@ class WechatTaskService(NeuroEventPublisherMixin):
 
             return {"success": True, "message": "任务已确认"}
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"确认任务失败：{e}")
             return {"success": False, "message": f"确认失败：{str(e)}"}
 
@@ -367,7 +368,7 @@ class WechatTaskService(NeuroEventPublisherMixin):
 
             return {"success": True, "message": "任务已忽略"}
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"忽略任务失败：{e}")
             return {"success": False, "message": f"忽略失败：{str(e)}"}
 
@@ -419,7 +420,7 @@ class WechatTaskService(NeuroEventPublisherMixin):
                     for t in tasks
                 ]
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"查询任务列表失败：{e}")
             return []
 
@@ -479,7 +480,7 @@ class WechatTaskService(NeuroEventPublisherMixin):
             logger.info(f"查询到 {len(contacts)} 个联系人")
             return contacts
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"查询联系人列表失败：{e}")
             return []
 
@@ -504,7 +505,7 @@ class WechatTaskService(NeuroEventPublisherMixin):
                         "updated_at": task.updated_at,
                     }
                 return None
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"获取任务失败：{e}")
             return None
 
@@ -516,7 +517,7 @@ class WechatTaskService(NeuroEventPublisherMixin):
                     db.query(WechatTask.id).filter(WechatTask.id == task_id).first() is not None
                 )
                 return exists
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"检查任务存在失败：{e}")
             return False
 
@@ -535,7 +536,7 @@ class WechatTaskService(NeuroEventPublisherMixin):
                     db.commit()
                     return True
                 return False
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"更新任务状态失败：{e}")
             return False
 
@@ -576,7 +577,7 @@ class WechatTaskService(NeuroEventPublisherMixin):
 
             return {"success": True, "message": "订单已记录", "order_info": order_info}
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"处理订单消息失败：{e}")
             return {"success": False, "message": f"处理失败：{str(e)}"}
 
@@ -605,7 +606,7 @@ class WechatTaskService(NeuroEventPublisherMixin):
 
             return {"success": True, "message": "发货单已记录", "shipment_info": shipment_info}
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"处理发货单消息失败：{e}")
             return {"success": False, "message": f"处理失败：{str(e)}"}
 

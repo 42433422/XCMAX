@@ -9,6 +9,7 @@ import os
 from typing import Any
 
 from app.extensions import celery_app
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +50,7 @@ def generate_shipment_order(
         logger.info(f"发货单生成完成：{result}")
         return result
 
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.exception(f"生成发货单失败：{e}")
         try:
             self.retry(exc=e, countdown=60)
@@ -101,7 +102,7 @@ def generate_batch_shipment_orders(self, orders: list[dict[str, Any]]) -> dict[s
                     succeeded += 1
                 else:
                     failed += 1
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 logger.exception(f"生成单个发货单失败：{e}")
                 failed += 1
                 results.append({"success": False, "message": str(e)})
@@ -116,7 +117,7 @@ def generate_batch_shipment_orders(self, orders: list[dict[str, Any]]) -> dict[s
             "results": results,
         }
 
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.exception(f"批量生成发货单失败：{e}")
         try:
             self.retry(exc=e, countdown=120)
@@ -168,7 +169,7 @@ def print_shipment_document(
         logger.info(f"打印完成：{result}")
         return result
 
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.exception(f"打印发货单失败：{e}")
         try:
             self.retry(exc=e, countdown=30)
@@ -217,13 +218,13 @@ def cleanup_old_shipment_documents(days: int = 90) -> int:
                     os.remove(file_path)
                     cleaned_count += 1
                     logger.info(f"已删除旧发货单：{filename}")
-                except Exception as e:
+                except OPERATIONAL_ERRORS as e:
                     logger.warning(f"删除文件失败 {filename}: {e}")
 
         logger.info(f"清理完成，共清理 {cleaned_count} 个文件")
         return cleaned_count
 
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.exception(f"清理旧文件失败：{e}")
         return 0
 
@@ -261,7 +262,7 @@ def export_shipment_records_task(
         logger.info(f"导出完成：{result}")
         return result
 
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.exception(f"导出出货记录失败：{e}")
         try:
             self.retry(exc=e, countdown=60)
@@ -321,7 +322,7 @@ def import_products_batch_task(
                     else:
                         failed += 1
                         failed_items.append(item)
-                except Exception as item_err:
+                except OPERATIONAL_ERRORS as item_err:
                     logger.warning(f"导入单个产品失败：{item_err}")
                     failed += 1
                     failed_items.append(item)
@@ -335,7 +336,7 @@ def import_products_batch_task(
             "failed_items": failed_items[:10],
         }
 
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.exception(f"批量导入产品失败：{e}")
         try:
             self.retry(exc=e, countdown=60)
@@ -390,7 +391,7 @@ def generate_labels_batch_task(self, labels: list[dict[str, Any]]) -> dict[str, 
                 if result.get("success"):
                     generated += 1
                 results.append(result)
-            except Exception as label_err:
+            except OPERATIONAL_ERRORS as label_err:
                 logger.warning(f"生成单个标签失败：{label_err}")
                 results.append({"success": False, "message": str(label_err)})
 
@@ -402,7 +403,7 @@ def generate_labels_batch_task(self, labels: list[dict[str, Any]]) -> dict[str, 
             "results": results[:20],
         }
 
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.exception(f"批量生成标签失败：{e}")
         try:
             self.retry(exc=e, countdown=60)
@@ -458,7 +459,7 @@ def generate_parallel_shipment_orders(self, orders: list[dict[str, Any]]) -> dic
             "message": "并行任务已提交",
         }
 
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.exception(f"并行生成发货单失败：{e}")
         return {
             "success": False,

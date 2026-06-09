@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +56,7 @@ class ChartDataService(NeuroEventPublisherMixin):
                 "data": chart_data,
                 "title": "月度营收趋势",
             }
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception("get_revenue_chart_data failed: %s", e)
             return {"success": False, "message": str(e)}
 
@@ -94,7 +95,7 @@ class ChartDataService(NeuroEventPublisherMixin):
                 },
                 "title": "产品销售占比（本月）",
             }
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception("get_product_pie_chart_data failed: %s", e)
             return {"success": False, "message": str(e)}
 
@@ -141,7 +142,7 @@ class ChartDataService(NeuroEventPublisherMixin):
                 "data": data,
                 "title": "客户销售额排行（本月）",
             }
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception("get_customer_bar_chart_data failed: %s", e)
             return {"success": False, "message": str(e)}
 
@@ -189,7 +190,7 @@ class ChartDataService(NeuroEventPublisherMixin):
                 "data": chart_data,
                 "title": "营收成本利润趋势",
             }
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception("get_profit_trend_chart_data failed: %s", e)
             return {"success": False, "message": str(e)}
 
@@ -236,7 +237,7 @@ class ChartDataService(NeuroEventPublisherMixin):
                 },
                 "title": "原材料库存价值分布",
             }
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             from sqlalchemy.exc import ProgrammingError
 
             if isinstance(e, ProgrammingError) and "does not exist" in str(e):

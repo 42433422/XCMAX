@@ -16,6 +16,7 @@ from enum import Enum
 from typing import Any
 
 from app.neuro_bus.events.base import NeuroEvent
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -201,7 +202,7 @@ class Sandbox:
         # 执行模拟
         try:
             simulator(context)
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"Sandbox simulation error: {e}")
             return SandboxReport(
                 event_id=event.metadata.event_id,

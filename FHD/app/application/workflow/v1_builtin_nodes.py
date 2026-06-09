@@ -15,6 +15,8 @@ from typing import Any
 
 import httpx
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
+
 from .types import PlanGraph, WorkflowNode
 
 logger = logging.getLogger(__name__)
@@ -106,7 +108,7 @@ def execute_http_request_node(
                 )
             try:
                 data = resp.json()
-            except Exception:
+            except OPERATIONAL_ERRORS:
                 data = {"raw": resp.text}
             return {
                 "success": resp.status_code < 400,

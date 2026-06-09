@@ -23,7 +23,10 @@
     "forceConsistentCasingInFileNames": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@admin-console-inject/adminHostRoutes": ["./src/router/adminHostRoutes.stub.ts"],
+      "@/data/workflow-employee-docs.json": ["./public/workflow-employee-docs.json"],
+      "@/data/workflow-employees.json": ["./public/workflow-employees.json"]
     },
     "types": ["vite/client"]
   },

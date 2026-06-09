@@ -10,6 +10,7 @@ from functools import lru_cache
 from typing import Any
 
 from app.mod_sdk.neuro_bus_compat import NEURO_BUS_BRIDGE_MOD_ID, _resolve_mod_dir
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +26,7 @@ def _read_manifest() -> dict[str, Any]:
     try:
         data = json.loads((mod_dir / "manifest.json").read_text(encoding="utf-8"))
         return data if isinstance(data, dict) else {}
-    except Exception:
+    except OPERATIONAL_ERRORS:
         return {}
 
 
@@ -56,7 +57,7 @@ def _resolve_mod_path() -> tuple[str, str] | tuple[None, None]:
         meta = get_mod_manager().get_mod(NEURO_BUS_BRIDGE_MOD_ID)
         if meta and meta.mod_path:
             return NEURO_BUS_BRIDGE_MOD_ID, str(meta.mod_path)
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.debug("neuro handler mod path via manager failed", exc_info=True)
     mod_dir = _resolve_mod_dir()
     if mod_dir:
@@ -101,7 +102,7 @@ def list_neuro_bus_handler_registry() -> dict[str, Any]:
                 mod = _load_handler_providers_module(mod_path, mod_id or NEURO_BUS_BRIDGE_MOD_ID)
                 if hasattr(mod, "summarize_handler_catalog"):
                     catalog_summary = mod.summarize_handler_catalog()
-        except Exception as exc:
+        except OPERATIONAL_ERRORS as exc:
             catalog_summary = {"error": str(exc)}
     return {
         "success": True,

@@ -13,6 +13,8 @@ import os
 from pathlib import Path
 from typing import Any
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
+
 logger = logging.getLogger(__name__)
 
 
@@ -24,7 +26,7 @@ def _effective_single_mod_id() -> str | None:
         ctx = get_request_active_mod_id()
         if ctx:
             return ctx
-    except Exception:
+    except OPERATIONAL_ERRORS:
         pass
     raw = os.environ.get("XCAGI_SINGLE_MOD_ID", "").strip()
     return raw or None

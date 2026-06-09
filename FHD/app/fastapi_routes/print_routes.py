@@ -12,6 +12,8 @@ from typing import Any
 from fastapi import APIRouter, Body, Query
 from fastapi.responses import FileResponse, JSONResponse
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/print", tags=["print"])
@@ -58,7 +60,7 @@ def get_printers():
     try:
         result = _svc().get_printers()
         return JSONResponse(result)
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error("获取打印机列表失败: %s", e, exc_info=True)
         return JSONResponse(
             {
@@ -75,7 +77,7 @@ def get_printer_selection():
     try:
         selection = _svc().get_printer_selection()
         return JSONResponse({"success": True, "selection": selection})
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error("获取打印机选择失败: %s", e, exc_info=True)
         return JSONResponse(
             {"success": False, "message": f"获取打印机选择失败: {str(e)}"},
@@ -117,7 +119,7 @@ def save_printer_selection(data: dict[str, Any] = Body(default_factory=dict)):
         )
         result.update(service.classify_printers(printers))
         return JSONResponse(result)
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error("保存打印机选择失败: %s", e, exc_info=True)
         return JSONResponse(
             {"success": False, "message": f"保存打印机选择失败: {str(e)}"},
@@ -130,7 +132,7 @@ def get_default_printer():
     try:
         result = _svc().get_default_printer()
         return JSONResponse(result)
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error("获取默认打印机失败: %s", e)
         return JSONResponse({"success": False, "message": str(e)}, status_code=500)
 
@@ -150,7 +152,7 @@ def print_document(data: dict[str, Any] = Body(default_factory=dict)):
         result = _svc().print_document(file_path, printer_name, use_automation)
         status_code = 200 if result.get("success") else 400
         return JSONResponse(result, status_code=status_code)
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error("打印文档失败: %s", e, exc_info=True)
         return JSONResponse({"success": False, "message": f"打印失败: {str(e)}"}, status_code=500)
 
@@ -166,7 +168,7 @@ def print_label(data: dict[str, Any] = Body(default_factory=dict)):
         confirm_action = str(data.get("confirm_action") or "").strip().lower()
         try:
             copies = int(copies)
-        except Exception:
+        except OPERATIONAL_ERRORS:
             copies = 0
         if not file_path:
             return JSONResponse({"success": False, "message": "文件路径不能为空"}, status_code=400)
@@ -236,7 +238,7 @@ def print_label(data: dict[str, Any] = Body(default_factory=dict)):
             result.setdefault("require_confirm", False)
         status_code = 200 if result.get("success") else 400
         return JSONResponse(result, status_code=status_code)
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error("打印标签失败: %s", e, exc_info=True)
         return JSONResponse(
             {"success": False, "message": f"打印标签失败: {str(e)}"}, status_code=500
@@ -253,7 +255,7 @@ def test_printer_post(data: dict[str, Any] = Body(default_factory=dict)):
             )
         result = _svc().test_printer(printer_name)
         return JSONResponse(result)
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error("测试打印机失败: %s", e, exc_info=True)
         return JSONResponse({"success": False, "message": str(e)}, status_code=500)
 
@@ -263,7 +265,7 @@ def validate_printer_separation():
     try:
         result = _svc().validate_printer_separation()
         return JSONResponse({"success": True, **result})
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error("验证打印机分离失败: %s", e, exc_info=True)
         return JSONResponse(
             {"success": False, "valid": False, "error": str(e)},
@@ -278,7 +280,7 @@ def get_document_printer():
         if printer:
             return JSONResponse({"success": True, "printer": printer})
         return JSONResponse({"success": False, "message": "未找到发货单打印机"})
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error("获取发货单打印机失败: %s", e)
         return JSONResponse({"success": False, "message": str(e)}, status_code=500)
 
@@ -290,7 +292,7 @@ def get_label_printer():
         if printer:
             return JSONResponse({"success": True, "printer": printer})
         return JSONResponse({"success": False, "message": "未找到标签打印机"})
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error("获取标签打印机失败: %s", e)
         return JSONResponse({"success": False, "message": str(e)}, status_code=500)
 
@@ -344,7 +346,7 @@ def workflow_label_print_dispatch(data: dict[str, Any] = Body(default_factory=di
                 product_name = str(p.get("name") or p.get("product_name") or model_number)
                 specification = str(p.get("specification") or p.get("spec") or "") or None
                 unit = str(p.get("unit") or "个")
-        except Exception as lookup_err:
+        except OPERATIONAL_ERRORS as lookup_err:
             logger.warning("workflow_label_print_dispatch: 产品查找失败: %s", lookup_err)
 
         result = get_print_application_service().print_single_label(
@@ -356,7 +358,7 @@ def workflow_label_print_dispatch(data: dict[str, Any] = Body(default_factory=di
         )
         status = 200 if result.get("success") else 400
         return JSONResponse(result, status_code=status)
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error("workflow_label_print_dispatch 失败: %s", e, exc_info=True)
         return JSONResponse({"success": False, "message": f"打印失败: {e}"}, status_code=500)
 
@@ -400,7 +402,7 @@ def list_labels(limit: int = Query(default=2, ge=1, le=20)):
         labels.sort(key=lambda x: x.get("filename", ""), reverse=True)
         labels = labels[:limit]
         return JSONResponse({"success": True, "labels": labels})
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error("获取标签列表失败: %s", e, exc_info=True)
         return JSONResponse({"success": False, "labels": [], "message": str(e)}, status_code=500)
 
@@ -417,6 +419,6 @@ def serve_label_image(filename: str):
             logger.warning("标签文件不存在: %s", file_path)
             return JSONResponse({"success": False, "message": "文件不存在"}, status_code=404)
         return FileResponse(file_path, media_type="image/png")
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error("获取标签图片失败: %s", e, exc_info=True)
         return JSONResponse({"success": False, "message": str(e)}, status_code=500)

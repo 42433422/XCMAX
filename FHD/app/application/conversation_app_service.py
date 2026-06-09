@@ -8,6 +8,7 @@ import logging
 
 from app.db.models import AIConversation, AIConversationSession
 from app.db.session import get_db
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +46,7 @@ class ConversationApplicationService:
                 )
 
                 neuro_notify_conversation_message_saved(session_id, user_id, role, intent)
-            except Exception:
+            except OPERATIONAL_ERRORS:
                 logger.debug("neuro_notify_conversation_message_saved skipped", exc_info=True)
             return message.id
 

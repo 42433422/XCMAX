@@ -8,6 +8,8 @@ import logging
 from datetime import UTC, datetime
 from typing import Any
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
+
 logger = logging.getLogger(__name__)
 
 
@@ -21,7 +23,7 @@ def _fmt_dt(val: Any) -> str:
     if hasattr(val, "isoformat"):
         try:
             return str(val.isoformat())
-        except Exception:
+        except OPERATIONAL_ERRORS:
             return str(val)
     return str(val)
 
@@ -100,7 +102,7 @@ def build_kitten_business_snapshot(
             suf = f" | 供应商:{sup}" if sup else ""
             lines.append(f"  · {name} | 类:{cat} | 存量:{qty}{u} | 单价:{up}{suf}")
         lines.append("")
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.exception("kitten snapshot materials failed: %s", e)
         lines.append("【原材料】读取失败，可提示用户检查原材料模块或数据库。")
         stats["materials_error"] = str(e)
@@ -150,7 +152,7 @@ def build_kitten_business_snapshot(
                 f"| 单位:{r.get('unit')} | 存量:{r.get('quantity')} | 单价:{r.get('price')}"
             )
         lines.append("")
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.exception("kitten snapshot products failed: %s", e)
         lines.append("【成品/产品库】读取失败。")
         stats["products_error"] = str(e)
@@ -181,7 +183,7 @@ def build_kitten_business_snapshot(
         if len(recs) > show:
             lines.append(f"  … 另有 {len(recs) - show} 条未列出")
         lines.append("")
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.exception("kitten snapshot shipments failed: %s", e)
         lines.append("【出货记录】读取失败。")
         stats["shipments_error"] = str(e)

@@ -34,7 +34,7 @@ export function useStartupAuth(options: {
   async function ensureStartupAuthenticated(): Promise<StartupAuthResult> {
     try {
       const res = await authApi.validateSession()
-      if (res?.success === true || res?.valid === true || res?.data?.valid === true) {
+      if (res?.success === true || (res as { valid?: boolean }).valid === true || res?.data?.valid === true) {
         await syncMarketTokensFromSession()
         try {
           const { useAccountProfileStore } = await import('@/stores/accountProfile')

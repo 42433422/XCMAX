@@ -12,6 +12,7 @@ from fastapi import FastAPI
 
 from app.neuro_bus.bus import NeuroBus, get_neuro_bus
 from app.neuro_bus.events.base import EventPriority, NeuroEvent
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -122,7 +123,7 @@ def init_neuro_bus(app: FastAPI | None = None) -> NeuroBus | None:
         from app.neuro_bus.domains.intent_domain import get_intent_domain
 
         get_intent_domain()
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.warning("init_neuro_bus: intent domain setup: %s", e)
 
     return get_neuro_bus()

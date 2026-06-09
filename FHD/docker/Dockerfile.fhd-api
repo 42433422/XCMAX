@@ -14,7 +14,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     portaudio19-dev \
     && rm -rf /var/lib/apt/lists/*
 
-COPY XCAGI/requirements.txt requirements.txt
+# 生产镜像用 server-api 锁定依赖；XCAGI/requirements.txt 含 -e .. 仅适合本地 editable 安装
+COPY deploy/requirements-server-api.txt requirements.txt
 
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip wheel --no-cache-dir --wheel-dir /wheels -r requirements.txt
@@ -38,7 +39,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && useradd --create-home --shell /bin/bash appuser
 
 COPY --from=builder /wheels /wheels
-RUN pip install --no-cache-dir /wheels/* && rm -rf /wheels
+RUN pip install --no-cache-dir /wheels/* && rm -rf /wheels \
+    && pip install --no-cache-dir --upgrade 'wheel>=0.46.2' 'jaraco.context>=6.1.0' 'setuptools>=78.0.0'
 
 COPY --chown=appuser:appuser app /app/app
 COPY --chown=appuser:appuser XCAGI /app/XCAGI
@@ -57,7 +59,7 @@ USER appuser
 EXPOSE 5000
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
-    CMD curl -fsS http://127.0.0.1:5000/health >/dev/null || exit 1
+    CMD curl -fsS http://127.0.0.1:5000/api/health >/dev/null || exit 1
 
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "1", "--timeout", "120", "--graceful-timeout", "30", "-k", "uvicorn.workers.UvicornWorker", "XCAGI.run_fastapi:app"]

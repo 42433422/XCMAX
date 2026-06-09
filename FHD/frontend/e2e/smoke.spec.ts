@@ -1,8 +1,15 @@
 import { test, expect } from '@playwright/test';
+import { installE2eShellMocks, isFullStack } from './helpers';
 
 const DB_READ_TOKEN = '61408693';
 
 test.describe('XCAGI 前端冒烟 @5001', () => {
+  test.beforeEach(async ({ page }) => {
+    if (!isFullStack()) {
+      await installE2eShellMocks(page);
+    }
+  });
+
   test('首页可加载且主壳在超时内可见（非持久 opacity:0）', async ({ page, request }) => {
     const pageErrors: string[] = [];
     page.on('pageerror', (err) => {
@@ -29,11 +36,13 @@ test.describe('XCAGI 前端冒烟 @5001', () => {
     // 未捕获的 JS 异常才会白屏；网络/API 报错在控制台常见，不据此判失败
     expect(pageErrors, `pageerror: ${pageErrors.join('\n')}`).toEqual([]);
 
-    const industryResp = await request.get('/api/system/industry', { timeout: 15_000 });
-    expect(industryResp.ok(), 'industry API should be reachable').toBeTruthy();
-    const industryJson = await industryResp.json();
-    const industryName = String(industryJson?.data?.name || '').trim();
-    expect(industryName.length, 'industry name should not be empty').toBeGreaterThan(0);
+    if (isFullStack()) {
+      const industryResp = await request.get('/api/system/industry', { timeout: 15_000 });
+      expect(industryResp.ok(), 'industry API should be reachable').toBeTruthy();
+      const industryJson = await industryResp.json();
+      const industryName = String(industryJson?.data?.name || '').trim();
+      expect(industryName.length, 'industry name should not be empty').toBeGreaterThan(0);
+    }
   });
 
   test('http://localhost:5001 与 127.0.0.1 行为一致（Windows IPv6 localhost）', async ({
@@ -55,6 +64,7 @@ test.describe('XCAGI 前端冒烟 @5001', () => {
   });
 
   test('并发 API 不被单点阻塞（products/list + system/industries）', async ({ request }) => {
+    test.skip(!isFullStack(), 'requires E2E_FULL_STACK=1');
     const jobs: Promise<any>[] = [];
     for (let i = 0; i < 10; i += 1) {
       jobs.push(

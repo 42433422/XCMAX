@@ -9,6 +9,8 @@ import logging
 import re
 from typing import Any
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
+
 logger = logging.getLogger(__name__)
 
 # XCAGI 测试 monkeypatch 兼容（可选）
@@ -82,7 +84,7 @@ def _is_trivial_customer_token(text: str) -> bool:
     try:
         float(t.replace(",", ""))
         return True
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.debug("suppressed exception", exc_info=True)
     return False
 
@@ -123,7 +125,7 @@ def _extract_customer_hint_from_excel(file_path: str, sheet_name: str | None = N
     """扫描表头区单元格，提取客户公司全称。"""
     try:
         from openpyxl import load_workbook
-    except Exception:
+    except OPERATIONAL_ERRORS:
         return ""
 
     try:
@@ -162,7 +164,7 @@ def _extract_customer_hint_from_excel(file_path: str, sheet_name: str | None = N
             return ""
         finally:
             wb.close()
-    except Exception:
+    except OPERATIONAL_ERRORS:
         return ""
 
 
@@ -176,7 +178,7 @@ def _extract_rectangular_excel_preview(
     try:
         from openpyxl import load_workbook
         from openpyxl.utils import get_column_letter
-    except Exception:
+    except OPERATIONAL_ERRORS:
         return {"fields": [], "sample_rows": [], "sheet_name": sheet_name or ""}
 
     try:
@@ -205,7 +207,7 @@ def _extract_rectangular_excel_preview(
             return {"fields": fields, "sample_rows": sample_rows, "sheet_name": ws.title}
         finally:
             wb.close()
-    except Exception:
+    except OPERATIONAL_ERRORS:
         return {"fields": [], "sample_rows": [], "sheet_name": sheet_name or ""}
 
 
@@ -225,7 +227,7 @@ def _extract_structured_excel_preview(
 
     try:
         from openpyxl import load_workbook
-    except Exception:
+    except OPERATIONAL_ERRORS:
         return {"fields": [], "sample_rows": [], "sheet_name": sheet_name or ""}
 
     hdr = int(force_header_row_1based)
@@ -279,5 +281,5 @@ def _extract_structured_excel_preview(
             return {"fields": fields, "sample_rows": sample_rows, "sheet_name": ws.title}
         finally:
             wb.close()
-    except Exception:
+    except OPERATIONAL_ERRORS:
         return {"fields": [], "sample_rows": [], "sheet_name": sheet_name or ""}

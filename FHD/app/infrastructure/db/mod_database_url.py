@@ -21,6 +21,8 @@ import os
 from pathlib import Path
 from urllib.parse import quote, unquote
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
+
 
 def _normalize_mod_for_env(mod_id: str) -> str:
     return (
@@ -94,7 +96,7 @@ def _postgres_url_with_mod_db(base_url: str, active_mod_id: str) -> str:
             return base_url
         new_db = f"{base_db}__{suffix}"
         return u.set(database=new_db).render_as_string(hide_password=False)
-    except Exception:
+    except OPERATIONAL_ERRORS:
         return base_url
 
 

@@ -9,6 +9,8 @@ import shutil
 import tempfile
 from typing import Any
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
+
 from .artifact_constants import ARTIFACT_EMPLOYEE_PACK, normalize_artifact
 from .artifact_package import validate_employee_pack_manifest
 from .package import ModPackage, ModPackageError, ModSignatureError
@@ -156,7 +158,7 @@ class EmployeeRegistry:
             return False, f"签名验证失败：{e}"
         except ModPackageError as e:
             return False, str(e)
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception("employee pack install failed")
             return False, str(e)
 

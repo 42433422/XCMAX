@@ -10,6 +10,8 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
+
 logger = logging.getLogger(__name__)
 
 _FHD_ROOT = Path(__file__).resolve().parents[2]
@@ -34,7 +36,7 @@ def demo_account_config() -> dict[str, Any]:
         raw = json.loads(_CONFIG_PATH.read_text(encoding="utf-8"))
         if isinstance(raw, dict):
             return {**defaults, **{k: v for k, v in raw.items() if not str(k).startswith("_")}}
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.debug("surface audit demo config read failed", exc_info=True)
     return defaults
 
@@ -182,7 +184,7 @@ def seed_demo_user_row(*, session_factory) -> None:
                 if not tenant.trial_expires_at or tenant.trial_expires_at < now:
                     tenant.trial_expires_at = now + timedelta(days=3650)
                 changed = True
-        except Exception:
+        except OPERATIONAL_ERRORS:
             logger.debug("P-S 演示租户写入跳过（tenants 表未迁移）", exc_info=True)
 
         if changed:

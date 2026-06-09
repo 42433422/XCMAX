@@ -19,6 +19,8 @@ import logging
 import operator
 from typing import Any
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
+
 logger = logging.getLogger(__name__)
 
 
@@ -145,7 +147,7 @@ class SafeExpressionEvaluator:
         except SafeEvaluationError as e:
             self.logger.warning(f"Unsafe condition expression: {expression} - {e}")
             raise
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             self.logger.error(f"Failed to evaluate condition '{expression}': {e}")
             raise SafeEvaluationError(f"Invalid condition expression: {expression}") from e
 
@@ -253,6 +255,6 @@ def should_trigger_condition(node, context: dict[str, Any]) -> bool:
             f"Condition evaluation failed for node {getattr(node, 'id', 'unknown')}: {e}"
         )
         return False  # Fail closed for safety
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error(f"Unexpected error evaluating condition: {e}")
         return False

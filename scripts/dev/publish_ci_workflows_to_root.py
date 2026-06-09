@@ -88,6 +88,26 @@ def _prefix_fhd_paths(content: str, out_name: str) -> str:
                [[ "${rel}" =~ ^(fix_|check_|final_).+\\.py$ ]]; then"""
     content = content.replace(guard_old2, guard_new2)
 
+    content = content.replace(
+        "cache-dependency-path: frontend/package-lock.json",
+        "cache-dependency-path: FHD/frontend/package-lock.json",
+    )
+    content = content.replace(
+        "working-directory: frontend",
+        "working-directory: FHD/frontend",
+    )
+    # upload-artifact / download-artifact / build-push-action ignore defaults.run.working-directory
+    content = content.replace("dist/deploy/", "FHD/dist/deploy/")
+    content = content.replace("path: dist/deploy\n", "path: FHD/dist/deploy\n")
+    content = content.replace(
+        "          context: .\n          file: ./docker/Dockerfile.fhd-api",
+        "          context: FHD\n          file: FHD/docker/Dockerfile.fhd-api",
+    )
+    content = content.replace(
+        "          context: .\n          file: ./Dockerfile",
+        "          context: FHD\n          file: FHD/Dockerfile",
+    )
+
     return content
 
 

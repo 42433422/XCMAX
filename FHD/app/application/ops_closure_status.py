@@ -6,6 +6,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.mod_sdk.duty_roster import all_planned_duty_employee_ids, load_duty_roster_document
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 
 def _installed_employee_pack_ids() -> set[str]:
@@ -22,7 +23,7 @@ def _installed_employee_pack_ids() -> set[str]:
                 pid = str(pack.get("id") or "").strip()
                 if pid:
                     ids.add(pid)
-    except Exception:
+    except OPERATIONAL_ERRORS:
         pass
     try:
         from app.infrastructure.mods.mod_manager import get_mod_manager
@@ -33,7 +34,7 @@ def _installed_employee_pack_ids() -> set[str]:
                 pid = str(getattr(mod, "id", "") or "").strip()
                 if pid:
                     ids.add(pid)
-    except Exception:
+    except OPERATIONAL_ERRORS:
         pass
     return ids
 

@@ -6,6 +6,7 @@
 
 | 文档 | 说明 |
 |------|------|
+| [START_HERE.md](START_HERE.md) | **日常入口**：18 份可执行文档 + 覆盖率 artifact 下载 |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | 系统架构与设计决策 |
 | [FEATURE_MAP.md](FEATURE_MAP.md) | 功能边界与目录职责 |
 | [QUICK_START.md](QUICK_START.md) | 快速启动 |

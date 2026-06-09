@@ -17,6 +17,8 @@ import time
 from collections.abc import Callable
 from typing import TypeVar
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
+
 logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
@@ -45,7 +47,7 @@ def get_optimizer_components():
         if optimizer.async_task_manager:
             components["async_manager"] = optimizer.async_task_manager
 
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.debug(f"优化组件加载失败: {e}")
 
     return components
@@ -137,7 +139,7 @@ def cached(
 
                 return result
 
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 logger.warning(f"缓存操作失败 [{func.__name__}]: {e}")
                 return func(*args, **kwargs)
 
@@ -207,7 +209,7 @@ def rate_limited(
 
                 return func(*args, **kwargs)
 
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 logger.warning(f"限流检查失败 [{func.__name__}]: {e}")
                 return func(*args, **kwargs)
 
@@ -258,7 +260,7 @@ def monitored(name: str | None = None, slow_threshold_ms: float = 1000.0):
 
                 return result
 
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 duration_ms = (time.perf_counter() - start_time) * 1000
                 monitor.record_metric(metric_name, duration_ms, success=False, error=str(e)[:200])
                 raise
@@ -424,7 +426,7 @@ def circuit_breaker(
                 state["failures"] = 0
                 return result
 
-            except Exception:
+            except OPERATIONAL_ERRORS:
                 state["failures"] += 1
                 state["last_failure_time"] = current_time
 

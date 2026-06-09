@@ -9,6 +9,8 @@ import urllib.error
 import urllib.request
 from typing import Any
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
+
 logger = logging.getLogger(__name__)
 
 
@@ -33,7 +35,7 @@ def fetch_remote_package_list(timeout_s: float = 12.0) -> list[dict[str, Any]]:
         logger.warning("Remote catalog fetch failed: %s", e)
     except json.JSONDecodeError as e:
         logger.warning("Remote catalog JSON invalid: %s", e)
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.warning("Remote catalog error: %s", e)
     return []
 

@@ -32,6 +32,7 @@ from app.neuro_bus.route_event_publisher import (
     publish_route_event,
     publish_simple_event,
 )
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 router = APIRouter(tags=["xcagi-compat"])
 logger = logging.getLogger(__name__)
@@ -112,7 +113,7 @@ def customers_list(
         )
         if client_out is not None:
             return client_out
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.debug("client mod customers.list skipped", exc_info=True)
     try:
         from app.mod_sdk.client_primary_erp import resolve_client_erp_mod_for_request
@@ -133,7 +134,7 @@ def customers_list(
             )
             if mod_out is not None:
                 return mod_out
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.debug("erp domain customers.list dispatch skipped", exc_info=True)
     try:
         from app.mod_sdk.erp_customers_facade import customers_list as customers_list_via_service
@@ -145,7 +146,7 @@ def customers_list(
             return customers_list_via_service(
                 request, page=page, per_page=per_page, keyword=keyword
             )
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.debug("customers list via service skipped", exc_info=True)
     verify_db_read_token_header(request)
     rows = _load_customers_rows()
@@ -177,7 +178,7 @@ def customers_get_one(request: Request, customer_id: int) -> dict | JSONResponse
 
         if is_erp_customers_via_service_enabled():
             return customers_get_via_service(request, customer_id)
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.debug("customers get via service skipped", exc_info=True)
     row = _customer_find_by_id(customer_id)
     if not row:
@@ -201,7 +202,7 @@ def customers_create(request: Request, body: dict = Body(default_factory=dict)) 
             return customers_create_via_service(request, body)
     except HTTPException:
         raise
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.debug("customers create via service skipped", exc_info=True)
     _customers_write_raise(request)
     name, cp, ph, addr = _customer_body_name_contact(body)
@@ -238,7 +239,7 @@ def customers_update(
             return customers_update_via_service(request, customer_id, body)
     except HTTPException:
         raise
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.debug("customers update via service skipped", exc_info=True)
     _customers_write_raise(request)
     name, cp, ph, addr = _customer_body_name_contact(body)
@@ -263,7 +264,7 @@ def customers_delete(request: Request, customer_id: int) -> dict:
             return customers_delete_via_service(request, customer_id)
     except HTTPException:
         raise
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.debug("customers delete via service skipped", exc_info=True)
     _customers_write_raise(request)
     _customer_delete_unified(customer_id)
@@ -310,7 +311,7 @@ async def customers_import(request: Request, file: UploadFile = File(...)) -> di
         return gate
     try:
         content = await file.read()
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         raise HTTPException(status_code=400, detail=f"读取上传文件失败：{e}") from e
     from app.application.excel_imports import run_customers_excel_import_bytes
 

@@ -8,6 +8,8 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
+
 
 def json_safe(value: Any) -> Any:
     if value is None or isinstance(value, (bool, int, str)):
@@ -25,7 +27,7 @@ def json_safe(value: Any) -> Any:
     if isinstance(value, bytes):
         try:
             return value.decode("utf-8", errors="replace")
-        except Exception:
+        except OPERATIONAL_ERRORS:
             return ""
     try:
         import numpy as np  # type: ignore

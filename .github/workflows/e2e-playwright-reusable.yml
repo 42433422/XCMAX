@@ -34,6 +34,7 @@ jobs:
       - name: Install Playwright Chromium
         run: npx playwright install chromium --with-deps
 
+      # E2E_VITE_MOCK_API=1: SSOT mock contract (Playwright route mocks in e2e/helpers.ts).
       - name: Run P0 e2e (mock API)
         env:
           E2E_VITE_MOCK_API: "1"
@@ -44,7 +45,7 @@ jobs:
             curl -sf http://127.0.0.1:5001/ >/dev/null && break
             sleep 2
           done
-          npx playwright test e2e/smoke.spec.ts e2e/critical-paths.spec.ts --reporter=line
+          npm run test:e2e:p0 -- --reporter=line
 
       - name: Run skeleton specs (optional full stack)
         if: inputs.run_skeleton

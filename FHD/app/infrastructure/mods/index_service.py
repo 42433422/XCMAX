@@ -11,6 +11,7 @@ import sqlite3
 from contextlib import contextmanager
 from typing import Any, Optional
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 from app.utils.time import utc_now_naive
 
 logger = logging.getLogger(__name__)
@@ -38,7 +39,7 @@ class ModIndexDatabase:
         try:
             yield conn
             conn.commit()
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             conn.rollback()
             raise e
         finally:
@@ -176,7 +177,7 @@ class ModIndexDatabase:
                 logger.info(f"MOD metadata indexed: {mod_id}")
                 return True
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"Failed to index MOD metadata: {e}")
             return False
 
@@ -272,7 +273,7 @@ class ModIndexDatabase:
                 self._recalculate_statistics(conn, mod_id)
 
                 return True
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"Failed to add rating: {e}")
             return False
 
@@ -376,7 +377,7 @@ class ModIndexService:
 
             return self.db.upsert_mod(info, package_file)
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"Failed to index MOD package: {e}")
             return False
 

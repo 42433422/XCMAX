@@ -7,6 +7,7 @@ from typing import Any, Literal
 
 from app.db.models.user import Session as UserSession
 from app.db.session import get_db
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -111,7 +112,7 @@ def persist_session_account_meta(
             if tenant_id is not None and hasattr(row, "tenant_id"):
                 row.tenant_id = int(tenant_id)
             db.commit()
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.exception("persist_session_account_meta failed")
 
 
@@ -125,7 +126,7 @@ def load_session_account_meta(session_id: str) -> dict[str, Any] | None:
             if row is None:
                 return None
             return session_row_to_meta_dict(row)
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.exception("load_session_account_meta failed")
         return None
 
@@ -157,7 +158,7 @@ def clear_impersonation(session_id: str) -> None:
             row.impersonating_market_user_id = None
             row.impersonating_username = ""
             db.commit()
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.exception("clear_impersonation failed")
 
 
@@ -204,5 +205,5 @@ def audit_admin_action(
             mod_id,
             detail or operator,
         )
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.exception("audit_admin_action failed")

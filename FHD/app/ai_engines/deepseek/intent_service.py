@@ -17,6 +17,7 @@ from collections import OrderedDict
 from typing import Any
 
 from app.utils.cache_manager import get_intent_deepseek_cache
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -139,7 +140,7 @@ class DeepseekIntentClassifier:
                         config_module = importlib.util.module_from_spec(spec)
                         spec.loader.exec_module(config_module)
                         key = getattr(config_module, "DEEPSEEK_API_KEY", "") or ""
-            except Exception:
+            except OPERATIONAL_ERRORS:
                 pass
         return key
 
@@ -212,7 +213,7 @@ class DeepseekIntentClassifier:
                 _intent_recognition_cache.set(message, result)
                 return result
 
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 last_error = e
                 logger.warning(f"DeepSeek API 调用失败（第 {attempt + 1} 次）：{e}")
                 if attempt < self.max_retries - 1:

@@ -15,6 +15,7 @@ import time
 from typing import Any
 
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +53,7 @@ class AIOptimizedService(NeuroEventPublisherMixin):
 
                 self._rate_limiter = get_rate_limiter("ai_chat", max_requests=30, window_seconds=60)
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.debug(f"AI服务优化组件加载失败: {e}")
 
     def _make_cache_key(self, user_id: str, message: str, context: dict | None = None) -> str:
@@ -152,7 +153,7 @@ class AIOptimizedService(NeuroEventPublisherMixin):
                         cacheable_result,
                         ttl=int(__import__("os").environ.get("XCAGI_AI_RESPONSE_CACHE_TTL", "300")),
                     )
-                except Exception as e:
+                except OPERATIONAL_ERRORS as e:
                     logger.debug(f"AI响应缓存写入失败: {e}")
 
             if isinstance(result, dict):
@@ -162,7 +163,7 @@ class AIOptimizedService(NeuroEventPublisherMixin):
 
             return result
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             duration_ms = (time.perf_counter() - start_time) * 1000
 
             if self._monitor:
@@ -195,7 +196,7 @@ class AIOptimizedService(NeuroEventPublisherMixin):
                 "_async": True,
             }
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.warning(f"异步任务提交失败，回退同步执行: {e}")
             return self.chat(user_id, message, **kwargs)
 
@@ -209,7 +210,7 @@ class AIOptimizedService(NeuroEventPublisherMixin):
             cleared = self._cache.clear_pattern(pattern)
             logger.info(f"已清除用户 {user_id} 的AI缓存 ({cleared} 个键)")
             return cleared
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.warning(f"清除AI缓存失败: {e}")
             return 0
 
@@ -270,7 +271,7 @@ class CustomerServiceOptimizer:
             optimizer = get_performance_optimizer()
             self._cache = optimizer.redis_cache
             self._monitor = optimizer.performance_monitor
-        except Exception:
+        except OPERATIONAL_ERRORS:
             pass
 
     @staticmethod
@@ -315,7 +316,7 @@ class CustomerServiceOptimizer:
             else:
                 self._cache.clear_pattern("customers:*")
                 self._cache.clear_pattern("customer:*")
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.warning(f"清除客户缓存失败: {e}")
 
 
@@ -335,7 +336,7 @@ class ShipmentServiceOptimizer:
             self._cache = optimizer.redis_cache
             self._async_manager = optimizer.async_task_manager
             self._monitor = optimizer.performance_monitor
-        except Exception:
+        except OPERATIONAL_ERRORS:
             pass
 
     @staticmethod
@@ -394,7 +395,7 @@ class ShipmentServiceOptimizer:
 
             if shipment_id:
                 self._cache.delete(f"shipment:{shipment_id}")
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.warning(f"清除出货单缓存失败: {e}")
 
 

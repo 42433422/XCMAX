@@ -4,6 +4,27 @@ from __future__ import annotations
 
 import tempfile
 
+import pytest
+
+from app.utils import rate_limiter as rate_limiter_mod
+
+
+@pytest.fixture(autouse=True)
+def _reset_rate_limiter_redis_state(monkeypatch: pytest.MonkeyPatch):
+    """避免前序用例初始化 Redis 后端导致本用例连 localhost:6379。"""
+    monkeypatch.delenv("CACHE_REDIS_URL", raising=False)
+    monkeypatch.delenv("REDIS_URL", raising=False)
+    monkeypatch.delenv("XCAGI_REDIS_URL", raising=False)
+    rate_limiter_mod._redis_client = None
+    rate_limiter_mod._redis_init_attempted = False
+    rate_limiter_mod._rate_limiters.clear()
+    rate_limiter_mod._circuit_breakers.clear()
+    yield
+    rate_limiter_mod._redis_client = None
+    rate_limiter_mod._redis_init_attempted = False
+    rate_limiter_mod._rate_limiters.clear()
+    rate_limiter_mod._circuit_breakers.clear()
+
 
 def test_filesystem_template_store_legacy_list():
     from app.infrastructure.templates.template_store_impl import FileSystemTemplateStore

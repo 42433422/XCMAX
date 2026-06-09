@@ -19,6 +19,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, TypeVar
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
+
 logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
@@ -195,7 +197,7 @@ class AsyncTaskManager:
 
             logger.info(f"[同步完成] 任务 {result.task_id}: {result.duration_ms:.2f}ms")
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             result.status = TaskStatus.FAILURE
             result.error = str(e)
             result.completed_at = time.time()
@@ -255,7 +257,7 @@ class AsyncTaskManager:
 
             logger.info(f"任务已提交: {result.task_id} (Celery ID: {celery_result.id})")
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"任务提交失败 [{task_name}]: {e}")
             result.status = TaskStatus.FAILURE
             result.error = f"任务提交失败: {str(e)}"
@@ -309,7 +311,7 @@ class AsyncTaskManager:
             if callback:
                 try:
                     callback(current, total or 100)
-                except Exception as e:
+                except OPERATIONAL_ERRORS as e:
                     logger.warning(f"进度回调失败: {e}")
 
     def cancel(self, task_id: str) -> bool:
@@ -470,7 +472,7 @@ def background_task(
                 t.start()
                 return {"status": "threaded", "task_name": task_name}
 
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 logger.error(f"后台任务提交失败 [{task_name}]: {e}")
                 raise
 

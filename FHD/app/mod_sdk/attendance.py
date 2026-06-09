@@ -24,4 +24,5 @@ except ModuleNotFoundError:
             "请确认 FHD/mods/attendance-industry/ 已安装。"
         )
 
+
 __all__ = ["attendance_workspace_root", "convert_attendance_file"]

@@ -12,7 +12,6 @@ types-requests
 types-pyyaml
 types-psutil
 types-aiofiles
-types-python-dotenv
 types-pillow
 types-openpyxl
 safety>=3.0

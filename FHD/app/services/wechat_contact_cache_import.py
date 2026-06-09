@@ -16,6 +16,7 @@ from typing import Any
 from app.db.models import WechatContact
 from app.db.session import get_db
 from app.utils.external_sqlite import sqlite_conn
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 from app.utils.path_utils import get_resource_path
 
 logger = logging.getLogger(__name__)
@@ -105,7 +106,7 @@ def ensure_decrypted_wechat_dbs() -> dict[str, Any]:
                     try:
                         if not os.path.exists(dst) or os.path.getmtime(dst) < os.path.getmtime(f):
                             shutil.copy2(f, dst)
-                    except Exception as copy_err:
+                    except OPERATIONAL_ERRORS as copy_err:
                         logger.warning(
                             "[WeChat] 复制原始库失败 section=%s file=%s err=%s",
                             section,
@@ -151,7 +152,7 @@ def ensure_decrypted_wechat_dbs() -> dict[str, Any]:
                     try:
                         if os.path.getmtime(decrypted_path) < os.path.getmtime(raw_path):
                             need_decrypt = True
-                    except Exception:
+                    except OPERATIONAL_ERRORS:
                         need_decrypt = True
 
                 if need_decrypt:
@@ -161,7 +162,7 @@ def ensure_decrypted_wechat_dbs() -> dict[str, Any]:
 
                         if decrypt_database(raw_path, decrypted_path, enc_key):
                             decrypt_counts[section] += 1
-                    except Exception as dec_err:
+                    except OPERATIONAL_ERRORS as dec_err:
                         logger.warning(
                             "[WeChat] 解密失败 section=%s raw=%s err=%s",
                             section,
@@ -187,7 +188,7 @@ def ensure_decrypted_wechat_dbs() -> dict[str, Any]:
             "reason": "not_configured",
             "message": f"wechat-decrypt 工具模块缺失: {e}。请确认工具目录包含 config.py / key_utils.py / decrypt_db.py。",
         }
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error(
             "[WeChat] ensure_decrypted_wechat_dbs 错误: %s\n%s", str(e), traceback.format_exc()
         )
@@ -281,7 +282,7 @@ def refresh_wechat_contacts_from_decrypt() -> tuple[dict[str, Any], int]:
                             ")"
                         )
                     )
-            except Exception as seq_err:
+            except OPERATIONAL_ERRORS as seq_err:
                 logger.warning("[WeChat] 调整 wechat_contacts_id_seq 失败(忽略): %s", seq_err)
 
             # 去掉 10000 的上限,联系人可能更多
@@ -340,7 +341,7 @@ def refresh_wechat_contacts_from_decrypt() -> tuple[dict[str, Any], int]:
             "skipped": skipped,
             "total": total,
         }, 200
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.exception("refresh_wechat_contacts_from_decrypt failed: %s", e)
         return {"success": False, "message": f"刷新失败：{str(e)}"}, 500
 
@@ -356,8 +357,8 @@ def wechat_message_source_size_payload() -> tuple[dict[str, Any], int]:
         for r in rows:
             try:
                 size += int(r.message_count or 0)
-            except Exception:
+            except OPERATIONAL_ERRORS:
                 continue
         return {"success": True, "size": size}, 200
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         return {"success": False, "message": f"获取失败：{str(e)}", "size": 0}, 500

@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Any
 from app.neuro_bus.bus import get_neuro_bus
 from app.neuro_bus.events.base import EventPriority, NeuroEvent
 from app.neuro_bus.events.product_events import *
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 if TYPE_CHECKING:
     pass  # 根据实际需要添加类型引用
@@ -61,7 +62,7 @@ class ProductAppServiceV2:
             )
             self._bus.publish(event)
             return event
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"[ProductAppServiceV2] 发布事件失败: {e}")
             return None
 
@@ -108,7 +109,7 @@ class ProductAppServiceV2:
                 "mode": "event_driven",
             }
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"[ProductAppServiceV2] 创建产品失败: {e}")
             return {"success": False, "message": str(e), "error": str(e)}
 
@@ -166,7 +167,7 @@ class ProductAppServiceV2:
                 "mode": "event_driven",
             }
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"[ProductAppServiceV2] 更新产品失败: {e}")
             return {"success": False, "message": str(e)}
 
@@ -212,7 +213,7 @@ class ProductAppServiceV2:
                 "mode": "event_driven",
             }
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"[ProductAppServiceV2] 删除产品失败: {e}")
             return {"success": False, "message": str(e)}
 
@@ -252,7 +253,7 @@ class ProductAppServiceV2:
                 "mode": "event_driven",
             }
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"[ProductAppServiceV2] 批量导入产品失败: {e}")
             return {"success": False, "message": str(e)}
 
@@ -288,7 +289,7 @@ class ProductAppServiceV2:
                 "mode": "event_driven",
             }
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"[ProductAppServiceV2] 缓存失效失败: {e}")
             return {"success": False, "message": str(e)}
 
@@ -338,7 +339,7 @@ class ProductAppServiceV2:
                 "mode": "event_driven",
             }
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"[ProductAppServiceV2] 执行命令失败: {e}")
             return {"success": False, "message": str(e)}
 

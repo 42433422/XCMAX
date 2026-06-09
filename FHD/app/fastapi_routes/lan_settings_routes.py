@@ -32,6 +32,7 @@ from app.security.lan_config import (
 from app.security.lan_ip import get_client_ip
 from app.security.lan_settings_store import LanSettingsOverride, load_overrides, save_overrides
 from app.security.license_store import write_audit
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -257,7 +258,7 @@ async def update_settings(
             ip=str(actor.get("ip") or ""),
             detail=", ".join(changed) or "noop",
         )
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.debug("audit write failed", exc_info=True)
 
     _ = time.time()

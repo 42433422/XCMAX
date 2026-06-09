@@ -12,6 +12,7 @@ from app.application.ports.wechat_contact_store import WechatContactStorePort
 from app.db.models import WechatContact, WechatContactContext
 from app.db.session import get_db
 from app.utils.external_sqlite import sqlite_conn
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +59,7 @@ def _read_rows_from_contact_db(path: str, limit: int) -> list[tuple[Any, ...]]:
             try:
                 cur = conn.execute(q, (limit,))
                 return [tuple(r) for r in cur.fetchall()]
-            except Exception:
+            except OPERATIONAL_ERRORS:
                 continue
     return []
 
@@ -149,7 +150,7 @@ class SQLAlchemyWechatContactStore(WechatContactStorePort):
                             )
 
                         return fallback
-                except Exception:
+                except OPERATIONAL_ERRORS:
                     # 回退失败不影响主表流程
                     pass
 
@@ -377,7 +378,7 @@ class SQLAlchemyWechatContactStore(WechatContactStorePort):
                         )
                         imported += 1
                 db.commit()
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception("sync_from_decrypt_contact_db failed")
             return {
                 "success": False,
@@ -406,7 +407,7 @@ class SQLAlchemyWechatContactStore(WechatContactStorePort):
                 return []
             try:
                 return json.loads(ctx.context_json)
-            except Exception:
+            except OPERATIONAL_ERRORS:
                 return []
 
     def save_context(self, contact_id: int, wechat_id: str, messages: list[dict[str, Any]]) -> bool:

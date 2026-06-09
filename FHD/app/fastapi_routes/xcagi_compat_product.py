@@ -34,6 +34,7 @@ from app.shell.mod_row_scope import (
     products_update_or_delete_mod_and,
     scoped_mod_id,
 )
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 router = APIRouter(tags=["xcagi-compat"])
 logger = logging.getLogger(__name__)
@@ -76,7 +77,7 @@ def _products_price_list_word_response(
             quote_date=qd,
             products=rows,
         )
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.exception("products export docx failed")
         raise HTTPException(status_code=500, detail=f"生成 Word 失败：{e}") from e
 
@@ -131,7 +132,7 @@ def products_list(
         )
         if mod_out is not None:
             return mod_out
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.debug("erp domain products.list dispatch skipped", exc_info=True)
     try:
         from app.mod_sdk.erp_products_facade import (
@@ -143,7 +144,7 @@ def products_list(
             return products_list_via_service(
                 request, page=page, per_page=per_page, keyword=keyword, unit=unit
             )
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.debug("products list via service skipped", exc_info=True)
     verify_db_read_token_header(request)
     try:
@@ -152,7 +153,7 @@ def products_list(
         if schema_hint:
             out["schema_hint"] = schema_hint
         return out
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.exception("products list failed (postgresql)")
         return {"success": False, "message": str(e), "data": [], "total": 0}
 
@@ -168,7 +169,7 @@ def products_get_by_id(request: Request, product_id: int) -> dict | JSONResponse
 
         if is_erp_products_via_service_enabled():
             return products_get_via_service(request, product_id)
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.debug("products get via service skipped", exc_info=True)
     verify_db_read_token_header(request)
     from app.bootstrap import get_products_service
@@ -216,7 +217,7 @@ def products_update(request: Request, body: dict = Body(default_factory=dict)) -
             return products_update_via_service(request, body)
     except HTTPException:
         raise
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.debug("products update via service skipped", exc_info=True)
     _products_write_raise(request)
     gate = _business_mod_json_block()
@@ -307,7 +308,7 @@ def products_update(request: Request, body: dict = Body(default_factory=dict)) -
                 raise HTTPException(status_code=404, detail="产品不存在")
     except HTTPException:
         raise
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.exception("products update failed")
         raise HTTPException(status_code=500, detail=f"更新失败：{e}") from e
 
@@ -327,7 +328,7 @@ def products_add(request: Request, body: dict = Body(default_factory=dict)) -> d
             return products_add_via_service(request, body)
     except HTTPException:
         raise
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.debug("products add via service skipped", exc_info=True)
     _products_write_raise(request)
     gate = _business_mod_json_block()
@@ -397,7 +398,7 @@ def products_add(request: Request, body: dict = Body(default_factory=dict)) -> d
     try:
         with eng.begin() as conn:
             new_id = conn.execute(text(sql), params).scalar_one()
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.exception("products add failed")
         raise HTTPException(status_code=500, detail=f"添加失败：{e}") from e
 
@@ -417,7 +418,7 @@ def products_delete(request: Request, body: dict = Body(default_factory=dict)) -
             return products_delete_via_service(request, body)
     except HTTPException:
         raise
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.debug("products delete via service skipped", exc_info=True)
     _products_write_raise(request)
     gate = _business_mod_json_block()
@@ -443,7 +444,7 @@ def products_delete(request: Request, body: dict = Body(default_factory=dict)) -
                 raise HTTPException(status_code=404, detail="产品不存在")
     except HTTPException:
         raise
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.exception("products delete failed")
         raise HTTPException(status_code=500, detail=f"删除失败：{e}") from e
 
@@ -465,7 +466,7 @@ def products_batch_delete(request: Request, body: dict = Body(default_factory=di
             return products_batch_delete_via_service(request, body)
     except HTTPException:
         raise
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.debug("products batch-delete via service skipped", exc_info=True)
     _products_write_raise(request)
     gate = _business_mod_json_block()
@@ -498,7 +499,7 @@ def products_batch_delete(request: Request, body: dict = Body(default_factory=di
                     deleted += 1
                 else:
                     skipped.append(str(raw))
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.exception("products batch-delete failed")
         raise HTTPException(status_code=500, detail=f"批量删除失败：{e}") from e
 

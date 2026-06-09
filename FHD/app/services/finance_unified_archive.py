@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +58,9 @@ def _items_from_pipeline(market_user_id: int | None, *, limit: int) -> list[dict
                     "status": str(payment.get("status") or "paid"),
                     "payment_ref": str(payment.get("reference") or ""),
                     "occurred_at": str(payment.get("confirmed_at") or ""),
-                    "label": str(doc.get("erp_customer_name") or doc.get("username") or f"客户{uid}"),
+                    "label": str(
+                        doc.get("erp_customer_name") or doc.get("username") or f"客户{uid}"
+                    ),
                     "market_user_id": uid,
                 }
             )
@@ -65,16 +69,20 @@ def _items_from_pipeline(market_user_id: int | None, *, limit: int) -> list[dict
     return items[:limit]
 
 
-def _items_from_db(market_user_id: int | None, *, track: str | None, limit: int) -> list[dict[str, Any]]:
+def _items_from_db(
+    market_user_id: int | None, *, track: str | None, limit: int
+) -> list[dict[str, Any]]:
     try:
         from app.db import SessionLocal
         from app.db.models.finance import FinancialTransaction
-    except Exception:
+    except OPERATIONAL_ERRORS:
         return []
     items: list[dict[str, Any]] = []
     try:
         with SessionLocal() as db:
-            q = db.query(FinancialTransaction).order_by(FinancialTransaction.transaction_date.desc())
+            q = db.query(FinancialTransaction).order_by(
+                FinancialTransaction.transaction_date.desc()
+            )
             if market_user_id:
                 q = q.filter(FinancialTransaction.counterparty_id == int(market_user_id))
             rows = q.limit(limit).all()
@@ -95,7 +103,7 @@ def _items_from_db(market_user_id: int | None, *, track: str | None, limit: int)
                 if track and entry["track"] != track:
                     continue
                 items.append(entry)
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.debug("financial_transactions query skipped", exc_info=True)
     return items
 
@@ -120,7 +128,7 @@ def list_ledger(
             items = [x for x in items if x.get("track") == track]
         if items:
             return items[:cap]
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.debug("crm invoice ledger fallback skipped", exc_info=True)
     return _items_from_pipeline(market_user_id, limit=cap)
 
@@ -136,7 +144,9 @@ def summarize_ledger(*, market_user_id: int | None = None) -> dict[str, Any]:
     return summary
 
 
-def archive_from_crm_invoice(inv: dict[str, Any], *, market_user_id: int | None = None) -> dict[str, Any]:
+def archive_from_crm_invoice(
+    inv: dict[str, Any], *, market_user_id: int | None = None
+) -> dict[str, Any]:
     uid = int(market_user_id or inv.get("market_user_id") or 0)
     entry = _ledger_item_from_invoice(inv)
     try:
@@ -153,13 +163,13 @@ def archive_from_crm_invoice(inv: dict[str, Any], *, market_user_id: int | None 
                 description=entry.get("label"),
                 status=str(entry.get("status") or "archived"),
                 counterparty_id=uid or None,
-                transaction_date=datetime.now(timezone.utc).replace(tzinfo=None),
+                transaction_date=datetime.now(UTC).replace(tzinfo=None),
             )
             db.add(txn)
             db.commit()
             db.refresh(txn)
             return {"archived": True, "transaction_id": txn.id}
-    except Exception as exc:
+    except OPERATIONAL_ERRORS as exc:
         logger.debug("DB archive skipped: %s", exc)
         return {"archived": True, "transaction_id": None, "local_only": True, "entry": entry}
 

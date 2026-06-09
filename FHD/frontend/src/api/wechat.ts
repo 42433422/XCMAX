@@ -75,7 +75,7 @@ export const wechatApi = {
   async ensureContactCache(): Promise<ApiResponse<any>> {
     const normalizeNoSource404 = (error: unknown): string => {
       if (!(error instanceof ApiError) || error.status !== 404) return '';
-      const message = String(error?.data?.message || error.message || '');
+      const message = String((error.data as Record<string, unknown> | null)?.message || error.message || '');
       if (!message) return '';
       if (/未找到可导入的联系人源|contact\.db|Name2Id/i.test(message)) {
         return message;

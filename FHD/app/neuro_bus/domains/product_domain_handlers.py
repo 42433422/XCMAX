@@ -16,6 +16,7 @@ from app.neuro_bus.events.product_events import (
     ProductPriceChangedEvent,
     ProductUpdatedEvent,
 )
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +70,7 @@ class ProductDomainHandlers:
             # 3. 可以在这里触发其他下游事件
             # 例如：通知搜索服务索引新产品
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"[ProductDomain] 处理产品创建事件失败: {e}")
             result["success"] = False
             result["error"] = str(e)
@@ -123,7 +124,7 @@ class ProductDomainHandlers:
             self.bus.publish(cache_event)
             result["actions"].append("cache_invalidated")
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"[ProductDomain] 处理产品更新事件失败: {e}")
             result["success"] = False
             result["error"] = str(e)
@@ -160,7 +161,7 @@ class ProductDomainHandlers:
             self.bus.publish(cache_event)
             result["actions"].append("cache_invalidated")
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"[ProductDomain] 处理产品删除事件失败: {e}")
             result["success"] = False
             result["error"] = str(e)
@@ -205,7 +206,7 @@ class ProductDomainHandlers:
             self.bus.publish(cache_event)
             result["actions"].append("bulk_cache_invalidated")
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"[ProductDomain] 处理产品导入事件失败: {e}")
             result["success"] = False
             result["error"] = str(e)
@@ -240,7 +241,7 @@ class ProductDomainHandlers:
             # 2. 可以在这里触发价格预警检查
             # 如果价格变动超过阈值，发送预警
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"[ProductDomain] 处理价格变更事件失败: {e}")
             result["success"] = False
             result["error"] = str(e)
@@ -268,7 +269,7 @@ class ProductDomainHandlers:
             # 这里调用实际的缓存清除逻辑
             # 可以调用 ProductsService 的缓存清除方法
             pass
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"[ProductDomain] 处理缓存失效事件失败: {e}")
             result["success"] = False
             result["error"] = str(e)

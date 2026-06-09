@@ -11,6 +11,8 @@ import os
 import sys
 from typing import Any
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
+
 logger = logging.getLogger(__name__)
 
 
@@ -57,7 +59,7 @@ class SystemService:
                         "platform": "windows",
                     }
 
-                except Exception as e:
+                except OPERATIONAL_ERRORS as e:
                     logger.error(f"获取开机自启配置失败：{e}")
                     return {
                         "enabled": False,
@@ -73,7 +75,7 @@ class SystemService:
                     "message": "当前平台不支持开机自启",
                 }
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"获取开机自启配置失败：{e}")
             return {"enabled": False, "app_path": self.app_path, "message": str(e)}
 
@@ -108,13 +110,13 @@ class SystemService:
                         "command": startup_command,
                     }
 
-                except Exception as e:
+                except OPERATIONAL_ERRORS as e:
                     logger.error(f"启用开机自启失败：{e}")
                     return {"success": False, "message": f"启用失败：{str(e)}"}
             else:
                 return {"success": False, "message": f"当前平台不支持开机自启：{sys.platform}"}
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"启用开机自启失败：{e}")
             return {"success": False, "message": f"启用失败：{str(e)}"}
 
@@ -141,13 +143,13 @@ class SystemService:
 
                 except FileNotFoundError:
                     return {"success": True, "message": "开机自启原本就未启用"}
-                except Exception as e:
+                except OPERATIONAL_ERRORS as e:
                     logger.error(f"禁用开机自启失败：{e}")
                     return {"success": False, "message": f"禁用失败：{str(e)}"}
             else:
                 return {"success": False, "message": f"当前平台不支持开机自启：{sys.platform}"}
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"禁用开机自启失败：{e}")
             return {"success": False, "message": f"禁用失败：{str(e)}"}
 
@@ -174,7 +176,7 @@ class SystemService:
                 "executable": sys.executable,
             }
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"获取系统信息失败：{e}")
             return {"message": str(e)}
 
@@ -196,7 +198,7 @@ class SystemService:
 
                 return {"success": True, "printers": printers, "default_printer": default_printer}
 
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 logger.error(f"获取打印机配置失败：{e}")
                 return {
                     "success": False,
@@ -205,7 +207,7 @@ class SystemService:
                     "default_printer": None,
                 }
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"获取打印机配置失败：{e}")
             return {"success": False, "message": f"获取打印机配置失败：{str(e)}"}
 
@@ -232,11 +234,11 @@ class SystemService:
                 else:
                     return {"success": False, "message": f"设置默认打印机失败：{printer_name}"}
 
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 logger.error(f"设置默认打印机失败：{e}")
                 return {"success": False, "message": f"设置失败：{str(e)}"}
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"设置默认打印机失败：{e}")
             return {"success": False, "message": f"设置失败：{str(e)}"}
 

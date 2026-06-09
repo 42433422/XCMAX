@@ -11,6 +11,8 @@ from typing import Any
 
 from starlette.requests import Request
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
+
 logger = logging.getLogger(__name__)
 
 
@@ -32,7 +34,7 @@ def _redact_headers(headers: Any) -> dict[str, str]:
                 out[str(k)] = "<redacted>"
             else:
                 out[str(k)] = str(v)[:200]
-    except Exception:
+    except OPERATIONAL_ERRORS:
         pass
     return out
 
@@ -46,7 +48,7 @@ async def neuro_http_trace_middleware(request: Request, call_next):
 
         if not is_neuro_stack_enabled() or not should_sample_http():
             return await call_next(request)
-    except Exception:
+    except OPERATIONAL_ERRORS:
         return await call_next(request)
 
     rid = str(uuid.uuid4())
@@ -69,7 +71,7 @@ async def neuro_http_trace_middleware(request: Request, call_next):
             },
             domain="global",
         )
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.debug("neuro http started skipped", exc_info=True)
 
     try:
@@ -89,10 +91,10 @@ async def neuro_http_trace_middleware(request: Request, call_next):
                 },
                 domain="global",
             )
-        except Exception:
+        except OPERATIONAL_ERRORS:
             logger.debug("neuro http completed skipped", exc_info=True)
         return response
-    except Exception as exc:
+    except OPERATIONAL_ERRORS as exc:
         ms = (time.perf_counter() - t0) * 1000.0
         try:
             from app.neuro_bus.application_neuro_bridge import publish_neuro_event
@@ -108,6 +110,6 @@ async def neuro_http_trace_middleware(request: Request, call_next):
                 },
                 domain="global",
             )
-        except Exception:
+        except OPERATIONAL_ERRORS:
             logger.debug("neuro http failed skipped", exc_info=True)
         raise
