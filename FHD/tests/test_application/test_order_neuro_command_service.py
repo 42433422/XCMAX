@@ -19,7 +19,6 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 from app.application.neuro_commands.order import OrderAppServiceV2, get_order_app_service_v2
 
 
