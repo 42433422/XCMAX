@@ -73,6 +73,7 @@ if [[ "$DEPLOY_MODE" == "image" ]]; then
   FHD_API_IMAGE="$IMAGE" \
     FHD_API_IMAGE_DIGEST="$IMAGE_DIGEST" \
     FHD_DEPLOY_ROOT="$DEPLOY_ROOT" \
+    FHD_ARTIFACT_DIR="$ARTIFACT_DIR" \
     bash "$APPLY_COMPOSE"
   log "compose 自动更新完成 version=$VERSION"
   exit 0
