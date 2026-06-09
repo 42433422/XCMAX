@@ -6,6 +6,25 @@
 
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
+### 自进化闭环补强（MODstore · 2026-06-10 · v10 线内迭代）
+- **feat(orchestrator)**：编排层 `ok` 收紧为 handler 输出验证；失败写入 `EmployeeExecutionMetric`
+- **feat(ci)**：`cr_narrow_ci` 窄验证（py_compile + 可选 ruff + pytest 子集）；自动审批前门禁；失败喂 `evolution-engine`
+- **feat(signals)**：`evolution_signal_collector` 注入 vibe 预备（pytest / incident / post_deploy_smoke）
+- **feat(rollout)**：`line_rollout_policy` P-S 灰度 primary + CR 日预算 + 通过率门禁
+- **feat(evolution)**：`prompt_evolution_ab` 影子 A/B 回放 + prompt override 自动应用/还原
+- **feat(cursor)**：`cursor_delegate_handler` P0/P1 接 Cursor SDK / Webhook 真执行
+
+### 表面巡检截图链路修复（SW / SS / SA · 2026-06-10 · v10 线内迭代）
+- **fix(audit)**：`run_surface_audit.mjs` P-S 共享上下文 `console_errors` 跨页累积修复——每页只归属本页新增错误，不再滚雪球误报
+- **fix(audit)**：`surface_audit_service._node_env` P-W 分支 `setdefault` 失效修复——P-W 刷新此前会打到本地 5000/5176 而非 xiu-ci.com；显式进程环境仍可覆盖
+- **feat(audit)**：远程导航 `gotoWithRetry`（domcontentloaded 失败降级 commit 重试一次）+ 导航失败时兜底截当前屏；`analyzePage` 区分「导航异常」与控制台错误
+- **fix(dashboard)**：`emp-wf-surface-audit.js` `openGallery` 回退分支死代码修复——fetch 后等待 `MonAiBiz` 挂载（≤3s）再开画廊
+- **test(audit)**：`test_surface_audit_service.py` 断言对齐现行 `surface_audit_pages.json`（P-W 49 页 / P-App 6 原生屏）；`test_surface_audit_demo_market_login.py` 导入路径改 `app.fastapi_routes.market_account`
+
+### 官网 / MODstore 生产修复（2026-06-10 · v10 线内迭代）
+- **fix(site)**：`ensure_market_dist` 并入 `main`；`modstore.service` 示例与 `align_modstore_systemd_to_deploy.sh` 默认路径对齐 `/root/XCMAX/…/MODstore_deploy`
+- **fix(market)**：补入库 `providerCredential.ts`，修复 `main` 上 `npm run build` 缺文件
+
 ### 部署工程化（2026-06-08 · v10 线内迭代）
 - **Phase 2 compose 双模**：CI `docker-build-fhd-api` 构建 `xcagi-fhd-api` 推 GHCR（`sha-<git_sha>` 标签）；manifest v2 含 `image` / `image_digest`；`fhd-apply-release-compose.sh` + `docker-compose.fhd-prod.yml`（digest 钉扎、5100→5000）；`fhd-auto-update.sh` 按 `deploy_mode` 路由
 - **tarball 拉取式发布链**（Phase 1 默认）：`fhd-pack-release.sh` → `fhd-push-release.sh` → 服务器 `fhd-auto-update.sh` cron → `fhd-apply-release.sh`（健康检查 + 自动回滚）
@@ -26,6 +45,7 @@
 - **许可证**：`LICENSE` 全文对齐 **Apache-2.0**；README / LICENSING / 商业文档社区版表述一致
 - **安全红线**：`git rm --cached` MODstore `payment_orders/order_*.json`（10 个）；`.gitignore` 补 `payment_orders/`、`.env.fhd-docker`；[`SECURITY.md`](SECURITY.md) 增密钥轮换 / 历史扫描 / 投资前 gitleaks 指引
 - **覆盖率诚实口径**：`full_app` **60.63%**（SSOT）；CI 窄包 **70%**；修正 CLAIMED / 周报误报 ≥88%
+- **口径对齐（2026-06-10）**：Android **实验骨架**（非签约级）；`*_v2` **23 个保留**（禁止宣称已清零）；README / VERSION / W24 周报同步；Android Kotlin 编译修复（Routes / MobileTokens / ServerRouter / 审批详情）
 
 ### 仓卫生 / 安全（2026-06-08 · v10 线内迭代）
 - 自 Git 索引移除 `frontend/.nm-e2e/` 依赖缓存（~11k 文件）；`.gitignore` 已覆盖 `.nm-*` / chroma / `.der`
