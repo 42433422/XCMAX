@@ -13,7 +13,7 @@ async def test_远端市场演示号走真实_api_不用本地_shim(monkeypatch)
     from app.application.surface_audit_demo_account import demo_account_config
 
     demo_account_config.cache_clear()
-    from app.fastapi_routes.domains.market_account import routes as mod
+    from app.fastapi_routes import market_account as mod
 
     login_calls: list[str] = []
 
@@ -56,7 +56,7 @@ async def test_本地市场优先_demo_shim(monkeypatch):
     from app.application.surface_audit_demo_account import demo_account_config
 
     demo_account_config.cache_clear()
-    from app.fastapi_routes.domains.market_account import routes as mod
+    from app.fastapi_routes import market_account as mod
 
     async def fail_proxy(*args, **kwargs):
         raise AssertionError("remote proxy should not run when local shim matches")
@@ -78,7 +78,7 @@ async def test_本地市场不可达时_demo_shim_兜底(monkeypatch):
     from app.application.surface_audit_demo_account import demo_account_config
 
     demo_account_config.cache_clear()
-    from app.fastapi_routes.domains.market_account import routes as mod
+    from app.fastapi_routes import market_account as mod
 
     async def unreachable(*args, **kwargs):
         return JSONResponse(
