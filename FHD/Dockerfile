@@ -41,7 +41,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && useradd --create-home --shell /bin/bash appuser
 
 COPY --from=builder /build/wheels /wheels
-RUN pip install --no-cache-dir /wheels/* && rm -rf /wheels
+RUN pip install --no-cache-dir /wheels/* && rm -rf /wheels \
+    && pip install --no-cache-dir --upgrade 'wheel>=0.46.2' 'jaraco.context>=6.1.0' 'setuptools>=78.0.0'
 
 COPY --chown=appuser:appuser . .
 
