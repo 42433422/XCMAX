@@ -28,6 +28,7 @@ vi.mock('@/stores/industry', () => ({
 import { setActivePinia, createPinia } from 'pinia'
 import { useModsStore } from '@/stores/mods'
 import { XCAGI_ACTIVE_EXTENSION_MOD_ID_KEY } from '@/utils/xcagiStorageKeys'
+import { CLIENT_PRIMARY_ERP_MOD_ID } from '@/constants/genericModPack'
 
 describe('mods store smoke', () => {
   beforeEach(() => {
@@ -119,28 +120,39 @@ describe('mods store smoke', () => {
 
   it('SUNBIRD 账号无 entitled 时仍强制太阳鸟 Mod', async () => {
     localStorage.setItem(XCAGI_ACTIVE_EXTENSION_MOD_ID_KEY, 'xcagi-erp-domain-bridge')
+    const modListPayload = {
+      ok: true,
+      json: async () => ({
+        success: true,
+        data: [
+          {
+            id: CLIENT_PRIMARY_ERP_MOD_ID,
+            name: '考勤行业',
+            version: '1.0.0',
+            author: '',
+            description: '',
+            primary: true,
+            industry: { id: '考勤', name: '考勤' },
+          },
+          {
+            id: 'taiyangniao-pro',
+            name: '太阳鸟pro',
+            version: '1.0.0',
+            author: '',
+            description: '',
+            primary: true,
+            industry: { id: '考勤', name: '考勤' },
+          },
+        ],
+      }),
+    }
     global.fetch
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          success: true,
-          data: [
-            {
-              id: 'taiyangniao-pro',
-              name: '太阳鸟pro',
-              version: '1.0.0',
-              author: '',
-              description: '',
-              primary: true,
-              industry: { id: '考勤', name: '考勤' },
-            },
-          ],
-        }),
-      })
+      .mockResolvedValueOnce(modListPayload)
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({ success: true, data: [] }),
       })
+      .mockResolvedValueOnce(modListPayload)
 
     const store = useModsStore()
     await store.initialize(true, {
@@ -149,6 +161,6 @@ describe('mods store smoke', () => {
       accountUsername: 'SUNBIRD',
     })
 
-    expect(store.activeModId).toBe('taiyangniao-pro')
+    expect(store.activeModId).toBe(CLIENT_PRIMARY_ERP_MOD_ID)
   })
 })

@@ -239,9 +239,9 @@ class KittenReportExportService:
                 current_row += 1
 
                 for month in monthly_data:
-                    ws_fin.cell(
-                        row=current_row, column=1, value=month.get("month")
-                    ).border = thin_border
+                    ws_fin.cell(row=current_row, column=1, value=month.get("month")).border = (
+                        thin_border
+                    )
                     ws_fin.cell(
                         row=current_row, column=2, value=round(month.get("revenue", 0), 2)
                     ).border = thin_border
@@ -338,18 +338,18 @@ class KittenReportExportService:
             current_row += 1
 
             ws_fin.cell(row=current_row, column=1, value="原材料").border = thin_border
-            ws_fin.cell(
-                row=current_row, column=2, value=materials.get("total_items", 0)
-            ).border = thin_border
+            ws_fin.cell(row=current_row, column=2, value=materials.get("total_items", 0)).border = (
+                thin_border
+            )
             ws_fin.cell(
                 row=current_row, column=3, value=round(materials.get("total_value", 0), 2)
             ).border = thin_border
             current_row += 1
 
             ws_fin.cell(row=current_row, column=1, value="成品/产品").border = thin_border
-            ws_fin.cell(
-                row=current_row, column=2, value=products.get("total_items", 0)
-            ).border = thin_border
+            ws_fin.cell(row=current_row, column=2, value=products.get("total_items", 0)).border = (
+                thin_border
+            )
             ws_fin.cell(
                 row=current_row, column=3, value=round(products.get("total_value", 0), 2)
             ).border = thin_border
@@ -382,18 +382,18 @@ class KittenReportExportService:
                 current_row += 1
 
                 for item in low_stock[:10]:
-                    ws_fin.cell(
-                        row=current_row, column=1, value=item.get("name")
-                    ).border = thin_border
-                    ws_fin.cell(
-                        row=current_row, column=2, value=item.get("current")
-                    ).border = thin_border
+                    ws_fin.cell(row=current_row, column=1, value=item.get("name")).border = (
+                        thin_border
+                    )
+                    ws_fin.cell(row=current_row, column=2, value=item.get("current")).border = (
+                        thin_border
+                    )
                     ws_fin.cell(
                         row=current_row, column=3, value=item.get("min_required")
                     ).border = thin_border
-                    ws_fin.cell(
-                        row=current_row, column=4, value=item.get("unit_price")
-                    ).border = thin_border
+                    ws_fin.cell(row=current_row, column=4, value=item.get("unit_price")).border = (
+                        thin_border
+                    )
                     current_row += 1
 
         for col in range(1, 5):

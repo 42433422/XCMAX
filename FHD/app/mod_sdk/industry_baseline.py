@@ -216,9 +216,11 @@ def build_industry_baseline_plan(
             show_mod_id = tier in ("core", "host", "optional")
         return {
             "mod_id": mod_id,
-            "label": _label_for_mod(mod_id, industry_key, labels)
-            if tier != "custom"
-            else _label_for_custom_mod(mod_id, industry_key, labels),
+            "label": (
+                _label_for_mod(mod_id, industry_key, labels)
+                if tier != "custom"
+                else _label_for_custom_mod(mod_id, industry_key, labels)
+            ),
             "tier": tier,
             "required": required,
             "installed": _mod_installed(mod_id, installed),
@@ -251,9 +253,11 @@ def build_industry_baseline_plan(
                 "title": "定制线",
                 "hint": custom_hint,
                 "items": [
-                    _item(mid, "custom", False, show_mod_id=False)
-                    if mid in industry_mod_ids
-                    else _item(mid, "custom", False, show_mod_id=True)
+                    (
+                        _item(mid, "custom", False, show_mod_id=False)
+                        if mid in industry_mod_ids
+                        else _item(mid, "custom", False, show_mod_id=True)
+                    )
                     for mid in custom_mod_ids
                 ],
             }
