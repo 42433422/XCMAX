@@ -154,12 +154,13 @@ jobs:
         run: python -m coverage report --fail-under=70
 
       - name: Upload coverage report
+        continue-on-error: true
         uses: codecov/codecov-action@v4
         with:
           files: ./coverage.xml
           flags: backend
           name: xcagi-backend
-          fail_ci_if_error: true
+          fail_ci_if_error: false
 
   frontend-test:
     needs: guard-temp-scripts
