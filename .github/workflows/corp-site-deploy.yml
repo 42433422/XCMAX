@@ -26,6 +26,8 @@ on:
       - '成都修茈科技有限公司/nginx-xiu-ci*.conf'
       - '成都修茈科技有限公司/MODstore_deploy/scripts/xcmax-site-auto-update.sh'
       - '成都修茈科技有限公司/MODstore_deploy/scripts/install-site-auto-update-cron.sh'
+      - '成都修茈科技有限公司/MODstore_deploy/market/public/download-release.json'
+      - '成都修茈科技有限公司/MODstore_deploy/market/src/views/SoftwareDownloadView.vue'
       - '.github/workflows/corp-site-deploy.yml'
 
 concurrency:
