@@ -71,6 +71,10 @@ class OCRApplicationService:
         """
         return self._ocr_service.recognize_product(image_path)
 
+    def extract_structured_data(self, text: str) -> dict[str, Any]:
+        """从 OCR 原文提取结构化字段（委托领域 OCRService）。"""
+        return self._ocr_service.extract_structured_data(text)
+
     def batch_recognize(self, image_paths: list) -> dict[str, Any]:
         """
         批量识别用例

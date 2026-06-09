@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from typing import Any
+from typing import Any, cast
 
 from app.application.shipment_app_service import ShipmentApplicationService
 from app.contexts.flags import is_event_primary_enabled
@@ -66,35 +66,44 @@ class ShipmentApplicationServiceEventPrimary:
             "contact_phone": contact_phone,
             "deduct_inventory": True,
         }
-        return self._run_cmd(self._dispatch_command("shipment.created", payload))
+        return cast(dict[str, Any], self._run_cmd(self._dispatch_command("shipment.created", payload)))
 
     def cancel_shipment(self, shipment_id: int) -> dict[str, Any]:
         if not is_event_primary_enabled("shipment"):
             return self._core.cancel_shipment(shipment_id)
-        return self._run_cmd(
-            self._dispatch_command(
-                "shipment.cancelled",
-                {"shipment_id": shipment_id, "reason": "user", "restore_inventory": True},
-            )
+        return cast(
+            dict[str, Any],
+            self._run_cmd(
+                self._dispatch_command(
+                    "shipment.cancelled",
+                    {"shipment_id": shipment_id, "reason": "user", "restore_inventory": True},
+                )
+            ),
         )
 
     def delete_shipment(self, shipment_id: int) -> dict[str, Any]:
         if not is_event_primary_enabled("shipment"):
             return self._core.delete_shipment(shipment_id)
-        return self._run_cmd(
-            self._dispatch_command("shipment.deleted", {"shipment_id": shipment_id})
+        return cast(
+            dict[str, Any],
+            self._run_cmd(
+                self._dispatch_command("shipment.deleted", {"shipment_id": shipment_id})
+            ),
         )
 
     def mark_as_printed(self, shipment_id: int, printer_name: str = "") -> dict[str, Any]:
         if not is_event_primary_enabled("shipment"):
             return self._core.mark_as_printed(shipment_id, printer_name)
-        return self._run_cmd(
-            self._dispatch_command(
-                "shipment.printed",
-                {
-                    "shipment_id": shipment_id,
-                    "printer_name": printer_name,
-                    "generate_record": True,
-                },
-            )
+        return cast(
+            dict[str, Any],
+            self._run_cmd(
+                self._dispatch_command(
+                    "shipment.printed",
+                    {
+                        "shipment_id": shipment_id,
+                        "printer_name": printer_name,
+                        "generate_record": True,
+                    },
+                )
+            ),
         )

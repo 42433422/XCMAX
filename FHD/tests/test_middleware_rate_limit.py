@@ -14,10 +14,17 @@ from app.utils import rate_limiter as rate_limiter_mod
 
 
 @pytest.fixture(autouse=True)
-def _reset_rate_limiter_state():
+def _reset_rate_limiter_state(monkeypatch):
+    monkeypatch.delenv("CACHE_REDIS_URL", raising=False)
+    monkeypatch.delenv("REDIS_URL", raising=False)
+    monkeypatch.delenv("XCAGI_REDIS_URL", raising=False)
+    rate_limiter_mod._redis_client = None
+    rate_limiter_mod._redis_init_attempted = False
     rate_limiter_mod._rate_limiters.clear()
     rate_limiter_mod._circuit_breakers.clear()
     yield
+    rate_limiter_mod._redis_client = None
+    rate_limiter_mod._redis_init_attempted = False
     rate_limiter_mod._rate_limiters.clear()
     rate_limiter_mod._circuit_breakers.clear()
 
