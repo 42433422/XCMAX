@@ -194,6 +194,7 @@ exclude = [
     "frontend",
     "migrations",
     "alembic/versions",
+    "app/infrastructure/skills/sidebar-menu-manager",
 ]
 
 [[tool.mypy.overrides]]
