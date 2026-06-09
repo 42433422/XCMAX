@@ -342,6 +342,29 @@ sync_corp_butler_assets
 
 restart_app_services
 
+sync_nginx_corp_root() {
+  local conf_src="${SITE_ROOT}/nginx-xiu-ci-root.conf"
+  if [[ ! -f "$conf_src" ]]; then
+    return 0
+  fi
+  if ! command -v nginx >/dev/null 2>&1; then
+    log "WARN: 未找到 nginx，跳过 corp root 配置"
+    return 0
+  fi
+  install -m 644 "$conf_src" /etc/nginx/conf.d/xiu-ci-corp-root.conf
+  if nginx -t >>"$LOG" 2>&1; then
+    systemctl reload nginx >>"$LOG" 2>&1 || true
+    log "nginx xiu-ci-corp-root.conf 已安装并重载"
+  else
+    log "WARN: nginx -t 失败，未 reload"
+  fi
+}
+
+if paths_changed_since "$XCMAX_ROOT" "$OLD_XCMAX_SHA" "$NEW_XCMAX_SHA" \
+  '^'"${SITE_SUBDIR}"'/nginx-xiu-ci.*\.conf$'; then
+  sync_nginx_corp_root
+fi
+
 echo "$NEW_XCMAX_SHA" >"${STATE_DIR}/xcmax.sha"
 # 兼容旧监控
 echo "$NEW_XCMAX_SHA" >"${STATE_DIR}/modstore.sha"
