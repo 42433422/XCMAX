@@ -16,6 +16,7 @@ on:
 defaults:
   run:
     working-directory: 成都修茈科技有限公司/MODstore_deploy
+
 jobs:
   e2e:
     runs-on: ubuntu-latest
