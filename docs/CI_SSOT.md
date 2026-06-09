@@ -107,6 +107,26 @@ bash /opt/fhd-full/scripts/deploy/fhd-apply-release-compose.sh
 
 **冻结错误制品**（两种模式通用）：`mv .../fhd-manifest.json{,.hold}`
 
+## Python 格式化 / lint（FHD）
+
+| 工具 | CI 状态 |
+|------|---------|
+| **Ruff** | `fhd-ci-cd.yml` / `fhd-test.yml` — 唯一 formatter + linter（`ruff check` + `ruff format --check`） |
+| **black / isort** | **不在 CI** — 与 Ruff 冲突；本地 pre-commit 可保留，勿在 CI 重加除非统一配置 |
+
+## Codecov（FHD 后端）
+
+`fhd-ci-cd.yml` → job `backend-test` 上传 `coverage.xml` 至 Codecov。**可选**：需在 GitHub **Settings → Secrets → Actions** 配置 `CODECOV_TOKEN`；无 token 时步骤 `continue-on-error`（不阻断 CI）。本地 `coverage.xml` / `htmlcov/` 仍为 SSOT。
+
+## E2E 分层
+
+| 场景 | Workflow | 模式 | 用例 |
+|------|----------|------|------|
+| FHD 全量 CI（PR） | `fhd-ci-cd.yml` → `frontend-e2e` | `E2E_VITE_MOCK_API=1` + Vite :5001 | `npm run test:e2e:p0` → **9 pass / 5 skip** |
+| 前端 path 过滤 / nightly | `e2e.yml` → `e2e-playwright-reusable.yml` | mock 同上；`schedule` / `workflow_dispatch` 额外 `E2E_FULL_STACK=1` | 全栈 **14/14**（含 `plan2026-skeleton`） |
+
+SSOT 脚本：`FHD/frontend/package.json` → `test:e2e:p0`；编排见 `FHD/scripts/dev/e2e-full.sh`。
+
 ## 同步根 workflow
 
 ```bash

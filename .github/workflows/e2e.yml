@@ -23,8 +23,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # PR/push: mock P0 only (9 pass). Full-stack 14/14 (plan2026-skeleton): nightly + manual dispatch.
   playwright-p0-paths:
     name: Playwright P0 关键路径
     uses: ./.github/workflows/e2e-playwright-reusable.yml
     with:
-      run_skeleton: true
+      run_skeleton: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
