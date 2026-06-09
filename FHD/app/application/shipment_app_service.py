@@ -369,7 +369,10 @@ class ShipmentApplicationService:
             else:
                 wb = Workbook()
                 ws = wb.active
-                ws.title = "出货记录"
+                if ws is None:
+                    ws = wb.create_sheet("出货记录")
+                else:
+                    ws.title = "出货记录"
 
                 headers = [
                     "ID",
@@ -402,13 +405,15 @@ class ShipmentApplicationService:
                             r.get("amount") or 0,
                             r.get("status") or "",
                             (
-                                r.get("created_at").strftime("%Y-%m-%d %H:%M:%S")
-                                if r.get("created_at")
+                                created_at.strftime("%Y-%m-%d %H:%M:%S")
+                                if (created_at := r.get("created_at")) is not None
+                                and hasattr(created_at, "strftime")
                                 else ""
                             ),
                             (
-                                r.get("printed_at").strftime("%Y-%m-%d %H:%M:%S")
-                                if r.get("printed_at")
+                                printed_at.strftime("%Y-%m-%d %H:%M:%S")
+                                if (printed_at := r.get("printed_at")) is not None
+                                and hasattr(printed_at, "strftime")
                                 else ""
                             ),
                             r.get("printer_name") or "",
