@@ -96,6 +96,9 @@ def _prefix_fhd_paths(content: str, out_name: str) -> str:
         "working-directory: frontend",
         "working-directory: FHD/frontend",
     )
+    # upload-artifact / download-artifact ignore defaults.run.working-directory
+    content = content.replace("dist/deploy/", "FHD/dist/deploy/")
+    content = content.replace("path: dist/deploy\n", "path: FHD/dist/deploy\n")
 
     return content
 
