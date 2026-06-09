@@ -512,7 +512,10 @@ def _base_registry() -> list[dict[str, Any]]:
 
 
 def get_workflow_tool_registry() -> list[dict[str, Any]]:
-    global _workflow_tool_registry_cache, _workflow_tool_registry_bulk_token_present, _workflow_registry_cache_ver
+    global \
+        _workflow_tool_registry_cache, \
+        _workflow_tool_registry_bulk_token_present, \
+        _workflow_registry_cache_ver
     bulk_on = bool((os.environ.get("FHD_DB_WRITE_TOKEN") or "").strip())
     if (
         _workflow_tool_registry_cache is not None

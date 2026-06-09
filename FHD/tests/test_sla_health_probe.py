@@ -75,9 +75,9 @@ def test_health_endpoint_latency_probe(client):
     """Probe /api/health; budget from XCAGI_SLA_HEALTH_MS (default 500ms)."""
     result = _probe_health(client)
     assert result["status_code"] < 500, f"health returned {result['status_code']}"
-    assert result[
-        "within_budget"
-    ], f"/api/health took {result['elapsed_ms']}ms (budget {BUDGET_MS}ms)"
+    assert result["within_budget"], (
+        f"/api/health took {result['elapsed_ms']}ms (budget {BUDGET_MS}ms)"
+    )
     _write_snapshot(client, result)
 
 

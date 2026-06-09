@@ -40,9 +40,9 @@ def _collect_paths(app: FastAPI) -> list[str]:
 def test_required_paths_present(essential_app: FastAPI):
     paths = _collect_paths(essential_app)
     for required in REQUIRED_PATHS:
-        assert required in paths or any(
-            required in p for p in paths
-        ), f"missing {required} in {paths[:20]}..."
+        assert required in paths or any(required in p for p in paths), (
+            f"missing {required} in {paths[:20]}..."
+        )
 
 
 def test_golden_route_snapshot_essential(essential_app: FastAPI):
