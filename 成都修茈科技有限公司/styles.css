@@ -371,16 +371,22 @@ body.nav-open .site-header { z-index: 90; }
   object-fit: contain;
   box-shadow: none;
   filter: none;
+  background: transparent;
+  display: block;
+  /* 生产 PNG 若仍带白底，乘色与浅蓝渐变融合（透明 PNG 同样安全） */
+  mix-blend-mode: multiply;
 }
 .logo-river__item--sunbird img {
   height: clamp(62px, 8vw, 88px);
   max-width: clamp(170px, 24vw, 320px);
   filter: none;
+  mix-blend-mode: multiply;
 }
 .logo-river__item--emblem img {
   height: clamp(56px, 7vw, 82px);
   max-width: clamp(110px, 15vw, 200px);
   filter: none;
+  mix-blend-mode: multiply;
 }
 @keyframes logoRiverRight {
   from { transform: translate3d(-50%, 0, 0); }

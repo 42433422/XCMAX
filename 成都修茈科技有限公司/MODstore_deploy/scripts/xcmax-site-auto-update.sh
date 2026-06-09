@@ -108,6 +108,12 @@ sync_corp_pages_to_dist_fallback() {
       n=$((n + 1))
     fi
   done
+  for f in sunbird-logo.png partner-emblem-logo.png xiu-ci-logo.png; do
+    if [[ -f "${corp}/assets/${f}" ]]; then
+      cp -af "${corp}/assets/${f}" "${dist}/assets/"
+      n=$((n + 1))
+    fi
+  done
   if [[ -d "${corp}/assets" ]]; then
     mkdir -p "${dist}/assets"
     cp -af "${corp}/assets/." "${dist}/assets/"
