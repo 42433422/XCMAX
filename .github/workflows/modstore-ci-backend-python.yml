@@ -27,6 +27,7 @@ env:
 defaults:
   run:
     working-directory: 成都修茈科技有限公司/MODstore_deploy
+
 jobs:
   release-gate:
     runs-on: ubuntu-latest

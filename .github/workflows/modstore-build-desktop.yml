@@ -18,6 +18,7 @@ permissions:
 defaults:
   run:
     working-directory: 成都修茈科技有限公司/MODstore_deploy
+
 jobs:
   windows:
     runs-on: windows-latest
