@@ -26,9 +26,11 @@ from typing import Any
 
 from app.domain.services.conversation.context import (
     ContextFacade,
-    get_context_facade,
 )
 from app.domain.services.conversation.context import PendingIntent as ContextPendingIntent
+from app.domain.services.conversation.context import (
+    get_context_facade,
+)
 
 logger = logging.getLogger(__name__)
 
