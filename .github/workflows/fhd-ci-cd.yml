@@ -390,7 +390,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist/deploy
-          ref="${{ env.REGISTRY }}/42433422/xcmax/xcagi-fhd-api"
+          ref="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_FHD_API }}"
           # build-push-action 只推送到 GHCR，本地 daemon 无镜像；先 pull 再 save
           docker pull "${ref}@${FHD_IMAGE_DIGEST}"
           docker save "${ref}@${FHD_IMAGE_DIGEST}" -o FHD/dist/deploy/fhd-api-image.tar
