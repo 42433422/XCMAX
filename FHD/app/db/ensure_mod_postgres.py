@@ -59,9 +59,7 @@ def ensure_postgres_per_mod_databases(
         return []
 
     if _skip_mod_db_create():
-        logger.info(
-            "ensure_postgres_per_mod_databases: skipped (FHD_SKIP_MOD_DB_CREATE=1)"
-        )
+        logger.info("ensure_postgres_per_mod_databases: skipped (FHD_SKIP_MOD_DB_CREATE=1)")
         return []
 
     base_url = (os.environ.get("DATABASE_URL") or "").strip()
