@@ -195,6 +195,7 @@ exclude = [
     "migrations",
     "alembic/versions",
     "app/infrastructure/skills/sidebar-menu-manager",
+    "app/infrastructure/skills/skill-maker",
 ]
 
 [[tool.mypy.overrides]]
