@@ -34,8 +34,8 @@ USER="${FHD_PUSH_USER:-root}"
 REMOTE_DIR="${FHD_PUSH_REMOTE_DIR:-/var/www/update/releases/${CHANNEL}/server}"
 SSH_KEY="${FHD_PUSH_SSH_KEY:-}"
 
-SSH_OPTS=(-o StrictHostKeyChecking=accept-new -o ServerAliveInterval=30)
-SCP_OPTS=(-o StrictHostKeyChecking=accept-new -o ServerAliveInterval=30)
+SSH_OPTS=(-o StrictHostKeyChecking=accept-new -o ServerAliveInterval=30 -o ServerAliveCountMax=120)
+SCP_OPTS=(-o StrictHostKeyChecking=accept-new -o ServerAliveInterval=30 -o ServerAliveCountMax=120)
 if [[ -n "$SSH_KEY" ]]; then
   SSH_OPTS+=(-i "$SSH_KEY")
   SCP_OPTS+=(-i "$SSH_KEY")
@@ -113,15 +113,26 @@ deploy_emit push started "artifact=$ARTIFACT version=$VERSION sha=$GIT_SHA"
 atomic_upload() {
   local src="$1"
   local dest="$2"
-  local base
-  base="$(basename "$dest")"
   local part="${dest}.part"
-  local local_sz
+  local local_sz attempt
   local_sz="$(wc -c < "$src" | tr -d '[:space:]')"
-  "${SCP[@]}" "$src" "${REMOTE}:${part}"
-  "${SSH[@]}" "$REMOTE" "REMOTE_SZ=\$(wc -c < '$part'); \
-    if [ \"\$REMOTE_SZ\" = '$local_sz' ]; then mv -f '$part' '$dest'; echo OK_MOVED; \
-    else echo SIZE_MISMATCH \"\$REMOTE_SZ\" vs '$local_sz'; rm -f '$part'; exit 1; fi"
+  for attempt in 1 2 3; do
+    if ! "${SCP[@]}" "$src" "${REMOTE}:${part}"; then
+      echo "[warn] scp attempt $attempt failed for $(basename "$src")" >&2
+      "${SSH[@]}" "$REMOTE" "rm -f '$part'" || true
+      sleep "$attempt"
+      continue
+    fi
+    if "${SSH[@]}" "$REMOTE" "test -f '$part' && REMOTE_SZ=\$(wc -c < '$part'); \
+      if [ "\$REMOTE_SZ" = '$local_sz' ]; then mv -f '$part' '$dest'; echo OK_MOVED; \
+      else echo SIZE_MISMATCH "\$REMOTE_SZ" vs '$local_sz'; rm -f '$part'; exit 1; fi"; then
+      return 0
+    fi
+    echo "[warn] verify attempt $attempt failed for $(basename "$src")" >&2
+    sleep "$attempt"
+  done
+  echo "[err] atomic_upload failed after 3 attempts: $(basename "$src")" >&2
+  return 1
 }
 
 atomic_upload "$TARBALL" "${REMOTE_DIR}/${ARTIFACT}"
