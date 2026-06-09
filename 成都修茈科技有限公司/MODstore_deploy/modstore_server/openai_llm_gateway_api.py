@@ -1,20 +1,19 @@
-"""OpenAI-compatible Chat Completions facade for XCAGI / desktop clients.
+"""OpenAI-compatible gateway for **XCauto** (修茈模型中转) and XCAGI desktop clients.
 
-Uses the same auth as the rest of the market API (``Authorization: Bearer`` JWT or
-developer PAT). Billing / wallet holds mirror ``POST /api/llm/chat``.
+Uses the same auth as the market API (``Authorization: Bearer`` JWT or developer PAT
+with ``llm:use``). Billing / wallet preauthorize-settle mirrors ``POST /api/llm/chat``.
 
 **Model parameter**
 
-- ``xiuci-account`` (aliases: ``xiuci-default``, ``xiuci``): resolve provider + model
-  exactly like ``GET /api/llm/resolve-chat-default`` (wallet default + keys).
-- ``<provider>/<model_id>`` e.g. ``deepseek/deepseek-chat``: explicit route.
+- ``xcauto-account`` (aliases: ``xcauto``, ``xcauto-default``, ``xiuci-account``,
+  ``xiuci-default``, ``xiuci``): resolve provider + model like
+  ``GET /api/llm/resolve-chat-default``.
+- ``<provider>/<model_id>`` e.g. ``deepseek/deepseek-chat``: explicit upstream route.
 
-**Client configuration example**
+**Client configuration (OpenAI SDK compatible)**
 
 - ``OPENAI_BASE_URL=https://<market-host>/v1``
-- ``OPENAI_API_KEY=<JWT or PAT with llm:use>`` (PAT wallet settlement requires Java
-  payment service to accept the same ``Authorization`` scheme as the browser session;
-  if unsettled, use login JWT.)
+- ``OPENAI_API_KEY=<JWT or PAT with llm:use>``
 
 ``stream=true`` is not implemented here; use ``POST /api/llm/chat/stream`` for SSE.
 """
@@ -32,13 +31,24 @@ from sqlalchemy.orm import Session
 
 from modstore_server.api.deps import _get_current_user
 from modstore_server.infrastructure.db import get_db
+from modstore_server.db.billing import AiModelPrice
 from modstore_server.llm_api import resolve_default_llm_route, run_billed_llm_chat
 from modstore_server.llm_key_resolver import KNOWN_PROVIDERS
 from modstore_server.models import User
 
-router = APIRouter(prefix="/v1", tags=["openai-gateway"])
+router = APIRouter(prefix="/v1", tags=["openai-gateway", "xcauto"])
 
-XIUCI_VIRTUAL_MODELS = frozenset({"xiuci-account", "xiuci-default", "xiuci"})
+# 账户路由虚拟名（XCauto 对外主品牌 + 历史 xiuci 别名）
+XCauto_VIRTUAL_MODELS = frozenset(
+    {
+        "xcauto-account",
+        "xcauto-default",
+        "xcauto",
+        "xiuci-account",
+        "xiuci-default",
+        "xiuci",
+    }
+)
 
 
 class OAIChatMessage(BaseModel):
@@ -60,7 +70,7 @@ def _parse_requested_model(model_raw: str) -> tuple[str, str]:
     if not m:
         raise HTTPException(400, "model is required")
     low = m.lower()
-    if low in XIUCI_VIRTUAL_MODELS:
+    if low in XCauto_VIRTUAL_MODELS:
         return "", ""
     if "/" in m:
         prov, mid = m.split("/", 1)
@@ -73,8 +83,43 @@ def _parse_requested_model(model_raw: str) -> tuple[str, str]:
         return prov, mid
     raise HTTPException(
         400,
-        "model 须为账户路由虚拟名（xiuci-account）或「供应商/模型id」（如 deepseek/deepseek-chat）。",
+        "model 须为 XCauto 虚拟名（xcauto-account）或「供应商/模型id」（如 deepseek/deepseek-chat）。",
     )
+
+
+def _oai_model_entry(model_id: str, owned_by: str, created: int = 1704067200) -> Dict[str, Any]:
+    return {
+        "id": model_id,
+        "object": "model",
+        "created": created,
+        "owned_by": owned_by,
+    }
+
+
+@router.get("/models")
+async def openai_list_models(
+    db: Session = Depends(get_db),
+    user: User = Depends(_get_current_user),
+):
+    """OpenAI-compatible model list for XCauto gateway clients."""
+    data: List[Dict[str, Any]] = [
+        _oai_model_entry("xcauto-account", "xcauto"),
+        _oai_model_entry("xiuci-account", "xiuci"),
+    ]
+    rows = (
+        db.query(AiModelPrice)
+        .filter(AiModelPrice.enabled == True)  # noqa: E712
+        .order_by(AiModelPrice.provider.asc(), AiModelPrice.model.asc())
+        .all()
+    )
+    seen: set[str] = set()
+    for row in rows:
+        mid = f"{row.provider}/{row.model}"
+        if mid in seen:
+            continue
+        seen.add(mid)
+        data.append(_oai_model_entry(mid, str(row.provider or "xcauto")))
+    return {"object": "list", "data": data}
 
 
 @router.post("/chat/completions")
