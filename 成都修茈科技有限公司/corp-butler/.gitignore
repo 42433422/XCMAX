@@ -1,0 +1,9 @@
+# 大体积运行时资源（由 build:corp-butler 产出或运维单独同步，不进 git）
+vosk/
+vosk.wasm
+vosk.wasm.js
+vosk.worker.js
+hero-video.mp4
+assets/*.wasm
+corp-butler/
+._*
