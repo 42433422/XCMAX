@@ -13,6 +13,8 @@ from ipaddress import ip_address, ip_network
 
 from starlette.types import Scope
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
+
 
 def _peer_ip(scope: Scope) -> str | None:
     client = scope.get("client") if isinstance(scope, dict) else None
@@ -66,12 +68,12 @@ def _xff_chain(scope: Scope) -> list[str]:
     for k, v in headers:
         try:
             name = k.decode("latin-1") if isinstance(k, bytes) else str(k)
-        except Exception:
+        except OPERATIONAL_ERRORS:
             continue
         if name.lower() == "x-forwarded-for":
             try:
                 raw = v.decode("latin-1") if isinstance(v, bytes) else str(v)
-            except Exception:
+            except OPERATIONAL_ERRORS:
                 return []
             return [seg.strip() for seg in raw.split(",") if seg.strip()]
     return []
@@ -82,12 +84,12 @@ def _real_ip_header(scope: Scope) -> str | None:
     for k, v in headers:
         try:
             name = k.decode("latin-1") if isinstance(k, bytes) else str(k)
-        except Exception:
+        except OPERATIONAL_ERRORS:
             continue
         if name.lower() == "x-real-ip":
             try:
                 return v.decode("latin-1") if isinstance(v, bytes) else str(v)
-            except Exception:
+            except OPERATIONAL_ERRORS:
                 return None
     return None
 

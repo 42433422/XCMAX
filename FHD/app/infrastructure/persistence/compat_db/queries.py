@@ -11,14 +11,15 @@ import logging
 from sqlalchemy import inspect, text
 from sqlalchemy.exc import OperationalError
 
+from app.infrastructure.db.sync_engine import get_sync_engine
 from app.infrastructure.persistence.compat_db.base import (
     TRIVIAL_MEASURE_UNITS,
     _exc_chain_has_undefined_table,
     _insp_table_exists,
     _sql_ident,
 )
-from app.infrastructure.db.sync_engine import get_sync_engine
 from app.shell.mod_row_scope import append_mod_scope_where
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -29,12 +30,12 @@ def _load_purchase_units_rows_pg() -> list[dict]:
 
         if not business_data_exposed():
             return []
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.debug("suppressed exception", exc_info=True)
     try:
         eng = get_sync_engine()
         insp = inspect(eng)
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.warning("purchase_units pg: no engine (%s)", e)
         return []
     if not _insp_table_exists(insp, "purchase_units"):
@@ -61,7 +62,7 @@ def _load_purchase_units_rows_pg() -> list[dict]:
                 .mappings()
                 .all()
             )
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         if _exc_chain_has_undefined_table(e):
             logger.debug("purchase_units pg: relation missing at query time (%s)", e)
         else:
@@ -86,11 +87,11 @@ def _distinct_units_from_products_db_pg() -> list[dict]:
 
         if not business_data_exposed():
             return []
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.debug("suppressed exception", exc_info=True)
     try:
         eng = get_sync_engine()
-    except Exception:
+    except OPERATIONAL_ERRORS:
         return []
     try:
         insp = inspect(eng)
@@ -114,7 +115,7 @@ def _distinct_units_from_products_db_pg() -> list[dict]:
         return [{"id": i + 1, "name": u, "symbol": u} for i, u in enumerate(names)]
     except OperationalError:
         return []
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.warning("distinct product units pg: %s", e)
         return []
 
@@ -226,7 +227,7 @@ def _load_customers_pg_from_customers_table(eng, insp) -> list[dict]:
     try:
         with eng.connect() as conn:
             rows = conn.execute(text(sql), bind).mappings().all()
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.warning("customers pg customers table: %s", e)
         return []
     out: list[dict] = []
@@ -262,7 +263,7 @@ def _load_customers_pg_from_purchase_units(eng) -> list[dict]:
                 .mappings()
                 .all()
             )
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.warning("customers pg purchase_units: %s", e)
         return []
     out: list[dict] = []
@@ -280,7 +281,7 @@ def _load_customers_rows_pg() -> list[dict]:
     try:
         eng = get_sync_engine()
         insp = inspect(eng)
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.warning("customers pg: no engine (%s)", e)
         return []
     names = set(insp.get_table_names())
@@ -299,7 +300,7 @@ def _load_customers_rows() -> list[dict]:
 
         if not business_data_exposed():
             return []
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.debug("suppressed exception", exc_info=True)
     rows = _load_customers_rows_pg()
     if rows:
@@ -357,7 +358,7 @@ def _customers_schema_hint_if_empty() -> str | None:
     try:
         eng = get_sync_engine()
         names = set(inspect(eng).get_table_names())
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         return f"无法连接 PostgreSQL：{e}。请检查 DATABASE_URL。"
 
     has_c = "customers" in names

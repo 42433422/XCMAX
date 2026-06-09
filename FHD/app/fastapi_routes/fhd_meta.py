@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
+
 router = APIRouter(prefix="/api/fhd", tags=["fhd"])
 
 
@@ -13,7 +15,7 @@ def db_tokens_status() -> dict:
         from app.request_active_mod_ctx import get_request_active_mod_id
 
         active_mod_id = str(get_request_active_mod_id() or "").strip()
-    except Exception:
+    except OPERATIONAL_ERRORS:
         active_mod_id = ""
     from app.infrastructure.auth.db_token import (
         configured_db_read_token,

@@ -26,6 +26,8 @@ from fastapi import APIRouter, Body, Request
 from fastapi.responses import JSONResponse
 from starlette.testclient import TestClient
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["ai-qclaw"])
@@ -132,7 +134,7 @@ def ai_qclaw_test_route(request: Request, body: dict = Body(default_factory=dict
             "status_code": resp.status_code,
             "result": "ok" if ok else "error",
         }
-    except Exception as err:
+    except OPERATIONAL_ERRORS as err:
         return JSONResponse(
             {"success": False, "path": path, "method": method, "message": str(err)},
             status_code=500,
@@ -158,7 +160,7 @@ def ai_qclaw_openclaw_chat(body: dict = Body(default_factory=dict)):
             raw = resp.read().decode("utf-8", errors="replace")
             try:
                 parsed = json.loads(raw) if raw else {}
-            except Exception:
+            except OPERATIONAL_ERRORS:
                 parsed = {"raw": raw}
             return {"success": True, "target": target_url, "data": parsed}
     except urllib.error.HTTPError as err:
@@ -172,7 +174,7 @@ def ai_qclaw_openclaw_chat(body: dict = Body(default_factory=dict)):
             },
             status_code=502,
         )
-    except Exception as err:
+    except OPERATIONAL_ERRORS as err:
         return JSONResponse(
             {"success": False, "target": target_url, "message": str(err)}, status_code=502
         )

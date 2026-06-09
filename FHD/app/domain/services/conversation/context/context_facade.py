@@ -26,6 +26,7 @@ from app.domain.services.conversation.context.intent_context import (
     PendingIntent,
     get_intent_context,
 )
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -563,7 +564,7 @@ class ContextFacade:
             if notifier and pending:
                 pending_data = pending.to_dict()
                 notifier.notify_pending_preserved(user_id, pending_data, action)
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.warning(f"[CONTEXT_FACADE] Failed to notify preserved: {e}")
 
     def _get_notifier(self):

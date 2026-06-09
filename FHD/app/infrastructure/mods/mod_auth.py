@@ -20,6 +20,8 @@ from fastapi import HTTPException, Request
 from starlette.requests import Request as StarletteRequest
 from starlette.types import ASGIApp, Receive, Scope, Send
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
+
 logger = logging.getLogger(__name__)
 
 # Secret for signing Mod IDs. Must be set in environment for production.
@@ -180,7 +182,7 @@ class ModContextMiddleware:
                     from app.infrastructure.mods.mod_manager import ensure_mod_api_ready
 
                     ensure_mod_api_ready(mod_context.mod_id, session_id=sid or None)
-                except Exception as exc:
+                except OPERATIONAL_ERRORS as exc:
                     logger.warning(
                         "ensure_mod_api_ready(%s) failed: %s",
                         mod_context.mod_id,

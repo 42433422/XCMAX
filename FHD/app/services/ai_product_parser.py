@@ -13,6 +13,8 @@ import logging
 import re
 from typing import Any
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
+
 logger = logging.getLogger(__name__)
 
 
@@ -246,7 +248,7 @@ class AIProductParser:
                 compute_fn=lambda: self._call_ai_api(text),
                 should_cache=self._should_cache_ai_result,
             )
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.debug("product-parse cache path failed, falling back: %s", e)
             return self._call_ai_api(text)
 
@@ -347,7 +349,7 @@ class AIProductParser:
                     "parse_method": "ai",
                 }
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"AI 解析失败: {e}")
 
         return None

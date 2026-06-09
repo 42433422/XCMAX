@@ -26,6 +26,7 @@ from typing import Any
 from uuid import uuid4
 
 from app.neuro_bus.events.base import NeuroEvent
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -198,7 +199,7 @@ class DeadLetterQueue:
         for callback in self._replay_callbacks:
             try:
                 callback(entry.original_event)
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 logger.error(f"[DeadLetterQueue] 重播回调失败: {e}")
 
         # 更新统计
@@ -336,7 +337,7 @@ class DeadLetterQueue:
         for callback in self._alert_callbacks:
             try:
                 callback(entry)
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 logger.error(f"[DeadLetterQueue] 告警回调失败: {e}")
 
     # ========== 内部方法 ==========

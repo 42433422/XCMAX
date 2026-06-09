@@ -34,9 +34,7 @@ def test_auth_session_validate_not_fallback(app: FastAPI):
         path = getattr(route, "path", None)
         if path:
             paths.append(path)
-    assert "/api/auth/session/validate" in paths or any(
-        "session/validate" in p for p in paths
-    )
+    assert "/api/auth/session/validate" in paths or any("session/validate" in p for p in paths)
 
 
 def test_registry_detect_conflicts_empty_for_unique_routers():
@@ -51,6 +49,7 @@ def test_registry_detect_conflicts_empty_for_unique_routers():
 
     registry.register_router("a", r1, priority=1)
     assert registry.detect_conflicts() == []
+
 
 def test_health_routes_registered(app: FastAPI):
     paths = {getattr(r, "path", "") for r in app.routes}

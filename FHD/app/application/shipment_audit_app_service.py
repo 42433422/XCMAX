@@ -10,6 +10,7 @@ from app.infrastructure.persistence.shipment_audit_repository import (
     ShipmentAuditRepository,
     get_shipment_audit_repository,
 )
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +55,7 @@ class ShipmentAuditAppService:
                 shipment_id=int(shipment_id) if shipment_id else None,
                 source="shipment",
             )
-        except Exception as exc:
+        except OPERATIONAL_ERRORS as exc:
             logger.exception("audit_from_shipment failed")
             return self._persist_decision("manual", f"审单异常: {exc}", source="shipment")
 

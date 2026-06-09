@@ -10,6 +10,8 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
+
 
 def _find_existing_mod_db_in_workspace(filename: str) -> Path | None:
     """在 cwd 向上查找已存在的 data/mod_dbs/<filename>。"""
@@ -93,7 +95,7 @@ def resolve_mod_private_sqlite_path(filename: str) -> Path:
                     db_dir = Path(get_data_dir()).resolve() / "mod_dbs"
                     db_dir.mkdir(parents=True, exist_ok=True)
                     return db_dir / name
-                except Exception:
+                except OPERATIONAL_ERRORS:
                     base_path = Path(os.getcwd()).resolve()
 
     db_dir = base_path / "data" / "mod_dbs"

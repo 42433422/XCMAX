@@ -1,6 +1,8 @@
 import logging
 import os
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
+
 logger = logging.getLogger(__name__)
 
 # 仓库根目录：本文件位于 ``app/config.py``，故此处为上一级目录（含 ``app/``、``backend/``、``XCAGI/`` 的一体化仓库根）。
@@ -23,7 +25,7 @@ try:
 
     if is_desktop_mode():
         configure_desktop_environment(os.environ.get("XCAGI_DATA_DIR"))
-except Exception:
+except OPERATIONAL_ERRORS:
     # Config import must stay side-effect tolerant for tests and management scripts.
     pass
 

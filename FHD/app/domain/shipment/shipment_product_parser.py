@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
+
 
 def _normalize_text(value: Any) -> str:
     return str(value or "").strip().lower()
@@ -16,7 +18,7 @@ def _to_float_or_none(value: Any) -> float | None:
         if value is None or str(value).strip() == "":
             return None
         return float(value)
-    except Exception:
+    except OPERATIONAL_ERRORS:
         return None
 
 
@@ -120,14 +122,14 @@ def prepare_parsed_products(
         if quantity_kg is None:
             try:
                 quantity_kg = float(quantity_tins or 0) * float(tin_spec or 0)
-            except Exception:
+            except OPERATIONAL_ERRORS:
                 quantity_kg = 0
 
         amount = p.get("amount")
         if amount is None:
             try:
                 amount = float(unit_price or 0) * float(quantity_kg or 0)
-            except Exception:
+            except OPERATIONAL_ERRORS:
                 amount = 0
 
         parsed_products.append(

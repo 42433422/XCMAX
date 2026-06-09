@@ -20,6 +20,7 @@ from app.infrastructure.payment.payment_sot import (
     model_payment_backend,
     modstore_payment_hint,
 )
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -263,7 +264,7 @@ async def alipay_trade_notify(request: Request):
         return PlainTextResponse("fail", status_code=410)
     try:
         form = await request.form()
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.warning("alipay notify: bad form: %s", e)
         return PlainTextResponse("fail", status_code=400)
 
@@ -278,7 +279,7 @@ async def alipay_trade_notify(request: Request):
 
     try:
         ok = mp_ali.verify_notify(data, signature)
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.exception("alipay notify verify error: %s", e)
         return PlainTextResponse("fail", status_code=500)
 
@@ -326,7 +327,7 @@ def diagnostics():
         try:
             data["order_count"] = mp_orders.count_orders()
             data["json_migration_pending"] = mp_orders.json_store_has_unmigrated_orders()
-        except Exception as exc:
+        except OPERATIONAL_ERRORS as exc:
             data["order_count_error"] = str(exc)[:200]
     return JSONResponse({"success": True, "data": data})
 

@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from app.mod_sdk.host_profile import resolve_fhd_config_dir
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 
 def _collect_ids_from_blocks(blocks: dict[str, Any]) -> list[str]:
@@ -81,7 +82,7 @@ def _read_json(path: Path) -> dict[str, Any] | None:
             return None
         data = json.loads(path.read_text(encoding="utf-8"))
         return data if isinstance(data, dict) else None
-    except Exception:
+    except OPERATIONAL_ERRORS:
         return None
 
 

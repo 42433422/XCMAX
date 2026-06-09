@@ -7,6 +7,7 @@ from typing import Any
 
 from app.domain.six_line.event_route import EventRoute
 from app.infrastructure.six_line import event_route_loader as loader
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -143,7 +144,7 @@ class SixLineEventAppService:
                 timeout=5.0,
             )
             return r.is_success
-        except Exception:
+        except OPERATIONAL_ERRORS:
             logger.debug("incident remote post skipped", exc_info=True)
             return False
 

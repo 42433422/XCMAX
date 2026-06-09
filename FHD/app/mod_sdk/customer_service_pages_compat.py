@@ -8,6 +8,8 @@ import os
 from pathlib import Path
 from typing import Any
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
+
 CUSTOMER_SERVICE_BRIDGE_MOD_ID = "xcagi-customer-service-bridge"
 MOD_PAGE_PREFIX = f"/mod/{CUSTOMER_SERVICE_BRIDGE_MOD_ID}"
 
@@ -25,7 +27,7 @@ def _resolve_mod_dir() -> Path | None:
         meta = get_mod_manager().get_mod(CUSTOMER_SERVICE_BRIDGE_MOD_ID)
         if meta and meta.mod_path and (Path(meta.mod_path) / "manifest.json").is_file():
             return Path(meta.mod_path)
-    except Exception:
+    except OPERATIONAL_ERRORS:
         pass
     trial = Path(__file__).resolve().parents[2] / "mods" / CUSTOMER_SERVICE_BRIDGE_MOD_ID
     return trial if (trial / "manifest.json").is_file() else None
@@ -44,7 +46,7 @@ def is_customer_service_pages_via_mod_enabled() -> bool:
             json.loads((mod_dir / "manifest.json").read_text(encoding="utf-8")).get("config") or {}
         )
         return isinstance(cfg, dict) and cfg.get("customer_service_pages_via_mod") is True
-    except Exception:
+    except OPERATIONAL_ERRORS:
         return False
 
 
@@ -55,7 +57,7 @@ def list_customer_service_pages_registry() -> dict[str, Any]:
         from app.mod_sdk.mod_views_compat import is_mod_views_physical_enabled
 
         physical = is_mod_views_physical_enabled(CUSTOMER_SERVICE_BRIDGE_MOD_ID)
-    except Exception:
+    except OPERATIONAL_ERRORS:
         pass
     return {
         "success": True,

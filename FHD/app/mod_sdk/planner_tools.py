@@ -13,6 +13,8 @@ import os
 from pathlib import Path
 from typing import Any, Callable
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
+
 PLANNER_FACADE_MOD_ID = "xcagi-planner-bridge"
 
 logger = logging.getLogger(__name__)
@@ -33,7 +35,7 @@ def _resolve_planner_mod_dir() -> Path | None:
             p = Path(meta.mod_path)
             if (p / "manifest.json").is_file():
                 return p
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.debug("planner mod path via manager failed", exc_info=True)
 
     roots: list[Path] = []
@@ -47,7 +49,7 @@ def _resolve_planner_mod_dir() -> Path | None:
         d = mods_dir()
         if d:
             roots.append(Path(d))
-    except Exception:
+    except OPERATIONAL_ERRORS:
         pass
 
     repo_mods = Path(__file__).resolve().parents[2] / "mods"
@@ -72,7 +74,7 @@ def _read_planner_manifest() -> dict[str, Any]:
     try:
         data = json.loads((mod_dir / "manifest.json").read_text(encoding="utf-8"))
         return data if isinstance(data, dict) else {}
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.debug("read planner manifest failed", exc_info=True)
         return {}
 
@@ -87,7 +89,7 @@ def is_planner_mod_installed() -> bool:
 
         if is_mods_disabled():
             return False
-    except Exception:
+    except OPERATIONAL_ERRORS:
         pass
     try:
         from app.infrastructure.mods.mod_manager import get_mod_manager
@@ -95,7 +97,7 @@ def is_planner_mod_installed() -> bool:
         for row in get_mod_manager().list_all_mods():
             if str(row.get("id") or "").strip() == PLANNER_FACADE_MOD_ID:
                 return True
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.debug("list_all_mods for planner failed", exc_info=True)
     return is_planner_mod_on_disk()
 
@@ -133,7 +135,7 @@ def load_planner_tools_config() -> dict[str, Any]:
     try:
         data = json.loads(cfg_path.read_text(encoding="utf-8"))
         return data if isinstance(data, dict) else {}
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.warning("planner_tools.json parse failed: %s", cfg_path)
         return {}
 
@@ -158,7 +160,7 @@ def load_mod_planner_tool_extensions() -> list[dict[str, Any]]:
             return [x for x in data if isinstance(x, dict)]
         if isinstance(data, dict) and isinstance(data.get("tools"), list):
             return [x for x in data["tools"] if isinstance(x, dict)]
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.warning("planner_tool_extensions.json parse failed")
     return []
 
@@ -239,7 +241,7 @@ def execute_planner_tool_from_body(body: dict[str, Any] | None) -> dict[str, Any
             workspace_root,
             db_write_token=db_write_token,
         )
-    except Exception as exc:
+    except OPERATIONAL_ERRORS as exc:
         logger.exception("planner tool execute failed: %s", name)
         return {"success": False, "error": str(exc), "tool_name": name}
 

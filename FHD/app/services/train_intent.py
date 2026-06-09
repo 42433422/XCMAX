@@ -21,6 +21,8 @@ from pathlib import Path
 
 import torch
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
@@ -84,7 +86,7 @@ def train_model(
         logger.info("=" * 60)
         return str(model_path)
 
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error(f"训练失败: {e}", exc_info=True)
         return None
 

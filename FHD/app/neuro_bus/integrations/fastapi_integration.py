@@ -22,6 +22,7 @@ from app.mod_sdk.neuro_bus_runtime import (
 from app.neuro_bus.bus import get_neuro_bus
 from app.neuro_bus.bus_setup import get_neuro_bus_manager
 from app.neuro_bus.domains.base import get_domain_registry
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +62,7 @@ async def setup_neurobus_lifespan(app: FastAPI):
         try:
             await run_lifespan_teardown()
             logger.info("NeuroBus core stopped")
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"NeuroBus shutdown error: {e}")
         logger.info("NeuroBus: Shutdown complete")
 
@@ -94,12 +95,12 @@ def get_neurobus_health() -> dict[str, Any]:
         try:
             processor = get_processor_coordinator()
             health["processors"] = processor.get_all_processor_stats()
-        except Exception:
+        except OPERATIONAL_ERRORS:
             pass
 
         return health
 
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         return {
             "status": "error",
             "error": str(e),
@@ -127,7 +128,7 @@ def add_neurobus_routes(app: FastAPI):
         try:
             processor = get_processor_coordinator()
             return processor.get_all_processor_stats()
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             return {"error": str(e)}
 
     logger.info("NeuroBus routes added")

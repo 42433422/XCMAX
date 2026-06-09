@@ -20,6 +20,8 @@ from typing import Any
 from fastapi import Request
 from fastapi.responses import JSONResponse, Response
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
+
 logger = logging.getLogger(__name__)
 
 _LANE_BY_TERMINAL = {
@@ -36,7 +38,7 @@ async def _resolve_market_authorization(request: Request) -> str:
             login_market_with_password,
             session_id_from_request,
         )
-    except Exception as exc:
+    except OPERATIONAL_ERRORS as exc:
         raise RuntimeError(f"market proxy unavailable: {exc}") from exc
 
     sid = str(session_id_from_request(request) or "").strip()
@@ -63,7 +65,7 @@ async def _resolve_market_authorization(request: Request) -> str:
         demo_pass = demo_password()
         if demo_user and demo_pass and (demo_user, demo_pass) not in creds:
             creds.append((demo_user, demo_pass))
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.debug("surface audit demo creds unavailable", exc_info=True)
 
     for user, password in creds:
@@ -119,7 +121,7 @@ def _crop_png_top(raw: bytes, height: int = _VIEWPORT_CROP_HEIGHT) -> bytes:
         buf = io.BytesIO()
         cropped.save(buf, format="PNG", optimize=True)
         return buf.getvalue()
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.debug("surface png viewport crop failed", exc_info=True)
         return raw
 
@@ -143,7 +145,7 @@ def _resize_png_thumb(raw: bytes, *, max_width: int = _THUMB_MAX_WIDTH) -> bytes
         buf = io.BytesIO()
         thumb.save(buf, format="PNG", optimize=True)
         return buf.getvalue()
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.debug("surface png thumb resize failed", exc_info=True)
         return raw
 
@@ -320,7 +322,7 @@ async def _local_surface_page(lane: str, index: int) -> dict[str, Any] | None:
             return None
         page = pages[index]
         return page if isinstance(page, dict) else None
-    except Exception:
+    except OPERATIONAL_ERRORS:
         return None
 
 
@@ -388,7 +390,7 @@ async def build_terminal_payload(
         from app.fastapi_routes.market_account import (
             _market_base_url,
         )
-    except Exception as exc:
+    except OPERATIONAL_ERRORS as exc:
         return JSONResponse(
             {"success": False, "message": f"market proxy unavailable: {exc}"},
             status_code=500,
@@ -497,7 +499,7 @@ async def fetch_surface_page_payload(
                     },
                 },
             }
-        except Exception as exc:
+        except OPERATIONAL_ERRORS as exc:
             return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
 
     from app.fastapi_routes.market_account import _proxy_json
@@ -632,7 +634,7 @@ async def _resolve_surface_audit(
                 return _sanitize_pw_admin_pages(lane, surface), surface_note
             if local.get("message") and not surface_note:
                 surface_note = str(local["message"])
-        except Exception as exc:
+        except OPERATIONAL_ERRORS as exc:
             logger.warning("local surface audit failed lane=%s: %s", lane, exc)
             if not surface_note:
                 surface_note = f"本地巡检异常: {exc}"

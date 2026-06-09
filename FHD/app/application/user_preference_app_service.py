@@ -6,6 +6,8 @@
 
 from typing import Any
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
+
 
 class UserPreferenceApplicationService:
     """用户偏好应用服务"""
@@ -19,7 +21,7 @@ class UserPreferenceApplicationService:
 
             memory_service = get_user_memory_service()
             return memory_service.get_preference(user_id, key, default)
-        except Exception:
+        except OPERATIONAL_ERRORS:
             return default
 
     def set_preference(self, user_id: str, key: str, value: Any) -> bool:
@@ -29,7 +31,7 @@ class UserPreferenceApplicationService:
             memory_service = get_user_memory_service()
             memory_service.add_preference(user_id, key, value)
             return True
-        except Exception:
+        except OPERATIONAL_ERRORS:
             return False
 
     def get_all_preferences(self, user_id: str) -> dict[str, Any]:
@@ -38,7 +40,7 @@ class UserPreferenceApplicationService:
 
             memory_service = get_user_memory_service()
             return memory_service.get_all_preferences(user_id)
-        except Exception:
+        except OPERATIONAL_ERRORS:
             return {}
 
 

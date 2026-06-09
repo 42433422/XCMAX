@@ -12,6 +12,8 @@ from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
+
 router = APIRouter(tags=["health-k8s"])
 
 
@@ -22,7 +24,7 @@ def _check_database() -> dict[str, Any]:
         with get_db() as db:
             db.execute(text("SELECT 1"))
         return {"status": "healthy", "latency_ms": 0}
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         return {"status": "unhealthy", "error": str(e)}
 
 
@@ -34,7 +36,7 @@ def _check_redis() -> dict[str, Any]:
         client = redis.from_url(redis_url)
         client.ping()
         return {"status": "healthy", "latency_ms": 0}
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         return {"status": "unhealthy", "error": str(e)}
 
 
@@ -62,7 +64,7 @@ def _check_ai_service() -> dict[str, Any]:
         if callable(getter):
             try:
                 engines = getter()
-            except Exception as exc:  # pragma: no cover - diagnostic only
+            except OPERATIONAL_ERRORS as exc:  # pragma: no cover - diagnostic only
                 engines = {"error": str(exc)}
 
         return {
@@ -70,7 +72,7 @@ def _check_ai_service() -> dict[str, Any]:
             "model_loaded": ready,
             "engines": engines,
         }
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         return {"status": "unhealthy", "error": str(e)}
 
 
@@ -132,7 +134,7 @@ def _check_pgvector() -> dict[str, Any]:
             "ivfflat_index_count": int(index_count),
             "vector_tables": tables,
         }
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         return {"status": "unhealthy", "error": str(e)}
 
 
@@ -150,7 +152,7 @@ def _check_rasa_nlu() -> dict[str, Any]:
             "available": available,
             "detail": snapshot,
         }
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         return {"status": "unhealthy", "error": str(e)}
 
 
@@ -158,7 +160,7 @@ def _system_info() -> dict[str, Any]:
     root = "C:\\" if os.name == "nt" else "/"
     try:
         disk = psutil.disk_usage(root).percent
-    except Exception:
+    except OPERATIONAL_ERRORS:
         disk = 0.0
     return {
         "cpu_percent": psutil.cpu_percent(interval=0.1),
@@ -255,7 +257,7 @@ def capabilities_diagnostics():
         getter = getattr(recognizer, "get_engine_status", None)
         if callable(getter):
             intent_engines = getter()
-    except Exception as exc:  # pragma: no cover - diagnostic only
+    except OPERATIONAL_ERRORS as exc:  # pragma: no cover - diagnostic only
         intent_engines = {"error": str(exc)}
 
     return JSONResponse(

@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import logging
-import os
 
 from fastapi import FastAPI
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
+
 logger = logging.getLogger(__name__)
+
 
 def register_health_routes(app: FastAPI) -> None:
     """注册健康检查路由"""
@@ -27,7 +29,7 @@ def register_health_routes(app: FastAPI) -> None:
                 payload["neuro"] = get_neurobus_health()
             else:
                 payload["neuro"] = {"enabled": False}
-        except Exception as exc:
+        except OPERATIONAL_ERRORS as exc:
             payload["neuro"] = {"enabled": True, "error": str(exc)}
         return payload
 
@@ -36,5 +38,3 @@ def register_health_routes(app: FastAPI) -> None:
         return {"pong": True}
 
     logger.info("Registered health check routes")
-
-

@@ -11,6 +11,8 @@ from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
+
 logger = logging.getLogger(__name__)
 
 _FHD_ROOT = Path(__file__).resolve().parents[2]
@@ -114,7 +116,7 @@ def _read_cache_path(path: Path) -> dict[str, Any] | None:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
         return data if isinstance(data, dict) and data.get("success") else None
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.debug("surface audit cache read failed: %s", path, exc_info=True)
         return None
 
@@ -188,7 +190,7 @@ def _adb_has_device() -> bool:
             parts = line.split()
             if len(parts) >= 2 and parts[1] == "device":
                 return True
-    except Exception:
+    except OPERATIONAL_ERRORS:
         return False
     return False
 
@@ -236,7 +238,7 @@ def _node_env(lane: str = "") -> dict[str, str]:
 
                 env["SURFACE_AUDIT_USER"] = demo_username()
                 env["SURFACE_AUDIT_PASSWORD"] = demo_password()
-            except Exception:
+            except OPERATIONAL_ERRORS:
                 env.setdefault("SURFACE_AUDIT_USER", "xcagi-enterprise-demo")
                 env.setdefault("SURFACE_AUDIT_PASSWORD", "Demo@2026")
     elif lane_key != "P-W":

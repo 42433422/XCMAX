@@ -7,6 +7,8 @@ import os
 from pathlib import Path
 from typing import Any
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
+
 # 兜底加载 .env（如果尚未加载）
 try:
     from dotenv import load_dotenv
@@ -15,7 +17,7 @@ try:
     for _env_file in (_repo_root / ".env", _repo_root / "XCAGI" / ".env"):
         if _env_file.is_file():
             load_dotenv(_env_file, override=False)
-except Exception:
+except ImportError:
     pass
 
 logger = logging.getLogger(__name__)
@@ -211,7 +213,7 @@ def _try_precreate(
 
     try:
         result = client.api_alipay_trade_precreate(**kwargs)
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.exception("alipay.trade.precreate 请求异常")
         return {"success": False, "qr_code": None, "message": f"请求支付宝异常: {e}", "raw": None}
 
@@ -267,7 +269,13 @@ def _try_page_pay(
     try:
         client = build_client()
     except RuntimeError as e:
-        return {"success": False, "order_string": None, "gateway": "", "message": str(e), "raw": None}
+        return {
+            "success": False,
+            "order_string": None,
+            "gateway": "",
+            "message": str(e),
+            "raw": None,
+        }
 
     kwargs = _build_common_kwargs(
         out_trade_no=out_trade_no,
@@ -281,7 +289,7 @@ def _try_page_pay(
     try:
         # python-alipay-sdk 3.x 的 page_pay 返回可直接拼在网关后的 order_string
         order_string = client.api_alipay_trade_page_pay(**kwargs)
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.exception("alipay.trade.page.pay 请求异常")
         return {
             "success": False,
@@ -328,7 +336,13 @@ def _try_wap_pay(
     try:
         client = build_client()
     except RuntimeError as e:
-        return {"success": False, "order_string": None, "gateway": "", "message": str(e), "raw": None}
+        return {
+            "success": False,
+            "order_string": None,
+            "gateway": "",
+            "message": str(e),
+            "raw": None,
+        }
 
     kwargs = _build_common_kwargs(
         out_trade_no=out_trade_no,
@@ -344,7 +358,7 @@ def _try_wap_pay(
 
     try:
         order_string = client.api_alipay_trade_wap_pay(**kwargs)
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.exception("alipay.trade.wap.pay 请求异常")
         return {
             "success": False,
@@ -508,7 +522,7 @@ def query_order(*, out_trade_no: str | None = None, trade_no: str | None = None)
         if trade_no:
             kwargs["trade_no"] = trade_no
         result = client.api_alipay_trade_query(**kwargs)
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.exception("alipay.trade.query 请求异常")
         return {"success": False, "message": f"请求支付宝异常: {e}", "raw": None}
     return _standard_api_result(result, "交易查询失败")
@@ -544,7 +558,7 @@ def refund_order(
         if refund_reason:
             kwargs["refund_reason"] = refund_reason
         result = client.api_alipay_trade_refund(**kwargs)
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.exception("alipay.trade.refund 请求异常")
         return {"success": False, "message": f"请求支付宝异常: {e}", "raw": None}
     return _standard_api_result(result, "退款失败")
@@ -565,7 +579,7 @@ def close_order(*, out_trade_no: str | None = None, trade_no: str | None = None)
         if trade_no:
             kwargs["trade_no"] = trade_no
         result = client.api_alipay_trade_close(**kwargs)
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.exception("alipay.trade.close 请求异常")
         return {"success": False, "message": f"请求支付宝异常: {e}", "raw": None}
     return _standard_api_result(result, "关闭交易失败")
@@ -583,7 +597,7 @@ def query_refund(*, out_trade_no: str, out_request_no: str | None = None) -> dic
     try:
         # SDK 3.x：第一个位置参数为 out_request_no，关键字 out_trade_no
         result = client.api_alipay_trade_fastpay_refund_query(req_no, out_trade_no=out_trade_no)
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.exception("alipay.trade.fastpay.refund.query 请求异常")
         return {"success": False, "message": f"请求支付宝异常: {e}", "raw": None}
     return _standard_api_result(result, "退款查询失败")

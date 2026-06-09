@@ -13,6 +13,8 @@ from pathlib import Path
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
+
 router = APIRouter(tags=["xcagi-compat"])
 logger = logging.getLogger(__name__)
 
@@ -160,7 +162,7 @@ def _serialize_cell_style(cell) -> dict:
                 bd[side] = {"style": st, "color": str(rgb3) if rgb3 else None}
             if bd:
                 d["border"] = bd
-    except Exception:
+    except OPERATIONAL_ERRORS:
         return {}
     return d
 
@@ -385,7 +387,7 @@ async def templates_extract_grid(
             persisted_rel = str(persisted_path)
 
         wb = load_workbook(filename=BytesIO(raw), data_only=True)
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         raise HTTPException(status_code=400, detail=f"Excel 读取失败: {e}") from e
 
     sheet_names = list(wb.sheetnames or [])

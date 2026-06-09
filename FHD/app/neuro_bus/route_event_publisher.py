@@ -17,6 +17,7 @@ from fastapi import Request
 
 from app.neuro_bus.application_neuro_bridge import publish_neuro_event
 from app.neuro_bus.integrations.intent_integration import is_neuro_stack_enabled
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +86,7 @@ def publish_route_event(
                     custom = payload_extractor(*args, **kwargs)
                     if custom:
                         payload.update(custom)
-                except Exception:
+                except OPERATIONAL_ERRORS:
                     logger.debug("suppressed exception", exc_info=True)
 
             # 发布开始事件
@@ -125,7 +126,7 @@ def publish_route_event(
 
                 return result
 
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 # 发布失败事件
                 latency_ms = (time.perf_counter() - start_time) * 1000
 
@@ -202,7 +203,7 @@ def publish_route_event(
 
                 return result
 
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 latency_ms = (time.perf_counter() - start_time) * 1000
 
                 error_payload = {
@@ -243,7 +244,7 @@ def publish_route_event(
                 func.__annotations__ = resolved
             except (AttributeError, TypeError):
                 pass
-        except Exception:
+        except OPERATIONAL_ERRORS:
             logger.debug("suppressed exception", exc_info=True)
 
         return wrapper  # type: ignore[return-value]
@@ -274,7 +275,7 @@ def publish_simple_event(
 
     try:
         return publish_neuro_event(event_type, payload, domain=domain)
-    except Exception:
+    except OPERATIONAL_ERRORS:
         return False
 
 

@@ -30,5 +30,7 @@ def test_sqlite_insert_increments_pk() -> None:
         session.commit()
         session.add(Customer(customer_name="B"))
         session.commit()
-        second_id = session.execute(text("SELECT id FROM customers ORDER BY id DESC LIMIT 1")).scalar_one()
+        second_id = session.execute(
+            text("SELECT id FROM customers ORDER BY id DESC LIMIT 1")
+        ).scalar_one()
     assert second_id > first_id

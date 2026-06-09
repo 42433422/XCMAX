@@ -10,6 +10,7 @@ import numpy as np
 
 from app.application.ports.vector_store import VectorStorePort
 from app.utils.external_sqlite import connect_sqlite
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -148,7 +149,7 @@ class SQLiteVectorStore(VectorStorePort):
                         "score": score,
                     }
                 )
-            except Exception:
+            except OPERATIONAL_ERRORS:
                 continue
 
         scored.sort(key=lambda item: item["score"], reverse=True)

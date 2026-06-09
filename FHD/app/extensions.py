@@ -52,7 +52,7 @@ def _build_celery_stub() -> Any:
 
 
 try:
-    from celery import Celery
+    from celery import Celery  # type: ignore[import-untyped]
 
     _broker = (os.environ.get("CELERY_BROKER_URL") or "memory://").strip()
     _backend = (os.environ.get("CELERY_RESULT_BACKEND") or "cache+memory://").strip()

@@ -14,5 +14,8 @@ interface Window {
     checkForUpdates: () => Promise<unknown>;
     installUpdate: () => Promise<void>;
     onUpdateEvent: (callback: (event: unknown) => void) => () => void;
+    showNotification?: (title: string, body: string) => Promise<void>;
+    setBadge?: (count: number) => Promise<void>;
   };
+  handleAutoAction?: (action: unknown, userMessage?: string) => void;
 }

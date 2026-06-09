@@ -5,7 +5,7 @@ import { useWorkflowAiEmployeesStore } from '@/stores/workflowAiEmployees'
 import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
 import { isPlatformShellModeEnabled } from '@/constants/platformShellMode'
 import { isClientModeTiersUiEnabled } from '@/constants/clientModeTiers'
-import { useStartupAuth } from '@/composables/useStartupAuth'
+import { useStartupAuth, type StartupAuthResult } from '@/composables/useStartupAuth'
 import {
   STARTUP_MOD_FETCH_CAP_MS,
   useStartupSplash,
@@ -153,7 +153,9 @@ export function useAppBoot() {
     ])
 
     void loadStartupMods.finally(() => {
-      modsStore.applyLoadingStatusPreview(startupModPreview.value)
+      modsStore.applyLoadingStatusPreview(
+        startupModPreview.value as Array<{ id: string; name?: string; version?: string }>
+      )
     })
 
     const finishSplash = () => completeStartupSplash(ensureStartupAuthenticated)
@@ -162,7 +164,7 @@ export function useAppBoot() {
     void (async () => {
       if (shouldSkipSplashVisual()) return
       try {
-        const authResult = await ensureStartupAuthenticated().catch(() => ({
+        const authResult: StartupAuthResult = await ensureStartupAuthenticated().catch(() => ({
           ok: false,
           entitledModIds: [] as string[],
         }))
@@ -170,7 +172,9 @@ export function useAppBoot() {
 
         await modWaitOrCap
         try {
-          modsStore.applyLoadingStatusPreview(startupModPreview.value)
+          modsStore.applyLoadingStatusPreview(
+            startupModPreview.value as Array<{ id: string; name?: string; version?: string }>
+          )
         } catch (e) {
           console.warn('[useAppBoot] applyLoadingStatusPreview:', e)
         }

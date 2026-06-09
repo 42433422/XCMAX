@@ -9,7 +9,7 @@
 🤖 **基于 Neuro-DDD（分层 + AI 用例编排）与 FastAPI 的 AI 单据智能处理系统**，适用于各行业的标签打印、出货管理和收货确认场景。
 
 [Release](https://github.com/42433422/xcagi/releases)
-[License: AGPL v3](https://www.gnu.org/licenses/agpl-3.0.html)
+[License: Apache-2.0](https://www.apache.org/licenses/LICENSE-2.0)
 [Python](https://www.python.org/)
 [FastAPI](https://fastapi.tiangolo.com/)
 [Architecture](#-neuro-ddd-与代码落点必读)
@@ -669,7 +669,7 @@ pytest
 
 ## 📄 许可证
 
-**AGPL-3.0** — 详见 [LICENSE](LICENSE)。
+**Apache-2.0** — 详见 [LICENSE](LICENSE)；商业场景见 [COMMERCIAL_LICENSE.md](COMMERCIAL_LICENSE.md) 与 [docs/guides/LICENSING.md](docs/guides/LICENSING.md)。
 
 ---
 

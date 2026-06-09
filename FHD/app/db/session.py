@@ -7,6 +7,7 @@ from functools import wraps
 
 from app.db import SessionLocal
 from app.db.session_cache import ThreadSafeLRUCache
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +34,7 @@ def _redis_cache_backend():
 
         cache = get_redis_cache()
         return cache if cache.is_available else None
-    except Exception:
+    except OPERATIONAL_ERRORS:
         return None
 
 
@@ -99,7 +100,7 @@ def get_db():
     try:
         yield db
         db.commit()
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         db.rollback()
         logger.error(f"数据库事务失败，已回滚: {e}")
         raise
@@ -112,7 +113,7 @@ def get_db_dependency():
     try:
         yield db
         db.commit()
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         db.rollback()
         logger.error(f"数据库事务失败，已回滚: {e}")
         raise

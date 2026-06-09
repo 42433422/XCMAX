@@ -8,6 +8,8 @@ from typing import Any
 from fastapi import APIRouter, Body, Query
 from fastapi.responses import JSONResponse
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
+
 logger = logging.getLogger(__name__)
 
 MOD_ID = "private-db-read-assistant"
@@ -125,7 +127,7 @@ def build_private_db_assistant_router() -> APIRouter:
                 payload = sync_group_messages()
                 code = 200 if payload.get("success") else 500
                 return JSONResponse(payload, status_code=code)
-            except Exception as exc:
+            except OPERATIONAL_ERRORS as exc:
                 return JSONResponse(
                     {"success": False, "message": f"同步聊天记录失败：{exc}"},
                     status_code=500,
@@ -158,7 +160,7 @@ def build_private_db_assistant_router() -> APIRouter:
                 "success": True,
                 "data": [_contact_to_private_db(c) for c in contacts],
             }
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception("private_db search contacts: %s", e)
             return JSONResponse(
                 {"success": False, "message": f"搜索失败：{e}"},
@@ -188,7 +190,7 @@ def build_private_db_assistant_router() -> APIRouter:
             service = get_wechat_contact_app_service()
             messages = service.get_contact_context(cid)
             return {"success": True, "data": _map_context_messages(messages)}
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception("private_db contact context: %s", e)
             return JSONResponse(
                 {"success": False, "message": f"读取失败：{e}"},

@@ -83,7 +83,7 @@ export function useServiceBridge() {
   async function loadRequests(params: Record<string, unknown> = {}) {
     loadingRequests.value = true
     try {
-      const res = await get('/api/service-bridge/requests', { per_page: 50, ...params })
+      const res = await get<{ data?: ServiceRequestRecord[] }>('/api/service-bridge/requests', { per_page: 50, ...params })
       requests.value = (res?.data || []) as ServiceRequestRecord[]
     } catch {
       requests.value = []
@@ -95,7 +95,7 @@ export function useServiceBridge() {
   async function loadStats() {
     loadingStats.value = true
     try {
-      const res = await get('/api/service-bridge/stats')
+      const res = await get<{ data?: ServiceBridgeStats }>('/api/service-bridge/stats')
       stats.value = (res?.data || null) as ServiceBridgeStats | null
     } catch {
       stats.value = null
@@ -107,7 +107,7 @@ export function useServiceBridge() {
   async function loadInstances() {
     loadingInstances.value = true
     try {
-      const res = await get('/api/service-bridge/instances')
+      const res = await get<{ data?: ServiceBridgeInstanceSummary[] }>('/api/service-bridge/instances')
       instances.value = (res?.data || []) as ServiceBridgeInstanceSummary[]
     } catch {
       instances.value = []
@@ -126,7 +126,7 @@ export function useServiceBridge() {
   }) {
     submitting.value = true
     try {
-      const res = await post('/api/service-bridge/requests', payload)
+      const res = await post<{ data?: ServiceRequestRecord }>('/api/service-bridge/requests', payload)
       return res?.data as ServiceRequestRecord | undefined
     } finally {
       submitting.value = false
@@ -145,9 +145,9 @@ export function useServiceBridge() {
     submitting.value = true
     try {
       try {
-        const cfg = await get('/api/service-bridge/config')
+        const cfg = await get<{ data?: { instance_id?: string } }>('/api/service-bridge/config')
         if (cfg?.data?.instance_id) {
-          const res = await post('/api/service-bridge/outbox', {
+          const res = await post<{ data?: ServiceRequestRecord }>('/api/service-bridge/outbox', {
             request_type: payload.request_type || 'general',
             title: payload.title,
             description: payload.description,
@@ -170,7 +170,7 @@ export function useServiceBridge() {
   ) {
     submitting.value = true
     try {
-      const res = await put(`/api/service-bridge/requests/${requestId}/respond`, payload)
+      const res = await put<{ data?: ServiceRequestRecord }>(`/api/service-bridge/requests/${requestId}/respond`, payload)
       return res?.data as ServiceRequestRecord | undefined
     } finally {
       submitting.value = false

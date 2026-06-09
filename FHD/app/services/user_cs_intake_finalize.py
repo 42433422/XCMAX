@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def finalize_intake_submission(
@@ -47,11 +49,13 @@ def finalize_intake_submission(
             from app.services.user_cs_intake_notice import maybe_send_intake_form_notice
 
             contact = str(intake.get("name") or company or username or "")
-            out = maybe_send_intake_form_notice(uid, username=username, contact_name=contact, brief="", force=False)
+            out = maybe_send_intake_form_notice(
+                uid, username=username, contact_name=contact, brief="", force=False
+            )
             meta["wechat_notice"] = {"sent": bool(out.get("sent")), **out}
             if out.get("sent"):
                 doc["intake_done_notice_sent"] = True
                 doc = save_pipeline(doc)
-        except Exception:
+        except OPERATIONAL_ERRORS:
             pass
     return doc, meta

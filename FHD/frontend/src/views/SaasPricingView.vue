@@ -30,7 +30,7 @@ onMounted(async () => {
       modelPaymentApi.getPlans(),
       authApi.getSubscriptionStatus().catch(() => null),
     ]);
-    plans.value = (planRes?.data?.plans || []).filter((p) => p.id.startsWith('saas-'));
+    plans.value = (planRes?.data?.plans || []).filter((p: ModelPaymentPlan) => p.id.startsWith('saas-'));
     if (subRes && (subRes as { data?: Record<string, unknown> }).data) {
       subscription.value = (subRes as { data: Record<string, unknown> }).data;
     }

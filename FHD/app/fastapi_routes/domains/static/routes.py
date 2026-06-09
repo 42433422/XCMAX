@@ -23,6 +23,7 @@ from app.traditional_mode_fs import (
     write_base64_response,
     write_text_response,
 )
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 from app.utils.path_utils import get_base_dir
 from app.utils.secure_filename import secure_filename
 
@@ -147,7 +148,7 @@ def gap_batch2_outputs(filename: str):
                 {"success": False, "message": f"文件不存在：{filename}"}, status_code=404
             )
         return FileResponse(file_path, filename=os.path.basename(filename))
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         return JSONResponse({"success": False, "message": f"下载失败：{str(e)}"}, status_code=500)
 
 
@@ -432,7 +433,7 @@ def customers_batch_delete_delete(
         return JSONResponse(
             {"success": False, "message": f"ID 格式错误：{str(e)}"}, status_code=400
         )
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         return JSONResponse({"success": False, "message": f"删除失败：{str(e)}"}, status_code=500)
 
 
@@ -443,5 +444,5 @@ def preferences_delete_key(key: str, user_id: str = Query(default="default")):
 
         success = get_user_preference_service().delete_preference(user_id, key)
         return {"success": success, "message": "偏好已删除" if success else "删除失败"}
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         return JSONResponse({"success": False, "message": str(e)}, status_code=500)

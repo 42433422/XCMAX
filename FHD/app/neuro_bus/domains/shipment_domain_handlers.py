@@ -16,6 +16,7 @@ from app.neuro_bus.events.shipment_events import (
     ShipmentInventoryDeductedEvent,
     ShipmentItemAddedEvent,
 )
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +52,7 @@ class ShipmentDomainHandlers:
             )
             try_complete_command_reply(event, result)
             return result
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception("[ShipmentDomain] 创建发货单失败: %s", e)
             try_complete_command_reply(event, None, error=e)
             raise
@@ -84,7 +85,7 @@ class ShipmentDomainHandlers:
 
             # 3. 可以触发库存检查
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"[ShipmentDomain] 处理添加产品事件失败: {e}")
             result["success"] = False
             result["error"] = str(e)
@@ -103,7 +104,7 @@ class ShipmentDomainHandlers:
             result = core.mark_as_printed(sid, str(event.payload.get("printer_name") or ""))
             try_complete_command_reply(event, result)
             return result
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception("[ShipmentDomain] 打印处理失败: %s", e)
             try_complete_command_reply(event, None, error=e)
             raise
@@ -120,7 +121,7 @@ class ShipmentDomainHandlers:
             result = core.cancel_shipment(sid)
             try_complete_command_reply(event, result)
             return result
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception("[ShipmentDomain] 取消失败: %s", e)
             try_complete_command_reply(event, None, error=e)
             raise
@@ -133,7 +134,7 @@ class ShipmentDomainHandlers:
             result = core.delete_shipment(sid)
             try_complete_command_reply(event, result)
             return result
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception("[ShipmentDomain] 删除失败: %s", e)
             try_complete_command_reply(event, None, error=e)
             raise
@@ -163,7 +164,7 @@ class ShipmentDomainHandlers:
 
             # 3. 可以触发文件处理
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"[ShipmentDomain] 处理导出事件失败: {e}")
             result["success"] = False
             result["error"] = str(e)
@@ -203,7 +204,7 @@ class ShipmentDomainHandlers:
             # 3. 检查预警
             result["actions"].append("alert_checked")
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"[ShipmentDomain] 处理库存扣减事件失败: {e}")
             result["success"] = False
             result["error"] = str(e)

@@ -14,6 +14,7 @@ import os
 from fastapi import FastAPI
 from fastapi.responses import FileResponse, JSONResponse
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 from app.utils.path_utils import get_base_dir
 
 logger = logging.getLogger(__name__)
@@ -125,5 +126,5 @@ def ensure_spa_fallback_last(app: FastAPI) -> None:
             "Reordered %d Vue history fallback route(s) to end of app.router.routes",
             len(fallback_routes),
         )
-    except Exception as exc:
+    except OPERATIONAL_ERRORS as exc:
         logger.warning("Failed to reorder history fallback routes: %s", exc)

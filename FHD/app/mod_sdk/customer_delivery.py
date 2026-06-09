@@ -8,6 +8,7 @@ from functools import lru_cache
 from typing import Any
 
 from app.mod_sdk.host_profile import resolve_fhd_config_dir
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 
 @lru_cache(maxsize=1)
@@ -19,7 +20,7 @@ def load_customer_delivery_document() -> dict[str, Any]:
             data = json.loads(path.read_text(encoding="utf-8"))
             if isinstance(data, dict):
                 return data
-        except Exception:
+        except OPERATIONAL_ERRORS:
             pass
     return {"schema_version": 1, "deliveries": []}
 

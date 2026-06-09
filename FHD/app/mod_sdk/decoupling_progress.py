@@ -5,12 +5,14 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
+
 
 def _safe(fn, default: dict[str, Any] | None = None) -> dict[str, Any]:
     try:
         out = fn()
         return out if isinstance(out, dict) else (default or {})
-    except Exception:
+    except OPERATIONAL_ERRORS:
         return default or {}
 
 

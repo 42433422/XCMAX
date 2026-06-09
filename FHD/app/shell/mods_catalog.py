@@ -19,6 +19,7 @@ from pathlib import Path
 
 from app.shell.mods_schemas import ModItem
 from app.shell.xcagi_mods_discover import read_manifest_dicts
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -98,6 +99,6 @@ def list_mod_items() -> list[ModItem]:
     combined = [*discovered, *tail]
     try:
         return [ModItem.model_validate(x) for x in combined]
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.warning("ModItem 校验失败，回退内置列表: %s", e)
         return [ModItem.model_validate(row) for row in _BUILTIN_RAW]

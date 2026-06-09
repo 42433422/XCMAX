@@ -12,6 +12,8 @@ from typing import Any
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, Info, generate_latest
 from starlette.responses import Response
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
+
 materials_created_total = Counter(
     "materials_created_total", "Total number of materials created", ["category"]
 )
@@ -124,7 +126,7 @@ def record_http_request(method: str, path: str, status_code: int, duration_secon
         api_request_duration_seconds.labels(method=method, endpoint=endpoint).observe(
             duration_seconds
         )
-    except Exception:
+    except OPERATIONAL_ERRORS:
         pass
 
 
@@ -174,7 +176,7 @@ def track_ai_request(service: str):
                 ai_requests_total.labels(service=service, status="success").inc()
                 ai_request_duration_seconds.labels(service=service).observe(duration)
                 return result
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 ai_requests_total.labels(service=service, status="error").inc()
                 ai_request_errors_total.labels(service=service, error_type=type(e).__name__).inc()
                 raise

@@ -187,10 +187,10 @@ async function request<T = unknown>(url: string, options: RequestOptions = {}): 
     }
 }
 
-type QueryParams = Record<string, string | number | boolean | null | undefined>;
+export type QueryParams = Record<string, string | number | boolean | null | undefined>;
 
 export const api = {
-  get<T = unknown>(url: string, params: QueryParams = {}, options: RequestOptions = {}): Promise<T> {
+  get<T = unknown>(url: string, params: QueryParams | object = {}, options: RequestOptions = {}): Promise<T> {
     const searchParams = new URLSearchParams();
     Object.entries(params).forEach(([key, value]) => {
       if (value !== null && value !== undefined) {
@@ -202,7 +202,7 @@ export const api = {
     return request(fullUrl, {
       method: 'GET',
       ...options
-    });
+    }) as Promise<T>;
   },
 
   post<T = unknown>(url: string, data: unknown = {}, options: RequestOptions = {}): Promise<T> {
@@ -214,7 +214,7 @@ export const api = {
       headers,
       skipDefaultJsonHeader: isFormData,
       ...options
-    });
+    }) as Promise<T>;
   },
 
   put<T = unknown>(url: string, data: unknown = {}, options: RequestOptions = {}): Promise<T> {
@@ -226,7 +226,7 @@ export const api = {
       headers,
       skipDefaultJsonHeader: isFormData,
       ...options
-    });
+    }) as Promise<T>;
   },
 
   patch<T = unknown>(url: string, data: unknown = {}, options: RequestOptions = {}): Promise<T> {
@@ -238,7 +238,7 @@ export const api = {
       headers,
       skipDefaultJsonHeader: isFormData,
       ...options
-    });
+    }) as Promise<T>;
   },
 
   delete<T = unknown>(url: string, data: Record<string, unknown> = {}, options: RequestOptions = {}): Promise<T> {
@@ -249,10 +249,10 @@ export const api = {
     if (Object.keys(data).length > 0) {
       config.body = JSON.stringify(data);
     }
-    return request(url, config);
+    return request(url, config) as Promise<T>;
   },
 
-  download(url: string, params: QueryParams = {}, options: RequestOptions = {}): Promise<Response> {
+  download(url: string, params: QueryParams | object = {}, options: RequestOptions = {}): Promise<Response> {
     const searchParams = new URLSearchParams();
     Object.entries(params).forEach(([key, value]) => {
       if (value !== null && value !== undefined) {

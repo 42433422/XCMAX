@@ -12,6 +12,8 @@ import shutil
 from datetime import datetime
 from typing import Any
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
+
 logger = logging.getLogger(__name__)
 
 
@@ -88,7 +90,7 @@ class DatabaseService:
                 "filename": backup_filename,
             }
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"数据库备份失败：{e}")
             return {
                 "success": False,
@@ -132,7 +134,7 @@ class DatabaseService:
 
             return {"success": True, "message": "数据库恢复成功"}
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"数据库恢复失败：{e}")
             return {"success": False, "message": f"恢复失败：{str(e)}"}
 
@@ -172,7 +174,7 @@ class DatabaseService:
 
             return {"success": True, "backups": backups, "count": len(backups)}
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"列出备份失败：{e}")
             return {
                 "success": False,
@@ -207,7 +209,7 @@ class DatabaseService:
 
             return {"success": True, "message": "备份文件删除成功"}
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"删除备份失败：{e}")
             return {"success": False, "message": f"删除失败：{str(e)}"}
 

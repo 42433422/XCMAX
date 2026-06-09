@@ -8,6 +8,8 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
+
 OFFICE_PACK_BRIDGE_MOD_ID = "xcagi-office-employee-pack-bridge"
 
 logger = logging.getLogger(__name__)
@@ -22,7 +24,7 @@ def _resolve_mod_dir() -> Path | None:
         meta = get_mod_manager().get_mod(OFFICE_PACK_BRIDGE_MOD_ID)
         if meta and meta.mod_path and (Path(meta.mod_path) / "manifest.json").is_file():
             return Path(meta.mod_path)
-    except Exception:
+    except OPERATIONAL_ERRORS:
         pass
     trial = Path(__file__).resolve().parents[2] / "mods" / OFFICE_PACK_BRIDGE_MOD_ID
     return trial if (trial / "manifest.json").is_file() else None
@@ -40,7 +42,7 @@ def _load_catalog_pack_ids() -> list[str]:
         raw = data.get("pack_ids") or []
         if isinstance(raw, list):
             return [str(x).strip() for x in raw if str(x).strip()]
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.debug("read office_pack_catalog failed", exc_info=True)
     return []
 
@@ -91,7 +93,7 @@ def list_installed_employee_packs() -> dict[str, Any]:
         root = _default_mods_root()
         reg = EmployeeRegistry(root)
         installed = reg.list_packs()
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.debug("list_installed_employee_packs failed", exc_info=True)
     catalog_ids = set(_load_catalog_pack_ids())
     office_installed = [

@@ -13,9 +13,10 @@ from typing import Any
 from sqlalchemy import inspect, text
 from sqlalchemy.exc import OperationalError
 
-from app.infrastructure.persistence.compat_db.base import _EXPORT_MAX_ROWS
 from app.infrastructure.db.sync_engine import get_sync_engine
+from app.infrastructure.persistence.compat_db.base import _EXPORT_MAX_ROWS
 from app.shell.mod_row_scope import append_mod_scope_where
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -31,11 +32,11 @@ def _load_products_list_impl_pg(
 
         if not business_data_exposed():
             return [], 0, business_data_hidden_reason()
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.debug("suppressed exception", exc_info=True)
     try:
         eng = get_sync_engine()
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         return [], 0, f"无法连接 PostgreSQL：{e}。请检查 DATABASE_URL 与数据库是否已启动。"
 
     try:
@@ -44,7 +45,7 @@ def _load_products_list_impl_pg(
                 meta_timeout_ms = int(
                     (os.environ.get("FHD_PRODUCTS_META_TIMEOUT_MS") or "2000").strip()
                 )
-            except Exception:
+            except OPERATIONAL_ERRORS:
                 meta_timeout_ms = 2000
             try:
                 if meta_timeout_ms > 0:
@@ -58,7 +59,7 @@ def _load_products_list_impl_pg(
                         "当前库中不存在 public.products 表，产品列表为空。请在目标库执行仓库 scripts/pg_init_xcagi_core.sql 后重启后端。",
                     )
                 col_names = {c["name"] for c in insp.get_columns("products")}
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 return (
                     [],
                     0,
@@ -68,7 +69,7 @@ def _load_products_list_impl_pg(
                 if meta_timeout_ms > 0:
                     try:
                         conn.execute(text("SET statement_timeout TO 0"))
-                    except Exception:
+                    except OPERATIONAL_ERRORS:
                         logger.debug("suppressed exception", exc_info=True)
         if not {"id", "model_number", "name"}.issubset(col_names):
             return (
@@ -108,19 +109,19 @@ def _load_products_list_impl_pg(
                 timeout_ms = int(
                     (os.environ.get("FHD_PRODUCTS_COUNT_TIMEOUT_MS") or "1500").strip()
                 )
-            except Exception:
+            except OPERATIONAL_ERRORS:
                 timeout_ms = 1500
             try:
                 if timeout_ms > 0:
                     conn.execute(text(f"SET statement_timeout TO {timeout_ms}"))
                 total = int(conn.execute(text(count_sql), params).scalar_one())
-            except Exception:
+            except OPERATIONAL_ERRORS:
                 total = None
             finally:
                 if timeout_ms > 0:
                     try:
                         conn.execute(text("SET statement_timeout TO 0"))
-                    except Exception:
+                    except OPERATIONAL_ERRORS:
                         logger.debug("suppressed exception", exc_info=True)
 
         sel: list[str] = ["id", "model_number", "name"]
@@ -153,19 +154,19 @@ def _load_products_list_impl_pg(
                 query_timeout_ms = int(
                     (os.environ.get("FHD_PRODUCTS_QUERY_TIMEOUT_MS") or "8000").strip()
                 )
-            except Exception:
+            except OPERATIONAL_ERRORS:
                 query_timeout_ms = 8000
             try:
                 if query_timeout_ms > 0:
                     conn.execute(text(f"SET statement_timeout TO {query_timeout_ms}"))
                 rows = conn.execute(text(data_sql), qparams).mappings().all()
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 data_query_err = e
             finally:
                 if query_timeout_ms > 0:
                     try:
                         conn.execute(text("SET statement_timeout TO 0"))
-                    except Exception:
+                    except OPERATIONAL_ERRORS:
                         logger.debug("suppressed exception", exc_info=True)
         if data_query_err is not None:
             if total is None:

@@ -173,7 +173,7 @@ class Shipment:
         }
 
     @classmethod
-    def create(cls, unit_name: str, contact_info: ContactInfo = None) -> "Shipment":
+    def create(cls, unit_name: str, contact_info: ContactInfo | None = None) -> "Shipment":
         return cls(
             order_number=OrderNumber.generate(),
             purchase_unit_name=unit_name,

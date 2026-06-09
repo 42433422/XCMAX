@@ -2,6 +2,8 @@ import logging
 import os
 from typing import Any
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
+
 logger = logging.getLogger(__name__)
 
 
@@ -27,7 +29,7 @@ class IntentMixin:
                 mode = self._normalize_ai_mode(legacy_model)
                 self.user_preference_service.set_preference(user_id, "aiMode", mode)
                 return mode
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.warning(f"读取 aiMode 偏好失败，回退在线模式: {e}")
         return "online"
 
@@ -130,7 +132,7 @@ class IntentMixin:
                     from app.neuro_bus.application_neuro_bridge import neuro_notify_intent_resolved
 
                     neuro_notify_intent_resolved(user_id, reflex_early)
-                except Exception:
+                except OPERATIONAL_ERRORS:
                     logger.debug("neuro_notify_intent_resolved skipped", exc_info=True)
                 return reflex_early
 
@@ -173,7 +175,7 @@ class IntentMixin:
             from app.neuro_bus.application_neuro_bridge import neuro_notify_intent_resolved
 
             neuro_notify_intent_resolved(user_id, intent_result)
-        except Exception:
+        except OPERATIONAL_ERRORS:
             logger.debug("neuro_notify_intent_resolved skipped", exc_info=True)
         return intent_result
 
@@ -269,7 +271,7 @@ class IntentMixin:
                 merged_slots["quantity_tins"] = first.get("quantity_tins")
 
             intent_result["slots"] = merged_slots
-        except Exception:
+        except OPERATIONAL_ERRORS:
             logger.debug("suppressed exception", exc_info=True)
 
         return intent_result

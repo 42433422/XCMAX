@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def issue_crm_invoice_for_pipeline(doc: dict[str, Any]) -> dict[str, Any]:

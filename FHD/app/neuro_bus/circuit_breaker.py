@@ -13,6 +13,8 @@ from enum import Enum
 from threading import RLock
 from typing import Any
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
+
 logger = logging.getLogger(__name__)
 
 
@@ -155,7 +157,7 @@ class CircuitBreaker:
             result = fn(*args, **kwargs)
             self.record_success()
             return result
-        except Exception:
+        except OPERATIONAL_ERRORS:
             self.record_failure()
             raise
 
@@ -168,7 +170,7 @@ class CircuitBreaker:
             result = await fn(*args, **kwargs)
             self.record_success()
             return result
-        except Exception:
+        except OPERATIONAL_ERRORS:
             self.record_failure()
             raise
 

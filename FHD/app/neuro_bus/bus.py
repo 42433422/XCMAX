@@ -21,6 +21,7 @@ from heapq import heappop, heappush
 from typing import Any
 
 from app.neuro_bus.events.base import AsyncEventHandler, EventHandler, NeuroEvent
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -341,7 +342,7 @@ class NeuroBus:
         if getattr(self, "_event_available", None):
             try:
                 self._event_available.set()
-            except Exception:
+            except OPERATIONAL_ERRORS:
                 pass
 
         logger.info("NeuroBus stopped")
@@ -379,7 +380,7 @@ class NeuroBus:
 
             except asyncio.CancelledError:
                 break
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 logger.exception(f"Error in processing loop: {e}")
                 self._error_count += 1
 
@@ -453,7 +454,7 @@ class NeuroBus:
             if self._rel_circuit is not None:
                 self._rel_circuit.record_success()
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception(f"Handler error for event {event}: {e}")
             subscription.record_call(success=False)
             self._error_count += 1
@@ -467,7 +468,7 @@ class NeuroBus:
                         retry_count=0,
                         handler_name=getattr(subscription.handler, "__name__", None),
                     )
-                except Exception as dlq_exc:
+                except OPERATIONAL_ERRORS as dlq_exc:
                     logger.exception("NeuroBus DLQ enqueue failed: %s", dlq_exc)
             return False
         finally:
@@ -534,17 +535,14 @@ class NeuroBus:
         success = self._event_queue.put(event)
         if success:
             self._published_count += 1
-            if (
-                self._redis_bridge is not None
-                and not event.payload.get("_neuro_remote_ingest")
-            ):
+            if self._redis_bridge is not None and not event.payload.get("_neuro_remote_ingest"):
                 self._redis_bridge.publish_remote(event)
             # wake processing loop if it's waiting
             ev = getattr(self, "_event_available", None)
             if ev is not None:
                 try:
                     ev.set()
-                except Exception:
+                except OPERATIONAL_ERRORS:
                     # ignore any loop-related errors
                     pass
         else:
@@ -571,7 +569,7 @@ class NeuroBus:
             if ev is not None:
                 try:
                     ev.set()
-                except Exception:
+                except OPERATIONAL_ERRORS:
                     pass
         return success
 
@@ -691,7 +689,7 @@ class NeuroBus:
         if self._rel_circuit is not None:
             try:
                 out["circuit_open"] = not self._rel_circuit.can_execute()
-            except Exception:
+            except OPERATIONAL_ERRORS:
                 out["circuit_open"] = None
         return out
 
@@ -714,7 +712,7 @@ class NeuroBus:
             from app.neuro_bus.domains.base import get_domain_registry
 
             return get_domain_registry().list_domains()
-        except Exception:
+        except OPERATIONAL_ERRORS:
             return []
 
 

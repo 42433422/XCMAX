@@ -13,9 +13,15 @@ export const productsApi = {
   },
 
   async getProductUnits(): Promise<{ success: boolean; data: string[]; count: number }> {
-    const resp = await api.get(resolveErpApiPath('/api/products/units'));
+    const resp = await api.get<{ data?: unknown[] | { units?: unknown[] } }>(
+      resolveErpApiPath('/api/products/units'),
+    );
     const raw = resp?.data;
-    const list = Array.isArray(raw) ? raw : Array.isArray(raw?.units) ? raw.units : [];
+    const nested =
+      raw && typeof raw === 'object' && !Array.isArray(raw)
+        ? (raw as { units?: unknown[] })
+        : null;
+    const list = Array.isArray(raw) ? raw : Array.isArray(nested?.units) ? nested.units : [];
     return {
       success: true,
       data: list.map((u: unknown) => String(u ?? '').trim()).filter(Boolean),

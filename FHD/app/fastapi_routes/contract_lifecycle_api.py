@@ -11,6 +11,7 @@ from app.schemas.contract_lifecycle_schemas import (
     EsignStartBody,
     EsignWebhookBody,
 )
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 router = APIRouter(prefix="/api/contract-lifecycle", tags=["contract-lifecycle"])
 
@@ -202,7 +203,7 @@ async def esign_webhook(request: Request):
 
     try:
         raw = await request.json()
-    except Exception:
+    except OPERATIONAL_ERRORS:
         raw = {}
     if not isinstance(raw, dict):
         raw = {}

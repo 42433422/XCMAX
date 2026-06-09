@@ -8,6 +8,8 @@ import shutil
 import tempfile
 from typing import Any
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
+
 from .artifact_constants import (
     ARTIFACT_BUNDLE,
     ARTIFACT_EMPLOYEE_PACK,
@@ -63,7 +65,7 @@ class InstallResolver:
 
         try:
             art = peek_artifact(package_path)
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             return False, f"无法读取包：{e}", None
 
         if art == ARTIFACT_EMPLOYEE_PACK:
@@ -73,7 +75,7 @@ class InstallResolver:
                 from .artifact_package import peek_manifest_from_zip
 
                 pack_id = (peek_manifest_from_zip(package_path).get("id") or "").strip()
-            except Exception:
+            except OPERATIONAL_ERRORS:
                 pass
             ok, msg = reg.install_from_package(package_path, verify_signature=verify_signature)
             if ok and pack_id:
@@ -124,7 +126,7 @@ class InstallResolver:
                 ):
                     shutil.rmtree(path, ignore_errors=True)
                 logger.warning("install rollback: removed %s %s", kind, path)
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 logger.warning("rollback failed for %s: %s", path, e)
         rb.clear()
 
@@ -198,7 +200,7 @@ class InstallResolver:
         except ModPackageError as e:
             self._rollback(rollback_stack)
             return False, str(e), None
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception("bundle install failed")
             self._rollback(rollback_stack)
             return False, str(e), None

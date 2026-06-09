@@ -10,6 +10,7 @@ from app.application.ports.shipment_record_query import ShipmentRecordQueryPort
 from app.db.models import ShipmentRecord
 from app.db.session import get_db
 from app.infrastructure.lookups import resolve_purchase_unit
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -86,7 +87,7 @@ class SQLAlchemyShipmentRecordQuery(ShipmentRecordQueryPort):
                 "page": page,
                 "per_page": per_page,
             }
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             return {
                 "success": False,
                 "message": f"查询失败：{str(e)}",
@@ -128,7 +129,7 @@ class SQLAlchemyShipmentRecordQuery(ShipmentRecordQueryPort):
                     rows.append(row_dict)
 
                 return rows
-        except Exception:
+        except OPERATIONAL_ERRORS:
             return []
 
     def get_shipment_by_id(self, order_id: str) -> dict[str, Any] | None:
@@ -156,7 +157,7 @@ class SQLAlchemyShipmentRecordQuery(ShipmentRecordQueryPort):
                 for column in shipment_inspect.columns:
                     row_dict[column.name] = getattr(record, column.name)
                 return row_dict
-        except Exception:
+        except OPERATIONAL_ERRORS:
             return None
 
     def get_latest_shipments(self, limit: int) -> list[dict[str, Any]]:
@@ -186,7 +187,7 @@ class SQLAlchemyShipmentRecordQuery(ShipmentRecordQueryPort):
                     rows.append(row_dict)
 
                 return rows
-        except Exception:
+        except OPERATIONAL_ERRORS:
             return []
 
     def get_shipment_records(
@@ -218,7 +219,7 @@ class SQLAlchemyShipmentRecordQuery(ShipmentRecordQueryPort):
                         resolved = resolve_purchase_unit(canonical_unit)
                         if resolved:
                             canonical_unit = str(resolved.unit_name or "").strip()
-                    except Exception:
+                    except OPERATIONAL_ERRORS:
                         logger.debug("suppressed exception", exc_info=True)
 
                     records_exact = (
@@ -255,7 +256,7 @@ class SQLAlchemyShipmentRecordQuery(ShipmentRecordQueryPort):
                                 try:
                                     r = resolve_purchase_unit(str(val or "").strip())
                                     memo[val] = str(r.unit_name or "").strip() if r else None
-                                except Exception:
+                                except OPERATIONAL_ERRORS:
                                     memo[val] = None
                                 return memo[val]
 
@@ -290,5 +291,5 @@ class SQLAlchemyShipmentRecordQuery(ShipmentRecordQueryPort):
                     rows.append(row_dict)
 
                 return rows
-        except Exception:
+        except OPERATIONAL_ERRORS:
             return []

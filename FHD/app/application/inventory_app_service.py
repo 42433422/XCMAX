@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import Any
 
 from app.application.facades.inventory_facade import InventoryService
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 
 class InventoryAppService:
@@ -31,9 +32,11 @@ class InventoryAppService:
         try:
             from app.application import get_material_application_service
 
-            mat_result = get_material_application_service().get_low_stock_materials(threshold=threshold)
+            mat_result = get_material_application_service().get_low_stock_materials(
+                threshold=threshold
+            )
             mat_items = mat_result.get("data") or []
-        except Exception:
+        except OPERATIONAL_ERRORS:
             pass
         return {
             "success": True,

@@ -11,6 +11,8 @@ import logging
 import os
 from typing import Any
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
+
 logger = logging.getLogger(__name__)
 
 
@@ -50,14 +52,14 @@ class UnifiedIntentRecognizer:
             # 首选 ai_engines 版本（提供统一的 load_model() 契约）。
             try:
                 from app.ai_engines.bert.intent_service import BertIntentClassifier
-            except Exception:
+            except OPERATIONAL_ERRORS:
                 from app.services.bert_intent_service import BertIntentClassifier  # type: ignore
             self.bert_recognizer = BertIntentClassifier()
             loader = getattr(self.bert_recognizer, "load_model", None)
             if callable(loader):
                 loader()
             logger.info("BERT识别器已加载")
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.warning(f"BERT识别器加载失败：{e}")
             self._engine_errors["bert"] = str(e)
 
@@ -70,7 +72,7 @@ class UnifiedIntentRecognizer:
                 )
 
                 self.distilled_recognizer = get_distilled_recognizer()
-            except Exception:
+            except OPERATIONAL_ERRORS:
                 from app.services.distilled_intent_service import (
                     DistilledIntentClassifier,  # type: ignore
                 )
@@ -80,7 +82,7 @@ class UnifiedIntentRecognizer:
                 if callable(loader):
                     loader()
             logger.info("蒸馏模型识别器已加载")
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.warning(f"蒸馏模型加载失败：{e}")
             self._engine_errors["distilled"] = str(e)
 
@@ -90,7 +92,7 @@ class UnifiedIntentRecognizer:
                 from app.ai_engines.deepseek.intent_service import (
                     DeepseekIntentClassifier as _DeepseekImpl,  # type: ignore
                 )
-            except Exception:
+            except OPERATIONAL_ERRORS:
                 from app.services.deepseek_intent_service import (
                     DeepSeekIntentRecognizer as _DeepseekImpl,  # type: ignore
                 )
@@ -99,7 +101,7 @@ class UnifiedIntentRecognizer:
             if callable(loader):
                 loader()
             logger.info("DeepSeek识别器已加载")
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.warning(f"DeepSeek识别器加载失败：{e}")
             self._engine_errors["deepseek"] = str(e)
 
@@ -107,12 +109,12 @@ class UnifiedIntentRecognizer:
             # 首选深度落地版（app.ai_engines.rasa）；保留旧入口作为兼容 fallback。
             try:
                 from app.ai_engines.rasa.nlu_service import RasaNLUService
-            except Exception:
+            except OPERATIONAL_ERRORS:
                 from app.services.rasa_nlu_service import RasaNLUService  # type: ignore
             self.rasa_recognizer = RasaNLUService()
             self.rasa_recognizer.load_model()
             logger.info("RASA NLU已加载")
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.warning(f"RASA NLU加载失败：{e}")
             self._engine_errors["rasa"] = str(e)
 
@@ -140,7 +142,7 @@ class UnifiedIntentRecognizer:
                 mod_id=mod_id,
                 compute_fn=lambda: self._recognize_uncached(text),
             )
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.debug("IntentCache path failed, falling back: %s", e)
             return self._recognize_uncached(text)
 
@@ -151,7 +153,7 @@ class UnifiedIntentRecognizer:
                 if result.get("confidence", 0) > 0.7:
                     result["source"] = "distilled"
                     return result
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 logger.warning(f"蒸馏模型预测失败：{e}")
 
         if self.bert_recognizer:
@@ -160,7 +162,7 @@ class UnifiedIntentRecognizer:
                 if result.get("confidence", 0) > 0.7:
                     result["source"] = "bert"
                     return result
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 logger.warning(f"BERT预测失败：{e}")
 
         if self.rasa_recognizer and _env_flag("ENABLE_RASA", "1"):
@@ -177,7 +179,7 @@ class UnifiedIntentRecognizer:
                         "entities": parsed.get("entities") or [],
                         "source": "rasa",
                     }
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 logger.warning(f"RASA 预测失败：{e}")
 
         if self.deepseek_recognizer:
@@ -191,7 +193,7 @@ class UnifiedIntentRecognizer:
                     if isinstance(result, dict) and result.get("confidence", 0) > 0.7:
                         result["source"] = result.get("source") or "deepseek"
                         return result
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 logger.warning(f"DeepSeek 预测失败：{e}")
 
         return {"intent": "unk", "confidence": 0.0, "source": "unified"}
@@ -202,7 +204,7 @@ class UnifiedIntentRecognizer:
         if not self._initialized:
             try:
                 self.load()
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 logger.debug("UnifiedIntentRecognizer.load() 失败：%s", e)
         # 规则层始终可用；只要这里完成初始化即 ready。
         return self._initialized
@@ -240,7 +242,7 @@ class UnifiedIntentRecognizer:
         if callable(getter):
             try:
                 entry.update(getter())
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 entry["status_error"] = str(e)
         return entry
 

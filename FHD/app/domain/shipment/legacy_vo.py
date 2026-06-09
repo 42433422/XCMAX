@@ -2,6 +2,6 @@
 
 from __future__ import annotations
 
-from app.domain.value_objects import ContactInfo, Money, OrderNumber, Quantity
+from app.domain.value_objects_compat import ContactInfo, Money, OrderNumber, Quantity
 
 __all__ = ["Quantity", "Money", "ContactInfo", "OrderNumber"]

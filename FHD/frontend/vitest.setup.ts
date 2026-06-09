@@ -1,4 +1,9 @@
-import { afterEach, vi } from 'vitest'
+import { afterEach, beforeEach, vi } from 'vitest'
+import { createPinia, setActivePinia } from 'pinia'
+
+beforeEach(() => {
+  setActivePinia(createPinia())
+})
 
 Object.defineProperty(window, 'matchMedia', {
   writable: true,

@@ -5,9 +5,11 @@ from __future__ import annotations
 import json
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +36,7 @@ _STAGE_LABELS = {s["id"]: s["label"] for s in PIPELINE_STAGES}
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _stage_rank(stage: str | None) -> int:
@@ -69,7 +71,7 @@ def _resolve_data_roots() -> list[Path]:
         base = get_desktop_data_dir()
         add(base / "data" / "user_cs_pipelines")
         add(base / "user_cs_pipelines")
-    except Exception:
+    except OPERATIONAL_ERRORS:
         pass
 
     if not roots:
@@ -288,7 +290,9 @@ def auto_advance_pipeline_if_ready(
     before = str(doc.get("stage") or "idle")
     advanced = False
 
-    if doc.get("intake_submitted_at") and _stage_rank(doc.get("stage")) < _stage_rank("intake_done"):
+    if doc.get("intake_submitted_at") and _stage_rank(doc.get("stage")) < _stage_rank(
+        "intake_done"
+    ):
         doc = set_pipeline_stage(
             market_user_id,
             "intake_done",
@@ -306,7 +310,9 @@ def auto_advance_pipeline_if_ready(
             note="已发送采集话术",
         )
         advanced = True
-    elif doc.get("connected_welcome_sent") and _stage_rank(doc.get("stage")) < _stage_rank("connected"):
+    elif doc.get("connected_welcome_sent") and _stage_rank(doc.get("stage")) < _stage_rank(
+        "connected"
+    ):
         doc = set_pipeline_stage(
             market_user_id,
             "connected",

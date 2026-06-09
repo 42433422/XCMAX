@@ -22,6 +22,7 @@ from app.application.mod_store_catalog_app import (
     sync_modstore_library_to_local,
 )
 from app.shell.mods_catalog import list_mod_items
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -141,7 +142,7 @@ def _all_rows() -> list[dict[str, Any]]:
     try:
         items = list_mod_items()
         return [_item_to_mod_info(x.model_dump()) for x in items]
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.warning("mod-store catalog: list_mod_items failed: %s", e)
         return []
 
@@ -302,7 +303,7 @@ async def _body_value(request: Request, key: str, default: str = "") -> str:
             return default
         form = await request.form()
         return _safe_text(form.get(key) or default)
-    except Exception:
+    except OPERATIONAL_ERRORS:
         return default
 
 
@@ -316,7 +317,7 @@ async def _request_payload(request: Request) -> dict[str, str]:
             )
         form = await request.form()
         return {str(k): _safe_text(v) for k, v in form.items()}
-    except Exception:
+    except OPERATIONAL_ERRORS:
         return {}
 
 
@@ -609,7 +610,7 @@ async def _install_host_foundation_internal(edition: str | None) -> ModStoreInst
         ed = "generic"
     try:
         data = materialize_host_foundation_bridges(ed)  # type: ignore[arg-type]
-    except Exception as exc:
+    except OPERATIONAL_ERRORS as exc:
         logger.exception("materialize_host_foundation_bridges failed (edition=%s)", ed)
         return ModStoreInstallResult(
             success=False,
@@ -636,7 +637,7 @@ async def mod_store_install_host_foundation(
         return ModStoreSimpleResponse(
             success=result.success, message=result.message, data=result.data
         )
-    except Exception as exc:
+    except OPERATIONAL_ERRORS as exc:
         logger.exception("install-host-foundation failed")
         return ModStoreSimpleResponse(
             success=False,
@@ -699,7 +700,7 @@ async def mod_store_sync_modstore_library(request: Request) -> ModStoreSimpleRes
     """使用修茈 PAT（须含 ``mod:sync``）从线上 ``/v1/mod-sync`` 拉 zip 并安装到本机 ``mods/``。"""
     try:
         body = await request.json()
-    except Exception:
+    except OPERATIONAL_ERRORS:
         raise HTTPException(status_code=400, detail="需要 JSON 请求体") from None
     if not isinstance(body, dict):
         raise HTTPException(status_code=400, detail="JSON 须为对象")

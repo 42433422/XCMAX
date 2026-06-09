@@ -5,12 +5,14 @@ import os
 from datetime import datetime
 from typing import Any
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
+
 try:
     from PIL import Image, ImageDraw, ImageFont
 
     _PIL_AVAILABLE = True
     _PIL_IMPORT_ERROR = ""
-except Exception as _pil_import_error:
+except ImportError as _pil_import_error:
     Image = None  # type: ignore[assignment]
     ImageDraw = None  # type: ignore[assignment]
     ImageFont = None  # type: ignore[assignment]
@@ -229,7 +231,7 @@ class SimpleLabelGenerator:
             logger.info(f"标签已生成: {output_path}")
             return filename
 
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.error(f"生成标签失败: {e}")
             return None
 

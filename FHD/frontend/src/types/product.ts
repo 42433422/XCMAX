@@ -40,4 +40,5 @@ export interface ProductQueryParams {
   brand?: string;
   unit?: string;
   is_active?: number;
+  [key: string]: string | number | undefined;
 }

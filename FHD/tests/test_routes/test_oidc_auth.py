@@ -5,8 +5,9 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from app.infrastructure.auth.oidc_provider import sign_oidc_state
 from fastapi.testclient import TestClient
+
+from app.infrastructure.auth.oidc_provider import sign_oidc_state
 
 
 @pytest.fixture(autouse=True)

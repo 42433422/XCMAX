@@ -16,6 +16,8 @@ import logging
 import os
 from typing import Any
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
+
 logger = logging.getLogger(__name__)
 
 _DEFAULT_CHAT_URLS: dict[str, str] = {
@@ -94,7 +96,7 @@ async def _call_openai_compatible_chat(
             r = await client.post(chat_url, headers=headers, json=payload)
             r.raise_for_status()
             return r.json()
-    except Exception as e:  # noqa: BLE001
+    except OPERATIONAL_ERRORS as e:  # noqa: BLE001
         logger.exception("mod_employee_complete: OpenAI-compatible chat 请求失败: %s", e)
         return None
 
@@ -142,7 +144,11 @@ async def mod_employee_complete(
         from app.services.ai_conversation_service import get_ai_conversation_service
     except ImportError as e:
         logger.warning("mod_employee_complete: get_ai_conversation_service 不可用: %s", e)
-        return {"success": False, "content": "", "error": "get_ai_conversation_service not available"}
+        return {
+            "success": False,
+            "content": "",
+            "error": "get_ai_conversation_service not available",
+        }
 
     svc = get_ai_conversation_service()
     if not getattr(svc, "api_key", None):
@@ -163,7 +169,7 @@ async def mod_employee_complete(
             max_tokens=int(max_tokens),
             **kwargs,
         )
-    except Exception as e:  # noqa: BLE001
+    except OPERATIONAL_ERRORS as e:  # noqa: BLE001
         logger.exception("mod_employee_complete: call_deepseek_api 异常")
         return {"success": False, "content": "", "error": str(e)[:500]}
 

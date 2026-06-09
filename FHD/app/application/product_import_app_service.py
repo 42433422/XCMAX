@@ -18,7 +18,11 @@ class ProductImportApplicationService:
         self,
         product_import_service: ProductImportService | None = None,
     ):
-        self._product_import_service = product_import_service or get_product_import_service()  # type: ignore
+        if product_import_service is None:
+            from app.services import get_product_import_service
+
+            product_import_service = get_product_import_service()
+        self._product_import_service = product_import_service
 
     def import_from_file(self, file_path: str, unit_name: str) -> dict[str, Any]:
         """

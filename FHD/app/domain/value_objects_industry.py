@@ -7,6 +7,8 @@
 
 from typing import Any
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
+
 _current_industry: str = "涂料"
 
 _industry_units_cache: dict[str, dict[str, Any]] = {}
@@ -42,7 +44,7 @@ def _load_from_yaml():
             _industry_fields_cache[ind_id] = qty_fields
 
         _current_industry = default_ind
-    except Exception:
+    except OPERATIONAL_ERRORS:
         _industry_units_cache = {
             "涂料": {
                 "primary": "桶",

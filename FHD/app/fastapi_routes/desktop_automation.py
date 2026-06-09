@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from app.desktop_automation.service import get_desktop_automation_service
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -125,7 +126,7 @@ async def bootstrap_app(body: BootstrapBody):
                     },
                 ]
                 return await mod_employee_complete(messages, max_tokens=2048, temperature=0.1)
-            except Exception as exc:
+            except OPERATIONAL_ERRORS as exc:
                 logger.warning("vision api bootstrap failed: %s", exc)
                 return "{}"
 

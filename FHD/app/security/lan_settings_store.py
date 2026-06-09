@@ -20,6 +20,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
+
 logger = logging.getLogger(__name__)
 
 _LOCK = threading.Lock()
@@ -101,7 +103,7 @@ def load_overrides() -> LanSettingsOverride:
             raw = path.read_text(encoding="utf-8")
         data = json.loads(raw) if raw.strip() else {}
         return LanSettingsOverride.from_json(data)
-    except Exception as exc:
+    except OPERATIONAL_ERRORS as exc:
         logger.warning("load_overrides failed at %s: %s", path, exc)
         return LanSettingsOverride()
 
@@ -121,7 +123,7 @@ def save_overrides(update: LanSettingsOverride, *, merge: bool = True) -> LanSet
                 raw = path.read_text(encoding="utf-8")
                 if raw.strip():
                     current = LanSettingsOverride.from_json(json.loads(raw))
-            except Exception:
+            except OPERATIONAL_ERRORS:
                 current = LanSettingsOverride()
 
         if update.enabled is not None:

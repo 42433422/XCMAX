@@ -27,7 +27,9 @@ def test_login_with_phone_code_invalid_input(client: TestClient) -> None:
     assert resp.json()["error"]["code"] == "INVALID_INPUT"
 
 
-def test_login_with_phone_code_market_fail(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_login_with_phone_code_market_fail(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
 
     async def _fail(phone: str, code: str):

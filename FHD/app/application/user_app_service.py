@@ -8,6 +8,7 @@ from typing import Any
 
 from app.db.models import User
 from app.db.session import get_db
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 from app.utils.password_hash import generate_password_hash
 
 
@@ -93,7 +94,7 @@ class UserApplicationService:
                         "role": user.role,
                     },
                 }
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 db.rollback()
                 return {"success": False, "message": str(e)}
 
@@ -128,7 +129,7 @@ class UserApplicationService:
                         "role": user.role,
                     },
                 }
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 db.rollback()
                 return {"success": False, "message": str(e)}
 
@@ -142,7 +143,7 @@ class UserApplicationService:
                 user.is_active = False
                 db.commit()
                 return {"success": True, "message": "用户已禁用"}
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 db.rollback()
                 return {"success": False, "message": str(e)}
 

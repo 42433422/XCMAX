@@ -9,6 +9,7 @@ import uuid
 from fastapi import APIRouter, Body, File, Form, UploadFile
 from fastapi.responses import JSONResponse
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 from app.utils.path_utils import get_upload_dir
 
 logger = logging.getLogger(__name__)
@@ -104,7 +105,7 @@ async def ai_analyze_post(
                 "message": "文本查询分析完成",
             }
         return JSONResponse({"success": False, "message": "请提供文件或查询内容"}, status_code=400)
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.exception("ai analyze: %s", e)
         return JSONResponse({"success": False, "message": f"服务器错误: {str(e)}"}, status_code=500)
 
@@ -132,7 +133,7 @@ async def ai_file_analyze(
         service = get_file_analysis_app_service()
         result = service.analyze_file(_UploadShim(file.filename, raw), purpose)
         return JSONResponse(result, status_code=200 if result.get("success") else 400)
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         return JSONResponse(
             {"success": False, "message": f"文件分析失败：{str(e)}"}, status_code=500
         )
@@ -151,7 +152,7 @@ def ai_sqlite_import_unit_products(body: dict = Body(default_factory=dict)):
             skip_duplicates=bool(body.get("skip_duplicates", True)),
         )
         return JSONResponse(result, status_code=200 if result.get("success") else 400)
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         return JSONResponse({"success": False, "message": f"导入失败：{str(e)}"}, status_code=500)
 
 

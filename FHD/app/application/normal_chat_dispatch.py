@@ -12,6 +12,7 @@ import re
 from typing import Any
 
 from app.utils.ai_helpers import format_money, safe_float
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -177,7 +178,7 @@ def build_product_query_response_dict(route_result: dict[str, Any]) -> dict[str,
             n = (row.get("name") or row.get("product_name") or "-").strip()
             p = safe_float(row.get("price"))
             preview_lines.append(f"- {m or '-'} / {n} / ￥{format_money(p)}")
-    except Exception as query_err:
+    except OPERATIONAL_ERRORS as query_err:
         logger.warning("产品查询预览失败：%s", query_err, exc_info=True)
 
     query_desc_bits = []
@@ -255,7 +256,7 @@ def run_workflow_products_query_normal_profile(
             "raw": result,
             "normal_tool_profile": True,
         }
-    except Exception as err:
+    except OPERATIONAL_ERRORS as err:
         logger.warning("normal_profile products.query 失败：%s", err, exc_info=True)
         return {"success": False, "message": str(err), "data": [], "normal_tool_profile": True}
 
@@ -351,7 +352,7 @@ def build_customers_query_response_dict(route_result: dict[str, Any]) -> dict[st
             "data": {"intent": "customers_query", "customers": customers[:20]},
             "normal_slot_dispatch": True,
         }
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.warning("customers_query 失败: %s", e)
         return {
             "success": False,
@@ -384,7 +385,7 @@ def build_inventory_alert_response_dict(route_result: dict[str, Any]) -> dict[st
             "data": {"intent": "inventory_alert", "low_stock_items": items[:20]},
             "normal_slot_dispatch": True,
         }
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.warning("inventory_alert 失败: %s", e)
         return {
             "success": False,
@@ -426,7 +427,7 @@ def build_label_print_response_dict(route_result: dict[str, Any]) -> dict[str, A
             "data": {"intent": "label_print", **result},
             "normal_slot_dispatch": True,
         }
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.warning("label_print 失败: %s", e)
         return {
             "success": False,

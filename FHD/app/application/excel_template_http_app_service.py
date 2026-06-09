@@ -14,6 +14,8 @@ from fastapi import Body, File, Query, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy import text
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
+
 logger = logging.getLogger(__name__)
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -89,7 +91,7 @@ def _json_safe_cell_value(v: Any) -> Any:
 
             if not math.isfinite(v):
                 return None
-        except Exception:
+        except OPERATIONAL_ERRORS:
             pass
         return v
     if isinstance(v, Decimal):
@@ -214,7 +216,7 @@ def _decompose_template_xls_pandas(
 
     try:
         xl = pd.ExcelFile(file_path, engine="xlrd")
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error("pandas/xlrd 打开 .xls 失败: %s", e)
         if _is_unreadable_workbook_error(str(e)):
             return {
@@ -300,7 +302,7 @@ def _decompose_template(file_path, sheet_name=None, sample_rows=5) -> tuple[dict
 
         try:
             return _decompose_template_openpyxl(file_path, sheet_name, sample_rows)
-        except Exception as oe:
+        except OPERATIONAL_ERRORS as oe:
             msg = str(oe)
             if _is_unreadable_workbook_error(msg):
                 return {
@@ -310,7 +312,7 @@ def _decompose_template(file_path, sheet_name=None, sample_rows=5) -> tuple[dict
                 }, 200
             raise
 
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error("分解 Excel 模板失败: %s", e)
         if _is_unreadable_workbook_error(str(e)):
             return {
@@ -326,7 +328,7 @@ def list_templates_get():
     try:
         templates = [_normalize_template_dto(t) for t in _get_template_list()]
         return JSONResponse({"success": True, "templates": templates}, status_code=200)
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error("获取模板列表失败: %s", e)
         return JSONResponse({"success": False, "message": str(e)}, status_code=500)
 
@@ -335,7 +337,7 @@ def get_templates_list():
     try:
         templates = _get_template_list()
         return JSONResponse({"success": True, "templates": templates})
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error("获取模板列表失败：%s", e)
         return JSONResponse({"success": False, "message": str(e)}, status_code=500)
 
@@ -353,7 +355,7 @@ def list_templates_by_type(
         return JSONResponse(
             {"success": True, "templates": templates, "count": len(templates)}, status_code=200
         )
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error("按类型获取模板列表失败：%s", e)
         return JSONResponse({"success": False, "message": f"获取失败：{str(e)}"}, status_code=500)
 
@@ -369,7 +371,7 @@ def get_default_template(type: str = Query(default="发货单")):
         return JSONResponse(
             {"success": True, "template": _normalize_template_dto(tpl)}, status_code=200
         )
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error("获取默认模板失败：%s", e)
         return JSONResponse({"success": False, "message": f"获取失败：{str(e)}"}, status_code=500)
 
@@ -387,7 +389,7 @@ def get_template_file(template_id: str):
             filename=template["filename"],
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error("获取模板文件失败: %s", e)
         return JSONResponse({"success": False, "message": str(e)}, status_code=500)
 
@@ -402,7 +404,7 @@ def save_template(data: dict[str, Any] = Body(default_factory=dict)):
         result = get_template_app_service().save_template_file(source_name, target_name, overwrite)
         status = 200 if result.get("success") else 404
         return JSONResponse(result, status_code=status)
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error("保存模板失败: %s", e)
         return JSONResponse({"success": False, "message": str(e)}, status_code=500)
 
@@ -425,7 +427,7 @@ def decompose_template(data: dict[str, Any] = Body(default_factory=dict)):
             return JSONResponse({"success": False, "message": "模板文件不存在"}, status_code=404)
         result, status = _decompose_template(target_path, sheet_name, sample_rows)
         return JSONResponse(result, status_code=status)
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error("分解模板失败: %s", e)
         return JSONResponse({"success": False, "message": str(e)}, status_code=500)
 
@@ -453,7 +455,7 @@ async def upload_excel(excel_file: UploadFile | None = File(default=None)):
                 "message": "文件上传成功",
             }
         )
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error("上传 Excel 文件失败: %s", e)
         return JSONResponse({"success": False, "message": str(e)}, status_code=500)
 
@@ -498,7 +500,7 @@ def get_template(template_id: int):
                 "updated_at": row.updated_at,
             }
             return JSONResponse({"success": True, "template": template})
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error("获取模板详情失败：%s", e)
         return JSONResponse({"success": False, "message": f"获取失败：{str(e)}"}, status_code=500)
 
@@ -546,7 +548,7 @@ def update_template(template_id: int, data: dict[str, Any] = Body(default_factor
             )
             db.commit()
         return JSONResponse({"success": True, "message": "模板更新成功"})
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error("更新模板失败：%s", e)
         return JSONResponse({"success": False, "message": f"更新失败：{str(e)}"}, status_code=500)
 
@@ -576,6 +578,6 @@ def delete_template(template_id: int):
             )
             db.commit()
         return JSONResponse({"success": True, "message": "模板删除成功"})
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error("删除模板失败：%s", e)
         return JSONResponse({"success": False, "message": f"删除失败：{str(e)}"}, status_code=500)

@@ -9,6 +9,8 @@ import os
 from pathlib import Path
 from typing import Any
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
+
 NEURO_BUS_BRIDGE_MOD_ID = "xcagi-neuro-bus-bridge"
 
 logger = logging.getLogger(__name__)
@@ -28,7 +30,7 @@ def _resolve_mod_dir() -> Path | None:
         meta = get_mod_manager().get_mod(NEURO_BUS_BRIDGE_MOD_ID)
         if meta and meta.mod_path and (Path(meta.mod_path) / "manifest.json").is_file():
             return Path(meta.mod_path)
-    except Exception:
+    except OPERATIONAL_ERRORS:
         pass
     trial = Path(__file__).resolve().parents[2] / "mods" / NEURO_BUS_BRIDGE_MOD_ID
     return trial if (trial / "manifest.json").is_file() else None
@@ -41,7 +43,7 @@ def _read_manifest() -> dict[str, Any]:
     try:
         data = json.loads((mod_dir / "manifest.json").read_text(encoding="utf-8"))
         return data if isinstance(data, dict) else {}
-    except Exception:
+    except OPERATIONAL_ERRORS:
         return {}
 
 
@@ -54,7 +56,7 @@ def is_neuro_bus_mod_installed() -> bool:
         for row in get_mod_manager().list_all_mods():
             if str(row.get("id") or "").strip() == NEURO_BUS_BRIDGE_MOD_ID:
                 return True
-    except Exception:
+    except OPERATIONAL_ERRORS:
         pass
     return _resolve_mod_dir() is not None
 
@@ -82,7 +84,7 @@ def list_neuro_bus_facade_registry() -> dict[str, Any]:
             raw = (manifest.get("config") or {}).get("domains") or []
             if isinstance(raw, list):
                 domains = [str(x) for x in raw if str(x).strip()]
-        except Exception:
+        except OPERATIONAL_ERRORS:
             pass
     endpoints = [
         "GET /neurobus/health",
@@ -102,7 +104,7 @@ def list_neuro_bus_facade_registry() -> dict[str, Any]:
 
         handlers_via_mod = is_neuro_bus_handlers_via_mod_enabled()
         handler_registry = list_neuro_bus_handler_registry()
-    except Exception:
+    except OPERATIONAL_ERRORS:
         pass
     return {
         "success": True,

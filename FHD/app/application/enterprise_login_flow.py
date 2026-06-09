@@ -15,6 +15,7 @@ from app.application.session_account_meta import (
     persist_session_account_meta,
     validate_account_kind_for_market,
 )
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -82,7 +83,7 @@ async def ensure_local_user_after_market(
         ensure_runtime_auth_bootstrap(swallow_errors=True)
         with get_db() as db:
             exists = db.query(User).filter(User.username == username).first()
-    except Exception as db_exc:
+    except OPERATIONAL_ERRORS as db_exc:
         logger.exception("enterprise login user lookup failed")
         return None, JSONResponse(
             {
@@ -163,7 +164,7 @@ def bind_tenant_for_login(
             out["tenant_name"] = name
         elif company_brand:
             out["tenant_name"] = company_brand
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.exception("bind_tenant_for_login failed user_id=%s", user_id)
     return out
 
@@ -180,7 +181,6 @@ async def finalize_enterprise_login(
 ) -> dict[str, Any]:
     """绑定市场 token、会话元数据、Mod 权益与租户信息。"""
     from app.fastapi_routes.market_account import (
-        login_market_with_password,
         save_session_market_token,
     )
 
@@ -257,7 +257,9 @@ async def finalize_enterprise_login(
                     str(session_id),
                     account_kind=account_kind,
                     company_brand=str(result.get("company_brand") or ""),
-                    tenant_id=int(tenant_info["tenant_id"]) if tenant_info.get("tenant_id") else None,
+                    tenant_id=(
+                        int(tenant_info["tenant_id"]) if tenant_info.get("tenant_id") else None
+                    ),
                 )
             result["account_kind"] = account_kind
 
@@ -295,7 +297,7 @@ async def finalize_enterprise_login(
                 "is_enterprise": bool(market_result.get("is_enterprise")),
                 "is_market_admin": bool(market_result.get("is_market_admin")),
             }
-    except Exception as exc:
+    except OPERATIONAL_ERRORS as exc:
         result["market_account"] = {
             "success": False,
             "message": f"市场账号自动同步失败：{exc}",
@@ -327,7 +329,7 @@ async def finalize_enterprise_login(
                 cached = get_cached_entitled_client_mod_ids()
                 if cached:
                     result["entitled_mod_ids"] = sorted(cached)
-        except Exception:
+        except OPERATIONAL_ERRORS:
             logger.exception("account_mod_binding fallback on login failed")
 
     return result
@@ -346,7 +348,7 @@ async def run_market_first_login(
     login_market_fn: Any | None = None,
 ) -> tuple[dict[str, Any] | None, JSONResponse | None]:
     """企业 SKU：市场先行，再本地 session + finalize。"""
-    from app.application.session_account_meta import persist_session_account_meta, validate_account_kind_for_market
+    from app.application.session_account_meta import persist_session_account_meta
 
     login_username = username
     if sku == "enterprise":

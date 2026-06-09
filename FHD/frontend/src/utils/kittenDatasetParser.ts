@@ -63,7 +63,7 @@ const parseWithWorker = (file: File, ext: string): Promise<ParsedDatasetFile> =>
       const data = event.data as { requestId?: number; ok?: boolean; payload?: ParsedDatasetFile; error?: string }
       if (!data || data.requestId !== requestId) return
       cleanup()
-      if (!data.success || !data.payload) {
+      if (!data.ok || !data.payload) {
         reject(new Error(data.error || 'Worker 解析失败'))
         return
       }

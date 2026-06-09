@@ -8,6 +8,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
+
 from .citation_tracker import CitationTracker
 from .hybrid_retriever import HybridRetriever, RetrievedChunk
 from .semantic_chunker import Chunk, SemanticChunker
@@ -118,7 +120,7 @@ def get_default_embedder() -> Callable[[str], list[float]] | None:
 
         svc = get_default_embedding_service()
         return lambda text: svc.embed(text)
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.debug("默认 embedder 不可用: %s", e)
         return None
 

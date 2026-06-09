@@ -7,6 +7,8 @@ from fastapi import APIRouter, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
+
 logger = logging.getLogger(__name__)
 
 
@@ -45,7 +47,7 @@ def finance_unified_ledger(
             "finance_self_hosted": True,
             "count": len(items),
         }
-    except Exception as exc:
+    except OPERATIONAL_ERRORS as exc:
         logger.exception("unified-ledger list failed")
         return JSONResponse(
             {"success": False, "message": str(exc)[:500], "items": [], "count": 0},
@@ -67,7 +69,7 @@ def finance_unified_ledger_summary(
             "summary": summary,
             "finance_self_hosted": True,
         }
-    except Exception as exc:
+    except OPERATIONAL_ERRORS as exc:
         logger.exception("unified-ledger summary failed")
         return JSONResponse(
             {"success": False, "message": str(exc)[:500], "summary": None},
@@ -84,7 +86,7 @@ def finance_unified_ledger_rebuild(body: FinanceLedgerRebuildBody):
         market_user_id = body.market_user_id
         result = rebuild_ledger_archive(market_user_id=market_user_id)
         return {"success": True, **result}
-    except Exception as exc:
+    except OPERATIONAL_ERRORS as exc:
         logger.exception("unified-ledger rebuild failed")
         return JSONResponse(
             {"success": False, "message": str(exc)[:500]},

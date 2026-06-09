@@ -14,6 +14,7 @@ from fastapi import HTTPException, Request
 
 from app.infrastructure.auth.db_token import verify_db_write_token_header
 from app.infrastructure.db.sync_engine import get_sync_engine
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -153,11 +154,11 @@ def _insp_table_exists(insp, table_name: str) -> bool:
     if callable(ht):
         try:
             return bool(ht(table_name))
-        except Exception:
+        except OPERATIONAL_ERRORS:
             logger.debug("suppressed exception", exc_info=True)
     try:
         return table_name in insp.get_table_names()
-    except Exception:
+    except OPERATIONAL_ERRORS:
         return False
 
 
@@ -245,7 +246,7 @@ def _business_mod_json_block() -> dict | None:
             "success": False,
             "message": business_data_hidden_reason() or "扩展 Mod 未就绪，业务接口已关闭。",
         }
-    except Exception:
+    except OPERATIONAL_ERRORS:
         return None
 
 
@@ -263,7 +264,7 @@ def _customers_write_raise(request: Request) -> None:
             )
     except HTTPException:
         raise
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         raise HTTPException(
             status_code=503,
             detail=f"无法校验 PostgreSQL 库结构: {e}",
@@ -284,7 +285,7 @@ def _products_write_raise(request: Request) -> None:
             )
     except HTTPException:
         raise
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         raise HTTPException(
             status_code=503,
             detail=f"无法校验 PostgreSQL 库结构: {e}",

@@ -23,6 +23,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
+
 logger = logging.getLogger(__name__)
 
 
@@ -61,5 +63,5 @@ def write_audit_event(
                     "payload": json.dumps(payload or {}, ensure_ascii=False, default=str)[:4096],
                 },
             )
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.debug("audit write_event 失败（非致命）: %s", e)

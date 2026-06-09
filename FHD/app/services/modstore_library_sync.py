@@ -12,6 +12,7 @@ from urllib.parse import quote
 import httpx
 
 from app.services.mod_zip_normalize import normalize_package_zip_path
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -102,7 +103,7 @@ async def sync_modstore_library_to_local(
                 installed.append(mid)
             else:
                 errors.append(f"{mid}: {message}")
-        except Exception as e:
+        except OPERATIONAL_ERRORS as e:
             logger.exception("modstore sync failed for %s", mid)
             errors.append(f"{mid}: {e}")
         finally:

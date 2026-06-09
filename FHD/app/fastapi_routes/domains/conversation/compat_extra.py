@@ -18,6 +18,7 @@ from app.request_active_mod_ctx import (
     get_request_active_mod_id,
     normalize_active_mod_id,
 )
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 router = APIRouter(tags=["xcagi-compat"])
 logger = logging.getLogger(__name__)
@@ -36,7 +37,7 @@ def _xcagi_resolve_session_scope(
     if not mod:
         try:
             mod = get_request_active_mod_id() or ""
-        except Exception:
+        except OPERATIONAL_ERRORS:
             mod = ""
     return (uid, mod)
 

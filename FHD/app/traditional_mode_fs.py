@@ -17,6 +17,7 @@ from collections.abc import Iterator
 from datetime import UTC, datetime
 from typing import Any
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 from app.utils.path_utils import get_base_dir
 
 logger = logging.getLogger(__name__)
@@ -132,7 +133,7 @@ def write_base64_response(rel_file: str, content_base64: str) -> tuple[dict[str,
         return {"success": False, "error": "目标路径是目录"}, 400
     try:
         data = base64.b64decode(content_base64, validate=True)
-    except Exception:
+    except OPERATIONAL_ERRORS:
         return {"success": False, "error": "base64 内容无效"}, 400
     os.makedirs(os.path.dirname(target), exist_ok=True)
     with open(target, "wb") as f:
@@ -233,7 +234,7 @@ def list_files_response(rel_path: str = "") -> tuple[dict[str, Any], int]:
 
         entries = dirs + files
         return {"success": True, "data": {"path": rel_path, "files": entries}}, 200
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error("列出目录失败: %s", e, exc_info=True)
         return {"success": False, "error": str(e)}, 500
 
@@ -282,7 +283,7 @@ def read_file_response(rel_file: str) -> tuple[dict[str, Any], int]:
                 }, 200
             except ImportError:
                 return {"success": False, "error": "openpyxl 未安装，无法读取 Excel 文件"}, 500
-            except Exception as e:
+            except OPERATIONAL_ERRORS as e:
                 logger.error("读取 Excel 文件失败: %s", e, exc_info=True)
                 return {"success": False, "error": f"读取 Excel 失败: {str(e)}"}, 500
 
@@ -318,7 +319,7 @@ def read_file_response(rel_file: str) -> tuple[dict[str, Any], int]:
                 content = base64.b64encode(f.read()).decode("utf-8")
             return {"success": True, "data": {"type": "binary", "content": content}}, 200
 
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error("读取文件失败: %s", e, exc_info=True)
         return {"success": False, "error": str(e)}, 500
 
@@ -381,7 +382,7 @@ def _watchdog_loop() -> None:
                     for q in dead:
                         if q in _watch_clients:
                             _watch_clients.remove(q)
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error("Watchdog 线程异常: %s", e, exc_info=True)
     finally:
         _watchdog_running = False

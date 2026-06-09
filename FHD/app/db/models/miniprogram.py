@@ -22,15 +22,12 @@ from sqlalchemy.sql import func
 from app.db.base import Base
 
 if TYPE_CHECKING:
-    from app.db.models.product import Product
     from app.db.models.user import User
 
 
 class MpCart(Base):
     __tablename__ = "mp_carts"
-    __table_args__ = (
-        UniqueConstraint("user_id", "product_id", name="uq_mp_cart_user_product"),
-    )
+    __table_args__ = (UniqueConstraint("user_id", "product_id", name="uq_mp_cart_user_product"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(
@@ -123,9 +120,7 @@ class MpAddress(Base):
 
 class MpBrowseHistory(Base):
     __tablename__ = "mp_browse_history"
-    __table_args__ = (
-        UniqueConstraint("user_id", "product_id", name="uq_mp_browse_user_product"),
-    )
+    __table_args__ = (UniqueConstraint("user_id", "product_id", name="uq_mp_browse_user_product"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(
@@ -141,9 +136,7 @@ class MpBrowseHistory(Base):
 
 class MpFavorite(Base):
     __tablename__ = "mp_favorites"
-    __table_args__ = (
-        UniqueConstraint("user_id", "product_id", name="uq_mp_fav_user_product"),
-    )
+    __table_args__ = (UniqueConstraint("user_id", "product_id", name="uq_mp_fav_user_product"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(

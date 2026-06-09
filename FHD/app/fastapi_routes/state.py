@@ -11,6 +11,8 @@ from typing import Any
 from fastapi import APIRouter, Body
 from fastapi.responses import JSONResponse
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/state", tags=["client-state"])
@@ -24,7 +26,7 @@ def read_client_mods_off_state() -> bool:
         if STATE_FILE.exists():
             data = json.loads(STATE_FILE.read_text(encoding="utf-8"))
             return bool(data.get("client_mods_off", False))
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.warning("[State API] 读取状态文件失败: %s", e)
     return False
 
@@ -37,7 +39,7 @@ def write_client_mods_off_state(value: bool) -> None:
         }
         STATE_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
         logger.info("[State API] 已写入 client_mods_off=%s", value)
-    except Exception as e:
+    except OPERATIONAL_ERRORS as e:
         logger.error("[State API] 写入状态文件失败: %s", e)
 
 

@@ -4,6 +4,8 @@ import json
 import logging
 import os
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
+
 logger = logging.getLogger(__name__)
 
 _TEMPLATE_SCOPE_REQUIRED_TERMS_CACHE = None
@@ -64,7 +66,7 @@ def _load_template_scope_required_terms():
             if isinstance(rule, dict) and "requiredTerms" in rule:
                 merged[scope_key] = list((rule or {}).get("requiredTerms") or [])
         return merged
-    except Exception:
+    except OPERATIONAL_ERRORS:
         return default_rules
 
 

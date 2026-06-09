@@ -10,6 +10,8 @@ import logging
 import uuid
 from typing import Any
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
+
 logger = logging.getLogger(__name__)
 
 
@@ -18,7 +20,7 @@ def _stack_on() -> bool:
         from app.neuro_bus.integrations.intent_integration import is_neuro_stack_enabled
 
         return is_neuro_stack_enabled()
-    except Exception:
+    except OPERATIONAL_ERRORS:
         return False
 
 
@@ -29,7 +31,7 @@ def _publish(event_type: str, payload: dict[str, Any], domain: str) -> bool:
         from app.mod_sdk.neuro_bus_runtime import publish_neuro_event_runtime
 
         return publish_neuro_event_runtime(event_type, payload, domain)
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.debug("application_neuro_bridge publish failed", exc_info=True)
         return False
 
@@ -114,7 +116,7 @@ def neuro_trace_service_call(
 
         if not is_neuro_service_layer_trace_enabled():
             return
-    except Exception:
+    except OPERATIONAL_ERRORS:
         pass
     if not _stack_on():
         return
@@ -225,5 +227,5 @@ def neuro_notify_ai_model_roundtrip(
             latency_ms=latency_ms,
             token_count=token_count,
         )
-    except Exception:
+    except OPERATIONAL_ERRORS:
         logger.debug("neuro_notify_ai_model_roundtrip skipped", exc_info=True)

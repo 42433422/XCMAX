@@ -12,6 +12,8 @@ from enum import Enum
 from functools import wraps
 from typing import Any
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
+
 logger = logging.getLogger(__name__)
 
 _circuit_breakers: dict[str, "CircuitBreaker"] = {}
@@ -85,7 +87,7 @@ class CircuitBreaker:
                 circuit_breaker_failures_total.labels(
                     name=self.name, circuit_state=self._state.value
                 ).inc(self._failure_count_total)
-        except Exception:
+        except OPERATIONAL_ERRORS:
             pass
 
     def _record_success(self):
