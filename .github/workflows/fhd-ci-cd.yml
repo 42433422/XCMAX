@@ -373,9 +373,10 @@ jobs:
           FHD_IMAGE_DIGEST: ${{ steps.build_fhd.outputs.digest }}
         run: |
           set -euo pipefail
-          ref="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_FHD_API }}"
-          docker save "${ref}@${FHD_IMAGE_DIGEST}" -o FHD/dist/deploy/fhd-api-image.tar
-          gzip -f FHD/dist/deploy/fhd-api-image.tar
+          mkdir -p dist/deploy
+          ref="${{ env.REGISTRY }}/42433422/xcmax/xcagi-fhd-api"
+          docker save "${ref}@${FHD_IMAGE_DIGEST}" -o dist/deploy/fhd-api-image.tar
+          gzip -f dist/deploy/fhd-api-image.tar
 
       - name: Upload manifest with image digest
         if: steps.build_fhd.outputs.digest != ''
