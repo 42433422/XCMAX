@@ -187,9 +187,11 @@ class HybridRetriever:
                 RetrievedChunk(
                     text=c.text,
                     score=float(score),
-                    source="hybrid"
-                    if (idx in vector_ranked and idx in bm25_ranked)
-                    else ("vector" if idx in vector_ranked else "bm25"),
+                    source=(
+                        "hybrid"
+                        if (idx in vector_ranked and idx in bm25_ranked)
+                        else ("vector" if idx in vector_ranked else "bm25")
+                    ),
                     chunk_index=c.chunk_index,
                     char_start=c.char_start,
                     char_end=c.char_end,

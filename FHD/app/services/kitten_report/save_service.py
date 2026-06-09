@@ -225,16 +225,16 @@ class AnalysisSaveService(NeuroEventPublisherMixin):
                     cell.border = thin_border
 
                 for i, product in enumerate(product_data[:10], start_row + 1):
-                    ws.cell(
-                        column=1, row=i, value=product.get("product_name", "")
-                    ).border = thin_border
-                    ws.cell(
-                        column=2, row=i, value=product.get("total_revenue", 0)
-                    ).border = thin_border
+                    ws.cell(column=1, row=i, value=product.get("product_name", "")).border = (
+                        thin_border
+                    )
+                    ws.cell(column=2, row=i, value=product.get("total_revenue", 0)).border = (
+                        thin_border
+                    )
                     ws.cell(column=3, row=i, value=product.get("total_qty", 0)).border = thin_border
-                    ws.cell(
-                        column=4, row=i, value=product.get("order_count", 0)
-                    ).border = thin_border
+                    ws.cell(column=4, row=i, value=product.get("order_count", 0)).border = (
+                        thin_border
+                    )
                     ws.cell(column=5, row=i, value=product.get("avg_price", 0)).border = thin_border
 
             customer_data = data.get("customer_analysis", [])
@@ -254,18 +254,18 @@ class AnalysisSaveService(NeuroEventPublisherMixin):
                     cell.border = thin_border
 
                 for i, customer in enumerate(customer_data[:10], start_row + 1):
-                    ws.cell(
-                        column=1, row=i, value=customer.get("customer", "")
-                    ).border = thin_border
-                    ws.cell(
-                        column=2, row=i, value=customer.get("total_amount", 0)
-                    ).border = thin_border
-                    ws.cell(
-                        column=3, row=i, value=customer.get("order_count", 0)
-                    ).border = thin_border
-                    ws.cell(
-                        column=4, row=i, value=customer.get("avg_order_value", 0)
-                    ).border = thin_border
+                    ws.cell(column=1, row=i, value=customer.get("customer", "")).border = (
+                        thin_border
+                    )
+                    ws.cell(column=2, row=i, value=customer.get("total_amount", 0)).border = (
+                        thin_border
+                    )
+                    ws.cell(column=3, row=i, value=customer.get("order_count", 0)).border = (
+                        thin_border
+                    )
+                    ws.cell(column=4, row=i, value=customer.get("avg_order_value", 0)).border = (
+                        thin_border
+                    )
 
             for col in range(1, 6):
                 ws.column_dimensions[get_column_letter(col)].width = 20

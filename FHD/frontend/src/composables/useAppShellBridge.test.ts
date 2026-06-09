@@ -1,6 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { useAppShellBridge } from './useAppShellBridge'
 
+vi.mock('@/constants/clientModeTiers', () => ({
+  isClientModeTiersUiEnabled: () => true,
+  PRO_INTENT_EXPERIENCE_KEY: 'xcagi_pro_intent_experience',
+  resetClientModeTierLocalState: vi.fn(),
+}))
+
 function makeRouter() {
   return { push: vi.fn() } as unknown as import('vue-router').Router
 }

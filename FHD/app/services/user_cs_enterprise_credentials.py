@@ -37,9 +37,7 @@ def get_enterprise_credentials(market_user_id: int, *, username: str = "") -> di
     doc = load_pipeline(int(market_user_id), username=username)
     payload = _base_payload(doc, username=username)
     base = (
-        (  # optional market sync
-            __import__("os").environ.get("XCAGI_MARKET_BASE_URL") or ""
-        )
+        (__import__("os").environ.get("XCAGI_MARKET_BASE_URL") or "")  # optional market sync
         .strip()
         .rstrip("/")
     )

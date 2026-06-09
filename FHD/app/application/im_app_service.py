@@ -91,9 +91,9 @@ class ImApplicationService:
                     "id": conv.id,
                     "title": title,
                     "is_direct": conv.is_direct,
-                    "last_message_at": conv.last_message_at.isoformat()
-                    if conv.last_message_at
-                    else None,
+                    "last_message_at": (
+                        conv.last_message_at.isoformat() if conv.last_message_at else None
+                    ),
                     "last_message_preview": (last_msg.body[:120] if last_msg else ""),
                     "unread_count": unread,
                 }

@@ -114,9 +114,9 @@ def subscription_status_for_user(user_id: int) -> dict[str, Any]:
                 "reason": "paid_plan",
                 "plan_id": tenant.plan_id,
                 "tenant_id": tenant.id,
-                "trial_expires_at": tenant.trial_expires_at.isoformat()
-                if tenant.trial_expires_at
-                else None,
+                "trial_expires_at": (
+                    tenant.trial_expires_at.isoformat() if tenant.trial_expires_at else None
+                ),
             }
 
         if tenant and tenant.trial_expires_at and tenant.trial_expires_at >= now:

@@ -42,12 +42,7 @@ _negation_action_keywords: dict[str, list[str]] = {}
 
 def _load_intent_runtime_rules() -> None:
     """从配置加载快路径/否定动作等运行时规则。"""
-    global \
-        _quick_command_map, \
-        _quick_intent_patterns, \
-        _context_inherit_patterns, \
-        _append_keywords, \
-        _negation_action_keywords
+    global _quick_command_map, _quick_intent_patterns, _context_inherit_patterns, _append_keywords, _negation_action_keywords
 
     config = get_intent_config()
     quick_rules = config.get("quick_rules", {}) or {}

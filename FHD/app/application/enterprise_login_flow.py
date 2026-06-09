@@ -257,9 +257,9 @@ async def finalize_enterprise_login(
                     str(session_id),
                     account_kind=account_kind,
                     company_brand=str(result.get("company_brand") or ""),
-                    tenant_id=int(tenant_info["tenant_id"])
-                    if tenant_info.get("tenant_id")
-                    else None,
+                    tenant_id=(
+                        int(tenant_info["tenant_id"]) if tenant_info.get("tenant_id") else None
+                    ),
                 )
             result["account_kind"] = account_kind
 
