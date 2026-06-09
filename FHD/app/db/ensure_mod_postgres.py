@@ -74,6 +74,7 @@ def ensure_postgres_per_mod_databases(
     clone_mod_ids = set(getattr(boot, "DEFAULT_CLONE_FROM_BASE_MOD_IDS", ()) or ())
 
     from sqlalchemy.engine import make_url
+    from sqlalchemy.exc import SQLAlchemyError
 
     base_u = make_url(base_url)
     base_db = (base_u.database or "xcagi").strip()
@@ -111,17 +112,13 @@ def ensure_postgres_per_mod_databases(
             exc,
         )
         return []
-    except Exception as exc:
-        from sqlalchemy.exc import SQLAlchemyError
-
-        if isinstance(exc, SQLAlchemyError):
-            logger.warning(
-                "ensure_postgres_per_mod_databases: skip (PostgreSQL error, "
-                "e.g. insufficient CREATEDB privilege): %s",
-                exc,
-            )
-            return []
-        raise
+    except SQLAlchemyError as exc:
+        logger.warning(
+            "ensure_postgres_per_mod_databases: skip (PostgreSQL error, "
+            "e.g. insufficient CREATEDB privilege): %s",
+            exc,
+        )
+        return []
     finally:
         admin_engine.dispose()
 
