@@ -31,7 +31,70 @@
 
 - **产品版本锚点**：恒 `10.0.0`（见 `FHD/VERSION.md`），**不因功能发版 bump 主版本**。
 - **Git tag（发版触发）**：`FHD/v10.0.0` 或 `FHD/v10.*`；**制品身份**用 tarball 内 `git_sha` + `sha256`，非 tag 名。
-- **串联**：`fhd-ci-cd.yml` 在 `FHD/v*` tag 上触发 `fhd-deploy.yml`（K8s，需 `KUBE_CONFIG`）；**生产 CVM tarball 拉取**由本机 `fhd-push-release.sh` 推送至 update 目录，服务器 cron 应用（见下方 runbook）。
+- **串联**：`fhd-ci-cd.yml` 在 `FHD/v*` tag 上触发 `fhd-deploy.yml`（K8s，需 `KUBE_CONFIG`）；**生产 CVM compose/tarball** 由 CI job `cvm-push-release` 或本机 `fhd-push-release.sh` 推送至 update 目录，服务器 cron 应用（见下方 runbook）。
+
+## 多环境 channel（stable / staging）
+
+| Channel | 远端 manifest 目录 | 用途 |
+|---------|-------------------|------|
+| `stable`（默认） | `/var/www/update/releases/stable/server/` | 生产 compose（5100） |
+| `staging` | `/var/www/update/releases/staging/server/` | 预发 / dry-run（建议 5101 + 独立 `FHD_DEPLOY_ROOT`） |
+
+**打包 / 推送**（`FHD/` 根目录）：
+
+```bash
+# 生产
+bash scripts/deploy/fhd-pack-release.sh
+bash scripts/deploy/fhd-push-release.sh
+
+# 预发 channel
+FHD_RELEASE_CHANNEL=staging bash scripts/deploy/fhd-pack-release.sh
+FHD_RELEASE_CHANNEL=staging bash scripts/deploy/fhd-push-release.sh
+```
+
+manifest 含 `"channel": "stable"|"staging"`。同一台 CVM（119.27.178.147）可并存两目录；staging cron 示例：
+
+```bash
+FHD_MANIFEST_PATH=/var/www/update/releases/staging/server/fhd-manifest.json \
+FHD_DEPLOY_ROOT=/opt/fhd-staging \
+FHD_API_PORT=5101 \
+bash /opt/fhd-staging/scripts/deploy/fhd-auto-update.sh
+```
+
+## CVM 自动 CD（GitHub Actions）
+
+`fhd-ci-cd.yml` job **`cvm-push-release`**：`main` push 且 `docker-build-fhd-api` 成功后，若配置了 secrets 则自动 scp 制品；**无 secrets 时跳过（不失败）**。
+
+| Secret / 变量 | 说明 |
+|---------------|------|
+| `FHD_PUSH_HOST` | 默认 `119.27.178.147` |
+| `FHD_PUSH_SSH_KEY` | SSH 私钥（**勿入库**） |
+| `FHD_PUSH_USER` | 可选，默认 `root` |
+| GitHub Environment `production` / `staging` | 可选审批门；`workflow_dispatch` 可选 channel |
+
+手动触发：`Actions → CI/CD Pipeline → Run workflow` → 勾选 **Push release artifacts to CVM**，选 channel。
+
+**仍需人工（仓外）**：GHCR `read:packages` PAT 写入服务器、`/root/fhd-full.env`、首次 cron 安装、branch protection。
+
+## K8s 部署（Phase 3 · 并行轨，不替代 CVM prod）
+
+| 触发 | Workflow | 前提 |
+|------|----------|------|
+| `FHD/v*` tag（非 `-rc` → prod；`-rc` → staging） | `fhd-deploy.yml` | Secret `KUBE_CONFIG` 或 `KUBE_CONFIG_B64` |
+| `workflow_dispatch` | 同上，选 environment + strategy | 同上 |
+| 可选 `image_digest` input | 钉扎 `xcagi-fhd-api@sha256:...` | CI 已推 GHCR |
+
+镜像 SSOT：`ghcr.io/<org>/<repo>/xcagi-fhd-api:sha-<git_sha>`（与 `docker-build-fhd-api` 一致）。Manifest 在 `FHD/k8s/`；staging 默认 namespace `xcagi-staging`。
+
+本地 / 119.27.178.147 K3s 一键：`deploy_k8s_staging.sh`（见 `FHD/k8s/monitoring/STAGING_RUNBOOK.md`）。
+
+## Branch protection（须仓库 Owner 在 GitHub UI 配置）
+
+Agent **无法**从本环境开启 branch protection。建议在 **Settings → Branches → main** 启用：
+
+- Required status checks：`backend-test`、`frontend-test`、`pack-verify`、`docker-build-fhd-api`、`container-scan`（及 `Release gate CI` 若启用）
+- Require branches up to date before merging
+- 可选：Environment `production` 需审批后再跑 `cvm-push-release`
 
 ## FHD 生产服务器部署 runbook（tarball 拉取式）
 

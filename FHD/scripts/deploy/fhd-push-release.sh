@@ -8,7 +8,8 @@
 #   FHD_SKIP_PACK=1              跳过 pack（使用已有 dist/deploy 产物）
 #   FHD_PUSH_HOST                默认 119.27.178.147
 #   FHD_PUSH_USER                默认 root
-#   FHD_PUSH_REMOTE_DIR          默认 /var/www/update/releases/stable/server
+#   FHD_RELEASE_CHANNEL          stable（prod）| staging；决定默认远端目录
+#   FHD_PUSH_REMOTE_DIR          默认 /var/www/update/releases/<channel>/server
 #   FHD_PUSH_SSH_KEY             SSH 私钥路径（默认 ~/.ssh/id_rsa 等）
 #   FHD_RELEASE_OUT_DIR          与 pack 脚本一致
 set -euo pipefail
@@ -20,9 +21,17 @@ FHD_ROOT="$(cd -- "$SCRIPT_DIR/../.." &>/dev/null && pwd)"
 export DEPLOY_SCRIPT_ID="fhd_push_release"
 
 OUT_DIR="${FHD_RELEASE_OUT_DIR:-$FHD_ROOT/dist/deploy}"
+CHANNEL="${FHD_RELEASE_CHANNEL:-stable}"
+case "$CHANNEL" in
+  stable | staging) ;;
+  *)
+    echo "[err] FHD_RELEASE_CHANNEL 须为 stable 或 staging，当前: $CHANNEL" >&2
+    exit 1
+    ;;
+esac
 HOST="${FHD_PUSH_HOST:-119.27.178.147}"
 USER="${FHD_PUSH_USER:-root}"
-REMOTE_DIR="${FHD_PUSH_REMOTE_DIR:-/var/www/update/releases/stable/server}"
+REMOTE_DIR="${FHD_PUSH_REMOTE_DIR:-/var/www/update/releases/${CHANNEL}/server}"
 SSH_KEY="${FHD_PUSH_SSH_KEY:-}"
 
 SSH_OPTS=(-o StrictHostKeyChecking=accept-new -o ServerAliveInterval=30)
@@ -36,11 +45,11 @@ REMOTE="${USER}@${HOST}"
 SSH=(ssh "${SSH_OPTS[@]}")
 SCP=(scp "${SCP_OPTS[@]}")
 
-deploy_emit bootstrap started "host=$HOST remote_dir=$REMOTE_DIR"
+deploy_emit bootstrap started "host=$HOST channel=$CHANNEL remote_dir=$REMOTE_DIR"
 
 if [[ "${FHD_SKIP_PACK:-0}" != "1" ]]; then
-  deploy_emit pack started "invoke=fhd-pack-release.sh"
-  bash "$SCRIPT_DIR/fhd-pack-release.sh"
+  deploy_emit pack started "invoke=fhd-pack-release.sh channel=$CHANNEL"
+  FHD_RELEASE_CHANNEL="$CHANNEL" bash "$SCRIPT_DIR/fhd-pack-release.sh"
   deploy_emit pack ok
 fi
 
@@ -118,8 +127,8 @@ atomic_upload() {
 atomic_upload "$TARBALL" "${REMOTE_DIR}/${ARTIFACT}"
 atomic_upload "$MANIFEST" "${REMOTE_DIR}/fhd-manifest.json"
 
-deploy_emit push ok "version=$VERSION git_sha=$GIT_SHA mode=${DEPLOY_MODE:-tarball}"
-echo "[ok] 已发布至 ${HOST}:${REMOTE_DIR}/"
+deploy_emit push ok "channel=$CHANNEL version=$VERSION git_sha=$GIT_SHA mode=${DEPLOY_MODE:-tarball}"
+echo "[ok] 已发布至 ${HOST}:${REMOTE_DIR}/ (channel=$CHANNEL)"
 echo "[ok] artifact=$ARTIFACT sha256=${SHA256:0:16}... deploy_mode=${DEPLOY_MODE:-tarball}"
 if [[ -n "${IMAGE:-}" && -n "${IMAGE_DIGEST:-}" ]]; then
   echo "[ok] image=$IMAGE digest=${IMAGE_DIGEST:0:19}..."
