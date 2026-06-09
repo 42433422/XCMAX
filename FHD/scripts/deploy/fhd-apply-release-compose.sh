@@ -11,6 +11,7 @@
 #   FHD_USE_BUNDLED_REDIS  1 时加 --profile bundled-redis
 #   FHD_IMAGE_TARBALL      可选，update 站 fhd-api-image.tar.gz（GHCR pull 失败时加载）
 #   FHD_ARTIFACT_DIR       默认同 manifest 目录，用于查找 fhd-api-image.tar.gz
+#   FHD_GIT_SHA            manifest git_sha（tar load 打 tag 用）
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
@@ -30,6 +31,43 @@ LOG="${FHD_DEPLOY_LOG:-/var/log/fhd-auto-update.log}"
 
 log() {
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG"
+}
+
+docker_host_db_env() {
+  if [[ ! -f "$ENV_FILE" ]]; then
+    return 0
+  fi
+  local db vdb
+  db="$(grep -m1 '^DATABASE_URL=' "$ENV_FILE" | cut -d= -f2- || true)"
+  if [[ -n "$db" ]]; then
+    export DATABASE_URL="${db/@127.0.0.1:/@host.docker.internal:}"
+  fi
+  vdb="$(grep -m1 '^VECTOR_DB_URL=' "$ENV_FILE" | cut -d= -f2- || true)"
+  if [[ -n "$vdb" ]]; then
+    export VECTOR_DB_URL="${vdb/@127.0.0.1:/@host.docker.internal:}"
+  fi
+}
+
+resolve_local_image_ref() {
+  local tag_sha="${FHD_GIT_SHA:-${DIGEST#sha256:}}"
+  tag_sha="${tag_sha:0:12}"
+  if [[ -n "$tag_sha" ]] && docker image inspect "${IMAGE}:sha-${tag_sha}" >/dev/null 2>&1; then
+    export FHD_API_IMAGE_REF="${IMAGE}:sha-${tag_sha}"
+    log "使用本地 tag ref=${FHD_API_IMAGE_REF}"
+    return 0
+  fi
+  if docker image inspect "${IMAGE}@${DIGEST}" >/dev/null 2>&1; then
+    export FHD_API_IMAGE_REF="${IMAGE}@${DIGEST}"
+    return 0
+  fi
+  return 1
+}
+
+rollback_systemd() {
+  log "回滚至 systemd tarball 模式"
+  docker compose "${COMPOSE_OPTS[@]}" down --remove-orphans 2>/dev/null || true
+  systemctl enable fhd-full.service 2>/dev/null || true
+  systemctl restart fhd-full.service || systemctl start fhd-full.service || true
 }
 
 if ! command -v docker >/dev/null 2>&1; then
@@ -71,6 +109,7 @@ export FHD_API_IMAGE_DIGEST="$DIGEST"
 export FHD_API_IMAGE_REF="${IMAGE}@${DIGEST}"
 export FHD_DEPLOY_ROOT="$DEPLOY_ROOT"
 export FHD_ENV_FILE="$ENV_FILE"
+docker_host_db_env
 
 COMPOSE_OPTS=(-f "$COMPOSE_FILE")
 if [[ "${FHD_USE_BUNDLED_REDIS:-0}" == "1" ]]; then
@@ -94,26 +133,29 @@ deploy_emit pull started
 PULL_OK=0
 if docker compose "${COMPOSE_OPTS[@]}" pull fhd-api; then
   PULL_OK=1
-elif docker image inspect "${IMAGE}@${DIGEST}" >/dev/null 2>&1; then
-  log "WARN: pull 失败但本地已有 digest，继续 up"
+elif resolve_local_image_ref; then
+  log "WARN: pull 失败但本地已有镜像，继续 up"
   PULL_OK=1
 else
   IMAGE_TAR="${FHD_IMAGE_TARBALL:-}"
   if [[ -z "$IMAGE_TAR" && -n "${FHD_ARTIFACT_DIR:-}" ]]; then
     IMAGE_TAR="${FHD_ARTIFACT_DIR}/fhd-api-image.tar.gz"
   fi
+  if [[ -z "$IMAGE_TAR" ]]; then
+    IMAGE_TAR="/var/www/update/releases/stable/server/fhd-api-image.tar.gz"
+  fi
   if [[ -n "$IMAGE_TAR" && -f "$IMAGE_TAR" ]]; then
     log "尝试从 tar 加载镜像（无 GHCR PAT）: $IMAGE_TAR"
     if FHD_IMAGE_TARBALL="$IMAGE_TAR" FHD_API_IMAGE="$IMAGE" FHD_API_IMAGE_DIGEST="$DIGEST" \
-      bash "$SCRIPT_DIR/fhd-load-release-image.sh"; then
-      if docker image inspect "${IMAGE}@${DIGEST}" >/dev/null 2>&1; then
+      FHD_GIT_SHA="${FHD_GIT_SHA:-}" bash "$SCRIPT_DIR/fhd-load-release-image.sh"; then
+      if resolve_local_image_ref; then
         PULL_OK=1
       fi
     fi
   fi
 fi
 if [[ "$PULL_OK" != "1" ]]; then
-  log "ERROR: docker compose pull 失败且无本地 digest"
+  log "ERROR: docker compose pull 失败且无本地镜像"
   deploy_emit pull failed
   rollback_compose "$PREV_DIGEST"
   deploy_emit apply failed "pull_failed"
@@ -150,6 +192,9 @@ done
 if [[ "$API_CODE" != "200" ]]; then
   log "ERROR: /api/health 未就绪 (code=$API_CODE)，尝试 compose 回滚"
   rollback_compose "$PREV_DIGEST"
+  if [[ -z "$PREV_DIGEST" ]]; then
+    rollback_systemd
+  fi
   deploy_emit apply failed "health_check rollback"
   exit 1
 fi

@@ -43,8 +43,19 @@ services:
       PYTHONPATH: /app
       XCAGI_UVICORN_RELOAD: "0"
       XCAGI_ENV: production
+      FHD_SKIP_ALEMBIC: ${FHD_SKIP_ALEMBIC:-1}
+      DATABASE_URL: ${DATABASE_URL:-}
+      VECTOR_DB_URL: ${VECTOR_DB_URL:-}
     env_file:
       - ${FHD_ENV_FILE:-/root/fhd-full.env}
+    command:
+      - uvicorn
+      - app.fastapi_app:create_fastapi_app
+      - --factory
+      - --host
+      - 0.0.0.0
+      - --port
+      - "5000"
     volumes:
       - ${FHD_DEPLOY_ROOT:-/opt/fhd-full}/data:/app/data
       - ${FHD_DEPLOY_ROOT:-/opt/fhd-full}/uploads:/app/uploads

@@ -27,10 +27,26 @@ if ! command -v docker >/dev/null 2>&1; then
 fi
 
 echo "[info] 加载镜像 tar: $TARBALL"
+load_out=""
 if [[ "$TARBALL" == *.gz ]]; then
-  gunzip -c "$TARBALL" | docker load
+  load_out="$(gunzip -c "$TARBALL" | docker load 2>&1 | tee /dev/stderr)"
 else
-  docker load -i "$TARBALL"
+  load_out="$(docker load -i "$TARBALL" 2>&1 | tee /dev/stderr)"
+fi
+
+loaded_id=""
+loaded_id="$(echo "$load_out" | sed -n 's/^Loaded image ID: //p' | tail -1)"
+if [[ -z "$loaded_id" ]]; then
+  loaded_id="$(echo "$load_out" | sed -n 's/^Loaded image: //p' | awk '{print $NF}' | tail -1)"
+fi
+
+if [[ -n "$IMAGE" && -n "$loaded_id" ]]; then
+  tag_sha="${FHD_GIT_SHA:-${DIGEST#sha256:}}"
+  tag_sha="${tag_sha:0:12}"
+  if [[ -n "$tag_sha" ]]; then
+    docker tag "$loaded_id" "${IMAGE}:sha-${tag_sha}"
+    echo "[ok] 已打 tag ${IMAGE}:sha-${tag_sha}"
+  fi
 fi
 
 if [[ -n "$DIGEST" && -n "$IMAGE" ]]; then
@@ -38,7 +54,13 @@ if [[ -n "$DIGEST" && -n "$IMAGE" ]]; then
     echo "[ok] 已加载 ${IMAGE}@${DIGEST:0:19}..."
     exit 0
   fi
-  echo "[warn] 加载完成但未找到 ${IMAGE}@${DIGEST:0:19}...（继续由 compose 校验）"
+  tag_sha="${FHD_GIT_SHA:-${DIGEST#sha256:}}"
+  tag_sha="${tag_sha:0:12}"
+  if [[ -n "$tag_sha" ]] && docker image inspect "${IMAGE}:sha-${tag_sha}" >/dev/null 2>&1; then
+    echo "[ok] 已加载 ${IMAGE}:sha-${tag_sha}（本地 tag）"
+    exit 0
+  fi
+  echo "[warn] 加载完成但未找到 ${IMAGE}@${DIGEST:0:19}...（compose 将用 sha tag）"
 fi
 
 echo "[ok] docker load 完成"
