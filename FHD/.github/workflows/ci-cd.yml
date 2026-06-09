@@ -360,6 +360,16 @@ jobs:
           FHD_IMAGE_DIGEST: ${{ steps.build_fhd.outputs.digest }}
         run: bash scripts/deploy/fhd-merge-manifest-image.sh
 
+      - name: Export image tarball for server bootstrap
+        if: steps.build_fhd.outputs.digest != '' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/FHD/v'))
+        env:
+          FHD_IMAGE_DIGEST: ${{ steps.build_fhd.outputs.digest }}
+        run: |
+          set -euo pipefail
+          ref="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_FHD_API }}"
+          docker save "${ref}@${FHD_IMAGE_DIGEST}" -o dist/deploy/fhd-api-image.tar
+          gzip -f dist/deploy/fhd-api-image.tar
+
       - name: Upload manifest with image digest
         if: steps.build_fhd.outputs.digest != ''
         uses: actions/upload-artifact@v4
@@ -368,6 +378,7 @@ jobs:
           path: |
             dist/deploy/fhd-manifest.json
             dist/deploy/fhd-full-*.tar.gz
+            dist/deploy/fhd-api-image.tar.gz
           if-no-files-found: error
           retention-days: 14
 

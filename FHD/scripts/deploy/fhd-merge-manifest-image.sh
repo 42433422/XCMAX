@@ -40,6 +40,8 @@ python3 - <<'PY' "$MANIFEST" "$IMAGE_REF" "$IMAGE_DIGEST" "$DEPLOY_MODE_OVERRIDE
 import json, sys
 
 path, image, digest, mode_override = sys.argv[1:5]
+# GHCR paths are lowercase; keep manifest aligned with pushed tags (42433422/xcmax/...).
+image = image.lower()
 doc = json.load(open(path, encoding="utf-8"))
 doc["image"] = image
 doc["image_digest"] = digest
