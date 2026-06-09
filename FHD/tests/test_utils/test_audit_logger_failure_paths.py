@@ -97,8 +97,9 @@ def test_append_audit_event_skips_when_no_path():
 
 
 def test_append_audit_event_writes_line(tmp_path, monkeypatch: pytest.MonkeyPatch):
-    from app.utils import audit_events
     from app.utils.audit_events import append_audit_event
+
+    from app.utils import audit_events
 
     p = tmp_path / "audit.jsonl"
     monkeypatch.setattr(audit_events, "audit_log_path", lambda: str(p))
@@ -111,8 +112,9 @@ def test_append_audit_event_writes_line(tmp_path, monkeypatch: pytest.MonkeyPatc
 
 
 def test_append_audit_event_keeps_existing_ts(tmp_path, monkeypatch: pytest.MonkeyPatch):
-    from app.utils import audit_events
     from app.utils.audit_events import append_audit_event
+
+    from app.utils import audit_events
 
     p = tmp_path / "audit.jsonl"
     monkeypatch.setattr(audit_events, "audit_log_path", lambda: str(p))
@@ -122,8 +124,9 @@ def test_append_audit_event_keeps_existing_ts(tmp_path, monkeypatch: pytest.Monk
 
 
 def test_append_audit_event_creates_parent_dir(tmp_path, monkeypatch: pytest.MonkeyPatch):
-    from app.utils import audit_events
     from app.utils.audit_events import append_audit_event
+
+    from app.utils import audit_events
 
     p = tmp_path / "nested" / "dir" / "a.jsonl"
     monkeypatch.setattr(audit_events, "audit_log_path", lambda: str(p))
@@ -132,8 +135,9 @@ def test_append_audit_event_creates_parent_dir(tmp_path, monkeypatch: pytest.Mon
 
 
 def test_append_audit_event_open_failure_silent(tmp_path, monkeypatch: pytest.MonkeyPatch):
-    from app.utils import audit_events
     from app.utils.audit_events import append_audit_event
+
+    from app.utils import audit_events
 
     monkeypatch.setattr(audit_events, "audit_log_path", lambda: "/dev/null/forbidden/path")
     # open 必定失败；append_audit_event 必须吞掉

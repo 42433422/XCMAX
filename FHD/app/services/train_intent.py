@@ -43,8 +43,8 @@ def train_model(
 ):
     """训练意图识别模型"""
     try:
-        from app.services.intent_trainer import INTENT_LABELS  # noqa: F401
         from app.services.intent_trainer import (
+            INTENT_LABELS,  # noqa: F401
             export_to_onnx,
             train_intent_model,
         )
@@ -94,9 +94,11 @@ def train_model(
 def evaluate_model(model_path: str, data_path: str | None = None):
     """评估模型"""
     try:
-        from app.services.bert_intent_service import INTENT_LABELS  # noqa: F401
-        from app.services.bert_intent_service import BertIntentClassifier  # noqa: F401
-        from app.services.bert_intent_service import get_bert_intent_service  # noqa: F401
+        from app.services.bert_intent_service import (
+            INTENT_LABELS,  # noqa: F401
+            BertIntentClassifier,  # noqa: F401
+            get_bert_intent_service,  # noqa: F401
+        )
     except ImportError as e:
         logger.error(f"无法导入推理模块: {e}")
         return
