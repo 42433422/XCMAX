@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <title>screenshotCapture 架构图</title>
+  <style>
+    :root {
+      --bg: #0b0f19;
+      --bg2: #131a2b;
+      --fg: #e2e8f0;
+      --muted: #94a3b8;
+      --accent: #22d3ee;
+      --green: #34d399;
+      --purple: #a78bfa;
+      --orange: #fb923c;
+      --red: #f87171;
+      --pink: #f472b6;
+      --yellow: #fbbf24;
+      --card: rgba(19, 26, 43, 0.92);
+      --border: rgba(34, 211, 238, 0.18);
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--fg);
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif;
+      min-height: 100vh;
+      padding: 32px 16px 80px;
+      line-height: 1.6;
+    }
+
+    .page {
+      max-width: 1280px;
+      margin: 0 auto;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 32px;
+    }
+
+    header h1 {
+      font-size: clamp(22px, 3.6vw, 36px);
+      font-weight: 800;
+      letter-spacing: 1px;
+      background: linear-gradient(135deg, var(--accent), var(--purple));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    header p {
+      color: var(--muted);
+      font-size: 13px;
+      margin-top: 6px;
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      justify-content: center;
+      margin-bottom: 24px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .legend span {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: var(--card);
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 2px;
+      display: inline-block;
+    }
+
+    .mermaid-wrap {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+      overflow-x: auto;
+    }
+
+    section.cards {
+      display: grid;
+      gap: 16px;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      margin-top: 32px;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px 18px;
+    }
+
+    .card h3 {
+      font-size: 14px;
+      color: var(--accent);
+      margin-bottom: 8px;
+      letter-spacing: 0.5px;
+    }
+
+    .card p,
+    .card li {
+      font-size: 13px;
+      color: var(--fg);
+    }
+
+    .card ul {
+      padding-left: 18px;
+    }
+
+    .card code {
+      background: rgba(34, 211, 238, 0.08);
+      color: var(--accent);
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-size: 12px;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="page">
+    <header>
+      <h1>screenshotCapture 架构图</h1>
+      <p>market/src/utils/agent — Docking Contract v1.1</p>
+    </header>
+
+    <div class="legend">
+      <span><i class="dot" style="background:#22d3ee"></i>公开 API / 入口</span>
+      <span><i class="dot" style="background:#a78bfa"></i>后端实现</span>
+      <span><i class="dot" style="background:#fbbf24"></i>错误 / 分类</span>
+      <span><i class="dot" style="background:#f472b6"></i>缓存 / 存储</span>
+      <span><i class="dot" style="background:#34d399"></i>成功路径产物</span>
+      <span><i class="dot" style="background:#f87171"></i>失败 / 降级</span>
+      <span><i class="dot" style="background:#94a3b8"></i>遥测 / 钩子</span>
+    </div>
+
+    <div class="mermaid-wrap">
+      <pre class="mermaid">
+flowchart TB
+    %% ============== 入口 ==============
+    CALLER(["📞 调用方<br/>UI 组件 / Agent / LLM 客户端"])
+
+    subgraph ENTRY["公开 API 层 · screenshotCapture.public.ts"]
+        PUB["<b>captureViewport(opts)</b><br/>invalidateCaptureCache(key?)<br/>onCaptureMeta(listener|null)"]
+        TYPES["<b>types</b> — CaptureResult 判别联合<br/>CaptureOptions / FailureReason / Severity<br/>ScreenshotBackend / VisionDetail / CaptureMeta"]
+    end
+
+    %% ============== 主流程 ==============
+    subgraph MAIN["主流程 · screenshotCapture.ts → captureViewport()"]
+        DEFAULTS["参数归一化<br/>ignoreSelectors / scale=0.5 / quality=0.7<br/>backend=html2canvas / cacheTtlMs=30s / noteMaxLen=1500<br/>retry=0 / releaseCanvasOnDone=true"]
+        PRE1{"signal.aborted?"}
+        PRE2{"document.body 存在?"}
+
+        CACHEGET["_cacheGet(key)<br/>key = backend|route|scale|quality<br/>|viewport|ignoreSelectors"]
+        CACHEKEY["_cacheKey(opts)"]
+        CACHEHIT(["✅ 直接返回<br/>fromCache=true<br/>重写 elapsedMs"])
+
+        ROUTER{"backend?"}
+        UNKNOWN["_buildFailure('no_backend')<br/>severity=critical"]
+
+        subgraph HTML2C["后端 A · html2canvas (含重试)"]
+            direction TB
+            H2C_IMPORT["动态 import('html2canvas')<br/>捕获失败 → render"]
+            H2C_RENDER["html2canvas(document.body, {<br/>  useCORS:true, scale, ignoreElements(el)<br/>})"]
+            H2C_ABORT{"signal.aborted<br/>(渲染后)?"}
+            H2C_TODATA["canvas.toDataURL('image/jpeg', quality)<br/>bytes = (len/4)*3 − padding"]
+            H2C_RELEASE["_releaseCanvas(canvas)<br/>canvas.width=0 / height=0<br/>释放 ~31MB 像素缓冲"]
+            H2C_OK(["✅ ok=true · kind=image<br/>dataUrl · bytes · backend='html2canvas'"])
+
+            H2C_CATCH["catch(e) → 错误分类<br/>_classifyHtml2CanvasError(msg)"]
+            H2C_REASON["reason:<br/>SecurityError/Tainted → cors<br/>CSP → csp<br/>OOM/Allocation → memory<br/>Timeout → timeout<br/>Abort → aborted<br/>other → render"]
+            H2C_TRANSIENT{"reason ∈<br/>cors/memory/timeout ?"}
+            H2C_RETRY["指数退避 100/200/400ms<br/>最多 retry 次"]
+        end
+
+        subgraph DOM["后端 B · dom-snapshot (零依赖兜底)"]
+            direction TB
+            D_PRE{"document.body /<br/>signal.aborted ?"}
+            D_DUMP["dump = serializeVisibleDom()<br/>title / route / h1-h3 / 按钮 / 输入框 / 表格列"]
+            D_JSON["payload = { kind:'dom-snapshot',<br/>route, capturedAt, text }<br/>JSON.stringify → UTF-8 safe base64<br/>btoa(encodeURIComponent...)"]
+            D_OK(["✅ ok=true · kind=text-snapshot<br/>dataUrl:application/json;base64,...<br/>bytes = json.length · backend='dom-snapshot'"])
+        end
+    end
+
+    %% ============== 失败兜底 ==============
+    subgraph FAIL["失败兜底 · _buildFailure / _trySerializeDom / _truncateNote"]
+        direction TB
+        BUILD["构造 {ok:false, reason, message, backend, severity}"]
+        FB_TRY{"autoTextFallback ?"}
+        FB_SER["_trySerializeDom()<br/>= serializeVisibleDom() · 失败返回 undefined"]
+        FB_TRUNC["_truncateNote(text, noteMaxLen)<br/>→ { text, truncated, originalLength }"]
+        FB_ATTACH["挂载 textFallback / noteTruncated /<br/>noteOriginalLength · 重算 severity"]
+        SEV_MAP["_severityFor(reason, hasFallback)<br/>aborted → user<br/>cors/memory/timeout → transient<br/>else 有 fallback → degraded<br/>else → critical"]
+    end
+
+    %% ============== 缓存写 ==============
+    subgraph CACHEW["缓存写 · LRU 上限 5 / TTL 30s"]
+        CACHEPUT["_cachePut(key, result, ttl)<br/>size ≥ 5 → 删除最旧 entry<br/>成功 AND 失败都缓存"]
+    end
+
+    %% ============== 遥测 ==============
+    subgraph META["遥测 · _emitMeta · onCaptureMeta 监听器"]
+        EMIT["for each listener in _metaListeners:<br/>  try listener(result, meta) catch {}<br/>meta: { elapsedMs, backend, fromCache,<br/>noteTruncated, noteOriginalLength }"]
+        LISTENERS(["sentry · 业务埋点 · devtools · 看板"])
+    end
+
+    %% ============== 返回 ==============
+    RETURN(["📤 返回 CaptureResult · 永不抛错"])
+
+    %% ============== 画线 ==============
+    CALLER --> PUB
+    PUB --> DEFAULTS
+    DEFAULTS --> PRE1
+    PRE1 -- "是" --> BUILD
+    PRE1 -- "否" --> PRE2
+    PRE2 -- "否" --> BUILD
+    PRE2 -- "是" --> CACHEKEY --> CACHEGET
+    CACHEGET -- "命中" --> CACHEHIT
+    CACHEGET -- "未命中 / 强制" --> ROUTER
+
+    ROUTER -- "html2canvas" --> H2C_IMPORT --> H2C_RENDER
+    H2C_RENDER -- "ok" --> H2C_ABORT
+    H2C_ABORT -- "否" --> H2C_TODATA --> H2C_RELEASE --> H2C_OK
+    H2C_ABORT -- "是" --> BUILD
+    H2C_RENDER -- "throw" --> H2C_CATCH --> H2C_REASON --> H2C_TRANSIENT
+    H2C_TRANSIENT -- "是 & 有 retry" --> H2C_RETRY --> H2C_RENDER
+    H2C_TRANSIENT -- "否 / 用完" --> BUILD
+
+    ROUTER -- "dom-snapshot" --> D_PRE
+    D_PRE -- "否" --> BUILD
+    D_PRE -- "是" --> D_DUMP --> D_JSON --> D_OK
+
+    ROUTER -- "其他" --> UNKNOWN
+
+    H2C_OK --> CACHEPUT
+    D_OK --> CACHEPUT
+    BUILD --> FB_TRY
+    FB_TRY -- "是" --> FB_SER
+    FB_SER -- "有 text" --> FB_TRUNC --> FB_ATTACH
+    FB_SER -- "无" --> SEV_MAP
+    FB_TRY -- "否" --> SEV_MAP
+    FB_ATTACH --> SEV_MAP
+    UNKNOWN --> SEV_MAP
+
+    CACHEPUT --> EMIT
+    CACHEHIT --> EMIT
+    SEV_MAP --> EMIT
+    EMIT --> LISTENERS
+    EMIT --> RETURN
+    CACHEHIT --> RETURN
+    H2C_OK --> RETURN
+    D_OK --> RETURN
+    SEV_MAP --> RETURN
+
+    %% ============== 样式 ==============
+    classDef entryStyle fill:#0e2a3a,stroke:#22d3ee,color:#e0fbff,stroke-width:1.5px
+    classDef mainStyle fill:#131a2b,stroke:#a78bfa,color:#ede9fe,stroke-width:1.2px
+    classDef okStyle fill:#0e2a1f,stroke:#34d399,color:#d1fae5,stroke-width:1.5px
+    classDef errStyle fill:#2a1015,stroke:#f87171,color:#fee2e2,stroke-width:1.5px
+    classDef cacheStyle fill:#2a1a2e,stroke:#f472b6,color:#fce7f3,stroke-width:1.5px
+    classDef metaStyle fill:#1f2937,stroke:#94a3b8,color:#e5e7eb,stroke-width:1.2px
+    classDef warnStyle fill:#2a2410,stroke:#fbbf24,color:#fef3c7,stroke-width:1.2px
+    classDef callerStyle fill:#1e293b,stroke:#22d3ee,color:#e2e8f0,stroke-width:2px
+
+    class CALLER callerStyle
+    class PUB,TYPES entryStyle
+    class DEFAULTS,PRE1,PRE2,CACHEGET,CACHEKEY,ROUTER mainStyle
+    class H2C_OK,D_OK okStyle
+    class CACHEHIT,RETURN okStyle
+    class BUILD,FB_TRY,FB_SER,FB_TRUNC,FB_ATTACH,SEV_MAP,UNKNOWN errStyle
+    class H2C_REASON,H2C_TRANSIENT,H2C_CATCH,H2C_RETRY,H2C_ABORT warnStyle
+    class CACHEPUT cacheStyle
+    class EMIT,LISTENERS metaStyle
+</pre>
+    </div>
+
+    <section class="cards">
+      <div class="card">
+        <h3>1 · 公开契约（唯一 import 入口）</h3>
+        <p><code>screenshotCapture.public.ts</code> 仅 re-export 三类东西：</p>
+        <ul>
+          <li>函数：<code>captureViewport</code> / <code>invalidateCaptureCache</code> / <code>onCaptureMeta</code></li>
+          <li>类型：<code>CaptureResult</code> 判别联合（image / text-snapshot / failure）</li>
+          <li>枚举：<code>CaptureFailureReason</code>、<code>Severity</code>、<code>ScreenshotBackend</code></li>
+        </ul>
+        <p>实现文件 <code>screenshotCapture.ts</code> 是模块内部，重构时不破坏契约。</p>
+      </div>
+
+      <div class="card">
+        <h3>2 · 主流程（4 段）</h3>
+        <ul>
+          <li><b>归一化 + 前置检查</b>：defaults → signal 已 abort → document.body 存在</li>
+          <li><b>缓存层</b>：key 含 <code>backend|route|scale|quality|viewport|ignore</code>，LRU 上限 5，TTL
+            30s；forceRetake=true 绕过</li>
+          <li><b>后端路由</b>：<code>html2canvas</code> / <code>dom-snapshot</code>，未知 → <code>no_backend</code></li>
+          <li><b>写缓存 + 遥测</b>：成功失败都缓存（避免雪崩），始终 emit meta</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h3>3 · 后端 A：html2canvas</h3>
+        <ul>
+          <li>动态 <code>import('html2canvas')</code>，首次失败 → <code>render</code></li>
+          <li>渲染 → <code>signal.aborted</code> 后置检查 → <code>toDataURL('image/jpeg', quality)</code> →
+            <code>bytes = (len/4)*3 − padding</code></li>
+          <li>渲染完立即 <code>canvas.width=0 / height=0</code> 释放 ~31MB</li>
+          <li>错误分类：<code>cors / csp / memory / timeout / aborted / render</code></li>
+          <li><b>仅 transient</b>（cors/memory/timeout）才按 100/200/400ms 指数退避重试，最多重试 <code>retry</code> 次</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h3>4 · 后端 B：dom-snapshot</h3>
+        <ul>
+          <li>零依赖兜底，永远不 CORS / CSP / 失败</li>
+          <li>复用 <code>serializeVisibleDom()</code> 收集：标题 / 路径 / h1-h3 / 可见按钮 / 输入框 placeholder / 表格列</li>
+          <li>JSON 编码 → UTF-8 safe base64 → <code>data:application/json;base64,...</code></li>
+          <li><code>kind='text-snapshot'</code>，<code>bytes=json.length</code></li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h3>5 · 失败兜底（任何 backend 失败都走这里）</h3>
+        <ul>
+          <li><code>_buildFailure</code> 构造 <code>{ok:false, reason, severity, ...}</code></li>
+          <li>若 <code>autoTextFallback=true</code>：调用 <code>serializeVisibleDom()</code> 附 <code>textFallback</code>，按
+            <code>noteMaxLen</code> 截断并标记 <code>noteTruncated</code> / <code>noteOriginalLength</code></li>
+          <li><b>severity
+              映射</b>：<code>aborted→user · transient→transient · 有 fallback→degraded · 无 fallback→critical</code></li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h3>6 · 缓存 & 遥测</h3>
+        <ul>
+          <li><b>缓存</b>：模块级 <code>Map</code>，LRU 上限 5，TTL 30s；成功与失败结果都缓存（防雪崩）</li>
+          <li><b>失效 API</b>：<code>invalidateCaptureCache(key?)</code> — 不传清空、传 key 精准删</li>
+          <li><b>遥测</b>：<code>onCaptureMeta(listener)</code> 注册幂等；listener 抛错被吞掉，不影响 capture 链路</li>
+        </ul>
+      </div>
+    </section>
+  </div>
+
+  <script type="module">
+    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs";
+    mermaid.initialize({ startOnLoad: true, theme: "dark", securityLevel: "loose", flowchart: { curve: "basis", padding: 12 } });
+  </script>
+</body>
+
+</html>
