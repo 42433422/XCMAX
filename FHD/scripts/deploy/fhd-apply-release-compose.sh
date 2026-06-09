@@ -66,6 +66,7 @@ log "开始 compose 发布 image=$IMAGE digest=${DIGEST:0:19}..."
 
 export FHD_API_IMAGE="$IMAGE"
 export FHD_API_IMAGE_DIGEST="$DIGEST"
+export FHD_API_IMAGE_REF="${IMAGE}@${DIGEST}"
 export FHD_DEPLOY_ROOT="$DEPLOY_ROOT"
 export FHD_ENV_FILE="$ENV_FILE"
 
@@ -82,13 +83,21 @@ rollback_compose() {
   fi
   log "compose 回滚至 digest=${digest:0:19}..."
   export FHD_API_IMAGE_DIGEST="$digest"
+  export FHD_API_IMAGE_REF="${FHD_API_IMAGE}@${digest}"
   docker compose "${COMPOSE_OPTS[@]}" pull fhd-api || true
-  docker compose "${COMPOSE_OPTS[@]}" up -d fhd-api || true
+  docker compose "${COMPOSE_OPTS[@]}" up -d --pull never fhd-api || true
 }
 
 deploy_emit pull started
-if ! docker compose "${COMPOSE_OPTS[@]}" pull fhd-api; then
-  log "ERROR: docker compose pull 失败"
+PULL_OK=0
+if docker compose "${COMPOSE_OPTS[@]}" pull fhd-api; then
+  PULL_OK=1
+elif docker image inspect "${IMAGE}@${DIGEST}" >/dev/null 2>&1; then
+  log "WARN: pull 失败但本地已有 digest，继续 up"
+  PULL_OK=1
+fi
+if [[ "$PULL_OK" != "1" ]]; then
+  log "ERROR: docker compose pull 失败且无本地 digest"
   deploy_emit pull failed
   rollback_compose "$PREV_DIGEST"
   deploy_emit apply failed "pull_failed"
@@ -97,7 +106,7 @@ fi
 deploy_emit pull ok
 
 deploy_emit up started
-if ! docker compose "${COMPOSE_OPTS[@]}" up -d fhd-api; then
+if ! docker compose "${COMPOSE_OPTS[@]}" up -d --pull never fhd-api; then
   log "ERROR: docker compose up 失败"
   deploy_emit up failed
   rollback_compose "$PREV_DIGEST"
