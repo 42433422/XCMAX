@@ -127,12 +127,8 @@ export function useAppShellBridge(router: Router, proMode: ProModeController) {
       setProModeEnabled?: (enabled: boolean) => void
       __XCAGI_IS_PRO_MODE?: boolean
     }
-    if (w.setProModeEnabled) {
-      delete w.setProModeEnabled
-    }
-    if (typeof w.__XCAGI_IS_PRO_MODE !== 'undefined') {
-      delete w.__XCAGI_IS_PRO_MODE
-    }
+    Reflect.deleteProperty(w, 'setProModeEnabled')
+    Reflect.deleteProperty(w, '__XCAGI_IS_PRO_MODE')
   }
 
   return {

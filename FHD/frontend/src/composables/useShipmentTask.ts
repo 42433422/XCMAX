@@ -29,6 +29,7 @@ export interface ShipmentTask {
       products?: ShipmentProduct[]
       unit_name?: string
       order_number?: string
+      record_count?: number
     }
   }
   completed?: boolean

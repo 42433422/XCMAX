@@ -99,7 +99,7 @@ export const approvalApi = {
         { approver_id: userId, page: 1, page_size: 200 },
         { headers: { 'X-User-ID': userId.toString() } }
       )
-      return withRequestList(data)
+      return withRequestList(data as Record<string, unknown>)
     } catch (error) {
       console.error('获取待审批列表失败:', error)
       return { success: false, message: '获取待审批列表失败', data: { requests: [] as ApprovalRequest[] } }
@@ -116,7 +116,7 @@ export const approvalApi = {
         { applicant_id: userId, page: 1, page_size: 500 },
         { headers: { 'X-User-ID': userId.toString() } }
       )
-      return withRequestList(data)
+      return withRequestList(data as Record<string, unknown>)
     } catch (error) {
       console.error('获取我的请求失败:', error)
       return { success: false, message: '获取我的请求失败', data: { requests: [] as ApprovalRequest[] } }
@@ -215,7 +215,7 @@ export const approvalApi = {
   async getFlowList() {
     try {
       const data = await api.get(ap('/api/approval/flows'), { is_active: true })
-      return withFlowList(data)
+      return withFlowList(data as Record<string, unknown>)
     } catch (error) {
       console.error('获取流程列表失败:', error)
       return { success: false, message: '获取流程列表失败' }

@@ -33,8 +33,8 @@ export function useStartupSplash() {
   let splashFinishOnce = false
   let startupProgressRaf: number | null = null
   let resolveStartupMinWait: (() => void) | null = null
-  let startupMinWaitTimer: ReturnType<typeof window.setTimeout> | null = null
-  let startupFailsafeTimer: ReturnType<typeof window.setTimeout> | null = null
+  let startupMinWaitTimer: number | null = null
+  let startupFailsafeTimer: number | null = null
   let startupAudio: HTMLAudioElement | null = null
   let startupAudioFallbackPlayed = false
   let startupAudioUserGestureHandler: (() => void) | null = null
