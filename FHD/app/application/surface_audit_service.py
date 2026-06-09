@@ -221,9 +221,14 @@ def _node_env(lane: str = "") -> dict[str, str]:
             or os.environ.get("MODSTORE_DAILY_SURFACE_AUDIT_BASE_URL")
             or "https://xiu-ci.com"
         ).rstrip("/")
-        env.setdefault("SURFACE_AUDIT_ADMIN_BASE_URL", marketing)
-        env.setdefault("XCAGI_MARKET_BASE_URL", marketing)
-        env.setdefault("SURFACE_AUDIT_API_URL", marketing)
+        # 上方 setdefault 已填入 127.0.0.1 本地默认值，这里须按「进程环境是否显式
+        # 配置」判断覆盖，否则 P-W 刷新会打到本地不存在的 5000/5176 端口。
+        if not os.environ.get("SURFACE_AUDIT_ADMIN_BASE_URL"):
+            env["SURFACE_AUDIT_ADMIN_BASE_URL"] = marketing
+        if not os.environ.get("XCAGI_MARKET_BASE_URL"):
+            env["XCAGI_MARKET_BASE_URL"] = marketing
+        if not os.environ.get("SURFACE_AUDIT_API_URL"):
+            env["SURFACE_AUDIT_API_URL"] = marketing
     if lane_key in ("P-S", "P-App"):
         env["SURFACE_AUDIT_PRODUCT_SKU"] = "enterprise"
         env["SURFACE_AUDIT_INCLUDE_ENTERPRISE"] = "1"
@@ -299,6 +304,8 @@ def run_surface_audit_lane(lane: str, *, refresh: bool = False) -> dict[str, Any
         "--out",
         str(out_path),
     ]
+    # P-W 全量 60+ 远程页（含 catalog 动态扩展），600s 不够
+    default_timeout = "1200" if lane == "P-W" else "600"
     try:
         proc = subprocess.run(
             cmd,
@@ -306,7 +313,7 @@ def run_surface_audit_lane(lane: str, *, refresh: bool = False) -> dict[str, Any
             env=_node_env(lane),
             capture_output=True,
             text=True,
-            timeout=int(os.environ.get("SURFACE_AUDIT_TIMEOUT_SEC", "600")),
+            timeout=int(os.environ.get("SURFACE_AUDIT_TIMEOUT_SEC", default_timeout)),
             check=False,
         )
     except subprocess.TimeoutExpired:

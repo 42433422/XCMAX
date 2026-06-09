@@ -18,6 +18,7 @@
 - **fix(audit)**：`run_surface_audit.mjs` P-S 共享上下文 `console_errors` 跨页累积修复——每页只归属本页新增错误，不再滚雪球误报
 - **fix(audit)**：`surface_audit_service._node_env` P-W 分支 `setdefault` 失效修复——P-W 刷新此前会打到本地 5000/5176 而非 xiu-ci.com；显式进程环境仍可覆盖
 - **feat(audit)**：远程导航 `gotoWithRetry`（domcontentloaded 失败降级 commit 重试一次）+ 导航失败时兜底截当前屏；`analyzePage` 区分「导航异常」与控制台错误
+- **perf(audit)**：`waitForCjkFonts` 每页等待收紧（networkidle ≤10s、字体轮询 ≤5s、固定等待 1.2s）；P-W 默认总超时 600s→1200s——此前全量 60+ 页必超时（实测端到端 686s 完成 58 页、仅 1 页网络抖动失败）
 - **fix(dashboard)**：`emp-wf-surface-audit.js` `openGallery` 回退分支死代码修复——fetch 后等待 `MonAiBiz` 挂载（≤3s）再开画廊
 - **test(audit)**：`test_surface_audit_service.py` 断言对齐现行 `surface_audit_pages.json`（P-W 49 页 / P-App 6 原生屏）；`test_surface_audit_demo_market_login.py` 导入路径改 `app.fastapi_routes.market_account`
 
