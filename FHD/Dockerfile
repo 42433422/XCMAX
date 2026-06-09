@@ -4,7 +4,7 @@
 # ============================================
 # Stage 1: Builder
 # ============================================
-FROM python:3.11-slim as builder
+FROM python:3.11-slim AS builder
 
 WORKDIR /build
 
@@ -12,14 +12,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
+# 生产镜像用 server-api 锁定依赖；XCAGI/requirements.txt 含 -e .. 仅适合本地 editable 安装
+COPY deploy/requirements-server-api.txt requirements.txt
 
-RUN pip wheel --no-cache-dir --no-deps --wheel-dir /build/wheels -r requirements.txt
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip wheel --no-cache-dir --wheel-dir /build/wheels -r requirements.txt
 
 # ============================================
 # Stage 2: Production
 # ============================================
-FROM python:3.11-slim as production
+FROM python:3.11-slim AS production
 
 LABEL maintainer="XCAGI Team"
 LABEL version="10.0.0"
@@ -58,7 +60,7 @@ CMD ["gunicorn", "--config", "gunicorn_config.py", "run:app"]
 # ============================================
 # Stage 3: Development
 # ============================================
-FROM python:3.11-slim as development
+FROM python:3.11-slim AS development
 
 WORKDIR /app
 
@@ -72,7 +74,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
+COPY deploy/requirements-server-api.txt requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
