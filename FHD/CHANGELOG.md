@@ -6,6 +6,10 @@
 
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
+### 官网 / MODstore 生产修复（2026-06-10 · v10 线内迭代）
+- **fix(site)**：`ensure_market_dist` 并入 `main`；`modstore.service` 示例与 `align_modstore_systemd_to_deploy.sh` 默认路径对齐 `/root/XCMAX/…/MODstore_deploy`
+- **fix(market)**：补入库 `providerCredential.ts`，修复 `main` 上 `npm run build` 缺文件
+
 ### 部署工程化（2026-06-08 · v10 线内迭代）
 - **Phase 2 compose 双模**：CI `docker-build-fhd-api` 构建 `xcagi-fhd-api` 推 GHCR（`sha-<git_sha>` 标签）；manifest v2 含 `image` / `image_digest`；`fhd-apply-release-compose.sh` + `docker-compose.fhd-prod.yml`（digest 钉扎、5100→5000）；`fhd-auto-update.sh` 按 `deploy_mode` 路由
 - **tarball 拉取式发布链**（Phase 1 默认）：`fhd-pack-release.sh` → `fhd-push-release.sh` → 服务器 `fhd-auto-update.sh` cron → `fhd-apply-release.sh`（健康检查 + 自动回滚）
@@ -26,6 +30,7 @@
 - **许可证**：`LICENSE` 全文对齐 **Apache-2.0**；README / LICENSING / 商业文档社区版表述一致
 - **安全红线**：`git rm --cached` MODstore `payment_orders/order_*.json`（10 个）；`.gitignore` 补 `payment_orders/`、`.env.fhd-docker`；[`SECURITY.md`](SECURITY.md) 增密钥轮换 / 历史扫描 / 投资前 gitleaks 指引
 - **覆盖率诚实口径**：`full_app` **60.63%**（SSOT）；CI 窄包 **70%**；修正 CLAIMED / 周报误报 ≥88%
+- **口径对齐（2026-06-10）**：Android **实验骨架**（非签约级）；`*_v2` **23 个保留**（禁止宣称已清零）；README / VERSION / W24 周报同步；Android Kotlin 编译修复（Routes / MobileTokens / ServerRouter / 审批详情）
 
 ### 仓卫生 / 安全（2026-06-08 · v10 线内迭代）
 - 自 Git 索引移除 `frontend/.nm-e2e/` 依赖缓存（~11k 文件）；`.gitignore` 已覆盖 `.nm-*` / chroma / `.der`
