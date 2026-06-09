@@ -66,7 +66,9 @@ class ShipmentApplicationServiceEventPrimary:
             "contact_phone": contact_phone,
             "deduct_inventory": True,
         }
-        return cast(dict[str, Any], self._run_cmd(self._dispatch_command("shipment.created", payload)))
+        return cast(
+            dict[str, Any], self._run_cmd(self._dispatch_command("shipment.created", payload))
+        )
 
     def cancel_shipment(self, shipment_id: int) -> dict[str, Any]:
         if not is_event_primary_enabled("shipment"):
@@ -86,9 +88,7 @@ class ShipmentApplicationServiceEventPrimary:
             return self._core.delete_shipment(shipment_id)
         return cast(
             dict[str, Any],
-            self._run_cmd(
-                self._dispatch_command("shipment.deleted", {"shipment_id": shipment_id})
-            ),
+            self._run_cmd(self._dispatch_command("shipment.deleted", {"shipment_id": shipment_id})),
         )
 
     def mark_as_printed(self, shipment_id: int, printer_name: str = "") -> dict[str, Any]:
