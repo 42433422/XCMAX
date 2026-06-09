@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>联系我们 | 成都修茈科技有限公司</title>
+  <meta name="description" content="联系成都修茈科技有限公司，咨询 AI 单据处理、企业自动化、MODstore 智能体市场和数字化解决方案。" />
+  <link rel="stylesheet" href="./styles.css?v=20260619" />
+</head>
+<body>
+<header class="site-header">
+  <div class="container header-inner">
+    <a class="brand-mark" href="/index.html">
+      <span class="brand-seal"><img src="/assets/xiu-ci-logo.png" alt="修茈科技 Logo" /></span>
+      <span class="brand-name"><strong>成都修茈科技有限公司</strong><span>XCAGI Automation</span></span>
+    </a>
+    <nav class="nav" aria-label="站点导航">
+      <div class="nav-menu">
+        <a href="/index.html">首页</a>
+        <a href="/about.html">关于修茈</a>
+        <a href="/services.html">产品中心</a>
+        <a href="/solutions.html">解决方案</a>
+        <a href="/cases.html">客户案例</a>
+        <a class="nav-optional" href="/news.html">新闻资讯</a>
+        <a class="nav-optional" href="/honors.html">资质与能力</a>
+        <a class="active" href="/contact.html">联系我们</a>
+        <a href="/developer.html">开发者门户</a>
+      </div>
+      <div class="nav-actions">
+        <a class="nav-action nav-action--primary" href="/market/">AI 市场</a>
+        <a class="nav-action nav-action--outline" href="/market/download">软件下载</a>
+      </div>
+    </nav>
+    <button class="mobile-menu-toggle" id="mobile-menu-toggle" type="button" aria-controls="mobile-menu" aria-label="打开菜单" aria-expanded="false"><span></span><span></span><span></span></button>
+  </div>
+</header>
+<div class="mobile-menu-overlay" id="mobile-menu-overlay"></div>
+<nav class="mobile-menu" id="mobile-menu" aria-hidden="true" inert>
+  <a href="/index.html" class="mobile-menu-link">首页</a>
+  <a href="/about.html" class="mobile-menu-link">关于修茈</a>
+  <a href="/services.html" class="mobile-menu-link">产品中心</a>
+  <a href="/solutions.html" class="mobile-menu-link">解决方案</a>
+  <a href="/cases.html" class="mobile-menu-link">客户案例</a>
+  <a href="/news.html" class="mobile-menu-link">新闻资讯</a>
+  <a href="/honors.html" class="mobile-menu-link">资质与能力</a>
+  <a href="/contact.html" class="mobile-menu-link">联系我们</a>
+  <a href="/developer.html" class="mobile-menu-link">开发者门户</a>
+  <div class="mobile-menu-actions">
+    <a href="/market/" class="mobile-menu-link mobile-menu-link--primary">AI 市场</a>
+    <a href="/market/download" class="mobile-menu-link mobile-menu-link--outline">软件下载</a>
+  </div>
+</nav>
+
+<main>
+  <section class="page-hero page-hero--contact">
+    <div class="container page-hero-inner">
+      <div>
+        <span class="eyebrow">Contact</span>
+        <h1>联系我们</h1>
+        <p>修茈科技专注企业软件与 AI 应用定制：单据处理、流程自动化、AI 工作台与系统集成。请按步骤填写项目需求，便于我们一对一跟进。</p>
+      </div>
+      <div class="page-hero-side">
+        <p>邮箱：970882904@qq.com<br />服务方向：AI 自动化、单据处理、工作流与系统集成。</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section contact-intake-section">
+    <div class="container contact-intake-layout">
+      <p class="contact-mobile-tagline">填写项目需求 · 约 3 分钟</p>
+      <div class="contact-intake-aside-column">
+      <aside class="info-box contact-intake-aside reveal">
+        <h2>需求小问卷</h2>
+        <p class="contact-intake-aside__lead">像聊天一样逐题回答即可，大约 3–5 分钟。我们会根据您的岗位和日常事务来理解需求，而不是让您先选技术名词。</p>
+        <ul class="intake-checklist">
+          <li data-intake-check="profile"><span class="intake-check-icon">○</span>先说说您是做什么的</li>
+          <li data-intake-check="problem"><span class="intake-check-icon">○</span>目前最想改善什么</li>
+          <li data-intake-check="workflow"><span class="intake-check-icon">○</span>描述现在怎么做事</li>
+          <li data-intake-check="contact"><span class="intake-check-icon">○</span>留下联系方式</li>
+          <li data-intake-check="plan"><span class="intake-check-icon">○</span>时间与对接意向</li>
+          <li data-intake-check="review"><span class="intake-check-icon">○</span>核对并提交</li>
+        </ul>
+        <h3 class="contact-intake-aside__sub">不用提前准备材料</h3>
+        <p class="contact-intake-aside__tip">想到什么写什么即可；若方便，可准备一份 Excel 或单据样例，顾问回访时再发也行。</p>
+      </aside>
+
+      <div id="intake-ai-assist" class="info-box contact-intake-ai reveal" role="region" aria-label="AI 一键填单">
+        <h2>AI 一键填单</h2>
+        <p class="contact-intake-aside__lead">只需填写公司与系统类型，AI 按典型场景预填右侧全流程问卷，您简单改一改即可提交。</p>
+        <h3 class="contact-intake-aside__sub">公司与系统</h3>
+        <div class="contact-intake-ai__fields">
+          <div class="form-field form-field--company-match">
+            <label for="intake-ai-company">公司名称</label>
+            <div class="intake-company-wrap">
+              <input
+                type="text"
+                id="intake-ai-company"
+                class="intake-company-input"
+                maxlength="80"
+                placeholder="例如：成都某某贸易有限公司"
+                autocomplete="off"
+                aria-autocomplete="list"
+                aria-controls="intake-ai-company-suggest"
+                aria-describedby="intake-ai-company-status intake-ai-company-result"
+                aria-expanded="false"
+              />
+              <div
+                id="intake-ai-company-result"
+                class="intake-company-result"
+                role="status"
+                hidden
+              ></div>
+              <ul id="intake-ai-company-suggest" class="intake-company-suggest" role="listbox" hidden></ul>
+            </div>
+            <p id="intake-ai-company-status" class="intake-company-status" aria-live="polite"></p>
+          </div>
+          <div class="form-field">
+            <label for="intake-ai-system">系统 / 业务类型</label>
+            <input
+              type="text"
+              id="intake-ai-system"
+              maxlength="120"
+              placeholder="例如：金蝶 ERP、Excel 跟单、客服工单系统"
+            />
+          </div>
+        </div>
+        <p id="intake-ai-assist-hint" class="contact-intake-ai__hint" hidden role="alert"></p>
+        <p class="contact-intake-aside__tip">联系方式不会自动填写；进入「联系方式」时姓名默认与公司一致，请核对并补全手机与邮箱。</p>
+        <button type="button" id="intake-ai-assist-btn" class="btn btn-accent contact-intake-ai__btn">
+          AI 一键填好问卷
+        </button>
+      </div>
+      </div>
+
+      <div class="contact-intake-main card reveal">
+        <div id="cs-intake-banner" class="cs-intake-banner" hidden>
+          修茈科技邀请您填写项目需求，提交后您的专属顾问将尽快跟进。
+        </div>
+
+        <form id="contact-form" class="contact-form contact-intake-form" data-intake-wizard="true" novalidate>
+          <div class="intake-progress" aria-hidden="true">
+            <div class="intake-progress-track">
+              <div id="intake-progress-fill" class="intake-progress-fill"></div>
+            </div>
+            <ol class="intake-progress-steps">
+              <li class="intake-progress-step is-active" data-intake-step="0"><span class="intake-step-dot">1</span><span>认识您</span></li>
+              <li class="intake-progress-step" data-intake-step="1"><span class="intake-step-dot">2</span><span>您的困扰</span></li>
+              <li class="intake-progress-step" data-intake-step="2"><span class="intake-step-dot">3</span><span>日常事务</span></li>
+              <li class="intake-progress-step" data-intake-step="3"><span class="intake-step-dot">4</span><span>联系方式</span></li>
+              <li class="intake-progress-step" data-intake-step="4"><span class="intake-step-dot">5</span><span>计划</span></li>
+              <li class="intake-progress-step" data-intake-step="5"><span class="intake-step-dot">6</span><span>提交</span></li>
+            </ol>
+          </div>
+
+          <div class="intake-wizard-body">
+            <div class="intake-step-panel is-active" data-intake-step="profile">
+              <p class="intake-step-kicker">第 1 题 / 共 6 题</p>
+              <h3 class="intake-question">先认识一下您——您主要是做什么的？</h3>
+              <p class="intake-panel-desc">不用懂技术名词，按您的实际岗位和日常事务来说就好。</p>
+              <fieldset class="intake-fieldset intake-fieldset--cards">
+                <legend class="sr-only">您的角色</legend>
+                <label class="intake-option-card"><input type="radio" name="userRole" value="企业负责人" /> <span>企业负责人 / 合伙人</span></label>
+                <label class="intake-option-card"><input type="radio" name="userRole" value="业务或销售" /> <span>业务 / 销售 / 跟单</span></label>
+                <label class="intake-option-card"><input type="radio" name="userRole" value="运营或行政" /> <span>运营 / 行政 / 文员</span></label>
+                <label class="intake-option-card"><input type="radio" name="userRole" value="财务" /> <span>财务 / 对账</span></label>
+                <label class="intake-option-card"><input type="radio" name="userRole" value="IT或技术" /> <span>IT / 技术 / 信息化</span></label>
+                <label class="intake-option-card"><input type="radio" name="userRole" value="其他" /> <span>其他岗位</span></label>
+              </fieldset>
+              <span id="userRole-error" class="form-error"></span>
+              <div class="form-field">
+                <label for="industry">公司或团队主要从事什么？</label>
+                <input id="industry" name="industry" maxlength="128" placeholder="例如：制造业出货、电商客服、贸易公司跟单…" />
+                <span id="industry-error" class="form-error"></span>
+              </div>
+              <div class="form-field">
+                <label for="roleSummary">用一两句话说说，您平时主要在忙什么 *</label>
+                <textarea id="roleSummary" name="roleSummary" rows="3" placeholder="例如：每天处理客户订单 Excel，核对库存后发物流，旺季经常加班录入…"></textarea>
+                <span id="roleSummary-error" class="form-error"></span>
+              </div>
+            </div>
+
+            <div class="intake-step-panel" data-intake-step="problem">
+              <p class="intake-step-kicker">第 2 题 / 共 6 题</p>
+              <h3 class="intake-question">眼下最让您头疼的是什么？</h3>
+              <fieldset class="intake-fieldset intake-fieldset--cards">
+                <legend class="sr-only">最想改善</legend>
+                <label class="intake-option-card"><input type="radio" name="primaryGoal" value="重复录入太累" /> <span>重复录入、复制粘贴太多</span></label>
+                <label class="intake-option-card"><input type="radio" name="primaryGoal" value="经常出错" /> <span>容易漏单、对不上账、出错</span></label>
+                <label class="intake-option-card"><input type="radio" name="primaryGoal" value="太慢跟不上" /> <span>处理太慢，旺季跟不上</span></label>
+                <label class="intake-option-card"><input type="radio" name="primaryGoal" value="系统各干各的" /> <span>微信、Excel、ERP 各干各的</span></label>
+                <label class="intake-option-card"><input type="radio" name="primaryGoal" value="想先小试点" /> <span>想先小范围试一套办法</span></label>
+              </fieldset>
+              <span id="primaryGoal-error" class="form-error"></span>
+              <p class="intake-panel-desc intake-panel-desc--sub">如果已有方向，可多选（可不选）：</p>
+              <fieldset class="intake-fieldset">
+                <legend class="sr-only">期望方向</legend>
+                <label class="intake-chip"><input type="checkbox" name="direction" value="少做表格单据" /> 少做表格 / 单据</label>
+                <label class="intake-chip"><input type="checkbox" name="direction" value="流程更顺" /> 流程更顺、少扯皮</label>
+                <label class="intake-chip"><input type="checkbox" name="direction" value="上AI助手" /> 想用 AI 帮忙处理</label>
+                <label class="intake-chip"><input type="checkbox" name="direction" value="和现有系统打通" /> 和现有系统打通</label>
+              </fieldset>
+            </div>
+
+            <div class="intake-step-panel" data-intake-step="workflow">
+              <p class="intake-step-kicker">第 3 题 / 共 6 题</p>
+              <h3 class="intake-question">您现在一般是怎么做的？</h3>
+              <div class="form-field">
+                <label for="manualSteps">请按顺序写一下：从收到需求到做完，中间要经过哪些人、哪些步骤 *</label>
+                <textarea id="manualSteps" name="manualSteps" rows="4" placeholder="例如：销售发微信/Excel → 我跟单录入 → 仓库拣货 → 财务对账…"></textarea>
+                <span id="manualSteps-error" class="form-error"></span>
+              </div>
+              <div class="form-field">
+                <label for="painGoals">哪一步最费时间或最容易出问题？ *</label>
+                <textarea id="painGoals" name="painGoals" rows="3" placeholder="例如：录入重复、对不上库存、客户催单…"></textarea>
+                <span id="painGoals-error" class="form-error"></span>
+              </div>
+              <div class="form-field">
+                <label for="sampleDesc">有典型 Excel 或单据样例吗？（选填，回访时再发也行）</label>
+                <textarea id="sampleDesc" name="sampleDesc" rows="2" placeholder="简单描述即可，如：每日出货单、对账单…"></textarea>
+              </div>
+            </div>
+
+            <div class="intake-step-panel" data-intake-step="contact">
+              <p class="intake-step-kicker">第 4 题 / 共 6 题</p>
+              <h3 class="intake-question">怎么联系您比较方便？</h3>
+              <div class="form-row">
+                <div class="form-field">
+                  <label for="name">姓名 *</label>
+                  <input id="name" name="name" autocomplete="name" maxlength="128" />
+                  <span id="name-error" class="form-error"></span>
+                </div>
+                <div class="form-field">
+                  <label for="phone">手机</label>
+                  <input id="phone" name="phone" autocomplete="tel" maxlength="64" />
+                  <span id="phone-error" class="form-error"></span>
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-field">
+                  <label for="email">邮箱 *</label>
+                  <input id="email" name="email" type="email" autocomplete="email" maxlength="256" />
+                  <span id="email-error" class="form-error"></span>
+                </div>
+                <div class="form-field">
+                  <label for="company">公司</label>
+                  <input id="company" name="company" maxlength="256" autocomplete="organization" />
+                  <span id="company-error" class="form-error"></span>
+                </div>
+              </div>
+            </div>
+
+            <div class="intake-step-panel" data-intake-step="plan">
+              <p class="intake-step-kicker">第 5 题 / 共 6 题</p>
+              <h3 class="intake-question">大概什么时候要？要不要和现有系统连起来？</h3>
+              <div class="form-row">
+                <div class="form-field">
+                  <label for="timeline">期望上线时间 *</label>
+                  <select id="timeline" name="timeline">
+                    <option value="">请选择</option>
+                    <option value="2 周内">2 周内</option>
+                    <option value="1 个月内">1 个月内</option>
+                    <option value="1–3 个月">1–3 个月</option>
+                    <option value="季度内">本季度内</option>
+                    <option value="先评估">先评估方案</option>
+                  </select>
+                  <span id="timeline-error" class="form-error"></span>
+                </div>
+                <div class="form-field">
+                  <label for="budget">预算范围</label>
+                  <select id="budget" name="budget">
+                    <option value="">暂未确定</option>
+                    <option value="5 万以内">5 万以内</option>
+                    <option value="5–20 万">5–20 万</option>
+                    <option value="20–50 万">20–50 万</option>
+                    <option value="50 万以上">50 万以上</option>
+                  </select>
+                </div>
+              </div>
+              <fieldset class="form-field intake-os-field">
+                <legend>日常使用的电脑系统 *</legend>
+                <p class="intake-field-hint">交付软件时将按此发送对应安装包（Windows 或 macOS）</p>
+                <div class="intake-option-row">
+                  <label class="intake-option-card">
+                    <input type="radio" name="desktopOs" value="win" />
+                    <span class="intake-option-title">Windows</span>
+                    <span class="intake-option-desc">.exe 安装包</span>
+                  </label>
+                  <label class="intake-option-card">
+                    <input type="radio" name="desktopOs" value="mac" />
+                    <span class="intake-option-title">macOS</span>
+                    <span class="intake-option-desc">.dmg 安装包</span>
+                  </label>
+                </div>
+                <span id="desktopOs-error" class="form-error"></span>
+              </fieldset>
+              <div class="form-field intake-mobile-field">
+                <label class="intake-checkbox-label">
+                  <input type="checkbox" id="needMobile" name="needMobile" checked />
+                  <span>同时需要 Android 手机端安装包（交付时将一并发送 .apk 下载链接）</span>
+                </label>
+              </div>
+              <div class="form-field">
+                <label for="needIntegration">是否需要对接现有系统 *</label>
+                <select id="needIntegration" name="needIntegration">
+                  <option value="">请选择</option>
+                  <option value="yes">需要对接</option>
+                  <option value="no">暂不需要</option>
+                </select>
+                <span id="needIntegration-error" class="form-error"></span>
+              </div>
+              <div class="form-field">
+                <label for="integrationNote">对接说明（选填）</label>
+                <input id="integrationNote" name="integrationNote" placeholder="如：金蝶、用友、自研 ERP、企业微信…" />
+                <span id="integrationNote-error" class="form-error"></span>
+              </div>
+              <div class="form-field">
+                <label for="extraNote">补充说明</label>
+                <textarea id="extraNote" name="extraNote" rows="2" maxlength="2000"></textarea>
+              </div>
+            </div>
+
+            <div class="intake-step-panel" data-intake-step="review">
+              <p class="intake-step-kicker">最后一步</p>
+              <h3 class="intake-question">请核对一下，确认提交</h3>
+              <p class="intake-panel-desc">提交后会有顾问在 1 个工作日内通过您留下的邮箱或电话与您联系。</p>
+              <dl id="intake-review-body" class="intake-review-dl"></dl>
+            </div>
+          </div>
+
+          <div class="intake-wizard-actions">
+            <button type="button" id="intake-btn-prev" class="btn" disabled>上一步</button>
+            <button type="button" id="intake-btn-next" class="btn btn-accent">下一步</button>
+            <button type="submit" id="submit-btn" class="btn submit-btn" hidden style="display:none">确认提交</button>
+          </div>
+
+          <div class="contact-intake-form__foot">
+            <p id="form-tip" class="footer-meta intake-form-tip">您的信息仅用于项目沟通，不会对外公开。约 3–5 分钟可填完。</p>
+            <p id="form-api-error" class="form-error" role="alert"></p>
+            <div id="form-success" class="form-success" hidden>已收到您的需求信息，我们会尽快通过邮箱或电话与您联系。</div>
+          </div>
+        </form>
+      </div>
+    </div>
+  </section>
+</main>
+<footer class="site-footer">
+  <div class="container footer-inner">
+    <div>
+      <a class="brand-mark" href="/index.html">
+        <span class="brand-seal"><img src="/assets/xiu-ci-logo.png" alt="修茈科技 Logo" /></span>
+        <span class="brand-name"><strong>成都修茈科技有限公司</strong><span>XCAGI Automation</span></span>
+      </a>
+      <p class="footer-copy">&copy; <span id="year"></span> 成都修茈科技有限公司 保留所有权利。</p>
+      <p class="footer-meta footer-legal"><a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">蜀ICP备2026014056号-1</a></p>
+    </div>
+    <div class="footer-links">
+      <a href="/about.html">关于修茈</a>
+      <a href="/services.html">产品中心</a>
+      <a href="/solutions.html">解决方案</a>
+      <a href="/cases.html">客户案例</a>
+      <a href="/news.html">新闻资讯</a>
+      <a href="/honors.html">资质与能力</a>
+    </div>
+  </div>
+</footer>
+<button id="back-to-top" class="back-to-top" aria-label="回到顶部"></button>
+<script src="./main.js?v=20260619"></script>
+
+<script src="./contact-intake.js?v=20260619"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  setTimeout(function () {
+    var form = document.getElementById('contact-form');
+    if (!form || form.dataset.intakeWizard !== 'true') return;
+    if (form.dataset.intakeReady === 'true') return;
+    var err = document.getElementById('form-api-error');
+    if (err) err.textContent = '问卷脚本未加载成功，请按 Ctrl+F5（Mac：Cmd+Shift+R）强制刷新后再试。';
+  }, 600);
+});
+</script>
+
+
+<div id="xc-corp-butler-root"></div>
+<link rel="stylesheet" href="/corp-butler/corp-butler.css?v=20260619" data-xc-corp-butler-css="1" />
+<script type="module" src="/corp-butler/corp-butler.js?v=20260619" data-xc-corp-butler-js="1"></script>
+
+</body>
+</html>
