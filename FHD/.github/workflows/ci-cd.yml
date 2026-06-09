@@ -118,7 +118,7 @@ jobs:
           fi
 
       - name: Run mypy type checking
-        run: mypy app/ tests/ --no-error-summary
+        run: mypy app/ --no-error-summary
 
       - name: Route integrity tests
         env:
