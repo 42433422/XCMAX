@@ -18,6 +18,11 @@ _LEGAL_VERSION = os.environ.get("XCAGI_LEGAL_VERSION", "1").strip() or "1"
 _ICP_NUMBER = (
     os.environ.get("XCAGI_ICP_NUMBER", "蜀ICP备2026014056号-1").strip() or "蜀ICP备2026014056号-1"
 )
+_APP_FILING_NUMBER = (
+    os.environ.get("XCAGI_APP_FILING_NUMBER", "蜀ICP备2026015936号").strip()
+    or os.environ.get("XCAGI_ANDROID_APP_FILING_NUMBER", "").strip()
+    or "蜀ICP备2026015936号"
+)
 _APP_FILING_APPROVED = (
     os.environ.get("XCAGI_ANDROID_APP_FILING_APPROVED", "1") or ""
 ).strip().lower() in (
@@ -64,6 +69,7 @@ def api_app_config(
         "icp_number": _ICP_NUMBER,
         "app_filing_approved": _APP_FILING_APPROVED,
         "app_filing_beian_url": "https://beian.miit.gov.cn/",
+        "app_filing_number": _APP_FILING_NUMBER,
         "min_android_version": _ANDROID_MIN_VERSION,
         "latest_android_version": _ANDROID_LATEST_VERSION,
         "latest_android_version_name": _ANDROID_LATEST_NAME,
