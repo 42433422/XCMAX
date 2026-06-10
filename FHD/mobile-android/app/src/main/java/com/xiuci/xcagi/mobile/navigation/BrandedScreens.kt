@@ -289,7 +289,7 @@ fun AuthScreen(vm: AppViewModel, onRegister: () -> Unit, onDone: () -> Unit) {
                     Text(
                         "个人版注册",
                         fontSize = 14.sp,
-                        color = MobileTokens.weChatGreen,
+                        color = MobileTokens.accent(),
                         textAlign = TextAlign.Center,
                         modifier = Modifier
                             .padding(top = 16.dp)

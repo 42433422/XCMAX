@@ -14,6 +14,7 @@ object MobileTokens {
     val cornerAuthCard = RoundedCornerShape(12.dp)
     val cornerAuthButton = RoundedCornerShape(8.dp)
 
+    /** 微信在线/成功态专用，非品牌主色；Auth 页请用 [accent]。 */
     val weChatGreen = Color(0xFF07C160)
     val authTextPrimary = Color(0xFF111111)
     val authTextMuted = Color(0xFF888888)
