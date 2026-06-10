@@ -290,7 +290,7 @@ def _ensure_playwright() -> Dict[str, Any]:
         return {"ok": False, "error": str(exc)[:300]}
 
 
-def _resolve_internal_api_base() -> str:
+def resolve_internal_api_base() -> str:
     """MODstore 内部 API 根：显式 env → DEPLOY_HEALTH_URL 去后缀 → 默认 :8788。"""
     explicit = (os.environ.get("MODSTORE_INTERNAL_API_BASE") or "").strip().rstrip("/")
     if explicit:
@@ -310,6 +310,42 @@ def _parse_port(url: str, default: int) -> int:
         return int(p) if p else default
     except Exception:
         return default
+
+
+def _ensure_android_emulator() -> Dict[str, Any]:
+    """P-App adb 截图：无设备时尝试 ``start_android_emulator.sh``（需 MODSTORE_SURFACE_AUDIT_AUTO_START=1）。"""
+    enabled = (os.environ.get("MODSTORE_SURFACE_AUDIT_ANDROID", "1") or "").strip().lower() not in (
+        "0",
+        "false",
+        "no",
+        "off",
+    )
+    if not enabled:
+        return {"ok": True, "skipped": True, "reason": "android_disabled"}
+    try:
+        from modstore_server.daily_digest_surface_audit_android import (
+            _adb_bin,
+            _adb_has_device,
+            _ensure_fhd_for_emulator,
+            _try_start_emulator,
+        )
+    except ImportError as exc:
+        return {"ok": False, "error": f"android audit module: {exc}"}
+
+    adb = _adb_bin()
+    if _adb_has_device(adb):
+        _ensure_fhd_for_emulator()
+        return {"ok": True, "skipped": True, "device": True, "adb": adb}
+    if not _auto_start_enabled():
+        return {
+            "ok": False,
+            "error": "no adb device (bash FHD/scripts/dev/start_android_emulator.sh)",
+            "adb": adb,
+        }
+    started = _try_start_emulator()
+    if started:
+        _ensure_fhd_for_emulator()
+    return {"ok": started, "started": started, "adb": adb}
 
 
 def ensure_surface_audit_deps() -> Dict[str, Any]:
@@ -335,7 +371,7 @@ def ensure_surface_audit_deps() -> Dict[str, Any]:
     digest_base = (
         os.environ.get("MODSTORE_DAILY_SURFACE_AUDIT_BASE_URL") or "https://xiu-ci.com"
     ).rstrip("/")
-    internal_api = _resolve_internal_api_base()
+    internal_api = resolve_internal_api_base()
 
     api_port = _parse_port(api_url, 5000)
     web_port = _parse_port(ps_base, 5001)
@@ -357,12 +393,20 @@ def ensure_surface_audit_deps() -> Dict[str, Any]:
     if _is_local_url(internal_api):
         out["services"]["modstore_api"] = _ensure_modstore_api(modstore_port)
 
+    out["services"]["android_emulator"] = _ensure_android_emulator()
+
     failures: List[str] = []
     for name, svc in out["services"].items():
         if not isinstance(svc, dict):
             continue
         if svc.get("error"):
             failures.append(f"{name}:{svc.get('error')}")
+        elif name == "android_emulator":
+            android_on = (
+                os.environ.get("MODSTORE_SURFACE_AUDIT_ANDROID", "1") or ""
+            ).strip().lower() not in ("0", "false", "no", "off")
+            if android_on and not (svc.get("skipped") or svc.get("ok")):
+                failures.append(f"{name}:not_ready")
         elif name in ("fhd_api", "vite_ps", "modstore_api", "marketing") and not (
             svc.get("skipped") or svc.get("ready")
         ):
@@ -375,3 +419,60 @@ def ensure_surface_audit_deps() -> Dict[str, Any]:
     else:
         logger.info("surface audit deps ready")
     return out
+
+
+def surface_audit_stop_after_enabled() -> bool:
+    """digest 结束后是否关闭 FHD/Vite/模拟器等临时进程（MODstore :8788 不关）。"""
+    raw = os.environ.get("MODSTORE_SURFACE_AUDIT_STOP_AFTER")
+    if raw is not None and str(raw).strip() != "":
+        return str(raw).strip().lower() not in ("0", "false", "no", "off")
+    if (os.environ.get("MODSTORE_LOCAL_AUTOMATION") or "").strip() in ("1", "true", "yes"):
+        return True
+    if (os.environ.get("MODSTORE_AUTOMATION_PRIMARY") or "").strip().lower() == "local_mac":
+        return True
+    return False
+
+
+def _kill_pid_file(label: str, pid_file: Path) -> None:
+    if not pid_file.is_file():
+        return
+    try:
+        pid = int(pid_file.read_text(encoding="utf-8").strip())
+    except (OSError, ValueError):
+        pid_file.unlink(missing_ok=True)
+        return
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        pid_file.unlink(missing_ok=True)
+        return
+    try:
+        os.kill(pid, 15)
+        time.sleep(0.5)
+        try:
+            os.kill(pid, 0)
+            os.kill(pid, 9)
+        except OSError:
+            pass
+        logger.info("surface audit deps: stopped %s pid=%s", label, pid)
+    except OSError as exc:
+        logger.warning("surface audit deps: stop %s pid=%s failed: %s", label, pid, exc)
+    pid_file.unlink(missing_ok=True)
+
+
+def stop_surface_audit_ephemeral() -> Dict[str, Any]:
+    """关闭 ``ensure_surface_audit_deps`` 拉起的临时服务（不含 MODstore 日更栈）。"""
+    stopped: List[str] = []
+    pids_dir = _pids_dir()
+    if pids_dir.is_dir():
+        for pid_file in sorted(pids_dir.glob("surface-audit-*.pid")):
+            _kill_pid_file(pid_file.stem, pid_file)
+            stopped.append(pid_file.stem)
+
+    fhd = _fhd_root()
+    emu_pid = fhd / "data" / "surface_audit" / ".android-emulator.pid"
+    if emu_pid.is_file():
+        _kill_pid_file("android-emulator", emu_pid)
+        stopped.append("android-emulator")
+
+    return {"ok": True, "stopped": stopped}
