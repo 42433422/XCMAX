@@ -32,8 +32,6 @@ fun ComplianceFooter(
     val filingApproved = config?.app_filing_approved != false
     val appFiling = config?.app_filing_number?.takeIf { it.isNotBlank() }
         ?: stringResource(R.string.app_filing_number)
-    val websiteIcp = config?.icp_number?.takeIf { it.isNotBlank() }
-        ?: stringResource(R.string.website_icp)
     val openBeian = {
         ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(beianUrl)))
     }
@@ -55,13 +53,6 @@ fun ComplianceFooter(
                     modifier = Modifier.clickable(onClick = openBeian),
                 )
             }
-            Text(
-                "网站 ICP $websiteIcp",
-                fontSize = 11.sp,
-                color = MobileTokens.authPlaceholder,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.clickable(onClick = openBeian),
-            )
             if (config?.ok == true && config.app_filing_approved == false) {
                 Text(
                     stringResource(R.string.app_filing_pending),
@@ -82,17 +73,10 @@ fun ComplianceFooter(
                 value = appFiling,
                 subtitle = stringResource(R.string.app_filing_subtitle),
                 showArrow = true,
-                showDivider = true,
+                showDivider = false,
                 onClick = openBeian,
             )
         }
-        WeCell(
-            title = "网站 ICP",
-            value = websiteIcp,
-            showArrow = true,
-            showDivider = false,
-            onClick = openBeian,
-        )
     }
     if (config?.ok == true && config.app_filing_approved == false) {
         Text(
