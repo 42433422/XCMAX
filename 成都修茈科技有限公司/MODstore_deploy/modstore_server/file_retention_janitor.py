@@ -462,7 +462,7 @@ def run_retention_janitor(*, dry_run: Optional[bool] = None) -> Dict[str, Any]:
     except Exception:  # noqa: BLE001
         logger.exception("retention janitor: write metric failed")
 
-    return {
+    result = {
         "ok": status != "failed",
         "status": status,
         "dry_run": is_dry,
@@ -477,6 +477,26 @@ def run_retention_janitor(*, dry_run: Optional[bool] = None) -> Dict[str, Any]:
         "metric_id": metric_id,
         "employee_id": EMPLOYEE_ID,
     }
+    _record_retention_runtime(result)
+    return result
+
+
+def _record_retention_runtime(result: Dict[str, Any]) -> None:
+    try:
+        from modstore_server.time_rail_runtime import record_node_run
+
+        record_node_run(
+            "R",
+            ok=bool(result.get("ok")),
+            source="file_retention_janitor",
+            meta={
+                "status": result.get("status"),
+                "dry_run": result.get("dry_run"),
+                "metric_id": result.get("metric_id"),
+            },
+        )
+    except Exception:  # noqa: BLE001
+        logger.exception("retention janitor: time_rail runtime record failed")
 
 
 def _cli() -> int:

@@ -867,8 +867,23 @@ body.emp-wf-pan-active .emp-wf-pan-zoom-host{cursor:grabbing}
   border:2px solid rgba(88,226,194,0.65);
   box-shadow:0 0 28px rgba(88,226,194,0.35),0 4px 18px rgba(0,0,0,0.45);
 }
-/* 普通步骤：圆角矩形（默认 .emp-wf-radial-node） */
+/* 时间轨 runtime API 状态徽标（last_run / ok / guard_active） */
+.emp-wf-radial-node--runtime-ok{box-shadow:0 0 0 2px rgba(86,211,100,0.55),0 2px 12px rgba(0,0,0,0.28)}
+.emp-wf-radial-node--runtime-fail{box-shadow:0 0 0 2px rgba(248,81,73,0.65),0 2px 12px rgba(0,0,0,0.28)}
+.emp-wf-radial-node--runtime-guard{box-shadow:0 0 0 2px rgba(255,166,87,0.75),0 0 18px rgba(255,166,87,0.25)}
+.emp-wf-radial-root.is-runtime-status-error::after{
+  content:attr(data-runtime-status-error);
+  display:block;
+  margin:6px 0 0;
+  padding:8px 12px;
+  font-size:11px;
+  color:#ffa657;
+  background:rgba(255,166,87,0.08);
+  border:1px solid rgba(255,166,87,0.35);
+  border-radius:8px;
+}
 .emp-wf-radial-node--step{font-weight:500}
+/* 普通步骤：圆角矩形（默认 .emp-wf-radial-node） */
 /* P3–P9 等：小号紧凑格 */
 .emp-wf-radial-node--compact{
   font-size:10px;font-weight:600;padding:6px 8px;border-radius:8px;

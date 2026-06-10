@@ -45,3 +45,37 @@ async def production_line_event_rail_status():
 @xcmax_router.get("/event-rail/backlog")
 async def production_line_event_backlog(limit: int = 50):
     return _backlog_preview(limit)
+
+
+def _time_rail_graph() -> JSONResponse:
+    from app.application.time_rail_app_service import get_time_rail_app_service
+
+    return JSONResponse({"success": True, "data": get_time_rail_app_service().graph_payload()})
+
+
+async def _time_rail_status(node_id: str | None = None) -> JSONResponse:
+    from app.application.time_rail_app_service import (
+        TimeRailStatusUnavailableError,
+        get_time_rail_app_service,
+    )
+
+    try:
+        data = await get_time_rail_app_service().runtime_status(node_id=node_id)
+        return JSONResponse({"success": True, "data": data})
+    except TimeRailStatusUnavailableError as exc:
+        return JSONResponse(
+            {"success": False, "error": str(exc), "data": None},
+            status_code=503,
+        )
+
+
+@admin_router.get("/time-rail/graph")
+@xcmax_router.get("/time-rail/graph")
+async def production_line_time_rail_graph():
+    return _time_rail_graph()
+
+
+@admin_router.get("/time-rail/status")
+@xcmax_router.get("/time-rail/status")
+async def production_line_time_rail_status(node_id: str | None = None):
+    return await _time_rail_status(node_id)

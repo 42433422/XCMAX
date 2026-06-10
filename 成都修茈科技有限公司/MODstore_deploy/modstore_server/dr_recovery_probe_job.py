@@ -30,6 +30,26 @@ def _max_retries() -> int:
         return 8
 
 
+def _record_dr_probe_runtime(result: Dict[str, Any]) -> None:
+    if result.get("skipped"):
+        return
+    try:
+        from modstore_server.time_rail_runtime import record_node_run
+
+        record_node_run(
+            "DRPROBE",
+            ok=bool(result.get("ok")) or bool(result.get("recovered")),
+            source="dr_recovery_probe_job",
+            meta={
+                "probe_retry_count": result.get("probe_retry_count"),
+                "escalated": result.get("escalated"),
+                "recovered": result.get("recovered"),
+            },
+        )
+    except Exception:  # noqa: BLE001
+        logger.exception("dr recovery probe: time_rail runtime record failed")
+
+
 def run_dr_recovery_probe() -> Dict[str, Any]:
     """执行一次 DR 恢复探针（由 workflow_scheduler 每 30min 调度）。"""
     if not _enabled():
@@ -37,7 +57,6 @@ def run_dr_recovery_probe() -> Dict[str, Any]:
 
     from modstore_server.release_train import (
         active_backup_guard,
-        mark_backup_guard_probe_escalated,
         record_backup_guard_probe_attempt,
     )
 
@@ -56,7 +75,9 @@ def run_dr_recovery_probe() -> Dict[str, Any]:
                 "probe_retry_count": retry,
                 "max_retries": max_retries,
             }
-        return _escalate(guard, retry, max_retries)
+        result = _escalate(guard, retry, max_retries)
+        _record_dr_probe_runtime(result)
+        return result
 
     from modstore_server.daily_backup_job import run_daily_backup_job
 
@@ -78,12 +99,14 @@ def run_dr_recovery_probe() -> Dict[str, Any]:
             retry,
             out.get("stamp"),
         )
-        return {
+        result = {
             "ok": True,
             "recovered": True,
             "probe_retry_count": retry,
             "backup": out,
         }
+        _record_dr_probe_runtime(result)
+        return result
 
     probe_meta = record_backup_guard_probe_attempt(success=False)
     new_retry = int(probe_meta.get("probe_retry_count") or retry + 1)
@@ -94,17 +117,20 @@ def run_dr_recovery_probe() -> Dict[str, Any]:
         out.get("stamp"),
     )
     if new_retry >= max_retries:
-        esc = _escalate(guard, new_retry, max_retries, backup_out=out)
-        esc["backup"] = out
-        return esc
+        result = _escalate(guard, new_retry, max_retries, backup_out=out)
+        result["backup"] = out
+        _record_dr_probe_runtime(result)
+        return result
 
-    return {
+    result = {
         "ok": False,
         "recovered": False,
         "probe_retry_count": new_retry,
         "max_retries": max_retries,
         "backup": out,
     }
+    _record_dr_probe_runtime(result)
+    return result
 
 
 def _escalate(
