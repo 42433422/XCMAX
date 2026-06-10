@@ -178,6 +178,25 @@ def _handle_dr_guard_escalated(payload: Dict[str, Any]) -> Dict[str, Any]:
     return {"ok": True}
 
 
+def emit_backup_event(event_type: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    """写入 incident 审计并立即执行 backup.* 副作用（不依赖 catalog 员工包）。"""
+    dispatch_result = dispatch_backup_event(event_type, payload)
+    published = False
+    try:
+        from modstore_server.incident_bus import publish
+
+        published = bool(
+            publish(
+                event_type,
+                payload if isinstance(payload, dict) else {},
+                source=str(payload.get("source") or "backup-pipeline"),
+            )
+        )
+    except Exception:  # noqa: BLE001
+        logger.exception("emit_backup_event: incident publish failed event_type=%s", event_type)
+    return {"dispatch": dispatch_result, "published": published}
+
+
 def dispatch_backup_event(event_type: str, payload: Dict[str, Any]) -> Dict[str, Any]:
     """派发 backup.* 事件到对应 handler。
 

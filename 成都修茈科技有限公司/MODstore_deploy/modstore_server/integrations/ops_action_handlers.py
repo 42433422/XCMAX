@@ -124,6 +124,13 @@ EVENT_TYPES = frozenset(
         "employee.collab.message_created",
         "employee.evolution.suggested",
         "employee.execution.recovery",
+        # 容灾备份事件链（BK→R / DRPROBE / 按需快照）
+        "backup.completed",
+        "backup.failed",
+        "backup.ondemand_completed",
+        "backup.ondemand_failed",
+        "backup.dr_guard.cleared",
+        "backup.dr_guard.escalated",
     }
 )
 

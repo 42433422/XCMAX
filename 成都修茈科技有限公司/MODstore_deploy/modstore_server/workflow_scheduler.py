@@ -28,6 +28,12 @@ def start_scheduler() -> None:
         return
     _scheduler = BackgroundScheduler()
     _scheduler.start()
+    try:
+        from modstore_server.backup_event_subscriber import register_backup_event_subscribers
+
+        register_backup_event_subscribers()
+    except Exception:
+        logger.exception("register backup event subscribers failed")
     _load_triggers()
 
     def _close_stale_orders() -> None:
@@ -239,6 +245,35 @@ def start_scheduler() -> None:
         )
     except Exception:
         logger.exception("register daily backup cron failed")
+
+    def _dr_recovery_probe_job() -> None:
+        try:
+            from modstore_server.dr_recovery_probe_job import run_dr_recovery_probe
+
+            r = run_dr_recovery_probe()
+            if not r.get("skipped"):
+                logger.info(
+                    "dr recovery probe: ok=%s recovered=%s retry=%s escalated=%s",
+                    r.get("ok"),
+                    r.get("recovered"),
+                    r.get("probe_retry_count"),
+                    r.get("escalated"),
+                )
+        except Exception:
+            logger.exception("dr recovery probe job failed")
+
+    try:
+        probe_mins = int(os.environ.get("MODSTORE_DR_PROBE_INTERVAL_MINUTES", "30"))
+    except ValueError:
+        probe_mins = 30
+    _scheduler.add_job(
+        _dr_recovery_probe_job,
+        IntervalTrigger(minutes=max(5, probe_mins)),
+        id="dr_recovery_probe_job",
+        replace_existing=True,
+        coalesce=True,
+        max_instances=1,
+    )
 
     def _inbox_poll_job() -> None:
         try:

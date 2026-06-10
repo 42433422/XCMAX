@@ -246,6 +246,15 @@ def _init_background_jobs() -> None:
         print("[bg-jobs] subscription scheduler FAILED", flush=True)
 
     try:
+        from modstore_server.backup_event_subscriber import register_backup_event_subscribers
+
+        register_backup_event_subscribers()
+        print("[bg-jobs] backup event subscribers registered OK", flush=True)
+    except Exception:
+        logger.exception("backup event subscribers registration failed")
+        print("[bg-jobs] backup event subscribers FAILED", flush=True)
+
+    try:
         from modstore_server.workflow_scheduler import start_scheduler as start_workflow_scheduler
 
         start_workflow_scheduler()

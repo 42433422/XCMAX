@@ -1030,6 +1030,15 @@ async def run_surface_audit_async() -> Dict[str, Any]:
         return {"ok": True, "skipped": True, "results": []}
 
     try:
+        from modstore_server.surface_audit_deps import ensure_surface_audit_deps
+
+        deps = ensure_surface_audit_deps()
+        if not deps.get("ok"):
+            logger.warning("surface audit deps not fully ready: %s", deps.get("failures"))
+    except Exception:  # noqa: BLE001
+        logger.exception("surface audit deps bootstrap failed")
+
+    try:
         timeout_ms = max(
             10_000, int(os.environ.get("MODSTORE_DAILY_SURFACE_AUDIT_TIMEOUT_MS", "45000"))
         )

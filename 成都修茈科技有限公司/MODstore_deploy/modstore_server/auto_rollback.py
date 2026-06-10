@@ -127,6 +127,17 @@ def auto_rollback_on_gate_failure(
         return out
 
     try:
+        from modstore_server.ondemand_backup import run_ondemand_backup
+
+        out["ondemand_backup"] = run_ondemand_backup(
+            trigger=f"auto_rollback:{gate}",
+            reason=str(reason)[:500],
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("auto_rollback: ondemand backup failed gate=%s", gate)
+        out["ondemand_backup"] = {"ok": False, "error": str(exc)[:300]}
+
+    try:
         from modstore_server.release_train import rollback_release_train
 
         rollback = rollback_release_train(reason=f"auto_rollback:{gate}")
