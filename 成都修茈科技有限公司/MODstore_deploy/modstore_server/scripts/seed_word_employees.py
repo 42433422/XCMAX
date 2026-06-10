@@ -102,7 +102,17 @@ def _build_pack(
     return manifest, rule_spec, raw_zip, pack_dir
 
 
+def _load_deploy_env() -> None:
+    try:
+        from dotenv import load_dotenv
+    except ImportError:
+        return
+    load_dotenv(MODSTORE_ROOT / ".env", override=False)
+    load_dotenv(MODSTORE_ROOT / ".env.local", override=True)
+
+
 def main() -> int:
+    _load_deploy_env()
     parser = argparse.ArgumentParser(description="Seed Word read/generate employee packs")
     parser.add_argument(
         "--set-public", action="store_true", help="设置 catalog_items.is_public=true"
