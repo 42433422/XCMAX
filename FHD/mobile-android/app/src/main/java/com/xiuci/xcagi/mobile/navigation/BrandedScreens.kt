@@ -54,7 +54,6 @@ import com.xiuci.xcagi.mobile.ui.components.mobile.WeInputCell
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeModeOption
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeSectionCaption
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeSpacer
-import com.xiuci.xcagi.mobile.ui.components.mobile.WeThirdPartyLoginRow
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeTopBar
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -337,11 +336,6 @@ fun AuthScreen(vm: AppViewModel, onRegister: () -> Unit, onDone: () -> Unit) {
                     )
                 }
             }
-            Spacer(Modifier.padding(top = 20.dp))
-            WeThirdPartyLoginRow(
-                onWeChat = { vm.snack("微信登录即将开放") },
-                onDouyin = { vm.snack("抖音登录即将开放") },
-            )
         },
     )
 }
