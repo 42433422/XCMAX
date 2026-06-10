@@ -1,40 +1,38 @@
-# NOTE: scope FHD/mobile-ios/** 规划中，release-ios.yml 待建
 id: mobile-ios-release-officer
 name: iOS 发版员
-version: "10.0.0"
+version: "1.0.0"
+domain: P-S iOS 渠道发布（规划中）：TestFlight / App Store 工程、notarize 协同与 release 门禁。
 owner: admin
 area: platform-core
-domain: >-
-  P-S iOS 渠道发布（规划中）：TestFlight / App Store 工程、notarize 协同与 release 门禁。
+five_line_id: prod_software
+subzone: build-release
+also_serves: []
 
 scope_globs:
-  - "FHD/mobile-ios/**"
+  - FHD/mobile-ios/**
   - FHD/.github/workflows/release-desktop.yml
-  - "FHD/XCAGI/resources/**"
-  - "yuangon/platform-core/mobile-ios-release-officer/**"
+  - FHD/XCAGI/resources/**
 
 forbidden_globs:
-  - "_local_secrets/**"
+  - _local_secrets/**
+
+triggers:
+  on_error: true
+
+sla:
+  timeout_seconds: 900
+  retry_max: 1
+  escalate_to_human: true
+
+llm_default: "auto"
+
+skills: []
 
 depends_on:
   - deploy-release-officer
   - mobile-android-release-officer
 
-actions:
-  handlers:
-    - llm_md
-    - echo
-
-triggers:
-  on_error: true
-  on_quality_fail: true
-
-skills:
-  - task.analyze
-  - llm.markdown
-  - workflow.assist
-
 changelog:
-  - version: "10.0.0"
-    date: "2026-06-07"
-    note: "yuangon 骨架由 bootstrap_yuangon.py 从 manifest 反向生成（v10 线内迭代）"
+  - version: "1.0.0"
+    date: "2026-06-03"
+    note: "六部门编制：P-S iOS 发版专岗（planned 渠道）"

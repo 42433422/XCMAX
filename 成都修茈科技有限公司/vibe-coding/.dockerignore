@@ -1,0 +1,53 @@
+# ── Version control ──────────────────────────────────────────────────────────
+.git
+.gitignore
+
+# ── Python bytecode / caches ──────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# ── Build / packaging artifacts ───────────────────────────────────────────────
+build/
+dist/
+*.egg-info/
+
+# ── Virtual environments ──────────────────────────────────────────────────────
+.venv/
+venv/
+env/
+
+# ── Test suite & coverage ─────────────────────────────────────────────────────
+tests/
+.coverage
+.coverage.*
+htmlcov/
+
+# ── Documentation & examples (not needed at runtime) ─────────────────────────
+docs/
+examples/
+*.md
+!README.md
+
+# ── CI / editor / OS noise ───────────────────────────────────────────────────
+.github/
+.cursor/
+.idea/
+.vscode/
+*.DS_Store
+Thumbs.db
+
+# ── Sensitive / local-only config ────────────────────────────────────────────
+.env
+.env.*
+*.local
+
+# ── Runtime data & databases ─────────────────────────────────────────────────
+vibe_coding_data/
+*.db
+*.log
+var/

@@ -176,4 +176,7 @@ class SessionStore @Inject constructor(
     }
 
     suspend fun accessToken(): String = fhdAccessFlow.first()
+
+    suspend fun fhdSessionId(): String =
+        context.dataStore.data.map { it[fhdSession] ?: "" }.first()
 }

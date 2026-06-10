@@ -1,64 +1,49 @@
-        # Runbook：MODstore 后端 API 员 (`modstore-backend-api`)
+# Runbook — MODstore 后端 API 员
 
-        ## 职责摘要
+| 字段 | 值 |
+|------|----|
+| 员工 ID | `modstore-backend-api` |
+| 最后更新 | 2026-05-06 |
+| 应急联系 | admin |
 
-        维护 MODstore 平台的 Flask 蓝图 API：工作台、市场目录、工作流、LLM 代理与 WebSocket 实时通道；不触碰前端 Vue 文件。
+## 日常巡检
 
-        ## 上游 Handoff 契约
+```bash
+cd MODstore_deploy
 
-        ### handoff: test-qa-runner → 本岗
-- **触发条件**：`employee.task.done:test-qa-runner`（pytest 全绿 + coverage gate 通过）
-- **输入**：CI 测试报告路径、覆盖率摘要
-- **门禁**：测试红灯时本岗不得继续；回滚上游修复后重触发
+# 语法检查核心文件
+python -m py_compile modstore_server/workbench_api.py
+python -m py_compile modstore_server/market_api.py
+python -m py_compile modstore_server/llm_chat_proxy.py
 
-### handoff: log-monitor-incident → 本岗
-- **触发条件**：`employee.task.done:log-monitor-incident`
-- **输入**：待补充（参见 `yuangon/**/log-monitor-incident/runbook.md`）
-- **门禁**：依赖完成前本岗不得继续
+# 运行单元测试
+python -m pytest tests/ -q --tb=short
 
-### handoff: deploy-release-officer → 本岗
-- **触发条件**：`ops.change_request.approved` → deploy 执行完成
-- **输入**：部署 manifest、环境 URL、健康检查结果
-- **门禁**：deploy 失败时自动 rollback；本岗等待 `/healthz` 返回 200
+# API 冒烟（服务需运行）
+curl -s http://localhost:8000/health
+```
 
-### handoff: dbops-engineer → 本岗
-- **触发条件**：`employee.task.done:dbops-engineer`
-- **输入**：待补充（参见 `yuangon/**/dbops-engineer/runbook.md`）
-- **门禁**：依赖完成前本岗不得继续
+## 异常处置
 
+### 异常 1：API 返回 500
 
-        ## Handlers
+1. 查看 Flask 日志（通知 `log-monitor-incident`）。
+2. `python -m py_compile <file>.py` 确认无语法错误。
+3. 隔离问题蓝图，逐步回滚。
 
-        | Handler | 说明 |
-        |---------|------|
-        | `llm_md` | 接收 Markdown 任务描述，调用 LLM 输出结构化结果 |
-| `echo` | 调试用：原样返回输入，用于 smoke 测试 |
+### 异常 2：LLM 代理超时
 
-        ## 核心 Scope
+1. 检查上游 LLM API Key 是否有效（联系 `security-secrets-guard`）。
+2. 检查 `llm_chat_proxy.py` 超时配置是否过短。
+3. 临时启用备用模型。
 
-        - `MODstore_deploy/modstore_server/workbench_api.py`
-- `MODstore_deploy/modstore_server/market_api.py`
-- `MODstore_deploy/modstore_server/market_catalog_api.py`
-- `MODstore_deploy/modstore_server/script_workflow_api.py`
-- `MODstore_deploy/modstore_server/realtime_ws.py`
-- `MODstore_deploy/modstore_server/llm_api.py`
+### 异常 3：WebSocket 连接断开
 
-        ## 故障处置
+1. 检查 `realtime_ws.py` 心跳间隔配置。
+2. 检查 Nginx `proxy_read_timeout` 设置（联系 `nginx-config-engineer`）。
 
-        | 场景 | 处置 |
-        |------|------|
-        | LLM 调用失败 | retry 2 次 → 上报 `employee.task.failed:modstore-backend-api` |
-        | 上游依赖未完成 | 等待 `employee.task.done:<dep>` 事件，不自行推进 |
-        | scope 文件不存在 | 报告缺口，待确认后再执行，不编造路径 |
-        | 版本锚点不对齐 | 运行 `verify_version_anchors.py`，修复后继续 |
+## ESkill 动态阶段触发记录
 
-        ## 验收检查清单
-
-        - [ ] `employee.yaml.depends_on` 与 manifest 根级一致
-        - [ ] `actions.handlers` 三方一致（yaml / manifest / `_DISPATCH`）
-        - [ ] scope_globs 路径存在（或标注规划中）
-        - [ ] `employee_pack_consistency_warnings` 无 handler warning
-        - [ ] echo smoke 测试通过
-
-        ---
-        *本文件由 `bootstrap_yuangon.py` 生成，v10 线内迭代*
+| 日期 | 触发原因 | patch_id | 结果 | 是否固化 |
+|------|----------|----------|------|----------|
+| — | — | — | — | — |

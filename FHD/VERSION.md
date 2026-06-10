@@ -24,6 +24,17 @@
 
 **跨平台企业 AI 员工桌面平台** — Windows/macOS 桌面版 + Web 版并行交付，保留 Neuro-DDD + FastAPI + Mod 生态 + Token 认证钱包。
 
+## 📱 各端交付等级（对外口径 SSOT）
+
+| 端 | 等级 | 说明 |
+|----|------|------|
+| **Windows 桌面** | 签约级 | 主交付面 |
+| **macOS 桌面** | 签约级 | arm64 + x64 dmg |
+| **Web / 后端** | 签约级 | FastAPI + Vue SPA |
+| **Android** | **实验骨架** | Kotlin Compose 可构建；**非**签约级移动产品 |
+
+声称 vs 实测差距见 [`docs/CLAIMED_VS_ACTUAL.md`](docs/CLAIMED_VS_ACTUAL.md)。
+
 ## 🔗 相关文档
 
 - 📝 [完整变更日志 CHANGELOG.md](CHANGELOG.md)
@@ -46,4 +57,4 @@ rg -n 'version\s*=\s*"[0-9]' app/fastapi_app/factory.py app/infrastructure/mods/
 
 ---
 
-*最后更新：2026-04-30（补充 `desktop`/`package.json` 锚点行；与 README「版本与发布约定」交叉引用）*
+*最后更新：2026-06-10（各端交付等级表 · Android 实验骨架口径）*

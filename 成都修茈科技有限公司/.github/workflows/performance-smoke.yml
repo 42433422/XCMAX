@@ -1,0 +1,60 @@
+name: Performance Smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_base_url:
+        description: "HTTP base URL, for example https://staging.example.com"
+        required: true
+        type: string
+      target_ws_url:
+        description: "WebSocket base URL, for example wss://staging.example.com"
+        required: false
+        type: string
+      stage:
+        description: "k6 stage"
+        required: true
+        default: smoke
+        type: choice
+        options:
+          - smoke
+          - step
+          - soak
+          - spike
+      enable_llm:
+        description: "Include lightweight LLM checks"
+        required: true
+        default: false
+        type: boolean
+      enable_rag:
+        description: "Include lightweight knowledge/RAG checks"
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  k6:
+    name: k6 full-link smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup k6
+        uses: grafana/setup-k6-action@v1
+
+      - name: Run full-link load test
+        working-directory: MODstore_deploy
+        env:
+          BASE_URL: ${{ inputs.target_base_url }}
+          WS_URL: ${{ inputs.target_ws_url || inputs.target_base_url }}
+          K6_STAGE: ${{ inputs.stage }}
+          TEST_EMAIL: ${{ secrets.LOADTEST_EMAIL }}
+          TEST_PASSWORD: ${{ secrets.LOADTEST_PASSWORD }}
+          ENABLE_LLM: ${{ inputs.enable_llm }}
+          ENABLE_RAG: ${{ inputs.enable_rag }}
+        run: k6 run perf/full_link_smoke.js

@@ -1,0 +1,15 @@
+{
+  "task": "dependency-cve-scan",
+  "description": "扫描所有 Python 依赖的 CVE 漏洞",
+  "input": {
+    "targets": [
+      "requirements.txt",
+      "MODstore_deploy/modstore_server/requirements.txt"
+    ],
+    "min_severity": "HIGH"
+  },
+  "output_format": {
+    "include_secret_values": false,
+    "group_by": "severity"
+  }
+}

@@ -1,54 +1,52 @@
-        # Runbook：市场前端开发员 (`market-frontend-dev`)
+# Runbook — 市场前端开发员
 
-        ## 职责摘要
+| 字段 | 值 |
+|------|----|
+| 员工 ID | `market-frontend-dev` |
+| 最后更新 | 2026-05-06 |
+| 应急联系 | admin |
 
-        维护 MODstore 市场前端（非工作台视图）：路由视图、API 对接层、Pinia store、HTTP client；严格遵守 Vue 3 Only，禁止引入 React。
+## 日常巡检
 
-        ## 上游 Handoff 契约
+```bash
+cd MODstore_deploy/market
 
-        ### handoff: modstore-backend-api → 本岗
-- **触发条件**：`employee.task.done:modstore-backend-api`
-- **输入**：API 端点变更 diff、OpenAPI schema 增量
-- **门禁**：schema 破坏性变更需 change-request-auditor 审批后才继续
+# TypeScript 编译检查
+npx vue-tsc --noEmit
 
-### handoff: workbench-ux-stylist → 本岗
-- **触发条件**：`employee.task.done:workbench-ux-stylist`
-- **输入**：待补充（参见 `yuangon/**/workbench-ux-stylist/runbook.md`）
-- **门禁**：依赖完成前本岗不得继续
+# 依赖审计（检查是否混入 React）
+grep -r "from 'react'" src/ && echo "ALERT: React import found!" || echo "Vue-only OK"
 
+# 构建检查
+npm run build
+```
 
-        ## Handlers
+## 异常处置
 
-        | Handler | 说明 |
-        |---------|------|
-        | `llm_md` | 接收 Markdown 任务描述，调用 LLM 输出结构化结果 |
-| `echo` | 调试用：原样返回输入，用于 smoke 测试 |
+### 异常 1：TypeScript 编译错误
 
-        ## 核心 Scope
+**排查**：`npx vue-tsc --noEmit` 查看具体错误文件和行号。  
+**修复**：修正类型注解或接口定义。
 
-        - `MODstore_deploy/market/src/views/*.vue`
-- `MODstore_deploy/market/src/views/workflow/**`
-- `MODstore_deploy/market/src/views/WorkbenchHomeView.vue`
-- `MODstore_deploy/market/src/api.ts`
-- `MODstore_deploy/market/src/infrastructure/http/client.ts`
-- `MODstore_deploy/market/src/App.vue`
+### 异常 2：api.ts 接口与后端不匹配
 
-        ## 故障处置
+**排查**：对比后端 API 蓝图路由定义与 `api.ts` 的 URL/schema。  
+**修复**：更新 `api.ts` 对应函数；通知 `workbench-ux-stylist` 如有视图影响。
 
-        | 场景 | 处置 |
-        |------|------|
-        | LLM 调用失败 | retry 2 次 → 上报 `employee.task.failed:market-frontend-dev` |
-        | 上游依赖未完成 | 等待 `employee.task.done:<dep>` 事件，不自行推进 |
-        | scope 文件不存在 | 报告缺口，待确认后再执行，不编造路径 |
-        | 版本锚点不对齐 | 运行 `verify_version_anchors.py`，修复后继续 |
+### 异常 3：Pinia store 状态丢失
 
-        ## 验收检查清单
+**排查**：检查 store action 是否正确 await；检查 `client.ts` 401 刷新逻辑。
 
-        - [ ] `employee.yaml.depends_on` 与 manifest 根级一致
-        - [ ] `actions.handlers` 三方一致（yaml / manifest / `_DISPATCH`）
-        - [ ] scope_globs 路径存在（或标注规划中）
-        - [ ] `employee_pack_consistency_warnings` 无 handler warning
-        - [ ] echo smoke 测试通过
+## React 违规检查
 
-        ---
-        *本文件由 `bootstrap_yuangon.py` 生成，v10 线内迭代*
+```bash
+# 任何时候发现以下内容立即报告
+grep -r "import React\|from 'react'\|from \"react\"" src/
+# 预期：无匹配（0 行）
+```
+
+## ESkill 动态阶段触发记录
+
+| 日期 | 触发原因 | patch_id | 结果 | 是否固化 |
+|------|----------|----------|------|----------|
+| — | — | — | — | — |

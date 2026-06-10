@@ -1,49 +1,51 @@
-        # Runbook：支付账单对账员 (`payment-billing-reconciler`)
+# Runbook — 支付账单对账员
 
-        ## 职责摘要
+| 字段 | 值 |
+|------|----|
+| 员工 ID | `payment-billing-reconciler` |
+| 最后更新 | 2026-05-06 |
+| 应急联系 | admin（所有资金操作需人工确认）|
 
-        维护 MODstore 支付与账单模块：支付宝接口、订单管理、LLM 计费与订阅续费；对账只读为主，禁止直接写生产 DB。
+## 日常巡检
 
-        ## 上游 Handoff 契约
+```bash
+# 语法检查
+python -m py_compile MODstore_deploy/modstore_server/payment_api.py
+python -m py_compile MODstore_deploy/modstore_server/payment_orders.py
 
-        ### handoff: security-secrets-guard → 本岗
-- **触发条件**：secrets 扫描通过（gitleaks clean）
-- **输入**：扫描报告、豁免列表更新
-- **门禁**：新增 secret 泄露阻断本岗所有操作
+# 只读对账预览（管理员 JWT；不落库）。详见 MODstore_deploy/docs/runbooks/payment-reconciliation-preview-api.md
+# curl -H "Authorization: Bearer <admin_jwt>" -H "Content-Type: application/json" \
+#   -d '{"period_start":"2026-05-01T00:00:00","period_end":"2026-06-01T00:00:00"}' \
+#   https://<host>/api/admin/reconciliation/preview
 
+# 证书过期检查（替换实际证书路径）
+openssl x509 -enddate -noout -in alipay_package/alipay_public_key.crt
 
-        ## Handlers
+# 订阅续费任务状态
+python MODstore_deploy/modstore_server/subscription_renewer.py --status
+```
 
-        | Handler | 说明 |
-        |---------|------|
-        | `llm_md` | 接收 Markdown 任务描述，调用 LLM 输出结构化结果 |
-| `echo` | 调试用：原样返回输入，用于 smoke 测试 |
+## 异常处置
 
-        ## 核心 Scope
+### 异常 1：支付回调签名验证失败
 
-        - `MODstore_deploy/modstore_server/reconciliation.py`
-- `MODstore_deploy/modstore_server/payment_api.py`
-- `MODstore_deploy/modstore_server/payment_orders.py`
-- `MODstore_deploy/modstore_server/payment_common.py`
-- `MODstore_deploy/modstore_server/payment_*.py`
-- `MODstore_deploy/modstore_server/payment_orders/**`
+1. 确认支付宝证书路径和版本（联系 `security-secrets-guard`）。
+2. 检查 `payment_common.py` 中签名算法配置。
+3. **所有变更经 admin 审批后执行**。
 
-        ## 故障处置
+### 异常 2：LLM 账单与实际消耗不符
 
-        | 场景 | 处置 |
-        |------|------|
-        | LLM 调用失败 | retry 2 次 → 上报 `employee.task.failed:payment-billing-reconciler` |
-        | 上游依赖未完成 | 等待 `employee.task.done:<dep>` 事件，不自行推进 |
-        | scope 文件不存在 | 报告缺口，待确认后再执行，不编造路径 |
-        | 版本锚点不对齐 | 运行 `verify_version_anchors.py`，修复后继续 |
+1. 对比 `llm_billing.py` 计费记录与 LLM 供应商账单。
+2. 生成差异报告，不直接修改账单记录（通知 admin）。
 
-        ## 验收检查清单
+### 异常 3：订阅续费失败
 
-        - [ ] `employee.yaml.depends_on` 与 manifest 根级一致
-        - [ ] `actions.handlers` 三方一致（yaml / manifest / `_DISPATCH`）
-        - [ ] scope_globs 路径存在（或标注规划中）
-        - [ ] `employee_pack_consistency_warnings` 无 handler warning
-        - [ ] echo smoke 测试通过
+1. 检查订阅到期的用户列表。
+2. 确认支付宝通道可用。
+3. 通知 admin 是否手动重试。
 
-        ---
-        *本文件由 `bootstrap_yuangon.py` 生成，v10 线内迭代*
+## ESkill 动态阶段触发记录
+
+| 日期 | 触发原因 | patch_id | 结果 | 是否固化 |
+|------|----------|----------|------|----------|
+| — | — | — | — | — |

@@ -1,35 +1,56 @@
-        # 市场前端开发员 (`market-frontend-dev`)
+# 市场前端开发员（market-frontend-dev）
 
-        **area**：`modstore-frontend`  
-        **yuangon 路径**：`成都修茈科技有限公司/yuangon/modstore-frontend/market-frontend-dev/`
+## 一句话职责
 
-        ## 职责
+维护 MODstore 市场前端非工作台部分：Vue 3 路由视图、API 对接层（`api.ts`）、Pinia store、HTTP client；严格遵守 Vue 3 Only 约束，任何时候禁止引入 React 生态。
 
-        维护 MODstore 市场前端（非工作台视图）：路由视图、API 对接层、Pinia store、HTTP client；严格遵守 Vue 3 Only，禁止引入 React。
+## 技术栈约束
 
-        ## 上游依赖 (`depends_on`)
+> 参见 `.cursor/rules/vue-only-frontend.mdc`
 
-        - `modstore-backend-api`
-- `workbench-ux-stylist`
+- **允许**：Vue 3、Vue Router、Pinia、Vue Flow、TypeScript、Vite
+- **禁止**：`react`、`react-dom`、`@types/react`、`.jsx`/`.tsx` 文件、任何 React 生态库
 
-        ## 支持的 Handlers
+## 负责文件
 
-        - `llm_md`：接收 Markdown 任务描述，调用 LLM 输出结构化结果
-- `echo`：调试用：原样返回输入，用于 smoke 测试
+| 类型 | 路径 |
+|------|------|
+| 路由视图 | `market/src/views/*.vue`（不含 workbench/）|
+| 工作流视图 | `market/src/views/workflow/**` |
+| API 层 | `market/src/api.ts` |
+| HTTP Client | `market/src/infrastructure/http/client.ts` |
+| 根组件 | `market/src/App.vue` |
+| 通用组件 | `market/src/components/**`（不含 workbench/）|
+| Store | `market/src/stores/**` |
+| 路由配置 | `market/src/router/**` |
+| 构建配置 | `package.json`、`vite.config.*`、`tsconfig*.json` |
 
-        ## Scope（核心文件范围）
+## 典型任务
 
-        - `MODstore_deploy/market/src/views/*.vue`
-- `MODstore_deploy/market/src/views/workflow/**`
-- `MODstore_deploy/market/src/views/WorkbenchHomeView.vue`
-- `MODstore_deploy/market/src/api.ts`
-- `MODstore_deploy/market/src/infrastructure/http/client.ts`
-- `MODstore_deploy/market/src/App.vue`
+1. 新增账户设置视图路由与页面。
+2. 在 `api.ts` 同步后端新增接口（axios 封装）。
+3. 修复 Pinia store 状态丢失问题。
+4. 更新 `client.ts` 的 JWT 刷新逻辑。
+5. 修复 `AccountSettingsView.vue` 表单校验 bug。
 
-        ## 相关链接
+## KPI
 
-        - manifest：`FHD/mods/_employees/market-frontend-dev/manifest.json`
-        - runbook：[runbook.md](./runbook.md)
+| 指标 | 目标 |
+|------|------|
+| TypeScript 编译零错误 | 100% |
+| `npm run build` 成功率 | 100% |
+| React 依赖引入事件 | 0 |
+| Lighthouse 性能分 | ≥ 80 |
 
-        ---
-        *本文件由 `bootstrap_yuangon.py` 生成，v10 线内迭代*
+## 禁区
+
+- `market/src/views/workbench/**`（归 `workbench-ux-stylist`）
+- `modstore_server/**`（后端）
+- 任何 `.py` 文件
+- `_local_secrets/**`
+
+## 协作关系
+
+- 后端接口变更时，`modstore-backend-api` 通知同步 `api.ts`。
+- 工作台边界内的视图改动与 `workbench-ux-stylist` 对齐。
+- 构建产物由 `deploy-release-officer` 部署。

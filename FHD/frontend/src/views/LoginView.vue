@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import QRCode from 'qrcode';
 import { useRoute, useRouter } from 'vue-router';
 import { ApiError } from '@/api';
@@ -19,6 +19,7 @@ import {
 } from '@/utils/adminConsoleUrl';
 import { ADMIN_OPERATOR_HOME_ROUTE } from '@/constants/adminOperatorNav';
 import type { AccountKind } from '@/api/auth';
+import { loadLoginPreferences, saveLoginPreferences } from '@/utils/loginPreferences';
 
 const route = useRoute();
 const router = useRouter();
@@ -43,6 +44,17 @@ const qrId = ref('');
 const qrPollSecret = ref('');
 const usernameFocused = ref(false);
 const passwordFocused = ref(false);
+const rememberPassword = ref(false);
+const autoLogin = ref(false);
+let autoLoginAttempted = false;
+
+watch(rememberPassword, (enabled) => {
+  if (!enabled) autoLogin.value = false;
+});
+
+watch(autoLogin, (enabled) => {
+  if (enabled) rememberPassword.value = true;
+});
 
 function peelNestedLoginRedirect(raw: string): string {
   let v = raw.trim();
@@ -111,7 +123,26 @@ const loginHelpRoute = computed(() => ({
   query: route.query,
 }));
 
+function applySavedLoginPreferences() {
+  const prefs = loadLoginPreferences();
+  rememberPassword.value = prefs.rememberPassword;
+  autoLogin.value = prefs.autoLogin;
+  if (prefs.rememberPassword && prefs.username) {
+    username.value = prefs.username;
+    password.value = prefs.password;
+  }
+}
+
+async function tryAutoLogin() {
+  if (autoLoginAttempted || loading.value || loginMode.value !== 'password') return;
+  if (!autoLogin.value || !rememberPassword.value) return;
+  if (!username.value.trim() || !password.value) return;
+  autoLoginAttempted = true;
+  await submitLogin();
+}
+
 onMounted(async () => {
+  applySavedLoginPreferences();
   productSku.value = await fetchProductSku();
   document.title = loginPageTitle(productSku.value);
   try {
@@ -128,7 +159,9 @@ onMounted(async () => {
   const oidcErr = route.query.oidc_error;
   if (oidcErr) {
     errorMessage.value = String(route.query.oidc_message || '企业 SSO 登录失败');
+    return;
   }
+  await tryAutoLogin();
 });
 
 onUnmounted(() => {
@@ -309,6 +342,12 @@ async function submitLogin() {
       });
       return;
     }
+    saveLoginPreferences({
+      rememberPassword: rememberPassword.value,
+      autoLogin: autoLogin.value,
+      username: username.value.trim(),
+      password: password.value,
+    });
     await completeLoginSuccess(raw);
   } catch (error: unknown) {
     if (error instanceof ApiError) {
@@ -433,6 +472,27 @@ async function submitLogin() {
               <svg v-if="showPassword" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
               <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
             </button>
+          </div>
+
+          <div class="login-options" role="group" aria-label="登录选项">
+            <label class="login-option">
+              <input
+                v-model="autoLogin"
+                type="checkbox"
+                class="login-option-input"
+                :disabled="loading"
+              />
+              <span>免登录</span>
+            </label>
+            <label class="login-option">
+              <input
+                v-model="rememberPassword"
+                type="checkbox"
+                class="login-option-input"
+                :disabled="loading"
+              />
+              <span>记住密码</span>
+            </label>
           </div>
           </template>
 
@@ -806,6 +866,38 @@ async function submitLogin() {
 
 .login-field--password .login-input {
   padding-right: 44px;
+}
+
+.login-options {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: -4px;
+}
+
+.login-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--xc-font-sm);
+  color: var(--xc-color-text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.login-option-input {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: var(--xc-color-primary, #2563eb);
+  cursor: pointer;
+}
+
+.login-option:has(.login-option-input:disabled) {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .login-eye-btn {

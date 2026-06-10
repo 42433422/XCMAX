@@ -1,64 +1,101 @@
 id: doc-knowledge-curator
 name: 文档知识管理员
-version: "10.0.0"
+version: "1.0.3"
+domain: 维护 xiu-ci.com 与 MODstore 平台的全部文档资产：README、ESkill.md、docs/ 目录、需求/方案 Markdown，以及 yuangon/ 各员工 README 同步；可调用 py-doc-generator.xcemp 与 project-doc-generator.xcemp 辅助生成文档；不修改源码。员工包专属文档（fhd-employee-composition.md、员工制作增强设计方案.md、employee_publish_wizard.md、0003-artifacts-bundles-employee-packs.md）由 employee-pack-curator 全权负责，本员工不主动修改。
 owner: admin
 area: quality-and-docs
-domain: >-
-  维护 xiu-ci.com 与 MODstore 平台的全部文档资产：README、ESkill.md、docs/ 目录、需求/方案 Markdown，以及 yuangon/ 各员工 README 同步；可调用 py-doc-generator.xcemp 与 project-doc-generator.xcemp 辅助生成文档；不修改源码。员工包专属文档（fhd-employee-composition.md、员工制作增强设计方案.md、employee_publish_wizard.md、0003-artifacts-bundles-employee-packs.md）由 employee-pack-curator 全权负责，本员工不主动修改。
 
 scope_globs:
   - README.md
   - ESkill.md
-  - "docs/**"
+  - docs/**
   - "*.md"
-  - "*.docx"
-  - "yuangon/**/README.md"
-  - "yuangon/_shared/**"
+  - "*.docx"                                 # AI员工集体建设需求报告.docx 等战略文档
+  - yuangon/**/README.md
+  - yuangon/_shared/**                       # 模板 + OWNERSHIP.md
   - py-doc-generator.xcemp
   - project-doc-generator.xcemp
-  - ".cursor/**"
-  - ".trae/**"
+  # IDE / 工作区
+  - .cursor/**
+  - .trae/**
   - "*.code-workspace"
-  - "MODstore_deploy/.trae/**"
+  - MODstore_deploy/.trae/**
+  # MODstore 项目级文档
   - MODstore_deploy/COMPOSE.md
   - MODstore_deploy/CONTRIBUTING.md
-  - MODstore_deploy/pyproject.toml
-  - "MODstore_deploy/templates/**"
-  - "MODstore_deploy/examples/**"
+  - MODstore_deploy/pyproject.toml           # 仅写注释 / 元数据；依赖升级走 dbops/ops 链路
+  - MODstore_deploy/templates/**
+  - MODstore_deploy/examples/**
   - 风格
-  - "yuangon/quality-and-docs/doc-knowledge-curator/**"
 
 forbidden_globs:
-  - "MODstore_deploy/modstore_server/**/*.py"
-  - "MODstore_deploy/market/src/**"
+  # 收窄黑名单以放行 templates/examples 中的文档骨架；仍禁止改后端与市场业务源码
+  - MODstore_deploy/modstore_server/**/*.py
+  - MODstore_deploy/market/src/**
   - "*.ts"
   - nginx-xiu-ci.conf
   - nginx-xiu-ci-root.conf
   - nginx-default.conf
-  - "_local_secrets/**"
+  - _local_secrets/**
   - docs/fhd-employee-composition.md
   - docs/modstore/员工制作增强设计方案.md
   - MODstore_deploy/docs/employee_publish_wizard.md
   - docs/adr/0003-artifacts-bundles-employee-packs.md
 
-depends_on:
-  - mods-and-eskill-curator
-  - vibe-coding-maintainer
-  - employee-pack-curator
+triggers:
+  on_error: true
+  on_quality_fail: true
+  on_coverage_miss: false
+  doc_change: true
+  subscribes:
+    - "employee.task.done:mods-and-eskill-curator"
+    - "employee.task.done:vibe-coding-maintainer"
+    - "employee.task.done:employee-pack-curator"
+    - "employee.task.done:test-qa-runner"
+    - "employee.task.done:log-monitor-incident"
+    - "employee.task.done:site-content-editor"
+    - "employee.task.done:payment-billing-reconciler"
+  max_patch_budget_tokens: 4000
+  max_patch_steps: 4
+
+sla:
+  timeout_seconds: 120
+  retry_max: 2
+  escalate_to_human: false
+
+llm_default: "auto"
+llm_reasoning: "auto"
+
+skills:
+  - skills/skill-doc-sync.md
 
 actions:
   handlers:
     - doc_sync
     - llm_md
+  doc_sync:
+    workspace_root: auto
+    scope_globs_ref: scope_globs
+    forbidden_globs_ref: forbidden_globs
+    markdownlint: true
+    consistency_check: true
+    diff_output: true
 
-triggers:
-  on_error: true
-  on_quality_fail: true
-
-skills:
-  - skill-doc-sync
+depends_on:
+  - mods-and-eskill-curator  # ESkill.md 变更同步
+  - vibe-coding-maintainer   # vibe-coding 文档同步
+  - employee-pack-curator    # 员工包专属文档由其全权负责
 
 changelog:
-  - version: "10.0.0"
-    date: "2026-06-07"
-    note: "yuangon 骨架由 bootstrap_yuangon.py 从 manifest 反向生成（v10 线内迭代）"
+  - version: "1.0.3"
+    date: "2026-05-08"
+    note: "全覆盖 Phase2：收窄 forbidden（py/vue/nginx）放行 MODstore templates/examples 与根「风格」文件"
+  - version: "1.0.2"
+    date: "2026-05-08"
+    note: "订阅 log-monitor-incident 日健康报告（modstore-report-meta）存档与索引"
+  - version: "1.0.1"
+    date: "2026-05-08"
+    note: "订阅 payment-billing-reconciler 产出物归档 tips"
+  - version: "1.0.0"
+    date: "2026-05-06"
+    note: "初始创建"

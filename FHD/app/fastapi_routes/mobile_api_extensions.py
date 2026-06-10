@@ -350,6 +350,10 @@ class SyncPushBody(BaseModel):
     items: list[SyncPushItem] = Field(default_factory=list)
 
 
+class SyncAckBody(BaseModel):
+    cursor: int = Field(default=0, ge=0)
+
+
 def _approval_items(limit: int = 100) -> list[dict[str, Any]]:
     from app.db.models.approval import ApprovalRequest
     from app.db.session import get_db
@@ -420,10 +424,14 @@ async def mobile_sync_pull(body: SyncPullBody, user=Depends(get_mobile_user)):
         cursor = sync_db.get_status().get("local_cursor") or body.since_cursor
         if cursor:
             sync_db.update_remote_cursor(int(cursor))
+        im_entity_types = {"im_message", "im_read_state"}
+        im_changes = [c for c in changes if str(c.get("entity_type") or "") in im_entity_types]
         return format_mobile_response(
             data={
                 "cursor": cursor,
                 "changes": changes,
+                "im_changes": im_changes,
+                "im_change_count": len(im_changes),
                 "approvals": _approval_items(),
                 "shipments": _shipment_items(),
             },
@@ -468,6 +476,26 @@ async def mobile_sync_push(body: SyncPushBody, user=Depends(get_mobile_user)):
         return format_mobile_response(data={"written": written, "apply": apply_result})
     except OPERATIONAL_ERRORS as exc:
         logger.warning("mobile_sync_push: %s", exc)
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=500),
+            status_code=500,
+        )
+
+
+@extension_router.post("/sync/ack")
+async def mobile_sync_ack(body: SyncAckBody, user=Depends(get_mobile_user)):
+    if user is None:
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
+        )
+    try:
+        from app.db.xcmax_sync import SyncDb
+
+        sync_db = SyncDb()
+        sync_db.update_remote_cursor(int(body.cursor))
+        return format_mobile_response(data={"acked": int(body.cursor)})
+    except OPERATIONAL_ERRORS as exc:
+        logger.warning("mobile_sync_ack: %s", exc)
         return JSONResponse(
             format_mobile_response(None, str(exc), success=False, code=500),
             status_code=500,

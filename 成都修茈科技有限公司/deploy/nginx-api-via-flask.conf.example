@@ -1,0 +1,33 @@
+# 示例：xiu-ci.com 的 /api/ 必须先到 Flask（由 app.py 反代 Uvicorn 并处理 CORS）。
+# 若 Nginx 将 /api/ 直接 proxy_pass 到 Uvicorn，则 Flask 的 OPTIONS/CORS 不会执行，
+# 浏览器仍会报「预检无 Access-Control-Allow-Origin」——请改为下列 upstream 指向 Flask 端口。
+
+upstream flask_modstore_gateway {
+    # Gunicorn / Flask 监听地址（与线上实际一致）
+    server 127.0.0.1:9999;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name xiu-ci.com www.xiu-ci.com;
+
+    # ssl_certificate ...;
+    # ssl_certificate_key ...;
+
+    # 关键：整段 /api 交给 Flask，勿对 OPTIONS 在此处 return 4xx（除非你在本层完整实现 CORS）
+    location /api/ {
+        proxy_pass http://flask_modstore_gateway;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_connect_timeout 120s;
+        proxy_send_timeout 120s;
+        proxy_read_timeout 120s;
+        proxy_buffering off;
+    }
+
+    # 其余静态或门户页面按你现有配置
+    # location / { ... }
+}

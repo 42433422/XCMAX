@@ -18,6 +18,11 @@ _LEGAL_VERSION = os.environ.get("XCAGI_LEGAL_VERSION", "1").strip() or "1"
 _ICP_NUMBER = (
     os.environ.get("XCAGI_ICP_NUMBER", "蜀ICP备2026014056号-1").strip() or "蜀ICP备2026014056号-1"
 )
+_APP_FILING_NUMBER = (
+    os.environ.get("XCAGI_APP_FILING_NUMBER", "蜀ICP备2026015936号").strip()
+    or os.environ.get("XCAGI_ANDROID_APP_FILING_NUMBER", "").strip()
+    or "蜀ICP备2026015936号"
+)
 _APP_FILING_APPROVED = (
     os.environ.get("XCAGI_ANDROID_APP_FILING_APPROVED", "1") or ""
 ).strip().lower() in (
@@ -27,11 +32,11 @@ _APP_FILING_APPROVED = (
     "on",
 )
 
-# versionCode 对齐 Android app/build.gradle.kts
-_ANDROID_MIN_VERSION = int(os.environ.get("XCAGI_ANDROID_MIN_VERSION_CODE", "11") or "11")
-_ANDROID_LATEST_VERSION = int(os.environ.get("XCAGI_ANDROID_LATEST_VERSION_CODE", "15") or "15")
+# versionCode / versionName 对齐 FHD/VERSION.md v10 锚点与 mobile-android/app/build.gradle.kts
+_ANDROID_MIN_VERSION = int(os.environ.get("XCAGI_ANDROID_MIN_VERSION_CODE", "10") or "10")
+_ANDROID_LATEST_VERSION = int(os.environ.get("XCAGI_ANDROID_LATEST_VERSION_CODE", "10") or "10")
 _ANDROID_LATEST_NAME = (
-    os.environ.get("XCAGI_ANDROID_LATEST_VERSION_NAME", "1.6.2").strip() or "1.6.2"
+    os.environ.get("XCAGI_ANDROID_LATEST_VERSION_NAME", "10.0.0").strip() or "10.0.0"
 )
 _ANDROID_FORCE_UPDATE = os.environ.get("XCAGI_ANDROID_FORCE_UPDATE", "").strip() in (
     "1",
@@ -64,6 +69,7 @@ def api_app_config(
         "icp_number": _ICP_NUMBER,
         "app_filing_approved": _APP_FILING_APPROVED,
         "app_filing_beian_url": "https://beian.miit.gov.cn/",
+        "app_filing_number": _APP_FILING_NUMBER,
         "min_android_version": _ANDROID_MIN_VERSION,
         "latest_android_version": _ANDROID_LATEST_VERSION,
         "latest_android_version_name": _ANDROID_LATEST_NAME,

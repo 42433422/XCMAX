@@ -68,6 +68,10 @@ data class SyncPushItem(
 
 data class SyncPushBody(val items: List<SyncPushItem> = emptyList())
 
+data class ImDirectBody(val peer_user_id: Int)
+
+data class ImSendBody(val body: String)
+
 interface FhdApi {
     @GET("api/health")
     suspend fun health(): Map<String, Any?>
@@ -192,4 +196,19 @@ interface FhdApi {
 
     @GET("api/finance/summary")
     suspend fun financeSummary(): Map<String, Any?>
+
+    @POST("api/im/conversations/direct")
+    suspend fun imCreateDirect(@Body body: ImDirectBody): Map<String, Any?>
+
+    @GET("api/im/conversations/{id}/messages")
+    suspend fun imListMessages(
+        @Path("id") conversationId: Int,
+        @Query("limit") limit: Int = 50,
+    ): Map<String, Any?>
+
+    @POST("api/im/conversations/{id}/messages")
+    suspend fun imSendMessage(
+        @Path("id") conversationId: Int,
+        @Body body: ImSendBody,
+    ): Map<String, Any?>
 }

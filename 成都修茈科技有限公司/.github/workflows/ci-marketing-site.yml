@@ -1,0 +1,85 @@
+# 组件级 CI：营销官网静态页（根层 *.html + site/ + new/ + assets 等）
+#
+# 责任边界：仅校验静态营销页改动；无需 Vue 构建或 Playwright。
+# 未拆仓前，此工作流保证营销页变更不会触发 Vue/Python/Java 的全量流水线。
+
+name: CI - Marketing Site
+
+on:
+  pull_request:
+    paths:
+      - 'index.html'
+      - 'about.html'
+      - 'case-*.html'
+      - 'cases.html'
+      - 'contact.html'
+      - 'honors.html'
+      - 'news.html'
+      - 'services.html'
+      - 'solutions.html'
+      - 'excel-to-ai.html'
+      - 'baidu_verify_*.html'
+      - 'styles.css'
+      - 'main.js'
+      - 'assets/**'
+      - 'new/**'
+      - 'site/**'
+      - '.github/workflows/ci-marketing-site.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'index.html'
+      - 'about.html'
+      - 'case-*.html'
+      - 'cases.html'
+      - 'contact.html'
+      - 'honors.html'
+      - 'news.html'
+      - 'services.html'
+      - 'solutions.html'
+      - 'excel-to-ai.html'
+      - 'baidu_verify_*.html'
+      - 'styles.css'
+      - 'main.js'
+      - 'assets/**'
+      - 'new/**'
+      - 'site/**'
+      - '.github/workflows/ci-marketing-site.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ci-marketing-site-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  marketing-site-ci:
+    name: Marketing site (static pages)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install HTML validator
+        run: npm install --global html-validate@9 htmlhint@1
+
+      # 只校验根层与 site/、new/ 下的静态页；忽略 MODstore_deploy 与 market 下的模板
+      - name: HTML validate (root)
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          files=( *.html site/*.html new/*.html )
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No static HTML files to validate."
+            exit 0
+          fi
+          echo "Validating ${#files[@]} marketing HTML file(s) with htmlhint..."
+          htmlhint "${files[@]}"

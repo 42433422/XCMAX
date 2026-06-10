@@ -1,0 +1,76 @@
+# market 生产部署：在 "CI - Market" 工作流成功后触发。
+# 拆分 CI 后不再监听单一的 "CI" 聚合工作流；仅 market/ 变更会走到这里。
+#
+# Secrets（仓库 Settings → Secrets and variables → Actions）：
+#   DEPLOY_HOST          例：119.27.178.147
+#   DEPLOY_USER          例：root
+#   DEPLOY_SSH_PRIVATE_KEY  登录该用户的私钥全文（含 BEGIN/END）
+# Variables（可选）：
+#   DEPLOY_MARKET_REMOTE_DIR（推荐，拆仓后指向独立 market 工作树）
+#   DEPLOY_REMOTE_REPO（兼容未拆仓服务器；如果设置会使用 ${REPO}/MODstore_deploy/market）
+#   DEPLOY_GIT_BRANCH（默认 main）
+
+name: Market live deploy
+
+on:
+  workflow_run:
+    workflows: ['CI - Market']
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: market-live-deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy-market-on-server:
+    runs-on: ubuntu-latest
+    # workflow_run 触发时仅在 CI 通过、且 head_branch 是 main 时部署；
+    # workflow_dispatch 永远允许（应急入口）。
+    if: >-
+      ${{
+        github.event_name == 'workflow_dispatch' ||
+        (
+          github.event.workflow_run.conclusion == 'success' &&
+          github.event.workflow_run.head_branch == 'main' &&
+          github.event.workflow_run.event == 'push'
+        )
+      }}
+    steps:
+      - name: SSH — git pull + npm ci + build market
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          script_stop: true
+          command_timeout: 25m
+          script: |
+            set -euo pipefail
+            MARKET_DIR="${{ vars.DEPLOY_MARKET_REMOTE_DIR }}"
+            LEGACY_REPO="${{ vars.DEPLOY_REMOTE_REPO }}"
+            BRANCH="${{ vars.DEPLOY_GIT_BRANCH }}"
+            if [ -z "${BRANCH}" ]; then BRANCH="main"; fi
+            if [ -n "${MARKET_DIR}" ]; then
+              TARGET_DIR="${MARKET_DIR}"
+            elif [ -n "${LEGACY_REPO}" ]; then
+              TARGET_DIR="${LEGACY_REPO}/MODstore_deploy/market"
+            else
+              echo "[err] 未设置 DEPLOY_MARKET_REMOTE_DIR 或 DEPLOY_REMOTE_REPO；market 路径不再默认硬编码到 monorepo"
+              exit 1
+            fi
+            echo "[info] market target=${TARGET_DIR} branch=${BRANCH}"
+            cd "${TARGET_DIR}"
+            git fetch origin "${BRANCH}"
+            git pull --ff-only "origin" "${BRANCH}" || git pull "origin" "${BRANCH}"
+            if [ -f ../scripts/node-release.sh ]; then
+              bash ../scripts/node-release.sh
+            elif [ -f scripts/node-release.sh ]; then
+              bash scripts/node-release.sh
+            else
+              export VITE_PUBLIC_BASE=/market/
+              npm ci
+              npm run build
+            fi
+            echo "[ok] market dist updated at $(pwd)/dist"

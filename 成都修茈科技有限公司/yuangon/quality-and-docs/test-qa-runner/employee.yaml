@@ -1,61 +1,88 @@
 id: test-qa-runner
 name: 测试质量运行员
-version: "10.0.0"
+version: 2.0.3
+domain: 负责全站测试套件的维护与执行：pytest 单元/集成测试、vitest 前端单测、Playwright E2E 测试、pre-commit hooks、覆盖率门禁、CI
+  工作流测试步骤、TypeScript 类型检查；输出测试结果并推动覆盖率达标；不修改被测源码。
 owner: admin
 area: quality-and-docs
-domain: >-
-  负责全站测试套件的维护与执行：pytest 单元/集成测试、vitest 前端单测、Playwright E2E 测试、pre-commit hooks、覆盖率门禁、CI 工作流测试步骤、TypeScript 类型检查；输出测试结果并推动覆盖率达标；不修改被测源码。
-
 scope_globs:
-  - .cursor/contracts/error-code-map.yaml
-  - "MODstore_deploy/tests/**"
-  - "vibe-coding/tests/**"
-  - playwright.config.ts
-  - playwright.global-setup.ts
-  - MODstore_deploy/market/playwright.config.ts
-  - MODstore_deploy/market/playwright.global-setup.ts
-  - .pre-commit-config.yaml
-  - "MODstore_deploy/market/src/**/*.test.ts"
-  - "MODstore_deploy/market/src/**/*.spec.ts"
-  - "MODstore_deploy/market/src/test/**"
-  - MODstore_deploy/market/vite.config.ts
-  - ".github/workflows/ci-*.yml"
-  - MODstore_deploy/tests/conftest.py
-  - vibe-coding/tests/conftest.py
-  - MODstore_deploy/tests/test_coverage_gates.py
-  - MODstore_deploy/scripts/coverage_audit.py
-  - "yuangon/quality-and-docs/test-qa-runner/**"
-
+- .cursor/contracts/error-code-map.yaml
+- MODstore_deploy/tests/**
+- vibe-coding/tests/**
+- playwright.config.ts
+- playwright.global-setup.ts
+- MODstore_deploy/market/playwright.config.ts
+- MODstore_deploy/market/playwright.global-setup.ts
+- .pre-commit-config.yaml
+- MODstore_deploy/market/src/**/*.test.ts
+- MODstore_deploy/market/src/**/*.spec.ts
+- MODstore_deploy/market/src/test/**
+- MODstore_deploy/market/vite.config.ts
+- .github/workflows/ci-*.yml
+- MODstore_deploy/tests/conftest.py
+- vibe-coding/tests/conftest.py
+- MODstore_deploy/tests/test_coverage_gates.py
+- MODstore_deploy/scripts/coverage_audit.py
 forbidden_globs:
-  - "MODstore_deploy/modstore_server/**"
-  - "vibe-coding/src/**"
-  - "_local_secrets/**"
-  - "nginx-*.conf"
-
-depends_on:
-  - modstore-backend-api
-  - vibe-coding-maintainer
-  - market-frontend-dev
-  - deploy-release-officer
-
-actions:
-  handlers:
-    - llm_md
-    - echo
-
+- MODstore_deploy/modstore_server/**
+- vibe-coding/src/**
+- _local_secrets/**
+- nginx-*.conf
 triggers:
   on_error: true
   on_quality_fail: true
-
+  on_coverage_miss: true
+  subscribes:
+  - employee.task.done:modstore-backend-api
+  - employee.task.done:market-frontend-dev
+  - employee.task.failed:modstore-backend-api
+  max_patch_budget_tokens: 4000
+  max_patch_steps: 5
+sla:
+  timeout_seconds: 300
+  retry_max: 1
+  escalate_to_human: true
+llm_default: auto
+llm_reasoning: auto
 skills:
-  - skill-pytest-run
-  - skill-playwright-e2e
-  - skill-vitest-run
-  - skill-coverage-gate
-  - skill-pre-commit-maintain
-  - skill-ci-workflow-check
-
+- skills/skill-pytest-run.md
+- skills/skill-playwright-e2e.md
+- skills/skill-vitest-run.md
+- skills/skill-coverage-gate.md
+- skills/skill-pre-commit-maintain.md
+- skills/skill-ci-workflow-check.md
+- skills/skill-failure-triage.md
+- skills/skill-test-case-review-checklist.md
+- skills/skill-typecheck-guard.md
+- skills/skill-generate-pytest-stub.md
+depends_on:
+- modstore-backend-api
+- vibe-coding-maintainer
+- market-frontend-dev
+- deploy-release-officer
 changelog:
-  - version: "10.0.0"
-    date: "2026-06-07"
-    note: "yuangon 骨架由 bootstrap_yuangon.py 从 manifest 反向生成（v10 线内迭代）"
+- version: 2.0.3
+  date: '2026-05-08'
+  note: 全覆盖 Phase2：scope 纳入 MODstore_deploy/scripts/coverage_audit.py
+- version: 2.0.2
+  date: '2026-05-08'
+  note: 修正 forbidden：移除误拦 market 单测路径的整树规则；scope 纳入 playwright.global-setup；新增 failure-triage
+    与用例评审清单 skill
+- version: 2.0.1
+  date: '2026-05-08'
+  note: scope 增加 .cursor/contracts/error-code-map.yaml，与 log-monitor-incident 统一失败码标注
+- version: 2.0.0
+  date: '2026-05-08'
+  note: 全权负责升级：新增 vitest/覆盖率门禁/pre-commit/CI工作流/类型检查 5 个 Skill；扩展 scope_globs 覆盖前端测试与
+    CI；新增 market-frontend-dev 和 deploy-release-officer 协作
+- version: 1.0.0
+  date: '2026-05-06'
+  note: 初始创建
+ci_coverage_artifacts:
+- coverage/**
+- MODstore_deploy/.coverage
+- MODstore_deploy/.pytest_cache/**
+- vibe-coding/.pytest_cache/**
+- playwright-report/**
+- test-results/**
+- .github/workflows/ci-*.yml

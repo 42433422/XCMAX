@@ -1,44 +1,51 @@
 id: fhd-core-maintainer
 name: FHD 核心应用维护员
-version: "10.0.0"
+version: "1.0.0"
+domain: 维护 FHD 宿主核心 app/ 与 tests/：应用服务、路由、NeuroBus 集成；产出经 CR Git 管线提交 PR，由 FHD test.yml 与 ci-auto-merge 门控。
 owner: admin
 area: platform-core
-domain: >-
-  维护 FHD 宿主核心 app/ 与 tests/：应用服务、路由、NeuroBus 集成；产出经 CR Git 管线提交 PR，由 FHD test.yml 与 ci-auto-merge 门控。
 
 scope_globs:
-  - "FHD/app/**"
-  - "FHD/tests/**"
-  - "FHD/frontend/src/**"
+  - FHD/app/**
+  - FHD/tests/**
   - FHD/pyproject.toml
-  - "FHD/alembic/**"
+  - FHD/alembic/**
   - FHD/docs/api/openapi.json
-  - "FHD/mods/_employees/fhd-core-maintainer/**"
-  - "yuangon/platform-core/fhd-core-maintainer/**"
+  - FHD/mods/_employees/fhd-core-maintainer/**
+  - yuangon/platform-core/fhd-core-maintainer/**
 
 forbidden_globs:
-  - "MODstore_deploy/**"
-  - "MODstore_deploy/market/**/*.vue"
-  - "成都修茈科技有限公司/**"
-  - "vibe-coding/**"
-  - "_local_secrets/**"
-
-depends_on:
-  - test-qa-runner
-
-actions:
-  handlers:
-    - llm_md
-    - echo
+  - MODstore_deploy/**
+  - 成都修茈科技有限公司/**
+  - vibe-coding/**
+  - _local_secrets/**
+  - "*.vue"
 
 triggers:
   on_error: true
   on_quality_fail: true
+  on_coverage_miss: true
+  subscribes:
+    - "telemetry.backlog.created"
+    - "employee.task.failed:test-qa-runner"
+  max_patch_budget_tokens: 6000
+  max_patch_steps: 6
+
+sla:
+  timeout_seconds: 300
+  retry_max: 2
+  escalate_to_human: true
+
+llm_default: "auto"
+llm_reasoning: "auto"
 
 skills:
-  - skill-fhd-app-patch
+  - skills/skill-fhd-app-patch.md
+
+depends_on:
+  - test-qa-runner
 
 changelog:
-  - version: "10.0.0"
-    date: "2026-06-07"
-    note: "yuangon 骨架由 bootstrap_yuangon.py 从 manifest 反向生成（v10 线内迭代）"
+  - version: "1.0.0"
+    date: "2026-05-31"
+    note: "制作线 P2：FHD app/ 自动编码→PR 闭环"

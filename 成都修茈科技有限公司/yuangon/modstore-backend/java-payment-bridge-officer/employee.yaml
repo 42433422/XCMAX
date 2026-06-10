@@ -1,40 +1,40 @@
 id: java-payment-bridge-officer
 name: Java 支付桥接员
-version: "10.0.0"
+version: "1.0.0"
+domain: P-W MODstore Java 支付面：PaymentController、OrderService、PAYMENT_CONTRACT 与 Python 代理对齐。
 owner: admin
 area: modstore-backend
-domain: >-
-  P-W MODstore Java 支付面：PaymentController、OrderService、PAYMENT_CONTRACT 与 Python 代理对齐。
+five_line_id: prod_web
+subzone: modstore-api
+also_serves: [ops_acquisition]
 
 scope_globs:
-  - "MODstore_deploy/java/**"
-  - "MODstore_deploy/modstore_server/payment_*.py"
+  - MODstore_deploy/java/**
+  - MODstore_deploy/modstore_server/payment_*.py
   - MODstore_deploy/docs/PAYMENT_CONTRACT.md
-  - "yuangon/modstore-backend/java-payment-bridge-officer/**"
 
 forbidden_globs:
-  - "_local_secrets/**"
+  - _local_secrets/**
   - "*.env*"
-
-depends_on:
-  - modstore-backend-api
-  - payment-billing-reconciler
-
-actions:
-  handlers:
-    - llm_md
-    - echo
 
 triggers:
   on_error: true
   on_quality_fail: true
 
-skills:
-  - task.analyze
-  - llm.markdown
-  - workflow.assist
+sla:
+  timeout_seconds: 180
+  retry_max: 2
+  escalate_to_human: true
+
+llm_default: "auto"
+
+skills: []
+
+depends_on:
+  - modstore-backend-api
+  - payment-billing-reconciler
 
 changelog:
-  - version: "10.0.0"
-    date: "2026-06-07"
-    note: "yuangon 骨架由 bootstrap_yuangon.py 从 manifest 反向生成（v10 线内迭代）"
+  - version: "1.0.0"
+    date: "2026-06-03"
+    note: "六部门编制：P-W P1d Java 支付桥接"

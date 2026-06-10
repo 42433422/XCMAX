@@ -1,0 +1,17 @@
+{
+  "task": "sync-employee-readme",
+  "description": "同步所有 AI 员工 README 与 employee.yaml 的一致性",
+  "input": {
+    "scan_paths": ["yuangon/"],
+    "checks": {
+      "scope_globs_match": true,
+      "forbidden_globs_listed": true,
+      "kpi_section_exists": true
+    }
+  },
+  "output": {
+    "format": "markdown",
+    "report_mismatches": true,
+    "auto_fix": false
+  }
+}

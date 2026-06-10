@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # 将 modstore.service 对齐到与 remote_sync_extract.sh 相同的 MODstore_deploy 目录（drop-in 覆盖）。
 # 需 root。用法（在服务器上）：
-#   sudo MODSTORE_DEPLOY_DIR=/root/modstore-git/MODstore_deploy bash scripts/align_modstore_systemd_to_deploy.sh
+#   sudo MODSTORE_DEPLOY_DIR=/root/XCMAX/成都修茈科技有限公司/MODstore_deploy bash scripts/align_modstore_systemd_to_deploy.sh
 # 同时安装后台任务单元 modstore-scheduler.service（参见 systemd/modstore-scheduler.service.example）：
-#   sudo INSTALL_MODSTORE_SCHEDULER=1 MODSTORE_DEPLOY_DIR=/root/modstore-git/MODstore_deploy bash scripts/align_modstore_systemd_to_deploy.sh
+#   sudo INSTALL_MODSTORE_SCHEDULER=1 MODSTORE_DEPLOY_DIR=/root/XCMAX/成都修茈科技有限公司/MODstore_deploy bash scripts/align_modstore_systemd_to_deploy.sh
 #   或追加参数：sudo bash scripts/align_modstore_systemd_to_deploy.sh --with-scheduler
 # 可选环境变量：
 #   MODSTORE_UVICORN_PORT   默认 9999
@@ -23,7 +23,7 @@ for _arg in "$@"; do
   esac
 done
 
-DEPLOY_DIR="${MODSTORE_DEPLOY_DIR:-/root/modstore-git/MODstore_deploy}"
+DEPLOY_DIR="${MODSTORE_DEPLOY_DIR:-/root/XCMAX/成都修茈科技有限公司/MODstore_deploy}"
 PORT="${MODSTORE_UVICORN_PORT:-9999}"
 EXTRA="${MODSTORE_UVICORN_EXTRA:-}"
 

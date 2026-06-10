@@ -1,10 +1,9 @@
 id: modstore-backend-api
 name: MODstore 后端 API 员
-version: "10.0.0"
+version: "1.0.0"
+domain: 维护 MODstore 平台的 Flask 蓝图 API：工作台、市场目录、工作流、LLM 代理与 WebSocket 实时通道；不触碰前端 Vue 文件。
 owner: admin
 area: modstore-backend
-domain: >-
-  维护 MODstore 平台的 Flask 蓝图 API：工作台、市场目录、工作流、LLM 代理与 WebSocket 实时通道；不触碰前端 Vue 文件。
 
 scope_globs:
   - MODstore_deploy/modstore_server/workbench_api.py
@@ -17,50 +16,56 @@ scope_globs:
   - MODstore_deploy/modstore_server/llm_catalog.py
   - MODstore_deploy/modstore_server/llm_model_taxonomy.py
   - MODstore_deploy/modstore_server/workflow_nl_graph.py
-  - "MODstore_deploy/modstore_server/api/**"
-  - "MODstore_deploy/modstore_server/eventing/**"
+  - MODstore_deploy/modstore_server/api/**
+  - MODstore_deploy/modstore_server/eventing/**
   - MODstore_deploy/modstore_server/app.py
-  - "MODstore_deploy/modstore_server/services/**"
-  - "MODstore_deploy/modstore_server/application/**"
-  - "MODstore_deploy/modstore_server/domain/**"
-  - "MODstore_deploy/modstore_server/infrastructure/**"
-  - "MODstore_deploy/modstore_server/integrations/**"
-  - "MODstore_deploy/modstore_server/tools/**"
-  - "MODstore_deploy/docs/contracts/events/**"
-  - "MODstore_deploy/docs/contracts/openapi/**"
-  - "MODstore_deploy/docs/contracts/orchestration/**"
-  - "yuangon/modstore-backend/modstore-backend-api/**"
+  - MODstore_deploy/modstore_server/services/**
+  - MODstore_deploy/modstore_server/application/**
+  - MODstore_deploy/modstore_server/domain/**
+  - MODstore_deploy/modstore_server/infrastructure/**
+  - MODstore_deploy/modstore_server/integrations/**
+  - MODstore_deploy/modstore_server/tools/**
+  # API / 事件 / 编排契约
+  - MODstore_deploy/docs/contracts/events/**
+  - MODstore_deploy/docs/contracts/openapi/**
+  - MODstore_deploy/docs/contracts/orchestration/**
 
 forbidden_globs:
-  - "MODstore_deploy/market/src/**"
-  - "MODstore_deploy/modstore_server/payment_*.py"
-  - "MODstore_deploy/modstore_server/employee_*.py"
-  - MODstore_deploy/modstore_server/models.py
-  - "MODstore_deploy/modstore_server/migrations/**"
-  - "MODstore_deploy/alembic/**"
-  - "_local_secrets/**"
-  - "vibe-coding/**"
-
-depends_on:
-  - test-qa-runner
-  - log-monitor-incident
-  - deploy-release-officer
-  - dbops-engineer
-
-actions:
-  handlers:
-    - llm_md
-    - echo
+  - MODstore_deploy/market/src/**     # 前端归 modstore-frontend
+  - MODstore_deploy/modstore_server/payment_*.py   # 归 payment-billing-reconciler
+  - MODstore_deploy/modstore_server/employee_*.py  # 归 employee-pack-curator
+  - MODstore_deploy/modstore_server/models.py      # 归 dbops-engineer，需求由本岗发起 PR 会签
+  - MODstore_deploy/modstore_server/migrations/**  # 归 dbops-engineer
+  - MODstore_deploy/alembic/**                     # 归 dbops-engineer
+  - _local_secrets/**
+  - vibe-coding/**
 
 triggers:
   on_error: true
   on_quality_fail: true
+  on_coverage_miss: false
+  max_patch_budget_tokens: 5000
+  max_patch_steps: 6
+
+sla:
+  timeout_seconds: 180
+  retry_max: 2
+  escalate_to_human: true
+
+llm_default: "auto"
+llm_reasoning: "auto"
 
 skills:
-  - skill-api-health-check
-  - skill-flask-blueprint-update
+  - skills/skill-api-health-check.md
+  - skills/skill-flask-blueprint-update.md
+
+depends_on:
+  - test-qa-runner
+  - log-monitor-incident
+  - deploy-release-officer # 发版与部署编排协作
+  - dbops-engineer         # schema 变更必须由 DBA 会签
 
 changelog:
-  - version: "10.0.0"
-    date: "2026-06-07"
-    note: "yuangon 骨架由 bootstrap_yuangon.py 从 manifest 反向生成（v10 线内迭代）"
+  - version: "1.0.0"
+    date: "2026-05-06"
+    note: "初始创建"
