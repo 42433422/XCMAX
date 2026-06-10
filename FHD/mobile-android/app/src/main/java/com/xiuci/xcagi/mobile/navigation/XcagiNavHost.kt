@@ -16,21 +16,14 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Chat
-import androidx.compose.material.icons.filled.Dashboard
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Lan
+import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Task
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
+import androidx.compose.material.icons.filled.Work
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
@@ -61,18 +54,21 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.xiuci.xcagi.mobile.R
-import com.xiuci.xcagi.mobile.core.ProductSkuConfig
 import com.xiuci.xcagi.mobile.core.connectivity.NetworkMonitor
 import com.xiuci.xcagi.mobile.feature.legal.LegalConsentScreen
 import com.xiuci.xcagi.mobile.feature.modhost.ModWebViewScreen
 import com.xiuci.xcagi.mobile.feature.settings.SettingsScreen
 import com.xiuci.xcagi.mobile.feature.workbench.WorkbenchWebViewScreen
 import com.xiuci.xcagi.mobile.ui.AppViewModel
+import com.xiuci.xcagi.mobile.ui.components.mobile.WeBottomNavBar
+import com.xiuci.xcagi.mobile.ui.components.mobile.WeBottomNavItem
+import com.xiuci.xcagi.mobile.ui.components.mobile.WeCell
+import com.xiuci.xcagi.mobile.ui.components.mobile.WeCellGroup
+import com.xiuci.xcagi.mobile.ui.components.mobile.WeScreen
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
-import androidx.hilt.navigation.compose.hiltViewModel
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
@@ -155,18 +151,16 @@ fun XcagiNavHost(vm: AppViewModel, pendingDeepLink: String? = null) {
         if (loggedIn) {
             val r = nav.currentDestination?.route
             if (r == Routes.AUTH || r == Routes.CONNECT || r == Routes.REGISTER) {
-                nav.navigate(Routes.HOME_HUB) { popUpTo(nav.graph.findStartDestination().id) { inclusive = true } }
+                nav.navigate(Routes.CHAT) { popUpTo(nav.graph.findStartDestination().id) { inclusive = true } }
             }
         }
     }
 
+    val approvalCount by vm.approvalPendingCount.collectAsState()
+
     val backStack by nav.currentBackStackEntryAsState()
-    val current = backStack?.destination?.route
-    val bottomNavRoutes = if (ProductSkuConfig.showsEnterpriseNav) {
-        setOf(Routes.HOME_HUB, Routes.CHAT, Routes.WORKBENCH, Routes.APPROVAL, Routes.ERP, Routes.PROFILE)
-    } else {
-        setOf(Routes.HOME_HUB, Routes.CHAT, Routes.WORKBENCH, Routes.PROFILE)
-    }
+    val current = backStack?.destination?.route?.substringBefore("?")
+    val bottomNavRoutes = setOf(Routes.CHAT, Routes.WORK, Routes.DISCOVER, Routes.PROFILE)
     val showBar = loggedIn && current in bottomNavRoutes
 
     if (!navReady) {
@@ -192,46 +186,22 @@ fun XcagiNavHost(vm: AppViewModel, pendingDeepLink: String? = null) {
         },
         bottomBar = {
             if (showBar) {
-                NavigationBar {
-                    NavigationBarItem(
-                        current == Routes.HOME_HUB,
-                        { nav.navigate(Routes.HOME_HUB) { launchSingleTop = true } },
-                        icon = { Icon(Icons.Default.Home, null) },
-                        label = { Text("首页") },
-                    )
-                    NavigationBarItem(
-                        current == Routes.CHAT,
-                        { nav.navigate(Routes.CHAT) { launchSingleTop = true } },
-                        icon = { Icon(Icons.Default.Chat, null) },
-                        label = { Text("对话") },
-                    )
-                    NavigationBarItem(
-                        current == Routes.WORKBENCH,
-                        { nav.navigate(Routes.WORKBENCH) { launchSingleTop = true } },
-                        icon = { Icon(Icons.Default.Dashboard, null) },
-                        label = { Text("工作台") },
-                    )
-                    if (ProductSkuConfig.showsEnterpriseNav) {
-                        NavigationBarItem(
-                            current == Routes.APPROVAL,
-                            { nav.navigate(Routes.APPROVAL) { launchSingleTop = true } },
-                            icon = { Icon(Icons.Default.Task, null) },
-                            label = { Text("审批") },
-                        )
-                        NavigationBarItem(
-                            current == Routes.ERP,
-                            { nav.navigate(Routes.ERP) { launchSingleTop = true } },
-                            icon = { Icon(Icons.Default.Lan, null) },
-                            label = { Text("业务") },
-                        )
-                    }
-                    NavigationBarItem(
-                        current == Routes.PROFILE,
-                        { nav.navigate(Routes.PROFILE) { launchSingleTop = true } },
-                        icon = { Icon(Icons.Default.Person, null) },
-                        label = { Text("我的") },
-                    )
-                }
+                WeBottomNavBar(
+                    items = listOf(
+                        WeBottomNavItem(Routes.CHAT, "对话", Icons.Default.Chat),
+                        WeBottomNavItem(Routes.WORK, "工作", Icons.Default.Work, approvalCount),
+                        WeBottomNavItem(Routes.DISCOVER, "发现", Icons.Default.Explore),
+                        WeBottomNavItem(Routes.PROFILE, "我的", Icons.Default.Person),
+                    ),
+                    currentRoute = current,
+                    onSelect = { route ->
+                        nav.navigate(route) {
+                            popUpTo(nav.graph.findStartDestination().id) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
+                )
             }
         },
     ) { padding ->
@@ -285,7 +255,7 @@ fun XcagiNavHost(vm: AppViewModel, pendingDeepLink: String? = null) {
                 SettingsScreen(vm) { nav.popBackStack() }
             }
             composable(Routes.AUTH) {
-                AuthScreen(vm, { nav.navigate(Routes.REGISTER) }, { nav.navigate(Routes.HOME_HUB) })
+                AuthScreen(vm, { nav.navigate(Routes.REGISTER) }, { nav.navigate(Routes.CHAT) })
             }
             composable(Routes.REGISTER) { RegisterScreen(vm) { nav.popBackStack() } }
             composable(Routes.HOME_HUB) {
@@ -320,16 +290,32 @@ fun XcagiNavHost(vm: AppViewModel, pendingDeepLink: String? = null) {
                     onConnectPc = { nav.navigate(Routes.CONNECT_PC) },
                     onAbout = { nav.navigate(Routes.ABOUT) },
                     onSettings = { nav.navigate(Routes.SETTINGS) },
-                    onBridge = { nav.navigate(Routes.BRIDGE) },
-                    onMods = { nav.navigate(Routes.MODS) },
-                    onMarket = { nav.navigate(Routes.MARKET) },
-                    onLongTail = { nav.navigate(Routes.LONGTAIL) },
                     onLogout = {
                         val dest = if (setupComplete) Routes.AUTH else Routes.CONNECT
                         vm.logout {
                             nav.navigate(dest) { popUpTo(0) { inclusive = true } }
                         }
                     },
+                )
+            }
+            composable(Routes.WORK) {
+                WorkScreen(
+                    vm,
+                    onApproval = { nav.navigate(Routes.APPROVAL) },
+                    onErpTab = { tab -> nav.navigate(Routes.erpTab(tab)) },
+                    onIm = { nav.navigate(Routes.IM) },
+                    onBridge = { nav.navigate(Routes.BRIDGE) },
+                    onLongTail = { nav.navigate(Routes.LONGTAIL) },
+                    onConnectPc = { nav.navigate(Routes.CONNECT_PC) },
+                )
+            }
+            composable(Routes.DISCOVER) {
+                DiscoverScreen(
+                    onWorkbench = { nav.navigate(Routes.WORKBENCH) },
+                    onMods = { nav.navigate(Routes.MODS) },
+                    onMarket = { nav.navigate(Routes.MARKET) },
+                    onScan = { nav.navigate(Routes.SCAN_QR) },
+                    onOcr = { nav.navigate(Routes.OCR) },
                 )
             }
             composable(Routes.CHAT) {
@@ -343,24 +329,40 @@ fun XcagiNavHost(vm: AppViewModel, pendingDeepLink: String? = null) {
                             onNative = { nav.navigate("mod/$id") },
                         )
                     },
+                    onOpenOcr = { nav.navigate(Routes.OCR) },
                 )
             }
             composable(Routes.APPROVAL) {
-                EnterpriseListScreen(
-                    title = "审批",
-                    vm = vm,
-                    load = vm::loadApprovals,
+                ApprovalListScreen(
+                    vm,
                     onItemClick = { id -> nav.navigate("approval/$id") },
                 )
             }
             composable(Routes.APPROVAL_DETAIL, arguments = listOf(navArgument("id") { type = NavType.IntType })) { e ->
                 ApprovalDetailScreen(vm, e.arguments?.getInt("id") ?: 0) { nav.popBackStack() }
             }
+            composable(Routes.IM) {
+                ImMessengerScreen(vm) { nav.popBackStack() }
+            }
             composable(Routes.ERP) { ErpScreen(vm) }
+            composable(Routes.ERP_OVERVIEW) { ErpScreen(vm) }
+            composable(
+                Routes.ERP_TAB,
+                arguments = listOf(navArgument("tabIndex") { type = NavType.IntType }),
+            ) { entry ->
+                ErpTabListScreen(
+                    tabIndex = entry.arguments?.getInt("tabIndex") ?: 0,
+                    vm = vm,
+                    onBack = { nav.popBackStack() },
+                )
+            }
+            composable(Routes.OCR) { OcrScreen(onBack = { nav.popBackStack() }) }
             composable(Routes.BRIDGE) { BridgeScreen(vm) }
-            composable(Routes.MARKET) { ListScreen("MODstore", vm, vm::loadMarket, null) }
+            composable(Routes.MARKET) {
+                ListScreen("MODstore", vm, vm::loadMarket, null) { nav.popBackStack() }
+            }
             composable(Routes.MODS) {
-                ListScreen("Mod", vm, vm::loadMods) { id -> nav.navigate("mod/$id") }
+                ListScreen("Mod", vm, vm::loadMods, { id -> nav.navigate("mod/$id") }) { nav.popBackStack() }
             }
             composable(Routes.MOD_WEB, arguments = listOf(navArgument("modId") { type = NavType.StringType })) { e ->
                 val modId = e.arguments?.getString("modId") ?: ""
@@ -403,44 +405,33 @@ fun ListScreen(
     vm: AppViewModel,
     load: () -> Unit,
     onClick: ((String) -> Unit)?,
+    onBack: (() -> Unit)? = null,
 ) {
     val items by vm.items.collectAsState()
+    val loading by vm.listLoading.collectAsState()
+    val error by vm.listError.collectAsState()
     LaunchedEffect(Unit) { load() }
-    Column(Modifier.fillMaxSize()) {
-        TopAppBar(title = { Text(title) })
-        LazyColumn(Modifier.padding(12.dp)) {
-            items(items) { item ->
-                Card(
-                    Modifier.fillMaxWidth().padding(vertical = 4.dp).then(
-                        if (onClick != null) Modifier.clickable { onClick(item.id) } else Modifier,
-                    ),
-                ) {
-                    Column(Modifier.padding(12.dp)) {
-                        Text(item.title, style = MaterialTheme.typography.titleMedium)
-                        if (item.subtitle.isNotBlank()) Text(item.subtitle)
-                    }
-                }
-            }
-        }
-    }
-}
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun ApprovalDetailScreen(vm: AppViewModel, id: Int, onBack: () -> Unit) {
-    val detail by vm.detailJson.collectAsState()
-    var opinion by remember { mutableStateOf("") }
-    LaunchedEffect(id) { vm.loadApprovalDetail(id) }
-    Column(Modifier.fillMaxSize()) {
-        TopAppBar(
-            title = { Text("审批 #$id") },
-            navigationIcon = { IconButton(onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null) } },
-        )
-        Text(detail, Modifier.padding(12.dp).weight(1f))
-        OutlinedTextField(opinion, { opinion = it }, Modifier.fillMaxWidth().padding(12.dp), label = { Text("意见") })
-        Row(Modifier.padding(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button({ vm.approve(id, opinion, onBack) }, Modifier.weight(1f)) { Text("通过") }
-            Button({ vm.reject(id, opinion, onBack) }, Modifier.weight(1f)) { Text("驳回") }
+    com.xiuci.xcagi.mobile.ui.components.mobile.MobileScaffold(
+        title = title,
+        onBack = onBack,
+        onRefresh = load,
+        loading = loading,
+        error = error,
+        empty = items.isEmpty(),
+        emptyMessage = "暂无数据",
+        onRetry = load,
+    ) { _ ->
+        WeCellGroup {
+            items.forEachIndexed { idx, item ->
+                WeCell(
+                    title = item.title,
+                    subtitle = item.subtitle,
+                    showArrow = onClick != null,
+                    showDivider = idx < items.lastIndex,
+                    onClick = onClick?.let { cb -> { cb(item.id) } },
+                )
+            }
         }
     }
 }
@@ -485,18 +476,22 @@ fun LongTailScreen(vm: AppViewModel) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun OcrScreen() {
-    Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("OCR / 拍照识别", style = MaterialTheme.typography.titleLarge)
+fun OcrScreen(onBack: () -> Unit) {
+    WeScreen(title = "OCR 拍照识别", onBack = onBack) {
         Text(
             "请在已连接电脑的局域网模式下，通过电脑端 FHD 使用完整 OCR 与批量识别；手机端将在后续版本接入相机上传。",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 16.dp),
         )
+        Spacer(Modifier.height(12.dp))
         Text(
-            "工作台内部分 Mod 已支持图片上传与识别，可直接在工作台使用。",
+            "工作台内部分 Mod 已支持图片上传与识别，可直接在「发现 → 工作台」使用。",
             style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 16.dp),
         )
     }
 }
