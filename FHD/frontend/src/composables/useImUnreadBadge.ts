@@ -1,6 +1,10 @@
 import { onMounted, onUnmounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import { fetchImUnreadTotal } from '@/api/im';
+import {
+  XCMAX_SYNC_IM_MESSAGE_EVENT,
+  XCMAX_SYNC_IM_READ_EVENT,
+} from '@/composables/useXcmaxSync';
 
 const imUnreadTotal = ref(0);
 let pollTimer: ReturnType<typeof setInterval> | null = null;
@@ -36,12 +40,20 @@ export function useImUnreadBadge() {
     }
   }
 
+  function onSyncImActivity(): void {
+    void refreshImUnreadTotal();
+  }
+
   onMounted(() => {
     void refreshImUnreadTotal();
     pollTimer = setInterval(() => void refreshImUnreadTotal(), 30_000);
+    window.addEventListener(XCMAX_SYNC_IM_MESSAGE_EVENT, onSyncImActivity);
+    window.addEventListener(XCMAX_SYNC_IM_READ_EVENT, onSyncImActivity);
   });
   onUnmounted(() => {
     if (pollTimer) clearInterval(pollTimer);
+    window.removeEventListener(XCMAX_SYNC_IM_MESSAGE_EVENT, onSyncImActivity);
+    window.removeEventListener(XCMAX_SYNC_IM_READ_EVENT, onSyncImActivity);
   });
 
   return { imUnreadTotal, refreshImUnreadTotal };
