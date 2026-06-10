@@ -72,7 +72,7 @@ fun ProfileScreen(
                     size = 64.dp,
                     content = {
                         Icon(
-                            painter = painterResource(R.mipmap.ic_launcher),
+                            painter = painterResource(R.mipmap.ic_launcher_foreground),
                             contentDescription = null,
                             modifier = Modifier.size(48.dp),
                             tint = Color.Unspecified,

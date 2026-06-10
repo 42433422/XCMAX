@@ -221,7 +221,7 @@ fun ChatScreen(
                     verticalArrangement = Arrangement.Center,
                 ) {
                     Icon(
-                        painter = painterResource(R.mipmap.ic_launcher),
+                        painter = painterResource(R.mipmap.ic_launcher_foreground),
                         contentDescription = null,
                         modifier = Modifier.size(56.dp),
                         tint = Color.Unspecified,
