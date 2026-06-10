@@ -1,6 +1,6 @@
 # XCMAX 工作区地图
 
-**最后更新**：2026-06-08
+**最后更新**：2026-06-10
 
 > **版本控制**：**`XCMAX/` 根目录为 SSOT 单仓**（`git clone` 即得 FHD + MODstore + specs 全栈）。历史子仓 `.git` 备份于 `~/XCMAX-archives/nested-git-backup-20260608/`。远程：**[`42433422/XCMAX`](https://github.com/42433422/XCMAX)**。CI 入口见 [`docs/CI_SSOT.md`](docs/CI_SSOT.md)。周度归档见 [`specs/weekly/`](specs/weekly/)。
 
@@ -9,7 +9,7 @@
 | 子项目 | 路径 | 活跃度 | 日常入口 | CI 主 workflow |
 |--------|------|--------|----------|----------------|
 | **XCAGI 主产品** | [`FHD/`](FHD/) | **活跃** — 后端 / 前端 / 桌面 / 双 SKU | [`FHD/docs/START_HERE.md`](FHD/docs/START_HERE.md) | [`fhd-ci-cd.yml`](.github/workflows/fhd-ci-cd.yml) |
-| **Android（签约级）** | [`FHD/mobile-android/`](FHD/mobile-android/) | **签约级移动产品** — 双 SKU · IM V0 · `release-android.yml` | [`FHD/docs/guides/MOBILE_ANDROID.md`](FHD/docs/guides/MOBILE_ANDROID.md) | [`.github/workflows/android-build.yml`](.github/workflows/android-build.yml) |
+| **Android（实验骨架）** | [`FHD/mobile-android/`](FHD/mobile-android/) | **Kotlin Compose 实验骨架** — 双 SKU 可构建 · 非签约级移动交付 | [`FHD/docs/guides/MOBILE_ANDROID.md`](FHD/docs/guides/MOBILE_ANDROID.md) | [`.github/workflows/android-build.yml`](.github/workflows/android-build.yml) |
 | **MODstore 姊妹栈** | [`成都修茈科技有限公司/`](成都修茈科技有限公司/) | **活跃** — 市场前端 / modstore_server / 支付 | [`MODstore_deploy/docs/developer/README.md`](成都修茈科技有限公司/MODstore_deploy/docs/developer/README.md) | [`modstore-ci-backend-python.yml`](.github/workflows/modstore-ci-backend-python.yml) |
 | **技术债与计划** | [`specs/`](specs/) | **活跃** — 规范与 checklist | [`specs/plan-2026-06.md`](specs/plan-2026-06.md) | — |
 | **FHD 历史副本** | [`FHD/MODstore/`](FHD/MODstore/) | **废弃** — 仅保留防断引用 | 见 redirect README | 勿在此开发 |
@@ -22,7 +22,7 @@
 
 | 路径 | 用途 |
 |------|------|
-| [`FHD/`](FHD/) | **XCAGI v10.0.0** 一体化主仓：后端、前端、桌面（**Windows 主交付 · 签约级**；**Android 签约级**；macOS **实验性** — 见 [`FHD/VERSION.md`](FHD/VERSION.md)）、双 SKU 打包 |
+| [`FHD/`](FHD/) | **XCAGI v10.0.0** 一体化主仓：后端、前端、桌面（**Windows 主交付 · 签约级**；macOS **签约级**；**Android 实验骨架** — 见 [`FHD/VERSION.md`](FHD/VERSION.md)）、双 SKU 打包 |
 | [`成都修茈科技有限公司/`](成都修茈科技有限公司/) | MODstore、官网、支付等姊妹项目 |
 | [`specs/`](specs/) | 技术债清偿规范（范围：FHD + 成都修茈） |
 

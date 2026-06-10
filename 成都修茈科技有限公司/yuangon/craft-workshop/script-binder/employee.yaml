@@ -1,37 +1,41 @@
 id: script-binder
 name: 配置绑定员工
-version: "10.0.0"
+version: 1.0.0
+domain: 将生成的脚本工作流嵌入员工包，更新 manifest 能力声明与目录结构
 owner: admin
 area: craft-workshop
-domain: >-
-  将生成的脚本工作流嵌入员工包，更新 manifest 能力声明与目录结构
-
 scope_globs:
-  - "workbench/sessions/*"
-  - "yuangon/**"
-  - "yuangon/craft-workshop/script-binder/**"
-
+- workbench/sessions/*
+- yuangon/**
 forbidden_globs:
-  - "*.py"
-  - "*.vue"
-  - "*.ts"
-
-depends_on:
-  - miniapp-builder
-
-actions:
-  handlers:
-    - llm_md
-    - echo
-
+- '*.py'
+- '*.vue'
+- '*.ts'
 triggers:
   on_error: true
   on_quality_fail: true
-
+  on_coverage_miss: false
+  max_patch_budget_tokens: 3000
+  max_patch_steps: 4
+sla:
+  timeout_seconds: 120
+  retry_max: 2
+  escalate_to_human: true
+llm_default: auto
+llm_reasoning: auto
+actions:
+  handlers:
+  - llm_md
+  - echo
 skills:
-  - skill-script-binding
-
+- skills/skill-script-binding.md
+depends_on:
+- miniapp-builder
 changelog:
-  - version: "10.0.0"
-    date: "2026-06-07"
-    note: "yuangon 骨架由 bootstrap_yuangon.py 从 manifest 反向生成（v10 线内迭代）"
+- version: 1.0.0
+  date: '2026-05-18'
+  note: 初始创建
+all_hands:
+  standby: true
+  runbook: 制作车间流水线岗位：无上游员工包/workflow/产物路径时仅汇报职责边界与待机条件；收到 intent-analyst 或 pack-registrar
+    输入后再描述可执行步骤。

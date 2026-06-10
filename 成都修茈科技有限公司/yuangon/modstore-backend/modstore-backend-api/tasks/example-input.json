@@ -1,0 +1,21 @@
+{
+  "task": "add-api-endpoint",
+  "description": "在 workbench_api.py 中新增一个工作台操作接口",
+  "input": {
+    "file": "MODstore_deploy/modstore_server/workbench_api.py",
+    "action": "add_route",
+    "route": {
+      "path": "/api/workbench/v2/execute",
+      "method": "POST",
+      "description": "触发工作台员工执行任务",
+      "auth_required": true,
+      "request_schema": { "employee_id": "string", "task_input": "object" },
+      "response_schema": { "status": "string", "job_id": "string" }
+    }
+  },
+  "validation": {
+    "syntax_check": true,
+    "run_tests": true,
+    "notify_frontend": true
+  }
+}

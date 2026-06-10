@@ -1,46 +1,43 @@
-        # Runbook：安全密钥守卫 (`security-secrets-guard`)
+# Runbook — 安全密钥守卫
 
-        ## 职责摘要
+| 字段 | 值 |
+|------|----|
+| 员工 ID | `security-secrets-guard` |
+| 最后更新 | 2026-05-06 |
+| 应急联系 | admin（安全事件立即通知） |
 
-        保护 xiu-ci.com 所有密钥、证书与敏感配置；进行依赖 CVE 扫描、CSP/Headers 审计；发现问题时告警，不自动修改生产配置。
+## 日常巡检
 
-        ## 上游 Handoff 契约
+```bash
+# 依赖 CVE 扫描
+pip-audit -r requirements.txt
+pip-audit -r MODstore_deploy/modstore_server/requirements.txt
 
-        （无上游依赖，直接接受 intake 派发）
+# 密钥目录权限检查
+ls -la _local_secrets/
 
-        ## Handlers
+# 证书过期检查（替换为实际证书路径）
+openssl x509 -enddate -noout -in /path/to/cert.pem
+```
 
-        | Handler | 说明 |
-        |---------|------|
-        | `llm_md` | 接收 Markdown 任务描述，调用 LLM 输出结构化结果 |
-| `echo` | 调试用：原样返回输入，用于 smoke 测试 |
-| `shell_exec` | 执行预批准的 shell 命令 |
+## 安全事件处置
 
-        ## 核心 Scope
+### 事件 1：高危 CVE（CVSS ≥ 7.0）
 
-        - `_local_secrets/**`
-- `.cursor_admin_token.txt`
-- `alipay_package/**`
-- `requirements.txt`
-- `MODstore_deploy/modstore_server/requirements*.txt`
-- `MODstore_deploy/keys/**`
+1. **立即**通知 admin 和 `deploy-release-officer` 暂缓发布。
+2. 确认受影响包和版本范围。
+3. 生成升级方案（新版本号 + 兼容性说明）。
+4. 由 `flask-entry-keeper` 或对应员工执行升级。
 
-        ## 故障处置
+### 事件 2：secrets 疑似泄露
 
-        | 场景 | 处置 |
-        |------|------|
-        | LLM 调用失败 | retry 2 次 → 上报 `employee.task.failed:security-secrets-guard` |
-        | 上游依赖未完成 | 等待 `employee.task.done:<dep>` 事件，不自行推进 |
-        | scope 文件不存在 | 报告缺口，待确认后再执行，不编造路径 |
-        | 版本锚点不对齐 | 运行 `verify_version_anchors.py`，修复后继续 |
+1. **立即**通知 admin。
+2. 确认泄露范围（git history、日志）。
+3. 吊销并重新生成受影响密钥。
+4. **禁止**在此 Runbook 或任何输出中记录明文密钥。
 
-        ## 验收检查清单
+## ESkill 动态阶段触发记录
 
-        - [ ] `employee.yaml.depends_on` 与 manifest 根级一致
-        - [ ] `actions.handlers` 三方一致（yaml / manifest / `_DISPATCH`）
-        - [ ] scope_globs 路径存在（或标注规划中）
-        - [ ] `employee_pack_consistency_warnings` 无 handler warning
-        - [ ] echo smoke 测试通过
-
-        ---
-        *本文件由 `bootstrap_yuangon.py` 生成，v10 线内迭代*
+| 日期 | 触发原因 | patch_id | 结果 | 是否固化 |
+|------|----------|----------|------|----------|
+| — | — | — | — | — |

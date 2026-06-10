@@ -1,39 +1,41 @@
 id: ecosystem-delivery-reporter
 name: 生态交付回传员
-version: "10.0.0"
+version: 1.0.0
+domain: O-B B3 联合包交付遥测 · 里程碑回写 O-A CRM 快照 · 生态进度事件。
 owner: admin
 area: partner-ecosystem
-domain: >-
-  O-B B3 联合包交付遥测 · 里程碑回写 O-A CRM 快照 · 生态进度事件。
-
+five_line_id: ops_partner
+subzone: delivery-bridge
+also_serves:
+- ops_acquisition
 scope_globs:
-  - "MODstore_deploy/modstore_server/**/production_line*"
-  - "MODstore_deploy/modstore_server/**/operations*"
-  - "FHD/app/**/telemetry/**"
-  - "yuangon/partner-ecosystem/ecosystem-delivery-reporter/**"
-
+- MODstore_deploy/modstore_server/**/production_line*
+- MODstore_deploy/modstore_server/**/operations*
+- FHD/app/**/telemetry/**
 forbidden_globs:
-  - "_local_secrets/**"
-
-depends_on:
-  - enterprise-adoption-officer
-  - deploy-release-officer
-
-actions:
-  handlers:
-    - llm_md
-    - echo
-
+- _local_secrets/**
 triggers:
   on_error: true
-  on_quality_fail: true
-
-skills:
-  - task.analyze
-  - llm.markdown
-  - workflow.assist
-
+  schedule:
+    cron: 0 9 * * 1-5
+    timezone: Asia/Shanghai
+sla:
+  timeout_seconds: 120
+  retry_max: 2
+  escalate_to_human: true
+llm_default: auto
+skills: []
+depends_on:
+- enterprise-adoption-officer
+- deploy-release-officer
 changelog:
-  - version: "10.0.0"
-    date: "2026-06-07"
-    note: "yuangon 骨架由 bootstrap_yuangon.py 从 manifest 反向生成（v10 线内迭代）"
+- version: 1.0.0
+  date: '2026-06-03'
+  note: O-B B3 生态交付回传专岗
+business_context:
+  five_line: O-B
+  subzone: delivery-report
+  kpis:
+  - 交付报告准时率
+  - 客户可见状态准确率
+  summary: O-B B3 联合包交付遥测 · 里程碑回写 O-A CRM 快照 · 生态进度事件。

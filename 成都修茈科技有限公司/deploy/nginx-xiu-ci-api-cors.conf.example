@@ -1,0 +1,62 @@
+# =============================================================================
+# 将「map」两段并入 nginx 主配置的 http { ... } 顶层（与 server 平级）。
+# 将「location /api/」并入 xiu-ci.com 的 server { ... }（可配合任意 upstream）。
+#
+# 作用：在 Nginx 上直接处理浏览器的 OPTIONS 预检，并为所有 /api/ 响应补上 CORS，
+# 不依赖 Flask/Uvicorn 是否带 ACAO。适用于当前仍出现
+# “preflight No Access-Control-Allow-Origin” 且怀疑请求未到 Flask 的场景。
+# =============================================================================
+
+# ---- 放入 http { } 内 ----
+map $http_origin $cors_allow_origin {
+    default "";
+    "~^https://[a-zA-Z0-9.-]+\.edgeone\.cool$" $http_origin;
+    "https://xiu-ci.com" $http_origin;
+    "https://www.xiu-ci.com" $http_origin;
+}
+
+map "$request_method:$cors_allow_origin" $cors_options_reject {
+    default 0;
+    "OPTIONS:" 1;
+}
+
+# ---- 放入 server { } 内；按实际修改 upstream 地址（Flask 或 Uvicorn 二选一）----
+#
+# upstream modstore_upstream {
+#     server 127.0.0.1:9999;   # Flask（由 app.py 再反代 Uvicorn）
+#     # server 127.0.0.1:8000; # 或直连 Uvicorn
+# }
+
+location /api/ {
+    if ($cors_options_reject = 1) {
+        return 403;
+    }
+
+    if ($request_method = OPTIONS) {
+        add_header Access-Control-Allow-Origin $cors_allow_origin always;
+        add_header Access-Control-Allow-Credentials "true" always;
+        add_header Access-Control-Allow-Methods "GET, POST, PUT, DELETE, PATCH, OPTIONS, HEAD" always;
+        add_header Access-Control-Allow-Headers $http_access_control_request_headers always;
+        add_header Access-Control-Max-Age "600" always;
+        add_header Vary "Origin" always;
+        return 204;
+    }
+
+    proxy_pass http://127.0.0.1:9999;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_connect_timeout 120s;
+    proxy_send_timeout 120s;
+    proxy_read_timeout 120s;
+    proxy_buffering off;
+
+    proxy_hide_header Access-Control-Allow-Origin;
+    proxy_hide_header Access-Control-Allow-Credentials;
+
+    add_header Access-Control-Allow-Origin $cors_allow_origin always;
+    add_header Access-Control-Allow-Credentials "true" always;
+    add_header Vary "Origin" always;
+}

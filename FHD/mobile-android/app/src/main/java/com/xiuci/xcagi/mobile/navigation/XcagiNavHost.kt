@@ -63,6 +63,7 @@ import com.xiuci.xcagi.mobile.feature.modhost.ModWebViewScreen
 import com.xiuci.xcagi.mobile.feature.settings.SettingsScreen
 import com.xiuci.xcagi.mobile.feature.workbench.WorkbenchWebViewScreen
 import com.xiuci.xcagi.mobile.ui.AppViewModel
+import com.xiuci.xcagi.mobile.ui.components.mobile.ComplianceFooter
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeBottomNavBar
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeBottomNavItem
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeCell
@@ -382,7 +383,10 @@ fun XcagiNavHost(vm: AppViewModel, pendingDeepLink: String? = null) {
                 }
             }
             composable(Routes.LONGTAIL) { LongTailScreen(vm) }
-            composable(Routes.ABOUT) { AboutScreen { nav.popBackStack() } }
+            composable(Routes.ABOUT) {
+                val cfg by vm.appConfig.collectAsState()
+                AboutScreen({ nav.popBackStack() }, cfg)
+            }
         }
     }
 }
@@ -501,7 +505,7 @@ fun OcrScreen(onBack: () -> Unit) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AboutScreen(onBack: () -> Unit) {
+fun AboutScreen(onBack: () -> Unit, appConfig: com.xiuci.xcagi.mobile.core.model.AppConfigResponse? = null) {
     Column(Modifier.fillMaxSize()) {
         TopAppBar(
             title = { Text("关于") },
@@ -509,8 +513,8 @@ fun AboutScreen(onBack: () -> Unit) {
         )
         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(stringResource(R.string.company_name), style = MaterialTheme.typography.titleLarge)
-            Text(stringResource(R.string.company_icp))
-            Text(stringResource(R.string.brand_url))
+            Text(stringResource(R.string.brand_url), style = MaterialTheme.typography.bodyMedium)
+            ComplianceFooter(appConfig)
         }
     }
 }

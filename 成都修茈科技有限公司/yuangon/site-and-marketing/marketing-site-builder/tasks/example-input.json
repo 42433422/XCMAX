@@ -1,0 +1,12 @@
+{
+  "task": "marketing-site-template-update",
+  "description": "更新 marketing-site 某 Nunjucks 模板区块",
+  "input": {
+    "target_glob": "marketing-site/templates/partials/header.njk",
+    "change_summary": "导航增加「案例」链接"
+  },
+  "validation": {
+    "run_build": true,
+    "paths_in_scope": ["marketing-site/**"]
+  }
+}

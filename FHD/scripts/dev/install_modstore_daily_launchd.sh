@@ -92,5 +92,7 @@ if [[ "${sched}" != "True" && "${sched}" != "true" ]]; then
 fi
 
 log "MODstore :8788 scheduler_running=${sched}"
-log "日志: ${LOG_DIR}/modstore-daily.launchd.{log,err.log}"
-log "手动触发摘要: bash FHD/scripts/dev/trigger_digest_now_local.sh"
+log "08:00 自动 digest：全开 FHD/Vite/模拟器 → 跑完自动关（MODSTORE_SURFACE_AUDIT_STOP_AFTER=1）"
+log "日志: ${LOG_DIR}/modstore-daily.launchd.{log,err.log}  ·  .xcmax-logs/surface-audit-*.log"
+log "手动触发: bash FHD/scripts/dev/trigger_digest_now_local.sh"
+log "一键验证: bash FHD/scripts/dev/run_digest_full_stack.sh"

@@ -1,0 +1,36 @@
+# 组件级 CI：Java 支付子服务（拆仓后的 modstore-payment-java 仓库专用模板）。
+# 与 monorepo 的 ci-payment-java.yml 等价，但路径已去掉 MODstore_deploy/java_payment_service/ 前缀。
+
+name: CI - Payment Java
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-payment-java-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  payment-java-ci:
+    name: MODstore (Java payment service)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+
+      - name: Maven verify
+        run: mvn -B verify

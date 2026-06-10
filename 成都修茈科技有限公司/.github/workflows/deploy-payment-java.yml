@@ -1,0 +1,98 @@
+# Java 支付子服务生产部署：在 "CI - Payment Java" 成功后触发。
+# 与 deploy.yml（后端 Python）、market-live-deploy.yml（市场前端）对称。
+#
+# Secrets：
+#   DEPLOY_HOST, DEPLOY_USER, DEPLOY_SSH_PRIVATE_KEY（复用同一组）
+# Variables（可选）：
+#   DEPLOY_PAYMENT_REMOTE_DIR（推荐，拆仓后独立 Java 工作树；默认 /opt/modstore/payment-java）
+#   DEPLOY_REMOTE_REPO（兼容未拆仓服务器；若设置会使用 ${REPO}/MODstore_deploy/java_payment_service）
+#   DEPLOY_GIT_BRANCH（默认 main）
+#   DEPLOY_PAYMENT_HEALTH_URL（默认 http://127.0.0.1:8080/actuator/health）
+
+name: Deploy payment (Java)
+
+on:
+  workflow_run:
+    workflows: ['CI - Payment Java']
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-payment-java-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy-payment-java-on-server:
+    runs-on: ubuntu-latest
+    if: >-
+      ${{
+        github.event_name == 'workflow_dispatch' ||
+        (
+          github.event.workflow_run.conclusion == 'success' &&
+          github.event.workflow_run.head_branch == 'main' &&
+          github.event.workflow_run.event == 'push'
+        )
+      }}
+    steps:
+      - name: SSH — git pull + mvn package + restart + health
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          script_stop: true
+          command_timeout: 25m
+          script: |
+            set -euo pipefail
+            PAYMENT_DIR="${{ vars.DEPLOY_PAYMENT_REMOTE_DIR }}"
+            LEGACY_REPO="${{ vars.DEPLOY_REMOTE_REPO }}"
+            BRANCH="${{ vars.DEPLOY_GIT_BRANCH }}"
+            HEALTH_URL="${{ vars.DEPLOY_PAYMENT_HEALTH_URL }}"
+            if [ -z "${BRANCH}" ]; then BRANCH="main"; fi
+            if [ -z "${HEALTH_URL}" ]; then HEALTH_URL="http://127.0.0.1:8080/actuator/health"; fi
+            if [ -n "${PAYMENT_DIR}" ]; then
+              TARGET_DIR="${PAYMENT_DIR}"
+            elif [ -n "${LEGACY_REPO}" ]; then
+              TARGET_DIR="${LEGACY_REPO}/MODstore_deploy/java_payment_service"
+            else
+              echo "[err] 未设置 DEPLOY_PAYMENT_REMOTE_DIR 或 DEPLOY_REMOTE_REPO；Java 路径不再默认硬编码到 monorepo"
+              exit 1
+            fi
+            echo "[info] payment-java target=${TARGET_DIR} branch=${BRANCH}"
+            cd "${TARGET_DIR}"
+            git fetch origin "${BRANCH}"
+            git pull --ff-only "origin" "${BRANCH}" || git pull "origin" "${BRANCH}"
+            if [ -f scripts/java-release.sh ]; then
+              bash scripts/java-release.sh
+            elif [ -f ../scripts/java-release.sh ]; then
+              bash ../scripts/java-release.sh
+            else
+              if ! command -v mvn >/dev/null 2>&1; then
+                echo "[err] mvn not found on remote"
+                exit 1
+              fi
+              mvn -B -q -Dmaven.test.skip=true clean package
+              if systemctl is-active --quiet modstore-payment.service 2>/dev/null; then
+                sudo systemctl restart modstore-payment.service
+              elif command -v docker >/dev/null 2>&1 && [ -f ../docker-compose.yml ]; then
+                cd ..
+                docker compose up -d --build payment-service
+              else
+                echo "[err] no modstore-payment.service and no docker compose; configure one"
+                exit 1
+              fi
+            fi
+            # 等待 Spring Boot ready
+            PAY_CODE=000
+            for _try in $(seq 1 60); do
+              pc=$(curl -sS -o /dev/null -m 3 -w "%{http_code}" "${HEALTH_URL}" 2>/dev/null || true)
+              pc=${pc:-000}
+              if [ "$pc" = "200" ]; then PAY_CODE=200; break; fi
+              sleep 2
+            done
+            if [ "$PAY_CODE" != "200" ]; then
+              echo "[err] payment service not healthy at ${HEALTH_URL}"
+              exit 1
+            fi
+            echo "[ok] MODstore payment-java deploy finished"

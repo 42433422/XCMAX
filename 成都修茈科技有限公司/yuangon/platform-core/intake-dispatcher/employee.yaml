@@ -1,46 +1,72 @@
 id: intake-dispatcher
 name: 需求接入员
-version: "10.0.0"
+version: "1.0.1"
+domain: 把外部输入（admin 自然语言下达、邮件、微信、客服工单、`mianshi/` 候补包、外部 webhook）规整成结构化 task，写入「待派发」队列；本岗只做语义解析与归一化，不直接选员工、不直接改业务代码。
 owner: admin
 area: platform-core
-domain: >-
-  把外部输入（admin 自然语言下达、邮件、微信、客服工单、`mianshi/` 候补包、外部 webhook）规整成结构化 task，写入「待派发」队列；本岗只做语义解析与归一化，不直接选员工、不直接改业务代码。
 
 scope_globs:
-  - "MODstore_deploy/modstore_server/eventing/intake/**"
+  - MODstore_deploy/modstore_server/eventing/intake/**
   - MODstore_deploy/modstore_server/api/intake_api.py
-  - "MODstore_deploy/modstore_server/webhook_events/intake/**"
-  - "mianshi/**"
-  - "yuangon/platform-core/intake-dispatcher/**"
+  - MODstore_deploy/modstore_server/webhook_events/intake/**
+  - mianshi/**
+  - yuangon/platform-core/intake-dispatcher/**
   - MODstore_deploy/docs/yuangon-process-loop.md
   - MODstore_deploy/scripts/intake_watcher.py
 
 forbidden_globs:
-  - "MODstore_deploy/market/src/**"
+  - MODstore_deploy/market/src/**
   - MODstore_deploy/modstore_server/models.py
-  - "MODstore_deploy/modstore_server/migrations/**"
-  - "MODstore_deploy/modstore_server/payment_*.py"
-  - "_local_secrets/**"
+  - MODstore_deploy/modstore_server/migrations/**
+  - MODstore_deploy/modstore_server/payment_*.py
+  - _local_secrets/**
   - "*.env*"
-
-depends_on:
-  - doc-knowledge-curator
-  - task-router-officer
-
-actions:
-  handlers:
-    - llm_md
-    - echo
-    - agent
 
 triggers:
   on_error: true
   on_quality_fail: true
+  on_coverage_miss: false
+  schedule:
+    cron: "*/5 * * * *"        # 每 5 分钟跑一次 mianshi watcher 兜底
+    timezone: "Asia/Shanghai"
+  subscribes:
+    # admin 在「下达任务」UI 输入
+    - "ops.intake.user_request"
+    # 微信员工产出
+    - "employee.task.done:wechat-contacts-ai-employee"
+    # 客服视图收到工单
+    - "ops.intake.customer_ticket"
+    # mianshi/ 目录新增候补包
+    - "ops.intake.candidate_pack"
+  max_patch_budget_tokens: 3000
+  max_patch_steps: 4
+
+sla:
+  timeout_seconds: 60
+  retry_max: 2
+  escalate_to_human: true
+
+llm_default: "auto"
+llm_reasoning: "auto"
 
 skills:
-  - skill-intake-normalize
+  - skills/skill-intake-normalize.md
+
+actions:
+  handlers: ["llm_md", "echo", "agent"]
+  agent:
+    workspace:
+      read_only: false
+      requires_project_root: true
+
+depends_on:
+  - doc-knowledge-curator   # 自然语言查文档时引用知识库
+  - task-router-officer     # 归一化后转交派发
 
 changelog:
-  - version: "10.0.0"
-    date: "2026-06-07"
-    note: "yuangon 骨架由 bootstrap_yuangon.py 从 manifest 反向生成（v10 线内迭代）"
+  - version: "1.0.1"
+    date: "2026-05-08"
+    note: "全覆盖 Phase2：scope 纳入 MODstore_deploy/scripts/intake_watcher.py"
+  - version: "1.0.0"
+    date: "2026-05-08"
+    note: "新增：闭环流程的『需求接入』节点，统一外部输入为结构化 task。"

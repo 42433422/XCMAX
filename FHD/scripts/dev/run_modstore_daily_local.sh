@@ -74,13 +74,30 @@ _load_modstore_env_file "${MODSTORE_DEPLOY_ROOT}/.env.production"
 _load_modstore_env_file "${MODSTORE_DEPLOY_ROOT}/.env.production.synced"
 _load_modstore_env_file "${MODSTORE_DEPLOY_ROOT}/.env.daily-closure"
 _load_modstore_env_file "${MODSTORE_DEPLOY_ROOT}/.env.local"
+# 本地 Mac 日更必须用 SQLite；生产同步 env 里的 DATABASE_URL 仅服务器有效
+if [[ -n "${MODSTORE_DB_PATH:-}" ]]; then
+  export MODSTORE_DB_PATH
+  unset DATABASE_URL DATABASE_USER DATABASE_PASSWORD DATABASE_HOST DATABASE_PORT DATABASE_NAME
+fi
+# 本地无 Redis 时关闭 Streams 双写，避免 incident_bus 刷 Connection refused
+export MODSTORE_EVENT_STREAM_ENABLED="${MODSTORE_EVENT_STREAM_ENABLED:-0}"
+if [[ "${MODSTORE_EVENT_STREAM_ENABLED}" == "0" ]]; then
+  unset REDIS_URL REDIS_PORT MODSTORE_REDIS_URL MODSTORE_EVENT_STREAM_URL CACHE_REDIS_URL XCAGI_REDIS_URL MODSTORE_VECTOR_REDIS_URL 2>/dev/null || true
+fi
+export MODSTORE_INTERNAL_API_BASE="${MODSTORE_INTERNAL_API_BASE:-http://127.0.0.1:${MODSTORE_PORT}}"
+export XCAGI_MARKET_BASE_URL="${XCAGI_MARKET_BASE_URL:-http://127.0.0.1:${MODSTORE_PORT}}"
+export MODSTORE_LOCAL_BASE_URL="${MODSTORE_LOCAL_BASE_URL:-http://127.0.0.1:${MODSTORE_PORT}}"
+export MODSTORE_DIGEST_BASE_URL="${MODSTORE_DIGEST_BASE_URL:-http://127.0.0.1:${MODSTORE_PORT}}"
 # 真 SMTP 授权码（覆盖 .env.production 里的 your-* 占位符）；勿提交 git
 _load_modstore_env_file "${MODSTORE_DEPLOY_ROOT}/.env.smtp.local"
 _load_modstore_env_file "${FHD_ROOT}/XCAGI/.env.smtp.local"
 _load_modstore_env_file "${FHD_ROOT}/XCAGI/.env.cursor.local"
 export MODSTORE_EMAIL_DEBUG="${MODSTORE_EMAIL_DEBUG:-0}"
 if [[ "${MODSTORE_EMAIL_DEBUG}" == "0" && -z "${MODSTORE_SMTP_PASSWORD:-}" ]]; then
-  log "WARN: MODSTORE_SMTP_PASSWORD 未设或仍为占位符 → 写入 FHD/XCAGI/.env.smtp.local 后重启"
+  log "WARN: MODSTORE_SMTP_PASSWORD 未设 → 运行: bash ${MODSTORE_DEPLOY_ROOT}/scripts/pull_prod_env_for_local.sh"
+fi
+if [[ ! -f "${MODSTORE_DEPLOY_ROOT}/.env.production.synced" ]]; then
+  log "WARN: 无 .env.production.synced → bash ${MODSTORE_DEPLOY_ROOT}/scripts/pull_prod_env_for_local.sh（从服务器拉 SMTP/凭证）"
 fi
 export MODSTORE_DAILY_DIGEST_ENABLED="${MODSTORE_DAILY_DIGEST_ENABLED:-1}"
 export MODSTORE_DAILY_VIBE_PREP_ENABLED="${MODSTORE_DAILY_VIBE_PREP_ENABLED:-1}"
@@ -94,6 +111,11 @@ export MODSTORE_DAILY_SURFACE_PPT_ENABLED="${MODSTORE_DAILY_SURFACE_PPT_ENABLED:
 # 注意：不要指向 FHD 企业后端 :5100 —— 它服务的是「企业版登录 SPA」，巡检会全站抓到登录页 + 401（误报）。
 # 如需巡检本地市场 SPA，请显式设 MODSTORE_DAILY_SURFACE_AUDIT_BASE_URL 为对应本地源。
 export MODSTORE_DAILY_SURFACE_AUDIT_BASE_URL="${MODSTORE_DAILY_SURFACE_AUDIT_BASE_URL:-https://xiu-ci.com}"
+export MODSTORE_DAILY_SURFACE_AUDIT_MODE="${MODSTORE_DAILY_SURFACE_AUDIT_MODE:-daily}"
+export MODSTORE_DAILY_SURFACE_AUDIT_MAX_PER_LANE="${MODSTORE_DAILY_SURFACE_AUDIT_MAX_PER_LANE:-1}"
+export MODSTORE_SURFACE_AUDIT_SKIP_CATALOG="${MODSTORE_SURFACE_AUDIT_SKIP_CATALOG:-0}"
+export MODSTORE_SURFACE_AUDIT_CATALOG_MAX="${MODSTORE_SURFACE_AUDIT_CATALOG_MAX:-3}"
+export MODSTORE_SURFACE_AUDIT_STOP_AFTER="${MODSTORE_SURFACE_AUDIT_STOP_AFTER:-1}"
 export MODSTORE_AUTOMATION_PRIMARY="${MODSTORE_AUTOMATION_PRIMARY:-local_mac}"
 export MODSTORE_AUTOMATION_ROLE="${MODSTORE_AUTOMATION_ROLE:-local_mac}"
 export MODSTORE_SYNC_DEPLOY_BASH="${MODSTORE_SYNC_DEPLOY_BASH:-bash ${MODSTORE_DEPLOY_ROOT}/scripts/trigger_server_git_sync.sh}"
@@ -121,6 +143,28 @@ export MODSTORE_POST_DEPLOY_MARKET_URL="${MODSTORE_POST_DEPLOY_MARKET_URL:-https
 export MODSTORE_LINE_PRIMARY_LINES="${MODSTORE_LINE_PRIMARY_LINES:-P-S}"
 export MODSTORE_LINE_SHADOW_LINES="${MODSTORE_LINE_SHADOW_LINES:-P-W,P-App,S-R}"
 export MODSTORE_SURFACE_AUDIT_AUTO_START="${MODSTORE_SURFACE_AUDIT_AUTO_START:-1}"
+export MODSTORE_SURFACE_AUDIT_ANDROID="${MODSTORE_SURFACE_AUDIT_ANDROID:-1}"
+export MODSTORE_SURFACE_AUDIT_PS_ENABLED="${MODSTORE_SURFACE_AUDIT_PS_ENABLED:-1}"
+export SURFACE_AUDIT_PRODUCT_SKU="${SURFACE_AUDIT_PRODUCT_SKU:-enterprise}"
+export SURFACE_AUDIT_INCLUDE_ENTERPRISE="${SURFACE_AUDIT_INCLUDE_ENTERPRISE:-1}"
+export SURFACE_AUDIT_ANDROID_FHD_HOST="${SURFACE_AUDIT_ANDROID_FHD_HOST:-10.0.2.2:5000}"
+export SURFACE_AUDIT_API_URL="${SURFACE_AUDIT_API_URL:-http://127.0.0.1:5000}"
+ADB_BIN="${FHD_ROOT}/mobile-android/.toolchain/android-sdk/platform-tools/adb"
+[[ -x "${ADB_BIN}" ]] || ADB_BIN="adb"
+if [[ "${MODSTORE_SURFACE_AUDIT_ANDROID}" != "0" ]]; then
+  if ! "${ADB_BIN}" devices 2>/dev/null | grep -qE '[[:space:]]device$'; then
+    if [[ "${XCAGI_AUTO_START_EMULATOR:-1}" == "1" && -x "${FHD_ROOT}/mobile-android/.toolchain/android-sdk/emulator/emulator" ]]; then
+      log "P-App 截图：无在线模拟器，尝试启动 …"
+      bash "${FHD_ROOT}/scripts/dev/start_android_emulator.sh" || log "WARN: 模拟器启动失败，digest P-App 可能失败"
+    fi
+  fi
+  if "${ADB_BIN}" devices 2>/dev/null | grep -qE '[[:space:]]device$'; then
+    export SURFACE_AUDIT_ANDROID_ADB="${ADB_BIN}"
+    log "P-App 截图：adb 模拟器/真机已就绪"
+  else
+    log "WARN: 无 adb 设备 — P-App 日更截图将失败（bash FHD/scripts/dev/start_android_emulator.sh）"
+  fi
+fi
 export MODSTORE_DR_PROBE_ENABLED="${MODSTORE_DR_PROBE_ENABLED:-1}"
 export MODSTORE_ONDEMAND_BACKUP_ENABLED="${MODSTORE_ONDEMAND_BACKUP_ENABLED:-1}"
 export MODSTORE_DAILY_VIBE_EXECUTE_ALLOW_HIGH_RISK="${MODSTORE_DAILY_VIBE_EXECUTE_ALLOW_HIGH_RISK:-1}"

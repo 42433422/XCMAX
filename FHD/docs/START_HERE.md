@@ -140,4 +140,4 @@ FHD_API_IMAGE_DIGEST=sha256:... \
 - 仓根地图：[`README.md`](../../README.md)
 - CI SSOT：[`docs/CI_SSOT.md`](../../docs/CI_SSOT.md)
 - OpenAPI：启动后 `http://127.0.0.1:5000/docs`
-- Android 签约级移动：`guides/MOBILE_ANDROID.md`
+- Android 实验骨架（非签约级）：`guides/MOBILE_ANDROID.md`

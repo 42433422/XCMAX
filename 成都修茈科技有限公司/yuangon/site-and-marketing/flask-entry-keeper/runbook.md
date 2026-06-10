@@ -1,49 +1,53 @@
-        # Runbook：Flask 入口维护员 (`flask-entry-keeper`)
+# Runbook — Flask 入口维护员
 
-        ## 职责摘要
+| 字段 | 值 |
+|------|----|
+| 员工 ID | `flask-entry-keeper` |
+| 负责区域 | site-and-marketing |
+| 最后更新 | 2026-05-06 |
+| 应急联系 | admin |
 
-        维护根目录 Flask 应用 app.py 的路由、表单处理、excel-to-ai 动态页与依赖 requirements.txt；对接静态站，不涉及 MODstore 或 Nginx 配置。
+---
 
-        ## 上游 Handoff 契约
+## 日常巡检
 
-        ### handoff: nginx-config-engineer → 本岗
-- **触发条件**：nginx 配置审核通过 + reload 无错误
-- **输入**：nginx conf diff、upstream 列表变更
-- **门禁**：配置语法错误或 upstream 不可达时阻断部署
+```bash
+# 语法检查
+python -m py_compile app.py && echo "app.py OK"
 
+# 依赖安全扫描
+pip-audit -r requirements.txt
 
-        ## Handlers
+# 冒烟：健康检查路由（如有）
+curl -s http://localhost:5000/health || echo "health route missing"
+```
 
-        | Handler | 说明 |
-        |---------|------|
-        | `llm_md` | 接收 Markdown 任务描述，调用 LLM 输出结构化结果 |
-| `echo` | 调试用：原样返回输入，用于 smoke 测试 |
+---
 
-        ## 核心 Scope
+## 异常处置
 
-        - `app.py`
-- `requirements.txt`
-- `public/**`
-- `uploads/**`
-- `site/**`
-- `excel-to-ai.html`
+### 异常 1：路由 500 错误
 
-        ## 故障处置
+**症状**：特定路由返回 500。  
+**排查**：查看 Flask 错误日志；`python -m py_compile app.py`。  
+**修复**：修正代码；重启 Flask 进程。
 
-        | 场景 | 处置 |
-        |------|------|
-        | LLM 调用失败 | retry 2 次 → 上报 `employee.task.failed:flask-entry-keeper` |
-        | 上游依赖未完成 | 等待 `employee.task.done:<dep>` 事件，不自行推进 |
-        | scope 文件不存在 | 报告缺口，待确认后再执行，不编造路径 |
-        | 版本锚点不对齐 | 运行 `verify_version_anchors.py`，修复后继续 |
+### 异常 2：requirements.txt 高危漏洞
 
-        ## 验收检查清单
+**症状**：`pip-audit` 报告 HIGH/CRITICAL CVE。  
+**排查**：查看受影响包与版本。  
+**修复**：升级到安全版本；在 staging 测试；通知 `security-secrets-guard`。
 
-        - [ ] `employee.yaml.depends_on` 与 manifest 根级一致
-        - [ ] `actions.handlers` 三方一致（yaml / manifest / `_DISPATCH`）
-        - [ ] scope_globs 路径存在（或标注规划中）
-        - [ ] `employee_pack_consistency_warnings` 无 handler warning
-        - [ ] echo smoke 测试通过
+### 异常 3：文件上传失败
 
-        ---
-        *本文件由 `bootstrap_yuangon.py` 生成，v10 线内迭代*
+**症状**：`uploads/` 写入权限错误。  
+**排查**：`ls -la uploads/`；检查磁盘空间。  
+**修复**：`chmod 755 uploads/` 或清理磁盘。
+
+---
+
+## ESkill 动态阶段触发记录
+
+| 日期 | 触发原因 | patch_id | 结果 | 是否固化 |
+|------|----------|----------|------|----------|
+| — | — | — | — | — |

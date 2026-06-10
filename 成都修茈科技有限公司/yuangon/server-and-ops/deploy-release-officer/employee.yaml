@@ -1,19 +1,19 @@
 id: deploy-release-officer
 name: 发布部署主管
-version: "10.0.0"
+version: "1.0.1"
+domain: 编排 xiu-ci.com 全站的构建与发布流程，包含 Docker 镜像、腾讯云 Pages 部署、脚本维护；不写业务逻辑。
 owner: admin
 area: server-and-ops
-domain: >-
-  编排 xiu-ci.com 全站的构建与发布流程，包含 Docker 镜像、腾讯云 Pages 部署、脚本维护；不写业务逻辑。
 
 scope_globs:
-  - "deploy/**"
-  - "scripts/**"
-  - "docker/**"
-  - "dist/**"
+  - deploy/**
+  - scripts/**
+  - docker/**
+  - dist/**
   - setup-alipay.sh
   - stop_ports.py
-  - 腾讯云Pages部署指南.md
+  - "腾讯云Pages部署指南.md"
+  # MODstore_deploy 发布脚手架
   - MODstore_deploy/Dockerfile
   - MODstore_deploy/docker-compose.yml
   - MODstore_deploy/.dockerignore
@@ -23,46 +23,70 @@ scope_globs:
   - MODstore_deploy/start_with_alipay.py
   - MODstore_deploy/start-with-alipay.ps1
   - MODstore_deploy/start-modstore.bat
-  - "MODstore_deploy/systemd/**"
-  - "MODstore_deploy/deploy/**"
+  - MODstore_deploy/systemd/**
+  - MODstore_deploy/deploy/**
   - MODstore_deploy/market/Dockerfile
+  # 市场侧 Nginx 与错误页（部署交付）
   - MODstore_deploy/market/nginx.conf
-  - "MODstore_deploy/market/nginx-errors/**"
-  - "MODstore_deploy/market/nginx-snippets/**"
-  - "MODstore_deploy/scripts/**"
-  - "yuangon/server-and-ops/deploy-release-officer/**"
+  - MODstore_deploy/market/nginx-errors/**
+  - MODstore_deploy/market/nginx-snippets/**
+  # MODstore_deploy 运维脚本（与 push-update-context-officer 的 yuangon_*.py 不重叠：那些已显式从此处排除）
+  - MODstore_deploy/scripts/**
 
 forbidden_globs:
-  - "_local_secrets/**"
+  - _local_secrets/**    # 只读引用，不写
   - "*.vue"
-  - "MODstore_deploy/modstore_server/**"
-  - "vibe-coding/src/**"
-  - "MODstore_deploy/scripts/yuangon_*.py"
+  - MODstore_deploy/modstore_server/**
+  - vibe-coding/src/**
+  # 这些脚本归 push-update-context-officer / dbops-engineer / change-request-auditor 等专员
+  - MODstore_deploy/scripts/yuangon_*.py
   - MODstore_deploy/scripts/build_routing_table.py
   - MODstore_deploy/scripts/intake_watcher.py
   - MODstore_deploy/scripts/coverage_audit.py
-  - "MODstore_deploy/scripts/audit_*.py"
-  - "MODstore_deploy/scripts/db_*.py"
+  - MODstore_deploy/scripts/audit_*.py
+  - MODstore_deploy/scripts/db_*.py
+
+triggers:
+  on_error: true
+  on_quality_fail: true
+  on_coverage_miss: false
+  subscribes:
+    - "employee.task.done:test-qa-runner"
+  max_patch_budget_tokens: 4000
+  max_patch_steps: 5
+
+sla:
+  timeout_seconds: 300
+  retry_max: 1
+  escalate_to_human: true
+
+llm_default: "auto"
+llm_reasoning: "auto"
+
+skills:
+  - skills/skill-deploy-pipeline.md
+
+actions:
+  handlers: ["llm_md", "echo", "shell_exec", "ssh_exec"]
+  shell_exec:
+    command_id: npm-build
+    args:
+      cwd: MODstore_deploy/market
+  ssh_exec:
+    command_id: tcb-pages-deploy
+    host_id: default
+    args:
+      dist_dir: MODstore_deploy/market/dist
+      env_id: placeholder-env-id
 
 depends_on:
   - nginx-config-engineer
   - security-secrets-guard
 
-actions:
-  handlers:
-    - llm_md
-    - echo
-    - shell_exec
-    - ssh_exec
-
-triggers:
-  on_error: true
-  on_quality_fail: true
-
-skills:
-  - skill-deploy-pipeline
-
 changelog:
-  - version: "10.0.0"
-    date: "2026-06-07"
-    note: "yuangon 骨架由 bootstrap_yuangon.py 从 manifest 反向生成（v10 线内迭代）"
+  - version: "1.0.1"
+    date: "2026-05-08"
+    note: "全覆盖 Phase2：scope 纳入 MODstore_deploy/market/nginx.conf 与 nginx-errors/nginx-snippets"
+  - version: "1.0.0"
+    date: "2026-05-06"
+    note: "初始创建"

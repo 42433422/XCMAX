@@ -1,5 +1,7 @@
 # XCAGI Android
 
+> **交付状态（2026-06）**：**实验骨架** — Kotlin + Jetpack Compose 可本地构建与单测；**非**签约级移动产品。对外口径以 [`docs/CLAIMED_VS_ACTUAL.md`](../docs/CLAIMED_VS_ACTUAL.md) 与 [`VERSION.md`](../VERSION.md) 为准。
+
 成都修茈科技有限公司 XCAGI 原生 Android 客户端（个人版 / 企业版双 SKU）。
 
 - 技术栈：Kotlin、Jetpack Compose、Hilt、Retrofit、Room、WorkManager

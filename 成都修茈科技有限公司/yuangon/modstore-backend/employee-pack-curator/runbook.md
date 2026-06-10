@@ -1,54 +1,59 @@
-        # Runbook：员工包策展员 (`employee-pack-curator`)
+# Runbook — 员工包策展员
 
-        ## 职责摘要
+| 字段 | 值 |
+|------|----|
+| 员工 ID | `employee-pack-curator` |
+| 最后更新 | 2026-05-06 |
+| 应急联系 | admin |
 
-        管理 MODstore 员工包的完整生命周期：AI scaffold、Skill 注册、executor 维护、.xcemp 导入导出与 ESkill 演化固化；不得修改支付模块。
+## 日常巡检
 
-        ## 上游 Handoff 契约
+```bash
+cd MODstore_deploy
 
-        ### handoff: mods-and-eskill-curator → 本岗
-- **触发条件**：`employee.task.done:mods-and-eskill-curator`
-- **输入**：待补充（参见 `yuangon/**/mods-and-eskill-curator/runbook.md`）
-- **门禁**：依赖完成前本岗不得继续
+# 语法检查
+python -m py_compile modstore_server/employee_executor.py
+python -m py_compile modstore_server/employee_skill_register.py
 
-### handoff: vibe-coding-maintainer → 本岗
-- **触发条件**：`employee.task.done:vibe-coding-maintainer`
-- **输入**：待补充（参见 `yuangon/**/vibe-coding-maintainer/runbook.md`）
-- **门禁**：依赖完成前本岗不得继续
+# 员工包导出冒烟
+python modstore_server/employee_pack_export.py --list
 
+# 注册表一致性检查
+python modstore_server/employee_skill_register.py --verify
 
-        ## Handlers
+# 文档一致性检查
+# 对比员工包相关文档与代码实现是否同步
+git diff --name-only HEAD~1 -- modstore_server/employee_*.py modstore_server/employee_pack_*.py modstore_server/employee_skill_register.py
+# 若上述文件有变更，检查以下文档是否需要同步更新：
+#   - docs/fhd-employee-composition.md
+#   - docs/modstore/员工制作增强设计方案.md
+#   - MODstore_deploy/docs/employee_publish_wizard.md
+#   - docs/adr/0003-artifacts-bundles-employee-packs.md
+```
 
-        | Handler | 说明 |
-        |---------|------|
-        | `llm_md` | 接收 Markdown 任务描述，调用 LLM 输出结构化结果 |
-| `echo` | 调试用：原样返回输入，用于 smoke 测试 |
+## 异常处置
 
-        ## 核心 Scope
+### 异常 1：.xcemp 导出失败
 
-        - `MODstore_deploy/modstore_server/employee_ai_scaffold.py`
-- `MODstore_deploy/modstore_server/employee_ai_pipeline.py`
-- `MODstore_deploy/modstore_server/employee_bench.py`
-- `MODstore_deploy/modstore_server/employee_executor.py`
-- `MODstore_deploy/modstore_server/employee_skill_register.py`
-- `MODstore_deploy/modstore_server/employee_pack_blueprints_template.py`
+1. 检查 `employee_pack_export.py` 的员工定义 schema 是否合法。
+2. 查看 `employee.yaml` 必填字段是否缺失。
+3. 动态阶段：LLM 自动补全缺失字段建议。
 
-        ## 故障处置
+### 异常 2：ESkill 固化失败
 
-        | 场景 | 处置 |
-        |------|------|
-        | LLM 调用失败 | retry 2 次 → 上报 `employee.task.failed:employee-pack-curator` |
-        | 上游依赖未完成 | 等待 `employee.task.done:<dep>` 事件，不自行推进 |
-        | scope 文件不存在 | 报告缺口，待确认后再执行，不编造路径 |
-        | 版本锚点不对齐 | 运行 `verify_version_anchors.py`，修复后继续 |
+1. 检查 Sandbox 沙箱是否正常启动。
+2. 验收标准是否全部通过（见 skill md 第 4 节）。
+3. 手动将补丁 diff 和 trace 交 admin 确认。
 
-        ## 验收检查清单
+### 异常 3：文档与代码不一致
 
-        - [ ] `employee.yaml.depends_on` 与 manifest 根级一致
-        - [ ] `actions.handlers` 三方一致（yaml / manifest / `_DISPATCH`）
-        - [ ] scope_globs 路径存在（或标注规划中）
-        - [ ] `employee_pack_consistency_warnings` 无 handler warning
-        - [ ] echo smoke 测试通过
+1. 运行 `git diff --name-only HEAD~1 -- modstore_server/employee_*.py` 确认变更范围。
+2. 对照 `skill-doc-ownership` 中列出的文档清单，逐一检查受影响章节。
+3. 生成同步建议 diff，交 admin 审核后合并。
+4. 若文档变更涉及架构决策，需同步更新 `docs/adr/0003-artifacts-bundles-employee-packs.md`。
 
-        ---
-        *本文件由 `bootstrap_yuangon.py` 生成，v10 线内迭代*
+## ESkill 动态阶段触发记录
+
+| 日期 | 触发原因 | patch_id | 结果 | 是否固化 |
+|------|----------|----------|------|----------|
+| — | — | — | — | — |

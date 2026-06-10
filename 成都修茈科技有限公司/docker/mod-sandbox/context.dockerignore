@@ -1,0 +1,28 @@
+# From repo root:
+#   docker build --ignorefile docker/mod-sandbox/context.dockerignore -f docker/mod-sandbox/Dockerfile -t xcagi-mod-sandbox .
+# Shrinks build context and keeps frontend / MODstore / docs out of the image build.
+
+.git
+.github
+.cursor
+.archive
+frontend
+MODstore
+docs
+tests
+**/__pycache__
+**/*.pyc
+**/*.pyo
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.venv
+venv
+node_modules
+*.md
+
+# Large XCAGI-only trees not needed for the sandbox image (Dockerfile copies only run.py + run_fastapi.py).
+XCAGI/mods
+XCAGI/ai_engines
+XCAGI/resources
+XCAGI/tests

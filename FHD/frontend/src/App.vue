@@ -1,38 +1,19 @@
 <script setup>
 import MainLayout from './components/MainLayout.vue'
-import StartupSplash from '@/components/shell/StartupSplash.vue'
 import LegacyFloatPanels from '@/components/shell/LegacyFloatPanels.vue'
 import AppGlobalProviders from '@/components/shell/AppGlobalProviders.vue'
 import { useAppBoot } from '@/composables/useAppBoot'
 
 const {
   hideChrome,
-  startupVisible,
   appReady,
-  startupProgressPct,
-  startupModNames,
-  primaryModName,
-  modsLoading,
-  modsLoadError,
   isProMode,
   handleToggleProMode,
-  skipStartupSplash,
   isAdminConsoleSpa,
 } = useAppBoot()
 </script>
 
 <template>
-  <StartupSplash
-    :visible="startupVisible"
-    :hide-chrome="hideChrome"
-    :primary-mod-name="primaryModName"
-    :startup-mod-names="startupModNames"
-    :mods-loading="modsLoading"
-    :mods-load-error="modsLoadError"
-    :startup-progress-pct="startupProgressPct"
-    @skip="skipStartupSplash"
-  />
-
   <div class="app-shell" :class="{ 'is-ready': appReady || hideChrome, 'app-shell--bare': hideChrome }">
     <LegacyFloatPanels v-if="!hideChrome" />
     <AppGlobalProviders :show-lan-gate="!isAdminConsoleSpa()" />

@@ -1,5 +1,5 @@
 # 示例：MODstore FastAPI API worker（多进程，无后台任务）
-# 与 sync-modstore-to-server 默认树 /root/modstore-git/MODstore_deploy 一致。
+# 与 XCMAX 单仓 cron 默认树 /root/XCMAX/成都修茈科技有限公司/MODstore_deploy 一致。
 #
 # 安装：复制为 /etc/systemd/system/modstore.service
 # 或用 scripts/align_modstore_systemd_to_deploy.sh 写 drop-in。
@@ -16,8 +16,8 @@ After=network.target
 [Service]
 Type=simple
 User=root
-WorkingDirectory=/root/modstore-git/MODstore_deploy
-EnvironmentFile=-/root/modstore-git/MODstore_deploy/.env
+WorkingDirectory=/root/XCMAX/成都修茈科技有限公司/MODstore_deploy
+EnvironmentFile=-/root/XCMAX/成都修茈科技有限公司/MODstore_deploy/.env
 Environment=PYTHONUNBUFFERED=1
 # API worker 不运行 outbox / APScheduler（由 modstore-scheduler.service 负责）
 Environment=MODSTORE_RUN_BACKGROUND_JOBS=0
@@ -25,7 +25,7 @@ Environment=MODSTORE_RUN_BACKGROUND_JOBS=0
 Environment=MODSTORE_BUS=rabbitmq
 # PAYMENT_BACKEND 须为 java 才能保证防重放 nonce 跨 worker 一致（Redis 实现）
 # Environment=PAYMENT_BACKEND=java
-ExecStart=/root/modstore-git/MODstore_deploy/.venv/bin/python -m uvicorn modstore_server.app:app --host 0.0.0.0 --port 9999 --workers 4
+ExecStart=/root/XCMAX/成都修茈科技有限公司/MODstore_deploy/.venv/bin/python -m uvicorn modstore_server.app:app --host 0.0.0.0 --port 9999 --workers 4
 Restart=on-failure
 RestartSec=5
 

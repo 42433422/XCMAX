@@ -1,46 +1,62 @@
 id: change-request-auditor
 name: 变更评审员
-version: "10.0.0"
+version: "1.0.0"
+domain: 对员工提交到「待邮件审批」队列的补丁/PR 做自动评审：跑测试 → 静态规则审 → 自动放行低风险 / 升级高风险给 admin；不直接改业务源码、不直接合并到主干。
 owner: admin
 area: platform-core
-domain: >-
-  对员工提交到「待邮件审批」队列的补丁/PR 做自动评审：跑测试 → 静态规则审 → 自动放行低风险 / 升级高风险给 admin；不直接改业务源码、不直接合并到主干。
 
 scope_globs:
   - MODstore_deploy/modstore_server/api/change_request_api.py
-  - "MODstore_deploy/modstore_server/eventing/audit/**"
-  - "MODstore_deploy/scripts/audit_*.py"
+  - MODstore_deploy/modstore_server/eventing/audit/**
+  - MODstore_deploy/scripts/audit_*.py
   - MODstore_deploy/docs/runbooks/change-request-audit.md
-  - "yuangon/platform-core/change-request-auditor/**"
+  - yuangon/platform-core/change-request-auditor/**
 
 forbidden_globs:
-  - "MODstore_deploy/market/src/**"
+  - MODstore_deploy/market/src/**
   - MODstore_deploy/modstore_server/models.py
-  - "MODstore_deploy/modstore_server/migrations/**"
-  - "MODstore_deploy/modstore_server/payment_*.py"
-  - "MODstore_deploy/modstore_server/employee_*.py"
-  - "_local_secrets/**"
+  - MODstore_deploy/modstore_server/migrations/**
+  - MODstore_deploy/modstore_server/payment_*.py
+  - MODstore_deploy/modstore_server/employee_*.py
+  - _local_secrets/**
+
+triggers:
+  on_error: true
+  on_quality_fail: true
+  on_coverage_miss: false
+  subscribes:
+    # 任意员工产生 change-request 时审一次
+    - "ops.change_request.submitted"
+    # 测试员跑完后回填评审结论
+    - "employee.task.done:test-qa-runner"
+  max_patch_budget_tokens: 4000
+  max_patch_steps: 5
+
+sla:
+  timeout_seconds: 300
+  retry_max: 1
+  escalate_to_human: true
+
+llm_default: "auto"
+llm_reasoning: "auto"
+
+skills:
+  - skills/skill-static-audit.md
+  - skills/skill-risk-gate.md
+
+actions:
+  handlers: ["llm_md", "echo", "agent"]
+  agent:
+    workspace:
+      read_only: false
+      requires_project_root: true
 
 depends_on:
   - test-qa-runner
-  - employee-pack-quality-interviewer
+  - employee-pack-quality-interviewer  # 上架前质询的同源静态审复用
   - security-secrets-guard
 
-actions:
-  handlers:
-    - llm_md
-    - echo
-    - agent
-
-triggers:
-  on_error: false
-  on_quality_fail: true
-
-skills:
-  - skill-static-audit
-  - skill-risk-gate
-
 changelog:
-  - version: "10.0.0"
-    date: "2026-06-07"
-    note: "yuangon 骨架由 bootstrap_yuangon.py 从 manifest 反向生成（v10 线内迭代）"
+  - version: "1.0.0"
+    date: "2026-05-08"
+    note: "新增：闭环流程的『审批/合并』节点；分担 admin 在 AdminEmployeeChangeRequestsView 的人工评审压力。"

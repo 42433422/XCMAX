@@ -1,39 +1,37 @@
 id: ecosystem-partner-onboard-officer
 name: 生态伙伴接入员
-version: "10.0.0"
+version: 1.0.0
+domain: O-B B1 生态伙伴 onboarding · 租户隔离 · 联合 SSO 与伙伴档案建档。
 owner: admin
 area: partner-ecosystem
-domain: >-
-  O-B B1 生态伙伴 onboarding · 租户隔离 · 联合 SSO 与伙伴档案建档。
-
+five_line_id: ops_partner
+subzone: partner-onboard
+also_serves: []
 scope_globs:
-  - "MODstore_deploy/modstore_server/**/partner*"
-  - "MODstore_deploy/modstore_server/**/tenant**"
-  - "FHD/app/**/external_crm*"
-  - "yuangon/partner-ecosystem/ecosystem-partner-onboard-officer/**"
-
+- MODstore_deploy/modstore_server/**/partner*
+- MODstore_deploy/modstore_server/**/tenant**
+- FHD/app/**/external_crm*
 forbidden_globs:
-  - "_local_secrets/**"
-  - "*.env*"
-
-depends_on:
-  - modstore-backend-api
-
-actions:
-  handlers:
-    - llm_md
-    - echo
-
+- _local_secrets/**
+- '*.env*'
 triggers:
   on_error: true
-  on_quality_fail: true
-
-skills:
-  - task.analyze
-  - llm.markdown
-  - workflow.assist
-
+sla:
+  timeout_seconds: 180
+  retry_max: 2
+  escalate_to_human: true
+llm_default: auto
+skills: []
+depends_on:
+- modstore-backend-api
 changelog:
-  - version: "10.0.0"
-    date: "2026-06-07"
-    note: "yuangon 骨架由 bootstrap_yuangon.py 从 manifest 反向生成（v10 线内迭代）"
+- version: 1.0.0
+  date: '2026-06-03'
+  note: O-B B1 生态伙伴接入专岗
+business_context:
+  five_line: O-B
+  subzone: partner-onboard
+  kpis:
+  - 伙伴建档 SLA
+  - 租户隔离校验通过率
+  summary: O-B B1 生态伙伴 onboarding · 租户隔离 · 联合 SSO 与伙伴档案建档。
