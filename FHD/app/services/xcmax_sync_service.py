@@ -17,6 +17,8 @@
   model_config   模型服务配置
   ecosystem      智能生态配置
   workflow_employee  员工工作流节点
+  im_message         IM 消息（im_messages）
+  im_read_state      IM 已读游标（im_conversation_members.last_read_message_id）
 """
 
 from __future__ import annotations
@@ -33,6 +35,50 @@ from app.utils.operational_errors import OPERATIONAL_ERRORS
 logger = logging.getLogger(__name__)
 
 _NODE_ID = os.environ.get("XCMAX_NODE_ID", "local")
+
+
+def utc_now_ms() -> int:
+    """UTC epoch 毫秒，供 LWW meta.updated_at_ms 使用。"""
+    from datetime import UTC, datetime
+
+    return int(datetime.now(UTC).timestamp() * 1000)
+
+
+def _payload_updated_at_ms(payload: dict[str, Any]) -> int:
+    meta = payload.get("meta") or {}
+    return int(meta.get("updated_at_ms") or 0)
+
+
+def _read_sync_meta(key: str) -> dict[str, Any]:
+    import sqlite3 as _sqlite3
+
+    from app.db.xcmax_sync import _ensure_schema, _resolve_db_path
+
+    conn = _sqlite3.connect(str(_resolve_db_path()))
+    _ensure_schema(conn)
+    row = conn.execute("SELECT value FROM sync_meta WHERE key=?", (key,)).fetchone()
+    conn.close()
+    if not row:
+        return {}
+    try:
+        return json.loads(row[0] or "{}")
+    except (json.JSONDecodeError, TypeError):
+        return {}
+
+
+def _write_sync_meta(key: str, value: dict[str, Any]) -> None:
+    import sqlite3 as _sqlite3
+
+    from app.db.xcmax_sync import _ensure_schema, _resolve_db_path
+
+    conn = _sqlite3.connect(str(_resolve_db_path()))
+    _ensure_schema(conn)
+    conn.execute(
+        "INSERT OR REPLACE INTO sync_meta (key, value) VALUES (?, ?)",
+        (key, json.dumps(value, ensure_ascii=False, default=str)),
+    )
+    conn.commit()
+    conn.close()
 
 
 # ---------------------------------------------------------------------------
@@ -508,6 +554,135 @@ def _apply_ecosystem(item: dict[str, Any]) -> None:
         conn.close()
     except OPERATIONAL_ERRORS as exc:
         logger.debug("apply_ecosystem non-fatal: %s", exc)
+
+
+@register_entity_applier("im_message")
+def _apply_im_message(item: dict[str, Any]) -> None:
+    """IM 消息变更：写入 im_messages（insert/update，LWW by meta.updated_at_ms）。"""
+    payload = item.get("payload") or {}
+    operation = item.get("operation", "insert")
+    message_id = int(payload.get("id") or item.get("entity_id") or 0)
+    conversation_id = int(payload.get("conversation_id") or 0)
+    if operation == "delete":
+        if not message_id:
+            return
+        try:
+            from app.db import get_db
+            from app.db.models.im import ImMessage
+
+            with get_db() as db:
+                obj = db.query(ImMessage).filter(ImMessage.id == message_id).first()
+                if obj:
+                    db.delete(obj)
+                    db.commit()
+        except OPERATIONAL_ERRORS as exc:
+            logger.warning("apply_im_message delete failed id=%s: %s", message_id, exc)
+        return
+    if not conversation_id:
+        return
+    body = str(payload.get("body") or "").strip()
+    if not body:
+        return
+    incoming_ms = _payload_updated_at_ms(payload)
+    meta_key = f"im_message:{message_id}" if message_id else ""
+    if message_id and meta_key:
+        stored = _read_sync_meta(meta_key)
+        stored_ms = int(stored.get("updated_at_ms") or 0)
+        if incoming_ms and stored_ms and incoming_ms < stored_ms:
+            return
+    try:
+        from app.db import get_db
+        from app.db.models.im import ImConversation, ImMessage
+        from app.utils.time import utc_now_naive
+
+        sender_user_id = int(payload.get("sender_user_id") or 0)
+        if not sender_user_id:
+            return
+        with get_db() as db:
+            obj = db.query(ImMessage).filter(ImMessage.id == message_id).first() if message_id else None
+            if obj:
+                if incoming_ms:
+                    stored_ms = int((_read_sync_meta(meta_key) or {}).get("updated_at_ms") or 0)
+                    if stored_ms and incoming_ms < stored_ms:
+                        return
+                obj.body = body[:4000]
+                if sender_user_id:
+                    obj.sender_user_id = sender_user_id
+            else:
+                obj = ImMessage(
+                    id=message_id if message_id else None,
+                    conversation_id=conversation_id,
+                    sender_user_id=sender_user_id,
+                    body=body[:4000],
+                )
+                db.add(obj)
+            conv = db.get(ImConversation, conversation_id)
+            if conv:
+                conv.last_message_at = utc_now_naive()
+            db.commit()
+            db.refresh(obj)
+            if meta_key:
+                _write_sync_meta(
+                    meta_key,
+                    {"updated_at_ms": incoming_ms or utc_now_ms(), "id": int(obj.id)},
+                )
+    except OPERATIONAL_ERRORS as exc:
+        logger.warning("apply_im_message failed conv=%s: %s", conversation_id, exc)
+
+
+@register_entity_applier("im_read_state")
+def _apply_im_read_state(item: dict[str, Any]) -> None:
+    """IM 已读游标：更新 ImConversationMember.last_read_message_id（LWW）。"""
+    payload = item.get("payload") or {}
+    conversation_id = int(payload.get("conversation_id") or 0)
+    user_id = int(payload.get("user_id") or 0)
+    incoming_read = int(payload.get("last_read_message_id") or 0)
+    if not conversation_id or not user_id:
+        parts = str(item.get("entity_id") or "").split(":", 1)
+        if len(parts) == 2:
+            conversation_id = conversation_id or int(parts[0] or 0)
+            user_id = user_id or int(parts[1] or 0)
+    if not conversation_id or not user_id:
+        return
+    incoming_ms = _payload_updated_at_ms(payload)
+    meta_key = f"im_read_state:{conversation_id}:{user_id}"
+    stored = _read_sync_meta(meta_key)
+    stored_ms = int(stored.get("updated_at_ms") or 0)
+    stored_read = int(stored.get("last_read_message_id") or 0)
+    if incoming_ms and stored_ms and incoming_ms < stored_ms:
+        return
+    if incoming_ms and stored_ms and incoming_ms == stored_ms and incoming_read <= stored_read:
+        return
+    new_read = max(incoming_read, stored_read)
+    try:
+        from sqlalchemy import select
+
+        from app.db import get_db
+        from app.db.models.im import ImConversationMember
+
+        with get_db() as db:
+            member = db.execute(
+                select(ImConversationMember).where(
+                    ImConversationMember.conversation_id == conversation_id,
+                    ImConversationMember.user_id == user_id,
+                )
+            ).scalar_one_or_none()
+            if not member:
+                return
+            applied_read = max(int(member.last_read_message_id or 0), new_read)
+            member.last_read_message_id = applied_read
+            db.commit()
+        _write_sync_meta(
+            meta_key,
+            {
+                "updated_at_ms": max(incoming_ms, stored_ms) if incoming_ms else stored_ms,
+                "last_read_message_id": applied_read,
+            },
+        )
+    except OPERATIONAL_ERRORS as exc:
+        logger.warning(
+            "apply_im_read_state failed conv=%s user=%s: %s", conversation_id, user_id, exc
+        )
 
 
 @register_entity_applier("workflow_employee")
