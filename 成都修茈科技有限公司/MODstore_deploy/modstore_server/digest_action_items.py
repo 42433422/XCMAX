@@ -76,12 +76,10 @@ def _engine():
 
 
 def ensure_table() -> None:
-    """懒建 daily_action_items（SQLite/Postgres 通用 DDL）。"""
+    """懒建 daily_action_items（按方言选用 SQLite / Postgres DDL）。"""
     from sqlalchemy import text as _sql
 
-    ddl = """
-    CREATE TABLE IF NOT EXISTS daily_action_items (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+    cols = """
         day VARCHAR(32) NOT NULL,
         record_id INTEGER,
         kind VARCHAR(16) NOT NULL,
@@ -96,17 +94,15 @@ def ensure_table() -> None:
         dedupe_key VARCHAR(64) UNIQUE,
         created_at VARCHAR(40),
         updated_at VARCHAR(40)
-    )
     """
-    # Postgres 用 SERIAL；这里用通用写法 + 失败回退
     eng = _engine()
+    dialect = (eng.dialect.name or "").lower()
+    if dialect == "postgresql":
+        ddl = f"CREATE TABLE IF NOT EXISTS daily_action_items (id SERIAL PRIMARY KEY, {cols})"
+    else:
+        ddl = f"CREATE TABLE IF NOT EXISTS daily_action_items (id INTEGER PRIMARY KEY AUTOINCREMENT, {cols})"
     with eng.begin() as conn:
-        try:
-            conn.execute(_sql(ddl))
-        except Exception:
-            # Postgres 不认 AUTOINCREMENT
-            ddl_pg = ddl.replace("INTEGER PRIMARY KEY AUTOINCREMENT", "SERIAL PRIMARY KEY")
-            conn.execute(_sql(ddl_pg))
+        conn.execute(_sql(ddl))
         for stmt in (
             "CREATE INDEX IF NOT EXISTS ix_dai_day ON daily_action_items (day)",
             "CREATE INDEX IF NOT EXISTS ix_dai_kind ON daily_action_items (kind)",

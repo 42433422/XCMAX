@@ -18,7 +18,7 @@ XCMAX_ROOT="$(cd "${FHD_ROOT}/.." && pwd)"
 HOST="${XCMAX_REMOTE_HOST:-119.27.178.147}"
 USER="${DEPLOY_SSH_USER:-root}"
 PORT="${DEPLOY_SSH_PORT:-22}"
-MODSTORE_ROOT="${MODSTORE_API_ROOT:-/root/modstore-git/MODstore_deploy}"
+MODSTORE_ROOT="${MODSTORE_API_ROOT:-/root/XCMAX/成都修茈科技有限公司/MODstore_deploy}"
 ENV_FILE="${MODSTORE_ROOT}/.env"
 RT_LOCAL="${FHD_ROOT}/config/release_train.json"
 TAR_RT="/tmp/release_train_sync_$$.json"
@@ -56,6 +56,7 @@ upsert() {
   echo "[ok] ${k}=${v}"
 }
 upsert MODSTORE_AUTOMATION_PRIMARY local_mac
+upsert MODSTORE_AUTOMATION_ROLE server
 upsert MODSTORE_DAILY_DIGEST_ENABLED 0
 upsert MODSTORE_DAILY_MEETING_ENABLED 0
 upsert MODSTORE_DAILY_VIBE_PREP_ENABLED 0
@@ -65,8 +66,12 @@ upsert MODSTORE_RELEASE_TRAIN_ENABLED 0
 upsert MODSTORE_DAILY_ORCHESTRATOR_DIGEST_MODE off
 upsert MODSTORE_RUN_BACKGROUND_JOBS 1
 upsert MODSTORE_RELEASE_TRAIN_JSON "${RT_SERVER}"
-upsert XCMAX_MONOREPO_ROOT /root/modstore-git
-upsert MODSTORE_REPO_ROOT /root/modstore-git
+upsert XCMAX_MONOREPO_ROOT /root/XCMAX
+upsert MODSTORE_REPO_ROOT /root/XCMAX
+upsert MODSTORE_DEPLOY_HEALTH_URL http://127.0.0.1:9999/api/health
+upsert MODSTORE_SURFACE_AUDIT_AUTO_START 0
+upsert MODSTORE_SURFACE_AUDIT_PS_ENABLED 0
+upsert MODSTORE_INBOX_POLL_ENABLED 0
 echo "[info] 公网日更 cron 已关闭；日更主跑在开发者本机（见 MODSTORE_AUTOMATION_PRIMARY）"
 if systemctl is-active modstore >/dev/null 2>&1; then
   systemctl restart modstore

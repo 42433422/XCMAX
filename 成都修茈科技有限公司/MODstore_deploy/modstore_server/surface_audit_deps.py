@@ -290,6 +290,20 @@ def _ensure_playwright() -> Dict[str, Any]:
         return {"ok": False, "error": str(exc)[:300]}
 
 
+def _resolve_internal_api_base() -> str:
+    """MODstore 内部 API 根：显式 env → DEPLOY_HEALTH_URL 去后缀 → 默认 :8788。"""
+    explicit = (os.environ.get("MODSTORE_INTERNAL_API_BASE") or "").strip().rstrip("/")
+    if explicit:
+        return explicit
+    health = (os.environ.get("MODSTORE_DEPLOY_HEALTH_URL") or "").strip().rstrip("/")
+    if health:
+        for suffix in ("/api/health", "/health"):
+            if health.endswith(suffix):
+                return health[: -len(suffix)] or health
+        return health
+    return "http://127.0.0.1:8788"
+
+
 def _parse_port(url: str, default: int) -> int:
     try:
         p = urlparse(url).port
@@ -321,9 +335,7 @@ def ensure_surface_audit_deps() -> Dict[str, Any]:
     digest_base = (
         os.environ.get("MODSTORE_DAILY_SURFACE_AUDIT_BASE_URL") or "https://xiu-ci.com"
     ).rstrip("/")
-    internal_api = (
-        os.environ.get("MODSTORE_INTERNAL_API_BASE") or "http://127.0.0.1:8788"
-    ).rstrip("/")
+    internal_api = _resolve_internal_api_base()
 
     api_port = _parse_port(api_url, 5000)
     web_port = _parse_port(ps_base, 5001)

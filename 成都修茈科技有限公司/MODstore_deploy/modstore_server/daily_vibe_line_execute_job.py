@@ -54,6 +54,12 @@ def run_daily_vibe_line_execute_job(
     if raw in ("0", "false", "no", "off"):
         return {"ok": True, "skipped": True, "reason": "MODSTORE_DAILY_VIBE_EXECUTE_ENABLED=0"}
 
+    from modstore_server.automation_primary import skip_daily_automation_result
+
+    delegated = skip_daily_automation_result(job="daily_vibe_line_execute")
+    if delegated and not force:
+        return delegated
+
     rid = find_digest_record_for_execute(record_id=record_id)
     if not rid:
         return {"ok": False, "error": "no digest record found"}
