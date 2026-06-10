@@ -67,12 +67,15 @@ object SurfaceAudit {
         Routes.REGISTER,
         Routes.HOME_HUB,
         Routes.CHAT,
+        Routes.WORK,
+        Routes.DISCOVER,
         Routes.WORKBENCH,
         Routes.PROFILE,
         Routes.IM,
         Routes.APPROVAL,
         Routes.ERP_OVERVIEW,
         Routes.ERP,
+        Routes.ERP_TAB.replace("{tabIndex}", "{tab_index}"),
         Routes.BRIDGE,
         Routes.MARKET,
         Routes.MODS,
@@ -148,6 +151,12 @@ object SurfaceAudit {
         if (r.isBlank()) return ""
         return when (r) {
             "im", "im_messenger" -> Routes.IM
+            "erp_overview" -> Routes.ERP_OVERVIEW
+            "erp_tab/0", "erp_customers" -> Routes.erpTab(0)
+            "erp_tab/1", "erp_shipments" -> Routes.erpTab(1)
+            "erp_tab/2", "erp_inventory" -> Routes.erpTab(2)
+            "work" -> Routes.WORK
+            "discover" -> Routes.DISCOVER
             "mod_web", "mod/{modId}", "mod/{mod_id}" -> Routes.MOD_WEB.replace("{modId}", "taiyangniao-pro")
             "splash" -> Routes.HOME_HUB
             else -> {
