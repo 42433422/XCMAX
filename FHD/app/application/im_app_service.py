@@ -213,17 +213,75 @@ class ImApplicationService:
         self._db.commit()
         self._db.refresh(msg)
         member_ids = self._member_user_ids(conversation_id)
+        message = self._message_dict(msg, self._display_name(sender_user_id))
+        updated_at_ms = self._record_im_message_change(message, actor=str(sender_user_id))
         return {
-            "message": self._message_dict(msg, self._display_name(sender_user_id)),
+            "message": message,
             "member_user_ids": member_ids,
+            "updated_at_ms": updated_at_ms,
         }
 
-    def mark_read(self, conversation_id: int, user_id: int, last_message_id: int) -> None:
+    def mark_read(
+        self, conversation_id: int, user_id: int, last_message_id: int
+    ) -> dict[str, Any]:
         member = self._get_member(conversation_id, user_id)
         if not member:
             raise PermissionError("非会话成员")
-        member.last_read_message_id = max(int(member.last_read_message_id or 0), last_message_id)
+        applied_read = max(int(member.last_read_message_id or 0), last_message_id)
+        member.last_read_message_id = applied_read
         self._db.commit()
+        updated_at_ms = self._record_im_read_change(
+            conversation_id,
+            user_id,
+            applied_read,
+            actor=str(user_id),
+        )
+        return {
+            "conversation_id": conversation_id,
+            "user_id": user_id,
+            "last_read_message_id": applied_read,
+            "member_user_ids": self._member_user_ids(conversation_id),
+            "updated_at_ms": updated_at_ms,
+        }
+
+    @staticmethod
+    def _record_im_message_change(message: dict[str, Any], *, actor: str) -> int:
+        from app.services.xcmax_sync_service import record_change, utc_now_ms
+
+        updated_at_ms = utc_now_ms()
+        record_change(
+            "im_message",
+            str(message["id"]),
+            "insert",
+            {**message, "meta": {"updated_at_ms": updated_at_ms}},
+            actor=actor,
+        )
+        return updated_at_ms
+
+    @staticmethod
+    def _record_im_read_change(
+        conversation_id: int,
+        user_id: int,
+        last_read_message_id: int,
+        *,
+        actor: str,
+    ) -> int:
+        from app.services.xcmax_sync_service import record_change, utc_now_ms
+
+        updated_at_ms = utc_now_ms()
+        record_change(
+            "im_read_state",
+            f"{conversation_id}:{user_id}",
+            "update",
+            {
+                "conversation_id": conversation_id,
+                "user_id": user_id,
+                "last_read_message_id": last_read_message_id,
+                "meta": {"updated_at_ms": updated_at_ms},
+            },
+            actor=actor,
+        )
+        return updated_at_ms
 
     def _member_user_ids(self, conversation_id: int) -> list[int]:
         rows = self._db.execute(
