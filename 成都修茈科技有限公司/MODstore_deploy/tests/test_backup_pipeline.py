@@ -150,9 +150,12 @@ def test_surface_audit_deps_auto_start_disabled(monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setenv("MODSTORE_SURFACE_AUDIT_AUTO_START", "0")
     monkeypatch.setenv("MODSTORE_SURFACE_AUDIT_PS_ENABLED", "1")
     monkeypatch.setenv("MODSTORE_SURFACE_AUDIT_PS_BASE_URL", "http://127.0.0.1:59999")
+    monkeypatch.setenv("SURFACE_AUDIT_API_URL", "http://127.0.0.1:59998")
 
-    from modstore_server.surface_audit_deps import ensure_surface_audit_deps
+    import modstore_server.surface_audit_deps as deps
 
-    out = ensure_surface_audit_deps()
+    monkeypatch.setattr(deps, "_http_ok", lambda *a, **k: False)
+
+    out = deps.ensure_surface_audit_deps()
     assert "services" in out
     assert out["services"].get("fhd_api", {}).get("reason") == "auto_start_disabled"
