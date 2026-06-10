@@ -1,5 +1,7 @@
 # XCAGI Android 原生客户端
 
+> **交付状态**：**实验骨架**（可构建 · 双 SKU · CI `android-build.yml`）；**非**签约级移动交付。与仓根 README / [`CLAIMED_VS_ACTUAL.md`](../CLAIMED_VS_ACTUAL.md) 对齐。
+
 ## 概述
 
 `mobile-android/` 为 **成都修茈科技有限公司** XCAGI 的 Android 原生客户端（Kotlin + Jetpack Compose），与 [FHD](../) 电脑端（Electron + FastAPI）及公网 [MODstore](https://xiu-ci.com) 互联。
@@ -50,6 +52,17 @@ powershell -File scripts/package/stage-sku-download-folders.ps1 -Version 10.0.0
 ## 底栏信息架构
 
 | SKU | 底栏 Tab |
+|-----|----------|
+| 个人版 / 企业版 | **对话 · 工作 · 发现 · 我的**（4 Tab 微信式） |
+
+- **对话**：DeepSeek 式 AI 首页（模式胶囊 + 底部输入条）
+- **工作**：审批 / 业务 / IM（企业版含审批与 ERP 入口）
+- **发现**：工作台 WebView、Mod、MODstore、扫一扫
+- **我的**：连接电脑、同步、设置
+
+（旧 6 Tab 路由 `home_hub` / `approval` / `erp` 仍保留供 surface audit 深链。）
+
+| SKU | 历史底栏（已移出主 Tab） |
 |-----|----------|
 | 个人版 | 首页 · 对话 · 工作台 · 我的 |
 | 企业版 | 首页 · 对话 · 工作台 · 审批 · 业务 · 我的 |

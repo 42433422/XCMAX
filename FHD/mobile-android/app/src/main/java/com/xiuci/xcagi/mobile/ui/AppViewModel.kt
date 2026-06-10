@@ -4,9 +4,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.xiuci.xcagi.mobile.core.datastore.SessionStore
 import com.xiuci.xcagi.mobile.core.model.ListItem
+import com.xiuci.xcagi.mobile.core.model.ApprovalDetail
 import com.xiuci.xcagi.mobile.core.network.ServerMode
 import com.xiuci.xcagi.mobile.core.network.ServerRouter
 import com.xiuci.xcagi.mobile.BuildConfig
+import com.xiuci.xcagi.mobile.core.ProductSkuConfig
 import com.xiuci.xcagi.mobile.core.model.AppConfigResponse
 import com.xiuci.xcagi.mobile.core.observability.XcagiAnalytics
 import com.xiuci.xcagi.mobile.core.push.PushRegistrar
@@ -100,6 +102,12 @@ class AppViewModel @Inject constructor(
     private val _detailJson = MutableStateFlow("")
     val detailJson: StateFlow<String> = _detailJson.asStateFlow()
 
+    private val _approvalDetail = MutableStateFlow<ApprovalDetail?>(null)
+    val approvalDetail: StateFlow<ApprovalDetail?> = _approvalDetail.asStateFlow()
+
+    private val _approvalDetailLoading = MutableStateFlow(false)
+    val approvalDetailLoading: StateFlow<Boolean> = _approvalDetailLoading.asStateFlow()
+
     private val _streaming = MutableStateFlow(false)
     val streaming: StateFlow<Boolean> = _streaming.asStateFlow()
 
@@ -123,6 +131,9 @@ class AppViewModel @Inject constructor(
 
     private val _homeHub = MutableStateFlow(HomeHubState())
     val homeHub: StateFlow<HomeHubState> = _homeHub.asStateFlow()
+
+    private val _approvalPendingCount = MutableStateFlow(0)
+    val approvalPendingCount: StateFlow<Int> = _approvalPendingCount.asStateFlow()
 
     private val _chatSuggestions = MutableStateFlow<List<ChatSuggestion>>(emptyList())
     val chatSuggestions: StateFlow<List<ChatSuggestion>> = _chatSuggestions.asStateFlow()
@@ -210,7 +221,7 @@ class AppViewModel @Inject constructor(
         _startRoute.value = when {
             !setup -> Routes.CONNECT
             !loggedIn -> Routes.AUTH
-            else -> Routes.HOME_HUB
+            else -> Routes.CHAT
         }
     }
 
@@ -490,6 +501,21 @@ class AppViewModel @Inject constructor(
         _chatMessages.value = repo.loadCachedChat()
     }
 
+    fun clearChat() {
+        chatJob?.cancel()
+        _streaming.value = false
+        _chatMessages.value = emptyList()
+        _chatAction.value = null
+    }
+
+    fun refreshApprovalCount() = viewModelScope.launch {
+        if (!ProductSkuConfig.showsEnterpriseNav) {
+            _approvalPendingCount.value = 0
+            return@launch
+        }
+        repo.approvals().onSuccess { _approvalPendingCount.value = it.size }
+    }
+
     fun sendChat(text: String) {
         chatJob?.cancel()
         _chatAction.value = null
@@ -570,8 +596,19 @@ class AppViewModel @Inject constructor(
     fun loadApprovals() = loadEnterpriseList { repo.approvals() }
 
     fun loadApprovalDetail(id: Int) = viewModelScope.launch {
-        repo.approvalDetail(id).onSuccess { _detailJson.value = it.toString() }
-            .onFailure { snack(it.message ?: "", true) }
+        _approvalDetailLoading.value = true
+        _approvalDetail.value = null
+        repo.approvalDetail(id)
+            .onSuccess { raw ->
+                _approvalDetail.value = ApprovalDetail.fromResponse(raw)
+                if (_approvalDetail.value == null) {
+                    _detailJson.value = raw.toString()
+                }
+            }
+            .onFailure {
+                snack(it.message ?: "", true)
+            }
+        _approvalDetailLoading.value = false
     }
 
     fun approve(id: Int, opinion: String, onDone: () -> Unit) = viewModelScope.launch {
@@ -631,6 +668,20 @@ class AppViewModel @Inject constructor(
         repo.bridgeRespond(id, text).onSuccess { snack("已回复"); onDone() }
             .onFailure { snack(it.message ?: "", true) }
     }
+
+    val imWsEvents get() = repo.imWsEvents
+
+    fun connectImWebSocket() = viewModelScope.launch { repo.connectImWebSocket() }
+
+    fun disconnectImWebSocket() = repo.disconnectImWebSocket()
+
+    suspend fun imOpenDirect(peerUserId: Int): Result<Map<String, Any?>> = repo.imOpenDirect(peerUserId)
+
+    suspend fun imListMessages(conversationId: Int): Result<Map<String, Any?>> =
+        repo.imListMessages(conversationId)
+
+    suspend fun imSendMessage(conversationId: Int, text: String): Result<Map<String, Any?>> =
+        repo.imSendMessage(conversationId, text)
 
     fun logout(onDone: () -> Unit) = viewModelScope.launch {
         pushRegistrar.unregisterAll()

@@ -1,27 +1,18 @@
 package com.xiuci.xcagi.mobile.navigation
 
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ExpandLess
-import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material3.Card
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -42,17 +33,20 @@ import com.xiuci.xcagi.mobile.BuildConfig
 import com.xiuci.xcagi.mobile.R
 import com.xiuci.xcagi.mobile.core.ProductSkuConfig
 import com.xiuci.xcagi.mobile.ui.AppViewModel
+import com.xiuci.xcagi.mobile.ui.components.mobile.WeAvatar
+import com.xiuci.xcagi.mobile.ui.components.mobile.WeCell
+import com.xiuci.xcagi.mobile.ui.components.mobile.WeCellGroup
+import com.xiuci.xcagi.mobile.ui.components.mobile.WeRedActionCell
+import com.xiuci.xcagi.mobile.ui.components.mobile.WeScreen
+import com.xiuci.xcagi.mobile.ui.components.mobile.WeSpacer
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileScreen(
     vm: AppViewModel,
     onConnectPc: () -> Unit,
     onAbout: () -> Unit,
     onSettings: () -> Unit,
-    onBridge: () -> Unit,
-    onMods: () -> Unit,
-    onMarket: () -> Unit,
-    onLongTail: () -> Unit,
     onLogout: () -> Unit,
 ) {
     val displayName by vm.displayName.collectAsState()
@@ -61,145 +55,109 @@ fun ProfileScreen(
     val autoProbe by vm.autoLanProbe.collectAsState()
     val autoSync by vm.autoSync.collectAsState()
     val hub by vm.homeHub.collectAsState()
-    var advancedOpen by remember { mutableStateOf(false) }
     var showDelete by remember { mutableStateOf(false) }
     var deletePassword by remember { mutableStateOf("") }
 
-    Column(
-        Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp, vertical = 20.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Row(
-            Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            Icon(
-                painter = painterResource(R.mipmap.ic_launcher),
-                contentDescription = null,
-                modifier = Modifier.size(56.dp),
-                tint = Color.Unspecified,
-            )
-            Column {
-                Text(stringResource(R.string.app_name), style = MaterialTheme.typography.titleLarge)
-                Text(
-                    displayName.ifBlank { "未登录" },
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Text(
-                    serverModeLabel,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-
-        Card(Modifier.fillMaxWidth()) {
-            ListItem(
-                headlineContent = { Text("连接电脑") },
-                supportingContent = {
-                    Text(
-                        if (fhdHost.isBlank()) "未配置，可使用云端工作台" else "当前：$fhdHost",
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                },
-            )
-            HorizontalDivider()
-            TextButton(onClick = onConnectPc, modifier = Modifier.fillMaxWidth()) {
-                Text("连接 / 更换电脑")
-            }
-        }
-
-        Card(Modifier.fillMaxWidth()) {
-            ListItem(
-                headlineContent = { Text("后台自动发现电脑") },
-                trailingContent = {
-                    Switch(autoProbe, { vm.setAutoLanProbe(it) })
-                },
-            )
-            Text(
-                "关闭后不在后台扫描局域网。",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
-            )
-            HorizontalDivider()
-            ListItem(
-                headlineContent = { Text("后台自动同步") },
-                supportingContent = { Text(hub.syncLabel) },
-                trailingContent = {
-                    Switch(autoSync, { vm.setAutoSync(it) })
-                },
-            )
-            TextButton(
-                onClick = { vm.runSyncNow() },
-                modifier = Modifier.fillMaxWidth(),
-                enabled = !hub.syncing,
+    WeScreen(title = "我的", scrollable = true) {
+        WeCellGroup {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(if (hub.syncing) "同步中…" else "立即同步工作数据")
-            }
-        }
-
-        Card(Modifier.fillMaxWidth()) {
-            ListItem(
-                headlineContent = { Text("设置") },
-                modifier = Modifier.clickable(onClick = onSettings),
-            )
-            HorizontalDivider()
-            ListItem(
-                headlineContent = { Text("关于") },
-                supportingContent = { Text(stringResource(R.string.company_name)) },
-                modifier = Modifier.clickable(onClick = onAbout),
-            )
-            HorizontalDivider()
-            ListItem(
-                headlineContent = { Text("版本") },
-                supportingContent = { Text("${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})") },
-            )
-        }
-
-        Row(
-            Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text("高级", style = MaterialTheme.typography.titleSmall)
-            Spacer(Modifier.weight(1f))
-            IconButton({ advancedOpen = !advancedOpen }) {
-                Icon(
-                    if (advancedOpen) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                    contentDescription = null,
-                )
-            }
-        }
-
-        if (advancedOpen) {
-            Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    ProfileNavRow("Service Bridge", onBridge)
-                    ProfileNavRow("Mod 列表", onMods)
-                    ProfileNavRow("插件市场", onMarket)
-                    if (ProductSkuConfig.showsEnterpriseNav) {
-                        ProfileNavRow("财务 / 打印摘要", onLongTail)
-                    }
+                WeAvatar(size = 64.dp) {
+                    Icon(
+                        painter = painterResource(R.mipmap.ic_launcher),
+                        contentDescription = null,
+                        modifier = Modifier.size(48.dp),
+                        tint = Color.Unspecified,
+                    )
+                }
+                Spacer(Modifier.width(16.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        displayName.ifBlank { "未登录" },
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    Text(
+                        ProductSkuConfig.displayEditionLabel,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        serverModeLabel,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
         }
 
-        Spacer(Modifier.height(8.dp))
+        WeSpacer(12.dp)
 
-        OutlinedButton(onClick = onLogout, modifier = Modifier.fillMaxWidth()) {
-            Text("退出登录")
+        WeCellGroup {
+            WeCell(
+                title = "连接电脑",
+                subtitle = if (fhdHost.isBlank()) "未配置，可使用云端工作台" else "当前：$fhdHost",
+                showArrow = true,
+                onClick = onConnectPc,
+            )
+            WeCell(
+                title = "后台自动发现电脑",
+                trailing = {
+                    Switch(autoProbe, { vm.setAutoLanProbe(it) })
+                },
+                showDivider = true,
+            )
+            WeCell(
+                title = "后台自动同步",
+                subtitle = hub.syncLabel,
+                trailing = {
+                    Switch(autoSync, { vm.setAutoSync(it) })
+                },
+                showDivider = true,
+            )
+            WeCell(
+                title = "立即同步工作数据",
+                value = if (hub.syncing) "同步中…" else "",
+                showArrow = false,
+                showDivider = false,
+                onClick = { if (!hub.syncing) vm.runSyncNow() },
+            )
         }
-        TextButton(
-            onClick = { showDelete = true },
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text("注销账号", color = MaterialTheme.colorScheme.error)
+
+        WeSpacer(12.dp)
+
+        WeCellGroup {
+            WeCell(
+                title = "设置",
+                icon = Icons.Default.Settings,
+                showArrow = true,
+                onClick = onSettings,
+            )
+            WeCell(
+                title = "关于",
+                subtitle = stringResource(R.string.company_name),
+                icon = Icons.Default.Info,
+                showArrow = true,
+                showDivider = false,
+                onClick = onAbout,
+            )
         }
+
+        WeSpacer(8.dp)
+        Text(
+            "版本 ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 16.dp),
+        )
+
+        WeSpacer(16.dp)
+        WeRedActionCell("退出登录", onLogout)
+        WeSpacer(8.dp)
+        WeRedActionCell("注销账号") { showDelete = true }
     }
 
     if (showDelete) {
@@ -229,14 +187,4 @@ fun ProfileScreen(
             },
         )
     }
-}
-
-@Composable
-private fun ProfileNavRow(label: String, onClick: () -> Unit) {
-    ListItem(
-        headlineContent = { Text(label) },
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-    )
 }
