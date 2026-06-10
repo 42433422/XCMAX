@@ -498,7 +498,7 @@ fun WeAuthTabs(
                     Modifier
                         .fillMaxWidth()
                         .height(2.dp)
-                        .background(if (selected) MobileTokens.weChatGreen else Color.Transparent),
+                        .background(if (selected) MobileTokens.accent() else Color.Transparent),
                 )
             }
         }
@@ -623,7 +623,7 @@ fun WeAuthInputActionField(
             Text(
                 actionLabel,
                 fontSize = 14.sp,
-                color = MobileTokens.weChatGreen,
+                color = MobileTokens.accent(),
                 modifier = Modifier
                     .clickable(onClick = onAction)
                     .padding(start = 8.dp),
@@ -654,10 +654,10 @@ fun WeAuthGreenButton(
         enabled = enabled,
         shape = MobileTokens.cornerAuthButton,
         colors = ButtonDefaults.buttonColors(
-            containerColor = MobileTokens.weChatGreen,
-            contentColor = Color.White,
-            disabledContainerColor = MobileTokens.weChatGreen.copy(alpha = 0.4f),
-            disabledContentColor = Color.White.copy(alpha = 0.7f),
+            containerColor = MaterialTheme.colorScheme.primary,
+            contentColor = MaterialTheme.colorScheme.onPrimary,
+            disabledContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f),
+            disabledContentColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f),
         ),
         elevation = ButtonDefaults.buttonElevation(0.dp, 0.dp, 0.dp, 0.dp, 0.dp),
     ) {
