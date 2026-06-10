@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -55,7 +57,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 
 private val WeChatGreen = Color(0xFF07C160)
 
@@ -434,6 +438,299 @@ fun WeUnderlineTabs(
                 )
             }
         }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Auth 专用组件  ─  登录/注册页精致布局（对标微信）
+// ─────────────────────────────────────────────────────────────────────────────
+
+@Composable
+fun WeAuthCard(
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = MobileTokens.authHorizontalMargin),
+        shape = MobileTokens.cornerAuthCard,
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
+    ) {
+        Column(content = content)
+    }
+}
+
+@Composable
+fun WeAuthTabs(
+    options: List<WeModeOption>,
+    selectedId: String,
+    onSelect: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        options.forEach { opt ->
+            val selected = opt.id == selectedId
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = { onSelect(opt.id) },
+                    )
+                    .padding(top = 16.dp, bottom = 0.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text(
+                    opt.label,
+                    fontSize = 16.sp,
+                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                    color = if (selected) MobileTokens.authTextPrimary else MobileTokens.authTextMuted,
+                    textAlign = TextAlign.Center,
+                )
+                Spacer(Modifier.height(10.dp))
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(2.dp)
+                        .background(if (selected) MobileTokens.weChatGreen else Color.Transparent),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun WeAuthInputField(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    placeholder: String = "",
+    showDivider: Boolean = true,
+    singleLine: Boolean = true,
+    visualTransformation: VisualTransformation = VisualTransformation.None,
+    keyboardOptions: androidx.compose.foundation.text.KeyboardOptions = androidx.compose.foundation.text.KeyboardOptions.Default,
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                label,
+                fontSize = 16.sp,
+                color = MobileTokens.authTextPrimary,
+                modifier = Modifier.width(72.dp),
+            )
+            BasicTextField(
+                value = value,
+                onValueChange = onValueChange,
+                modifier = Modifier.weight(1f),
+                singleLine = singleLine,
+                visualTransformation = visualTransformation,
+                keyboardOptions = keyboardOptions,
+                textStyle = MaterialTheme.typography.bodyLarge.copy(
+                    color = MobileTokens.authTextPrimary,
+                    fontSize = 16.sp,
+                ),
+                decorationBox = { inner ->
+                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterStart) {
+                        if (value.isEmpty() && placeholder.isNotBlank()) {
+                            Text(
+                                placeholder,
+                                fontSize = 16.sp,
+                                color = MobileTokens.authPlaceholder,
+                            )
+                        }
+                        inner()
+                    }
+                },
+            )
+        }
+        if (showDivider) {
+            HorizontalDivider(
+                thickness = 0.5.dp,
+                color = MobileTokens.authDivider,
+            )
+        }
+    }
+}
+
+@Composable
+fun WeAuthInputActionField(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    actionLabel: String,
+    onAction: () -> Unit,
+    modifier: Modifier = Modifier,
+    placeholder: String = "",
+    showDivider: Boolean = true,
+    keyboardOptions: androidx.compose.foundation.text.KeyboardOptions = androidx.compose.foundation.text.KeyboardOptions.Default,
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                label,
+                fontSize = 16.sp,
+                color = MobileTokens.authTextPrimary,
+                modifier = Modifier.width(72.dp),
+            )
+            BasicTextField(
+                value = value,
+                onValueChange = onValueChange,
+                modifier = Modifier.weight(1f),
+                singleLine = true,
+                keyboardOptions = keyboardOptions,
+                textStyle = MaterialTheme.typography.bodyLarge.copy(
+                    color = MobileTokens.authTextPrimary,
+                    fontSize = 16.sp,
+                ),
+                decorationBox = { inner ->
+                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterStart) {
+                        if (value.isEmpty() && placeholder.isNotBlank()) {
+                            Text(
+                                placeholder,
+                                fontSize = 16.sp,
+                                color = MobileTokens.authPlaceholder,
+                            )
+                        }
+                        inner()
+                    }
+                },
+            )
+            Text(
+                actionLabel,
+                fontSize = 14.sp,
+                color = MobileTokens.weChatGreen,
+                modifier = Modifier
+                    .clickable(onClick = onAction)
+                    .padding(start = 8.dp),
+            )
+        }
+        if (showDivider) {
+            HorizontalDivider(
+                thickness = 0.5.dp,
+                color = MobileTokens.authDivider,
+            )
+        }
+    }
+}
+
+@Composable
+fun WeAuthGreenButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+) {
+    Button(
+        onClick = onClick,
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = MobileTokens.authHorizontalMargin)
+            .height(50.dp),
+        enabled = enabled,
+        shape = MobileTokens.cornerAuthButton,
+        colors = ButtonDefaults.buttonColors(
+            containerColor = MobileTokens.weChatGreen,
+            contentColor = Color.White,
+            disabledContainerColor = MobileTokens.weChatGreen.copy(alpha = 0.4f),
+            disabledContentColor = Color.White.copy(alpha = 0.7f),
+        ),
+        elevation = ButtonDefaults.buttonElevation(0.dp, 0.dp, 0.dp, 0.dp, 0.dp),
+    ) {
+        Text(text, fontSize = 17.sp, fontWeight = FontWeight.Medium)
+    }
+}
+
+@Composable
+fun AuthScreenLayout(
+    title: String,
+    subtitle: String,
+    logoContent: @Composable () -> Unit,
+    modifier: Modifier = Modifier,
+    logoSize: Dp = 80.dp,
+    footer: @Composable () -> Unit = {},
+    formContent: @Composable ColumnScope.() -> Unit,
+    actions: @Composable ColumnScope.() -> Unit,
+) {
+    Column(
+        modifier
+            .fillMaxSize()
+            .background(MobileTokens.authPageBg)
+            .imePadding(),
+    ) {
+        Column(
+            Modifier
+                .weight(1f)
+                .verticalScroll(rememberScrollState()),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 220.dp)
+                    .padding(top = 56.dp, bottom = 28.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+            ) {
+                WeAvatar(size = logoSize, content = logoContent)
+                Spacer(Modifier.height(20.dp))
+                Text(
+                    title,
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MobileTokens.authTextPrimary,
+                    textAlign = TextAlign.Center,
+                )
+                Text(
+                    subtitle,
+                    fontSize = 13.sp,
+                    color = MobileTokens.authTextMuted,
+                    textAlign = TextAlign.Center,
+                    maxLines = 2,
+                    modifier = Modifier
+                        .padding(horizontal = 40.dp)
+                        .padding(top = 8.dp),
+                )
+            }
+
+            WeAuthCard(content = formContent)
+
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(top = 32.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                content = actions,
+            )
+
+            Spacer(Modifier.height(24.dp))
+        }
+
+        footer()
     }
 }
 

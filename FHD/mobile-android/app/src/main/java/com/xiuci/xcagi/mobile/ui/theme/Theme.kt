@@ -10,7 +10,7 @@ import androidx.compose.ui.graphics.Color
 /** GPT 灰点缀 + 微信分组灰底 */
 private val GptGray = Color(0xFF353740)
 private val GptGrayMuted = Color(0xFF8E8EA0)
-private val WeChatBg = Color(0xFFEDEDED)
+private val WeChatBg = Color(0xFFF5F5F5)
 private val WeChatGreen = Color(0xFF07C160)
 
 private val DarkColors = darkColorScheme(
