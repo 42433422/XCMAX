@@ -1,0 +1,923 @@
+{
+  "version": "emp-wf:node-click",
+  "center_id": "daily-hub",
+  "phase_colors": {
+    "t0": "#79c0ff",
+    "t1": "#58e2c2",
+    "t2": "#d2a8ff",
+    "t2b": "#a371f7",
+    "t3": "#56d364",
+    "t4": "#ffa657",
+    "evt": "#f778ba"
+  },
+  "compact_ids": [
+    "P3",
+    "P4",
+    "P5",
+    "P6",
+    "P6G",
+    "P6POP",
+    "P6PW",
+    "P7",
+    "P8",
+    "P9",
+    "P9G",
+    "P9I",
+    "P5I",
+    "P6I",
+    "BK",
+    "BKOND",
+    "DRPROBE",
+    "ART",
+    "WB_D",
+    "WB_M",
+    "GAPS",
+    "ROAD"
+  ],
+  "xrail_edge_keys": [
+    "DLSSOT->O5",
+    "O5->O6",
+    "O6->O7",
+    "O7->CS_CHG",
+    "CS_CHG->Vibe08",
+    "Vibe08->V"
+  ],
+  "nodes": [
+    {
+      "id": "daily-hub",
+      "label": "日更闭环",
+      "kind": "center"
+    },
+    {
+      "id": "BK",
+      "label": "03:05 容灾备份",
+      "kind": "step",
+      "phase": "t0",
+      "desc": "SQLite 全量备份（VACUUM INTO + wal_checkpoint TRUNCATE）+ release_train 快照 → backups/ · v2.2: 真实 WAL 增量（拷贝 .db-wal/.db-shm）+ 全量轮转"
+    },
+    {
+      "id": "BKOND",
+      "label": "按需快照\n交叉升级/回滚触发",
+      "kind": "step",
+      "phase": "t0",
+      "desc": "交叉升级/回滚前主动触发按需快照，独立目录 backups/ondemand/ + 独立保留策略（默认7份），同时写 release_train 历史快照确保回滚粒度精确 · v2.2: 快照失败联动 DR 守卫"
+    },
+    {
+      "id": "DRFAIL",
+      "label": "灾备失败 → 降级\n告警 + 跳过当日 bump",
+      "kind": "step",
+      "phase": "t0",
+      "desc": "容灾备份失败时熔断：发告警、保留上一份快照、当日不递增 release_train（last_bump_day 守卫兜底）· v2.2: 自动恢复探针每30分钟重试，超8次升级告警；clear_backup_guard 双轨发布 dispatch 事件"
+    },
+    {
+      "id": "DRPROBE",
+      "label": "自动恢复探针\n30min 重试 × 8",
+      "kind": "step",
+      "phase": "t0",
+      "desc": "DRFAIL 守卫生效后，每30分钟自动重试备份；成功则解除守卫恢复日更（双轨 dispatch backup.dr_guard.cleared 事件），超8次升级告警。retry_count 结构化字段写入 SSOT"
+    },
+    {
+      "id": "R",
+      "label": "03:15 retention-officer 归档",
+      "kind": "step",
+      "phase": "t0",
+      "desc": "日志与过期数据归档清理，释放存储空间，确保备份后数据链路清洁"
+    },
+    {
+      "id": "K",
+      "label": "运维 KPI · 待审 · TLS · IMAP",
+      "kind": "step",
+      "phase": "t1",
+      "desc": "SLO 7 天 staging 验收【进行中 · 已更正】：服务器 119.27.178.147 k3s xcagi-staging 集群健康运行（docker 26.1.3 + 全 pod Running/0 重启）。Prometheus 抓 xcagi-backend(xcagi-service:80)=UP、8d 保留；k6-7day 168h 压测进行中（~11% · 已 18h+ · 0 中断 · 22.5w 迭代），api_requests_total 持续增长（11.9w，近 1h +1.8w）。窗口约 6 天后达 168h → 填 reading_7d + SRE 签字解 T36–T37。注：本地 k3d/KinD 试装失败仅影响开发机、不影响服务器集群；k6 自身 /metrics target 因非 scrape 设计显示 down，不影响 SLO 采集。acceptance-*.yaml 已据实声明 observation_mode。"
+    },
+    {
+      "id": "SW",
+      "label": "P-W 网站截图+分析",
+      "kind": "step",
+      "phase": "t1"
+    },
+    {
+      "id": "SS",
+      "label": "P-S 软件截图+分析",
+      "kind": "step",
+      "phase": "t1"
+    },
+    {
+      "id": "SA",
+      "label": "P-App 移动/WebView 截图",
+      "kind": "step",
+      "phase": "t1"
+    },
+    {
+      "id": "M",
+      "label": "员工大会 → 会议摘要",
+      "kind": "step",
+      "phase": "t1"
+    },
+    {
+      "id": "PPTX",
+      "label": "三端截图 → PPT 附件",
+      "kind": "step",
+      "phase": "t1"
+    },
+    {
+      "id": "ASM",
+      "label": "拼装 digest HTML",
+      "kind": "step",
+      "phase": "t1"
+    },
+    {
+      "id": "P",
+      "label": "落库 DailyDigestRecord",
+      "kind": "step",
+      "phase": "t1"
+    },
+    {
+      "id": "RT",
+      "label": "release_train +0.0.0.1\n同日幂等",
+      "kind": "step",
+      "phase": "t1",
+      "desc": "last_bump_day 守卫 · 历史快照 jsonl"
+    },
+    {
+      "id": "CENT",
+      "label": "day_index % 100 = 0?",
+      "kind": "decision",
+      "phase": "t1"
+    },
+    {
+      "id": "MAJ",
+      "label": "major 大推送 1.N.0.0",
+      "kind": "step",
+      "phase": "t1"
+    },
+    {
+      "id": "V",
+      "label": "Vibe 预备 更新+补丁 MD",
+      "kind": "step",
+      "phase": "t1"
+    },
+    {
+      "id": "ACT",
+      "label": "双清单 → daily_action_items",
+      "kind": "step",
+      "phase": "t1",
+      "desc": "parse_and_store_action_items · 同日 dedupe_key 幂等"
+    },
+    {
+      "id": "GAPS",
+      "label": "断点清单 · AI 补丁看板",
+      "kind": "step",
+      "phase": "t1",
+      "desc": "#s-gaps · kind=patch · 固定卡片模板 · 单一数据源"
+    },
+    {
+      "id": "ROAD",
+      "label": "路线图 · AI 更新看板",
+      "kind": "step",
+      "phase": "t1",
+      "desc": "#s-roadmap · kind=update · 状态随执行自动刷新"
+    },
+    {
+      "id": "ART",
+      "label": "阶段结果文件面板",
+      "kind": "step",
+      "phase": "t1",
+      "desc": "PNG/PPT/Vibe MD/RT 历史/DR 备份 · artifacts API"
+    },
+    {
+      "id": "L",
+      "label": "四产线拆分 P-W/P-S/P-App/S-R",
+      "kind": "phase",
+      "phase": "t1",
+      "desc": "【跨轨桥接 经营→研发】事件轨 O7 变更反馈 / CS_CHG 变更工单 / Vibe08 08:00 补丁清单 汇入日更四产线 backlog，与双清单 action_items 合流派发"
+    },
+    {
+      "id": "PARSE",
+      "label": "08:15 解析 WorkUnit",
+      "kind": "step",
+      "phase": "t2"
+    },
+    {
+      "id": "PSA",
+      "label": "P-S Runner 补丁派发",
+      "kind": "step",
+      "phase": "t2"
+    },
+    {
+      "id": "APPA",
+      "label": "P-App Runner 补丁派发",
+      "kind": "step",
+      "phase": "t2"
+    },
+    {
+      "id": "GITCR",
+      "label": "CR → 员工分支\ngit commit + gh PR",
+      "kind": "step",
+      "phase": "t2",
+      "desc": "cr_git_pipeline：apply CR 暂存到 employees/<id> 分支 → git commit「apply CR-<id>」→（MODSTORE_CR_GIT_AUTO_PR=1）gh PR；默认全开，git 不可用则降级跳过"
+    },
+    {
+      "id": "ORCH",
+      "label": "08:25 release_train orchestrator",
+      "kind": "phase",
+      "phase": "t2b"
+    },
+    {
+      "id": "PW",
+      "label": "P-W Runner 更新派发",
+      "kind": "step",
+      "phase": "t2b"
+    },
+    {
+      "id": "APPB",
+      "label": "P-App Runner 更新派发",
+      "kind": "step",
+      "phase": "t2b"
+    },
+    {
+      "id": "SR",
+      "label": "S-R Runner 派发",
+      "kind": "step",
+      "phase": "t2b"
+    },
+    {
+      "id": "KIND",
+      "label": "release_kind?",
+      "kind": "decision",
+      "phase": "t2b"
+    },
+    {
+      "id": "P9I",
+      "label": "deploy-release-officer P9",
+      "kind": "step",
+      "phase": "t2b"
+    },
+    {
+      "id": "P5I",
+      "label": "deploy-release-officer P5 全量",
+      "kind": "step",
+      "phase": "t2b"
+    },
+    {
+      "id": "P6I",
+      "label": "push-update-context P6 OTA/COS",
+      "kind": "step",
+      "phase": "t2b"
+    },
+    {
+      "id": "FASTGATE",
+      "label": "即时推送门禁\nstaging+健康检查通过?",
+      "kind": "decision",
+      "phase": "t2b",
+      "desc": "快路径全量推送 COS/OTA 前置门禁：staging 验收 + /healthz + 关键 smoke 通过才放行 DLSSOT；不过则转 ROLLBACK 自动回滚。堵住「即时路径绕过灰度/审批直推全量」的风险"
+    },
+    {
+      "id": "DLSSOT",
+      "label": "安装包推 COS\n回写下载版本 SSOT",
+      "kind": "step",
+      "phase": "t2b",
+      "desc": "release/xcagi-v10.0.0/{personal,enterprise} → dl.xiu-ci.com · 回写 FHD/config/download_release.json.last_push + 官网 /download-release.json（下载页 fetch，无需重建即生效）· v10 锁恒 10.0.0 · 【跨轨桥接 研发→经营】产出供事件轨 O6 企业使用 / O5 交付编排 消费 OTA"
+    },
+    {
+      "id": "BR",
+      "label": "切日更分支 primary 模式",
+      "kind": "step",
+      "phase": "t2b"
+    },
+    {
+      "id": "P2W",
+      "label": "P2 网站编码",
+      "kind": "step",
+      "phase": "t3"
+    },
+    {
+      "id": "P2S",
+      "label": "P2 软件编码",
+      "kind": "step",
+      "phase": "t3"
+    },
+    {
+      "id": "P2APP",
+      "label": "P2 App 打包/渠道",
+      "kind": "step",
+      "phase": "t3"
+    },
+    {
+      "id": "P2R",
+      "label": "P2 归档/文档",
+      "kind": "step",
+      "phase": "t3"
+    },
+    {
+      "id": "GATE",
+      "label": "第4段=0 且非首日?",
+      "kind": "decision",
+      "phase": "t3"
+    },
+    {
+      "id": "P9G",
+      "label": "P9 十日线代际 Gn→Gn+1",
+      "kind": "step",
+      "phase": "t3"
+    },
+    {
+      "id": "P3",
+      "label": "P3 测试",
+      "kind": "step",
+      "phase": "t3"
+    },
+    {
+      "id": "P4",
+      "label": "P4 CI 构建",
+      "kind": "step",
+      "phase": "t3"
+    },
+    {
+      "id": "P5",
+      "label": "P5 发布",
+      "kind": "step",
+      "phase": "t3"
+    },
+    {
+      "id": "CANARY",
+      "label": "灰度发布\nstaging→canary 10%→prod",
+      "kind": "step",
+      "phase": "t3",
+      "desc": "XCAGI_DEPLOY_STRATEGY=canary（默认）：先 staging 验证 → 金丝雀 10% 流量 + HPA 自动扩缩 → 校验通过再推进 production（rolling/canary/blue-green 可选）"
+    },
+    {
+      "id": "P6",
+      "label": "P6 推送更新",
+      "kind": "step",
+      "phase": "t3"
+    },
+    {
+      "id": "P6G",
+      "label": "每30日 · 0.0.3.0?",
+      "kind": "decision",
+      "phase": "t3"
+    },
+    {
+      "id": "P6POP",
+      "label": "Desktop+App 更新弹窗",
+      "kind": "step",
+      "phase": "t3"
+    },
+    {
+      "id": "P6PW",
+      "label": "P-W 网站静默自更",
+      "kind": "step",
+      "phase": "t3"
+    },
+    {
+      "id": "ROLLBACK",
+      "label": "校验不过 → 自动回滚\n回上一稳定版 + 告警",
+      "kind": "step",
+      "phase": "t3",
+      "desc": "灰度/即时门禁失败统一回滚：deploy-release-officer 回退到上一稳定 release_train，COS/OTA 撤包，发告警并落 OpsStagedChange 复盘待审"
+    },
+    {
+      "id": "HEAL",
+      "label": "P7 异常 → 自愈\n重启/扩缩/熔断",
+      "kind": "step",
+      "phase": "t3",
+      "desc": "监控触发自愈闭环：HPA 扩缩 + pod 重启 + 失败熔断；自愈无效则升级为 OpsStagedChange 人工介入"
+    },
+    {
+      "id": "P7",
+      "label": "P7 监控",
+      "kind": "step",
+      "phase": "t3"
+    },
+    {
+      "id": "P8",
+      "label": "P8 净化",
+      "kind": "step",
+      "phase": "t3"
+    },
+    {
+      "id": "P9",
+      "label": "P9 版本演进 · SSOT",
+      "kind": "step",
+      "phase": "t3"
+    },
+    {
+      "id": "STG",
+      "label": "OpsStagedChange pending",
+      "kind": "step",
+      "phase": "t4"
+    },
+    {
+      "id": "APPR",
+      "label": "邮件/工作台审批",
+      "kind": "step",
+      "phase": "t4"
+    },
+    {
+      "id": "V10SYNC",
+      "label": "版本统一管理\nWeb·App·软件",
+      "kind": "step",
+      "phase": "t4",
+      "desc": "除各端独立 OTA 外，统一收口网站/App/软件营销锚点与 Mod 宿主版本"
+    },
+    {
+      "id": "MERGE",
+      "label": "合并 + 部署",
+      "kind": "step",
+      "phase": "t4"
+    },
+    {
+      "id": "WB_D",
+      "label": "派发回写 dispatched",
+      "kind": "step",
+      "phase": "t2",
+      "desc": "line-execute 成功 → sync_dispatched_for_work_units"
+    },
+    {
+      "id": "WB_M",
+      "label": "部署回写 merged ✅",
+      "kind": "step",
+      "phase": "t4",
+      "desc": "OpsStagedChange 部署 → sync_merged_on_deploy · 卡片淡化"
+    },
+    {
+      "id": "O5",
+      "label": "事件轨 · O5 交付编排",
+      "kind": "step",
+      "phase": "evt",
+      "desc": "【跨轨 研发→经营】DLSSOT 今日 OTA/COS 产物供事件轨 O5 交付编排消费（deploy-release-officer + shipment_mgmt）"
+    },
+    {
+      "id": "O6",
+      "label": "事件轨 · O6 企业使用",
+      "kind": "step",
+      "phase": "evt",
+      "desc": "【跨轨 研发→经营】交付后企业实际使用，沉淀使用信号供 O7 反馈与经营治理"
+    },
+    {
+      "id": "O7",
+      "label": "事件轨 · O7 变更反馈",
+      "kind": "step",
+      "phase": "evt",
+      "desc": "【跨轨 经营→研发】企业使用反馈 → six_line_event_router → backlog/change_request，次日汇入日更"
+    },
+    {
+      "id": "CS_CHG",
+      "label": "变更工单 · ops-dispatch",
+      "kind": "step",
+      "phase": "evt",
+      "desc": "【跨轨 经营→研发】客服变更工单归一化进 six_line_digest_backlog.jsonl"
+    },
+    {
+      "id": "Vibe08",
+      "label": "08:00 补丁清单 P-S",
+      "kind": "step",
+      "phase": "evt",
+      "desc": "【跨轨 经营→研发】M2 已接线：08:00 Vibe 将事件轨 backlog 合并进次日补丁清单 → 汇入双清单"
+    }
+  ],
+  "edges": [
+    {
+      "from": "SW",
+      "to": "M"
+    },
+    {
+      "from": "SS",
+      "to": "M"
+    },
+    {
+      "from": "SA",
+      "to": "M"
+    },
+    {
+      "from": "SW",
+      "to": "PPTX"
+    },
+    {
+      "from": "SS",
+      "to": "PPTX"
+    },
+    {
+      "from": "SA",
+      "to": "PPTX"
+    },
+    {
+      "from": "K",
+      "to": "ASM"
+    },
+    {
+      "from": "M",
+      "to": "ASM"
+    },
+    {
+      "from": "PPTX",
+      "to": "ASM",
+      "optional": true
+    },
+    {
+      "from": "ASM",
+      "to": "P"
+    },
+    {
+      "from": "P",
+      "to": "RT"
+    },
+    {
+      "from": "P",
+      "to": "ART",
+      "optional": true
+    },
+    {
+      "from": "RT",
+      "to": "CENT"
+    },
+    {
+      "from": "CENT",
+      "to": "MAJ"
+    },
+    {
+      "from": "RT",
+      "to": "V"
+    },
+    {
+      "from": "V",
+      "to": "ACT"
+    },
+    {
+      "from": "ACT",
+      "to": "L"
+    },
+    {
+      "from": "ACT",
+      "to": "GAPS",
+      "optional": true
+    },
+    {
+      "from": "ACT",
+      "to": "ROAD",
+      "optional": true
+    },
+    {
+      "from": "L",
+      "to": "PARSE"
+    },
+    {
+      "from": "PARSE",
+      "to": "PSA"
+    },
+    {
+      "from": "PARSE",
+      "to": "APPA"
+    },
+    {
+      "from": "PSA",
+      "to": "GITCR"
+    },
+    {
+      "from": "APPA",
+      "to": "GITCR"
+    },
+    {
+      "from": "GITCR",
+      "to": "WB_D"
+    },
+    {
+      "from": "PSA",
+      "to": "WB_D"
+    },
+    {
+      "from": "APPA",
+      "to": "WB_D"
+    },
+    {
+      "from": "WB_D",
+      "to": "GAPS",
+      "optional": true
+    },
+    {
+      "from": "WB_D",
+      "to": "ROAD",
+      "optional": true
+    },
+    {
+      "from": "PSA",
+      "to": "ORCH"
+    },
+    {
+      "from": "APPA",
+      "to": "ORCH"
+    },
+    {
+      "from": "ORCH",
+      "to": "PW"
+    },
+    {
+      "from": "ORCH",
+      "to": "APPB"
+    },
+    {
+      "from": "ORCH",
+      "to": "SR"
+    },
+    {
+      "from": "ORCH",
+      "to": "KIND"
+    },
+    {
+      "from": "PW",
+      "to": "WB_D"
+    },
+    {
+      "from": "APPB",
+      "to": "WB_D"
+    },
+    {
+      "from": "SR",
+      "to": "WB_D"
+    },
+    {
+      "from": "KIND",
+      "to": "P9I"
+    },
+    {
+      "from": "P9I",
+      "to": "P5I"
+    },
+    {
+      "from": "P5I",
+      "to": "P6I"
+    },
+    {
+      "from": "P6I",
+      "to": "FASTGATE"
+    },
+    {
+      "from": "FASTGATE",
+      "to": "DLSSOT"
+    },
+    {
+      "from": "FASTGATE",
+      "to": "ROLLBACK",
+      "optional": true
+    },
+    {
+      "from": "ORCH",
+      "to": "BR"
+    },
+    {
+      "from": "PW",
+      "to": "P2W"
+    },
+    {
+      "from": "PSA",
+      "to": "P2S"
+    },
+    {
+      "from": "APPA",
+      "to": "P2APP"
+    },
+    {
+      "from": "APPB",
+      "to": "P2APP",
+      "optional": true
+    },
+    {
+      "from": "SR",
+      "to": "P2R"
+    },
+    {
+      "from": "P2W",
+      "to": "GATE"
+    },
+    {
+      "from": "P2S",
+      "to": "GATE"
+    },
+    {
+      "from": "P2APP",
+      "to": "GATE"
+    },
+    {
+      "from": "P2R",
+      "to": "GATE"
+    },
+    {
+      "from": "GATE",
+      "to": "P9G"
+    },
+    {
+      "from": "GATE",
+      "to": "P3"
+    },
+    {
+      "from": "P9G",
+      "to": "P5I"
+    },
+    {
+      "from": "P3",
+      "to": "P4"
+    },
+    {
+      "from": "P4",
+      "to": "P5"
+    },
+    {
+      "from": "P5",
+      "to": "CANARY"
+    },
+    {
+      "from": "CANARY",
+      "to": "P6"
+    },
+    {
+      "from": "CANARY",
+      "to": "ROLLBACK",
+      "optional": true
+    },
+    {
+      "from": "ROLLBACK",
+      "to": "STG",
+      "optional": true
+    },
+    {
+      "from": "P6",
+      "to": "P6PW",
+      "optional": true
+    },
+    {
+      "from": "P6",
+      "to": "P6G"
+    },
+    {
+      "from": "P6G",
+      "to": "P6POP"
+    },
+    {
+      "from": "P6G",
+      "to": "P7"
+    },
+    {
+      "from": "P6POP",
+      "to": "P7"
+    },
+    {
+      "from": "P6PW",
+      "to": "P7",
+      "optional": true
+    },
+    {
+      "from": "P7",
+      "to": "P8"
+    },
+    {
+      "from": "P8",
+      "to": "P9"
+    },
+    {
+      "from": "P7",
+      "to": "HEAL",
+      "optional": true
+    },
+    {
+      "from": "HEAL",
+      "to": "STG",
+      "optional": true
+    },
+    {
+      "from": "HEAL",
+      "to": "P8",
+      "optional": true
+    },
+    {
+      "from": "MAJ",
+      "to": "P5I",
+      "optional": true
+    },
+    {
+      "from": "P9",
+      "to": "STG"
+    },
+    {
+      "from": "STG",
+      "to": "APPR"
+    },
+    {
+      "from": "APPR",
+      "to": "V10SYNC"
+    },
+    {
+      "from": "V10SYNC",
+      "to": "MERGE"
+    },
+    {
+      "from": "MERGE",
+      "to": "WB_M"
+    },
+    {
+      "from": "WB_M",
+      "to": "GAPS",
+      "optional": true
+    },
+    {
+      "from": "WB_M",
+      "to": "ROAD",
+      "optional": true
+    },
+    {
+      "from": "BK",
+      "to": "R"
+    },
+    {
+      "from": "BK",
+      "to": "DRFAIL",
+      "optional": true
+    },
+    {
+      "from": "DRFAIL",
+      "to": "R",
+      "optional": true
+    },
+    {
+      "from": "DRFAIL",
+      "to": "DRPROBE",
+      "optional": true
+    },
+    {
+      "from": "DRPROBE",
+      "to": "BK",
+      "optional": true
+    },
+    {
+      "from": "BKOND",
+      "to": "R",
+      "optional": true
+    },
+    {
+      "from": "R",
+      "to": "K",
+      "optional": true
+    },
+    {
+      "from": "R",
+      "to": "SW",
+      "optional": true
+    },
+    {
+      "from": "R",
+      "to": "SS",
+      "optional": true
+    },
+    {
+      "from": "R",
+      "to": "SA",
+      "optional": true
+    },
+    {
+      "from": "BR",
+      "to": "P2W"
+    },
+    {
+      "from": "BR",
+      "to": "P2S"
+    },
+    {
+      "from": "BR",
+      "to": "P2APP"
+    },
+    {
+      "from": "BR",
+      "to": "P2R"
+    },
+    {
+      "from": "DLSSOT",
+      "to": "P7"
+    },
+    {
+      "from": "DLSSOT",
+      "to": "O5"
+    },
+    {
+      "from": "O5",
+      "to": "O6"
+    },
+    {
+      "from": "O6",
+      "to": "O7"
+    },
+    {
+      "from": "O7",
+      "to": "CS_CHG"
+    },
+    {
+      "from": "CS_CHG",
+      "to": "Vibe08"
+    },
+    {
+      "from": "Vibe08",
+      "to": "V"
+    }
+  ],
+  "source": "docs/xcagi-dashboard/emp-wf-radial-graph.js",
+  "schema": "time_rail_workflow_graph/v1"
+}
