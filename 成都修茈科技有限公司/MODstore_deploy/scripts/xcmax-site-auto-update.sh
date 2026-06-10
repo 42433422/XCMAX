@@ -131,6 +131,9 @@ sync_corp_butler_assets() {
   mkdir -p "$corp_dir"
   if [[ -f "$logo_src" ]]; then
     cp -af "$logo_src" "${corp_dir}/brand-xc-logo.jpg"
+    log "corp-butler brand-xc-logo.jpg 已同步"
+  else
+    log "WARN: 缺少 ${logo_src}，AI 管家浮球 Logo 将 404"
   fi
   if [[ -f "${MODSTORE_ROOT}/market/public/download-release.json" ]]; then
     cp -af "${MODSTORE_ROOT}/market/public/download-release.json" "${corp_dir}/download-release.json"
