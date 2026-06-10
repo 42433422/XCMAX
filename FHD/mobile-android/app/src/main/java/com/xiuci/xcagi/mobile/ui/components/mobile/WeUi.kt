@@ -22,6 +22,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -403,4 +407,312 @@ fun WeAvatar(
 @Composable
 fun WeSpacer(height: androidx.compose.ui.unit.Dp = 16.dp) {
     Spacer(Modifier.height(height))
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WeBadge  ─  红点 / 数字角标
+// ─────────────────────────────────────────────────────────────────────────────
+
+@Composable
+fun WeBadge(
+    count: Int,
+    modifier: Modifier = Modifier,
+    showDot: Boolean = false,
+) {
+    if (count <= 0 && !showDot) return
+    Box(
+        modifier = modifier
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.error)
+            .padding(
+                horizontal = if (count > 0 && count < 10) 5.dp else if (count >= 10) 4.dp else 0.dp,
+                vertical = if (count > 0) 1.dp else 0.dp,
+            )
+            .then(if (showDot && count <= 0) Modifier.size(8.dp) else Modifier),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (count > 0) {
+            Text(
+                if (count > 99) "99+" else count.toString(),
+                style = MaterialTheme.typography.labelSmall,
+                color = Color.White,
+            )
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WeModeCapsule  ─  DeepSeek 式模式切换胶囊
+// ─────────────────────────────────────────────────────────────────────────────
+
+data class WeModeOption(
+    val id: String,
+    val label: String,
+    val icon: ImageVector? = null,
+    val hint: String = "",
+)
+
+@Composable
+fun WeModeCapsule(
+    options: List<WeModeOption>,
+    selectedId: String,
+    onSelect: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+    ) {
+        Row(
+            Modifier.padding(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            options.forEach { opt ->
+                val selected = opt.id == selectedId
+                Surface(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable { onSelect(opt.id) },
+                    shape = RoundedCornerShape(20.dp),
+                    color = if (selected) MaterialTheme.colorScheme.surface else Color.Transparent,
+                ) {
+                    Row(
+                        Modifier.padding(vertical = 10.dp, horizontal = 8.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        if (opt.icon != null) {
+                            Icon(
+                                opt.icon,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                                tint = if (selected) MobileTokens.accent() else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Spacer(Modifier.width(4.dp))
+                        }
+                        Text(
+                            opt.label,
+                            style = MaterialTheme.typography.labelLarge,
+                            color = if (selected) MobileTokens.accent() else MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WeChatInputBar  ─  底部大圆角输入条 + chips
+// ─────────────────────────────────────────────────────────────────────────────
+
+@Composable
+fun WeChatInputBar(
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String,
+    deepThinking: Boolean,
+    onDeepThinkingChange: (Boolean) -> Unit,
+    smartSearch: Boolean,
+    onSmartSearchChange: (Boolean) -> Unit,
+    onSend: () -> Unit,
+    onStop: () -> Unit,
+    streaming: Boolean,
+    modifier: Modifier = Modifier,
+    onAttach: (() -> Unit)? = null,
+    onVoice: (() -> Unit)? = null,
+) {
+    Column(
+        modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+    ) {
+        Surface(
+            shape = MobileTokens.cornerInputBar,
+            color = MaterialTheme.colorScheme.surface,
+            shadowElevation = 1.dp,
+        ) {
+            Column(Modifier.padding(12.dp)) {
+                OutlinedTextField(
+                    value = value,
+                    onValueChange = onValueChange,
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = {
+                        Text(
+                            placeholder,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    },
+                    maxLines = 4,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Color.Transparent,
+                        unfocusedBorderColor = Color.Transparent,
+                    ),
+                )
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        WeInputChip(
+                            label = "深度思考",
+                            selected = deepThinking,
+                            onClick = { onDeepThinkingChange(!deepThinking) },
+                        )
+                        WeInputChip(
+                            label = "智能搜索",
+                            selected = smartSearch,
+                            onClick = { onSmartSearchChange(!smartSearch) },
+                        )
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        if (onAttach != null) {
+                            IconButton(onClick = onAttach, modifier = Modifier.size(36.dp)) {
+                                Icon(
+                                    Icons.Default.Add,
+                                    contentDescription = "更多",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                        if (onVoice != null) {
+                            IconButton(onClick = onVoice, modifier = Modifier.size(36.dp)) {
+                                Icon(
+                                    Icons.Default.Mic,
+                                    contentDescription = "语音",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                        IconButton(
+                            onClick = { if (streaming) onStop() else onSend() },
+                            modifier = Modifier.size(36.dp),
+                        ) {
+                            Icon(
+                                if (streaming) Icons.Default.Stop else Icons.AutoMirrored.Filled.Send,
+                                contentDescription = if (streaming) "停止" else "发送",
+                                tint = MobileTokens.accent(),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun WeInputChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier.clickable(onClick = onClick),
+        shape = RoundedCornerShape(14.dp),
+        color = if (selected) MobileTokens.chipSelectedBg() else MobileTokens.chipUnselectedBg(),
+    ) {
+        Text(
+            label,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            style = MaterialTheme.typography.labelMedium,
+            color = if (selected) MobileTokens.accent() else MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WeRedActionCell  ─  退出登录等红字居中 cell
+// ─────────────────────────────────────────────────────────────────────────────
+
+@Composable
+fun WeRedActionCell(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    WeCellGroup(modifier) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onClick)
+                .padding(vertical = 14.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WeBottomNavBar  ─  微信式 4 Tab 底栏
+// ─────────────────────────────────────────────────────────────────────────────
+
+data class WeBottomNavItem(
+    val route: String,
+    val label: String,
+    val icon: ImageVector,
+    val badge: Int = 0,
+)
+
+@Composable
+fun WeBottomNavBar(
+    items: List<WeBottomNavItem>,
+    currentRoute: String?,
+    onSelect: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier) {
+        HorizontalDivider(
+            thickness = 0.5.dp,
+            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
+        )
+        Surface(color = MaterialTheme.colorScheme.surface) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 6.dp),
+            ) {
+                items.forEach { item ->
+                    val selected = currentRoute == item.route
+                    Column(
+                        Modifier
+                            .weight(1f)
+                            .clickable { onSelect(item.route) }
+                            .padding(vertical = 4.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        Box {
+                            Icon(
+                                item.icon,
+                                contentDescription = item.label,
+                                modifier = Modifier.size(24.dp),
+                                tint = if (selected) MobileTokens.accent() else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            if (item.badge > 0) {
+                                WeBadge(
+                                    count = item.badge,
+                                    modifier = Modifier.align(Alignment.TopEnd),
+                                )
+                            }
+                        }
+                        Text(
+                            item.label,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (selected) MobileTokens.accent() else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 2.dp),
+                        )
+                    }
+                }
+            }
+        }
+    }
 }
