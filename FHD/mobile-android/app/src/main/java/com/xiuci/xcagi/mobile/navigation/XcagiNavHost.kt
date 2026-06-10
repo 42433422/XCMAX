@@ -1,5 +1,8 @@
 package com.xiuci.xcagi.mobile.navigation
 
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -288,7 +291,13 @@ fun XcagiNavHost(vm: AppViewModel, pendingDeepLink: String? = null) {
                     onReloadTokens = { vm.refreshMarketTokens() },
                 )
             }
-            composable(Routes.PROFILE) {
+            composable(
+                Routes.PROFILE,
+                enterTransition = { fadeIn(tween(250)) },
+                exitTransition = { fadeOut(tween(250)) },
+                popEnterTransition = { fadeIn(tween(250)) },
+                popExitTransition = { fadeOut(tween(250)) },
+            ) {
                 ProfileScreen(
                     vm,
                     onConnectPc = { nav.navigate(Routes.CONNECT_PC) },
@@ -302,7 +311,13 @@ fun XcagiNavHost(vm: AppViewModel, pendingDeepLink: String? = null) {
                     },
                 )
             }
-            composable(Routes.WORK) {
+            composable(
+                Routes.WORK,
+                enterTransition = { fadeIn(tween(250)) },
+                exitTransition = { fadeOut(tween(250)) },
+                popEnterTransition = { fadeIn(tween(250)) },
+                popExitTransition = { fadeOut(tween(250)) },
+            ) {
                 WorkScreen(
                     vm,
                     onApproval = { nav.navigate(Routes.APPROVAL) },
@@ -313,7 +328,13 @@ fun XcagiNavHost(vm: AppViewModel, pendingDeepLink: String? = null) {
                     onConnectPc = { nav.navigate(Routes.CONNECT_PC) },
                 )
             }
-            composable(Routes.DISCOVER) {
+            composable(
+                Routes.DISCOVER,
+                enterTransition = { fadeIn(tween(250)) },
+                exitTransition = { fadeOut(tween(250)) },
+                popEnterTransition = { fadeIn(tween(250)) },
+                popExitTransition = { fadeOut(tween(250)) },
+            ) {
                 DiscoverScreen(
                     onWorkbench = { nav.navigate(Routes.WORKBENCH) },
                     onMods = { nav.navigate(Routes.MODS) },
@@ -322,7 +343,13 @@ fun XcagiNavHost(vm: AppViewModel, pendingDeepLink: String? = null) {
                     onOcr = { nav.navigate(Routes.OCR) },
                 )
             }
-            composable(Routes.CHAT) {
+            composable(
+                Routes.CHAT,
+                enterTransition = { fadeIn(tween(250)) },
+                exitTransition = { fadeOut(tween(250)) },
+                popEnterTransition = { fadeIn(tween(250)) },
+                popExitTransition = { fadeOut(tween(250)) },
+            ) {
                 ChatScreen(
                     vm,
                     onOpenWorkbench = { nav.navigate(Routes.WORKBENCH) },

@@ -1,8 +1,15 @@
 package com.xiuci.xcagi.mobile.ui.components.mobile
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -171,7 +178,7 @@ fun WeCellGroup(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp),
-        shape = RoundedCornerShape(10.dp),
+        shape = MobileTokens.cornerCard,
         color = MaterialTheme.colorScheme.surface,
         tonalElevation = 0.dp,
         shadowElevation = 0.dp,
@@ -568,6 +575,103 @@ fun WeAuthInputField(
     }
 }
 
+/** Kimi 风 6 格验证码输入，保留单一字符串回调供 loginPhone API 使用。 */
+@Composable
+fun WeOtpCells(
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    cellCount: Int = 6,
+    enabled: Boolean = true,
+) {
+    val focusRequester = remember { FocusRequester() }
+    val keyboard = LocalSoftwareKeyboardController.current
+    val digits = value.filter { it.isDigit() }.take(cellCount)
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp)
+            .clickable(enabled = enabled) {
+                focusRequester.requestFocus()
+                keyboard?.show()
+            },
+    ) {
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+        ) {
+            repeat(cellCount) { index ->
+                val char = digits.getOrNull(index)?.toString() ?: ""
+                val focused = digits.length == index
+                Box(
+                    Modifier
+                        .weight(1f)
+                        .height(48.dp)
+                        .clip(MobileTokens.cornerCard)
+                        .background(MaterialTheme.colorScheme.surface)
+                        .border(
+                            width = if (focused) 1.5.dp else 1.dp,
+                            color = if (focused) MobileTokens.accent() else MobileTokens.authDivider,
+                            shape = MobileTokens.cornerCard,
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        char,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MobileTokens.authTextPrimary,
+                        textAlign = TextAlign.Center,
+                    )
+                }
+            }
+        }
+        BasicTextField(
+            value = digits,
+            onValueChange = { raw ->
+                onValueChange(raw.filter { it.isDigit() }.take(cellCount))
+            },
+            modifier = Modifier
+                .size(1.dp)
+                .focusRequester(focusRequester),
+            enabled = enabled,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+            keyboardActions = KeyboardActions(onDone = { keyboard?.hide() }),
+        )
+        Spacer(Modifier.height(8.dp))
+    }
+}
+
+@Composable
+fun WeAuthOtpField(
+    actionLabel: String,
+    onAction: () -> Unit,
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    actionEnabled: Boolean = true,
+) {
+    Column(modifier = modifier.fillMaxWidth()) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("验证码", fontSize = 16.sp, color = MobileTokens.authTextPrimary)
+            Text(
+                actionLabel,
+                fontSize = 14.sp,
+                color = if (actionEnabled) MobileTokens.accent() else MobileTokens.authTextMuted,
+                modifier = Modifier.clickable(enabled = actionEnabled, onClick = onAction),
+            )
+        }
+        WeOtpCells(value = value, onValueChange = onValueChange, enabled = actionEnabled)
+    }
+}
+
 @Composable
 fun WeAuthInputActionField(
     label: String,
@@ -960,7 +1064,49 @@ fun WeModeCapsule(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// WeChatInputBar  ─  底部大圆角输入条 + chips
+// ChatToolRow  ─  模式 + 联网 + 更多（主工具栏一行）
+// ─────────────────────────────────────────────────────────────────────────────
+
+@Composable
+fun ChatToolRow(
+    modeOptions: List<WeModeOption>,
+    selectedModeId: String,
+    onModeSelect: (String) -> Unit,
+    smartSearch: Boolean,
+    onSmartSearchChange: (Boolean) -> Unit,
+    onMore: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier
+            .fillMaxWidth()
+            .padding(horizontal = MobileTokens.horizontalPagePadding, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        WeModeCapsule(
+            options = modeOptions,
+            selectedId = selectedModeId,
+            onSelect = onModeSelect,
+            modifier = Modifier.weight(1f),
+        )
+        WeInputChip(
+            label = "联网",
+            selected = smartSearch,
+            onClick = { onSmartSearchChange(!smartSearch) },
+        )
+        IconButton(onClick = onMore, modifier = Modifier.size(36.dp)) {
+            Icon(
+                Icons.Default.Add,
+                contentDescription = "更多",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WeChatInputBar  ─  底部大圆角输入条（工具收纳至 ChatToolRow / BottomSheet）
 // ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
@@ -968,32 +1114,32 @@ fun WeChatInputBar(
     value: String,
     onValueChange: (String) -> Unit,
     placeholder: String,
-    deepThinking: Boolean,
-    onDeepThinkingChange: (Boolean) -> Unit,
-    smartSearch: Boolean,
-    onSmartSearchChange: (Boolean) -> Unit,
     onSend: () -> Unit,
     onStop: () -> Unit,
     streaming: Boolean,
     modifier: Modifier = Modifier,
-    onAttach: (() -> Unit)? = null,
     onVoice: (() -> Unit)? = null,
 ) {
     Column(
         modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .padding(horizontal = MobileTokens.horizontalPagePadding, vertical = 8.dp),
     ) {
         Surface(
             shape = MobileTokens.cornerInputBar,
             color = MaterialTheme.colorScheme.surface,
             shadowElevation = 1.dp,
         ) {
-            Column(Modifier.padding(12.dp)) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.Bottom,
+            ) {
                 OutlinedTextField(
                     value = value,
                     onValueChange = onValueChange,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.weight(1f),
                     placeholder = {
                         Text(
                             placeholder,
@@ -1006,53 +1152,24 @@ fun WeChatInputBar(
                         unfocusedBorderColor = Color.Transparent,
                     ),
                 )
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
+                if (onVoice != null) {
+                    IconButton(onClick = onVoice, modifier = Modifier.size(40.dp)) {
+                        Icon(
+                            Icons.Default.Mic,
+                            contentDescription = "语音",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                IconButton(
+                    onClick = { if (streaming) onStop() else onSend() },
+                    modifier = Modifier.size(40.dp),
                 ) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        WeInputChip(
-                            label = "深度思考",
-                            selected = deepThinking,
-                            onClick = { onDeepThinkingChange(!deepThinking) },
-                        )
-                        WeInputChip(
-                            label = "智能搜索",
-                            selected = smartSearch,
-                            onClick = { onSmartSearchChange(!smartSearch) },
-                        )
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        if (onAttach != null) {
-                            IconButton(onClick = onAttach, modifier = Modifier.size(36.dp)) {
-                                Icon(
-                                    Icons.Default.Add,
-                                    contentDescription = "更多",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        }
-                        if (onVoice != null) {
-                            IconButton(onClick = onVoice, modifier = Modifier.size(36.dp)) {
-                                Icon(
-                                    Icons.Default.Mic,
-                                    contentDescription = "语音",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        }
-                        IconButton(
-                            onClick = { if (streaming) onStop() else onSend() },
-                            modifier = Modifier.size(36.dp),
-                        ) {
-                            Icon(
-                                if (streaming) Icons.Default.Stop else Icons.AutoMirrored.Filled.Send,
-                                contentDescription = if (streaming) "停止" else "发送",
-                                tint = MobileTokens.accent(),
-                            )
-                        }
-                    }
+                    Icon(
+                        if (streaming) Icons.Default.Stop else Icons.AutoMirrored.Filled.Send,
+                        contentDescription = if (streaming) "停止" else "发送",
+                        tint = MobileTokens.accent(),
+                    )
                 }
             }
         }

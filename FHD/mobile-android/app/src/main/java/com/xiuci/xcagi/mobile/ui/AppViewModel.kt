@@ -456,9 +456,10 @@ class AppViewModel @Inject constructor(
             .onFailure { snack(it.message ?: "失败", true); onDone(false) }
     }
 
-    fun sendCode(phone: String) = viewModelScope.launch {
+    fun sendCode(phone: String, onDone: (() -> Unit)? = null) = viewModelScope.launch {
         repo.sendMarketCode(phone).onSuccess { snack("验证码已发送") }
             .onFailure { snack(it.message ?: "失败", true) }
+        onDone?.invoke()
     }
 
     fun loginPhone(phone: String, code: String, onDone: (Boolean) -> Unit) = viewModelScope.launch {
