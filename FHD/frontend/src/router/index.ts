@@ -290,6 +290,12 @@ allRoutes.push(
     meta: { title: '首次设置', hideChrome: true, publicAccess: true },
   },
   {
+    path: '/discover',
+    name: 'discover',
+    component: () => import('../views/DiscoverView.vue'),
+    meta: { title: '发现' },
+  },
+  {
     path: '/mod-store',
     name: 'mod-store',
     component: () => import('../views/ModStore.vue'),

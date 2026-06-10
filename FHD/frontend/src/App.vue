@@ -25,10 +25,14 @@ const {
       @toggle-pro-mode="handleToggleProMode"
     >
       <router-view v-slot="{ Component, route }">
-        <keep-alive v-if="!isAdminConsoleSpa()" :max="12">
-          <component :is="Component" :key="route.fullPath" />
-        </keep-alive>
-        <component v-else :is="Component" :key="route.fullPath" />
+        <transition name="route-fade" mode="out-in">
+          <div :key="route.fullPath" class="route-view-shell">
+            <keep-alive v-if="!isAdminConsoleSpa()" :max="12">
+              <component :is="Component" />
+            </keep-alive>
+            <component v-else :is="Component" />
+          </div>
+        </transition>
       </router-view>
     </MainLayout>
   </div>
@@ -59,5 +63,26 @@ const {
   flex: 1 1 auto;
   min-height: 0;
   width: 100%;
+}
+
+.route-view-shell {
+  min-height: 0;
+}
+
+.route-fade-enter-active,
+.route-fade-leave-active {
+  transition: opacity 250ms ease;
+}
+
+.route-fade-enter-from,
+.route-fade-leave-to {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .route-fade-enter-active,
+  .route-fade-leave-active {
+    transition-duration: 1ms;
+  }
 }
 </style>

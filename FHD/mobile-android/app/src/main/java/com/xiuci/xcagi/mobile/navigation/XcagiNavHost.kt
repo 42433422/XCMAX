@@ -3,6 +3,18 @@ package com.xiuci.xcagi.mobile.navigation
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.filled.Extension
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.sp
+import com.xiuci.xcagi.mobile.core.model.ListItem
+import com.xiuci.xcagi.mobile.ui.components.mobile.MobileTokens
+import com.xiuci.xcagi.mobile.ui.components.mobile.WeFadeTransition
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -48,6 +60,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -266,19 +279,12 @@ fun XcagiNavHost(vm: AppViewModel, pendingDeepLink: String? = null) {
             }
             composable(Routes.REGISTER) { RegisterScreen(vm) { nav.popBackStack() } }
             composable(Routes.HOME_HUB) {
-                HomeHubScreen(
-                    vm,
-                    onChat = { nav.navigate(Routes.CHAT) },
-                    onWorkbench = { nav.navigate(Routes.WORKBENCH) },
-                    onConnectPc = { nav.navigate(Routes.CONNECT_PC) },
-                    onModClick = { id ->
-                        vm.requestModOpen(
-                            id,
-                            onCloud = { nav.navigate(Routes.WORKBENCH) },
-                            onNative = { nav.navigate("mod/$id") },
-                        )
-                    },
-                )
+                LaunchedEffect(Unit) {
+                    nav.navigate(Routes.CHAT) {
+                        popUpTo(Routes.HOME_HUB) { inclusive = true }
+                        launchSingleTop = true
+                    }
+                }
             }
             composable(Routes.WORKBENCH) {
                 val access by vm.marketAccess.collectAsState()
@@ -330,10 +336,10 @@ fun XcagiNavHost(vm: AppViewModel, pendingDeepLink: String? = null) {
             }
             composable(
                 Routes.DISCOVER,
-                enterTransition = { fadeIn(tween(250)) },
-                exitTransition = { fadeOut(tween(250)) },
-                popEnterTransition = { fadeIn(tween(250)) },
-                popExitTransition = { fadeOut(tween(250)) },
+                enterTransition = { WeFadeTransition.enter() },
+                exitTransition = { WeFadeTransition.exit() },
+                popEnterTransition = { WeFadeTransition.enter() },
+                popExitTransition = { WeFadeTransition.exit() },
             ) {
                 DiscoverScreen(
                     onWorkbench = { nav.navigate(Routes.WORKBENCH) },
@@ -345,10 +351,10 @@ fun XcagiNavHost(vm: AppViewModel, pendingDeepLink: String? = null) {
             }
             composable(
                 Routes.CHAT,
-                enterTransition = { fadeIn(tween(250)) },
-                exitTransition = { fadeOut(tween(250)) },
-                popEnterTransition = { fadeIn(tween(250)) },
-                popExitTransition = { fadeOut(tween(250)) },
+                enterTransition = { WeFadeTransition.enter() },
+                exitTransition = { WeFadeTransition.exit() },
+                popEnterTransition = { WeFadeTransition.enter() },
+                popExitTransition = { WeFadeTransition.exit() },
             ) {
                 ChatScreen(
                     vm,
@@ -390,7 +396,17 @@ fun XcagiNavHost(vm: AppViewModel, pendingDeepLink: String? = null) {
             composable(Routes.OCR) { OcrScreen(onBack = { nav.popBackStack() }) }
             composable(Routes.BRIDGE) { BridgeScreen(vm) }
             composable(Routes.MARKET) {
-                ListScreen("MODstore", vm, vm::loadMarket, null) { nav.popBackStack() }
+                MarketListScreen(
+                    vm,
+                    onUse = { id ->
+                        vm.requestModOpen(
+                            id,
+                            onCloud = { nav.navigate(Routes.WORKBENCH) },
+                            onNative = { nav.navigate("mod/$id") },
+                        )
+                    },
+                    onBack = { nav.popBackStack() },
+                )
             }
             composable(Routes.MODS) {
                 ListScreen("Mod", vm, vm::loadMods, { id -> nav.navigate("mod/$id") }) { nav.popBackStack() }
@@ -429,6 +445,82 @@ fun RegisterScreen(vm: AppViewModel, onBack: () -> Unit) {
         OutlinedTextField(p, { p = it }, Modifier.fillMaxWidth(), label = { Text("密码") })
         OutlinedTextField(e, { e = it }, Modifier.fillMaxWidth(), label = { Text("邮箱") })
         Button({ vm.register(u, p, e) { if (it) onBack() } }, Modifier.fillMaxWidth()) { Text("提交") }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun MarketListScreen(
+    vm: AppViewModel,
+    onUse: (String) -> Unit,
+    onBack: () -> Unit,
+) {
+    val items by vm.items.collectAsState()
+    val loading by vm.listLoading.collectAsState()
+    val error by vm.listError.collectAsState()
+    LaunchedEffect(Unit) { vm.loadMarket() }
+
+    com.xiuci.xcagi.mobile.ui.components.mobile.MobileScaffold(
+        title = "MODstore",
+        onBack = onBack,
+        onRefresh = vm::loadMarket,
+        loading = loading,
+        error = error,
+        empty = items.isEmpty(),
+        emptyMessage = "暂无 Mod",
+        onRetry = vm::loadMarket,
+    ) { _ ->
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            items.forEach { item ->
+                MarketModCard(item = item, onUse = { onUse(item.id) })
+            }
+        }
+    }
+}
+
+@Composable
+private fun MarketModCard(item: ListItem, onUse: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(MobileTokens.cornerCard)
+            .background(MaterialTheme.colorScheme.surface)
+            .padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            Modifier
+                .size(44.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(Color(0xFFFA9D3B).copy(alpha = 0.15f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(Icons.Default.Extension, contentDescription = null, tint = Color(0xFFFA9D3B))
+        }
+        Column(
+            Modifier
+                .weight(1f)
+                .padding(horizontal = 12.dp),
+        ) {
+            Text(
+                item.title,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                item.subtitle.ifBlank { "浏览并安装行业 Mod" },
+                fontSize = 13.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 2.dp),
+            )
+        }
+        Button(onClick = onUse, shape = MobileTokens.cornerCard) {
+            Text("使用")
+        }
     }
 }
 

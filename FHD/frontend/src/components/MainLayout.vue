@@ -86,6 +86,7 @@
     </div>
     <FloatingChatAssistant :visible="shouldShowFloatingChatAssistant" />
     <TutorialOverlay />
+    <MobileBottomNav v-if="mobileBottomNavVisible" />
   </div>
 </template>
 
@@ -115,6 +116,7 @@ import PaneResizeHandle from './PaneResizeHandle.vue'
 import Sidebar from './Sidebar.vue'
 import TopAssistantFloat from './TopAssistantFloat.vue'
 import TutorialOverlay from './TutorialOverlay.vue'
+import MobileBottomNav from './MobileBottomNav.vue'
 import { setTutorialBuildContextFactory } from '@/stores/tutorial'
 import { useTutorialCatalog } from '@/composables/useTutorialCatalog'
 
@@ -144,6 +146,7 @@ const { modMenuItems } = useModRoutes()
 const SIDEBAR_INACTIVITY_MS = 15000
 const SIDEBAR_HOVER_OPEN_MS = 1000
 const SIDEBAR_DISABLE_MQ = '(max-width: 767px)'
+const MOBILE_BOTTOM_NAV_MQ = '(max-width: 768px)'
 const SIDEBAR_PANE_KEY = 'main-layout.sidebar'
 const ACTIVITY_EVENTS = ['mousemove', 'mousedown', 'keydown', 'wheel', 'touchstart']
 const sidebarCollapsed = ref(false)
@@ -151,6 +154,8 @@ const isSidebarFeatureEnabled = ref(true)
 let sidebarCollapseTimer = null
 let sidebarHoverTimer = null
 let sidebarViewportMedia = null
+const showMobileBottomNav = ref(false)
+let mobileBottomNavMedia = null
 
 const clientModeTiersUiEnabled = isClientModeTiersUiEnabled()
 const isSandboxMode = new URLSearchParams(window.location.search).has('sandbox')
@@ -563,6 +568,14 @@ const onViewportChange = (event) => {
   scheduleSidebarAutoCollapse()
 }
 
+const onMobileNavViewportChange = (event) => {
+  showMobileBottomNav.value = event.matches
+}
+
+const mobileBottomNavVisible = computed(
+  () => showMobileBottomNav.value && !adminConsoleSpa && route.meta?.hideChrome !== true,
+)
+
 onMounted(async () => {
   if (!accountProfileStore.loaded) {
     try {
@@ -607,6 +620,13 @@ onMounted(async () => {
   } else if (typeof sidebarViewportMedia.addListener === 'function') {
     sidebarViewportMedia.addListener(onViewportChange)
   }
+  mobileBottomNavMedia = window.matchMedia(MOBILE_BOTTOM_NAV_MQ)
+  onMobileNavViewportChange(mobileBottomNavMedia)
+  if (typeof mobileBottomNavMedia.addEventListener === 'function') {
+    mobileBottomNavMedia.addEventListener('change', onMobileNavViewportChange)
+  } else if (typeof mobileBottomNavMedia.addListener === 'function') {
+    mobileBottomNavMedia.addListener(onMobileNavViewportChange)
+  }
   ACTIVITY_EVENTS.forEach((eventName) => {
     window.addEventListener(eventName, handleGlobalActivity, { passive: true })
   })
@@ -625,12 +645,24 @@ onBeforeUnmount(() => {
   } else if (typeof sidebarViewportMedia.removeListener === 'function') {
     sidebarViewportMedia.removeListener(onViewportChange)
   }
+  if (!mobileBottomNavMedia) return
+  if (typeof mobileBottomNavMedia.removeEventListener === 'function') {
+    mobileBottomNavMedia.removeEventListener('change', onMobileNavViewportChange)
+  } else if (typeof mobileBottomNavMedia.removeListener === 'function') {
+    mobileBottomNavMedia.removeListener(onMobileNavViewportChange)
+  }
 })
 </script>
 
 <style scoped>
 .main-container {
   position: relative;
+}
+
+@media (max-width: 768px) {
+  .main-container :deep(.main-content) {
+    padding-bottom: calc(64px + env(safe-area-inset-bottom, 0));
+  }
 }
 
 .sidebar-shell {

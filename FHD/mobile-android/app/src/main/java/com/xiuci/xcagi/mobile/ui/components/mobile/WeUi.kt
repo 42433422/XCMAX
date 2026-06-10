@@ -869,6 +869,69 @@ fun WeGreenButton(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// WeThirdPartyLoginRow  ─  微信 / 抖音第三方登录占位（后端 OAuth 未就绪）
+// ─────────────────────────────────────────────────────────────────────────────
+
+private val DouyinPink = Color(0xFFFE2C55)
+
+@Composable
+fun WeThirdPartyLoginRow(
+    onWeChat: () -> Unit,
+    onDouyin: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = MobileTokens.authHorizontalMargin),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        HorizontalDivider(
+            thickness = 0.5.dp,
+            color = MobileTokens.authDivider,
+            modifier = Modifier.padding(bottom = 16.dp),
+        )
+        Text(
+            "其他登录方式",
+            fontSize = 13.sp,
+            color = MobileTokens.authTextMuted,
+            modifier = Modifier.padding(bottom = 12.dp),
+        )
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(24.dp, Alignment.CenterHorizontally),
+        ) {
+            WeThirdPartyChip(label = "微信", color = WeChatGreen, onClick = onWeChat)
+            WeThirdPartyChip(label = "抖音", color = DouyinPink, onClick = onDouyin)
+        }
+    }
+}
+
+@Composable
+private fun WeThirdPartyChip(
+    label: String,
+    color: Color,
+    onClick: () -> Unit,
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.clickable(onClick = onClick),
+    ) {
+        Box(
+            Modifier
+                .size(48.dp)
+                .clip(CircleShape)
+                .background(color.copy(alpha = 0.12f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(label.take(1), fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = color)
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(label, fontSize = 12.sp, color = MobileTokens.authTextMuted)
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // WeBlockButton  ─  全宽圆角主按钮（微信绿）
 // ─────────────────────────────────────────────────────────────────────────────
 

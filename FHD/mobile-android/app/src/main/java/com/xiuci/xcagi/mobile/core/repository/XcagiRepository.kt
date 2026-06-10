@@ -582,7 +582,12 @@ class XcagiRepository @Inject constructor(
         val items = (res["items"] as? List<*>) ?: emptyList<Any>()
         Result.success(items.mapNotNull { row ->
             (row as? Map<*, *>)?.let {
-                ListItem("${it["id"]}", "${it["name"] ?: it["title"]}")
+                val desc = (it["description"] ?: it["summary"] ?: it["tagline"] ?: "").toString().trim()
+                ListItem(
+                    id = "${it["id"]}",
+                    title = "${it["name"] ?: it["title"]}",
+                    subtitle = desc,
+                )
             }
         })
     } catch (e: Exception) {

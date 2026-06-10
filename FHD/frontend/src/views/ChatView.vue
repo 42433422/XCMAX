@@ -102,7 +102,11 @@
           </div>
         </div>
           <div v-if="isLoading && !isStreamingReply" class="message ai">
-            <div><span class="status-dot online"></span> {{ loadingProgressText }}</div>
+            <div class="chat-loading-row">
+              <i class="fa fa-spinner fa-spin chat-loading-spinner" aria-hidden="true"></i>
+              <span class="status-dot online"></span>
+              <span>{{ loadingProgressText }}</span>
+            </div>
           </div>
         </div>
       </div>
@@ -2153,6 +2157,17 @@ onBeforeUnmount(() => {
   50% {
     box-shadow: 0 0 0 6px rgba(220, 38, 38, 0.05);
   }
+}
+
+.chat-loading-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.chat-loading-spinner {
+  color: var(--xc-color-primary, #0d47a1);
+  font-size: 14px;
 }
 </style>
 

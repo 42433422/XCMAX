@@ -20,6 +20,8 @@ import {
 import { ADMIN_OPERATOR_HOME_ROUTE } from '@/constants/adminOperatorNav';
 import type { AccountKind } from '@/api/auth';
 import { loadLoginPreferences, saveLoginPreferences } from '@/utils/loginPreferences';
+import OtpCells from '@/components/OtpCells.vue';
+import { showAppToast } from '@/composables/useAppToast';
 
 const route = useRoute();
 const router = useRouter();
@@ -86,7 +88,7 @@ const redirectPath = computed(() => {
 const canSubmit = computed(() => {
   if (loading.value) return false;
   if (loginMode.value === 'phone') {
-    return phone.value.trim().length >= 5 && smsCode.value.trim().length >= 4;
+    return phone.value.trim().length >= 5 && smsCode.value.trim().length >= 6;
   }
   if (loginMode.value === 'qr') return false;
   return username.value.trim().length > 0 && password.value.length > 0;
@@ -306,6 +308,10 @@ function showAltLoginMessage(label: string) {
   altLoginHint.value = `${label} 暂未在本版本开放，请使用账号登录或联系管理员。`;
 }
 
+function onThirdPartyLogin(provider: '微信' | '抖音') {
+  showAppToast(`${provider}登录即将开放`, 'info');
+}
+
 function selectEnterpriseLogin() {
   accountKind.value = 'enterprise';
   altLoginHint.value = '';
@@ -510,26 +516,19 @@ async function submitLogin() {
               />
             </div>
             <div class="login-field login-field--sms">
-              <label class="login-label" for="lv-sms">验证码</label>
-              <div class="login-sms-row">
-                <input
-                  id="lv-sms"
-                  v-model="smsCode"
-                  type="text"
-                  class="login-input login-input--sms"
-                  inputmode="numeric"
-                  placeholder="短信验证码"
-                  :disabled="loading"
-                />
+              <div class="login-sms-head">
+                <label class="login-label" for="lv-sms-send">验证码</label>
                 <button
+                  id="lv-sms-send"
                   type="button"
-                  class="login-sms-btn"
+                  class="login-sms-btn login-sms-btn--inline"
                   :disabled="loading || sendingCode"
                   @click="sendPhoneCode"
                 >
                   {{ sendingCode ? '发送中' : '获取验证码' }}
                 </button>
               </div>
+              <OtpCells v-model="smsCode" :disabled="loading" />
             </div>
           </template>
 
@@ -552,6 +551,20 @@ async function submitLogin() {
           <img v-if="qrDataUrl" :src="qrDataUrl" alt="登录二维码" class="login-qr-image" width="220" height="220" />
           <p v-if="qrExpiresAt" class="login-hint">剩余 {{ qrCountdown }} 秒 · 过期后请切换 Tab 刷新</p>
           <button type="button" class="login-sso" :disabled="loading" @click="startQrLogin">刷新二维码</button>
+        </div>
+
+        <div v-if="accountKind === 'enterprise'" class="login-third-party">
+          <div class="login-divider"><span>其他登录方式</span></div>
+          <div class="login-third-party-row">
+            <button type="button" class="login-third-party-btn wechat" :disabled="loading" @click="onThirdPartyLogin('微信')">
+              <span class="login-third-party-icon" aria-hidden="true">微</span>
+              <span>微信</span>
+            </button>
+            <button type="button" class="login-third-party-btn douyin" :disabled="loading" @click="onThirdPartyLogin('抖音')">
+              <span class="login-third-party-icon" aria-hidden="true">抖</span>
+              <span>抖音</span>
+            </button>
+          </div>
         </div>
 
         <!-- SSO 仅在启用时显示 -->
@@ -921,6 +934,14 @@ async function submitLogin() {
   color: var(--xc-color-text);
 }
 
+.login-sms-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
 .login-sms-row {
   display: flex;
   align-items: stretch;
@@ -931,6 +952,12 @@ async function submitLogin() {
   flex: 1;
   min-width: 0;
   padding-right: var(--xc-space-3);
+}
+
+.login-sms-btn--inline {
+  height: 32px;
+  padding: 0 12px;
+  font-size: 12px;
 }
 
 .login-sms-btn {
@@ -1030,6 +1057,61 @@ async function submitLogin() {
 
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+
+/* ─── 第三方登录占位 ───────────────────────────────────── */
+.login-third-party {
+  margin: 8px 0 20px;
+}
+
+.login-third-party-row {
+  display: flex;
+  justify-content: center;
+  gap: 28px;
+}
+
+.login-third-party-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  background: transparent;
+  color: var(--xc-color-text-secondary);
+  font: inherit;
+  font-size: var(--xc-font-sm);
+  cursor: pointer;
+  transition: transform var(--xc-transition-fast);
+}
+
+.login-third-party-btn:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.login-third-party-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.login-third-party-icon {
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-size: 18px;
+  font-weight: var(--xc-font-weight-semibold);
+}
+
+.login-third-party-btn.wechat .login-third-party-icon {
+  background: rgba(7, 193, 96, 0.12);
+  color: #07c160;
+}
+
+.login-third-party-btn.douyin .login-third-party-icon {
+  background: rgba(254, 44, 85, 0.12);
+  color: #fe2c55;
 }
 
 /* ─── SSO ──────────────────────────────────────────────── */
