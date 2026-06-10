@@ -361,7 +361,7 @@ class AppViewModel @Inject constructor(
             val constraints = Constraints.Builder()
                 .setRequiredNetworkType(NetworkType.CONNECTED)
                 .build()
-            val req = PeriodicWorkRequestBuilder<MobileSyncWorker>(30, TimeUnit.MINUTES)
+            val req = PeriodicWorkRequestBuilder<MobileSyncWorker>(15, TimeUnit.MINUTES)
                 .setConstraints(constraints)
                 .build()
             wm.enqueueUniquePeriodicWork(
@@ -669,16 +669,15 @@ class AppViewModel @Inject constructor(
             .onFailure { snack(it.message ?: "", true) }
     }
 
-    val imWsEvents get() = repo.imWsEvents
-
     fun connectImWebSocket() = viewModelScope.launch { repo.connectImWebSocket() }
 
     fun disconnectImWebSocket() = repo.disconnectImWebSocket()
 
     suspend fun imOpenDirect(peerUserId: Int): Result<Map<String, Any?>> = repo.imOpenDirect(peerUserId)
 
-    suspend fun imListMessages(conversationId: Int): Result<Map<String, Any?>> =
-        repo.imListMessages(conversationId)
+    fun observeImMessages(conversationId: Int) = repo.observeImMessages(conversationId)
+
+    suspend fun seedImMessages(conversationId: Int): Result<Unit> = repo.seedImMessages(conversationId)
 
     suspend fun imSendMessage(conversationId: Int, text: String): Result<Map<String, Any?>> =
         repo.imSendMessage(conversationId, text)
