@@ -843,8 +843,7 @@ fun WeAvatar(
     Box(
         modifier = modifier
             .size(size)
-            .clip(RoundedCornerShape(size * 0.22f))
-            .background(MaterialTheme.colorScheme.surface),
+            .clip(RoundedCornerShape(size * 0.22f)),
         contentAlignment = Alignment.Center,
     ) {
         content()
