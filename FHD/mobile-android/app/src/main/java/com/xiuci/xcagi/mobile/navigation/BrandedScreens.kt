@@ -90,7 +90,7 @@ fun ConnectScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Icon(
-                        painter = painterResource(R.mipmap.ic_launcher),
+                        painter = painterResource(R.mipmap.ic_launcher_foreground),
                         contentDescription = null,
                         modifier = Modifier.size(72.dp),
                         tint = Color.Unspecified,
@@ -166,7 +166,7 @@ fun AuthScreen(vm: AppViewModel, onRegister: () -> Unit, onDone: () -> Unit) {
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Icon(
-            painter = painterResource(R.mipmap.ic_launcher),
+            painter = painterResource(R.mipmap.ic_launcher_foreground),
             contentDescription = null,
             modifier = Modifier.size(80.dp),
             tint = Color.Unspecified,
