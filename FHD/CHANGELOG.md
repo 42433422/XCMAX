@@ -6,6 +6,35 @@
 
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
+### Mac 主跑 / 服务器跟 git（混合日更 · 2026-06-10 · v10 线内迭代）
+- **feat(automation)**：`automation_primary.py` — `MODSTORE_AUTOMATION_PRIMARY` + `ROLE` 门禁，服务器跳过 digest/08:15–08:25 编排
+- **fix(digest)**：`digest_action_items.ensure_table` 按方言选用 Postgres SERIAL / SQLite AUTOINCREMENT
+- **fix(audit)**：`surface_audit_deps` 从 `MODSTORE_DEPLOY_HEALTH_URL` 推断内部 API（生产 :9999）
+- **ops(closure)**：`patch_prod_daily_closure.sh` follower 块 + `trigger_server_git_sync.sh`；Mac `MODSTORE_SYNC_DEPLOY_BASH`
+
+### 日更闭环断点修复（BK→R / DRPROBE / 截图依赖 · 2026-06-10 · v10 线内迭代）
+- **feat(backup)**：`daily_backup_job` 成功/失败派发 `backup.completed` / `backup.failed`；启动时 `register_backup_event_subscribers`
+- **feat(dr)**：`dr_recovery_probe_job` 守卫生效时每 30min 重试（默认 ×8），成功 `backup.dr_guard.cleared`、超限 `backup.dr_guard.escalated`
+- **feat(backup)**：`ondemand_backup` 按需快照；`auto_rollback` 回滚前自动抓取
+- **feat(audit)**：`surface_audit_deps` 截图前自动拉起 FHD :5000、Vite :5001、MODstore :8788、Playwright（`MODSTORE_SURFACE_AUDIT_AUTO_START=0` 可关）
+- **ops(closure)**：`.env.daily-closure` 模板 + 生产 `patch_prod_daily_closure.sh` / `dedupe_env_file.py`；`run_modstore_daily_local.sh` 加载生产同步 env
+
+### 自进化闭环补强（MODstore · 2026-06-10 · v10 线内迭代）
+- **feat(orchestrator)**：编排层 `ok` 收紧为 handler 输出验证；失败写入 `EmployeeExecutionMetric`
+- **feat(ci)**：`cr_narrow_ci` 窄验证（py_compile + 可选 ruff + pytest 子集）；自动审批前门禁；失败喂 `evolution-engine`
+- **feat(signals)**：`evolution_signal_collector` 注入 vibe 预备（pytest / incident / post_deploy_smoke）
+- **feat(rollout)**：`line_rollout_policy` P-S 灰度 primary + CR 日预算 + 通过率门禁
+- **feat(evolution)**：`prompt_evolution_ab` 影子 A/B 回放 + prompt override 自动应用/还原
+- **feat(cursor)**：`cursor_delegate_handler` P0/P1 接 Cursor SDK / Webhook 真执行
+
+### 表面巡检截图链路修复（SW / SS / SA · 2026-06-10 · v10 线内迭代）
+- **fix(audit)**：`run_surface_audit.mjs` P-S 共享上下文 `console_errors` 跨页累积修复——每页只归属本页新增错误，不再滚雪球误报
+- **fix(audit)**：`surface_audit_service._node_env` P-W 分支 `setdefault` 失效修复——P-W 刷新此前会打到本地 5000/5176 而非 xiu-ci.com；显式进程环境仍可覆盖
+- **feat(audit)**：远程导航 `gotoWithRetry`（domcontentloaded 失败降级 commit 重试一次）+ 导航失败时兜底截当前屏；`analyzePage` 区分「导航异常」与控制台错误
+- **perf(audit)**：`waitForCjkFonts` 每页等待收紧（networkidle ≤10s、字体轮询 ≤5s、固定等待 1.2s）；P-W 默认总超时 600s→1200s——此前全量 60+ 页必超时（实测端到端 686s 完成 58 页、仅 1 页网络抖动失败）
+- **fix(dashboard)**：`emp-wf-surface-audit.js` `openGallery` 回退分支死代码修复——fetch 后等待 `MonAiBiz` 挂载（≤3s）再开画廊
+- **test(audit)**：`test_surface_audit_service.py` 断言对齐现行 `surface_audit_pages.json`（P-W 49 页 / P-App 6 原生屏）；`test_surface_audit_demo_market_login.py` 导入路径改 `app.fastapi_routes.market_account`
+
 ### 官网 / MODstore 生产修复（2026-06-10 · v10 线内迭代）
 - **fix(site)**：`ensure_market_dist` 并入 `main`；`modstore.service` 示例与 `align_modstore_systemd_to_deploy.sh` 默认路径对齐 `/root/XCMAX/…/MODstore_deploy`
 - **fix(market)**：补入库 `providerCredential.ts`，修复 `main` 上 `npm run build` 缺文件

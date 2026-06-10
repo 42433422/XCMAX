@@ -204,6 +204,36 @@ def _filter_units_for_line(
     return filtered
 
 
+def _resolve_line_mode(
+    dispatch_line: str,
+    *,
+    phase: str,
+    requested_mode: str,
+) -> tuple[str, bool, Dict[str, Any]]:
+    """按产线灰度策略解析执行 mode 与 dry_run。"""
+    global_mode = (
+        os.environ.get("MODSTORE_DAILY_ORCHESTRATOR_DIGEST_MODE", "shadow") or "shadow"
+    ).strip().lower()
+    try:
+        from modstore_server.line_rollout_policy import resolve_line_execution_mode, should_allow_line_primary
+
+        policy = should_allow_line_primary(dispatch_line)
+        line_mode = resolve_line_execution_mode(
+            dispatch_line,
+            phase=phase,
+            global_digest_mode=global_mode,
+        )
+        if not policy.get("allowed"):
+            line_mode = "shadow"
+        if requested_mode == "shadow":
+            line_mode = "shadow"
+        dry_run = line_mode == "shadow"
+        return line_mode, dry_run, policy
+    except Exception:
+        dry_run = requested_mode == "shadow" or global_mode == "shadow"
+        return requested_mode or ("shadow" if dry_run else "auto"), dry_run, {}
+
+
 def execute_digest_line_work_units(
     record_id: int,
     *,
@@ -224,6 +254,12 @@ def execute_digest_line_work_units(
 
     line = (dispatch_line or DISPATCH_PS).strip()
     run_phase = (phase or "A").strip().upper() or "A"
+    line_mode, policy_dry_run, rollout_policy = _resolve_line_mode(
+        line, phase=run_phase, requested_mode=mode
+    )
+    if dry_run or policy_dry_run:
+        dry_run = True
+        line_mode = "shadow"
     kinds = list(list_kinds) if list_kinds is not None else ["patches"]
     prios = list(priorities) if priorities is not None else _parse_priorities_env()
     cap = max_units if max_units is not None else _max_units()
@@ -238,6 +274,27 @@ def execute_digest_line_work_units(
         base_version = ctx["base_version"]
         meta_prev = _read_execute_meta(int(record_id))
         prev_line = (meta_prev.get("runs") or {}).get(line) or {}
+        if not dry_run:
+            try:
+                from modstore_server.line_rollout_policy import check_daily_cr_budget
+
+                budget = check_daily_cr_budget(digest_record_id=int(record_id))
+                if not budget.get("ok"):
+                    run_payload = {
+                        "ok": True,
+                        "skipped": True,
+                        "reason": "daily_cr_budget_exceeded",
+                        "budget": budget,
+                        "dispatch_line": line,
+                        "phase": run_phase,
+                        "completed_at": datetime.now(timezone.utc).isoformat(),
+                    }
+                    merged = _merge_run_meta(meta_prev, line, run_payload)
+                    persist_line_execute_on_digest_record(record_id, merged)
+                    return {"ok": True, "record_id": record_id, **run_payload}
+            except Exception:
+                logger.debug("cr budget check skipped", exc_info=True)
+
         if (
             not force
             and not dry_run
@@ -265,7 +322,7 @@ def execute_digest_line_work_units(
                 "dispatch_line": line,
                 "base_version": base_version,
                 "phase": run_phase,
-                "mode": mode,
+                "mode": line_mode,
                 "completed_at": datetime.now(timezone.utc).isoformat(),
             }
             merged = _merge_run_meta(meta_prev, line, run_payload)
@@ -300,8 +357,9 @@ def execute_digest_line_work_units(
                 "priorities": prios,
                 "base_version": base_version,
                 "phase": run_phase,
-                "mode": mode,
+                "mode": line_mode,
                 "dry_run": dry_run,
+                "rollout_policy": rollout_policy,
                 "unit_count": 0,
                 "started_at": started_at,
                 "completed_at": datetime.now(timezone.utc).isoformat(),
@@ -320,7 +378,8 @@ def execute_digest_line_work_units(
                 "priorities": prios,
                 "base_version": base_version,
                 "phase": run_phase,
-                "mode": mode,
+                "mode": line_mode,
+                "rollout_policy": rollout_policy,
                 "unit_count": len(units),
                 "units": [u.to_dict() for u in units],
                 "planned_employees": sorted({u.employee_id for u in units}),
@@ -375,7 +434,8 @@ def execute_digest_line_work_units(
             "priorities": prios,
             "base_version": base_version,
             "phase": run_phase,
-            "mode": mode,
+            "mode": line_mode,
+            "rollout_policy": rollout_policy,
             "unit_count": len(units),
             "units": [u.to_dict() for u in units],
             "dispatch": {

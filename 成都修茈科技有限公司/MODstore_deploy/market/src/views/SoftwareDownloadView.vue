@@ -215,23 +215,31 @@ const downloadBase = computed(() =>
 
 function releaseManifestUrls(): string[] {
   const base = (import.meta.env.BASE_URL || '/').replace(/\/?$/, '/')
-  const candidates = [`${base}download-release.json`, '/download-release.json']
+  // 站点根 /download-release.json 优先：market SPA 会把缺失静态文件回退成 index.html（200+HTML）
+  const candidates = ['/download-release.json', `${base}download-release.json`]
   return candidates.filter((url, index) => candidates.indexOf(url) === index)
+}
+
+async function parseReleaseManifest(resp: Response): Promise<Record<string, unknown> | null> {
+  const ct = resp.headers.get('content-type') || ''
+  if (!ct.includes('json')) return null
+  const data = (await resp.json()) as Record<string, unknown>
+  return data && typeof data === 'object' ? data : null
 }
 
 async function loadReleaseManifest() {
   try {
-    let resp: Response | null = null
+    let j: Record<string, unknown> | null = null
     for (const url of releaseManifestUrls()) {
       const attempt = await fetch(url, { cache: 'no-store' })
-      if (attempt.ok) {
-        resp = attempt
+      if (!attempt.ok) continue
+      const parsed = await parseReleaseManifest(attempt)
+      if (parsed && typeof parsed.download_version === 'string') {
+        j = parsed
         break
       }
     }
-    if (!resp) return
-    const j = (await resp.json()) as Record<string, unknown>
-    if (!j || typeof j !== 'object') return
+    if (!j) return
     if (j.download_version) downloadVersion.value = String(j.download_version)
     if (j.android_version) androidVersion.value = String(j.android_version)
     if (j.win_installer_mb != null) winInstallerMb.value = String(j.win_installer_mb)

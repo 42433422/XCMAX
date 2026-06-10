@@ -1546,6 +1546,11 @@ def run_daily_digest_email() -> None:
         logger.info("daily digest disabled by MODSTORE_DAILY_DIGEST_ENABLED")
         return
 
+    from modstore_server.automation_primary import skip_daily_automation_result
+
+    if skip_daily_automation_result(job="daily_digest_email"):
+        return
+
     recipients = parse_daily_digest_recipient_emails(
         os.environ.get("MODSTORE_DAILY_DIGEST_EMAIL", DEFAULT_DIGEST_EMAIL).strip()
     )

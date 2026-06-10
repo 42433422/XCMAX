@@ -568,6 +568,13 @@ async def _cognition_real(
     cog_cfg = _get_section(config, "cognition")
     agent = cog_cfg.get("agent") if isinstance(cog_cfg.get("agent"), dict) else cog_cfg
     system_prompt = agent.get("system_prompt", "你是智能员工助手")
+    if employee_id:
+        try:
+            from modstore_server.prompt_evolution_ab import get_effective_system_prompt
+
+            system_prompt = get_effective_system_prompt(str(employee_id), str(system_prompt))
+        except Exception:
+            pass
     model_cfg = agent.get("model") if isinstance(agent.get("model"), dict) else {}
     normalized_inp = perceived.get("normalized_input", {})
     if not isinstance(normalized_inp, dict):
@@ -1361,6 +1368,15 @@ def _filter_handlers_vibe_coding_maintainer(
 
     if delegate == "cursor" or priority == "P0" or inp.get("fallback_cursor"):
         selected: List[str] = []
+        if "cursor_delegate" in handlers:
+            selected.append("cursor_delegate")
+        elif os.environ.get("MODSTORE_CURSOR_DELEGATE_ENABLED", "1").strip().lower() in (
+            "1",
+            "true",
+            "yes",
+            "on",
+        ):
+            selected.append("cursor_delegate")
         if "direct_python" in handlers:
             selected.append("direct_python")
         if "llm_md" in handlers:
@@ -1481,6 +1497,17 @@ def _actions_real(
             )
         elif handler == "agent":
             outputs.append(_action_agent_runner(actions_cfg, reasoning, task, employee_id, user_id))
+        elif handler == "cursor_delegate":
+            from modstore_server.cursor_delegate_handler import dispatch_cursor_delegate
+
+            cog_in = reasoning.get("input") if isinstance(reasoning.get("input"), dict) else {}
+            outputs.append(
+                dispatch_cursor_delegate(
+                    task=task,
+                    input_data=cog_in,
+                    employee_id=employee_id,
+                )
+            )
         elif handler == "llm_md":
             # Alias: llm_md is single-shot LLM already done via cognition; return it.
             outputs.append({"handler": "llm_md", "output": reasoning.get("reasoning", "")})
@@ -1702,6 +1729,17 @@ def _auto_wrap_execution_result_to_change_requests(
     }
 
 
+def _handlers_execution_ok(result: Dict[str, Any]) -> bool:
+    """actions 层 outputs 中任一 handler 显式 ok=False 则视为失败。"""
+    outputs = result.get("outputs") if isinstance(result.get("outputs"), list) else []
+    if not outputs:
+        return True
+    for out in outputs:
+        if isinstance(out, dict) and out.get("ok") is False:
+            return False
+    return True
+
+
 def execute_employee_task(
     employee_id: str,
     task: str,
@@ -1818,17 +1856,36 @@ def execute_employee_task(
                 )
                 duration_ms = round((time.perf_counter() - t0) * 1000, 3)
                 llm_tokens = 0 if direct_only else _extract_token_count(reasoning)
+                handler_ok = _handlers_execution_ok(result if isinstance(result, dict) else {})
+                exec_status = "success" if handler_ok else "handler_failed"
                 session.add(
                     EmployeeExecutionMetric(
                         user_id=_resolve_metric_user_id(session, user_id),
                         employee_id=employee_id,
                         task=_metric_task_preview(task),
-                        status="success",
+                        status=exec_status,
                         duration_ms=duration_ms,
                         llm_tokens=llm_tokens,
+                        error="" if handler_ok else "one or more handlers returned ok=False",
                     )
                 )
                 session.commit()
+                if not handler_ok:
+                    try:
+                        from modstore_server.notification_service import notify_employee_execution_done
+
+                        notify_employee_execution_done(user_id, employee_id, task, exec_status)
+                    except Exception:
+                        pass
+                    return {
+                        "employee_id": employee_id,
+                        "pack": {"id": pack["pack_id"], "version": pack["version"]},
+                        "duration_ms": duration_ms,
+                        "result": result,
+                        "executed_at": datetime.now(timezone.utc).isoformat(),
+                        "llm_tokens": llm_tokens,
+                        "handler_failed": True,
+                    }
                 if recovery_meta.get("recovered"):
                     try:
                         from modstore_server.services.change_signal import (

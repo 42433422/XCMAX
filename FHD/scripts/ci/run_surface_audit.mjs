@@ -244,12 +244,34 @@ function resolveUrl(pageDef, laneCfg) {
 function analyzePage(pageResult) {
   const lines = []
   const status = pageResult.status || 0
+  if (pageResult.error) {
+    const head = String(pageResult.error).split('\n')[0].slice(0, 160)
+    lines.push(
+      pageResult.screenshot_saved
+        ? `导航异常（已兜底截当前屏）: ${head}`
+        : `导航/截图失败: ${head}`,
+    )
+  }
   if (status >= 400) lines.push(`HTTP ${status}：页面未正常打开`)
-  const ce = pageResult.console_errors || []
+  const ce = (pageResult.console_errors || []).filter((m) => !pageResult.error || m !== String(pageResult.error))
   if (ce.length) lines.push(`控制台错误 ${ce.length} 条，需排查 JS 异常`)
   if (pageResult.native) lines.push('原生屏占位截图（Web 无等价 URL）')
   if (!lines.length) lines.push('表面巡检通过：无 console error、HTTP 正常')
   return lines
+}
+
+/** 远程站点（xiu-ci.com 等）易抖动：goto 失败后降级 waitUntil 再试一次 */
+async function gotoWithRetry(page, url, timeoutMs) {
+  try {
+    return await page.goto(url, { waitUntil: 'domcontentloaded', timeout: timeoutMs })
+  } catch (err) {
+    const resp = await page
+      .goto(url, { waitUntil: 'commit', timeout: timeoutMs })
+      .catch(() => null)
+    if (!resp) throw err
+    await page.waitForLoadState('domcontentloaded', { timeout: timeoutMs }).catch(() => {})
+    return resp
+  }
 }
 
 const CJK_FONT_CSS = [
@@ -498,6 +520,8 @@ async function capturePsLaneShared(browser, pages, laneCfg, auditAuth, laneKey) 
     for (let i = 0; i < pages.length; i++) {
       const pageDef = pages[i]
       const url = resolveUrl(pageDef, laneCfg)
+      // 共享上下文：只归属本页新增的 console error，避免跨页滚雪球
+      const errStart = consoleErrors.length
       let status = 0
       try {
         if (!url) {
@@ -512,10 +536,7 @@ async function capturePsLaneShared(browser, pages, laneCfg, auditAuth, laneKey) 
           continue
         }
         if (i > 0) {
-          const resp = await page.goto(url, {
-            waitUntil: 'domcontentloaded',
-            timeout: laneCfg.ready_timeout_ms || 25000,
-          })
+          const resp = await gotoWithRetry(page, url, laneCfg.ready_timeout_ms || 25000)
           status = resp ? resp.status() : 0
         } else {
           status = 200
@@ -533,19 +554,27 @@ async function capturePsLaneShared(browser, pages, laneCfg, auditAuth, laneKey) 
           native: !!pageDef.native,
           preview: !!pageDef.preview,
           admin: !!pageDef.admin,
-          console_errors: consoleErrors.slice(0, 20),
+          console_errors: consoleErrors.slice(errStart, errStart + 20),
           screenshot_saved: saved,
           analysis: [],
         })
       } catch (err) {
+        let saved = ''
+        try {
+          const shot = await page.screenshot({ type: 'png', fullPage: false })
+          saved = writeScreenshotPng(laneKey, i, pageDef, shot)
+        } catch {
+          /* 页面已不可用 */
+        }
         results.push({
           id: pageDef.id,
           name: pageDef.name,
           url: url || '',
           status: status || 0,
-          console_errors: [...consoleErrors, String(err)].slice(0, 20),
+          console_errors: [...consoleErrors.slice(errStart), String(err)].slice(0, 20),
+          screenshot_saved: saved,
           error: String(err),
-          analysis: [`截图失败: ${err}`],
+          analysis: [],
         })
       }
     }
@@ -579,15 +608,17 @@ async function waitForCjkFonts(page, timeoutMs = 30000) {
   } catch {
     /* optional */
   }
+  // 上限收紧：每页 networkidle ≤10s、字体轮询 ≤5s，否则 P-W 全量 60+ 页
+  // 在 SURFACE_AUDIT_TIMEOUT_SEC 内跑不完（每页 context 独立、字体反复下载）
   try {
-    await page.waitForLoadState('networkidle', { timeout: Math.min(timeoutMs, 30000) })
+    await page.waitForLoadState('networkidle', { timeout: Math.min(timeoutMs, 10000) })
   } catch {
     /* SPA may never idle */
   }
   try {
     await page.evaluate(async () => {
       if (document.fonts && document.fonts.ready) await document.fonts.ready
-      for (let i = 0; i < 40; i++) {
+      for (let i = 0; i < 20; i++) {
         if (document.fonts && document.fonts.check('16px "Noto Sans SC"')) return true
         await new Promise((r) => setTimeout(r, 250))
       }
@@ -596,7 +627,7 @@ async function waitForCjkFonts(page, timeoutMs = 30000) {
   } catch {
     /* fallback wait */
   }
-  await page.waitForTimeout(2000)
+  await page.waitForTimeout(1200)
 }
 
 function writeScreenshotPng(laneKey, pageIndex, pageDef, buffer) {
@@ -722,7 +753,7 @@ async function capturePage(browser, pageDef, laneCfg, auditAuth, laneKey, pageIn
       })
       status = 200
     } else {
-      const resp = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: laneCfg.ready_timeout_ms || 25000 })
+      const resp = await gotoWithRetry(page, url, laneCfg.ready_timeout_ms || 25000)
       status = resp ? resp.status() : 0
       const sel = laneCfg.ready_selector || '#app'
       try {
@@ -815,6 +846,13 @@ async function capturePage(browser, pageDef, laneCfg, auditAuth, laneKey, pageIn
       analysis: [],
     }
   } catch (err) {
+    let saved = ''
+    try {
+      const shot = await page.screenshot({ type: 'png', fullPage: false })
+      saved = writeScreenshotPng(laneKey, pageIndex, pageDef, shot)
+    } catch {
+      /* 页面已不可用 */
+    }
     return {
       id: pageDef.id,
       name: pageDef.name,
@@ -823,6 +861,7 @@ async function capturePage(browser, pageDef, laneCfg, auditAuth, laneKey, pageIn
       status: status || 0,
       native: !!pageDef.native,
       console_errors: [...consoleErrors, String(err)].slice(0, 20),
+      screenshot_saved: saved,
       screenshot_b64: '',
       error: String(err),
       analysis: [`截图失败: ${err}`],

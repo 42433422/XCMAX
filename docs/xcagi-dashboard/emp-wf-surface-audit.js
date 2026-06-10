@@ -56,6 +56,18 @@ const EmpWfSurfaceAudit = (() => {
     if (terminal === 'app' && biz.refreshTerminalApp) return biz.refreshTerminalApp(!!refresh);
   }
 
+  function waitForMonAiBiz(timeoutMs) {
+    return new Promise((resolve) => {
+      const deadline = Date.now() + (timeoutMs || 3000);
+      (function poll() {
+        const biz = window.MonAiBiz;
+        if (biz && biz.openTerminalScreenshotGallery) return resolve(biz);
+        if (Date.now() >= deadline) return resolve(null);
+        setTimeout(poll, 150);
+      })();
+    });
+  }
+
   async function openGallery(nodeId, refresh) {
     const meta = NODES[nodeId];
     if (!meta) return;
@@ -77,7 +89,9 @@ const EmpWfSurfaceAudit = (() => {
       const r = await fetch(api(apiPath + q), { cache: 'no-store' });
       const j = await r.json();
       const pages = (j.data && j.data.surface_audit && j.data.surface_audit.pages) || [];
-      if (biz && biz.openTerminalScreenshotGallery) biz.openTerminalScreenshotGallery(meta.terminal, pages);
+      // mon-ai-biz.js 可能在 Tab 切换后才挂载：等它就绪再开画廊
+      const lateBiz = await waitForMonAiBiz(3000);
+      if (lateBiz) await lateBiz.openTerminalScreenshotGallery(meta.terminal, pages);
     } catch (_) { /* offline */ }
   }
 

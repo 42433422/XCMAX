@@ -47,7 +47,8 @@ _VIBE_PREP_SYSTEM = """你是 MODstore 的 Vibe-Coding 编排秘书。
      · P2 = 纯文档/README/runbook 补齐、低风险维护。
      （updates 偏维护，patches 偏 diff/修复；两份清单都要体现优先级梯度）
 5. 简体中文；不要输出 JSON 以外的任何文字。
-6. 版本号由服务端统一写入文首，你无需重复输出版本表。"""
+6. 版本号由服务端统一写入文首，你无需重复输出版本表。
+7. 「进化事实信号」段落（pytest 失败 / incident / 性能探针）优先级高于三端截图分析；补丁清单须优先覆盖这些事实。"""
 
 
 def resolve_vibe_prep_version_context(
@@ -517,6 +518,17 @@ def _build_llm_user_content(
     if len(emp_json) > 90000:
         emp_json = emp_json[:89900] + "…"
     ver = version_ctx or {}
+    evolution_block = "（未采集）"
+    try:
+        from modstore_server.evolution_signal_collector import (
+            collect_evolution_signals,
+            format_evolution_signals_for_prompt,
+        )
+
+        evolution_block = format_evolution_signals_for_prompt(collect_evolution_signals())
+    except Exception:
+        logger.debug("digest_vibe_prep: evolution signals unavailable", exc_info=True)
+
     return (
         f"模式：{mode}\n"
         f"摘要日期：{digest_day}\n"
@@ -524,9 +536,10 @@ def _build_llm_user_content(
         f"基线版本：{ver.get('base_version') or '（待写入）'}\n"
         f"更新清单版本：{ver.get('updates_version') or ''}\n"
         f"补丁清单版本：{ver.get('patches_version') or ''}\n\n"
+        f"## 进化事实信号（优先于截图）\n{evolution_block}\n\n"
         f"## 每日摘要正文节选\n{digest_excerpt or '（无）'}\n\n"
         f"## 员工大会摘要节选\n{meeting_excerpt or '（无）'}\n\n"
-        f"## 三端页面截图巡检节选（P-W 网站 · P-S 软件 · P-App 移动）\n{surface_audit_excerpt or '（无）'}\n\n"
+        f"## 三端页面截图巡检节选（辅助 · P-W 网站 · P-S 软件 · P-App 移动）\n{surface_audit_excerpt or '（无）'}\n\n"
         f"## 员工快照 JSON（{len(employees)} 人）\n```json\n{emp_json}\n```"
     )
 
