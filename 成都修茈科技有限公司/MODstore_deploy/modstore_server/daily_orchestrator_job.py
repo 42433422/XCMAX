@@ -50,6 +50,12 @@ def run_daily_orchestrator_job(*, bypass_digest_gate: bool = False) -> Dict[str,
     if raw in ("0", "false", "no", "off"):
         return {"ok": True, "skipped": True}
 
+    from modstore_server.automation_primary import skip_daily_automation_result
+
+    delegated = skip_daily_automation_result(job="daily_orchestrator")
+    if delegated and not bypass_digest_gate:
+        return delegated
+
     if _slo_halt_blocks_auto_merge():
         logger.warning(
             "daily orchestrator halted: post_deploy_smoke failed (MODSTORE_SLO_HALT_AUTO_MERGE)"

@@ -72,6 +72,12 @@ def run_daily_release_train_orchestrator_job(
     if raw in ("0", "false", "no", "off"):
         return {"ok": True, "skipped": True, "reason": "MODSTORE_RELEASE_TRAIN_ENABLED=0"}
 
+    from modstore_server.automation_primary import skip_daily_automation_result
+
+    delegated = skip_daily_automation_result(job="release_train_orchestrator")
+    if delegated and not force:
+        return delegated
+
     mode = _orchestrator_digest_mode()
     if mode in ("off", "legacy"):
         return {
