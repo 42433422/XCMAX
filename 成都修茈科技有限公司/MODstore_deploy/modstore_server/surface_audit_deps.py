@@ -162,6 +162,11 @@ def _ensure_fhd_api(api_port: int) -> Dict[str, Any]:
         "XCAGI_USE_LOCAL_MARKET": "1",
         "XCAGI_GLOBAL_RATE_LIMIT": "0",
         "XCAGI_AUTH_RATE_LIMIT": "0",
+        "DATABASE_URL": "",
+        "VECTOR_DB_URL": "",
+        "REDIS_URL": "",
+        "CACHE_REDIS_URL": "",
+        "XCAGI_REDIS_URL": "",
     }
     market_base = (
         os.environ.get("MODSTORE_INTERNAL_API_BASE")
