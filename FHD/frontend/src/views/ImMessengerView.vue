@@ -147,6 +147,7 @@ import {
 import { authApi } from '@/api/auth';
 import { useImSounds } from '@/composables/useImSounds';
 import { showAppToast } from '@/composables/useAppToast';
+import { useXcmaxSync } from '@/composables/useXcmaxSync';
 
 const localUserId = ref<number | null>(null);
 const conversations = ref<ImConversationSummary[]>([]);
@@ -164,8 +165,11 @@ const contactKeyword = ref('');
 const contactsLoading = ref(false);
 
 const { playIncoming, playOutgoing } = useImSounds();
+const { onImMessage, onImReadState } = useXcmaxSync();
 
 let ws: WebSocket | null = null;
+let offSyncMessage: (() => void) | null = null;
+let offSyncRead: (() => void) | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let reconnectAttempt = 0;
 
@@ -303,6 +307,59 @@ function scrollToBottom(): void {
   if (el) el.scrollTop = el.scrollHeight;
 }
 
+function applyIncomingMessage(msg: ImMessage, cid: number): void {
+  if (cid === activeConversationId.value) {
+    if (!messages.value.some((m) => m.id === msg.id)) {
+      messages.value.push(msg);
+      void nextTick().then(scrollToBottom);
+      void markImRead(cid, msg.id);
+    }
+  }
+  if (msg.sender_user_id !== localUserId.value) {
+    void playIncoming(msg.body);
+  }
+  void loadConversations();
+}
+
+function applyReadState(conversationId: number, userId: number, lastMessageId: number): void {
+  if (userId !== localUserId.value) return;
+  const conv = conversations.value.find((c) => c.id === conversationId);
+  if (conv) {
+    conv.unread_count = 0;
+  }
+  if (conversationId === activeConversationId.value && lastMessageId > 0) {
+    void markImRead(conversationId, lastMessageId).then(() => loadConversations());
+  } else {
+    void loadConversations();
+  }
+}
+
+function handleWsPayload(payload: {
+  type?: string;
+  conversation_id?: number;
+  user_id?: number;
+  last_message_id?: number;
+  message?: ImMessage;
+}): void {
+  if (payload.type === 'pong') return;
+  if (
+    (payload.type === 'im.message' || payload.type === 'message') &&
+    payload.message
+  ) {
+    const cid = payload.conversation_id ?? payload.message.conversation_id;
+    applyIncomingMessage(payload.message, cid);
+    return;
+  }
+  if (payload.type === 'im.read') {
+    const cid = Number(payload.conversation_id);
+    const uid = Number(payload.user_id);
+    const lastId = Number(payload.last_message_id);
+    if (Number.isFinite(cid) && Number.isFinite(uid) && Number.isFinite(lastId)) {
+      applyReadState(cid, uid, lastId);
+    }
+  }
+}
+
 async function onSend(): Promise<void> {
   const id = activeConversationId.value;
   const text = draft.value.trim();
@@ -347,26 +404,7 @@ function connectWs(): void {
     };
     ws.onmessage = (ev) => {
       try {
-        const payload = JSON.parse(String(ev.data)) as {
-          type?: string;
-          conversation_id?: number;
-          message?: ImMessage;
-        };
-        if (payload.type === 'pong') return;
-        if (payload.type === 'message' && payload.message) {
-          const cid = payload.conversation_id ?? payload.message.conversation_id;
-          if (cid === activeConversationId.value) {
-            if (!messages.value.some((m) => m.id === payload.message!.id)) {
-              messages.value.push(payload.message);
-              void nextTick().then(scrollToBottom);
-              void markImRead(cid, payload.message.id);
-            }
-          }
-          if (payload.message.sender_user_id !== localUserId.value) {
-            void playIncoming(payload.message.body);
-          }
-          void loadConversations();
-        }
+        handleWsPayload(JSON.parse(String(ev.data)));
       } catch {
         /* ignore */
       }
@@ -395,11 +433,21 @@ onMounted(async () => {
     showAppToast('请先登录后使用消息功能', 'warning');
     return;
   }
+  offSyncMessage = onImMessage(({ conversation_id, message }) => {
+    applyIncomingMessage(message, conversation_id);
+  });
+  offSyncRead = onImReadState(({ conversation_id, user_id, last_message_id }) => {
+    applyReadState(conversation_id, user_id, last_message_id);
+  });
   connectWs();
   await loadConversations();
 });
 
 onUnmounted(() => {
+  offSyncMessage?.();
+  offSyncMessage = null;
+  offSyncRead?.();
+  offSyncRead = null;
   disconnectWs();
 });
 </script>
