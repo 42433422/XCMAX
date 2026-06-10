@@ -20,6 +20,9 @@
 market/public/vosk/
 .env
 .env.local
+.env.daily-closure
+.env.production.synced
+.env.local
 .modstore_build.json
 __pycache__/
 *.py[cod]
@@ -78,6 +81,7 @@ id_ed25519*
 *secret*
 !*secret*.example
 *credential*
+!market/src/domain/llm/providerCredential.ts
 *token*.json
 *.smtp.local
 .env.smtp.local
