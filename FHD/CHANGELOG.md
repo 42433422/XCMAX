@@ -6,6 +6,12 @@
 
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
+### 日更闭环断点修复（BK→R / DRPROBE / 截图依赖 · 2026-06-10 · v10 线内迭代）
+- **feat(backup)**：`daily_backup_job` 成功/失败派发 `backup.completed` / `backup.failed`；启动时 `register_backup_event_subscribers`
+- **feat(dr)**：`dr_recovery_probe_job` 守卫生效时每 30min 重试（默认 ×8），成功 `backup.dr_guard.cleared`、超限 `backup.dr_guard.escalated`
+- **feat(backup)**：`ondemand_backup` 按需快照；`auto_rollback` 回滚前自动抓取
+- **feat(audit)**：`surface_audit_deps` 截图前自动拉起 FHD :5000、Vite :5001、MODstore :8788、Playwright（`MODSTORE_SURFACE_AUDIT_AUTO_START=0` 可关）
+
 ### 自进化闭环补强（MODstore · 2026-06-10 · v10 线内迭代）
 - **feat(orchestrator)**：编排层 `ok` 收紧为 handler 输出验证；失败写入 `EmployeeExecutionMetric`
 - **feat(ci)**：`cr_narrow_ci` 窄验证（py_compile + 可选 ruff + pytest 子集）；自动审批前门禁；失败喂 `evolution-engine`

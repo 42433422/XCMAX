@@ -157,8 +157,11 @@ def _clear_dr_guard() -> None:
         logger.exception("daily backup: clear release_train backup guard failed")
 
 
-def run_daily_backup_job() -> Dict[str, Any]:
-    """执行一次容灾备份；返回结构化结果（供日志/可视化）。"""
+def run_daily_backup_job(*, from_probe: bool = False) -> Dict[str, Any]:
+    """执行一次容灾备份；返回结构化结果（供日志/可视化）。
+
+    ``from_probe=True`` 时失败不重复 ``set_backup_guard`` / ``backup.failed``（由 DR 探针计数）。
+    """
     if not _enabled():
         return {"ok": True, "skipped": True, "reason": "MODSTORE_DAILY_BACKUP_ENABLED=0"}
     dst_dir = _backup_dir()
@@ -173,11 +176,23 @@ def run_daily_backup_job() -> Dict[str, Any]:
         "release_train": _backup_release_train(dst_dir, stamp, keep),
     }
     out["ok"] = bool(out["db"].get("ok")) and bool(out["release_train"].get("ok"))
+    out["trigger"] = "scheduled"
     logger.info("daily backup done: ok=%s dir=%s", out["ok"], dst_dir)
     if out["ok"]:
         _clear_dr_guard()
-    else:
+    elif not from_probe:
         out["degrade"] = _trigger_dr_failure(out)
+
+    if not from_probe or out["ok"]:
+        try:
+            from modstore_server.backup_event_subscriber import emit_backup_event
+
+            emit_backup_event(
+                "backup.completed" if out["ok"] else "backup.failed",
+                out,
+            )
+        except Exception:  # noqa: BLE001
+            logger.exception("daily backup: emit backup event failed")
     return out
 
 
