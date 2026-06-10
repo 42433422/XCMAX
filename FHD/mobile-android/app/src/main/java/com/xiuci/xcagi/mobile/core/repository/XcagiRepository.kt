@@ -21,6 +21,11 @@ import com.xiuci.xcagi.mobile.core.model.AccountDeleteBody
 import com.xiuci.xcagi.mobile.core.model.AppFeedbackBody
 import com.xiuci.xcagi.mobile.core.model.DeviceRegisterBody
 import com.xiuci.xcagi.mobile.core.network.FhdApi
+import com.xiuci.xcagi.mobile.core.network.ImDirectBody
+import com.xiuci.xcagi.mobile.core.network.ImSendBody
+import com.xiuci.xcagi.mobile.core.db.ImMessageCacheEntity
+import com.xiuci.xcagi.mobile.core.im.ImRepository
+import com.xiuci.xcagi.mobile.core.im.ImWebSocketClient
 import com.xiuci.xcagi.mobile.core.network.LanScanner
 import com.xiuci.xcagi.mobile.core.network.ModstoreApi
 import com.xiuci.xcagi.mobile.core.network.MobileLoginRequest
@@ -34,8 +39,11 @@ import com.xiuci.xcagi.mobile.core.network.ServerMode
 import com.xiuci.xcagi.mobile.core.network.ServerRouter
 import com.xiuci.xcagi.mobile.core.network.SseChatClient
 import com.google.gson.Gson
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.SharedFlow
 import okhttp3.OkHttpClient
+import org.json.JSONObject
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import java.util.UUID
@@ -49,6 +57,8 @@ class XcagiRepository @Inject constructor(
     private val okHttp: OkHttpClient,
     private val sseChat: SseChatClient,
     private val lanScanner: LanScanner,
+    private val imWebSocket: ImWebSocketClient,
+    private val imRepo: ImRepository,
     private val db: XcagiDatabase,
     private val gson: Gson = Gson(),
 ) {
@@ -319,17 +329,20 @@ class XcagiRepository @Inject constructor(
         Result.failure(e)
     }
 
-    suspend fun confirmAuthQr(qrId: String, username: String, password: String): Result<Unit> = try {
-        syncRouterFromStore()
-        val r = fhd().authQrConfirm(
-            AuthQrConfirmBody(qr_id = qrId, username = username, password = password),
-        )
-        if (r.success != true) {
-            return Result.failure(Exception(r.message ?: "扫码登录确认失败"))
+    suspend fun confirmAuthQr(qrId: String, username: String, password: String): Result<Unit> {
+        return try {
+            syncRouterFromStore()
+            val r = fhd().authQrConfirm(
+                AuthQrConfirmBody(qr_id = qrId, username = username, password = password),
+            )
+            if (r.success != true) {
+                Result.failure(Exception(r.message ?: "扫码登录确认失败"))
+            } else {
+                Result.success(Unit)
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
         }
-        Result.success(Unit)
-    } catch (e: Exception) {
-        Result.failure(e)
     }
 
     suspend fun requestLanAccess(note: String): Result<String> = try {
@@ -395,31 +408,34 @@ class XcagiRepository @Inject constructor(
         }
     }
 
-    suspend fun loginMarketPhone(phone: String, code: String): Result<String> = try {
-        if (isPcReachable()) {
-            val res = fhd().mobileLoginWithPhone(
-                MobilePhoneLoginRequest(phone = phone, code = code, account_kind = ProductSkuConfig.accountKind),
-            )
-            if (!res.success || res.data?.access_token.isNullOrBlank()) {
-                return Result.failure(Exception(res.message.ifBlank { "手机验证码登录失败" }))
+    suspend fun loginMarketPhone(phone: String, code: String): Result<String> {
+        return try {
+            if (isPcReachable()) {
+                val res = fhd().mobileLoginWithPhone(
+                    MobilePhoneLoginRequest(phone = phone, code = code, account_kind = ProductSkuConfig.accountKind),
+                )
+                if (!res.success || res.data?.access_token.isNullOrBlank()) {
+                    Result.failure(Exception(res.message.ifBlank { "手机验证码登录失败" }))
+                } else {
+                    val d = res.data!!
+                    sessionStore.saveFhdAuth(
+                        d.access_token!!,
+                        d.refresh_token ?: "",
+                        d.session_id ?: "",
+                        d.user?.username ?: phone,
+                        userId = d.user?.id ?: 0,
+                    )
+                    refreshMe()
+                    syncMarketSessionHandoff()
+                    Result.success(d.user?.display_name ?: phone)
+                }
+            } else {
+                val res = modstore().loginWithPhoneCode(MarketLoginBody(phone, code))
+                applyMarketAuth(res, phone)
             }
-            val d = res.data!!
-            sessionStore.saveFhdAuth(
-                d.access_token!!,
-                d.refresh_token ?: "",
-                d.session_id ?: "",
-                d.user?.username ?: phone,
-                userId = d.user?.id ?: 0,
-            )
-            refreshMe()
-            syncMarketSessionHandoff()
-            Result.success(d.user?.display_name ?: phone)
-        } else {
-            val res = modstore().loginWithPhoneCode(MarketLoginBody(phone, code))
-            applyMarketAuth(res, phone)
+        } catch (e: Exception) {
+            Result.failure(e)
         }
-    } catch (e: Exception) {
-        Result.failure(e)
     }
 
     suspend fun loginMarketPassword(username: String, password: String): Result<String> = try {
@@ -609,6 +625,63 @@ class XcagiRepository @Inject constructor(
         db.chatDao().clear()
         db.approvalDao().clear()
         db.shipmentDao().clear()
+        imRepo.clearAll()
+    }
+
+    val imWsEvents: SharedFlow<JSONObject> get() = imWebSocket.events
+
+    suspend fun connectImWebSocket() {
+        syncRouterFromStore()
+        imRepo.attachWebSocketListener()
+        val sid = sessionStore.fhdSessionId()
+        if (sid.isNotBlank()) {
+            imWebSocket.connect(sid)
+        }
+    }
+
+    fun observeImMessages(conversationId: Int): Flow<List<ImMessageCacheEntity>> =
+        imRepo.observeMessages(conversationId)
+
+    suspend fun seedImMessages(conversationId: Int): Result<Unit> = try {
+        syncRouterFromStore()
+        val body = fhd().imListMessages(conversationId)
+        @Suppress("UNCHECKED_CAST")
+        val list = body["messages"] as? List<Map<String, Any?>> ?: emptyList()
+        imRepo.seedMessagesFromNetwork(list)
+        Result.success(Unit)
+    } catch (e: Exception) {
+        Result.failure(e)
+    }
+
+    fun disconnectImWebSocket() {
+        imWebSocket.disconnect()
+    }
+
+    suspend fun imOpenDirect(peerUserId: Int): Result<Map<String, Any?>> = try {
+        syncRouterFromStore()
+        Result.success(fhd().imCreateDirect(ImDirectBody(peerUserId)))
+    } catch (e: Exception) {
+        Result.failure(e)
+    }
+
+    suspend fun imListMessages(conversationId: Int): Result<Map<String, Any?>> = try {
+        syncRouterFromStore()
+        Result.success(fhd().imListMessages(conversationId))
+    } catch (e: Exception) {
+        Result.failure(e)
+    }
+
+    suspend fun imSendMessage(conversationId: Int, text: String): Result<Map<String, Any?>> = try {
+        syncRouterFromStore()
+        val body = fhd().imSendMessage(conversationId, ImSendBody(text))
+        @Suppress("UNCHECKED_CAST")
+        val msg = body["message"] as? Map<String, Any?>
+        if (msg != null) {
+            imRepo.cacheSentMessage(msg)
+        }
+        Result.success(body)
+    } catch (e: Exception) {
+        Result.failure(e)
     }
 
     private suspend fun parseMobileList(

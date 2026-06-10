@@ -5,6 +5,7 @@ import com.xiuci.xcagi.mobile.core.datastore.SessionStore
 import com.xiuci.xcagi.mobile.core.db.ApprovalCacheEntity
 import com.xiuci.xcagi.mobile.core.db.ShipmentCacheEntity
 import com.xiuci.xcagi.mobile.core.db.XcagiDatabase
+import com.xiuci.xcagi.mobile.core.im.ImRepository
 import com.xiuci.xcagi.mobile.core.network.FhdApi
 import com.xiuci.xcagi.mobile.core.network.ServerRouter
 import com.xiuci.xcagi.mobile.core.network.SyncPullBody
@@ -29,6 +30,7 @@ class MobileSyncRepository @Inject constructor(
     private val serverRouter: ServerRouter,
     private val repo: XcagiRepository,
     private val db: XcagiDatabase,
+    private val imRepo: ImRepository,
     private val okHttp: okhttp3.OkHttpClient,
     private val gson: Gson = Gson(),
 ) {
@@ -101,6 +103,20 @@ class MobileSyncRepository @Inject constructor(
                         json = gson.toJson(row),
                     ),
                 )
+            }
+
+            @Suppress("UNCHECKED_CAST")
+            val changes = (data["changes"] as? List<Map<String, Any?>>) ?: emptyList()
+            changes.forEach { change ->
+                val entityType = change["entity_type"]?.toString() ?: return@forEach
+                @Suppress("UNCHECKED_CAST")
+                val payload = (change["payload"] as? Map<String, Any?>) ?: emptyMap()
+                val entityId = change["entity_id"]?.toString() ?: ""
+                val changeCreatedAt = change["created_at"]?.toString()
+                when (entityType) {
+                    "im_message" -> imRepo.applySyncMessage(payload, entityId, changeCreatedAt)
+                    "im_read_state" -> imRepo.applySyncReadState(payload, entityId, changeCreatedAt)
+                }
             }
 
             Result.success(
