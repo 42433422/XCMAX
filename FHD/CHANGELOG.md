@@ -11,6 +11,7 @@
 - **feat(dr)**：`dr_recovery_probe_job` 守卫生效时每 30min 重试（默认 ×8），成功 `backup.dr_guard.cleared`、超限 `backup.dr_guard.escalated`
 - **feat(backup)**：`ondemand_backup` 按需快照；`auto_rollback` 回滚前自动抓取
 - **feat(audit)**：`surface_audit_deps` 截图前自动拉起 FHD :5000、Vite :5001、MODstore :8788、Playwright（`MODSTORE_SURFACE_AUDIT_AUTO_START=0` 可关）
+- **ops(closure)**：`.env.daily-closure` 模板 + 生产 `patch_prod_daily_closure.sh` / `dedupe_env_file.py`；`run_modstore_daily_local.sh` 加载生产同步 env
 
 ### 自进化闭环补强（MODstore · 2026-06-10 · v10 线内迭代）
 - **feat(orchestrator)**：编排层 `ok` 收紧为 handler 输出验证；失败写入 `EmployeeExecutionMetric`
