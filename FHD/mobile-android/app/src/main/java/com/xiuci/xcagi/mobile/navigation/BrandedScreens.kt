@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -43,8 +44,8 @@ import com.xiuci.xcagi.mobile.ui.components.mobile.ComplianceFooter
 import com.xiuci.xcagi.mobile.ui.components.mobile.MobileTokens
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeAuthCard
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeAuthGreenButton
-import com.xiuci.xcagi.mobile.ui.components.mobile.WeAuthInputActionField
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeAuthInputField
+import com.xiuci.xcagi.mobile.ui.components.mobile.WeAuthOtpField
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeAuthTabs
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeAvatar
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeBlockOutlinedButton
@@ -209,6 +210,8 @@ fun AuthScreen(vm: AppViewModel, onRegister: () -> Unit, onDone: () -> Unit) {
     var pass by remember { mutableStateOf("") }
     var phone by remember { mutableStateOf("") }
     var code by remember { mutableStateOf("") }
+    var loggingIn by remember { mutableStateOf(false) }
+    var sendingCode by remember { mutableStateOf(false) }
     val appConfig by vm.appConfig.collectAsState()
     val isEnterprise = ProductSkuConfig.isEnterprise
     val accountLabel = if (isEnterprise) "企业账号" else "账号密码"
@@ -266,15 +269,15 @@ fun AuthScreen(vm: AppViewModel, onRegister: () -> Unit, onDone: () -> Unit) {
                     placeholder = "请输入手机号",
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                 )
-                WeAuthInputActionField(
-                    label = "验证码",
+                WeAuthOtpField(
                     value = code,
                     onValueChange = { code = it },
-                    placeholder = "请输入验证码",
-                    actionLabel = "获取验证码",
-                    onAction = { vm.sendCode(phone) },
-                    showDivider = false,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    actionLabel = if (sendingCode) "发送中…" else "获取验证码",
+                    actionEnabled = !sendingCode && phone.length >= 11,
+                    onAction = {
+                        sendingCode = true
+                        vm.sendCode(phone) { sendingCode = false }
+                    },
                 )
             }
             Spacer(Modifier.padding(bottom = 8.dp))
@@ -282,8 +285,15 @@ fun AuthScreen(vm: AppViewModel, onRegister: () -> Unit, onDone: () -> Unit) {
         actions = {
             if (tab == 0) {
                 WeAuthGreenButton(
-                    text = "登录",
-                    onClick = { vm.loginFhd(user, pass) { if (it) onDone() } },
+                    text = if (loggingIn) "登录中…" else "登录",
+                    enabled = !loggingIn,
+                    onClick = {
+                        loggingIn = true
+                        vm.loginFhd(user, pass) {
+                            loggingIn = false
+                            if (it) onDone()
+                        }
+                    },
                 )
                 if (!isEnterprise) {
                     Text(
@@ -307,9 +317,24 @@ fun AuthScreen(vm: AppViewModel, onRegister: () -> Unit, onDone: () -> Unit) {
                 )
             } else {
                 WeAuthGreenButton(
-                    text = "登录",
-                    onClick = { vm.loginPhone(phone, code) { if (it) onDone() } },
+                    text = if (loggingIn) "登录中…" else "登录",
+                    enabled = !loggingIn && phone.length >= 11 && code.length >= 6,
+                    onClick = {
+                        loggingIn = true
+                        vm.loginPhone(phone, code) {
+                            loggingIn = false
+                            if (it) onDone()
+                        }
+                    },
                 )
+                if (loggingIn) {
+                    CircularProgressIndicator(
+                        modifier = Modifier
+                            .padding(top = 12.dp)
+                            .size(24.dp),
+                        strokeWidth = 2.dp,
+                    )
+                }
             }
         },
     )

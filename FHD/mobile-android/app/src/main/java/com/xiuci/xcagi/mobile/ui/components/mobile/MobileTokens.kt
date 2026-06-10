@@ -8,6 +8,7 @@ import androidx.compose.ui.unit.dp
 
 object MobileTokens {
     val horizontalPagePadding = 16.dp
+    val sectionSpacing = 16.dp
     val authHorizontalMargin = 24.dp
     val itemSpacing = 8.dp
     val cornerCard = RoundedCornerShape(12.dp)

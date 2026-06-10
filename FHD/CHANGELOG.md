@@ -6,6 +6,12 @@
 
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
+### Android 移动端体验 P0（对标豆包/Kimi · 2026-06-11 · v10 线内迭代）
+- **feat(mobile-android)**：登录手机号 Tab 默认 + 6 格 OTP 分格输入（`WeOtpCells`）；登录/发码加载态
+- **feat(mobile-android)**：对话页 Kimi 风空态（欢迎语 + 3 推荐问题单列 chips）；工具栏收纳为「模式 + 联网 + 更多」BottomSheet
+- **feat(mobile-android)**：4 Tab 切换 250ms 淡入淡出；流式回复 `CircularProgressIndicator`；统一 12dp 圆角 / 16dp 间距 tokens
+- **note**：冷启动/登录后首屏已为 `Routes.CHAT`（无营销 Hero）；Web SPA 默认 `/` → `ChatView`
+
 ### Android 企业版微信风重构（2026-06-10 · v10 线内迭代）
 - **feat(mobile-android)**：4 Tab 架构（对话 · 工作 · 发现 · 我的）；对话页 DeepSeek 式空态 + 模式胶囊 + 底部输入条
 - **feat(mobile-android)**：浅色微信风主题（白底 + 灰分组 + GPT 灰点缀），跟随系统深色
