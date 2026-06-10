@@ -65,7 +65,7 @@ fun EnterpriseListScreen(
         error = error,
         isEmpty = items.isEmpty(),
         onRetry = load,
-    ) { _ ->
+    ) {
         WeCellGroup {
             items.forEachIndexed { idx, item ->
                 WeCell(

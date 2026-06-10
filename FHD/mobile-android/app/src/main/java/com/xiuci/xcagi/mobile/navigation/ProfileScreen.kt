@@ -66,14 +66,17 @@ fun ProfileScreen(
                     .padding(16.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                WeAvatar(size = 64.dp) {
-                    Icon(
-                        painter = painterResource(R.mipmap.ic_launcher),
-                        contentDescription = null,
-                        modifier = Modifier.size(48.dp),
-                        tint = Color.Unspecified,
-                    )
-                }
+                WeAvatar(
+                    size = 64.dp,
+                    content = {
+                        Icon(
+                            painter = painterResource(R.mipmap.ic_launcher),
+                            contentDescription = null,
+                            modifier = Modifier.size(48.dp),
+                            tint = Color.Unspecified,
+                        )
+                    },
+                )
                 Spacer(Modifier.width(16.dp))
                 Column(Modifier.weight(1f)) {
                     Text(
@@ -155,9 +158,9 @@ fun ProfileScreen(
         )
 
         WeSpacer(16.dp)
-        WeRedActionCell("退出登录", onLogout)
+        WeRedActionCell(text = "退出登录", onClick = onLogout)
         WeSpacer(8.dp)
-        WeRedActionCell("注销账号") { showDelete = true }
+        WeRedActionCell(text = "注销账号", onClick = { showDelete = true })
     }
 
     if (showDelete) {
