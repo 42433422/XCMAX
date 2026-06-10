@@ -28,6 +28,7 @@ private val DarkColors = darkColorScheme(
     outline = Color(0xFF3A3A3A),
     surfaceVariant = Color(0xFF2A2B32),
     error = Color(0xFFFA5151),
+    surfaceTint = Color.Transparent,
 )
 
 private val LightColors = lightColorScheme(
@@ -45,6 +46,7 @@ private val LightColors = lightColorScheme(
     outline = Color(0xFFD9D9D9),
     surfaceVariant = Color(0xFFF5F5F5),
     error = Color(0xFFFA5151),
+    surfaceTint = Color.Transparent,
 )
 
 @Composable

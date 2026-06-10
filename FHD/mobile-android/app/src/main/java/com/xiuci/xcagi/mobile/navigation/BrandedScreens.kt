@@ -4,25 +4,19 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -51,10 +45,12 @@ import com.xiuci.xcagi.mobile.ui.components.mobile.WeAvatar
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeBlockOutlinedButton
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeCell
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeCellGroup
+import com.xiuci.xcagi.mobile.ui.components.mobile.WeGreenButton
+import com.xiuci.xcagi.mobile.ui.components.mobile.WeInputActionCell
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeInputCell
-import com.xiuci.xcagi.mobile.ui.components.mobile.WeModeCapsule
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeModeOption
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeSectionCaption
+import com.xiuci.xcagi.mobile.ui.components.mobile.WeUnderlineTabs
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeSpacer
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeTopBar
 
@@ -83,7 +79,8 @@ fun ConnectScreen(
     Column(
         Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
+            .background(MaterialTheme.colorScheme.background)
+            .imePadding(),
     ) {
         if (fromProfile || loggedIn) {
             WeTopBar(title = "连接电脑", onBack = onBack)
@@ -93,8 +90,8 @@ fun ConnectScreen(
             Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+                .padding(vertical = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             if (!fromProfile && !loggedIn) {
                 Column(
@@ -128,8 +125,8 @@ fun ConnectScreen(
                         modifier = Modifier.padding(top = 8.dp),
                     )
                 }
-                WeSpacer(8.dp)
-                AuthPrimaryButton(text = "进入云端使用", onClick = onSkipCloud)
+                WeSpacer(12.dp)
+                WeGreenButton(text = "进入云端使用", onClick = onSkipCloud)
                 WeBlockOutlinedButton(
                     text = if (pcExpanded) "收起电脑连接" else "连接电脑（可选）",
                     onClick = { pcExpanded = !pcExpanded },
@@ -163,8 +160,8 @@ fun ConnectScreen(
                         },
                     )
                 }
-                WeSpacer(8.dp)
-                AuthPrimaryButton(
+                WeSpacer(12.dp)
+                WeGreenButton(
                     text = "检测并保存",
                     onClick = {
                         vm.setHost(host)
@@ -196,7 +193,7 @@ fun ConnectScreen(
                 WeBlockOutlinedButton(text = "扫码配对", onClick = onScan)
                 WeBlockOutlinedButton(text = "入网申请", onClick = { vm.lanRequest("Android") })
                 if (!fromProfile && !loggedIn && cloud) {
-                    AuthPrimaryButton(text = "使用云端并登录", onClick = onNext)
+                    WeGreenButton(text = "使用云端并登录", onClick = onNext)
                 }
             }
         }
@@ -220,30 +217,33 @@ fun AuthScreen(vm: AppViewModel, onRegister: () -> Unit, onDone: () -> Unit) {
         "与官网 MODstore 同一账号，登录后工作台与云端能力直接可用。"
     }
 
+    val weChatGreen = Color(0xFF07C160)
+
     Column(
         Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
+            .background(MaterialTheme.colorScheme.background)
+            .imePadding(),
     ) {
         Column(
             Modifier
                 .weight(1f)
                 .verticalScroll(rememberScrollState())
-                .padding(top = 48.dp, bottom = 16.dp),
+                .padding(top = 64.dp, bottom = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             WeAvatar(
-                size = 80.dp,
+                size = 88.dp,
                 content = {
                     Icon(
                         painter = painterResource(R.mipmap.ic_launcher_foreground),
                         contentDescription = null,
-                        modifier = Modifier.size(60.dp),
+                        modifier = Modifier.size(64.dp),
                         tint = Color.Unspecified,
                     )
                 },
             )
-            WeSpacer(20.dp)
+            WeSpacer(28.dp)
             Text(
                 title,
                 style = MaterialTheme.typography.headlineSmall,
@@ -251,30 +251,28 @@ fun AuthScreen(vm: AppViewModel, onRegister: () -> Unit, onDone: () -> Unit) {
                 color = MaterialTheme.colorScheme.onBackground,
             )
             Text(
-                stringResource(R.string.company_name),
+                subtitle,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 4.dp),
-            )
-            Text(
-                subtitle,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
-                modifier = Modifier.padding(horizontal = 32.dp, vertical = 12.dp),
+                maxLines = 2,
+                modifier = Modifier
+                    .padding(horizontal = 40.dp)
+                    .padding(top = 12.dp),
             )
 
-            WeModeCapsule(
+            WeSpacer(28.dp)
+
+            WeUnderlineTabs(
                 options = listOf(
                     WeModeOption("account", accountLabel),
                     WeModeOption("phone", "手机号"),
                 ),
                 selectedId = if (tab == 0) "account" else "phone",
                 onSelect = { tab = if (it == "account") 0 else 1 },
-                modifier = Modifier.padding(horizontal = 16.dp),
             )
 
-            WeSpacer(16.dp)
+            WeSpacer(20.dp)
 
             WeCellGroup {
                 if (tab == 0) {
@@ -300,10 +298,15 @@ fun AuthScreen(vm: AppViewModel, onRegister: () -> Unit, onDone: () -> Unit) {
                         placeholder = "请输入手机号",
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                     )
-                    AuthCodeInputRow(
+                    WeInputActionCell(
+                        label = "验证码",
                         value = code,
                         onValueChange = { code = it },
-                        onSend = { vm.sendCode(phone) },
+                        placeholder = "请输入验证码",
+                        actionLabel = "获取验证码",
+                        onAction = { vm.sendCode(phone) },
+                        showDivider = false,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     )
                 }
             }
@@ -313,111 +316,39 @@ fun AuthScreen(vm: AppViewModel, onRegister: () -> Unit, onDone: () -> Unit) {
                     "默认直连云端；仅当已连接电脑且电脑在线时，才走电脑端会话。",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 32.dp, vertical = 8.dp),
+                    modifier = Modifier
+                        .padding(horizontal = 32.dp)
+                        .padding(top = 12.dp),
                 )
             }
 
-            WeSpacer(20.dp)
+            WeSpacer(28.dp)
 
             if (tab == 0) {
-                AuthPrimaryButton(
+                WeGreenButton(
                     text = "登录",
                     onClick = { vm.loginFhd(user, pass) { if (it) onDone() } },
                 )
                 if (!isEnterprise) {
                     TextButton(
                         onClick = onRegister,
-                        modifier = Modifier.padding(top = 4.dp),
+                        modifier = Modifier.padding(top = 8.dp),
                     ) {
                         Text(
                             "还没有账号？立即注册",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.secondary,
+                            color = weChatGreen,
                         )
                     }
                 }
             } else {
-                AuthPrimaryButton(
+                WeGreenButton(
                     text = "登录",
                     onClick = { vm.loginPhone(phone, code) { if (it) onDone() } },
                 )
             }
         }
 
-        ComplianceFooter(appConfig, Modifier.padding(bottom = 12.dp))
-    }
-}
-
-@Composable
-private fun AuthPrimaryButton(
-    text: String,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit,
-) {
-    Button(
-        onClick = onClick,
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp)
-            .height(50.dp),
-        shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp),
-        colors = ButtonDefaults.buttonColors(
-            containerColor = MaterialTheme.colorScheme.secondary,
-            contentColor = MaterialTheme.colorScheme.onSecondary,
-        ),
-    ) {
-        Text(text, style = MaterialTheme.typography.bodyLarge)
-    }
-}
-
-@Composable
-private fun AuthCodeInputRow(
-    value: String,
-    onValueChange: (String) -> Unit,
-    onSend: () -> Unit,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            "验证码",
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.width(80.dp),
-        )
-        OutlinedTextField(
-            value = value,
-            onValueChange = onValueChange,
-            modifier = Modifier.weight(1f),
-            placeholder = {
-                Text(
-                    "请输入验证码",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            },
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = Color.Transparent,
-                unfocusedBorderColor = Color.Transparent,
-                errorBorderColor = Color.Transparent,
-                disabledBorderColor = Color.Transparent,
-            ),
-            textStyle = MaterialTheme.typography.bodyMedium,
-        )
-        TextButton(
-            onClick = onSend,
-            contentPadding = PaddingValues(horizontal = 4.dp),
-        ) {
-            Text(
-                "获取验证码",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.secondary,
-            )
-        }
+        ComplianceFooter(appConfig, Modifier.padding(bottom = 16.dp))
     }
 }

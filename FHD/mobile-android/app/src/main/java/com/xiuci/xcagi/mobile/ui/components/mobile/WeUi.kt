@@ -2,6 +2,7 @@ package com.xiuci.xcagi.mobile.ui.components.mobile
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,6 +19,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -39,17 +41,23 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+
+private val WeChatGreen = Color(0xFF07C160)
 
 // ─────────────────────────────────────────────────────────────────────────────
 // WeTopBar  ─  扁平无底部阴影顶栏，居中标题
@@ -162,6 +170,7 @@ fun WeCellGroup(
         shape = RoundedCornerShape(10.dp),
         color = MaterialTheme.colorScheme.surface,
         tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
     ) {
         Column(content = content)
     }
@@ -274,23 +283,28 @@ fun WeInputCell(
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.width(80.dp),
             )
-            OutlinedTextField(
+            BasicTextField(
                 value = value,
                 onValueChange = onValueChange,
                 modifier = Modifier.weight(1f),
-                placeholder = if (placeholder.isNotBlank()) {
-                    { Text(placeholder, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                } else null,
                 singleLine = singleLine,
                 visualTransformation = visualTransformation,
                 keyboardOptions = keyboardOptions,
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = Color.Transparent,
-                    unfocusedBorderColor = Color.Transparent,
-                    errorBorderColor = Color.Transparent,
-                    disabledBorderColor = Color.Transparent,
+                textStyle = MaterialTheme.typography.bodyMedium.copy(
+                    color = MaterialTheme.colorScheme.onSurface,
                 ),
-                textStyle = MaterialTheme.typography.bodyMedium,
+                decorationBox = { inner ->
+                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterStart) {
+                        if (value.isEmpty() && placeholder.isNotBlank()) {
+                            Text(
+                                placeholder,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        inner()
+                    }
+                },
             )
         }
         if (showDivider) {
@@ -304,11 +318,131 @@ fun WeInputCell(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// WeBlockButton  ─  全宽圆角主按钮（填充 primary）
+// WeInputActionCell  ─  分组内输入行 + 右侧绿色文字按钮
 // ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
-fun WeBlockButton(
+fun WeInputActionCell(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    actionLabel: String,
+    onAction: () -> Unit,
+    modifier: Modifier = Modifier,
+    placeholder: String = "",
+    showDivider: Boolean = true,
+    keyboardOptions: androidx.compose.foundation.text.KeyboardOptions = androidx.compose.foundation.text.KeyboardOptions.Default,
+) {
+    Column(modifier = modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 16.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                label,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.width(80.dp),
+            )
+            BasicTextField(
+                value = value,
+                onValueChange = onValueChange,
+                modifier = Modifier.weight(1f),
+                singleLine = true,
+                keyboardOptions = keyboardOptions,
+                textStyle = MaterialTheme.typography.bodyMedium.copy(
+                    color = MaterialTheme.colorScheme.onSurface,
+                ),
+                decorationBox = { inner ->
+                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterStart) {
+                        if (value.isEmpty() && placeholder.isNotBlank()) {
+                            Text(
+                                placeholder,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        inner()
+                    }
+                },
+            )
+            TextButton(
+                onClick = onAction,
+                contentPadding = PaddingValues(horizontal = 8.dp),
+            ) {
+                Text(
+                    actionLabel,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = WeChatGreen,
+                )
+            }
+        }
+        if (showDivider) {
+            HorizontalDivider(
+                modifier = Modifier.padding(start = 16.dp),
+                thickness = 0.5.dp,
+                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
+            )
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WeUnderlineTabs  ─  纯文字 Tab + 绿色下划线
+// ─────────────────────────────────────────────────────────────────────────────
+
+@Composable
+fun WeUnderlineTabs(
+    options: List<WeModeOption>,
+    selectedId: String,
+    onSelect: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+    ) {
+        options.forEach { opt ->
+            val selected = opt.id == selectedId
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = { onSelect(opt.id) },
+                    )
+                    .padding(vertical = 12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text(
+                    opt.label,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                    color = if (selected) WeChatGreen else MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                )
+                Spacer(Modifier.height(8.dp))
+                Box(
+                    Modifier
+                        .fillMaxWidth(0.5f)
+                        .height(2.dp)
+                        .background(if (selected) WeChatGreen else Color.Transparent),
+                )
+            }
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WeGreenButton  ─  微信绿全宽主按钮
+// ─────────────────────────────────────────────────────────────────────────────
+
+@Composable
+fun WeGreenButton(
     text: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -319,12 +453,32 @@ fun WeBlockButton(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
-            .height(50.dp),
+            .height(48.dp),
         enabled = enabled,
-        shape = RoundedCornerShape(10.dp),
+        shape = RoundedCornerShape(12.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = WeChatGreen,
+            contentColor = Color.White,
+            disabledContainerColor = WeChatGreen.copy(alpha = 0.4f),
+            disabledContentColor = Color.White.copy(alpha = 0.7f),
+        ),
     ) {
         Text(text, style = MaterialTheme.typography.bodyLarge)
     }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WeBlockButton  ─  全宽圆角主按钮（微信绿）
+// ─────────────────────────────────────────────────────────────────────────────
+
+@Composable
+fun WeBlockButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+) {
+    WeGreenButton(text, onClick, modifier, enabled)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -393,7 +547,7 @@ fun WeAvatar(
         modifier = modifier
             .size(size)
             .clip(RoundedCornerShape(size * 0.22f))
-            .background(MaterialTheme.colorScheme.primaryContainer),
+            .background(MaterialTheme.colorScheme.surface),
         contentAlignment = Alignment.Center,
     ) {
         content()
@@ -462,7 +616,9 @@ fun WeModeCapsule(
     Surface(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant,
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
     ) {
         Row(
             Modifier.padding(4.dp),
@@ -475,7 +631,9 @@ fun WeModeCapsule(
                         .weight(1f)
                         .clickable { onSelect(opt.id) },
                     shape = RoundedCornerShape(20.dp),
-                    color = if (selected) MaterialTheme.colorScheme.surface else Color.Transparent,
+                    color = if (selected) MaterialTheme.colorScheme.background else Color.Transparent,
+                    tonalElevation = 0.dp,
+                    shadowElevation = 0.dp,
                 ) {
                     Row(
                         Modifier.padding(vertical = 10.dp, horizontal = 8.dp),
@@ -487,14 +645,14 @@ fun WeModeCapsule(
                                 opt.icon,
                                 contentDescription = null,
                                 modifier = Modifier.size(16.dp),
-                                tint = if (selected) MobileTokens.accent() else MaterialTheme.colorScheme.onSurfaceVariant,
+                                tint = if (selected) WeChatGreen else MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                             Spacer(Modifier.width(4.dp))
                         }
                         Text(
                             opt.label,
                             style = MaterialTheme.typography.labelLarge,
-                            color = if (selected) MobileTokens.accent() else MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = if (selected) WeChatGreen else MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
