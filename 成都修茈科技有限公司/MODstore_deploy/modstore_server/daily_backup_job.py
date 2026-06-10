@@ -193,6 +193,25 @@ def run_daily_backup_job(*, from_probe: bool = False) -> Dict[str, Any]:
             )
         except Exception:  # noqa: BLE001
             logger.exception("daily backup: emit backup event failed")
+
+    try:
+        from modstore_server.time_rail_runtime import record_node_run
+
+        record_node_run(
+            "BK",
+            ok=bool(out.get("ok")),
+            source="daily_backup_job",
+            meta={"stamp": out.get("stamp"), "from_probe": bool(from_probe)},
+        )
+        if not out.get("ok") and not from_probe:
+            record_node_run(
+                "DRFAIL",
+                ok=False,
+                source="daily_backup_job",
+                meta={"degrade": out.get("degrade")},
+            )
+    except Exception:  # noqa: BLE001
+        logger.exception("daily backup: time_rail runtime record failed")
     return out
 
 

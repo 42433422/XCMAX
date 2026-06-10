@@ -127,6 +127,24 @@ async def api_event_rail_status():
     return {"ok": True, "data": get_event_rail_status()}
 
 
+@router.get("/time-rail/graph")
+async def api_time_rail_graph():
+    """时间轨机器可读 workflow 图（节点 + 边 + phase）。"""
+    from modstore_server.time_rail_workflow import graph_api_payload
+
+    return graph_api_payload()
+
+
+@router.get("/time-rail/status")
+async def api_time_rail_status(node_id: Optional[str] = None):
+    """时间轨节点 runtime：last_run / ok / guard_active。"""
+    from modstore_server.time_rail_workflow import collect_node_runtime_status
+
+    ids = [node_id.strip()] if node_id and node_id.strip() else None
+    data = collect_node_runtime_status(node_ids=ids)
+    return {"ok": True, "data": data}
+
+
 @router.post("/webhook-outbox/process")
 async def api_webhook_outbox_process(limit: int = 20):
     from modstore_server.cs_webhook_outbox import process_pending_outbox

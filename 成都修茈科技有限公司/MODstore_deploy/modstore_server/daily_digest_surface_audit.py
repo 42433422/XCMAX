@@ -746,14 +746,16 @@ async def _capture_one(
             save_path.write_bytes(png)
     except Exception as exc:  # noqa: BLE001
         err = str(exc)
-        png = b""
+        raise RuntimeError(f"surface audit page capture failed url={url}: {err}") from exc
+    if not save_path or not save_path.is_file():
+        raise RuntimeError(f"surface audit screenshot missing url={url}")
     return {
         "url": url,
         "status": status,
         "title": title,
         "console_errors": console_errors[:8],
-        "error": err,
-        "screenshot_saved": str(save_path) if save_path and save_path.is_file() else "",
+        "error": None,
+        "screenshot_saved": str(save_path),
         "viewport": viewport,
         "prepare": prepare or "",
     }
@@ -899,14 +901,18 @@ async def analyze_surface_lanes(report: Dict[str, Any], *, user_id: int = 0) -> 
         owners = lane_employee_ids(lane)
         rule_md = _rule_based_lane_analysis(lane, rows)
         if not bench_prov or not bench_mdl:
-            out[lane] = {
-                "markdown": rule_md,
-                "owners": owners,
-                "model": "",
-                "error": "" if (enabled in ("0", "false", "no", "off")) else "bench LLM 未配置",
-                "source": "rule",
-            }
-            continue
+            if enabled in ("0", "false", "no", "off"):
+                out[lane] = {
+                    "markdown": rule_md,
+                    "owners": owners,
+                    "model": "",
+                    "error": "",
+                    "source": "rule",
+                }
+                continue
+            raise RuntimeError(
+                f"surface audit lane analysis: bench LLM 未配置（lane={lane}）"
+            )
         system = _LANE_ANALYSIS_SYSTEM.format(lane=lane, owners="、".join(owners[:3]) or lane)
         user_content = _build_lane_analysis_user_content(lane, lane_labels.get(lane, lane), rows)
         try:
@@ -927,14 +933,9 @@ async def analyze_surface_lanes(report: Dict[str, Any], *, user_id: int = 0) -> 
                 )
         except Exception as exc:  # noqa: BLE001
             logger.warning("surface audit: lane analysis dispatch failed lane=%s err=%s", lane, exc)
-            out[lane] = {
-                "markdown": rule_md,
-                "owners": owners,
-                "model": f"{bench_prov}/{bench_mdl}",
-                "error": str(exc)[:300],
-                "source": "rule",
-            }
-            continue
+            raise RuntimeError(
+                f"surface audit lane analysis failed lane={lane}: {exc}"
+            ) from exc
         md = ""
         if isinstance(result, dict) and result.get("ok"):
             md = str(result.get("content") or "").strip()
@@ -958,13 +959,7 @@ async def analyze_surface_lanes(report: Dict[str, Any], *, user_id: int = 0) -> 
                 if isinstance(result, dict)
                 else "bench LLM 返回为空"
             )
-            out[lane] = {
-                "markdown": rule_md,
-                "owners": owners,
-                "model": f"{bench_prov}/{bench_mdl}",
-                "error": err[:300],
-                "source": "rule",
-            }
+            raise RuntimeError(f"surface audit lane analysis empty lane={lane}: {err}")
     return out
 
 
@@ -1034,9 +1029,12 @@ async def run_surface_audit_async() -> Dict[str, Any]:
 
         deps = ensure_surface_audit_deps()
         if not deps.get("ok"):
-            logger.warning("surface audit deps not fully ready: %s", deps.get("failures"))
-    except Exception:  # noqa: BLE001
-        logger.exception("surface audit deps bootstrap failed")
+            failures = deps.get("failures") or deps
+            raise RuntimeError(f"surface audit deps not ready: {failures}")
+    except RuntimeError:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise RuntimeError(f"surface audit deps bootstrap failed: {exc}") from exc
 
     try:
         timeout_ms = max(
@@ -1062,10 +1060,13 @@ async def run_surface_audit_async() -> Dict[str, Any]:
     market_auth = _login_surface_audit_sync()
     if market_auth:
         logger.info("surface audit: market login ok user=%s", market_auth.get("username"))
-    else:
-        logger.warning(
-            "surface audit: market login skipped/failed; /market/* may capture login redirect"
+    elif any(_path_needs_market_auth(t.path) for t in default_surface_targets()):
+        raise RuntimeError(
+            "surface audit: market login required for /market/* pages but login failed "
+            "(check MODSTORE_SURFACE_AUDIT_USER/PASSWORD)"
         )
+    else:
+        logger.info("surface audit: no market-auth pages in target set; login skipped")
 
     async with async_playwright() as pw:
         browser = await pw.chromium.launch(headless=True)
@@ -1116,18 +1117,27 @@ async def run_surface_audit_async() -> Dict[str, Any]:
     ).strip()
     analysis_uid = int(raw_uid) if raw_uid.isdigit() else 0
     lane_analysis: Dict[str, Any] = {}
-    try:
-        lane_analysis = await analyze_surface_lanes({"results": results}, user_id=analysis_uid)
-    except Exception:  # noqa: BLE001
-        logger.exception("surface audit: lane analysis failed")
+    lane_analysis = await analyze_surface_lanes({"results": results}, user_id=analysis_uid)
     for r in results:
         la = lane_analysis.get(str(r.get("lane")))
         if isinstance(la, dict):
             r["analysis"] = la.get("markdown") or ""
             r["analysis_owners"] = la.get("owners") or []
 
+    if not ok:
+        bad = [
+            r
+            for r in results
+            if r.get("error") or int(r.get("status") or 0) >= 400
+        ]
+        sample = bad[0] if bad else {}
+        raise RuntimeError(
+            f"surface audit failed: {len(bad)} page(s) with errors; "
+            f"first={sample.get('name') or sample.get('url')}: {sample.get('error') or sample.get('status')}"
+        )
+
     return {
-        "ok": ok,
+        "ok": True,
         "skipped": False,
         "results": results,
         "day": day,
@@ -1295,25 +1305,20 @@ def _lane_count_overview_html(results: List[Dict[str, Any]]) -> str:
 
 
 def build_surface_audit_html_sync() -> Tuple[str, Dict[str, Any]]:
-    """同步入口：供 ``run_daily_digest_email`` 调用。返回 (html, report_dict)。"""
+    """同步入口：供 ``run_daily_digest_email`` 调用。返回 (html, report_dict)。
+
+    任一页截图/分析失败即抛错，不生成「存在异常页」兜底 HTML。
+    """
     enabled = (os.environ.get("MODSTORE_DAILY_SURFACE_AUDIT_ENABLED", "1") or "").strip().lower()
     if enabled in ("0", "false", "no", "off"):
         return "", {"ok": True, "skipped": True, "results": []}
 
     import asyncio
 
-    try:
-        report = asyncio.run(run_surface_audit_async())
-    except Exception as exc:  # noqa: BLE001
-        logger.exception("daily surface audit failed")
-        report = {"ok": False, "error": str(exc), "results": []}
+    report = asyncio.run(run_surface_audit_async())
 
     if report.get("skipped"):
         return "", report
-
-    if report.get("error") and not report.get("results"):
-        body = f'<p style="margin:0;font-size:13px;color:#b91c1c">三端页面巡检失败：{html.escape(str(report.get("error")))}</p>'
-        return body, report
 
     results = report.get("results") if isinstance(report.get("results"), list) else []
     lanes_html = "".join(
@@ -1323,9 +1328,9 @@ def build_surface_audit_html_sync() -> Tuple[str, Dict[str, Any]]:
             _render_lane_html("P-App", "P-App · 移动端 / App WebView", results, report),
         ]
     )
-    ok_all = bool(report.get("ok"))
-    badge = "全部通过" if ok_all else "存在异常页"
-    badge_color = "#047857" if ok_all else "#b45309"
+    ok_all = True
+    badge = "全部通过"
+    badge_color = "#047857"
     delta_html = ""
     if isinstance(report.get("baseline_delta"), dict):
         delta_md = baseline_delta_excerpt_markdown(report["baseline_delta"])

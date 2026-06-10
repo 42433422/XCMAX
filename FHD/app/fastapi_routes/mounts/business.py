@@ -131,3 +131,19 @@ def register_business_routes(app: FastAPI, registry: RouteRegistry) -> None:
         "mobile_api",
         lambda: __import__("app.fastapi_routes.mobile_api", fromlist=["router"]).router,
     )
+    _mount(
+        registry,
+        "production_line_event",
+        lambda: __import__(
+            "app.fastapi_routes.production_line_event_api",
+            fromlist=["admin_router"],
+        ).admin_router,
+    )
+    _mount(
+        registry,
+        "production_line_event_xcmax",
+        lambda: __import__(
+            "app.fastapi_routes.production_line_event_api",
+            fromlist=["xcmax_router"],
+        ).xcmax_router,
+    )

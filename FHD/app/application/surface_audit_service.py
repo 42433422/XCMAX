@@ -154,18 +154,7 @@ def _most_recent_prior_cache(lane: str) -> Path | None:
 
 
 def _read_cache(lane: str) -> dict[str, Any] | None:
-    data = _read_cache_path(_cache_file(lane))
-    if data is not None:
-        return data
-    fallback = _most_recent_prior_cache(lane)
-    if fallback is not None:
-        data = _read_cache_path(fallback)
-        if data is not None:
-            data = dict(data)
-            data["stale_cache"] = True
-            data["stale_cache_date"] = fallback.stem
-            return data
-    return None
+    return _read_cache_path(_cache_file(lane))
 
 
 def _write_cache(lane: str, payload: dict[str, Any]) -> None:

@@ -752,6 +752,23 @@ const EmpWfRadialGraph = (() => {
       if (window.EmpWfSurfaceAudit && typeof window.EmpWfSurfaceAudit.bindRadialDoubleOpen === 'function') {
         window.EmpWfSurfaceAudit.bindRadialDoubleOpen(layer);
       }
+      fetchRuntimeStatus()
+        .then((wrap) => {
+          if (!wrap || wrap.error) {
+            root.classList.add('is-runtime-status-error');
+            const msg = (wrap && wrap.error) || 'time-rail status 不可用（MODstore 未启动或 API 503）';
+            root.setAttribute('data-runtime-status-error', msg);
+            return;
+          }
+          if (wrap.nodes) applyRuntimeStatusToLayer(layer, wrap.nodes);
+        })
+        .catch((err) => {
+          root.classList.add('is-runtime-status-error');
+          root.setAttribute(
+            'data-runtime-status-error',
+            err && err.message ? err.message : 'time-rail status fetch failed',
+          );
+        });
       scrollDiagramToTop();
     } catch (err) {
       root.classList.add('is-error');
@@ -759,6 +776,71 @@ const EmpWfRadialGraph = (() => {
       root.textContent = '辐射视图渲染失败：' + (err && err.message ? err.message : 'unknown');
       throw err;
     }
+  }
+
+  async function fetchRuntimeStatus() {
+    const paths = [
+      '/api/xcmax/production-line/time-rail/status',
+      '/api/admin/production-line/time-rail/status',
+    ];
+    const bases = [''];
+    if (location.protocol === 'file:') bases.push('http://127.0.0.1:5000', 'http://127.0.0.1:8788');
+    let lastError = '';
+    for (const base of bases) {
+      for (const path of paths) {
+        try {
+          const url = base ? base + path : path;
+          const r = await fetch(url, { signal: AbortSignal.timeout(2500) });
+          const ct = (r.headers.get('content-type') || '').toLowerCase();
+          if (ct.includes('text/html')) {
+            lastError = `non-JSON response ${r.status} ${path}`;
+            continue;
+          }
+          const j = await r.json();
+          if (!r.ok || j.success === false) {
+            lastError = String(j.error || j.message || `HTTP ${r.status}`);
+            continue;
+          }
+          const data = (j && j.data) || null;
+          if (data && data.nodes) return data;
+          lastError = 'time-rail status missing nodes';
+        } catch (err) {
+          lastError = err && err.message ? err.message : String(err);
+        }
+      }
+    }
+    return { error: lastError || 'time-rail status unavailable' };
+  }
+
+  function applyRuntimeStatusToLayer(layer, nodesById) {
+    if (!layer || !nodesById) return;
+    layer.querySelectorAll('.emp-wf-radial-node[data-emp-wf-node]').forEach((el) => {
+      const nid = (el.dataset.empWfNode || '').trim();
+      const row = nodesById[nid];
+      el.classList.remove(
+        'emp-wf-radial-node--runtime-ok',
+        'emp-wf-radial-node--runtime-fail',
+        'emp-wf-radial-node--runtime-guard',
+        'emp-wf-radial-node--runtime-unknown',
+      );
+      if (!row) {
+        el.classList.add('emp-wf-radial-node--runtime-unknown');
+        return;
+      }
+      if (row.guard_active) el.classList.add('emp-wf-radial-node--runtime-guard');
+      else if (row.ok === true) el.classList.add('emp-wf-radial-node--runtime-ok');
+      else if (row.ok === false) el.classList.add('emp-wf-radial-node--runtime-fail');
+      else el.classList.add('emp-wf-radial-node--runtime-unknown');
+      const hint = [
+        row.last_run ? 'last_run: ' + row.last_run : '',
+        row.ok === true ? 'ok' : row.ok === false ? 'fail' : 'unknown',
+        row.guard_active ? 'guard_active' : '',
+        row.source ? 'src: ' + row.source : '',
+      ].filter(Boolean).join(' · ');
+      if (hint) el.title = (el.title ? el.title + '\n' : '') + hint;
+      el.dataset.empWfRuntimeOk = row.ok === true ? '1' : row.ok === false ? '0' : '';
+      el.dataset.empWfGuardActive = row.guard_active ? '1' : '0';
+    });
   }
 
   /**
@@ -945,6 +1027,8 @@ const EmpWfRadialGraph = (() => {
     /* 对接契约：版本号 + 标签解析器（多模型协作用） */
     SOT_VERSION,
     setLabelResolver,
+    fetchRuntimeStatus,
+    applyRuntimeStatusToLayer,
   };
 })();
 

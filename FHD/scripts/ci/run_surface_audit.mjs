@@ -246,11 +246,7 @@ function analyzePage(pageResult) {
   const status = pageResult.status || 0
   if (pageResult.error) {
     const head = String(pageResult.error).split('\n')[0].slice(0, 160)
-    lines.push(
-      pageResult.screenshot_saved
-        ? `导航异常（已兜底截当前屏）: ${head}`
-        : `导航/截图失败: ${head}`,
-    )
+    lines.push(`导航/截图失败: ${head}`)
   }
   if (status >= 400) lines.push(`HTTP ${status}：页面未正常打开`)
   const ce = (pageResult.console_errors || []).filter((m) => !pageResult.error || m !== String(pageResult.error))
@@ -559,20 +555,13 @@ async function capturePsLaneShared(browser, pages, laneCfg, auditAuth, laneKey) 
           analysis: [],
         })
       } catch (err) {
-        let saved = ''
-        try {
-          const shot = await page.screenshot({ type: 'png', fullPage: false })
-          saved = writeScreenshotPng(laneKey, i, pageDef, shot)
-        } catch {
-          /* 页面已不可用 */
-        }
         results.push({
           id: pageDef.id,
           name: pageDef.name,
           url: url || '',
           status: status || 0,
           console_errors: [...consoleErrors.slice(errStart), String(err)].slice(0, 20),
-          screenshot_saved: saved,
+          screenshot_saved: '',
           error: String(err),
           analysis: [],
         })
@@ -846,13 +835,6 @@ async function capturePage(browser, pageDef, laneCfg, auditAuth, laneKey, pageIn
       analysis: [],
     }
   } catch (err) {
-    let saved = ''
-    try {
-      const shot = await page.screenshot({ type: 'png', fullPage: false })
-      saved = writeScreenshotPng(laneKey, pageIndex, pageDef, shot)
-    } catch {
-      /* 页面已不可用 */
-    }
     return {
       id: pageDef.id,
       name: pageDef.name,
@@ -861,7 +843,7 @@ async function capturePage(browser, pageDef, laneCfg, auditAuth, laneKey, pageIn
       status: status || 0,
       native: !!pageDef.native,
       console_errors: [...consoleErrors, String(err)].slice(0, 20),
-      screenshot_saved: saved,
+      screenshot_saved: '',
       screenshot_b64: '',
       error: String(err),
       analysis: [`截图失败: ${err}`],
@@ -1044,7 +1026,9 @@ async function main() {
         const conc = auditConcurrency()
         const rows = await mapWithConcurrency(pages, conc, async (pageDef, i) => {
           const row = await capturePage(browser, pageDef, laneCfg, auditAuth, laneArg, i)
-          if (row?.digest_unlock_failed) return null
+          if (row?.digest_unlock_failed) {
+            throw new Error(`管理端身份码解锁失败: ${row.name || pageDef.id}`)
+          }
           row.analysis = analyzePage(row)
           return row
         })
@@ -1071,6 +1055,25 @@ async function main() {
     } else if (androidPayload && !androidPayload.success) {
       androidMeta = { message: androidPayload.message, hint: androidPayload.hint }
     }
+  }
+
+  const failed = merged.filter(
+    (p) => p.error || (p.status || 0) >= 400 || p.digest_unlock_failed,
+  )
+  if (failed.length) {
+    const summary = failed
+      .slice(0, 8)
+      .map((p) => `${p.name || p.id}: ${p.error || `HTTP ${p.status}`}`)
+      .join('; ')
+    console.error(
+      JSON.stringify({
+        success: false,
+        message: `surface audit ${failed.length} page(s) failed: ${summary}`,
+        lane: laneArg,
+        failed_count: failed.length,
+      }),
+    )
+    process.exit(1)
   }
 
   const payload = {

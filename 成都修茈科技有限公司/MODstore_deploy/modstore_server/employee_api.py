@@ -31,6 +31,11 @@ from modstore_server.services.employee import get_default_employee_client
 router = APIRouter(prefix="/api/employees", tags=["employees"])
 
 
+def _reraise_employee_pack_not_found(exc: BaseException) -> None:
+    if isinstance(exc, ValueError) and "员工包不存在" in str(exc):
+        raise HTTPException(404, str(exc)) from exc
+
+
 def _runtime_dir() -> Path:
     return Path(os.environ.get("MODSTORE_RUNTIME_DIR") or "/tmp/modstore_runtime").expanduser()
 
@@ -483,6 +488,7 @@ async def execute_employee_task_endpoint(
             user_id=user.id,
         )
     except Exception as e:
+        _reraise_employee_pack_not_found(e)
         failure = str(e)
         result = None
     try:
@@ -784,6 +790,7 @@ async def execute_employee_task_file_endpoint(
             if downloads:
                 result["output_downloads"] = downloads
     except Exception as e:
+        _reraise_employee_pack_not_found(e)
         failure = str(e)
         result = None
     finally:

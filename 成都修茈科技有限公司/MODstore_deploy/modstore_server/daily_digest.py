@@ -1627,22 +1627,13 @@ def run_daily_digest_email() -> None:
         tls_cert_section_html = _tls_cert_digest_html(cert_results)
 
         # 先跑三端巡检（截图 + 对应员工 AI 分析），员工大会再围绕巡检结果讨论。
-        surface_audit_html = ""
-        surface_audit_report: Dict[str, Any] = {}
-        try:
-            from modstore_server.daily_digest_surface_audit import (
-                build_surface_audit_html_sync,
-                surface_audit_excerpt_markdown,
-            )
+        # 任一步失败即抛错，中断当日 digest（不发送带占位 HTML 的邮件）。
+        from modstore_server.daily_digest_surface_audit import (
+            build_surface_audit_html_sync,
+            surface_audit_excerpt_markdown,
+        )
 
-            surface_audit_html, surface_audit_report = build_surface_audit_html_sync()
-        except Exception:
-            logger.exception("daily digest: surface audit failed")
-            surface_audit_html = (
-                '<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:14px 16px">'
-                '<p style="margin:0;font-size:13px;color:#b91c1c">三端页面截图巡检失败（见服务器日志）。</p>'
-                "</div>"
-            )
+        surface_audit_html, surface_audit_report = build_surface_audit_html_sync()
 
         # 三端截图 → PowerPoint（每日邮件附件）。
         surface_ppt_path = ""
@@ -1746,6 +1737,22 @@ def run_daily_digest_email() -> None:
             )
         _notify_daily_digest_in_app(subject, any_delivered)
 
+        if record_id:
+            try:
+                from modstore_server.time_rail_runtime import record_node_run
+
+                digest_ok = bool(any_delivered)
+                meta = {"record_id": int(record_id), "day": day}
+                for nid in ("ASM", "P", "M", "PPTX", "SW", "SS", "SA", "V"):
+                    record_node_run(
+                        nid,
+                        ok=digest_ok,
+                        source="daily_digest",
+                        meta=meta,
+                    )
+            except Exception:
+                logger.exception("daily digest: time_rail runtime record failed")
+
         # digest_identity 与邮件/存档 HTML 中展示的校验码一致；解锁校验依赖 OpsApprovalToken 行。
         # 若仅因 SMTP 失败导致 any_delivered=False，仍应入库身份码，否则后台「摘要存档」里能看到的码在市场端永远无效。
         identity_tokens = [
@@ -1768,6 +1775,12 @@ def run_daily_digest_email() -> None:
             logger.info("daily digest: persisted %d deploy approval token(s)", len(deploy_tokens))
     except Exception:
         logger.exception("daily digest failed")
+        try:
+            from modstore_server.time_rail_runtime import record_node_run
+
+            record_node_run("ASM", ok=False, source="daily_digest", meta={"error": "job_failed"})
+        except Exception:
+            logger.exception("daily digest: time_rail failure record failed")
 
 
 def cron_trigger_for_digest():
