@@ -638,9 +638,7 @@ class AppViewModel @Inject constructor(
         repo.mods().onSuccess { _items.value = it }.onFailure { snack(it.message ?: "", true) }
     }
 
-    fun loadMarket() = viewModelScope.launch {
-        repo.marketCatalog().onSuccess { _items.value = it }.onFailure { snack(it.message ?: "", true) }
-    }
+    fun loadMarket() = loadEnterpriseList { repo.marketCatalog() }
 
     fun loadInventory() = viewModelScope.launch {
         _listLoading.value = true
@@ -702,7 +700,8 @@ class AppViewModel @Inject constructor(
                 val id = Regex("approval/(\\d+)").find(route)?.groupValues?.getOrNull(1)
                 if (id != null) nav("approval/$id") else nav(Routes.APPROVAL)
             }
-            else -> nav(Routes.HOME_HUB)
+            route.contains("home") || route.contains("home_hub") -> nav(Routes.CHAT)
+            else -> nav(Routes.CHAT)
         }
     }
 }

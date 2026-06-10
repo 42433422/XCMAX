@@ -6,6 +6,15 @@
 
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
+### 移动端体验 P1（Android + Web · 2026-06-11 · v10 线内迭代）
+- **feat(mobile-android)**：登录页微信/抖音第三方入口占位（Snackbar「即将开放」；后端 OAuth 未就绪，不假登录）
+- **feat(frontend)**：`LoginView` 6 格 OTP 分格（`OtpCells`）；微信/抖音占位 + `showAppToast`
+- **feat(mobile-android)**：`MarketListScreen` 简化 Mod 市场卡片（图标 + 名称 + 简介 +「使用」）
+- **feat(frontend)**：`ModStore` 窄屏紧凑卡片；`DiscoverView` + `MobileBottomNav`（对话/发现/市场/我的）
+- **feat(motion)**：Android `WeFadeTransition` / `WeMotion`；Web 路由 250ms fade + 按钮 active scale 0.98；`ChatView` 加载 spinner
+- **fix(mobile-android)**：`HOME_HUB` / 未知深链重定向至 `CHAT`
+- **note**：第三方登录依赖后端 `/api/auth/oauth/*`（微信/抖音）尚未实现
+
 ### Android 移动端体验 P0（对标豆包/Kimi · 2026-06-11 · v10 线内迭代）
 - **feat(mobile-android)**：登录手机号 Tab 默认 + 6 格 OTP 分格输入（`WeOtpCells`）；登录/发码加载态
 - **feat(mobile-android)**：对话页 Kimi 风空态（欢迎语 + 3 推荐问题单列 chips）；工具栏收纳为「模式 + 联网 + 更多」BottomSheet

@@ -139,101 +139,123 @@
         v-for="mod in filteredMods"
         :key="mod.id"
         class="mod-card"
-        :class="{ installed: mod.is_installed }"
+        :class="{ installed: mod.is_installed, 'mod-card--compact': isMobileViewport }"
       >
-        <div class="mod-card-header">
-          <div class="mod-icon">
-            <i :class="mod.icon || 'fa fa-puzzle-piece'"></i>
+        <template v-if="isMobileViewport">
+          <div class="mod-card-compact">
+            <div class="mod-icon">
+              <i :class="mod.icon || 'fa fa-puzzle-piece'"></i>
+            </div>
+            <div class="mod-compact-body">
+              <h3 class="mod-name">{{ mod.name }}</h3>
+              <p class="mod-description">{{ mod.description || '暂无描述' }}</p>
+            </div>
+            <button
+              type="button"
+              class="btn btn-primary mod-use-btn"
+              :disabled="mod.installationInProgress"
+              @click="onMobileUse(mod)"
+            >
+              <i v-if="mod.installationInProgress" class="fa fa-spinner fa-spin" aria-hidden="true"></i>
+              {{ mod.installationInProgress ? '处理中' : '使用' }}
+            </button>
           </div>
-          <div class="mod-basic">
-            <h3 class="mod-name">{{ mod.name }}</h3>
-            <p class="mod-author">by {{ mod.author || 'Unknown' }}</p>
-            <div class="mod-badges">
-              <span v-if="collectionLabel(mod)" class="source-badge collection-badge">
-                {{ collectionLabel(mod) }}
-              </span>
-              <span :class="['source-badge', mod.source === 'remote' ? 'remote' : 'local']">
-                {{ mod.source === 'remote' ? '远端 Catalog' : '本机' }}
-              </span>
-              <span v-if="mod.is_installed" class="source-badge installed-badge">已安装</span>
+        </template>
+        <template v-else>
+          <div class="mod-card-header">
+            <div class="mod-icon">
+              <i :class="mod.icon || 'fa fa-puzzle-piece'"></i>
+            </div>
+            <div class="mod-basic">
+              <h3 class="mod-name">{{ mod.name }}</h3>
+              <p class="mod-author">by {{ mod.author || 'Unknown' }}</p>
+              <div class="mod-badges">
+                <span v-if="collectionLabel(mod)" class="source-badge collection-badge">
+                  {{ collectionLabel(mod) }}
+                </span>
+                <span :class="['source-badge', mod.source === 'remote' ? 'remote' : 'local']">
+                  {{ mod.source === 'remote' ? '远端 Catalog' : '本机' }}
+                </span>
+                <span v-if="mod.is_installed" class="source-badge installed-badge">已安装</span>
+              </div>
+            </div>
+            <div class="mod-version">
+              v{{ mod.version }}
             </div>
           </div>
-          <div class="mod-version">
-            v{{ mod.version }}
+
+          <p class="mod-description">{{ mod.description || '暂无描述' }}</p>
+
+          <div class="mod-stats">
+            <span class="stat" v-if="mod.download_count || mod.total_downloads">
+              <i class="fa fa-download"></i>
+              {{ mod.download_count || mod.total_downloads || 0 }}
+            </span>
+            <span class="stat" v-if="mod.avg_rating || mod.rating_count">
+              <i class="fa fa-star"></i>
+              {{ (mod.avg_rating || 0).toFixed(1) }}
+              ({{ mod.rating_count || 0 }})
+            </span>
           </div>
-        </div>
 
-        <p class="mod-description">{{ mod.description || '暂无描述' }}</p>
+          <div class="mod-actions">
+            <button
+              v-if="!mod.is_installed"
+              class="btn btn-primary"
+              @click="installMod(mod)"
+              :disabled="mod.installationInProgress"
+            >
+              <i class="fa fa-download"></i>
+              {{ mod.installationInProgress ? '安装中...' : '安装' }}
+            </button>
 
-        <div class="mod-stats">
-          <span class="stat" v-if="mod.download_count || mod.total_downloads">
-            <i class="fa fa-download"></i>
-            {{ mod.download_count || mod.total_downloads || 0 }}
-          </span>
-          <span class="stat" v-if="mod.avg_rating || mod.rating_count">
-            <i class="fa fa-star"></i>
-            {{ (mod.avg_rating || 0).toFixed(1) }}
-            ({{ mod.rating_count || 0 }})
-          </span>
-        </div>
+            <button
+              v-else
+              class="btn btn-secondary"
+              @click="uninstallMod(mod)"
+              :disabled="mod.uninstallationInProgress"
+            >
+              <i class="fa fa-trash"></i>
+              {{ mod.uninstallationInProgress ? '卸载中...' : '卸载' }}
+            </button>
 
-        <div class="mod-actions">
-          <button
-            v-if="!mod.is_installed"
-            class="btn btn-primary"
-            @click="installMod(mod)"
-            :disabled="mod.installationInProgress"
-          >
-            <i class="fa fa-download"></i>
-            {{ mod.installationInProgress ? '安装中...' : '安装' }}
-          </button>
-          
-          <button
-            v-else
-            class="btn btn-secondary"
-            @click="uninstallMod(mod)"
-            :disabled="mod.uninstallationInProgress"
-          >
-            <i class="fa fa-trash"></i>
-            {{ mod.uninstallationInProgress ? '卸载中...' : '卸载' }}
-          </button>
+            <button
+              class="btn btn-info"
+              @click="viewDetails(mod)"
+            >
+              <i class="fa fa-info-circle"></i>
+              详情
+            </button>
 
-          <button
-            class="btn btn-info"
-            @click="viewDetails(mod)"
-          >
-            <i class="fa fa-info-circle"></i>
-            详情
-          </button>
+            <a
+              v-if="mod.source === 'remote'"
+              class="btn btn-link"
+              :href="marketModUrl(mod)"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <i class="fa fa-external-link"></i>
+              网页查看
+            </a>
 
-          <a
-            v-if="mod.source === 'remote'"
-            class="btn btn-link"
-            :href="marketModUrl(mod)"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <i class="fa fa-external-link"></i>
-            网页查看
-          </a>
+            <button
+              v-if="hasUpdate(mod)"
+              class="btn btn-warning"
+              @click="updateMod(mod)"
+              :disabled="mod.updateInProgress"
+            >
+              <i class="fa fa-refresh"></i>
+              {{ mod.updateInProgress ? '更新中...' : '更新' }}
+            </button>
+          </div>
 
-          <button
-            v-if="hasUpdate(mod)"
-            class="btn btn-warning"
-            @click="updateMod(mod)"
-            :disabled="mod.updateInProgress"
-          >
-            <i class="fa fa-refresh"></i>
-            {{ mod.updateInProgress ? '更新中...' : '更新' }}
-          </button>
-        </div>
-
-        <div class="mod-tags" v-if="mod.dependencies && Object.keys(mod.dependencies).length > 0">
-          <span class="tag">
-            <i class="fa fa-plug"></i>
-            {{ Object.keys(mod.dependencies).length }} 依赖
-          </span>
-        </div>
+          <div class="mod-tags" v-if="mod.dependencies && Object.keys(mod.dependencies).length > 0">
+            <span class="tag">
+              <i class="fa fa-plug"></i>
+              {{ Object.keys(mod.dependencies).length }} 依赖
+            </span>
+          </div>
+        </template>
       </div>
     </div>
 
@@ -262,7 +284,7 @@
 </template>
 
 <script>
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, onBeforeUnmount, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { apiFetch } from '@/utils/apiBase';
 import { installHostFoundation } from '@/api/modStore';
@@ -317,6 +339,12 @@ export default {
     const deliverableOk = ref(true);
     const missingModIds = ref([]);
     const bootstrapBusy = ref(false);
+    const isMobileViewport = ref(false);
+    let mobileMedia = null;
+
+    const onMobileViewportChange = (event) => {
+      isMobileViewport.value = event.matches;
+    };
 
     const onboardingBanner = computed(
       () => route.query.onboarding === '1' || deliverableOk.value === false,
@@ -593,6 +621,14 @@ export default {
       selectedMod.value = mod;
     };
 
+    const onMobileUse = async (mod) => {
+      if (mod.is_installed) {
+        viewDetails(mod);
+        return;
+      }
+      await installMod(mod);
+    };
+
     const marketModUrl = (mod) => {
       const id = encodeURIComponent(mod.pkg_id || mod.id || '');
       return `${marketBaseUrl}/mods/${id}`;
@@ -602,6 +638,22 @@ export default {
       currentTab.value = 'host_foundation';
       void loadMods();
       void refreshDeliverable();
+      mobileMedia = window.matchMedia('(max-width: 768px)');
+      onMobileViewportChange(mobileMedia);
+      if (typeof mobileMedia.addEventListener === 'function') {
+        mobileMedia.addEventListener('change', onMobileViewportChange);
+      } else if (typeof mobileMedia.addListener === 'function') {
+        mobileMedia.addListener(onMobileViewportChange);
+      }
+    });
+
+    onBeforeUnmount(() => {
+      if (!mobileMedia) return;
+      if (typeof mobileMedia.removeEventListener === 'function') {
+        mobileMedia.removeEventListener('change', onMobileViewportChange);
+      } else if (typeof mobileMedia.removeListener === 'function') {
+        mobileMedia.removeListener(onMobileViewportChange);
+      }
     });
 
     return {
@@ -630,6 +682,8 @@ export default {
       updateMod,
       hasUpdate,
       viewDetails,
+      onMobileUse,
+      isMobileViewport,
       marketModUrl,
       collectionLabel,
       HOST_FOUNDATION_EMPLOYEE_PACK_ID,
@@ -859,6 +913,51 @@ export default {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
   gap: 20px;
+}
+
+.mod-card--compact {
+  padding: 14px;
+}
+
+.mod-card-compact {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 12px;
+  align-items: center;
+}
+
+.mod-compact-body {
+  min-width: 0;
+}
+
+.mod-card--compact .mod-name {
+  margin: 0;
+  font-size: 16px;
+}
+
+.mod-card--compact .mod-description {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--xc-color-muted, #6b7280);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mod-use-btn {
+  min-width: 72px;
+  white-space: nowrap;
+}
+
+@media (max-width: 768px) {
+  .mod-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .mod-store {
+    padding-bottom: calc(72px + env(safe-area-inset-bottom, 0));
+  }
 }
 
 .mod-card {
