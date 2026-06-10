@@ -2,16 +2,21 @@ package com.xiuci.xcagi.mobile.ui.components.mobile
 
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.xiuci.xcagi.mobile.R
 import com.xiuci.xcagi.mobile.core.model.AppConfigResponse
 
@@ -19,6 +24,7 @@ import com.xiuci.xcagi.mobile.core.model.AppConfigResponse
 fun ComplianceFooter(
     config: AppConfigResponse?,
     modifier: Modifier = Modifier,
+    compact: Boolean = false,
 ) {
     val ctx = LocalContext.current
     val beianUrl = config?.app_filing_beian_url?.takeIf { it.isNotBlank() }
@@ -30,6 +36,42 @@ fun ComplianceFooter(
         ?: stringResource(R.string.website_icp)
     val openBeian = {
         ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(beianUrl)))
+    }
+
+    if (compact) {
+        Column(
+            modifier = modifier
+                .fillMaxWidth()
+                .padding(horizontal = MobileTokens.authHorizontalMargin),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            if (filingApproved) {
+                Text(
+                    "APP 备案 $appFiling",
+                    fontSize = 11.sp,
+                    color = MobileTokens.authPlaceholder,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.clickable(onClick = openBeian),
+                )
+            }
+            Text(
+                "网站 ICP $websiteIcp",
+                fontSize = 11.sp,
+                color = MobileTokens.authPlaceholder,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.clickable(onClick = openBeian),
+            )
+            if (config?.ok == true && config.app_filing_approved == false) {
+                Text(
+                    stringResource(R.string.app_filing_pending),
+                    fontSize = 11.sp,
+                    color = MobileTokens.authPlaceholder,
+                    textAlign = TextAlign.Center,
+                )
+            }
+        }
+        return
     }
 
     WeSpacer(12.dp)

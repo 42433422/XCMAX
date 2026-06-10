@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -19,7 +18,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -32,25 +30,28 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.xiuci.xcagi.mobile.R
 import com.xiuci.xcagi.mobile.core.ProductSkuConfig
 import com.xiuci.xcagi.mobile.ui.AppViewModel
+import com.xiuci.xcagi.mobile.ui.components.mobile.AuthScreenLayout
 import com.xiuci.xcagi.mobile.ui.components.mobile.ComplianceFooter
+import com.xiuci.xcagi.mobile.ui.components.mobile.MobileTokens
+import com.xiuci.xcagi.mobile.ui.components.mobile.WeAuthCard
+import com.xiuci.xcagi.mobile.ui.components.mobile.WeAuthGreenButton
+import com.xiuci.xcagi.mobile.ui.components.mobile.WeAuthInputActionField
+import com.xiuci.xcagi.mobile.ui.components.mobile.WeAuthInputField
+import com.xiuci.xcagi.mobile.ui.components.mobile.WeAuthTabs
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeAvatar
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeBlockOutlinedButton
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeCell
-import com.xiuci.xcagi.mobile.ui.components.mobile.WeCellGroup
-import com.xiuci.xcagi.mobile.ui.components.mobile.WeGreenButton
-import com.xiuci.xcagi.mobile.ui.components.mobile.WeInputActionCell
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeInputCell
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeModeOption
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeSectionCaption
-import com.xiuci.xcagi.mobile.ui.components.mobile.WeUnderlineTabs
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeSpacer
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeTopBar
 
@@ -79,7 +80,7 @@ fun ConnectScreen(
     Column(
         Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .background(MobileTokens.authPageBg)
             .imePadding(),
     ) {
         if (fromProfile || loggedIn) {
@@ -97,16 +98,16 @@ fun ConnectScreen(
                 Column(
                     Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 24.dp),
+                        .padding(horizontal = MobileTokens.authHorizontalMargin),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     WeAvatar(
-                        size = 72.dp,
+                        size = 80.dp,
                         content = {
                             Icon(
                                 painter = painterResource(R.mipmap.ic_launcher_foreground),
                                 contentDescription = null,
-                                modifier = Modifier.size(52.dp),
+                                modifier = Modifier.size(56.dp),
                                 tint = Color.Unspecified,
                             )
                         },
@@ -114,19 +115,20 @@ fun ConnectScreen(
                     WeSpacer(16.dp)
                     Text(
                         stringResource(R.string.app_name),
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 22.sp,
+                        color = MobileTokens.authTextPrimary,
+                        textAlign = TextAlign.Center,
                     )
                     Text(
                         "独立客户端，可与电脑协同，也可直接使用云端。",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 13.sp,
+                        color = MobileTokens.authTextMuted,
                         textAlign = TextAlign.Center,
                         modifier = Modifier.padding(top = 8.dp),
                     )
                 }
-                WeSpacer(12.dp)
-                WeGreenButton(text = "进入云端使用", onClick = onSkipCloud)
+                WeSpacer(8.dp)
+                WeAuthGreenButton(text = "进入云端使用", onClick = onSkipCloud)
                 WeBlockOutlinedButton(
                     text = if (pcExpanded) "收起电脑连接" else "连接电脑（可选）",
                     onClick = { pcExpanded = !pcExpanded },
@@ -135,7 +137,7 @@ fun ConnectScreen(
 
             if (fromProfile || loggedIn || pcExpanded) {
                 WeSectionCaption("连接电脑")
-                WeCellGroup {
+                WeAuthCard {
                     WeInputCell(
                         label = "电脑 IP",
                         value = host,
@@ -150,7 +152,7 @@ fun ConnectScreen(
                         showDivider = false,
                     )
                 }
-                WeCellGroup {
+                WeAuthCard {
                     WeCell(
                         title = "云端模式",
                         subtitle = "开启后优先使用云端能力",
@@ -160,8 +162,8 @@ fun ConnectScreen(
                         },
                     )
                 }
-                WeSpacer(12.dp)
-                WeGreenButton(
+                WeSpacer(8.dp)
+                WeAuthGreenButton(
                     text = "检测并保存",
                     onClick = {
                         vm.setHost(host)
@@ -179,7 +181,7 @@ fun ConnectScreen(
                 WeBlockOutlinedButton(text = "扫描局域网", onClick = { vm.scanSubnet(prefix) })
                 if (scans.isNotEmpty()) {
                     WeSectionCaption("扫描结果")
-                    WeCellGroup {
+                    WeAuthCard {
                         scans.forEachIndexed { index, ip ->
                             WeCell(
                                 title = ip,
@@ -193,7 +195,7 @@ fun ConnectScreen(
                 WeBlockOutlinedButton(text = "扫码配对", onClick = onScan)
                 WeBlockOutlinedButton(text = "入网申请", onClick = { vm.lanRequest("Android") })
                 if (!fromProfile && !loggedIn && cloud) {
-                    WeGreenButton(text = "使用云端并登录", onClick = onNext)
+                    WeAuthGreenButton(text = "使用云端并登录", onClick = onNext)
                 }
             }
         }
@@ -217,53 +219,22 @@ fun AuthScreen(vm: AppViewModel, onRegister: () -> Unit, onDone: () -> Unit) {
         "与官网 MODstore 同一账号，登录后工作台与云端能力直接可用。"
     }
 
-    val weChatGreen = Color(0xFF07C160)
-
-    Column(
-        Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .imePadding(),
-    ) {
-        Column(
-            Modifier
-                .weight(1f)
-                .verticalScroll(rememberScrollState())
-                .padding(top = 64.dp, bottom = 24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            WeAvatar(
-                size = 88.dp,
-                content = {
-                    Icon(
-                        painter = painterResource(R.mipmap.ic_launcher_foreground),
-                        contentDescription = null,
-                        modifier = Modifier.size(64.dp),
-                        tint = Color.Unspecified,
-                    )
-                },
+    AuthScreenLayout(
+        title = title,
+        subtitle = subtitle,
+        logoContent = {
+            Icon(
+                painter = painterResource(R.mipmap.ic_launcher_foreground),
+                contentDescription = null,
+                modifier = Modifier.size(58.dp),
+                tint = Color.Unspecified,
             )
-            WeSpacer(28.dp)
-            Text(
-                title,
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onBackground,
-            )
-            Text(
-                subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-                maxLines = 2,
-                modifier = Modifier
-                    .padding(horizontal = 40.dp)
-                    .padding(top = 12.dp),
-            )
-
-            WeSpacer(28.dp)
-
-            WeUnderlineTabs(
+        },
+        footer = {
+            ComplianceFooter(appConfig, compact = true, modifier = Modifier.padding(bottom = 12.dp))
+        },
+        formContent = {
+            WeAuthTabs(
                 options = listOf(
                     WeModeOption("account", accountLabel),
                     WeModeOption("phone", "手机号"),
@@ -271,84 +242,75 @@ fun AuthScreen(vm: AppViewModel, onRegister: () -> Unit, onDone: () -> Unit) {
                 selectedId = if (tab == 0) "account" else "phone",
                 onSelect = { tab = if (it == "account") 0 else 1 },
             )
-
-            WeSpacer(20.dp)
-
-            WeCellGroup {
-                if (tab == 0) {
-                    WeInputCell(
-                        label = "用户名",
-                        value = user,
-                        onValueChange = { user = it },
-                        placeholder = "请输入用户名",
-                    )
-                    WeInputCell(
-                        label = "密码",
-                        value = pass,
-                        onValueChange = { pass = it },
-                        placeholder = "请输入密码",
-                        showDivider = false,
-                        visualTransformation = PasswordVisualTransformation(),
-                    )
-                } else {
-                    WeInputCell(
-                        label = "手机号",
-                        value = phone,
-                        onValueChange = { phone = it },
-                        placeholder = "请输入手机号",
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
-                    )
-                    WeInputActionCell(
-                        label = "验证码",
-                        value = code,
-                        onValueChange = { code = it },
-                        placeholder = "请输入验证码",
-                        actionLabel = "获取验证码",
-                        onAction = { vm.sendCode(phone) },
-                        showDivider = false,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    )
-                }
-            }
-
+            Spacer(Modifier.padding(top = 4.dp))
             if (tab == 0) {
-                Text(
-                    "默认直连云端；仅当已连接电脑且电脑在线时，才走电脑端会话。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier
-                        .padding(horizontal = 32.dp)
-                        .padding(top = 12.dp),
+                WeAuthInputField(
+                    label = "用户名",
+                    value = user,
+                    onValueChange = { user = it },
+                    placeholder = "请输入用户名",
+                )
+                WeAuthInputField(
+                    label = "密码",
+                    value = pass,
+                    onValueChange = { pass = it },
+                    placeholder = "请输入密码",
+                    showDivider = false,
+                    visualTransformation = PasswordVisualTransformation(),
+                )
+            } else {
+                WeAuthInputField(
+                    label = "手机号",
+                    value = phone,
+                    onValueChange = { phone = it },
+                    placeholder = "请输入手机号",
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                )
+                WeAuthInputActionField(
+                    label = "验证码",
+                    value = code,
+                    onValueChange = { code = it },
+                    placeholder = "请输入验证码",
+                    actionLabel = "获取验证码",
+                    onAction = { vm.sendCode(phone) },
+                    showDivider = false,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 )
             }
-
-            WeSpacer(28.dp)
-
+            Spacer(Modifier.padding(bottom = 8.dp))
+        },
+        actions = {
             if (tab == 0) {
-                WeGreenButton(
+                WeAuthGreenButton(
                     text = "登录",
                     onClick = { vm.loginFhd(user, pass) { if (it) onDone() } },
                 )
                 if (!isEnterprise) {
-                    TextButton(
-                        onClick = onRegister,
-                        modifier = Modifier.padding(top = 8.dp),
-                    ) {
-                        Text(
-                            "还没有账号？立即注册",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = weChatGreen,
-                        )
-                    }
+                    Text(
+                        "个人版注册",
+                        fontSize = 14.sp,
+                        color = MobileTokens.weChatGreen,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier
+                            .padding(top = 16.dp)
+                            .clickable(onClick = onRegister),
+                    )
                 }
+                Text(
+                    "默认直连云端；仅当已连接电脑且电脑在线时，才走电脑端会话。",
+                    fontSize = 12.sp,
+                    color = MobileTokens.authTextMuted,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .padding(horizontal = MobileTokens.authHorizontalMargin)
+                        .padding(top = 12.dp),
+                )
             } else {
-                WeGreenButton(
+                WeAuthGreenButton(
                     text = "登录",
                     onClick = { vm.loginPhone(phone, code) { if (it) onDone() } },
                 )
             }
-        }
-
-        ComplianceFooter(appConfig, Modifier.padding(bottom = 16.dp))
-    }
+        },
+    )
 }
