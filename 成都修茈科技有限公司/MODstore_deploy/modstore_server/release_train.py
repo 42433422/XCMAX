@@ -244,10 +244,13 @@ def set_backup_guard(
     """
     p = path or ssot_path()
     st = load_state(path=p)
+    prev = st.get("backup_guard") if isinstance(st.get("backup_guard"), dict) else {}
     guard = {
         "day": _digest_calendar_day(day),
         "reason": str(reason or "backup_failed")[:500],
         "at": datetime.now(timezone.utc).isoformat(),
+        "probe_retry_count": int(prev.get("probe_retry_count") or 0),
+        "probe_escalated": bool(prev.get("probe_escalated")),
     }
     st["backup_guard"] = guard
     save_state(st, path=p)
@@ -280,6 +283,48 @@ def active_backup_guard(
     if str(guard.get("day") or "") == _digest_calendar_day(day):
         return guard
     return None
+
+
+def record_backup_guard_probe_attempt(
+    *,
+    success: bool,
+    path: Optional[Path] = None,
+) -> Dict[str, Any]:
+    """DR 探针重试计数：失败递增 ``probe_retry_count``，成功由 ``clear_backup_guard`` 清除。"""
+    p = path or ssot_path()
+    st = load_state(path=p)
+    guard = st.get("backup_guard")
+    if not isinstance(guard, dict):
+        return {"ok": True, "skipped": True, "reason": "no_active_guard"}
+    if success:
+        return {"ok": True, "skipped": True, "reason": "probe_succeeded"}
+    guard = dict(guard)
+    guard["probe_retry_count"] = int(guard.get("probe_retry_count") or 0) + 1
+    guard["last_probe_at"] = datetime.now(timezone.utc).isoformat()
+    st["backup_guard"] = guard
+    save_state(st, path=p)
+    return {
+        "ok": True,
+        "probe_retry_count": int(guard["probe_retry_count"]),
+        "probe_escalated": bool(guard.get("probe_escalated")),
+    }
+
+
+def mark_backup_guard_probe_escalated(*, path: Optional[Path] = None) -> Dict[str, Any]:
+    """探针重试超限后标记 escalated，避免重复推送升级告警。"""
+    p = path or ssot_path()
+    st = load_state(path=p)
+    guard = st.get("backup_guard")
+    if not isinstance(guard, dict):
+        return {"ok": True, "skipped": True, "reason": "no_active_guard"}
+    if guard.get("probe_escalated"):
+        return {"ok": True, "skipped": True, "reason": "already_escalated"}
+    guard = dict(guard)
+    guard["probe_escalated"] = True
+    guard["probe_escalated_at"] = datetime.now(timezone.utc).isoformat()
+    st["backup_guard"] = guard
+    save_state(st, path=p)
+    return {"ok": True, "probe_escalated": True}
 
 
 def bump_release_train(

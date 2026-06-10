@@ -20,6 +20,9 @@
 market/public/vosk/
 .env
 .env.local
+.env.daily-closure
+.env.production.synced
+.env.local
 .modstore_build.json
 __pycache__/
 *.py[cod]

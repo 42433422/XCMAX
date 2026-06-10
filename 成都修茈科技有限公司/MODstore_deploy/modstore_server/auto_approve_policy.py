@@ -197,6 +197,7 @@ def maybe_auto_approve(change_request_id: int) -> Dict[str, Any]:
 
             rel_path = str(data.get("path") or "").strip()
             content = str(data.get("content") or "")
+            source_employee_id = str(row.source_employee_id or "")
             risk = str(row.risk_level or "medium")
             try:
                 ag_from_row = [
@@ -247,6 +248,33 @@ def maybe_auto_approve(change_request_id: int) -> Dict[str, Any]:
                 "reason": f"medium risk requires manual approval: {reason}",
             }
 
+        # risk == "low" → 窄 CI 验证（可通过 MODSTORE_AUTO_APPROVE_REQUIRE_CI 强制）
+        narrow_ci: Dict[str, Any] = {"ok": True, "skipped": True}
+        if _require_ci() or os.environ.get("MODSTORE_CR_NARROW_CI_ENABLED", "1").strip().lower() in (
+            "1",
+            "true",
+            "yes",
+            "on",
+        ):
+            from modstore_server.cr_narrow_ci import (
+                record_cr_validation_failure_for_evolution,
+                run_narrow_ci_validation,
+            )
+
+            narrow_ci = run_narrow_ci_validation(rel_path, content)
+            if not narrow_ci.get("ok") and not narrow_ci.get("skipped"):
+                record_cr_validation_failure_for_evolution(
+                    change_request_id=int(change_request_id),
+                    source_employee_id=source_employee_id,
+                    rel_path=rel_path,
+                    validation=narrow_ci,
+                )
+                return {
+                    "auto_approved": False,
+                    "reason": f"narrow CI failed: {narrow_ci.get('failed_step')}",
+                    "narrow_ci": narrow_ci,
+                }
+
         # risk == "low" → 自动落盘
         from modstore_server.employee_change_request_service import apply_employee_change_request
         from modstore_server.models import User
@@ -263,7 +291,12 @@ def maybe_auto_approve(change_request_id: int) -> Dict[str, Any]:
 
         result = apply_employee_change_request(change_request_id, admin_id or 0)
         logger.info("auto_approve: CR %d auto-approved (risk=low): %s", change_request_id, reason)
-        return {"auto_approved": True, "reason": reason, "result": result}
+        return {
+            "auto_approved": True,
+            "reason": reason,
+            "result": result,
+            "narrow_ci": narrow_ci,
+        }
 
     except Exception as exc:
         logger.exception("maybe_auto_approve failed for CR %d", change_request_id)

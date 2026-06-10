@@ -1,5 +1,14 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
+import { RouterLink } from 'vue-router'
+
+const props = withDefaults(
+  defineProps<{
+    /** 账户中心嵌入：精简列表，桌面加密导出见开发者门户 */
+    embedded?: boolean
+  }>(),
+  { embedded: false },
+)
 import { api } from '../../api'
 import { confirmDanger } from '../../composables/useDangerConfirm'
 import { ApiError } from '../../infrastructure/http/client'
@@ -258,6 +267,21 @@ function formatTime(iso: string | null): string {
   }
 }
 
+function formatExpiresShort(iso: string | null): string {
+  if (!iso) return '永不过期'
+  try {
+    return new Date(iso).toLocaleDateString()
+  } catch {
+    return iso
+  }
+}
+
+function scopesSummary(scopes: string[]): string {
+  if (!scopes.length) return '未配置权限'
+  if (scopes.length <= 2) return scopes.join(' · ')
+  return `${scopes.slice(0, 2).join(' · ')} +${scopes.length - 2}`
+}
+
 function statusOf(row: DeveloperToken): { text: string; cls: string } {
   if (row.revoked_at) return { text: '已吊销', cls: 'st-revoked' }
   if (row.expires_at && new Date(row.expires_at).getTime() < Date.now())
@@ -271,14 +295,21 @@ function justCreatedHasScope(scope: string): boolean {
 </script>
 
 <template>
-  <div class="dt dt--dark">
-    <header class="dt__head">
-      <div>
+  <div class="dt dt--dark" :class="{ 'dt--embedded': embedded }">
+    <header class="dt__head" :class="{ 'dt__head--embedded': embedded }">
+      <div v-if="!embedded">
         <h2 class="dt__title">Personal Access Token</h2>
-        <p class="dt__hint">Bearer Token 调用 API；创建后明文仅显示一次。<a href="/dev-docs/" target="_blank" rel="noreferrer">文档</a></p>
+        <p class="dt__hint">
+          Bearer Token 调用 API；创建后明文仅显示一次。
+          <a href="/dev-docs/" target="_blank" rel="noreferrer">文档</a>
+        </p>
       </div>
+      <p v-else class="dt__hint dt__hint--inline">
+        创建后明文仅显示一次。
+        <a href="/dev-docs/" target="_blank" rel="noreferrer">API 文档</a>
+      </p>
       <button class="dt__btn dt__btn--primary" type="button" @click="openCreate">
-        创建新 Token
+        创建 Token
       </button>
     </header>
 
@@ -286,8 +317,38 @@ function justCreatedHasScope(scope: string): boolean {
 
     <div v-if="loading" class="dt__placeholder">加载中…</div>
     <div v-else-if="!tokens.length" class="dt__placeholder">
-      还没有 Token，点击「创建新 Token」开始接入第三方应用。
+      {{ embedded ? '暂无 Token，点击「创建 Token」生成密钥。' : '还没有 Token，点击「创建新 Token」开始接入第三方应用。' }}
     </div>
+    <ul v-else-if="embedded" class="dt__list">
+      <li
+        v-for="t in tokens"
+        :key="t.id"
+        class="dt__list-item"
+        :class="{ 'dt__list-item--inactive': !t.is_active }"
+      >
+        <div class="dt__list-body">
+          <div class="dt__list-top">
+            <span class="dt__list-name">{{ t.name || '—' }}</span>
+            <span class="dt__status" :class="statusOf(t).cls">{{ statusOf(t).text }}</span>
+          </div>
+          <p class="dt__list-meta">
+            <code>{{ t.prefix }}…</code>
+            <span class="dt__list-sep">·</span>
+            {{ scopesSummary(t.scopes) }}
+            <span class="dt__list-sep">·</span>
+            {{ formatExpiresShort(t.expires_at) }}
+          </p>
+        </div>
+        <button
+          v-if="t.is_active"
+          class="dt__btn dt__btn--danger dt__btn--sm"
+          type="button"
+          @click="revoke(t)"
+        >
+          吊销
+        </button>
+      </li>
+    </ul>
     <table v-else class="dt__table">
       <thead>
         <tr>
@@ -329,7 +390,12 @@ function justCreatedHasScope(scope: string): boolean {
       </tbody>
     </table>
 
-    <section class="dt-desk">
+    <p v-if="embedded && tokens.length" class="dt__portal-link">
+      批量加密下发到桌面？
+      <RouterLink :to="{ name: 'developer-portal' }">开发者门户 → API Token</RouterLink>
+    </p>
+
+    <section v-if="!embedded" class="dt-desk">
       <h3 class="dt-desk__title">传到桌面（加密包）</h3>
       <p class="dt-desk__hint">粘贴桌面公钥并确认密码后下发加密包。<a href="/dev-docs/developer/08-key-export-desktop.md" target="_blank" rel="noreferrer">说明</a></p>
       <label class="dt-field">
@@ -481,6 +547,99 @@ function justCreatedHasScope(scope: string): boolean {
   align-items: flex-end;
   gap: 16px;
   margin-bottom: 14px;
+}
+
+.dt__head--embedded {
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.dt__hint--inline {
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+}
+
+.dt--embedded .dt__placeholder {
+  padding: 18px 16px;
+}
+
+.dt__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dt__list-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 0.5px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.dt__list-item--inactive {
+  opacity: 0.55;
+}
+
+.dt__list-body {
+  min-width: 0;
+  flex: 1;
+}
+
+.dt__list-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.dt__list-name {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.dt__list-meta {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+  line-height: 1.45;
+}
+
+.dt__list-meta code {
+  font-size: 11px;
+}
+
+.dt__list-sep {
+  margin: 0 4px;
+  opacity: 0.45;
+}
+
+.dt__btn--sm {
+  padding: 5px 10px;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.dt__portal-link {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.dt__portal-link a {
+  color: #a5b4fc;
+  text-decoration: none;
+}
+
+.dt__portal-link a:hover {
+  text-decoration: underline;
 }
 
 .dt__title {
