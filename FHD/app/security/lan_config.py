@@ -108,6 +108,10 @@ _DEFAULT_BYPASS = (
     "/api/mods/",
     "/api/mods/routes",
     "/api/mods/loading-status",
+    # AIOPEN 开放平台对外端点（鉴权由 X-AIOPEN-Key 承担；面板/keys 仍受 LAN 门禁）
+    "/api/aiopen/manifest",
+    "/api/aiopen/invoke",
+    "/api/aiopen/mcp",
     # Neuro 迁移冒烟 / 诊断（CI 与本地 pytest 不持 LAN cookie）
     "/api/neuro/migration-smoke",
     "/api/neurobus/health",

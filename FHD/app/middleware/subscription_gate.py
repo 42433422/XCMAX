@@ -12,6 +12,8 @@ _SKIP_PREFIXES = (
     "/api/auth/",
     "/api/health",
     "/api/model-payment/",
+    # AIOPEN 开放平台：外部 AI Agent 无登录态，安全由 X-AIOPEN-Key 承担
+    "/api/aiopen/",
     "/api/market/",
     "/api/app/",
     "/docs",
