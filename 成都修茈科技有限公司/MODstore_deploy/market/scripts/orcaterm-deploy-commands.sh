@@ -24,7 +24,9 @@ deploy_one() {
     [[ -s "${NVM_DIR}/nvm.sh" ]] && . "${NVM_DIR}/nvm.sh"
     cd "${root}/market"
     if command -v npm >/dev/null 2>&1; then
-      npm ci --omit=optional 2>/dev/null || npm install --omit=optional
+      # 跳过 @huggingface/transformers 拉取 onnxruntime-node 原生包（302/网络失败）；前端 build 仅用 onnxruntime-web
+      npm ci --ignore-scripts 2>/dev/null || npm install --ignore-scripts
+      node scripts/install-native-bindings.mjs
       npm run build
     else
       echo "[warn] 未找到 npm，请先安装 node 20+"
