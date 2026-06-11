@@ -6,6 +6,13 @@
 
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
+### 人工试用阻断修复（2026-06-12 · v10 线内迭代）
+- **feat(web)**：注册 `/im` 路由与侧栏「消息」入口；未读角标 + `useImUnreadBadge`
+- **fix(web)**：企业版不再被平台壳拦截设置/Mod 商店/IM；跳过首次引导拦截员工工作台
+- **fix(web)**：设置页「关于」版本读取 `package.json`（10.0.0）；商标导出副窗默认文案
+- **fix(chat)**：Modstore/LLM 不可用时 SSE 不再空流；考勤演示兜底回复（`demo_chat_fallback`）
+- **fix(backend)**：`httpx` 传输错误纳入 `OPERATIONAL_ERRORS`；流式桥接线程异常转为 SSE error 事件
+
 ### 桌面/移动上线阻断项修复（2026-06-12 · v10 线内迭代）
 - **fix(desktop)**：`update-available` 后自动 `downloadUpdate`；`installUpdate` 校验已下载；preload 暴露 `setBadge` / `showNotification` IPC
 - **fix(android)**：Release 允许局域网 HTTP/ws（`network_security_config`）；LAN WebView 注入 `session_id` cookie；推送注册失败可见提示

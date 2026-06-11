@@ -483,7 +483,7 @@
               <i class="fa fa-info-circle"></i>
             </span>
             <span class="settings-row__label">关于</span>
-            <span class="settings-row__meta">8.0.0</span>
+            <span class="settings-row__meta">{{ appVersionLabel }}</span>
             <span class="settings-row__arrow" aria-hidden="true"></span>
           </summary>
           <div class="settings-card__body settings-card__body--compact">
@@ -517,6 +517,7 @@ import {
 } from '@/utils/sidebarTheme';
 import { useModsStore } from '@/stores/mods';
 import { useAccountProfileStore } from '@/stores/accountProfile';
+import packageJson from '../../package.json';
 import { appAlert, appConfirm } from '@/utils/appDialog';
 import { DEFAULT_INDUSTRY_ID } from '@/constants/industryDefaults';
 import { getIndustryPreset } from '@/constants/industryPresets';
@@ -1127,6 +1128,8 @@ const industries = ref<ApiIndustry[]>([]);
 const currentIndustry = ref(DEFAULT_INDUSTRY_ID);
 const currentIndustryUnit = ref('天');
 const sidebarThemePreset = ref('office-default');
+
+const appVersionLabel = computed(() => String(packageJson.version || '10.0.0'));
 
 const systemDisplayName = computed(() => {
   const id = String(currentIndustry.value || DEFAULT_INDUSTRY_ID).trim() || DEFAULT_INDUSTRY_ID;

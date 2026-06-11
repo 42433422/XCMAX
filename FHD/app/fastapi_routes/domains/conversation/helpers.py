@@ -469,6 +469,16 @@ def _xcagi_guarded_planner_stream_events(
         if item is done_marker:
             return
         if isinstance(item, BaseException):
+            from app.application.demo_chat_fallback import try_demo_attendance_reply
+
+            fallback = try_demo_attendance_reply(body.message)
+            if fallback:
+                yield {"type": "token", "text": fallback}
+                yield {
+                    "type": "done",
+                    "result": {"response": fallback, "success": True, "demo_fallback": True},
+                }
+                return
             raise item
 
         first_event_seen = True
@@ -519,8 +529,13 @@ async def _xcagi_planner_stream_bytes_async(
         try:
             for chunk in _xcagi_planner_stream_bytes(request, body, ai_tier=ai_tier):
                 asyncio.run_coroutine_threadsafe(async_q.put(chunk), loop).result(timeout=120)
-        except OPERATIONAL_ERRORS as exc:
-            asyncio.run_coroutine_threadsafe(async_q.put(exc), loop).result(timeout=5)
+        except BaseException as exc:
+            err_msg = str(exc).strip() or exc.__class__.__name__
+            err_line = _sse_event_line({"type": "error", "message": err_msg})
+            try:
+                asyncio.run_coroutine_threadsafe(async_q.put(err_line), loop).result(timeout=5)
+            except Exception:
+                pass
         finally:
             asyncio.run_coroutine_threadsafe(async_q.put(_SENTINEL), loop).result(timeout=5)
 
@@ -531,8 +546,6 @@ async def _xcagi_planner_stream_bytes_async(
         item = await async_q.get()
         if item is _SENTINEL:
             break
-        if isinstance(item, BaseException):
-            raise item
         yield item
 
 
@@ -604,6 +617,13 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
         if halted_for_write_token:
             return
         merged = "".join(reply_parts)
+        if not merged.strip():
+            from app.application.demo_chat_fallback import try_demo_attendance_reply
+
+            fallback = try_demo_attendance_reply(body.message)
+            if fallback:
+                merged = fallback
+                yield _sse_event_line({"type": "token", "text": fallback})
         thinking = _thinking_steps_from_planner_stream_text(merged)
         if thinking:
             done_reply: str | dict = {"response": merged, "thinking_steps": thinking}

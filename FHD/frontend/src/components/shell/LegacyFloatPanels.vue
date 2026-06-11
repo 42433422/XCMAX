@@ -78,7 +78,7 @@
     </div>
     <div class="import-content">
       <div id="labelsExportList" class="labels-export-list">
-        <p class="labels-export-hint">加载中...</p>
+        <p class="labels-export-hint">暂无标签文件（发货任务生成后可在此下载）</p>
       </div>
       <div class="import-actions" style="margin-top: 12px;">
         <button class="btn btn-secondary" id="labelsExportCloseBtn2" type="button">关闭</button>
