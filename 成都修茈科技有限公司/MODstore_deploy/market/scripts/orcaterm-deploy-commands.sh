@@ -24,7 +24,7 @@ deploy_one() {
     [[ -s "${NVM_DIR}/nvm.sh" ]] && . "${NVM_DIR}/nvm.sh"
     cd "${root}/market"
     if command -v npm >/dev/null 2>&1; then
-      npm ci 2>/dev/null || npm install
+      npm ci --omit=optional 2>/dev/null || npm install --omit=optional
       npm run build
     else
       echo "[warn] 未找到 npm，请先安装 node 20+"

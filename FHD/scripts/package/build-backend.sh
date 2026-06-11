@@ -25,7 +25,6 @@ fi
 PYTHON="${PYTHON:-python3}"
 
 "${PYTHON}" -m pip install --upgrade pip
-"${PYTHON}" -m pip install -e .
 RUNTIME_REQUIREMENTS="$(mktemp)"
 grep -Ev '^[[:space:]]*(#|-e|pytest($|[-=<>]))' XCAGI/requirements.txt | grep -Ev '^[[:space:]]*$' > "${RUNTIME_REQUIREMENTS}" || true
 if [ -s "${RUNTIME_REQUIREMENTS}" ]; then

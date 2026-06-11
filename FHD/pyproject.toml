@@ -350,3 +350,29 @@ fail_under = 70
 [tool.coverage.html]
 directory = "htmlcov"
 show_contexts = true
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+# 桌面/CI 构建时 `pip install -e .` 仅暴露 app 包，避免 FHD 根目录杂项目录触发 setuptools 误判。
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]
+exclude = [
+    "tests*",
+    "frontend*",
+    "mods*",
+    "mods-admin-runtime*",
+    "mobile-android*",
+    "desktop*",
+    "admin-console*",
+    "sunbird-console*",
+    "templates*",
+    "alembic*",
+    "scripts*",
+    "docs*",
+    "XCAGI*",
+    "MODstore*",
+]
+namespaces = false
