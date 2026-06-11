@@ -6,7 +6,7 @@
         <span class="kitten-brand-icon" aria-hidden="true">🐱</span>
         <div class="kitten-brand-text">
           <div class="kitten-title">小猫分析</div>
-          <div class="kitten-subtitle">智能对话</div>
+          <div class="kitten-subtitle">可视化 AI 员工 · 对话洞察 · 图表导出</div>
         </div>
       </div>
       <button class="kitten-header-action" type="button" @click="resetSession">清空</button>
@@ -39,12 +39,24 @@
         </div>
       </div>
 
+      <KittenVizEmployeeStrip
+        v-if="datasetSummary"
+        :employees="vizEmployees"
+        :selected-pkg-id="selectedVizEmployee.pkgId"
+        :installed-count="vizInstalledCount"
+        :loading="vizLoading"
+        @select="onVizEmployeeSelect"
+      />
+
       <KittenChartPanel
         v-if="datasetSummary && datasetRows.length"
         :rows="datasetRows"
         :field-profiles="fieldProfiles"
         :config="chartConfig"
         :recommendations="recommendedCharts"
+        :palette="selectedVizEmployee.palette"
+        :dashboard-mode="!!selectedVizEmployee.dashboard"
+        :employee-name="selectedVizEmployee.name"
         @update-config="setChartConfig"
         @apply-recommendation="applyChartRecommendation"
       />
@@ -228,12 +240,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { buildFullApiUrl } from '@/api/core'
 import { sanitizeChatBubbleHtml } from '@/utils/sanitizeHtml'
 import { downloadBlob, getFilenameFromDisposition } from '@/utils'
 import { appAlert } from '@/utils/appDialog'
 import KittenChartPanel from '@/components/kitten/KittenChartPanel.vue'
+import KittenVizEmployeeStrip from '@/components/kitten/KittenVizEmployeeStrip.vue'
+import { useKittenVizEmployees } from '@/composables/useKittenVizEmployees'
+import type { KittenChartType } from '@/composables/useKittenAnalyzer'
 import {
   useKittenAnalyzer,
   kittenQuickActions,
@@ -286,6 +301,31 @@ const {
   clearResult,
   handleInputKeydown
 } = useKittenAnalyzer()
+
+const {
+  employees: vizEmployees,
+  selected: selectedVizEmployee,
+  installedCount: vizInstalledCount,
+  loading: vizLoading,
+  selectEmployee: selectVizEmployee,
+} = useKittenVizEmployees()
+
+function onVizEmployeeSelect(pkgId: string) {
+  selectVizEmployee(pkgId)
+  applyVizEmployeeChartType()
+}
+
+function applyVizEmployeeChartType() {
+  const emp = selectedVizEmployee.value
+  if (!emp?.installed || !datasetSummary.value) return
+  const nextType: KittenChartType = emp.dashboard ? 'bar' : emp.chartType
+  setChartConfig({ type: nextType })
+}
+
+watch(
+  () => datasetSummary.value?.name,
+  () => applyVizEmployeeChartType(),
+)
 
 const runDocGen = () => {
   void generateAiOfficeDocument(docGenPrompt.value, docGenFormat.value)
