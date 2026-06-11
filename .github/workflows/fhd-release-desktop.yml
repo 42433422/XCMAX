@@ -36,7 +36,7 @@ jobs:
           cache: "npm"
           cache-dependency-path: |
             frontend/package-lock.json
-            desktop/package-lock.json
+            FHD/desktop/package-lock.json
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "8.0.x"
@@ -51,6 +51,32 @@ jobs:
           path: |
             release/xcagi-v*/personal/**
             release/xcagi-v*/enterprise/**
+
+  deploy-windows:
+    needs: [windows]
+    if: success()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: xcagi-desktop-windows
+          path: artifacts
+      - name: Upload installers to update server
+        if: ${{ secrets.SERVER_SSH_KEY != '' }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          printf '%s\n' "${SERVER_SSH_KEY}" > ~/.ssh/id_ci
+          chmod 600 ~/.ssh/id_ci
+          ssh-keyscan -H "${{ vars.FHD_PUSH_HOST || '119.27.178.147' }}" >> ~/.ssh/known_hosts 2>/dev/null || true
+          HOST="${{ vars.FHD_PUSH_HOST || '119.27.178.147' }}"
+          for sku in personal enterprise; do
+            dir="artifacts/release/xcagi-v${{ github.event.inputs.version || '10.0.0' }}/$sku"
+            if [ ! -d "$dir" ]; then dir="artifacts/$sku"; fi
+            if [ ! -d "$dir" ]; then echo "[skip] no $sku dir"; continue; fi
+            dest="/var/www/update/releases/stable/$sku"
+            rsync -avz -e "ssh -i ~/.ssh/id_ci -o StrictHostKeyChecking=no" "$dir/" "root@${HOST}:$dest/"
+          done
 
   macos:
     runs-on: macos-latest
@@ -70,7 +96,7 @@ jobs:
           cache: "npm"
           cache-dependency-path: |
             frontend/package-lock.json
-            desktop/package-lock.json
+            FHD/desktop/package-lock.json
       - name: Build macOS installers (2 SKUs)
         shell: bash
         run: |

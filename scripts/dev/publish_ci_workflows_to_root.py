@@ -93,6 +93,10 @@ def _prefix_fhd_paths(content: str, out_name: str) -> str:
         "cache-dependency-path: FHD/frontend/package-lock.json",
     )
     content = content.replace(
+        "desktop/package-lock.json",
+        "FHD/desktop/package-lock.json",
+    )
+    content = content.replace(
         "working-directory: frontend",
         "working-directory: FHD/frontend",
     )
