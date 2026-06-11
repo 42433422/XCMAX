@@ -6,7 +6,7 @@
         <button class="app-launcher" type="button" @click="enterAnalyzer('kitten')">
           <span class="app-launcher-icon" aria-hidden="true">🐱</span>
           <span class="app-launcher-name">小猫分析</span>
-          <span class="app-launcher-desc">上传表格、对话分析、生成丰富图表，并按需导出报告</span>
+          <span class="app-launcher-desc">接入可视化 AI 员工，上传表格、对话分析、生成 ECharts 图表与报告</span>
         </button>
         <button class="app-launcher" type="button" @click="enterAnalyzer('aiopen')">
           <span class="app-launcher-icon" aria-hidden="true">🤖</span>
