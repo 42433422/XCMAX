@@ -42,13 +42,7 @@
 
         <div v-if="storeNav === 'office_aux'" class="office-spotlight office-aux-spotlight">
           <p class="office-spotlight__text">
-            {{ OFFICE_AUX_PACK_1_PKG_IDS.length }} 个附属扩展：JSON 量化报告员，将结构化数据生成为 HTML 报告（上架后显示）。
-          </p>
-        </div>
-
-        <div v-if="storeNav === 'office_aux_2'" class="office-spotlight office-aux-spotlight">
-          <p class="office-spotlight__text">
-            {{ OFFICE_AUX_PACK_2_PKG_IDS.length }} 个可视化员工：柱状 / 折线 / 饼图 / 综合看板，供小猫分析接入 ECharts 图表（上架后显示）。
+            {{ OFFICE_AUX_PACK_1_PKG_IDS.length }} 个附属扩展：JSON 量化报告员 + 柱状/折线/饼图/看板可视化员，供报告与小猫分析图表（上架后显示）。
           </p>
         </div>
 
@@ -197,8 +191,7 @@
 
         <div v-if="loading" class="state-msg">加载中…</div>
         <div v-else-if="!items.length" class="state-msg muted">
-          <template v-if="storeNav === 'office_aux'">暂无商品。JSON 量化报告员（json-report-employee）上架后将显示在此。</template>
-          <template v-else-if="storeNav === 'office_aux_2'">暂无商品。柱状/折线/饼图/看板可视化员（chart-*-employee）上架后将显示在此。</template>
+          <template v-if="storeNav === 'office_aux'">暂无商品。JSON 量化报告员与 chart-* 可视化员上架后将显示在此。</template>
           <template v-else>暂无商品，可切换左侧分类或调整筛选。</template>
         </div>
 
@@ -359,10 +352,7 @@ import { isCatalogSaved, toggleCatalogSaved } from '../utils/catalogSaved'
 import {
   OFFICE_AUX_PACK_1_COLLECTION,
   OFFICE_AUX_PACK_1_PKG_IDS,
-  OFFICE_AUX_PACK_2_COLLECTION,
-  OFFICE_AUX_PACK_2_PKG_IDS,
   OFFICE_AUX_GROUP_ORDER,
-  OFFICE_AUX_2_GROUP_ORDER,
   OFFICE_EMPLOYEE_COLLECTION,
   OFFICE_EMPLOYEE_PKG_IDS,
   OFFICE_GROUP_LABELS,
@@ -370,14 +360,13 @@ import {
   employeePackIconKind,
   employeePackRole,
   isOfficeAuxPack1Pkg,
-  isOfficeAuxPack2Pkg,
   isOfficeEmployeePkg,
   type EmployeePackIconKind,
 } from '../constants/officeEmployeePack'
 import { WORKFLOW_EMPLOYEE_COLLECTION } from '../constants/workflowEmployeePack'
 import { HOST_FOUNDATION_COLLECTION } from '../constants/hostFoundationPack'
 
-type StoreNavId = 'all' | 'host_foundation' | 'office' | 'office_aux' | 'office_aux_2' | 'workflow' | 'ai_employee'
+type StoreNavId = 'all' | 'host_foundation' | 'office' | 'office_aux' | 'workflow' | 'ai_employee'
 
 const ARTIFACT_LABELS = {
   mod: 'MOD 插件',
@@ -453,7 +442,7 @@ const err = ref('')
 const items = ref<AiStoreItem[]>([])
 const total = ref(0)
 const delistingId = ref<number | string | null>(null)
-const activeTheme = ref<'host_foundation' | 'office' | 'office_aux' | 'office_aux_2' | 'workflow' | ''>('')
+const activeTheme = ref<'host_foundation' | 'office' | 'office_aux' | 'workflow' | ''>('')
 const storeNav = ref<StoreNavId>('all')
 const showAdvancedFilters = ref(false)
 const bundleDownloading = ref(false)
@@ -487,26 +476,17 @@ const storeNavTabs = [
     icon: 'report' as EmployeePackIconKind,
     badge: '',
   },
-  {
-    id: 'office_aux_2' as StoreNavId,
-    label: '办公员工附属包2',
-    icon: 'chart' as EmployeePackIconKind,
-    badge: '',
-  },
   { id: 'workflow' as StoreNavId, label: '工作流员工', icon: undefined, badge: '6' },
   { id: 'ai_employee' as StoreNavId, label: 'AI 员工', icon: undefined, badge: '' },
 ]
 
 /** 附属包角标与市场上架数一致（未上架时为 0，不再写死为 1） */
 const officeAuxNavBadge = ref('')
-const officeAux2NavBadge = ref('')
 
 const storeNavTabsDisplay = computed(() =>
-  storeNavTabs.map((tab) => {
-    if (tab.id === 'office_aux') return { ...tab, badge: officeAuxNavBadge.value }
-    if (tab.id === 'office_aux_2') return { ...tab, badge: officeAux2NavBadge.value }
-    return tab
-  }),
+  storeNavTabs.map((tab) =>
+    tab.id === 'office_aux' ? { ...tab, badge: officeAuxNavBadge.value } : tab,
+  ),
 )
 
 async function refreshOfficeAuxNavBadge() {
@@ -530,32 +510,10 @@ async function refreshOfficeAuxNavBadge() {
   }
 }
 
-async function refreshOfficeAux2NavBadge() {
-  try {
-    const res = await api.catalog(
-      '',
-      'employee_pack',
-      20,
-      0,
-      '',
-      '',
-      'ai_employee',
-      '',
-      false,
-      OFFICE_AUX_PACK_2_COLLECTION,
-    )
-    let list = ((res.items || []) as AiStoreItem[]).filter((it) => isOfficeAuxPack2Pkg(it.pkg_id))
-    officeAux2NavBadge.value = String(list.length)
-  } catch {
-    officeAux2NavBadge.value = '0'
-  }
-}
-
 const mainListTitle = computed(() => {
   if (activeTheme.value === 'host_foundation') return '宿主基础能力（预装员工）'
   if (activeTheme.value === 'office') return '办公员工包'
   if (activeTheme.value === 'office_aux') return '办公员工附属包1'
-  if (activeTheme.value === 'office_aux_2') return '办公员工附属包2 · 小猫可视化'
   if (activeTheme.value === 'workflow') return '工作流员工'
   if (filters.materialCategory === 'ai_employee') return 'AI 员工'
   if (appliedQ.value) return `搜索「${appliedQ.value}」`
@@ -576,7 +534,6 @@ const isPackCollectionNav = computed(
   () =>
     storeNav.value === 'office' ||
     storeNav.value === 'office_aux' ||
-    storeNav.value === 'office_aux_2' ||
     storeNav.value === 'workflow' ||
     storeNav.value === 'host_foundation',
 )
@@ -607,11 +564,6 @@ const officeAuxGroups = computed(() => {
   return buildPackGroups([...OFFICE_AUX_GROUP_ORDER])
 })
 
-const officeAux2Groups = computed(() => {
-  if (activeTheme.value !== 'office_aux_2') return []
-  return buildPackGroups([...OFFICE_AUX_2_GROUP_ORDER])
-})
-
 const displayGroups = computed(() => {
   if (activeTheme.value === 'office' && officeGroups.value.length) {
     return officeGroups.value.map((g) => ({
@@ -629,19 +581,8 @@ const displayGroups = computed(() => {
       items: g.items,
     }))
   }
-  if (activeTheme.value === 'office_aux_2' && officeAux2Groups.value.length) {
-    return officeAux2Groups.value.map((g) => ({
-      key: g.kind,
-      title: g.title,
-      kind: g.kind,
-      items: g.items,
-    }))
-  }
   if (activeTheme.value === 'office_aux') {
     return [{ key: 'aux-flat', title: '', kind: 'report' as EmployeePackIconKind, items: items.value }]
-  }
-  if (activeTheme.value === 'office_aux_2') {
-    return [{ key: 'aux2-flat', title: '', kind: 'chart' as EmployeePackIconKind, items: items.value }]
   }
   return [{ key: 'all', title: '', kind: undefined as EmployeePackIconKind | undefined, items: items.value }]
 })
@@ -839,9 +780,7 @@ async function loadItems(cacheBust = false) {
           ? OFFICE_EMPLOYEE_COLLECTION
           : activeTheme.value === 'office_aux'
             ? OFFICE_AUX_PACK_1_COLLECTION
-            : activeTheme.value === 'office_aux_2'
-              ? OFFICE_AUX_PACK_2_COLLECTION
-              : activeTheme.value === 'workflow'
+            : activeTheme.value === 'workflow'
               ? WORKFLOW_EMPLOYEE_COLLECTION
               : '',
     )
@@ -856,21 +795,14 @@ async function loadItems(cacheBust = false) {
       list = list.filter((it) => isOfficeEmployeePkg(it.pkg_id))
     } else if (activeTheme.value === 'office_aux') {
       list = list.filter((it) => isOfficeAuxPack1Pkg(it.pkg_id))
-    } else if (activeTheme.value === 'office_aux_2') {
-      list = list.filter((it) => isOfficeAuxPack2Pkg(it.pkg_id))
     }
     items.value = list
     total.value =
-      activeTheme.value === 'office' ||
-      activeTheme.value === 'office_aux' ||
-      activeTheme.value === 'office_aux_2'
+      activeTheme.value === 'office' || activeTheme.value === 'office_aux'
         ? list.length
         : (res.total ?? list.length)
     if (activeTheme.value === 'office_aux') {
       officeAuxNavBadge.value = String(list.length)
-    }
-    if (activeTheme.value === 'office_aux_2') {
-      officeAux2NavBadge.value = String(list.length)
     }
   } catch (e: unknown) {
     if (e instanceof ApiError && e.status === 429) {
@@ -945,14 +877,6 @@ function setStoreNav(id: StoreNavId) {
   }
   if (id === 'office_aux') {
     activeTheme.value = 'office_aux'
-    filters.materialCategory = 'ai_employee'
-    filters.artifact = 'employee_pack'
-    scheduleLoadItems()
-    suppressFilterWatch = false
-    return
-  }
-  if (id === 'office_aux_2') {
-    activeTheme.value = 'office_aux_2'
     filters.materialCategory = 'ai_employee'
     filters.artifact = 'employee_pack'
     scheduleLoadItems()
@@ -1090,13 +1014,13 @@ watch(
 onMounted(async () => {
   await loadFacets()
   void refreshOfficeAuxNavBadge()
-  void refreshOfficeAux2NavBadge()
   const navHint = String(route.query.nav || route.query.collection || '').trim()
-  if (navHint === 'office_aux_2' || navHint === OFFICE_AUX_PACK_2_COLLECTION) {
-    setStoreNav('office_aux_2')
-    return
-  }
-  if (navHint === 'office_aux' || navHint === OFFICE_AUX_PACK_1_COLLECTION) {
+  if (
+    navHint === 'office_aux' ||
+    navHint === 'office_aux_2' ||
+    navHint === OFFICE_AUX_PACK_1_COLLECTION ||
+    navHint === 'office_employee_aux_pack_2'
+  ) {
     setStoreNav('office_aux')
     return
   }

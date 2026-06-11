@@ -1,6 +1,6 @@
 import type { KittenChartType } from '@/composables/useKittenAnalyzer'
 
-/** 小猫分析 · 可视化 AI 员工（办公员工附属包2） */
+/** 小猫分析 · 可视化 AI 员工（办公员工附属包1） */
 export interface KittenVizEmployeeDef {
   pkgId: string
   name: string

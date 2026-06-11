@@ -290,10 +290,6 @@ def api_market_catalog(
             from modstore_server.office_employee_aux_pack_1 import OFFICE_AUX_PACK_1_PKG_IDS_LIST
 
             query = query.filter(CatalogItem.pkg_id.in_(OFFICE_AUX_PACK_1_PKG_IDS_LIST))
-        elif collection == "office_employee_aux_pack_2":
-            from modstore_server.office_employee_aux_pack_2 import OFFICE_AUX_PACK_2_PKG_IDS_LIST
-
-            query = query.filter(CatalogItem.pkg_id.in_(OFFICE_AUX_PACK_2_PKG_IDS_LIST))
         elif collection == "workflow_employee":
             from modstore_server.workflow_employee_pack import WORKFLOW_EMPLOYEE_PKG_IDS
 

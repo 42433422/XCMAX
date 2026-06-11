@@ -1,4 +1,4 @@
-"""Kitten 数据集 → ECharts 可视化（办公员工附属包2：chart-*-employee）。"""
+"""Kitten 数据集 → ECharts 可视化（办公员工附属包1：chart-*-employee）。"""
 
 from __future__ import annotations
 

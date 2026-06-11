@@ -4,7 +4,7 @@
       <div>
         <div class="kitten-viz-strip__title">可视化 AI 员工</div>
         <div class="kitten-viz-strip__subtitle">
-          办公员工附属包2 · 已安装 {{ installedCount }}/{{ employees.length }}
+          办公员工附属包1 · 已安装 {{ installedCount }}/{{ employees.length }}
           <span v-if="loading" class="kitten-viz-strip__loading">同步中…</span>
         </div>
       </div>
@@ -61,7 +61,7 @@ function onSelect(emp: KittenVizEmployeeState) {
 
 function goMarket() {
   const marketBase = String(import.meta.env.VITE_MARKET_BASE || 'https://xiu-ci.com/market').replace(/\/$/, '')
-  const url = `${marketBase}/ai-store?nav=office_aux_2`
+  const url = `${marketBase}/ai-store?nav=office_aux`
   window.open(url, '_blank', 'noopener,noreferrer')
 }
 </script>
