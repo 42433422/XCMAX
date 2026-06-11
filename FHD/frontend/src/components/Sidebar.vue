@@ -50,6 +50,7 @@
           :is-pressing="pressingKey === item.key"
           :is-dragging="draggingKey === item.key"
           :long-press-ms="LONG_PRESS_MS"
+          :im-unread-total="imUnreadTotal"
           @parent-click="onParentMenuClick(item)"
           @select-view="selectView"
           @reorder-pointer-down="onReorderPointerDown($event, item.key)"
@@ -141,7 +142,10 @@ import {
 } from '@/constants/platformShellMode'
 import { SETTINGS_MENU_ITEM, sidebarLayoutSeedKeys } from '@/constants/coreMenuCatalog'
 import { useVisibleNavItems } from '@/composables/useVisibleNavItems'
+import { useImUnreadBadge } from '@/composables/useImUnreadBadge'
 import SidebarMenuItem from '@/components/SidebarMenuItem.vue'
+
+const { imUnreadTotal } = useImUnreadBadge()
 
 const props = defineProps({
   activeView: {

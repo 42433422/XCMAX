@@ -27,9 +27,13 @@ export const LS_PLATFORM_SHELL_AUTO_MINIMAL = 'xcagi_platform_shell_auto_minimal
 /** 壳模式保留的侧栏 key（与 router name 对齐；含员工工作流分组及子项） */
 export const SHELL_CORE_MENU_KEYS = new Set([
   'chat',
+  'im',
   'ai-ecosystem',
   'employee-workflow',
   'workflow-employee-space',
+  'settings',
+  'mod-store',
+  'desktop-runtime',
   'login',
 ])
 
@@ -103,7 +107,7 @@ export function bootstrapEditionDefaults(): void {
   bootstrapGenericEditionDefaults()
 }
 
-function isEnterpriseProductSkuBuild(): boolean {
+export function isEnterpriseProductSkuBuild(): boolean {
   const raw = String(import.meta.env.VITE_XCAGI_PRODUCT_SKU || '').trim().toLowerCase()
   return raw === 'enterprise'
 }
@@ -185,6 +189,7 @@ export function applyGenericPackPlatformShell(installedModIds: string[]): void {
 
 /** 按构建 edition 或已安装 Mod 集自动开壳 */
 export function applyEditionPackPlatformShell(installedModIds: string[]): void {
+  if (isEnterpriseProductSkuBuild()) return
   const edition = readBuildEdition()
   if (edition === 'minimal') {
     applyMinimalPackPlatformShell(installedModIds)

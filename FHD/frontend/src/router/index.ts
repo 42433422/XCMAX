@@ -308,6 +308,12 @@ allRoutes.push(
     meta: { title: '设置' }
   },
   {
+    path: '/im',
+    name: 'im',
+    component: () => import('../views/ImMessengerView.vue'),
+    meta: { title: '消息' }
+  },
+  {
     path: '/admin/entitlements',
     name: 'admin-entitlements',
     component: () => import('../views/AdminEntitlementsView.vue'),

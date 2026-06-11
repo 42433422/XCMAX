@@ -16,6 +16,14 @@ try:
 except ImportError:
     pass
 
+_httpx_extra: tuple[type[BaseException], ...] = ()
+try:
+    import httpx
+
+    _httpx_extra = (httpx.HTTPError, httpx.TransportError)
+except ImportError:
+    pass
+
 OPERATIONAL_ERRORS: tuple[type[BaseException], ...] = (
     OSError,
     ValueError,
@@ -31,4 +39,5 @@ OPERATIONAL_ERRORS: tuple[type[BaseException], ...] = (
     ArithmeticError,
     UnicodeError,
     *_operational_extra,
+    *_httpx_extra,
 )
