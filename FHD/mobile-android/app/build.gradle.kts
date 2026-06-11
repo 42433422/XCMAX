@@ -127,6 +127,12 @@ android {
     }
 }
 
+afterEvaluate {
+    tasks.matching { it.name.contains("uploadCrashlyticsMappingFile") }.configureEach {
+        enabled = project.findProperty("uploadCrashlyticsMapping")?.toString() == "true"
+    }
+}
+
 tasks.matching { it.name.startsWith("assemble") && it.name.contains("Release") }.configureEach {
     doFirst {
         val releaseSigning = android.signingConfigs.getByName("release")

@@ -1,0 +1,47 @@
+name: fhd-release-android
+
+on:
+  workflow_dispatch:
+    inputs:
+      upload_crashlytics_mapping:
+        description: Upload ProGuard mapping to Firebase Crashlytics
+        type: boolean
+        default: false
+  push:
+    tags:
+      - "xcagi-android-v*"
+
+concurrency:
+  group: fhd-release-android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  assemble-release:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: FHD/mobile-android
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+      - name: Ensure gradlew executable
+        run: chmod +x ./gradlew
+      - name: Assemble Release (personal + enterprise)
+        env:
+          UPLOAD_CRASHLYTICS: ${{ github.event.inputs.upload_crashlytics_mapping == true && 'true' || '' }}
+        run: |
+          ./gradlew assemblePersonalRelease assembleEnterpriseRelease \
+            -PuploadCrashlyticsMapping=${{ github.event.inputs.upload_crashlytics_mapping == true && 'true' || 'false' }} \
+            --no-daemon
+      - name: Upload APK artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcagi-android-release-apks
+          path: |
+            FHD/mobile-android/app/build/outputs/apk/personal/release/*.apk
+            FHD/mobile-android/app/build/outputs/apk/enterprise/release/*.apk
+          if-no-files-found: error
