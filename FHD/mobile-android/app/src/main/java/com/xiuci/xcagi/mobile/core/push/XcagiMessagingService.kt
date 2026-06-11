@@ -34,7 +34,7 @@ class XcagiMessagingService : FirebaseMessagingService() {
         )
         val channel = message.data["channel"] ?: NotificationChannels.SYSTEM
         val notification = NotificationCompat.Builder(this, channel)
-            .setSmallIcon(R.mipmap.ic_launcher)
+            .setSmallIcon(R.mipmap.ic_launcher_foreground)
             .setContentTitle(title)
             .setContentText(body)
             .setContentIntent(pending)

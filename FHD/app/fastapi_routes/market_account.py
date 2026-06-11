@@ -626,10 +626,14 @@ async def refresh_session_market_token(session_id: str) -> str:
 
 async def resolve_valid_market_access_token(session_id: str) -> str:
     """Return a working market access token, refreshing when /api/auth/me returns 401."""
+    from app.application.surface_audit_demo_account import is_local_demo_market_token
+
     sid = (session_id or "").strip()
     tok = _normalize_bearer_token(session_market_token(sid) or latest_session_market_token())
     if not tok:
         return ""
+    if is_local_demo_market_token(tok):
+        return tok
     me = await _proxy_json(
         "GET", "/api/auth/me", authorization=f"Bearer {tok}", return_error_payload=True
     )

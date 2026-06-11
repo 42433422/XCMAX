@@ -1,55 +1,45 @@
-        # Runbook：任务派发员 (`task-router-officer`)
+# Runbook — 任务派发员
 
-        ## 职责摘要
+| 字段 | 值 |
+|------|----|
+| 员工 ID | `task-router-officer` |
+| 负责区域 | `platform-core` |
+| 最后更新 | 2026-05-08 |
+| 应急联系 | admin |
 
-        把 `intake-dispatcher` 产出的结构化 task 派发给最合适的员工：基于 task.files_hint 与各员工 scope_globs 做匹配，命中多人时按仲裁规则选一人，无人匹配则升级 admin；本岗只做路由决策，不直接改业务代码、不执行任务。
+## 日常巡检
 
-        ## 上游 Handoff 契约
+### 巡检 1：路由表新鲜度
+```bash
+ls -l MODstore_deploy/docs/routing-table.md
+# mtime 在 24h 内为新鲜
+```
 
-        ### handoff: intake-dispatcher → 本岗
-- **触发条件**：`employee.task.done:intake-dispatcher`
-- **输入**：待补充（参见 `yuangon/**/intake-dispatcher/runbook.md`）
-- **门禁**：依赖完成前本岗不得继续
+### 巡检 2：未命中堆积
+```bash
+sqlite3 MODstore_deploy/var/modstore.db "SELECT COUNT(*) FROM dispatch_log WHERE chosen IS NULL AND created_at > datetime('now','-1 day');"
+```
 
-### handoff: employee-pack-curator → 本岗
-- **触发条件**：`employee.task.done:employee-pack-curator`
-- **输入**：待补充（参见 `yuangon/**/employee-pack-curator/runbook.md`）
-- **门禁**：依赖完成前本岗不得继续
+### 巡检 3：误派发回收
+```bash
+sqlite3 MODstore_deploy/var/modstore.db "SELECT chosen, COUNT(*) FROM dispatch_log WHERE outcome='rejected' AND created_at > datetime('now','-1 day') GROUP BY chosen;"
+```
 
+## 异常处置
 
-        ## Handlers
+### 异常 1：路由表过期
+- 立即 `python -m modstore_server.scripts.build_routing_table` 重建。
+- 通知 `push-update-context-officer` 检查 yuangon-resync 流水线。
 
-        | Handler | 说明 |
-        |---------|------|
-        | `llm_md` | 接收 Markdown 任务描述，调用 LLM 输出结构化结果 |
-| `echo` | 调试用：原样返回输入，用于 smoke 测试 |
-| `agent` | 启动多步 agent 执行链 |
+### 异常 2：派发后被员工拒收
+- 读取 `dispatch_log.reason` 与员工反馈，更新 `skill-arbitrate-overlap.md` 的仲裁规则。
 
-        ## 核心 Scope
+### 异常 3：高风险任务被派给低权限员工
+- 立即 escalate admin。
+- 在 `skill-route-task.md` 的"风险通道"加规则。
 
-        - `MODstore_deploy/modstore_server/eventing/router/**`
-- `MODstore_deploy/modstore_server/api/router_api.py`
-- `MODstore_deploy/modstore_server/scripts/build_routing_table.py`
-- `MODstore_deploy/scripts/build_routing_table.py`
-- `MODstore_deploy/docs/routing-table.md`
-- `yuangon/platform-core/task-router-officer/**`
+## ESkill 动态阶段触发记录
 
-        ## 故障处置
-
-        | 场景 | 处置 |
-        |------|------|
-        | LLM 调用失败 | retry 2 次 → 上报 `employee.task.failed:task-router-officer` |
-        | 上游依赖未完成 | 等待 `employee.task.done:<dep>` 事件，不自行推进 |
-        | scope 文件不存在 | 报告缺口，待确认后再执行，不编造路径 |
-        | 版本锚点不对齐 | 运行 `verify_version_anchors.py`，修复后继续 |
-
-        ## 验收检查清单
-
-        - [ ] `employee.yaml.depends_on` 与 manifest 根级一致
-        - [ ] `actions.handlers` 三方一致（yaml / manifest / `_DISPATCH`）
-        - [ ] scope_globs 路径存在（或标注规划中）
-        - [ ] `employee_pack_consistency_warnings` 无 handler warning
-        - [ ] echo smoke 测试通过
-
-        ---
-        *本文件由 `bootstrap_yuangon.py` 生成，v10 线内迭代*
+| 日期 | 触发原因 | patch_id | 结果 | 是否固化 |
+|------|----------|----------|------|----------|
+| — | — | — | — | — |

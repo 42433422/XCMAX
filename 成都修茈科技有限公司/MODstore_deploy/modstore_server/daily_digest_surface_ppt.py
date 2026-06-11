@@ -31,7 +31,7 @@ _SLIDE_H_IN = 7.5
 _LANE_TITLES = {
     "P-W": "P-W · 获客网站（xiu-ci.com）",
     "P-S": "P-S · MODstore 软件面（market）",
-    "P-App": "P-App · 移动端 / App WebView",
+    "P-App": "P-App · 移动端 / adb 原生屏",
 }
 _LANE_ORDER = ["P-W", "P-S", "P-App"]
 
@@ -179,7 +179,7 @@ def build_surface_audit_pptx(
             (f"日期 {day}", 18, grey, False),
             (overview or "无巡检数据", 16, slate, False),
             (
-                "P-W 网站截图+分析 · P-S 软件截图+分析 · P-App 移动 WebView 截图+分析",
+                "P-W 网站截图+分析 · P-S 软件截图+分析 · P-App adb 模拟器原生屏截图+分析",
                 13,
                 grey,
                 False,

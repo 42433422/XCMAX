@@ -21,13 +21,12 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
-import kotlinx.coroutines.flow.collectLatest
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.xiuci.xcagi.mobile.ui.AppViewModel
@@ -44,19 +43,11 @@ fun ImMessengerScreen(
     var conversationId by remember { mutableStateOf<Int?>(null) }
     var draft by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
-    val messages = remember { mutableStateListOf<Map<String, Any?>>() }
-
-    fun refreshMessages(cid: Int) {
-        scope.launch {
-            vm.imListMessages(cid)
-                .onSuccess { body ->
-                    @Suppress("UNCHECKED_CAST")
-                    val list = body["messages"] as? List<Map<String, Any?>> ?: emptyList()
-                    messages.clear()
-                    messages.addAll(list)
-                }
-                .onFailure { error = it.message }
-        }
+    val cid = conversationId
+    val messages by if (cid != null) {
+        vm.observeImMessages(cid).collectAsState(initial = emptyList())
+    } else {
+        remember { mutableStateOf(emptyList()) }
     }
 
     DisposableEffect(Unit) {
@@ -64,24 +55,9 @@ fun ImMessengerScreen(
         onDispose { vm.disconnectImWebSocket() }
     }
 
-    LaunchedEffect(conversationId) {
-        val cid = conversationId ?: return@LaunchedEffect
-        refreshMessages(cid)
-    }
-
-    LaunchedEffect(conversationId) {
-        val cid = conversationId ?: return@LaunchedEffect
-        vm.imWsEvents.collectLatest { event ->
-            if (event.optString("type") != "message") return@collectLatest
-            if (event.optInt("conversation_id") != cid) return@collectLatest
-            val msg = event.optJSONObject("message") ?: return@collectLatest
-            val map = buildMap<String, Any?> {
-                msg.keys().forEach { k -> put(k, msg.opt(k)) }
-            }
-            if (messages.none { (it["id"] as? Number)?.toLong() == (map["id"] as? Number)?.toLong() }) {
-                messages.add(map)
-            }
-        }
+    LaunchedEffect(cid) {
+        val activeCid = cid ?: return@LaunchedEffect
+        vm.seedImMessages(activeCid).onFailure { error = it.message }
     }
 
     Scaffold(
@@ -130,9 +106,9 @@ fun ImMessengerScreen(
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    items(messages) { m ->
+                    items(messages, key = { it.message_id }) { m ->
                         Text(
-                            text = "${m["sender_user_id"]}: ${m["body"]}",
+                            text = "${m.sender_user_id}: ${m.body}",
                             style = MaterialTheme.typography.bodyMedium,
                         )
                     }
@@ -145,14 +121,14 @@ fun ImMessengerScreen(
                 )
                 Button(
                     onClick = {
-                        val cid = conversationId ?: return@Button
+                        val activeCid = conversationId ?: return@Button
                         val text = draft.trim()
                         if (text.isEmpty()) return@Button
                         scope.launch {
-                            vm.imSendMessage(cid, text)
+                            vm.imSendMessage(activeCid, text)
                                 .onSuccess {
                                     draft = ""
-                                    refreshMessages(cid)
+                                    error = null
                                 }
                                 .onFailure { error = it.message }
                         }

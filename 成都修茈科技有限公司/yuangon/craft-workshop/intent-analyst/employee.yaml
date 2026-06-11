@@ -1,37 +1,40 @@
 id: intent-analyst
 name: 需求分析员工
-version: "10.0.0"
+version: 1.0.0
+domain: 解析用户自然语言需求，提取结构化意图、领域关键词与建议能力；识别用户身份与权限
 owner: admin
 area: craft-workshop
-domain: >-
-  解析用户自然语言需求，提取结构化意图、领域关键词与建议能力；识别用户身份与权限
-
 scope_globs:
-  - "workbench/sessions/*"
-  - "workbench/intent/*"
-  - "yuangon/craft-workshop/intent-analyst/**"
-
+- workbench/sessions/*
+- workbench/intent/*
 forbidden_globs:
-  - "*.py"
-  - "*.vue"
-  - "*.ts"
-
-depends_on:
-  []
-
-actions:
-  handlers:
-    - llm_md
-    - echo
-
+- '*.py'
+- '*.vue'
+- '*.ts'
 triggers:
   on_error: true
   on_quality_fail: true
-
+  on_coverage_miss: false
+  max_patch_budget_tokens: 3000
+  max_patch_steps: 4
+sla:
+  timeout_seconds: 120
+  retry_max: 2
+  escalate_to_human: true
+llm_default: auto
+llm_reasoning: auto
 skills:
-  - skill-intent-analysis
-
+- skills/skill-intent-analysis.md
+actions:
+  handlers:
+  - llm_md
+  - echo
+depends_on: []
 changelog:
-  - version: "10.0.0"
-    date: "2026-06-07"
-    note: "yuangon 骨架由 bootstrap_yuangon.py 从 manifest 反向生成（v10 线内迭代）"
+- version: 1.0.0
+  date: '2026-05-18'
+  note: 初始创建
+all_hands:
+  standby: true
+  runbook: 制作车间流水线岗位：无上游员工包/workflow/产物路径时仅汇报职责边界与待机条件；收到 intent-analyst 或 pack-registrar
+    输入后再描述可执行步骤。

@@ -61,4 +61,55 @@ class ImWebSocketClient @Inject constructor(
         socket = null
         connected = false
     }
+
+    companion object {
+        fun parseEvent(json: JSONObject): ImWsEvent? = when (json.optString("type")) {
+            "im.message", "message" -> parseMessage(json)
+            "im.read", "read" -> parseRead(json)
+            else -> null
+        }
+
+        private fun parseMessage(json: JSONObject): ImWsEvent.Message? {
+            val conversationId = json.optInt("conversation_id", 0)
+            val msg = json.optJSONObject("message")
+            val messageId = when {
+                msg != null -> msg.optLong("id", 0L)
+                else -> json.optLong("message_id", 0L)
+            }
+            if (conversationId <= 0 || messageId <= 0L) return null
+            val senderUserId = when {
+                msg != null -> msg.optInt("sender_user_id", 0)
+                else -> json.optInt("sender_user_id", 0)
+            }
+            val body = when {
+                msg != null -> msg.optString("body", "")
+                else -> json.optString("body", "")
+            }
+            val createdAtMs = when {
+                msg != null -> ImRepository.parseTimestampMs(msg.opt("created_at"))
+                else -> ImRepository.parseTimestampMs(json.opt("created_at"))
+            } ?: System.currentTimeMillis()
+            return ImWsEvent.Message(
+                conversationId = conversationId,
+                messageId = messageId,
+                senderUserId = senderUserId,
+                body = body,
+                createdAtMs = createdAtMs,
+                updatedAtMs = System.currentTimeMillis(),
+            )
+        }
+
+        private fun parseRead(json: JSONObject): ImWsEvent.Read? {
+            val conversationId = json.optInt("conversation_id", 0)
+            val lastRead = json.optLong("last_read_message_id", 0L)
+                .takeIf { it > 0L }
+                ?: json.optLong("last_message_id", 0L)
+            if (conversationId <= 0 || lastRead <= 0L) return null
+            return ImWsEvent.Read(
+                conversationId = conversationId,
+                lastReadMessageId = lastRead,
+                updatedAtMs = System.currentTimeMillis(),
+            )
+        }
+    }
 }

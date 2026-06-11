@@ -1,0 +1,94 @@
+{
+  "id": "taiyangniao-pro",
+  "name": "太阳鸟pro",
+  "version": "1.0.0",
+  "author": "太阳鸟",
+  "description": "太阳鸟专业版：由 MODstore 脚手架创建，可在库内继续编辑并同步到 XCAGI/mods。",
+  "primary": false,
+  "dependencies": {
+    "xcagi": ">=1.0.0"
+  },
+  "backend": {
+    "entry": "blueprints",
+    "init": "mod_init"
+  },
+  "frontend": {
+    "routes": "frontend/routes",
+    "menu": [
+      {
+        "id": "taiyangniao-pro-home",
+        "label": "太阳鸟pro",
+        "icon": "fa-cube",
+        "path": "/taiyangniao-pro"
+      }
+    ],
+    "menu_overrides": [
+      {
+        "key": "products",
+        "label": "人员管理"
+      },
+      {
+        "key": "customers",
+        "label": "部门管理"
+      }
+    ]
+  },
+  "hooks": {},
+  "industry": {
+    "id": "考勤",
+    "name": "考勤/人事行业",
+    "description": "适用于企业考勤、排班、出勤统计等人事场景",
+    "units": {
+      "primary": "天",
+      "secondary": "小时",
+      "primary_label": "出勤天数",
+      "secondary_label": "工时",
+      "spec_label": "班次",
+      "conversion": { "天_to_小时": 8.0 }
+    },
+    "quantity_fields": {
+      "primary_field": "days",
+      "secondary_field": "hours",
+      "spec_field": "shift",
+      "primary_label": "出勤天数",
+      "secondary_label": "工时",
+      "spec_label": "班次"
+    },
+    "product_fields": {
+      "name": "员工姓名",
+      "model": "工号",
+      "category": "部门",
+      "price": "时薪",
+      "unit": "单位"
+    },
+    "order_types": {
+      "shipment": "考勤单",
+      "receipt": "排班单",
+      "return": "异常单"
+    },
+    "intent_keywords": {
+      "create_order": ["录考勤", "登记出勤", "排班", "生成考勤单"],
+      "quantity_unit": "天",
+      "print_label": ["考勤表", "工时单", "标签"],
+      "product": ["员工", "工号", "人员", "花名册"],
+      "customer": ["部门", "班组", "项目"]
+    },
+    "print_config": {
+      "printer_type": "PDF",
+      "label_width": 80,
+      "label_height": 50
+    }
+  },
+  "workflow_employees": [
+    {
+      "id": "attendance_ai",
+      "label": "考勤ai助手",
+      "panel_title": "工作流 · 考勤ai助手",
+      "panel_summary": "协助处理出勤记录、异常说明与排班相关问答；后续可接入考勤系统 API 与状态轮询。",
+      "workflow_placeholder": true
+    }
+  ],
+  "comms": {
+    "exports": []
+  }
+}

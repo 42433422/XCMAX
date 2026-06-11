@@ -131,7 +131,22 @@ export const useAuthStore = defineStore('auth', () => {
     }
     try {
       const raw = await api.me()
+      if (
+        raw &&
+        typeof raw === 'object' &&
+        ((raw as { ok?: boolean }).ok === false ||
+          (raw as { success?: boolean }).success === false)
+      ) {
+        clearAuthTokens()
+        resetSession()
+        return null
+      }
       const me = normalizeMeResponse(raw)
+      if (!me || me.id == null) {
+        clearAuthTokens()
+        resetSession()
+        return null
+      }
       user.value = me
       lastValidatedToken.value = token
       lastMeFetchedAt.value = Date.now()

@@ -1,37 +1,41 @@
 id: miniapp-builder
 name: 小程序员工
-version: "10.0.0"
+version: 1.0.0
+domain: 为员工包生成配套脚本工作流（小程序），将自然语言需求转化为可执行的脚本逻辑
 owner: admin
 area: craft-workshop
-domain: >-
-  为员工包生成配套脚本工作流（小程序），将自然语言需求转化为可执行的脚本逻辑
-
 scope_globs:
-  - "workbench/sessions/*"
-  - "workbench/scripts/*"
-  - "yuangon/craft-workshop/miniapp-builder/**"
-
+- workbench/sessions/*
+- workbench/scripts/*
 forbidden_globs:
-  - "*.py"
-  - "*.vue"
-  - "*.ts"
-
-depends_on:
-  - quality-validator
-
-actions:
-  handlers:
-    - llm_md
-    - echo
-
+- '*.py'
+- '*.vue'
+- '*.ts'
 triggers:
   on_error: true
   on_quality_fail: true
-
+  on_coverage_miss: false
+  max_patch_budget_tokens: 3000
+  max_patch_steps: 4
+sla:
+  timeout_seconds: 120
+  retry_max: 2
+  escalate_to_human: true
+llm_default: auto
+llm_reasoning: auto
+actions:
+  handlers:
+  - llm_md
+  - echo
 skills:
-  - skill-miniapp-build
-
+- skills/skill-miniapp-build.md
+depends_on:
+- quality-validator
 changelog:
-  - version: "10.0.0"
-    date: "2026-06-07"
-    note: "yuangon 骨架由 bootstrap_yuangon.py 从 manifest 反向生成（v10 线内迭代）"
+- version: 1.0.0
+  date: '2026-05-18'
+  note: 初始创建
+all_hands:
+  standby: true
+  runbook: 制作车间流水线岗位：无上游员工包/workflow/产物路径时仅汇报职责边界与待机条件；收到 intent-analyst 或 pack-registrar
+    输入后再描述可执行步骤。

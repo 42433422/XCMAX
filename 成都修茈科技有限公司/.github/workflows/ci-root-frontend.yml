@@ -1,0 +1,121 @@
+# 组件级 CI：根 Vue 3 + Vite 项目（modstore-market，根层）
+#
+# 责任边界：仅负责根 src/ 下的 Vue 应用及其构建/测试工具链。
+# 不覆盖：营销官网静态页（见 ci-marketing-site.yml）、MODstore market（见 ci-market.yml）、
+#         modstore_server Python（见 ci-backend-python.yml）、java_payment_service（见 ci-payment-java.yml）。
+#
+# 拆分前 ci.yml 的 root-ci job 内容一比一迁移至此；workflow_run 重命名 "CI" → "CI - Root Frontend"。
+
+name: CI - Root Frontend
+
+on:
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'public/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'vite.config.*'
+      - 'tsconfig*.json'
+      - 'vitest.config.*'
+      - 'playwright.config.*'
+      - '.prettierrc*'
+      - '.prettierignore'
+      - 'eslint.config.*'
+      - '.eslintrc*'
+      - '.github/workflows/ci-root-frontend.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'public/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'vite.config.*'
+      - 'tsconfig*.json'
+      - 'vitest.config.*'
+      - 'playwright.config.*'
+      - '.prettierrc*'
+      - '.prettierignore'
+      - 'eslint.config.*'
+      - '.eslintrc*'
+      - '.github/workflows/ci-root-frontend.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ci-root-frontend-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  root-frontend-ci:
+    name: Root project (Vue 3 + Vite)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Unit tests + coverage
+        run: npm run test:coverage
+
+      - name: Build
+        run: npm run build:no-typecheck
+        env:
+          VITE_PUBLIC_BASE: '/'
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        id: pw-cache-root
+        with:
+          path: ~/.cache/ms-playwright
+          key: pw-${{ runner.os }}-root-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            pw-${{ runner.os }}-root-
+
+      - name: Install Playwright browsers
+        if: steps.pw-cache-root.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+
+      - name: Install Playwright system deps (cache hit fallback)
+        if: steps.pw-cache-root.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+
+      - name: E2E tests
+        run: npm run test:e2e
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: root-coverage
+          path: coverage/
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: root-playwright-report
+          path: playwright-report/
+          if-no-files-found: ignore
+          retention-days: 14

@@ -21,22 +21,19 @@ export const ADMIN_OPERATOR_AUX_MENU_ITEMS: CoreMenuCatalogItem[] = [
   { key: 'internal-customer-service', name: '内部客服', iconClass: 'fa-headphones' },
   { key: 'data-sources', name: '数据来源', iconClass: 'fa-database' },
   { key: 'tools', name: '工具表', iconClass: 'fa-wrench' },
-  { key: 'other-tools', name: '员工工作流', iconClass: 'fa-sitemap' },
-  { key: 'workflow-visualization', name: '流程可视化', iconClass: 'fa-project-diagram' },
   { key: 'mod-store', name: '能力库', iconClass: 'fa-puzzle-piece' },
-  { key: 'workflow-employee-space', name: '员工空间', iconClass: 'fa-user-circle' },
 ]
 
 /** 管理员宿主 core/aux 可见 key（不含运维顶栏三项） */
 export const ADMIN_OPERATOR_VISIBLE_CORE_KEYS = new Set([
   'chat',
   'ai-ecosystem',
+  'employee-workflow',
+  'workflow-employee-space',
+  'workflow-visualization',
   'mod-store',
   'tools',
   'data-sources',
-  'other-tools',
-  'workflow-employee-space',
-  'workflow-visualization',
   'chat-debug',
   'internal-customer-service',
   'mod-internal-customer-service',
@@ -85,7 +82,11 @@ export const ADMIN_OPERATOR_ROUTE_NAMES = new Set([
   'taiyangniao-pro-settings',
 ])
 
-export const ADMIN_OPERATOR_HIDDEN_MOD_IDS = new Set(['coating-industry', 'sz-qsm-pro'])
+export const ADMIN_OPERATOR_HIDDEN_MOD_IDS = new Set([
+  'coating-industry',
+  'sz-qsm-pro',
+  'xcagi-workflow-visualization-bridge',
+])
 
 export const ADMIN_OPERATOR_ATTENDANCE_MOD_IDS = new Set(['attendance-industry', 'taiyangniao-pro'])
 

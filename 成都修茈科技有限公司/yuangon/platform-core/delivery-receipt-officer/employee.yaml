@@ -1,39 +1,40 @@
 id: delivery-receipt-officer
 name: 交付签收员
-version: "10.0.0"
+version: "1.0.0"
+domain: O8 里程碑签收与交付确认：对接 OPS_CLOSURE、签收工单、test-qa-runner 门禁与 receipt 工作流。
 owner: admin
 area: platform-core
-domain: >-
-  O8 里程碑签收与交付确认：对接 OPS_CLOSURE、签收工单、test-qa-runner 门禁与 receipt 工作流。
+five_line_id: ops_acquisition
+subzone: delivery-feedback
+also_serves: []
 
 scope_globs:
-  - "FHD/app/**/ops_closure/**"
-  - "FHD/mods/xcagi-workflow-employee-receipt-confirm/**"
-  - "MODstore_deploy/modstore_server/**/delivery**"
-  - "yuangon/platform-core/delivery-receipt-officer/**"
+  - FHD/app/**/ops_closure/**
+  - FHD/mods/xcagi-workflow-employee-receipt-confirm/**
+  - MODstore_deploy/modstore_server/**/delivery**
 
 forbidden_globs:
-  - "_local_secrets/**"
+  - _local_secrets/**
+
+triggers:
+  on_error: true
+  subscribes:
+    - "ops.delivery.milestone_ready"
+
+sla:
+  timeout_seconds: 180
+  retry_max: 2
+  escalate_to_human: true
+
+llm_default: "auto"
+
+skills: []
 
 depends_on:
   - test-qa-runner
   - change-request-auditor
 
-actions:
-  handlers:
-    - llm_md
-    - echo
-
-triggers:
-  on_error: true
-  on_quality_fail: true
-
-skills:
-  - task.analyze
-  - llm.markdown
-  - workflow.assist
-
 changelog:
-  - version: "10.0.0"
-    date: "2026-06-07"
-    note: "yuangon 骨架由 bootstrap_yuangon.py 从 manifest 反向生成（v10 线内迭代）"
+  - version: "1.0.0"
+    date: "2026-06-03"
+    note: "六部门编制：O-A O8 交付签收专岗"

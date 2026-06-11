@@ -1,40 +1,42 @@
 id: legacy-archive-curator
 name: 工作区归档管理员
-version: "10.0.0"
+version: "1.0.0"
+domain: S-R R3 工作区与 legacy 归档：_archive/、FHD/.archive/、LEGACY_CLEANUP_TRACKING、xcmax-tree 排除项治理。
 owner: admin
 area: server-and-ops
-domain: >-
-  S-R R3 工作区与 legacy 归档：_archive/、FHD/.archive/、LEGACY_CLEANUP_TRACKING、xcmax-tree 排除项治理。
+five_line_id: shared_retention
+subzone: legacy-archive
+also_serves: []
 
 scope_globs:
-  - "_archive/**"
-  - "FHD/.archive/**"
+  - _archive/**
+  - FHD/.archive/**
   - FHD/docs/reports/LEGACY_CLEANUP_TRACKING.md
   - scripts/cleanup_archive_secrets.py
   - scripts/build-xcmax-tree-data.py
-  - "yuangon/server-and-ops/legacy-archive-curator/**"
 
 forbidden_globs:
-  - "_local_secrets/**"
+  - _local_secrets/**
+
+triggers:
+  on_error: true
+  schedule:
+    cron: "15 3 * * *"
+    timezone: "Asia/Shanghai"
+
+sla:
+  timeout_seconds: 300
+  retry_max: 1
+  escalate_to_human: true
+
+llm_default: "auto"
+
+skills: []
 
 depends_on:
   - retention-officer
 
-actions:
-  handlers:
-    - llm_md
-    - echo
-
-triggers:
-  on_error: true
-  on_quality_fail: true
-
-skills:
-  - task.analyze
-  - llm.markdown
-  - workflow.assist
-
 changelog:
-  - version: "10.0.0"
-    date: "2026-06-07"
-    note: "yuangon 骨架由 bootstrap_yuangon.py 从 manifest 反向生成（v10 线内迭代）"
+  - version: "1.0.0"
+    date: "2026-06-03"
+    note: "六部门编制：S-R legacy 归档专岗"

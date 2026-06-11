@@ -1,0 +1,18 @@
+{
+  "task": "review-new-mod-package",
+  "description": "审核一个新提交的 Mod 包",
+  "input": {
+    "package_path": "mods/example-mod-v1.0.0",
+    "checklist": {
+      "schema_valid": true,
+      "no_secret_leak": true,
+      "version_format": "semver",
+      "scope_globs_reasonable": true,
+      "forbidden_globs_set": true
+    }
+  },
+  "output": {
+    "generate_report": true,
+    "notify_developer_on_reject": true
+  }
+}

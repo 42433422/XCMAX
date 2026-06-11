@@ -4,6 +4,7 @@ import {
   shouldAutoEnableMinimalPlatformShell,
   shouldAutoEnablePlatformShell,
 } from '@/constants/genericModPack'
+import { removeTenantScopedStorageItem } from '@/utils/tenantStorageScope'
 import { XCAGI_ACTIVE_EXTENSION_MOD_ID_KEY } from '@/utils/xcagiStorageKeys'
 
 /**
@@ -23,10 +24,12 @@ export const LS_PLATFORM_SHELL_AUTO_GENERIC = 'xcagi_platform_shell_auto_generic
 
 export const LS_PLATFORM_SHELL_AUTO_MINIMAL = 'xcagi_platform_shell_auto_minimal'
 
-/** 壳模式保留的侧栏 key（与 router name 对齐） */
+/** 壳模式保留的侧栏 key（与 router name 对齐；含员工工作流分组及子项） */
 export const SHELL_CORE_MENU_KEYS = new Set([
   'chat',
   'ai-ecosystem',
+  'employee-workflow',
+  'workflow-employee-space',
   'login',
 ])
 
@@ -123,7 +126,7 @@ export function bootstrapAdminConsoleShellDefaults(): void {
   if (typeof localStorage === 'undefined') return
   try {
     localStorage.setItem(LS_PLATFORM_SHELL_MODE, '0')
-    localStorage.removeItem(XCAGI_ACTIVE_EXTENSION_MOD_ID_KEY)
+    removeTenantScopedStorageItem(XCAGI_ACTIVE_EXTENSION_MOD_ID_KEY)
     localStorage.setItem('xcagi_lan_mod_facade_enabled', '0')
     localStorage.setItem('xcagi_planner_mod_facade_enabled', '0')
     localStorage.setItem('xcagi_erp_domain_mod_facade_enabled', '0')

@@ -1,0 +1,9 @@
+pyproject.toml
+tests/test_csrf.py
+xcagi_common/__init__.py
+xcagi_common/csrf.py
+xcagi_common/session.py
+xcagi_common.egg-info/PKG-INFO
+xcagi_common.egg-info/SOURCES.txt
+xcagi_common.egg-info/dependency_links.txt
+xcagi_common.egg-info/top_level.txt

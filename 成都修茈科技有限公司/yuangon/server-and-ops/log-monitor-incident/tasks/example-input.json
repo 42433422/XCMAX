@@ -1,0 +1,21 @@
+{
+  "task": "daily-health-report",
+  "description": "生成每日健康报告",
+  "input": {
+    "sources": [
+      "coverage/",
+      "playwright-report/",
+      "test-results/",
+      ".cursor_case1_log.txt",
+      ".cursor_case2_log.txt",
+      ".cursor_case3_log.txt"
+    ],
+    "coverage_threshold_drop_pct": 5.0
+  },
+  "output": {
+    "format": "markdown",
+    "include_p0": true,
+    "include_p1": true,
+    "include_coverage_trend": true
+  }
+}

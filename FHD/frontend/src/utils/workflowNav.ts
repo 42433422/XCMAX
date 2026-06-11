@@ -16,12 +16,12 @@ export function resolveWorkflowVisualizationLocation(): RouteLocationRaw {
   return { name: 'workflow-visualization' }
 }
 
-/** 员工工作流管理页（office pack 门面开启时走 Mod 路径） */
+/** @deprecated 员工视图已移除；统一进员工空间 */
 export function resolveOtherToolsLocation(): RouteLocationRaw {
   if (readOfficeEmployeePackModPagesEnabled()) {
     return { path: OTHER_TOOLS_MOD_PATH }
   }
-  return { name: 'other-tools' }
+  return { name: 'workflow-employee-space' }
 }
 
 export function workflowVisualizationModPath(): string {

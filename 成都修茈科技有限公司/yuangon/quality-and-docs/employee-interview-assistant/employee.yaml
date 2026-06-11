@@ -1,42 +1,54 @@
 id: employee-interview-assistant
 name: 员工信息访谈员
-version: "10.0.0"
+version: "1.0.2"
+domain: |
+  面向内部编制与协作场景：通过结构化提问与表单补全，帮助其他员工（及岗位包）补全元数据、能力说明、
+  运行依赖与风险字段；不替代 HR 正式录用流程，不存储敏感个人身份信息于未授权位置。
 owner: admin
 area: quality-and-docs
-domain: >-
-  面向内部编制与协作场景：通过结构化提问与表单补全，帮助其他员工（及岗位包）补全元数据、能力说明、 运行依赖与风险字段；不替代 HR 正式录用流程，不存储敏感个人身份信息于未授权位置。
 
 scope_globs:
-  - "yuangon/**/README.md"
-  - "yuangon/**/employee.yaml"
-  - "yuangon/**/runbook.md"
-  - "yuangon/**/skills/*.md"
-  - "yuangon/**/tasks/**"
-  - "yuangon/quality-and-docs/employee-interview-assistant/**"
+  - yuangon/**/README.md
+  - yuangon/**/employee.yaml
+  - yuangon/**/runbook.md
+  - yuangon/**/skills/*.md
+  - yuangon/**/tasks/**
 
 forbidden_globs:
-  - "_local_secrets/**"
+  - _local_secrets/**
   - "*.key"
   - .env
-  - "payments/**"
+  - payments/**
+
+triggers:
+  on_error: false
+  on_quality_fail: false
+  on_coverage_miss: false
+  max_patch_budget_tokens: 3000
+  max_patch_steps: 3
+
+sla:
+  timeout_seconds: 90
+  retry_max: 1
+  escalate_to_human: true
+
+llm_default: "auto"
+llm_reasoning: "auto"
+
+skills:
+  - skills/skill-employee-intake.md
 
 depends_on:
   - doc-knowledge-curator
   - employee-pack-curator
 
-actions:
-  handlers:
-    - llm_md
-    - echo
-
-triggers:
-  on_error: false
-  on_quality_fail: false
-
-skills:
-  - skill-employee-intake
-
 changelog:
-  - version: "10.0.0"
-    date: "2026-06-07"
-    note: "yuangon 骨架由 bootstrap_yuangon.py 从 manifest 反向生成（v10 线内迭代）"
+  - version: "1.0.2"
+    date: "2026-05-08"
+    note: "全覆盖 Phase2：scope 纳入 yuangon/**/tasks/**（example-input 等）"
+  - version: "1.0.1"
+    date: "2026-05-08"
+    note: "skill-employee-intake：数字员工能力结构化模板与访谈目的融合；README 运行依赖示例与联动说明"
+  - version: "1.0.0"
+    date: "2026-05-07"
+    note: "纳入编制；每日简报调研种子见 README manifest 建议字段"

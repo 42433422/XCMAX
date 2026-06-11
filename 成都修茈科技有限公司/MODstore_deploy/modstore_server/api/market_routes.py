@@ -302,7 +302,10 @@ def api_login(body: LoginDTO):
 
 
 @router.get("/auth/me")
-def api_me(user: User = Depends(_get_current_user)):
+def api_me(user: Optional[User] = Depends(_get_optional_user)):
+    # 未登录用 200，避免 SPA 控制台刷 401（语义由 ok/success 表达）。
+    if not user:
+        return {"ok": False, "success": False, "error": "请先登录"}
     # 经验值与等级档由前端导航栏 / 设置页直接消费；缺失会导致用户停在 Lv.1
     exp = int(getattr(user, "experience", 0) or 0)
     level_profile = account_level_service.build_level_profile(exp).to_dict()

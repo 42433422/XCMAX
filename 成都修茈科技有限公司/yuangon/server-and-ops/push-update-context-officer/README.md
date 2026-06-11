@@ -1,35 +1,41 @@
-        # 推送更新员工 (`push-update-context-officer`)
+# 推送更新员工（push-update-context-officer）
 
-        **area**：`server-and-ops`  
-        **yuangon 路径**：`成都修茈科技有限公司/yuangon/server-and-ops/push-update-context-officer/`
+## 一句话职责
 
-        ## 职责
+在合并、推送与发布前汇总当前 Git 状态与设备/部署档位；不直接执行生产发布，不修改业务源码。
 
-        在合并、推送与发布前汇总当前 Git 状态与设备/部署档位；不直接执行生产发布，不修改业务源码。
+## 负责文件
 
-        ## 上游依赖 (`depends_on`)
+| 路径 | 说明 |
+|------|------|
+| `MODstore_deploy/.env.example` | 环境变量示例 |
+| `deploy/**` | 部署配置 |
+| `scripts/**` | 运维脚本 |
+| `.github/**` | CI/CD 工作流 |
 
-        - `deploy-release-officer`
+## 典型任务
 
-        ## 支持的 Handlers
+1. 在合并请求前汇总 Git 状态（分支、提交、冲突）。
+2. 在发布前检查部署档位（环境、配置、版本）。
+3. 生成推送上下文报告供 deploy-release-officer 参考。
+4. 检查 CI/CD 工作流配置是否符合规范。
 
-        - `llm_md`：接收 Markdown 任务描述，调用 LLM 输出结构化结果
-- `echo`：调试用：原样返回输入，用于 smoke 测试
-- `shell_exec`：执行预批准的 shell 命令
+## KPI
 
-        ## Scope（核心文件范围）
+| 指标 | 目标 |
+|------|------|
+| 上下文报告准确率 | 100% |
+| 发布前检查覆盖率 | 100% |
+| 上下文汇总延迟 | ≤ 30 秒 |
 
-        - `.gitignore`
-- `.gitleaks.toml`
-- `.github/**`
-- `MODstore_deploy/.gitignore`
-- `MODstore_deploy/.github/**`
-- `MODstore_deploy/git-push.sh`
+## 禁区
 
-        ## 相关链接
+- `_local_secrets/**`（密钥目录）
+- `*.vue`（前端源码）
+- `vibe-coding/src/**`（vibe-coding 源码）
 
-        - manifest：`FHD/mods/_employees/push-update-context-officer/manifest.json`
-        - runbook：[runbook.md](./runbook.md)
+## 协作关系
 
-        ---
-        *本文件由 `bootstrap_yuangon.py` 生成，v10 线内迭代*
+- 依赖 `deploy-release-officer` 的部署流程。
+- 为 `daily-orchestrator` 的修复提交提供上下文。
+- 为 `nginx-config-engineer` 的配置变更提供档位信息。

@@ -54,14 +54,24 @@ export const PRODUCT_FLOW_STEPS: ProductFlowStepMeta[] = [
   },
 ]
 
-/** 引导「行业定型」当前开放可选（其余仅展示） */
+/** 引导「行业定型」当前开放可选（其余仅展示）；运行时以服务器 catalog 为准 */
 export const ONBOARDING_OPEN_INDUSTRY_IDS = ['涂料', '考勤'] as const
 
 export type OnboardingOpenIndustryId = (typeof ONBOARDING_OPEN_INDUSTRY_IDS)[number]
 
+let runtimeOpenIndustryIds: readonly string[] | null = null
+
+export function setRuntimeOnboardingOpenIndustryIds(ids: string[] | null | undefined): void {
+  runtimeOpenIndustryIds = ids?.length ? ids : null
+}
+
+export function readRuntimeOnboardingOpenIndustryIds(): readonly string[] {
+  return runtimeOpenIndustryIds ?? ONBOARDING_OPEN_INDUSTRY_IDS
+}
+
 export function isOnboardingIndustryOpen(industryId: string): boolean {
   const id = String(industryId || '').trim()
-  return (ONBOARDING_OPEN_INDUSTRY_IDS as readonly string[]).includes(id)
+  return readRuntimeOnboardingOpenIndustryIds().includes(id)
 }
 
 export function defaultOnboardingIndustryId(): OnboardingOpenIndustryId {
@@ -101,6 +111,9 @@ export function markProductFlowCompleted(): void {
   } catch {
     /* ignore */
   }
+  void import('@/utils/workspacePrefsApi').then(({ queueWorkspacePrefsSync }) => {
+    queueWorkspacePrefsSync({ product_flow_completed: true })
+  }).catch(() => {})
 }
 
 export function readHostPackAcknowledged(): boolean {
@@ -119,6 +132,9 @@ export function markHostPackAcknowledged(): void {
   } catch {
     /* ignore */
   }
+  void import('@/utils/workspacePrefsApi').then(({ queueWorkspacePrefsSync }) => {
+    queueWorkspacePrefsSync({ host_pack_acknowledged: true })
+  }).catch(() => {})
 }
 
 export function parseFlowStepQuery(raw: unknown): ProductFlowStepId {

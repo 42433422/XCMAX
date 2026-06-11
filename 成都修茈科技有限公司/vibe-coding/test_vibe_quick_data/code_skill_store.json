@@ -1,0 +1,429 @@
+{
+  "code_events": [],
+  "code_runs": [
+    {
+      "completed_at": "2026-05-05T11:33:23.718243+00:00",
+      "diagnosis": {},
+      "error": "",
+      "input_data": {
+        "input_string": "hello"
+      },
+      "output_data": {
+        "reversed_string": "olleh"
+      },
+      "patch": null,
+      "run_id": "b0190bcb6ebf4a17904b7844ed45a3d3",
+      "skill_id": "string-reversal",
+      "stage": "static",
+      "started_at": "2026-05-05T11:33:23.446644+00:00"
+    },
+    {
+      "completed_at": "2026-05-05T11:35:26.951198+00:00",
+      "diagnosis": {
+        "error_message": "quality_gate:missing_key:merged_dict",
+        "error_type": "ValueError",
+        "failing_line": "",
+        "local_variables": {},
+        "suggested_fix_type": "invalid_value",
+        "traceback_str": ""
+      },
+      "error": "Dynamic phase rejected: input is outside skill domain",
+      "input_data": {
+        "dict1": {
+          "a": 1,
+          "b": 2
+        },
+        "dict2": {
+          "b": 3,
+          "c": 4
+        }
+      },
+      "output_data": {},
+      "patch": null,
+      "run_id": "b5a9f5cc03224821a3a110ad43194eab",
+      "skill_id": "merge-dicts-with-list-values",
+      "stage": "domain_rejected",
+      "started_at": "2026-05-05T11:35:26.704544+00:00"
+    },
+    {
+      "completed_at": "2026-05-05T11:37:15.067856+00:00",
+      "diagnosis": {},
+      "error": "",
+      "input_data": {
+        "n": 5
+      },
+      "output_data": {
+        "n": 5,
+        "result": 5
+      },
+      "patch": null,
+      "run_id": "62aecb61f0914e7394a90d38a8952aa2",
+      "skill_id": "fibonacci-with-cache",
+      "stage": "static",
+      "started_at": "2026-05-05T11:37:14.833089+00:00"
+    },
+    {
+      "completed_at": "2026-05-05T11:39:15.324318+00:00",
+      "diagnosis": {},
+      "error": "",
+      "input_data": {
+        "n": 3,
+        "text": "the quick brown fox jumps over the lazy dog the fox"
+      },
+      "output_data": {
+        "top_words": [
+          {
+            "count": 3,
+            "word": "the"
+          },
+          {
+            "count": 2,
+            "word": "fox"
+          },
+          {
+            "count": 1,
+            "word": "quick"
+          }
+        ]
+      },
+      "patch": null,
+      "run_id": "a6a371ef725c4441842cfd37879e3155",
+      "skill_id": "word-frequency-counter",
+      "stage": "static",
+      "started_at": "2026-05-05T11:39:15.011021+00:00"
+    }
+  ],
+  "code_skills": {
+    "fibonacci-with-cache": {
+      "active_version": 1,
+      "created_at": "2026-05-05T11:37:14.814775+00:00",
+      "domain": "计算斐波那契数列的第n个数，支持缓存以提高性能",
+      "name": "带缓存的斐波那契数列计算",
+      "skill_id": "fibonacci-with-cache",
+      "updated_at": "2026-05-05T11:37:14.814775+00:00",
+      "versions": [
+        {
+          "created_at": "2026-05-05T11:37:14.814775+00:00",
+          "dependencies": [],
+          "domain_keywords": [
+            "fibonacci",
+            "cache",
+            "dynamic programming",
+            "sequence"
+          ],
+          "function_name": "fibonacci_with_cache",
+          "quality_gate": {
+            "required_keys": [
+              "result"
+            ]
+          },
+          "signature": {
+            "params": [
+              "n"
+            ],
+            "required_params": [
+              "n"
+            ],
+            "return_type": "dict"
+          },
+          "source_code": "def fibonacci_with_cache(n) -> dict:\n    '''计算斐波那契数列的第n个数，支持缓存。\n\n    参数:\n        n (int): 要计算的斐波那契数列的索引。\n\n    返回:\n        dict: 包含 'n' 和 'result' 的字典；如果 n 为负数，则返回 None。\n    '''\n    if n < 0:\n        return None\n    if not hasattr(fibonacci_with_cache, 'cache'):\n        fibonacci_with_cache.cache = {}\n    cache = fibonacci_with_cache.cache\n    if n in cache:\n        result = cache[n]\n    else:\n        if n == 0:\n            result = 0\n        elif n == 1:\n            result = 1\n        else:\n            result = fibonacci_with_cache(n-1)['result'] + fibonacci_with_cache(n-2)['result']\n        cache[n] = result\n    return {'n': n, 'result': result}",
+          "source_run_id": "vibe-a03ad007",
+          "test_cases": [
+            {
+              "assert_fn": null,
+              "case_id": "happy_path",
+              "expected_output": {
+                "n": 5,
+                "result": 5
+              },
+              "input_data": {
+                "n": 5
+              }
+            },
+            {
+              "assert_fn": null,
+              "case_id": "edge_empty",
+              "expected_output": {
+                "n": 0,
+                "result": 0
+              },
+              "input_data": {
+                "n": 0
+              }
+            },
+            {
+              "assert_fn": null,
+              "case_id": "edge_invalid",
+              "expected_output": null,
+              "input_data": {
+                "n": -1
+              }
+            }
+          ],
+          "trigger_policy": {
+            "force_dynamic": false,
+            "on_error": true,
+            "on_quality_below_threshold": true
+          },
+          "version": 1
+        }
+      ]
+    },
+    "merge-dicts-with-list-values": {
+      "active_version": 1,
+      "created_at": "2026-05-05T11:35:26.686631+00:00",
+      "domain": "合并两个字典，处理键冲突时将值合并为列表",
+      "name": "Merge Dictionaries with List Values",
+      "skill_id": "merge-dicts-with-list-values",
+      "updated_at": "2026-05-05T11:35:26.686631+00:00",
+      "versions": [
+        {
+          "created_at": "2026-05-05T11:35:26.686631+00:00",
+          "dependencies": [],
+          "domain_keywords": [
+            "dictionary",
+            "merge",
+            "list",
+            "conflict",
+            "combine"
+          ],
+          "function_name": "merge_dicts_with_list",
+          "quality_gate": {
+            "required_keys": [
+              "merged_dict"
+            ]
+          },
+          "signature": {
+            "params": [
+              "dict1",
+              "dict2"
+            ],
+            "required_params": [
+              "dict1",
+              "dict2"
+            ],
+            "return_type": "dict"
+          },
+          "source_code": "def merge_dicts_with_list(dict1, dict2) -> dict:\n    \"\"\"Merge two dictionaries, combining values into lists for conflicting keys.\n\n    Args:\n        dict1: First dictionary to merge.\n        dict2: Second dictionary to merge.\n\n    Returns:\n        A merged dictionary with values as lists for keys present in both inputs.\n        Returns a dict with 'error' key if inputs are invalid.\n    \"\"\"\n    if not isinstance(dict1, dict) or not isinstance(dict2, dict):\n        return {\"error\": \"Invalid input: both arguments must be dictionaries\"}\n    \n    result = dict1.copy()\n    for key, value in dict2.items():\n        if key in result:\n            existing = result[key]\n            if isinstance(existing, list):\n                existing.append(value)\n            else:\n                result[key] = [existing, value]\n        else:\n            result[key] = value\n    return result",
+          "source_run_id": "vibe-83006867",
+          "test_cases": [
+            {
+              "assert_fn": null,
+              "case_id": "happy_path",
+              "expected_output": {
+                "a": 1,
+                "b": [
+                  2,
+                  3
+                ],
+                "c": 4
+              },
+              "input_data": {
+                "dict1": {
+                  "a": 1,
+                  "b": 2
+                },
+                "dict2": {
+                  "b": 3,
+                  "c": 4
+                }
+              }
+            },
+            {
+              "assert_fn": null,
+              "case_id": "edge_empty",
+              "expected_output": null,
+              "input_data": {
+                "dict1": null,
+                "dict2": {
+                  "a": 1
+                }
+              }
+            },
+            {
+              "assert_fn": null,
+              "case_id": "edge_invalid",
+              "expected_output": null,
+              "input_data": {
+                "dict1": "not a dict",
+                "dict2": {
+                  "a": 1
+                }
+              }
+            }
+          ],
+          "trigger_policy": {
+            "force_dynamic": false,
+            "on_error": true,
+            "on_quality_below_threshold": true
+          },
+          "version": 1
+        }
+      ]
+    },
+    "string-reversal": {
+      "active_version": 1,
+      "created_at": "2026-05-05T11:33:23.429828+00:00",
+      "domain": "处理字符串反转操作",
+      "name": "字符串反转技能",
+      "skill_id": "string-reversal",
+      "updated_at": "2026-05-05T11:33:23.429828+00:00",
+      "versions": [
+        {
+          "created_at": "2026-05-05T11:33:23.429828+00:00",
+          "dependencies": [],
+          "domain_keywords": [
+            "字符串反转",
+            "文本处理",
+            "字符串操作"
+          ],
+          "function_name": "reverse_string",
+          "quality_gate": {
+            "required_keys": [
+              "reversed_string"
+            ]
+          },
+          "signature": {
+            "params": [
+              "input_string"
+            ],
+            "required_params": [
+              "input_string"
+            ],
+            "return_type": "dict"
+          },
+          "source_code": "def reverse_string(input_string) -> dict:\n    \"\"\"反转输入字符串并返回包含反转后字符串的字典。\n\n    参数:\n        input_string (str): 要反转的字符串。\n\n    返回:\n        dict: 包含 'reversed_string' 键的字典，如果输入无效则包含 'error' 键。\n    \"\"\"\n    if not isinstance(input_string, str):\n        return {'error': 'input_string must be a string'}\n    reversed_str = input_string[::-1]\n    return {'reversed_string': reversed_str}",
+          "source_run_id": "vibe-c7d8e02f",
+          "test_cases": [
+            {
+              "assert_fn": null,
+              "case_id": "happy_path",
+              "expected_output": {
+                "reversed_string": "olleh"
+              },
+              "input_data": {
+                "input_string": "hello"
+              }
+            },
+            {
+              "assert_fn": null,
+              "case_id": "edge_empty",
+              "expected_output": {
+                "reversed_string": ""
+              },
+              "input_data": {
+                "input_string": ""
+              }
+            },
+            {
+              "assert_fn": null,
+              "case_id": "edge_invalid",
+              "expected_output": null,
+              "input_data": {
+                "input_string": 123
+              }
+            }
+          ],
+          "trigger_policy": {
+            "force_dynamic": false,
+            "on_error": true,
+            "on_quality_below_threshold": true
+          },
+          "version": 1
+        }
+      ]
+    },
+    "word-frequency-counter": {
+      "active_version": 1,
+      "created_at": "2026-05-05T11:39:14.989489+00:00",
+      "domain": "统计英文文本中单词频率并返回前N个高频词",
+      "name": "Word Frequency Counter",
+      "skill_id": "word-frequency-counter",
+      "updated_at": "2026-05-05T11:39:14.989489+00:00",
+      "versions": [
+        {
+          "created_at": "2026-05-05T11:39:14.989489+00:00",
+          "dependencies": [],
+          "domain_keywords": [
+            "word frequency",
+            "text analysis",
+            "English text",
+            "top N words",
+            "frequency count"
+          ],
+          "function_name": "count_word_frequency",
+          "quality_gate": {
+            "required_keys": [
+              "top_words"
+            ]
+          },
+          "signature": {
+            "params": [
+              "text",
+              "n"
+            ],
+            "required_params": [
+              "text",
+              "n"
+            ],
+            "return_type": "dict"
+          },
+          "source_code": "import re\nfrom collections import Counter\n\ndef count_word_frequency(text: str, n: int) -> dict:\n    \"\"\"统计英文文本中单词频率并返回前N个高频词。\n\n    参数:\n        text (str): 要分析的英文文本。\n        n (int): 要返回的高频词数量。\n\n    返回:\n        dict: 包含 'top_words' 键的字典，其值为列表，每个元素是包含 'word' 和 'count' 的字典。\n              如果输入无效，返回包含 'error' 键的字典。\n    \"\"\"\n    # 验证 n 是否为正整数\n    if not isinstance(n, int) or n <= 0:\n        return {\"error\": \"n must be a positive integer\"}\n    \n    # 如果文本为空或只包含空白，返回空列表\n    if not text or not text.strip():\n        return {\"top_words\": []}\n    \n    # 将文本转换为小写并提取单词（只考虑字母序列）\n    words = re.findall(r'[a-zA-Z]+', text.lower())\n    \n    # 统计单词频率\n    word_counts = Counter(words)\n    \n    # 获取前 n 个高频词\n    top_n = word_counts.most_common(n)\n    \n    # 构建返回的列表\n    top_words_list = [{\"word\": word, \"count\": count} for word, count in top_n]\n    \n    return {\"top_words\": top_words_list}",
+          "source_run_id": "vibe-15adad20",
+          "test_cases": [
+            {
+              "assert_fn": null,
+              "case_id": "happy_path",
+              "expected_output": {
+                "top_words": [
+                  {
+                    "count": 3,
+                    "word": "the"
+                  },
+                  {
+                    "count": 2,
+                    "word": "fox"
+                  },
+                  {
+                    "count": 1,
+                    "word": "quick"
+                  }
+                ]
+              },
+              "input_data": {
+                "n": 3,
+                "text": "the quick brown fox jumps over the lazy dog the fox"
+              }
+            },
+            {
+              "assert_fn": null,
+              "case_id": "edge_empty",
+              "expected_output": {
+                "top_words": []
+              },
+              "input_data": {
+                "n": 5,
+                "text": ""
+              }
+            },
+            {
+              "assert_fn": null,
+              "case_id": "edge_invalid",
+              "expected_output": null,
+              "input_data": {
+                "n": -1,
+                "text": "hello world"
+              }
+            }
+          ],
+          "trigger_policy": {
+            "force_dynamic": false,
+            "on_error": true,
+            "on_quality_below_threshold": true
+          },
+          "version": 1
+        }
+      ]
+    }
+  }
+}

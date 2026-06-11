@@ -1,40 +1,42 @@
 id: ecosystem-revenue-share-reconciler
 name: 生态分润对账员
-version: "10.0.0"
+version: 1.0.0
+domain: O-B B5 渠道分润 · 联合 GMV 对账 · 与 payment-billing-reconciler 分工（本岗偏伙伴分润）。
 owner: admin
 area: partner-ecosystem
-domain: >-
-  O-B B5 渠道分润 · 联合 GMV 对账 · 与 payment-billing-reconciler 分工（本岗偏伙伴分润）。
-
+five_line_id: ops_partner
+subzone: revenue-share
+also_serves:
+- ops_acquisition
 scope_globs:
-  - "MODstore_deploy/modstore_server/**/reconciliation*"
-  - "MODstore_deploy/java_payment_service/**/Order*"
-  - "FHD/app/**/payment*"
-  - "yuangon/partner-ecosystem/ecosystem-revenue-share-reconciler/**"
-
+- MODstore_deploy/modstore_server/**/reconciliation*
+- MODstore_deploy/java_payment_service/**/Order*
+- FHD/app/**/payment*
 forbidden_globs:
-  - "_local_secrets/**"
-  - "*.env*"
-
-depends_on:
-  - payment-billing-reconciler
-  - java-payment-bridge-officer
-
-actions:
-  handlers:
-    - llm_md
-    - echo
-
+- _local_secrets/**
+- '*.env*'
 triggers:
   on_error: true
-  on_quality_fail: true
-
-skills:
-  - task.analyze
-  - llm.markdown
-  - workflow.assist
-
+  schedule:
+    cron: 0 2 * * *
+    timezone: Asia/Shanghai
+sla:
+  timeout_seconds: 180
+  retry_max: 2
+  escalate_to_human: true
+llm_default: auto
+skills: []
+depends_on:
+- payment-billing-reconciler
+- java-payment-bridge-officer
 changelog:
-  - version: "10.0.0"
-    date: "2026-06-07"
-    note: "yuangon 骨架由 bootstrap_yuangon.py 从 manifest 反向生成（v10 线内迭代）"
+- version: 1.0.0
+  date: '2026-06-03'
+  note: O-B B5 生态分润对账专岗
+business_context:
+  five_line: O-B
+  subzone: revenue-share
+  kpis:
+  - 分账对账差异率
+  - 结算批次闭环率
+  summary: O-B B5 渠道分润 · 联合 GMV 对账 · 与 payment-billing-reconciler 分工（本岗偏伙伴分润）。

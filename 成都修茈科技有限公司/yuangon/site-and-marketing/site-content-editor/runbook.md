@@ -1,49 +1,64 @@
-        # Runbook：静态站内容编辑员 (`site-content-editor`)
+# Runbook — 静态站内容编辑员
 
-        ## 职责摘要
+| 字段 | 值 |
+|------|----|
+| 员工 ID | `site-content-editor` |
+| 负责区域 | site-and-marketing |
+| 最后更新 | 2026-05-08 |
+| 应急联系 | admin |
 
-        维护 xiu-ci.com 营销静态页面的内容、文案、图片引用与数据 JSON；不涉及服务器配置或后端逻辑。
+---
 
-        ## 上游 Handoff 契约
+## 日常巡检
 
-        ### handoff: seo-sitemap-curator → 本岗
-- **触发条件**：`employee.task.done:seo-sitemap-curator`
-- **输入**：待补充（参见 `yuangon/**/seo-sitemap-curator/runbook.md`）
-- **门禁**：依赖完成前本岗不得继续
+```bash
+# 检查关键营销页是否可访问（替换为实际域名）
+curl -o /dev/null -s -w "%{http_code}" https://xiu-ci.com/
+curl -o /dev/null -s -w "%{http_code}" https://xiu-ci.com/about.html
+curl -o /dev/null -s -w "%{http_code}" https://xiu-ci.com/news.html
 
+# 校验 news 源数据 JSON 格式（canonical）
+python -c "import json; json.load(open('marketing-site/data/news.json', encoding='utf-8')); print('OK')"
+# 根目录 news.json 由构建脚本从 marketing-site/data 同步；仍可用以下命令做二次确认
+python -c "import json; json.load(open('news.json', encoding='utf-8')); print('OK')"
+python -c "import json; json.load(open('activities.json', encoding='utf-8')); print('OK')"
+```
 
-        ## Handlers
+**预期输出**：每行 HTTP 200；JSON 校验输出 OK。
 
-        | Handler | 说明 |
-        |---------|------|
-        | `llm_md` | 接收 Markdown 任务描述，调用 LLM 输出结构化结果 |
-| `echo` | 调试用：原样返回输入，用于 smoke 测试 |
+---
 
-        ## 核心 Scope
+## 异常处置
 
-        - `index.html`
-- `about.html`
-- `cases.html`
-- `services.html`
-- `solutions.html`
-- `news.html`
+### 异常 1：页面返回 404
 
-        ## 故障处置
+**症状**：`curl` 返回 404。  
+**排查**：确认文件名拼写、Nginx `try_files` 规则（联系 `nginx-config-engineer`）。  
+**修复**：恢复文件或修正文件名；通知 `nginx-config-engineer`。
 
-        | 场景 | 处置 |
-        |------|------|
-        | LLM 调用失败 | retry 2 次 → 上报 `employee.task.failed:site-content-editor` |
-        | 上游依赖未完成 | 等待 `employee.task.done:<dep>` 事件，不自行推进 |
-        | scope 文件不存在 | 报告缺口，待确认后再执行，不编造路径 |
-        | 版本锚点不对齐 | 运行 `verify_version_anchors.py`，修复后继续 |
+### 异常 2：JSON 格式错误
 
-        ## 验收检查清单
+**症状**：`json.load` 抛出异常。  
+**排查**：`python -m json.tool marketing-site/data/news.json`（或与根 `news.json` 对比是否未跑构建）。  
+**修复**：修正 JSON 语法后在 `marketing-site/` 执行 `npm run build`，并提交同步后的根 `news.html`、`news.json`。
 
-        - [ ] `employee.yaml.depends_on` 与 manifest 根级一致
-        - [ ] `actions.handlers` 三方一致（yaml / manifest / `_DISPATCH`）
-        - [ ] scope_globs 路径存在（或标注规划中）
-        - [ ] `employee_pack_consistency_warnings` 无 handler warning
-        - [ ] echo smoke 测试通过
+### 异常 3：图片路径 404
 
-        ---
-        *本文件由 `bootstrap_yuangon.py` 生成，v10 线内迭代*
+**症状**：页面图片显示 broken。  
+**排查**：检查 `assets/` 目录下文件是否存在，核对 HTML `src` 属性。  
+**修复**：补传图片或修正路径。
+
+---
+
+## ESkill 动态阶段触发记录
+
+| 日期 | 触发原因 | patch_id | 结果 | 是否固化 |
+|------|----------|----------|------|----------|
+| — | — | — | — | — |
+
+---
+
+## 应急升级路径
+
+1. 静态 Skill 失败 → 动态阶段 → 超预算 → 通知 admin。
+2. 页面大范围不可达 → 通知 `nginx-config-engineer` + `deploy-release-officer`。

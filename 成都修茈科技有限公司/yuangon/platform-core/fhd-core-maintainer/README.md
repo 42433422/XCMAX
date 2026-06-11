@@ -1,34 +1,20 @@
-        # FHD 核心应用维护员 (`fhd-core-maintainer`)
+# FHD 核心应用维护员（fhd-core-maintainer）
 
-        **area**：`platform-core`  
-        **yuangon 路径**：`成都修茈科技有限公司/yuangon/platform-core/fhd-core-maintainer/`
+维护 [`FHD/app/`](../../../FHD/app/) 与 [`FHD/tests/`](../../../FHD/tests/)：修复 CI 失败、实现遥测 backlog 任务、承接运营线 O7→P2 编码需求。
 
-        ## 职责
+## 边界
 
-        维护 FHD 宿主核心 app/ 与 tests/：应用服务、路由、NeuroBus 集成；产出经 CR Git 管线提交 PR，由 FHD test.yml 与 ci-auto-merge 门控。
+| 允许 | 禁止 |
+|------|------|
+| `FHD/app/**`、`FHD/tests/**`、`pyproject.toml` | `MODstore_deploy/**`、营销仓、vibe-coding 源码 |
 
-        ## 上游依赖 (`depends_on`)
+## 闭环
 
-        - `test-qa-runner`
+1. `plan_and_dispatch` / `marketing-content-loop` 同类 API 指定 `target_employee_id=fhd-core-maintainer`
+2. 变更经 `cr_git_pipeline` → 分支 `employees/fhd-core-maintainer/cr-*`
+3. PR 带 `auto-merge` + `ai-employee` → [`ci-auto-merge.yml`](../../../.github/workflows/ci-auto-merge.yml)
 
-        ## 支持的 Handlers
+## 相关
 
-        - `llm_md`：接收 Markdown 任务描述，调用 LLM 输出结构化结果
-- `echo`：调试用：原样返回输入，用于 smoke 测试
-
-        ## Scope（核心文件范围）
-
-        - `FHD/app/**`
-- `FHD/tests/**`
-- `FHD/frontend/src/**`
-- `FHD/pyproject.toml`
-- `FHD/alembic/**`
-- `FHD/docs/api/openapi.json`
-
-        ## 相关链接
-
-        - manifest：`FHD/mods/_employees/fhd-core-maintainer/manifest.json`
-        - runbook：[runbook.md](./runbook.md)
-
-        ---
-        *本文件由 `bootstrap_yuangon.py` 生成，v10 线内迭代*
+- [`FHD/.github/workflows/fhd-core-coding-loop.yml`](../../../FHD/.github/workflows/fhd-core-coding-loop.yml)
+- [`test-qa-runner`](../quality-and-docs/test-qa-runner/)（测试守门）

@@ -1,41 +1,51 @@
 id: user-customer-service-officer
 name: 用户客服员工
-version: "10.0.0"
+version: "1.0.0"
+domain: 面向终端用户的客服 AI 员工：绑定微信账号资产，在 Mac 本地协助沟通；首要能力为需求采集（询问客户需求并推送表单链接）。
 owner: admin
 area: platform-core
-domain: >-
-  面向终端用户的客服 AI 员工：绑定微信账号资产，在 Mac 本地协助沟通；首要能力为需求采集（询问客户需求并推送表单链接）。
 
 scope_globs:
-  - "customer-service/sessions/**"
-  - "customer-service/wechat/**"
-  - "FHD/mods/_employees/user-customer-service-officer/**"
-  - "yuangon/platform-core/user-customer-service-officer/**"
+  - customer-service/sessions/**
+  - customer-service/wechat/**
+  - FHD/mods/_employees/user-customer-service-officer/**
+  - yuangon/platform-core/user-customer-service-officer/**
 
 forbidden_globs:
-  - "FHD/app/**"
-  - "FHD/tests/**"
-  - "MODstore_deploy/**"
-  - "_local_secrets/**"
+  - FHD/app/**
+  - FHD/tests/**
+  - MODstore_deploy/**
+  - _local_secrets/**
   - "*.env*"
-
-depends_on:
-  - intake-dispatcher
-
-actions:
-  handlers:
-    - llm_md
-    - echo
 
 triggers:
   on_error: true
   on_quality_fail: true
+  on_coverage_miss: false
+  subscribes:
+    - "ops.intake.customer_ticket"
+  max_patch_budget_tokens: 3000
+  max_patch_steps: 4
+
+sla:
+  timeout_seconds: 120
+  retry_max: 2
+  escalate_to_human: true
+
+llm_default: "auto"
+llm_reasoning: "auto"
 
 skills:
-  - skill-demand-intake
-  - skill-wechat-relay
+  - skills/skill-demand-intake.md
+  - skills/skill-wechat-relay.md
+
+actions:
+  handlers: ["llm_md", "echo"]
+
+depends_on:
+  - intake-dispatcher
 
 changelog:
-  - version: "10.0.0"
-    date: "2026-06-07"
-    note: "yuangon 骨架由 bootstrap_yuangon.py 从 manifest 反向生成（v10 线内迭代）"
+  - version: "1.0.0"
+    date: "2026-06-03"
+    note: "补齐编制缺岗的 yuangon 源定义"

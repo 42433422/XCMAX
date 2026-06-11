@@ -55,7 +55,7 @@ data class RegisterRequest(
 data class ApproveBody(val approver_id: Int, val opinion: String = "")
 data class RejectBody(val approver_id: Int, val reason: String = "")
 data class BridgeRespondBody(val response: String, val responded_by: String? = null, val status: String = "resolved")
-data class PairingExchangeBody(val nonce: String)
+data class PairingExchangeBody(val nonce: String = "", val code: String = "")
 
 data class SyncPullBody(val since_cursor: Int = 0)
 
@@ -67,6 +67,10 @@ data class SyncPushItem(
 )
 
 data class SyncPushBody(val items: List<SyncPushItem> = emptyList())
+
+data class ImDirectBody(val peer_user_id: Int)
+
+data class ImSendBody(val body: String)
 
 interface FhdApi {
     @GET("api/health")
@@ -192,4 +196,19 @@ interface FhdApi {
 
     @GET("api/finance/summary")
     suspend fun financeSummary(): Map<String, Any?>
+
+    @POST("api/im/conversations/direct")
+    suspend fun imCreateDirect(@Body body: ImDirectBody): Map<String, Any?>
+
+    @GET("api/im/conversations/{id}/messages")
+    suspend fun imListMessages(
+        @Path("id") conversationId: Int,
+        @Query("limit") limit: Int = 50,
+    ): Map<String, Any?>
+
+    @POST("api/im/conversations/{id}/messages")
+    suspend fun imSendMessage(
+        @Path("id") conversationId: Int,
+        @Body body: ImSendBody,
+    ): Map<String, Any?>
 }

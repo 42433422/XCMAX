@@ -1,4 +1,4 @@
-import { createRouter, createWebHistory, type NavigationGuardNext, type RouteLocationNormalized, type RouteRecordRaw } from 'vue-router';
+import { createRouter, createWebHistory, START_LOCATION, type NavigationGuardNext, type RouteLocationNormalized, type RouteRecordRaw } from 'vue-router';
 import { useLanGate } from '@/composables/useLanGate';
 import {
   isPlatformShellModeEnabled,
@@ -26,6 +26,8 @@ import {
   ADMIN_OPERATOR_BLOCKED_ROUTE_NAMES,
   ADMIN_OPERATOR_HOME_ROUTE,
 } from '@/constants/adminOperatorNav';
+import { buildRoleMenuProfile, canShowCoreMenuKey } from '@/utils/roleMenuProfile';
+import { isClientErpSidebarContext } from '@/constants/genericModPack';
 const isSandbox = new URLSearchParams(window.location.search).has('sandbox');
 
 const SANDBOX_ALLOWED = new Set([
@@ -37,11 +39,9 @@ const SANDBOX_ALLOWED = new Set([
   'chat',
   'workflow-employee-space',
   'workflow-employee-stitch-full',
-  'workflow-visualization',
   'mod-landing',
   'chat-debug',
   'tools',
-  'other-tools',
 ]);
 
 const allRoutes: RouteRecordRaw[] = [
@@ -290,6 +290,12 @@ allRoutes.push(
     meta: { title: '首次设置', hideChrome: true, publicAccess: true },
   },
   {
+    path: '/discover',
+    name: 'discover',
+    component: () => import('../views/DiscoverView.vue'),
+    meta: { title: '发现' },
+  },
+  {
     path: '/mod-store',
     name: 'mod-store',
     component: () => import('../views/ModStore.vue'),
@@ -328,8 +334,7 @@ allRoutes.push(
   {
     path: '/other-tools',
     name: 'other-tools',
-    component: () => import('../views/OtherToolsView.vue'),
-    meta: { title: '员工工作流' }
+    redirect: { name: 'workflow-employee-space' },
   },
   ...(import.meta.env.VITE_XCAGI_EDITION !== 'minimal'
     ? [
@@ -427,7 +432,44 @@ router.beforeEach(async (to, _from, next) => {
     return;
   }
 
-  if (isAdminConsoleSpa() && to.name === 'chat' && to.path === '/') {
+  if (
+    !isAdminConsoleSpa() &&
+    (to.name === 'workflow-visualization' || to.name === 'mod-workflow-visualization')
+  ) {
+    try {
+      const { useAccountProfileStore } = await import('@/stores/accountProfile');
+      const profileStore = useAccountProfileStore();
+      if (!profileStore.loaded) await profileStore.refreshFromServer();
+      const modsStore = useModsStore();
+      const menuProfile = buildRoleMenuProfile(
+        {
+          accountKind: profileStore.accountKind,
+          marketIsAdmin: profileStore.marketIsAdmin,
+          marketIsEnterprise: profileStore.marketIsEnterprise,
+          isAdminAccount: profileStore.isAdminAccount,
+        },
+        isClientErpSidebarContext(
+          (modsStore.mods || []).map((m) => String(m.id || '').trim()),
+          modsStore.activeModId,
+        ),
+      );
+      if (!canShowCoreMenuKey(menuProfile, 'workflow-visualization')) {
+        next({ name: 'workflow-employee-space', replace: true });
+        return;
+      }
+    } catch {
+      next({ name: 'workflow-employee-space', replace: true });
+      return;
+    }
+  }
+
+  // 管理端冷启动落在 `/` 时默认进运维总览；侧栏点「智能对话」时 _from 非 START_LOCATION，须放行
+  if (
+    isAdminConsoleSpa() &&
+    to.name === 'chat' &&
+    to.path === '/' &&
+    _from === START_LOCATION
+  ) {
     try {
       const { useAccountProfileStore } = await import('@/stores/accountProfile');
       const profile = useAccountProfileStore();

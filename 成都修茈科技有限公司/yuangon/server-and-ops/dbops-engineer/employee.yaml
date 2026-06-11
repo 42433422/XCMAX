@@ -1,51 +1,67 @@
 id: dbops-engineer
 name: 数据库运维工程师
-version: "10.0.0"
+version: "1.0.0"
+domain: 负责 ORM 模型与 Alembic 迁移、慢查询/索引/复制状态诊断、备份恢复策略与权限审计；唯一拥有 models.py / alembic / migrations 写权限的员工，所有 schema 变更必须由本岗发起或评审。
 owner: admin
 area: server-and-ops
-domain: >-
-  负责 ORM 模型与 Alembic 迁移、慢查询/索引/复制状态诊断、备份恢复策略与权限审计；唯一拥有 models.py / alembic / migrations 写权限的员工，所有 schema 变更必须由本岗发起或评审。
 
 scope_globs:
   - MODstore_deploy/modstore_server/models.py
-  - "MODstore_deploy/modstore_server/migrations/**"
-  - "MODstore_deploy/alembic/**"
+  - MODstore_deploy/modstore_server/migrations/**
+  - MODstore_deploy/alembic/**
   - MODstore_deploy/alembic.ini
   - MODstore_deploy/modstore_server/db.py
-  - "MODstore_deploy/modstore_server/database*.py"
-  - "MODstore_deploy/docs/runbooks/dbops-*.md"
-  - "MODstore_deploy/scripts/db_*.py"
-  - "yuangon/server-and-ops/dbops-engineer/**"
+  - MODstore_deploy/modstore_server/database*.py
+  - MODstore_deploy/docs/runbooks/dbops-*.md
+  - MODstore_deploy/scripts/db_*.py
+  - yuangon/server-and-ops/dbops-engineer/**
 
 forbidden_globs:
   - "*.vue"
   - "*.ts"
-  - "market/src/**"
-  - "_local_secrets/**"
+  - market/src/**
+  - _local_secrets/**
   - "**/*.db"
-  - "MODstore_deploy/modstore_server/catalog_data/**"
-  - "MODstore_deploy/modstore_server/library/**"
+  - MODstore_deploy/modstore_server/catalog_data/**
+  - MODstore_deploy/modstore_server/library/**
+
+triggers:
+  on_error: true
+  on_quality_fail: true
+  on_coverage_miss: false
+  subscribes:
+    # 后端 API 改动后做 schema 一致性回放
+    - "employee.task.done:modstore-backend-api"
+    # 编排员命中迁移类失败时升级到本岗
+    - "employee.task.escalate:daily-orchestrator"
+  max_patch_budget_tokens: 6000
+  max_patch_steps: 6
+
+sla:
+  timeout_seconds: 300
+  retry_max: 1
+  escalate_to_human: true
+
+llm_default: "auto"
+llm_reasoning: "auto"
+
+skills:
+  - skills/skill-schema-migration.md
+  - skills/skill-slow-sql-triage.md
+  - skills/skill-backup-restore-advice.md
+
+actions:
+  handlers: ["llm_md", "echo", "agent"]
+  agent:
+    workspace:
+      read_only: false
+      requires_project_root: true
 
 depends_on:
   - test-qa-runner
   - security-secrets-guard
 
-actions:
-  handlers:
-    - llm_md
-    - echo
-    - agent
-
-triggers:
-  on_error: true
-  on_quality_fail: true
-
-skills:
-  - skill-schema-migration
-  - skill-slow-sql-triage
-  - skill-backup-restore-advice
-
 changelog:
-  - version: "10.0.0"
-    date: "2026-06-07"
-    note: "yuangon 骨架由 bootstrap_yuangon.py 从 manifest 反向生成（v10 线内迭代）"
+  - version: "1.0.0"
+    date: "2026-05-08"
+    note: "从 mianshi/dbops-engineer.xcemp 录用：填补 models.py / alembic 真空。"

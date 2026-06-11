@@ -1,39 +1,37 @@
 id: ecosystem-investor-portal-officer
 name: 投资方只读门户员
-version: "10.0.0"
+version: 1.0.0
+domain: O-B B4 投资方/伙伴只读 Portal · 里程碑与风险视图 · 进度只读 API。
 owner: admin
 area: partner-ecosystem
-domain: >-
-  O-B B4 投资方/伙伴只读 Portal · 里程碑与风险视图 · 进度只读 API。
-
+five_line_id: ops_partner
+subzone: investor-portal
+also_serves: []
 scope_globs:
-  - "MODstore_deploy/market/src/**/admin/**"
-  - "MODstore_deploy/market/src/views/**/Investor*"
-  - "MODstore_deploy/modstore_server/**/investor*"
-  - "yuangon/partner-ecosystem/ecosystem-investor-portal-officer/**"
-
+- MODstore_deploy/market/src/**/admin/**
+- MODstore_deploy/market/src/views/**/Investor*
+- MODstore_deploy/modstore_server/**/investor*
 forbidden_globs:
-  - "_local_secrets/**"
-
-depends_on:
-  - market-frontend-dev
-  - ecosystem-delivery-reporter
-
-actions:
-  handlers:
-    - llm_md
-    - echo
-
+- _local_secrets/**
 triggers:
   on_error: true
-  on_quality_fail: true
-
-skills:
-  - task.analyze
-  - llm.markdown
-  - workflow.assist
-
+sla:
+  timeout_seconds: 120
+  retry_max: 1
+  escalate_to_human: true
+llm_default: auto
+skills: []
+depends_on:
+- market-frontend-dev
+- ecosystem-delivery-reporter
 changelog:
-  - version: "10.0.0"
-    date: "2026-06-07"
-    note: "yuangon 骨架由 bootstrap_yuangon.py 从 manifest 反向生成（v10 线内迭代）"
+- version: 1.0.0
+  date: '2026-06-03'
+  note: O-B B4 投资方只读视图专岗
+business_context:
+  five_line: O-B
+  subzone: investor-portal
+  kpis:
+  - 投资人门户可用性
+  - 披露材料完整性
+  summary: O-B B4 投资方/伙伴只读 Portal · 里程碑与风险视图 · 进度只读 API。

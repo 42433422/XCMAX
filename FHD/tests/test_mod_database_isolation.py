@@ -117,3 +117,47 @@ def test_mod_context_header_takes_priority_over_path():
 
     assert seen["active_mod"] == "header-mod"
     assert get_request_active_mod_id() == ""
+
+
+def test_mod_context_middleware_survives_stale_session_with_active_mod_header(monkeypatch):
+    """过期/伪造 session + X-XCAGI-Active-Mod-Id 不得把宿主 API 打成 500。"""
+    from app.infrastructure.mods.mod_auth import ModContextMiddleware
+
+    async def downstream(scope, receive, send):
+        await send({"type": "http.response.start", "status": 200, "headers": []})
+        await send({"type": "http.response.body", "body": b"{}"})
+
+    async def receive():
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    sent: list[dict] = []
+
+    async def send(message):
+        sent.append(message)
+
+    def _boom(_mod_id, session_id=None):
+        raise RuntimeError("simulated entitlement restore failure")
+
+    monkeypatch.setattr(
+        "app.infrastructure.mods.mod_manager.ensure_mod_api_ready",
+        _boom,
+    )
+
+    middleware = ModContextMiddleware(downstream)
+    scope = {
+        "type": "http",
+        "method": "GET",
+        "path": "/api/platform-shell/capabilities",
+        "headers": [
+            (b"x-xcagi-active-mod-id", b"xcagi-workflow-visualization-bridge"),
+            (b"cookie", b"session_id=stale-invalid-session"),
+        ],
+        "query_string": b"",
+        "scheme": "http",
+        "server": ("testserver", 80),
+        "client": ("127.0.0.1", 12345),
+    }
+
+    asyncio.run(middleware(scope, receive, send))
+
+    assert sent[0]["status"] == 200

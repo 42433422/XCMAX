@@ -105,6 +105,11 @@ def register_business_routes(app: FastAPI, registry: RouteRegistry) -> None:
     )
     _mount(
         registry,
+        "workspace_prefs",
+        lambda: __import__("app.fastapi_routes.workspace_prefs_routes", fromlist=["router"]).router,
+    )
+    _mount(
+        registry,
         "business_bridge",
         lambda: __import__("app.fastapi_routes.business_api", fromlist=["router"]).router,
     )

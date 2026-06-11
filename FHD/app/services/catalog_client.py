@@ -59,7 +59,7 @@ def _catalog_url(path: str) -> str:
 
 async def _http_get_json(url: str) -> dict[str, Any]:
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=60.0) as client:
             resp = await client.get(url, headers=_catalog_headers())
     except httpx.RequestError as exc:
         raise HTTPException(status_code=502, detail=f"远端 Catalog 不可达：{exc}") from exc
@@ -95,15 +95,59 @@ def _market_item_to_package_row(item: dict[str, Any]) -> dict[str, Any] | None:
         "version": ver,
         "description": str(item.get("description") or "").strip(),
         "artifact": item.get("artifact") or "employee_pack",
+        "author": item.get("author") or item.get("publisher"),
         "download_url": f"/v1/packages/{pid}/{ver}/download",
         "public_listing": True,
+        "download_count": int(item.get("download_count") or item.get("total_downloads") or 0),
+        "total_downloads": int(item.get("total_downloads") or item.get("download_count") or 0),
+        "avg_rating": float(item.get("avg_rating") or 0.0),
+        "rating_count": int(item.get("rating_count") or 0),
+        "created_at": item.get("created_at") or item.get("updated_at"),
         "commerce": {
             "mode": "free" if price <= 0 else "paid",
             "price": price,
             "collection": item.get("collection"),
         },
         "license": item.get("license"),
+        "material_category": item.get("material_category"),
+        "industry": item.get("industry"),
     }
+
+
+async def fetch_market_catalog_page(
+    *,
+    q: str | None = None,
+    collection: str | None = None,
+    artifact: str | None = None,
+    material_category: str | None = None,
+    license_scope: str | None = None,
+    industry: str | None = None,
+    security_level: str | None = None,
+    limit: int = 80,
+    offset: int = 0,
+) -> dict[str, Any]:
+    """分页拉取与市场 AiStore 一致的 /api/market/catalog 列表。"""
+    from urllib.parse import quote
+
+    base = market_catalog_list_url()
+    params: list[str] = [f"limit={max(1, min(limit, 200))}", f"offset={max(0, offset)}"]
+    if q:
+        params.append(f"q={quote(q.strip(), safe='')}")
+    if collection:
+        params.append(f"collection={quote(collection.strip(), safe='')}")
+    if artifact:
+        params.append(f"artifact={quote(artifact.strip(), safe='')}")
+    if material_category:
+        params.append(f"material_category={quote(material_category.strip(), safe='')}")
+    if license_scope:
+        params.append(f"license_scope={quote(license_scope.strip(), safe='')}")
+    if industry:
+        params.append(f"industry={quote(industry.strip(), safe='')}")
+    if security_level:
+        params.append(f"security_level={quote(security_level.strip(), safe='')}")
+    sep = "&" if "?" in base else "?"
+    url = f"{base}{sep}{'&'.join(params)}"
+    return await _http_get_json(url)
 
 
 async def _fetch_market_catalog_rows() -> list[dict[str, Any]]:

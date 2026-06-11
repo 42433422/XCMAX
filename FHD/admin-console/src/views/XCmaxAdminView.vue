@@ -540,7 +540,7 @@ onDeactivated(() => {
 
 <style scoped>
 .xcmax-admin-view {
-  min-height: 100vh;
+  overflow-y: auto;
   background: linear-gradient(135deg, #edf5fb 0%, #e7eef6 100%);
 }
 

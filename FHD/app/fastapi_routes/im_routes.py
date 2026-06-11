@@ -188,15 +188,22 @@ async def im_send_message(
         result = ImApplicationService(db).send_message(
             conversation_id, uid, str(body.get("body") or "")
         )
-        payload = {
+        legacy_payload = {
             "type": "message",
             "conversation_id": conversation_id,
             "message": result["message"],
         }
+        sync_payload = {
+            "type": "im.message",
+            "conversation_id": conversation_id,
+            "message": result["message"],
+            "updated_at_ms": result.get("updated_at_ms"),
+        }
         member_ids = [int(mid) for mid in (result.get("member_user_ids") or [])]
         for member_id in member_ids:
             if member_id != uid:
-                await im_ws_hub.send_to_user(member_id, payload)
+                await im_ws_hub.send_to_user(member_id, legacy_payload)
+                await im_ws_hub.send_to_user(member_id, sync_payload)
         await _notify_offline_im_members(member_ids, uid, str(body.get("body") or ""))
         return {"success": True, **result}
     except PermissionError as exc:
@@ -211,7 +218,7 @@ async def im_send_message(
 
 
 @router.post("/api/im/conversations/{conversation_id}/read")
-def im_mark_read(
+async def im_mark_read(
     conversation_id: int,
     body: dict = Body(default_factory=dict),
     user: CurrentUser = Depends(require_identified_user),
@@ -221,8 +228,18 @@ def im_mark_read(
     last_id = int(body.get("last_message_id") or 0)
     db = SessionLocal()
     try:
-        ImApplicationService(db).mark_read(conversation_id, uid, last_id)
-        return {"success": True}
+        result = ImApplicationService(db).mark_read(conversation_id, uid, last_id)
+        read_payload = {
+            "type": "im.read",
+            "conversation_id": conversation_id,
+            "user_id": uid,
+            "last_message_id": result["last_read_message_id"],
+            "updated_at_ms": result.get("updated_at_ms"),
+        }
+        for member_id in result.get("member_user_ids") or []:
+            if int(member_id) != uid:
+                await im_ws_hub.send_to_user(int(member_id), read_payload)
+        return {"success": True, **result}
     except PermissionError as exc:
         return JSONResponse({"success": False, "message": str(exc)}, status_code=403)
     except OPERATIONAL_ERRORS as exc:

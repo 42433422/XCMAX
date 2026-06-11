@@ -55,7 +55,11 @@
         <template v-else-if="currentStep === 'industry'">
           <h1>先定行业</h1>
           <p class="lead">
-            当前开放 <strong>涂料</strong> 与 <strong>考勤</strong> 两套行业方向；选好后下一步会列出要补的基础线。
+            当前开放
+            <template v-for="(name, idx) in openIndustryLeadNames" :key="name">
+              <strong>{{ name }}</strong><template v-if="idx < openIndustryLeadNames.length - 1"> 与 </template>
+            </template>
+            两套行业方向；选好后下一步会列出要补的基础线。
           </p>
           <p class="industry-open-hint">请选择您的行业方向</p>
           <div class="industry-pick industry-pick--open" role="listbox" aria-label="可选行业">
@@ -192,6 +196,7 @@ import {
   parseFlowStepQuery,
   readOnboardingReturnPath,
   readProductFlowCompleted,
+  setRuntimeOnboardingOpenIndustryIds,
 } from '@/constants/productFlow'
 import { useProductFlow } from '@/composables/useProductFlow'
 import { useIndustryStore } from '@/stores/industry'
@@ -209,18 +214,50 @@ const industryStore = useIndustryStore()
 
 const industryOptions = listIndustryPresets()
 const onboardingCatalog = ref(null)
-const openIndustryOptions = computed(() =>
-  industryOptions.filter((p) => isOnboardingIndustryOpen(p.id)),
-)
-const previewIndustryOptions = computed(() =>
-  industryOptions.filter((p) => !isOnboardingIndustryOpen(p.id)),
-)
-const pickedIndustryId = ref(defaultOnboardingIndustryId())
+
+function catalogChipRow(pkg) {
+  const id = String(pkg?.industry_id || '').trim()
+  return {
+    id,
+    name: String(pkg?.name || getIndustryPreset(id)?.name || id).trim(),
+    scenario: String(pkg?.scenario || getIndustryPreset(id)?.scenario || '').trim(),
+    productName: String(pkg?.product_name || '').trim(),
+  }
+}
+
+const openIndustryOptions = computed(() => {
+  const openPkgs = onboardingCatalog.value?.open_packages
+  if (Array.isArray(openPkgs) && openPkgs.length) {
+    return openPkgs.map(catalogChipRow)
+  }
+  return industryOptions
+    .filter((p) => isOnboardingIndustryOpen(p.id))
+    .map((p) => ({ id: p.id, name: p.name, scenario: p.scenario, productName: '' }))
+})
+
+const previewIndustryOptions = computed(() => {
+  const previewPkgs = onboardingCatalog.value?.preview_packages
+  if (Array.isArray(previewPkgs) && previewPkgs.length) {
+    return previewPkgs.map(catalogChipRow)
+  }
+  return industryOptions
+    .filter((p) => !isOnboardingIndustryOpen(p.id))
+    .map((p) => ({ id: p.id, name: p.name, scenario: p.scenario, productName: '' }))
+})
+
+const openIndustryLeadNames = computed(() => {
+  const ids = onboardingCatalog.value?.open_industry_ids
+  if (Array.isArray(ids) && ids.length) return ids
+  return openIndustryOptions.value.map((p) => p.id)
+})
+const pickedIndustryId = ref(resolveDefaultPickedIndustryId())
 
 function industryPackageLabel(industryId) {
   const id = String(industryId || '').trim()
   const row = onboardingCatalog.value?.open_packages?.find((p) => p.industry_id === id)
   if (row?.product_name) return row.product_name
+  const chip = openIndustryOptions.value.find((p) => p.id === id)
+  if (chip?.productName) return chip.productName
   const preset = getIndustryPreset(id)
   return preset?.name ? `${preset.name}行业包` : ''
 }
@@ -230,10 +267,28 @@ function chipScenarioText(text) {
   return String(text || '').replace(/[。．]$/, '')
 }
 
+function isIndustrySelectable(id) {
+  const key = String(id || '').trim()
+  if (!key) return false
+  const openIds = onboardingCatalog.value?.open_industry_ids
+  if (Array.isArray(openIds)) {
+    return openIds.includes(key)
+  }
+  return isOnboardingIndustryOpen(key)
+}
+
+function resolveDefaultPickedIndustryId() {
+  const selected = String(onboardingCatalog.value?.selected_industry_id || '').trim()
+  if (selected && isIndustrySelectable(selected)) return selected
+  const openIds = onboardingCatalog.value?.open_industry_ids
+  if (Array.isArray(openIds) && openIds.length) return openIds[0]
+  return defaultOnboardingIndustryId()
+}
+
 function normalizePickedIndustryId(raw) {
   const id = String(raw || '').trim()
-  if (isOnboardingIndustryOpen(id)) return id
-  return defaultOnboardingIndustryId()
+  if (isIndustrySelectable(id)) return id
+  return resolveDefaultPickedIndustryId()
 }
 
 const steps = PRODUCT_FLOW_STEPS.filter((s) => s.id !== 'done')
@@ -381,7 +436,7 @@ async function runBootstrap() {
 }
 
 function pickIndustry(id) {
-  if (!isOnboardingIndustryOpen(id)) return
+  if (!isIndustrySelectable(id)) return
   pickedIndustryId.value = normalizePickedIndustryId(id)
 }
 
@@ -449,6 +504,9 @@ function skipEntireFlow() {
 onMounted(async () => {
   try {
     onboardingCatalog.value = await fetchOnboardingIndustryCatalog()
+    if (onboardingCatalog.value?.open_industry_ids?.length) {
+      setRuntimeOnboardingOpenIndustryIds(onboardingCatalog.value.open_industry_ids)
+    }
   } catch {
     /* 离线兜底：仅展示 preset 名称 */
   }
@@ -461,7 +519,9 @@ onMounted(async () => {
     }
   }
   const cur = String(industryStore.currentIndustryId || DEFAULT_INDUSTRY_ID).trim()
-  pickedIndustryId.value = normalizePickedIndustryId(cur)
+  pickedIndustryId.value = normalizePickedIndustryId(
+    onboardingCatalog.value?.selected_industry_id || cur,
+  )
   const expectedQuery = { step: currentStep.value }
   if (fromTutorial.value) {
     expectedQuery.from = 'tutorial'

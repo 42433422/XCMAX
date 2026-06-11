@@ -1,6 +1,8 @@
-"""Qclaw 路由与运行时状态。
+"""Qclaw 兼容路由（已升级为 AIOPEN，URL 契约保持不变）。
 
-Phase 2C 从 :mod:`app.fastapi_routes.archive_gap_batch1/2` 拆分而出,URL 保持不变:
+Phase 2C 从 :mod:`app.fastapi_routes.archive_gap_batch1/2` 拆分而出；现 Qclaw
+龙虾生态已升级为 AIOPEN 开放平台（:mod:`app.fastapi_routes.ai_open`），本模块
+仅保留旧 URL 兼容：
 
 - ``GET /api/ai/qclaw/routes`` / ``GET /api/ai/qclaw/panel``
 - ``POST /api/ai/qclaw/wechat-gateway``
@@ -9,41 +11,28 @@ Phase 2C 从 :mod:`app.fastapi_routes.archive_gap_batch1/2` 拆分而出,URL 保
 - ``POST /api/ai/qclaw/test-route``
 - ``POST /api/ai/qclaw/openclaw/chat``
 
-``_QCLOW_RUNTIME_STATE`` 原位于 ``archive_gap_batch1``,现统一搬迁至本模块,
-其余仍需访问它的 batch2 代码(wechat 相关)通过 ``from app.fastapi_routes.ai_qclaw
-import _QCLOW_RUNTIME_STATE`` 导入。
+运行时状态 SSOT 已迁至 :data:`app.application.aiopen.service.AIOPEN_STATE`；
+``_QCLOW_RUNTIME_STATE`` 保留为其别名，旧 batch2（wechat 相关）导入不受影响。
 """
 
 from __future__ import annotations
 
-import json
 import logging
-import urllib.error
-import urllib.request
 from typing import Any
 
 from fastapi import APIRouter, Body, Request
 from fastapi.responses import JSONResponse
 from starlette.testclient import TestClient
 
+from app.application.aiopen.service import AIOPEN_STATE, openclaw_chat_proxy
 from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["ai-qclaw"])
 
-
-_QCLOW_RUNTIME_STATE: dict[str, Any] = {
-    "wechat_open": True,
-    "openclaw_base": "http://localhost:28789",
-    "whitelist": {
-        "/api/ai/chat": True,
-        "/api/ai/unified_chat": True,
-        "/api/wechat_contacts": True,
-        "/api/shipment/orders": True,
-        "/api/print/printers": True,
-    },
-}
+# 兼容别名：旧代码 `from app.fastapi_routes.ai_qclaw import _QCLOW_RUNTIME_STATE`
+_QCLOW_RUNTIME_STATE: dict[str, Any] = AIOPEN_STATE
 
 
 @router.get("/api/ai/qclaw/routes")
@@ -68,7 +57,7 @@ def ai_qclaw_routes():
                 "/api/print/*",
             ],
         },
-        "note": "Qclaw 来源允许同时访问普通版与专业版主链路。",
+        "note": "Qclaw/AIOPEN 来源允许同时访问普通版与专业版主链路。",
     }
 
 
@@ -146,35 +135,7 @@ def ai_qclaw_openclaw_chat(body: dict = Body(default_factory=dict)):
     message = str(body.get("message") or "").strip()
     if not message:
         return JSONResponse({"success": False, "message": "message 不能为空"}, status_code=400)
-    base = str(_QCLOW_RUNTIME_STATE.get("openclaw_base", "http://localhost:28789")).rstrip("/")
-    target_url = f"{base}/api/chat"
-    payload = json.dumps({"message": message}).encode("utf-8")
-    req = urllib.request.Request(
-        target_url,
-        data=payload,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=20) as resp:
-            raw = resp.read().decode("utf-8", errors="replace")
-            try:
-                parsed = json.loads(raw) if raw else {}
-            except OPERATIONAL_ERRORS:
-                parsed = {"raw": raw}
-            return {"success": True, "target": target_url, "data": parsed}
-    except urllib.error.HTTPError as err:
-        b = err.read().decode("utf-8", errors="replace")
-        return JSONResponse(
-            {
-                "success": False,
-                "target": target_url,
-                "status_code": err.code,
-                "message": b or str(err),
-            },
-            status_code=502,
-        )
-    except OPERATIONAL_ERRORS as err:
-        return JSONResponse(
-            {"success": False, "target": target_url, "message": str(err)}, status_code=502
-        )
+    payload, status = openclaw_chat_proxy(message)
+    if status == 200:
+        return payload
+    return JSONResponse(payload, status_code=status)

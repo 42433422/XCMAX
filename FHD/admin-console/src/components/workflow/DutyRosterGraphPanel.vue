@@ -2299,6 +2299,10 @@ function goBackFromPage() {
     router.back()
     return
   }
+  if (router.hasRoute('duty-roster-graph')) {
+    void router.push({ name: 'duty-roster-graph' })
+    return
+  }
   if (router.hasRoute('other-tools')) {
     void router.push({ name: 'other-tools' })
     return

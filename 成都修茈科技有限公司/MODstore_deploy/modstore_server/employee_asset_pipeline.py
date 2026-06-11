@@ -43,6 +43,11 @@ from modstore_server.json_report_runtime import (
     is_json_quant_report,
     render_json_report_convert_module,
 )
+from modstore_server.kitten_chart_runtime import (
+    build_kitten_chart_rule_spec,
+    is_kitten_chart_viz,
+    render_kitten_chart_convert_module,
+)
 from modstore_server.llm_key_resolver import (
     OAI_COMPAT_OPENAI_STYLE_PROVIDERS,
     resolve_api_key,
@@ -245,6 +250,8 @@ def _infer_asset_runtime_kind(brief: str, asset_manifest: Optional[Dict[str, Any
         return "pdf_full_read"
     if is_json_quant_report(brief):
         return "json_quant_report"
+    if is_kitten_chart_viz(brief):
+        return "kitten_chart_viz"
     if is_ppt_generate(brief):
         return "ppt_generate"
     if is_ppt_full_read(brief):
@@ -460,6 +467,8 @@ def build_rule_spec(
         return build_pdf_read_rule_spec(brief)
     if is_json_quant_report(brief):
         return build_json_quant_report_rule_spec(brief)
+    if is_kitten_chart_viz(brief):
+        return build_kitten_chart_rule_spec(brief)
     if is_ppt_generate(brief):
         return build_ppt_generate_rule_spec(brief)
     if is_ppt_full_read(brief):
@@ -681,6 +690,7 @@ def _fallback_manifest(brief: str, rule_spec: Dict[str, Any]) -> Dict[str, Any]:
     _is_ppt_read = runtime_kind == "ppt_full_read"
     _is_ppt_gen = runtime_kind == "ppt_generate"
     _is_json_report = runtime_kind == "json_quant_report"
+    _is_kitten_chart = runtime_kind == "kitten_chart_viz"
     employee_id = str(rule_spec.get("pack_id") or pid).strip() or pid
     accepted = rule_spec.get("accepted_extensions") or [".xlsx"]
     has_doc = any(e in DOC_SUFFIXES for e in accepted)
@@ -707,6 +717,8 @@ def _fallback_manifest(brief: str, rule_spec: Dict[str, Any]) -> Dict[str, Any]:
         capabilities = ["ppt.write", "ppt.ooxml", "data.json_read", "llm.plan"]
     elif _is_json_report:
         capabilities = ["data.json_read", "report.write"]
+    elif _is_kitten_chart:
+        capabilities = ["data.json_read", "chart.echarts", "viz.dashboard"]
     elif _is_word_gen:
         capabilities = ["doc.generate", "doc.template_merge", "doc.styles"]
     elif _is_word_extract:
