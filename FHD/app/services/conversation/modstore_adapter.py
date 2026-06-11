@@ -542,6 +542,20 @@ class ModstorePlatformAdapter:
         if not self.platform_url:
             raise ValueError("修茈市场平台URL未配置 (MODSTORE_PLATFORM_URL)")
 
+        try:
+            from app.application.surface_audit_demo_account import is_local_demo_market_token
+            from app.fastapi_routes.market_account import _is_local_market_base
+
+            if is_local_demo_market_token(self.auth_token or "") and not _is_local_market_base(
+                self.platform_url
+            ):
+                raise ValueError(
+                    "当前会话为本地演示令牌，无法调用官网 LLM。"
+                    "请设置 XCAGI_USE_REMOTE_MARKET=1 重启后端并重新登录。"
+                )
+        except ImportError:
+            pass
+
         effective_provider, effective_model = self._resolve_provider_model(provider, model)
         url = f"{self.platform_url}/api/llm/chat"
         payload: Dict[str, Any] = {
