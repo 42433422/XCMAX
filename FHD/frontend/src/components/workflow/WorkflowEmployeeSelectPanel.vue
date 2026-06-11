@@ -45,8 +45,6 @@ import { useWorkflowModsRuntimeContext } from '@/composables/useWorkflowModsRunt
 import { useWorkflowEmployeeRegistrySync } from '@/composables/useWorkflowEmployeeRegistrySync'
 import { resolveLabel } from '@/utils/workflowEmployeeRegistry'
 import { resolveWorkflowVisualizationLocation } from '@/utils/workflowNav'
-
-import { resolveWorkflowVisualizationLocation } from '@/utils/workflowNav'
 import { useWorkflowPanoramaNavVisible } from '@/composables/useWorkflowPanoramaNavVisible'
 
 const props = withDefaults(
