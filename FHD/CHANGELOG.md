@@ -10,7 +10,8 @@
 - **feat(web)**：注册 `/im` 路由与侧栏「消息」入口；未读角标 + `useImUnreadBadge`
 - **fix(web)**：企业版不再被平台壳拦截设置/Mod 商店/IM；跳过首次引导拦截员工工作台
 - **fix(web)**：设置页「关于」版本读取 `package.json`（10.0.0）；商标导出副窗默认文案
-- **fix(chat)**：Modstore/LLM 不可用时 SSE 不再空流；考勤演示兜底回复（`demo_chat_fallback`）
+- **fix(chat)**：流式桥接线程异常转为 SSE error 事件；修茈平台连接失败返回明确 503 而非空流
+- **fix(market)**：`XCAGI_USE_REMOTE_MARKET=1` 优先于本地 `.env.local-market`，避免演示 shim 误挡官网 LLM
 - **fix(backend)**：`httpx` 传输错误纳入 `OPERATIONAL_ERRORS`；流式桥接线程异常转为 SSE error 事件
 
 ### 桌面/移动上线阻断项修复（2026-06-12 · v10 线内迭代）

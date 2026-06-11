@@ -63,15 +63,23 @@ def _load_dotenv_override(env_path: Path, keys: frozenset[str] | None = None) ->
         pass
 
 
+def _env_truthy(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
 def _apply_desktop_local_market_env() -> None:
-    """桌面模式默认连接生产认证服务器；本地 MODstore 仅当显式 XCAGI_USE_LOCAL_MARKET=1。"""
+    """桌面模式默认连接生产认证服务器；本地 MODstore 仅当显式 XCAGI_USE_LOCAL_MARKET=1。
+
+    ``XCAGI_USE_REMOTE_MARKET=1`` 优先于本地市场，避免 shell 同时 export 两者时
+    ``.env.local-market`` 把 ``XCAGI_MARKET_BASE_URL`` 覆盖回 ``:8788``。
+    """
     os.environ.setdefault("XCAGI_MARKET_BASE_URL", "https://xiu-ci.com")
-    if os.environ.get("XCAGI_USE_LOCAL_MARKET", "").strip().lower() in {
-        "1",
-        "true",
-        "yes",
-        "on",
-    }:
+    if _env_truthy("XCAGI_USE_REMOTE_MARKET"):
+        _load_dotenv_override(_XCAGI_DIR / ".env.online-market", frozenset({"XCAGI_MARKET_BASE_URL"}))
+        if not os.environ.get("XCAGI_MARKET_BASE_URL"):
+            os.environ["XCAGI_MARKET_BASE_URL"] = "https://xiu-ci.com"
+        return
+    if _env_truthy("XCAGI_USE_LOCAL_MARKET"):
         _load_dotenv_override(_XCAGI_DIR / ".env.local-market", _LOCAL_MARKET_ENV_KEYS)
         if not os.environ.get("XCAGI_MARKET_BASE_URL"):
             os.environ["XCAGI_MARKET_BASE_URL"] = "http://127.0.0.1:8788"

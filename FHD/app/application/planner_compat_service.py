@@ -132,11 +132,6 @@ async def execute_compat_chat(request: Request, body: XcagiCompatChatBody) -> di
     except TimeoutError:
         return _xcagi_chat_timeout_error_payload(timeout)
     except OPERATIONAL_ERRORS as e:
-        from app.application.demo_chat_fallback import try_demo_attendance_reply
-
-        fallback = try_demo_attendance_reply(body.message)
-        if fallback:
-            return _xcagi_compat_reply_payload(fallback, kitten_attachments=kitten_extra or None)
         raise _xcagi_chat_http_exc(e) from e
     return _xcagi_compat_reply_payload(reply, kitten_attachments=kitten_extra or None)
 
