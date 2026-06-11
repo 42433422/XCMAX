@@ -6,6 +6,12 @@
 
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
+### 发版制品与构建链收口（2026-06-12 · v10 线内迭代）
+- **fix(release)**：Enterprise Windows `XCAGI-Enterprise-Setup-10.0.0-x64.exe`（Electron 薄壳）已上传 `update.xcagi.com`；完整内嵌 PyInstaller 后端仍需 Windows 或 GitHub Actions
+- **feat(scripts)**：新增 `build-windows-electron-only.sh`（Mac/Linux 交叉编译 Windows NSIS 薄壳）；Wine Docker 默认 DaoCloud 镜像
+- **fix(modstore)**：`orcaterm-deploy-commands.sh` 使用 `npm ci --ignore-scripts` 跳过 onnxruntime-node 原生下载失败
+- **fix(ci)**：`fhd-ci-cd.yml` docker save 路径对齐 `FHD/dist/deploy/`
+
 ### 多租户隔离锚定服务器会话（2026-06-11 · v10 线内迭代）
 - **fix(backend)**：`/api/auth/me` 与 session validate 通过 `enrich_session_meta_with_tenant` 补全/自动 provision `tenant_id`；下发 `market_user_id`、`local_user_id`、`tenant_id`
 - **fix(backend)**：桌面 SQLite 启动时幂等创建 `user_preferences` 表；`GET /api/workspace/prefs` 缺表时降级空数据，不再 500

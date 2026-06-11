@@ -68,7 +68,7 @@ fi
 "${PYTHON}" scripts/package/generate_mods_index.py
 
 # PyInstaller（Wine · Windows 目标）
-WINE_IMAGE="${XCAGI_WINE_BUILD_IMAGE:-electronuserland/builder:wine}"
+WINE_IMAGE="${XCAGI_WINE_BUILD_IMAGE:-docker.m.daocloud.io/electronuserland/builder:wine}"
 if ! docker image inspect "${WINE_IMAGE}" >/dev/null 2>&1; then
   echo "[info] pulling ${WINE_IMAGE} ..."
   docker pull "${WINE_IMAGE}"
