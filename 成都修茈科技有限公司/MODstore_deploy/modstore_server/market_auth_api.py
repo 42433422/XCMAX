@@ -989,7 +989,10 @@ def api_login(body: LoginDTO):
 
 
 @router.get("/auth/me", summary="当前用户资料与等级（含 Java 侧叠加字段）")
-def api_me(request: Request, user: User = Depends(_get_current_user)):
+def api_me(request: Request, user: Optional[User] = Depends(_optional_current_user)):
+    # 与 FHD /api/auth/me 一致：未登录用 200，避免 SPA 控制台刷 401。
+    if not user:
+        return {"ok": False, "success": False, "error": "请先登录"}
     exp = int(getattr(user, "experience", 0) or 0)
     level_profile = account_level_service.build_level_profile(exp).to_dict()
     phone_out = (getattr(user, "phone", None) or "") or ""

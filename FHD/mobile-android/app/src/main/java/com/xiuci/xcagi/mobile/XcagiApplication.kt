@@ -3,6 +3,7 @@ package com.xiuci.xcagi.mobile
 import android.app.Application
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
+import com.xiuci.xcagi.mobile.core.media.SoundHelper
 import com.xiuci.xcagi.mobile.core.push.PushRegistrar
 import dagger.hilt.android.HiltAndroidApp
 import javax.inject.Inject
@@ -16,6 +17,7 @@ class XcagiApplication : Application(), Configuration.Provider {
     override fun onCreate() {
         super.onCreate()
         pushRegistrar.initSdk()
+        SoundHelper.init(this)
     }
 
     override val workManagerConfiguration: Configuration

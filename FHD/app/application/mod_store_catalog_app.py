@@ -6,6 +6,7 @@ from app.services.catalog_client import (
     catalog_base_url,
     catalog_download_to,
     catalog_get_json,
+    fetch_market_catalog_page,
     iter_catalog_packages,
 )
 from app.services.mod_zip_normalize import normalize_package_zip_path
@@ -15,6 +16,7 @@ __all__ = [
     "catalog_base_url",
     "catalog_download_to",
     "catalog_get_json",
+    "fetch_market_catalog_page",
     "iter_catalog_packages",
     "normalize_package_zip_path",
     "sync_modstore_library_to_local",

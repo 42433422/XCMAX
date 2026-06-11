@@ -39,6 +39,7 @@ import {
   isClientErpSidebarContext,
   isHostMountedModMenuPath,
   isSelectableExtensionModId,
+  shouldHideAttendanceModSidebarMenu,
   shouldSuppressClientErpModMenuId,
 } from '@/constants/genericModPack';
 import {
@@ -50,7 +51,7 @@ import { useAccountProfileStore } from '@/stores/accountProfile';
 import { buildSunbirdClientModStub } from '@/constants/sunbirdClientMod';
 import { isProtectedClientModId } from '@/constants/protectedMods';
 import { bootstrapHostConfig, clientModPolicies } from '@/stores/hostConfig';
-import { XCAGI_ACTIVE_EXTENSION_MOD_ID_KEY } from '@/utils/xcagiStorageKeys';
+import { XCAGI_ACTIVE_EXTENSION_MOD_ID_KEY, readActiveExtensionModIdFromStorage, writeActiveExtensionModIdToStorage } from '@/utils/xcagiStorageKeys';
 
 /** 防止 applyEntitledActiveMod 内 refetch 再次触发 entitlement 回流 */
 let entitledRefetchInProgress = false;
@@ -82,9 +83,9 @@ function readClientModsUiOff(): boolean {
   }
 }
 
-function readActiveModId(): string {
+function readActiveModId(scope?: string): string {
   try {
-    return String(localStorage.getItem(XCAGI_ACTIVE_EXTENSION_MOD_ID_KEY) || '').trim();
+    return readActiveExtensionModIdFromStorage(scope);
   } catch {
     return '';
   }
@@ -436,15 +437,18 @@ export const useModsStore = defineStore('mods', () => {
     return filterWorkflowRegistrySourceMods(mods.value) as ModInfo[];
   });
 
-  function setActiveModId(modId: string | null | undefined) {
+  function setActiveModId(modId: string | null | undefined, scope?: string) {
     const next = String(modId || '').trim();
     activeModId.value = next;
     try {
-      if (next) localStorage.setItem(XCAGI_ACTIVE_EXTENSION_MOD_ID_KEY, next);
-      else localStorage.removeItem(XCAGI_ACTIVE_EXTENSION_MOD_ID_KEY);
+      writeActiveExtensionModIdToStorage(next || null, scope);
     } catch {
       /* private mode */
     }
+  }
+
+  function reloadActiveModForTenantScope(scope?: string) {
+    activeModId.value = readActiveModId(scope);
   }
 
   function resolveModsAccountContext() {
@@ -942,6 +946,7 @@ export const useModsStore = defineStore('mods', () => {
   }
 
   function shouldHideModMenuEntry(menuId: string): boolean {
+    if (shouldHideAttendanceModSidebarMenu(menuId)) return true
     const installedIds = mods.value.map((m) => String(m.id || '').trim()).filter(Boolean);
     return shouldSuppressClientErpModMenuId(menuId, installedIds, activeModId.value);
   }
@@ -1140,6 +1145,7 @@ export const useModsStore = defineStore('mods', () => {
     activeModId,
     clientModsUiOff,
     setActiveModId,
+    reloadActiveModForTenantScope,
     setClientModsUiOff,
     isLoaded,
     loadError,

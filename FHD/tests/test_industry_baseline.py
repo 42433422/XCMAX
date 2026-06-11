@@ -37,6 +37,14 @@ def test_onboarding_industry_catalog_neutral_names():
     assert names["涂料"] == "涂料行业包"
     assert "太阳鸟" not in str(cat)
     assert "奇士美" not in str(cat)
+    paint = next(p for p in cat["open_packages"] if p["industry_id"] == "涂料")
+    assert paint["name"] == "涂料/油漆"
+    assert "批发" in paint["scenario"]
+    assert paint["selectable"] is True
+    assert cat["preview_packages"]
+    locked = next(p for p in cat["preview_packages"] if p["industry_id"] == "通用")
+    assert locked["selectable"] is False
+    assert locked["name"] == "通用"
 
 
 def test_industry_baseline_generic_minimal():
@@ -60,6 +68,42 @@ def test_industry_baseline_custom_line_from_manifest():
     assert "考勤转换" in custom["hint"]
     assert data["custom_mod_ids"] == ["attendance-industry"]
     assert data["industry_mod_ready"] is True
+
+
+def test_onboarding_catalog_filtered_attendance_only():
+    from app.mod_sdk.industry_baseline import (
+        build_onboarding_industry_catalog,
+        filter_onboarding_catalog_for_entitlements,
+    )
+
+    cat = build_onboarding_industry_catalog()
+    filtered = filter_onboarding_catalog_for_entitlements(cat, {"taiyangniao-pro"})
+    assert filtered["open_industry_ids"] == ["考勤"]
+    assert all(p["selectable"] for p in filtered["open_packages"])
+
+
+def test_onboarding_catalog_filtered_coating_only():
+    from app.mod_sdk.industry_baseline import (
+        build_onboarding_industry_catalog,
+        filter_onboarding_catalog_for_entitlements,
+    )
+
+    cat = build_onboarding_industry_catalog()
+    filtered = filter_onboarding_catalog_for_entitlements(cat, {"sz-qsm-pro"})
+    assert filtered["open_industry_ids"] == ["涂料"]
+
+
+def test_onboarding_catalog_both_entitled():
+    from app.mod_sdk.industry_baseline import (
+        build_onboarding_industry_catalog,
+        filter_onboarding_catalog_for_entitlements,
+    )
+
+    cat = build_onboarding_industry_catalog()
+    filtered = filter_onboarding_catalog_for_entitlements(
+        cat, {"taiyangniao-pro", "sz-qsm-pro", "attendance-industry"}
+    )
+    assert set(filtered["open_industry_ids"]) == {"涂料", "考勤"}
 
 
 def test_industry_baseline_unknown_falls_back_to_generic():

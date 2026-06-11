@@ -6,17 +6,22 @@ import {
   type KittenVizEmployeeDef,
 } from '@/constants/kittenVisualizationEmployees'
 import { safeJsonRequest } from '@/utils/safeJsonRequest'
+import { buildTenantScopedStorageKey } from '@/utils/tenantStorageScope'
 
-const LS_KEY = 'xcagi_kitten_viz_employee_pkg'
+const LS_KEY_BASE = 'xcagi_kitten_viz_employee_pkg'
 const BRIDGE_INSTALLED_URL = '/api/mod/xcagi-office-employee-pack-bridge/installed'
 
 export interface KittenVizEmployeeState extends KittenVizEmployeeDef {
   installed: boolean
 }
 
+function kittenVizStorageKey(): string {
+  return buildTenantScopedStorageKey(LS_KEY_BASE)
+}
+
 function readStoredPkgId(): string {
   try {
-    const raw = localStorage.getItem(LS_KEY)
+    const raw = localStorage.getItem(kittenVizStorageKey())
     if (raw && KITTEN_VIZ_EMPLOYEES.some((e) => e.pkgId === raw)) return raw
   } catch {
     /* ignore */
@@ -73,7 +78,7 @@ export function useKittenVizEmployees() {
     if (!KITTEN_VIZ_EMPLOYEES.some((e) => e.pkgId === pkgId)) return
     selectedPkgId.value = pkgId
     try {
-      localStorage.setItem(LS_KEY, pkgId)
+      localStorage.setItem(kittenVizStorageKey(), pkgId)
     } catch {
       /* ignore */
     }

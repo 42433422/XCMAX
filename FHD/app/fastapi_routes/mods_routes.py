@@ -36,17 +36,9 @@ def get_mods_router() -> Any:
 async def _sync_enterprise_entitlements_from_request(request: Request) -> None:
     """已登录会话拉 Mod 列表前同步权益（含 SUNBIRD → taiyangniao-pro 兜底）。"""
     try:
-        from app.enterprise.mod_entitlements import (
-            enterprise_mod_filter_active,
-            sync_entitlements_for_session,
-        )
+        from app.enterprise.mod_entitlements import sync_entitlements_from_request
 
-        if not enterprise_mod_filter_active():
-            return
-        cookie_name = os.environ.get("SESSION_COOKIE_NAME", "session_id")
-        sid = (request.cookies.get(cookie_name) or "").strip()
-        if sid:
-            await sync_entitlements_for_session(sid)
+        await sync_entitlements_from_request(request)
     except OPERATIONAL_ERRORS:
         logger.exception("sync entitlements before list_mods failed")
 

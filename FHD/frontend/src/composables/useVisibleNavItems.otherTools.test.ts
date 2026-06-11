@@ -21,13 +21,9 @@ function hostNavKeyHasContributingModFacet(
 }
 
 describe('员工工作流侧栏可见性', () => {
-  it('menu_overrides 隐藏 other-tools 但 Mod 未贡献菜单时，宿主槽位仍应保留', () => {
-    expect(hostNavKeyHasContributingModFacet('other-tools', [])).toBe(false)
-  })
-
-  it('Mod 贡献 mod-office-other-tools 时可隐藏宿主 other-tools', () => {
+  it('Mod 贡献 mod-office-other-tools 时映射到员工空间槽位', () => {
     expect(
-      hostNavKeyHasContributingModFacet('other-tools', [
+      hostNavKeyHasContributingModFacet('workflow-employee-space', [
         {
           key: 'mod-office-other-tools',
           path: '/mod/xcagi-office-employee-pack-bridge/other-tools',
@@ -36,21 +32,11 @@ describe('员工工作流侧栏可见性', () => {
     ).toBe(true)
   })
 
-  it('管理员运维壳始终保留宿主 other-tools', () => {
-    const isAdminShell = true
-    const key = 'other-tools'
-    const overrideHidden = true
-    const hidden =
-      overrideHidden &&
-      !(isAdminShell && key === 'other-tools')
-    expect(hidden).toBe(false)
-  })
-
   it('合并侧栏时 admin 运维项与 core 项在同一 core 批次', () => {
     const merged = mergeSidebarMenuItems(
       [
         { key: 'xcmax-admin', name: '服务器后台总览', iconClass: 'fa-dashboard' },
-        { key: 'other-tools', name: '员工工作流', iconClass: 'fa-sitemap' },
+        { key: 'workflow-employee-space', name: '员工空间', iconClass: 'fa-th-large' },
         { key: 'chat', name: '智能对话', iconClass: 'fa-comments-o' },
       ],
       [],
@@ -61,7 +47,7 @@ describe('员工工作流侧栏可见性', () => {
     )
     expect(merged.map((m) => m.key)).toEqual([
       'xcmax-admin',
-      'other-tools',
+      'workflow-employee-space',
       'chat',
       'admin-entitlements',
     ])

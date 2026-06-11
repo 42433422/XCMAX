@@ -1,4 +1,4 @@
-import { XCAGI_ACTIVE_EXTENSION_MOD_ID_KEY } from './xcagiStorageKeys'
+import { readActiveExtensionModIdFromStorage } from './xcagiStorageKeys'
 import { readCsrfTokenFromCookie, shouldAttachCsrfHeader } from './csrfCookie'
 
 /**
@@ -123,12 +123,18 @@ export function getClientModsUiOffHeader(): Record<string, string> {
   }
 }
 
+const ACTIVE_MOD_HEADER_SKIP_PREFIXES = [
+  '/api/auth/',
+  '/api/platform-shell/',
+  '/api/debug/',
+] as const
+
 function shouldAttachActiveModHeader(rawUrl = ''): boolean {
   const value = String(rawUrl || '').trim();
   if (!value) return true;
   try {
     const pathname = /^https?:\/\//i.test(value) ? new URL(value).pathname : value.split('?')[0] || '';
-    return !pathname.startsWith('/api/auth/');
+    return !ACTIVE_MOD_HEADER_SKIP_PREFIXES.some((p) => pathname.startsWith(p));
   } catch {
     return true;
   }
@@ -138,7 +144,7 @@ function shouldAttachActiveModHeader(rawUrl = ''): boolean {
 export function getActiveExtensionModHeaders(rawUrl = ''): Record<string, string> {
   if (!shouldAttachActiveModHeader(rawUrl)) return {};
   try {
-    const id = String(localStorage.getItem(XCAGI_ACTIVE_EXTENSION_MOD_ID_KEY) || '').trim();
+    const id = readActiveExtensionModIdFromStorage();
     if (!id) return {};
     return { 'X-XCAGI-Active-Mod-Id': id };
   } catch {

@@ -3,6 +3,7 @@
 由原 Qclaw龙虾生态（:mod:`app.fastapi_routes.ai_qclaw`）升级而来：
 
 - ``GET  /api/aiopen/manifest`` — 工具目录（公开，无需 Key）
+- ``GET  /api/aiopen/guide`` — 接入说明（公开；供其他 AI 阅读后自行配置 MCP）
 - ``POST /api/aiopen/invoke`` — REST 通用工具调用 ``{tool, args}``（需 ``X-AIOPEN-Key``）
 - ``POST /api/aiopen/mcp`` — MCP Streamable HTTP 端点（JSON-RPC 2.0：
   initialize / tools/list / tools/call / ping；无状态 application/json 应答）
@@ -17,14 +18,20 @@
 from __future__ import annotations
 
 import logging
+import secrets
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Body, Header, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Body, Header, Query, Request, WebSocket, WebSocketDisconnect
+from fastapi.responses import JSONResponse, PlainTextResponse, Response
 
 from app.application.aiopen.service import (
     AIOPEN_STATE,
+    MCP_DEFAULT_PROTOCOL_VERSION,
+    MCP_PROTOCOL_VERSIONS,
     aiopen_manifest,
+    build_aiopen_guide,
+    build_mcp_install_bundle,
+    format_tool_result_text,
     generate_api_key,
     invoke_tool,
     list_api_keys,
@@ -59,6 +66,38 @@ def aiopen_manifest_route():
     return {"success": True, **aiopen_manifest()}
 
 
+@router.get("/api/aiopen/guide")
+def aiopen_guide_route(
+    request: Request,
+    format: str = Query(default="json", alias="format"),
+):
+    """公开接入说明：其他 AI Agent 读取后可自行完成 MCP 配置。
+
+    - ``format=json``（默认）：JSON，含 ``markdown`` / ``mcp_config_template`` / ``prompt_for_user``
+    - ``format=markdown`` 或 ``format=text``：纯 Markdown 文本，便于 AI 直接阅读
+    """
+    base = str(request.base_url).rstrip("/")
+    payload = build_aiopen_guide(base)
+    fmt = str(format or "json").strip().lower()
+    if fmt in {"markdown", "text", "md"}:
+        return PlainTextResponse(payload["markdown"], media_type="text/markdown; charset=utf-8")
+    return payload
+
+
+@router.get("/api/aiopen/install")
+def aiopen_install_route(request: Request, key: str = Query(default="")):
+    """公开：MCP 安装包（Cursor deep link / stdio / mcp-remote 多种方式）。"""
+    base = str(request.base_url).rstrip("/")
+    bundle = build_mcp_install_bundle(base, api_key=str(key or "").strip())
+    manifest = aiopen_manifest()
+    return {
+        "success": True,
+        "tool_count": len(manifest["tools"]),
+        "protocol_versions": list(MCP_PROTOCOL_VERSIONS),
+        **bundle,
+    }
+
+
 # ---------------------------------------------------------------------------
 # REST 通用调用
 # ---------------------------------------------------------------------------
@@ -86,10 +125,26 @@ async def aiopen_invoke(
 
 
 # ---------------------------------------------------------------------------
-# MCP Streamable HTTP（JSON-RPC 2.0，无状态）
+# MCP Streamable HTTP（JSON-RPC 2.0）
 # ---------------------------------------------------------------------------
 
-_MCP_PROTOCOL_VERSION = "2025-03-26"
+
+def _resolve_mcp_protocol_version(params: dict[str, Any] | None) -> str:
+    params = params if isinstance(params, dict) else {}
+    requested = str(params.get("protocolVersion") or "").strip()
+    if requested in MCP_PROTOCOL_VERSIONS:
+        return requested
+    return MCP_DEFAULT_PROTOCOL_VERSION
+
+
+def _mcp_response_headers(request: Request, protocol_version: str, *, new_session: bool = False) -> dict[str, str]:
+    headers = {"MCP-Protocol-Version": protocol_version}
+    incoming = str(request.headers.get("mcp-session-id") or request.headers.get("Mcp-Session-Id") or "").strip()
+    if incoming:
+        headers["Mcp-Session-Id"] = incoming
+    elif new_session:
+        headers["Mcp-Session-Id"] = secrets.token_hex(16)
+    return headers
 
 
 def _jsonrpc_result(req_id: Any, result: dict[str, Any]) -> dict[str, Any]:
@@ -100,7 +155,7 @@ def _jsonrpc_error(req_id: Any, code: int, message: str) -> dict[str, Any]:
     return {"jsonrpc": "2.0", "id": req_id, "error": {"code": code, "message": message}}
 
 
-async def _handle_mcp_message(msg: dict[str, Any], app: Any) -> dict[str, Any] | None:
+async def _handle_mcp_message(msg: dict[str, Any], app: Any, protocol_version: str) -> dict[str, Any] | None:
     """处理单条 JSON-RPC 消息；notification（无 id）返回 None。"""
     method = str(msg.get("method") or "")
     req_id = msg.get("id")
@@ -110,14 +165,20 @@ async def _handle_mcp_message(msg: dict[str, Any], app: Any) -> dict[str, Any] |
         return None
 
     if method == "initialize":
+        params = msg.get("params") if isinstance(msg.get("params"), dict) else {}
+        negotiated = _resolve_mcp_protocol_version(params)
         manifest = aiopen_manifest()
         return _jsonrpc_result(
             req_id,
             {
-                "protocolVersion": _MCP_PROTOCOL_VERSION,
+                "protocolVersion": negotiated,
                 "capabilities": {"tools": {"listChanged": False}},
                 "serverInfo": {"name": manifest["name"], "version": manifest["version"]},
-                "instructions": manifest["tagline"],
+                "instructions": (
+                    f"{manifest['tagline']}\n"
+                    "操作流程：ui_sessions → ui_snapshot → ui_click/ui_type/ui_navigate。"
+                    "业务数据用 api_catalog + api_call；对话用 chat。"
+                ),
             },
         )
     if method == "ping":
@@ -132,19 +193,52 @@ async def _handle_mcp_message(msg: dict[str, Any], app: Any) -> dict[str, Any] |
             result = await invoke_tool(tool, args, app)
         except OPERATIONAL_ERRORS as err:
             return _jsonrpc_error(req_id, -32603, f"tool execution failed: {err}")
-        import json as _json
-
         is_error = not bool(result.get("success", False))
+        text = format_tool_result_text(tool, result)
         return _jsonrpc_result(
             req_id,
             {
-                "content": [{"type": "text", "text": _json.dumps(result, ensure_ascii=False, default=str)}],
+                "content": [{"type": "text", "text": text}],
                 "isError": is_error,
             },
         )
     if is_notification:
         return None
     return _jsonrpc_error(req_id, -32601, f"method not found: {method}")
+
+
+def _wrap_mcp_json(
+    payload: dict[str, Any] | list[dict[str, Any]] | None,
+    request: Request,
+    *,
+    status_code: int = 200,
+    protocol_version: str = MCP_DEFAULT_PROTOCOL_VERSION,
+    new_session: bool = False,
+) -> Response:
+    headers = _mcp_response_headers(request, protocol_version, new_session=new_session)
+    if payload is None:
+        return Response(status_code=status_code, headers=headers)
+    return JSONResponse(payload, status_code=status_code, headers=headers)
+
+
+@router.get("/api/aiopen/mcp")
+async def aiopen_mcp_get(request: Request, x_aiopen_key: AiOpenKeyHeader = None):
+    """Streamable HTTP GET：无 SSE 推送时返回服务说明（Cursor 探测用）。"""
+    if not verify_api_key(x_aiopen_key):
+        return _unauthorized()
+    manifest = aiopen_manifest()
+    return JSONResponse(
+        {
+            "success": True,
+            "transport": "streamable-http",
+            "mcp_endpoint": "/api/aiopen/mcp",
+            "protocol_versions": list(MCP_PROTOCOL_VERSIONS),
+            "server": manifest["name"],
+            "tool_count": len(manifest["tools"]),
+            "hint": "Send JSON-RPC via POST with Content-Type: application/json",
+        },
+        headers=_mcp_response_headers(request, MCP_DEFAULT_PROTOCOL_VERSION),
+    )
 
 
 @router.post("/api/aiopen/mcp")
@@ -155,22 +249,45 @@ async def aiopen_mcp(
 ):
     if not verify_api_key(x_aiopen_key):
         return _unauthorized()
+    params = body.get("params") if isinstance(body, dict) else {}
+    protocol_version = _resolve_mcp_protocol_version(params if isinstance(params, dict) else {})
+    is_initialize = isinstance(body, dict) and body.get("method") == "initialize"
+
     if isinstance(body, list):
         responses = []
         for item in body:
             if isinstance(item, dict):
-                resp = await _handle_mcp_message(item, request.app)
+                item_params = item.get("params") if isinstance(item.get("params"), dict) else {}
+                if item.get("method") == "initialize":
+                    protocol_version = _resolve_mcp_protocol_version(item_params)
+                    is_initialize = True
+                resp = await _handle_mcp_message(item, request.app, protocol_version)
                 if resp is not None:
                     responses.append(resp)
         if not responses:
-            return JSONResponse(None, status_code=202)
-        return JSONResponse(responses)
+            return _wrap_mcp_json(None, request, status_code=202, protocol_version=protocol_version)
+        return _wrap_mcp_json(
+            responses,
+            request,
+            protocol_version=protocol_version,
+            new_session=is_initialize,
+        )
     if not isinstance(body, dict):
-        return JSONResponse(_jsonrpc_error(None, -32700, "parse error: body must be a JSON object"), status_code=400)
-    resp = await _handle_mcp_message(body, request.app)
+        return _wrap_mcp_json(
+            _jsonrpc_error(None, -32700, "parse error: body must be a JSON object"),
+            request,
+            status_code=400,
+            protocol_version=protocol_version,
+        )
+    resp = await _handle_mcp_message(body, request.app, protocol_version)
     if resp is None:
-        return JSONResponse(None, status_code=202)
-    return JSONResponse(resp)
+        return _wrap_mcp_json(None, request, status_code=202, protocol_version=protocol_version)
+    return _wrap_mcp_json(
+        resp,
+        request,
+        protocol_version=protocol_version,
+        new_session=is_initialize,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -204,8 +321,10 @@ def aiopen_keys_revoke(body: dict = Body(default_factory=dict)):
 
 
 @router.get("/api/aiopen/panel")
-def aiopen_panel():
+def aiopen_panel(request: Request):
     whitelist = AIOPEN_STATE.get("whitelist", {})
+    base = str(request.base_url).rstrip("/")
+    manifest = aiopen_manifest()
     return {
         "success": True,
         "wechat_open": bool(AIOPEN_STATE.get("wechat_open", False)),
@@ -215,6 +334,11 @@ def aiopen_panel():
         "screen_sessions": aiopen_cursor_hub.sessions_info(),
         "recent_commands": aiopen_cursor_hub.recent_commands(30),
         "keys": list_api_keys(),
+        "mcp": {
+            "tool_count": len(manifest["tools"]),
+            "endpoint": f"{base}/api/aiopen/mcp",
+            "install_url": f"{base}/api/aiopen/install",
+        },
     }
 
 

@@ -602,6 +602,7 @@ import { sanitizeChatBubbleHtml, sanitizeChatBubbleMarkdown } from '@/utils/sani
 import { speakText, stopSpeaking, cleanTextForSpeech } from '@/utils/tts'
 import { estimateMessageHeight, getPerformanceStats } from '@/utils/pretext'
 import { resolveHostBusinessPageRedirect } from '@/utils/hostBusinessPageRedirect'
+import { readAiSessionIdFromStorage, writeAiSessionIdToStorage } from '@/utils/xcagiStorageKeys'
 
 const router = useRouter()
 const modsStore = useModsStore()
@@ -630,10 +631,10 @@ function generateSessionId(): string {
 }
 
 // 首次进入时若未写入 ai_session_id，切换路由再回来会生成新会话 ID，导致 localStorage 中的消息键对不上
-const _storedSessionId = localStorage.getItem('ai_session_id')
+const _storedSessionId = readAiSessionIdFromStorage()
 const currentSessionId = ref(_storedSessionId || generateSessionId())
 if (!_storedSessionId) {
-  localStorage.setItem('ai_session_id', currentSessionId.value)
+  writeAiSessionIdToStorage(currentSessionId.value)
 }
 
 const {

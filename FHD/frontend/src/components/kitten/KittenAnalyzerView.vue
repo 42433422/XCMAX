@@ -3,9 +3,11 @@
     <header class="kitten-header">
       <button class="kitten-back" type="button" @click="emit('back')">返回</button>
       <div class="kitten-brand">
-        <span class="kitten-brand-icon" aria-hidden="true">🐱</span>
+        <span class="kitten-brand-icon" aria-hidden="true">
+          <KittenLauncherIcon size="sm" />
+        </span>
         <div class="kitten-brand-text">
-          <div class="kitten-title">小猫分析</div>
+          <div class="kitten-title">智慧分析</div>
           <div class="kitten-subtitle">可视化 AI 员工 · 对话洞察 · 图表导出</div>
         </div>
       </div>
@@ -246,6 +248,7 @@ import { sanitizeChatBubbleHtml } from '@/utils/sanitizeHtml'
 import { downloadBlob, getFilenameFromDisposition } from '@/utils'
 import { appAlert } from '@/utils/appDialog'
 import KittenChartPanel from '@/components/kitten/KittenChartPanel.vue'
+import KittenLauncherIcon from '@/components/kitten/KittenLauncherIcon.vue'
 import KittenVizEmployeeStrip from '@/components/kitten/KittenVizEmployeeStrip.vue'
 import { useKittenVizEmployees } from '@/composables/useKittenVizEmployees'
 import type { KittenChartType } from '@/composables/useKittenAnalyzer'
@@ -485,8 +488,8 @@ const openDownloadLink = async (link: string) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 22px;
-  background: linear-gradient(135deg, #dbeafe, #bfdbfe);
+  background: linear-gradient(145deg, #0f766e 0%, #1e40af 100%);
+  box-shadow: 0 4px 12px rgba(15, 118, 110, 0.22);
   flex-shrink: 0;
 }
 .kitten-brand-text {

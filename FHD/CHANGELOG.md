@@ -6,9 +6,74 @@
 
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
+### 多租户隔离锚定服务器会话（2026-06-11 · v10 线内迭代）
+- **fix(backend)**：`/api/auth/me` 与 session validate 通过 `enrich_session_meta_with_tenant` 补全/自动 provision `tenant_id`；下发 `market_user_id`、`local_user_id`、`tenant_id`
+- **fix(backend)**：桌面 SQLite 启动时幂等创建 `user_preferences` 表；`GET /api/workspace/prefs` 缺表时降级空数据，不再 500
+- **fix(frontend)**：客户端持久化 scope 优先服务器会话（tenant → 市场用户 → FHD `session:{user.id}`），不再把未绑定租户的用户都打进 `local` 共享域
+
+### 企业级行业二级筛选与跨设备工作区同步（2026-06-11 · v10 线内迭代）
+- **feat(backend)**：`build_onboarding_industry_catalog` 合并 `industry_presets.json`，返回 `name` / `scenario` / `product_name` 二级结构及 `preview_packages`
+- **feat(api)**：`GET /api/platform-shell/onboarding-industries` 企业版按 session entitlement 裁剪开放行业（legacy `taiyangniao-pro` / `sz-qsm-pro` 与中性 mod 对齐）；返回 `selected_industry_id` / `enterprise_filter_applied`
+- **feat(api)**：`GET/PATCH /api/workspace/prefs` 按租户/会话持久化行业选择、员工开关、引导完成态；`GET/POST /api/system/industry` 登录用户读写租户 prefs，未 entitlement 行业返回 403
+- **fix(frontend)**：`ProductOnboardingView` 行业 chip 以服务器 catalog 为准；登录后 hydrate 工作区 prefs，员工开关与引导状态跨设备一致
+
+### 企业端工作流员工多租户隔离（2026-06-11 · v10 线内迭代）
+- **fix(frontend)**：员工开关、工位快照/工时、当前扩展 Mod、聊天 sessionId、聊天记录、能力库 catalog 缓存、Kitten 可视化员工选择均按 `tenant_id` 分域持久化；登录/切换账号后自动重载对应租户数据，避免同浏览器串租户
+
+### 企业端移除「员工视图」侧栏入口（2026-06-11 · v10 线内迭代）
+- **fix(frontend)**：取消「员工工作台 → 员工视图」；企业端仅保留「员工空间」；旧 `/other-tools` 重定向至员工空间；管理端 `:5011` 改为「编制图谱」子项
+- **fix(frontend)**：企业账号侧栏/沙箱/壳模式不再展示「流程全景」；路由与副窗链接隐藏；管理端 `:5011/admin/` 保留
+
+### 管理端 other-tools 改为编制图谱（2026-06-11 · v10 线内迭代）
+- **fix(admin-console)**：`/other-tools` 管理端直接渲染 `DutyRosterGraphPanel`（编制图谱）；侧栏管理端显示「编制图谱」；企业端仍为「员工视图」开关页
+
+### 侧栏「员工可视化」命名对齐（2026-06-11 · v10 线内迭代）
+- **revert**：撤销仅改文案的「员工可视化」命名；编制图谱与员工视图分轨
+
+### 管理端侧栏恢复「员工工作台」分组（2026-06-11 · v10 线内迭代）
+- **fix(admin-console)**：从 aux 尾部菜单移除平铺的「员工视图/员工空间」，改由 `CORE_MENU_ITEMS_BASE` 的「员工工作台」子菜单承载；放开管理端 `workflow-visualization` 路由
+
+### 员工视图独立页（2026-06-11 · v10 线内迭代）
+- **feat(frontend)**：`/other-tools` 改为独立「员工视图」页（`WorkflowEmployeeInspector` + 状态/进度），移除与侧栏重复的「员工空间」「流程全景」卡片
+
+### 员工视图内嵌工作流员工开关（2026-06-11 · v10 线内迭代）
+- **feat(frontend)**：`OtherToolsView` 首卡改为「员工视图」，内嵌 `WorkflowEmployeeSelectPanel`（与副窗「一键托管」开关同步）；侧栏/路由标签由「流程与员工」改为「员工视图」
+
+### 设置页恢复 App 扫码配对二维码（2026-06-11 · v10 线内迭代）
+- **feat(frontend)**：`SettingsView`「移动端连接」展示配对 QR（`/api/mobile/v1/pairing/issue`），App「扫码连电脑」可绑定本机宿主
+- **fix(mobile+frontend)**：QR 改为 JSON（含 host/port/nonce）；App 向电脑 exchange 而非本机 127.0.0.1，并保存 `host:port`（修复 :5100 误连 :5000）
+- **fix(backend)**：`discover-hint.api_port` 与 `FASTAPI_PORT`/`XCAGI_API_PORT` 对齐
+
+### MOD 扩展内嵌 AI 市场目录（2026-06-11 · v10 线内迭代）
+- **feat(backend)**：`GET /api/mod-store/market-catalog` 代理修茈 `/api/market/catalog`，按 `collection` / `artifact` / `material_category` 分页拉取并合并本机安装态
+- **feat(frontend)**：`ModStore.vue` 侧栏对齐网页 AI 市场（办公员工包 / 附属包1 / 工作流 / AI 员工），分类数据直载无需外链跳转
+
 ### 小猫分析 · 可视化 AI 员工（2026-06-11 · v10 线内迭代）
 - **feat(frontend)**：小猫分析接入办公员工附属包1（柱状/折线/饼图/看板可视化员 + JSON 量化报告员同栏），员工选择条 + 主题色 ECharts；综合看板多图联动
 - **feat(modstore)**：`bootstrap_kitten_chart_employees.py` / `publish_kitten_chart_employees.py`；chart-* 员工与报告员一并归入「办公员工附属包1」
+
+### AIOPEN 生态入口图标重设计（2026-06-11 · v10 线内迭代）
+- **ui**：AI生态应用卡片替换 🤖 emoji 为品牌 SVG（开放弧 + 虚拟光标 + MCP 节点），与 AIOPEN 面板视觉统一
+
+### AIOPEN 发给 AI 助手一键配置 + MCP 403 修复（2026-06-11 · v10 线内迭代）
+- **fix**：MCP 健康检查改 manifest GET；MCP 配置 URL 固定指向后端 :5100 非 Vite :5001
+- **feat**：「复制发给 AI 助手 · 一键配置」— 含说明链接 + MCP JSON + 验证步骤，可粘贴 ChatGPT/Claude/Kimi
+
+### AIOPEN MCP CSRF 豁免（2026-06-11 · v10 线内迭代）
+- **fix(csrf)**：`/api/aiopen/*` 与旧 `/api/ai/qclaw/*` 变更 POST 不再要求 CSRF（外部 Agent 无 Cookie）；面板 MCP 自检改 GET 探测
+
+### AIOPEN 多 AI 客户端 MCP 配置（2026-06-11 · v10 线内迭代）
+- **feat(frontend)**：面板支持 Cursor / Claude / VS Code / Windsurf / Trae / 其他 六种 AI 软件分别安装或复制配置，可同时配置多个
+- **feat(backend)**：`/api/aiopen/install` 返回 `clients[]` 多客户端安装包
+
+### AIOPEN MCP 对齐业界接入（2026-06-11 · v10 线内迭代）
+- **feat(mcp)**：`GET /api/aiopen/install` 安装包（Cursor deep link / npx mcp-remote / Python stdio 桥）；`GET /api/aiopen/mcp` 探测；响应头 `MCP-Protocol-Version` + `Mcp-Session-Id`；`tools/call` 人类可读输出
+- **feat(frontend)**：面板「在 Cursor 中安装」一键 MCP、MCP 自检、工具列表预览
+- **feat(scripts)**：`scripts/dev/aiopen_mcp_stdio.py` stdio→HTTP 桥接
+
+### AIOPEN 面板小白化 + 接入说明链接（2026-06-11 · v10 线内迭代）
+- **feat(aiopen)**：`GET /api/aiopen/guide` 公开接入说明（JSON 或 `?format=markdown`），供其他 AI 阅读后自行配置 MCP
+- **feat(frontend)**：面板「发给其他 AI」— 一键复制说明链接 / 复制给 AI 的提示语
 
 ### AIOPEN 开放智控 — Qclaw龙虾生态 toA 升级（2026-06-11 · v10 线内迭代）
 - **feat(aiopen)**：「Qclaw龙虾生态」更名升级为「AIOPEN 开放智控」（我是 AI 的工具）：面向外部 AI Agent 的 MCP + REST 开放平台与虚拟光标操控

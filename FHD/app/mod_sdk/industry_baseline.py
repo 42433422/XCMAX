@@ -167,23 +167,180 @@ def _label_for_custom_mod(mod_id: str, industry_key: str, labels: dict[str, str]
     return name or mod_id
 
 
+def _onboarding_package_row(
+    industry_id: str,
+    *,
+    selectable: bool,
+    presets: dict[str, Any],
+) -> dict[str, Any]:
+    iid = str(industry_id or "").strip()
+    pkg = _industry_package(iid)
+    preset = presets.get(iid) if isinstance(presets.get(iid), dict) else {}
+    name = str(preset.get("name") or iid).strip()
+    scenario = str(preset.get("scenario") or "").strip()
+    return {
+        "industry_id": iid,
+        "name": name,
+        "scenario": scenario,
+        "product_name": str(pkg.get("product_name") or f"{iid}行业包").strip(),
+        "mod_id": str(pkg.get("mod_id") or "").strip(),
+        "selectable": selectable,
+    }
+
+
+def industry_entitled_for_client_mods(industry_id: str, entitled_mod_ids: set[str]) -> bool:
+    """企业 entitlement：行业是否对当前账号开放（含 legacy mod id 别名）。"""
+    from app.mod_sdk.industry_mod_aliases import (
+        canonical_mod_id,
+        canonical_mod_id_for_industry,
+        legacy_mod_ids_for,
+    )
+
+    iid = str(industry_id or "").strip()
+    if not iid:
+        return False
+    canonical = canonical_mod_id_for_industry(iid)
+    if not canonical:
+        return False
+    entitled = {str(x).strip() for x in entitled_mod_ids if str(x).strip()}
+    entitled_canonical = {canonical_mod_id(mid) for mid in entitled} | entitled
+    if canonical in entitled_canonical:
+        return True
+    for leg in legacy_mod_ids_for(canonical):
+        if leg in entitled:
+            return True
+    return False
+
+
+def filter_onboarding_catalog_for_entitlements(
+    catalog: dict[str, Any],
+    entitled_mod_ids: set[str],
+) -> dict[str, Any]:
+    """按企业客户 Mod 权益裁剪开放行业；未 entitlement 的开放项降级为 preview。"""
+    entitled = {str(x).strip() for x in entitled_mod_ids if str(x).strip()}
+    open_pkgs: list[dict[str, Any]] = []
+    demoted: list[dict[str, Any]] = []
+    for pkg in catalog.get("open_packages") or []:
+        if not isinstance(pkg, dict):
+            continue
+        iid = str(pkg.get("industry_id") or "").strip()
+        row = dict(pkg)
+        if industry_entitled_for_client_mods(iid, entitled):
+            row["selectable"] = True
+            open_pkgs.append(row)
+        else:
+            row["selectable"] = False
+            demoted.append(row)
+
+    preview_pkgs = [
+        dict(p) if isinstance(p, dict) else p for p in (catalog.get("preview_packages") or [])
+    ]
+    preview_ids = {
+        str(p.get("industry_id") or "").strip()
+        for p in preview_pkgs
+        if isinstance(p, dict) and str(p.get("industry_id") or "").strip()
+    }
+    for pkg in demoted:
+        iid = str(pkg.get("industry_id") or "").strip()
+        if iid and iid not in preview_ids:
+            preview_pkgs.append(pkg)
+            preview_ids.add(iid)
+
+    open_ids = [
+        str(p.get("industry_id") or "").strip()
+        for p in open_pkgs
+        if str(p.get("industry_id") or "").strip()
+    ]
+    return {
+        **catalog,
+        "open_industry_ids": open_ids,
+        "open_packages": open_pkgs,
+        "preview_packages": preview_pkgs,
+    }
+
+
+async def build_onboarding_industry_catalog_for_request(request) -> dict[str, Any]:
+    """按会话感知：企业 entitlement 二级筛选 + 租户已选行业。"""
+    import os
+
+    from app.application.tenant_workspace_prefs import (
+        get_workspace_prefs,
+        resolve_workspace_owner_id,
+    )
+    from app.enterprise.mod_entitlements import (
+        enterprise_mod_filter_active,
+        get_cached_entitled_client_mod_ids,
+        is_admin_account_session,
+        sync_entitlements_from_request,
+    )
+    from app.infrastructure.auth.dependencies import resolve_session_user
+
+    catalog = build_onboarding_industry_catalog()
+    meta: dict[str, Any] = {
+        "enterprise_filter_applied": False,
+        "owner_id": None,
+        "selected_industry_id": None,
+    }
+
+    user = resolve_session_user(request)
+    if user is not None:
+        owner_id = resolve_workspace_owner_id(request, user)
+        if owner_id:
+            meta["owner_id"] = owner_id
+            prefs = get_workspace_prefs(owner_id)
+            selected = str(prefs.get("selected_industry_id") or "").strip()
+            if selected:
+                meta["selected_industry_id"] = selected
+
+    if not enterprise_mod_filter_active():
+        return {**catalog, **meta}
+
+    cookie_name = os.environ.get("SESSION_COOKIE_NAME", "session_id")
+    sid = (request.cookies.get(cookie_name) or "").strip()
+    if not sid:
+        return {**catalog, **meta}
+
+    await sync_entitlements_from_request(request)
+    meta["enterprise_filter_applied"] = True
+
+    if is_admin_account_session():
+        return {**catalog, **meta}
+
+    entitled = get_cached_entitled_client_mod_ids() or set()
+    filtered = filter_onboarding_catalog_for_entitlements(catalog, entitled)
+    return {**filtered, **meta}
+
+
 def build_onboarding_industry_catalog() -> dict[str, Any]:
     doc = load_industry_baseline_document()
     open_ids = _dedupe([str(x) for x in (doc.get("onboarding_open_industry_ids") or []) if x])
-    open_packages: list[dict[str, Any]] = []
-    for iid in open_ids:
-        pkg = _industry_package(iid)
-        open_packages.append(
-            {
-                "industry_id": iid,
-                "product_name": str(pkg.get("product_name") or f"{iid}行业包").strip(),
-                "mod_id": str(pkg.get("mod_id") or "").strip(),
-            }
-        )
+
+    presets_doc: dict[str, Any] = {}
+    try:
+        from app.mod_sdk.host_profile import load_industry_presets_document
+
+        presets_doc = load_industry_presets_document()
+    except OPERATIONAL_ERRORS:
+        presets_doc = {}
+    presets = presets_doc.get("presets") if isinstance(presets_doc.get("presets"), dict) else {}
+
+    open_packages = [_onboarding_package_row(iid, selectable=True, presets=presets) for iid in open_ids]
+
+    preset_ids = presets_doc.get("preset_ids")
+    if not isinstance(preset_ids, list):
+        preset_ids = list(presets.keys())
+    preview_ids = _dedupe(
+        [str(x) for x in preset_ids if str(x or "").strip() and str(x).strip() not in open_ids]
+    )
+    preview_packages = [
+        _onboarding_package_row(iid, selectable=False, presets=presets) for iid in preview_ids
+    ]
+
     return {
         "schema_version": doc.get("schema_version", 1),
         "open_industry_ids": open_ids,
         "open_packages": open_packages,
+        "preview_packages": preview_packages,
     }
 
 
@@ -312,5 +469,8 @@ def build_industry_baseline_plan(
 __all__ = [
     "build_industry_baseline_plan",
     "build_onboarding_industry_catalog",
+    "build_onboarding_industry_catalog_for_request",
+    "filter_onboarding_catalog_for_entitlements",
+    "industry_entitled_for_client_mods",
     "load_industry_baseline_document",
 ]

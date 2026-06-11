@@ -6,7 +6,11 @@
           <router-link :to="{ name: 'workflow-employee-space' }" class="panorama-btn">
             返回员工空间
           </router-link>
-          <router-link :to="workflowVisualizationLocation" class="panorama-btn">
+          <router-link
+            v-if="showWorkflowPanoramaNav"
+            :to="workflowVisualizationLocation"
+            class="panorama-btn"
+          >
             流程全景说明
           </router-link>
         </div>
@@ -57,8 +61,10 @@ import WorkflowEmployeeInspector from '@/components/workflow/WorkflowEmployeeIns
 import { useWorkflowEmployeeDesks } from '@/composables/useWorkflowEmployeeDesks'
 import type { YuangongStitchHotspot } from '@/constants/yuangongStitchHotspots'
 import { resolveWorkflowVisualizationLocation } from '@/utils/workflowNav'
+import { useWorkflowPanoramaNavVisible } from '@/composables/useWorkflowPanoramaNavVisible'
 
 const workflowVisualizationLocation = resolveWorkflowVisualizationLocation()
+const { showWorkflowPanoramaNav } = useWorkflowPanoramaNavVisible()
 const EMPTY_HOTSPOTS: YuangongStitchHotspot[] = []
 const PANORAMA_LAYOUT_MQ = '(max-width: 960px)'
 

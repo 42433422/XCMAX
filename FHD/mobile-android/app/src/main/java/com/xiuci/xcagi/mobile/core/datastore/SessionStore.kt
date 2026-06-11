@@ -1,7 +1,6 @@
 package com.xiuci.xcagi.mobile.core.datastore
 
 import android.content.Context
-import com.xiuci.xcagi.mobile.BuildConfig
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
@@ -9,20 +8,24 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.xiuci.xcagi.mobile.BuildConfig
 import dagger.hilt.android.qualifiers.ApplicationContext
+import javax.inject.Inject
+import javax.inject.Singleton
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
-import javax.inject.Inject
-import javax.inject.Singleton
 
-private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(
-    "xcagi_session_${BuildConfig.PRODUCT_SKU}",
-)
+private val Context.dataStore: DataStore<Preferences> by
+        preferencesDataStore(
+                "xcagi_session_${BuildConfig.PRODUCT_SKU}",
+        )
 
 @Singleton
-class SessionStore @Inject constructor(
-    @ApplicationContext private val context: Context,
+class SessionStore
+@Inject
+constructor(
+        @ApplicationContext private val context: Context,
 ) {
     private val fhdHost = stringPreferencesKey("fhd_host")
     private val fhdAccess = stringPreferencesKey("fhd_access_token")
@@ -42,6 +45,10 @@ class SessionStore @Inject constructor(
     private val legalAcceptedVersionKey = stringPreferencesKey("legal_accepted_version")
     private val themeModeKey = stringPreferencesKey("theme_mode")
     private val biometricEnabledKey = booleanPreferencesKey("biometric_enabled")
+    private val savedUsernameKey = stringPreferencesKey("saved_username")
+    private val savedPasswordKey = stringPreferencesKey("saved_password")
+    private val rememberPassKey = booleanPreferencesKey("remember_password")
+    private val autoLoginKey = booleanPreferencesKey("auto_login")
 
     val fhdHostFlow: Flow<String> = context.dataStore.data.map { it[fhdHost] ?: "" }
     val userIdFlow: Flow<Int> = context.dataStore.data.map { it[userIdKey] ?: 0 }
@@ -51,18 +58,18 @@ class SessionStore @Inject constructor(
     val marketRefreshFlow: Flow<String> = context.dataStore.data.map { it[marketRefresh] ?: "" }
     val fhdUsernameFlow: Flow<String> = context.dataStore.data.map { it[fhdUsername] ?: "" }
 
-    val isLoggedInFlow: Flow<Boolean> = context.dataStore.data.map {
-        !(it[fhdAccess].isNullOrBlank()) || !(it[marketToken].isNullOrBlank())
-    }
+    val isLoggedInFlow: Flow<Boolean> =
+            context.dataStore.data.map {
+                !(it[fhdAccess].isNullOrBlank()) || !(it[marketToken].isNullOrBlank())
+            }
 
     /** 已完成引导：显式标记或已保存电脑主机。 */
-    val isSetupCompleteFlow: Flow<Boolean> = context.dataStore.data.map { prefs ->
-        prefs[setupCompleteKey] == true || !(prefs[fhdHost].isNullOrBlank())
-    }
+    val isSetupCompleteFlow: Flow<Boolean> =
+            context.dataStore.data.map { prefs ->
+                prefs[setupCompleteKey] == true || !(prefs[fhdHost].isNullOrBlank())
+            }
 
-    val autoLanProbeFlow: Flow<Boolean> = context.dataStore.data.map {
-        it[autoLanProbeKey] == true
-    }
+    val autoLanProbeFlow: Flow<Boolean> = context.dataStore.data.map { it[autoLanProbeKey] == true }
 
     val syncCursorFlow: Flow<Int> = context.dataStore.data.map { it[syncCursorKey] ?: 0 }
 
@@ -70,11 +77,18 @@ class SessionStore @Inject constructor(
 
     val autoSyncFlow: Flow<Boolean> = context.dataStore.data.map { it[autoSyncKey] != false }
 
-    val legalAcceptedVersionFlow: Flow<String> = context.dataStore.data.map { it[legalAcceptedVersionKey] ?: "" }
+    val legalAcceptedVersionFlow: Flow<String> =
+            context.dataStore.data.map { it[legalAcceptedVersionKey] ?: "" }
 
     val themeModeFlow: Flow<String> = context.dataStore.data.map { it[themeModeKey] ?: "system" }
 
-    val biometricEnabledFlow: Flow<Boolean> = context.dataStore.data.map { it[biometricEnabledKey] == true }
+    val biometricEnabledFlow: Flow<Boolean> =
+            context.dataStore.data.map { it[biometricEnabledKey] == true }
+
+    val savedUsernameFlow: Flow<String> = context.dataStore.data.map { it[savedUsernameKey] ?: "" }
+    val savedPasswordFlow: Flow<String> = context.dataStore.data.map { it[savedPasswordKey] ?: "" }
+    val rememberPassFlow: Flow<Boolean> = context.dataStore.data.map { it[rememberPassKey] == true }
+    val autoLoginFlow: Flow<Boolean> = context.dataStore.data.map { it[autoLoginKey] == true }
 
     suspend fun isSetupComplete(): Boolean = isSetupCompleteFlow.first()
 
@@ -107,11 +121,11 @@ class SessionStore @Inject constructor(
     suspend fun fhdHost(): String = fhdHostFlow.first()
 
     suspend fun saveFhdAuth(
-        access: String,
-        refresh: String,
-        sessionId: String,
-        username: String,
-        userId: Int = 0,
+            access: String,
+            refresh: String,
+            sessionId: String,
+            username: String,
+            userId: Int = 0,
     ) {
         context.dataStore.edit {
             it[fhdAccess] = access
@@ -171,12 +185,53 @@ class SessionStore @Inject constructor(
         context.dataStore.edit { it[biometricEnabledKey] = enabled }
     }
 
+    /** 保存登录凭证（记住密码） */
+    suspend fun saveCredentials(username: String, password: String) {
+        context.dataStore.edit {
+            it[savedUsernameKey] = username.trim()
+            it[savedPasswordKey] = password
+            it[rememberPassKey] = true
+        }
+    }
+
+    /** 清除保存的凭证（取消记住密码时调用） */
+    suspend fun clearSavedCredentials() {
+        context.dataStore.edit {
+            it.remove(savedUsernameKey)
+            it.remove(savedPasswordKey)
+            it[rememberPassKey] = false
+        }
+    }
+
+    /** 设置免登录状态 */
+    suspend fun setAutoLogin(enabled: Boolean) {
+        context.dataStore.edit { it[autoLoginKey] = enabled }
+    }
+
+    /** 读取已保存的用户名 */
+    suspend fun savedUsername(): String = savedUsernameFlow.first()
+
+    /** 读取已保存的密码 */
+    suspend fun savedPassword(): String = savedPasswordFlow.first()
+
+    /** 是否记住密码 */
+    suspend fun isRememberPass(): Boolean = rememberPassFlow.first()
+
+    /** 是否开启免登录 */
+    suspend fun isAutoLogin(): Boolean = autoLoginFlow.first()
+
+    /** 检查是否可以自动登录：有保存的账号密码 + 免登录开启 */
+    suspend fun canAutoLogin(): Boolean {
+        val u = savedUsernameFlow.first()
+        val p = savedPasswordFlow.first()
+        return autoLoginFlow.first() && u.isNotBlank() && p.isNotBlank()
+    }
+
     suspend fun clear() {
         context.dataStore.edit { it.clear() }
     }
 
     suspend fun accessToken(): String = fhdAccessFlow.first()
 
-    suspend fun fhdSessionId(): String =
-        context.dataStore.data.map { it[fhdSession] ?: "" }.first()
+    suspend fun fhdSessionId(): String = context.dataStore.data.map { it[fhdSession] ?: "" }.first()
 }

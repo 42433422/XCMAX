@@ -265,9 +265,10 @@ const viewTitlesBase = {
   console: '模板库',
   settings: '系统设置',
   tools: '工具表',
-  'other-tools': '员工工作流',
+  'other-tools': '员工视图',
+  'employee-workflow': '员工工作台',
   'workflow-employee-space': '员工空间',
-  'workflow-visualization': '流程可视化',
+  'workflow-visualization': '流程全景',
   purchase: '耗材申领',
   'label-editor': '模板编辑器',
   'batch-analyze': '批量分析',
@@ -398,6 +399,7 @@ const currentViewTitle = computed(() => {
 const SIDEBAR_ROUTE_ALIASES = {
   'approval-hub': 'approval-workspace',
   'mod-approval-hub': 'approval-workspace',
+  'employee-workflow': 'workflow-employee-space',
 }
 
 function resolveLegacyRouteFromModPath(modPath) {
@@ -585,15 +587,14 @@ onMounted(async () => {
     }
   }
   try {
-    const { authApi } = await import('@/api/auth')
     const {
       augmentEntitledModIdsForAccount,
       isSunbirdAccountUsername,
       SUNBIRD_CLIENT_MOD_ID,
     } = await import('@/constants/accountModBinding')
-    const me = await authApi.getCurrentUser()
-    const uname = String(me?.data?.user?.username || accountUsername.value || '').trim()
+    const uname = accountUsername.value.trim()
     if (
+      uname &&
       isSunbirdAccountUsername(uname) &&
       String(modsStore.activeModId || '').trim() !== SUNBIRD_CLIENT_MOD_ID
     ) {

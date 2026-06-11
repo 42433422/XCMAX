@@ -55,7 +55,7 @@ data class RegisterRequest(
 data class ApproveBody(val approver_id: Int, val opinion: String = "")
 data class RejectBody(val approver_id: Int, val reason: String = "")
 data class BridgeRespondBody(val response: String, val responded_by: String? = null, val status: String = "resolved")
-data class PairingExchangeBody(val nonce: String)
+data class PairingExchangeBody(val nonce: String = "", val code: String = "")
 
 data class SyncPullBody(val since_cursor: Int = 0)
 

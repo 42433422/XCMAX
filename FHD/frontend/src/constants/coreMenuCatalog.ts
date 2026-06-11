@@ -19,9 +19,28 @@ export function pinMenuKeyFirst<T extends { key: string }>(
   return [hit, ...items.filter((i) => String(i.key) !== key)]
 }
 
+export const EMPLOYEE_WORKFLOW_MENU_CHILDREN: CoreMenuCatalogItem[] = [
+  { key: 'workflow-employee-space', name: '员工空间', iconClass: 'fa-th-large' },
+  { key: 'workflow-visualization', name: '流程全景', iconClass: 'fa-share-alt' },
+]
+
+/** 管理端「员工工作台」额外子项（企业端不可见） */
+export const ADMIN_EMPLOYEE_WORKFLOW_MENU_CHILDREN: CoreMenuCatalogItem[] = [
+  { key: 'duty-roster-graph', name: '编制图谱', iconClass: 'fa-sitemap' },
+]
+
+/** 侧栏分组：员工工作台 */
+export const EMPLOYEE_WORKFLOW_MENU_ITEM: CoreMenuCatalogItem = {
+  key: 'employee-workflow',
+  name: '员工工作台',
+  iconClass: 'fa-users',
+  children: EMPLOYEE_WORKFLOW_MENU_CHILDREN,
+}
+
 export const CORE_MENU_ITEMS_BASE: CoreMenuCatalogItem[] = [
   { key: PRIMARY_CHAT_MENU_KEY, name: '智能对话', iconClass: 'fa-comments-o' },
   { key: 'ai-ecosystem', name: '智能生态', iconClass: 'fa-sitemap' },
+  EMPLOYEE_WORKFLOW_MENU_ITEM,
 ]
 
 export const SETTINGS_MENU_ITEM: CoreMenuCatalogItem = {
@@ -39,7 +58,7 @@ export const ADMIN_MENU_ITEM: CoreMenuCatalogItem = {
 }
 
 export const CORE_NAV_KEYS = [
-  ...CORE_MENU_ITEMS_BASE.map((m) => m.key),
+  ...flattenNavKeys(CORE_MENU_ITEMS_BASE),
   ...CORE_MENU_ITEMS_TRAILING.map((m) => m.key),
   SETTINGS_MENU_ITEM.key,
 ]
@@ -47,6 +66,8 @@ export const CORE_NAV_KEYS = [
 export const SANDBOX_MENU_KEYS = new Set([
   'chat',
   'ai-ecosystem',
+  'employee-workflow',
+  'workflow-employee-space',
 ])
 
 export function flattenNavKeys(items: Array<{ key: string; children?: Array<{ key: string }> }>): string[] {

@@ -13,6 +13,19 @@ if str(ROOT) not in sys.path:
 if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
+
+def _load_deploy_env() -> None:
+    """与 uvicorn 一致：优先读 MODstore_deploy/.env，避免 CLI 误写 sqlite。"""
+    try:
+        from dotenv import load_dotenv
+    except ImportError:
+        return
+    load_dotenv(ROOT / ".env", override=False)
+    load_dotenv(ROOT / ".env.local", override=True)
+
+
+_load_deploy_env()
+
 from bootstrap_kitten_chart_employees import CHART_EMPLOYEES  # noqa: E402
 
 
