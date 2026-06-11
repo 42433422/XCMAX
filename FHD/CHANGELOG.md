@@ -6,6 +6,14 @@
 
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
+### AIOPEN 开放智控 — Qclaw龙虾生态 toA 升级（2026-06-11 · v10 线内迭代）
+- **feat(aiopen)**：「Qclaw龙虾生态」更名升级为「AIOPEN 开放智控」（我是 AI 的工具）：面向外部 AI Agent 的 MCP + REST 开放平台与虚拟光标操控
+- **feat(backend)**：`app/application/aiopen/`（`AIOPEN_STATE` SSOT、工具注册表、API Key 鉴权）+ `app/fastapi_routes/ai_open.py`（`/api/aiopen/manifest|invoke|mcp|keys|panel|whitelist|config|control`）；MCP 端点为手写轻量 JSON-RPC 2.0（initialize / tools/list / tools/call / ping），零新增依赖
+- **feat(backend)**：`app/infrastructure/aiopen/cursor_hub.py` + `WS /api/aiopen/ws`：虚拟光标 screen 会话池，ui_snapshot / ui_navigate / ui_click / ui_type / ui_scroll 经 hub 下发并按 id 等待前端回执（10s 超时）
+- **feat(frontend)**：`AIOpenPanel.vue` 控制台（接入信息 + Key 管理 + 工具目录/白名单 + 虚拟光标会话 + OpenClaw 联调原样迁入）；`VirtualCursorOverlay.vue` + `useAiOpenCursor.ts` 全局虚拟光标（动画移动 / 点击波纹 /「AI 操控中」徽标，真实派发 DOM 事件）
+- **compat**：旧 `/api/ai/qclaw/*` URL 全部保留并共享新状态（`_QCLOW_RUNTIME_STATE` 即 `AIOPEN_STATE` 别名）；`is_qclaw_source` 增加 `aiopen` 别名；LAN/订阅门禁放行对外端点（安全由 `X-AIOPEN-Key` 承担）
+- **docs**：`docs/aiopen.md` 接入指南（Cursor/Claude mcp.json、curl、虚拟光标指令协议）
+
 ### 移动端体验 P1（Android + Web · 2026-06-11 · v10 线内迭代）
 - **fix(mobile-android,frontend)**：移除微信/抖音第三方登录占位入口（保留手机/企业账号/密码/扫码）
 - **feat(frontend)**：`LoginView` 6 格 OTP 分格（`OtpCells`）

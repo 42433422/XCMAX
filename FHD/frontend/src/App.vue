@@ -2,6 +2,7 @@
 import MainLayout from './components/MainLayout.vue'
 import LegacyFloatPanels from '@/components/shell/LegacyFloatPanels.vue'
 import AppGlobalProviders from '@/components/shell/AppGlobalProviders.vue'
+import VirtualCursorOverlay from '@/components/aiopen/VirtualCursorOverlay.vue'
 import { useAppBoot } from '@/composables/useAppBoot'
 
 const {
@@ -17,6 +18,7 @@ const {
   <div class="app-shell" :class="{ 'is-ready': appReady || hideChrome, 'app-shell--bare': hideChrome }">
     <LegacyFloatPanels v-if="!hideChrome" />
     <AppGlobalProviders :show-lan-gate="!isAdminConsoleSpa()" />
+    <VirtualCursorOverlay />
 
     <router-view v-if="hideChrome" />
     <MainLayout
@@ -42,6 +44,8 @@ const {
 .app-shell {
   opacity: 1;
   transition: opacity 320ms ease;
+  height: 100vh;
+  overflow: hidden;
   background:
     radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.88), transparent 42%),
     linear-gradient(135deg, #edf5fb 0%, #e7eef6 48%, #eef3f8 100%);
@@ -66,6 +70,15 @@ const {
 }
 
 .route-view-shell {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.route-view-shell > * {
+  flex: 1 1 auto;
   min-height: 0;
 }
 

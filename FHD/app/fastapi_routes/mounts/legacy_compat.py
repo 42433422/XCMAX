@@ -216,6 +216,11 @@ def register_legacy_compat_routes(app: FastAPI) -> None:
     app.include_router(ai_qclaw_router)
     logger.info("Registered ai_qclaw (/api/ai/qclaw/*)")
 
+    from app.fastapi_routes.ai_open import router as ai_open_router
+
+    app.include_router(ai_open_router)
+    logger.info("Registered ai_open (/api/aiopen/*)")
+
     # legacy_gap domain routers superseded by xcagi_compat (SSOT) — no double-mount.
     # Force-only via XCAGI_REGISTER_LEGACY_ROUTES=1 for migration debugging.
     if os.environ.get("XCAGI_REGISTER_LEGACY_ROUTES", "").strip().lower() in (
