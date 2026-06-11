@@ -8,6 +8,13 @@ describe('admin operator aux sidebar', () => {
     expect(keys).toContain('internal-customer-service')
   })
 
+  it('does not flatten employee-workflow children into admin aux trailing', () => {
+    const keys = ADMIN_OPERATOR_AUX_MENU_ITEMS.map((m) => m.key)
+    expect(keys).not.toContain('other-tools')
+    expect(keys).not.toContain('workflow-employee-space')
+    expect(keys).not.toContain('workflow-visualization')
+  })
+
   it('merges admin aux trailing without duplicate mod slot', () => {
     const merged = mergeSidebarMenuItems(
       [

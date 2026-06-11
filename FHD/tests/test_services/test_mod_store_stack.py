@@ -40,6 +40,42 @@ def test_normalize_package_zip_flattens_single_top_folder(tmp_path: Path):
     Path(out).unlink(missing_ok=True)
 
 
+def test_mod_store_market_catalog_proxy(monkeypatch: pytest.MonkeyPatch):
+    async def _fake_market(**kwargs):
+        assert kwargs.get("collection") == "office_employee_aux_pack_1"
+        return {
+            "items": [
+                {
+                    "pkg_id": "chart-bar-employee",
+                    "version": "1.0.0",
+                    "name": "柱状图员工",
+                    "artifact": "employee_pack",
+                    "price": 0,
+                }
+            ],
+            "total": 1,
+        }
+
+    monkeypatch.setattr(
+        "app.fastapi_routes.mod_store_routes.fetch_market_catalog_page",
+        _fake_market,
+    )
+
+    app = FastAPI()
+    app.include_router(mod_store_router, prefix="/api/mod-store")
+    client = TestClient(app)
+    r = client.get(
+        "/api/mod-store/market-catalog"
+        "?collection=office_employee_aux_pack_1&artifact=employee_pack&material_category=ai_employee"
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body.get("success") is True
+    assert body["data"]["total"] == 1
+    assert body["data"]["items"][0]["id"] == "chart-bar-employee"
+    assert body["data"]["items"][0]["store_collection"] == "office_employee_aux_pack_1"
+
+
 def test_mod_store_catalog_mount(monkeypatch: pytest.MonkeyPatch):
     async def _empty_remote():
         if False:  # pragma: no cover

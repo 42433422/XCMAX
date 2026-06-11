@@ -27,4 +27,16 @@ class ServerRouter @Inject constructor() {
         ServerMode.LAN -> fhdBaseUrl()
         ServerMode.CLOUD -> modstoreBaseUrl()
     }
+
+    /** IM V0 WebSocket：`/ws/im?session_id=`（与前端 `im.ts` 一致）。 */
+    fun fhdImWebSocketUrl(sessionId: String): String {
+        val http = fhdBaseUrl().trimEnd('/')
+        val ws = when {
+            http.startsWith("https://") -> "wss://" + http.removePrefix("https://")
+            http.startsWith("http://") -> "ws://" + http.removePrefix("http://")
+            else -> "ws://$http"
+        }
+        val encoded = java.net.URLEncoder.encode(sessionId, Charsets.UTF_8.name())
+        return "$ws/ws/im?session_id=$encoded"
+    }
 }

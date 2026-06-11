@@ -1,50 +1,48 @@
-        # Runbook：营销站点构建员 (`marketing-site-builder`)
+# Runbook — marketing-site-builder
 
-        ## 职责摘要
+## 基本信息
 
-        维护 marketing-site/ Nunjucks 模板与构建脚本（build.mjs、package.json）；与根静态站 site-content-editor 分工：本岗只管独立营销站子项目，不碰 MODstore 与市场 Vue 源码。
+| 字段 | 值 |
+|------|-----|
+| 员工 ID | `marketing-site-builder` |
+| 负责区域 | site-and-marketing |
+| 最后更新 | 2026-05-08 |
+| 应急联系 | admin |
 
-        ## 上游 Handoff 契约
+---
 
-        ### handoff: site-content-editor → 本岗
-- **触发条件**：`employee.task.done:site-content-editor`
-- **输入**：待补充（参见 `yuangon/**/site-content-editor/runbook.md`）
-- **门禁**：依赖完成前本岗不得继续
+## 日常巡检
 
-### handoff: seo-sitemap-curator → 本岗
-- **触发条件**：`employee.task.done:seo-sitemap-curator`
-- **输入**：待补充（参见 `yuangon/**/seo-sitemap-curator/runbook.md`）
-- **门禁**：依赖完成前本岗不得继续
+```bash
+cd marketing-site
+npm ci
+npm run build
+```
 
+**预期输出**：构建完成且无模板解析错误。
 
-        ## Handlers
+---
 
-        | Handler | 说明 |
-        |---------|------|
-        | `llm_md` | 接收 Markdown 任务描述，调用 LLM 输出结构化结果 |
-| `echo` | 调试用：原样返回输入，用于 smoke 测试 |
+## 异常处置
 
-        ## 核心 Scope
+### 构建失败（Nunjucks / 路径）
 
-        - `marketing-site/**`
-- `yuangon/site-and-marketing/marketing-site-builder/**`
+**排查**：检查 `templates/` 与 `scripts/build.mjs` 中的路径别名。
 
-        ## 故障处置
+**回滚**：恢复上一版本模板或 `git checkout` 对应文件。
 
-        | 场景 | 处置 |
-        |------|------|
-        | LLM 调用失败 | retry 2 次 → 上报 `employee.task.failed:marketing-site-builder` |
-        | 上游依赖未完成 | 等待 `employee.task.done:<dep>` 事件，不自行推进 |
-        | scope 文件不存在 | 报告缺口，待确认后再执行，不编造路径 |
-        | 版本锚点不对齐 | 运行 `verify_version_anchors.py`，修复后继续 |
+---
 
-        ## 验收检查清单
+## ESkill 动态阶段触发记录
 
-        - [ ] `employee.yaml.depends_on` 与 manifest 根级一致
-        - [ ] `actions.handlers` 三方一致（yaml / manifest / `_DISPATCH`）
-        - [ ] scope_globs 路径存在（或标注规划中）
-        - [ ] `employee_pack_consistency_warnings` 无 handler warning
-        - [ ] echo smoke 测试通过
+| 日期 | 触发原因 | patch_id | 结果 | 是否固化 |
+|------|----------|----------|------|----------|
+| — | — | — | — | — |
 
-        ---
-        *本文件由 `bootstrap_yuangon.py` 生成，v10 线内迭代*
+---
+
+## 变更记录
+
+| 日期 | 变更内容 | 操作人 |
+|------|----------|--------|
+| 2026-05-08 | 初始创建 | admin |

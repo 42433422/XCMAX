@@ -1,44 +1,51 @@
 id: mods-and-eskill-curator
 name: Mods/ESkill 策展员
-version: "10.0.0"
+version: "1.0.0"
+domain: 管理 mods/ 目录中的 Mod 包与 eskill-prototype/ 原型；负责 .xcemp 上架审核流程与 ESkill 标准文档维护；所有上线须经 CI 审批，不直接操作生产 DB。
 owner: admin
 area: platform-core
-domain: >-
-  管理 mods/ 目录中的 Mod 包与 eskill-prototype/ 原型；负责 .xcemp 上架审核流程与 ESkill 标准文档维护；所有上线须经 CI 审批，不直接操作生产 DB。
 
 scope_globs:
-  - "mods/**"
-  - "eskill-prototype/**"
-  - "MODstore_deploy/modstore_server/market_files/**"
+  - mods/**
+  - eskill-prototype/**
+  - MODstore_deploy/modstore_server/market_files/**
   - MODstore_deploy/modstore_server/market_files/REGISTRY.json
-  - "MODstore_deploy/modman/**"
+  - MODstore_deploy/modman/**
   - ESkill.md
-  - "yuangon/platform-core/mods-and-eskill-curator/**"
 
 forbidden_globs:
-  - "_local_secrets/**"
-  - "MODstore_deploy/modstore_server/*.py"
-  - "MODstore_deploy/market/src/**"
-  - "vibe-coding/src/**"
-
-depends_on:
-  - employee-pack-curator
-
-actions:
-  handlers:
-    - llm_md
-    - echo
+  - _local_secrets/**
+  - MODstore_deploy/modstore_server/*.py    # 只读引用，不改后端代码
+  - MODstore_deploy/market/src/**
+  - vibe-coding/src/**
 
 triggers:
   on_error: true
   on_quality_fail: true
+  on_coverage_miss: false
+  subscribes:
+    - "employee.task.done:employee-pack-curator"
+    - "change_request.applied"
+  max_patch_budget_tokens: 3000
+  max_patch_steps: 4
+
+sla:
+  timeout_seconds: 120
+  retry_max: 2
+  escalate_to_human: true
+
+llm_default: "auto"
+llm_reasoning: "auto"
 
 skills:
-  - skill-mod-review
-  - skill-eskill-prototype-promote
-  - skill-xcemp-audit
+  - skills/skill-mod-review.md
+  - skills/skill-eskill-prototype-promote.md
+  - skills/skill-xcemp-audit.md
+
+depends_on:
+  - employee-pack-curator
 
 changelog:
-  - version: "10.0.0"
-    date: "2026-06-07"
-    note: "yuangon 骨架由 bootstrap_yuangon.py 从 manifest 反向生成（v10 线内迭代）"
+  - version: "1.0.0"
+    date: "2026-05-06"
+    note: "初始创建"

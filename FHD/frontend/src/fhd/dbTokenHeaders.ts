@@ -1,5 +1,5 @@
 /** 与 FHD 后端 X-FHD-Db-Read-Token 对齐；供 apiFetch / fetch 补丁 / 一级锁 UI 使用。 */
-import { XCAGI_ACTIVE_EXTENSION_MOD_ID_KEY } from '@/utils/xcagiStorageKeys';
+import { readActiveExtensionModIdFromStorage } from '@/utils/xcagiStorageKeys';
 
 export const LS_DB_READ_TOKEN = 'xcagi_db_read_token';
 export const LS_DB_WRITE_TOKEN = 'xcagi_db_write_token';
@@ -50,7 +50,7 @@ export async function fetchDbTokensStatus(apiBase = ''): Promise<DbTokensStatus>
 function readActiveModId(): string {
   if (typeof localStorage === 'undefined') return '';
   try {
-    return String(localStorage.getItem(XCAGI_ACTIVE_EXTENSION_MOD_ID_KEY) || '').trim();
+    return readActiveExtensionModIdFromStorage();
   } catch {
     return '';
   }

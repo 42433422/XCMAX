@@ -16,7 +16,7 @@ describe('workflowNav', () => {
 
   it('uses host route names when mod facades off', () => {
     expect(resolveWorkflowVisualizationLocation()).toEqual({ name: 'workflow-visualization' })
-    expect(resolveOtherToolsLocation()).toEqual({ name: 'other-tools' })
+    expect(resolveOtherToolsLocation()).toEqual({ name: 'workflow-employee-space' })
   })
 
   it('uses mod paths when facades on', () => {

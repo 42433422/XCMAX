@@ -117,6 +117,13 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+@media (prefers-reduced-motion: no-preference) {
+  .btn:active:not(:disabled),
+  button:active:not(:disabled):not(.login-eye-btn):not(.otp-cells__input) {
+    transform: scale(0.98);
+  }
+}
+
 /* ─── Pro 霓虹模式（独立命名空间，不污染默认） ─────────────── */
 body.pro-mode-active {
   --xc-color-primary:      #00e5ff;

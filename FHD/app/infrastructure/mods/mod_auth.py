@@ -188,6 +188,13 @@ class ModContextMiddleware:
                         mod_context.mod_id,
                         exc,
                     )
+                except Exception as exc:
+                    # 过期/伪造 session + Active-Mod 头时，权益恢复或按需 load 可能触发 DB 异常；不得拖垮宿主 API。
+                    logger.warning(
+                        "Mod context bootstrap failed for %s: %s",
+                        mod_context.mod_id,
+                        exc,
+                    )
             request.state.mod_context = mod_context
             from app.request_active_mod_ctx import set_request_active_mod_id
 

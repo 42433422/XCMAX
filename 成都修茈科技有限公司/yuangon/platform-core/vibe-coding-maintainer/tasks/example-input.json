@@ -1,0 +1,18 @@
+{
+  "task": "fix-nl-parsing-edge-case",
+  "description": "修复 nl/parsing.py 无法处理带括号的技能名称的 bug",
+  "input": {
+    "failing_input": "生成一个「代码审核（Python）」技能",
+    "expected_output": {
+      "skill_name": "代码审核（Python）",
+      "skill_type": "code_review"
+    },
+    "actual_output": null,
+    "error": "ParseError: unexpected token '（'"
+  },
+  "validation": {
+    "run_tests": true,
+    "coverage_threshold": 85,
+    "add_test_case": true
+  }
+}

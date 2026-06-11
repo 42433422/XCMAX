@@ -1,46 +1,66 @@
 id: task-router-officer
 name: 任务派发员
-version: "10.0.0"
+version: "1.0.1"
+domain: 把 `intake-dispatcher` 产出的结构化 task 派发给最合适的员工：基于 task.files_hint 与各员工 scope_globs 做匹配，命中多人时按仲裁规则选一人，无人匹配则升级 admin；本岗只做路由决策，不直接改业务代码、不执行任务。
 owner: admin
 area: platform-core
-domain: >-
-  把 `intake-dispatcher` 产出的结构化 task 派发给最合适的员工：基于 task.files_hint 与各员工 scope_globs 做匹配，命中多人时按仲裁规则选一人，无人匹配则升级 admin；本岗只做路由决策，不直接改业务代码、不执行任务。
 
 scope_globs:
-  - "MODstore_deploy/modstore_server/eventing/router/**"
+  - MODstore_deploy/modstore_server/eventing/router/**
   - MODstore_deploy/modstore_server/api/router_api.py
   - MODstore_deploy/modstore_server/scripts/build_routing_table.py
   - MODstore_deploy/scripts/build_routing_table.py
   - MODstore_deploy/docs/routing-table.md
-  - "yuangon/platform-core/task-router-officer/**"
+  - yuangon/platform-core/task-router-officer/**
 
 forbidden_globs:
-  - "MODstore_deploy/market/src/**"
+  - MODstore_deploy/market/src/**
   - MODstore_deploy/modstore_server/models.py
-  - "MODstore_deploy/modstore_server/migrations/**"
-  - "MODstore_deploy/modstore_server/payment_*.py"
-  - "MODstore_deploy/modstore_server/employee_*.py"
-  - "_local_secrets/**"
-
-depends_on:
-  - intake-dispatcher
-  - employee-pack-curator
-
-actions:
-  handlers:
-    - llm_md
-    - echo
-    - agent
+  - MODstore_deploy/modstore_server/migrations/**
+  - MODstore_deploy/modstore_server/payment_*.py
+  - MODstore_deploy/modstore_server/employee_*.py   # 派发员不直接改员工包
+  - _local_secrets/**
 
 triggers:
   on_error: true
   on_quality_fail: true
+  on_coverage_miss: false
+  schedule:
+    cron: "0 3 * * *"          # 每日 03:00 重建路由表
+    timezone: "Asia/Shanghai"
+  subscribes:
+    - "ops.intake.task.queued"
+    - "ops.yuangon.resync.done"  # yuangon 改动后立即重建路由表
+  max_patch_budget_tokens: 3000
+  max_patch_steps: 4
+
+sla:
+  timeout_seconds: 60
+  retry_max: 2
+  escalate_to_human: true
+
+llm_default: "auto"
+llm_reasoning: "auto"
 
 skills:
-  - skill-route-task
-  - skill-arbitrate-overlap
+  - skills/skill-route-task.md
+  - skills/skill-arbitrate-overlap.md
+
+actions:
+  handlers: ["llm_md", "echo", "agent"]
+  agent:
+    workspace:
+      read_only: false
+      requires_project_root: true
+
+depends_on:
+  - intake-dispatcher
+  - employee-pack-curator   # 读取所有员工的 scope_globs 构建路由表
 
 changelog:
-  - version: "10.0.0"
-    date: "2026-06-07"
-    note: "yuangon 骨架由 bootstrap_yuangon.py 从 manifest 反向生成（v10 线内迭代）"
+  - version: "1.0.1"
+    date: "2026-05-08"
+    note: "全覆盖 Phase2：scope 纳入仓库侧 MODstore_deploy/scripts/build_routing_table.py"
+  - version: "1.0.0"
+    date: "2026-05-08"
+    note: "新增：闭环流程的『任务派发』节点；从 daily-orchestrator 拆出路由决策。"

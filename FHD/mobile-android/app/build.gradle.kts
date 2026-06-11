@@ -18,8 +18,8 @@ android {
         applicationId = "com.xiuci.xcagi.mobile"
         minSdk = 26
         targetSdk = 35
-        versionCode = 9
-        versionName = "1.4.0"
+        versionCode = 10
+        versionName = "10.0.0"
         manifestPlaceholders["JPUSH_PKGNAME"] = "com.xiuci.xcagi.mobile"
         manifestPlaceholders["JPUSH_CHANNEL"] = "developer-default"
         manifestPlaceholders["JPUSH_APPKEY"] = "placeholder_replace_in_local_properties"

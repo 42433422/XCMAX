@@ -8320,13 +8320,19 @@ onMounted(async () => {
     /* ignore */
   }
 
-  try {
-    const me = await api.me()
-    const u = typeof me.username === 'string' ? me.username.trim() : ''
-    const e = typeof me.email === 'string' ? me.email.trim() : ''
-    displayName.value = u || (e ? e.split('@')[0] || e : '')
-  } catch {
-    displayName.value = ''
+  if (getAccessToken()) {
+    try {
+      const me = await api.me()
+      if (me && typeof me === 'object' && me.ok !== false && me.success !== false) {
+        const u = typeof me.username === 'string' ? me.username.trim() : ''
+        const e = typeof me.email === 'string' ? me.email.trim() : ''
+        displayName.value = u || (e ? e.split('@')[0] || e : '')
+      } else {
+        displayName.value = ''
+      }
+    } catch {
+      displayName.value = ''
+    }
   }
   await loadLlmCatalogForWorkbench()
   await loadWorkbenchRepoPicks()

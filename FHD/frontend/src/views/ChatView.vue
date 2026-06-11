@@ -102,7 +102,11 @@
           </div>
         </div>
           <div v-if="isLoading && !isStreamingReply" class="message ai">
-            <div><span class="status-dot online"></span> {{ loadingProgressText }}</div>
+            <div class="chat-loading-row">
+              <i class="fa fa-spinner fa-spin chat-loading-spinner" aria-hidden="true"></i>
+              <span class="status-dot online"></span>
+              <span>{{ loadingProgressText }}</span>
+            </div>
           </div>
         </div>
       </div>
@@ -598,6 +602,7 @@ import { sanitizeChatBubbleHtml, sanitizeChatBubbleMarkdown } from '@/utils/sani
 import { speakText, stopSpeaking, cleanTextForSpeech } from '@/utils/tts'
 import { estimateMessageHeight, getPerformanceStats } from '@/utils/pretext'
 import { resolveHostBusinessPageRedirect } from '@/utils/hostBusinessPageRedirect'
+import { readAiSessionIdFromStorage, writeAiSessionIdToStorage } from '@/utils/xcagiStorageKeys'
 
 const router = useRouter()
 const modsStore = useModsStore()
@@ -626,10 +631,10 @@ function generateSessionId(): string {
 }
 
 // 首次进入时若未写入 ai_session_id，切换路由再回来会生成新会话 ID，导致 localStorage 中的消息键对不上
-const _storedSessionId = localStorage.getItem('ai_session_id')
+const _storedSessionId = readAiSessionIdFromStorage()
 const currentSessionId = ref(_storedSessionId || generateSessionId())
 if (!_storedSessionId) {
-  localStorage.setItem('ai_session_id', currentSessionId.value)
+  writeAiSessionIdToStorage(currentSessionId.value)
 }
 
 const {
@@ -2153,6 +2158,17 @@ onBeforeUnmount(() => {
   50% {
     box-shadow: 0 0 0 6px rgba(220, 38, 38, 0.05);
   }
+}
+
+.chat-loading-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.chat-loading-spinner {
+  color: var(--xc-color-primary, #0d47a1);
+  font-size: 14px;
 }
 </style>
 

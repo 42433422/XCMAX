@@ -1,0 +1,41 @@
+# Pre-commit hooks for 成都修茈科技有限公司 monorepo.
+# 主要目标：阻止运行期产物（outbox / webhook 投递 JSON / payment_orders / chroma）
+#          被 git add 进提交；拆仓后每个新仓库继承同一规则（见
+#          docs/migration/new-repo-templates/）。
+#
+# 安装：
+#   pip install pre-commit
+#   pre-commit install
+#
+# 手工触发所有 hook：
+#   pre-commit run --all-files
+
+repos:
+  - repo: local
+    hooks:
+      - id: forbid-runtime-artifacts
+        name: Forbid committing runtime artifacts
+        entry: |
+          python - <<'PY'
+          import re
+          import sys
+
+          forbidden = [
+              re.compile(r"MODstore_deploy/modstore_server/webhook_events/.+\.json$"),
+              re.compile(r"MODstore_deploy/modstore_server/data/event_outbox\.jsonl$"),
+              re.compile(r"MODstore_deploy/modstore_server/data/event_outbox_.+\.jsonl$"),
+              re.compile(r"MODstore_deploy/modstore_server/data/payment_orders/"),
+              re.compile(r"MODstore_deploy/modstore_server/data/chroma/"),
+          ]
+          staged = sys.argv[1:]
+          bad = [p for p in staged if any(r.search(p) for r in forbidden)]
+          if bad:
+              print("[err] 运行期产物不应进入 git；请改为在生产用 MODSTORE_RUNTIME_DIR 指向数据盘。")
+              for p in bad:
+                  print(f"  - {p}")
+              sys.exit(1)
+          PY
+        language: system
+        pass_filenames: true
+        stages: [commit]
+        always_run: false

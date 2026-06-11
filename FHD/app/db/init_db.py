@@ -777,6 +777,38 @@ def ensure_sqlite_inventory_bootstrap(
         raise
 
 
+def ensure_user_preferences_bootstrap(
+    engine: Engine | None = None,
+    *,
+    database_url: str | None = None,
+    swallow_errors: bool = True,
+) -> None:
+    """补齐 user_preferences 表（工作区 prefs 跨设备同步依赖）。"""
+    from sqlalchemy import inspect
+
+    from app.db.base import Base
+    from app.db.models.ai import UserPreference
+
+    real_engine = _resolve_auth_bootstrap_engine(engine, database_url=database_url)
+    if real_engine is None:
+        return
+    try:
+        insp = inspect(real_engine)
+        tables = set(insp.get_table_names() or [])
+        if "user_preferences" not in tables:
+            logger.info("缺少 user_preferences 表，正在通过 ORM 创建 …")
+            Base.metadata.create_all(
+                real_engine,
+                tables=[UserPreference.__table__],
+                checkfirst=True,
+            )
+    except OPERATIONAL_ERRORS as exc:
+        if swallow_errors:
+            logger.warning("ensure_user_preferences_bootstrap 失败: %s", exc, exc_info=True)
+            return
+        raise
+
+
 def ensure_runtime_auth_bootstrap(
     engine: Engine | None = None,
     *,
@@ -805,8 +837,18 @@ def ensure_runtime_auth_bootstrap(
             database_url=url,
             swallow_errors=swallow_errors,
         )
+        ensure_user_preferences_bootstrap(
+            engine,
+            database_url=url,
+            swallow_errors=swallow_errors,
+        )
     else:
         ensure_postgresql_auth_bootstrap(engine, database_url=url)
+        ensure_user_preferences_bootstrap(
+            engine,
+            database_url=url,
+            swallow_errors=swallow_errors,
+        )
 
 
 def ensure_postgresql_auth_bootstrap(

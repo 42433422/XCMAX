@@ -1,4 +1,4 @@
-"""办公员工附属包1：主办公包之外的扩展员工（JSON 量化报告等）。"""
+"""办公员工附属包1：JSON 量化报告 + 小猫分析可视化 chart-*-employee。"""
 
 from __future__ import annotations
 

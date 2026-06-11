@@ -1,0 +1,10 @@
+User-agent: *
+Allow: /
+Allow: /assets/xiu-ci-logo.png
+
+Disallow: /assets/
+Disallow: /uploads/
+Disallow: /.trae/
+Disallow: /test_image.jpg
+
+Sitemap: https://xiu-ci.com/sitemap.xml

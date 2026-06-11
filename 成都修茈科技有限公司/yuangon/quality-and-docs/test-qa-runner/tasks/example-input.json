@@ -1,0 +1,14 @@
+{
+  "task": "run-modstore-tests",
+  "description": "执行 MODstore 完整测试套件并生成覆盖率报告",
+  "input": {
+    "test_dirs": ["MODstore_deploy/tests/"],
+    "coverage_src": "MODstore_deploy/modstore_server",
+    "coverage_threshold": 80,
+    "fail_fast": false
+  },
+  "output": {
+    "json_summary": true,
+    "notify_on_fail": ["log-monitor-incident"]
+  }
+}

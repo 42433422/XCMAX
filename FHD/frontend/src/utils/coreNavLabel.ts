@@ -5,6 +5,7 @@
 
 import { DEFAULT_INDUSTRY_ID } from '@/constants/industryDefaults'
 import { INDUSTRY_PRESETS } from '@/constants/industryPresets'
+import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
 
 export type MenuOverrideRow = {
   key?: string
@@ -46,9 +47,10 @@ export const MENU_DEFAULT_NAMES: Record<string, string> = {
   'approval-hub': '审批中心',
   'enterprise-customer-service': '外部客服',
   'internal-customer-service': '内部客服',
-  'other-tools': '员工工作流',
+  'other-tools': '员工视图',
+  'employee-workflow': '员工工作台',
   'workflow-employee-space': '员工空间',
-  'workflow-visualization': '流程可视化',
+  'workflow-visualization': '流程全景',
   purchase: '耗材申领',
   'label-editor': '模板编辑器',
   'batch-analyze': '批量分析',
@@ -144,5 +146,6 @@ export function resolveCoreNavLabel(
   const byInd =
     INDUSTRY_MENU_LABELS[industryId] || INDUSTRY_MENU_LABELS[DEFAULT_INDUSTRY_ID]
   if (byInd[key]) return byInd[key]
+  if (key === 'other-tools' && isAdminConsoleSpa()) return '编制图谱'
   return MENU_DEFAULT_NAMES[key] || ''
 }

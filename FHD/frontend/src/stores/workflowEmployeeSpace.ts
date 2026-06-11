@@ -3,9 +3,33 @@ import { ref } from 'vue'
 import type { CoreWorkflowEmployeeId } from '@/constants/coreWorkflowMod'
 import { shortNameFromPanelTitle } from '@/utils/workflowEmployeeDisplayName'
 import { useWorkflowAiEmployeesStore } from '@/stores/workflowAiEmployees'
+import {
+  buildTenantScopedStorageKey,
+  resolveTenantStorageScopeFromRuntime,
+} from '@/utils/tenantStorageScope'
 
 export const WORKFLOW_EMPLOYEE_SPACE_STORAGE_KEY = 'xcagi_workflow_employee_space_v1'
 export const WORKFLOW_EMPLOYEE_SESSIONS_STORAGE_KEY = 'xcagi_workflow_employee_sessions_v1'
+
+let activeTenantScope = ''
+
+function ensureActiveTenantScope(): string {
+  if (!activeTenantScope) {
+    activeTenantScope = resolveTenantStorageScopeFromRuntime(true)
+  }
+  return activeTenantScope
+}
+
+function workflowEmployeeSpaceStorageKey(scope?: string): string {
+  return buildTenantScopedStorageKey(WORKFLOW_EMPLOYEE_SPACE_STORAGE_KEY, scope ?? ensureActiveTenantScope())
+}
+
+function workflowEmployeeSessionsStorageKey(scope?: string): string {
+  return buildTenantScopedStorageKey(
+    WORKFLOW_EMPLOYEE_SESSIONS_STORAGE_KEY,
+    scope ?? ensureActiveTenantScope(),
+  )
+}
 
 export type WorkflowEmployeeSpaceSnapshot = {
   empId: string
@@ -112,7 +136,7 @@ function schedulePersist(snapshots: Record<string, WorkflowEmployeeSpaceSnapshot
     persistTimer = null
     try {
       const out: PersistedV1 = { schemaVersion: 1, snapshots: { ...snapshots } }
-      sessionStorage.setItem(WORKFLOW_EMPLOYEE_SPACE_STORAGE_KEY, JSON.stringify(out))
+      sessionStorage.setItem(workflowEmployeeSpaceStorageKey(), JSON.stringify(out))
     } catch {
       /* quota / private mode */
     }
@@ -127,7 +151,7 @@ function scheduleSessionsPersist(sessions: Record<string, WorkflowEmployeeSessio
     try {
       const out: PersistedSessionsV1 = { schemaVersion: 1, sessions: { ...sessions } }
       /** 工时累计跨页要存活，用 localStorage（与 xcagi_workflow_ai_employees 持久层一致） */
-      localStorage.setItem(WORKFLOW_EMPLOYEE_SESSIONS_STORAGE_KEY, JSON.stringify(out))
+      localStorage.setItem(workflowEmployeeSessionsStorageKey(), JSON.stringify(out))
     } catch {
       /* quota / private mode */
     }
@@ -138,32 +162,45 @@ export const useWorkflowEmployeeSpaceStore = defineStore('workflowEmployeeSpace'
   const snapshots = ref<Record<string, WorkflowEmployeeSpaceSnapshot>>({})
   const sessions = ref<Record<string, WorkflowEmployeeSession>>({})
 
-  function hydrateFromSessionStorage() {
+  function hydrateFromSessionStorage(scope?: string) {
     if (typeof sessionStorage === 'undefined') return
     try {
-      const parsed = safeParsePersisted(sessionStorage.getItem(WORKFLOW_EMPLOYEE_SPACE_STORAGE_KEY))
+      const parsed = safeParsePersisted(
+        sessionStorage.getItem(workflowEmployeeSpaceStorageKey(scope)),
+      )
       if (parsed?.snapshots) {
         snapshots.value = { ...parsed.snapshots }
+      } else {
+        snapshots.value = {}
       }
     } catch {
       /* ignore */
     }
   }
 
-  function hydrateSessionsFromLocalStorage() {
+  function hydrateSessionsFromLocalStorage(scope?: string) {
     if (typeof localStorage === 'undefined') return
     try {
-      const parsed = safeParseSessions(localStorage.getItem(WORKFLOW_EMPLOYEE_SESSIONS_STORAGE_KEY))
+      const parsed = safeParseSessions(
+        localStorage.getItem(workflowEmployeeSessionsStorageKey(scope)),
+      )
       if (parsed?.sessions) {
         sessions.value = { ...parsed.sessions }
+      } else {
+        sessions.value = {}
       }
     } catch {
       /* ignore */
     }
   }
 
-  hydrateFromSessionStorage()
-  hydrateSessionsFromLocalStorage()
+  function reloadForTenantScope(scope?: string) {
+    activeTenantScope = scope || resolveTenantStorageScopeFromRuntime(true)
+    hydrateFromSessionStorage(activeTenantScope)
+    hydrateSessionsFromLocalStorage(activeTenantScope)
+  }
+
+  reloadForTenantScope(resolveTenantStorageScopeFromRuntime(true))
 
   function ensureSession(empId: string): WorkflowEmployeeSession {
     const cur = sessions.value[empId]
@@ -404,6 +441,7 @@ export const useWorkflowEmployeeSpaceStore = defineStore('workflowEmployeeSpace'
     sessions,
     hydrateFromSessionStorage,
     hydrateSessionsFromLocalStorage,
+    reloadForTenantScope,
     applyFromWorkflowPayload,
     applyLabelPrintBridge,
     applyReceiptBridge,

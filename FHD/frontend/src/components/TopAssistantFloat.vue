@@ -130,6 +130,7 @@
           <div class="workflow-employee-section-head">
             <div class="workflow-employee-heading">工作流员工选择</div>
             <router-link
+              v-if="showWorkflowPanoramaNav"
               :to="workflowVisualizationLocation"
               class="workflow-employee-visual-link"
               :title="workflowPanoramaLinkTitle"
@@ -327,6 +328,7 @@ import {
 import { shouldTryWechatShipmentPreview } from '@/utils/wechatShipmentDetect';
 import { resolveErpApiPath } from '@/utils/erpDomainPaths';
 import { resolveWorkflowVisualizationLocation } from '@/utils/workflowNav';
+import { useWorkflowPanoramaNavVisible } from '@/composables/useWorkflowPanoramaNavVisible';
 import ExcelPreview from '@/components/template/ExcelPreview.vue';
 
 const router = useRouter();
@@ -418,6 +420,7 @@ const workflowEmployeeDefs = computed(() => {
 });
 
 const workflowVisualizationLocation = resolveWorkflowVisualizationLocation();
+const { showWorkflowPanoramaNav } = useWorkflowPanoramaNavVisible();
 
 const workflowPanoramaLinkTitle = computed(() =>
   modWorkflowEmployeesActive.value

@@ -86,6 +86,7 @@
     </div>
     <FloatingChatAssistant :visible="shouldShowFloatingChatAssistant" />
     <TutorialOverlay />
+    <MobileBottomNav v-if="mobileBottomNavVisible" />
   </div>
 </template>
 
@@ -115,6 +116,7 @@ import PaneResizeHandle from './PaneResizeHandle.vue'
 import Sidebar from './Sidebar.vue'
 import TopAssistantFloat from './TopAssistantFloat.vue'
 import TutorialOverlay from './TutorialOverlay.vue'
+import MobileBottomNav from './MobileBottomNav.vue'
 import { setTutorialBuildContextFactory } from '@/stores/tutorial'
 import { useTutorialCatalog } from '@/composables/useTutorialCatalog'
 
@@ -144,6 +146,7 @@ const { modMenuItems } = useModRoutes()
 const SIDEBAR_INACTIVITY_MS = 15000
 const SIDEBAR_HOVER_OPEN_MS = 1000
 const SIDEBAR_DISABLE_MQ = '(max-width: 767px)'
+const MOBILE_BOTTOM_NAV_MQ = '(max-width: 768px)'
 const SIDEBAR_PANE_KEY = 'main-layout.sidebar'
 const ACTIVITY_EVENTS = ['mousemove', 'mousedown', 'keydown', 'wheel', 'touchstart']
 const sidebarCollapsed = ref(false)
@@ -151,6 +154,8 @@ const isSidebarFeatureEnabled = ref(true)
 let sidebarCollapseTimer = null
 let sidebarHoverTimer = null
 let sidebarViewportMedia = null
+const showMobileBottomNav = ref(false)
+let mobileBottomNavMedia = null
 
 const clientModeTiersUiEnabled = isClientModeTiersUiEnabled()
 const isSandboxMode = new URLSearchParams(window.location.search).has('sandbox')
@@ -260,9 +265,10 @@ const viewTitlesBase = {
   console: '模板库',
   settings: '系统设置',
   tools: '工具表',
-  'other-tools': '员工工作流',
+  'other-tools': '员工视图',
+  'employee-workflow': '员工工作台',
   'workflow-employee-space': '员工空间',
-  'workflow-visualization': '流程可视化',
+  'workflow-visualization': '流程全景',
   purchase: '耗材申领',
   'label-editor': '模板编辑器',
   'batch-analyze': '批量分析',
@@ -393,6 +399,7 @@ const currentViewTitle = computed(() => {
 const SIDEBAR_ROUTE_ALIASES = {
   'approval-hub': 'approval-workspace',
   'mod-approval-hub': 'approval-workspace',
+  'employee-workflow': 'workflow-employee-space',
 }
 
 function resolveLegacyRouteFromModPath(modPath) {
@@ -563,6 +570,14 @@ const onViewportChange = (event) => {
   scheduleSidebarAutoCollapse()
 }
 
+const onMobileNavViewportChange = (event) => {
+  showMobileBottomNav.value = event.matches
+}
+
+const mobileBottomNavVisible = computed(
+  () => showMobileBottomNav.value && !adminConsoleSpa && route.meta?.hideChrome !== true,
+)
+
 onMounted(async () => {
   if (!accountProfileStore.loaded) {
     try {
@@ -572,15 +587,14 @@ onMounted(async () => {
     }
   }
   try {
-    const { authApi } = await import('@/api/auth')
     const {
       augmentEntitledModIdsForAccount,
       isSunbirdAccountUsername,
       SUNBIRD_CLIENT_MOD_ID,
     } = await import('@/constants/accountModBinding')
-    const me = await authApi.getCurrentUser()
-    const uname = String(me?.data?.user?.username || accountUsername.value || '').trim()
+    const uname = accountUsername.value.trim()
     if (
+      uname &&
       isSunbirdAccountUsername(uname) &&
       String(modsStore.activeModId || '').trim() !== SUNBIRD_CLIENT_MOD_ID
     ) {
@@ -607,6 +621,13 @@ onMounted(async () => {
   } else if (typeof sidebarViewportMedia.addListener === 'function') {
     sidebarViewportMedia.addListener(onViewportChange)
   }
+  mobileBottomNavMedia = window.matchMedia(MOBILE_BOTTOM_NAV_MQ)
+  onMobileNavViewportChange(mobileBottomNavMedia)
+  if (typeof mobileBottomNavMedia.addEventListener === 'function') {
+    mobileBottomNavMedia.addEventListener('change', onMobileNavViewportChange)
+  } else if (typeof mobileBottomNavMedia.addListener === 'function') {
+    mobileBottomNavMedia.addListener(onMobileNavViewportChange)
+  }
   ACTIVITY_EVENTS.forEach((eventName) => {
     window.addEventListener(eventName, handleGlobalActivity, { passive: true })
   })
@@ -625,12 +646,24 @@ onBeforeUnmount(() => {
   } else if (typeof sidebarViewportMedia.removeListener === 'function') {
     sidebarViewportMedia.removeListener(onViewportChange)
   }
+  if (!mobileBottomNavMedia) return
+  if (typeof mobileBottomNavMedia.removeEventListener === 'function') {
+    mobileBottomNavMedia.removeEventListener('change', onMobileNavViewportChange)
+  } else if (typeof mobileBottomNavMedia.removeListener === 'function') {
+    mobileBottomNavMedia.removeListener(onMobileNavViewportChange)
+  }
 })
 </script>
 
 <style scoped>
 .main-container {
   position: relative;
+}
+
+@media (max-width: 768px) {
+  .main-container :deep(.main-content) {
+    padding-bottom: calc(64px + env(safe-area-inset-bottom, 0));
+  }
 }
 
 .sidebar-shell {

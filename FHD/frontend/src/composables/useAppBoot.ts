@@ -13,7 +13,7 @@ import {
 } from '@/composables/useStartupSplash'
 import { useAppProMode } from '@/composables/useAppProMode'
 import { useAppShellBridge } from '@/composables/useAppShellBridge'
-import { isDesktopShell } from '@/utils/desktopShell'
+import { useXcmaxSync } from '@/composables/useXcmaxSync'
 
 function startupPublicUrl(fileName: string) {
   const base = String(import.meta.env.BASE_URL || '/')
@@ -28,10 +28,6 @@ export function useAppBoot() {
   const isSandboxMode =
     typeof window !== 'undefined' &&
     new URLSearchParams(window.location.search).has('sandbox')
-  const skipSplashByUrl =
-    typeof window !== 'undefined' &&
-    new URLSearchParams(window.location.search).has('nosplash')
-
   const hideChrome = computed(() => route.meta?.hideChrome === true)
 
   function isPublicEntryRoute(r = route) {
@@ -44,13 +40,8 @@ export function useAppBoot() {
     )
   }
 
-  const shouldSkipSplashVisual = () =>
-    isSandboxMode ||
-    skipSplashByUrl ||
-    isDesktopShell() ||
-    isPlatformShellModeEnabled() ||
-    isAdminConsoleSpa() ||
-    isPublicEntryRoute()
+  /** 产品决策：取消开屏加载动画，启动后直接进主界面（仍保留 Mod/鉴权初始化） */
+  const shouldSkipSplashVisual = () => true
 
   const splash = useStartupSplash()
   const {
@@ -90,6 +81,7 @@ export function useAppBoot() {
   })
 
   const shellBridge = useAppShellBridge(router, proMode)
+  const xcmaxSync = useXcmaxSync()
 
   let onModsVisibilityRetry: (() => void) | null = null
   let onPageShowBfCache: ((e: PageTransitionEvent) => void) | null = null
@@ -103,6 +95,9 @@ export function useAppBoot() {
     () => {
       if (isPublicEntryRoute()) {
         dismissStartupSplashImmediate()
+        xcmaxSync.stop()
+      } else {
+        xcmaxSync.start()
       }
     },
     { immediate: true }
@@ -228,6 +223,7 @@ export function useAppBoot() {
     }
     proMode.uninstallLegacyDomObserver()
     shellBridge.uninstall()
+    xcmaxSync.stop()
     teardownOnUnmount()
   })
 

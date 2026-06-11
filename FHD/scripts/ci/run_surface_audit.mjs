@@ -354,14 +354,38 @@ async function applyPagePrepare(page, pageDef) {
   }
 }
 
+function isAiEmployeeMaterial(item) {
+  const cat = String(item?.material_category || item?.category || '').trim().toLowerCase()
+  if (cat === 'ai_employee') return true
+  const art = String(item?.artifact_type || item?.artifact || '').trim().toLowerCase()
+  return art === 'ai_employee' || art === 'workflow_employee'
+}
+
+function stableSampleCatalogPages(pages, cap) {
+  if (!Array.isArray(pages) || cap <= 0) return []
+  if (pages.length <= cap) return pages
+  const day = new Date().toISOString().slice(0, 10)
+  return [...pages]
+    .sort((a, b) => {
+      const ka = `${day}:${a?.catalog_id ?? a?.path ?? a?.id ?? ''}`
+      const kb = `${day}:${b?.catalog_id ?? b?.path ?? b?.id ?? ''}`
+      return ka.localeCompare(kb)
+    })
+    .slice(0, cap)
+}
+
 async function fetchMarketCatalogPages() {
-  const skip = (process.env.SURFACE_AUDIT_SKIP_CATALOG || '0').trim().toLowerCase()
+  const skip = (process.env.SURFACE_AUDIT_SKIP_CATALOG || process.env.MODSTORE_SURFACE_AUDIT_SKIP_CATALOG || '0').trim().toLowerCase()
   if (['1', 'true', 'yes', 'on'].includes(skip)) return []
+  const maxRaw = (process.env.SURFACE_AUDIT_CATALOG_MAX || process.env.MODSTORE_SURFACE_AUDIT_CATALOG_MAX || '3').trim()
+  const maxN = Math.max(0, parseInt(maxRaw, 10) || 0)
+  if (maxN <= 0) return []
   const base = MARKET_BASE.replace(/\/$/, '')
   const out = []
   const seen = new Set()
   let offset = 0
   const limit = 200
+  const need = Math.max(maxN * 6, 12)
   for (let page = 0; page < 20; page++) {
     const url = `${base}/api/market/catalog?limit=${limit}&offset=${offset}`
     let data
@@ -385,14 +409,21 @@ async function fetchMarketCatalogPages() {
         name: `AI商品-${label}`,
         base: 'market',
         path: `/market/catalog/${cid}`,
+        catalog_id: cid,
+        material_category: item?.material_category || item?.category || '',
+        artifact_type: item?.artifact_type || item?.artifact || '',
       })
+      if (out.length >= need) break
     }
+    if (out.length >= need) break
     const total = Number(data?.total)
     offset += items.length
     if (!items.length || (Number.isFinite(total) && total > 0 && offset >= total)) break
     if (items.length < limit) break
   }
-  return out
+  const aiOnly = out.filter((p) => isAiEmployeeMaterial(p))
+  const pool = aiOnly.length ? aiOnly : out
+  return stableSampleCatalogPages(pool, maxN)
 }
 
 function expandPwMarketPages(staticPages, catalogPages) {

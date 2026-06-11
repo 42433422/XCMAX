@@ -33,7 +33,6 @@ import com.xiuci.xcagi.mobile.ui.components.mobile.WeCellGroup
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeSectionCaption
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeSpacer
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeTopBar
-import com.xiuci.xcagi.mobile.ui.components.mobile.MobileTokens
 
 @Composable
 fun ApprovalListScreen(

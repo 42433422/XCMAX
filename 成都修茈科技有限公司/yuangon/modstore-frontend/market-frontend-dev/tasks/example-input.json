@@ -1,0 +1,19 @@
+{
+  "task": "sync-api-endpoint",
+  "description": "同步后端新增的工作台执行接口到 api.ts",
+  "input": {
+    "file": "MODstore_deploy/market/src/api.ts",
+    "action": "add_function",
+    "endpoint": {
+      "name": "executeWorkbenchTask",
+      "method": "POST",
+      "path": "/api/workbench/v2/execute",
+      "request_type": "{ employee_id: string; task_input: Record<string, unknown> }",
+      "response_type": "{ status: string; job_id: string }"
+    }
+  },
+  "constraints": {
+    "no_react": true,
+    "use_existing_client": true
+  }
+}

@@ -19,6 +19,10 @@ _CONFIG_PATH = _FHD_ROOT / "config" / "surface_audit_demo_account.json"
 _DEMO_TOKEN_PREFIX = "xcagi-local-surface-audit-demo"
 
 
+def is_local_demo_market_token(token: str) -> bool:
+    return (token or "").strip().startswith(_DEMO_TOKEN_PREFIX)
+
+
 @lru_cache(maxsize=1)
 def demo_account_config() -> dict[str, Any]:
     defaults: dict[str, Any] = {

@@ -20,6 +20,17 @@ from app.utils.operational_errors import OPERATIONAL_ERRORS
 logger = logging.getLogger(__name__)
 
 
+def _login_client_http_status(upstream_status: int) -> int:
+    """凭证/业务拒绝用 200，避免前端 fetch 在控制台刷 401/403；仅 5xx 保留 HTTP 错误态。"""
+    try:
+        code = int(upstream_status)
+    except (TypeError, ValueError):
+        code = 502
+    if code >= 500:
+        return code
+    return 200
+
+
 def market_auth_error_response(market_result: dict[str, Any]) -> JSONResponse:
     try:
         status_code = int(market_result.get("status_code") or 0)
@@ -40,7 +51,7 @@ def market_auth_error_response(market_result: dict[str, Any]) -> JSONResponse:
                 "message": message,
             },
         },
-        status_code=status_code,
+        status_code=_login_client_http_status(status_code),
     )
 
 
@@ -108,7 +119,7 @@ async def ensure_local_user_after_market(
                     ),
                 },
             },
-            status_code=401,
+            status_code=_login_client_http_status(401),
         )
 
     if not exists:
@@ -134,7 +145,7 @@ async def ensure_local_user_after_market(
     else:
         result = auth_app_service.create_session_for_username(username)
     if not result.get("success"):
-        return None, JSONResponse(result, status_code=401)
+        return None, JSONResponse(result, status_code=_login_client_http_status(401))
     return result, None
 
 
@@ -394,7 +405,7 @@ async def run_market_first_login(
                     "message": kind_err,
                     "error": {"code": "ACCOUNT_KIND_MISMATCH", "message": kind_err},
                 },
-                status_code=403,
+                status_code=_login_client_http_status(403),
             )
         login_username = username or resolve_market_username(market_result or {})
         if not login_username:
@@ -419,11 +430,11 @@ async def run_market_first_login(
         if not password:
             return None, JSONResponse(
                 {"success": False, "error": {"code": "INVALID_INPUT", "message": "密码不能为空"}},
-                status_code=400,
+                status_code=_login_client_http_status(400),
             )
         result = auth_app_service.login(username, password)
         if not result.get("success"):
-            return None, JSONResponse(result, status_code=401)
+            return None, JSONResponse(result, status_code=_login_client_http_status(401))
         if market_result is None and login_market_fn:
             market_result = await login_market_fn(username, password)
 

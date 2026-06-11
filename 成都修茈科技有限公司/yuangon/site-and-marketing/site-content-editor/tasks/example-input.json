@@ -1,0 +1,19 @@
+{
+  "task": "update-news-entry",
+  "description": "向 news.json 追加一条新闻",
+  "input": {
+    "file": "news.json",
+    "action": "append",
+    "entry": {
+      "id": "2026-05-06-01",
+      "title": "修茈科技发布 MODstore 2.0",
+      "date": "2026-05-06",
+      "summary": "全新 AI 员工平台正式上线，支持 ESkill 四阶段进化。",
+      "link": "/news.html#2026-05-06-01"
+    }
+  },
+  "validation": {
+    "json_valid": true,
+    "no_duplicate_id": true
+  }
+}

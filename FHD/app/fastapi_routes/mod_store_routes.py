@@ -17,6 +17,7 @@ from app.application.mod_store_catalog_app import (
     catalog_base_url,
     catalog_download_to,
     catalog_get_json,
+    fetch_market_catalog_page,
     iter_catalog_packages,
     normalize_package_zip_path,
     sync_modstore_library_to_local,
@@ -45,6 +46,19 @@ class ModStoreCatalogResponse(BaseModel):
 class ModStoreListResponse(BaseModel):
     success: Literal[True] = True
     data: list[dict[str, Any]]
+
+
+class ModStoreMarketCatalogPayload(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    items: list[dict[str, Any]]
+    total: int
+    collection: str = ""
+
+
+class ModStoreMarketCatalogResponse(BaseModel):
+    success: Literal[True] = True
+    data: ModStoreMarketCatalogPayload
 
 
 class ModStoreDetailData(BaseModel):
@@ -209,6 +223,37 @@ async def _remote_rows() -> list[dict[str, Any]]:
             continue
         rows.append(info)
     return rows
+
+
+async def _map_market_catalog_page(
+    data: dict[str, Any],
+    *,
+    collection_hint: str = "",
+) -> tuple[list[dict[str, Any]], int]:
+    from app.services.catalog_client import _market_item_to_package_row
+    from app.services.catalog_visibility import is_public_catalog_row
+
+    installed_ids = set(_installed_by_id())
+    items_raw = data.get("items") if isinstance(data.get("items"), list) else []
+    try:
+        total = int(data.get("total") or len(items_raw))
+    except (TypeError, ValueError):
+        total = len(items_raw)
+    out: list[dict[str, Any]] = []
+    for raw in items_raw:
+        if not isinstance(raw, dict):
+            continue
+        row = _market_item_to_package_row(raw)
+        if not row or not is_public_catalog_row(row):
+            continue
+        info = _remote_to_mod_info(row, installed_ids)
+        hint = collection_hint or str(
+            (row.get("commerce") or {}).get("collection") or ""
+        ).strip()
+        if hint:
+            info["store_collection"] = hint
+        out.append(info)
+    return out, total
 
 
 def _inject_host_foundation_row(available: list[dict[str, Any]], installed_ids: set[str]) -> None:
@@ -412,6 +457,43 @@ async def mod_store_catalog() -> ModStoreCatalogResponse:
     rows, installed = await _combined_rows()
     return ModStoreCatalogResponse(
         data=ModStoreCatalogPayload(installed=installed, available=rows, indexed_count=len(rows))
+    )
+
+
+@router.get("/market-catalog", response_model=ModStoreMarketCatalogResponse)
+async def mod_store_market_catalog(
+    q: str | None = Query(None),
+    collection: str | None = Query(None),
+    artifact: str | None = Query(None),
+    material_category: str | None = Query(None),
+    license_scope: str | None = Query(None),
+    industry: str | None = Query(None),
+    security_level: str | None = Query(None),
+    limit: int = Query(80, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> ModStoreMarketCatalogResponse:
+    """代理修茈 AI 市场 /api/market/catalog，合并本机安装态。"""
+    data = await fetch_market_catalog_page(
+        q=q,
+        collection=collection,
+        artifact=artifact,
+        material_category=material_category,
+        license_scope=license_scope,
+        industry=industry,
+        security_level=security_level,
+        limit=limit,
+        offset=offset,
+    )
+    items, total = await _map_market_catalog_page(
+        data,
+        collection_hint=str(collection or "").strip(),
+    )
+    return ModStoreMarketCatalogResponse(
+        data=ModStoreMarketCatalogPayload(
+            items=items,
+            total=total,
+            collection=str(collection or "").strip(),
+        )
     )
 
 

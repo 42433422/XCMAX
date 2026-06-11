@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 
 from app.utils.operational_errors import OPERATIONAL_ERRORS
 
@@ -67,8 +67,8 @@ async def platform_shell_industry_baseline(industry_id: str = "通用"):
 
 
 @router.get("/onboarding-industries")
-async def platform_shell_onboarding_industries():
-    """引导「行业定型」：开放可选行业及中性化行业包名（不含客户品牌）。"""
-    from app.mod_sdk.industry_baseline import build_onboarding_industry_catalog
+async def platform_shell_onboarding_industries(request: Request):
+    """引导「行业定型」：开放可选行业及中性化行业包名；企业版按 entitlement 二级筛选。"""
+    from app.mod_sdk.industry_baseline import build_onboarding_industry_catalog_for_request
 
-    return {"success": True, "data": build_onboarding_industry_catalog()}
+    return {"success": True, "data": await build_onboarding_industry_catalog_for_request(request)}
