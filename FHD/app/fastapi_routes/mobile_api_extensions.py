@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from app.fastapi_routes.mobile_api import get_mobile_user
-from app.security.mobile_pairing import consume_pairing_nonce, issue_pairing_nonce
+from app.security.mobile_pairing import consume_by_shortcode, consume_pairing_nonce, issue_pairing_nonce, lookup_by_shortcode
 from app.utils.mobile_api import format_mobile_response, paginate_list
 from app.utils.operational_errors import OPERATIONAL_ERRORS
 
@@ -46,7 +46,12 @@ class DeviceRegisterBody(BaseModel):
 
 
 class PairingExchangeBody(BaseModel):
-    nonce: str = Field(..., min_length=8)
+    nonce: str = Field(default="", min_length=0)
+    code: str = Field(default="", max_length=6)
+
+
+class PairingLookupBody(BaseModel):
+    code: str = Field(..., min_length=6, max_length=6)
 
 
 class PairingIssueBody(BaseModel):
@@ -252,19 +257,45 @@ async def mobile_pairing_issue(body: PairingIssueBody):
     return format_mobile_response(data=payload)
 
 
-@extension_router.post("/pairing/exchange")
-async def mobile_pairing_exchange(body: PairingExchangeBody):
-    rec = consume_pairing_nonce(body.nonce.strip())
+@extension_router.post("/pairing/lookup")
+async def mobile_pairing_lookup(body: PairingLookupBody):
+    """手机通过 6 位配对码查询完整连接信息（不消费）。"""
+    rec = lookup_by_shortcode(body.code.strip())
     if not rec:
         return JSONResponse(
-            format_mobile_response(None, "nonce 无效或已过期", success=False, code=400),
+            format_mobile_response(None, "配对码无效或已过期", success=False, code=404),
+            status_code=404,
+        )
+    return format_mobile_response(data={
+        "host": rec["host"],
+        "port": rec["port"],
+        "nonce": rec["nonce"],
+        "exp": rec.get("exp", 0),
+    })
+
+
+@extension_router.post("/pairing/exchange")
+async def mobile_pairing_exchange(body: PairingExchangeBody):
+    # 支持两种方式：nonce（旧）或 shortCode（新）
+    nonce_val = body.nonce.strip()
+    code_val = body.code.strip()
+    if code_val:
+        rec = consume_by_shortcode(code_val)
+    elif nonce_val:
+        rec = consume_pairing_nonce(nonce_val)
+    else:
+        rec = None
+    if not rec:
+        return JSONResponse(
+            format_mobile_response(None, "配对码无效或已过期", success=False, code=400),
             status_code=400,
         )
     return format_mobile_response(
         data={
             "host": rec["host"],
             "port": rec["port"],
-            "hint": "请在 App 中保存 host 并提交 LAN access-request",
+            "shortCode": rec.get("shortCode", ""),
+            "hint": "配对成功，App 已获取连接信息",
         },
     )
 

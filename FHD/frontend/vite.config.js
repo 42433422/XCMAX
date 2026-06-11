@@ -76,6 +76,10 @@ export default defineConfig(({ mode }) => {
           find: '@admin-console-inject/adminHostRoutes',
           replacement: path.resolve(__dirname, './src/router/adminHostRoutes.stub.ts'),
         },
+        {
+          find: '@admin-console-inject/views/DutyRosterGraphView.vue',
+          replacement: path.resolve(__dirname, './src/views/adminDutyRosterGraphView.stub.vue'),
+        },
         { find: '@', replacement: path.resolve(__dirname, './src') },
         // 干净通用版：Mod 已迁出 mods-export-2026-06-07/，开发时按需恢复单条 alias
         // {

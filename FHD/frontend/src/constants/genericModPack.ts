@@ -3,6 +3,7 @@
 
 import { clientModPolicies } from '@/stores/hostConfig'
 import { getWorkflowEmployeeModIds } from '@/constants/workflowEmployeeMods'
+import { isOfficeAuxPack1Pkg, isOfficeEmployeePkg } from '@/constants/officeEmployeePack'
 
 /** 空壳发行（里程碑 Q）：对话 + NeuroBus + 办公 pack，无 ERP/审批等行业 Mod */
 export const MINIMAL_HOST_MOD_IDS = [
@@ -212,7 +213,7 @@ export const MOD_MENU_ID_TO_HOST_NAV_KEY: Readonly<Record<string, string>> = {
   'mod-erp-printer-list': 'printer-list',
   'mod-erp-template-preview': 'template-preview',
   'mod-office-tools': 'tools',
-  'mod-office-other-tools': 'other-tools',
+  'mod-office-other-tools': 'workflow-employee-space',
   'mod-kitten-finance': 'kitten-finance',
   'mod-lan-gate': 'lan-gate',
 }
@@ -221,6 +222,29 @@ export const MOD_MENU_ID_TO_HOST_NAV_KEY: Readonly<Record<string, string>> = {
 export function normalizeModSidebarNavKey(key: string): string {
   const k = String(key || '').trim();
   return k.replace(/^mod-mod-/, 'mod-');
+}
+
+/** 考勤 Mod 侧栏入口（manifest.menu.id 与 mod- 前缀 key 两种形态） */
+export const ATTENDANCE_MOD_SIDEBAR_MENU_KEYS = new Set([
+  'attendance-industry-home',
+  'mod-attendance-industry-home',
+  'attendance-industry-settings',
+  'mod-attendance-industry-settings',
+  'taiyangniao-pro-home',
+  'mod-taiyangniao-pro-home',
+  'taiyangniao-pro-settings',
+  'mod-taiyangniao-pro-settings',
+])
+
+/** 企业端 / 管理端不展示「考勤表转换」；太阳鸟客户端仍保留 */
+export function shouldHideAttendanceModSidebarMenu(menuKey: string): boolean {
+  if (String(import.meta.env.VITE_XCMAX_SUNBIRD_CONSOLE || '').trim() === '1') return false
+  const key = normalizeModSidebarNavKey(String(menuKey || '').trim())
+  if (!ATTENDANCE_MOD_SIDEBAR_MENU_KEYS.has(key)) return false
+  const sku = String(import.meta.env.VITE_XCAGI_PRODUCT_SKU || '').trim().toLowerCase()
+  if (sku === 'enterprise') return true
+  if (String(import.meta.env.VITE_XCMAX_ADMIN_CONSOLE || '').trim() === '1') return true
+  return false
 }
 
 /**
@@ -334,6 +358,8 @@ export const HOST_FOUNDATION_EMPLOYEE_PACK_ID = 'xcagi-host-foundation-employee'
 
 export const STORE_COLLECTION_HOST_FOUNDATION = 'host_foundation'
 export const STORE_COLLECTION_WORKFLOW_EMPLOYEE = 'workflow_employee'
+export const STORE_COLLECTION_OFFICE_EMPLOYEE = 'office_employee_pack'
+export const STORE_COLLECTION_OFFICE_AUX = 'office_employee_aux_pack_1'
 export const STORE_COLLECTION_INDUSTRY_MOD = 'industry_mod'
 
 export function isHostFoundationEmployeePackId(modId: string): boolean {
@@ -356,6 +382,8 @@ export function catalogStoreCollection(row: {
   }
   const id = String(row?.id || row?.pkg_id || '').trim()
   if (isHostFoundationEmployeePackId(id)) return STORE_COLLECTION_HOST_FOUNDATION
+  if (isOfficeEmployeePkg(id)) return STORE_COLLECTION_OFFICE_EMPLOYEE
+  if (isOfficeAuxPack1Pkg(id)) return STORE_COLLECTION_OFFICE_AUX
   if (isWorkflowEmployeeModId(id)) return STORE_COLLECTION_WORKFLOW_EMPLOYEE
   if (isHostBridgeModId(id)) return ''
   return STORE_COLLECTION_INDUSTRY_MOD

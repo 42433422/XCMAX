@@ -30,6 +30,12 @@ export interface ModCatalog {
   indexed_count: number;
 }
 
+export interface MarketCatalogResult {
+  items: ModInfo[];
+  total: number;
+  collection: string;
+}
+
 export interface ModSearchResult {
   data: ModInfo[];
   count: number;
@@ -92,6 +98,35 @@ export async function getModCatalog(): Promise<ModCatalog> {
   }
   
   return data.data;
+}
+
+/** 按分类拉取修茈 AI 市场目录（经宿主 /api/mod-store/market-catalog 代理） */
+export async function fetchMarketCatalog(params: {
+  q?: string;
+  collection?: string;
+  artifact?: string;
+  material_category?: string;
+  limit?: number;
+  offset?: number;
+} = {}): Promise<MarketCatalogResult> {
+  const search = new URLSearchParams();
+  search.set('limit', String(params.limit ?? 80));
+  search.set('offset', String(params.offset ?? 0));
+  if (params.q) search.set('q', params.q);
+  if (params.collection) search.set('collection', params.collection);
+  if (params.artifact) search.set('artifact', params.artifact);
+  if (params.material_category) search.set('material_category', params.material_category);
+
+  const response = await apiFetch(`/api/mod-store/market-catalog?${search}`, {
+    timeoutMs: 120_000,
+  });
+  const data = await response.json();
+
+  if (!data.success) {
+    throw new Error(data.error || data.message || '获取 AI 市场目录失败');
+  }
+
+  return data.data as MarketCatalogResult;
 }
 
 /**

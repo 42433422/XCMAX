@@ -6,6 +6,7 @@ object Routes {
     const val CONNECT = "connect"
     const val CONNECT_PC = "connect_pc"
     const val AUTH = "auth"
+    const val AUTH_AUTO_LOGIN = "auth_auto_login"
     const val REGISTER = "register"
     const val HOME_HUB = "home_hub"
     /** 4 Tab：工作（审批 + 业务聚合入口） */
@@ -35,4 +36,14 @@ object Routes {
     const val SETTINGS = "settings"
     const val ABOUT = "about"
     const val SCAN_QR = "scan_qr"
+    /** AI 员工列表页（从聊天页右上角 + 号进入） */
+    const val AI_EMPLOYEES = "ai_employees"
+    /** 智慧分析（Kitten Analyzer） */
+    const val SMART_ANALYSIS = "smart_analysis"
+    /** AIOPEN 开放智控 */
+    const val AI_OPEN = "ai_open"
+    /** 生产员工 / 智脑集成 */
+    const val BRAIN = "brain"
+    /** 员工商店 / 能力库 */
+    const val MOD_STORE = "mod_store"
 }

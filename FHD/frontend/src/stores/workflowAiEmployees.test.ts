@@ -3,13 +3,17 @@ import { setActivePinia, createPinia } from 'pinia'
 import {
   useWorkflowAiEmployeesStore,
   WORKFLOW_AI_EMPLOYEES_STORAGE_KEY,
+  workflowAiEmployeesStorageKey,
   defaultWorkflowBuiltinEnabled,
 } from './workflowAiEmployees'
+import { setTenantStorageScopeCache } from '@/utils/tenantStorageScope'
 
 describe('workflowAiEmployees store', () => {
   beforeEach(() => {
     localStorage.clear()
+    setTenantStorageScopeCache('tenant:1')
     setActivePinia(createPinia())
+    useWorkflowAiEmployeesStore().reloadForTenantScope('tenant:1')
     vi.spyOn(window, 'dispatchEvent').mockImplementation(() => true)
   })
 
@@ -19,20 +23,21 @@ describe('workflowAiEmployees store', () => {
 
   it('reads keys from localStorage without builtin defaults', () => {
     localStorage.setItem(
-      WORKFLOW_AI_EMPLOYEES_STORAGE_KEY,
+      workflowAiEmployeesStorageKey('tenant:1'),
       JSON.stringify({
         label_print: true,
         custom_mod_emp: false,
       }),
     )
     const store = useWorkflowAiEmployeesStore()
+    store.reloadFromLocalStorage()
     expect(store.enabled.label_print).toBe(true)
     expect(store.enabled.shipment_mgmt).toBeUndefined()
     expect(store.enabled.custom_mod_emp).toBe(false)
   })
 
   it('falls back to empty defaults on invalid JSON', () => {
-    localStorage.setItem(WORKFLOW_AI_EMPLOYEES_STORAGE_KEY, '{not json')
+    localStorage.setItem(workflowAiEmployeesStorageKey('tenant:1'), '{not json')
     const store = useWorkflowAiEmployeesStore()
     expect(store.enabled).toEqual(defaultWorkflowBuiltinEnabled())
   })
@@ -112,10 +117,28 @@ describe('workflowAiEmployees store', () => {
   it('reloadFromLocalStorage picks up external storage writes', () => {
     const store = useWorkflowAiEmployeesStore()
     localStorage.setItem(
-      WORKFLOW_AI_EMPLOYEES_STORAGE_KEY,
+      workflowAiEmployeesStorageKey('tenant:1'),
       JSON.stringify({ label_print: true }),
     )
     store.reloadFromLocalStorage()
     expect(store.enabled.label_print).toBe(true)
+  })
+
+  it('reloadForTenantScope isolates toggles per tenant', () => {
+    localStorage.setItem(
+      workflowAiEmployeesStorageKey('tenant:1'),
+      JSON.stringify({ label_print: true }),
+    )
+    localStorage.setItem(
+      workflowAiEmployeesStorageKey('tenant:2'),
+      JSON.stringify({ label_print: false, shipment_mgmt: true }),
+    )
+    const store = useWorkflowAiEmployeesStore()
+    store.reloadForTenantScope('tenant:1')
+    expect(store.enabled.label_print).toBe(true)
+    expect(store.enabled.shipment_mgmt).toBeUndefined()
+    store.reloadForTenantScope('tenant:2')
+    expect(store.enabled.label_print).toBe(false)
+    expect(store.enabled.shipment_mgmt).toBe(true)
   })
 })

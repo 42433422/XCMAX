@@ -45,8 +45,26 @@ def test_manifest_public(client):
     assert data["success"] is True
     assert data["name"] == "AIOPEN"
     assert data["version"] == "10.0.0"
+    assert data["protocol"]["guide"] == "/api/aiopen/guide"
     tool_names = {t["name"] for t in data["tools"]}
     assert {"api_catalog", "api_call", "chat", "ui_snapshot", "ui_click", "ui_type"} <= tool_names
+
+
+def test_guide_json_and_markdown(client):
+    j = client.get("/api/aiopen/guide").json()
+    assert j["success"] is True
+    assert "markdown" in j and "mcp_config_template" in j
+    assert "prompt_for_user" in j
+    assert "xcagi-aiopen" in j["mcp_config_template"]["mcpServers"]
+    assert "/api/aiopen/mcp" in j["endpoints"]["mcp"]
+    assert "cursor_deeplink" in j
+    assert "install_url" in j
+
+    md = client.get("/api/aiopen/guide?format=markdown")
+    assert md.status_code == 200
+    assert "text/markdown" in (md.headers.get("content-type") or "")
+    assert "XCAGI AIOPEN 接入说明" in md.text
+    assert "ui_snapshot" in md.text
 
 
 def test_invoke_requires_key_when_configured(client, monkeypatch):
@@ -148,16 +166,64 @@ def test_mcp_initialize_list_call(client, monkeypatch):
     ).json()
     assert call["result"]["isError"] is False
     assert "/api/ai/unified_chat" in call["result"]["content"][0]["text"]
+    assert "白名单" in call["result"]["content"][0]["text"]
 
     ping = client.post(
         "/api/aiopen/mcp", json={"jsonrpc": "2.0", "id": 4, "method": "ping"}
-    ).json()
-    assert ping["result"] == {}
+    )
+    assert ping.headers.get("MCP-Protocol-Version")
+    ping_body = ping.json()
+    assert ping_body["result"] == {}
 
     unknown = client.post(
         "/api/aiopen/mcp", json={"jsonrpc": "2.0", "id": 5, "method": "bogus/method"}
     ).json()
     assert unknown["error"]["code"] == -32601
+
+
+def test_mcp_get_probe(client, monkeypatch):
+    monkeypatch.delenv("AIOPEN_API_KEY", raising=False)
+    resp = client.get("/api/aiopen/mcp")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["transport"] == "streamable-http"
+    assert data["tool_count"] >= 9
+    assert resp.headers.get("MCP-Protocol-Version")
+
+
+def test_install_bundle(client):
+    resp = client.get("/api/aiopen/install")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["success"] is True
+    assert data["server_name"] == "xcagi-aiopen"
+    assert "url" in data["methods"]
+    assert "cursor_deeplink" in data["methods"]["url"]
+    assert data["methods"]["url"]["cursor_deeplink"].startswith("cursor://")
+    clients = data.get("clients") or []
+    assert len(clients) >= 6
+    ids = {c["id"] for c in clients}
+    assert {"cursor", "claude", "vscode", "windsurf", "generic"} <= ids
+    cursor = next(c for c in clients if c["id"] == "cursor")
+    assert "mcp_json" in cursor and "xcagi-aiopen" in cursor["mcp_json"]
+
+
+def test_mcp_initialize_session_header(client, monkeypatch):
+    monkeypatch.delenv("AIOPEN_API_KEY", raising=False)
+    resp = client.post(
+        "/api/aiopen/mcp",
+        json={
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {"protocolVersion": "2024-11-05"},
+        },
+    )
+    assert resp.status_code == 200
+    assert resp.headers.get("Mcp-Session-Id")
+    body = resp.json()
+    assert body["result"]["protocolVersion"] == "2024-11-05"
+    assert "ui_sessions" in body["result"]["instructions"]
 
 
 def test_ui_tool_without_session(client, monkeypatch):

@@ -10,6 +10,8 @@
 
 | 端点 | 说明 | 鉴权 |
 |---|---|---|
+| `GET /api/aiopen/guide` | **接入说明**（供其他 AI 阅读后自行配置 MCP；`?format=markdown` 纯文本） | 公开 |
+| `GET /api/aiopen/install` | **MCP 安装包**（Cursor deep link / stdio / mcp-remote） | 公开 |
 | `GET /api/aiopen/manifest` | 工具目录（名称 / 描述 / inputSchema） | 公开 |
 | `POST /api/aiopen/mcp` | MCP Streamable HTTP（JSON-RPC 2.0） | `X-AIOPEN-Key` |
 | `POST /api/aiopen/invoke` | REST 通用工具调用 `{tool, args}` | `X-AIOPEN-Key` |
@@ -26,23 +28,60 @@
 
 请求头：`X-AIOPEN-Key: <你的 Key>`。
 
+## 发给其他 AI（推荐小白用法）
+
+在 AIOPEN 面板点 **「复制说明链接」** 或 **「复制给 AI 的提示语」**，粘贴给任意 AI。
+对方会打开 `GET /api/aiopen/guide?format=markdown` 阅读完整步骤，并向你索取连接口令后自行写入 MCP 配置。
+
+示例提示语（面板一键复制）：
+
+```
+请打开并阅读以下 XCAGI AIOPEN 接入说明，然后帮我完成 MCP 配置并验证连接：
+http://<主机>/api/aiopen/guide?format=markdown
+```
+
 ## MCP 接入（Cursor / Claude）
 
-`mcp.json`（Cursor：`~/.cursor/mcp.json`；Claude Desktop：`claude_desktop_config.json`）：
+**推荐**：在 AIOPEN 面板 **选择 AI 软件**（Cursor / Claude / VS Code 等）一键安装或复制配置；
+或 `GET /api/aiopen/install` 取 `clients[]` 完整安装包。
+
+三种传输方式（install 端点均返回），**六种 AI 客户端**（`clients` 数组）：
+
+| 客户端 | 方式 | 说明 |
+|---|---|---|
+| **Cursor** | 一键 deep link | `~/.cursor/mcp.json` |
+| **Claude Desktop** | 复制 JSON | `claude_desktop_config.json` + npx mcp-remote |
+| **VS Code** | 一键 / 复制 | MCP 扩展 |
+| **Windsurf** | 复制 JSON | `mcp_config.json` |
+| **Trae** | 复制 JSON | Trae MCP 设置 |
+| **其他** | 复制 JSON | Cherry Studio / Chatbox 等 |
+
+传输方式：
+
+| 方式 | 适用 | 说明 |
+|---|---|---|
+| **url** | Cursor / Windsurf / Trae | 原生 HTTP MCP，`url` + `headers` |
+| **mcp-remote** | Claude / VS Code / 通用 | `npx -y mcp-remote <mcp_url> --header X-AIOPEN-Key:...` |
+| **stdio** | 无 npx 环境 | `python3 FHD/scripts/dev/aiopen_mcp_stdio.py` 本地桥接 |
+
+手动 `mcp.json` 示例（Cursor：`~/.cursor/mcp.json`）：
 
 ```json
 {
   "mcpServers": {
-    "xcagi_aiopen": {
-      "url": "http://<XCAGI主机>:5000/api/aiopen/mcp",
+    "xcagi-aiopen": {
+      "url": "http://<XCAGI主机>:5100/api/aiopen/mcp",
       "headers": { "X-AIOPEN-Key": "<你的 API Key>" }
     }
   }
 }
 ```
 
-支持的 JSON-RPC 方法：`initialize`、`tools/list`、`tools/call`、`ping`（无状态
-application/json 应答；notification 返回 202）。
+支持的 JSON-RPC 方法：`initialize`、`tools/list`、`tools/call`、`ping`、
+`notifications/initialized`（notification 返回 202）。
+
+响应头：`MCP-Protocol-Version`、`Mcp-Session-Id`（initialize 时下发）。
+`tools/call` 返回人类可读文本（非原始 JSON  dump）。
 
 ## REST 接入
 

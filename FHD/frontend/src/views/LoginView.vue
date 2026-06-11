@@ -283,23 +283,35 @@ function switchLoginMode(mode: 'password' | 'phone' | 'qr') {
 function formatLoginFailurePayload(payload: Record<string, unknown> | null | undefined): string {
   const r = payload && typeof payload === 'object' ? payload : {};
   const errObj = r.error && typeof r.error === 'object' ? (r.error as Record<string, unknown>) : null;
+  const errorCode =
+    (errObj && typeof errObj.code === 'string' && errObj.code.trim()) ||
+    (typeof r.error_code === 'string' && r.error_code.trim()) ||
+    '';
   const message =
     (typeof r.message === 'string' && r.message.trim()) ||
     (errObj && typeof errObj.message === 'string' && errObj.message.trim()) ||
     '';
   const errorId = typeof r.error_id === 'string' && r.error_id.trim() ? r.error_id.trim() : '';
 
+  let out = '';
   if (message) {
-    let out = message;
+    out = message;
     if (errorId && !out.includes(errorId)) {
       out = `${out}（错误编号 ${errorId}）`;
     }
-    return out;
+  } else if (errorId) {
+    out = `登录失败（错误编号 ${errorId}），请联系管理员排查后端日志。`;
+  } else {
+    out = '登录失败，请检查账号或密码';
   }
-  if (errorId) {
-    return `登录失败（错误编号 ${errorId}），请联系管理员排查后端日志。`;
+
+  if (
+    import.meta.env.DEV &&
+    (errorCode === 'MARKET_AUTH_FAILED' || errorCode === 'LOCAL_AUTH_MISMATCH')
+  ) {
+    out += '。本地开发可试：企业演示 xcagi-enterprise-demo / Demo@2026；平台管理员请点「管理员登录」或访问 /admin/（admin / admin123）。';
   }
-  return '登录失败，请检查账号或密码';
+  return out;
 }
 
 function selectEnterpriseLogin() {

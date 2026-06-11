@@ -68,14 +68,22 @@ export interface IndustryPackageRef {
 
 export interface OnboardingIndustryPackage {
   industry_id: string
+  name?: string
+  scenario?: string
   product_name: string
   mod_id: string
+  selectable?: boolean
 }
 
 export interface OnboardingIndustryCatalog {
   schema_version?: number
   open_industry_ids: string[]
   open_packages: OnboardingIndustryPackage[]
+  preview_packages?: OnboardingIndustryPackage[]
+  /** 企业 entitlement 已裁剪开放列表 */
+  enterprise_filter_applied?: boolean
+  owner_id?: string | null
+  selected_industry_id?: string | null
 }
 
 export interface IndustryBaselinePlan {

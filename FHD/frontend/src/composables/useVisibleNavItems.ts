@@ -7,6 +7,7 @@ import { useModRoutes } from '@/composables/useModRoutes'
 import { DEFAULT_INDUSTRY_ID } from '@/constants/industryDefaults'
 import {
   ADMIN_MENU_ITEM,
+  ADMIN_EMPLOYEE_WORKFLOW_MENU_CHILDREN,
   CORE_MENU_ITEMS_BASE,
   CORE_MENU_ITEMS_TRAILING,
   SANDBOX_MENU_KEYS,
@@ -17,6 +18,8 @@ import { isPlatformShellModeEnabled, SHELL_CORE_MENU_KEYS } from '@/constants/pl
 import {
   isClientErpSidebarContext,
   keepHostNavKeyVisibleWhenModSidebarFacetSuppressed,
+  normalizeModSidebarNavKey,
+  shouldHideAttendanceModSidebarMenu,
 } from '@/constants/genericModPack'
 import { resolveNavRouteName } from '@/constants/navRouteAliases'
 import { resolveCoreNavLabel } from '@/utils/coreNavLabel'
@@ -132,14 +135,31 @@ export function useVisibleNavItems() {
     const baseCore = CORE_MENU_ITEMS_BASE.map((item) => {
       const override = coreMenuOverrides.value.get(item.key)
       if (isCoreNavHidden(item.key)) return null
-      if (!canShowCoreMenuKey(roleMenuProfile.value, item.key)) return null
+      const childKeys = [
+        ...(item.children?.map((c) => c.key) || []),
+        ...(item.key === 'employee-workflow' &&
+        isAdminConsoleSpa() &&
+        accountProfileStore.isAdminAccount
+          ? ADMIN_EMPLOYEE_WORKFLOW_MENU_CHILDREN.map((c) => c.key)
+          : []),
+      ]
+      const parentAllowed =
+        canShowCoreMenuKey(roleMenuProfile.value, item.key) ||
+        childKeys.some((key) => canShowCoreMenuKey(roleMenuProfile.value, key))
+      if (!parentAllowed) return null
       const resolved: ResolvedSidebarMenuItem = {
         ...item,
-        name: resolveCoreNavLabel(item.key, id, modsForUi.value),
+        name: resolveCoreNavLabel(item.key, id, modsForUi.value) || item.name,
         iconClass: override?.iconClass || item.iconClass,
       }
       if (item.children?.length) {
-        resolved.children = item.children
+        const childSource = [
+          ...item.children,
+          ...(isAdminConsoleSpa() && accountProfileStore.isAdminAccount
+            ? ADMIN_EMPLOYEE_WORKFLOW_MENU_CHILDREN
+            : []),
+        ]
+        resolved.children = childSource
           .map((child) => {
             if (isCoreNavHidden(child.key)) return null
             if (!canShowCoreMenuKey(roleMenuProfile.value, child.key)) return null
@@ -151,6 +171,7 @@ export function useVisibleNavItems() {
             }
           })
           .filter(Boolean) as ResolvedSidebarMenuItem[]
+        if (!resolved.children.length) return null
       }
       return resolved
     }).filter((item) => {
@@ -201,6 +222,14 @@ export function useVisibleNavItems() {
     const adminShell = isAdminConsoleSpa() && accountProfileStore.isAdminAccount
     return modMenuItems.value
       .filter((item) => {
+        const navKey = normalizeModSidebarNavKey(String(item.key || ''))
+        if (shouldHideAttendanceModSidebarMenu(navKey)) return false
+        if (
+          roleMenuProfile.value.role === 'enterprise-user' &&
+          (navKey === 'workflow-visualization' || navKey === 'mod-workflow-visualization')
+        ) {
+          return false
+        }
         if (!adminShell) return true
         const modId = String(item.modId || '').trim()
         if (modId && ADMIN_OPERATOR_HIDDEN_MOD_IDS.has(modId)) return false

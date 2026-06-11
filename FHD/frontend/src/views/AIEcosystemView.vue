@@ -3,23 +3,31 @@
     <div v-if="!inAnalyzer" class="ecosystem-home">
       <div class="ecosystem-home-title">AI生态应用</div>
       <div class="launcher-grid">
-        <button class="app-launcher" type="button" @click="enterAnalyzer('kitten')">
-          <span class="app-launcher-icon" aria-hidden="true">🐱</span>
-          <span class="app-launcher-name">小猫分析</span>
-          <span class="app-launcher-desc">接入可视化 AI 员工，上传表格、对话分析、生成 ECharts 图表与报告</span>
+        <button class="app-launcher app-launcher--kitten" type="button" @click="enterAnalyzer('kitten')">
+          <span class="app-launcher-icon app-launcher-icon--kitten" aria-hidden="true">
+            <KittenLauncherIcon />
+          </span>
+          <span class="app-launcher-name">智慧分析</span>
+          <span class="app-launcher-desc">接入可视化 AI 员工，上传表格、对话洞察、生成 ECharts 图表与报告</span>
         </button>
-        <button class="app-launcher" type="button" @click="enterAnalyzer('aiopen')">
-          <span class="app-launcher-icon" aria-hidden="true">🤖</span>
+        <button class="app-launcher app-launcher--aiopen" type="button" @click="enterAnalyzer('aiopen')">
+          <span class="app-launcher-icon app-launcher-icon--aiopen" aria-hidden="true">
+            <AiOpenLauncherIcon />
+          </span>
           <span class="app-launcher-name">AIOPEN 开放智控</span>
-          <span class="app-launcher-desc">我是 AI 的工具 — MCP / API 开放平台与虚拟光标操控</span>
+          <span class="app-launcher-desc">企业级 AI Agent 接入平台，基于 MCP/API 标准协议，提供远程 UI 操控与白名单业务接口开放</span>
         </button>
-        <button class="app-launcher" type="button" @click="goShellPage('brain')">
-          <span class="app-launcher-icon" aria-hidden="true">🧠</span>
-          <span class="app-launcher-name">AI智脑集成</span>
-          <span class="app-launcher-desc">Agent 控制台，同源 Planner 与 unified_chat 联调</span>
+        <button class="app-launcher app-launcher--production" type="button" @click="goShellPage('brain')">
+          <span class="app-launcher-icon app-launcher-icon--production" aria-hidden="true">
+            <ProductionEmployeeLauncherIcon />
+          </span>
+          <span class="app-launcher-name">生产员工</span>
+          <span class="app-launcher-desc">部署与调度生产 AI 员工，编排任务流、监控工位运行与自动化交付</span>
         </button>
-        <button class="app-launcher" type="button" @click="goShellPage('mod-store')">
-          <span class="app-launcher-icon" aria-hidden="true">🧩</span>
+        <button class="app-launcher app-launcher--modstore" type="button" @click="goShellPage('mod-store')">
+          <span class="app-launcher-icon app-launcher-icon--modstore" aria-hidden="true">
+            <ModStoreLauncherIcon />
+          </span>
           <span class="app-launcher-name">员工商店</span>
           <span class="app-launcher-desc">MOD 扩展浏览、安装与本机 .xcmod 目录</span>
         </button>
@@ -36,6 +44,10 @@
 import { ref, defineAsyncComponent } from 'vue'
 import { useRouter } from 'vue-router'
 import { resolvePlannerPageRedirectForRouteName } from '@/utils/plannerPagePaths'
+import AiOpenLauncherIcon from '@/components/aiopen/AiOpenLauncherIcon.vue'
+import KittenLauncherIcon from '@/components/kitten/KittenLauncherIcon.vue'
+import ProductionEmployeeLauncherIcon from '@/components/workflow/ProductionEmployeeLauncherIcon.vue'
+import ModStoreLauncherIcon from '@/components/modStore/ModStoreLauncherIcon.vue'
 
 const router = useRouter()
 
@@ -112,6 +124,50 @@ const exitAnalyzer = () => {
   justify-content: center;
   font-size: 42px;
   background: linear-gradient(135deg, #dbeafe, #bfdbfe);
+}
+.app-launcher-icon--kitten {
+  background: linear-gradient(145deg, #0f766e 0%, #1e40af 100%);
+  box-shadow:
+    0 8px 20px rgba(15, 118, 110, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22);
+}
+.app-launcher--kitten:hover .app-launcher-icon--kitten {
+  box-shadow:
+    0 10px 24px rgba(30, 64, 175, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.28);
+}
+.app-launcher-icon--aiopen {
+  background: linear-gradient(145deg, #3b82f6 0%, #1d4ed8 100%);
+  box-shadow:
+    0 8px 20px rgba(37, 99, 235, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+.app-launcher--aiopen:hover .app-launcher-icon--aiopen {
+  box-shadow:
+    0 10px 24px rgba(37, 99, 235, 0.42),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+.app-launcher-icon--production {
+  background: linear-gradient(145deg, #f59e0b 0%, #ea580c 100%);
+  box-shadow:
+    0 8px 20px rgba(234, 88, 12, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+.app-launcher--production:hover .app-launcher-icon--production {
+  box-shadow:
+    0 10px 24px rgba(234, 88, 12, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+.app-launcher-icon--modstore {
+  background: linear-gradient(145deg, #8b5cf6 0%, #6d28d9 100%);
+  box-shadow:
+    0 8px 20px rgba(109, 40, 217, 0.34),
+    inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+.app-launcher--modstore:hover .app-launcher-icon--modstore {
+  box-shadow:
+    0 10px 24px rgba(109, 40, 217, 0.42),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
 }
 .app-launcher-name {
   font-size: 18px;

@@ -53,6 +53,8 @@ const hostKeysFromPath = new Set([
   'template-preview',
   'tools',
   'other-tools',
+  'workflow-visualization',
+  'workflow-employee-space',
   'chat',
   'ai-ecosystem',
   'kitten-finance',

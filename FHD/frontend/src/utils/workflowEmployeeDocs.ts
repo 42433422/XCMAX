@@ -201,11 +201,17 @@ export function normalizeWorkflowEmployeeDocs(d: WorkflowEmployeeDocsV1): Workfl
  *
  * 推荐：**路径 1 — 结构化 JSON 文本**，与代码分仓维护；不要用「静态分析代码」生成说明（叙述质量差、易碎、难审阅）。
  */
+function workflowEmployeeDocsPublicUrl(): string {
+  const base = String(import.meta.env.BASE_URL || '/')
+  const root = base.endsWith('/') ? base : `${base}/`
+  return `${root}workflow-employee-docs.json`
+}
+
 export async function loadWorkflowEmployeeDocs(): Promise<WorkflowEmployeeDocsV1> {
   const envUrl = (import.meta.env.VITE_WORKFLOW_EMPLOYEE_DOCS_URL as string | undefined)?.trim()
   const urls: string[] = []
   if (envUrl) urls.push(envUrl)
-  urls.push('/workflow-employee-docs.json')
+  urls.push(workflowEmployeeDocsPublicUrl())
 
   for (const url of urls) {
     try {

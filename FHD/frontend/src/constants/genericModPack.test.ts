@@ -6,6 +6,7 @@ import {
   MINIMAL_HOST_MOD_IDS,
   shouldAutoEnableMinimalPlatformShell,
   shouldAutoEnablePlatformShell,
+  shouldHideAttendanceModSidebarMenu,
 } from './genericModPack'
 
 describe('genericModPack', () => {
@@ -55,6 +56,19 @@ describe('genericModPack', () => {
     expect(isHostMountedModMenuPath('/wechat-contacts', '/wechat-contacts')).toBe(true)
     expect(isHostMountedModMenuPath('/chat', null)).toBe(true)
     expect(isHostMountedModMenuPath('/mod/foo/bar', '/wechat-contacts')).toBe(false)
+  })
+
+  it('hides attendance mod sidebar in enterprise/admin but not sunbird', () => {
+    vi.stubEnv('VITE_XCMAX_SUNBIRD_CONSOLE', '')
+    vi.stubEnv('VITE_XCMAX_ADMIN_CONSOLE', '')
+    vi.stubEnv('VITE_XCAGI_PRODUCT_SKU', 'enterprise')
+    expect(shouldHideAttendanceModSidebarMenu('mod-attendance-industry-home')).toBe(true)
+    vi.stubEnv('VITE_XCAGI_PRODUCT_SKU', '')
+    vi.stubEnv('VITE_XCMAX_ADMIN_CONSOLE', '1')
+    expect(shouldHideAttendanceModSidebarMenu('attendance-industry-home')).toBe(true)
+    vi.stubEnv('VITE_XCMAX_ADMIN_CONSOLE', '')
+    vi.stubEnv('VITE_XCMAX_SUNBIRD_CONSOLE', '1')
+    expect(shouldHideAttendanceModSidebarMenu('mod-attendance-industry-home')).toBe(false)
   })
 
   it('readBuildEdition from env', async () => {

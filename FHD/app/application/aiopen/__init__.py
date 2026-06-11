@@ -3,6 +3,7 @@
 from app.application.aiopen.service import (
     AIOPEN_STATE,
     aiopen_manifest,
+    build_aiopen_guide,
     generate_api_key,
     invoke_tool,
     list_api_keys,
@@ -13,6 +14,7 @@ from app.application.aiopen.service import (
 __all__ = [
     "AIOPEN_STATE",
     "aiopen_manifest",
+    "build_aiopen_guide",
     "generate_api_key",
     "invoke_tool",
     "list_api_keys",

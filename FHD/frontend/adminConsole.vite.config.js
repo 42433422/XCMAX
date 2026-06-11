@@ -108,6 +108,10 @@ export default defineConfig(() => ({
         find: '@admin-console-inject/adminHostRoutes',
         replacement: path.join(adminSrc, 'adminHostRoutes.ts'),
       },
+      {
+        find: '@admin-console-inject/views/DutyRosterGraphView.vue',
+        replacement: path.join(adminSrc, 'views/DutyRosterGraphView.vue'),
+      },
       { find: '@host', replacement: hostSrc },
       { find: '@', replacement: hostSrc },
       { find: '@amin', replacement: path.resolve(hostRoot, '../AMIN') },

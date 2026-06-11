@@ -3,7 +3,8 @@ import { ref, computed, watch, onMounted, onBeforeUnmount, type Ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useTutorialStore } from '@/stores/tutorial'
 import { useModsStore } from '@/stores/mods'
-import { useWorkflowAiEmployeesStore } from '@/stores/workflowAiEmployees'
+import { useWorkflowAiEmployeesStore, workflowAiEmployeesStorageKey } from '@/stores/workflowAiEmployees'
+import { writeAiSessionIdToStorage } from '@/utils/xcagiStorageKeys'
 import {
   buildModWorkflowPanelMeta,
   findWorkflowEmployeeEntry,
@@ -896,7 +897,6 @@ export function useChatView(options: UseChatViewOptions) {
   }
 
   /** 与副窗「一键托管」员工开关一致：启用后在任务面板展示工作流状态 */
-  const WORKFLOW_AI_EMPLOYEES_STORAGE_KEY = 'xcagi_workflow_ai_employees'
 
   function resolveWorkflowEmployeePanelMeta(empId: string): { title: string; summary: string } | null {
     const modMap = buildModWorkflowPanelMeta(modsStore.modsForUi)
@@ -1982,7 +1982,7 @@ export function useChatView(options: UseChatViewOptions) {
   }
 
   function onWorkflowEmployeesStorage(e: StorageEvent) {
-    if (e.key !== WORKFLOW_AI_EMPLOYEES_STORAGE_KEY) return
+    if (e.key !== workflowAiEmployeesStorageKey()) return
     workflowAiEmployeesStore.reloadFromLocalStorage()
     syncWorkflowEmployeePanelTasks(readWorkflowEmployeeEnabledMap())
   }
@@ -3726,7 +3726,7 @@ export function useChatView(options: UseChatViewOptions) {
     historyError.value = ''
     historyLoading.value = true
     sessionId.value = sid
-    localStorage.setItem('ai_session_id', sid)
+    writeAiSessionIdToStorage(sid)
     applyPersistedTaskPanelStateForSession(sid)
 
     try {
@@ -3768,7 +3768,7 @@ export function useChatView(options: UseChatViewOptions) {
       } else {
         historyError.value = e instanceof Error ? e.message : '加载会话失败，请稍后重试'
         sessionId.value = previousSessionId
-        localStorage.setItem('ai_session_id', previousSessionId)
+        writeAiSessionIdToStorage(previousSessionId)
         applyPersistedTaskPanelStateForSession(previousSessionId || 'default')
         console.error('加载会话失败:', e)
       }
@@ -3806,7 +3806,7 @@ export function useChatView(options: UseChatViewOptions) {
     linkedExcelSheet.value = null
     linkedExcelAllSheets.value = false
     sessionId.value = generateSessionId()
-    localStorage.setItem('ai_session_id', sessionId.value)
+    writeAiSessionIdToStorage(sessionId.value)
     taskList.value = []
     activeTaskId.value = ''
     expandedTaskIds.value = []

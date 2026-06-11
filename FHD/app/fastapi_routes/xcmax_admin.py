@@ -1329,3 +1329,22 @@ async def sync_stream(
             "X-Accel-Buffering": "no",
         },
     )
+
+
+@router.api_route(
+    "/market-proxy/{subpath:path}",
+    methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
+    response_model=None,
+)
+async def xcmax_market_proxy_catchall(request: Request, subpath: str):
+    """编制图 LLM / 员工执行等：经会话市场 token 转发至 MODstore ``/api/...``。"""
+    method = request.method.upper()
+    json_body: dict[str, Any] | None = None
+    if method in {"POST", "PUT", "PATCH"}:
+        try:
+            body = await request.json()
+            json_body = body if isinstance(body, dict) else None
+        except OPERATIONAL_ERRORS:
+            json_body = None
+    api_path = f"/api/{str(subpath or '').lstrip('/')}"
+    return await _market_admin_proxy(request, method, api_path, json_body=json_body)

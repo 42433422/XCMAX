@@ -51,4 +51,9 @@ interface ModstoreApi {
         @Header("Authorization") auth: String? = null,
         @Query("limit") limit: Int = 20,
     ): Map<String, Any?>
+
+    @GET("api/mods/installed")
+    suspend fun installedMods(
+        @Header("Authorization") auth: String? = null,
+    ): Map<String, Any?>
 }

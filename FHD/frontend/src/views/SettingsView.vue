@@ -318,6 +318,24 @@
           </div>
         </div>
 
+        <details
+          class="settings-card settings-card--nested"
+          data-tutorial-id="settings-mobile-pairing"
+          open
+        >
+          <summary class="settings-row settings-row--nested">
+            <span class="settings-row__icon settings-row__icon--cyan" aria-hidden="true">
+              <i class="fa fa-qrcode"></i>
+            </span>
+            <span class="settings-row__label">移动端连接</span>
+            <span class="settings-row__meta">App 扫码配对</span>
+            <span class="settings-row__arrow" aria-hidden="true"></span>
+          </summary>
+          <div class="settings-card__body settings-card__body--nested">
+            <MobilePairingQrCard />
+          </div>
+        </details>
+
         <details v-if="!clientModsUiOff" class="settings-card settings-card--nested">
           <summary class="settings-row settings-row--nested">
             <span class="settings-row__icon settings-row__icon--orange" aria-hidden="true">
@@ -515,6 +533,7 @@ import {
   isWorkflowEmployeeModId,
 } from '@/constants/genericModPack';
 import HostModBridgeView from '@/components/HostModBridgeView.vue';
+import MobilePairingQrCard from '@/components/settings/MobilePairingQrCard.vue';
 import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl';
 
 const isAdminConsole = isAdminConsoleSpa();

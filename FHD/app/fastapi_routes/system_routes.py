@@ -19,7 +19,7 @@ app/infrastructure/mods/manifest.py::ModMetadata.industry。
 import logging
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from app.utils.operational_errors import OPERATIONAL_ERRORS
@@ -98,7 +98,7 @@ async def get_industries():
 
 
 @router.get("/industry")
-async def get_current_industry_endpoint():
+async def get_current_industry_endpoint(request: Request):
     """Get current industry profile"""
     try:
         from resources.config.industry_config import (
@@ -107,6 +107,22 @@ async def get_current_industry_endpoint():
         )
 
         current_id = get_current_industry()
+        try:
+            from app.application.tenant_workspace_prefs import (
+                get_selected_industry_id,
+                resolve_workspace_owner_id,
+            )
+            from app.infrastructure.auth.dependencies import resolve_session_user
+
+            user = resolve_session_user(request)
+            if user is not None:
+                owner_id = resolve_workspace_owner_id(request, user)
+                saved = get_selected_industry_id(owner_id)
+                if saved:
+                    current_id = saved
+        except OPERATIONAL_ERRORS:
+            logger.debug("workspace industry prefs lookup skipped", exc_info=True)
+
         profile = get_industry_profile(current_id)
 
         return {"success": True, "data": _build_industry_response(current_id, profile)}
@@ -124,7 +140,7 @@ async def get_current_industry_endpoint():
 
 
 @router.post("/industry")
-async def set_industry_endpoint(request: SetIndustryRequest):
+async def set_industry_endpoint(request_body: SetIndustryRequest, request: Request):
     """Set current industry"""
     try:
         from resources.config.industry_config import (
@@ -132,13 +148,54 @@ async def set_industry_endpoint(request: SetIndustryRequest):
             set_current_industry,
         )
 
-        success = set_current_industry(request.industry_id)
+        success = set_current_industry(request_body.industry_id)
         if not success:
-            raise HTTPException(status_code=400, detail=f"Unknown industry: {request.industry_id}")
+            raise HTTPException(status_code=400, detail=f"Unknown industry: {request_body.industry_id}")
 
-        profile = get_industry_profile(request.industry_id)
+        try:
+            from app.application.tenant_workspace_prefs import (
+                resolve_workspace_owner_id,
+                save_selected_industry,
+            )
+            from app.infrastructure.auth.dependencies import resolve_session_user
+            from app.mod_sdk.industry_baseline import build_onboarding_industry_catalog_for_request
+            from app.mod_sdk.industry_mod_aliases import canonical_mod_id_for_industry
 
-        return {"success": True, "data": _build_industry_response(request.industry_id, profile)}
+            user = resolve_session_user(request)
+            if user is not None:
+                owner_id = resolve_workspace_owner_id(request, user)
+                if owner_id:
+                    cat = await build_onboarding_industry_catalog_for_request(request)
+                    industry_id = request_body.industry_id
+                    if cat.get("enterprise_filter_applied") and canonical_mod_id_for_industry(
+                        industry_id
+                    ):
+                        open_ids = set(cat.get("open_industry_ids") or [])
+                        if industry_id not in open_ids:
+                            raise HTTPException(
+                                status_code=403,
+                                detail="当前企业账号未开通该行业方向",
+                            )
+                    pkg = next(
+                        (
+                            p
+                            for p in (cat.get("open_packages") or [])
+                            if p.get("industry_id") == industry_id
+                        ),
+                        None,
+                    )
+                    mod_id = str((pkg or {}).get("mod_id") or "").strip()
+                    save_selected_industry(
+                        owner_id,
+                        industry_id,
+                        industry_mod_id=mod_id,
+                    )
+        except OPERATIONAL_ERRORS:
+            logger.debug("workspace industry prefs save skipped", exc_info=True)
+
+        profile = get_industry_profile(request_body.industry_id)
+
+        return {"success": True, "data": _build_industry_response(request_body.industry_id, profile)}
     except HTTPException:
         raise
     except OPERATIONAL_ERRORS as e:

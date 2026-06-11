@@ -12,7 +12,7 @@ export const OFFICE_EMPLOYEE_PKG_IDS = [
   'word-full-read-employee',
 ] as const
 
-/** 办公员工附属包1：JSON 量化报告 + 小猫分析可视化图表员工。 */
+/** 办公员工附属包1：JSON 量化报告 + 智慧分析可视化图表员工。 */
 export const OFFICE_AUX_PACK_1_PKG_IDS = [
   'json-report-employee',
   'chart-bar-employee',

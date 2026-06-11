@@ -1,7 +1,14 @@
 package com.xiuci.xcagi.mobile.ui.components.mobile
 
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.text.KeyboardActions
@@ -36,6 +43,7 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -54,11 +62,15 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.VisualTransformation
@@ -68,52 +80,161 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-private val WeChatGreen = Color(0xFF07C160)
+// ─────────────────────────────────────────────────────────────────────────────
+// WeStatusBarSpacer  ─  状态栏占位（与白色顶栏融合）
+// ─────────────────────────────────────────────────────────────────────────────
+
+@Composable
+fun WeStatusBarSpacer() {
+    Spacer(Modifier.fillMaxWidth().background(MobileTokens.surfaceWhite))
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
-// WeTopBar  ─  扁平无底部阴影顶栏，居中标题
+// WeTopBar  ─  微信风顶栏：左侧菜单/返回 + 居中标题 + 右侧搜索/添加圆形描边按钮
 // ─────────────────────────────────────────────────────────────────────────────
+
+@Composable
+fun WeTopBarCircleAction(
+    icon: ImageVector,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier
+            .size(32.dp)
+            .clip(CircleShape)
+            .border(0.5.dp, MobileTokens.divider, CircleShape)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            icon,
+            contentDescription = null,
+            modifier = Modifier.size(18.dp),
+            tint = MobileTokens.textPrimary,
+        )
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WeTopBar(
     title: String,
     onBack: (() -> Unit)? = null,
-    actions: @Composable () -> Unit = {},
+    showLeftMenu: Boolean = false,
+    onLeftMenu: (() -> Unit)? = null,
+    showRightSearch: Boolean = false,
+    onRightSearch: (() -> Unit)? = null,
+    showRightAdd: Boolean = false,
+    onRightAdd: (() -> Unit)? = null,
+    rightLabel: String? = null,
+    rightLabelIsAgent: Boolean = false,
 ) {
     TopAppBar(
         title = {
             Text(
                 title,
-                style = MaterialTheme.typography.titleMedium,
+                fontSize = 17.sp,
+                fontWeight = FontWeight.Medium,
+                color = MobileTokens.textPrimary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
         },
         navigationIcon = {
-            if (onBack != null) {
-                IconButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+            when {
+                onBack != null -> IconButton(onClick = onBack) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "返回",
+                        tint = MobileTokens.textPrimary,
+                    )
+                }
+                showLeftMenu -> WeTopBarCircleAction(
+                    icon = Icons.Default.Add,
+                    onClick = { onLeftMenu?.invoke() },
+                )
+            }
+        },
+        actions = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.padding(end = 12.dp),
+            ) {
+                // 连接状态标签
+                if (rightLabel != null) {
+                    val dotColor = if (rightLabelIsAgent) MobileTokens.brandBlue else MobileTokens.successGreen
+                    if (rightLabelIsAgent) {
+                        val infiniteTransition = rememberInfiniteTransition(label = "agentPulse")
+                        val pulseAlpha by infiniteTransition.animateFloat(
+                            initialValue = 0.5f,
+                            targetValue = 1f,
+                            animationSpec = infiniteRepeatable(
+                                animation = tween(800),
+                                repeatMode = RepeatMode.Reverse,
+                            ),
+                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            Box(
+                                Modifier
+                                    .size(6.dp)
+                                    .clip(CircleShape)
+                                    .background(dotColor.copy(alpha = pulseAlpha))
+                            )
+                            Text(
+                                rightLabel,
+                                fontSize = 11.sp,
+                                color = MobileTokens.brandBlue,
+                            )
+                        }
+                    } else {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            Box(
+                                Modifier
+                                    .size(6.dp)
+                                    .clip(CircleShape)
+                                    .background(dotColor)
+                            )
+                            Text(
+                                rightLabel,
+                                fontSize = 11.sp,
+                                color = MobileTokens.textTertiary,
+                            )
+                        }
+                    }
+                }
+                if (showRightSearch) {
+                    WeTopBarCircleAction(
+                        icon = Icons.Default.Search,
+                        onClick = { onRightSearch?.invoke() },
+                    )
+                }
+                if (showRightAdd) {
+                    WeTopBarCircleAction(
+                        icon = Icons.Default.Add,
+                        onClick = { onRightAdd?.invoke() },
+                    )
                 }
             }
         },
-        actions = { actions() },
         colors = TopAppBarDefaults.topAppBarColors(
-            containerColor = MaterialTheme.colorScheme.surface,
-            titleContentColor = MaterialTheme.colorScheme.onSurface,
-            navigationIconContentColor = MaterialTheme.colorScheme.onSurface,
-            actionIconContentColor = MaterialTheme.colorScheme.onSurface,
+            containerColor = MobileTokens.surfaceWhite,
+            titleContentColor = MobileTokens.textPrimary,
+            navigationIconContentColor = MobileTokens.textPrimary,
+            actionIconContentColor = MobileTokens.textPrimary,
         ),
-        windowInsets = androidx.compose.foundation.layout.WindowInsets(0),
-    )
-    HorizontalDivider(
-        thickness = 0.5.dp,
-        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
     )
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// WeScreen  ─  灰底可滚动页面骨架
+// WeScreen  ─  页面骨架
 // ─────────────────────────────────────────────────────────────────────────────
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -121,14 +242,30 @@ fun WeTopBar(
 fun WeScreen(
     title: String,
     onBack: (() -> Unit)? = null,
-    topBarActions: @Composable () -> Unit = {},
+    showLeftMenu: Boolean = false,
+    onLeftMenu: (() -> Unit)? = null,
+    showRightSearch: Boolean = false,
+    onRightSearch: (() -> Unit)? = null,
+    showRightAdd: Boolean = false,
+    onRightAdd: (() -> Unit)? = null,
     scrollable: Boolean = true,
-    contentPadding: PaddingValues = PaddingValues(vertical = 12.dp),
+    contentPadding: PaddingValues = PaddingValues(0.dp),
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Scaffold(
-        topBar = { WeTopBar(title, onBack, topBarActions) },
-        containerColor = MaterialTheme.colorScheme.background,
+        topBar = {
+            WeTopBar(
+                title = title,
+                onBack = onBack,
+                showLeftMenu = showLeftMenu,
+                onLeftMenu = onLeftMenu,
+                showRightSearch = showRightSearch,
+                onRightSearch = onRightSearch,
+                showRightAdd = showRightAdd,
+                onRightAdd = onRightAdd,
+            )
+        },
+        containerColor = MobileTokens.surfaceWhite,
     ) { padding ->
         if (scrollable) {
             Column(
@@ -152,21 +289,27 @@ fun WeScreen(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// WeSectionCaption  ─  分组上方小灰标题
+// WeSectionCaption  ─  灰底分组标题
 // ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
 fun WeSectionCaption(text: String, modifier: Modifier = Modifier) {
-    Text(
-        text,
-        style = MaterialTheme.typography.labelMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 4.dp),
-    )
+    Box(
+        modifier
+            .fillMaxWidth()
+            .background(MobileTokens.surfaceBg)
+            .padding(horizontal = 16.dp, vertical = 6.dp),
+    ) {
+        Text(
+            text,
+            style = MaterialTheme.typography.labelSmall,
+            color = MobileTokens.textTertiary,
+        )
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// WeCellGroup  ─  白底圆角分组容器，子项间自动插入左缩进发丝分隔线
+// WeCellGroup  ─  无内边距列表容器（顶部圆角+灰分割线）
 // ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
@@ -177,18 +320,17 @@ fun WeCellGroup(
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp),
-        shape = MobileTokens.cornerCard,
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 0.dp,
-        shadowElevation = 0.dp,
+            .padding(horizontal = 12.dp),
+        shape = RoundedCornerShape(12.dp),
+        color = MobileTokens.surfaceWhite,
+        shadowElevation = 1.dp,
     ) {
         Column(content = content)
     }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// WeCell  ─  通用行：可选前置图标 + 标题 + 副标题/右值 + 可选尾部
+// WeCell  ─  微信风通用行：左彩色方块图标 + 标题 + 副标题/右值 + 箭头
 // ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
@@ -196,77 +338,96 @@ fun WeCell(
     title: String,
     modifier: Modifier = Modifier,
     icon: ImageVector? = null,
-    iconTint: Color = MaterialTheme.colorScheme.primary,
+    iconTint: Color = MobileTokens.iconFgBlue,
+    iconBg: Color = MobileTokens.iconBgBlue,
+    iconSize: Dp = 36.dp,
+    iconIconSize: Dp = 20.dp,
     subtitle: String = "",
     value: String = "",
-    showArrow: Boolean = false,
+    showArrow: Boolean = true,
     showDivider: Boolean = true,
     trailing: @Composable (() -> Unit)? = null,
+    titleColor: Color = MobileTokens.textPrimary,
     onClick: (() -> Unit)? = null,
 ) {
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
+            .then(
+                if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier
+            ),
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 13.dp),
+                .padding(horizontal = 16.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             if (icon != null) {
                 Box(
                     modifier = Modifier
-                        .size(32.dp)
+                        .size(iconSize)
                         .clip(RoundedCornerShape(8.dp))
-                        .background(iconTint.copy(alpha = 0.12f)),
+                        .background(iconBg),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
                         icon,
                         contentDescription = null,
-                        modifier = Modifier.size(18.dp),
+                        modifier = Modifier.size(iconIconSize),
                         tint = iconTint,
                     )
                 }
+                Spacer(Modifier.width(14.dp))
             }
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(title, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
+            Column(Modifier.weight(1f)) {
+                Text(
+                    title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = titleColor,
+                )
                 if (subtitle.isNotBlank()) {
                     Text(
                         subtitle,
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = MobileTokens.textTertiary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
             }
             if (value.isNotBlank()) {
-                Text(value, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    value,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MobileTokens.textTertiary,
+                )
+                if (showArrow) {
+                    Spacer(Modifier.width(4.dp))
+                }
             }
             when {
                 trailing != null -> trailing()
                 showArrow -> Icon(
                     Icons.AutoMirrored.Filled.KeyboardArrowRight,
                     contentDescription = null,
-                    modifier = Modifier.size(18.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(16.dp),
+                    tint = MobileTokens.textDisabled,
                 )
             }
         }
         if (showDivider) {
             HorizontalDivider(
-                modifier = Modifier.padding(start = if (icon != null) 60.dp else 16.dp),
+                modifier = Modifier.padding(start = if (icon != null) 16.dp + iconSize + 14.dp else 16.dp),
                 thickness = 0.5.dp,
-                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
+                color = MobileTokens.divider,
             )
         }
     }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// WeInputCell  ─  分组内输入行（左标签 + 无边框输入框）
+// WeInputCell  ─  分组内输入行
 // ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
@@ -290,8 +451,8 @@ fun WeInputCell(
         ) {
             Text(
                 label,
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface,
+                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
+                color = MobileTokens.textPrimary,
                 modifier = Modifier.width(80.dp),
             )
             BasicTextField(
@@ -302,7 +463,7 @@ fun WeInputCell(
                 visualTransformation = visualTransformation,
                 keyboardOptions = keyboardOptions,
                 textStyle = MaterialTheme.typography.bodyMedium.copy(
-                    color = MaterialTheme.colorScheme.onSurface,
+                    color = MobileTokens.textPrimary,
                 ),
                 decorationBox = { inner ->
                     Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterStart) {
@@ -310,7 +471,7 @@ fun WeInputCell(
                             Text(
                                 placeholder,
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                color = MobileTokens.textDisabled,
                             )
                         }
                         inner()
@@ -322,14 +483,14 @@ fun WeInputCell(
             HorizontalDivider(
                 modifier = Modifier.padding(start = 16.dp),
                 thickness = 0.5.dp,
-                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
+                color = MobileTokens.divider,
             )
         }
     }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// WeInputActionCell  ─  分组内输入行 + 右侧绿色文字按钮
+// WeInputActionCell  ─  分组内输入行 + 右侧品牌色文字按钮
 // ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
@@ -353,8 +514,8 @@ fun WeInputActionCell(
         ) {
             Text(
                 label,
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface,
+                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
+                color = MobileTokens.textPrimary,
                 modifier = Modifier.width(80.dp),
             )
             BasicTextField(
@@ -364,7 +525,7 @@ fun WeInputActionCell(
                 singleLine = true,
                 keyboardOptions = keyboardOptions,
                 textStyle = MaterialTheme.typography.bodyMedium.copy(
-                    color = MaterialTheme.colorScheme.onSurface,
+                    color = MobileTokens.textPrimary,
                 ),
                 decorationBox = { inner ->
                     Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterStart) {
@@ -372,7 +533,7 @@ fun WeInputActionCell(
                             Text(
                                 placeholder,
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                color = MobileTokens.textDisabled,
                             )
                         }
                         inner()
@@ -386,7 +547,7 @@ fun WeInputActionCell(
                 Text(
                     actionLabel,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = WeChatGreen,
+                    color = MobileTokens.brandBlue,
                 )
             }
         }
@@ -394,14 +555,14 @@ fun WeInputActionCell(
             HorizontalDivider(
                 modifier = Modifier.padding(start = 16.dp),
                 thickness = 0.5.dp,
-                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
+                color = MobileTokens.divider,
             )
         }
     }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// WeUnderlineTabs  ─  纯文字 Tab + 绿色下划线
+// WeUnderlineTabs  ─  纯文字 Tab + 品牌色下划线
 // ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
@@ -433,15 +594,18 @@ fun WeUnderlineTabs(
                     opt.label,
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                    color = if (selected) WeChatGreen else MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = if (selected) MobileTokens.brandBlue else MobileTokens.textSecondary,
                     textAlign = TextAlign.Center,
                 )
                 Spacer(Modifier.height(8.dp))
                 Box(
                     Modifier
                         .fillMaxWidth(0.5f)
-                        .height(2.dp)
-                        .background(if (selected) WeChatGreen else Color.Transparent),
+                        .height(2.5.dp)
+                        .clip(RoundedCornerShape(1.25.dp))
+                        .background(
+                            if (selected) MobileTokens.brandBlue else Color.Transparent,
+                        ),
                 )
             }
         }
@@ -449,7 +613,7 @@ fun WeUnderlineTabs(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Auth 专用组件  ─  登录/注册页精致布局（对标微信）
+// Auth 专用组件
 // ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
@@ -462,7 +626,7 @@ fun WeAuthCard(
             .fillMaxWidth()
             .padding(horizontal = MobileTokens.authHorizontalMargin),
         shape = MobileTokens.cornerAuthCard,
-        color = MaterialTheme.colorScheme.surface,
+        color = MobileTokens.surfaceWhite,
         tonalElevation = 0.dp,
         shadowElevation = 0.dp,
     ) {
@@ -504,8 +668,10 @@ fun WeAuthTabs(
                 Box(
                     Modifier
                         .fillMaxWidth()
-                        .height(2.dp)
-                        .background(if (selected) MobileTokens.accent() else Color.Transparent),
+                        .height(2.5.dp)
+                        .background(
+                            if (selected) MobileTokens.brandBlue else Color.Transparent,
+                        ),
                 )
             }
         }
@@ -575,7 +741,7 @@ fun WeAuthInputField(
     }
 }
 
-/** Kimi 风 6 格验证码输入，保留单一字符串回调供 loginPhone API 使用。 */
+/** 6 格验证码输入 */
 @Composable
 fun WeOtpCells(
     value: String,
@@ -608,12 +774,12 @@ fun WeOtpCells(
                     Modifier
                         .weight(1f)
                         .height(48.dp)
-                        .clip(MobileTokens.cornerCard)
-                        .background(MaterialTheme.colorScheme.surface)
+                        .clip(MobileTokens.cornerCardSmall)
+                        .background(MobileTokens.surfaceWhite)
                         .border(
                             width = if (focused) 1.5.dp else 1.dp,
-                            color = if (focused) MobileTokens.accent() else MobileTokens.authDivider,
-                            shape = MobileTokens.cornerCard,
+                            color = if (focused) MobileTokens.brandBlue else MobileTokens.authDivider,
+                            shape = MobileTokens.cornerCardSmall,
                         ),
                     contentAlignment = Alignment.Center,
                 ) {
@@ -664,7 +830,7 @@ fun WeAuthOtpField(
             Text(
                 actionLabel,
                 fontSize = 14.sp,
-                color = if (actionEnabled) MobileTokens.accent() else MobileTokens.authTextMuted,
+                color = if (actionEnabled) MobileTokens.brandBlue else MobileTokens.authTextMuted,
                 modifier = Modifier.clickable(enabled = actionEnabled, onClick = onAction),
             )
         }
@@ -727,7 +893,7 @@ fun WeAuthInputActionField(
             Text(
                 actionLabel,
                 fontSize = 14.sp,
-                color = MobileTokens.accent(),
+                color = MobileTokens.brandBlue,
                 modifier = Modifier
                     .clickable(onClick = onAction)
                     .padding(start = 8.dp),
@@ -754,18 +920,21 @@ fun WeAuthGreenButton(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = MobileTokens.authHorizontalMargin)
-            .height(50.dp),
+            .height(48.dp),
         enabled = enabled,
         shape = MobileTokens.cornerAuthButton,
         colors = ButtonDefaults.buttonColors(
-            containerColor = MaterialTheme.colorScheme.primary,
-            contentColor = MaterialTheme.colorScheme.onPrimary,
-            disabledContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f),
-            disabledContentColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f),
+            containerColor = MobileTokens.brandBlue,
+            contentColor = Color.White,
+            disabledContainerColor = MobileTokens.brandBlue.copy(alpha = 0.4f),
+            disabledContentColor = Color.White.copy(alpha = 0.7f),
         ),
-        elevation = ButtonDefaults.buttonElevation(0.dp, 0.dp, 0.dp, 0.dp, 0.dp),
+        elevation = ButtonDefaults.buttonElevation(
+            defaultElevation = 0.dp,
+            disabledElevation = 0.dp,
+        ),
     ) {
-        Text(text, fontSize = 17.sp, fontWeight = FontWeight.Medium)
+        Text(text, fontSize = 16.sp, fontWeight = FontWeight.Medium)
     }
 }
 
@@ -839,7 +1008,7 @@ fun AuthScreenLayout(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// WeGreenButton  ─  微信绿全宽主按钮
+// WeGreenButton  ─  品牌主色全宽主按钮
 // ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
@@ -854,23 +1023,20 @@ fun WeGreenButton(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
-            .height(48.dp),
+            .height(44.dp),
         enabled = enabled,
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(8.dp),
         colors = ButtonDefaults.buttonColors(
-            containerColor = WeChatGreen,
+            containerColor = MobileTokens.brandBlue,
             contentColor = Color.White,
-            disabledContainerColor = WeChatGreen.copy(alpha = 0.4f),
+            disabledContainerColor = MobileTokens.brandBlue.copy(alpha = 0.4f),
             disabledContentColor = Color.White.copy(alpha = 0.7f),
         ),
+        elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp),
     ) {
-        Text(text, style = MaterialTheme.typography.bodyLarge)
+        Text(text, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium))
     }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// WeBlockButton  ─  全宽圆角主按钮（微信绿）
-// ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
 fun WeBlockButton(
@@ -881,10 +1047,6 @@ fun WeBlockButton(
 ) {
     WeGreenButton(text, onClick, modifier, enabled)
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// WeBlockOutlinedButton  ─  全宽圆角次按钮（描边）
-// ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
 fun WeBlockOutlinedButton(
@@ -898,17 +1060,13 @@ fun WeBlockOutlinedButton(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
-            .height(50.dp),
+            .height(48.dp),
         enabled = enabled,
-        shape = RoundedCornerShape(10.dp),
+        shape = RoundedCornerShape(8.dp),
     ) {
         Text(text, style = MaterialTheme.typography.bodyLarge)
     }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// WeBlockDangerButton  ─  全宽圆角危险按钮（白底红字）
-// ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
 fun WeBlockDangerButton(
@@ -922,27 +1080,29 @@ fun WeBlockDangerButton(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
-            .height(50.dp),
+            .height(48.dp),
         enabled = enabled,
-        shape = RoundedCornerShape(10.dp),
+        shape = RoundedCornerShape(8.dp),
         colors = ButtonDefaults.buttonColors(
-            containerColor = MaterialTheme.colorScheme.surface,
-            contentColor = MaterialTheme.colorScheme.error,
+            containerColor = MobileTokens.surfaceWhite,
+            contentColor = MobileTokens.dangerRed,
         ),
+        border = BorderStroke(1.dp, MobileTokens.dangerRed),
+        elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp),
     ) {
         Text(text, style = MaterialTheme.typography.bodyLarge)
     }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// WeAvatar  ─  圆角方形头像（微信式）
+// WeAvatar  ─  圆角方形头像
 // ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
 fun WeAvatar(
     content: @Composable () -> Unit,
     modifier: Modifier = Modifier,
-    size: androidx.compose.ui.unit.Dp = 64.dp,
+    size: Dp = 64.dp,
 ) {
     Box(
         modifier = modifier
@@ -954,12 +1114,8 @@ fun WeAvatar(
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// WeSpacer  ─  分组间隔
-// ─────────────────────────────────────────────────────────────────────────────
-
 @Composable
-fun WeSpacer(height: androidx.compose.ui.unit.Dp = 16.dp) {
+fun WeSpacer(height: Dp = 16.dp) {
     Spacer(Modifier.height(height))
 }
 
@@ -974,15 +1130,16 @@ fun WeBadge(
     showDot: Boolean = false,
 ) {
     if (count <= 0 && !showDot) return
+    val size = when {
+        showDot && count <= 0 -> 8.dp
+        count in 1..9 -> 18.dp
+        else -> 20.dp
+    }
     Box(
         modifier = modifier
+            .size(size)
             .clip(CircleShape)
-            .background(MaterialTheme.colorScheme.error)
-            .padding(
-                horizontal = if (count > 0 && count < 10) 5.dp else if (count >= 10) 4.dp else 0.dp,
-                vertical = if (count > 0) 1.dp else 0.dp,
-            )
-            .then(if (showDot && count <= 0) Modifier.size(8.dp) else Modifier),
+            .background(MobileTokens.dangerRed),
         contentAlignment = Alignment.Center,
     ) {
         if (count > 0) {
@@ -996,7 +1153,7 @@ fun WeBadge(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// WeModeCapsule  ─  DeepSeek 式模式切换胶囊
+// WeModeCapsule  ─  微信风模式切换胶囊（白底圆角+选中浅蓝底+品牌色文字）
 // ─────────────────────────────────────────────────────────────────────────────
 
 data class WeModeOption(
@@ -1014,9 +1171,9 @@ fun WeModeCapsule(
     modifier: Modifier = Modifier,
 ) {
     Surface(
-        modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(24.dp),
-        color = MaterialTheme.colorScheme.surface,
+        modifier = modifier,
+        shape = RoundedCornerShape(20.dp),
+        color = MobileTokens.surfaceBg,
         tonalElevation = 0.dp,
         shadowElevation = 0.dp,
     ) {
@@ -1028,15 +1185,14 @@ fun WeModeCapsule(
                 val selected = opt.id == selectedId
                 Surface(
                     modifier = Modifier
-                        .weight(1f)
+                        .clip(RoundedCornerShape(16.dp))
                         .clickable { onSelect(opt.id) },
-                    shape = RoundedCornerShape(20.dp),
-                    color = if (selected) MaterialTheme.colorScheme.background else Color.Transparent,
+                    color = if (selected) MobileTokens.brandBlueLight else Color.Transparent,
                     tonalElevation = 0.dp,
                     shadowElevation = 0.dp,
                 ) {
                     Row(
-                        Modifier.padding(vertical = 10.dp, horizontal = 8.dp),
+                        Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
@@ -1045,14 +1201,16 @@ fun WeModeCapsule(
                                 opt.icon,
                                 contentDescription = null,
                                 modifier = Modifier.size(16.dp),
-                                tint = if (selected) WeChatGreen else MaterialTheme.colorScheme.onSurfaceVariant,
+                                tint = if (selected) MobileTokens.brandBlue else MobileTokens.textTertiary,
                             )
                             Spacer(Modifier.width(4.dp))
                         }
                         Text(
                             opt.label,
-                            style = MaterialTheme.typography.labelLarge,
-                            color = if (selected) WeChatGreen else MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
+                            ),
+                            color = if (selected) MobileTokens.brandBlue else MobileTokens.textTertiary,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
@@ -1064,49 +1222,7 @@ fun WeModeCapsule(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ChatToolRow  ─  模式 + 联网 + 更多（主工具栏一行）
-// ─────────────────────────────────────────────────────────────────────────────
-
-@Composable
-fun ChatToolRow(
-    modeOptions: List<WeModeOption>,
-    selectedModeId: String,
-    onModeSelect: (String) -> Unit,
-    smartSearch: Boolean,
-    onSmartSearchChange: (Boolean) -> Unit,
-    onMore: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Row(
-        modifier
-            .fillMaxWidth()
-            .padding(horizontal = MobileTokens.horizontalPagePadding, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        WeModeCapsule(
-            options = modeOptions,
-            selectedId = selectedModeId,
-            onSelect = onModeSelect,
-            modifier = Modifier.weight(1f),
-        )
-        WeInputChip(
-            label = "联网",
-            selected = smartSearch,
-            onClick = { onSmartSearchChange(!smartSearch) },
-        )
-        IconButton(onClick = onMore, modifier = Modifier.size(36.dp)) {
-            Icon(
-                Icons.Default.Add,
-                contentDescription = "更多",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// WeChatInputBar  ─  底部大圆角输入条（工具收纳至 ChatToolRow / BottomSheet）
+// WeChatInputBar  ─  微信风底部输入条：白底圆角 + 左操作芯片 + 右圆形按钮
 // ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
@@ -1119,60 +1235,103 @@ fun WeChatInputBar(
     streaming: Boolean,
     modifier: Modifier = Modifier,
     onVoice: (() -> Unit)? = null,
+    onDeepThinking: (() -> Unit)? = null,
+    deepThinking: Boolean = false,
+    onSmartSearch: (() -> Unit)? = null,
+    smartSearch: Boolean = false,
 ) {
     Column(
         modifier
             .fillMaxWidth()
-            .padding(horizontal = MobileTokens.horizontalPagePadding, vertical = 8.dp),
+            .background(MobileTokens.surfaceWhite)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
     ) {
         Surface(
-            shape = MobileTokens.cornerInputBar,
-            color = MaterialTheme.colorScheme.surface,
-            shadowElevation = 1.dp,
+            shape = RoundedCornerShape(8.dp),
+            color = MobileTokens.surfaceWhite,
+            border = androidx.compose.foundation.BorderStroke(0.5.dp, MobileTokens.divider),
+            shadowElevation = 0.dp,
         ) {
             Row(
                 Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.Bottom,
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                OutlinedTextField(
+                BasicTextField(
                     value = value,
                     onValueChange = onValueChange,
                     modifier = Modifier.weight(1f),
-                    placeholder = {
-                        Text(
-                            placeholder,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    },
-                    maxLines = 4,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Color.Transparent,
-                        unfocusedBorderColor = Color.Transparent,
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(
+                        color = MobileTokens.textPrimary,
                     ),
+                    decorationBox = { inner ->
+                        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterStart) {
+                            if (value.isEmpty()) {
+                                Text(
+                                    placeholder,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MobileTokens.textDisabled,
+                                )
+                            }
+                            inner()
+                        }
+                    },
                 )
-                if (onVoice != null) {
-                    IconButton(onClick = onVoice, modifier = Modifier.size(40.dp)) {
-                        Icon(
-                            Icons.Default.Mic,
-                            contentDescription = "语音",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-                IconButton(
-                    onClick = { if (streaming) onStop() else onSend() },
-                    modifier = Modifier.size(40.dp),
-                ) {
-                    Icon(
-                        if (streaming) Icons.Default.Stop else Icons.AutoMirrored.Filled.Send,
-                        contentDescription = if (streaming) "停止" else "发送",
-                        tint = MobileTokens.accent(),
-                    )
-                }
             }
         }
+        Spacer(Modifier.height(8.dp))
+        Row(
+            Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            if (onDeepThinking != null) {
+                WeInputChip(
+                    label = "深度思考",
+                    selected = deepThinking,
+                    onClick = onDeepThinking,
+                )
+            }
+            if (onSmartSearch != null) {
+                WeInputChip(
+                    label = "智能搜索",
+                    selected = smartSearch,
+                    onClick = onSmartSearch,
+                )
+            }
+            Spacer(Modifier.weight(1f))
+            if (onVoice != null) {
+                WeCircleAction(icon = Icons.Default.Mic, onClick = onVoice)
+            }
+            WeCircleAction(
+                icon = if (streaming) Icons.Default.Stop else Icons.AutoMirrored.Filled.Send,
+                onClick = { if (streaming) onStop() else onSend() },
+            )
+        }
+    }
+}
+
+@Composable
+private fun WeCircleAction(
+    icon: ImageVector,
+    onClick: () -> Unit,
+) {
+    Box(
+        Modifier
+            .size(36.dp)
+            .clip(CircleShape)
+            .border(0.5.dp, MobileTokens.divider, CircleShape)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            icon,
+            contentDescription = null,
+            modifier = Modifier.size(20.dp),
+            tint = MobileTokens.textPrimary,
+        )
     }
 }
 
@@ -1184,20 +1343,39 @@ private fun WeInputChip(
 ) {
     Surface(
         modifier = Modifier.clickable(onClick = onClick),
-        shape = RoundedCornerShape(14.dp),
-        color = if (selected) MobileTokens.chipSelectedBg() else MobileTokens.chipUnselectedBg(),
+        shape = RoundedCornerShape(16.dp),
+        color = if (selected) MobileTokens.brandBlueLight else MobileTokens.surfaceWhite,
+        border = androidx.compose.foundation.BorderStroke(0.5.dp, MobileTokens.divider),
     ) {
-        Text(
-            label,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-            style = MaterialTheme.typography.labelMedium,
-            color = if (selected) MobileTokens.accent() else MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        Row(
+            Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                Modifier
+                    .size(14.dp)
+                    .clip(CircleShape)
+                    .background(if (selected) MobileTokens.brandBlue else MobileTokens.textTertiary),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    if (selected) "✓" else label.take(1),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.White,
+                )
+            }
+            Spacer(Modifier.width(4.dp))
+            Text(
+                label,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (selected) MobileTokens.brandBlue else MobileTokens.textTertiary,
+            )
+        }
     }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// WeRedActionCell  ─  退出登录等红字居中 cell
+// WeRedActionCell  ─  红字居中 cell
 // ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
@@ -1206,25 +1384,23 @@ fun WeRedActionCell(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    WeCellGroup(modifier) {
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .clickable(onClick = onClick)
-                .padding(vertical = 14.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text,
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.error,
-            )
-        }
+    Box(
+        modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 14.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text,
+            style = MaterialTheme.typography.bodyLarge,
+            color = MobileTokens.dangerRed,
+        )
     }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// WeBottomNavBar  ─  微信式 4 Tab 底栏
+// WeBottomNavBar  ─  微信风底栏：白底+品牌色选中
 // ─────────────────────────────────────────────────────────────────────────────
 
 data class WeBottomNavItem(
@@ -1241,47 +1417,53 @@ fun WeBottomNavBar(
     onSelect: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(modifier) {
+    Surface(
+        modifier = modifier,
+        shadowElevation = 3.dp,
+        color = MobileTokens.surfaceWhite,
+    ) {
         HorizontalDivider(
             thickness = 0.5.dp,
-            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
+            color = MobileTokens.divider,
         )
-        Surface(color = MaterialTheme.colorScheme.surface) {
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 6.dp),
-            ) {
-                items.forEach { item ->
-                    val selected = currentRoute == item.route
-                    Column(
-                        Modifier
-                            .weight(1f)
-                            .clickable { onSelect(item.route) }
-                            .padding(vertical = 4.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        Box {
-                            Icon(
-                                item.icon,
-                                contentDescription = item.label,
-                                modifier = Modifier.size(24.dp),
-                                tint = if (selected) MobileTokens.accent() else MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            if (item.badge > 0) {
-                                WeBadge(
-                                    count = item.badge,
-                                    modifier = Modifier.align(Alignment.TopEnd),
-                                )
-                            }
-                        }
-                        Text(
-                            item.label,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = if (selected) MobileTokens.accent() else MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 2.dp),
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(top = 6.dp, bottom = 8.dp),
+        ) {
+            items.forEach { item ->
+                val selected = currentRoute == item.route
+                Column(
+                    Modifier
+                        .weight(1f)
+                        .clickable { onSelect(item.route) }
+                        .padding(vertical = 2.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Box(contentAlignment = Alignment.TopEnd) {
+                        val scale by animateFloatAsState(
+                            targetValue = if (selected) 1.1f else 1f,
+                            animationSpec = tween(200),
+                            label = "navScale",
                         )
+                        Icon(
+                            item.icon,
+                            contentDescription = item.label,
+                            modifier = Modifier.size(24.dp).graphicsLayer { scaleX = scale; scaleY = scale },
+                            tint = if (selected) MobileTokens.brandBlue else MobileTokens.textTertiary,
+                        )
+                        if (item.badge > 0) {
+                            WeBadge(count = item.badge)
+                        }
                     }
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        item.label,
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
+                        ),
+                        color = if (selected) MobileTokens.brandBlue else MobileTokens.textTertiary,
+                    )
                 }
             }
         }

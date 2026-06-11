@@ -394,3 +394,18 @@ async def reload_enterprise_mods_after_login() -> None:
             ensure_mod_api_ready(SUNBIRD_CLIENT_MOD_ID)
     except OPERATIONAL_ERRORS:
         logger.exception("reload_enterprise_mods_after_login failed")
+
+
+async def sync_entitlements_from_request(request) -> None:
+    """已登录会话在拉 Mod/引导 catalog 前同步市场权益。"""
+    if not enterprise_mod_filter_active():
+        return
+    try:
+        import os
+
+        cookie_name = os.environ.get("SESSION_COOKIE_NAME", "session_id")
+        sid = (request.cookies.get(cookie_name) or "").strip()
+        if sid:
+            await sync_entitlements_for_session(sid)
+    except OPERATIONAL_ERRORS:
+        logger.exception("sync_entitlements_from_request failed")

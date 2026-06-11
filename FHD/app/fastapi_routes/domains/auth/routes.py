@@ -12,6 +12,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from app.infrastructure.auth.dependencies import (
     get_logged_in_user,
     require_permission,
+    resolve_session_user,
     session_id_from_request,
 )
 from app.utils.operational_errors import OPERATIONAL_ERRORS
@@ -37,23 +38,45 @@ def _user_public_dict(user) -> dict[str, Any]:
     }
 
 
-def _session_meta_for_response(request: Request) -> dict[str, Any]:
-    from app.application.session_account_meta import load_session_account_meta
+def _session_meta_for_response(request: Request, user=None) -> dict[str, Any]:
+    from app.application.session_account_meta import enrich_session_meta_with_tenant, load_session_account_meta
 
     sid = session_id_from_request(request)
     if not sid:
         return {}
+    if user is not None:
+        return enrich_session_meta_with_tenant(sid, user)
     meta = load_session_account_meta(sid)
     return meta if meta else {}
 
 
 @router.get("/api/auth/me")
-def auth_me(request: Request, user=Depends(get_logged_in_user)):
+def auth_me(request: Request):
     from app.application.auth_app_service import get_auth_app_service
+
+    user = resolve_session_user(request)
+    if not user:
+        # 与 /api/auth/session/validate 一致：未登录用 200，避免前端 fetch 在控制台刷 401。
+        return JSONResponse(
+            {
+                "success": False,
+                "valid": False,
+                "error": {"code": "UNAUTHORIZED", "message": "请先登录"},
+            },
+            status_code=200,
+        )
+    if not getattr(user, "is_active", True):
+        return JSONResponse(
+            {
+                "success": False,
+                "error": {"code": "ACCOUNT_DISABLED", "message": "账户已被禁用"},
+            },
+            status_code=403,
+        )
 
     auth_app_service = get_auth_app_service()
     permissions = auth_app_service.get_user_permissions(user)
-    session_meta = _session_meta_for_response(request)
+    session_meta = _session_meta_for_response(request, user)
     return {
         "success": True,
         "data": {
@@ -63,6 +86,8 @@ def auth_me(request: Request, user=Depends(get_logged_in_user)):
             "company_brand": session_meta.get("company_brand") or "",
             "market_is_admin": bool(session_meta.get("market_is_admin")),
             "market_is_enterprise": bool(session_meta.get("market_is_enterprise")),
+            "market_user_id": session_meta.get("market_user_id"),
+            "local_user_id": session_meta.get("local_user_id") or getattr(user, "id", None),
             "tenant_id": session_meta.get("tenant_id"),
             "tenant_name": session_meta.get("tenant_name")
             or session_meta.get("company_brand")
@@ -141,7 +166,8 @@ async def auth_session_validate(request: Request):
                 entitled_mod_ids = sorted(cached)
     except OPERATIONAL_ERRORS:
         logger.exception("sync enterprise entitlements on validate failed")
-    session_meta = _session_meta_for_response(request)
+    user = resolve_session_user(request)
+    session_meta = _session_meta_for_response(request, user)
     payload: dict[str, Any] = {"success": True, "valid": True, "data": session_info}
     if entitled_mod_ids:
         payload["entitled_mod_ids"] = entitled_mod_ids
@@ -150,6 +176,10 @@ async def auth_session_validate(request: Request):
         payload["company_brand"] = session_meta.get("company_brand")
         payload["market_is_admin"] = session_meta.get("market_is_admin")
         payload["market_is_enterprise"] = session_meta.get("market_is_enterprise")
+        payload["market_user_id"] = session_meta.get("market_user_id")
+        payload["local_user_id"] = session_meta.get("local_user_id")
+        payload["tenant_id"] = session_meta.get("tenant_id")
+        payload["tenant_name"] = session_meta.get("tenant_name")
         payload["impersonating_market_user_id"] = session_meta.get("impersonating_market_user_id")
         payload["impersonating_username"] = session_meta.get("impersonating_username")
     return payload
@@ -528,7 +558,7 @@ async def auth_login(request: Request, body: dict = Body(default_factory=dict)):
                 "success": False,
                 "error": {"code": "INVALID_INPUT", "message": "用户名和密码不能为空"},
             },
-            status_code=400,
+            status_code=200,
         )
 
     auth_app_service = get_auth_app_service()

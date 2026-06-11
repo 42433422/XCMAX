@@ -25,7 +25,7 @@ const KITTEN_CHAT_TIMEOUT_MS = (() => {
 })()
 
 export const KITTEN_WELCOME_HTML =
-  '你好，我是 <strong>小猫分析</strong>：日常问答、简单推理、文案与表格草稿。需要时可在右侧<strong>设置</strong>里打开业务库摘要或联网；也可上传表格或从输入旁回形针添加文件。<br><br>直接提问即可。'
+  '你好，我是 <strong>智慧分析</strong>：日常问答、简单推理、文案与表格草稿。需要时可在右侧<strong>设置</strong>里打开业务库摘要或联网；也可上传表格或从输入旁回形针添加文件。<br><br>直接提问即可。'
 
 export const kittenWorkflowSteps = [
   { key: 'ingest', label: '数据接入', desc: '上传或粘贴数据' },
@@ -634,7 +634,7 @@ export function useKittenAnalyzer() {
       ['报告时间', now.toLocaleString('zh-CN')],
       ['分析阶段', kittenPhase.value],
       ['摘要', result?.summary || ''],
-      ['来源', '小猫分析工作台']
+      ['来源', '智慧分析工作台']
     ]
     if (ds) {
       summaryRows.push(['数据文件', ds.name || ''])
@@ -710,7 +710,7 @@ export function useKittenAnalyzer() {
     await assertKittenFileBlob(resp, blob, 'Excel 导出')
     const filename = getFilenameFromDisposition(
       resp.headers.get('content-disposition'),
-      `小猫分析报告_${formatExportTimestamp()}.xlsx`
+      `智慧分析报告_${formatExportTimestamp()}.xlsx`
     )
     downloadBlob(blob, filename)
   }
@@ -744,7 +744,7 @@ export function useKittenAnalyzer() {
     await assertKittenFileBlob(resp, blob, 'Word 导出')
     const filename = getFilenameFromDisposition(
       resp.headers.get('content-disposition'),
-      `小猫分析报告_${formatExportTimestamp()}.docx`
+      `智慧分析报告_${formatExportTimestamp()}.docx`
     )
     downloadBlob(blob, filename)
   }
@@ -1002,7 +1002,7 @@ export function useKittenAnalyzer() {
         const blob = new Blob([workbookArray], {
           type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         })
-        const fileName = `小猫分析报告_${formatExportTimestamp()}.xlsx`
+        const fileName = `智慧分析报告_${formatExportTimestamp()}.xlsx`
         downloadBlob(blob, fileName)
       } catch (err) {
         console.error('导出报告失败:', err)

@@ -265,9 +265,9 @@ export const HOST_PAGE_HIGHLIGHTS: Record<string, TutorialPageHighlight[]> = {
   'other-tools': [
     {
       idSuffix: 'workflow',
-      title: '员工工作流管理 · 流程与员工',
-      description: '本卡说明原版与 Mod 扩展的统一管理入口，并可进入「流程全景」查看执行逻辑…',
-      targetSelector: '#view-other-tools .page-content > .card:nth-child(2)',
+      title: '员工视图',
+      description: '查看已安装工作流 AI 员工，启用/关闭托管；与副窗「一键托管」同步…',
+      targetSelector: '#view-other-tools .page-content',
     },
   ],
   'workflow-employee-space': [

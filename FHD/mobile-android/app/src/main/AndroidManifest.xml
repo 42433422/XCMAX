@@ -35,6 +35,14 @@
             android:name="JPUSH_CHANNEL"
             android:value="${JPUSH_CHANNEL}" />
 
+        <!-- ICP 备案 / APP 备案信息（供应用商店审核与安全扫描工具读取） -->
+        <meta-data
+            android:name="ICP_LICENSE"
+            android:value="@string/app_filing_number" />
+        <meta-data
+            android:name="APP_FILING_URL"
+            android:value="@string/app_filing_beian_url" />
+
         <service
             android:name=".core.push.XcagiMessagingService"
             android:exported="false">
