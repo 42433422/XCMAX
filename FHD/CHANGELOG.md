@@ -102,6 +102,12 @@
 - **feat(mobile-android)**：`WorkScreen` / `DiscoverScreen` 分组列表；`WeUi` 补充底栏、角标、输入条组件
 - **feat(audit)**：`surface_audit_pages.json` 增加 `work` / `discover` 路由
 
+### Mac 主跑 / 服务器跟 git（混合日更 · 2026-06-10 · v10 线内迭代）
+- **feat(automation)**：`automation_primary.py` — `MODSTORE_AUTOMATION_PRIMARY` + `ROLE` 门禁，服务器跳过 digest/08:15–08:25 编排
+- **fix(digest)**：`digest_action_items.ensure_table` 按方言选用 Postgres SERIAL / SQLite AUTOINCREMENT
+- **fix(audit)**：`surface_audit_deps` 从 `MODSTORE_DEPLOY_HEALTH_URL` 推断内部 API（生产 :9999）
+- **ops(closure)**：`patch_prod_daily_closure.sh` follower 块 + `trigger_server_git_sync.sh`；Mac `MODSTORE_SYNC_DEPLOY_BASH`
+
 ### 日更闭环断点修复（BK→R / DRPROBE / 截图依赖 · 2026-06-10 · v10 线内迭代）
 - **feat(backup)**：`daily_backup_job` 成功/失败派发 `backup.completed` / `backup.failed`；启动时 `register_backup_event_subscribers`
 - **feat(dr)**：`dr_recovery_probe_job` 守卫生效时每 30min 重试（默认 ×8），成功 `backup.dr_guard.cleared`、超限 `backup.dr_guard.escalated`
