@@ -24,18 +24,15 @@ PUBLIC_TABULAR_PKG_IDS: Tuple[str, ...] = (
     "word-full-read-employee",
 )
 
-OFFICE_AUX_PACK_1_PKG_IDS: Tuple[str, ...] = ("json-report-employee",)
-
-OFFICE_AUX_PACK_2_PKG_IDS: Tuple[str, ...] = (
+OFFICE_AUX_PACK_1_PKG_IDS: Tuple[str, ...] = (
+    "json-report-employee",
     "chart-bar-employee",
     "chart-line-employee",
     "chart-pie-employee",
     "chart-dashboard-employee",
 )
 
-PUBLIC_OFFICE_EMPLOYEE_PKG_IDS: Tuple[str, ...] = (
-    PUBLIC_TABULAR_PKG_IDS + OFFICE_AUX_PACK_1_PKG_IDS + OFFICE_AUX_PACK_2_PKG_IDS
-)
+PUBLIC_OFFICE_EMPLOYEE_PKG_IDS: Tuple[str, ...] = PUBLIC_TABULAR_PKG_IDS + OFFICE_AUX_PACK_1_PKG_IDS
 
 STANDARD_DISPLAY_NAMES: Dict[str, str] = {
     "excel-generate-employee": "Excel 生成员",

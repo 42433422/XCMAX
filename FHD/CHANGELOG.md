@@ -7,8 +7,8 @@
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
 ### 小猫分析 · 可视化 AI 员工（2026-06-11 · v10 线内迭代）
-- **feat(frontend)**：小猫分析接入办公员工附属包2（柱状/折线/饼图/看板可视化员），员工选择条 + 主题色 ECharts；综合看板多图联动
-- **feat(modstore)**：`bootstrap_kitten_chart_employees.py` / `publish_kitten_chart_employees.py`；AI 市场新增「办公员工附属包2」Tab
+- **feat(frontend)**：小猫分析接入办公员工附属包1（柱状/折线/饼图/看板可视化员 + JSON 量化报告员同栏），员工选择条 + 主题色 ECharts；综合看板多图联动
+- **feat(modstore)**：`bootstrap_kitten_chart_employees.py` / `publish_kitten_chart_employees.py`；chart-* 员工与报告员一并归入「办公员工附属包1」
 
 ### AIOPEN 开放智控 — Qclaw龙虾生态 toA 升级（2026-06-11 · v10 线内迭代）
 - **feat(aiopen)**：「Qclaw龙虾生态」更名升级为「AIOPEN 开放智控」（我是 AI 的工具）：面向外部 AI Agent 的 MCP + REST 开放平台与虚拟光标操控

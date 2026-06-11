@@ -12,11 +12,9 @@ export const OFFICE_EMPLOYEE_PKG_IDS = [
   'word-full-read-employee',
 ] as const
 
-/** 办公员工附属包1：主包之外的扩展员工（JSON 量化报告等）。 */
-export const OFFICE_AUX_PACK_1_PKG_IDS = ['json-report-employee'] as const
-
-/** 办公员工附属包2：小猫分析可视化图表员工。 */
-export const OFFICE_AUX_PACK_2_PKG_IDS = [
+/** 办公员工附属包1：JSON 量化报告 + 小猫分析可视化图表员工。 */
+export const OFFICE_AUX_PACK_1_PKG_IDS = [
+  'json-report-employee',
   'chart-bar-employee',
   'chart-line-employee',
   'chart-pie-employee',
@@ -25,7 +23,6 @@ export const OFFICE_AUX_PACK_2_PKG_IDS = [
 
 export const OFFICE_EMPLOYEE_COLLECTION = 'office_employee_pack'
 export const OFFICE_AUX_PACK_1_COLLECTION = 'office_employee_aux_pack_1'
-export const OFFICE_AUX_PACK_2_COLLECTION = 'office_employee_aux_pack_2'
 
 export type EmployeePackIconKind =
   | 'ppt'
@@ -49,7 +46,6 @@ export function employeePackIconKind(pkgId?: string | null): EmployeePackIconKin
   if (id.startsWith('chart-')) return 'chart'
   if (OFFICE_EMPLOYEE_PKG_IDS.some((p) => p === id)) return 'office'
   if (OFFICE_AUX_PACK_1_PKG_IDS.some((p) => p === id)) return 'report'
-  if (OFFICE_AUX_PACK_2_PKG_IDS.some((p) => p === id)) return 'chart'
   return 'generic'
 }
 
@@ -61,15 +57,10 @@ export function isOfficeAuxPack1Pkg(pkgId?: string | null): boolean {
   return OFFICE_AUX_PACK_1_PKG_IDS.includes((pkgId || '') as (typeof OFFICE_AUX_PACK_1_PKG_IDS)[number])
 }
 
-export function isOfficeAuxPack2Pkg(pkgId?: string | null): boolean {
-  return OFFICE_AUX_PACK_2_PKG_IDS.includes((pkgId || '') as (typeof OFFICE_AUX_PACK_2_PKG_IDS)[number])
-}
-
 /** 主办公包分组（不含 report；附属包单独导航） */
 export const OFFICE_GROUP_ORDER: EmployeePackIconKind[] = ['ppt', 'excel', 'csv', 'pdf', 'word']
 
-export const OFFICE_AUX_GROUP_ORDER: EmployeePackIconKind[] = ['report']
-export const OFFICE_AUX_2_GROUP_ORDER: EmployeePackIconKind[] = ['chart']
+export const OFFICE_AUX_GROUP_ORDER: EmployeePackIconKind[] = ['report', 'chart']
 
 export const OFFICE_GROUP_LABELS: Record<EmployeePackIconKind, string> = {
   ppt: 'PPT',
