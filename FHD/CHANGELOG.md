@@ -6,6 +6,13 @@
 
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
+### 桌面/移动上线阻断项修复（2026-06-12 · v10 线内迭代）
+- **fix(desktop)**：`update-available` 后自动 `downloadUpdate`；`installUpdate` 校验已下载；preload 暴露 `setBadge` / `showNotification` IPC
+- **fix(android)**：Release 允许局域网 HTTP/ws（`network_security_config`）；LAN WebView 注入 `session_id` cookie；推送注册失败可见提示
+- **fix(android)**：Crashlytics mapping 上传默认关闭（`-PuploadCrashlyticsMapping=true` 显式开启）；新增 `fhd-release-android.yml`
+- **fix(backend)**：审批操作人优先 session 鉴权，生产不信任 `X-User-ID`（测试 `FHD_ALLOW_X_USER_ID_HEADER=1`）
+- **chore**：Android `versionName` 纳入 `verify_version_anchors.py`
+
 ### 发版制品与构建链收口（2026-06-12 · v10 线内迭代）
 - **fix(release)**：Enterprise Windows `XCAGI-Enterprise-Setup-10.0.0-x64.exe`（Electron 薄壳）已上传 `update.xcagi.com`；完整内嵌 PyInstaller 后端仍需 Windows 或 GitHub Actions
 - **feat(scripts)**：新增 `build-windows-electron-only.sh`（Mac/Linux 交叉编译 Windows NSIS 薄壳）；Wine Docker 默认 DaoCloud 镜像

@@ -2,6 +2,12 @@ import { BrowserWindow, app, dialog } from 'electron'
 import { autoUpdater } from 'electron-updater'
 import crypto from 'node:crypto'
 
+let updateDownloaded = false
+
+export function isUpdateDownloaded(): boolean {
+  return updateDownloaded
+}
+
 export function configureUpdater(mainWindow: BrowserWindow, beforeInstall?: () => Promise<void>): void {
   autoUpdater.autoDownload = false
   autoUpdater.autoInstallOnAppQuit = true
@@ -20,10 +26,16 @@ export function configureUpdater(mainWindow: BrowserWindow, beforeInstall?: () =
   }
 
   autoUpdater.on('checking-for-update', () => send('checking-for-update'))
-  autoUpdater.on('update-available', info => send('update-available', info))
+  autoUpdater.on('update-available', info => {
+    send('update-available', info)
+    void autoUpdater.downloadUpdate().catch(error => {
+      send('error', { message: error.message, phase: 'download' })
+    })
+  })
   autoUpdater.on('update-not-available', info => send('update-not-available', info))
   autoUpdater.on('download-progress', progress => send('download-progress', progress))
   autoUpdater.on('update-downloaded', async info => {
+    updateDownloaded = true
     send('update-downloaded', info)
     const result = await dialog.showMessageBox(mainWindow, {
       type: 'info',
@@ -63,6 +75,9 @@ export async function checkForUpdates(): Promise<unknown> {
 }
 
 export async function installUpdate(beforeInstall?: () => Promise<void>): Promise<void> {
+  if (!updateDownloaded) {
+    throw new Error('尚未下载更新包，请先检查更新并等待下载完成')
+  }
   if (beforeInstall) {
     await beforeInstall()
   }

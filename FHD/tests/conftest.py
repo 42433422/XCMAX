@@ -116,6 +116,7 @@ def _isolate_edition_and_product_sku_env(monkeypatch):
     ):
         monkeypatch.delenv(key, raising=False)
     # 避免读取安装目录 product-sku.json；各用例仍可用 monkeypatch.setenv("XCAGI_PRODUCT_SKU", ...)
+    monkeypatch.setenv("FHD_ALLOW_X_USER_ID_HEADER", "1")
     monkeypatch.setenv(
         "XCAGI_PRODUCT_SKU_FILE",
         os.path.join(PROJECT_ROOT, "tests", "_fixtures", "no-product-sku.json"),

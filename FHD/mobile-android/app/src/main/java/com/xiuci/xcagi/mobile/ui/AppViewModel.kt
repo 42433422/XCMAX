@@ -109,6 +109,20 @@ constructor(
     private val _marketRefresh = MutableStateFlow("")
     val marketRefresh: StateFlow<String> = _marketRefresh.asStateFlow()
 
+    val fhdAccess =
+            sessionStore.fhdAccessFlow.stateIn(
+                    viewModelScope,
+                    SharingStarted.WhileSubscribed(5_000),
+                    "",
+            )
+
+    private fun registerPushWithHint() {
+        viewModelScope.launch {
+            val result = pushRegistrar.registerAll()
+            result.hint?.let { snack(it, isError = true) }
+        }
+    }
+
     private val _navReady = MutableStateFlow(false)
     val navReady: StateFlow<Boolean> = _navReady.asStateFlow()
 
@@ -297,7 +311,7 @@ constructor(
                             serverRouter.mode = ServerMode.CLOUD
                             snack("欢迎回来，$it")
                             refreshMarketTokens()
-                            pushRegistrar.registerAll()
+                            registerPushWithHint()
                             _startRoute.value = Routes.CHAT
                         }
                         .onFailure { snack("自动登录失败，请手动登录", true) }
@@ -570,7 +584,7 @@ constructor(
                             snack("欢迎回来，$it")
                             analytics.log("login_success", mapOf("method" to "password"))
                             refreshMarketTokens()
-                            pushRegistrar.registerAll()
+                            registerPushWithHint()
                             onDone(true)
                         }
                         .onFailure {
@@ -608,7 +622,7 @@ constructor(
                             snack(it)
                             analytics.log("login_success", mapOf("method" to "phone"))
                             refreshMarketTokens()
-                            pushRegistrar.registerAll()
+                            registerPushWithHint()
                             onDone(true)
                         }
                         .onFailure {

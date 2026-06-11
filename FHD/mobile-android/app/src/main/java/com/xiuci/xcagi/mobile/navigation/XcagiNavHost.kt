@@ -494,12 +494,13 @@ fun XcagiNavHost(vm: AppViewModel, pendingDeepLink: String? = null) {
                     var url by remember { mutableStateOf("") }
                     val access by vm.marketAccess.collectAsState()
                     val refresh by vm.marketRefresh.collectAsState()
+                    val fhdAccess by vm.fhdAccess.collectAsState()
                     LaunchedEffect(modId) {
                         bearer = vm.bearerToken()
                         url = vm.modUrl(modId)
                     }
                     if (url.isNotBlank()) {
-                        ModWebViewScreen(url, bearer, access, refresh)
+                        ModWebViewScreen(url, bearer, access, refresh, fhdAccess)
                     }
                 }
                 composable(Routes.LONGTAIL) { LongTailScreen(vm) }
