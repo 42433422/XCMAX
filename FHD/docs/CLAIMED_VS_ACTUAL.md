@@ -18,14 +18,14 @@
 
 | ID | 声称 | 实际 | 差距 | 负责人 | 证据 |
 |----|------|------|------|--------|------|
-| SLO-API-01 | API 可用性 99.9%（目标）；基线 99.94% | **staging 未验证**；本地 compose 可复现（脚本 + JSON，无 7 天曲线） | 未测 | SRE | 本地：[`scripts/observability/local_stack_up.sh`](../scripts/observability/local_stack_up.sh) → [`evidence/slo/`](evidence/slo/)；staging：[`staging-runbook.md`](staging-runbook.md) · BLOCKERS T36–T37 |
-| SLO-API-02 | 登录 P95 &lt; 500ms；基线 312ms | **staging 未验证**；本地栈未宣称 P95 基线 | 未测 | SRE | 同上 + [`SLO_STAGING_TICKET.md`](SLO_STAGING_TICKET.md) |
-| SLO-API-03 | API 错误率 &lt; 0.1%；基线 0.06% | **staging 未验证** | 未测 | SRE | 同上 |
-| SLO-AI-01 | 聊天首包 P95 &lt; 1500ms；基线 1080ms | **staging 未验证** | 未测 | AI 平台 | [`evidence/README.md`](evidence/README.md) M0 表 · panel `xcagi-slo:3` |
-| SLO-BUS-01 | NeuroBus 投递 99.95%；基线 99.97% | **staging 未验证** | 未测 | 平台 | M0 · panel `xcagi-slo:7` |
+| SLO-API-01 | API 可用性 99.9%（目标）；基线 99.94% | Round-1 **无效**（[`acceptance-round1-invalid-20260612.yaml`](evidence/slo/acceptance-round1-invalid-20260612.yaml)）；Round-2 k6 **进行中** | 滞后 | SRE | [`STAGING_RUNBOOK.md`](../k8s/monitoring/STAGING_RUNBOOK.md) · [`capacity-planning.md`](reports/capacity-planning.md) §6 |
+| SLO-API-02 | 登录 P95 &lt; 500ms；基线 312ms | Round-2 指标已落盘代码；7d 读数待 round-2 满窗 | 未测 | SRE | `auth_login_duration_seconds` · round-2 gate |
+| SLO-API-03 | API 错误率 &lt; 0.1%；基线 0.06% | Round-1 探针为主；round-2 合同流量待满窗 | 未测 | SRE | 同上 |
+| SLO-AI-01 | 聊天首包 P95 &lt; 1500ms；基线 1080ms | `chat_stream_first_byte_seconds` 已 observe；round-2 待样本 | 未测 | AI 平台 | panel `xcagi-slo:3` |
+| SLO-BUS-01 | NeuroBus 投递 99.95%；基线 99.97% | staging NeuroBus **100%**（7d 窗口，与 k6 无关） | 一致 | 平台 | panel `xcagi-slo:7` |
 | SLO-TIER-C-01 | 集群持续 ≥1000 RPS × 10min | **未验证**（脚本与证据模板已就绪） | 未测 | SRE | [`scripts/loadtest/tier_c_sustained.js`](../scripts/loadtest/tier_c_sustained.js) · [`evidence/tier-c/`](evidence/tier-c/) |
 | SLO-TIER-C-04 | ≥200 路 AI 流式并发 × 15min | **未验证** | 未测 | AI 平台 | [`tier_c_chat_streams.js`](../scripts/loadtest/tier_c_chat_streams.js) · chat 流式信号量已接入 |
-| **可观测性栈** | M0：Grafana 四域 + staging 7 天 | **本地**：2026-06-05 `local_stack_up.sh --check-only` 通过；**本环境无 Docker**，未起栈、**未导出** M0 四 PNG（[`evidence/slo/`](evidence/slo/) 仍占位）。**staging**：7 天流量与正式基线 **未验证**（非伪造曲线） | 未测（staging）；本地仅路径/脚本 | SRE | [`evidence/README.md`](evidence/README.md) · [`scripts/observability/`](../scripts/observability/) · T36–T37 |
+| **可观测性栈** | M0：Grafana 五域 + staging 7 天 | **xcagi-slo.json** 五面板已扩展；`export_m0_panels.sh` 已补齐；round-2 满窗后 PNG + acceptance | 滞后 | SRE | [`export_m0_panels.sh`](../scripts/observability/export_m0_panels.sh) · T36–T37 |
 | e2e 关键链路 | 5 条 Playwright 在 CI 稳定通过 | **M0 已验证（2026-06-05）**：本地 `E2E_VITE_MOCK_API=1` + Vite :5001 → `npm run test:e2e:p0` **14/14 passed**（连续 2 次本地复现，约 36s）（`critical-paths` 5 链 + `plan2026-skeleton` 5 链 + `smoke` 4）；截图 [`evidence/e2e/01–05.png`](evidence/e2e/README.md)。CI：仓根 [`e2e.yml`](../../.github/workflows/e2e.yml) → [`e2e-playwright-reusable.yml`](../.github/workflows/e2e-playwright-reusable.yml)；`E2E_VITE_MOCK_API=1` 契约 mock + 可选 Postgres 全栈 | 一致 | 前端 + QA | [`frontend/e2e/README.md`](../frontend/e2e/README.md)、[`evidence/e2e/`](evidence/e2e/) |
 
 ---

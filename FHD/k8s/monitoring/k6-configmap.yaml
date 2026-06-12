@@ -26,23 +26,6 @@ data:
           duration: __ENV.K6_DURATION || '168h',
           preAllocatedVUs: 5,
           maxVUs: 20,
-          startTime: '0s',
-        },
-        tier_c_ramp: {
-          executor: 'ramping-arrival-rate',
-          startRate: 10,
-          timeUnit: '1m',
-          preAllocatedVUs: 20,
-          maxVUs: 200,
-          stages: [
-            { duration: '24h', target: 60 },
-            { duration: '24h', target: 120 },
-            { duration: '24h', target: 240 },
-            { duration: '24h', target: 480 },
-            { duration: '24h', target: 600 },
-            { duration: '24h', target: 600 },
-          ],
-          startTime: '1h',
         },
       },
       thresholds: {
@@ -52,18 +35,19 @@ data:
     };
 
     function csrfFrom(res) {
-      return (
-        res.cookies.csrf_token?.[0]?.value ||
-        res.cookies['csrf-token']?.[0]?.value ||
-        ''
-      );
+      const a = res.cookies.csrf_token;
+      const b = res.cookies['csrf-token'];
+      if (a && a[0] && a[0].value) return a[0].value;
+      if (b && b[0] && b[0].value) return b[0].value;
+      return '';
     }
 
     function jsonHeaders(csrf) {
-      return {
-        'Content-Type': 'application/json',
-        ...(csrf ? { 'X-CSRF-Token': csrf } : {}),
-      };
+      const h = { 'Content-Type': 'application/json' };
+      if (csrf) {
+        h['X-CSRF-Token'] = csrf;
+      }
+      return h;
     }
 
     export default function () {

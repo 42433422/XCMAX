@@ -173,6 +173,7 @@ data:
   XCAGI_GLOBAL_RATE_LIMIT: "1"
   XCAGI_GLOBAL_RATE_LIMIT_MAX: "300"
   XCAGI_GLOBAL_RATE_LIMIT_WINDOW: "60"
+  XCAGI_GUNICORN_WORKERS: "2"
 EOF
 /usr/local/bin/k3s kubectl apply -f "$DEPLOY_DIR/00-namespace.yaml"
 /usr/local/bin/k3s kubectl apply -f "$DEPLOY_DIR/01-redis.yaml"
@@ -189,7 +190,7 @@ metadata:
     app: xcagi
     version: v10.0.0
 spec:
-  replicas: 1
+  replicas: 2
   selector:
     matchLabels:
       app: xcagi

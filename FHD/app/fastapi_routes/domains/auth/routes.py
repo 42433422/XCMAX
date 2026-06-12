@@ -618,6 +618,11 @@ async def auth_register(request: Request, body: dict = Body(default_factory=dict
 
 @router.post("/api/auth/login")
 async def auth_login(request: Request, body: dict = Body(default_factory=dict)):
+    import time
+
+    from app.utils.metrics import auth_login_duration_seconds
+
+    login_start = time.perf_counter()
     from app.application.auth_app_service import get_auth_app_service
     from app.application.enterprise_login_flow import run_market_first_login
     from app.application.session_account_meta import normalize_account_kind
@@ -627,6 +632,9 @@ async def auth_login(request: Request, body: dict = Body(default_factory=dict)):
     username = (body.get("username") or "").strip()
     password = body.get("password", "")
     if not username or not password:
+        auth_login_duration_seconds.labels(auth_method="password").observe(
+            time.perf_counter() - login_start
+        )
         return JSONResponse(
             {
                 "success": False,
@@ -653,12 +661,24 @@ async def auth_login(request: Request, body: dict = Body(default_factory=dict)):
         login_market_fn=login_market_with_password,
     )
     if err:
+        auth_login_duration_seconds.labels(auth_method="password").observe(
+            time.perf_counter() - login_start
+        )
         return err
-    return _attach_session_cookie(JSONResponse(result or {}), (result or {}).get("session_id"))
+    resp = _attach_session_cookie(JSONResponse(result or {}), (result or {}).get("session_id"))
+    auth_login_duration_seconds.labels(auth_method="password").observe(
+        time.perf_counter() - login_start
+    )
+    return resp
 
 
 @router.post("/api/auth/login-with-phone-code")
 async def auth_login_with_phone_code(request: Request, body: dict = Body(default_factory=dict)):
+    import time
+
+    from app.utils.metrics import auth_login_duration_seconds
+
+    login_start = time.perf_counter()
     from app.application.auth_app_service import get_auth_app_service
     from app.application.enterprise_login_flow import run_market_first_login
     from app.application.session_account_meta import normalize_account_kind
@@ -668,6 +688,9 @@ async def auth_login_with_phone_code(request: Request, body: dict = Body(default
     phone = str(body.get("phone") or "").strip()
     code = str(body.get("code") or "").strip()
     if not phone or not code:
+        auth_login_duration_seconds.labels(auth_method="phone_code").observe(
+            time.perf_counter() - login_start
+        )
         return JSONResponse(
             {
                 "success": False,
@@ -696,8 +719,15 @@ async def auth_login_with_phone_code(request: Request, body: dict = Body(default
         login_market_fn=None,
     )
     if err:
+        auth_login_duration_seconds.labels(auth_method="phone_code").observe(
+            time.perf_counter() - login_start
+        )
         return err
-    return _attach_session_cookie(JSONResponse(result or {}), (result or {}).get("session_id"))
+    resp = _attach_session_cookie(JSONResponse(result or {}), (result or {}).get("session_id"))
+    auth_login_duration_seconds.labels(auth_method="phone_code").observe(
+        time.perf_counter() - login_start
+    )
+    return resp
 
 
 @router.get("/api/auth/oidc/status")
