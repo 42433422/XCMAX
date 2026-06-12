@@ -67,6 +67,11 @@ _CI_STABLE_NODEID_FRAGMENTS = (
     "test_application/test_shipment_app_service",
     "test_services/test_shipment_service",
     "test_infrastructure/test_shipment_document_generator",
+    "test_time_rail_app_service",
+    "test_production_line_event_api",
+    "test_business_mount",
+    "test_shipment_product_parser",
+    "test_mod_store_catalog_app",
     # benchmarks/ 需 DB/完整意图栈，见 intent-benchmark.yml，勿纳入 CI_STABLE_ONLY
 )
 

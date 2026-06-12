@@ -1,3 +1,5 @@
+@file:OptIn(androidx.camera.core.ExperimentalGetImage::class)
+
 package com.xiuci.xcagi.mobile.feature.scan
 
 import android.Manifest
@@ -9,6 +11,7 @@ import android.provider.MediaStore
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
+import androidx.camera.core.ExperimentalGetImage
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
@@ -95,7 +98,7 @@ import java.util.concurrent.Executors
 // 特性：取景框+四角边框+扫描线动画+蒙层+闪光灯+相册选图+震动反馈+手动输入弹窗
 // ─────────────────────────────────────────────────────────────────────────────
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalGetImage::class)
 @Composable
 fun ScanQrScreen(vm: AppViewModel, onBack: () -> Unit) {
         val ctx = LocalContext.current
@@ -246,6 +249,7 @@ fun ScanQrScreen(vm: AppViewModel, onBack: () -> Unit) {
                                                                                                                 .close()
                                                                                                         return@setAnalyzer
                                                                                                 }
+                                                                                                @Suppress("UnsafeOptInUsageError")
                                                                                                 val mediaImage =
                                                                                                         imageProxy
                                                                                                                 .image
@@ -677,8 +681,7 @@ private fun ScannerOverlay() {
 
         // 扫描线动画：上下循环移动
         val infiniteTransition = rememberInfiniteTransition(label = "scanLine")
-        val scanLineY by
-                infiniteTransition.animateFloat(
+        val scanLineY by infiniteTransition.animateFloat(
                         initialValue = 0f,
                         targetValue = 1f,
                         animationSpec =

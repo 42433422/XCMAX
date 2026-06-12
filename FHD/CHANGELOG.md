@@ -15,6 +15,18 @@
 - **tasks**：`inference` Celery 队列（OCR/intent）；`workflow_excel_paths` 拆分巨型 `workflow.py`
 - **registry**：`app_service_pair_registry` 增加 `resolve_http_getter` / `resolve_neuro_getter`
 
+### v10 交付前全量修复（2026-06-12 · v10 线内迭代）
+
+- **feat(android)**：AuthScreen 密码/手机号 OTP 双模式；NavHost 注册 `CONNECT`/`WORKBENCH`；发现/我的入口工作台
+- **test(android)**：`RoutesTest` + `NavRoutesInstrumentedTest`；gradle 单测/instrumented 依赖；lint 门禁启用
+- **docs(android)**：`VERSION.md` Android 签约级；`MOBILE_ANDROID.md` / `CLAIMED_VS_ACTUAL` 对齐
+- **test(backend)**：time_rail / production_line_event / business mount / shipment_parser / mod_store_catalog 单测；CI 稳定子集扩面
+- **test(frontend)**：修复 `plannerPagePaths` 租户隔离 mock；Vitest gate ≥50% 绿
+- **docs(v2)**：`*_v2` 24 模块为受控双入口 SSOT（非 tech debt）；allowlist guard 零漂移
+- **fix(except)**：`chat_stream_limit` / `agent_runner` / `inference_tasks` / 流式 bridge 缩窄为 `OPERATIONAL_ERRORS`
+- **deps**：生产 lock SSOT 为 `deploy/requirements-server-api.lock.txt`（见 `scripts/dev/check_requirements_lock.py`）
+- **release 制品核对（2026-06-12）**：Win Enterprise `XCAGI-Enterprise-Setup-10.0.0-x64.exe`（CDN）；macOS dmg 见 `config/download_release.json`；Docker `docker/Dockerfile.fhd-api`；Android `./gradlew assemble*Release` + CI `fhd-release-android.yml`
+
 ### 四阶段架构与可靠性闭环（2026-06-12 · v10 线内迭代）
 - **evidence**：Round-1 归档 `acceptance-round1-invalid-20260612.yaml`；Round-2 k6 已启动（ES5 兼容 `k6_7d_contract.js` · 镜像 `0.50.0`）
 - **obs**：`export_m0_panels.sh`、`check_round2_metrics_gate.sh`、`xcagi-slo.json` 五域面板、`staging_rollout_metrics.sh`
@@ -23,6 +35,9 @@
 - **adr**：`ADR-route-a-desktop-private.md`；`M0-remaining-gaps.md` 更新
 - **ci**：`capacity-staging-monthly.yml`、`legacy-usage-weekly.yml`
 - **fix(metrics)**：登录/手机验证码 `auth_login_duration_seconds`、流式 `chat_stream_first_byte_seconds`
+- **fix(admin-console)**：挂载 `im_routes`；时间轨 MODstore 不可达时 degraded 200 替代 503；全景 HTML 字体改 `fonts.googleapis.cn`；管理端跳过 IM 未读轮询
+- **fix(all-hands)**：MODstore 单员工汇报 300s 超时，避免 19/20 卡 95%；收集阶段进度封顶 88%；ServerFunctions 阶段文案与停滞提示
+- **fix(admin-console)**：本地 duty-graph health 不再把「未安装 employee_pack」误标为 catalog 缺岗，编制图谱恢复展示；`missing_local_employee_packs` 区分本机未落盘
 - **test**：`test_slo_metrics_histogram.py`
 
 ### 行业种子分层隔离 L2（2026-06-12 · v10 线内迭代）

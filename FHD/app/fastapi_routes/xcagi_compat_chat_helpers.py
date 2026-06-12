@@ -553,7 +553,7 @@ async def _xcagi_planner_stream_bytes_async(
             err_line = _sse_event_line({"type": "error", "message": err_msg})
             try:
                 asyncio.run_coroutine_threadsafe(async_q.put(err_line), loop).result(timeout=5)
-            except Exception:
+            except OPERATIONAL_ERRORS:
                 pass
         finally:
             asyncio.run_coroutine_threadsafe(async_q.put(_SENTINEL), loop).result(timeout=5)

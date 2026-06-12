@@ -9,6 +9,8 @@ import logging
 import os
 from typing import Any
 
+from app.utils.operational_errors import OPERATIONAL_ERRORS
+
 logger = logging.getLogger(__name__)
 
 
@@ -37,8 +39,8 @@ async def _chat_completion(messages: list[dict[str, Any]], max_tokens: int = 400
                 "model": model,
             }
         return await adapter.chat_completion(messages, max_tokens=max_tokens)
-    except Exception as exc:
-        logger.exception("employee agent LLM failed")
+    except OPERATIONAL_ERRORS as exc:
+        logger.exception("employee agent LLM failed: %s", exc)
         return {"error": str(exc)[:800]}
 
 

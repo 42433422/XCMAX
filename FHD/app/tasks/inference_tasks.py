@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 
 from app.extensions import celery_app
+from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +23,7 @@ def run_paddle_ocr_task(self, image_path: str):
         img = np.array(Image.open(Path(image_path)))
         blocks = predict_to_text_blocks(img)
         return {"success": True, "blocks": blocks}
-    except Exception as exc:
+    except OPERATIONAL_ERRORS as exc:
         logger.exception("inference OCR failed")
         raise self.retry(exc=exc, countdown=5)
 
