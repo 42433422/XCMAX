@@ -22,7 +22,7 @@ QUERIES = {
     ),
     "SLO-API-02": (
         "histogram_quantile(0.95, sum by (le) "
-        "(rate(login_request_duration_seconds_bucket[{w}]))) * 1000"
+        '(rate(api_request_duration_seconds_bucket{{endpoint="/api/auth/login"}}[{w}]))) * 1000'
     ),
     "SLO-API-03": (
         'sum(rate(api_requests_total{{status=~"5.."}}[{w}])) '

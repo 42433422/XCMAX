@@ -2,7 +2,9 @@
 
 ## 现状说明
 
-**正式压测数据（RPS、P95/P99 延迟、错误率、资源占用）需在目标环境实测后填入下表。** 不同机型、是否 GPU、LLM 供应商网络与配额均会显著影响结果；本仓库提供可复现的 **探针脚本** 与 **结果模板**，避免文档与数据混在多处版本不一致。
+**Cloud API staging 首版实测**见 [`reports/capacity-planning.md`](reports/capacity-planning.md) §6（2026-06-12）。桌面 SKU 与云 API **分表记录**（路线 A，见 [`architecture/ADR-route-a-desktop-private.md`](architecture/ADR-route-a-desktop-private.md)）。
+
+不同机型、是否 GPU、LLM 供应商网络与配额均会显著影响结果；本仓库提供可复现的 **探针脚本** 与 **结果模板**，避免文档与数据混在多处版本不一致。
 
 ## 结果记录模板（请把「待测」替换为实测值）
 

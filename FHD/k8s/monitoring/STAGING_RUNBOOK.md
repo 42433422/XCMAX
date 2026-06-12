@@ -6,6 +6,10 @@
 
 - 命名空间：`xcagi-staging`
 - 远程一键部署：仓根 [`deploy_k8s_staging.sh`](../../../deploy_k8s_staging.sh)（K3s + FHD API + 监控栈）
+- Staging 拓扑：**2 副本** `xcagi` + **Gunicorn**（`XCAGI_GUNICORN_WORKERS=2`）— 与生产 [`k8s/deployment.yaml`](../../deployment.yaml) 缩小对齐
+- Kustomize overlay（SSOT 方向）：[`k8s/overlays/staging/`](../../overlays/staging/)
+- 指标修复 rollout（不重启 k6）：`bash scripts/observability/staging_rollout_metrics.sh`
+- Round-1 无效证据：[`docs/evidence/slo/acceptance-round1-invalid-20260612.yaml`](../../docs/evidence/slo/acceptance-round1-invalid-20260612.yaml)
 - 阻塞项：[`specs/BLOCKERS.md`](../../../specs/BLOCKERS.md) T36–T37（7 天窗口截图）
 
 ## 1. k6 7 天合同流量
@@ -44,9 +48,19 @@ kubectl -n xcagi-staging get configmap k6-7day-contract -o jsonpath='{.data.k6_7
 kubectl -n xcagi-staging logs job/k6-7day -f
 ```
 
+### Round-2 启动（Round-1 自然结束后）
+
+```bash
+bash FHD/scripts/observability/launch_k6_round2_staging.sh --start
+# 48h 门禁：
+PROMETHEUS_URL=http://119.27.178.147:30090 bash FHD/scripts/observability/check_round2_metrics_gate.sh
+```
+
 ### 7 天收尾
 
 ```bash
+TIME_RANGE=now-7d GRAFANA_URL=http://127.0.0.1:30300 \
+  bash FHD/scripts/observability/export_m0_panels.sh --prefix staging --time-range now-7d
 bash FHD/scripts/observability/run_staging_7d_acceptance.sh --prefix staging
 # 或仓根 collect_7day_k8s.sh（停 k6 + 读 Prometheus + Grafana PNG）
 ```

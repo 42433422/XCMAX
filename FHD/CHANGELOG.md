@@ -15,10 +15,15 @@
 - **tasks**：`inference` Celery 队列（OCR/intent）；`workflow_excel_paths` 拆分巨型 `workflow.py`
 - **registry**：`app_service_pair_registry` 增加 `resolve_http_getter` / `resolve_neuro_getter`
 
-### SLO round-2 staging 准备（2026-06-12 · v10 线内迭代）
-- **fix(obs)**：k6 脚本兼容 `BASE_URL` / `XCAGI_BASE_URL`（修复 round-1 Job 误打 `127.0.0.1:5000`）
-- **fix(metrics)**：登录 `auth_login_duration_seconds`、流式聊天 `chat_stream_first_byte_seconds` 落盘
-- **docs**：`SLO.md` 登录 P95 PromQL 对齐 `api_request_duration_seconds{endpoint="/api/auth/login"}`
+### 四阶段架构与可靠性闭环（2026-06-12 · v10 线内迭代）
+- **evidence**：Round-1 归档 `acceptance-round1-invalid-20260612.yaml`；Round-2 k6 已启动（ES5 兼容 `k6_7d_contract.js` · 镜像 `0.50.0`）
+- **obs**：`export_m0_panels.sh`、`check_round2_metrics_gate.sh`、`xcagi-slo.json` 五域面板、`staging_rollout_metrics.sh`
+- **capacity**：`capacity-planning.md` §6 staging k6 + probe 实测
+- **deploy**：`Dockerfile.fhd-api` Gunicorn；`deploy_k8s_staging.sh` 2 副本；`k8s/overlays/staging/`
+- **adr**：`ADR-route-a-desktop-private.md`；`M0-remaining-gaps.md` 更新
+- **ci**：`capacity-staging-monthly.yml`、`legacy-usage-weekly.yml`
+- **fix(metrics)**：登录/手机验证码 `auth_login_duration_seconds`、流式 `chat_stream_first_byte_seconds`
+- **test**：`test_slo_metrics_histogram.py`
 
 ### 行业种子分层隔离 L2（2026-06-12 · v10 线内迭代）
 - **feat(backend)**：`industry_seed.py` + `POST /api/mod-store/install-industry-seed`（池内 copy → Catalog 兜底；换行业卸载其它 open 中性 Mod）
