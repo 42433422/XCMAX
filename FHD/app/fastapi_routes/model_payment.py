@@ -20,6 +20,7 @@ from app.infrastructure.payment.payment_sot import (
     model_payment_backend,
     modstore_payment_hint,
 )
+from app.infrastructure.billing.saas_plans import list_saas_plans, plan_by_id
 from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -65,11 +66,12 @@ def _integration_flags() -> dict[str, bool]:
     }
 
 
+def _all_plans() -> list[dict[str, Any]]:
+    return list(_DEMO_PLANS) + list_saas_plans()
+
+
 def _plan_by_id(plan_id: str) -> dict[str, Any] | None:
-    for p in _DEMO_PLANS:
-        if p["id"] == plan_id:
-            return p
-    return None
+    return plan_by_id(plan_id, extra_plans=_DEMO_PLANS)
 
 
 @router.get("/plans")
@@ -78,7 +80,7 @@ def get_plans():
         {
             "success": True,
             "data": {
-                "plans": list(_DEMO_PLANS),
+                "plans": _all_plans(),
                 "integration": _integration_flags(),
             },
         }
@@ -103,6 +105,7 @@ def wechat_redirect(plan_id: str, market_user_id: int = 0):
 
 @router.post("/checkout")
 def checkout(
+    request: Request,
     body: dict[str, Any] = Body(default_factory=dict),
     user_agent: str | None = Header(default=None),
 ):
@@ -228,11 +231,20 @@ def checkout(
         pay_res.get("type"),
     )
     try:
+        from app.infrastructure.auth.dependencies import resolve_session_user
+
+        checkout_user = resolve_session_user(request)
+        local_user_id = int(checkout_user.id) if checkout_user is not None else None
+    except (TypeError, ValueError, AttributeError):
+        local_user_id = None
+
+    try:
         mp_orders.record_checkout_pending(
             out_trade_no=order_id,
             plan_id=plan_id,
             amount_cents=int(plan["amount_cents"]),
             amount_yuan=amount_yuan,
+            local_user_id=local_user_id,
         )
     except OSError as e:
         logger.exception("[model-payment] 写入本地订单失败（notify 将无法幂等关联）: %s", e)

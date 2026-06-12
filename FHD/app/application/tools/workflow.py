@@ -511,6 +511,19 @@ def _base_registry() -> list[dict[str, Any]]:
     ]
 
 
+def invalidate_workflow_tool_registry() -> None:
+    """装包/卸载 employee_pack 后使进程内工具注册表缓存失效。"""
+    global _WORKFLOW_REG_VER, _workflow_tool_registry_cache
+    _WORKFLOW_REG_VER += 1
+    _workflow_tool_registry_cache = None
+    try:
+        from app.mod_sdk.employee_tool_registry import invalidate_employee_tool_cache
+
+        invalidate_employee_tool_cache()
+    except OPERATIONAL_ERRORS:
+        logger.debug("employee tool cache invalidate skipped", exc_info=True)
+
+
 def get_workflow_tool_registry() -> list[dict[str, Any]]:
     global \
         _workflow_tool_registry_cache, \
@@ -524,6 +537,14 @@ def get_workflow_tool_registry() -> list[dict[str, Any]]:
     ):
         return _workflow_tool_registry_cache
     reg = _base_registry()
+    try:
+        from app.mod_sdk.employee_tool_registry import build_employee_pack_tool_definitions
+
+        emp_tools = build_employee_pack_tool_definitions()
+        if emp_tools:
+            reg = reg + emp_tools
+    except OPERATIONAL_ERRORS:
+        logger.debug("employee pack tools merge skipped", exc_info=True)
     if bulk_on:
         reg.append(
             {
@@ -562,6 +583,13 @@ def execute_workflow_tool(
         except OPERATIONAL_ERRORS:
             args = {}
     try:
+        from app.mod_sdk.employee_tool_registry import execute_employee_tool, is_employee_tool
+
+        if is_employee_tool(name):
+            return execute_employee_tool(name, args, workspace_root)
+    except OPERATIONAL_ERRORS:
+        logger.debug("employee tool dispatch skipped", exc_info=True)
+    try:
         from app.mod_sdk.planner_native_tools import try_execute_native_planner_tool
 
         native_raw, _mod = try_execute_native_planner_tool(
@@ -571,6 +599,16 @@ def execute_workflow_tool(
             return native_raw
     except OPERATIONAL_ERRORS:
         logger.debug("planner native tool dispatch skipped", exc_info=True)
+    try:
+        from app.application.employee_pack_runner import try_execute_employee_planner_tool
+
+        emp_raw = try_execute_employee_planner_tool(
+            name, args, workspace_root, db_write_token=db_write_token
+        )
+        if emp_raw is not None:
+            return emp_raw
+    except OPERATIONAL_ERRORS:
+        logger.debug("legacy employee planner tool dispatch skipped", exc_info=True)
     if name == "excel_analysis":
         return json.dumps(
             handle_excel_analysis(args, workspace_root=workspace_root), ensure_ascii=False

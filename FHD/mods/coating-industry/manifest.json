@@ -20,7 +20,7 @@
   },
   "onboarding": {
     "custom_line_hint": "涂料配方、批次与客户服务；完整能力由定制 Mod 交付",
-    "custom_mod_ids": []
+    "custom_mod_ids": ["sz-qsm-pro"]
   },
   "hooks": {},
   "industry": {

@@ -76,4 +76,4 @@ def _demo_payment_enabled() -> bool:
 
 def is_saas_plan_id(plan_id: str) -> bool:
     pid = (plan_id or "").strip()
-    return any(p.get("id") == pid for p in list_saas_plans(include_demo=False))
+    return any(p.get("id") == pid for p in list_saas_plans())

@@ -11,6 +11,7 @@
         expanded: isExpanded,
       }"
       :data-view="item.key"
+      :data-tour="`sidebar-${item.key}`"
       :aria-label="item.name"
       :aria-current="isActive && !hasActiveChild ? 'page' : undefined"
       :aria-expanded="hasChildren ? isExpanded : undefined"
@@ -43,6 +44,7 @@
               type="button"
               :class="{ active: activeView === child.key }"
               :data-view="child.key"
+              :data-tour="`sidebar-${child.key}`"
               :aria-label="child.name"
               :aria-current="activeView === child.key ? 'page' : undefined"
               :title="child.name"

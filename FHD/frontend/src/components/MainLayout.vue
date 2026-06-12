@@ -85,7 +85,9 @@
       <slot></slot>
     </div>
     <FloatingChatAssistant :visible="shouldShowFloatingChatAssistant" />
-    <TutorialOverlay />
+    <VirtualCursor />
+    <OnboardingTutorial />
+    <TutorialOverlay v-if="!onboardingTutorialStore.active" />
     <MobileBottomNav v-if="mobileBottomNavVisible" />
   </div>
 </template>
@@ -116,7 +118,10 @@ import PaneResizeHandle from './PaneResizeHandle.vue'
 import Sidebar from './Sidebar.vue'
 import TopAssistantFloat from './TopAssistantFloat.vue'
 import TutorialOverlay from './TutorialOverlay.vue'
+import VirtualCursor from './VirtualCursor.vue'
+import OnboardingTutorial from './OnboardingTutorial.vue'
 import MobileBottomNav from './MobileBottomNav.vue'
+import { useOnboardingTutorialStore } from '@/stores/onboardingTutorial'
 import { setTutorialBuildContextFactory } from '@/stores/tutorial'
 import { useTutorialCatalog } from '@/composables/useTutorialCatalog'
 
@@ -131,6 +136,7 @@ const emit = defineEmits(['toggle-pro-mode'])
 
 const route = useRoute()
 const router = useRouter()
+const onboardingTutorialStore = useOnboardingTutorialStore()
 const industryStore = useIndustryStore()
 const modsStore = useModsStore()
 const accountProfileStore = useAccountProfileStore()

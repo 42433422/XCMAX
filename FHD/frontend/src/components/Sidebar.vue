@@ -19,6 +19,7 @@
     <nav
       ref="sidebarMenuRef"
       class="sidebar-menu"
+      data-tour="sidebar-menu"
       :class="{ 'reorder-enabled': sidebarLayoutStore.reorderEnabled, 'is-dragging': draggingKey }"
       aria-label="主导航"
     >
@@ -66,6 +67,7 @@
           active: activeView === settingsMenuItem.key,
         }"
         :data-view="settingsMenuItem.key"
+        :data-tour="`sidebar-${settingsMenuItem.key}`"
         :aria-label="settingsMenuItem.name"
         :aria-current="activeView === settingsMenuItem.key ? 'page' : undefined"
         :title="settingsMenuItem.name"

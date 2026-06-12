@@ -59,11 +59,11 @@ async def platform_shell_deliverable_status():
 
 
 @router.get("/industry-baseline")
-async def platform_shell_industry_baseline(industry_id: str = "通用"):
-    """按行业返回建议补装的基础 Mod 清单（对话底座 + 行业基础线 + 定制线 + 可选）。"""
-    from app.mod_sdk.industry_baseline import build_industry_baseline_plan
+async def platform_shell_industry_baseline(request: Request, industry_id: str = "通用"):
+    """按行业返回建议补装的基础 Mod 清单（对话底座 + 行业基础线 + 行业包 + 账号定制）。"""
+    from app.mod_sdk.industry_baseline import build_industry_baseline_plan_for_request
 
-    return {"success": True, "data": build_industry_baseline_plan(industry_id)}
+    return {"success": True, "data": await build_industry_baseline_plan_for_request(request, industry_id)}
 
 
 @router.get("/onboarding-industries")
@@ -72,3 +72,19 @@ async def platform_shell_onboarding_industries(request: Request):
     from app.mod_sdk.industry_baseline import build_onboarding_industry_catalog_for_request
 
     return {"success": True, "data": await build_onboarding_industry_catalog_for_request(request)}
+
+
+@router.get("/employee-planner-status")
+async def platform_shell_employee_planner_status():
+    """办公 employee_pack 安装态 vs Planner 工具注册表（教程验收 / 设置诊断）。"""
+    from app.mod_sdk.employee_tool_registry import build_employee_tools_status
+
+    return {"success": True, "data": build_employee_tools_status()}
+
+
+@router.get("/employee-tools")
+async def platform_shell_employee_tools():
+    """已加载 employee_pack 工具摘要 + runtime 缺失警告。"""
+    from app.mod_sdk.employee_tool_registry import build_employee_tools_status
+
+    return {"success": True, "data": build_employee_tools_status()}

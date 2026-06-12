@@ -56,6 +56,12 @@ def schedule_background_mod_load(app: Any) -> None:
             load_mod_routes(app, mm)
             app.state.mods_routes_loaded = True
             app.state.mods_full_load_done = True
+            try:
+                from app.mod_sdk.employee_runtime import warm_employee_tool_registry
+
+                warm_employee_tool_registry()
+            except OPERATIONAL_ERRORS:
+                logger.debug("employee tool warm scan skipped", exc_info=True)
             mark_startup("mod_background_done")
             logger.info(
                 "[mod_startup] background load_all_mods done (%s ids)",
@@ -97,6 +103,12 @@ def bootstrap_mod_extensions_sync(app: Any) -> None:
     bundled = _load_bundled_host_mods(mm)
     load_mod_routes(app, mm)
     app.state.mods_routes_loaded = True
+    try:
+        from app.mod_sdk.employee_runtime import warm_employee_tool_registry
+
+        warm_employee_tool_registry()
+    except OPERATIONAL_ERRORS:
+        logger.debug("employee tool warm scan skipped", exc_info=True)
     try:
         from app.fastapi_app.startup_timing import mark_startup
 

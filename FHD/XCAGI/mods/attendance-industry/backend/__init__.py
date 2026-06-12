@@ -1,1 +1,1 @@
-"""Mod taiyangniao-pro backend package."""
+"""Mod attendance-industry backend package."""

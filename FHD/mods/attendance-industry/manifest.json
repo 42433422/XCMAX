@@ -3,7 +3,7 @@
   "name": "考勤行业包",
   "version": "1.0.0",
   "author": "XCAGI",
-  "description": "考勤行业通用包：排班、出勤统计与表格转换；客户品牌见 customer_delivery.json。",
+  "description": "考勤行业通用包：排班、出勤统计与行业 AI 员工；考勤表转换见账号定制 Mod。",
   "primary": true,
   "legacy_mod_ids": ["taiyangniao-pro"],
   "dependencies": {
@@ -16,14 +16,7 @@
   "frontend": {
     "routes": "frontend/routes",
     "pro_entry_path": "/attendance-industry",
-    "menu": [
-      {
-        "id": "attendance-industry-home",
-        "label": "考勤表转换",
-        "icon": "fa-file-excel-o",
-        "path": "/attendance-industry"
-      }
-    ],
+    "menu": [],
     "menu_overrides": [
       {
         "key": "products",
@@ -37,7 +30,7 @@
   },
   "onboarding": {
     "custom_line_hint": "考勤转换、排班菜单与行业 AI 员工",
-    "custom_mod_ids": []
+    "custom_mod_ids": ["taiyangniao-pro"]
   },
   "hooks": {},
   "industry": {

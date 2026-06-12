@@ -153,6 +153,14 @@ class EmployeeRegistry:
                         True,
                         f"宿主基础能力员工包已安装，bridge {result.get('installed_count')}/{result.get('expected_count')} 就绪",
                     )
+                try:
+                    from app.mod_sdk.employee_runtime import refresh_employee_pack_runtime
+
+                    refresh_employee_pack_runtime(pack_id)
+                except OPERATIONAL_ERRORS:
+                    logger.warning(
+                        "employee pack installed but runtime refresh failed: %s", pack_id, exc_info=True
+                    )
                 return True, f"员工包 {pack_id} 安装成功"
         except ModSignatureError as e:
             return False, f"签名验证失败：{e}"
@@ -171,6 +179,12 @@ class EmployeeRegistry:
             return False, f"员工包未安装：{pack_id}"
         if remove_files:
             shutil.rmtree(dest, ignore_errors=True)
+        try:
+            from app.mod_sdk.employee_runtime import refresh_employee_pack_runtime
+
+            refresh_employee_pack_runtime()
+        except OPERATIONAL_ERRORS:
+            logger.warning("employee pack uninstalled but runtime refresh failed", exc_info=True)
         return True, f"员工包 {pack_id} 已卸载"
 
 

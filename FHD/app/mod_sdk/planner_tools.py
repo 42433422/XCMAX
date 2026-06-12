@@ -203,6 +203,21 @@ def execute_planner_workflow_tool(
         logger.debug("planner tool native mod=%s tool=%s", native_mod, name)
         return native_raw
 
+    try:
+        from app.application.employee_pack_runner import try_execute_employee_planner_tool
+
+        emp_raw = try_execute_employee_planner_tool(
+            name,
+            args,
+            workspace_root,
+            db_write_token=db_write_token,
+        )
+        if emp_raw is not None:
+            logger.debug("planner tool employee pack tool=%s", name)
+            return emp_raw
+    except OPERATIONAL_ERRORS:
+        logger.debug("employee planner tool dispatch skipped", exc_info=True)
+
     from app.application.tools.workflow import execute_workflow_tool
 
     raw = execute_workflow_tool(
@@ -290,12 +305,20 @@ def list_planner_tools_registry_detail() -> dict[str, Any]:
     from app.mod_sdk.planner_native_tools import list_native_planner_tools_summary
 
     native_summary = list_native_planner_tools_summary()
+    try:
+        from app.mod_sdk.employee_tool_registry import build_employee_tools_status
+
+        employee_status = build_employee_tools_status()
+    except OPERATIONAL_ERRORS:
+        employee_status = {}
     return {
         "success": True,
         "tool_count": len(names),
         "tool_names": names,
         "mod_extension_count": len(ext_names),
         "mod_extension_names": ext_names,
+        "employee_planner": employee_status,
+        "employee_pack_tools": employee_status.get("employee_pack_tools") or [],
         "execution_via_mod_facade": via_mod,
         "native_planner_tools": native_summary,
         "execution_path": (

@@ -283,6 +283,65 @@ def _open_registration_allowed(sku: str) -> bool:
     return sku != "enterprise"
 
 
+def _enrich_register_with_tenant(
+    *,
+    result: dict[str, Any],
+    username: str,
+    session_id: str | None,
+    sku: str,
+    company_brand: str = "",
+) -> dict[str, Any]:
+    """注册成功后创建试用租户并写入会话元数据（与登录流 bind_tenant_for_login 对齐）。"""
+    user_id = (result.get("user") or {}).get("id")
+    if user_id is None:
+        return result
+    try:
+        from app.application.enterprise_login_flow import bind_tenant_for_login
+        from app.application.session_account_meta import persist_session_account_meta
+
+        tenant_info = bind_tenant_for_login(
+            user_id=int(user_id),
+            company_brand=company_brand or username,
+            username=username,
+        )
+        if tenant_info.get("tenant_id") is not None:
+            result["tenant_id"] = tenant_info["tenant_id"]
+        if tenant_info.get("tenant_name"):
+            result["tenant_name"] = tenant_info["tenant_name"]
+        if session_id:
+            account_kind = "enterprise" if sku == "enterprise" else "personal"
+            persist_session_account_meta(
+                str(session_id),
+                account_kind=account_kind,
+                company_brand=company_brand or "",
+                tenant_id=(
+                    int(tenant_info["tenant_id"]) if tenant_info.get("tenant_id") else None
+                ),
+            )
+            result.setdefault("account_kind", account_kind)
+    except OPERATIONAL_ERRORS:
+        logger.exception("register tenant provision failed for user_id=%s", user_id)
+    return result
+
+
+@router.get("/api/auth/subscription/status")
+def auth_subscription_status(request: Request):
+    """当前登录用户的试用/付费订阅状态（SaasPricingView 与订阅门禁共用）。"""
+    user = resolve_session_user(request)
+    if not user:
+        return JSONResponse(
+            {
+                "success": False,
+                "error": {"code": "UNAUTHORIZED", "message": "请先登录"},
+            },
+            status_code=200,
+        )
+    from app.application.tenant_subscription_app_service import subscription_status_for_user
+
+    status = subscription_status_for_user(int(user.id))
+    return {"success": True, "data": status}
+
+
 def _attach_session_cookie(response: JSONResponse, session_id: str | None) -> JSONResponse:
     sid = (session_id or "").strip()
     if not sid:
@@ -484,6 +543,13 @@ async def auth_register(request: Request, body: dict = Body(default_factory=dict
             result["market_access_token"] = mtok
             if mrefresh:
                 result["market_refresh_token"] = mrefresh
+        result = _enrich_register_with_tenant(
+            result=result,
+            username=username,
+            session_id=str(session_id) if session_id else None,
+            sku=sku,
+            company_brand=email_market or email,
+        )
     else:
         if not _open_registration_allowed(sku):
             return JSONResponse(
@@ -537,6 +603,14 @@ async def auth_register(request: Request, body: dict = Body(default_factory=dict
                         result["market_refresh_token"] = mrefresh
         except OPERATIONAL_ERRORS:
             logger.exception("optional market sync after local register failed")
+
+        result = _enrich_register_with_tenant(
+            result=result,
+            username=username,
+            session_id=str(session_id) if session_id else None,
+            sku=sku,
+            company_brand=email or username,
+        )
 
     payload = {"success": True, **result}
     return _attach_session_cookie(JSONResponse(payload), result.get("session_id"))

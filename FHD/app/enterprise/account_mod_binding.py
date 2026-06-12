@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from app.mod_sdk.platform_shell import PROTECTED_CLIENT_MOD_IDS
 
-# 太阳鸟演示账号（见 alembic seed SUNBIRD）；中性行业 mod id，legacy: taiyangniao-pro
+# 太阳鸟演示账号（见 alembic seed SUNBIRD）；行业包 + 账号定制 Mod
 SUNBIRD_LOCAL_USERNAMES: frozenset[str] = frozenset({"SUNBIRD", "sunbird"})
-SUNBIRD_CLIENT_MOD_ID = "attendance-industry"
+SUNBIRD_CLIENT_MOD_ID = "taiyangniao-pro"
+SUNBIRD_INDUSTRY_MOD_ID = "attendance-industry"
 
 
 def is_sunbird_local_username(username: str) -> bool:
@@ -21,6 +22,6 @@ def augment_entitled_client_mod_ids_for_username(
     """在已有权益集上合并账号级默认客户 Mod。"""
     out = set(current or ())
     if is_sunbird_local_username(username):
-        if SUNBIRD_CLIENT_MOD_ID in PROTECTED_CLIENT_MOD_IDS:
-            out.add(SUNBIRD_CLIENT_MOD_ID)
+        out.add(SUNBIRD_CLIENT_MOD_ID)
+        out.add(SUNBIRD_INDUSTRY_MOD_ID)
     return out

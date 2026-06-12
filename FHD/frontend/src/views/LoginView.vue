@@ -20,6 +20,7 @@ import {
 import { ADMIN_OPERATOR_HOME_ROUTE } from '@/constants/adminOperatorNav';
 import type { AccountKind } from '@/api/auth';
 import { loadLoginPreferences, saveLoginPreferences } from '@/utils/loginPreferences';
+import { clearHostPackSkippedSession } from '@/utils/hostPackOnboardingGate';
 import OtpCells from '@/components/OtpCells.vue';
 
 const route = useRoute();
@@ -177,6 +178,7 @@ function stopQrPoll() {
 }
 
 async function completeLoginSuccess(raw: Record<string, unknown>) {
+  clearHostPackSkippedSession();
   await applyMarketTokensAfterFhdLogin(raw);
   accountProfileStore.applyFromLoginPayload(raw);
   const loginUser =

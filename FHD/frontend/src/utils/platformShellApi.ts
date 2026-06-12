@@ -1,6 +1,7 @@
 import { apiFetch, DEFAULT_MOD_API_TIMEOUT_MS } from '@/utils/apiBase'
 import type {
   DeliverableStatus,
+  EmployeePlannerStatus,
   IndustryBaselinePlan,
   OnboardingIndustryCatalog,
   PlatformShellCapabilities,
@@ -50,6 +51,9 @@ export function clearDeliverableStatusCache(): void {
   cached = null
   baselineCache.clear()
   onboardingCatalogCached = null
+  void import('@/utils/hostPackOnboardingGate')
+    .then(({ invalidateHostPackCompletionCache }) => invalidateHostPackCompletionCache())
+    .catch(() => {})
 }
 
 export async function fetchOnboardingIndustryCatalog(
@@ -83,4 +87,15 @@ export async function fetchIndustryBaseline(
   const data = (body?.data || body) as IndustryBaselinePlan
   baselineCache.set(key, data)
   return data
+}
+
+export async function fetchEmployeePlannerStatus(
+  _force = false,
+): Promise<EmployeePlannerStatus> {
+  const r = await apiFetch('/api/platform-shell/employee-planner-status', {
+    timeoutMs: DEFAULT_MOD_API_TIMEOUT_MS,
+  })
+  if (!r.ok) throw new Error(`employee-planner-status HTTP ${r.status}`)
+  const body = await r.json()
+  return (body?.data || body) as EmployeePlannerStatus
 }
