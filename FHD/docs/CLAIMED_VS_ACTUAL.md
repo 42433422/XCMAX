@@ -50,7 +50,7 @@
 | CI 窄包门禁（`pyproject.toml` include/omit） | M3 目标 70% | **70%**（`fail_under` + `ci-cd.yml` `--cov-fail-under=70`） | 一致 | QA | [`docs/reports/COVERAGE_RAMP.md`](reports/COVERAGE_RAMP.md) |
 | 工作区体积（`du -sh .`） | ≤ 8 GB（[`plan-2026-06.md`](../../specs/plan-2026-06.md) M0） | **8.6 GB**（2026-06-05 外置后 `du -sh` 仓根；FHD 含 `.git` ~7.5 GB；**未删 `.git` 历史**） | 接近目标（+0.6 GB） | 发布工程 | 迁出前 **20 GB**；外置 `~/XCMAX-archives/m0-fhd-bulk-20260605/`（models 2.7G、installer 1.8G、XcagiInstaller 1.9G 等）；工作区 `ARCHIVE_POINTER.md` + 子目录 `ARCHIVE_POINTER.md` |
 | 仓根/FHD 散落脚本 | 无 `fix_*`/`check_*`/`probe_*` 于仓根或 `scripts/` 根 | **已收敛（2026-06-05）**：`maxdepth 2` 无散落；一次性脚本在 [`scripts/_archived/`](../scripts/_archived/)、探针在 [`scripts/dev/diagnostics/`](../scripts/dev/diagnostics/)、CI 在 [`scripts/ci/`](../scripts/ci/) | 一致 | 发布工程 | [`scripts/README.md`](../scripts/README.md) |
-| Android 原生 | 根 README / 部分材料曾写「签约级」 | Kotlin Compose **实验骨架**（可构建 · 双 SKU）；**非**签约级移动产品 | 一致（2026-06-10 对齐） | 移动端 | [`VERSION.md`](../VERSION.md) · [`mobile-android/README.md`](../mobile-android/README.md) |
+| Android 原生 | 根 README / 部分材料曾写「签约级」 | Kotlin Compose **签约级**（双 SKU · 密码/OTP/扫码登录 · SSE 对话 · 4 Tab · 工作台 WebView）；商店推送/签名需运维配置 | 一致（2026-06-12 对齐） | 移动端 | [`VERSION.md`](../VERSION.md) · [`mobile-android/README.md`](../mobile-android/README.md) |
 
 ---
 

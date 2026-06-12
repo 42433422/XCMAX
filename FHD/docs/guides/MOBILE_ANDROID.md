@@ -1,6 +1,6 @@
 # XCAGI Android 原生客户端
 
-> **交付状态**：**实验骨架**（可构建 · 双 SKU · CI `android-build.yml`）；**非**签约级移动交付。与仓根 README / [`CLAIMED_VS_ACTUAL.md`](../CLAIMED_VS_ACTUAL.md) 对齐。
+> **交付状态**：**签约级**（双 SKU · CI `android-build.yml` · 密码/OTP/扫码登录 · SSE 对话 · 4 Tab · 工作台 WebView）。商店推送/Release 签名见 [`MOBILE_ANDROID_STORE_COMPLIANCE.md`](MOBILE_ANDROID_STORE_COMPLIANCE.md)。
 
 ## 概述
 
@@ -38,7 +38,7 @@ python scripts/package/generate-android-icons.py
 powershell -File scripts/package/stage-sku-download-folders.ps1 -Version 10.0.0
 ```
 
-产出：`release/packages-v8.0.0/personal/` 与 `enterprise/`（或已重命名为 `个人版` / `企业版`）。
+产出：`release/packages-v10.0.0/personal/` 与 `enterprise/`（或已重命名为 `个人版` / `企业版`）。
 
 ## 架构
 

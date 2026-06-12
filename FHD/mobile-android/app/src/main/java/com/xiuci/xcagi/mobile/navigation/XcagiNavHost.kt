@@ -80,6 +80,7 @@ import com.xiuci.xcagi.mobile.core.work.LanProbeWorker
 import com.xiuci.xcagi.mobile.feature.legal.LegalConsentScreen
 import com.xiuci.xcagi.mobile.feature.modhost.ModWebViewScreen
 import com.xiuci.xcagi.mobile.feature.settings.SettingsScreen
+import com.xiuci.xcagi.mobile.feature.workbench.WorkbenchWebViewScreen
 import com.xiuci.xcagi.mobile.ui.AppViewModel
 import com.xiuci.xcagi.mobile.ui.components.mobile.ComplianceFooter
 import com.xiuci.xcagi.mobile.ui.components.mobile.MobileTokens
@@ -281,6 +282,24 @@ fun XcagiNavHost(vm: AppViewModel, pendingDeepLink: String? = null) {
                             onAbout = { nav.navigate(Routes.ABOUT) },
                     )
                 }
+                composable(Routes.CONNECT) {
+                    ConnectScreen(
+                            vm,
+                            fromProfile = false,
+                            onNext = {
+                                nav.navigate(Routes.AUTH) {
+                                    popUpTo(Routes.CONNECT) { inclusive = true }
+                                }
+                            },
+                            onScan = { nav.navigate(Routes.SCAN_QR) },
+                            onSkipCloud = {
+                                nav.navigate(Routes.AUTH) {
+                                    popUpTo(Routes.CONNECT) { inclusive = true }
+                                }
+                            },
+                            onBack = null,
+                    )
+                }
                 composable(Routes.CONNECT_PC) {
                     ConnectScreen(
                             vm,
@@ -322,6 +341,7 @@ fun XcagiNavHost(vm: AppViewModel, pendingDeepLink: String? = null) {
                     ProfileScreen(
                             vm,
                             onConnectPc = { nav.navigate(Routes.CONNECT_PC) },
+                            onWorkbench = { nav.navigate(Routes.WORKBENCH) },
                             onAbout = { nav.navigate(Routes.ABOUT) },
                             onSettings = { nav.navigate(Routes.SETTINGS) },
                             onLogout = {
@@ -369,6 +389,7 @@ fun XcagiNavHost(vm: AppViewModel, pendingDeepLink: String? = null) {
                     DiscoverScreen(
                             onScan = { nav.navigate(Routes.SCAN_QR) },
                             onOcr = { nav.navigate(Routes.OCR) },
+                            onWorkbench = { nav.navigate(Routes.WORKBENCH) },
                     )
                 }
                 composable(
@@ -389,6 +410,18 @@ fun XcagiNavHost(vm: AppViewModel, pendingDeepLink: String? = null) {
                             },
                             onOpenOcr = { nav.navigate(Routes.OCR) },
                             onNavigateToEmployees = { nav.navigate(Routes.AI_EMPLOYEES) },
+                    )
+                }
+                composable(Routes.WORKBENCH) {
+                    val access by vm.marketAccess.collectAsState()
+                    val refresh by vm.marketRefresh.collectAsState()
+                    val fhdAccess by vm.fhdAccess.collectAsState()
+                    WorkbenchWebViewScreen(
+                            url = vm.workbenchUrl(),
+                            accessToken = access,
+                            refreshToken = refresh,
+                            fhdAccessToken = fhdAccess,
+                            onReloadTokens = { vm.refreshMarketTokens() },
                     )
                 }
                 composable(Routes.AI_EMPLOYEES) {
