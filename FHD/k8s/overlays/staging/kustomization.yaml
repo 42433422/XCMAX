@@ -1,0 +1,24 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../deployment.yaml
+
+namespace: xcagi-staging
+
+namePrefix: ""
+nameSuffix: ""
+
+labels:
+  - pairs:
+      environment: staging
+    includeSelectors: false
+
+patches:
+  - path: replicas-patch.yaml
+  - path: config-patch.yaml
+
+images:
+  - name: __DEPLOY_BACKEND_IMAGE__
+    newName: xcagi-fhd-api
+    newTag: staging

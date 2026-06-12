@@ -41,6 +41,8 @@ v2 模块现为 **应用层 SSOT**（见 [`CLAIMED_VS_ACTUAL.md`](CLAIMED_VS_ACT
 
 T12 结论：registry 判定 V1/V2 **非 drop-in**，本轮不做全局 alias 桥接。逐域迁移见 [`reports/COMPAT_LAYER_INVENTORY.md`](reports/COMPAT_LAYER_INVENTORY.md)。
 
+**Wave 4 辅助**：[`app_service_pair_registry.py`](../app/application/app_service_pair_registry.py) 新增 `resolve_http_getter` / `resolve_neuro_getter` — HTTP 仍 V1、Neuro 仍 V2，待内联合并后改 `http_layer`。
+
 ---
 
 ## 4. 收敛顺序（建议）

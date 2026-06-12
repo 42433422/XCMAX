@@ -5,11 +5,18 @@ Phase 3B 从 ``app.legacy.product_db_read`` 吸收。
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
 from sqlalchemy import inspect, text
 
-from app.infrastructure.db.sync_engine import get_sync_engine
+from app.infrastructure.db.sync_engine import get_read_sync_engine, get_sync_engine
+
+
+def _read_engine():
+    if (os.environ.get("DATABASE_READ_URL") or "").strip():
+        return get_read_sync_engine()
+    return get_sync_engine()
 
 
 def find_matching_customer_unified(customer_name: str) -> str | None:
@@ -20,7 +27,7 @@ def find_matching_customer_unified(customer_name: str) -> str | None:
 
 
 def load_products_for_price_list_by_customer(customer_name: str, _ctx: Any) -> list[dict[str, Any]]:
-    eng = get_sync_engine()
+    eng = _read_engine()
     insp = inspect(eng)
     if "products" not in insp.get_table_names():
         return []

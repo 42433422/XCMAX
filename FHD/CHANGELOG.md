@@ -6,6 +6,25 @@
 
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
+### 术债收口 + Tier C 高并发（Wave 0–10 · v10 线内迭代）
+- **docs**：`SLO.md` Tier C 压测 SLO；`docs/evidence/arch/` 路由/OpenAPI 基线；`services_import_matrix.md`；`WAVE2_ROUTE_SSOT.md`
+- **loadtest**：`tier_c_smoke.js` / `tier_c_sustained.js` / `tier_c_chat_streams.js`；k6 7d `tier_c_ramp` 阶梯场景
+- **infra**：`DATABASE_READ_URL` + `get_read_session`；`pool_sizing.py`；staging/prod Redis 查询缓存与连接池文档
+- **k8s**：`celery-worker-deployment.yaml` + HPA；API `deployment`/`hpa` Tier C 资源；chat 流式 Redis 信号量
+- **migrate**：`catalog_client`/`catalog_visibility` → `infrastructure/mods/`（services shim）；`mod_store_routes` 走 application 门面
+- **tasks**：`inference` Celery 队列（OCR/intent）；`workflow_excel_paths` 拆分巨型 `workflow.py`
+- **registry**：`app_service_pair_registry` 增加 `resolve_http_getter` / `resolve_neuro_getter`
+
+### SLO round-2 staging 准备（2026-06-12 · v10 线内迭代）
+- **fix(obs)**：k6 脚本兼容 `BASE_URL` / `XCAGI_BASE_URL`（修复 round-1 Job 误打 `127.0.0.1:5000`）
+- **fix(metrics)**：登录 `auth_login_duration_seconds`、流式聊天 `chat_stream_first_byte_seconds` 落盘
+- **docs**：`SLO.md` 登录 P95 PromQL 对齐 `api_request_duration_seconds{endpoint="/api/auth/login"}`
+
+### 行业种子分层隔离 L2（2026-06-12 · v10 线内迭代）
+- **feat(backend)**：`industry_seed.py` + `POST /api/mod-store/install-industry-seed`（池内 copy → Catalog 兜底；换行业卸载其它 open 中性 Mod）
+- **feat(package)**：`industry-seeds/` 只读池（`onboarding_open` 行业）；`stage-industry-seeds.ps1` + `verify-industry-seeds.ps1`
+- **feat(web)**：引导 `runBootstrap` 优先 `installIndustrySeed`；L3 定制仍 `installMod`
+
 ### 办公 employee_pack Planner 桥接（2026-06-12 · v10 线内迭代）
 - **feat(backend)**：`employee_runtime` 包（loader / executor / risk_gate / agent_runner）对齐 MODstore `execute_employee_task`；`employee_tool_registry` 合并进 `get_workflow_tool_registry`
 - **feat(backend)**：工具名 = pack_id；装包/卸载/启动 warm scan + `invalidate_workflow_tool_registry`；bridge `POST .../execute`、`GET /api/platform-shell/employee-tools`

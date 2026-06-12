@@ -230,8 +230,10 @@ async def _map_market_catalog_page(
     *,
     collection_hint: str = "",
 ) -> tuple[list[dict[str, Any]], int]:
-    from app.services.catalog_client import _market_item_to_package_row
-    from app.services.catalog_visibility import is_public_catalog_row
+    from app.application.mod_store_catalog_app import (
+        is_public_catalog_row,
+        market_item_to_package_row,
+    )
 
     installed_ids = set(_installed_by_id())
     items_raw = data.get("items") if isinstance(data.get("items"), list) else []
@@ -243,7 +245,7 @@ async def _map_market_catalog_page(
     for raw in items_raw:
         if not isinstance(raw, dict):
             continue
-        row = _market_item_to_package_row(raw)
+        row = market_item_to_package_row(raw)
         if not row or not is_public_catalog_row(row):
             continue
         info = _remote_to_mod_info(row, installed_ids)
@@ -588,6 +590,25 @@ async def mod_store_install(request: Request) -> ModStoreInstallResult:
         version = version or parsed_version
     activate = str(payload.get("activate") or "true").lower() not in {"0", "false", "no"}
     return await _install_from_catalog(pkg_id, version, activate=activate)
+
+
+@router.post("/install-industry-seed", response_model=ModStoreInstallResult)
+async def mod_store_install_industry_seed(request: Request) -> ModStoreInstallResult:
+    """L2：从 industry-seeds 池安装所选行业中性 Mod；池缺失时 Catalog 兜底。"""
+    payload = await _request_payload(request)
+    raw = _safe_text(
+        payload.get("industry_id") or payload.get("mod_id") or payload.get("industryId")
+    )
+    if not raw:
+        raise HTTPException(status_code=400, detail="缺少 industry_id 或 mod_id")
+    from app.mod_sdk.industry_seed import install_industry_seed_with_fallback
+
+    data = await install_industry_seed_with_fallback(raw)
+    return ModStoreInstallResult(
+        success=bool(data.get("success")),
+        message=str(data.get("message") or ""),
+        data=data,
+    )
 
 
 @router.post("/reload-employees")
