@@ -1002,6 +1002,59 @@ def get_mod_manager() -> ModManager:
     return _mod_manager
 
 
+_employee_pack_routes_registered: set[str] = set()
+
+
+def register_employee_pack_routes(
+    app,
+    mod_manager: ModManager | None,
+    pack_id: str,
+    *,
+    force: bool = False,
+) -> bool:
+    """为单个 employee_pack 挂载 FastAPI 路由（安装后热加载）。"""
+    pid = (pack_id or "").strip()
+    if not pid or is_mods_disabled():
+        return False
+    if mod_manager is None:
+        mod_manager = get_mod_manager()
+    if not force and pid in _employee_pack_routes_registered:
+        return True
+
+    pack_path = os.path.join(mod_manager.mods_root, "_employees", pid)
+    mf = os.path.join(pack_path, "manifest.json")
+    if not os.path.isfile(mf):
+        return False
+    try:
+        with open(mf, encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return False
+    if normalize_artifact(data) != ARTIFACT_EMPLOYEE_PACK:
+        return False
+    backend = data.get("backend") or {}
+    entry = str(backend.get("entry") or "").strip()
+    if not entry:
+        return False
+    resolved_id = str(data.get("id") or pid).strip()
+    if not resolved_id:
+        return False
+    try:
+        module = import_mod_backend_py(pack_path, resolved_id, entry)
+        reg = getattr(module, "register_fastapi_routes", None)
+        if callable(reg):
+            reg(app, resolved_id)
+            _employee_pack_routes_registered.add(resolved_id)
+            logger.info("FastAPI routes registered for employee_pack: %s", resolved_id)
+            return True
+    except OPERATIONAL_ERRORS as e:
+        logger.error(
+            "employee_pack route registration failed %s: %s", resolved_id, e, exc_info=True
+        )
+        mod_manager.record_blueprint_failure(resolved_id, str(e)[:500])
+    return False
+
+
 def load_employee_pack_routes(app, mod_manager: ModManager | None = None) -> None:
     """为 ``mods/_employees/<pack_id>/`` 中带 ``backend.entry`` 的 employee_pack 挂载 FastAPI 路由。
 
@@ -1029,24 +1082,10 @@ def load_employee_pack_routes(app, mod_manager: ModManager | None = None) -> Non
             continue
         if normalize_artifact(data) != ARTIFACT_EMPLOYEE_PACK:
             continue
-        backend = data.get("backend") or {}
-        entry = str(backend.get("entry") or "").strip()
-        if not entry:
-            continue
         pack_id = str(data.get("id") or name).strip()
         if not pack_id:
             continue
-        try:
-            module = import_mod_backend_py(pack_path, pack_id, entry)
-            reg = getattr(module, "register_fastapi_routes", None)
-            if callable(reg):
-                reg(app, pack_id)
-                logger.info("FastAPI routes registered for employee_pack: %s", pack_id)
-        except OPERATIONAL_ERRORS as e:
-            logger.error(
-                "employee_pack route registration failed %s: %s", pack_id, e, exc_info=True
-            )
-            mod_manager.record_blueprint_failure(pack_id, str(e)[:500])
+        register_employee_pack_routes(app, mod_manager, pack_id)
 
 
 def _register_single_mod_http_routes(

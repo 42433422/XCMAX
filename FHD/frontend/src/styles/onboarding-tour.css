@@ -1,0 +1,65 @@
+body.tutorial-active {
+  cursor: none !important;
+}
+
+body.tutorial-active * {
+  cursor: none !important;
+}
+
+.xcagi-tour-popover.driver-popover {
+  border-radius: 12px;
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.22);
+  max-width: min(360px, calc(100vw - 24px));
+}
+
+.xcagi-tour-popover .driver-popover-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.xcagi-tour-popover .driver-popover-description {
+  font-size: 13px;
+  line-height: 1.5;
+  color: #475569;
+}
+
+.xcagi-tour-extra-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+  width: 100%;
+}
+
+.xcagi-tour-btn {
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  color: #334155;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.xcagi-tour-btn:hover {
+  background: #f8fafc;
+}
+
+.xcagi-tour-btn-finish {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #fff;
+}
+
+.xcagi-tour-btn-finish:hover {
+  background: #1d4ed8;
+}
+
+.driver-popover.xcagi-tour-popover .driver-popover-footer {
+  flex-wrap: wrap;
+}
+
+.onboarding-tutorial-host {
+  display: none;
+}

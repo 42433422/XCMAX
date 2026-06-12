@@ -118,11 +118,20 @@
             <template v-else>
               <i class="fa fa-exclamation-circle"></i>
               还缺 {{ missingRequiredCount }} 项必需基础线
-              <span v-if="missingIndustryCount > 0">
-                （另 {{ missingIndustryCount }} 项定制线可从扩展市场安装）
+              <span v-if="missingAccountCustomCount > 0">
+                （另 {{ missingAccountCustomCount }} 项账号定制 Mod 待安装）
+              </span>
+              <span v-else-if="missingIndustryPackageCount > 0">
+                （另 {{ missingIndustryPackageCount }} 项行业包可选安装）
               </span>
             </template>
           </div>
+          <p
+            v-if="showNoAccountCustomHint"
+            class="account-custom-empty-hint muted"
+          >
+            当前账号未绑定定制 Mod，可联系管理员或在扩展市场购买。
+          </p>
           <div v-if="baselineGroups.length" class="baseline-groups">
             <section v-for="group in baselineGroups" :key="group.id" class="baseline-group">
               <h3>{{ group.title }}</h3>
@@ -184,8 +193,9 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { installHostFoundation, installMod } from '@/api/modStore'
+import { installHostFoundation, installMod, installOfficeEmployeePack } from '@/api/modStore'
 import { readBuildEdition } from '@/constants/genericModPack'
+import { fetchProductSku, isEnterpriseEdition } from '@/utils/productSku'
 import { DEFAULT_INDUSTRY_ID } from '@/constants/industryDefaults'
 import { getIndustryPreset, listIndustryPresets } from '@/constants/industryPresets'
 import {
@@ -206,6 +216,10 @@ import {
   fetchOnboardingIndustryCatalog,
 } from '@/utils/platformShellApi'
 import { appAlert } from '@/utils/appDialog'
+import {
+  invalidateHostPackCompletionCache,
+  markHostPackSkippedThisSession,
+} from '@/utils/hostPackOnboardingGate'
 
 const route = useRoute()
 const router = useRouter()
@@ -318,13 +332,28 @@ function onWelcomeLogoError() {
   }
 }
 
+const productSku = ref('generic')
 const baselineOk = computed(() => baselinePlan.value?.baseline_ready === true)
 const baselineGroups = computed(() => baselinePlan.value?.groups || [])
 const missingRequiredCount = computed(
   () => baselinePlan.value?.missing_required_mod_ids?.length || 0,
 )
-const missingIndustryCount = computed(
-  () => baselinePlan.value?.missing_industry_mod_ids?.length || 0,
+const missingAccountCustomCount = computed(
+  () => baselinePlan.value?.missing_account_custom_mod_ids?.length || 0,
+)
+const missingIndustryPackageCount = computed(() => {
+  const ids = new Set(baselinePlan.value?.industry_mod_ids || [])
+  return (baselinePlan.value?.missing_industry_mod_ids || []).filter((id) => ids.has(id)).length
+})
+const hasAccountCustomEntitlement = computed(
+  () => (baselinePlan.value?.account_custom_mod_ids?.length || 0) > 0,
+)
+const showNoAccountCustomHint = computed(
+  () =>
+    isEnterpriseEdition(productSku.value) &&
+    currentStep.value === 'host-pack' &&
+    !loading.value &&
+    !hasAccountCustomEntitlement.value,
 )
 const pickedIndustryName = computed(() => getIndustryPreset(pickedIndustryId.value).name)
 
@@ -394,16 +423,24 @@ async function runBootstrap() {
     await flow.refreshDeliverable(true)
     await refreshBaseline(true)
 
+    const officeResult = await installOfficeEmployeePack({
+      onProgress: (msg) => {
+        console.info('[ProductOnboarding]', msg)
+      },
+    })
+    await refreshBaseline(true)
+
     const industryMissing = [...(baselinePlan.value?.missing_industry_mod_ids || [])]
-    const industryErrors = []
-    for (const modId of industryMissing) {
+    const customMissing = [...(baselinePlan.value?.missing_account_custom_mod_ids || [])]
+    const installErrors = []
+    for (const modId of [...industryMissing, ...customMissing]) {
       try {
         const ir = await installMod(modId)
         if (!ir.success) {
-          industryErrors.push(`${modId}：${ir.message || '安装失败'}`)
+          installErrors.push(`${modId}：${ir.message || '安装失败'}`)
         }
       } catch (err) {
-        industryErrors.push(
+        installErrors.push(
           `${modId}：${err instanceof Error ? err.message : '安装失败'}`,
         )
       }
@@ -411,7 +448,11 @@ async function runBootstrap() {
     await refreshBaseline(true)
 
     if (baselineOk.value) {
+      invalidateHostPackCompletionCache()
       flow.markHostPackAcknowledged()
+      if (!readProductFlowCompleted()) {
+        flow.markProductFlowCompleted()
+      }
       await appAlert('本行业推荐基础线已装齐，可以开始使用了。')
       return
     }
@@ -424,8 +465,11 @@ async function runBootstrap() {
     if (requiredMissing.length) {
       detailParts.push(`仍缺必需项：${requiredMissing.join('、')}`)
     }
-    if (industryErrors.length) {
-      detailParts.push(industryErrors.join('；'))
+    if (installErrors.length) {
+      detailParts.push(installErrors.join('；'))
+    }
+    if (!officeResult.success && officeResult.errors.length) {
+      detailParts.push(`办公员工包：${officeResult.errors.slice(0, 3).join('；')}`)
     }
     await appAlert(detailParts.join('\n') || '部分项目未装齐，可稍后在扩展市场继续安装。')
   } catch (err) {
@@ -479,16 +523,30 @@ function openModStore() {
   })
 }
 
-function finishToChat() {
-  if (fromTutorial.value) {
+function finishHostPackFlow() {
+  invalidateHostPackCompletionCache()
+  if (baselineOk.value) {
     if (!readProductFlowCompleted()) {
       flow.markProductFlowCompleted()
       flow.markHostPackAcknowledged()
     }
+    if (fromTutorial.value) {
+      returnFromTutorial()
+      return
+    }
+    flow.completeFlowAndGoChat(router)
+    return
+  }
+  markHostPackSkippedThisSession()
+  if (fromTutorial.value) {
     returnFromTutorial()
     return
   }
-  flow.completeFlowAndGoChat(router)
+  void router.replace({ path: '/' })
+}
+
+function finishToChat() {
+  finishHostPackFlow()
 }
 
 function skipEntireFlow() {
@@ -496,12 +554,21 @@ function skipEntireFlow() {
     returnFromTutorial()
     return
   }
-  flow.markProductFlowCompleted()
-  flow.markHostPackAcknowledged()
+  if (baselineOk.value) {
+    flow.markProductFlowCompleted()
+    flow.markHostPackAcknowledged()
+  } else {
+    markHostPackSkippedThisSession()
+  }
   finishToChat()
 }
 
 onMounted(async () => {
+  try {
+    productSku.value = await fetchProductSku()
+  } catch {
+    /* ignore */
+  }
   try {
     onboardingCatalog.value = await fetchOnboardingIndustryCatalog()
     if (onboardingCatalog.value?.open_industry_ids?.length) {
@@ -842,6 +909,12 @@ onMounted(async () => {
 .baseline-group-hint {
   margin: 0 0 8px;
   font-size: 12px;
+  color: #64748b;
+}
+
+.account-custom-empty-hint {
+  margin: 0 0 12px;
+  font-size: 13px;
   color: #64748b;
 }
 

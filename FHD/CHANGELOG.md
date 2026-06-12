@@ -6,6 +6,11 @@
 
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
+### 办公 employee_pack Planner 桥接（2026-06-12 · v10 线内迭代）
+- **feat(backend)**：`employee_runtime` 包（loader / executor / risk_gate / agent_runner）对齐 MODstore `execute_employee_task`；`employee_tool_registry` 合并进 `get_workflow_tool_registry`
+- **feat(backend)**：工具名 = pack_id；装包/卸载/启动 warm scan + `invalidate_workflow_tool_registry`；bridge `POST .../execute`、`GET /api/platform-shell/employee-tools`
+- **feat(web)**：`useOfficeEmployeePackReady`；runBootstrap / Mod Store 装齐后刷新 registry；Mod Store `?tab=office` + driver 教程验收
+
 ### 人工试用阻断修复（2026-06-12 · v10 线内迭代）
 - **feat(web)**：注册 `/im` 路由与侧栏「消息」入口；未读角标 + `useImUnreadBadge`
 - **fix(web)**：企业版不再被平台壳拦截设置/Mod 商店/IM；跳过首次引导拦截员工工作台

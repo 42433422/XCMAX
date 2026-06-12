@@ -1,6 +1,6 @@
 <template>
   <div class="chat-view page-view active" id="view-chat">
-    <div class="quick-actions">
+    <div class="quick-actions" data-tour="chat-quick-actions">
       <button
         v-for="quickBtn in visibleQuickButtons"
         :key="quickBtn.text"
@@ -12,7 +12,7 @@
         {{ quickBtn.label }}
       </button>
     </div>
-    <div class="chat-container" :style="chatPaneStyle">
+    <div class="chat-container" data-tour="chat-thread" :style="chatPaneStyle">
       <div class="chat-messages-shell">
         <div class="chat-messages" id="chatMessages" ref="chatMessagesRef">
           <div
@@ -394,7 +394,7 @@
         </div>
       </div>
     </div>
-    <div class="input-area">
+    <div class="input-area" data-tour="chat-input-area">
       <div class="input-toolbar">
         <button class="toolbar-btn" id="newConversationBtn" title="新建对话" @click="newConversation">
           <i class="fa fa-plus" aria-hidden="true"></i> 新对话

@@ -22,11 +22,47 @@ def test_industry_baseline_attendance_plan():
     assert "xcagi-planner-bridge" not in data["missing_required_mod_ids"]
     assert "xcagi-erp-domain-bridge" in data["missing_required_mod_ids"]
     assert data["baseline_ready"] is False
+    assert data["host_baseline_ready"] is False
+    assert data["account_custom_ready"] is True
     assert data["industry_mod_ready"] is False
-    industry_group = next(g for g in data["groups"] if g["id"] == "custom")
-    assert industry_group["title"] == "定制线"
-    assert industry_group["items"][0]["label"] == "考勤行业包"
-    assert industry_group["items"][0]["show_mod_id"] is False
+    pkg_group = next(g for g in data["groups"] if g["id"] == "industry_package")
+    assert pkg_group["title"] == "行业包"
+    assert pkg_group["items"][0]["label"] == "考勤行业包"
+    assert pkg_group["items"][0]["show_mod_id"] is False
+    assert not any(g["id"] == "account_custom" for g in data["groups"])
+
+
+def test_industry_baseline_attendance_with_entitled_custom():
+    data = build_industry_baseline_plan(
+        "考勤",
+        installed_mod_ids=["xcagi-planner-bridge", "xcagi-neuro-bus-bridge"],
+        entitled_mod_ids={"taiyangniao-pro"},
+    )
+    custom_group = next(g for g in data["groups"] if g["id"] == "account_custom")
+    assert custom_group["items"][0]["mod_id"] == "taiyangniao-pro"
+    assert custom_group["items"][0]["label"] == "太阳鸟 PRO"
+    assert custom_group["items"][0]["required"] is True
+    assert data["account_custom_ready"] is False
+    assert data["baseline_ready"] is False
+    assert "taiyangniao-pro" in data["missing_account_custom_mod_ids"]
+
+
+def test_industry_baseline_attendance_custom_installed():
+    data = build_industry_baseline_plan(
+        "考勤",
+        installed_mod_ids=[
+            "xcagi-planner-bridge",
+            "xcagi-neuro-bus-bridge",
+            "xcagi-erp-domain-bridge",
+            "xcagi-core-workflow-employees",
+            "xcagi-planner-excel-tools",
+            "xcagi-office-employee-pack-bridge",
+            "taiyangniao-pro",
+        ],
+        entitled_mod_ids={"taiyangniao-pro"},
+    )
+    assert data["account_custom_ready"] is True
+    assert data["missing_account_custom_mod_ids"] == []
 
 
 def test_onboarding_industry_catalog_neutral_names():
@@ -59,13 +95,13 @@ def test_industry_baseline_generic_minimal():
     assert data["industry_mod_ids"] == []
 
 
-def test_industry_baseline_custom_line_from_manifest():
+def test_industry_baseline_industry_package_installed():
     data = build_industry_baseline_plan(
         "考勤",
         installed_mod_ids=["attendance-industry"],
     )
-    custom = next(g for g in data["groups"] if g["id"] == "custom")
-    assert "考勤转换" in custom["hint"]
+    pkg = next(g for g in data["groups"] if g["id"] == "industry_package")
+    assert "考勤" in pkg["hint"] or "排班" in pkg["hint"]
     assert data["custom_mod_ids"] == ["attendance-industry"]
     assert data["industry_mod_ready"] is True
 
@@ -110,3 +146,14 @@ def test_industry_baseline_unknown_falls_back_to_generic():
     data = build_industry_baseline_plan("不存在的行业", installed_mod_ids=[])
     assert data["industry_id"] == "不存在的行业"
     assert "xcagi-planner-bridge" in data["missing_required_mod_ids"]
+
+
+def test_account_custom_skip_gate_for_admin():
+    data = build_industry_baseline_plan(
+        "考勤",
+        installed_mod_ids=["xcagi-planner-bridge"],
+        entitled_mod_ids={"taiyangniao-pro"},
+        skip_account_custom_gate=True,
+    )
+    assert data["account_custom_ready"] is True
+    assert "taiyangniao-pro" in data["missing_account_custom_mod_ids"]

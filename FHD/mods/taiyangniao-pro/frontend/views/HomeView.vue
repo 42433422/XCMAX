@@ -4,7 +4,7 @@
       <div class="page-content page-main">
         <h2>考勤行业包</h2>
         <p class="muted">
-          Mod ID: <code>attendance-industry</code> — 在库项目中编辑后执行 <code>modman push</code> 部署到 XCAGI。
+          Mod ID: <code>taiyangniao-pro</code> — 在库项目中编辑后执行 <code>modman push</code> 部署到 XCAGI。
         </p>
         <p class="muted small">
           <router-link :to="{ name: 'attendance-industry-settings' }">考勤转换设置</router-link>
@@ -285,7 +285,7 @@ async function loadRules() {
   rulesLoading.value = true
   rulesErr.value = ''
   try {
-    const res = await apiFetch('/api/mod/attendance-industry/attendance/rules')
+    const res = await apiFetch('/api/mod/taiyangniao-pro/attendance/rules')
     const j = await res.json().catch(() => ({}))
     if (!res.ok) {
       rulesErr.value = j.error || j.message || `HTTP ${res.status}`
@@ -331,7 +331,7 @@ async function downloadOutput(relpath) {
   try {
     const q = new URLSearchParams()
     q.set('relpath', rel)
-    const res = await apiFetch(`/api/mod/attendance-industry/attendance/download?${q.toString()}`)
+    const res = await apiFetch(`/api/mod/taiyangniao-pro/attendance/download?${q.toString()}`)
     if (!res.ok) {
       const t = await res.text().catch(() => '')
       err.value = t || `下载失败 HTTP ${res.status}`
@@ -391,7 +391,7 @@ async function doUploadConvert() {
     if (useLlm.value) fd.append('use_llm', '1')
     fd.append('use_personnel_roster', usePersonnelRoster.value ? '1' : '0')
 
-    const res = await apiFetch('/api/mod/attendance-industry/attendance/convert-upload', {
+    const res = await apiFetch('/api/mod/taiyangniao-pro/attendance/convert-upload', {
       method: 'POST',
       body: fd,
     })

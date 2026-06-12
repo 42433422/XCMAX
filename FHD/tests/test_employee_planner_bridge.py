@@ -1,0 +1,140 @@
+# -*- coding: utf-8 -*-
+"""employee_pack → Planner 工具注册表。"""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import pytest
+
+
+def _write_csv_read_pack(root: Path, pack_id: str = "csv-full-read-employee") -> Path:
+    pack_dir = root / "_employees" / pack_id
+    vendor = pack_dir / "backend" / "vendor" / "csv_read"
+    vendor.mkdir(parents=True, exist_ok=True)
+    (pack_dir / "manifest.json").write_text(
+        json.dumps(
+            {
+                "id": pack_id,
+                "name": "CSV 读取员工",
+                "artifact": "employee_pack",
+                "scope": "global",
+                "description": "读取 CSV 表格",
+                "employee": {"label": "CSV 读取"},
+                "employee_config_v2": {
+                    "actions": {
+                        "handlers": ["direct_python"],
+                        "direct_python": {"module": "worker"},
+                    },
+                    "cognition": {"agent": {"system_prompt": "读取 CSV 文件并返回结构化数据"}},
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    (pack_dir / "rule_spec.json").write_text(
+        json.dumps(
+            {
+                "runtime_kind": "csv_full_read",
+                "default_output_relpath": "outputs/data.json",
+                "output_schema": ["columns", "rows"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (vendor / "convert.py").write_text(
+        """from pathlib import Path
+
+def convert_file(src_path, output_path, *, template_path=None, payload=None, ctx=None, rule_spec=None):
+    text = Path(src_path).read_text(encoding='utf-8')
+    lines = [l for l in text.strip().splitlines() if l]
+    cols = lines[0].split(',') if lines else []
+    rows = [dict(zip(cols, ln.split(','))) for ln in lines[1:]]
+    out = {"columns": cols, "rows": rows, "row_count": len(rows)}
+    Path(output_path).write_text(__import__('json').dumps(out), encoding='utf-8')
+    return {"output_path": str(output_path), "row_count": len(rows), "column_count": len(cols)}
+""",
+        encoding="utf-8",
+    )
+    return pack_dir
+
+
+@pytest.fixture()
+def employee_mods_root(tmp_path, monkeypatch):
+    mods_root = tmp_path / "mods"
+    mods_root.mkdir()
+    monkeypatch.setenv("XCAGI_MODS_ROOT", str(mods_root))
+    from app.infrastructure.mods import employee_registry as er
+    from app.infrastructure.mods import mod_manager as mm
+    from app.application.tools.workflow import invalidate_workflow_tool_registry
+
+    er._registry.clear()
+    mm._mod_manager = None
+    mm._employee_pack_routes_registered.clear()
+    invalidate_workflow_tool_registry()
+    return mods_root
+
+
+def test_planner_registry_includes_installed_employee_pack(employee_mods_root):
+    pack_id = "csv-full-read-employee"
+    _write_csv_read_pack(employee_mods_root, pack_id)
+
+    from app.mod_sdk.employee_tool_registry import (
+        build_employee_pack_tool_definitions,
+        invalidate_employee_tool_cache,
+    )
+
+    invalidate_employee_tool_cache()
+    tools = build_employee_pack_tool_definitions()
+    names = [t["function"]["name"] for t in tools]
+    assert pack_id in names
+
+
+def test_execute_employee_csv_read_tool(employee_mods_root, tmp_path):
+    pack_id = "csv-full-read-employee"
+    _write_csv_read_pack(employee_mods_root, pack_id)
+    csv_file = tmp_path / "sample.csv"
+    csv_file.write_text("a,b\n1,2\n3,4\n", encoding="utf-8")
+
+    from app.mod_sdk.employee_tool_registry import execute_employee_tool, invalidate_employee_tool_cache
+
+    invalidate_employee_tool_cache()
+    raw = execute_employee_tool(pack_id, {"file_path": str(csv_file)}, str(tmp_path))
+    data = json.loads(raw)
+    assert data.get("success") is True
+
+
+def test_get_planner_chat_tool_registry_merges_employee_tools(employee_mods_root):
+    _write_csv_read_pack(employee_mods_root)
+    from app.application.tools.workflow import invalidate_workflow_tool_registry
+    from app.mod_sdk.planner_tools import get_planner_chat_tool_registry
+
+    invalidate_workflow_tool_registry()
+    reg = get_planner_chat_tool_registry()
+    names = [item["function"]["name"] for item in reg if item.get("function")]
+    assert "csv-full-read-employee" in names
+
+
+def test_legacy_tool_alias_still_resolves(employee_mods_root):
+    _write_csv_read_pack(employee_mods_root)
+    from app.mod_sdk.employee_tool_registry import (
+        invalidate_employee_tool_cache,
+        pack_id_to_legacy_tool_name,
+        resolve_tool_to_pack_id,
+    )
+
+    invalidate_employee_tool_cache()
+    legacy = pack_id_to_legacy_tool_name("csv-full-read-employee")
+    assert resolve_tool_to_pack_id(legacy) == "csv-full-read-employee"
+
+
+def test_employee_tools_status_counts(employee_mods_root):
+    _write_csv_read_pack(employee_mods_root)
+    from app.mod_sdk.employee_tool_registry import build_employee_tools_status, invalidate_employee_tool_cache
+
+    invalidate_employee_tool_cache()
+    status = build_employee_tools_status()
+    assert status["installed_employee_pack_count"] >= 1
+    assert status["registered_tool_count"] >= 1

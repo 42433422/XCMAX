@@ -41,6 +41,7 @@
     "@vue-flow/core": "^1.48.2",
     "@vue-flow/minimap": "^1.5.4",
     "dompurify": "^3.2.4",
+    "driver.js": "^1.4.0",
     "echarts": "^6.0.0",
     "element-plus": "^2.13.7",
     "font-awesome": "^4.7.0",

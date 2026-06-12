@@ -6,6 +6,10 @@ import {
   SHELL_CORE_ROUTE_NAMES,
 } from '@/constants/platformShellMode';
 import { shouldRouteToProductOnboarding } from '@/composables/useProductFlow';
+import {
+  resolveHostPackOnboardingStep,
+  shouldRouteToHostPackOnboarding,
+} from '@/utils/hostPackOnboardingGate';
 import { resolveHostBusinessPageRedirect } from '@/utils/hostBusinessPageRedirect';
 import { customerServiceHostPathFromModPath } from '@/utils/customerServicePagePaths';
 import { readErpDomainModFacadeEnabled } from '@/constants/erpDomainMod';
@@ -685,6 +689,28 @@ router.beforeEach(async (to, _from, next) => {
     // 首次引导始终从「认识宿主」开始；宿主包未齐时在步骤 2 由用户点「下一步」进入
     next({ name: 'product-onboarding', query: { step: 'welcome', redirect: to.fullPath } });
     return;
+  }
+
+  if (
+    shouldRouteToHostPackOnboarding(to.name) &&
+    !to.meta?.publicAccess &&
+    !isAdminConsoleSpa()
+  ) {
+    try {
+      const onboardingStep = await resolveHostPackOnboardingStep(true);
+      if (onboardingStep) {
+        next({
+          name: 'product-onboarding',
+          query: {
+            step: onboardingStep,
+            redirect: to.fullPath !== '/onboarding' ? to.fullPath : '/',
+          },
+        });
+        return;
+      }
+    } catch {
+      /* API 异常时不阻断主流程 */
+    }
   }
 
   next();

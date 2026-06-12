@@ -510,3 +510,61 @@ export async function bootstrapEditionPack(
   }
   return data;
 }
+
+/** 刷新 employee_pack HTTP 路由与 Planner 工具注册表 */
+export async function reloadEmployeePacks(
+  packId?: string,
+): Promise<{ success: boolean; message: string; data?: Record<string, unknown> }> {
+  const response = await apiFetch('/api/mod-store/reload-employees', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(packId ? { pack_id: packId } : {}),
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    const detail = (data && (data.detail || data.message)) || response.statusText;
+    throw new Error(typeof detail === 'string' ? detail : JSON.stringify(detail));
+  }
+  return {
+    success: Boolean(data.success),
+    message: String(data.message || '已刷新'),
+    data: data.data,
+  };
+}
+
+/** 逐包安装办公 10 员工并刷新 Planner registry */
+export async function installOfficeEmployeePack(options?: {
+  onProgress?: (message: string) => void;
+}): Promise<{ success: boolean; errors: string[] }> {
+  const { OFFICE_EMPLOYEE_PKG_IDS } = await import('@/constants/officeEmployeePack');
+  const response = await apiFetch('/api/mod-store/catalog', { timeoutMs: 90_000 });
+  const body = await response.json();
+  const available: ModInfo[] = body?.data?.available || body?.available || [];
+  const errors: string[] = [];
+  const targets = OFFICE_EMPLOYEE_PKG_IDS.map((id) =>
+    available.find((m) => (m.pkg_id || m.id) === id),
+  ).filter(Boolean) as ModInfo[];
+
+  for (let i = 0; i < targets.length; i += 1) {
+    const mod = targets[i];
+    const pkgId = mod.pkg_id || mod.id;
+    options?.onProgress?.(`正在安装办公员工 ${i + 1}/${targets.length}：${mod.name || pkgId}`);
+    if (mod.is_installed) continue;
+    try {
+      const ir = await installMod(mod);
+      if (!ir.success) {
+        errors.push(`${mod.name || pkgId}：${ir.message || '安装失败'}`);
+      }
+    } catch (err) {
+      errors.push(`${mod.name || pkgId}：${err instanceof Error ? err.message : '安装失败'}`);
+    }
+  }
+
+  try {
+    await reloadEmployeePacks();
+  } catch (err) {
+    errors.push(err instanceof Error ? err.message : '刷新员工工具注册表失败');
+  }
+
+  return { success: errors.length === 0, errors };
+}

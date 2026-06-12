@@ -590,6 +590,21 @@ async def mod_store_install(request: Request) -> ModStoreInstallResult:
     return await _install_from_catalog(pkg_id, version, activate=activate)
 
 
+@router.post("/reload-employees")
+async def mod_store_reload_employees(request: Request) -> ModStoreSimpleResponse:
+    """显式刷新 employee_pack HTTP 路由与 Planner 工具注册表（装包后双保险）。"""
+    payload = await _request_payload(request)
+    pack_id = _safe_text(payload.get("pack_id") or payload.get("pkg_id"))
+    from app.mod_sdk.employee_runtime import refresh_employee_pack_runtime
+
+    data = refresh_employee_pack_runtime(pack_id or None)
+    return ModStoreSimpleResponse(
+        success=True,
+        message="员工包 Planner 注册表已刷新",
+        data=data,
+    )
+
+
 @router.post("/uninstall", response_model=ModStoreSimpleResponse)
 async def mod_store_uninstall(request: Request) -> ModStoreSimpleResponse:
     mod_id = await _body_value(request, "mod_id")

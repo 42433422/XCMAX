@@ -123,6 +123,7 @@ def list_employee_pack_facade_registry() -> dict[str, Any]:
             "GET /catalog",
             "GET /installed",
             "GET /status",
+            "POST /execute",
         ],
         "catalog_pack_count": cat.get("pack_count", 0),
         "office_installed_count": inst.get("office_installed_count", 0),

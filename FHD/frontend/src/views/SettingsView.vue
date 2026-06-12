@@ -151,6 +151,46 @@
         </details>
 
         <details
+          v-if="isLoggedIn && isLocalAdmin"
+          class="settings-card"
+          data-tutorial-id="settings-audit-logs"
+        >
+          <summary class="settings-row">
+            <span class="settings-row__icon settings-row__icon--amber" aria-hidden="true">
+              <i class="fa fa-shield"></i>
+            </span>
+            <span class="settings-row__label">安全审计</span>
+            <span class="settings-row__meta">{{ auditLogsTotal }} 条</span>
+            <span class="settings-row__arrow" aria-hidden="true"></span>
+          </summary>
+          <div class="settings-card__body settings-card__body--list">
+            <p v-if="auditLogsLoading" class="muted" style="padding: 12px 16px; margin: 0;">加载中…</p>
+            <p v-else-if="auditLogsError" class="settings-profile-form__hint" role="alert" style="padding: 12px 16px;">
+              {{ auditLogsError }}
+            </p>
+            <ul v-else-if="auditLogs.length" class="settings-audit-list">
+              <li v-for="(row, idx) in auditLogs" :key="idx" class="settings-audit-list__item">
+                <span class="settings-audit-list__action">{{ row.action || '—' }}</span>
+                <span class="settings-audit-list__meta">
+                  {{ row.timestamp || row.ts || '' }}
+                  · {{ row.user_id ?? '—' }}
+                  · {{ row.success === false ? '失败' : '成功' }}
+                </span>
+              </li>
+            </ul>
+            <p v-else class="muted" style="padding: 12px 16px; margin: 0;">暂无审计记录（可配置 AUDIT_LOG_PATH）</p>
+            <div class="settings-profile-form__actions" style="padding: 0 16px 16px;">
+              <button type="button" class="settings-profile-form__submit" @click="loadAuditLogs">
+                刷新
+              </button>
+              <button type="button" class="settings-profile-form__submit settings-profile-form__submit--ghost" @click="downloadAuditCsv">
+                导出 CSV
+              </button>
+            </div>
+          </div>
+        </details>
+
+        <details
           class="settings-card"
           data-tutorial-id="settings-intent"
           open
@@ -536,6 +576,7 @@ import {
 import HostModBridgeView from '@/components/HostModBridgeView.vue';
 import MobilePairingQrCard from '@/components/settings/MobilePairingQrCard.vue';
 import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl';
+import adminAuditApi, { type AuditLogEntry } from '@/api/adminAudit';
 
 const isAdminConsole = isAdminConsoleSpa();
 const industryStore = useIndustryStore();
@@ -686,6 +727,35 @@ async function hydrateUserFromSessionValidate(): Promise<boolean> {
 }
 
 const isLoggedIn = computed(() => Boolean(localUser.value) || sessionValid.value);
+
+const isLocalAdmin = computed(() => {
+  const role = String(localUser.value?.role || '').toLowerCase();
+  return role === 'admin' || role === 'superadmin';
+});
+
+const auditLogsLoading = ref(false);
+const auditLogs = ref<AuditLogEntry[]>([]);
+const auditLogsTotal = ref(0);
+const auditLogsError = ref('');
+
+async function loadAuditLogs() {
+  if (!isLocalAdmin.value) return;
+  auditLogsLoading.value = true;
+  auditLogsError.value = '';
+  try {
+    const res = await adminAuditApi.list(30, 0);
+    auditLogs.value = res?.data?.items || [];
+    auditLogsTotal.value = res?.data?.total || 0;
+  } catch (e: unknown) {
+    auditLogsError.value = errorMessage(e, '加载审计日志失败');
+  } finally {
+    auditLogsLoading.value = false;
+  }
+}
+
+function downloadAuditCsv() {
+  window.open(adminAuditApi.csvDownloadUrl(500), '_blank', 'noopener,noreferrer');
+}
 
 function syncProfileDraftsFromUser(u: User | null) {
   if (!u) {
@@ -1437,6 +1507,7 @@ watch(() => route.query.section, scrollToSettingsSection);
 onMounted(async () => {
   scrollToSettingsSection();
   await loadLocalUser();
+  void loadAuditLogs();
   void loadDesktopDatabaseStatus();
   const uname = String(localUser.value?.username || '').trim();
   const sunbird = isSunbirdAccountUsername(uname);
@@ -1738,6 +1809,41 @@ onBeforeUnmount(() => {
   opacity: 0.55;
   cursor: not-allowed;
   box-shadow: none;
+}
+
+.settings-profile-form__submit--ghost {
+  margin-left: 8px;
+  color: var(--settings-accent, #2d6df6);
+  background: #fff;
+  border: 1px solid rgba(45, 109, 246, 0.35);
+  box-shadow: none;
+}
+
+.settings-audit-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 16px 8px;
+  max-height: 280px;
+  overflow: auto;
+}
+
+.settings-audit-list__item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 0;
+  border-bottom: 1px solid #f0f0f0;
+  font-size: 13px;
+}
+
+.settings-audit-list__action {
+  font-weight: 600;
+  color: #111827;
+}
+
+.settings-audit-list__meta {
+  color: #6b7280;
+  font-size: 12px;
 }
 
 .settings-profile__name {
