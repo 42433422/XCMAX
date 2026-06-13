@@ -621,9 +621,7 @@ class NeuroBus:
     ) -> HandlerSubscription:
         """订阅事件；指定 domain 时路由到领域处理器。"""
         if domain:
-            return self.subscribe_to_domain(
-                domain, event_type, handler, priority, is_async
-            )
+            return self.subscribe_to_domain(domain, event_type, handler, priority, is_async)
         return self.subscribe(event_type, handler, priority, is_async, filter_fn)
 
     def subscribe_global(

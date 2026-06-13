@@ -130,9 +130,10 @@ defineEmits<{
 const messagesHostRef = ref<HTMLElement | null>(null)
 
 watch(messagesHostRef, (el) => {
-  if (props.chatMessagesRef) {
-    props.chatMessagesRef.value = el
-  }
+  const bag = props.chatMessagesRef
+  if (!bag) return
+  // eslint-disable-next-line vue/no-mutating-props -- 父级 composable 传入 Ref 以挂载滚动宿主
+  bag.value = el
 }, { immediate: true })
 </script>
 

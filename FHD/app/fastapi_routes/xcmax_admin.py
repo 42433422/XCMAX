@@ -1314,9 +1314,9 @@ async def _sync_sse_generator(request: Request, since_cursor: int):
 async def list_conflicts(limit: int = Query(50, ge=1, le=500)):
     """列出 inbox 中待处理的冲突条目。"""
     try:
-        from app.services.admin_sync_service import list_sync_conflicts
+        from app.application.admin_sync_app_service import list_admin_sync_conflicts
 
-        data = list_sync_conflicts(limit=limit)
+        data = list_admin_sync_conflicts(limit=limit)
         return {"success": True, "data": data, "count": len(data)}
     except RECOVERABLE_ERRORS as exc:
         return {"success": True, "data": [], "count": 0, "note": str(exc)}
@@ -1331,19 +1331,19 @@ async def resolve_conflict(inbox_id: int, body: dict):
 
         db = SyncDb()
         if action == "apply":
+            from app.application.admin_sync_app_service import fetch_admin_inbox_row
             from app.application.xcmax_sync_app import entity_appliers
-            from app.services.admin_sync_service import fetch_inbox_row
 
-            row = fetch_inbox_row(inbox_id)
+            row = fetch_admin_inbox_row(inbox_id)
             if row:
                 applier = entity_appliers().get(row["entity_type"])
                 if applier:
                     applier(row)
             db.mark_inbox_applied(inbox_id)
         else:
-            from app.services.admin_sync_service import mark_inbox_skipped
+            from app.application.admin_sync_app_service import mark_admin_inbox_skipped
 
-            mark_inbox_skipped(inbox_id)
+            mark_admin_inbox_skipped(inbox_id)
         return {"success": True, "inbox_id": inbox_id, "action": action}
     except RECOVERABLE_ERRORS as exc:
         return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
