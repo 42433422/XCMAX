@@ -465,8 +465,12 @@ class UserMemoryService(NeuroEventPublisherMixin):
         elif feedback == "negated":
             weight_delta = -0.15
         elif feedback == "corrected" and corrected_intent:
-            weight_delta = -0.1
+            for action in memory.frequent_actions:
+                if action.get("intent") == recognized_intent:
+                    new_confidence = action.get("confidence", 0.5) - 0.1
+                    action["confidence"] = max(0.1, min(0.99, new_confidence))
             target_intent = corrected_intent
+            weight_delta = 0.1
 
         for action in memory.frequent_actions:
             if action.get("intent") == target_intent:
@@ -616,6 +620,7 @@ def reset_user_memory_service() -> None:
     """重置用户记忆服务单例"""
     global _user_memory_service
     _user_memory_service = None
+    UserMemoryService._instance = None
 
 
 # NEURO-DDD: 为 Services 层类添加 instrumentation

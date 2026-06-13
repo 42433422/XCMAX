@@ -479,8 +479,15 @@ def init_redis_cache_from_app(app) -> RedisCache | None:
     if redis_client is None:
         try:
             import redis
+            from app.utils.deployment import redis_url_from_env
 
-            redis_url = app.config.get("CACHE_REDIS_URL", "redis://localhost:6379/0")
+            redis_url = ""
+            if hasattr(app, "config"):
+                redis_url = (app.config.get("CACHE_REDIS_URL") or "").strip()
+            if not redis_url:
+                redis_url = redis_url_from_env()
+            if not redis_url:
+                return None
             redis_client = redis.from_url(redis_url, decode_responses=True)
         except RECOVERABLE_ERRORS as e:
             logger.warning("无法连接 Redis: %s", e)

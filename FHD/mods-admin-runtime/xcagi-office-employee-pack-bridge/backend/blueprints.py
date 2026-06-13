@@ -6,6 +6,8 @@ import json
 import logging
 from pathlib import Path
 
+from fastapi import APIRouter, Request
+
 logger = logging.getLogger(__name__)
 
 OFFICE_PACK_MOD_ID = "xcagi-office-employee-pack-bridge"
@@ -29,8 +31,6 @@ def load_office_pack_catalog() -> dict:
 
 
 def register_fastapi_routes(app, mod_id: str) -> None:
-    from fastapi import APIRouter, Request
-
     router = APIRouter(prefix=f"/api/mod/{mod_id}", tags=[f"office-pack-bridge-{mod_id}"])
 
     @router.get("/status")

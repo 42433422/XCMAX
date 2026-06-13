@@ -1331,12 +1331,7 @@ async def sync_stream(
     )
 
 
-@router.api_route(
-    "/market-proxy/{subpath:path}",
-    methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
-    response_model=None,
-)
-async def xcmax_market_proxy_catchall(request: Request, subpath: str):
+async def _xcmax_market_proxy_impl(request: Request, subpath: str):
     """编制图 LLM / 员工执行等：经会话市场 token 转发至 MODstore ``/api/...``。"""
     method = request.method.upper()
     json_body: dict[str, Any] | None = None
@@ -1348,3 +1343,21 @@ async def xcmax_market_proxy_catchall(request: Request, subpath: str):
             json_body = None
     api_path = f"/api/{str(subpath or '').lstrip('/')}"
     return await _market_admin_proxy(request, method, api_path, json_body=json_body)
+
+
+def _register_market_proxy_method(method: str) -> None:
+    async def endpoint(request: Request, subpath: str):
+        return await _xcmax_market_proxy_impl(request, subpath)
+
+    endpoint.__name__ = f"xcmax_market_proxy_{method.lower()}"
+    endpoint.__qualname__ = endpoint.__name__
+    router.add_api_route(
+        "/market-proxy/{subpath:path}",
+        endpoint,
+        methods=[method],
+        response_model=None,
+    )
+
+
+for _market_proxy_method in ("GET", "POST", "PUT", "DELETE", "PATCH"):
+    _register_market_proxy_method(_market_proxy_method)

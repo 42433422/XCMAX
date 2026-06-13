@@ -21,16 +21,14 @@ class ModelValidators:
             return value
         try:
             num_value = float(value)
-            if allow_zero:
-                if num_value < 0:
-                    raise ValueError(f"{field_name} 必须为非负数")
-            else:
-                if num_value <= 0:
-                    raise ValueError(f"{field_name} 必须为正数")
-        except (TypeError, ValueError) as e:
-            if "must be" in str(e):
-                raise
+        except (TypeError, ValueError):
             raise ValueError(f"{field_name} 必须是有效数字")
+        if allow_zero:
+            if num_value < 0:
+                raise ValueError(f"{field_name} 必须为非负数")
+        else:
+            if num_value <= 0:
+                raise ValueError(f"{field_name} 必须为正数")
         return value
 
     @staticmethod

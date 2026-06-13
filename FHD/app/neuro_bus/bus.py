@@ -610,6 +610,30 @@ class NeuroBus:
         logger.debug(f"Subscribed to {event_type}: {handler.__name__}")
         return subscription
 
+    def subscribe_event(
+        self,
+        event_type: str,
+        handler: EventHandler | AsyncEventHandler,
+        priority: int = 0,
+        is_async: bool = True,
+        filter_fn: Callable[[NeuroEvent], bool] | None = None,
+        domain: str | None = None,
+    ) -> HandlerSubscription:
+        """订阅事件；指定 domain 时路由到领域处理器。"""
+        if domain:
+            return self.subscribe_to_domain(
+                domain, event_type, handler, priority, is_async
+            )
+        return self.subscribe(event_type, handler, priority, is_async, filter_fn)
+
+    def subscribe_global(
+        self,
+        handler: EventHandler | AsyncEventHandler,
+        filter_fn: Callable[[NeuroEvent], bool] | None = None,
+    ) -> HandlerSubscription:
+        """订阅所有事件（subscribe_all 别名）。"""
+        return self.subscribe_all(handler, filter_fn)
+
     def subscribe_to_domain(
         self,
         domain: str,

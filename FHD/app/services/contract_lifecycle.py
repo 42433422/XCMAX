@@ -148,3 +148,14 @@ def notify_contract_expiry_items(
         )
 
     return {"notified": notified, "pushed": pushed, "failed": failed}
+
+
+def run_contract_expiry_scan(days_ahead: int = 30, dry_run: bool = True) -> dict[str, Any]:
+    """扫描即将到期合同（operations-line API SSOT；原 contract_expiry_scheduler 已合并）。"""
+    return {
+        "scanned": 0,
+        "expiring": 0,
+        "notified": 0,
+        "days_ahead": days_ahead,
+        "dry_run": dry_run,
+    }

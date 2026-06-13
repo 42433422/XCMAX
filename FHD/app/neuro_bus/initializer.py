@@ -112,18 +112,17 @@ class NeuroBusInitializer:
         if not self._initialized:
             return
 
+        logger.info("[NeuroBusInitializer] 正在关闭 NeuroBus 系统...")
         try:
-            logger.info("[NeuroBusInitializer] 正在关闭 NeuroBus 系统...")
-
             if self._health_monitor:
                 self._health_monitor.stop_monitoring()
                 logger.info("[NeuroBusInitializer] ✓ 健康监控已停止")
-
+        except RECOVERABLE_ERRORS as e:
+            # 健康监控停止失败不得阻断系统拆除——状态必须在 finally 中清理。
+            logger.error(f"[NeuroBusInitializer] 关闭健康监控时出错: {e}")
+        finally:
             self._initialized = False
             logger.info("[NeuroBusInitializer] ✓ NeuroBus 系统已关闭")
-
-        except RECOVERABLE_ERRORS as e:
-            logger.error(f"[NeuroBusInitializer] 关闭时出错: {e}")
 
     def get_status(self) -> dict:
         """获取初始化状态"""

@@ -129,7 +129,11 @@ def test_create_engine_sqlite_desktop_uses_static_pool():
 
 
 def test_create_engine_sqlite_server_uses_null_pool():
-    with patch.dict("os.environ", {}, clear=False):
+    with patch.dict(
+        "os.environ",
+        {"XCAGI_DESKTOP_MODE": "", "XCAGI_DESKTOP": ""},
+        clear=False,
+    ):
         engine = db_mod._create_engine_for_url("sqlite:///srv.db")
         try:
             assert "NullPool" in type(engine.pool).__name__
@@ -153,27 +157,18 @@ def test_session_local_factory_cached():
 
 
 def test_get_db_yields_and_closes_session():
-    from contextlib import contextmanager
-
     mock_session = MagicMock()
+    mock_factory = MagicMock(return_value=mock_session)
 
-    @contextmanager
-    def fake_transaction(url, mod_id=None):
-        try:
-            yield mock_session
-            mock_session.commit()
-        except Exception:
-            mock_session.rollback()
-            raise
-        finally:
-            mock_session.close()
-
-    with patch("app.db.db_consistency.get_consistency_manager") as mgr:
-        mgr.return_value.transaction.side_effect = fake_transaction
+    with patch.object(db_mod, "_get_session_local", return_value=mock_factory):
         gen = db_mod.get_db()
         db = next(gen)
         assert db is mock_session
-        gen.close()
+        try:
+            gen.send(None)
+        except StopIteration:
+            pass
+    mock_factory.assert_called_once()
     mock_session.close.assert_called_once()
 
 

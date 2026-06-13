@@ -56,14 +56,15 @@ def paginate_list(
     Returns:
         dict: 包含数据和分页信息的响应
     """
+    total_pages = ceil(total / per_page) if per_page > 0 else 0
     return {
         "items": items,
         "pagination": {
             "total": total,
             "page": page,
             "per_page": per_page,
-            "total_pages": ceil(total / per_page) if per_page > 0 else 0,
-            "has_next": page < ceil(total / per_page),
+            "total_pages": total_pages,
+            "has_next": page < total_pages if per_page > 0 else False,
             "has_prev": page > 1,
         },
     }

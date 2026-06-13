@@ -16,6 +16,7 @@ from sqlalchemy.pool import StaticPool
 from app.db.base import Base
 from app.db.models.approval import ApprovalFlow, ApprovalFlowNode, ApprovalStatus
 from app.fastapi_routes import approval as approval_routes
+from app.application import approval_workspace_app_service as approval_svc
 
 try:
     from app.fastapi_routes import finance as finance_routes
@@ -113,7 +114,7 @@ def _patch_get_db(session_factory):
         finally:
             db.close()
 
-    with patch.object(approval_routes, "get_db", _get_db):
+    with patch.object(approval_svc, "get_db", _get_db):
         yield
 
 
@@ -180,7 +181,7 @@ def test_approval_withdraw_pending_request(
     approval_db,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(approval_routes, "notify_mobile_user", lambda *a, **k: None)
+    monkeypatch.setattr(approval_svc, "notify_mobile_user", lambda *a, **k: None)
     session = approval_db()
     try:
         applicant_id = _ensure_user(session, "p41_applicant")
@@ -209,7 +210,7 @@ def test_approval_withdraw_forbidden_for_non_applicant(
     approval_db,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(approval_routes, "notify_mobile_user", lambda *a, **k: None)
+    monkeypatch.setattr(approval_svc, "notify_mobile_user", lambda *a, **k: None)
     session = approval_db()
     try:
         applicant_id = _ensure_user(session, "p41_app2")
@@ -238,7 +239,7 @@ def test_approval_delete_final_request(
     approval_db,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(approval_routes, "notify_mobile_user", lambda *a, **k: None)
+    monkeypatch.setattr(approval_svc, "notify_mobile_user", lambda *a, **k: None)
     session = approval_db()
     try:
         applicant_id = _ensure_user(session, "p41_del_app")

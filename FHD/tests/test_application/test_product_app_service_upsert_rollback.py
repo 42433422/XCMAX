@@ -119,8 +119,8 @@ class TestUpdateAndDelete:
 class TestSingleton:
     def test_uses_gateway_defaults(self) -> None:
         with (
-            patch("app.application.product_app_service.get_products_service") as gp,
-            patch("app.application.product_app_service.get_printer_service") as gpr,
+            patch("app.services.get_products_service") as gp,
+            patch("app.services.get_printer_service") as gpr,
         ):
             gp.return_value = MagicMock(name="prod")
             gpr.return_value = MagicMock(name="printer")

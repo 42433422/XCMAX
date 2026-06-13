@@ -5,6 +5,7 @@ from pathlib import Path
 
 from sqlalchemy import create_engine, event, inspection, pool
 from sqlalchemy.engine import Engine, make_url
+from sqlalchemy.exc import ArgumentError as SQLAlchemyArgumentError
 from sqlalchemy.orm import scoped_session, sessionmaker
 from sqlalchemy.pool import NullPool
 
@@ -50,7 +51,7 @@ def _sqlite_url_with_mod_suffix(base_url: str, active_mod_id: str) -> str:
         return base_url
     try:
         u = make_url(base_url)
-    except RECOVERABLE_ERRORS:
+    except (*RECOVERABLE_ERRORS, SQLAlchemyArgumentError):
         return base_url
     if u.get_dialect().name != "sqlite":
         return base_url
