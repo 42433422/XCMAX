@@ -214,22 +214,22 @@ class TestCustomerApplicationService:
 
     def test_get_all_customers(self):
         """测试获取所有客户"""
-        with patch("app.application.customer_app_service._get_customers_engine"):
-            with patch("app.application.customer_app_service._CustomersSessionLocal"):
-                service = CustomerApplicationService()
-                session_mock = MagicMock()
-                query_mock = MagicMock()
-                query_mock.count.return_value = 0
-                query_mock.order_by.return_value = query_mock
-                query_mock.offset.return_value = query_mock
-                query_mock.limit.return_value = query_mock
-                query_mock.all.return_value = []
+        # 该服务已迁移为惰性 session（_get_session），不再有模块级 engine/SessionLocal；
+        # 直接 patch 实例的 _get_session 即可隔离 DB。
+        service = CustomerApplicationService()
+        session_mock = MagicMock()
+        query_mock = MagicMock()
+        query_mock.count.return_value = 0
+        query_mock.order_by.return_value = query_mock
+        query_mock.offset.return_value = query_mock
+        query_mock.limit.return_value = query_mock
+        query_mock.all.return_value = []
 
-                with patch.object(service, "_get_session", return_value=session_mock):
-                    session_mock.query.return_value = query_mock
-                    result = service.get_all()
+        with patch.object(service, "_get_session", return_value=session_mock):
+            session_mock.query.return_value = query_mock
+            result = service.get_all()
 
-                    assert result["success"] is True
+            assert result["success"] is True
 
 
 @pytest.mark.skipif(

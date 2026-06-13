@@ -21,6 +21,13 @@ def test_provision_trial_creates_tenant() -> None:
     db = MagicMock()
     db.query.return_value.filter.return_value.first.side_effect = [user, None]
 
+    # 模拟真实 SQLAlchemy：add/flush 后由 DB 赋自增主键（否则 int(tenant.id) 收到 None）。
+    def _assign_pk(obj: object) -> None:
+        if getattr(obj, "id", None) is None:
+            obj.id = 99
+
+    db.add.side_effect = _assign_pk
+
     with patch("app.application.tenant_subscription_app_service.get_db") as mock_get_db:
         mock_get_db.return_value.__enter__.return_value = db
         mock_get_db.return_value.__exit__.return_value = False

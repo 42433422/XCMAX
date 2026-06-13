@@ -10,7 +10,6 @@ tests/test_db/test_retry_handler_backoff.py  # INFRA:9
 
 # ===== DRIFT (11 文件) =====
 tests/neuro/test_bus_publish_failure_paths.py  # DRIFT:2
-tests/neuro/test_runtime_diagnostics_snapshot.py  # DRIFT:1
 tests/test_application/test_auth_app_service_token_rotation.py  # DRIFT:10
 tests/test_application/test_product_app_service_upsert_rollback.py  # DRIFT:6
 tests/test_coverage_ramp_phase54_routes.py  # DRIFT:8
@@ -27,7 +26,6 @@ tests/routes/test_desktop_runtime_status.py  # ASSERT:4
 tests/test_application/test_finance_app_service_parse_errors.py  # ASSERT:1
 tests/test_aux_employee_store.py  # ASSERT:2
 tests/test_coverage_ramp_routes.py  # ASSERT:10
-tests/test_customer_service_pages_compat.py  # ASSERT:1
 tests/test_db/test_sqlite_pk_reuse.py  # ASSERT:1
 tests/test_db/test_validators_edge_cases.py  # ASSERT:2
 tests/test_decoupling_mods.py  # ASSERT:5
@@ -65,12 +63,8 @@ tests/routes/test_debug_client_log_ingest.py  # OTHER:2
 tests/routes/test_fhd_meta_serialization.py  # OTHER:4
 tests/routes/test_health_k8s_probe.py  # OTHER:5
 tests/test_application/test_ai_chat_app_service.py  # OTHER:2
-tests/test_application/test_app_services.py  # OTHER:1
 tests/test_application/test_customer_app_service_merge_conflict.py  # OTHER:2
 tests/test_application/test_material_app_service_unit_conversion.py  # OTHER:1
-tests/test_application/test_tenant_subscription.py  # OTHER:1
-tests/test_approval_bridge_mod.py  # OTHER:2
-tests/test_approval_pages_compat.py  # OTHER:1
 tests/test_coverage_ramp_phase41_routes.py  # OTHER:4
 tests/test_coverage_ramp_phase5_routes.py  # OTHER:2
 tests/test_db/test_session_module.py  # OTHER:3
@@ -82,19 +76,13 @@ tests/test_erp_pages_compat.py  # OTHER:1
 tests/test_erp_products_facade.py  # OTHER:3
 tests/test_erp_repository_registry.py  # OTHER:4
 tests/test_industry_seed.py  # OTHER:1
-tests/test_lan_bridge_mod.py  # OTHER:2
-tests/test_lan_pages_compat.py  # OTHER:1
 tests/test_mobile_api.py  # OTHER:3
 tests/test_mobile_api_extensions.py  # OTHER:2
-tests/test_model_payment_bridge_mod.py  # OTHER:2
-tests/test_model_payment_pages_compat.py  # OTHER:1
 tests/test_mods_list_etag.py  # OTHER:1
 tests/test_neuro_bus_bridge_mod.py  # OTHER:2
 tests/test_neuro_bus_handler_registry.py  # OTHER:3
 tests/test_neuro_bus_runtime.py  # OTHER:2
 tests/test_openapi_consistency.py  # OTHER:2
-tests/test_planner_mod_facade.py  # OTHER:2
-tests/test_planner_pages_compat.py  # OTHER:2
 tests/test_routes/test_im_v0.py  # OTHER:2
 tests/test_services/test_contract_expiry_notify.py  # OTHER:1
 tests/test_services/test_extract_log_service.py  # OTHER:3

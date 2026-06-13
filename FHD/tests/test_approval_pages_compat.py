@@ -11,10 +11,11 @@ REPO = Path(__file__).resolve().parents[1]
 def test_approval_pages_registry_physical():
     from app.mod_sdk.approval_pages_compat import list_approval_pages_registry
 
+    from tests.mod_presence import skip_if_bridge_mod_absent
+
+    mod_dir = skip_if_bridge_mod_absent("xcagi-approval-bridge")
     reg = list_approval_pages_registry()
-    manifest = json.loads(
-        (REPO / "mods" / "xcagi-approval-bridge" / "manifest.json").read_text(encoding="utf-8")
-    )
+    manifest = json.loads((mod_dir / "manifest.json").read_text(encoding="utf-8"))
     if manifest.get("config", {}).get("views_physical"):
         assert reg.get("component_source") == "mod.frontend.views (O+ physical)"
         assert reg.get("views_physical") is True
