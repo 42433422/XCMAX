@@ -7,6 +7,10 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+pytest.importorskip(
+    "app.fastapi_routes.legacy_auth",
+    reason="legacy_auth route module removed; auth lives under fastapi_routes/domains/auth",
+)
 from app.fastapi_routes import legacy_auth
 
 

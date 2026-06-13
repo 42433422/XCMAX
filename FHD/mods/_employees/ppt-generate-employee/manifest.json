@@ -1,0 +1,129 @@
+{
+  "id": "ppt-generate-employee",
+  "name": "PPT 生成员",
+  "version": "1.0.0",
+  "author": "XCAGI",
+  "description": "PPT 生成员：LLM 编排 + OOXML 执行。支持从零 compose 多页演示、基于上传 pptx 增强（图片+动画）。输出 output.pptx，禁止纯文字冒充动效作业。",
+  "artifact": "employee_pack",
+  "scope": "global",
+  "dependencies": {
+    "xcagi": ">=1.0.0"
+  },
+  "employee": {
+    "id": "ppt-generate-employee",
+    "label": "PPT 生成员",
+    "capabilities": [
+      "ppt.write",
+      "ppt.ooxml",
+      "data.json_read",
+      "llm.plan"
+    ]
+  },
+  "workflow_employees": [
+    {
+      "id": "ppt-generate-employee",
+      "label": "PPT 生成员",
+      "panel_title": "PPT 生成员",
+      "panel_summary": "文字/JSON 从零生成或基于 template.pptx 增强，输出 output.pptx（含动画）。",
+      "capabilities": [
+        "ppt.write",
+        "ppt.ooxml",
+        "data.json_read",
+        "llm.plan"
+      ],
+      "api_base_path": "employees/ppt-generate-employee",
+      "entry_action": "run"
+    }
+  ],
+  "backend": {
+    "entry": "blueprints",
+    "init": "mod_init"
+  },
+  "employee_config_v2": {
+    "identity": {
+      "id": "ppt-generate-employee",
+      "version": "1.0.0",
+      "artifact": "employee_pack",
+      "name": "PPT 生成员",
+      "description": "制作 PPT 生成员工包（Codex 级）"
+    },
+    "perception": {
+      "type": "file_or_text",
+      "accepted_extensions": [
+        ".json",
+        ".txt"
+      ]
+    },
+    "memory": {
+      "type": "session"
+    },
+    "cognition": {
+      "agent": {
+        "system_prompt": "你是PPT 生成员。compose-first：无模板时从零合成多页 output.pptx；enhance：复制 template 后按 ppt_edit_plan 注入 OOXML 动画。必须执行 modstore_server.ppt_generate_pipeline，禁止仅输出纯文字幻灯片冒充带动效作业。",
+        "role": {
+          "name": "PPT 生成员",
+          "persona": "严谨的 PPT 生成员工",
+          "tone": "professional",
+          "expertise": [
+            "PPT 合成",
+            "OOXML 动画",
+            "LLM 编排"
+          ]
+        },
+        "behavior_rules": [
+          "必须写出 outputs/output.pptx（含 ppt_edit_plan.json）。",
+          "compose 无模板时须多页骨架；enhance 须保留 template 媒体。",
+          "禁止无输入编造；禁止纯文字冒充带动效/带图 PPT。"
+        ],
+        "few_shot_examples": [],
+        "model": {
+          "provider": "auto",
+          "model_name": "auto",
+          "temperature": 0.1,
+          "max_tokens": 2000,
+          "top_p": 0.9
+        }
+      },
+      "skills": [
+        {
+          "name": "ppt.generate",
+          "brief": "plan → compose/enhance → output.pptx。"
+        }
+      ]
+    },
+    "collaboration": {
+      "workflow": {
+        "workflow_id": 0,
+        "name": "PPT 生成员"
+      }
+    },
+    "actions": {
+      "handlers": [
+        "direct_python"
+      ],
+      "direct_python": {
+        "module": "ppt_generate_employee",
+        "action": "convert",
+        "default_output_relpath": "outputs/output.pptx",
+        "default_template_relpath": "",
+        "default_use_personnel_roster": true
+      }
+    }
+  },
+  "metadata": {
+    "framework_version": "2.0.0",
+    "created_by": "asset_pipeline"
+  },
+  "actions": {
+    "handlers": [
+      "direct_python"
+    ],
+    "direct_python": {
+      "module": "ppt_generate_employee",
+      "action": "convert",
+      "default_output_relpath": "outputs/output.pptx",
+      "default_template_relpath": "",
+      "default_use_personnel_roster": true
+    }
+  }
+}

@@ -1,0 +1,124 @@
+{
+  "id": "csv-generate-employee",
+  "name": "CSV 生成员",
+  "version": "1.0.0",
+  "author": "XCAGI",
+  "description": "CSV生成员工：上传 .json（含 columns 与 rows）写出 outputs/output.csv，使用 direct_python，禁止编造表格数据",
+  "artifact": "employee_pack",
+  "scope": "global",
+  "dependencies": {
+    "xcagi": ">=1.0.0"
+  },
+  "employee": {
+    "id": "csv-generate-employee",
+    "label": "CSV 生成员",
+    "capabilities": [
+      "data.json_read",
+      "data.csv_write"
+    ]
+  },
+  "workflow_employees": [
+    {
+      "id": "csv-generate-employee",
+      "label": "CSV 生成员",
+      "panel_title": "CSV 生成员",
+      "panel_summary": "上传 JSON，按 columns/rows 写出 outputs/output.csv。",
+      "capabilities": [
+        "data.json_read",
+        "data.csv_write"
+      ],
+      "api_base_path": "employees/csv-generate-employee",
+      "entry_action": "run"
+    }
+  ],
+  "backend": {
+    "entry": "blueprints",
+    "init": "mod_init"
+  },
+  "employee_config_v2": {
+    "identity": {
+      "id": "csv-generate-employee",
+      "version": "1.0.0",
+      "artifact": "employee_pack",
+      "name": "CSV 生成员",
+      "description": "CSV生成员工：上传 .json（含 columns 与 rows）写出 outputs/output.csv，使用 direct_python，禁止编造表格数据"
+    },
+    "perception": {
+      "type": "json",
+      "accepted_extensions": [
+        ".json",
+        ".txt"
+      ]
+    },
+    "memory": {
+      "type": "session"
+    },
+    "cognition": {
+      "agent": {
+        "system_prompt": "你是CSV 生成员。你负责根据 JSON（columns/rows）写出 outputs/output.csv。JSON 为中介；必须真实执行 direct_python，禁止编造表格内容。",
+        "role": {
+          "name": "CSV 生成员",
+          "persona": "严谨的 CSV 生成员工",
+          "tone": "professional",
+          "expertise": [
+            "JSON 解析",
+            "CSV 写出",
+            "表格生成"
+          ]
+        },
+        "behavior_rules": [
+          "必须根据 JSON columns/rows 写出 csv。",
+          "成功必须以写出 output.csv 为准。"
+        ],
+        "few_shot_examples": [],
+        "model": {
+          "provider": "auto",
+          "model_name": "auto",
+          "temperature": 0.1,
+          "max_tokens": 2000,
+          "top_p": 0.9
+        }
+      },
+      "skills": [
+        {
+          "name": "data.csv_write",
+          "brief": "JSON 中介 → 写出 output.csv。"
+        }
+      ]
+    },
+    "collaboration": {
+      "workflow": {
+        "workflow_id": 0,
+        "name": "CSV 生成员"
+      }
+    },
+    "actions": {
+      "handlers": [
+        "direct_python"
+      ],
+      "direct_python": {
+        "module": "csv_generate_employee",
+        "action": "convert",
+        "default_output_relpath": "outputs/output.csv",
+        "default_template_relpath": "",
+        "default_use_personnel_roster": false
+      }
+    }
+  },
+  "metadata": {
+    "framework_version": "2.0.0",
+    "created_by": "asset_pipeline"
+  },
+  "actions": {
+    "handlers": [
+      "direct_python"
+    ],
+    "direct_python": {
+      "module": "csv_generate_employee",
+      "action": "convert",
+      "default_output_relpath": "outputs/output.csv",
+      "default_template_relpath": "",
+      "default_use_personnel_roster": false
+    }
+  }
+}
