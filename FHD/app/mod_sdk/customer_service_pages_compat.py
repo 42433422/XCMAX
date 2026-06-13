@@ -24,9 +24,13 @@ def _resolve_mod_dir() -> Path | None:
     try:
         from app.infrastructure.mods.mod_manager import get_mod_manager
 
-        meta = get_mod_manager().get_mod(CUSTOMER_SERVICE_BRIDGE_MOD_ID)
+        mm = get_mod_manager()
+        meta = mm.get_mod(CUSTOMER_SERVICE_BRIDGE_MOD_ID)
         if meta and meta.mod_path and (Path(meta.mod_path) / "manifest.json").is_file():
             return Path(meta.mod_path)
+        disk = mm.resolve_mod_directory(CUSTOMER_SERVICE_BRIDGE_MOD_ID)
+        if disk and (Path(disk) / "manifest.json").is_file():
+            return Path(disk)
     except RECOVERABLE_ERRORS:
         pass
     trial = Path(__file__).resolve().parents[2] / "mods" / CUSTOMER_SERVICE_BRIDGE_MOD_ID

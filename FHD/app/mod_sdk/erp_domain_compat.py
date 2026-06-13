@@ -51,11 +51,15 @@ def _resolve_mod_dir() -> Path | None:
     try:
         from app.infrastructure.mods.mod_manager import get_mod_manager
 
-        meta = get_mod_manager().get_mod(ERP_DOMAIN_BRIDGE_MOD_ID)
+        mm = get_mod_manager()
+        meta = mm.get_mod(ERP_DOMAIN_BRIDGE_MOD_ID)
         if meta and meta.mod_path:
             p = Path(meta.mod_path)
             if (p / "manifest.json").is_file():
                 return p
+        disk = mm.resolve_mod_directory(ERP_DOMAIN_BRIDGE_MOD_ID)
+        if disk and (Path(disk) / "manifest.json").is_file():
+            return Path(disk)
     except RECOVERABLE_ERRORS:
         logger.debug("erp domain mod path lookup failed", exc_info=True)
 
