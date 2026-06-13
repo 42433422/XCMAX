@@ -364,11 +364,41 @@ Step 5  mods.ts 收敛为门面（return 维持原 API）
 
 ## 6. 前置依赖：后端测试可复现性（阻塞 §1 验证）
 
-本地实测 `pytest`：**321 failed / 1425 passed / 58 errors**（环境耦合，缺 CI fixtures/外部依赖）。
-**在修复可复现性前，§1 的"行为零变化"无法被测试证明**。建议先：
-1. 标注/隔离需要外部依赖的测试（`@pytest.mark.integration`），默认 CI 子集本地可全绿；
-2. 补齐本地 fixtures 或 `conftest` 跳过逻辑，使 `pytest -m "not integration"` 干净通过；
-3. 之后再开 §1 阶段 A。
+### 6.1 实测结论（2026-06-13，已落地部分修复）
+
+- 配置卫生：`pytest.ini` 仅声明 `release_gate`（已在 pyproject）却**完全覆盖** pyproject 的
+  `[tool.pytest.ini_options]`（pytest 配置文件取第一命中者）。已**删除** `pytest.ini`，恢复
+  pyproject 配置（`asyncio_mode=auto`、`--import-mode=importlib`、`testpaths`、marker、
+  `filterwarnings`），marker 警告 16→1。
+- 全量基线（删 ini 后，本地 + CI 环境变量）：**320 failed / 1509 passed / 51 skipped / 12 errors**，
+  仅 ~24s（快速失败，**非网络超时**）。
+- **CI 本分支同样全红**（`gh run list` 确认）—— 即此红是**既有状态**，不是重构引入。
+- 失败根因分布（97 个失败文件）：
+  - **幽灵/漂移**：测从未实现或已删改的 API。典型 `tests/test_utils/test_deployment_env_probe.py`
+    （18）import 的 `app.utils.deployment` **整模块不存在**（仅 `is_desktop_mode` 散落在
+    `app/desktop_runtime/paths.py`）。属 COVERAGE_RAMP 为凑覆盖率批量产出的死测试。
+  - **环境耦合**：redis(`localhost:6379`)、postgres(`127.0.0.1:5432`)、`database is locked`、
+    Mod 后端文件缺失 —— CI 有 redis 服务故通过，本地无。
+  - **断言/其它**：行为漂移或测试陈旧。
+
+### 6.2 已落地的可复现绿色信号（快车道）
+
+- `tests/quarantine_known_red.txt`：97 个已知红文件的**显式燃尽清单**（非隐藏跳过；修一个删一行）。
+- `scripts/dev/test_fast.py`：排除清单后运行，自动对齐 CI 环境变量。
+  实测 **682 passed / 42 skipped / 0 failed（~14s）** —— 重构（如 §1 路由收口）可据此即时验证不引入新回归。
+  ```bash
+  python scripts/dev/test_fast.py            # 绿
+  python scripts/dev/test_fast.py -k xxx     # 透传 pytest 参数
+  ```
+
+### 6.3 燃尽路线（后续）
+
+1. **幽灵测试**：逐个判定「实现缺失模块」or「删除死测试」。`app.utils.deployment` 建议按
+   `test_deployment_env_probe.py`（即其规格）实现一个薄环境探测工具模块，一次回收 18 项。
+2. **环境耦合**：给 redis/postgres 类标 `@pytest.mark.integration`，并加 conftest「infra 不可达即 skip」；
+   使 `-m "not integration"` 本地干净。
+3. 每修复一类 → 从 `quarantine_known_red.txt` 删除对应行，快车道覆盖面自动扩大，直至清零。
+4. 收尾后令 `test_fast.py` 等同全量，§1 后端重构即获完整安全网。
 
 ---
 
