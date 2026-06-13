@@ -231,6 +231,8 @@ async def refresh_session_entitlements_from_market(
     else:
         client_ids = await fetch_entitled_client_mod_ids_from_market(market_token)
 
+    client_ids = _augment_entitled_for_username(market_username, client_ids)
+
     set_session_entitlements(
         market_user_id=market_user_id,
         market_username=market_username,
@@ -308,8 +310,14 @@ def _session_username_for_entitlements(session_id: str) -> str:
         from app.services.session_service import SessionService
 
         info = SessionService().validate_session(sid)
-        if info and info.get("username"):
-            return str(info["username"]).strip()
+        if info is None:
+            pass
+        elif isinstance(info, dict):
+            username = info.get("username")
+        else:
+            username = getattr(info, "username", None)
+        if username:
+            return str(username).strip()
     except RECOVERABLE_ERRORS:
         pass
     return ""

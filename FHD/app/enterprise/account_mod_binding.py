@@ -7,10 +7,21 @@ SUNBIRD_LOCAL_USERNAMES: frozenset[str] = frozenset({"SUNBIRD", "sunbird"})
 SUNBIRD_CLIENT_MOD_ID = "taiyangniao-pro"
 SUNBIRD_INDUSTRY_MOD_ID = "attendance-industry"
 
+# P-S 企业版本地演示号（见 config/surface_audit_demo_account.json）
+ENTERPRISE_DEMO_LOCAL_USERNAME = "xcagi-enterprise-demo"
+ENTERPRISE_DEMO_INDUSTRY_MOD_IDS: frozenset[str] = frozenset(
+    {"coating-industry", "attendance-industry"}
+)
+
 
 def is_sunbird_local_username(username: str) -> bool:
     u = (username or "").strip()
     return u.upper() in {x.upper() for x in SUNBIRD_LOCAL_USERNAMES}
+
+
+def is_enterprise_demo_local_username(username: str) -> bool:
+    u = (username or "").strip()
+    return u.lower() == ENTERPRISE_DEMO_LOCAL_USERNAME.lower()
 
 
 def augment_entitled_client_mod_ids_for_username(
@@ -22,4 +33,6 @@ def augment_entitled_client_mod_ids_for_username(
     if is_sunbird_local_username(username):
         out.add(SUNBIRD_CLIENT_MOD_ID)
         out.add(SUNBIRD_INDUSTRY_MOD_ID)
+    if is_enterprise_demo_local_username(username):
+        out.update(ENTERPRISE_DEMO_INDUSTRY_MOD_IDS)
     return out

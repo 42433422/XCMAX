@@ -246,9 +246,9 @@ function catalogChipRow(pkg) {
 }
 
 const openIndustryOptions = computed(() => {
-  const openPkgs = onboardingCatalog.value?.open_packages
-  if (Array.isArray(openPkgs) && openPkgs.length) {
-    return openPkgs.map(catalogChipRow)
+  const catalog = onboardingCatalog.value
+  if (catalog) {
+    return (catalog.open_packages || []).map(catalogChipRow)
   }
   return industryOptions
     .filter((p) => isOnboardingIndustryOpen(p.id))
@@ -869,6 +869,7 @@ onMounted(async () => {
   border-style: dashed;
   padding: 10px;
   min-height: 88px;
+  pointer-events: none;
 }
 
 .industry-chip--locked:hover {
