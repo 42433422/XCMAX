@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
-from typing import Any
+from typing import Any, cast
 
 from app.mod_sdk.host_profile import resolve_fhd_config_dir
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -25,7 +25,7 @@ def load_industry_baseline_document() -> dict[str, Any]:
     if cfg:
         doc = _load_json(cfg / "industry_baseline.json")
         if doc and isinstance(doc.get("industries"), dict):
-            return doc
+            return cast("dict[str, Any]", doc)
     return {
         "schema_version": 1,
         "core_mod_ids": ["xcagi-planner-bridge", "xcagi-neuro-bus-bridge"],
@@ -41,10 +41,11 @@ def _installed_mod_ids() -> list[str]:
         from app.infrastructure.mods.mod_manager import get_mod_manager
 
         mm = get_mod_manager()
-        ids = [m.id for m in (mm.list_loaded_mods() or []) if getattr(m, "id", None)]
-        if ids:
-            return ids
-        return [m.id for m in mm.scan_mods() if getattr(m, "id", None)]
+        loaded = [m.id for m in (mm.list_loaded_mods() or []) if getattr(m, "id", None)]
+        scanned = [m.id for m in mm.scan_mods() if getattr(m, "id", None)]
+        if scanned or loaded:
+            return _dedupe(scanned + loaded)
+        return []
     except RECOVERABLE_ERRORS:
         return []
 

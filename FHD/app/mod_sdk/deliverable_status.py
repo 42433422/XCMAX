@@ -26,10 +26,18 @@ def _installed_mod_ids() -> list[str]:
         from app.infrastructure.mods.mod_manager import get_mod_manager
 
         mm = get_mod_manager()
-        ids = [m.id for m in (mm.list_loaded_mods() or []) if getattr(m, "id", None)]
-        if ids:
-            return ids
-        return [m.id for m in mm.scan_mods() if getattr(m, "id", None)]
+        loaded = [m.id for m in (mm.list_loaded_mods() or []) if getattr(m, "id", None)]
+        scanned = [m.id for m in mm.scan_mods() if getattr(m, "id", None)]
+        if scanned or loaded:
+            seen: set[str] = set()
+            out: list[str] = []
+            for mid in scanned + loaded:
+                s = str(mid or "").strip()
+                if s and s not in seen:
+                    seen.add(s)
+                    out.append(s)
+            return out
+        return []
     except RECOVERABLE_ERRORS:
         return []
 

@@ -1,0 +1,224 @@
+{
+  "id": "xcagi-erp-domain-bridge",
+  "name": "XCAGI 通用业务领域门面 Mod",
+  "version": "10.0.0",
+  "author": "成都修茈科技有限公司",
+  "description": "通用业务 API 门面 + Repository 可插拔 + Mod 业务页（K+/O+ 物理视图；L 仓储边界）。",
+  "primary": false,
+  "dependencies": {
+    "xcagi": ">=10.0.0"
+  },
+  "backend": {
+    "entry": "blueprints",
+    "init": "mod_init"
+  },
+  "frontend": {
+    "routes": "frontend/routes",
+    "menu": [
+      {
+        "id": "mod-erp-products",
+        "label": "业务对象",
+        "icon": "fa-cubes",
+        "path": "/mod/xcagi-erp-domain-bridge/products"
+      },
+      {
+        "id": "mod-erp-customers",
+        "label": "组织管理",
+        "icon": "fa-users",
+        "path": "/mod/xcagi-erp-domain-bridge/customers"
+      },
+      {
+        "id": "mod-erp-orders",
+        "label": "业务单据",
+        "icon": "fa-file-text-o",
+        "path": "/mod/xcagi-erp-domain-bridge/orders"
+      },
+      {
+        "id": "mod-erp-shipment-records",
+        "label": "业务记录",
+        "icon": "fa-industry",
+        "path": "/mod/xcagi-erp-domain-bridge/shipment-records"
+      },
+      {
+        "id": "mod-erp-materials-list",
+        "label": "资源列表",
+        "icon": "fa-list-alt",
+        "path": "/mod/xcagi-erp-domain-bridge/materials-list"
+      },
+      {
+        "id": "mod-erp-materials",
+        "label": "资源库",
+        "icon": "fa-archive",
+        "path": "/mod/xcagi-erp-domain-bridge/materials"
+      },
+      {
+        "id": "mod-erp-traditional-mode",
+        "label": "表格模式",
+        "icon": "fa-table",
+        "path": "/mod/xcagi-erp-domain-bridge/traditional-mode"
+      },
+      {
+        "id": "mod-erp-business-docking",
+        "label": "业务对接",
+        "icon": "fa-exchange",
+        "path": "/mod/xcagi-erp-domain-bridge/business-docking"
+      },
+      {
+        "id": "mod-erp-data-sources",
+        "label": "数据来源",
+        "icon": "fa-database",
+        "path": "/mod/xcagi-erp-domain-bridge/data-sources"
+      },
+      {
+        "id": "mod-erp-print",
+        "label": "模板与打印",
+        "icon": "fa-print",
+        "path": "/mod/xcagi-erp-domain-bridge/print"
+      },
+      {
+        "id": "mod-erp-printer-list",
+        "label": "打印机列表",
+        "icon": "fa-print",
+        "path": "/mod/xcagi-erp-domain-bridge/printer-list"
+      },
+      {
+        "id": "mod-erp-template-preview",
+        "label": "模板库",
+        "icon": "fa-file-o",
+        "path": "/mod/xcagi-erp-domain-bridge/template-preview"
+      },
+      {
+        "id": "mod-erp-wechat-contacts",
+        "label": "企业微信联系人",
+        "icon": "fa-weixin",
+        "path": "/mod/xcagi-erp-domain-bridge/wechat-contacts"
+      }
+    ],
+    "menu_overrides": [
+      {
+        "key": "products",
+        "hidden": true
+      },
+      {
+        "key": "customers",
+        "hidden": true
+      },
+      {
+        "key": "orders",
+        "hidden": true
+      },
+      {
+        "key": "shipment-records",
+        "hidden": true
+      },
+      {
+        "key": "wechat-contacts",
+        "hidden": true
+      },
+      {
+        "key": "materials",
+        "hidden": true
+      },
+      {
+        "key": "materials-list",
+        "hidden": true
+      },
+      {
+        "key": "traditional-mode",
+        "hidden": true
+      },
+      {
+        "key": "business-docking",
+        "hidden": true
+      },
+      {
+        "key": "data-sources",
+        "hidden": true
+      },
+      {
+        "key": "print",
+        "hidden": true
+      },
+      {
+        "key": "printer-list",
+        "hidden": true
+      },
+      {
+        "key": "template-preview",
+        "hidden": true
+      }
+    ]
+  },
+  "hooks": {},
+  "comms": {
+    "exports": []
+  },
+  "config": {
+    "erp_domain_facade": true,
+    "erp_pages_via_mod": true,
+    "erp_extended_pages": true,
+    "erp_domains": {
+      "facade_enabled": true
+    },
+    "mod_domain_handlers": [
+      "products",
+      "shipment",
+      "customers",
+      "wechat"
+    ],
+    "products_via_service": true,
+    "customers_via_service": true,
+    "wechat_contacts_via_facade": true,
+    "repository_via_mod": true,
+    "repository_phase": "L++",
+    "repository_adapter": "mod_factory",
+    "views_physical": true,
+    "physical_views": [
+      "ProductsView.vue",
+      "CustomersView.vue",
+      "OrdersView.vue",
+      "CreateOrderView.vue",
+      "ShipmentRecordsView.vue",
+      "WechatContactsView.vue",
+      "MaterialsView.vue",
+      "TraditionalModeView.vue",
+      "BusinessDockingView.vue",
+      "DataSourcesView.vue",
+      "PrintView.vue",
+      "PrinterListView.vue",
+      "TemplatePreviewView.vue",
+      "LabelEditorView.vue",
+      "PurchaseView.vue",
+      "InventoryView.vue",
+      "BatchAnalyzeView.vue"
+    ],
+    "legacy_host_prefixes": [
+      "/api/products",
+      "/api/customers",
+      "/api/orders",
+      "/api/shipment",
+      "/api/wechat",
+      "/api/wechat_contacts"
+    ],
+    "legacy_host_page_paths": [
+      "/products",
+      "/customers",
+      "/orders",
+      "/orders/create",
+      "/shipment-records",
+      "/wechat-contacts",
+      "/materials",
+      "/materials-list",
+      "/traditional-mode",
+      "/business-docking",
+      "/data-sources",
+      "/print",
+      "/printer-list",
+      "/template-preview",
+      "/label-editor",
+      "/purchase",
+      "/inventory"
+    ],
+    "phase": "O+"
+  }
+}
