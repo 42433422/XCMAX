@@ -28,7 +28,6 @@ def test_list_planner_pages_registry():
 
 def test_planner_pages_registry_physical():
     from app.mod_sdk.planner_pages_compat import list_planner_pages_registry
-
     from tests.mod_presence import skip_if_bridge_mod_absent
 
     skip_if_bridge_mod_absent("xcagi-planner-bridge")

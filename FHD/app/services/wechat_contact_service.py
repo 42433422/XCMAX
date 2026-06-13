@@ -15,11 +15,11 @@ from sqlalchemy import or_
 
 from app.db.models import WechatContact, WechatContactContext
 from app.db.session import get_db
-from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
 from app.infrastructure.db.sql_identifiers import (
     quote_sqlite_identifier,
     resolve_wechat_message_table,
 )
+from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
 from app.utils.external_sqlite import sqlite_conn
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 

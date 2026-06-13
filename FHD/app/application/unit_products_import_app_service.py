@@ -16,11 +16,11 @@ from typing import Any
 from app.db.models.customer import Customer
 from app.db.models.product import Product
 from app.db.session import get_db
-from app.utils.external_sqlite import sqlite_conn
 from app.infrastructure.db.sql_identifiers import (
     quote_sqlite_identifier,
     resolve_products_table,
 )
+from app.utils.external_sqlite import sqlite_conn
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.path_utils import get_upload_dir
 

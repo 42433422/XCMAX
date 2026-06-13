@@ -94,6 +94,8 @@ const fileInputRef = ref<HTMLInputElement | null>(null)
 
 watch(fileInputRef, (el) => {
   if (props.excelAnalyzeInputRef) {
+    // Parent-owned ref bridge for Excel upload input
+    // eslint-disable-next-line vue/no-mutating-props -- intentional ref forwarding
     props.excelAnalyzeInputRef.value = el
   }
 }, { immediate: true })

@@ -213,7 +213,6 @@ class TestCleanupOldShipmentDocumentsTask:
     ):
         """测试成功清理旧文档"""
         import datetime
-        import os
 
         from app.tasks.shipment_tasks import cleanup_old_shipment_documents
 

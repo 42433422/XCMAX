@@ -13,10 +13,10 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from app.application import approval_workspace_app_service as approval_svc
 from app.db.base import Base
 from app.db.models.approval import ApprovalFlow, ApprovalFlowNode, ApprovalStatus
 from app.fastapi_routes import approval as approval_routes
-from app.application import approval_workspace_app_service as approval_svc
 
 try:
     from app.fastapi_routes import finance as finance_routes

@@ -24,7 +24,7 @@
             >
               <span>{{ $t('chat.orderNumber') }}</span>
               <input
-                v-model="currentTask.customOrderNumber"
+                v-model="customOrderNumberModel"
                 type="text"
                 class="form-control form-control-sm"
                 style="max-width:180px;height:28px;"
@@ -275,6 +275,7 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { ShipmentTask } from '@/composables/useShipmentTask'
 import type { TaskItem } from '@/composables/useChatPersistence'
@@ -305,7 +306,7 @@ function hasWorkflowBody(task: TaskItem): boolean {
   )
 }
 
-defineProps<{
+const props = defineProps<{
   currentTask: ShipmentTask | null
   taskList: TaskItem[]
   filteredTaskList: TaskItem[]
@@ -326,10 +327,11 @@ defineProps<{
   workflowTaskDotTitle: (task: TaskItem) => string
 }>()
 
-defineEmits<{
+const emit = defineEmits<{
   'confirm-task': []
   'cancel-task': []
   'refetch-order-number': []
+  'set-custom-order-number': [value: string]
   'shipment-download-click': []
   'start-print': []
   'switch-view': [view: string]
@@ -343,6 +345,11 @@ defineEmits<{
   'copy-assistant-push': []
   'open-assistant-float': []
 }>()
+
+const customOrderNumberModel = computed({
+  get: () => props.currentTask?.customOrderNumber ?? '',
+  set: (value: string) => emit('set-custom-order-number', value),
+})
 </script>
 
 <style scoped>

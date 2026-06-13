@@ -13,7 +13,9 @@ def test_erp_pages_registry_physical():
 
     reg = list_erp_pages_registry()
     manifest = json.loads(
-        (REPO / "mods-admin-runtime" / "xcagi-erp-domain-bridge" / "manifest.json").read_text(encoding="utf-8")
+        (REPO / "mods-admin-runtime" / "xcagi-erp-domain-bridge" / "manifest.json").read_text(
+            encoding="utf-8"
+        )
     )
     if manifest.get("config", {}).get("views_physical"):
         assert reg.get("component_source") == "mod.frontend.views (O+ physical)"

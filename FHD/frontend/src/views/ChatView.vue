@@ -49,6 +49,7 @@
         @confirm-task="confirmTask"
         @cancel-task="cancelTask"
         @refetch-order-number="refetchTaskOrderNumber"
+        @set-custom-order-number="setCustomOrderNumber"
         @shipment-download-click="handleShipmentDownloadClick"
         @start-print="startPrintFromTaskCard"
         @switch-view="emitSwitchView"
@@ -225,6 +226,7 @@ const {
   sendMessage: chatSendMessage,
   confirmTask,
   refetchTaskOrderNumber,
+  setCustomOrderNumber,
   cancelTask,
   showTaskConfirm,
   triggerUpload,

@@ -61,7 +61,9 @@ class PurchaseAppServiceV2:
     def get_suppliers(
         self, status: str | None = None, keyword: str | None = None
     ) -> dict[str, Any]:
-        return cast("dict[str, Any]", self._purchase_svc().get_suppliers(status=status, keyword=keyword))
+        return cast(
+            "dict[str, Any]", self._purchase_svc().get_suppliers(status=status, keyword=keyword)
+        )
 
     def get_supplier(self, supplier_id: int) -> dict[str, Any]:
         return cast("dict[str, Any]", self._purchase_svc().get_supplier(supplier_id))

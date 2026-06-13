@@ -234,9 +234,7 @@ def with_sla(level: SLALevel, fallback=None):
                 return result
 
             except TimeoutError:
-                logger.error(
-                    f"SLA violated: {func.__name__} exceeded {sla_config.target_ms}ms"
-                )
+                logger.error(f"SLA violated: {func.__name__} exceeded {sla_config.target_ms}ms")
                 if fallback:
                     return fallback(*args, **kwargs)
                 raise SLAViolation(f"Operation exceeded SLA of {sla_config.target_ms}ms")
