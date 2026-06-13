@@ -153,7 +153,7 @@ class TestDetails:
                 "app.fastapi_routes.health_k8s._check_rasa_nlu", return_value={"status": "healthy"}
             ),
             patch(
-                "app.fastapi_routes.health_k8s.psutil.disk_usage", side_effect=Exception("disk err")
+                "app.fastapi_routes.health_k8s.psutil.disk_usage", side_effect=OSError("disk err")
             ),
             patch("app.fastapi_routes.health_k8s.psutil.cpu_percent", return_value=0),
             patch("app.fastapi_routes.health_k8s.psutil.virtual_memory") as vm,
@@ -180,7 +180,7 @@ class TestCapabilities:
                 "app.fastapi_routes.health_k8s._check_ai_service",
                 return_value={"status": "healthy", "engines": {}},
             ),
-            patch("app.fastapi_routes.health_k8s.get_unified_intent_recognizer") as g,
+            patch("app.domain.services.unified_intent_recognizer.get_unified_intent_recognizer") as g,
         ):
             rec = MagicMock()
             rec.get_engine_status.return_value = {"rule": True, "bert": False}
@@ -204,8 +204,8 @@ class TestCapabilities:
                 return_value={"status": "healthy"},
             ),
             patch(
-                "app.fastapi_routes.health_k8s.get_unified_intent_recognizer",
-                side_effect=Exception("boot fail"),
+                "app.domain.services.unified_intent_recognizer.get_unified_intent_recognizer",
+                side_effect=RuntimeError("boot fail"),
             ),
         ):
             r = client.get("/api/diagnostics/capabilities")
@@ -217,7 +217,7 @@ class TestCheckHelpers:
     def test_check_database_healthy(self) -> None:
         from app.fastapi_routes.health_k8s import _check_database
 
-        with patch("app.fastapi_routes.health_k8s.get_db") as gdb:
+        with patch("app.db.session.get_db") as gdb:
             gdb.return_value.__enter__.return_value.execute.return_value = None
             out = _check_database()
         assert out["status"] == "healthy"
@@ -225,7 +225,7 @@ class TestCheckHelpers:
     def test_check_database_unhealthy(self) -> None:
         from app.fastapi_routes.health_k8s import _check_database
 
-        with patch("app.fastapi_routes.health_k8s.get_db", side_effect=Exception("db err")):
+        with patch("app.db.session.get_db", side_effect=RuntimeError("db err")):
             out = _check_database()
         assert out["status"] == "unhealthy"
 
