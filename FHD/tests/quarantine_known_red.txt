@@ -17,7 +17,6 @@ tests/test_coverage_ramp_phase54_routes.py  # DRIFT:8
 tests/test_coverage_ramp_phase55_backend.py  # DRIFT:5
 tests/test_db/test_session_cache_concurrency.py  # DRIFT:6
 tests/test_utils/test_audit_logger_failure_paths.py  # DRIFT:9
-tests/test_utils/test_deployment_env_probe.py  # DRIFT:18
 tests/test_utils/test_observability_m0_metrics.py  # DRIFT:4
 tests/test_utils/test_rate_limiter_circuit_breaker.py  # DRIFT:15
 
