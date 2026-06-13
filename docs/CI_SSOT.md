@@ -198,21 +198,13 @@ Overlay：`FHD/k8s/overlays/preview/`（1 副本、资源收紧）。需 `KUBE_C
 
 > Phase 1（供应链）起 cosign **keyless**（Sigstore + GitHub OIDC）签名**免私钥**，不新增长期密钥；集群凭证统一走 `KUBE_CONFIG`。
 
-## Branch protection（须仓库 Owner 在 GitHub UI 配置）
+## Branch protection（main）
 
-Agent **无法**从本环境开启 branch protection。建议在 **Settings → Branches → main** 启用：
+已通过 API 配置（2026-06-13）：required status checks 含 `guard-temp-scripts`、`backend-test`、`frontend-test`、`frontend-e2e`、`arch-fitness`、`security-scan`、`pack-verify`、`container-scan`、`docker-build-fhd-api`；`required_approving_review_count=0`。
 
-> **个人私有仓限制**：Branch protection 的 required status checks 需 **GitHub Team 或 Enterprise** 计划；免费个人私有仓只能文档化门禁，无法在 UI 强制拦截 merge。
+> **Public 仓库**：`42433422/XCMAX` 已为 **PUBLIC**；Actions 对 public repo 有免费额度。若 job 仍报 `payments have failed or spending limit`，在 [Payment information](https://github.com/settings/billing/payment_information) 添加有效支付方式。
 
 > **Actions 账单**：若所有 job 在数秒内失败且 annotation 为 `recent account payments have failed or your spending limit needs to be increased`，须在 **Settings → Billing & plans** 修复付款或提高 spending limit；此阻断与 workflow/代码无关。
-
-- Required status checks：`backend-test`、`frontend-test`、`frontend-e2e`、`arch-fitness`、`security-scan`、`pack-verify`、`container-scan`、`docker-build-fhd-api`（及 `Release gate CI` 若启用）
-- Phase 1+：`cosign verify` 在 `fhd-deploy` 部署门禁（集群侧；非独立 check 名）
-- Phase 3+：Rollouts `AnalysisRun` 失败 = 集群内自动 abort（非 branch protection check）
-- Phase 5+（可选）：启用 PR 预览时加 `preview` job（`fhd-preview-env.yml`）
-- Phase 6+：`MODSTORE_SLO_HALT_AUTO_MERGE=1` 时 SLO 红则日更脚本不 promote
-- Require branches up to date before merging
-- 可选：Environment `production` 需审批后再跑 `cvm-push-release`
 
 ## FHD 生产服务器部署 runbook（tarball 拉取式）
 
