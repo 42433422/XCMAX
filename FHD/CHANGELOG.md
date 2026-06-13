@@ -6,6 +6,12 @@
 
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
+### 企业引导 Mod 种子（v10 线内迭代 · 2026-06-14）
+
+- **chore(mods)**：`scripts/dev/sync-enterprise-mod-seeds.sh` 从 desktop-dev / admin-runtime 补全 `FHD/mods/` bridge、core-workflow、planner-excel 等种子
+- **feat(mods)**：新增 `mods/_employees/xcagi-host-foundation-employee` 宿主基础预装员工包 manifest
+- **fix(onboarding)**：`industry_baseline` / `deliverable_status` 以磁盘 scan + 已加载 Mod 并集判定「已安装」
+
 ### 真正员工运行时（EmployeeAgent · v10 线内迭代 · 2026-06-14）
 
 - **feat(employee_runtime)**：`EmployeeAgent` 编排对象接管 `execute_employee_task_local`；P0 多轮 `agent_loop` + `EmployeeMemoryManager`（短期 ConversationService / 长期 `emp:{id}` 向量索引）；P1 `tool_scope` 作用域工具 + `workspace_guard` 运行时强制 `scope_globs/forbidden_globs`；P2 `PerceptionPipeline`（document/vision/audio/text）；P3 `orchestrator` 本地 `depends_on` DAG + `triggers` NeuroBus 动态订阅；P4 写操作 `write_approval` 接 ApprovalGatedEngine 语义 + `metrics` 可观测
