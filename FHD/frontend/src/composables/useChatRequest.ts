@@ -38,7 +38,7 @@ export function useChatRequest(deps: UseChatRequestDeps) {
     message: string,
     plannerOpts?: { fromWriteUnlock?: boolean }
   ): {
-    body: Record<string, any>
+    body: Record<string, unknown>
     proIntentEnabled: boolean
   } {
     const runtimeProEnabled = resolveEffectiveProModeState()
@@ -56,7 +56,7 @@ export function useChatRequest(deps: UseChatRequestDeps) {
           .replace(/<[^>]*>/g, '')
           .slice(0, 500)
       }))
-    const contextPayload: Record<string, any> = {
+    const contextPayload: Record<string, unknown> = {
       recent_messages: compactHistory
     }
     const contextParts: string[] = []
@@ -110,17 +110,17 @@ export function useChatRequest(deps: UseChatRequestDeps) {
     message: string,
     fetchOptions: RequestInit = {},
     plannerOpts?: { fromWriteUnlock?: boolean }
-  ): Promise<any> {
+  ): Promise<unknown> {
     const { body, proIntentEnabled } = buildPlannerChatRequestPayload(message, plannerOpts)
     const reqOpts = { signal: fetchOptions.signal }
     if (proIntentEnabled) {
-      return chatApi.sendChat(body as any, reqOpts)
+      return chatApi.sendChat(body as unknown, reqOpts)
     }
-    return chatApi.sendUnifiedChat(body as any, reqOpts)
+    return chatApi.sendUnifiedChat(body as unknown, reqOpts)
   }
 
   /** 与单条请求相同的 context / user_id，用于 /api/ai/chat/batch 与 unified_chat/batch */
-  async function requestChatByModeBatch(batchTexts: string[], fetchOptions: RequestInit = {}): Promise<any> {
+  async function requestChatByModeBatch(batchTexts: string[], fetchOptions: RequestInit = {}): Promise<unknown> {
     const runtimeProEnabled = resolveEffectiveProModeState()
     isProMode.value = runtimeProEnabled
     const proIntentEnabled = runtimeProEnabled || !!proIntentExperienceEnabled?.value
@@ -135,7 +135,7 @@ export function useChatRequest(deps: UseChatRequestDeps) {
           .replace(/<[^>]*>/g, '')
           .slice(0, 500)
       }))
-    const contextPayload: Record<string, any> = {
+    const contextPayload: Record<string, unknown> = {
       recent_messages: compactHistory
     }
     const contextParts: string[] = []
@@ -159,13 +159,13 @@ export function useChatRequest(deps: UseChatRequestDeps) {
       ...resolveChatDbTokensForPayload()
     }
     if (proIntentEnabled) {
-      return chatApi.sendChatBatch(batchBody as any, reqOpts)
+      return chatApi.sendChatBatch(batchBody as unknown, reqOpts)
     }
-    return chatApi.sendUnifiedChatBatch(batchBody as any, reqOpts)
+    return chatApi.sendUnifiedChatBatch(batchBody as unknown, reqOpts)
   }
 
   function getChatBatchDebounceMs(): number {
-    const v = (import.meta as any).env?.VITE_CHAT_BATCH_MS
+    const v = (import.meta as unknown).env?.VITE_CHAT_BATCH_MS
     // 默认 0：单条消息立即发；需要合并连发时可设 VITE_CHAT_BATCH_MS
     if (v === undefined || v === '') return 0
     const n = Number(v)
@@ -203,7 +203,7 @@ export function useChatRequest(deps: UseChatRequestDeps) {
     message: string,
     timeoutMs: number = 45000,
     plannerOpts?: { fromWriteUnlock?: boolean }
-  ): Promise<any> {
+  ): Promise<unknown> {
     const controller = new AbortController()
     const timeoutPromise = new Promise<never>((_, reject) => {
       window.setTimeout(() => {
@@ -217,7 +217,7 @@ export function useChatRequest(deps: UseChatRequestDeps) {
     ])
   }
 
-  async function requestChatByModeBatchWithTimeout(batchTexts: string[], timeoutMs: number = 45000): Promise<any> {
+  async function requestChatByModeBatchWithTimeout(batchTexts: string[], timeoutMs: number = 45000): Promise<unknown> {
     const controller = new AbortController()
     const timeoutPromise = new Promise<never>((_, reject) => {
       window.setTimeout(() => {

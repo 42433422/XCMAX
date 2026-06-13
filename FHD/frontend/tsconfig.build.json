@@ -7,10 +7,6 @@
   "exclude": [
     "src/constants/*.minimal.ts",
     "src/views/temp2.vue",
-    "src/views/ChatViewOptimized.vue",
-    "src/composables/useChatView.ts",
-    "src/composables/useChatView.test.ts",
-    "src/stores/tutorial.ts",
-    "src/utils/pretext.ts"
+    "src/views/ChatViewOptimized.vue"
   ]
 }

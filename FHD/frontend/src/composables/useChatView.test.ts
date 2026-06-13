@@ -5,7 +5,7 @@ import { ref } from 'vue'
 vi.mock('./useChatMessages', async () => {
   const { ref } = await import('vue')
   return {
-    useChatMessages: (sessionId: any) => ({
+    useChatMessages: (sessionId: unknown) => ({
       messages: ref([]),
       lastMessage: ref(null),
       addMessage: vi.fn(),

@@ -6,14 +6,14 @@ type SpeechRecognitionLike = {
   continuous: boolean;
   interimResults: boolean;
   onstart: (() => void) | null;
-  onresult: ((event: any) => void) | null;
-  onerror: ((event: any) => void) | null;
+  onresult: ((event: unknown) => void) | null;
+  onerror: ((event: unknown) => void) | null;
   onend: (() => void) | null;
   start: () => void;
   stop: () => void;
 };
 
-export function useJarvisChat(): any {
+export function useJarvisChat(): unknown {
   const store = useJarvisChatStore();
 
   const isListening = ref(false);
@@ -33,7 +33,7 @@ export function useJarvisChat(): any {
     store.addMessage(content, type);
   };
 
-  const addTaskMessage = (content: string, taskData: any) => {
+  const addTaskMessage = (content: string, taskData: unknown) => {
     store.addTaskMessage(content, taskData);
   };
 
@@ -45,7 +45,7 @@ export function useJarvisChat(): any {
     }
 
     const SpeechRecognitionCtor =
-      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      (window as unknown).SpeechRecognition || (window as unknown).webkitSpeechRecognition;
     recognition.value = new SpeechRecognitionCtor() as SpeechRecognitionLike;
     recognition.value.lang = 'zh-CN';
     recognition.value.continuous = false;
@@ -56,7 +56,7 @@ export function useJarvisChat(): any {
       store.startRecording();
     };
 
-    recognition.value.onresult = (event: any) => {
+    recognition.value.onresult = (event: unknown) => {
       const transcript = event?.results?.[0]?.[0]?.transcript || '';
       store.stopRecording();
       if (transcript) {
@@ -64,7 +64,7 @@ export function useJarvisChat(): any {
       }
     };
 
-    recognition.value.onerror = (event: any) => {
+    recognition.value.onerror = (event: unknown) => {
       console.error('Speech recognition error:', event?.error);
       store.stopRecording();
       isListening.value = false;

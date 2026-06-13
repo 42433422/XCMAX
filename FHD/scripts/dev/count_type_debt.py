@@ -37,9 +37,9 @@ def _count_in_tree(root: Path, pattern: re.Pattern[str], glob: str) -> tuple[int
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--max-type-ignore", type=int, default=69)
-    parser.add_argument("--max-ts-nocheck", type=int, default=3)
-    parser.add_argument("--max-any", type=int, default=539)
+    parser.add_argument("--max-type-ignore", type=int, default=0)
+    parser.add_argument("--max-ts-nocheck", type=int, default=0)
+    parser.add_argument("--max-any", type=int, default=0)
     args = parser.parse_args()
 
     ti, ti_files = _count_in_tree(APP_ROOT, TYPE_IGNORE, "*.py")

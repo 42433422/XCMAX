@@ -196,7 +196,7 @@ export function useChatMessages(sessionId: Ref<string>) {
 
   function sanitizeMessagesList(rawList: unknown[]): ChatMessage[] {
     return (Array.isArray(rawList) ? rawList : [])
-      .map((msg: any) => {
+      .map((msg: unknown) => {
         const role = (msg?.role === 'user' || msg?.role === 'task') ? msg.role : 'ai'
         const content = String(msg?.content || '')
         if (!hasMeaningfulContent(content)) return null
@@ -301,10 +301,10 @@ export function useChatMessages(sessionId: Ref<string>) {
       const sid = String(sessionId.value || '').trim()
       if (!sid) return false
       const data = await chatApi.getConversation(sid)
-      const serverMessages = Array.isArray((data as any)?.messages) ? (data as any).messages : []
+      const serverMessages = Array.isArray((data as unknown)?.messages) ? (data as unknown).messages : []
       if (!serverMessages.length) return false
 
-      const mapped: ChatMessage[] = serverMessages.map((msg: any) => ({
+      const mapped: ChatMessage[] = serverMessages.map((msg: unknown) => ({
         role: (msg?.role === 'user' || msg?.role === 'task') ? msg.role : 'ai',
         content: normalizeServerContentToHtml(msg?.content),
         time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })

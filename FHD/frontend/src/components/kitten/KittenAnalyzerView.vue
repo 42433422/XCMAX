@@ -350,7 +350,7 @@ const runFinancialBriefAndClose = () => {
 type VoiceState = 'idle' | 'recording' | 'transcribing' | 'error'
 const voiceState = ref<VoiceState>('idle')
 const voiceErrorText = ref('')
-let voiceRecognition: any = null
+let voiceRecognition: unknown = null
 
 const voiceButtonDisabled = computed(() => voiceState.value === 'transcribing' || isChatLoading.value)
 const voiceButtonClass = computed(() => ({
@@ -362,7 +362,7 @@ const voiceButtonClass = computed(() => ({
 
 const startVoiceInput = () => {
   if (voiceState.value === 'recording' || voiceState.value === 'transcribing') return
-  const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+  const SpeechRecognition = (window as unknown).SpeechRecognition || (window as unknown).webkitSpeechRecognition
   if (!SpeechRecognition) {
     voiceState.value = 'error'
     voiceErrorText.value = '当前浏览器不支持语音识别'
@@ -381,11 +381,11 @@ const startVoiceInput = () => {
     voiceState.value = 'recording'
     voiceErrorText.value = ''
   }
-  voiceRecognition.onresult = (event: any) => {
+  voiceRecognition.onresult = (event: unknown) => {
     const text = event.results[0][0].transcript
     inputText.value = (inputText.value || '') + text
   }
-  voiceRecognition.onerror = (event: any) => {
+  voiceRecognition.onerror = (event: unknown) => {
     if (event.error === 'no-speech') {
       voiceState.value = 'idle'
       return

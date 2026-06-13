@@ -7,8 +7,8 @@ interface ProModeState {
   isWorkMode: boolean;
   isMonitorMode: boolean;
   currentStage: string;
-  selectedCompany: any | null;
-  selectedProduct: any | null;
+  selectedCompany: unknown | null;
+  selectedProduct: unknown | null;
   coreScale: number;
   orbitLayerScale: number;
   stageHistory: string[];
@@ -20,8 +20,8 @@ export const useProModeStore = defineStore('proMode', () => {
   const isWorkMode = ref(false)
   const isMonitorMode = ref(false)
   const currentStage = ref('idle')
-  const selectedCompany = ref<any | null>(null)
-  const selectedProduct = ref<any | null>(null)
+  const selectedCompany = ref<unknown | null>(null)
+  const selectedProduct = ref<unknown | null>(null)
   const coreScale = ref(1)
   const orbitLayerScale = ref(1)
   const stageHistory = ref<string[]>([])
@@ -79,7 +79,7 @@ export const useProModeStore = defineStore('proMode', () => {
     isMonitorMode.value = false
   }
 
-  function setStage(stage: string, payload: { company?: any; product?: any } = {}) {
+  function setStage(stage: string, payload: { company?: unknown; product?: unknown } = {}) {
     if (stage !== 'idle' && stage !== currentStage.value) {
       stageHistory.value.push(currentStage.value)
       if (stageHistory.value.length > 10) {

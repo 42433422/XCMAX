@@ -229,7 +229,7 @@ export const approvalApi = {
     flow_key: string
     business_type: string
     business_id?: number
-    business_data?: any
+    business_data?: unknown
     title: string
     description?: string
   }) {

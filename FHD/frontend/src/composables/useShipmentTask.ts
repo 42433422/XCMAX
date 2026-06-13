@@ -25,7 +25,9 @@ export interface ShipmentTask {
   title?: string
   description?: string
   payload?: {
+    tool_id?: string
     params?: {
+      tool_id?: string
       products?: ShipmentProduct[]
       unit_name?: string
       order_number?: string
@@ -34,14 +36,16 @@ export interface ShipmentTask {
   }
   completed?: boolean
   customOrderNumber?: string
-  items?: any[]
+  items?: unknown[]
   order_number?: string
   downloadUrl?: string
   api_url?: string
   method?: string
   switch_view?: string
-  data?: any
-  document?: any
+  tool_id?: string
+  data?: Record<string, unknown>
+  document?: Record<string, unknown>
+  __xcagiAutoConfirmScheduled?: boolean
 }
 
 interface ChatMessageLike {
@@ -239,7 +243,7 @@ export function useShipmentTask(
     return null
   }
 
-  function pickBestProductRecord(records: any[], target: string): any | null {
+  function pickBestProductRecord(records: unknown[], target: string): unknown | null {
     if (!Array.isArray(records) || !records.length) return null
     if (!target) return records[0]
 
@@ -411,7 +415,7 @@ export function useShipmentTask(
     return Object.keys(items[0] || {})
   }
 
-  function getTaskTableItems(task: ShipmentTask): any[] {
+  function getTaskTableItems(task: ShipmentTask): unknown[] {
     const items = Array.isArray(task?.items) ? task.items : []
     if (!items.length) return []
 
@@ -420,7 +424,7 @@ export function useShipmentTask(
     }
 
     return items.map((item) => {
-      const row: Record<string, any> = {}
+      const row: Record<string, unknown> = {}
       SHIPMENT_PREVIEW_COLUMNS.forEach((col) => {
         const value = item?.[col]
         row[col] = (value === null || typeof value === 'undefined' || value === '') ? '-' : value

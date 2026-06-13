@@ -16,7 +16,7 @@ interface JarvisChatState {
   isRecording: boolean;
   isPlaying: boolean;
   voiceQueue: string[];
-  currentTask: any | null;
+  currentTask: unknown | null;
   statusText: string;
   isCoreSpeaking: boolean;
 }
@@ -26,7 +26,7 @@ export const useJarvisChatStore = defineStore('jarvisChat', () => {
   const isRecording = ref(false)
   const isPlaying = ref(false)
   const voiceQueue = ref<string[]>([])
-  const currentTask = ref<any | null>(null)
+  const currentTask = ref<unknown | null>(null)
   const statusText = ref('准备就绪')
   const isCoreSpeaking = ref(false)
 
@@ -48,7 +48,7 @@ export const useJarvisChatStore = defineStore('jarvisChat', () => {
     updateLastMessage()
   }
 
-  function addTaskMessage(content: string, taskData: any) {
+  function addTaskMessage(content: string, taskData: unknown) {
     messages.value.push({
       id: Date.now(),
       content,
@@ -60,25 +60,25 @@ export const useJarvisChatStore = defineStore('jarvisChat', () => {
   }
 
   function syncLegacyMonitorMode(): boolean {
-    const monitorToggle = (window as any).setMonitorModeFromChat
+    const monitorToggle = (window as unknown).setMonitorModeFromChat
     if (typeof monitorToggle !== 'function') return false
 
     // Keep legacy runtime as source of truth for overlay mode classes.
     monitorToggle(true)
-    if (typeof (window as any).refreshWorkModeMonitorList === 'function') {
-      ;(window as any).refreshWorkModeMonitorList()
+    if (typeof (window as unknown).refreshWorkModeMonitorList === 'function') {
+      ;(window as unknown).refreshWorkModeMonitorList()
     }
     return true
   }
 
   function syncLegacyWorkMode(): boolean {
-    const workToggle = (window as any).setWorkModeFromChat
+    const workToggle = (window as unknown).setWorkModeFromChat
     if (typeof workToggle !== 'function') return false
 
     // Keep legacy runtime as source of truth for overlay mode classes.
     workToggle(true)
-    if (typeof (window as any).refreshWorkModeMonitorList === 'function') {
-      ;(window as any).refreshWorkModeMonitorList()
+    if (typeof (window as unknown).refreshWorkModeMonitorList === 'function') {
+      ;(window as unknown).refreshWorkModeMonitorList()
     }
     return true
   }
@@ -197,7 +197,7 @@ export const useJarvisChatStore = defineStore('jarvisChat', () => {
     isCoreSpeaking.value = speaking
   }
 
-  function setCurrentTask(task: any) {
+  function setCurrentTask(task: unknown) {
     currentTask.value = task
   }
 

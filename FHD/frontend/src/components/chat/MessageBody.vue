@@ -24,7 +24,7 @@ const rendered = computed(() => {
   return html
 })
 
-let mermaidApi: any = null
+let mermaidApi: unknown = null
 let mermaidInit = false
 
 async function getMermaid() {
@@ -100,7 +100,7 @@ async function flushMermaid() {
     if (!rendered) {
       const errMsg = (lastErr as Error)?.message || String(lastErr || '')
       const escapeText = (raw: string) =>
-        raw.replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' } as any)[c])
+        raw.replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' } as unknown)[c])
       el.innerHTML =
         `<div class="md-mermaid-fail">` +
         `<div class="md-mermaid-fail__head">` +
