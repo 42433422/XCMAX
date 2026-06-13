@@ -62,9 +62,10 @@ class TestIntentCache:
         backend = MagicMock()
         backend.get.return_value = None
         cache = IntentCache(backend=backend, enabled=True, default_ttl=60)
-        compute = MagicMock(return_value={"intent": "fresh"})
+        # 默认 should_cache 不回填零/缺失置信度的结果（视为低质量）；带正置信度才会回填。
+        compute = MagicMock(return_value={"intent": "fresh", "confidence": 0.9})
         out = cache.get_or_compute(text="hi", mod_id="m1", compute_fn=compute)
-        assert out == {"intent": "fresh"}
+        assert out == {"intent": "fresh", "confidence": 0.9}
         backend.set.assert_called_once()
 
     def test_backend_failure_falls_through_to_compute(self) -> None:

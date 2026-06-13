@@ -299,9 +299,8 @@ def collect_node_runtime_status(
                 "node_id": nid,
                 "last_run": row.get("last_run"),
                 "ok": row.get("ok"),
-                "guard_active": bool(row.get("guard_active")) or (
-                    guard_global and nid in ("RT", "DRFAIL", "DRPROBE")
-                ),
+                "guard_active": bool(row.get("guard_active"))
+                or (guard_global and nid in ("RT", "DRFAIL", "DRPROBE")),
                 "source": row.get("source") or "",
                 "detail": row.get("detail") if isinstance(row.get("detail"), dict) else {},
             }

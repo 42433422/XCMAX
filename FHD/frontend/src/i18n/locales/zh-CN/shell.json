@@ -1,0 +1,10 @@
+{
+  "shell": {
+    "send": "发送",
+    "newChat": "新对话",
+    "history": "历史",
+    "upload": "上传",
+    "uploadAnalyzing": "分析中...",
+    "settings": "设置"
+  }
+}

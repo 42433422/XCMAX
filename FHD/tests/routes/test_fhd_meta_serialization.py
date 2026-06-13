@@ -26,8 +26,8 @@ class TestDbTokensStatus:
     def test_both_tokens_configured(self, client: TestClient) -> None:
         with (
             patch("app.request_active_mod_ctx.get_request_active_mod_id", return_value=""),
-            patch("app.fastapi_routes.fhd_meta.configured_db_read_token", return_value="RTOKEN"),
-            patch("app.fastapi_routes.fhd_meta.configured_db_write_token", return_value="WTOKEN"),
+            patch("app.infrastructure.auth.db_token.configured_db_read_token", return_value="RTOKEN"),
+            patch("app.infrastructure.auth.db_token.configured_db_write_token", return_value="WTOKEN"),
         ):
             r = client.get("/api/fhd/db-tokens/status")
         assert r.status_code == 200
@@ -39,8 +39,8 @@ class TestDbTokensStatus:
     def test_no_tokens(self, client: TestClient) -> None:
         with (
             patch("app.request_active_mod_ctx.get_request_active_mod_id", return_value=None),
-            patch("app.fastapi_routes.fhd_meta.configured_db_read_token", return_value=""),
-            patch("app.fastapi_routes.fhd_meta.configured_db_write_token", return_value=""),
+            patch("app.infrastructure.auth.db_token.configured_db_read_token", return_value=""),
+            patch("app.infrastructure.auth.db_token.configured_db_write_token", return_value=""),
         ):
             r = client.get("/api/fhd/db-tokens/status")
         assert r.json()["read_token_configured"] is False
@@ -48,8 +48,8 @@ class TestDbTokensStatus:
     def test_with_active_mod_id(self, client: TestClient) -> None:
         with (
             patch("app.request_active_mod_ctx.get_request_active_mod_id", return_value="mod-x"),
-            patch("app.fastapi_routes.fhd_meta.configured_db_read_token", return_value="R"),
-            patch("app.fastapi_routes.fhd_meta.configured_db_write_token", return_value=None),
+            patch("app.infrastructure.auth.db_token.configured_db_read_token", return_value="R"),
+            patch("app.infrastructure.auth.db_token.configured_db_write_token", return_value=None),
         ):
             r = client.get("/api/fhd/db-tokens/status")
         data = r.json()
@@ -61,10 +61,10 @@ class TestDbTokensStatus:
         with (
             patch(
                 "app.request_active_mod_ctx.get_request_active_mod_id",
-                side_effect=Exception("ctx missing"),
+                side_effect=RuntimeError("ctx missing"),
             ),
-            patch("app.fastapi_routes.fhd_meta.configured_db_read_token", return_value=""),
-            patch("app.fastapi_routes.fhd_meta.configured_db_write_token", return_value=""),
+            patch("app.infrastructure.auth.db_token.configured_db_read_token", return_value=""),
+            patch("app.infrastructure.auth.db_token.configured_db_write_token", return_value=""),
         ):
             r = client.get("/api/fhd/db-tokens/status")
         assert r.status_code == 200

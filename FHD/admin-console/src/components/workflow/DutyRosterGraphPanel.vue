@@ -249,9 +249,13 @@ function isVirtualEmployee(id: string): boolean {
   return VIRTUAL_EMPLOYEE_IDS.has(id)
 }
 
-/** 编制内已在服务端上架 catalog 的真实员工（可拉 manifest / 执行）；不含缺岗与虚拟管家 */
+/** 编制内已安装本地 employee_pack（可拉 manifest / 执行）；不含缺岗与虚拟管家 */
 function isDeployedDutyRosterRow(e: EmpRow): boolean {
-  return !isVirtualEmployee(e.id) && e.source === 'catalog'
+  return (
+    !isVirtualEmployee(e.id)
+    && e.source === 'catalog'
+    && !missingLocalPackIds.value.has(e.id)
+  )
 }
 
 /** 值班图节点仅允许编制矩阵 + 数字管家（防止 employees 被污染或旧缓存仍带全库列表） */
@@ -263,6 +267,8 @@ function isDutyGraphMember(e: EmpRow): boolean {
 // State
 // ─────────────────────────────────────────────────────────────────────────────
 const employees  = ref<EmpRow[]>([])
+/** 编制内但未安装到本机 mods/_employees 的 pkg_id（与 missing_employees/catalog 缺岗区分） */
+const missingLocalPackIds = ref<Set<string>>(new Set())
 const healthMap  = ref<Record<string, HealthSt>>({})
 const depsMap    = ref<Record<string, string[]>>({})
 const loading    = ref(false)
@@ -1130,7 +1136,7 @@ function buildDepartmentGraph(emps: EmpRow[]) {
 
     for (const empId of memberIds) {
       const emp = rosterEmps.find((e) => e.id === empId) || allRows.find((e) => e.id === empId)
-      const deployed = catalogIds.has(empId)
+      const deployed = catalogIds.has(empId) && !missingLocalPackIds.value.has(empId)
       const hl = healthLevel(empId)
       const al = llmActLevel(empId)
       const rs = runStatusLevel(empId)
@@ -1656,14 +1662,28 @@ async function load() {
     const staffing = health?.staffing as Record<string, unknown> | undefined
     const errStaff = typeof staffing?.error === 'string' ? staffing.error : ''
     if (errStaff) throw new Error(errStaff)
-    const missingRaw = Array.isArray(staffing?.missing_employees) ? staffing!.missing_employees : []
-    const missingIds = new Set(
-      (missingRaw as unknown[]).map((x) => String(x ?? '').trim()).filter(Boolean),
+    const missingCatalogRaw = Array.isArray(staffing?.missing_employees)
+      ? staffing!.missing_employees
+      : []
+    const missingCatalogIds = new Set(
+      (missingCatalogRaw as unknown[]).map((x) => String(x ?? '').trim()).filter(Boolean),
     )
-    employees.value = [...buildRosterEmployeeRows(missingIds), butlerEmployeeRow()]
+    const missingLocalRaw = Array.isArray(staffing?.missing_local_employee_packs)
+      ? staffing!.missing_local_employee_packs
+      : []
+    missingLocalPackIds.value = new Set(
+      (missingLocalRaw as unknown[]).map((x) => String(x ?? '').trim()).filter(Boolean),
+    )
+    employees.value = [...buildRosterEmployeeRows(missingCatalogIds), butlerEmployeeRow()]
+    const localGap = missingLocalPackIds.value.size
+    if (localGap > 0 && String(health?.source || '') === 'local') {
+      loadWarning.value =
+        `本机 mods/_employees 未安装 ${localGap} 个编制员工包（图谱仍展示）；可在运维闭环执行 install-local 或启动 MODstore :8788 后从 Catalog 安装。`
+    }
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e)
     // 健康检查失败仍展示本机编制矩阵（六部门视图可离线浏览）
+    missingLocalPackIds.value = new Set()
     employees.value = [...buildRosterEmployeeRows(new Set()), butlerEmployeeRow()]
     loadWarning.value = msg
   } finally {
@@ -2121,7 +2141,8 @@ const gapRows = computed(() => {
       const row = employees.value.find((e) => e.id === id)
       const name = row?.name || YUANGON_PKG_ROLE_LABELS[id] || id
       const deployed =
-        isVirtualEmployee(id) || row?.source === 'catalog'
+        isVirtualEmployee(id)
+        || (row?.source === 'catalog' && !missingLocalPackIds.value.has(id))
       rows.push({
         id,
         name,

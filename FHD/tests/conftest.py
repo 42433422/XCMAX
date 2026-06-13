@@ -1,16 +1,6 @@
 # -*- coding: utf-8 -*-
 """
 pytest 配置与 fixtures（FastAPI 版）
-
-历史沿革：
-    仓库早期为 Flask，`app` / `client` 曾基于 ``flask.Flask.test_client``。
-    Flask → FastAPI 迁移完成后（入口：``app.fastapi_app:get_fastapi_app``），
-    `app/__init__.py` 退化为 deprecated stub，原 `from app import create_app`
-    已不可用，Flask 风格的 fixture 随之失效。
-
-    当前文件以 ``fastapi.testclient.TestClient`` 重建 `app` / `client` fixture，
-    并保留无关 web 框架的数据工厂（sample_data_factory 等），使 ``tests/`` 下
-    既有测试能够被 pytest 收集并运行。
 """
 
 from __future__ import annotations
@@ -23,69 +13,6 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
-
-# 无法在 import 阶段加载的用例须 collect_ignore（skip 来不及）；其余见 _LEGACY_SKIP_FRAGMENTS。
-collect_ignore: list[str] = [
-    "test_intent.py",
-    "test_application/test_app_services.py",
-    "neuro/test_routing_policy.py",
-    "test_coverage_ramp_phase41_routes.py",
-    "test_legacy_auth_account_kind.py",
-    "test_routes/test_ai_chat.py",
-    "test_application/test_order_neuro_command_service.py",
-    "test_application/test_purchase_app_service_state_machine.py",
-    "test_infrastructure/test_billing_metering_bounds.py",
-    "test_routes/test_oidc_auth.py",
-    "test_services/test_contract_expiry_notify.py",
-]
-
-_LEGACY_SKIP_FRAGMENTS: tuple[str, ...] = (
-    # essential compat 未挂载完整 auth/product 栈时路由烟测 500
-    "test_coverage_ramp_routes",
-    "test_routes/test_health_capabilities",
-    "test_routes/test_smoke_apis",
-    # 异常路径用例与当前 mock 策略不一致
-    "test_services/test_printer_service",
-    "test_wechat_tasks",
-)
-
-# CI 稳定子集（片段须能唯一匹配目标 nodeid，避免 test_health 命中 test_health_capabilities）
-_CI_STABLE_NODEID_FRAGMENTS = (
-    "test_neuro_bus_reliability_env",
-    "test_infrastructure_repositories",
-    "test_middleware_rate_limit",
-    "test_neuro_bus_core",
-    "test_utils/test_utils",
-    "test_openapi_consistency",
-    "test_services/test_intent_service",
-    "test_routes/test_mods_routes",
-    "test_routes/test_materials",
-    "test_routes/test_route_registry",
-    "test_routes/test_registry_unit",
-    "test_routes/test_route_golden",
-    "test_domain/test_shipment_aggregates",
-    "test_application/test_shipment_app_service",
-    "test_services/test_shipment_service",
-    "test_infrastructure/test_shipment_document_generator",
-    # benchmarks/ 需 DB/完整意图栈，见 intent-benchmark.yml，勿纳入 CI_STABLE_ONLY
-)
-
-
-def pytest_collection_modifyitems(config, items):
-    legacy_skip = pytest.mark.skip(reason="legacy/未落地：原 collect_ignore，见 COVERAGE_RAMP.md")
-    for item in items:
-        nodeid = item.nodeid.replace("\\", "/")
-        if any(frag in nodeid for frag in _LEGACY_SKIP_FRAGMENTS):
-            item.add_marker(legacy_skip)
-
-    if os.environ.get("CI_STABLE_ONLY", "").strip().lower() not in {"1", "true", "yes", "on"}:
-        return
-    skip = pytest.mark.skip(reason="CI_STABLE_ONLY：非稳定子集，完整回归请本地 omit 该变量")
-    for item in items:
-        nodeid = item.nodeid.replace("\\", "/")
-        if not any(frag in nodeid for frag in _CI_STABLE_NODEID_FRAGMENTS):
-            item.add_marker(skip)
-
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:
@@ -115,16 +42,11 @@ def _isolate_edition_and_product_sku_env(monkeypatch):
         "XCAGI_STAGED_MODS_DIR",
     ):
         monkeypatch.delenv(key, raising=False)
-    # 避免读取安装目录 product-sku.json；各用例仍可用 monkeypatch.setenv("XCAGI_PRODUCT_SKU", ...)
+    monkeypatch.setenv("FHD_ALLOW_X_USER_ID_HEADER", "1")
     monkeypatch.setenv(
         "XCAGI_PRODUCT_SKU_FILE",
         os.path.join(PROJECT_ROOT, "tests", "_fixtures", "no-product-sku.json"),
     )
-
-
-# ---------------------------------------------------------------------------
-# FastAPI 应用/客户端 fixture
-# ---------------------------------------------------------------------------
 
 
 @pytest.fixture(scope="session")
@@ -137,24 +59,10 @@ def app():
 
 @pytest.fixture(scope="function")
 def client(app):
-    """与整机 FastAPI 应用绑定的 ``TestClient``。
-
-    故意不使用 ``with TestClient(...) as c:`` 的上下文管理形式 —— 整机应用
-    会触发 lifespan startup（NeuroBus、compat shim 注册等），在单机/CI 环境
-    里可能阻塞。已有冒烟测试（``tests/test_neuro_migration_smoke.py``）也
-    采用裸 ``TestClient(app)`` 的模式以规避该问题。
-
-    业务路由统一用 ``raise_server_exceptions=False`` 让服务端异常被包装成
-    5xx JSON 响应，便于从响应体断言。
-    """
+    """与整机 FastAPI 应用绑定的 ``TestClient``。"""
     from fastapi.testclient import TestClient
 
     yield TestClient(app, raise_server_exceptions=False)
-
-
-# ---------------------------------------------------------------------------
-# 与 web 框架无关的辅助 fixture
-# ---------------------------------------------------------------------------
 
 
 @pytest.fixture
@@ -335,11 +243,7 @@ def sample_template() -> dict[str, Any]:
 
 @pytest.fixture
 def assert_response():
-    """针对 httpx ``Response`` 的断言辅助。
-
-    httpx/requests 的响应对象与 Flask 不同：JSON 用 ``.json()`` 而非
-    ``.get_json()``；``content_type`` 需从 ``headers["content-type"]`` 读取。
-    """
+    """针对 httpx ``Response`` 的断言辅助。"""
 
     def assert_success(response, expected_status: int = 200) -> None:
         assert response.status_code == expected_status

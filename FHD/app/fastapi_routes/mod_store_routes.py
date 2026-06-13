@@ -23,7 +23,7 @@ from app.application.mod_store_catalog_app import (
     sync_modstore_library_to_local,
 )
 from app.shell.mods_catalog import list_mod_items
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -156,7 +156,7 @@ def _all_rows() -> list[dict[str, Any]]:
     try:
         items = list_mod_items()
         return [_item_to_mod_info(x.model_dump()) for x in items]
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.warning("mod-store catalog: list_mod_items failed: %s", e)
         return []
 
@@ -230,8 +230,10 @@ async def _map_market_catalog_page(
     *,
     collection_hint: str = "",
 ) -> tuple[list[dict[str, Any]], int]:
-    from app.services.catalog_client import _market_item_to_package_row
-    from app.services.catalog_visibility import is_public_catalog_row
+    from app.application.mod_store_catalog_app import (
+        is_public_catalog_row,
+        market_item_to_package_row,
+    )
 
     installed_ids = set(_installed_by_id())
     items_raw = data.get("items") if isinstance(data.get("items"), list) else []
@@ -243,13 +245,11 @@ async def _map_market_catalog_page(
     for raw in items_raw:
         if not isinstance(raw, dict):
             continue
-        row = _market_item_to_package_row(raw)
+        row = market_item_to_package_row(raw)
         if not row or not is_public_catalog_row(row):
             continue
         info = _remote_to_mod_info(row, installed_ids)
-        hint = collection_hint or str(
-            (row.get("commerce") or {}).get("collection") or ""
-        ).strip()
+        hint = collection_hint or str((row.get("commerce") or {}).get("collection") or "").strip()
         if hint:
             info["store_collection"] = hint
         out.append(info)
@@ -348,7 +348,7 @@ async def _body_value(request: Request, key: str, default: str = "") -> str:
             return default
         form = await request.form()
         return _safe_text(form.get(key) or default)
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         return default
 
 
@@ -362,7 +362,7 @@ async def _request_payload(request: Request) -> dict[str, str]:
             )
         form = await request.form()
         return {str(k): _safe_text(v) for k, v in form.items()}
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         return {}
 
 
@@ -590,6 +590,40 @@ async def mod_store_install(request: Request) -> ModStoreInstallResult:
     return await _install_from_catalog(pkg_id, version, activate=activate)
 
 
+@router.post("/install-industry-seed", response_model=ModStoreInstallResult)
+async def mod_store_install_industry_seed(request: Request) -> ModStoreInstallResult:
+    """L2：从 industry-seeds 池安装所选行业中性 Mod；池缺失时 Catalog 兜底。"""
+    payload = await _request_payload(request)
+    raw = _safe_text(
+        payload.get("industry_id") or payload.get("mod_id") or payload.get("industryId")
+    )
+    if not raw:
+        raise HTTPException(status_code=400, detail="缺少 industry_id 或 mod_id")
+    from app.mod_sdk.industry_seed import install_industry_seed_with_fallback
+
+    data = await install_industry_seed_with_fallback(raw)
+    return ModStoreInstallResult(
+        success=bool(data.get("success")),
+        message=str(data.get("message") or ""),
+        data=data,
+    )
+
+
+@router.post("/reload-employees")
+async def mod_store_reload_employees(request: Request) -> ModStoreSimpleResponse:
+    """显式刷新 employee_pack HTTP 路由与 Planner 工具注册表（装包后双保险）。"""
+    payload = await _request_payload(request)
+    pack_id = _safe_text(payload.get("pack_id") or payload.get("pkg_id"))
+    from app.mod_sdk.employee_runtime import refresh_employee_pack_runtime
+
+    data = refresh_employee_pack_runtime(pack_id or None)
+    return ModStoreSimpleResponse(
+        success=True,
+        message="员工包 Planner 注册表已刷新",
+        data=data,
+    )
+
+
 @router.post("/uninstall", response_model=ModStoreSimpleResponse)
 async def mod_store_uninstall(request: Request) -> ModStoreSimpleResponse:
     mod_id = await _body_value(request, "mod_id")
@@ -692,7 +726,7 @@ async def _install_host_foundation_internal(edition: str | None) -> ModStoreInst
         ed = "generic"
     try:
         data = materialize_host_foundation_bridges(ed)  # type: ignore[arg-type]
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.exception("materialize_host_foundation_bridges failed (edition=%s)", ed)
         return ModStoreInstallResult(
             success=False,
@@ -719,7 +753,7 @@ async def mod_store_install_host_foundation(
         return ModStoreSimpleResponse(
             success=result.success, message=result.message, data=result.data
         )
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.exception("install-host-foundation failed")
         return ModStoreSimpleResponse(
             success=False,
@@ -782,7 +816,7 @@ async def mod_store_sync_modstore_library(request: Request) -> ModStoreSimpleRes
     """使用修茈 PAT（须含 ``mod:sync``）从线上 ``/v1/mod-sync`` 拉 zip 并安装到本机 ``mods/``。"""
     try:
         body = await request.json()
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         raise HTTPException(status_code=400, detail="需要 JSON 请求体") from None
     if not isinstance(body, dict):
         raise HTTPException(status_code=400, detail="JSON 须为对象")

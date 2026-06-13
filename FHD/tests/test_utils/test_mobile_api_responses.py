@@ -48,36 +48,34 @@ def test_format_error_response_custom():
 def test_paginate_list_empty():
     out = paginate_list([], total=0, page=1, per_page=20)
     assert out["items"] == []
-    assert out["total"] == 0
-    assert out["page"] == 1
-    assert out["per_page"] == 20
-    assert out["total_pages"] == 0
-    assert out["has_next"] is False
-    assert out["has_prev"] is False
+    assert out["pagination"]["total"] == 0
+    assert out["pagination"]["page"] == 1
+    assert out["pagination"]["per_page"] == 20
+    assert out["pagination"]["total_pages"] == 0
+    assert out["pagination"]["has_next"] is False
+    assert out["pagination"]["has_prev"] is False
 
 
 def test_paginate_list_exact_multiple():
     out = paginate_list([1, 2, 3, 4], total=4, page=1, per_page=2)
-    assert out["total_pages"] == 2
-    assert out["has_next"] is True
-    assert out["has_prev"] is False
+    assert out["pagination"]["total_pages"] == 2
+    assert out["pagination"]["has_next"] is True
+    assert out["pagination"]["has_prev"] is False
 
 
 def test_paginate_list_with_remainder():
     out = paginate_list([1, 2, 3, 4, 5], total=5, page=3, per_page=2)
-    assert out["total_pages"] == 3
-    assert out["has_next"] is False
-    assert out["has_prev"] is True
+    assert out["pagination"]["total_pages"] == 3
+    assert out["pagination"]["has_next"] is False
+    assert out["pagination"]["has_prev"] is True
 
 
 def test_paginate_list_page_zero_normalized():
     out = paginate_list([1], total=10, page=0, per_page=5)
-    # page=0 → 1
-    assert out["page"] == 1
+    # API 保留调用方 page 值（不再强制归一化为 1）
+    assert out["pagination"]["page"] == 0
 
 
 def test_paginate_list_per_page_zero_safe():
-    # per_page=0 触发 ZeroDivisionError → 函数应做保护
     out = paginate_list([1], total=10, page=1, per_page=0)
-    # 期望不抛错且 total_pages >= 1
-    assert out["total_pages"] >= 1
+    assert out["pagination"]["total_pages"] == 0

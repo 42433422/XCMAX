@@ -2,6 +2,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import QRCode from 'qrcode';
 import { useRoute, useRouter } from 'vue-router';
+import { useI18n } from 'vue-i18n';
 import { ApiError } from '@/api';
 import { authApi } from '@/api/auth';
 import { applyMarketTokensAfterFhdLogin } from '@/api/marketAccount';
@@ -20,10 +21,12 @@ import {
 import { ADMIN_OPERATOR_HOME_ROUTE } from '@/constants/adminOperatorNav';
 import type { AccountKind } from '@/api/auth';
 import { loadLoginPreferences, saveLoginPreferences } from '@/utils/loginPreferences';
+import { clearHostPackSkippedSession } from '@/utils/hostPackOnboardingGate';
 import OtpCells from '@/components/OtpCells.vue';
 
 const route = useRoute();
 const router = useRouter();
+const { t } = useI18n();
 const accountProfileStore = useAccountProfileStore();
 
 const username = ref('');
@@ -103,7 +106,7 @@ const baseUrl = import.meta.env.BASE_URL;
 const isEnterpriseEdition = computed(() => productSku.value === 'enterprise');
 
 const loginHeading = computed(() =>
-  accountKind.value === 'admin' ? '管理员登录' : '企业账号登录',
+  accountKind.value === 'admin' ? t('login.headingAdmin') : t('login.headingEnterprise'),
 );
 const accountPlaceholder = computed(() => loginAccountInputPlaceholder(productSku.value));
 const passwordPlaceholder = computed(() => loginPasswordInputPlaceholder());
@@ -159,7 +162,7 @@ onMounted(async () => {
   }
   const oidcErr = route.query.oidc_error;
   if (oidcErr) {
-    errorMessage.value = String(route.query.oidc_message || '企业 SSO 登录失败');
+    errorMessage.value = String(route.query.oidc_message || t('login.errSsoFailed'));
     return;
   }
   await tryAutoLogin();
@@ -177,6 +180,7 @@ function stopQrPoll() {
 }
 
 async function completeLoginSuccess(raw: Record<string, unknown>) {
+  clearHostPackSkippedSession();
   await applyMarketTokensAfterFhdLogin(raw);
   accountProfileStore.applyFromLoginPayload(raw);
   const loginUser =
@@ -211,16 +215,16 @@ function startOidcLogin() {
 
 async function sendPhoneCode() {
   if (phone.value.trim().length < 5) {
-    errorMessage.value = '请输入有效手机号';
+    errorMessage.value = t('login.errInvalidPhone');
     return;
   }
   sendingCode.value = true;
   errorMessage.value = '';
   try {
     const res = await authApi.sendPhoneCode(phone.value.trim());
-    altLoginHint.value = String((res as { message?: string }).message || '验证码已发送');
+    altLoginHint.value = String((res as { message?: string }).message || t('login.errCodeSent'));
   } catch (error: unknown) {
-    errorMessage.value = error instanceof ApiError ? error.message : '发送验证码失败';
+    errorMessage.value = error instanceof ApiError ? error.message : t('login.errSendCodeFailed');
   } finally {
     sendingCode.value = false;
   }
@@ -242,7 +246,7 @@ async function startQrLogin() {
     qrDataUrl.value = await QRCode.toDataURL(payload, { width: 220, margin: 1 });
     qrPollTimer.value = window.setInterval(() => void pollQrStatus(), 2000);
   } catch (error: unknown) {
-    errorMessage.value = error instanceof ApiError ? error.message : '无法生成登录二维码';
+    errorMessage.value = error instanceof ApiError ? error.message : t('login.errQrGenerateFailed');
   }
 }
 
@@ -250,7 +254,7 @@ async function pollQrStatus() {
   if (!qrId.value || !qrPollSecret.value) return;
   if (qrCountdown.value <= 0) {
     stopQrPoll();
-    errorMessage.value = '二维码已过期，请刷新';
+    errorMessage.value = t('login.errQrExpired');
     return;
   }
   try {
@@ -261,7 +265,7 @@ async function pollQrStatus() {
       await completeLoginSuccess({ success: true, ...data } as Record<string, unknown>);
     } else if (data.status === 'expired') {
       stopQrPoll();
-      errorMessage.value = '二维码已过期，请重新获取';
+      errorMessage.value = t('login.errQrExpiredRetry');
     }
   } catch {
     /* ignore transient poll errors */
@@ -297,19 +301,19 @@ function formatLoginFailurePayload(payload: Record<string, unknown> | null | und
   if (message) {
     out = message;
     if (errorId && !out.includes(errorId)) {
-      out = `${out}（错误编号 ${errorId}）`;
+      out = `${out}${t('login.errIdSuffix', { id: errorId })}`;
     }
   } else if (errorId) {
-    out = `登录失败（错误编号 ${errorId}），请联系管理员排查后端日志。`;
+    out = t('login.errWithId', { id: errorId });
   } else {
-    out = '登录失败，请检查账号或密码';
+    out = t('login.errLoginFailed');
   }
 
   if (
     import.meta.env.DEV &&
     (errorCode === 'MARKET_AUTH_FAILED' || errorCode === 'LOCAL_AUTH_MISMATCH')
   ) {
-    out += '。本地开发可试：企业演示 xcagi-enterprise-demo / Demo@2026；平台管理员请点「管理员登录」或访问 /admin/（admin / admin123）。';
+    out += t('login.devHint');
   }
   return out;
 }
@@ -328,7 +332,7 @@ function selectAdminLogin() {
 async function submitLogin() {
   if (!canSubmit.value) {
     errorMessage.value =
-      loginMode.value === 'phone' ? '请输入手机号和验证码' : '请输入账号和密码';
+      loginMode.value === 'phone' ? t('login.errNeedPhoneAndCode') : t('login.errNeedUsernamePassword');
     return;
   }
   loading.value = true;
@@ -373,7 +377,7 @@ async function submitLogin() {
     } else {
       const err = error as { response?: { data?: { message?: string; error?: { message?: string } } } };
       const data = err.response?.data;
-      errorMessage.value = data?.error?.message || data?.message || '登录失败，请稍后再试';
+      errorMessage.value = data?.error?.message || data?.message || t('login.errLoginFailedRetry');
     }
   } finally {
     loading.value = false;
@@ -382,32 +386,32 @@ async function submitLogin() {
 </script>
 
 <template>
-  <main class="login-view" aria-label="登录">
+  <main class="login-view" :aria-label="$t('login.pageAria')">
     <!-- 左侧品牌区（宽屏） -->
     <aside class="login-brand" aria-hidden="true">
       <div class="login-brand-inner">
-        <h2 class="login-brand-name">{{ isAdminConsoleSpa() ? 'XCMAX 服务器后台' : 'XCAGI 企业版' }}</h2>
+        <h2 class="login-brand-name">{{ isAdminConsoleSpa() ? $t('login.brandAdmin') : $t('login.brandEnterprise') }}</h2>
         <p class="login-brand-desc">
-          <template v-if="isAdminConsoleSpa()">平台运维 · 系统管理<br>服务器后台与自动化治理</template>
-          <template v-else>智能企业管理平台<br>让 AI 驱动您的业务增长</template>
+          <template v-if="isAdminConsoleSpa()">{{ $t('login.brandAdminDesc') }}<br>{{ $t('login.brandAdminDesc2') }}</template>
+          <template v-else>{{ $t('login.brandEnterpriseDesc') }}<br>{{ $t('login.brandEnterpriseDesc2') }}</template>
         </p>
         <ul class="login-brand-features">
-          <li>企业级 AI 对话与智能体</li>
-          <li>审批工作流与 ERP 集成</li>
-          <li>即时通讯与团队协作</li>
+          <li>{{ $t('login.featureAi') }}</li>
+          <li>{{ $t('login.featureWorkflow') }}</li>
+          <li>{{ $t('login.featureIm') }}</li>
         </ul>
       </div>
     </aside>
 
     <!-- 右侧登录区 -->
     <section class="login-panel" aria-labelledby="login-heading">
-      <router-link class="login-register-link" :to="registerRoute">注册账号</router-link>
+      <router-link class="login-register-link" :to="registerRoute">{{ $t('login.register') }}</router-link>
 
       <div class="login-panel-inner">
         <h1 id="login-heading" class="login-heading">{{ loginHeading }}</h1>
         <p class="login-subheading" role="note">
-          <template v-if="accountKind === 'admin'">管理员账号 · 仅限运营人员</template>
-          <template v-else>使用企业账号登录后展示企业品牌</template>
+          <template v-if="accountKind === 'admin'">{{ $t('login.subheadingAdmin') }}</template>
+          <template v-else>{{ $t('login.subheadingEnterprise') }}</template>
         </p>
 
         <div v-if="accountKind === 'enterprise'" class="login-mode-tabs" role="tablist">
@@ -417,7 +421,7 @@ async function submitLogin() {
             :class="{ active: loginMode === 'password' }"
             @click="switchLoginMode('password')"
           >
-            账号密码
+            {{ $t('login.tabPassword') }}
           </button>
           <button
             type="button"
@@ -425,7 +429,7 @@ async function submitLogin() {
             :class="{ active: loginMode === 'phone' }"
             @click="switchLoginMode('phone')"
           >
-            手机验证码
+            {{ $t('login.tabPhone') }}
           </button>
           <button
             type="button"
@@ -433,14 +437,14 @@ async function submitLogin() {
             :class="{ active: loginMode === 'qr' }"
             @click="switchLoginMode('qr')"
           >
-            扫码登录
+            {{ $t('login.tabQr') }}
           </button>
         </div>
 
         <form v-if="loginMode !== 'qr'" class="login-form" @submit.prevent="submitLogin" novalidate>
           <template v-if="loginMode === 'password'">
           <div class="login-field" :class="{ 'is-focused': usernameFocused }">
-            <label class="login-label" for="lv-username">账号</label>
+            <label class="login-label" for="lv-username">{{ $t('login.labelUsername') }}</label>
             <input
               id="lv-username"
               v-model="username"
@@ -457,7 +461,7 @@ async function submitLogin() {
           </div>
 
           <div class="login-field login-field--password" :class="{ 'is-focused': passwordFocused }">
-            <label class="login-label" for="lv-password">密码</label>
+            <label class="login-label" for="lv-password">{{ $t('login.labelPassword') }}</label>
             <input
               id="lv-password"
               v-model="password"
@@ -474,7 +478,7 @@ async function submitLogin() {
               type="button"
               class="login-eye-btn"
               :disabled="loading"
-              :aria-label="showPassword ? '隐藏密码' : '显示密码'"
+              :aria-label="showPassword ? $t('login.hidePassword') : $t('login.showPassword')"
               @click="showPassword = !showPassword"
             >
               <svg v-if="showPassword" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
@@ -482,7 +486,7 @@ async function submitLogin() {
             </button>
           </div>
 
-          <div class="login-options" role="group" aria-label="登录选项">
+          <div class="login-options" role="group" :aria-label="$t('login.loginOptions')">
             <label class="login-option">
               <input
                 v-model="autoLogin"
@@ -490,7 +494,7 @@ async function submitLogin() {
                 class="login-option-input"
                 :disabled="loading"
               />
-              <span>免登录</span>
+              <span>{{ $t('login.autoLogin') }}</span>
             </label>
             <label class="login-option">
               <input
@@ -499,27 +503,27 @@ async function submitLogin() {
                 class="login-option-input"
                 :disabled="loading"
               />
-              <span>记住密码</span>
+              <span>{{ $t('login.rememberPassword') }}</span>
             </label>
           </div>
           </template>
 
           <template v-else>
             <div class="login-field">
-              <label class="login-label" for="lv-phone">手机号</label>
+              <label class="login-label" for="lv-phone">{{ $t('login.labelPhone') }}</label>
               <input
                 id="lv-phone"
                 v-model="phone"
                 type="tel"
                 class="login-input"
                 autocomplete="tel"
-                placeholder="请输入手机号"
+                :placeholder="$t('login.phonePlaceholder')"
                 :disabled="loading"
               />
             </div>
             <div class="login-field login-field--sms">
               <div class="login-sms-head">
-                <label class="login-label" for="lv-sms-send">验证码</label>
+                <label class="login-label" for="lv-sms-send">{{ $t('login.labelSmsCode') }}</label>
                 <button
                   id="lv-sms-send"
                   type="button"
@@ -527,7 +531,7 @@ async function submitLogin() {
                   :disabled="loading || sendingCode"
                   @click="sendPhoneCode"
                 >
-                  {{ sendingCode ? '发送中' : '获取验证码' }}
+                  {{ sendingCode ? $t('login.sendingCode') : $t('login.getSmsCode') }}
                 </button>
               </div>
               <OtpCells v-model="smsCode" :disabled="loading" />
@@ -542,25 +546,25 @@ async function submitLogin() {
           </transition>
 
           <button class="login-submit" type="submit" :disabled="!canSubmit || loading">
-            <span>{{ loading ? '正在登录…' : '登 录' }}</span>
+            <span>{{ loading ? $t('login.submitting') : $t('login.submit') }}</span>
             <span v-if="loading" class="login-spinner" aria-hidden="true"></span>
             <svg v-else viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path fill-rule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
           </button>
         </form>
 
         <div v-else class="login-qr-panel">
-          <p class="login-subheading">请使用 XCAGI Android App 扫描二维码并确认登录</p>
-          <img v-if="qrDataUrl" :src="qrDataUrl" alt="登录二维码" class="login-qr-image" width="220" height="220" />
-          <p v-if="qrExpiresAt" class="login-hint">剩余 {{ qrCountdown }} 秒 · 过期后请切换 Tab 刷新</p>
-          <button type="button" class="login-sso" :disabled="loading" @click="startQrLogin">刷新二维码</button>
+          <p class="login-subheading">{{ $t('login.qrHint') }}</p>
+          <img v-if="qrDataUrl" :src="qrDataUrl" :alt="$t('login.qrAlt')" class="login-qr-image" width="220" height="220" />
+          <p v-if="qrExpiresAt" class="login-hint">{{ $t('login.qrCountdown', { seconds: qrCountdown }) }}</p>
+          <button type="button" class="login-sso" :disabled="loading" @click="startQrLogin">{{ $t('login.refreshQr') }}</button>
         </div>
 
         <!-- SSO 仅在启用时显示 -->
         <div v-if="oidcEnabled && accountKind === 'enterprise'" class="login-alt">
-          <div class="login-divider"><span>或</span></div>
+          <div class="login-divider"><span>{{ $t('login.orDivider') }}</span></div>
           <button type="button" class="login-sso" :disabled="loading" @click="startOidcLogin">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
-            <span>企业 SSO 登录</span>
+            <span>{{ $t('login.ssoLogin') }}</span>
           </button>
         </div>
 
@@ -569,11 +573,11 @@ async function submitLogin() {
         </transition>
 
         <footer class="login-footer">
-          <router-link :to="forgotAccountRoute">忘记账号</router-link>
+          <router-link :to="forgotAccountRoute">{{ $t('login.forgotAccount') }}</router-link>
           <span class="login-footer-sep" aria-hidden="true">·</span>
-          <router-link :to="forgotPasswordRoute">忘记密码</router-link>
+          <router-link :to="forgotPasswordRoute">{{ $t('login.forgotPassword') }}</router-link>
           <span class="login-footer-sep" aria-hidden="true">·</span>
-          <router-link :to="loginHelpRoute">帮助</router-link>
+          <router-link :to="loginHelpRoute">{{ $t('login.help') }}</router-link>
         </footer>
 
         <div v-if="!isAdminConsoleSpa()" class="login-admin-entry">
@@ -584,7 +588,7 @@ async function submitLogin() {
             @click="selectAdminLogin"
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-            管理员登录（独立运维台）
+            {{ $t('login.adminEntry') }}
           </button>
         </div>
       </div>

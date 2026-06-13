@@ -62,7 +62,15 @@ def test_target_module_format() -> None:
 
 
 def test_allowed_legacy_files_whitelist() -> None:
-    assert frozenset({"xcagi_compat.py"}) == ALLOWED_LEGACY_FILES
+    # 护栏：扩白名单须在此显式登记（避免悄悄新增顶层 legacy 文件）。
+    # chat_helpers/product 为已知待迁移 compat 辅助模块（详见 domain_registry 注释）。
+    assert ALLOWED_LEGACY_FILES == frozenset(
+        {
+            "xcagi_compat.py",
+            "xcagi_compat_chat_helpers.py",
+            "xcagi_compat_product.py",
+        }
+    )
 
 
 def test_legacy_route_dataclass() -> None:

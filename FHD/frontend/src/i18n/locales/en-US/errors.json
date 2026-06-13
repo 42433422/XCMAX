@@ -1,0 +1,24 @@
+{
+  "errors": {
+    "UNAUTHORIZED": "Please sign in first",
+    "WEAK_PASSWORD": "New password must be at least 6 characters",
+    "VALIDATION_ERROR": "Invalid request parameters",
+    "EMPTY_MESSAGE": "Message cannot be empty",
+    "BATCH_LIMIT_EXCEEDED": "Batch limit is 20 messages",
+    "NOT_FOUND": "Resource not found",
+    "FORBIDDEN": "Access denied",
+    "INTERNAL_ERROR": "Internal server error",
+    "INVALID_INPUT": "Invalid request parameters",
+    "NO_SESSION": "No session",
+    "INVALID_SESSION": "Session invalid or expired",
+    "ACCOUNT_DISABLED": "Account has been disabled",
+    "MARKET_NOT_BOUND": "Enterprise edition requires a Xiuci Market enterprise account",
+    "SEND_CODE_FAILED": "Failed to send verification code",
+    "MARKET_RESET_FAILED": "Password reset failed",
+    "MARKET_REGISTER_FAILED": "Xiuci Market registration failed",
+    "REGISTRATION_DISABLED": "Self-registration is not enabled on this deployment",
+    "CREATE_FAILED": "Failed to create user",
+    "UPDATE_FAILED": "Update failed",
+    "QR_NOT_FOUND": "Invalid QR code"
+  }
+}

@@ -18,8 +18,15 @@
 | QPS（写入） | N/A | ≥ 50 | k6 load test |
 | P50 延迟 | N/A | < 50ms | k6 + Prometheus |
 | P95 延迟 | N/A | < 200ms | k6 + Prometheus |
-| P99 延迟 | N/A | < 500ms | k6 + Prometheus |
-| 错误率 | 见 §6（无上游时为连接失败） | < 1% | k6 + Prometheus |
+| P99 延迟 | 见 §6 Cloud API | < 500ms | k6 + Prometheus |
+| 错误率 | 见 §6 Cloud API | < 1% | k6 + Prometheus |
+
+### 1.1b 分表口径（路线 A）
+
+| 表 | 含义 |
+|----|------|
+| **Cloud API 基线** | staging `119.27.178.147:30080`，§6 k6 / probe |
+| **Desktop 本地基线** | 单机 `probe.py` + 桌面壳日志；**不与云表混写** |
 
 ### 1.2 资源消耗（待填充）
 
@@ -113,22 +120,50 @@ k6 run -e BASE_URL=http://your-server:5000 scripts/loadtest/stress.js
 
 ## 6. 基线测试记录
 
-### 测试环境
+### 6.1 Cloud API — staging（2026-06-12）
 
 | 项目 | 值 |
 |------|-----|
-| OS | Windows（Agent 执行机，文档生成用） |
-| CPU / Memory | 未记录 |
-| Python | 3.11 |
-| Database | PostgreSQL 16 |
-| Redis | 7-alpine |
-| API 进程 | 未启动（`127.0.0.1:5000` 拒绝连接） |
+| 主机 | 腾讯云 4C / 7.4Gi · `119.27.178.147` |
+| 拓扑 | k3s 单机全栈（xcagi + Prometheus + Grafana + Redis + k6 round-1 并行） |
+| API | NodePort `30080` → `xcagi-service` · 单副本 uvicorn（压测日） |
+| 数据库 | staging SQLite 母库 + Redis |
+| k6 | `grafana/k6:0.50.0` · `BASE_URL=http://127.0.0.1:30080` |
 
-### 测试结果
+#### k6 摘要
 
-| 日期 | 脚本 | VU | http_reqs | 迭代次数 | http_req_failed | 备注 |
-|------|------|-----|-------------|----------|-----------------|------|
-| 2026-05-03 | smoke.js | 5 | 150 | 75 | 100% | 无上游，仅验证 k6 与脚本；FHD commit `aa9a961` |
-| 2026-05-03 | MODstore `full_link_smoke.js` | 2 | 480 | 60 | 100% | 数据见姊妹仓库 [perf-benchmark-public.md](../../../成都修茈科技有限公司/MODstore_deploy/docs/perf-benchmark-public.md) |
+| 脚本 | VU max | http_reqs | RPS | http_req_failed | http_req_duration p95 | 阈值 |
+|------|--------|-----------|-----|-----------------|----------------------|------|
+| `smoke.js` | 5 | ~120（60 iter ×2） | ~4 | 0%（30s 窗口） | <5s 门禁 | pass |
+| `load.js` | 50 | 1614 | 8.39 | 0.24% | waiting p95 11.51s | duration 阈值失败 |
+| `stress.js` | 200 | 4067 | 13.57 | 30.34% | p95 60s（超时顶满） | duration + failed 失败 |
 
-服务可用后请重跑本表并填写 **P50/P95/P99** 与 **业务错误率**（可附 `--summary-export` JSON 路径）。
+> `load.js` / `stress.js` 含 catalog、liveness、login（无效密码）；与 round-1 k6 并行时 CPU 争用，**非干净容量上限**。
+
+#### probe.py（20 workers × 200）
+
+| 路径 | RPS | p50 ms | p95 ms | p99 ms | 错误 |
+|------|-----|--------|--------|--------|------|
+| `/api/health` | 7.8 | 2575 | 3056 | 3288 | 0 |
+| `/api/mods/` | 3.5 | 2109 | 27691 | 31795 | 4%（502/超时） |
+| `/api/mods/loading-status` | 38.6 | 32 | 2031 | 3024 | 0 |
+| `/api/desktop/status` | 28.3 | 32 | 1268 | 3469 | 0 |
+
+### 6.2 Desktop 本地（probe 参考）
+
+桌面 SKU 请在 **本机 FastAPI** 重跑 `probe.py`；勿将 §6.1 数字当作桌面容量。
+
+### 6.3 历史记录
+
+| 日期 | 脚本 | VU | http_reqs | 迭代 | http_req_failed | 备注 |
+|------|------|-----|-----------|------|-----------------|------|
+| 2026-05-03 | smoke.js | 5 | 150 | 75 | 100% | 无上游；commit `aa9a961` |
+| 2026-05-03 | MODstore smoke | 2 | 480 | 60 | 100% | [perf-benchmark-public.md](../../../成都修茈科技有限公司/MODstore_deploy/docs/perf-benchmark-public.md) |
+| 2026-06-12 | staging k6 三件套 | 5–200 | 见上表 | — | 见上表 | 路线 A Cloud API 首版实测 |
+
+复现（在 staging 主机）：
+
+```bash
+docker run --rm --network host -v /opt/fhd-full/scripts/loadtest:/loadtest:ro \
+  -e BASE_URL=http://127.0.0.1:30080 grafana/k6:0.50.0 run /loadtest/load.js
+```

@@ -20,7 +20,7 @@ from datetime import datetime
 from typing import Any
 
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -130,7 +130,7 @@ class UserMemoryStore:
                     for user_id, memory_data in data.items():
                         self._memory_cache[user_id] = UserMemory.from_dict(memory_data)
                 logger.info(f"从 {JSON_MEMORY_PATH} 加载了 {len(self._memory_cache)} 个用户记忆")
-            except OPERATIONAL_ERRORS as e:
+            except RECOVERABLE_ERRORS as e:
                 logger.error(f"加载用户记忆失败: {e}")
                 self._memory_cache = {}
 
@@ -145,7 +145,7 @@ class UserMemoryStore:
             with open(JSON_MEMORY_PATH, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
             logger.debug(f"已保存 {len(self._memory_cache)} 个用户记忆到 {JSON_MEMORY_PATH}")
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.error(f"保存用户记忆失败: {e}")
 
     def get_memory(self, user_id: str) -> UserMemory | None:
@@ -465,8 +465,12 @@ class UserMemoryService(NeuroEventPublisherMixin):
         elif feedback == "negated":
             weight_delta = -0.15
         elif feedback == "corrected" and corrected_intent:
-            weight_delta = -0.1
+            for action in memory.frequent_actions:
+                if action.get("intent") == recognized_intent:
+                    new_confidence = action.get("confidence", 0.5) - 0.1
+                    action["confidence"] = max(0.1, min(0.99, new_confidence))
             target_intent = corrected_intent
+            weight_delta = 0.1
 
         for action in memory.frequent_actions:
             if action.get("intent") == target_intent:
@@ -616,6 +620,7 @@ def reset_user_memory_service() -> None:
     """重置用户记忆服务单例"""
     global _user_memory_service
     _user_memory_service = None
+    UserMemoryService._instance = None
 
 
 # NEURO-DDD: 为 Services 层类添加 instrumentation

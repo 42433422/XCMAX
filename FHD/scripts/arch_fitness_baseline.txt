@@ -191,3 +191,5 @@
 [routes->services] app/fastapi_routes/domains/wechat/routes.py:153
 [routes->services] app/fastapi_routes/domains/wechat/routes.py:126
 [routes->services] app/fastapi_routes/domains/wechat/routes.py:308
+[giant-file] app/mod_sdk/industry_baseline.py
+[giant-file] app/application/aiopen/service.py

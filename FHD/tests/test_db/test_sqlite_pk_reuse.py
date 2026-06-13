@@ -19,7 +19,9 @@ def test_sqlite_autoincrement_removed_from_customer_model() -> None:
                 assert "sqlite_autoincrement" not in item
 
 
-def test_sqlite_insert_increments_pk() -> None:
+def test_sqlite_pk_reused_after_deleting_highest_row() -> None:
+    # 移除 sqlite_autoincrement 后的既定行为：删除最高（此处为唯一）行再插入会复用 rowid。
+    # 这正是 ①-C 想固化的回归点——无 AUTOINCREMENT 时 SQLite 不维护单调序列。
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine, tables=[Customer.__table__])
     with Session(engine) as session:
@@ -33,4 +35,4 @@ def test_sqlite_insert_increments_pk() -> None:
         second_id = session.execute(
             text("SELECT id FROM customers ORDER BY id DESC LIMIT 1")
         ).scalar_one()
-    assert second_id > first_id
+    assert second_id == first_id

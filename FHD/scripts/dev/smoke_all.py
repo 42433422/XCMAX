@@ -42,6 +42,13 @@ def step_mod_boundary() -> int:
     )
 
 
+def step_layer_ratchet() -> int:
+    return _run_subprocess(
+        "分层债棘轮 (scripts/dev/check_layer_ratchet.py)",
+        [sys.executable, str(REPO_ROOT / "scripts/dev/check_layer_ratchet.py")],
+    )
+
+
 def step_werkzeug_shim() -> int:
     return _run_subprocess(
         "werkzeug shim parity (scripts/dev/smoke_werkzeug_shim.py)",
@@ -85,6 +92,7 @@ def step_get_routes_smoke() -> int:
 def main() -> int:
     steps = (
         ("mod_boundary", step_mod_boundary),
+        ("layer_ratchet", step_layer_ratchet),
         ("werkzeug_shim", step_werkzeug_shim),
         ("fastapi_boot", step_fastapi_boot),
         ("get_routes_smoke", step_get_routes_smoke),

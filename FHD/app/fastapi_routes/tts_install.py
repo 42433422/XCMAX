@@ -25,7 +25,7 @@ from typing import Any
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -162,7 +162,7 @@ def install_system_voice(request: Request) -> Any:
                 "然后在自动打开的 PowerShell 窗口观察安装进度，完成后重启浏览器即可。"
             ),
         }
-    except OPERATIONAL_ERRORS as exc:  # pragma: no cover — ctypes/系统调用异常
+    except RECOVERABLE_ERRORS as exc:  # pragma: no cover — ctypes/系统调用异常
         logger.exception("install_system_voice failed")
         return JSONResponse(
             {"success": False, "message": f"无法启动安装：{exc}"},

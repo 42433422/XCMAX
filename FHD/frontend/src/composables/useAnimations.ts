@@ -1,7 +1,7 @@
 import { ref, onUnmounted, type Ref } from 'vue';
 
 type EasingFn = (t: number) => number;
-type FrameCallback = (...args: any[]) => void;
+type FrameCallback = (...args: unknown[]) => void;
 
 interface AnimationOptions {
   duration?: number;
@@ -183,7 +183,7 @@ export function useTransition(elementRef: Ref<HTMLElement | null>, options: Anim
     isTransitioning.value = true;
 
     const property = options.property;
-    const startValue = parseFloat((elementRef.value.style as any)[property] || '0');
+    const startValue = parseFloat((elementRef.value.style as unknown)[property] || '0');
     const startTime = performance.now();
 
     const animate = (currentTime: number) => {
@@ -192,7 +192,7 @@ export function useTransition(elementRef: Ref<HTMLElement | null>, options: Anim
       const easedProgress = options.easing ? options.easing(ratio) : ratio;
       const currentValue = startValue + (toValue - startValue) * easedProgress;
 
-      (elementRef.value!.style as any)[property] = `${currentValue}${options.unit || 'px'}`;
+      (elementRef.value!.style as unknown)[property] = `${currentValue}${options.unit || 'px'}`;
 
       if (ratio < 1) {
         requestAnimationFrame(animate);

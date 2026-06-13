@@ -224,17 +224,16 @@ def list_crm_invoices(
     if status:
         clauses.append("status = ?")
         params.append(str(status).strip())
-    where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+    where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
     with _connect() as conn:
         total = conn.execute(
-            f"SELECT COUNT(*) AS c FROM cs_crm_invoices {where}",
+            "SELECT COUNT(*) AS c FROM cs_crm_invoices " + where,
             params,
         ).fetchone()["c"]
         rows = conn.execute(
-            f"""
-            SELECT * FROM cs_crm_invoices {where}
-            ORDER BY id DESC LIMIT ? OFFSET ?
-            """,
+            "SELECT * FROM cs_crm_invoices "
+            + where
+            + " ORDER BY id DESC LIMIT ? OFFSET ?",
             [*params, int(limit), int(offset)],
         ).fetchall()
     items = [dict(r) for r in rows]

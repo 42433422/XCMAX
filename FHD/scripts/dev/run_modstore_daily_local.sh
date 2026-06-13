@@ -147,8 +147,9 @@ export MODSTORE_SURFACE_AUDIT_ANDROID="${MODSTORE_SURFACE_AUDIT_ANDROID:-1}"
 export MODSTORE_SURFACE_AUDIT_PS_ENABLED="${MODSTORE_SURFACE_AUDIT_PS_ENABLED:-1}"
 export SURFACE_AUDIT_PRODUCT_SKU="${SURFACE_AUDIT_PRODUCT_SKU:-enterprise}"
 export SURFACE_AUDIT_INCLUDE_ENTERPRISE="${SURFACE_AUDIT_INCLUDE_ENTERPRISE:-1}"
-export SURFACE_AUDIT_ANDROID_FHD_HOST="${SURFACE_AUDIT_ANDROID_FHD_HOST:-10.0.2.2:5000}"
-export SURFACE_AUDIT_API_URL="${SURFACE_AUDIT_API_URL:-http://127.0.0.1:5000}"
+# 本地 Mac：.env.daily-closure 常写 :5000/:5100，但 :5000 被 AirPlay 占用、:5100 常为开发 PostgreSQL 实例 → 日更栈专用 :5102 桌面 SQLite
+export SURFACE_AUDIT_API_URL="http://127.0.0.1:5102"
+export SURFACE_AUDIT_ANDROID_FHD_HOST="10.0.2.2:5102"
 ADB_BIN="${FHD_ROOT}/mobile-android/.toolchain/android-sdk/platform-tools/adb"
 [[ -x "${ADB_BIN}" ]] || ADB_BIN="adb"
 if [[ "${MODSTORE_SURFACE_AUDIT_ANDROID}" != "0" ]]; then
@@ -174,6 +175,8 @@ export MODSTORE_EMAIL_INTAKE_ENABLED="${MODSTORE_EMAIL_INTAKE_ENABLED:-1}"
 export MODSTORE_IMAP_HOST="${MODSTORE_IMAP_HOST:-imap.qq.com}"
 export MODSTORE_IMAP_PORT="${MODSTORE_IMAP_PORT:-993}"
 export MODSTORE_RELEASE_TRAIN_JSON="${XCMAX_ROOT}/FHD/config/release_train.json"
+# auto-merge 后 GitOps 晋级（与 fhd-ci-cd gitops-image-bump 双轨；SLO 熔断时 post_merge 会 exit 1）
+export MODSTORE_POST_MERGE_GITOPS_SCRIPT="${MODSTORE_POST_MERGE_GITOPS_SCRIPT:-${FHD_ROOT}/scripts/gitops/post_merge_promote.sh}"
 # TLS 证书到期巡检（K 节点）：写入 .env.local 或在此处设默认路径
 # 示例：MODSTORE_TLS_CERT_PATHS=/path/to/xiu-ci.com_bundle.pem
 export MODSTORE_TLS_CERT_PATHS="${MODSTORE_TLS_CERT_PATHS:-}"

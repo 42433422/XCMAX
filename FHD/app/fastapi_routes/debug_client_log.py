@@ -7,7 +7,7 @@ from typing import Any
 
 from fastapi import APIRouter, Body
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +20,6 @@ def post_client_debug_log(body: dict[str, Any] = Body(default_factory=dict)) -> 
         from app.utils.logging_utils import ingest_client_debug_json
 
         return ingest_client_debug_json(body)
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.exception("[debug] client-log 处理失败")
         return {"success": False, "message": str(e)}

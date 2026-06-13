@@ -55,8 +55,10 @@ import com.xiuci.xcagi.mobile.R
 import com.xiuci.xcagi.mobile.core.ProductSkuConfig
 import com.xiuci.xcagi.mobile.ui.AppViewModel
 import com.xiuci.xcagi.mobile.ui.components.mobile.MobileTokens
+import com.xiuci.xcagi.mobile.ui.components.mobile.WeAuthOtpField
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeAvatar
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeTopBar
+import kotlinx.coroutines.delay
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ConnectScreen  ─  连接电脑页（白底+Logo+按钮，飞书风格）
@@ -117,10 +119,18 @@ fun ConnectScreen(
 // AuthScreen  ─  登录页（精确复刻截图：白底+Logo+无Tab+输入框+眼睛+灰色按钮+勾选）
 // ─────────────────────────────────────────────────────────────────────────────
 
+private enum class AuthLoginMode {
+        PASSWORD,
+        PHONE,
+}
+
 @Composable
 fun AuthScreen(vm: AppViewModel, onRegister: () -> Unit, onDone: () -> Unit) {
+        var loginMode by remember { mutableStateOf(AuthLoginMode.PASSWORD) }
         var user by remember { mutableStateOf("") }
         var pass by remember { mutableStateOf("") }
+        var phone by remember { mutableStateOf("") }
+        var otpCode by remember { mutableStateOf("") }
         var passwordVisible by remember { mutableStateOf(false) }
         var agreed by remember { mutableStateOf(true) }
         var loggingIn by remember { mutableStateOf(false) }
@@ -128,6 +138,8 @@ fun AuthScreen(vm: AppViewModel, onRegister: () -> Unit, onDone: () -> Unit) {
         var rememberPass by remember { mutableStateOf(false) }
         var autoLogin by remember { mutableStateOf(false) }
         var loginError by remember { mutableStateOf<String?>(null) }
+        var codeCooldown by remember { mutableStateOf(0) }
+        var sendingCode by remember { mutableStateOf(false) }
         val appConfig by vm.appConfig.collectAsState()
         val ctx = androidx.compose.ui.platform.LocalContext.current
         val sessionStore = com.xiuci.xcagi.mobile.core.datastore.SessionStore(ctx)
@@ -185,8 +197,33 @@ fun AuthScreen(vm: AppViewModel, onRegister: () -> Unit, onDone: () -> Unit) {
                 )
                 Spacer(Modifier.height(24.dp))
 
+                // ── 密码 / 手机号登录切换 ──
+                Row(
+                        Modifier.fillMaxWidth().padding(horizontal = 24.dp),
+                        horizontalArrangement = Arrangement.spacedBy(24.dp),
+                ) {
+                        LoginTab(
+                                label = "密码登录",
+                                selected = loginMode == AuthLoginMode.PASSWORD,
+                                onClick = { loginMode = AuthLoginMode.PASSWORD },
+                        )
+                        LoginTab(
+                                label = "手机号登录",
+                                selected = loginMode == AuthLoginMode.PHONE,
+                                onClick = { loginMode = AuthLoginMode.PHONE },
+                        )
+                }
+                Spacer(Modifier.height(20.dp))
+
+                androidx.compose.runtime.LaunchedEffect(codeCooldown) {
+                        if (codeCooldown > 0) {
+                                delay(1000)
+                                codeCooldown -= 1
+                        }
+                }
+
                 // ── 管理员切换（企业版） ──
-                if (isEnterprise) {
+                if (isEnterprise && loginMode == AuthLoginMode.PASSWORD) {
                         Text(
                                 if (adminMode) "切换为市场账号" else "管理员账号登录",
                                 fontSize = 13.sp,
@@ -198,24 +235,53 @@ fun AuthScreen(vm: AppViewModel, onRegister: () -> Unit, onDone: () -> Unit) {
                         Spacer(Modifier.height(20.dp))
                 }
 
-                // ── 输入框（截图样式：placeholder在内部，无边框label） ──
-                LoginInputBox(
-                        value = user,
-                        onValueChange = { user = it },
-                        placeholder =
-                                when {
-                                        adminMode -> "管理员账号"
-                                        isEnterprise -> "市场账号或邮箱"
-                                        else -> "请输入用户名"
+                // ── 输入框 ──
+                if (loginMode == AuthLoginMode.PASSWORD) {
+                        LoginInputBox(
+                                value = user,
+                                onValueChange = { user = it },
+                                placeholder =
+                                        when {
+                                                adminMode -> "管理员账号"
+                                                isEnterprise -> "市场账号或邮箱"
+                                                else -> "请输入用户名"
+                                        },
+                        )
+                        Spacer(Modifier.height(14.dp))
+                        LoginPasswordBox(
+                                value = pass,
+                                onValueChange = { pass = it },
+                                visible = passwordVisible,
+                                onToggleVisibility = { passwordVisible = !passwordVisible },
+                        )
+                } else {
+                        LoginInputBox(
+                                value = phone,
+                                onValueChange = { phone = it.filter { ch -> ch.isDigit() }.take(11) },
+                                placeholder = "请输入手机号",
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        WeAuthOtpField(
+                                actionLabel =
+                                        when {
+                                                sendingCode -> "发送中…"
+                                                codeCooldown > 0 -> "${codeCooldown}s 后重发"
+                                                else -> "获取验证码"
+                                        },
+                                onAction = {
+                                        if (phone.length != 11 || codeCooldown > 0 || sendingCode) return@WeAuthOtpField
+                                        sendingCode = true
+                                        loginError = null
+                                        vm.sendCode(phone) {
+                                                sendingCode = false
+                                                codeCooldown = 60
+                                        }
                                 },
-                )
-                Spacer(Modifier.height(14.dp))
-                LoginPasswordBox(
-                        value = pass,
-                        onValueChange = { pass = it },
-                        visible = passwordVisible,
-                        onToggleVisibility = { passwordVisible = !passwordVisible },
-                )
+                                value = otpCode,
+                                onValueChange = { otpCode = it.filter { ch -> ch.isDigit() }.take(6) },
+                                actionEnabled = phone.length == 11 && codeCooldown == 0 && !sendingCode,
+                        )
+                }
 
                 Spacer(Modifier.height(28.dp))
 
@@ -230,8 +296,14 @@ fun AuthScreen(vm: AppViewModel, onRegister: () -> Unit, onDone: () -> Unit) {
                         Spacer(Modifier.height(8.dp))
                 }
 
-                // ── 登录按钮（截图：灰色disabled态） ──
-                val canLogin = user.isNotBlank() && pass.isNotBlank() && agreed && !loggingIn
+                // ── 登录按钮 ──
+                val canLogin =
+                        when (loginMode) {
+                                AuthLoginMode.PASSWORD ->
+                                        user.isNotBlank() && pass.isNotBlank() && agreed && !loggingIn
+                                AuthLoginMode.PHONE ->
+                                        phone.length == 11 && otpCode.length >= 4 && agreed && !loggingIn
+                        }
                 Box(
                         Modifier.fillMaxWidth()
                                 .padding(horizontal = 24.dp)
@@ -244,15 +316,25 @@ fun AuthScreen(vm: AppViewModel, onRegister: () -> Unit, onDone: () -> Unit) {
                                 .clickable(enabled = canLogin) {
                                         loggingIn = true
                                         loginError = null
-                                        vm.loginFhd(
-                                                user,
-                                                pass,
-                                                adminMode,
-                                                rememberPass,
-                                                autoLogin
-                                        ) {
-                                                loggingIn = false
-                                                if (it) onDone() else loginError = "用户名或密码错误"
+                                        when (loginMode) {
+                                                AuthLoginMode.PASSWORD ->
+                                                        vm.loginFhd(
+                                                                user,
+                                                                pass,
+                                                                adminMode,
+                                                                rememberPass,
+                                                                autoLogin
+                                                        ) {
+                                                                loggingIn = false
+                                                                if (it) onDone()
+                                                                else loginError = "用户名或密码错误"
+                                                        }
+                                                AuthLoginMode.PHONE ->
+                                                        vm.loginPhone(phone, otpCode) {
+                                                                loggingIn = false
+                                                                if (it) onDone()
+                                                                else loginError = "验证码错误或已过期"
+                                                        }
                                         }
                                 },
                         contentAlignment = Alignment.Center,
@@ -265,27 +347,29 @@ fun AuthScreen(vm: AppViewModel, onRegister: () -> Unit, onDone: () -> Unit) {
                         )
                 }
 
-                // ── 记住密码 / 免登录（靠右） ──
-                Spacer(Modifier.height(14.dp))
-                Row(
-                        Modifier.fillMaxWidth().padding(horizontal = 24.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.End,
-                ) {
-                        LoginCheckbox(
-                                checked = rememberPass,
-                                onToggle = { rememberPass = !rememberPass },
-                                label = "记住密码"
-                        )
-                        Spacer(Modifier.width(20.dp))
-                        LoginCheckbox(
-                                checked = autoLogin,
-                                onToggle = { autoLogin = !autoLogin },
-                                label = "免登录"
-                        )
+                // ── 记住密码 / 免登录（密码模式） ──
+                if (loginMode == AuthLoginMode.PASSWORD) {
+                        Spacer(Modifier.height(14.dp))
+                        Row(
+                                Modifier.fillMaxWidth().padding(horizontal = 24.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.End,
+                        ) {
+                                LoginCheckbox(
+                                        checked = rememberPass,
+                                        onToggle = { rememberPass = !rememberPass },
+                                        label = "记住密码"
+                                )
+                                Spacer(Modifier.width(20.dp))
+                                LoginCheckbox(
+                                        checked = autoLogin,
+                                        onToggle = { autoLogin = !autoLogin },
+                                        label = "免登录"
+                                )
+                        }
                 }
 
-                if (!isEnterprise) {
+                if (!isEnterprise && loginMode == AuthLoginMode.PASSWORD) {
                         Spacer(Modifier.height(12.dp))
                         Text(
                                 "个人版注册",

@@ -165,7 +165,7 @@ class TestScanWechatMessagesTask:
         from app.tasks.wechat_tasks import scan_wechat_messages
 
         mock_service = MagicMock()
-        mock_service.scan_messages.side_effect = Exception("数据库错误")
+        mock_service.scan_messages.side_effect = RuntimeError("数据库错误")
 
         with patch.object(
             scan_wechat_messages, "retry", side_effect=MaxRetriesExceededError("max")
@@ -232,7 +232,7 @@ class TestCleanupOldTasksTask:
         """测试清理时发生异常"""
         from app.tasks.wechat_tasks import cleanup_old_tasks
 
-        mock_session_local.return_value.__enter__.side_effect = Exception("数据库连接失败")
+        mock_session_local.return_value.__enter__.side_effect = RuntimeError("数据库连接失败")
 
         result = cleanup_old_tasks(days=30)
 

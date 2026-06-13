@@ -3,7 +3,7 @@
 import logging
 from collections.abc import Iterable
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 from typing import Any
@@ -77,9 +77,9 @@ def merged_cell_value(ws, row: int, col: int) -> Any:
                     min_col, min_row, max_col, max_row = range_boundaries(rng)
                     if min_row <= row <= max_row and min_col <= col <= max_col:
                         return ws.cell(row=min_row, column=min_col).value
-            except OPERATIONAL_ERRORS:
+            except RECOVERABLE_ERRORS:
                 continue
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         logger.debug("suppressed exception", exc_info=True)
 
     return ws.cell(row=row, column=col).value

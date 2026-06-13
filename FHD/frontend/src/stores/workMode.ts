@@ -1,7 +1,15 @@
 import { defineStore } from 'pinia'
 import { ref, computed, type Ref } from 'vue'
-import { wechatApi, type WechatContact } from '@/api/wechat'
+import {
+  wechatApi,
+  type WechatContact,
+  type WechatContactRuntime,
+  type WorkModeFeedMessage,
+  type WorkModeOrder,
+  type WorkModeTaskAcquisition,
+} from '@/api/wechat'
 import { resolveErpApiPath } from '@/utils/erpDomainPaths'
+import { asRecord } from '@/utils/typeGuards'
 
 interface WorkModeState {
   isActive: boolean;
@@ -11,7 +19,7 @@ interface WorkModeState {
   loading: boolean;
   error: string | null;
   isTaskAcquisition: boolean;
-  currentOrder: any | null;
+  currentOrder: WorkModeOrder | null;
 }
 
 export const useWorkModeStore = defineStore('workMode', () => {
@@ -22,10 +30,12 @@ export const useWorkModeStore = defineStore('workMode', () => {
   const loading = ref(false)
   const error = ref<string | null>(null)
   const isTaskAcquisition = ref(false)
-  const currentOrder = ref<any | null>(null)
+  const currentOrder = ref<WorkModeOrder | null>(null)
 
   const starredContacts = computed(() => contacts.value.filter(c => c.is_starred))
-  const unreadContacts = computed(() => contacts.value.filter(c => (c as any).unreadCount > 0))
+  const unreadContacts = computed(() =>
+    contacts.value.filter(c => ((c as WechatContactRuntime).unreadCount ?? 0) > 0),
+  )
 
   async function startWorkMode() {
     isActive.value = true
@@ -49,11 +59,10 @@ export const useWorkModeStore = defineStore('workMode', () => {
   async function loadContacts() {
     loading.value = true
     error.value = null
-    
     try {
-      const response = await wechatApi.getContacts({ starred: true })
-      contacts.value = response.data || []
-    } catch (err: any) {
+      const res = await wechatApi.getStarredContacts()
+      contacts.value = res.data ?? []
+    } catch (err) {
       error.value = err instanceof Error ? err.message : '加载联系人失败'
       console.error('Failed to load contacts:', err)
     } finally {
@@ -63,58 +72,50 @@ export const useWorkModeStore = defineStore('workMode', () => {
 
   async function getMessageSourceSize() {
     try {
-      const response = await fetch(resolveErpApiPath('/api/wechat_contacts/message_source_size'))
-      const data = await response.json()
-      lastMessageSourceSize.value = data.size
-    } catch (error) {
-      console.error('Failed to get message source size:', error)
+      const res = await wechatApi.refreshMessagesCache()
+      const data = asRecord(res.data)
+      lastMessageSourceSize.value = typeof data.size === 'number' ? data.size : null
+    } catch (err) {
+      console.error('Failed to get message source size:', err)
     }
   }
 
   async function refreshMessagesCache() {
-    try {
-      await fetch(resolveErpApiPath('/api/wechat_contacts/refresh_messages_cache'), { method: 'POST' })
-      await getMessageSourceSize()
-    } catch (error) {
-      console.error('Failed to refresh messages cache:', error)
-    }
+    await getMessageSourceSize()
   }
 
   async function fetchWorkModeFeed() {
     try {
-      const response = await fetch(resolveErpApiPath('/api/wechat_contacts/work_mode_feed'))
-      const data = await response.json()
-      
-      contacts.value = data.contacts || contacts.value
-      
-      if (data.newMessages && data.newMessages.length > 0) {
-        processNewMessages(data.newMessages)
+      const response = await fetch(resolveErpApiPath('/api/work_mode/feed'))
+      const data = asRecord(await response.json())
+      if (Array.isArray(data.messages)) {
+        processNewMessages(data.messages as WorkModeFeedMessage[])
       }
-      
       if (data.taskAcquisition) {
-        handleTaskAcquisition(data.taskAcquisition)
+        handleTaskAcquisition(data.taskAcquisition as WorkModeTaskAcquisition)
       }
     } catch (error) {
       console.error('Failed to fetch work mode feed:', error)
     }
   }
 
-  function processNewMessages(messages: any[]) {
+  function processNewMessages(messages: WorkModeFeedMessage[]) {
     messages.forEach(msg => {
       const contact = contacts.value.find(c => c.id === msg.contactId)
       if (contact) {
-        const c = contact as any
-        c.lastMessage = msg.content
-        c.lastMessageTime = msg.timestamp
+        const c = contact as WechatContactRuntime
+        c.lastMessage = String(msg.content ?? '')
+        c.lastMessageTime = String(msg.timestamp ?? '')
         c.unreadCount = (c.unreadCount || 0) + 1
       }
     })
   }
 
-  function handleTaskAcquisition(taskData: any) {
-    if (isTaskAcquisitionMessage(taskData.content)) {
+  function handleTaskAcquisition(taskData: WorkModeTaskAcquisition) {
+    const content = String(taskData.content ?? '')
+    if (isTaskAcquisitionMessage(content)) {
       isTaskAcquisition.value = true
-      currentOrder.value = taskData.order
+      currentOrder.value = taskData.order ?? null
     }
   }
 
@@ -129,12 +130,12 @@ export const useWorkModeStore = defineStore('workMode', () => {
       
       const contact = contacts.value.find(c => c.id === contactId)
       if (contact) {
-        const contactAny = contact as any
-        contactAny.lastMessage = message
-        contactAny.lastMessageTime = new Date().toISOString()
-        contactAny.unreadCount = 0
+        const contactRuntime = contact as WechatContactRuntime
+        contactRuntime.lastMessage = message
+        contactRuntime.lastMessageTime = new Date().toISOString()
+        contactRuntime.unreadCount = 0
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       error.value = err instanceof Error ? err.message : '发送消息失败'
       console.error('Failed to send message:', err)
       throw err

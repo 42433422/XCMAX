@@ -16,7 +16,7 @@ from enum import Enum
 from typing import Any
 
 from app.neuro_bus.events.base import NeuroEvent
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -77,7 +77,7 @@ class SandboxContext:
             SideEffect(
                 effect_type=SideEffectType.READ,
                 target=key,
-                description=f"Read from {key}",
+                description="Read key " + key,
                 risk_level=1,
             )
         )
@@ -106,7 +106,7 @@ class SandboxContext:
             SideEffect(
                 effect_type=SideEffectType.DELETE,
                 target=key,
-                description=f"Delete {key}: {old_value}",
+                description="Remove key " + key + ": " + repr(old_value),
                 data={"deleted": old_value},
                 risk_level=4,
             )
@@ -202,7 +202,7 @@ class Sandbox:
         # 执行模拟
         try:
             simulator(context)
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.exception(f"Sandbox simulation error: {e}")
             return SandboxReport(
                 event_id=event.metadata.event_id,

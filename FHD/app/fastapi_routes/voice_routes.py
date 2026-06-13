@@ -20,7 +20,7 @@ from typing import Any
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +45,7 @@ def _resolve_device() -> str:
         import torch  # type: ignore
 
         return "cuda" if torch.cuda.is_available() else "cpu"
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         return "cpu"
 
 
@@ -90,7 +90,7 @@ def _get_model():
     )
     try:
         instance = WhisperModel(model_name, device=device, compute_type=compute_type)
-    except OPERATIONAL_ERRORS as exc:  # 例如 CUDA 不可用、模型未下载、依赖 DLL 缺失
+    except RECOVERABLE_ERRORS as exc:  # 例如 CUDA 不可用、模型未下载、依赖 DLL 缺失
         logger.exception("加载 faster-whisper 模型失败: %s", exc)
         raise HTTPException(
             status_code=503,
@@ -144,7 +144,7 @@ def _run_transcribe(path: Path, language: str | None) -> dict[str, Any]:
             condition_on_previous_text=False,
             without_timestamps=True,
         )
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.exception("faster-whisper 转写失败: %s", exc)
         raise HTTPException(status_code=500, detail=f"语音识别执行失败：{exc}") from exc
 
@@ -180,7 +180,7 @@ async def transcribe_audio(
     finally:
         try:
             tmp_path.unlink(missing_ok=True)
-        except OPERATIONAL_ERRORS as exc:
+        except RECOVERABLE_ERRORS as exc:
             logger.debug("删除 ASR 临时文件失败（可忽略）: %s", exc)
     elapsed_ms = int((time.monotonic() - t0) * 1000)
 
@@ -202,7 +202,7 @@ async def voice_health():
 
         ready = True
         reason = ""
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         ready = False
         reason = str(exc)
     return {

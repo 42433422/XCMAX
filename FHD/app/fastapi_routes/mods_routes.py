@@ -16,7 +16,7 @@ from typing import Any
 from fastapi import Request
 from fastapi.responses import JSONResponse, Response
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +39,7 @@ async def _sync_enterprise_entitlements_from_request(request: Request) -> None:
         from app.enterprise.mod_entitlements import sync_entitlements_from_request
 
         await sync_entitlements_from_request(request)
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         logger.exception("sync entitlements before list_mods failed")
 
 
@@ -77,7 +77,7 @@ def _register_mods_endpoints(router) -> None:
                 from app.enterprise.mod_entitlements import filter_mod_id_list_for_enterprise
 
                 discovered_mod_ids = filter_mod_id_list_for_enterprise(discovered_mod_ids)
-            except OPERATIONAL_ERRORS:
+            except RECOVERABLE_ERRORS:
                 pass
 
             loaded_mods = mm.list_loaded_mods()
@@ -124,7 +124,7 @@ def _register_mods_endpoints(router) -> None:
                     "mods_disabled": False,
                 },
             }
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.exception(f"get_loading_status failed: {e}")
             return {
                 "success": True,
@@ -169,7 +169,7 @@ def _register_mods_endpoints(router) -> None:
                 content=body,
                 headers={"ETag": f'"{etag}"', "Cache-Control": "private, max-age=30"},
             )
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.exception(f"list_mods failed: {e}")
             err = str(e)
             return {"success": False, "message": err, "error": err, "data": []}
@@ -183,7 +183,7 @@ def _register_mods_endpoints(router) -> None:
             mm = get_mod_manager()
             routes = mm.get_routes()
             return {"success": True, "data": routes}
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.exception(f"list_routes failed: {e}")
             err = str(e)
             return {"success": False, "message": err, "error": err, "data": []}
@@ -195,18 +195,17 @@ def _register_mods_endpoints(router) -> None:
             from app.infrastructure.mods.comms import get_mod_comms
 
             return {"success": True, "data": get_mod_comms().list_endpoints()}
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.exception("list_comms_endpoints failed: %s", e)
             return {"success": False, "error": str(e)}
 
     @router.get("/employee-packs/{pack_id}/config-preview")
     async def employee_pack_config_preview(pack_id: str):
         """返回已安装 employee_pack 的 ``employee_config_v2`` 摘要（供宿主/MODstore 联调）。"""
-        import os
 
         try:
             from app.infrastructure.mods.mod_manager import _default_mods_root
-        except OPERATIONAL_ERRORS as e:  # noqa: BLE001
+        except RECOVERABLE_ERRORS as e:  # noqa: BLE001
             return {"success": False, "error": str(e)}
         root = os.path.join(
             _default_mods_root(), "_employees", (pack_id or "").strip(), "manifest.json"
@@ -264,7 +263,7 @@ def _register_mods_endpoints(router) -> None:
                     "comms_exports": mod.comms_exports,
                 },
             }
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.exception("get_mod_detail failed: %s", e)
             return JSONResponse({"success": False, "error": str(e)}, status_code=500)
 
@@ -287,6 +286,6 @@ def _register_mods_endpoints(router) -> None:
             if not ok:
                 return JSONResponse({"success": False, "message": msg}, status_code=400)
             return {"success": True, "message": msg, "data": {"id": mid}}
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.exception("uninstall_mod_disk failed: %s", e)
             return JSONResponse({"success": False, "message": str(e)}, status_code=500)

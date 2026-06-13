@@ -21,7 +21,9 @@ from enum import Enum
 from typing import Any
 
 from app.neuro_bus.bus import get_neuro_bus
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.neuro_bus.dead_letter_queue import get_dead_letter_queue
+from app.neuro_bus.event_store import get_event_store
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -115,7 +117,7 @@ class HealthMonitor:
         """注销健康检查"""
         if name in self._checks:
             del self._checks[name]
-            del self._last_results[name]
+            self._last_results.pop(name, None)
             del self._metrics_history[name]
 
     # ========== 健康检查实现 ==========
@@ -152,7 +154,7 @@ class HealthMonitor:
                 details=stats,
             )
 
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             return HealthCheckResult(
                 component="neuro_bus",
                 status=HealthStatus.UNHEALTHY,
@@ -197,7 +199,7 @@ class HealthMonitor:
                 },
             )
 
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             return HealthCheckResult(
                 component="event_queue",
                 status=HealthStatus.UNHEALTHY,
@@ -239,7 +241,7 @@ class HealthMonitor:
                 message="无法检查（psutil 未安装）",
                 latency_ms=(time.perf_counter() - t0) * 1000,
             )
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             return HealthCheckResult(
                 component="memory",
                 status=HealthStatus.UNHEALTHY,
@@ -270,7 +272,7 @@ class HealthMonitor:
 
             return result
 
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.error(f"[HealthMonitor] 检查失败 {name}: {e}")
             return None
 
@@ -318,7 +320,7 @@ class HealthMonitor:
         for callback in self._alert_callbacks:
             try:
                 callback(alert)
-            except OPERATIONAL_ERRORS as e:
+            except RECOVERABLE_ERRORS as e:
                 logger.error(f"[HealthMonitor] 告警回调失败: {e}")
 
         logger.warning(
@@ -348,7 +350,7 @@ class HealthMonitor:
             try:
                 await self.run_all_checks()
                 await asyncio.sleep(self._check_interval)
-            except OPERATIONAL_ERRORS as e:
+            except RECOVERABLE_ERRORS as e:
                 logger.error(f"[HealthMonitor] 监控循环错误: {e}")
                 await asyncio.sleep(5)
 
@@ -423,9 +425,6 @@ class DashboardDataProvider:
 
     def get_dashboard_data(self) -> dict[str, Any]:
         """获取完整的仪表盘数据"""
-        from app.neuro_bus.dead_letter_queue import get_dead_letter_queue
-        from app.neuro_bus.event_store import get_event_store
-
         bus = get_neuro_bus()
         dlq = get_dead_letter_queue()
         store = get_event_store()

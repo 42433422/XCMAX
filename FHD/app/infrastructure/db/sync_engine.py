@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 import os
 import threading
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import urlparse
@@ -19,7 +20,7 @@ from sqlalchemy.engine import Engine
 
 from app.infrastructure.db.mod_database_url import resolve_database_url_for_active_mod
 from app.shell import mod_database_gate
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +30,8 @@ _lock = threading.RLock()
 _mode: Literal["production", "test"] = "production"
 _engine: Engine | None = None
 _bound_engine_url: str | None = None
+_read_engine: Engine | None = None
+_bound_read_engine_url: str | None = None
 
 
 def _workspace_root() -> Path:
@@ -82,6 +85,19 @@ def get_database_url() -> str:
     return resolve_database_url_for_active_mod(base)
 
 
+def get_read_database_url() -> str:
+    """Read replica URL; falls back to primary when unset or SQLite."""
+    read_url = (os.environ.get("DATABASE_READ_URL") or "").strip()
+    primary = get_database_url()
+    if not read_url:
+        return primary
+    if primary.startswith("sqlite:"):
+        return primary
+    if os.environ.get("PYTEST_CURRENT_TEST"):
+        return primary
+    return resolve_database_url_for_active_mod(read_url)
+
+
 def _urls_equivalent(a: str | None, b: str) -> bool:
     if a is None:
         return False
@@ -91,7 +107,7 @@ def _urls_equivalent(a: str | None, b: str) -> bool:
         return make_url(a).render_as_string(hide_password=True) == make_url(b).render_as_string(
             hide_password=True
         )
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         return (a or "").strip() == (b or "").strip()
 
 
@@ -117,13 +133,53 @@ def get_sync_engine() -> Engine:
         return _engine
 
 
+def get_read_sync_engine() -> Engine:
+    global _read_engine, _bound_read_engine_url
+    with _lock:
+        want = get_read_database_url()
+        if _read_engine is None or not _urls_equivalent(_bound_read_engine_url, want):
+            if _read_engine is not None:
+                _read_engine.dispose()
+            from app.infrastructure.db.pool_sizing import pool_config_from_env
+
+            cfg = pool_config_from_env()
+            if want.startswith("sqlite:"):
+                _read_engine = create_engine(want, future=True)
+            else:
+                _read_engine = create_engine(
+                    want,
+                    future=True,
+                    pool_size=cfg["pool_size"],
+                    max_overflow=cfg["max_overflow"],
+                )
+            _bound_read_engine_url = want
+        return _read_engine
+
+
 def dispose_sync_engine() -> None:
-    global _engine, _bound_engine_url
+    global _engine, _bound_engine_url, _read_engine, _bound_read_engine_url
     with _lock:
         if _engine is not None:
             _engine.dispose()
+        if _read_engine is not None:
+            _read_engine.dispose()
         _engine = None
         _bound_engine_url = None
+        _read_engine = None
+        _bound_read_engine_url = None
+
+
+@contextmanager
+def get_read_session():
+    """Yield a read-only SQLAlchemy connection scope (replica when configured)."""
+    from sqlalchemy.orm import Session
+
+    engine = get_read_sync_engine()
+    session = Session(bind=engine, autoflush=False, autocommit=False)
+    try:
+        yield session
+    finally:
+        session.close()
 
 
 def redact_database_url(url: str) -> str:
@@ -134,7 +190,7 @@ def redact_database_url(url: str) -> str:
             host = p.hostname or ""
             port = f":{p.port}" if p.port else ""
             return f"{p.scheme}://{user}:***@{host}{port}{p.path or ''}"
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         logger.debug("suppressed exception", exc_info=True)
     return url
 
@@ -225,7 +281,10 @@ __all__ = [
     "set_mode",
     "resolve_customer_db_path",
     "get_database_url",
+    "get_read_database_url",
     "get_sync_engine",
+    "get_read_sync_engine",
+    "get_read_session",
     "dispose_sync_engine",
     "redact_database_url",
     "get_db_status",

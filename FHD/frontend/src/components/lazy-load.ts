@@ -143,14 +143,14 @@ export function getComponent(name: string) {
 }
 
 export function preloadComponent(name: string) {
-  const component = ProModeComponents[name] as any;
+  const component = ProModeComponents[name] as unknown;
   if (component && component.loader) {
     component.loader();
   }
 }
 
 export function preloadAllComponents() {
-  Object.values(ProModeComponents).forEach((component: any) => {
+  Object.values(ProModeComponents).forEach((component: unknown) => {
     if (component.loader) {
       component.loader();
     }

@@ -1,7 +1,7 @@
 import { computed } from 'vue';
 import { useProductQueryStore } from '@/stores/productQuery';
 
-export function useProductQuery(): any {
+export function useProductQuery(): unknown {
   const store = useProductQueryStore();
 
   const loading = computed(() => store.loading);
@@ -25,11 +25,11 @@ export function useProductQuery(): any {
     await store.loadAllProducts();
   };
 
-  const selectCompany = (company: any) => {
+  const selectCompany = (company: unknown) => {
     store.selectCompany(company);
   };
 
-  const selectProduct = (product: any) => {
+  const selectProduct = (product: unknown) => {
     store.selectProduct(product);
   };
 
@@ -37,7 +37,7 @@ export function useProductQuery(): any {
     store.searchProducts(query);
   };
 
-  const updateProduct = async (productId: number | string, data: Record<string, any>) => {
+  const updateProduct = async (productId: number | string, data: Record<string, unknown>) => {
     await store.updateProduct(productId, data);
   };
 

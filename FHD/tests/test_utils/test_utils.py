@@ -102,6 +102,8 @@ class TestExcelUtils:
     def test_cell_str_standard(self):
         """测试单元格字符串转换"""
         mock_ws = Mock()
+        mock_ws.merged_cells = None
+        mock_ws.merged_cell_ranges = None
         mock_ws.cell.return_value.value = "测试值"
 
         result = cell_str(mock_ws, 1, 1)
@@ -111,6 +113,8 @@ class TestExcelUtils:
     def test_cell_str_none_value(self):
         """测试单元格 None 值"""
         mock_ws = Mock()
+        mock_ws.merged_cells = None
+        mock_ws.merged_cell_ranges = None
         mock_ws.cell.return_value.value = None
 
         result = cell_str(mock_ws, 1, 1)
@@ -120,6 +124,8 @@ class TestExcelUtils:
     def test_cell_str_none_column(self):
         """测试 None 列号"""
         mock_ws = Mock()
+        mock_ws.merged_cells = None
+        mock_ws.merged_cell_ranges = None
 
         result = cell_str(mock_ws, 1, None)
 
@@ -128,6 +134,8 @@ class TestExcelUtils:
     def test_cell_str_integer(self):
         """测试整数单元格值"""
         mock_ws = Mock()
+        mock_ws.merged_cells = None
+        mock_ws.merged_cell_ranges = None
         mock_ws.cell.return_value.value = 123
 
         result = cell_str(mock_ws, 1, 1)
@@ -137,6 +145,8 @@ class TestExcelUtils:
     def test_cell_str_float(self):
         """测试浮点数单元格值"""
         mock_ws = Mock()
+        mock_ws.merged_cells = None
+        mock_ws.merged_cell_ranges = None
         mock_ws.cell.return_value.value = 123.45
 
         result = cell_str(mock_ws, 1, 1)
@@ -146,6 +156,8 @@ class TestExcelUtils:
     def test_cell_str_integer_float(self):
         """测试整数形式的浮点数"""
         mock_ws = Mock()
+        mock_ws.merged_cells = None
+        mock_ws.merged_cell_ranges = None
         mock_ws.cell.return_value.value = 123.0
 
         result = cell_str(mock_ws, 1, 1)
@@ -246,6 +258,7 @@ class TestMergedCellValue:
         """测试无合并单元格"""
         mock_ws = Mock()
         mock_ws.merged_cells = None
+        mock_ws.merged_cell_ranges = None
         mock_ws.cell.return_value.value = "普通值"
 
         result = merged_cell_value(mock_ws, 1, 1)
@@ -255,7 +268,8 @@ class TestMergedCellValue:
     def test_empty_merged_ranges(self):
         """测试空合并范围"""
         mock_ws = Mock()
-        mock_ws.merged_cells.ranges = []
+        mock_ws.merged_cells = None
+        mock_ws.merged_cell_ranges = []
         mock_ws.cell.return_value.value = "普通值"
 
         result = merged_cell_value(mock_ws, 1, 1)
@@ -265,13 +279,14 @@ class TestMergedCellValue:
     def test_merged_cell_in_range(self):
         """测试合并单元格在范围内"""
         mock_ws = Mock()
+        mock_ws.merged_cells = None
         mock_range = Mock()
         mock_range.min_row = 1
         mock_range.max_row = 2
         mock_range.min_col = 1
         mock_range.max_col = 2
 
-        mock_ws.merged_cells.ranges = [mock_range]
+        mock_ws.merged_cell_ranges = [mock_range]
         mock_ws.cell.return_value.value = "合并值"
 
         result = merged_cell_value(mock_ws, 2, 2)
@@ -282,13 +297,14 @@ class TestMergedCellValue:
     def test_merged_cell_not_in_range(self):
         """测试单元格不在合并范围内"""
         mock_ws = Mock()
+        mock_ws.merged_cells = None
         mock_range = Mock()
         mock_range.min_row = 1
         mock_range.max_row = 2
         mock_range.min_col = 1
         mock_range.max_col = 2
 
-        mock_ws.merged_cells.ranges = [mock_range]
+        mock_ws.merged_cell_ranges = [mock_range]
         mock_ws.cell.return_value.value = "普通值"
 
         result = merged_cell_value(mock_ws, 5, 5)
@@ -296,10 +312,10 @@ class TestMergedCellValue:
         assert result == "普通值"
 
     def test_merged_cell_exception_handling(self):
-        """测试合并单元格异常处理"""
+        """测试合并单元格异常处理（无效 range 字符串触发 ValueError 并被吞掉）"""
         mock_ws = Mock()
-        mock_ws.merged_cells.ranges = [Mock()]
-        mock_ws.merged_cells.ranges[0].min_row = None
+        mock_ws.merged_cells = None
+        mock_ws.merged_cell_ranges = ["not-a-valid-range"]
         mock_ws.cell.return_value.value = "默认值"
 
         result = merged_cell_value(mock_ws, 1, 1)
@@ -329,6 +345,8 @@ class TestExcelUtilsEdgeCases:
     def test_cell_str_strip_whitespace(self):
         """测试单元格字符串去空格"""
         mock_ws = Mock()
+        mock_ws.merged_cells = None
+        mock_ws.merged_cell_ranges = None
         mock_ws.cell.return_value.value = "  测试  "
 
         result = cell_str(mock_ws, 1, 1)

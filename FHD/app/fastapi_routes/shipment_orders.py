@@ -25,7 +25,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from app.application.facades.query_facade import query_service
 from app.bootstrap import get_shipment_application_service_core
 from app.db.models import ShipmentRecord
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -110,7 +110,7 @@ def shipment_generate_batch(payload: dict[str, Any] = Body(default_factory=dict)
                 ok_count += 1
             else:
                 errors.append({"index": idx, "error": result.get("message", "生成失败")})
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.exception("shipment generate-batch[%s]: %s", idx, e)
             errors.append({"index": idx, "error": str(e)})
     return {
@@ -135,7 +135,7 @@ def shipment_generate(payload: dict[str, Any] = Body(default_factory=dict)):
             date=date,
         )
         return JSONResponse(result, status_code=200 if result.get("success") else 500)
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.exception("shipment generate: %s", e)
         return JSONResponse(
             {"success": False, "message": f"生成失败：{str(e)}"},
@@ -158,7 +158,7 @@ def shipment_print(payload: dict[str, Any] = Body(default_factory=dict)):
         if order_id:
             try:
                 shipment_id = int(order_id)
-            except OPERATIONAL_ERRORS:
+            except RECOVERABLE_ERRORS:
                 raise HTTPException(status_code=400, detail="order_id 无效")
             result = _svc().mark_as_printed(shipment_id, printer_name=str(printer_name or ""))
             if isinstance(result, dict):
@@ -177,7 +177,7 @@ def shipment_print(payload: dict[str, Any] = Body(default_factory=dict)):
         return JSONResponse(result, status_code=200 if result.get("success") else 500)
     except HTTPException:
         raise
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.exception("shipment print: %s", e)
         return JSONResponse(
             {"success": False, "message": f"打印失败：{str(e)}"},
@@ -387,7 +387,7 @@ def shipment_records_list(
         )
         if mod_out is not None:
             return mod_out
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         logger.debug("erp domain shipment.records_list dispatch skipped", exc_info=True)
     u = (unit or unit_name or "").strip() or None
     records = _svc().get_shipment_records(u)

@@ -45,9 +45,7 @@ def test_daily_surface_targets_pw_full_plus_ps_papp_full(monkeypatch: pytest.Mon
     pw = [t for t in targets if t.lane == "P-W"]
     pw_no_catalog = [t for t in pw if "/market/catalog/" not in t.path]
     full_pw = [
-        t
-        for t in build_surface_targets()
-        if t.lane == "P-W" and "/market/catalog/" not in t.path
+        t for t in build_surface_targets() if t.lane == "P-W" and "/market/catalog/" not in t.path
     ]
     assert len(pw_no_catalog) == len(full_pw)
     assert len(pw_no_catalog) > 10
@@ -106,11 +104,7 @@ def test_build_surface_targets_single_ai_store_tab(monkeypatch: pytest.MonkeyPat
     monkeypatch.setenv("MODSTORE_DAILY_SURFACE_AUDIT_MODE", "full")
     monkeypatch.setenv("MODSTORE_SURFACE_AUDIT_SKIP_CATALOG", "1")
     targets = build_surface_targets()
-    pw_ai = [
-        t
-        for t in targets
-        if t.path == "/market/ai-store" and t.lane == "P-W" and t.prepare
-    ]
+    pw_ai = [t for t in targets if t.path == "/market/ai-store" and t.lane == "P-W" and t.prepare]
     assert len(pw_ai) == 1
     assert "AI员工" in pw_ai[0].name
     app_ai = [t for t in targets if t.path == "/market/ai-store" and t.lane == "P-App"]

@@ -388,6 +388,28 @@ services:
 
 ---
 
+## Tier C 数据库连接池（K8s / Gunicorn）
+
+总连接数上限（最坏情况）：
+
+```
+pods × XCAGI_GUNICORN_WORKERS × (XCAGI_DB_POOL_SIZE + XCAGI_DB_MAX_OVERFLOW)
+```
+
+| 变量 | 默认 | 说明 |
+|------|------|------|
+| `XCAGI_GUNICORN_WORKERS` | CPU×2+1 | 见 `gunicorn_config.py` |
+| `XCAGI_DB_POOL_SIZE` | 5 | 见 `app/infrastructure/db/pool_sizing.py` |
+| `XCAGI_DB_MAX_OVERFLOW` | 10 | 同上 |
+| `DATABASE_READ_URL` | — | 只读副本；未设则与 primary 相同 |
+| `XCAGI_QUERY_CACHE_BACKEND` | memory | staging/prod 建议 `redis` |
+
+推荐：`python -c "from app.infrastructure.db.pool_sizing import recommend_pool_for_pg; print(recommend_pool_for_pg(pods=3, workers_per_pod=4))"`
+
+压测：`k6 run scripts/loadtest/tier_c_sustained.js`（见 `scripts/loadtest/README.md`）。
+
+---
+
 ## 📞 技术支持
 
 如遇到其他问题，请：

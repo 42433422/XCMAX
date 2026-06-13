@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { ApiError, type ApiResponse } from '@/api/core';
+import { ApiError } from '@/api/core';
+import type { ApiResponse } from '@/types/api';
 import { authApi } from '@/api/auth';
 
 describe('api core types', () => {

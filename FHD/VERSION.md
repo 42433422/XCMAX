@@ -31,7 +31,7 @@
 | **Windows 桌面** | 签约级 | 主交付面 |
 | **macOS 桌面** | 签约级 | arm64 + x64 dmg |
 | **Web / 后端** | 签约级 | FastAPI + Vue SPA |
-| **Android** | **实验骨架** | Kotlin Compose 可构建；**非**签约级移动产品 |
+| **Android** | **签约级** | Kotlin Compose 双 SKU；登录（密码/OTP/扫码）· SSE 对话 · 4 Tab · 工作台 WebView |
 
 声称 vs 实测差距见 [`docs/CLAIMED_VS_ACTUAL.md`](docs/CLAIMED_VS_ACTUAL.md)。
 
@@ -57,4 +57,4 @@ rg -n 'version\s*=\s*"[0-9]' app/fastapi_app/factory.py app/infrastructure/mods/
 
 ---
 
-*最后更新：2026-06-10（各端交付等级表 · Android 实验骨架口径）*
+*最后更新：2026-06-12（Android 签约级 · 4 Tab + OTP/工作台）*

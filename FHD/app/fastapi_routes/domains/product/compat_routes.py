@@ -30,11 +30,17 @@ from app.fastapi_routes.domains.db.queries import (
 )
 from app.infrastructure.auth.db_token import verify_db_read_token_header
 from app.infrastructure.db.sync_engine import get_sync_engine
+from app.infrastructure.persistence.compat_db.writes import (
+    products_pg_batch_delete_rows,
+    products_pg_delete_row,
+    products_pg_insert_row,
+    products_pg_update_row,
+)
 from app.shell.mod_row_scope import (
     products_update_or_delete_mod_and,
     scoped_mod_id,
 )
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 router = APIRouter(tags=["xcagi-compat"])
 logger = logging.getLogger(__name__)
@@ -77,7 +83,7 @@ def _products_price_list_word_response(
             quote_date=qd,
             products=rows,
         )
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.exception("products export docx failed")
         raise HTTPException(status_code=500, detail=f"生成 Word 失败：{e}") from e
 
@@ -132,7 +138,7 @@ def products_list(
         )
         if mod_out is not None:
             return mod_out
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         logger.debug("erp domain products.list dispatch skipped", exc_info=True)
     try:
         from app.mod_sdk.erp_products_facade import (
@@ -144,7 +150,7 @@ def products_list(
             return products_list_via_service(
                 request, page=page, per_page=per_page, keyword=keyword, unit=unit
             )
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         logger.debug("products list via service skipped", exc_info=True)
     verify_db_read_token_header(request)
     try:
@@ -153,7 +159,7 @@ def products_list(
         if schema_hint:
             out["schema_hint"] = schema_hint
         return out
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.exception("products list failed (postgresql)")
         return {"success": False, "message": str(e), "data": [], "total": 0}
 
@@ -169,7 +175,7 @@ def products_get_by_id(request: Request, product_id: int) -> dict | JSONResponse
 
         if is_erp_products_via_service_enabled():
             return products_get_via_service(request, product_id)
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         logger.debug("products get via service skipped", exc_info=True)
     verify_db_read_token_header(request)
     from app.bootstrap import get_products_service
@@ -217,7 +223,7 @@ def products_update(request: Request, body: dict = Body(default_factory=dict)) -
             return products_update_via_service(request, body)
     except HTTPException:
         raise
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         logger.debug("products update via service skipped", exc_info=True)
     _products_write_raise(request)
     gate = _business_mod_json_block()
@@ -230,85 +236,17 @@ def products_update(request: Request, body: dict = Body(default_factory=dict)) -
     if pid is None:
         raise HTTPException(status_code=400, detail="id 无效或缺失")
 
-    eng = get_sync_engine()
-    insp = inspect(eng)
-    col_names = {c["name"] for c in insp.get_columns("products")}
-    if not {"id", "model_number", "name"}.issubset(col_names):
-        raise HTTPException(
-            status_code=503,
-            detail="products 表缺少必要列（至少需要 id、model_number、name）。",
-        )
-
-    name = str(body.get("name") or "").strip()
-    if not name:
-        raise HTTPException(status_code=400, detail="产品名称不能为空")
-
-    sets: list[str] = []
-    params: dict[str, object] = {"pid": pid}
-
-    if "model_number" in col_names:
-        mn = body.get("model_number")
-        sets.append("model_number = :model_number")
-        params["model_number"] = (str(mn).strip() if mn is not None else "")[:120]
-
-    sets.append("name = :name")
-    params["name"] = name[:500]
-
-    if "specification" in col_names:
-        sp = body.get("specification")
-        sets.append("specification = :specification")
-        params["specification"] = None if sp is None else str(sp)
-
-    if "price" in col_names:
-        sets.append("price = :price")
-        params["price"] = _parse_price(body.get("price"))
-
-    if "quantity" in col_names:
-        sets.append("quantity = :quantity")
-        params["quantity"] = _product_parse_quantity(body.get("quantity"))
-
-    if "unit" in col_names:
-        un = body.get("unit")
-        sets.append("unit = :unit")
-        params["unit"] = (str(un).strip() if un is not None else "")[:200]
-
-    if "description" in col_names:
-        dv = body.get("description")
-        sets.append("description = :description")
-        params["description"] = None if dv is None else str(dv)
-
-    if "category" in col_names:
-        cv = body.get("category")
-        sets.append("category = :category")
-        params["category"] = None if cv is None else str(cv)[:200]
-
-    if "brand" in col_names:
-        bv = body.get("brand")
-        sets.append("brand = :brand")
-        params["brand"] = None if bv is None else str(bv)[:200]
-
-    if "is_active" in col_names:
-        ia = _product_parse_is_active(body.get("is_active"))
-        if ia is not None:
-            sets.append("is_active = :is_active")
-            params["is_active"] = ia
-
-    if "updated_at" in col_names:
-        sets.append("updated_at = NOW()")
-
-    if not sets:
-        raise HTTPException(status_code=400, detail="没有可更新的列")
-
-    mod_and = products_update_or_delete_mod_and(col_names, params)
-    sql = "UPDATE products SET " + ", ".join(sets) + " WHERE id = :pid" + mod_and
     try:
-        with eng.begin() as conn:
-            r = conn.execute(text(sql), params)
-            if r.rowcount == 0:
-                raise HTTPException(status_code=404, detail="产品不存在")
+        products_pg_update_row(
+            pid,
+            body,
+            parse_price=_parse_price,
+            parse_quantity=_product_parse_quantity,
+            parse_is_active=_product_parse_is_active,
+        )
     except HTTPException:
         raise
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.exception("products update failed")
         raise HTTPException(status_code=500, detail=f"更新失败：{e}") from e
 
@@ -328,81 +266,29 @@ def products_add(request: Request, body: dict = Body(default_factory=dict)) -> d
             return products_add_via_service(request, body)
     except HTTPException:
         raise
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         logger.debug("products add via service skipped", exc_info=True)
     _products_write_raise(request)
     gate = _business_mod_json_block()
     if gate:
         return gate
 
-    from app.application.excel_imports import _norm_model, _parse_price
-
-    name = str(body.get("name") or "").strip()
-    if not name:
-        raise HTTPException(status_code=400, detail="产品名称不能为空")
-    spec = str(body.get("specification") or "").strip()
-    mn_raw = body.get("model_number")
-    model_number = str(mn_raw).strip() if mn_raw is not None else ""
-    if not model_number:
-        model_number = _norm_model("", name, spec)
-
-    eng = get_sync_engine()
-    insp = inspect(eng)
-    col_names = {c["name"] for c in insp.get_columns("products")}
-    if not {"model_number", "name"}.issubset(col_names):
-        raise HTTPException(
-            status_code=503,
-            detail="products 表缺少必要列（至少需要 model_number、name）。",
-        )
-
-    icols: list[str] = []
-    params: dict[str, object] = {}
-
-    def _add(col: str, val: object) -> None:
-        if col in col_names:
-            icols.append(col)
-            params[col] = val
-
-    _add("model_number", model_number[:120])
-    _add("name", name[:500])
-    _add("specification", spec or None)
-    _add("price", _parse_price(body.get("price")))
-    _add("quantity", _product_parse_quantity(body.get("quantity")))
-    unit = str(body.get("unit") or "").strip()[:200]
-    _add("unit", unit)
-    _add(
-        "description",
-        str(body.get("description") or "") if body.get("description") is not None else None,
-    )
-    _add(
-        "category",
-        str(body.get("category") or "")[:200] if body.get("category") is not None else None,
-    )
-    _add("brand", str(body.get("brand") or "")[:200] if body.get("brand") is not None else None)
-    ia = _product_parse_is_active(body.get("is_active"))
-    if ia is not None and "is_active" in col_names:
-        _add("is_active", ia)
-
-    if not icols:
-        raise HTTPException(status_code=500, detail="无法构造 INSERT 列")
-
-    mid = scoped_mod_id()
-    if "xcagi_mod_id" in col_names and mid:
-        icols.append("xcagi_mod_id")
-        params["xcagi_mod_id"] = mid
-
-    quoted = ", ".join(_sql_ident(c) for c in icols)
-    ph = ", ".join(f":{c}" for c in icols)
-    sql = f"INSERT INTO products ({quoted}) VALUES ({ph}) RETURNING id"
+    from app.application.excel_imports import _parse_price
 
     try:
-        with eng.begin() as conn:
-            new_id = conn.execute(text(sql), params).scalar_one()
-    except OPERATIONAL_ERRORS as e:
+        new_id = products_pg_insert_row(
+            body,
+            parse_price=_parse_price,
+            parse_quantity=_product_parse_quantity,
+            parse_is_active=_product_parse_is_active,
+        )
+    except HTTPException:
+        raise
+    except RECOVERABLE_ERRORS as e:
         logger.exception("products add failed")
         raise HTTPException(status_code=500, detail=f"添加失败：{e}") from e
 
-    return {"success": True, "data": {"id": int(new_id)}}
+    return {"success": True, "data": {"id": new_id}}
 
 
 @router.post("/products/delete")
@@ -418,7 +304,7 @@ def products_delete(request: Request, body: dict = Body(default_factory=dict)) -
             return products_delete_via_service(request, body)
     except HTTPException:
         raise
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         logger.debug("products delete via service skipped", exc_info=True)
     _products_write_raise(request)
     gate = _business_mod_json_block()
@@ -429,22 +315,11 @@ def products_delete(request: Request, body: dict = Body(default_factory=dict)) -
     if pid is None:
         raise HTTPException(status_code=400, detail="id 无效或缺失")
 
-    eng = get_sync_engine()
-    insp = inspect(eng)
-    pcols = {c["name"] for c in insp.get_columns("products")}
-    del_params: dict[str, object] = {"pid": pid}
-    mod_and = products_update_or_delete_mod_and(pcols, del_params)
     try:
-        with eng.begin() as conn:
-            r = conn.execute(
-                text("DELETE FROM products WHERE id = :pid" + mod_and),
-                del_params,
-            )
-            if r.rowcount == 0:
-                raise HTTPException(status_code=404, detail="产品不存在")
+        products_pg_delete_row(pid)
     except HTTPException:
         raise
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.exception("products delete failed")
         raise HTTPException(status_code=500, detail=f"删除失败：{e}") from e
 
@@ -466,7 +341,7 @@ def products_batch_delete(request: Request, body: dict = Body(default_factory=di
             return products_batch_delete_via_service(request, body)
     except HTTPException:
         raise
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         logger.debug("products batch-delete via service skipped", exc_info=True)
     _products_write_raise(request)
     gate = _business_mod_json_block()
@@ -477,29 +352,9 @@ def products_batch_delete(request: Request, body: dict = Body(default_factory=di
     if not isinstance(ids, list) or not ids:
         raise HTTPException(status_code=400, detail="ids 须为非空数组")
 
-    eng = get_sync_engine()
-    insp = inspect(eng)
-    pcols = {c["name"] for c in insp.get_columns("products")}
-    deleted = 0
-    skipped: list[str] = []
     try:
-        with eng.begin() as conn:
-            for raw in ids:
-                pid = _product_parse_id(raw)
-                if pid is None:
-                    skipped.append(str(raw))
-                    continue
-                del_params = {"pid": pid}
-                mod_and = products_update_or_delete_mod_and(pcols, del_params)
-                r = conn.execute(
-                    text("DELETE FROM products WHERE id = :pid" + mod_and),
-                    del_params,
-                )
-                if r.rowcount:
-                    deleted += 1
-                else:
-                    skipped.append(str(raw))
-    except OPERATIONAL_ERRORS as e:
+        deleted, skipped = products_pg_batch_delete_rows(ids)
+    except RECOVERABLE_ERRORS as e:
         logger.exception("products batch-delete failed")
         raise HTTPException(status_code=500, detail=f"批量删除失败：{e}") from e
 

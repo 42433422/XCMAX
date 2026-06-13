@@ -63,20 +63,11 @@ export function clearVoiceQueue() {
   stopSpeaking()
 }
 
-export interface ChatMessage {
-  role: 'user' | 'ai' | 'task'
-  content: string
-  time: string
-  thinkingSteps?: string
-  todoSteps?: string[]
-  workflowAction?: string
-  nodeResults?: Array<{ node_id: string; success: boolean; tool_id: string; action: string; error?: string }>
-  contextSummary?: string
-  /** 发货单文档下载链接（与右侧任务卡一致，便于在对话内直接下载） */
-  shipmentDownloadUrl?: string
-}
+import type { UiChatMessage, UiChatMessageExtras } from '@/types/chat-ui'
 
-export type ChatMessageExtras = Partial<Pick<ChatMessage, 'shipmentDownloadUrl'>>
+/** UI 聊天消息（与 ApiChatMessage 不同：role 用 ai、时间字段为 time） */
+export type ChatMessage = UiChatMessage
+export type ChatMessageExtras = UiChatMessageExtras
 
 export function useChatMessages(sessionId: Ref<string>) {
   const modsStore = useModsStore()
@@ -205,7 +196,7 @@ export function useChatMessages(sessionId: Ref<string>) {
 
   function sanitizeMessagesList(rawList: unknown[]): ChatMessage[] {
     return (Array.isArray(rawList) ? rawList : [])
-      .map((msg: any) => {
+      .map((msg: unknown) => {
         const role = (msg?.role === 'user' || msg?.role === 'task') ? msg.role : 'ai'
         const content = String(msg?.content || '')
         if (!hasMeaningfulContent(content)) return null
@@ -310,10 +301,10 @@ export function useChatMessages(sessionId: Ref<string>) {
       const sid = String(sessionId.value || '').trim()
       if (!sid) return false
       const data = await chatApi.getConversation(sid)
-      const serverMessages = Array.isArray((data as any)?.messages) ? (data as any).messages : []
+      const serverMessages = Array.isArray((data as unknown)?.messages) ? (data as unknown).messages : []
       if (!serverMessages.length) return false
 
-      const mapped: ChatMessage[] = serverMessages.map((msg: any) => ({
+      const mapped: ChatMessage[] = serverMessages.map((msg: unknown) => ({
         role: (msg?.role === 'user' || msg?.role === 'task') ? msg.role : 'ai',
         content: normalizeServerContentToHtml(msg?.content),
         time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })

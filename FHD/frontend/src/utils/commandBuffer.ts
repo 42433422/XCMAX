@@ -157,7 +157,7 @@ function safeParseEntries(raw: string | null): CommandBufferEntry[] {
     const parsed = JSON.parse(raw)
     if (!Array.isArray(parsed)) return []
     return parsed
-      .map((x: any) => ({
+      .map((x: unknown) => ({
         intent: x?.intent,
         handlerKey: x?.handlerKey,
         normalizedText: String(x?.normalizedText || ''),

@@ -1,4 +1,15 @@
-import { BrowserWindow, Menu, Tray, app, dialog, ipcMain, nativeImage, screen, shell } from 'electron'
+import {
+  BrowserWindow,
+  Menu,
+  Notification,
+  Tray,
+  app,
+  dialog,
+  ipcMain,
+  nativeImage,
+  screen,
+  shell
+} from 'electron'
 import { ChildProcessWithoutNullStreams, spawn } from 'node:child_process'
 import crypto from 'node:crypto'
 import fs from 'node:fs'
@@ -630,6 +641,28 @@ if (!gotLock) {
     ipcMain.handle('xcagi:export-support-bundle', () => exportSupportBundleInteractive())
     ipcMain.handle('xcagi:check-for-updates', () => checkForUpdates())
     ipcMain.handle('xcagi:install-update', () => installUpdate(runBackendMigration))
+    ipcMain.handle('xcagi:set-badge', (_event, count: number) => {
+      const n = Math.max(0, Math.floor(Number(count) || 0))
+      if (process.platform === 'darwin' || process.platform === 'linux') {
+        app.setBadgeCount(n)
+        return
+      }
+      if (mainWindow) {
+        mainWindow.flashFrame(n > 0)
+      }
+    })
+    ipcMain.handle(
+      'xcagi:show-notification',
+      (_event, payload: { title?: string; body?: string }) => {
+        const title = String(payload?.title || APP_NAME).trim() || APP_NAME
+        const body = String(payload?.body || '').trim()
+        if (!Notification.isSupported()) {
+          return { ok: false, reason: 'unsupported' }
+        }
+        new Notification({ title, body }).show()
+        return { ok: true }
+      }
+    )
 
     createMenu()
     createTray()

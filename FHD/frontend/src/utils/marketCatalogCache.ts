@@ -1,11 +1,11 @@
-import type { ModInfo } from '@/api/modStore'
+import type { ModCatalogItemUi } from '@/types/modCatalog'
 import { resolveTenantStorageScopeFromRuntime } from '@/utils/tenantStorageScope'
 
 const STORAGE_PREFIX = 'xcagi_market_catalog_v1:'
 const DEFAULT_TTL_MS = 30 * 60 * 1000
 
 export interface MarketCatalogCacheEntry {
-  items: ModInfo[]
+  items: ModCatalogItemUi[]
   fetchedAt: number
   tab: string
 }
@@ -54,7 +54,7 @@ export function isMarketCatalogCacheFresh(
   return Date.now() - entry.fetchedAt <= ttlMs
 }
 
-export function writeMarketCatalogCache(key: string, tab: string, items: ModInfo[]): void {
+export function writeMarketCatalogCache(key: string, tab: string, items: ModCatalogItemUi[]): void {
   const entry: MarketCatalogCacheEntry = {
     items,
     fetchedAt: Date.now(),

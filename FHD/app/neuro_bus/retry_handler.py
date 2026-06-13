@@ -16,7 +16,7 @@ from collections.abc import Callable
 from functools import wraps
 from typing import Any
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -140,7 +140,7 @@ class RetryHandler:
 
                 return result
 
-            except OPERATIONAL_ERRORS as e:
+            except RECOVERABLE_ERRORS as e:
                 if not context.should_retry(e):
                     # 不可重试或次数耗尽
                     report = context.get_report()
@@ -182,7 +182,7 @@ class RetryHandler:
                 context.record_success()
                 return result
 
-            except OPERATIONAL_ERRORS as e:
+            except RECOVERABLE_ERRORS as e:
                 if not context.should_retry(e):
                     raise
 

@@ -85,7 +85,7 @@ let currentSource: AudioBufferSourceNode | null = null
 
 function getAudioContext(): AudioContext {
   if (!audioCtx) {
-    audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)()
+    audioCtx = new (window.AudioContext || (window as unknown).webkitAudioContext)()
   }
   return audioCtx
 }
@@ -118,7 +118,7 @@ export async function ensureOfflineReady(onProgress?: (p: number) => void): Prom
 
   try {
     // 动态加载，避免主 bundle 体积过大
-    const mod: any = await import('@huggingface/transformers')
+    const mod: unknown = await import('@huggingface/transformers')
 
     if (mod.env) {
       mod.env.allowRemoteModels = true
@@ -140,7 +140,7 @@ export async function ensureOfflineReady(onProgress?: (p: number) => void): Prom
 
     const pipelineOpts: Record<string, unknown> = {
       dtype: 'q8',
-      progress_callback: (info: any) => {
+      progress_callback: (info: unknown) => {
         if (info && typeof info.progress === 'number') {
           progress = Math.max(progress, Math.min(1, info.progress / 100))
           onProgress?.(progress)

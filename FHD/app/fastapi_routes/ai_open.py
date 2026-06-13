@@ -40,7 +40,7 @@ from app.application.aiopen.service import (
     verify_api_key,
 )
 from app.infrastructure.aiopen.cursor_hub import aiopen_cursor_hub
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -137,9 +137,13 @@ def _resolve_mcp_protocol_version(params: dict[str, Any] | None) -> str:
     return MCP_DEFAULT_PROTOCOL_VERSION
 
 
-def _mcp_response_headers(request: Request, protocol_version: str, *, new_session: bool = False) -> dict[str, str]:
+def _mcp_response_headers(
+    request: Request, protocol_version: str, *, new_session: bool = False
+) -> dict[str, str]:
     headers = {"MCP-Protocol-Version": protocol_version}
-    incoming = str(request.headers.get("mcp-session-id") or request.headers.get("Mcp-Session-Id") or "").strip()
+    incoming = str(
+        request.headers.get("mcp-session-id") or request.headers.get("Mcp-Session-Id") or ""
+    ).strip()
     if incoming:
         headers["Mcp-Session-Id"] = incoming
     elif new_session:
@@ -155,7 +159,9 @@ def _jsonrpc_error(req_id: Any, code: int, message: str) -> dict[str, Any]:
     return {"jsonrpc": "2.0", "id": req_id, "error": {"code": code, "message": message}}
 
 
-async def _handle_mcp_message(msg: dict[str, Any], app: Any, protocol_version: str) -> dict[str, Any] | None:
+async def _handle_mcp_message(
+    msg: dict[str, Any], app: Any, protocol_version: str
+) -> dict[str, Any] | None:
     """处理单条 JSON-RPC 消息；notification（无 id）返回 None。"""
     method = str(msg.get("method") or "")
     req_id = msg.get("id")
@@ -191,7 +197,7 @@ async def _handle_mcp_message(msg: dict[str, Any], app: Any, protocol_version: s
         args = params.get("arguments") if isinstance(params.get("arguments"), dict) else {}
         try:
             result = await invoke_tool(tool, args, app)
-        except OPERATIONAL_ERRORS as err:
+        except RECOVERABLE_ERRORS as err:
             return _jsonrpc_error(req_id, -32603, f"tool execution failed: {err}")
         is_error = not bool(result.get("success", False))
         text = format_tool_result_text(tool, result)
@@ -403,7 +409,7 @@ async def aiopen_screen_ws(ws: WebSocket):
                 logger.debug("aiopen ws unhandled message: %s", raw[:200])
     except WebSocketDisconnect:
         pass
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         logger.exception("aiopen screen ws error session=%s", session_id)
     finally:
         await aiopen_cursor_hub.disconnect(session_id)

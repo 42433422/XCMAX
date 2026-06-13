@@ -21,6 +21,8 @@ export interface TutorialStep {
   afterNavKey?: string
   /** Mod 贡献：所属路线 */
   track?: string
+  /** 路由 query（如 mod-store ?tab=office） */
+  routeQuery?: Record<string, string>
 }
 
 export interface TutorialPageHighlight {

@@ -5,6 +5,7 @@ import { fetchProductSku, isEnterpriseEdition } from '@/utils/productSku'
 import { readEntitledModIdsFromAuthPayload } from '@/stores/mods'
 import type { useModsStore } from '@/stores/mods'
 import { buildLoginLocation } from '@/utils/startupRedirect'
+import { clearHostPackSkippedSession } from '@/utils/hostPackOnboardingGate'
 
 export type StartupAuthResult = {
   ok: boolean
@@ -35,6 +36,7 @@ export function useStartupAuth(options: {
     try {
       const res = await authApi.validateSession()
       if (res?.success === true || (res as { valid?: boolean }).valid === true || res?.data?.valid === true) {
+        clearHostPackSkippedSession()
         await syncMarketTokensFromSession()
         try {
           const { useAccountProfileStore } = await import('@/stores/accountProfile')

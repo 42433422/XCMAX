@@ -6,7 +6,7 @@ import time
 from typing import Any
 
 from app.utils.metrics import record_ai_call
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
 class OpenAISdkProvider:
@@ -55,6 +55,6 @@ class OpenAISdkProvider:
             result = await asyncio.to_thread(_sync_call)
             record_ai_call(self.provider_id, "chat", "success", time.perf_counter() - t0)
             return result
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             record_ai_call(self.provider_id, "chat", "error", time.perf_counter() - t0)
             raise

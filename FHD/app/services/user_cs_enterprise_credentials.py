@@ -7,7 +7,7 @@ import secrets
 from datetime import UTC, datetime
 from typing import Any
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +62,7 @@ def get_enterprise_credentials(market_user_id: int, *, username: str = "") -> di
                 payload["is_enterprise"] = bool(user.get("is_enterprise", payload["is_enterprise"]))
                 if user.get("username"):
                     payload["username"] = str(user["username"])
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.debug("market enterprise user fetch failed", exc_info=True)
         payload["market_fetch_error"] = str(exc)[:200]
     return payload

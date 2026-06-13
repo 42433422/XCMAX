@@ -1,0 +1,33 @@
+{
+  "brief": "制作 PPT 全量读取员工包。上传 .pptx：解析大纲与每页正文写入 outputs/presentation_full.json；内嵌图片导出到 outputs/images/ 并通过 VLM（ctx.call_llm vision）生成 .vlm.json；按提示词「为这份PPT生成每页的演讲备注」生成 notes_generated 与 outputs/speaker_notes.md。使用 direct_python，handlers 仅 direct_python，禁止编造幻灯片正文。",
+  "mode": "direct_python_file_transform",
+  "accepted_extensions": [
+    ".pptx"
+  ],
+  "default_action": "convert",
+  "default_output_relpath": "outputs/presentation_full.json",
+  "default_meta_relpath": "outputs/presentation_meta.json",
+  "default_images_dir": "outputs/images",
+  "default_notes_relpath": "outputs/speaker_notes.md",
+  "runtime_kind": "ppt_full_read",
+  "speaker_notes_prompt": "为这份PPT生成每页的演讲备注",
+  "output_schema": [
+    "title",
+    "slide_count",
+    "outline",
+    "slides",
+    "images",
+    "notes_generated",
+    "source"
+  ],
+  "requirements": [
+    "Use direct_python only; handlers must be [\"direct_python\"].",
+    "Parse pptx with python-pptx; never use LLM for slide body text.",
+    "Export embedded images to outputs/images/<category>/.",
+    "When ctx.call_llm supports vision, describe each image to .vlm.json sidecar.",
+    "Generate per-slide speaker notes via ctx.call_llm text with prompt: 为这份PPT生成每页的演讲备注",
+    "Write presentation_full.json, presentation_meta.json, speaker_notes.md, images_index.json.",
+    "Return {ok, summary, items, warnings, error, meta}."
+  ],
+  "pack_id": "ppt-full-read-employee"
+}

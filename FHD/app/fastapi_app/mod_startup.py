@@ -7,7 +7,7 @@ import logging
 import threading
 from typing import Any
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -31,9 +31,9 @@ def _load_bundled_host_mods(mm: Any) -> list[str]:
             try:
                 if mm.load_mod(mid):
                     loaded.append(mid)
-            except OPERATIONAL_ERRORS:
+            except RECOVERABLE_ERRORS:
                 logger.debug("bundled mod load skipped: %s", mid, exc_info=True)
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         logger.debug("bundled mod ids resolve skipped", exc_info=True)
     return loaded
 
@@ -56,12 +56,18 @@ def schedule_background_mod_load(app: Any) -> None:
             load_mod_routes(app, mm)
             app.state.mods_routes_loaded = True
             app.state.mods_full_load_done = True
+            try:
+                from app.mod_sdk.employee_runtime import warm_employee_tool_registry
+
+                warm_employee_tool_registry()
+            except RECOVERABLE_ERRORS:
+                logger.debug("employee tool warm scan skipped", exc_info=True)
             mark_startup("mod_background_done")
             logger.info(
                 "[mod_startup] background load_all_mods done (%s ids)",
                 len(loaded),
             )
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             logger.exception("[mod_startup] background load_all_mods failed")
 
     threading.Thread(
@@ -98,10 +104,16 @@ def bootstrap_mod_extensions_sync(app: Any) -> None:
     load_mod_routes(app, mm)
     app.state.mods_routes_loaded = True
     try:
+        from app.mod_sdk.employee_runtime import warm_employee_tool_registry
+
+        warm_employee_tool_registry()
+    except RECOVERABLE_ERRORS:
+        logger.debug("employee tool warm scan skipped", exc_info=True)
+    try:
         from app.fastapi_app.startup_timing import mark_startup
 
         mark_startup("mod_staged")
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         pass
     logger.info(
         "Mod extensions staged (client=%s, bundled=%s); scheduling background load",

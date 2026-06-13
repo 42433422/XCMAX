@@ -502,9 +502,14 @@ def _run_scheduled_digest_vibe_prep(
 
 
 def _repo_root() -> Path:
+    mono = os.environ.get("XCMAX_MONOREPO_ROOT", "").strip()
+    if mono:
+        return Path(mono).resolve()
     env = os.environ.get("MODSTORE_REPO_ROOT", "").strip()
     if env:
-        return Path(env).resolve()
+        p = Path(env).resolve()
+        if (p / "FHD").is_dir():
+            return p
     try:
         from modstore_server.integrations.ops_action_handlers import repo_root as _ops_rr
 
@@ -941,7 +946,9 @@ def _digest_system_work_summary_html(
             _kv_row("今日任务执行", f"{total} 次"),
             _kv_row("成功率", rate, extra_style="" if met_fail == 0 else "background:#fef2f2"),
             _kv_row("运维操作记录", f"{ops_n} 条"),
-            _kv_row("系统事件", f"{inc_n} 条", extra_style="" if inc_n == 0 else "background:#fffbeb"),
+            _kv_row(
+                "系统事件", f"{inc_n} 条", extra_style="" if inc_n == 0 else "background:#fffbeb"
+            ),
         ]
     )
 
@@ -1014,54 +1021,93 @@ def _digest_kpi_cards_html(
 
     cards.append(
         _card(
-            str(emp_n), "编制在岗", icon="&#x1F465;", accent="#2563eb",
-            color="#1d4ed8", bg="#eff6ff", border="#bfdbfe",
+            str(emp_n),
+            "编制在岗",
+            icon="&#x1F465;",
+            accent="#2563eb",
+            color="#1d4ed8",
+            bg="#eff6ff",
+            border="#bfdbfe",
         )
     )
     if met_fail == 0:
         cards.append(
             _card(
-                str(met_ok), "任务成功", icon="&#x2705;", accent="#16a34a",
-                color="#047857", bg="#ecfdf5", border="#a7f3d0",
-                sub="全部成功", sub_color="#16a34a",
+                str(met_ok),
+                "任务成功",
+                icon="&#x2705;",
+                accent="#16a34a",
+                color="#047857",
+                bg="#ecfdf5",
+                border="#a7f3d0",
+                sub="全部成功",
+                sub_color="#16a34a",
             )
         )
     else:
         cards.append(
             _card(
-                str(met_ok), "任务成功", icon="&#x26A0;&#xFE0F;", accent="#ea580c",
-                color="#c2410c", bg="#fff7ed", border="#fed7aa",
-                sub=f"失败 {met_fail} 次", sub_color="#ea580c",
+                str(met_ok),
+                "任务成功",
+                icon="&#x26A0;&#xFE0F;",
+                accent="#ea580c",
+                color="#c2410c",
+                bg="#fff7ed",
+                border="#fed7aa",
+                sub=f"失败 {met_fail} 次",
+                sub_color="#ea580c",
             )
         )
     if ops_n == 0:
         cards.append(
             _card(
-                "0", "运维操作", icon="&#x1F6E0;&#xFE0F;", accent="#94a3b8",
-                color="#64748b", bg="#f8fafc", border="#e2e8f0",
+                "0",
+                "运维操作",
+                icon="&#x1F6E0;&#xFE0F;",
+                accent="#94a3b8",
+                color="#64748b",
+                bg="#f8fafc",
+                border="#e2e8f0",
             )
         )
     else:
         cards.append(
             _card(
-                str(ops_n), "运维操作", icon="&#x1F6E0;&#xFE0F;", accent="#2563eb",
-                color="#1d4ed8", bg="#eff6ff", border="#bfdbfe",
+                str(ops_n),
+                "运维操作",
+                icon="&#x1F6E0;&#xFE0F;",
+                accent="#2563eb",
+                color="#1d4ed8",
+                bg="#eff6ff",
+                border="#bfdbfe",
             )
         )
     if inc_n == 0:
         cards.append(
             _card(
-                "0", "系统事件", icon="&#x1F514;", accent="#16a34a",
-                color="#047857", bg="#ecfdf5", border="#a7f3d0",
-                sub="无异常", sub_color="#16a34a",
+                "0",
+                "系统事件",
+                icon="&#x1F514;",
+                accent="#16a34a",
+                color="#047857",
+                bg="#ecfdf5",
+                border="#a7f3d0",
+                sub="无异常",
+                sub_color="#16a34a",
             )
         )
     else:
         cards.append(
             _card(
-                str(inc_n), "系统事件", icon="&#x1F514;", accent="#ea580c",
-                color="#c2410c", bg="#fff7ed", border="#fed7aa",
-                sub="待处理", sub_color="#ea580c",
+                str(inc_n),
+                "系统事件",
+                icon="&#x1F514;",
+                accent="#ea580c",
+                color="#c2410c",
+                bg="#fff7ed",
+                border="#fed7aa",
+                sub="待处理",
+                sub_color="#ea580c",
             )
         )
 
@@ -1633,6 +1679,24 @@ def run_daily_digest_email() -> None:
                 existing_token_hashes=existing_token_hashes,
             )
 
+        from modstore_server.digest_identity import extract_digest_identity_plain_from_html
+
+        pre_identity_code = extract_digest_identity_plain_from_html(staged_section_html)
+        identity_tokens_pre = [
+            t for t in (token_batch or []) if getattr(t, "kind", None) == "digest_identity"
+        ]
+        if identity_tokens_pre:
+            with sf() as session:
+                for t in identity_tokens_pre:
+                    session.add(t)
+                session.commit()
+            logger.info(
+                "daily digest: pre-persisted %d digest_identity token(s) for surface audit",
+                len(identity_tokens_pre),
+            )
+        if pre_identity_code:
+            os.environ["MODSTORE_SURFACE_AUDIT_DIGEST_CODE"] = pre_identity_code
+
         employee_briefs_html = ""
         if os.environ.get("MODSTORE_DAILY_BRIEF_ENABLED", "0").strip().lower() in (
             "1",
@@ -1797,10 +1861,21 @@ def run_daily_digest_email() -> None:
         ]
         if identity_tokens:
             with sf() as session:
+                existing = {
+                    str(row[0])
+                    for row in session.query(OpsApprovalToken.token_hash).all()
+                    if row[0]
+                }
+                added = 0
                 for t in identity_tokens:
+                    th = str(getattr(t, "token_hash", "") or "")
+                    if th and th in existing:
+                        continue
                     session.add(t)
+                    added += 1
                 session.commit()
-            logger.info("daily digest: persisted %d digest_identity token(s)", len(identity_tokens))
+            if added:
+                logger.info("daily digest: persisted %d digest_identity token(s)", added)
         if deploy_tokens and any_delivered:
             with sf() as session:
                 for t in deploy_tokens:
@@ -1821,7 +1896,9 @@ def run_daily_digest_email() -> None:
                 from modstore_server.surface_audit_deps import stop_surface_audit_ephemeral
 
                 stopped = stop_surface_audit_ephemeral()
-                logger.info("daily digest: surface audit ephemeral stopped %s", stopped.get("stopped"))
+                logger.info(
+                    "daily digest: surface audit ephemeral stopped %s", stopped.get("stopped")
+                )
             except Exception:
                 logger.exception("daily digest: stop surface audit ephemeral failed")
 

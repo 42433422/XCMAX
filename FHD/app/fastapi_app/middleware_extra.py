@@ -12,7 +12,7 @@ from app.request_active_mod_ctx import (
     reset_request_active_mod_id,
     set_request_active_mod_id,
 )
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +31,7 @@ def register_http_sli_middleware(app: FastAPI) -> None:
             record_http_request(
                 request.method, path, response.status_code, time.perf_counter() - started
             )
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             pass
         return response
 
@@ -113,5 +113,5 @@ def register_prometheus_metrics(app: FastAPI) -> None:
         logger.info("✅ Prometheus 监控端点已注册 (/metrics)")
     except ImportError:
         logger.warning("⚠️ prometheus_client 未安装，监控端点不可用")
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.warning("⚠️ Prometheus 监控端点注册失败：%s", e)

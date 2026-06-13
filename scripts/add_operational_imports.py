@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Ensure every file using OPERATIONAL_ERRORS imports it after __future__ lines."""
+"""ARCHIVED (2026-06): superseded by RECOVERABLE_ERRORS migration. Do not run."""
+"""Ensure every file using RECOVERABLE_ERRORS imports it after __future__ lines."""
 
 from __future__ import annotations
 

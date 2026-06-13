@@ -1,4 +1,5 @@
-# CI SSOT: generated from FHD/.github/workflows/release-desktop.yml — edit root copy only.
+# CI SSOT: generated from FHD/.github/workflows/release-desktop.yml — DO NOT edit here.
+# Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
 name: Release Desktop
 
 on:
@@ -8,10 +9,9 @@ on:
         description: "Release version"
         required: true
         default: "10.0.0"
-  push:
-    tags:
-      - "FHD/v10.*"
-      - "FHD/v*"
+  # Tag (FHD/v*) entry is centralized in fhd-release-orchestrator.yml, which gates on
+  # verify-version-anchors and then dispatches this workflow. Removing the direct tag
+  # trigger here eliminates the double-run on tag push.
 
 permissions:
   contents: write
@@ -62,17 +62,25 @@ jobs:
           name: xcagi-desktop-windows
           path: artifacts
       - name: Upload installers to update server
-        if: ${{ secrets.SERVER_SSH_KEY != '' }}
+        env:
+          # Unified desktop-upload key: SERVER_SSH_KEY (preferred) with FHD_PUSH_SSH_KEY
+          # fallback so a single SSH secret covers both desktop + CVM tarball pushes.
+          DESKTOP_SSH_KEY: ${{ secrets.SERVER_SSH_KEY || secrets.FHD_PUSH_SSH_KEY }}
         run: |
           set -euo pipefail
-          mkdir -p ~/.ssh
-          printf '%s\n' "${SERVER_SSH_KEY}" > ~/.ssh/id_ci
-          chmod 600 ~/.ssh/id_ci
-          ssh-keyscan -H "${{ vars.FHD_PUSH_HOST || '119.27.178.147' }}" >> ~/.ssh/known_hosts 2>/dev/null || true
+          if [ -z "${DESKTOP_SSH_KEY:-}" ]; then
+            echo "::notice::No SERVER_SSH_KEY / FHD_PUSH_SSH_KEY secret — skipping desktop upload."
+            exit 0
+          fi
           HOST="${{ vars.FHD_PUSH_HOST || '119.27.178.147' }}"
+          mkdir -p ~/.ssh
+          printf '%s\n' "${DESKTOP_SSH_KEY}" > ~/.ssh/id_ci
+          chmod 600 ~/.ssh/id_ci
+          ssh-keyscan -H "${HOST}" >> ~/.ssh/known_hosts 2>/dev/null || true
+          BASE="${GITHUB_WORKSPACE}/artifacts"
           for sku in personal enterprise; do
-            dir="artifacts/release/xcagi-v${{ github.event.inputs.version || '10.0.0' }}/$sku"
-            if [ ! -d "$dir" ]; then dir="artifacts/$sku"; fi
+            dir="${BASE}/release/xcagi-v${{ github.event.inputs.version || '10.0.0' }}/$sku"
+            if [ ! -d "$dir" ]; then dir="${BASE}/$sku"; fi
             if [ ! -d "$dir" ]; then echo "[skip] no $sku dir"; continue; fi
             dest="/var/www/update/releases/stable/$sku"
             rsync -avz -e "ssh -i ~/.ssh/id_ci -o StrictHostKeyChecking=no" "$dir/" "root@${HOST}:$dest/"
@@ -109,6 +117,38 @@ jobs:
           path: |
             release/xcagi-v*/personal/**
             release/xcagi-v*/enterprise/**
+
+  deploy-macos:
+    needs: [macos]
+    if: success()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: xcagi-desktop-macos
+          path: artifacts
+      - name: Upload macOS installers to update server
+        env:
+          DESKTOP_SSH_KEY: ${{ secrets.SERVER_SSH_KEY || secrets.FHD_PUSH_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${DESKTOP_SSH_KEY:-}" ]; then
+            echo "::notice::No SERVER_SSH_KEY / FHD_PUSH_SSH_KEY secret — skipping macOS upload."
+            exit 0
+          fi
+          HOST="${{ vars.FHD_PUSH_HOST || '119.27.178.147' }}"
+          mkdir -p ~/.ssh
+          printf '%s\n' "${DESKTOP_SSH_KEY}" > ~/.ssh/id_ci
+          chmod 600 ~/.ssh/id_ci
+          ssh-keyscan -H "${HOST}" >> ~/.ssh/known_hosts 2>/dev/null || true
+          BASE="${GITHUB_WORKSPACE}/artifacts"
+          for sku in personal enterprise; do
+            dir="${BASE}/release/xcagi-v${{ github.event.inputs.version || '10.0.0' }}/$sku"
+            if [ ! -d "$dir" ]; then dir="${BASE}/$sku"; fi
+            if [ ! -d "$dir" ]; then echo "[skip] no $sku dir"; continue; fi
+            dest="/var/www/update/releases/stable/$sku"
+            rsync -avz -e "ssh -i ~/.ssh/id_ci -o StrictHostKeyChecking=no" "$dir/" "root@${HOST}:$dest/"
+          done
 
   github-release:
     needs: [windows, macos]

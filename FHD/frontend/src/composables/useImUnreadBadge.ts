@@ -5,6 +5,7 @@ import {
   XCMAX_SYNC_IM_MESSAGE_EVENT,
   XCMAX_SYNC_IM_READ_EVENT,
 } from '@/composables/useXcmaxSync';
+import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl';
 
 const imUnreadTotal = ref(0);
 let pollTimer: ReturnType<typeof setInterval> | null = null;
@@ -24,7 +25,7 @@ export function useImUnreadBadge() {
 
   async function refreshImUnreadTotal(): Promise<void> {
     // 公共页（登录/授权等）不轮询未读，避免对未鉴权接口发请求
-    if (isPublicRoute(route.name)) {
+    if (isPublicRoute(route.name) || isAdminConsoleSpa()) {
       imUnreadTotal.value = 0;
       return;
     }

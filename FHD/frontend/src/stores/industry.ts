@@ -9,8 +9,8 @@ interface Industry {
   name: string;
   code: string;
   description?: string;
-  config?: any;
-  [key: string]: any;
+  config?: unknown;
+  [key: string]: unknown;
 }
 
 /**
@@ -21,12 +21,12 @@ interface Industry {
  */
 function mergeModIndustriesInto(
   base: Industry[],
-  modList: ReadonlyArray<Record<string, any>>,
+  modList: ReadonlyArray<Record<string, unknown>>,
 ): Industry[] {
   const out: Industry[] = Array.isArray(base) ? [...base] : []
   const seen = new Set(out.map((ind) => String(ind.id ?? '').trim()).filter(Boolean))
   for (const mod of modList) {
-    const ind = mod && typeof mod === 'object' ? (mod as any).industry : null
+    const ind = mod && typeof mod === 'object' ? (mod as unknown).industry : null
     if (!ind || typeof ind !== 'object') continue
     const id = String(ind.id ?? '').trim()
     if (!id || seen.has(id)) continue
@@ -59,7 +59,7 @@ function mergeModIndustriesInto(
 export const useIndustryStore = defineStore('industry', () => {
   const industries = ref<Industry[]>([])
   const currentIndustry = ref<Industry | null>(null)
-  const currentConfig = ref<any>(null)
+  const currentConfig = ref<unknown>(null)
   const loading = ref(false)
   const error = ref<string | null>(null)
   let initInFlight: Promise<void> | null = null
@@ -85,16 +85,16 @@ export const useIndustryStore = defineStore('industry', () => {
   })
 
   /** 从 modsStore 当前选中的 mod 取 manifest.industry，找不到时返回 null */
-  function activeModIndustryConfig(): any | null {
+  function activeModIndustryConfig(): unknown | null {
     try {
       const modsStore = useModsStore()
       const activeId = String(modsStore.activeModId || '').trim()
       const list = Array.isArray(modsStore.mods) ? modsStore.mods : []
       const exact = activeId
-        ? list.find((m: any) => String(m?.id || '').trim() === activeId)
+        ? list.find((m: unknown) => String(m?.id || '').trim() === activeId)
         : null
       const candidate = exact || list[0] || null
-      const ind = candidate && (candidate as any).industry
+      const ind = candidate && (candidate as unknown).industry
       return ind && typeof ind === 'object' ? ind : null
     } catch {
       return null
@@ -109,9 +109,9 @@ export const useIndustryStore = defineStore('industry', () => {
       const response = await systemApi.getIndustries()
       let serverIndustries: Industry[] = []
       if (response.success && response.data) {
-        serverIndustries = (response.data as any).industries || []
+        serverIndustries = (response.data as unknown).industries || []
       }
-      let modList: ReadonlyArray<Record<string, any>> = []
+      let modList: ReadonlyArray<Record<string, unknown>> = []
       try {
         const modsStore = useModsStore()
         modList = Array.isArray(modsStore.mods) ? modsStore.mods : []

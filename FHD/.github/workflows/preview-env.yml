@@ -1,0 +1,205 @@
+# Per-PR ephemeral preview environments (K8s namespace xcagi-pr-<num>).
+name: Preview environment
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+    branches: [main, develop, master]
+    paths:
+      - "FHD/**"
+      - ".github/workflows/fhd-preview-env.yml"
+
+permissions:
+  contents: read
+  packages: write
+  pull-requests: write
+  id-token: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME_FHD_API: ${{ github.repository }}/xcagi-fhd-api
+
+jobs:
+  preview:
+    if: github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: preview-pr-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure kubeconfig
+        id: kube
+        env:
+          KUBE_CONFIG_B64: ${{ secrets.KUBE_CONFIG_B64 }}
+          KUBE_CONFIG: ${{ secrets.KUBE_CONFIG }}
+        run: |
+          mkdir -p ~/.kube
+          if [ -n "${KUBE_CONFIG_B64}" ]; then
+            echo "${KUBE_CONFIG_B64}" | base64 -d > ~/.kube/config
+            echo "configured=1" >> "$GITHUB_OUTPUT"
+          elif [ -n "${KUBE_CONFIG}" ]; then
+            printf '%s\n' "${KUBE_CONFIG}" > ~/.kube/config
+            echo "configured=1" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::No KUBE_CONFIG — skipping preview build/deploy."
+            echo "configured=0" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Comment skip notice on PR
+        if: steps.kube.outputs.configured != '1'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request.number;
+            const body = [
+              '## 🔍 Preview environment',
+              '',
+              '_Skipped: `KUBE_CONFIG` / `KUBE_CONFIG_B64` not configured. Add cluster secret to enable per-PR preview._',
+            ].join('\n');
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr,
+            });
+            const marker = '## 🔍 Preview environment';
+            const existing = comments.find((c) => c.body?.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr,
+                body,
+              });
+            }
+
+      - name: Compute lowercase FHD API image name
+        if: steps.kube.outputs.configured == '1'
+        id: imgref
+        run: |
+          name="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_FHD_API }}"
+          echo "name=$(printf '%s' "$name" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        if: steps.kube.outputs.configured == '1'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        if: steps.kube.outputs.configured == '1'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push preview image
+        if: steps.kube.outputs.configured == '1'
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./docker/Dockerfile.fhd-api
+          push: true
+          tags: ${{ steps.imgref.outputs.name }}:pr-${{ github.event.pull_request.number }}
+          cache-from: type=gha,scope=xcagi-fhd-api-preview
+          cache-to: type=gha,mode=max,scope=xcagi-fhd-api-preview
+
+      - name: Set up kubectl
+        if: steps.kube.outputs.configured == '1'
+        uses: azure/setup-kubectl@v4
+
+      - name: Deploy preview namespace
+        if: steps.kube.outputs.configured == '1'
+        env:
+          PR_NUM: ${{ github.event.pull_request.number }}
+          PREVIEW_NS: xcagi-pr-${{ github.event.pull_request.number }}
+          PREVIEW_TAG: pr-${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          TMP="${RUNNER_TEMP}/preview-kustomize"
+          rm -rf "${TMP}"
+          cp -R k8s/overlays/preview "${TMP}"
+          sed -i.bak \
+            -e "s/xcagi-pr-REPLACE/${PREVIEW_NS}/g" \
+            -e "s/pr-REPLACE/${PREVIEW_TAG}/g" \
+            "${TMP}/kustomization.yaml"
+          kubectl kustomize --load-restrictor LoadRestrictionsNone "${TMP}" | kubectl apply -f -
+          kubectl -n "${PREVIEW_NS}" rollout status deployment/xcagi --timeout=300s
+
+      - name: Comment preview URL on PR
+        if: steps.kube.outputs.configured == '1'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request.number;
+            const ns = `xcagi-pr-${pr}`;
+            const body = [
+              '## 🔍 Preview environment',
+              '',
+              `| | |`,
+              `|---|---|`,
+              `| **Namespace** | \`${ns}\` |`,
+              `| **Image** | \`ghcr.io/42433422/xcmax/xcagi-fhd-api:pr-${pr}\` |`,
+              `| **Ingress** | Configure host \`pr-${pr}.preview.xcagi.example.com\` → \`${ns}/xcagi-service\` |`,
+              '',
+              '_Updated by `fhd-preview-env.yml` · torn down when PR closes._',
+            ].join('\n');
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr,
+            });
+            const marker = '## 🔍 Preview environment';
+            const existing = comments.find((c) => c.body?.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr,
+                body,
+              });
+            }
+
+  teardown:
+    if: github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Configure kubeconfig
+        id: kube
+        env:
+          KUBE_CONFIG_B64: ${{ secrets.KUBE_CONFIG_B64 }}
+          KUBE_CONFIG: ${{ secrets.KUBE_CONFIG }}
+        run: |
+          mkdir -p ~/.kube
+          if [ -n "${KUBE_CONFIG_B64}" ]; then
+            echo "${KUBE_CONFIG_B64}" | base64 -d > ~/.kube/config
+            echo "configured=1" >> "$GITHUB_OUTPUT"
+          elif [ -n "${KUBE_CONFIG}" ]; then
+            printf '%s\n' "${KUBE_CONFIG}" > ~/.kube/config
+            echo "configured=1" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=0" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Delete preview namespace
+        if: steps.kube.outputs.configured == '1'
+        run: |
+          kubectl delete namespace "xcagi-pr-${{ github.event.pull_request.number }}" --ignore-not-found=true

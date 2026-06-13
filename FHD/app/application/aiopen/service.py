@@ -25,7 +25,7 @@ from typing import Any
 from urllib.parse import quote
 
 from app.infrastructure.aiopen.cursor_hub import aiopen_cursor_hub
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -155,7 +155,9 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "description": "采集 XCAGI 前端当前页面快照：URL、标题与可见可交互元素（selector/文本/位置）。",
         "inputSchema": {
             "type": "object",
-            "properties": {"session_id": {"type": "string", "description": "目标会话，缺省取第一个在线会话"}},
+            "properties": {
+                "session_id": {"type": "string", "description": "目标会话，缺省取第一个在线会话"}
+            },
         },
     },
     {
@@ -177,7 +179,10 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
             "type": "object",
             "properties": {
                 "selector": {"type": "string", "description": "CSS 选择器（来自 ui_snapshot）"},
-                "text": {"type": "string", "description": "可选：按可见文本匹配元素（selector 缺省时使用）"},
+                "text": {
+                    "type": "string",
+                    "description": "可选：按可见文本匹配元素（selector 缺省时使用）",
+                },
                 "session_id": {"type": "string"},
             },
         },
@@ -209,7 +214,13 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
     },
 ]
 
-_UI_ACTIONS = {"ui_snapshot": "snapshot", "ui_navigate": "navigate", "ui_click": "click", "ui_type": "type", "ui_scroll": "scroll"}
+_UI_ACTIONS = {
+    "ui_snapshot": "snapshot",
+    "ui_navigate": "navigate",
+    "ui_click": "click",
+    "ui_type": "type",
+    "ui_scroll": "scroll",
+}
 
 
 def _repo_stdio_bridge_path() -> str:
@@ -254,7 +265,9 @@ def build_mcp_remote_config(base_url: str, api_key: str = "") -> dict[str, Any]:
 
 def build_cursor_deeplink(server_name: str, server_config: dict[str, Any]) -> str:
     """生成 Cursor 一键安装 deep link（base64(JSON)）。"""
-    config_b64 = base64.b64encode(json.dumps(server_config, ensure_ascii=False).encode("utf-8")).decode("ascii")
+    config_b64 = base64.b64encode(
+        json.dumps(server_config, ensure_ascii=False).encode("utf-8")
+    ).decode("ascii")
     return f"cursor://anysphere.cursor-deeplink/mcp/install?name={quote(server_name, safe='')}&config={quote(config_b64, safe='')}"
 
 
@@ -287,7 +300,9 @@ def build_mcp_install_bundle(base_url: str, api_key: str = "") -> dict[str, Any]
             "hint": hint,
             "transport": transport,
             "install_mode": install_mode,
-            "mcp_json": json.dumps({"mcpServers": {MCP_SERVER_NAME: server_cfg}}, ensure_ascii=False, indent=2),
+            "mcp_json": json.dumps(
+                {"mcpServers": {MCP_SERVER_NAME: server_cfg}}, ensure_ascii=False, indent=2
+            ),
             "config": server_cfg,
         }
         if cursor_deeplink:
@@ -304,30 +319,62 @@ def build_mcp_install_bundle(base_url: str, api_key: str = "") -> dict[str, Any]
 
     clients = [
         _client_entry(
-            "cursor", "Cursor", "◆", "~/.cursor/mcp.json",
-            "点一下自动写入 MCP 配置", "url", url_cfg,
-            install_mode="deeplink", cursor_deeplink=cursor_dl, web_install_url=cursor_web,
+            "cursor",
+            "Cursor",
+            "◆",
+            "~/.cursor/mcp.json",
+            "点一下自动写入 MCP 配置",
+            "url",
+            url_cfg,
+            install_mode="deeplink",
+            cursor_deeplink=cursor_dl,
+            web_install_url=cursor_web,
         ),
         _client_entry(
-            "claude", "Claude", "✳", "claude_desktop_config.json",
-            "复制后粘贴到 Claude Desktop → 设置 → MCP", "mcp_remote", remote_cfg,
+            "claude",
+            "Claude",
+            "✳",
+            "claude_desktop_config.json",
+            "复制后粘贴到 Claude Desktop → 设置 → MCP",
+            "mcp_remote",
+            remote_cfg,
         ),
         _client_entry(
-            "vscode", "VS Code", "▣", "MCP 扩展 · 用户 settings",
-            "需安装 MCP 扩展；也可复制 JSON 手动添加", "mcp_remote", remote_cfg,
+            "vscode",
+            "VS Code",
+            "▣",
+            "MCP 扩展 · 用户 settings",
+            "需安装 MCP 扩展；也可复制 JSON 手动添加",
+            "mcp_remote",
+            remote_cfg,
             install_mode="vscode",
         ),
         _client_entry(
-            "windsurf", "Windsurf", "≋", "~/.codeium/windsurf/mcp_config.json",
-            "与 Cursor 相同 url 格式，复制后写入配置文件", "url", url_cfg,
+            "windsurf",
+            "Windsurf",
+            "≋",
+            "~/.codeium/windsurf/mcp_config.json",
+            "与 Cursor 相同 url 格式，复制后写入配置文件",
+            "url",
+            url_cfg,
         ),
         _client_entry(
-            "trae", "Trae", "◎", "Trae → MCP 服务器设置",
-            "字节 Trae IDE，粘贴 mcpServers JSON", "url", url_cfg,
+            "trae",
+            "Trae",
+            "◎",
+            "Trae → MCP 服务器设置",
+            "字节 Trae IDE，粘贴 mcpServers JSON",
+            "url",
+            url_cfg,
         ),
         _client_entry(
-            "generic", "其他", "⋯", "任意支持 MCP 的 AI 客户端",
-            "Cherry Studio / Chatbox / Open WebUI 等通用 JSON", "mcp_remote", remote_cfg,
+            "generic",
+            "其他",
+            "⋯",
+            "任意支持 MCP 的 AI 客户端",
+            "Cherry Studio / Chatbox / Open WebUI 等通用 JSON",
+            "mcp_remote",
+            remote_cfg,
         ),
     ]
 
@@ -385,7 +432,11 @@ def format_tool_result_text(tool_name: str, result: dict[str, Any]) -> str:
         if not ok:
             return f"API 调用失败：{method} {path}\n{result.get('message', '')}"
         data = result.get("data")
-        body = json.dumps(data, ensure_ascii=False, indent=2, default=str) if data is not None else "(empty)"
+        body = (
+            json.dumps(data, ensure_ascii=False, indent=2, default=str)
+            if data is not None
+            else "(empty)"
+        )
         if len(body) > 4000:
             body = body[:4000] + "\n…(truncated)"
         return f"API 调用成功：{method} {path} → HTTP {status}\n\n{body}"
@@ -404,10 +455,7 @@ def format_tool_result_text(tool_name: str, result: dict[str, Any]) -> str:
     if name == "ui_sessions":
         sessions = result.get("sessions") if isinstance(result.get("sessions"), list) else []
         if not sessions:
-            return (
-                "当前无在线虚拟光标会话。\n"
-                "请让用户在 XCAGI 打开 AIOPEN 面板并开启「本页待命」。"
-            )
+            return "当前无在线虚拟光标会话。\n请让用户在 XCAGI 打开 AIOPEN 面板并开启「本页待命」。"
         lines = [f"在线 screen 会话 {len(sessions)} 个："]
         for s in sessions:
             if not isinstance(s, dict):
@@ -421,7 +469,11 @@ def format_tool_result_text(tool_name: str, result: dict[str, Any]) -> str:
         url = result.get("url") or result.get("page_url") or ""
         title = result.get("title") or result.get("page_title") or ""
         elements = result.get("elements") if isinstance(result.get("elements"), list) else []
-        lines = [f"页面：{title or '(无标题)'}", f"URL：{url or '(未知)'}", f"可交互元素 {len(elements)} 个："]
+        lines = [
+            f"页面：{title or '(无标题)'}",
+            f"URL：{url or '(未知)'}",
+            f"可交互元素 {len(elements)} 个：",
+        ]
         for el in elements[:40]:
             if not isinstance(el, dict):
                 continue
@@ -480,11 +532,11 @@ def build_aiopen_guide(base_url: str) -> dict[str, Any]:
     mcp_template = install["mcp_config_template"]
     url_deeplink = install["methods"]["url"]["cursor_deeplink"]
     remote_cfg = install["methods"]["mcp_remote"]["config"]
-    remote_template = json.dumps({"mcpServers": {MCP_SERVER_NAME: remote_cfg}}, ensure_ascii=False, indent=2)
-
-    tool_lines = "\n".join(
-        f"- **{t['name']}**：{t['description']}" for t in TOOL_DEFINITIONS
+    remote_template = json.dumps(
+        {"mcpServers": {MCP_SERVER_NAME: remote_cfg}}, ensure_ascii=False, indent=2
     )
+
+    tool_lines = "\n".join(f"- **{t['name']}**：{t['description']}" for t in TOOL_DEFINITIONS)
 
     markdown = f"""# XCAGI AIOPEN 接入说明（给 AI 阅读）
 
@@ -644,7 +696,11 @@ def _tool_api_call(app: Any, args: dict[str, Any]) -> dict[str, Any]:
         return {"success": False, "message": "path 不能为空"}
     whitelist: dict[str, bool] = AIOPEN_STATE.get("whitelist", {})
     if not bool(whitelist.get(path, False)):
-        return {"success": False, "message": f"路由 {path} 未在 AIOPEN 白名单启用", "code": "ROUTE_NOT_WHITELISTED"}
+        return {
+            "success": False,
+            "message": f"路由 {path} 未在 AIOPEN 白名单启用",
+            "code": "ROUTE_NOT_WHITELISTED",
+        }
     try:
         client = TestClient(app)
         if method == "POST":
@@ -664,7 +720,7 @@ def _tool_api_call(app: Any, args: dict[str, Any]) -> dict[str, Any]:
             "status_code": resp.status_code,
             "data": data,
         }
-    except OPERATIONAL_ERRORS as err:
+    except RECOVERABLE_ERRORS as err:
         return {"success": False, "path": path, "method": method, "message": str(err)}
 
 
@@ -674,7 +730,11 @@ def _tool_chat(app: Any, args: dict[str, Any]) -> dict[str, Any]:
         return {"success": False, "message": "message 不能为空"}
     return _tool_api_call(
         app,
-        {"path": "/api/ai/unified_chat", "method": "POST", "body": {"message": message, "source": "aiopen"}},
+        {
+            "path": "/api/ai/unified_chat",
+            "method": "POST",
+            "body": {"message": message, "source": "aiopen"},
+        },
     )
 
 
@@ -697,7 +757,11 @@ async def invoke_tool(name: str, args: dict[str, Any] | None, app: Any) -> dict[
         }
     if name in _UI_ACTIONS:
         if not AIOPEN_STATE.get("remote_control_enabled", False):
-            return {"success": False, "message": "远程操控总开关已关闭（AIOPEN 面板可开启）", "code": "REMOTE_CONTROL_DISABLED"}
+            return {
+                "success": False,
+                "message": "远程操控总开关已关闭（AIOPEN 面板可开启）",
+                "code": "REMOTE_CONTROL_DISABLED",
+            }
         session_id = str(args.get("session_id") or "") or None
         params = {k: v for k, v in args.items() if k != "session_id"}
         return await aiopen_cursor_hub.dispatch(
@@ -727,14 +791,19 @@ def openclaw_chat_proxy(message: str) -> tuple[dict[str, Any], int]:
             raw = resp.read().decode("utf-8", errors="replace")
             try:
                 parsed = json.loads(raw) if raw else {}
-            except OPERATIONAL_ERRORS:
+            except RECOVERABLE_ERRORS:
                 parsed = {"raw": raw}
             return {"success": True, "target": target_url, "data": parsed}, 200
     except urllib.error.HTTPError as err:
         body = err.read().decode("utf-8", errors="replace")
         return (
-            {"success": False, "target": target_url, "status_code": err.code, "message": body or str(err)},
+            {
+                "success": False,
+                "target": target_url,
+                "status_code": err.code,
+                "message": body or str(err),
+            },
             502,
         )
-    except OPERATIONAL_ERRORS as err:
+    except RECOVERABLE_ERRORS as err:
         return {"success": False, "target": target_url, "message": str(err)}, 502

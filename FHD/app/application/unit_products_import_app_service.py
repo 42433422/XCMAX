@@ -17,7 +17,11 @@ from app.db.models.customer import Customer
 from app.db.models.product import Product
 from app.db.session import get_db
 from app.utils.external_sqlite import sqlite_conn
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.infrastructure.db.sql_identifiers import (
+    quote_sqlite_identifier,
+    resolve_products_table,
+)
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.path_utils import get_upload_dir
 
 logger = logging.getLogger(__name__)
@@ -108,7 +112,7 @@ class UnitProductsImportService:
                 "failed_products": failed_products,
             }
 
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.exception(f"导入购买单位+产品列表失败：{e}")
             return {"success": False, "message": f"导入失败：{str(e)}"}
 
@@ -132,11 +136,12 @@ class UnitProductsImportService:
             "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
         ).fetchall()
         table_names = [t[0] for t in tables if t and t[0]]
-        products_table = next((t for t in table_names if t and t.lower() == "products"), None)
+        products_table = resolve_products_table(table_names)
         if not products_table:
             return []
 
-        cols = cur.execute(f"PRAGMA table_info('{products_table}')").fetchall()
+        quoted_table = quote_sqlite_identifier(products_table)
+        cols = cur.execute(f"PRAGMA table_info({quoted_table})").fetchall()
         col_names = [c[1] for c in cols if c and c[1]]
         col_map = {str(c).lower(): str(c) for c in col_names}
 
@@ -161,8 +166,8 @@ class UnitProductsImportService:
         if not select_cols:
             return []
 
-        quoted_cols = ",".join([f'"{c}"' for c in select_cols])
-        rows = cur.execute(f'SELECT {quoted_cols} FROM "{products_table}"').fetchall()
+        quoted_cols = ",".join(quote_sqlite_identifier(c) for c in select_cols)
+        rows = cur.execute("SELECT " + quoted_cols + " FROM " + quoted_table).fetchall()
         row_dicts = [dict(zip(select_cols, r)) for r in rows]
 
         products_rows = []
@@ -207,14 +212,14 @@ class UnitProductsImportService:
         """安全解析浮点数"""
         try:
             return float(value) if value is not None and str(value).strip() != "" else 0.0
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             return 0.0
 
     def _parse_int(self, value: Any) -> int | None:
         """安全解析整数"""
         try:
             return int(value) if value is not None and str(value).strip() != "" else None
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             return None
 
     def _ensure_unit_exists(self, unit_name: str, create_purchase_unit: bool) -> bool:

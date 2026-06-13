@@ -13,11 +13,30 @@ def _im_sqlite_db(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     """``sqlite://`` 在 SQLAlchemy 下无法持久化表；IM 测试使用临时文件库。"""
     db_file = tmp_path / "im_v0_test.db"
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{db_file}")
-    from app.db import dispose_and_recreate_engine, engine
+    from app.db import SessionLocal, dispose_and_recreate_engine, engine
+    from app.db.base import Base
     from app.db.init_db import init_im_tables
+    from app.db.models.user import User
 
     dispose_and_recreate_engine()
+    Base.metadata.create_all(engine, tables=[User.__table__], checkfirst=True)
     init_im_tables(engine)
+    session = SessionLocal()
+    try:
+        for uid, username in [(1, "im_u1"), (2, "im_u2"), (9, "im_u9")]:
+            if session.get(User, uid) is None:
+                session.add(
+                    User(
+                        id=uid,
+                        username=username,
+                        password="test-hash",
+                        display_name=username,
+                        is_active=True,
+                    )
+                )
+        session.commit()
+    finally:
+        session.close()
 
 
 @pytest.fixture(autouse=True)

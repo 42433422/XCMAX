@@ -145,9 +145,7 @@ def line_rollout_pass_rate(*, dispatch_line: str, lookback_days: int = 7) -> Dic
                 .all()
             )
         matched = [
-            r
-            for r in rows
-            if line_tag and line_tag in str(getattr(r, "task_brief", "") or "")
+            r for r in rows if line_tag and line_tag in str(getattr(r, "task_brief", "") or "")
         ]
         if not matched:
             return {

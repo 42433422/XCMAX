@@ -13,7 +13,7 @@ from app.application.ports import (
 )
 from app.domain.shipment.aggregates import Shipment, ShipmentItem
 from app.domain.shipment.legacy_vo import ContactInfo
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +68,7 @@ class ShipmentApplicationService:
                 from app.infrastructure.mods.hooks import trigger
 
                 trigger("shipment.created", shipment=saved_shipment)
-            except OPERATIONAL_ERRORS as hook_err:
+            except RECOVERABLE_ERRORS as hook_err:
                 logger.warning(f"Hook trigger failed: {hook_err}")
 
             return {
@@ -77,7 +77,7 @@ class ShipmentApplicationService:
                 "shipment": saved_shipment.to_dict(),
             }
 
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.exception(f"创建发货单失败: {e}")
             return {"success": False, "message": f"创建失败: {str(e)}"}
 
@@ -108,7 +108,7 @@ class ShipmentApplicationService:
                 "per_page": per_page,
             }
 
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.exception(f"查询发货单失败: {e}")
             return {"success": False, "message": str(e), "data": []}
 
@@ -324,7 +324,7 @@ class ShipmentApplicationService:
                         or preview_data.get("sheet_name")
                         or ""
                     ).strip()
-                except OPERATIONAL_ERRORS as e:
+                except RECOVERABLE_ERRORS as e:
                     return {
                         "success": False,
                         "message": f"导出失败：读取模板信息异常（{str(e)}）",
@@ -428,7 +428,7 @@ class ShipmentApplicationService:
                 "count": len(records),
                 "template_used": template_path or "",
             }
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             return {
                 "success": False,
                 "message": f"导出失败：{str(e)}",
@@ -471,7 +471,7 @@ class ShipmentApplicationService:
                 "printed_at": datetime.now().isoformat(),
             }
 
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.exception(f"标记打印失败: {e}")
             return {"success": False, "message": str(e)}
 
@@ -487,7 +487,7 @@ class ShipmentApplicationService:
 
             return {"success": True, "message": "发货单已取消"}
 
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.exception(f"取消发货单失败: {e}")
             return {"success": False, "message": str(e)}
 
@@ -499,7 +499,7 @@ class ShipmentApplicationService:
                 return {"success": True, "message": "发货单已删除"}
             return {"success": False, "message": "发货单不存在"}
 
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.exception(f"删除发货单失败: {e}")
             return {"success": False, "message": str(e)}
 
@@ -564,7 +564,7 @@ class ShipmentApplicationService:
                     # 向前兼容：历史前端把 order_id 当作 shipment_records 主键使用。
                     result["record_id"] = record_id
                     result["order_id"] = record_id
-            except OPERATIONAL_ERRORS:
+            except RECOVERABLE_ERRORS:
                 # 记录写入失败不影响文档生成返回
                 pass
         return result

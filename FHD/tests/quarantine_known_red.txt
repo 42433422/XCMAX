@@ -1,0 +1,5 @@
+# 后端测试隔离名单（known-red quarantine） — v10 线内迭代
+# 由 scripts/dev/test_fast.py 读取并 --ignore；债务燃尽清单（非隐藏跳过）。
+# 见 docs/architecture/REFACTOR_DECOMPOSITION_PLAN.md §6。修一个删一行。
+#
+# 2026-06-13：隔离名单已清空；快车道 ≈ 全量 pytest。

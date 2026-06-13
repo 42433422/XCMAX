@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 
-from app.application.audit_log_reader import list_audit_log_entries
+from app.application.audit_log_reader import export_audit_log_csv, list_audit_log_entries
 from app.infrastructure.auth.dependencies import get_logged_in_user
 
 router = APIRouter(prefix="/api/admin", tags=["admin-audit"])
@@ -28,8 +28,17 @@ def admin_audit_logs(
     request: Request,
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
+    format: str = Query("json", alias="format"),
     _admin=Depends(_require_admin_user),
 ):
+    fmt = (format or "json").strip().lower()
+    if fmt == "csv":
+        csv_text = export_audit_log_csv(limit=max(limit, 500))
+        return PlainTextResponse(
+            csv_text,
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": 'attachment; filename="audit-logs.csv"'},
+        )
     data = list_audit_log_entries(limit=limit, offset=offset)
     data["requested_by"] = getattr(_admin, "username", None)
     return JSONResponse({"success": True, "data": data})

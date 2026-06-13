@@ -2,7 +2,7 @@ import logging
 import subprocess
 import time
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 try:
     import win32api
@@ -105,7 +105,7 @@ class PrinterAutomation:
                 logger.error(f"设置默认打印机失败: {result.stderr}")
                 return False
 
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.error(f"设置默认打印机异常: {e}")
             return False
 
@@ -184,7 +184,7 @@ class PrinterAutomation:
                 "file": file_path,
             }
 
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.error(f"自动化打印失败: {e}")
 
             if self.original_default and self.current_printer != self.original_default:
@@ -220,6 +220,6 @@ class EnhancedPrinterUtils:
             else:
                 return self.automation.print_with_automation(file_path, printer_name)
 
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.error(f"增强打印失败: {e}")
             return {"success": False, "message": f"增强打印失败: {str(e)}"}

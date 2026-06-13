@@ -1,4 +1,5 @@
-# CI SSOT: generated from FHD/.github/workflows/neuro_migration_check.yml — edit root copy only.
+# CI SSOT: generated from FHD/.github/workflows/neuro_migration_check.yml — DO NOT edit here.
+# Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
 name: Neuro-DDD Migration Check
 
 on:

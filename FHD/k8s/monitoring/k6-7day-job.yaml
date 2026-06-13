@@ -19,29 +19,19 @@ spec:
       restartPolicy: Never
       containers:
         - name: k6
-          image: grafana/k6:0.54.0
+          image: grafana/k6:0.50.0
           args:
             - run
             - /scripts/k6_7d_contract.js
           env:
             - name: XCAGI_BASE_URL
-              value: "http://xcagi-api.xcagi-staging.svc.cluster.local:5000"
+              value: "http://xcagi-service:80"
             - name: K6_DURATION
               value: "168h"
-            - name: K6_PROMETHEUS_RW_SERVER_URL
-              value: "http://prometheus.monitoring.svc.cluster.local:9090/api/v1/write"
             - name: E2E_USER
-              valueFrom:
-                secretKeyRef:
-                  name: xcagi-e2e-creds
-                  key: username
-                  optional: true
+              value: "admin"
             - name: E2E_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: xcagi-e2e-creds
-                  key: password
-                  optional: true
+              value: "admin123"
           volumeMounts:
             - name: k6-script
               mountPath: /scripts

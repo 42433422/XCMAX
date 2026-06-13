@@ -1,7 +1,7 @@
 import logging
 import os
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +25,7 @@ try:
 
     if is_desktop_mode():
         configure_desktop_environment(os.environ.get("XCAGI_DATA_DIR"))
-except OPERATIONAL_ERRORS:
+except RECOVERABLE_ERRORS:
     # Config import must stay side-effect tolerant for tests and management scripts.
     pass
 

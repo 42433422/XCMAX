@@ -39,6 +39,7 @@ export const EMPLOYEE_WORKFLOW_MENU_ITEM: CoreMenuCatalogItem = {
 
 export const CORE_MENU_ITEMS_BASE: CoreMenuCatalogItem[] = [
   { key: PRIMARY_CHAT_MENU_KEY, name: '智能对话', iconClass: 'fa-comments-o' },
+  { key: 'im', name: '消息', iconClass: 'fa-envelope-o' },
   { key: 'ai-ecosystem', name: '智能生态', iconClass: 'fa-sitemap' },
   EMPLOYEE_WORKFLOW_MENU_ITEM,
 ]

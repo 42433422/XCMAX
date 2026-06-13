@@ -1,8 +1,11 @@
 import { ref, type Ref } from 'vue';
+import { ApiError } from '@/api';
+import i18n from '@/i18n';
+import { resolveApiErrorMessage } from '@/utils/resolveApiError';
 
 export interface UseApiOptions<T> {
   immediate?: boolean;
-  defaultParams?: Record<string, any>;
+  defaultParams?: Record<string, unknown>;
   onSuccess?: (data: T) => void;
   onError?: (error: Error) => void;
 }
@@ -11,12 +14,29 @@ export interface UseApiReturn<T> {
   data: Ref<T | null>;
   error: Ref<Error | null>;
   loading: Ref<boolean>;
-  execute: (params?: Record<string, any>) => Promise<T | null>;
+  execute: (params?: Record<string, unknown>) => Promise<T | null>;
   reset: () => void;
 }
 
+function resolveApiError(err: unknown, fallback = ''): Error {
+  if (err instanceof ApiError) {
+    const data = err.data && typeof err.data === 'object' ? (err.data as Record<string, unknown>) : null;
+    const nested =
+      data?.error && typeof data.error === 'object'
+        ? (data.error as { code?: string; message?: string })
+        : null;
+    const message = resolveApiErrorMessage(
+      (key: string) => String(i18n.global.t(key)),
+      nested || { message: err.message },
+      err.message || fallback,
+    );
+    return new Error(message);
+  }
+  return err instanceof Error ? err : new Error(String(err || fallback));
+}
+
 export function useApi<T>(
-  apiFn: (params: Record<string, any>) => Promise<T>,
+  apiFn: (params: Record<string, unknown>) => Promise<T>,
   options: UseApiOptions<T> = {}
 ): UseApiReturn<T> {
   const data = ref<T | null>(null) as Ref<T | null>;
@@ -24,7 +44,7 @@ export function useApi<T>(
   const loading = ref(false);
   const { immediate = false, defaultParams = {} } = options;
 
-  const execute = async (params: Record<string, any> = {}): Promise<T | null> => {
+  const execute = async (params: Record<string, unknown> = {}): Promise<T | null> => {
     loading.value = true;
     error.value = null;
     
@@ -34,9 +54,10 @@ export function useApi<T>(
       options.onSuccess?.(result);
       return result;
     } catch (err) {
-      error.value = err instanceof Error ? err : new Error(String(err));
-      options.onError?.(error.value);
-      throw err;
+      const resolved = resolveApiError(err);
+      error.value = resolved;
+      options.onError?.(resolved);
+      throw resolved;
     } finally {
       loading.value = false;
     }
@@ -59,18 +80,18 @@ export function useApi<T>(
   };
 }
 
-export interface UseMutationOptions<T, V = any> {
+export interface UseMutationOptions<T, V = unknown> {
   onSuccess?: (data: T, variables: V) => void;
   onError?: (error: Error, variables: V) => void;
 }
 
-export interface UseMutationReturn<T, V = any> {
+export interface UseMutationReturn<T, V = unknown> {
   loading: Ref<boolean>;
   error: Ref<Error | null>;
   mutate: (variables: V) => Promise<T | null>;
 }
 
-export function useMutation<T, V = any>(
+export function useMutation<T, V = unknown>(
   apiFn: (variables: V) => Promise<T>,
   options: UseMutationOptions<T, V> = {}
 ): UseMutationReturn<T, V> {
@@ -87,9 +108,10 @@ export function useMutation<T, V = any>(
       onSuccess?.(result, variables);
       return result;
     } catch (err) {
-      error.value = err instanceof Error ? err : new Error(String(err));
-      onError?.(error.value, variables);
-      throw err;
+      const resolved = resolveApiError(err);
+      error.value = resolved;
+      onError?.(resolved, variables);
+      throw resolved;
     } finally {
       loading.value = false;
     }

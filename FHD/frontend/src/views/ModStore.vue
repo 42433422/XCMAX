@@ -49,6 +49,7 @@
       <button
         type="button"
         class="btn btn-primary btn-sm store-toolbar__cta"
+        data-tour="store-one-click-install"
         :disabled="bootstrapBusy"
         @click="runOneClickInstallAndOnboard"
       >
@@ -74,7 +75,7 @@
       </button>
     </div>
 
-    <div class="store-shell">
+    <div class="store-shell" data-tour="store-shell">
       <aside class="store-sidebar" aria-label="分类与筛选">
         <nav class="store-nav" aria-label="商品分类">
           <button
@@ -83,6 +84,7 @@
             type="button"
             class="store-nav__item"
             :class="{ active: currentTab === tab.id }"
+            :data-tour="tab.id === 'office' ? 'store-nav-office' : undefined"
             @click="switchTab(tab.id)"
           >
             <i :class="['fa', tab.icon, 'store-nav__icon']" aria-hidden="true"></i>
@@ -231,7 +233,7 @@
 import { ref, onMounted, onBeforeUnmount, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { apiFetch } from '@/utils/apiBase';
-import { fetchMarketCatalog, installHostFoundation } from '@/api/modStore';
+import { fetchMarketCatalog, installHostFoundation, reloadEmployeePacks } from '@/api/modStore';
 import {
   catalogStoreCollection,
   HOST_FOUNDATION_EMPLOYEE_PACK_ID,
@@ -256,6 +258,11 @@ import Modal from '@/components/Modal.vue';
 import ModDetails from './ModDetails.vue';
 import { appAlert, appConfirm } from '@/utils/appDialog';
 import {
+  promptAdvancedTutorialAfterInstall,
+  resolveRouteNameFromPath,
+} from '@/tutorial/promptAdvancedTutorial';
+import { useTutorialCatalog } from '@/composables/useTutorialCatalog';
+import {
   buildMarketCatalogCacheKey,
   isMarketCatalogCacheFresh,
   readMarketCatalogCache,
@@ -279,6 +286,7 @@ export default {
       import.meta.env.VITE_MARKET_BASE || 'https://xiu-ci.com/market',
     ).replace(/\/$/, '');
     const modsStore = useModsStore();
+    const { buildContext: tutorialBuildContext } = useTutorialCatalog();
 
     function refreshHostMods() {
       void modsStore.refresh().catch((e) => {
@@ -460,8 +468,18 @@ export default {
       markProductFlowCompleted();
       markHostPackAcknowledged();
       const label = mainListTitle.value || '员工包';
-      await appAlert(`${label}已装齐，正在入驻…`);
-      await router.replace(onboardDestinationForTab(tab));
+      const dest = onboardDestinationForTab(tab);
+      const promptResult = await promptAdvancedTutorialAfterInstall({
+        router,
+        buildContext: tutorialBuildContext.value,
+        message: `${label}已装齐，正在入驻。\n\n是否现在观看进阶教程，快速熟悉菜单与智能对话？`,
+        returnContext: { routeName: resolveRouteNameFromPath(router, dest) },
+      });
+      if (promptResult === 'started') return;
+      if (promptResult === 'already_completed') {
+        await appAlert(`${label}已装齐，正在入驻…`);
+      }
+      await router.replace(dest);
     };
 
     const runOneClickInstallAndOnboard = async () => {
@@ -515,6 +533,14 @@ export default {
         await loadMods(false);
         refreshHostMods();
         await refreshDeliverable();
+
+        if (tab === 'office' || tab === 'office_aux') {
+          try {
+            await reloadEmployeePacks();
+          } catch (e) {
+            console.warn('[ModStore] reloadEmployeePacks:', e);
+          }
+        }
 
         const remaining = filterByCollectionTab([...allMods.value]).filter((m) => !m.is_installed);
         if (!remaining.length && !errors.length) {
@@ -976,7 +1002,18 @@ export default {
     };
 
     onMounted(() => {
-      currentTab.value = 'host_foundation';
+      const tabQuery = typeof route.query.tab === 'string' ? route.query.tab.trim() : '';
+      const allowedTabs = new Set([
+        'all',
+        'host_foundation',
+        'office',
+        'office_aux',
+        'workflow',
+        'ai_employee',
+        'industry_mod',
+        'installed',
+      ]);
+      currentTab.value = allowedTabs.has(tabQuery) ? tabQuery : 'host_foundation';
       void warmCatalogSnapshot();
       void loadMods(false);
       void refreshDeliverable();

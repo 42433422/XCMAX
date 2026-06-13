@@ -2,7 +2,7 @@
 
 declare module '*.vue' {
   import type { DefineComponent } from 'vue';
-  const component: DefineComponent<Record<string, never>, Record<string, never>, any>;
+  const component: DefineComponent<Record<string, never>, Record<string, never>, unknown>;
   export default component;
 }
 
@@ -15,8 +15,8 @@ interface Window {
     installUpdate: () => Promise<void>;
     onUpdateEvent: (callback: (event: unknown) => void) => () => void;
     getPairingQrPayload?: () => Promise<string>;
-    showNotification?: (title: string, body: string) => Promise<void>;
-    setBadge?: (count: number) => Promise<void>;
+    showNotification: (title: string, body: string) => Promise<void>;
+    setBadge: (count: number) => Promise<void>;
   };
   handleAutoAction?: (action: unknown, userMessage?: string) => void;
 }

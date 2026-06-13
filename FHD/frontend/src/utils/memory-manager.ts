@@ -1,5 +1,5 @@
 export interface ResourceEntry {
-  resource: any;
+  resource: unknown;
   type: string;
   createdAt: number;
   lastAccessed: number;
@@ -37,7 +37,7 @@ export class ResourceManager {
     this.isDisposed = false;
   }
 
-  register(id: string, resource: any, type: string = 'generic'): boolean {
+  register(id: string, resource: unknown, type: string = 'generic'): boolean {
     if (this.isDisposed) {
       console.warn(`ResourceManager: Cannot register resource "${id}" - manager is disposed`);
       return false;
@@ -58,7 +58,7 @@ export class ResourceManager {
     return true;
   }
 
-  get(id: string): any {
+  get(id: string): unknown {
     const entry = this.resources.get(id);
     if (entry) {
       entry.lastAccessed = Date.now();
@@ -86,7 +86,7 @@ export class ResourceManager {
         resource.cleanup();
       } else if (resource instanceof HTMLElement && resource.remove) {
         resource.remove();
-      } else if (resource && (resource as any) instanceof EventTarget && (resource as any).removeEventListener) {
+      } else if (resource && (resource as unknown) instanceof EventTarget && (resource as unknown).removeEventListener) {
         this.removeAllListeners(resource as EventTarget);
       }
     } catch (error) {
@@ -269,7 +269,7 @@ export function cleanupEventListener(
   }
 }
 
-export function cleanupObject(obj: Record<string, any>): void {
+export function cleanupObject(obj: Record<string, unknown>): void {
   if (!obj) return;
 
   for (const key in obj) {

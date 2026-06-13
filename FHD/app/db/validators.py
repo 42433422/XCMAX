@@ -8,7 +8,7 @@ import logging
 
 from sqlalchemy.orm import validates
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
 class ModelValidators:
@@ -21,16 +21,14 @@ class ModelValidators:
             return value
         try:
             num_value = float(value)
-            if allow_zero:
-                if num_value < 0:
-                    raise ValueError(f"{field_name} 必须为非负数")
-            else:
-                if num_value <= 0:
-                    raise ValueError(f"{field_name} 必须为正数")
-        except (TypeError, ValueError) as e:
-            if "must be" in str(e):
-                raise
+        except (TypeError, ValueError):
             raise ValueError(f"{field_name} 必须是有效数字")
+        if allow_zero:
+            if num_value < 0:
+                raise ValueError(f"{field_name} 必须为非负数")
+        else:
+            if num_value <= 0:
+                raise ValueError(f"{field_name} 必须为正数")
         return value
 
     @staticmethod
@@ -94,7 +92,7 @@ def register_model_validators():
         logger.info(f"模型验证器已初始化 ({validated_count} 个模型)")
         return True
 
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.warning(f"模型验证器初始化跳过: {e}")
         return False
 

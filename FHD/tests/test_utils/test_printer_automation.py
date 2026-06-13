@@ -3,8 +3,15 @@ import sys
 import unittest
 from unittest.mock import MagicMock, Mock, patch
 
+import pytest
+
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, PROJECT_ROOT)
+
+if sys.platform != "win32":
+    pytestmark = pytest.mark.skip(
+        reason="printer_automation tests require Windows win32api (patched paths are inactive when _WIN32_AUTOMATION_AVAILABLE is False)",
+    )
 
 
 class TestPrinterAutomation(unittest.TestCase):

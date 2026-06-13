@@ -2,7 +2,6 @@ import { computed, onMounted, ref } from 'vue'
 import { buildFullApiUrl } from '@/api/core'
 import {
   KITTEN_VIZ_EMPLOYEES,
-  findKittenVizEmployee,
   type KittenVizEmployeeDef,
 } from '@/constants/kittenVisualizationEmployees'
 import { safeJsonRequest } from '@/utils/safeJsonRequest'
@@ -57,16 +56,20 @@ export function useKittenVizEmployees() {
     })),
   )
 
-  const selected = computed(() => findKittenVizEmployee(selectedPkgId.value) || KITTEN_VIZ_EMPLOYEES[0])
+  const selected = computed<KittenVizEmployeeState>(
+    () => employees.value.find((e) => e.pkgId === selectedPkgId.value) || employees.value[0],
+  )
 
   const installedCount = computed(() => employees.value.filter((e) => e.installed).length)
 
   async function refreshInstalled() {
     loading.value = true
     try {
-      const resp = await fetch(buildFullApiUrl(BRIDGE_INSTALLED_URL), { credentials: 'include' })
-      const json = await safeJsonRequest<{ success?: boolean; data?: Record<string, unknown> }>(resp)
-      installedIds.value = collectInstalledIds(json?.data)
+      const json = await safeJsonRequest<{ success?: boolean; data?: Record<string, unknown> }>(
+        buildFullApiUrl(BRIDGE_INSTALLED_URL),
+        { credentials: 'include' },
+      )
+      installedIds.value = collectInstalledIds(json.data?.data)
     } catch {
       installedIds.value = new Set()
     } finally {

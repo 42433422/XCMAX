@@ -15,7 +15,7 @@ from datetime import UTC, datetime
 from functools import wraps
 from typing import Any
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
 class StructuredLogFormatter(logging.Formatter):
@@ -155,7 +155,7 @@ def log_operation(operation_name: str):
                     duration=duration,
                 )
                 return result
-            except OPERATIONAL_ERRORS as e:
+            except RECOVERABLE_ERRORS as e:
                 duration = (time.time() - start_time) * 1000
                 logger.error(
                     f"Operation failed: {operation_name}",
@@ -187,7 +187,7 @@ def log_operation(operation_name: str):
                     duration=duration,
                 )
                 return result
-            except OPERATIONAL_ERRORS as e:
+            except RECOVERABLE_ERRORS as e:
                 duration = (time.time() - start_time) * 1000
                 logger.error(
                     f"Operation failed: {operation_name}",

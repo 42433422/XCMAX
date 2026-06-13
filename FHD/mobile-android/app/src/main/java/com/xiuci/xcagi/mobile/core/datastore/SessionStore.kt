@@ -86,7 +86,9 @@ constructor(
             context.dataStore.data.map { it[biometricEnabledKey] == true }
 
     val savedUsernameFlow: Flow<String> = context.dataStore.data.map { it[savedUsernameKey] ?: "" }
-    val savedPasswordFlow: Flow<String> = context.dataStore.data.map { it[savedPasswordKey] ?: "" }
+    // 密码经 AndroidKeyStore AES/GCM 加密后落盘；读取时解密（历史明文自动兼容）。
+    val savedPasswordFlow: Flow<String> =
+            context.dataStore.data.map { CredentialCipher.decrypt(it[savedPasswordKey] ?: "") }
     val rememberPassFlow: Flow<Boolean> = context.dataStore.data.map { it[rememberPassKey] == true }
     val autoLoginFlow: Flow<Boolean> = context.dataStore.data.map { it[autoLoginKey] == true }
 
@@ -185,11 +187,11 @@ constructor(
         context.dataStore.edit { it[biometricEnabledKey] = enabled }
     }
 
-    /** 保存登录凭证（记住密码） */
+    /** 保存登录凭证（记住密码）；密码以 AndroidKeyStore 加密后落盘，不再明文存储。 */
     suspend fun saveCredentials(username: String, password: String) {
         context.dataStore.edit {
             it[savedUsernameKey] = username.trim()
-            it[savedPasswordKey] = password
+            it[savedPasswordKey] = CredentialCipher.encrypt(password)
             it[rememberPassKey] = true
         }
     }

@@ -66,7 +66,7 @@ def test_products_list_403_when_read_token_configured_missing_header(client, mon
 def test_products_list_ok_with_read_header_mocked_pg(client, monkeypatch):
     monkeypatch.setenv("FHD_DB_READ_TOKEN", "secret-read")
     monkeypatch.setattr(
-        "app.fastapi_routes.xcagi_compat_product._load_products_list_impl_pg",
+        "app.fastapi_routes.domains.product.compat_routes._load_products_list_impl_pg",
         lambda *a, **k: ([], 0, None),
     )
     r = client.get(
@@ -89,7 +89,7 @@ def test_products_list_200_when_read_token_unconfigured_no_header(client, monkey
     monkeypatch.delenv("FHD_DB_READ_TOKEN", raising=False)
     monkeypatch.delenv("FHD_DB_WRITE_TOKEN", raising=False)
     monkeypatch.setattr(
-        "app.fastapi_routes.xcagi_compat_product._load_products_list_impl_pg",
+        "app.fastapi_routes.domains.product.compat_routes._load_products_list_impl_pg",
         lambda *a, **k: ([], 0, None),
     )
     r = client.get("/api/products/list?page=1&per_page=1")

@@ -34,7 +34,7 @@ class SecurityHeadersMiddleware:
                         b"x-content-type-options": b"nosniff",
                         b"x-frame-options": b"SAMEORIGIN",
                         b"referrer-policy": b"strict-origin-when-cross-origin",
-                        b"content-security-policy": b"default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' ws: wss: http: https:; frame-ancestors 'self'",
+                        b"content-security-policy": b"default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.googleapis.cn; img-src 'self' data: blob:; font-src 'self' data: https://fonts.gstatic.com https://fonts.gstatic.cn; connect-src 'self' ws: wss: http: https:; frame-ancestors 'self'",
                     }
                 else:
                     security_headers = {

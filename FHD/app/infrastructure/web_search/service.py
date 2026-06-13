@@ -6,7 +6,7 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -190,6 +190,6 @@ async def kitten_web_search(
             "provider": provider,
             "query": q,
         }
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.warning("web search failed: %s", e)
         return {"success": False, "hits": [], "provider": provider, "message": str(e)}

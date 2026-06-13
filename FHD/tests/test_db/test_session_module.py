@@ -2,25 +2,11 @@
 
 from __future__ import annotations
 
-from contextlib import contextmanager
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from app.db import session as session_mod
-
-
-@contextmanager
-def _mock_session_scope():
-    mock_db = MagicMock()
-    try:
-        yield mock_db
-        mock_db.commit()
-    except Exception:
-        mock_db.rollback()
-        raise
-    finally:
-        mock_db.close()
 
 
 def test_query_cache_roundtrip():
@@ -41,52 +27,32 @@ def test_timed_query_decorator_runs():
 
 
 def test_get_db_commits_on_success():
-    captured = MagicMock()
+    mock_db = MagicMock()
 
-    @contextmanager
-    def scope():
-        try:
-            yield captured
-            captured.commit()
-        except Exception:
-            captured.rollback()
-            raise
-        finally:
-            captured.close()
-
-    with patch.object(session_mod, "_session_scope", scope):
+    with patch.object(session_mod, "SessionLocal", return_value=mock_db):
         with session_mod.get_db() as db:
-            assert db is captured
-    captured.commit.assert_called_once()
-    captured.close.assert_called_once()
+            assert db is mock_db
+    mock_db.commit.assert_called_once()
+    mock_db.close.assert_called_once()
 
 
 def test_get_db_rolls_back_on_error():
-    captured = MagicMock()
+    mock_db = MagicMock()
 
-    @contextmanager
-    def scope():
-        try:
-            yield captured
-            captured.commit()
-        except Exception:
-            captured.rollback()
-            raise
-        finally:
-            captured.close()
-
-    with patch.object(session_mod, "_session_scope", scope):
+    with patch.object(session_mod, "SessionLocal", return_value=mock_db):
         with pytest.raises(RuntimeError):
             with session_mod.get_db():
                 raise RuntimeError("boom")
-    captured.rollback.assert_called_once()
-    captured.close.assert_called_once()
+    mock_db.rollback.assert_called_once()
+    mock_db.close.assert_called_once()
 
 
 def test_get_db_dependency_yields_session():
-    with patch.object(session_mod, "_session_scope", _mock_session_scope):
+    mock_db = MagicMock()
+
+    with patch.object(session_mod, "SessionLocal", return_value=mock_db):
         gen = session_mod.get_db_dependency()
         db = next(gen)
-        assert isinstance(db, MagicMock)
+        assert db is mock_db
         gen.close()
-        db.close.assert_called()
+    mock_db.close.assert_called_once()

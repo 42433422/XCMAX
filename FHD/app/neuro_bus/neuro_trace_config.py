@@ -10,7 +10,7 @@ import os
 import random
 from functools import lru_cache
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
 def _truthy(raw: str) -> bool:
@@ -97,7 +97,7 @@ def bump_domain_handler_metric(metric_key: str) -> None:
         return
     try:
         _DOMAIN_HANDLER_METRICS[metric_key] = _DOMAIN_HANDLER_METRICS.get(metric_key, 0) + 1
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         pass
 
 

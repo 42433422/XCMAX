@@ -63,7 +63,10 @@ class InventoryServiceDomainHandlers:
         """处理 transfer 事件"""
         logger.info(f"[InventoryServiceDomain] 处理 transfer: {event.payload}")
         if isinstance(event, InventoryTransferEvent):
-            logger.info(f"[InventoryServiceDomain] From: {event.payload.get('from_location')}")
+            logger.info(
+                "[InventoryServiceDomain] origin: %s",
+                event.payload.get("from_location"),
+            )
         return {"success": True, "event_type": "inventory.transfer"}
 
     async def handle_check_completed(self, event: NeuroEvent) -> dict[str, Any]:

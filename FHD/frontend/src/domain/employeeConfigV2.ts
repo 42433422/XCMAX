@@ -1,4 +1,4 @@
-type EmployeeConfigRecord = Record<string, any>
+type EmployeeConfigRecord = Record<string, unknown>
 
 const DEFAULT_IDENTITY = {
   id: '',

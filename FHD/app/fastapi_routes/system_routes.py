@@ -22,7 +22,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -92,7 +92,7 @@ async def get_industries():
                 "current": current,
             },
         }
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.error(f"Failed to get industries: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -120,13 +120,13 @@ async def get_current_industry_endpoint(request: Request):
                 saved = get_selected_industry_id(owner_id)
                 if saved:
                     current_id = saved
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             logger.debug("workspace industry prefs lookup skipped", exc_info=True)
 
         profile = get_industry_profile(current_id)
 
         return {"success": True, "data": _build_industry_response(current_id, profile)}
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.exception("Failed to get current industry: %s", e)
         # 避免 Mod manifest / YAML 异常时侧栏整页 500：回退到内置「涂料」档案
         try:
@@ -135,7 +135,7 @@ async def get_current_industry_endpoint(request: Request):
             fid = "涂料"
             profile = get_industry_profile(fid)
             return {"success": True, "data": _build_industry_response(fid, profile)}
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             raise HTTPException(status_code=500, detail=str(e)) from e
 
 
@@ -150,7 +150,9 @@ async def set_industry_endpoint(request_body: SetIndustryRequest, request: Reque
 
         success = set_current_industry(request_body.industry_id)
         if not success:
-            raise HTTPException(status_code=400, detail=f"Unknown industry: {request_body.industry_id}")
+            raise HTTPException(
+                status_code=400, detail=f"Unknown industry: {request_body.industry_id}"
+            )
 
         try:
             from app.application.tenant_workspace_prefs import (
@@ -190,15 +192,26 @@ async def set_industry_endpoint(request_body: SetIndustryRequest, request: Reque
                         industry_id,
                         industry_mod_id=mod_id,
                     )
-        except OPERATIONAL_ERRORS:
+                    if mod_id:
+                        from app.mod_sdk.industry_seed import (
+                            deactivate_other_open_industry_mods,
+                            industry_mod_id_for,
+                        )
+
+                        canonical = industry_mod_id_for(industry_id) or mod_id
+                        deactivate_other_open_industry_mods(canonical)
+        except RECOVERABLE_ERRORS:
             logger.debug("workspace industry prefs save skipped", exc_info=True)
 
         profile = get_industry_profile(request_body.industry_id)
 
-        return {"success": True, "data": _build_industry_response(request_body.industry_id, profile)}
+        return {
+            "success": True,
+            "data": _build_industry_response(request_body.industry_id, profile),
+        }
     except HTTPException:
         raise
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.error(f"Failed to set industry: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -210,7 +223,7 @@ async def get_host_profile():
         from app.mod_sdk.host_profile import build_host_profile_api_payload
 
         return {"success": True, "data": build_host_profile_api_payload()}
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.error("Failed to get host profile: %s", e)
         raise HTTPException(status_code=500, detail=str(e)) from e
 
@@ -230,7 +243,7 @@ async def get_industry_presets():
                 "presets": doc.get("presets") or {},
             },
         }
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.error("Failed to get industry presets: %s", e)
         raise HTTPException(status_code=500, detail=str(e)) from e
 
@@ -257,7 +270,7 @@ async def get_workflow_employee_catalog():
                 "static_catalog": load_workflow_employee_catalog(),
             },
         }
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.error("Failed to get workflow employee catalog: %s", e)
         raise HTTPException(status_code=500, detail=str(e)) from e
 
@@ -269,7 +282,7 @@ async def get_employee_registry_rules():
         from app.mod_sdk.host_profile import get_employee_registry_rules
 
         return {"success": True, "data": get_employee_registry_rules()}
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.error("Failed to get employee registry rules: %s", e)
         raise HTTPException(status_code=500, detail=str(e)) from e
 
@@ -294,6 +307,6 @@ async def get_industry_detail(industry_id: str):
         return {"success": True, "data": _build_industry_response(industry_id, profile)}
     except HTTPException:
         raise
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.error(f"Failed to get industry {industry_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))

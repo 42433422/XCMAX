@@ -14,7 +14,7 @@ import os
 from typing import Any
 
 from app.utils.distillation_paths import get_distillation_checkpoints_dir
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -140,7 +140,7 @@ class DistilledIntentRecognizer:
             logger.info(f"蒸馏模型加载成功：{self.model_path}")
             self._initialized = True
 
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.error(f"加载蒸馏模型失败：{e}")
             self._initialized = True
 
@@ -193,7 +193,7 @@ class DistilledIntentRecognizer:
                 "source": "distilled",
             }
 
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.error(f"蒸馏模型推理失败：{e}")
             return {
                 "intent": None,

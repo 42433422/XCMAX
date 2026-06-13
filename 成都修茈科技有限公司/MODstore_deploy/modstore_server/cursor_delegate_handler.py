@@ -23,9 +23,7 @@ def _cursor_delegate_enabled() -> bool:
 
 def _cursor_api_key() -> str:
     return (
-        os.environ.get("CURSOR_API_KEY")
-        or os.environ.get("MODSTORE_CURSOR_API_KEY")
-        or ""
+        os.environ.get("CURSOR_API_KEY") or os.environ.get("MODSTORE_CURSOR_API_KEY") or ""
     ).strip()
 
 
@@ -103,7 +101,9 @@ def _try_cursor_webhook(task: str, *, cwd: str, input_data: Dict[str, Any]) -> D
             "source": "cursor_webhook",
             "status_code": resp.status_code,
             "output": str(body.get("output") or body.get("result") or resp.text)[:20_000],
-            "files_changed": body.get("files_changed") if isinstance(body.get("files_changed"), list) else [],
+            "files_changed": (
+                body.get("files_changed") if isinstance(body.get("files_changed"), list) else []
+            ),
         }
     except Exception as exc:  # noqa: BLE001
         return {"ok": False, "source": "cursor_webhook", "error": str(exc)}

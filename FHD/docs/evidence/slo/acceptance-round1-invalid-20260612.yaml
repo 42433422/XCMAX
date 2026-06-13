@@ -1,0 +1,60 @@
+# acceptance-round1-invalid-20260612.yaml — Round-1 k6 窗口归档（不可用于合同 SLA）
+meta:
+  status: invalid
+  observation_mode: invalid_env
+  blocker_ref: specs/BLOCKERS.md#T36-T37
+  environment: staging
+  namespace: xcagi-staging
+  server: 119.27.178.147
+  verified_at: "2026-06-12T12:00:00+08:00"
+  round1_job_start: "2026-06-05T20:12:20Z"
+  round1_progress_at_archive: "~91% (6d+ elapsed of 168h)"
+
+root_cause:
+  summary: "k6 Job 注入 BASE_URL，脚本仅读 XCAGI_BASE_URL，流量打在 pod 内 127.0.0.1:5000"
+  fix: "k6_7d_contract.js 兼容双 env；Job 使用 XCAGI_BASE_URL=http://xcagi-service:80"
+  fixed_in_repo: "2026-06-12 (v10 Unreleased)"
+
+prometheus_7d_snapshot:
+  note: "数字来自探针为主，非业务 API 压测"
+  api_requests_total: "~256万 increase/7d"
+  endpoint_breakdown:
+    - endpoint: /health/liveness
+      count_7d: "~252万"
+    - endpoint: /api/auth/login
+      count_7d: 3
+    - endpoint: /api/ai/chat/stream
+      count_7d: 2
+  slo_readings:
+    availability_7d: "100% (误导性)"
+    login_p95_7d_ms: "无有效样本"
+    chat_first_byte_p95_7d: "无数据"
+
+panels:
+  api_availability:
+    slo_id: SLO-API-01
+    meets_target: null
+    reading_7d: null
+    notes: "不可用 — 使用 acceptance-staging-* (round-2) 替代"
+  api_login_p95_ms:
+    slo_id: SLO-API-02
+    meets_target: null
+    reading_7d: null
+  api_error_rate:
+    slo_id: SLO-API-03
+    meets_target: null
+    reading_7d: null
+  ai_chat_first_byte_p95_ms:
+    slo_id: SLO-AI-01
+    meets_target: null
+    reading_7d: null
+  neurobus_delivery:
+    slo_id: SLO-BUS-01
+    meets_target: true
+    reading_7d: "100%"
+    notes: "NeuroBus 指标可信，但与 k6 API 路径无关"
+
+next:
+  - "Round-1 Job 自然结束后: launch_k6_round2_staging.sh --start"
+  - "48h 后: scripts/observability/check_round2_metrics_gate.sh"
+  - "168h 后: run_staging_7d_acceptance.sh --prefix staging"

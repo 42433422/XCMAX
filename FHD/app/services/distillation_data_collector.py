@@ -24,7 +24,7 @@ from app.utils.distillation_paths import (
     get_distillation_logs_dir,
     get_distillation_root_dir,
 )
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DISTILL_DIR = get_distillation_root_dir()
@@ -203,7 +203,7 @@ def get_deepseek_api_key() -> str:
                 config_module = importlib.util.module_from_spec(spec)
                 spec.loader.exec_module(config_module)
                 return getattr(config_module, "DEEPSEEK_API_KEY", "") or ""
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.warning(f"读取配置文件失败: {e}")
 
     return ""
@@ -282,7 +282,7 @@ async def call_deepseek_intent(api_key: str, message: str) -> dict[str, Any] | N
                 "slots": data.get("slots", {}),
                 "confidence": 1.0,
             }
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.error(f"DeepSeek API 调用失败: {e}")
 
     return None
@@ -451,7 +451,11 @@ def mark_samples_as_used(ids: list[int]):
     placeholders = ", ".join([f":id_{idx}" for idx in range(len(ids))])
     with ENGINE.begin() as conn:
         conn.execute(
-            text(f"UPDATE distillation_log SET used_for_training = 1 WHERE id IN ({placeholders})"),
+            text(
+                "UPDATE distillation_log SET used_for_training = 1 WHERE id IN ("
+                + placeholders
+                + ")"
+            ),
             bindings,
         )
 

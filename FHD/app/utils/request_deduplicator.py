@@ -24,7 +24,7 @@ from functools import wraps
 from threading import Lock
 from typing import Any
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -132,7 +132,7 @@ class RequestDeduplicator:
 
             return (False, result)
 
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             with self._lock:
                 if key in self._records:
                     del self._records[key]
@@ -179,7 +179,7 @@ class RequestDeduplicator:
 
             return (False, result)
 
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             with self._lock:
                 if key in self._records:
                     del self._records[key]

@@ -6,7 +6,7 @@ import json
 import logging
 from pathlib import Path
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -21,8 +21,12 @@ except ImportError:  # pragma: no cover
 FEATURE_DIM = 16
 NUM_ACTIONS = 3
 
+# Import-safe base: fall back to ``object`` when torch is absent so the module
+# can be imported (and the rest of the API degrade to no-op) without PyTorch.
+_NNModule = nn.Module if nn is not None else object
 
-class RoutingMLP(nn.Module):  # type: ignore[misc]
+
+class RoutingMLP(_NNModule):  # type: ignore[misc,valid-type]
     def __init__(self, in_dim: int = FEATURE_DIM, hidden: int = 32, out_dim: int = NUM_ACTIONS):
         super().__init__()
         self.net = nn.Sequential(
@@ -52,7 +56,7 @@ def load_active_policy() -> RoutingMLP | None:
         return None
     try:
         manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.warning("routing manifest read failed: %s", e)
         return None
     ver = (manifest.get("active_version") or "0").strip()
@@ -80,7 +84,7 @@ def load_active_policy() -> RoutingMLP | None:
         _policy.to(_policy_device)
         logger.info("loaded routing policy v%s from %s", ver, weights)
         return _policy
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.warning("failed to load routing policy: %s", e)
         return None
 

@@ -2,9 +2,9 @@ import { ref, onMounted, onUnmounted } from 'vue';
 
 interface PerformanceUpdateEvent {
   type: string;
-  value?: any;
+  value?: unknown;
   threshold?: number;
-  metrics?: Record<string, any>;
+  metrics?: Record<string, unknown>;
 }
 
 interface PerformanceMonitorOptions {
@@ -31,7 +31,7 @@ export function usePerformanceMonitor(options: PerformanceMonitorOptions = {}) {
 
   const fps = ref(60);
   const memory = ref(0);
-  const longTasks = ref<any[]>([]);
+  const longTasks = ref<unknown[]>([]);
   const isMonitoring = ref(false);
   const performanceMetrics = ref({
     avgFPS: 60,
@@ -95,7 +95,7 @@ export function usePerformanceMonitor(options: PerformanceMonitorOptions = {}) {
 
   const measureMemory = () => {
     if (!enableMemory) return;
-    const perfAny = performance as any;
+    const perfAny = performance as unknown;
     if (perfAny.memory) {
       memory.value = Math.round(perfAny.memory.usedJSHeapSize / 1048576);
       performanceMetrics.value.memoryUsage = memory.value;
@@ -152,7 +152,7 @@ export function usePerformanceMonitor(options: PerformanceMonitorOptions = {}) {
             detectLongTask(entry);
           }
         });
-        observer.observe({ entryTypes: ['longtask'] as any });
+        observer.observe({ entryTypes: ['longtask'] as unknown });
       } catch (_e) {
         console.warn('Long task detection not supported');
       }

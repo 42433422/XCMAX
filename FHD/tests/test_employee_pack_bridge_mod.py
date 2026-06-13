@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
-MOD_DIR = REPO / "mods" / "xcagi-office-employee-pack-bridge"
+MOD_DIR = REPO / "mods-admin-runtime" / "xcagi-office-employee-pack-bridge"
 
 
 def test_office_catalog_file():

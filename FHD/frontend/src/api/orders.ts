@@ -6,7 +6,7 @@ import { resolveErpApiPath } from '@/utils/erpDomainPaths';
 const erp = (path: string) => resolveErpApiPath(path);
 
 export const ordersApi = {
-  getOrders(params: Record<string, any> = {}): Promise<ApiResponse<Order[]>> {
+  getOrders(params: Record<string, unknown> = {}): Promise<ApiResponse<Order[]>> {
     return api.get<ApiResponse<Order[]>>(erp('/api/orders'), params);
   },
 
@@ -30,34 +30,34 @@ export const ordersApi = {
     return api.delete<ApiResponse<void>>(erp('/api/orders/clear-all'));
   },
 
-  async getShipmentRecordUnits(): Promise<ApiResponse<any[]>> {
+  async getShipmentRecordUnits(): Promise<ApiResponse<unknown[]>> {
     try {
-      return await api.get<ApiResponse<any[]>>(erp('/api/shipment/shipment-records/units'));
-    } catch (e: any) {
+      return await api.get<ApiResponse<unknown[]>>(erp('/api/shipment/shipment-records/units'));
+    } catch (e: unknown) {
       const st = e?.status;
       if (st === 404) {
-        return api.get<ApiResponse<any[]>>(erp('/api/purchase_units'));
+        return api.get<ApiResponse<unknown[]>>(erp('/api/purchase_units'));
       }
       throw e;
     }
   },
 
-  getShipmentRecords(purchaseUnit: string): Promise<ApiResponse<any[]>> {
-    return api.get<ApiResponse<any[]>>(erp('/api/shipment/shipment-records/records'), {
+  getShipmentRecords(purchaseUnit: string): Promise<ApiResponse<unknown[]>> {
+    return api.get<ApiResponse<unknown[]>>(erp('/api/shipment/shipment-records/records'), {
       unit_name: purchaseUnit,
     });
   },
 
-  createShipmentRecord(payload: any): Promise<ApiResponse<any>> {
-    return api.post<ApiResponse<any>>(erp('/api/shipment/shipment-records/record'), payload);
+  createShipmentRecord(payload: unknown): Promise<ApiResponse<unknown>> {
+    return api.post<ApiResponse<unknown>>(erp('/api/shipment/shipment-records/record'), payload);
   },
 
-  updateShipmentRecord(payload: any): Promise<ApiResponse<any>> {
-    return api.patch<ApiResponse<any>>(erp('/api/shipment/shipment-records/record'), payload);
+  updateShipmentRecord(payload: unknown): Promise<ApiResponse<unknown>> {
+    return api.patch<ApiResponse<unknown>>(erp('/api/shipment/shipment-records/record'), payload);
   },
 
-  deleteShipmentRecord(payload: any): Promise<ApiResponse<any>> {
-    return api.delete<ApiResponse<any>>(erp('/api/shipment/shipment-records/record'), payload);
+  deleteShipmentRecord(payload: unknown): Promise<ApiResponse<unknown>> {
+    return api.delete<ApiResponse<unknown>>(erp('/api/shipment/shipment-records/record'), payload);
   },
 
   exportShipmentRecords(purchaseUnit: string, templateId?: string, statusFilter?: string): Promise<Response> {

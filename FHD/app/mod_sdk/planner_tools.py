@@ -13,7 +13,7 @@ import os
 from pathlib import Path
 from typing import Any, Callable
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 PLANNER_FACADE_MOD_ID = "xcagi-planner-bridge"
 
@@ -35,7 +35,7 @@ def _resolve_planner_mod_dir() -> Path | None:
             p = Path(meta.mod_path)
             if (p / "manifest.json").is_file():
                 return p
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         logger.debug("planner mod path via manager failed", exc_info=True)
 
     roots: list[Path] = []
@@ -49,7 +49,7 @@ def _resolve_planner_mod_dir() -> Path | None:
         d = mods_dir()
         if d:
             roots.append(Path(d))
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         pass
 
     repo_mods = Path(__file__).resolve().parents[2] / "mods"
@@ -74,7 +74,7 @@ def _read_planner_manifest() -> dict[str, Any]:
     try:
         data = json.loads((mod_dir / "manifest.json").read_text(encoding="utf-8"))
         return data if isinstance(data, dict) else {}
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         logger.debug("read planner manifest failed", exc_info=True)
         return {}
 
@@ -89,7 +89,7 @@ def is_planner_mod_installed() -> bool:
 
         if is_mods_disabled():
             return False
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         pass
     try:
         from app.infrastructure.mods.mod_manager import get_mod_manager
@@ -97,7 +97,7 @@ def is_planner_mod_installed() -> bool:
         for row in get_mod_manager().list_all_mods():
             if str(row.get("id") or "").strip() == PLANNER_FACADE_MOD_ID:
                 return True
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         logger.debug("list_all_mods for planner failed", exc_info=True)
     return is_planner_mod_on_disk()
 
@@ -135,7 +135,7 @@ def load_planner_tools_config() -> dict[str, Any]:
     try:
         data = json.loads(cfg_path.read_text(encoding="utf-8"))
         return data if isinstance(data, dict) else {}
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         logger.warning("planner_tools.json parse failed: %s", cfg_path)
         return {}
 
@@ -160,7 +160,7 @@ def load_mod_planner_tool_extensions() -> list[dict[str, Any]]:
             return [x for x in data if isinstance(x, dict)]
         if isinstance(data, dict) and isinstance(data.get("tools"), list):
             return [x for x in data["tools"] if isinstance(x, dict)]
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         logger.warning("planner_tool_extensions.json parse failed")
     return []
 
@@ -203,6 +203,21 @@ def execute_planner_workflow_tool(
         logger.debug("planner tool native mod=%s tool=%s", native_mod, name)
         return native_raw
 
+    try:
+        from app.application.employee_pack_runner import try_execute_employee_planner_tool
+
+        emp_raw = try_execute_employee_planner_tool(
+            name,
+            args,
+            workspace_root,
+            db_write_token=db_write_token,
+        )
+        if emp_raw is not None:
+            logger.debug("planner tool employee pack tool=%s", name)
+            return emp_raw
+    except RECOVERABLE_ERRORS:
+        logger.debug("employee planner tool dispatch skipped", exc_info=True)
+
     from app.application.tools.workflow import execute_workflow_tool
 
     raw = execute_workflow_tool(
@@ -241,7 +256,7 @@ def execute_planner_tool_from_body(body: dict[str, Any] | None) -> dict[str, Any
             workspace_root,
             db_write_token=db_write_token,
         )
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.exception("planner tool execute failed: %s", name)
         return {"success": False, "error": str(exc), "tool_name": name}
 
@@ -290,12 +305,20 @@ def list_planner_tools_registry_detail() -> dict[str, Any]:
     from app.mod_sdk.planner_native_tools import list_native_planner_tools_summary
 
     native_summary = list_native_planner_tools_summary()
+    try:
+        from app.mod_sdk.employee_tool_registry import build_employee_tools_status
+
+        employee_status = build_employee_tools_status()
+    except RECOVERABLE_ERRORS:
+        employee_status = {}
     return {
         "success": True,
         "tool_count": len(names),
         "tool_names": names,
         "mod_extension_count": len(ext_names),
         "mod_extension_names": ext_names,
+        "employee_planner": employee_status,
+        "employee_pack_tools": employee_status.get("employee_pack_tools") or [],
         "execution_via_mod_facade": via_mod,
         "native_planner_tools": native_summary,
         "execution_path": (

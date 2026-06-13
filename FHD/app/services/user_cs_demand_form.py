@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import urlencode
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -149,6 +149,6 @@ async def sync_intake_from_market_if_newer(
             },
         }
         return apply_landing_submission_to_pipeline(payload)
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         logger.debug("sync_intake_from_market_if_newer skipped", exc_info=True)
         return None

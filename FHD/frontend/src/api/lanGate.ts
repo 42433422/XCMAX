@@ -200,7 +200,7 @@ export const lanGateApi = {
   async updateSettings(payload: LanSettingsUpdate): Promise<LanSettingsView> {
     try {
       return await api.post<LanSettingsView>(lp('/api/lan/admin/settings'), payload);
-    } catch (error: any) {
+    } catch (error: unknown) {
       // 兼容旧服务端只接受 PUT 的情况，避免页面保存直接报 405。
       if (Number(error?.status) === 405) {
         return api.put<LanSettingsView>(lp('/api/lan/admin/settings'), payload);

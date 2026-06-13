@@ -8,7 +8,7 @@ from functools import lru_cache
 from typing import Any
 
 from app.mod_sdk.neuro_bus_compat import NEURO_BUS_BRIDGE_MOD_ID, is_neuro_bus_via_mod_enabled
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +31,7 @@ def _resolve_mod_path() -> tuple[str, str] | tuple[None, None]:
         mod_dir = _resolve_mod_dir()
         if mod_dir:
             return NEURO_BUS_BRIDGE_MOD_ID, str(mod_dir)
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         logger.debug("neuro bus runtime mod path failed", exc_info=True)
     return None, None
 

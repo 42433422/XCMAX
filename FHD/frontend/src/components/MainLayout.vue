@@ -85,13 +85,15 @@
       <slot></slot>
     </div>
     <FloatingChatAssistant :visible="shouldShowFloatingChatAssistant" />
-    <TutorialOverlay />
+    <VirtualCursor />
+    <OnboardingTutorial />
+    <TutorialOverlay v-if="!onboardingTutorialStore.active" />
     <MobileBottomNav v-if="mobileBottomNavVisible" />
   </div>
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRoute, useRouter } from 'vue-router'
 import { useIndustryStore } from '@/stores/industry'
@@ -116,7 +118,11 @@ import PaneResizeHandle from './PaneResizeHandle.vue'
 import Sidebar from './Sidebar.vue'
 import TopAssistantFloat from './TopAssistantFloat.vue'
 import TutorialOverlay from './TutorialOverlay.vue'
+import VirtualCursor from './VirtualCursor.vue'
+import OnboardingTutorial from './OnboardingTutorial.vue'
 import MobileBottomNav from './MobileBottomNav.vue'
+import { useOnboardingTutorialStore } from '@/stores/onboardingTutorial'
+import { useTutorialStore } from '@/stores/tutorial'
 import { setTutorialBuildContextFactory } from '@/stores/tutorial'
 import { useTutorialCatalog } from '@/composables/useTutorialCatalog'
 
@@ -131,6 +137,13 @@ const emit = defineEmits(['toggle-pro-mode'])
 
 const route = useRoute()
 const router = useRouter()
+const onboardingTutorialStore = useOnboardingTutorialStore()
+const tutorialStore = useTutorialStore()
+const { active: onboardingTutorialActive } = storeToRefs(onboardingTutorialStore)
+const { isActive: legacyTutorialActive } = storeToRefs(tutorialStore)
+const isAnyTutorialActive = computed(
+  () => onboardingTutorialActive.value || legacyTutorialActive.value,
+)
 const industryStore = useIndustryStore()
 const modsStore = useModsStore()
 const accountProfileStore = useAccountProfileStore()
@@ -264,6 +277,7 @@ const viewTitlesBase = {
   'template-preview': '模板库',
   console: '模板库',
   settings: '系统设置',
+  im: '消息',
   tools: '工具表',
   'other-tools': '员工视图',
   'employee-workflow': '员工工作台',
@@ -306,6 +320,8 @@ const routeNameMap = {
   '/template-preview': 'template-preview',
   '/console': 'console',
   '/settings': 'settings',
+  '/im': 'im',
+  '/desktop-runtime': 'desktop-runtime',
   '/tools': 'tools',
   '/other-tools': 'other-tools',
   '/workflow-employee-space': 'workflow-employee-space',
@@ -521,13 +537,33 @@ const clearSidebarHoverTimer = () => {
   }
 }
 
+const ensureSidebarExpandedForTutorial = () => {
+  clearSidebarCollapseTimer()
+  clearSidebarHoverTimer()
+  if (isSidebarFeatureEnabled.value) {
+    sidebarCollapsed.value = false
+  }
+}
+
 const scheduleSidebarAutoCollapse = () => {
+  if (isAnyTutorialActive.value) return
   if (!isSidebarFeatureEnabled.value || sidebarCollapsed.value) return
   clearSidebarCollapseTimer()
   sidebarCollapseTimer = window.setTimeout(() => {
+    if (isAnyTutorialActive.value) return
     sidebarCollapsed.value = true
   }, SIDEBAR_INACTIVITY_MS)
 }
+
+watch(isAnyTutorialActive, (active) => {
+  if (active) {
+    ensureSidebarExpandedForTutorial()
+    return
+  }
+  if (isSidebarFeatureEnabled.value && !sidebarCollapsed.value) {
+    scheduleSidebarAutoCollapse()
+  }
+})
 
 const handleGlobalActivity = () => {
   if (!isSidebarFeatureEnabled.value) return
