@@ -7,6 +7,7 @@ Covers:
 
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -30,7 +31,12 @@ class TestDesktopStatus:
         with (
             patch(
                 "app.fastapi_routes.desktop_runtime.ensure_desktop_dirs",
-                return_value={"root": "/tmp/x"},
+                return_value={
+                    "root": Path("/tmp/x"),
+                    "data": Path("/tmp/x/data"),
+                    "mods": Path("/tmp/x/mods"),
+                    "models": Path("/tmp/x/models"),
+                },
             ),
             patch(
                 "app.fastapi_routes.desktop_runtime.load_or_create_profile",
@@ -39,7 +45,7 @@ class TestDesktopStatus:
             patch("app.fastapi_routes.desktop_runtime.resolve_storage_mode", return_value="sqlite"),
             patch("app.fastapi_routes.desktop_runtime.is_desktop_mode", return_value=True),
             patch(
-                "app.fastapi_routes.desktop_runtime.startup_timing_snapshot",
+                "app.fastapi_app.startup_timing.startup_timing_snapshot",
                 return_value={"phase1": 1.2},
             ),
         ):
@@ -53,7 +59,12 @@ class TestDesktopStatus:
         with (
             patch(
                 "app.fastapi_routes.desktop_runtime.ensure_desktop_dirs",
-                return_value={"root": "/tmp/x"},
+                return_value={
+                    "root": Path("/tmp/x"),
+                    "data": Path("/tmp/x/data"),
+                    "mods": Path("/tmp/x/mods"),
+                    "models": Path("/tmp/x/models"),
+                },
             ),
             patch(
                 "app.fastapi_routes.desktop_runtime.load_or_create_profile",
@@ -64,8 +75,8 @@ class TestDesktopStatus:
             ),
             patch("app.fastapi_routes.desktop_runtime.is_desktop_mode", return_value=False),
             patch(
-                "app.fastapi_routes.desktop_runtime.startup_timing_snapshot",
-                side_effect=Exception("module missing"),
+                "app.fastapi_app.startup_timing.startup_timing_snapshot",
+                side_effect=ImportError("module missing"),
             ),
         ):
             r = client.get("/api/desktop/status")
@@ -76,12 +87,13 @@ class TestDesktopStatus:
 
 class TestDownloadModel:
     def test_invalid_request_body(self, client: TestClient) -> None:
-        r = client.post("/api/desktop/model/download", json={})
+        r = client.post("/api/desktop/models/download", json={})
         # 422 from pydantic validation, or 400 if handler runs
         assert r.status_code in (400, 422)
 
     def test_successful_download_returns_zip(self, client: TestClient) -> None:
         with (
+            patch("app.fastapi_routes.desktop_runtime.is_desktop_mode", return_value=True),
             patch("app.fastapi_routes.desktop_runtime.download_model") as dl,
             patch(
                 "app.fastapi_routes.desktop_runtime.build_support_bundle_zip",
@@ -90,7 +102,7 @@ class TestDownloadModel:
         ):
             dl.return_value = "/tmp/model.bin"
             r = client.post(
-                "/api/desktop/model/download",
+                "/api/desktop/models/download",
                 json={
                     "name": "test-model",
                     "version": "1.0.0",
