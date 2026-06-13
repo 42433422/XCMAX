@@ -16,7 +16,7 @@ spec:
   source:
     repoURL: https://github.com/42433422/XCMAX.git
     targetRevision: main
-    path: FHD/k8s/monitoring
+    path: FHD/k8s/monitoring/overlays/full
   destination:
     server: https://kubernetes.default.svc
     namespace: monitoring
