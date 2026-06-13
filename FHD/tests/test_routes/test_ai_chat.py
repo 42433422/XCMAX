@@ -29,6 +29,10 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+pytest.importorskip(
+    "app.fastapi_routes.legacy_gaps_batch1",
+    reason="legacy_gaps_batch1/2 route modules removed; AI smoke consolidated into ai_intent",
+)
 from app.fastapi_routes import ai_intent, legacy_gaps_batch1, legacy_gaps_batch2
 
 

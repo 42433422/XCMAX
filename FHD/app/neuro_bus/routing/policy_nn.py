@@ -21,8 +21,12 @@ except ImportError:  # pragma: no cover
 FEATURE_DIM = 16
 NUM_ACTIONS = 3
 
+# Import-safe base: fall back to ``object`` when torch is absent so the module
+# can be imported (and the rest of the API degrade to no-op) without PyTorch.
+_NNModule = nn.Module if nn is not None else object
 
-class RoutingMLP(nn.Module):  # type: ignore[misc]
+
+class RoutingMLP(_NNModule):  # type: ignore[misc,valid-type]
     def __init__(self, in_dim: int = FEATURE_DIM, hidden: int = 32, out_dim: int = NUM_ACTIONS):
         super().__init__()
         self.net = nn.Sequential(

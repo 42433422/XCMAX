@@ -42,6 +42,26 @@ def deliveries_for_industry(industry_id: str) -> list[dict[str, Any]]:
     return out
 
 
+def list_customer_deliveries() -> list[dict[str, Any]]:
+    """全部客户交付清单（每行含 ``industry_mod_id`` / ``customer_brand`` 等）。"""
+    out: list[dict[str, Any]] = []
+    for row in load_customer_delivery_document().get("deliveries") or []:
+        if isinstance(row, dict):
+            out.append(dict(row))
+    return out
+
+
+def delivery_for_industry_mod(industry_mod_id: str) -> dict[str, Any] | None:
+    """按 canonical ``industry_mod_id``（如 ``attendance-industry``）查单条交付清单。"""
+    mid = str(industry_mod_id or "").strip()
+    if not mid:
+        return None
+    for row in list_customer_deliveries():
+        if str(row.get("industry_mod_id") or "").strip() == mid:
+            return row
+    return None
+
+
 def _entitled_matches_mod(mod_id: str, entitled: set[str]) -> bool:
     mid = str(mod_id or "").strip()
     if not mid or not entitled:
@@ -101,6 +121,8 @@ def label_for_account_custom_mod(mod_id: str, industry_id: str) -> str:
 __all__ = [
     "account_custom_mod_ids_for_industry",
     "deliveries_for_industry",
+    "delivery_for_industry_mod",
     "label_for_account_custom_mod",
+    "list_customer_deliveries",
     "load_customer_delivery_document",
 ]

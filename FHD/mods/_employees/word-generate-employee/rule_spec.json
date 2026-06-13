@@ -1,0 +1,34 @@
+{
+  "brief": "Word生成员工：支持 document_full.json、user_query 纯文本或 .txt；可选 template.docx；输出 generated_document.docx。",
+  "mode": "direct_python_file_transform",
+  "accepted_extensions": [
+    ".json",
+    ".txt"
+  ],
+  "template_extensions": [
+    ".docx"
+  ],
+  "default_action": "convert",
+  "default_output_relpath": "outputs/generated_document.docx",
+  "default_json_input": "inputs/document_full.json",
+  "default_template_relpath": "inputs/template.docx",
+  "runtime_kind": "word_generate",
+  "optional_llm_polish": false,
+  "output_schema": [
+    "metadata",
+    "paragraphs",
+    "tables",
+    "outline",
+    "blocks",
+    "plain_text",
+    "stats"
+  ],
+  "requirements": [
+    "handlers must include \"direct_python\"; may include \"agent\" for optional polish.",
+    "Read JSON (document_full.json schema); optional template.docx for styles.",
+    "Write outputs/generated_document.docx with headings, lists, tables, fonts where available.",
+    "Never fabricate content when JSON input is empty.",
+    "Return {ok, summary, items, warnings, error, meta}."
+  ],
+  "pack_id": "word-generate-employee"
+}

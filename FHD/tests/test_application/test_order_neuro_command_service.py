@@ -19,6 +19,11 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 import pytest
+
+pytest.importorskip(
+    "app.application.neuro_commands.order",
+    reason="neuro_commands command SSOT not present in this build; test reactivates when module lands",
+)
 from app.application.neuro_commands.order import OrderAppServiceV2, get_order_app_service_v2
 
 

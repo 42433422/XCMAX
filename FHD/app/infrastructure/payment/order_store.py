@@ -280,3 +280,26 @@ def update_order_status(
             o.update(extra)
         _atomic_write(order_store_path(), data)
         return dict(o)
+
+
+def count_orders() -> int:
+    """当前 JSON 订单存储中的订单总数（供诊断接口展示）。"""
+    with _lock:
+        data = _load()
+    orders = data.get("orders")
+    return len(orders) if isinstance(orders, dict) else 0
+
+
+def json_store_has_unmigrated_orders() -> bool:
+    """本地 JSON 订单文件是否仍存有订单。
+
+    在 PostgreSQL 后端下用于提示：JSON 文件里仍有遗留订单待迁移
+    （见 ``scripts/migrate_fhd_json_orders_to_postgres.py``）。
+    文件不存在或无订单时返回 ``False``。
+    """
+    if not order_store_path().is_file():
+        return False
+    with _lock:
+        data = _load()
+    orders = data.get("orders")
+    return bool(isinstance(orders, dict) and orders)
