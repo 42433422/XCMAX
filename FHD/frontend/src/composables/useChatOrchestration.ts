@@ -571,6 +571,12 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     }
   }
 
+  function setCustomOrderNumber(value: string) {
+    const t = currentTask.value
+    if (!t) return
+    t.customOrderNumber = value
+  }
+
   function shouldAutoRunTask(task: unknown): boolean {
     if (!task || task?.completed) return false
     const taskType = String(task?.type || '').trim().toLowerCase()
@@ -1463,6 +1469,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     sendMessage,
     confirmTask,
     refetchTaskOrderNumber,
+    setCustomOrderNumber,
     cancelTask,
     showTaskConfirm,
     triggerUpload,

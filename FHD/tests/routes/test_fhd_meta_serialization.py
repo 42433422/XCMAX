@@ -26,8 +26,12 @@ class TestDbTokensStatus:
     def test_both_tokens_configured(self, client: TestClient) -> None:
         with (
             patch("app.request_active_mod_ctx.get_request_active_mod_id", return_value=""),
-            patch("app.infrastructure.auth.db_token.configured_db_read_token", return_value="RTOKEN"),
-            patch("app.infrastructure.auth.db_token.configured_db_write_token", return_value="WTOKEN"),
+            patch(
+                "app.infrastructure.auth.db_token.configured_db_read_token", return_value="RTOKEN"
+            ),
+            patch(
+                "app.infrastructure.auth.db_token.configured_db_write_token", return_value="WTOKEN"
+            ),
         ):
             r = client.get("/api/fhd/db-tokens/status")
         assert r.status_code == 200

@@ -4,8 +4,8 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 from app.enterprise.account_mod_binding import (
-    augment_entitled_client_mod_ids_for_username,
     ENTERPRISE_DEMO_INDUSTRY_MOD_IDS,
+    augment_entitled_client_mod_ids_for_username,
 )
 from app.enterprise.mod_entitlements import _session_username_for_entitlements
 
@@ -22,4 +22,4 @@ def test_session_username_from_user_object():
 
 def test_enterprise_demo_username_gets_both_industry_mods():
     ids = augment_entitled_client_mod_ids_for_username("xcagi-enterprise-demo", set())
-    assert ENTERPRISE_DEMO_INDUSTRY_MOD_IDS <= ids
+    assert ids >= ENTERPRISE_DEMO_INDUSTRY_MOD_IDS

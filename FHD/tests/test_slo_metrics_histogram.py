@@ -16,7 +16,9 @@ def client(monkeypatch):
 
     prime_test_env(sqlite_url="sqlite:///:memory:")
     monkeypatch.setattr("app.db.init_db.ensure_runtime_auth_bootstrap", lambda *a, **k: None)
-    monkeypatch.setattr("app.db.init_db.ensure_sqlite_per_mod_database_copies", lambda *a, **k: None)
+    monkeypatch.setattr(
+        "app.db.init_db.ensure_sqlite_per_mod_database_copies", lambda *a, **k: None
+    )
     app = get_test_fastapi_app()
     with TestClient(app, raise_server_exceptions=False) as c:
         yield c

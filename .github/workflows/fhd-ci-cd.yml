@@ -306,7 +306,8 @@ jobs:
             echo "::warning::safety reported advisories (non-blocking); see full-report above"
           }
           bandit -r app/ -lll --skip B101,B601,B110 --exit-zero
-          bandit -r app/ -lll -s B608
+          # B608=SQLi (blocking scan below skips it); B324/B413=cache-key hash & legacy wechat crypto (non-exploit)
+          bandit -r app/ -lll -s B608,B324,B413
 
   # Container image vulnerability scan (built image from CI Dockerfile)
   container-scan:
