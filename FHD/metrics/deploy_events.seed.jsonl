@@ -1,0 +1,5 @@
+{"deploy_id":"seed-1","deployed_at":"2026-05-28T10:00:00Z","commit_at":"2026-05-28T08:30:00Z","status":"success","restored_at":null,"source_workflow":"Deploy","head_branch":"main"}
+{"deploy_id":"seed-2","deployed_at":"2026-06-01T14:20:00Z","commit_at":"2026-06-01T12:00:00Z","status":"success","restored_at":null,"source_workflow":"Deploy","head_branch":"main"}
+{"deploy_id":"seed-3","deployed_at":"2026-06-02T09:15:00Z","commit_at":"2026-06-02T07:00:00Z","status":"failed","restored_at":"2026-06-02T16:40:00Z","source_workflow":"CI/CD Pipeline","head_branch":"main"}
+{"deploy_id":"seed-4","deployed_at":"2026-06-02T16:40:00Z","commit_at":"2026-06-02T15:10:00Z","status":"success","restored_at":null,"source_workflow":"Deploy","head_branch":"main"}
+{"deploy_id":"seed-5","deployed_at":"2026-06-03T11:00:00Z","commit_at":"2026-06-03T09:45:00Z","status":"success","restored_at":null,"source_workflow":"Deploy","head_branch":"main"}

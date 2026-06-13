@@ -526,6 +526,22 @@ jobs:
           if ! git push origin HEAD:main; then
             echo "::warning::gitops push to main rejected (branch protection?). Enable ArgoCD Image Updater or promote via orchestrator instead."
           fi
+      - name: Emit GitOps deploy event (DORA)
+        if: success()
+        run: |
+          python3 scripts/observability/emit_deploy_event.py \
+            --status success \
+            --source-workflow fhd-ci-cd-gitops-image-bump \
+            --environment staging \
+            --git-sha "${{ github.sha }}"
+      - name: Commit GitOps deploy event (DORA)
+        if: success()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add metrics/deploy_events.jsonl || true
+          git diff --staged --quiet || git commit -m "chore(metrics): gitops staging bump [skip ci]"
+          git push || true
 
   # CVM 拉取式自动 CD（main 成功 + secrets 就绪时 scp manifest/tarball；无 secrets 则跳过）
   cvm-push-release:
