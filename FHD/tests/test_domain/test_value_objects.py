@@ -1,7 +1,8 @@
-"""领域值对象测试（与当前 app.domain.value_objects 实现一致）。"""
+"""app/domain/value_objects 包单测：Money/Percentage/Email/Phone/Address/DateRange 等。"""
 
 from __future__ import annotations
 
+from datetime import date, datetime
 from decimal import Decimal
 
 import pytest
@@ -10,172 +11,145 @@ from app.domain.value_objects import (
     Address,
     ContactInfo,
     Currency,
-    ModelNumber,
+    DateRange,
+    Email,
     Money,
-    OrderNumber,
-    Price,
-    Quantity,
-    UnitOfMeasure,
+    Percentage,
+    PhoneNumber,
 )
 
 
 class TestMoney:
-    def test_create_money_with_positive_amount(self):
-        money = Money.from_float(100.0, Currency.CNY)
-        assert money.amount == Decimal("100.00")
-        assert money.currency == Currency.CNY
+    def test_from_float_and_arithmetic(self):
+        a = Money.from_float(10.5)
+        b = Money.from_float(2.5)
+        assert (a + b).amount == Decimal("13.00")
+        assert (a * 2).amount == Decimal("21.00")
+        assert a.divide(2).amount == Decimal("5.25")
 
-    def test_create_money_with_zero(self):
-        money = Money.zero(Currency.CNY)
-        assert money.amount == Decimal("0")
+    def test_negative_raises(self):
+        with pytest.raises(ValueError, match="负数"):
+            Money(Decimal("-1"), Currency.CNY)
 
-    def test_create_money_with_negative_raises_error(self):
-        with pytest.raises(ValueError, match="金额不能为负数"):
-            Money(Decimal("-50"), Currency.CNY)
+    def test_currency_mismatch(self):
+        with pytest.raises(ValueError, match="Cannot add"):
+            Money.zero(Currency.CNY) + Money.zero(Currency.USD)
 
-    def test_money_addition(self):
-        m1 = Money.from_float(100.0, Currency.CNY)
-        m2 = Money.from_float(50.0, Currency.CNY)
-        result = m1 + m2
-        assert result.amount == Decimal("150.00")
-        assert result.currency == Currency.CNY
+    def test_divide_by_zero(self):
+        with pytest.raises(ValueError, match="zero"):
+            Money.zero().divide(0)
 
-    def test_money_addition_different_currency_raises_error(self):
-        m1 = Money.from_float(100.0, Currency.CNY)
-        m2 = Money.from_float(50.0, Currency.USD)
-        with pytest.raises(ValueError):
-            m1 + m2
-
-    def test_money_multiplication(self):
-        money = Money.from_float(100.0, Currency.CNY)
-        result = money * 2
-        assert result.amount == Decimal("200.00")
-
-    def test_money_to_yuan_not_applicable_use_float(self):
-        money = Money.from_float(100.5, Currency.CNY)
-        assert float(money.amount) == 100.5
-
-    def test_money_immutability(self):
-        m1 = Money.from_float(100.0, Currency.CNY)
-        m2 = m1 + Money.from_float(50.0, Currency.CNY)
-        assert m1.amount == Decimal("100.00")
-        assert m2.amount == Decimal("150.00")
+    def test_compare_and_dict_roundtrip(self):
+        m = Money.from_string("12.34", "CNY")
+        other = Money.from_string("12.34", "CNY")
+        assert m.compare_to(other) == 0
+        assert m.greater_than_or_equal(other)
+        assert Money.from_dict(m.to_dict()).amount == m.amount
 
 
-class TestQuantity:
-    def test_create_quantity(self):
-        q = Quantity.from_float(50.0, UnitOfMeasure.KG)
-        assert q.value == Decimal("50.000")
-        assert q.unit == UnitOfMeasure.KG
+class TestPercentage:
+    def test_fraction_and_apply(self):
+        p = Percentage.from_float(10)
+        assert p.as_fraction == Decimal("0.1")
+        assert p.apply_to(Decimal("200")) == Decimal("20")
 
-    def test_quantity_add_same_unit(self):
-        q1 = Quantity.from_float(3.0, UnitOfMeasure.KG)
-        q2 = Quantity.from_float(2.0, UnitOfMeasure.KG)
-        assert (q1 + q2).value == Decimal("5.000")
-
-    def test_quantity_subtract_would_go_negative_raises(self):
-        q1 = Quantity.from_float(1.0, UnitOfMeasure.KG)
-        q2 = Quantity.from_float(5.0, UnitOfMeasure.KG)
+    def test_subtract_negative_raises(self):
         with pytest.raises(ValueError, match="negative"):
-            q1 - q2
+            Percentage(5).subtract(Percentage(10))
+
+    def test_display_and_dict(self):
+        p = Percentage(25)
+        assert p.as_display_string == "25%"
+        assert Percentage.from_dict(p.to_dict()).value == p.value
 
 
-class TestOrderNumber:
-    def test_create_order_number(self):
-        order_num = OrderNumber(value="ORD20260321001")
-        assert order_num.value == "ORD20260321001"
+class TestEmail:
+    def test_valid_email(self):
+        e = Email("User@Example.COM")
+        assert e.address == "user@example.com"
+        assert e.domain == "example.com"
+        assert e.local_part == "user"
 
-    def test_generate_order_number(self):
-        order_num = OrderNumber.generate()
-        assert order_num.value.startswith("SO-")
-        assert len(order_num.value) == 15
+    def test_invalid_raises(self):
+        with pytest.raises(ValueError, match="Invalid email"):
+            Email("not-email")
 
-    def test_empty_order_number_raises_error(self):
-        with pytest.raises(ValueError, match="订单号不能为空"):
-            OrderNumber(value="")
-
-    def test_order_number_str(self):
-        order_num = OrderNumber(value="ORD001")
-        assert str(order_num) == "ORD001"
+    def test_is_valid(self):
+        assert Email.is_valid("a@b.co") is True
+        assert Email.is_valid("") is False
 
 
-class TestContactInfo:
-    def test_create_contact_info(self):
-        contact = ContactInfo(name="张三", phone="13800138000", address=None, company=None)
-        assert contact.name == "张三"
-        assert contact.phone == "13800138000"
+class TestPhoneNumber:
+    def test_mobile_format_and_mask(self):
+        p = PhoneNumber("138-1234-5678")
+        assert p.is_mobile is True
+        assert p.formatted == "138-1234-5678"
+        assert "****" in p.masked
 
-    def test_contact_info_minimal(self):
-        contact = ContactInfo(name="")
-        assert contact.name == ""
-        assert contact.phone is None
+    def test_invalid_length_raises(self):
+        with pytest.raises(ValueError, match="Invalid phone"):
+            PhoneNumber("123")
 
-    def test_contact_info_immutability(self):
-        contact = ContactInfo(name="张三", phone="13800138000")
-        with pytest.raises(Exception):
-            contact.name = "李四"  # type: ignore[misc]
-
-
-class TestPrice:
-    def test_create_price(self):
-        price = Price(unit_price=100.0)
-        assert price.unit_price == 100.0
-        assert price.discount_rate == 1.0
-
-    def test_create_price_with_discount(self):
-        price = Price(unit_price=100.0, discount_rate=0.8)
-        assert price.unit_price == 100.0
-        assert price.discount_rate == 0.8
-
-    def test_negative_price_raises_error(self):
-        with pytest.raises(ValueError, match="单价不能为负数"):
-            Price(unit_price=-10.0)
-
-    def test_invalid_discount_rate_raises_error(self):
-        with pytest.raises(ValueError, match="折扣率必须在 0-1 之间"):
-            Price(unit_price=100.0, discount_rate=1.5)
-
-    def test_final_price(self):
-        price = Price(unit_price=100.0, discount_rate=0.9)
-        assert price.final_price() == 90.0
-
-    def test_calculate_amount(self):
-        price = Price(unit_price=10.0, discount_rate=1.0)
-        quantity = Quantity.from_float(50.0, UnitOfMeasure.KG)
-        assert price.calculate_amount(quantity) == 500.0
-
-
-class TestModelNumber:
-    def test_create_model_number(self):
-        model = ModelNumber(value="9803")
-        assert model.value == "9803"
-
-    def test_empty_model_number_raises_error(self):
-        with pytest.raises(ValueError, match="型号不能为空"):
-            ModelNumber(value="")
-
-    def test_model_number_matches_case_insensitive(self):
-        m1 = ModelNumber(value="ABC123")
-        m2 = ModelNumber(value="abc123")
-        assert m1.matches(m2) is True
-
-    def test_model_number_not_matches(self):
-        m1 = ModelNumber(value="ABC123")
-        m2 = ModelNumber(value="DEF456")
-        assert m1.matches(m2) is False
-
-    def test_model_number_contains(self):
-        model = ModelNumber(value="ABC-9803-XYZ")
-        assert model.contains("9803") is True
-        assert model.contains("abc") is True
-        assert model.contains("1234") is False
-
-    def test_model_number_str(self):
-        model = ModelNumber(value="9803")
-        assert str(model) == "9803"
+    def test_is_valid(self):
+        assert PhoneNumber.is_valid("13812345678") is True
+        assert PhoneNumber.is_valid("") is False
 
 
 class TestAddress:
-    def test_address_round_trip(self):
-        a = Address(province="粤", city="深圳", district="南山")
-        assert "深圳" in a.to_short_string()
+    def test_from_string_and_full(self):
+        a = Address.from_string("四川 成都")
+        assert a.province == "四川"
+        assert "成都" in a.to_full_string()
+
+    def test_dict_roundtrip(self):
+        a = Address(province="浙", city="杭", district="西")
+        assert Address.from_dict(a.to_dict()) == a
+
+
+class TestContactInfoPackage:
+    def test_to_dict_with_address(self):
+        c = ContactInfo(
+            name="张三",
+            phone="13812345678",
+            address=Address(province="沪", city="上海"),
+        )
+        d = c.to_dict()
+        assert d["name"] == "张三"
+        assert ContactInfo.from_dict(d).name == "张三"
+
+
+class TestDateRange:
+    def test_invalid_range_raises(self):
+        with pytest.raises(ValueError, match="cannot be before"):
+            DateRange(date(2026, 6, 10), date(2026, 6, 1))
+
+    def test_from_datetime_and_contains(self):
+        dr = DateRange.from_datetime(datetime(2026, 6, 1), datetime(2026, 6, 5))
+        assert dr.contains(date(2026, 6, 3))
+        assert dr.days == 5
+
+    def test_overlap_intersection_union(self):
+        a = DateRange(date(2026, 6, 1), date(2026, 6, 10))
+        b = DateRange(date(2026, 6, 5), date(2026, 6, 15))
+        assert a.overlaps(b)
+        inter = a.intersection(b)
+        assert inter and inter.start == date(2026, 6, 5)
+        assert a.union(b).start == date(2026, 6, 1)
+
+    def test_no_overlap_intersection_none(self):
+        a = DateRange(date(2026, 6, 1), date(2026, 6, 3))
+        b = DateRange(date(2026, 6, 10), date(2026, 6, 12))
+        assert not a.overlaps(b)
+        assert a.intersection(b) is None
+
+    def test_extend_shift_split(self):
+        dr = DateRange(date(2026, 6, 1), date(2026, 6, 3))
+        assert dr.extend(2).end == date(2026, 6, 5)
+        assert dr.shift(1).start == date(2026, 6, 2)
+        parts = DateRange(date(2026, 5, 28), date(2026, 6, 2)).split_by_month()
+        assert len(parts) >= 1
+
+    def test_factory_methods(self):
+        assert DateRange.today().is_single_day
+        assert DateRange.last_n_days(3).days == 3
+        assert len(DateRange.this_week()) >= 1
