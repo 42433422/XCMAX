@@ -45,7 +45,18 @@ DOMAIN_TO_DIR: dict[str, str] = {
     "db": "app/fastapi_routes/domains/db/",
 }
 
-ALLOWED_LEGACY_FILES: frozenset[str] = frozenset({"xcagi_compat.py"})
+# 顶层允许保留的 legacy/compat 文件白名单。
+# - xcagi_compat.py：compat 聚合入口（misc 域文档指向它）。
+# - xcagi_compat_chat_helpers.py / xcagi_compat_product.py：仍被 mod_sdk / application /
+#   mods-admin-runtime 桥接实时引用的 compat 辅助模块，已在 arch_fitness/layer_ratchet
+#   baseline 中登记为已知债，待后续迁入 domains/conversation、domains/product 后移除。
+ALLOWED_LEGACY_FILES: frozenset[str] = frozenset(
+    {
+        "xcagi_compat.py",
+        "xcagi_compat_chat_helpers.py",
+        "xcagi_compat_product.py",
+    }
+)
 
 
 @dataclass(frozen=True)

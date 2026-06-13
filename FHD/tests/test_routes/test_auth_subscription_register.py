@@ -57,6 +57,11 @@ def test_subscription_status_trial(client: TestClient, monkeypatch: pytest.Monke
 def test_register_enriches_tenant_id(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("FHD_ALLOW_OPEN_REGISTRATION", "1")
 
+    # /api/auth/register 非 CSRF 豁免（仅 login 因跨域特例豁免）。模拟同源浏览器双提交：
+    # 先 GET 取得 csrf_token Cookie，POST 再带同值 X-CSRF-Token 头。
+    client.get("/api/auth/subscription/status")
+    csrf = client.cookies.get("csrf_token") or ""
+
     created_user = {"success": True, "user_id": 7}
     login_result = {
         "success": True,
@@ -90,6 +95,7 @@ def test_register_enriches_tenant_id(client: TestClient, monkeypatch: pytest.Mon
         resp = client.post(
             "/api/auth/register",
             json={"username": "newbie", "password": "secret12"},
+            headers={"X-CSRF-Token": csrf},
         )
 
     assert resp.status_code == 200, resp.text
