@@ -168,9 +168,7 @@ def test_mcp_initialize_list_call(client, monkeypatch):
     assert "/api/ai/unified_chat" in call["result"]["content"][0]["text"]
     assert "白名单" in call["result"]["content"][0]["text"]
 
-    ping = client.post(
-        "/api/aiopen/mcp", json={"jsonrpc": "2.0", "id": 4, "method": "ping"}
-    )
+    ping = client.post("/api/aiopen/mcp", json={"jsonrpc": "2.0", "id": 4, "method": "ping"})
     assert ping.headers.get("MCP-Protocol-Version")
     ping_body = ping.json()
     assert ping_body["result"] == {}

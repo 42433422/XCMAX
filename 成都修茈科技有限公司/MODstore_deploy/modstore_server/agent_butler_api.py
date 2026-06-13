@@ -1422,9 +1422,16 @@ async def _run_all_hands_report_session(
         completed = _to_nonneg_int(evt.get("completed"))
         ok_n = _to_nonneg_int(evt.get("ok"))
         err_n = _to_nonneg_int(evt.get("error"))
-        if total > 0:
+        if stage == "minutes":
+            percent = 97
+        elif stage == "synthesize":
+            percent = 92
+        elif stage == "completed":
+            percent = 90 if total > 0 else 100
+        elif total > 0:
             completed = min(completed, total)
-            percent = int(round((completed / total) * 100))
+            # 收集阶段最高 88%，避免 19/20 显示 95% 却仍在等末位员工
+            percent = int(round((completed / total) * 88))
         else:
             percent = 0
 
@@ -1491,6 +1498,16 @@ async def _run_all_hands_report_session(
 
     done_count = len((report.get("employees") or []))
     await _set_step(sid, "collect", "done", f"已收集 {done_count} 名员工汇报")
+    await _on_progress(
+        {
+            "stage": "completed",
+            "total": done_count,
+            "completed": done_count,
+            "ok": int((report.get("summary") or {}).get("ok") or 0),
+            "error": int((report.get("summary") or {}).get("error") or 0),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+    )
 
     if synthesize_flag:
         synth = report.get("synthesized_answer") if isinstance(report, dict) else None
@@ -1515,6 +1532,16 @@ async def _run_all_hands_report_session(
             )
 
     await _set_step(sid, "minutes", "running", "正在生成会议摘要…")
+    await _on_progress(
+        {
+            "stage": "minutes",
+            "total": done_count,
+            "completed": done_count,
+            "ok": int((report.get("summary") or {}).get("ok") or 0),
+            "error": int((report.get("summary") or {}).get("error") or 0),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+    )
     meeting_minutes = await synthesize_meeting_minutes(report=report, user_id=user_id)
     body_text = str(meeting_minutes.get("text") or "").strip()
     minutes_err = str(meeting_minutes.get("error") or "").strip()

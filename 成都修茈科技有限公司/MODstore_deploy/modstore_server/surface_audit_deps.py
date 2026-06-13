@@ -41,7 +41,9 @@ def _repo_root() -> Path:
 
         return Path(root_fn())
     except Exception:
-        mono = (os.environ.get("XCMAX_MONOREPO_ROOT") or os.environ.get("MODSTORE_REPO_ROOT") or "").strip()
+        mono = (
+            os.environ.get("XCMAX_MONOREPO_ROOT") or os.environ.get("MODSTORE_REPO_ROOT") or ""
+        ).strip()
         if mono:
             return Path(mono).expanduser().resolve()
         return Path(__file__).resolve().parents[3]
@@ -186,7 +188,16 @@ def _ensure_fhd_api(api_port: int) -> Dict[str, Any]:
         str(run_py),
     ]
     if run_py.name == "run_fastapi.py":
-        cmd += ["--desktop", "--headless", "--host", "127.0.0.1", "--port", str(api_port), "--data-dir", data_dir]
+        cmd += [
+            "--desktop",
+            "--headless",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            str(api_port),
+            "--data-dir",
+            data_dir,
+        ]
     else:
         env["FASTAPI_PORT"] = str(api_port)
 
@@ -233,7 +244,16 @@ def _ensure_modstore_api(port: int) -> Dict[str, Any]:
     py = _python_bin()
     out = _spawn(
         "modstore",
-        [py, "-m", "uvicorn", "modstore_server.app:app", "--host", "127.0.0.1", "--port", str(port)],
+        [
+            py,
+            "-m",
+            "uvicorn",
+            "modstore_server.app:app",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            str(port),
+        ],
         cwd=deploy,
     )
     out["ready"] = _wait_http(health, label="MODstore API")
@@ -352,7 +372,9 @@ def ensure_surface_audit_deps() -> Dict[str, Any]:
     """截图前确保本地依赖就绪；返回各服务探活/拉起结果。"""
     out: Dict[str, Any] = {"ok": True, "services": {}}
 
-    ps_enabled = (os.environ.get("MODSTORE_SURFACE_AUDIT_PS_ENABLED", "1") or "").strip().lower() not in (
+    ps_enabled = (
+        os.environ.get("MODSTORE_SURFACE_AUDIT_PS_ENABLED", "1") or ""
+    ).strip().lower() not in (
         "0",
         "false",
         "no",

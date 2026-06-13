@@ -250,7 +250,9 @@ def maybe_auto_approve(change_request_id: int) -> Dict[str, Any]:
 
         # risk == "low" → 窄 CI 验证（可通过 MODSTORE_AUTO_APPROVE_REQUIRE_CI 强制）
         narrow_ci: Dict[str, Any] = {"ok": True, "skipped": True}
-        if _require_ci() or os.environ.get("MODSTORE_CR_NARROW_CI_ENABLED", "1").strip().lower() in (
+        if _require_ci() or os.environ.get(
+            "MODSTORE_CR_NARROW_CI_ENABLED", "1"
+        ).strip().lower() in (
             "1",
             "true",
             "yes",

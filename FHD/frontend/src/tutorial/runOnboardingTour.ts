@@ -145,15 +145,21 @@ export function runOnboardingTour(options: RunOnboardingTourOptions): () => void
     }
 
     if (el && driverRef) {
-      driverRef.highlight({
-        element: el,
-        popover: {
-          title: step.title,
-          description: step.description,
-          side: 'bottom',
-          align: 'start',
-        },
-      })
+      const popover = {
+        title: step.title,
+        description: step.description,
+        side: 'bottom' as const,
+        align: 'start' as const,
+      }
+      const refreshHighlight = () => {
+        if (!driverRef || destroyed) return
+        driverRef.highlight({ element: el, popover })
+      }
+      refreshHighlight()
+      if (el.closest('.sidebar-shell, .sidebar, [data-tour^="sidebar"]')) {
+        await sleep(350)
+        if (el.isConnected) refreshHighlight()
+      }
       mountControls(document.querySelector('.driver-popover') || document.body)
     }
 

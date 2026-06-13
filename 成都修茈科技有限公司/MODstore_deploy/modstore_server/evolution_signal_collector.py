@@ -14,7 +14,9 @@ logger = logging.getLogger(__name__)
 
 def _lookback_hours() -> int:
     try:
-        return max(1, min(int(os.environ.get("MODSTORE_EVOLUTION_SIGNAL_LOOKBACK_HOURS", "24")), 168))
+        return max(
+            1, min(int(os.environ.get("MODSTORE_EVOLUTION_SIGNAL_LOOKBACK_HOURS", "24")), 168)
+        )
     except ValueError:
         return 24
 

@@ -55,7 +55,9 @@ def _load_prompt_override(employee_id: str) -> Optional[str]:
         return None
 
 
-def apply_prompt_override(employee_id: str, system_prompt: str, *, meta: Dict[str, Any]) -> Dict[str, Any]:
+def apply_prompt_override(
+    employee_id: str, system_prompt: str, *, meta: Dict[str, Any]
+) -> Dict[str, Any]:
     """写入 prompt override 文件（可还原）。"""
     d = _override_dir()
     d.mkdir(parents=True, exist_ok=True)
@@ -125,7 +127,10 @@ async def _judge_prompt_pair(
     prompt_after: str,
 ) -> str:
     """LLM 判断哪条 prompt 更可能成功完成该失败任务。返回 before|after|tie。"""
-    from modstore_server.services.llm import resolve_platform_bench_llm, chat_dispatch_via_platform_only
+    from modstore_server.services.llm import (
+        chat_dispatch_via_platform_only,
+        resolve_platform_bench_llm,
+    )
 
     prov, mdl = resolve_platform_bench_llm()
     if not prov or not mdl:

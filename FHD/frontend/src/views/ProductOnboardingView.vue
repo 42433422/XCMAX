@@ -193,7 +193,7 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { installHostFoundation, installMod, installOfficeEmployeePack } from '@/api/modStore'
+import { installHostFoundation, installMod, installOfficeEmployeePack, installIndustrySeed } from '@/api/modStore'
 import { readBuildEdition } from '@/constants/genericModPack'
 import { fetchProductSku, isEnterpriseEdition } from '@/utils/productSku'
 import { DEFAULT_INDUSTRY_ID } from '@/constants/industryDefaults'
@@ -217,6 +217,11 @@ import {
 } from '@/utils/platformShellApi'
 import { appAlert } from '@/utils/appDialog'
 import {
+  promptAdvancedTutorialAfterInstall,
+  resolveRouteNameFromPath,
+} from '@/tutorial/promptAdvancedTutorial'
+import { useTutorialCatalog } from '@/composables/useTutorialCatalog'
+import {
   invalidateHostPackCompletionCache,
   markHostPackSkippedThisSession,
 } from '@/utils/hostPackOnboardingGate'
@@ -225,6 +230,7 @@ const route = useRoute()
 const router = useRouter()
 const flow = useProductFlow()
 const industryStore = useIndustryStore()
+const { buildContext: tutorialBuildContext } = useTutorialCatalog()
 
 const industryOptions = listIndustryPresets()
 const onboardingCatalog = ref(null)
@@ -433,7 +439,19 @@ async function runBootstrap() {
     const industryMissing = [...(baselinePlan.value?.missing_industry_mod_ids || [])]
     const customMissing = [...(baselinePlan.value?.missing_account_custom_mod_ids || [])]
     const installErrors = []
-    for (const modId of [...industryMissing, ...customMissing]) {
+    if (industryMissing.length) {
+      try {
+        const ir = await installIndustrySeed(pickedIndustryId.value)
+        if (!ir.success) {
+          installErrors.push(`行业包：${ir.message || '安装失败'}`)
+        }
+      } catch (err) {
+        installErrors.push(
+          `行业包：${err instanceof Error ? err.message : '安装失败'}`,
+        )
+      }
+    }
+    for (const modId of customMissing) {
       try {
         const ir = await installMod(modId)
         if (!ir.success) {
@@ -453,7 +471,16 @@ async function runBootstrap() {
       if (!readProductFlowCompleted()) {
         flow.markProductFlowCompleted()
       }
-      await appAlert('本行业推荐基础线已装齐，可以开始使用了。')
+      const promptResult = await promptAdvancedTutorialAfterInstall({
+        router,
+        buildContext: tutorialBuildContext.value,
+        message:
+          '本行业推荐基础线已装齐，可以开始使用了。\n\n是否现在观看进阶教程，快速熟悉菜单与智能对话？',
+        returnContext: { routeName: 'chat' },
+      })
+      if (promptResult === 'already_completed') {
+        await appAlert('本行业推荐基础线已装齐，可以开始使用了。')
+      }
       return
     }
 

@@ -258,6 +258,11 @@ import Modal from '@/components/Modal.vue';
 import ModDetails from './ModDetails.vue';
 import { appAlert, appConfirm } from '@/utils/appDialog';
 import {
+  promptAdvancedTutorialAfterInstall,
+  resolveRouteNameFromPath,
+} from '@/tutorial/promptAdvancedTutorial';
+import { useTutorialCatalog } from '@/composables/useTutorialCatalog';
+import {
   buildMarketCatalogCacheKey,
   isMarketCatalogCacheFresh,
   readMarketCatalogCache,
@@ -281,6 +286,7 @@ export default {
       import.meta.env.VITE_MARKET_BASE || 'https://xiu-ci.com/market',
     ).replace(/\/$/, '');
     const modsStore = useModsStore();
+    const { buildContext: tutorialBuildContext } = useTutorialCatalog();
 
     function refreshHostMods() {
       void modsStore.refresh().catch((e) => {
@@ -462,8 +468,18 @@ export default {
       markProductFlowCompleted();
       markHostPackAcknowledged();
       const label = mainListTitle.value || '员工包';
-      await appAlert(`${label}已装齐，正在入驻…`);
-      await router.replace(onboardDestinationForTab(tab));
+      const dest = onboardDestinationForTab(tab);
+      const promptResult = await promptAdvancedTutorialAfterInstall({
+        router,
+        buildContext: tutorialBuildContext.value,
+        message: `${label}已装齐，正在入驻。\n\n是否现在观看进阶教程，快速熟悉菜单与智能对话？`,
+        returnContext: { routeName: resolveRouteNameFromPath(router, dest) },
+      });
+      if (promptResult === 'started') return;
+      if (promptResult === 'already_completed') {
+        await appAlert(`${label}已装齐，正在入驻…`);
+      }
+      await router.replace(dest);
     };
 
     const runOneClickInstallAndOnboard = async () => {

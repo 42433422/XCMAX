@@ -941,7 +941,9 @@ def _digest_system_work_summary_html(
             _kv_row("今日任务执行", f"{total} 次"),
             _kv_row("成功率", rate, extra_style="" if met_fail == 0 else "background:#fef2f2"),
             _kv_row("运维操作记录", f"{ops_n} 条"),
-            _kv_row("系统事件", f"{inc_n} 条", extra_style="" if inc_n == 0 else "background:#fffbeb"),
+            _kv_row(
+                "系统事件", f"{inc_n} 条", extra_style="" if inc_n == 0 else "background:#fffbeb"
+            ),
         ]
     )
 
@@ -1014,54 +1016,93 @@ def _digest_kpi_cards_html(
 
     cards.append(
         _card(
-            str(emp_n), "编制在岗", icon="&#x1F465;", accent="#2563eb",
-            color="#1d4ed8", bg="#eff6ff", border="#bfdbfe",
+            str(emp_n),
+            "编制在岗",
+            icon="&#x1F465;",
+            accent="#2563eb",
+            color="#1d4ed8",
+            bg="#eff6ff",
+            border="#bfdbfe",
         )
     )
     if met_fail == 0:
         cards.append(
             _card(
-                str(met_ok), "任务成功", icon="&#x2705;", accent="#16a34a",
-                color="#047857", bg="#ecfdf5", border="#a7f3d0",
-                sub="全部成功", sub_color="#16a34a",
+                str(met_ok),
+                "任务成功",
+                icon="&#x2705;",
+                accent="#16a34a",
+                color="#047857",
+                bg="#ecfdf5",
+                border="#a7f3d0",
+                sub="全部成功",
+                sub_color="#16a34a",
             )
         )
     else:
         cards.append(
             _card(
-                str(met_ok), "任务成功", icon="&#x26A0;&#xFE0F;", accent="#ea580c",
-                color="#c2410c", bg="#fff7ed", border="#fed7aa",
-                sub=f"失败 {met_fail} 次", sub_color="#ea580c",
+                str(met_ok),
+                "任务成功",
+                icon="&#x26A0;&#xFE0F;",
+                accent="#ea580c",
+                color="#c2410c",
+                bg="#fff7ed",
+                border="#fed7aa",
+                sub=f"失败 {met_fail} 次",
+                sub_color="#ea580c",
             )
         )
     if ops_n == 0:
         cards.append(
             _card(
-                "0", "运维操作", icon="&#x1F6E0;&#xFE0F;", accent="#94a3b8",
-                color="#64748b", bg="#f8fafc", border="#e2e8f0",
+                "0",
+                "运维操作",
+                icon="&#x1F6E0;&#xFE0F;",
+                accent="#94a3b8",
+                color="#64748b",
+                bg="#f8fafc",
+                border="#e2e8f0",
             )
         )
     else:
         cards.append(
             _card(
-                str(ops_n), "运维操作", icon="&#x1F6E0;&#xFE0F;", accent="#2563eb",
-                color="#1d4ed8", bg="#eff6ff", border="#bfdbfe",
+                str(ops_n),
+                "运维操作",
+                icon="&#x1F6E0;&#xFE0F;",
+                accent="#2563eb",
+                color="#1d4ed8",
+                bg="#eff6ff",
+                border="#bfdbfe",
             )
         )
     if inc_n == 0:
         cards.append(
             _card(
-                "0", "系统事件", icon="&#x1F514;", accent="#16a34a",
-                color="#047857", bg="#ecfdf5", border="#a7f3d0",
-                sub="无异常", sub_color="#16a34a",
+                "0",
+                "系统事件",
+                icon="&#x1F514;",
+                accent="#16a34a",
+                color="#047857",
+                bg="#ecfdf5",
+                border="#a7f3d0",
+                sub="无异常",
+                sub_color="#16a34a",
             )
         )
     else:
         cards.append(
             _card(
-                str(inc_n), "系统事件", icon="&#x1F514;", accent="#ea580c",
-                color="#c2410c", bg="#fff7ed", border="#fed7aa",
-                sub="待处理", sub_color="#ea580c",
+                str(inc_n),
+                "系统事件",
+                icon="&#x1F514;",
+                accent="#ea580c",
+                color="#c2410c",
+                bg="#fff7ed",
+                border="#fed7aa",
+                sub="待处理",
+                sub_color="#ea580c",
             )
         )
 
@@ -1821,7 +1862,9 @@ def run_daily_digest_email() -> None:
                 from modstore_server.surface_audit_deps import stop_surface_audit_ephemeral
 
                 stopped = stop_surface_audit_ephemeral()
-                logger.info("daily digest: surface audit ephemeral stopped %s", stopped.get("stopped"))
+                logger.info(
+                    "daily digest: surface audit ephemeral stopped %s", stopped.get("stopped")
+                )
             except Exception:
                 logger.exception("daily digest: stop surface audit ephemeral failed")
 

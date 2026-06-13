@@ -31,7 +31,9 @@ def test_match_product_name_contains() -> None:
 
 def test_prepare_parsed_products_computes_amount() -> None:
     rows = prepare_parsed_products(
-        input_products=[{"name": "锡膏 A", "model_number": "XG-100", "quantity_tins": 2, "tin_spec": 10.0}],
+        input_products=[
+            {"name": "锡膏 A", "model_number": "XG-100", "quantity_tins": 2, "tin_spec": 10.0}
+        ],
         db_products=_DB,
     )
     assert len(rows) == 1

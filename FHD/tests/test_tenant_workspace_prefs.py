@@ -27,7 +27,9 @@ def test_patch_workspace_prefs_merges_workflow_employees(monkeypatch):
     )
 
     owner = "tenant:42"
-    patch_workspace_prefs(owner, {"selected_industry_id": "涂料", "industry_mod_id": "coating-industry"})
+    patch_workspace_prefs(
+        owner, {"selected_industry_id": "涂料", "industry_mod_id": "coating-industry"}
+    )
     patch_workspace_prefs(owner, {"workflow_ai_employees": {"emp-a": True}})
     patch_workspace_prefs(owner, {"workflow_ai_employees": {"emp-b": False}})
 

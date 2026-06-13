@@ -93,7 +93,7 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRoute, useRouter } from 'vue-router'
 import { useIndustryStore } from '@/stores/industry'
@@ -122,6 +122,7 @@ import VirtualCursor from './VirtualCursor.vue'
 import OnboardingTutorial from './OnboardingTutorial.vue'
 import MobileBottomNav from './MobileBottomNav.vue'
 import { useOnboardingTutorialStore } from '@/stores/onboardingTutorial'
+import { useTutorialStore } from '@/stores/tutorial'
 import { setTutorialBuildContextFactory } from '@/stores/tutorial'
 import { useTutorialCatalog } from '@/composables/useTutorialCatalog'
 
@@ -137,6 +138,12 @@ const emit = defineEmits(['toggle-pro-mode'])
 const route = useRoute()
 const router = useRouter()
 const onboardingTutorialStore = useOnboardingTutorialStore()
+const tutorialStore = useTutorialStore()
+const { active: onboardingTutorialActive } = storeToRefs(onboardingTutorialStore)
+const { isActive: legacyTutorialActive } = storeToRefs(tutorialStore)
+const isAnyTutorialActive = computed(
+  () => onboardingTutorialActive.value || legacyTutorialActive.value,
+)
 const industryStore = useIndustryStore()
 const modsStore = useModsStore()
 const accountProfileStore = useAccountProfileStore()
@@ -530,13 +537,33 @@ const clearSidebarHoverTimer = () => {
   }
 }
 
+const ensureSidebarExpandedForTutorial = () => {
+  clearSidebarCollapseTimer()
+  clearSidebarHoverTimer()
+  if (isSidebarFeatureEnabled.value) {
+    sidebarCollapsed.value = false
+  }
+}
+
 const scheduleSidebarAutoCollapse = () => {
+  if (isAnyTutorialActive.value) return
   if (!isSidebarFeatureEnabled.value || sidebarCollapsed.value) return
   clearSidebarCollapseTimer()
   sidebarCollapseTimer = window.setTimeout(() => {
+    if (isAnyTutorialActive.value) return
     sidebarCollapsed.value = true
   }, SIDEBAR_INACTIVITY_MS)
 }
+
+watch(isAnyTutorialActive, (active) => {
+  if (active) {
+    ensureSidebarExpandedForTutorial()
+    return
+  }
+  if (isSidebarFeatureEnabled.value && !sidebarCollapsed.value) {
+    scheduleSidebarAutoCollapse()
+  }
+})
 
 const handleGlobalActivity = () => {
   if (!isSidebarFeatureEnabled.value) return

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { IndustryBaselinePlan, OnboardingIndustryCatalog } from '@/constants/platformShell'
 import {
   clearHostPackSkippedSession,
   invalidateHostPackCompletionCache,
@@ -37,8 +38,10 @@ describe('hostPackOnboardingGate', () => {
     sessionStorage.clear()
     invalidateHostPackCompletionCache()
     vi.mocked(fetchProductSku).mockResolvedValue('enterprise')
-    vi.mocked(fetchOnboardingIndustryCatalog).mockResolvedValue({ selected_industry_id: '涂料' })
-    vi.mocked(fetchIndustryBaseline).mockResolvedValue({ baseline_ready: false })
+    vi.mocked(fetchOnboardingIndustryCatalog).mockResolvedValue({
+      selected_industry_id: '涂料',
+    } as OnboardingIndustryCatalog)
+    vi.mocked(fetchIndustryBaseline).mockResolvedValue({ baseline_ready: false } as IndustryBaselinePlan)
     vi.mocked(authApi.validateSession).mockResolvedValue({
       success: true,
       data: { account_kind: 'enterprise', market_is_admin: false },
@@ -60,7 +63,7 @@ describe('hostPackOnboardingGate', () => {
   })
 
   it('does not require host pack when baseline ready', async () => {
-    vi.mocked(fetchIndustryBaseline).mockResolvedValue({ baseline_ready: true })
+    vi.mocked(fetchIndustryBaseline).mockResolvedValue({ baseline_ready: true } as IndustryBaselinePlan)
     await expect(needsHostPackCompletion(true)).resolves.toBe(false)
   })
 
@@ -89,12 +92,14 @@ describe('hostPackOnboardingGate', () => {
   })
 
   it('resolves industry step when no selected industry', async () => {
-    vi.mocked(fetchOnboardingIndustryCatalog).mockResolvedValue({ selected_industry_id: '' })
+    vi.mocked(fetchOnboardingIndustryCatalog).mockResolvedValue({
+      selected_industry_id: '',
+    } as OnboardingIndustryCatalog)
     await expect(resolveHostPackOnboardingStep(true)).resolves.toBe('industry')
   })
 
   it('returns null when baseline ready', async () => {
-    vi.mocked(fetchIndustryBaseline).mockResolvedValue({ baseline_ready: true })
+    vi.mocked(fetchIndustryBaseline).mockResolvedValue({ baseline_ready: true } as IndustryBaselinePlan)
     await expect(resolveHostPackOnboardingStep(true)).resolves.toBe(null)
   })
 })

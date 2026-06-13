@@ -21,7 +21,9 @@ def _android_enabled() -> bool:
 
 
 def _fhd_root() -> Path:
-    mono = (os.environ.get("XCMAX_MONOREPO_ROOT") or os.environ.get("MODSTORE_REPO_ROOT") or "").strip()
+    mono = (
+        os.environ.get("XCMAX_MONOREPO_ROOT") or os.environ.get("MODSTORE_REPO_ROOT") or ""
+    ).strip()
     if mono:
         p = Path(mono).expanduser().resolve() / "FHD"
         if p.is_dir():
@@ -254,9 +256,8 @@ def run_android_surface_audit_sync(
         pages = _filter_sample_pages(pages)
 
     meta: Dict[str, Any] = {
-        "ok": bool(payload.get("success")) or any(
-            isinstance(p, dict) and p.get("screenshot_b64") for p in pages
-        ),
+        "ok": bool(payload.get("success"))
+        or any(isinstance(p, dict) and p.get("screenshot_b64") for p in pages),
         "source": payload.get("source") or "android-adb",
         "page_count": len(pages),
         "device_count": payload.get("device_count"),

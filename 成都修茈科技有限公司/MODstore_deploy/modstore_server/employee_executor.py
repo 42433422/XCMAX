@@ -1872,7 +1872,9 @@ def execute_employee_task(
                 session.commit()
                 if not handler_ok:
                     try:
-                        from modstore_server.notification_service import notify_employee_execution_done
+                        from modstore_server.notification_service import (
+                            notify_employee_execution_done,
+                        )
 
                         notify_employee_execution_done(user_id, employee_id, task, exec_status)
                     except Exception:
