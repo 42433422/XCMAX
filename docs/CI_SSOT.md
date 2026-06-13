@@ -141,6 +141,39 @@ kubectl argo rollouts promote xcagi -n xcagi-staging   # 手动晋级
 kubectl argo rollouts abort   xcagi -n xcagi-staging   # 手动 abort
 ```
 
+## 可观测性（Phase 4 · 一键全栈 + DORA）
+
+| 路径 | 用途 |
+|------|------|
+| `FHD/k8s/monitoring/overlays/full/` | GitOps 全栈（Prometheus/Grafana/Loki/Alertmanager + 看板） |
+| `bash FHD/scripts/observability/bringup_stack.sh` | 非 GitOps 一键 `kubectl apply -k` |
+| `bash FHD/scripts/observability/local_stack_up.sh` | 本地 Docker Prometheus `:9091` + Grafana `:3000` |
+| `FHD/scripts/observability/emit_deploy_event.py` | 部署事件 → `metrics/deploy_events.jsonl` |
+| `FHD/scripts/observability/collect_dora.py` | DORA 四指标 → `metrics/dora-YYYYMMDD.json` |
+| `fhd-slo-metrics-collect.yml` | 每日 08:00 UTC 采集 SLO + DORA 并 commit |
+
+Grafana 预置看板：`xcagi-slo` · `xcagi-rollouts` · `xcagi-dora`（`overlays/full` ConfigMap 挂载）。
+
+## 每 PR 预览环境（Phase 5）
+
+| 触发 | Workflow | 行为 |
+|------|----------|------|
+| PR opened/synchronize | `fhd-preview-env.yml` | 构建 `pr-<num>` 镜像 → `xcagi-pr-<num>` namespace |
+| PR closed | 同上 `teardown` job | `kubectl delete namespace xcagi-pr-<num>` |
+
+Overlay：`FHD/k8s/overlays/preview/`（1 副本、资源收紧）。需 `KUBE_CONFIG`；无则跳过并在 PR 评论说明。
+
+## 日更编排闭环（Phase 6）
+
+| 组件 | 说明 |
+|------|------|
+| `run_modstore_daily_local.sh` | export `MODSTORE_POST_MERGE_GITOPS_SCRIPT` → `post_merge_promote.sh` |
+| `FHD/scripts/gitops/post_merge_promote.sh` | 等 `fhd-ci-cd` 绿 → `bump_image.sh staging`；**SLO 熔断**（`MODSTORE_SLO_HALT_AUTO_MERGE`）时 exit 1 |
+| `FHD/config/release_train.json` | MODstore **日更节奏** SSOT（`+0.0.0.1` epoch）；**≠** 产品 v10 锚点 `10.0.0` |
+| `GITOPS_BUMP_ENABLE=1` | CI 自动回写 staging tag（与 post_merge **双轨**，二选一或并存） |
+
+闭环：auto-PR → merge main → CI 签名 → GitOps bump → ArgoCD sync → Rollouts 金丝雀 → SLO 分析 → DORA 事件 → 次日 digest。
+
 ## Secrets / Variables 清单
 
 **Settings → Secrets and variables → Actions**（Secrets 与 Variables 两页）。标「跳过」者缺失时对应步骤跳过（不致 CI 失败）。
@@ -169,7 +202,11 @@ kubectl argo rollouts abort   xcagi -n xcagi-staging   # 手动 abort
 
 Agent **无法**从本环境开启 branch protection。建议在 **Settings → Branches → main** 启用：
 
-- Required status checks：`backend-test`、`frontend-test`、`frontend-e2e`、`arch-fitness`、`security-scan`、`pack-verify`、`container-scan`、`docker-build-fhd-api`（及 `Release gate CI` 若启用；Phase 1 起增 `cosign-verify`，Phase 3 起增 Rollouts 分析门）
+- Required status checks：`backend-test`、`frontend-test`、`frontend-e2e`、`arch-fitness`、`security-scan`、`pack-verify`、`container-scan`、`docker-build-fhd-api`（及 `Release gate CI` 若启用）
+- Phase 1+：`cosign verify` 在 `fhd-deploy` 部署门禁（集群侧；非独立 check 名）
+- Phase 3+：Rollouts `AnalysisRun` 失败 = 集群内自动 abort（非 branch protection check）
+- Phase 5+（可选）：启用 PR 预览时加 `preview` job（`fhd-preview-env.yml`）
+- Phase 6+：`MODSTORE_SLO_HALT_AUTO_MERGE=1` 时 SLO 红则日更脚本不 promote
 - Require branches up to date before merging
 - 可选：Environment `production` 需审批后再跑 `cvm-push-release`
 

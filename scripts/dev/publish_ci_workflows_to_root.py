@@ -37,7 +37,7 @@ WORKFLOW_RENAMES = {
     "modstore-tests.yml": "fhd-modstore-tests.yml",
     "intent-benchmark.yml": "fhd-intent-benchmark.yml",
     "slo-metrics-collect.yml": "fhd-slo-metrics-collect.yml",
-    "deploy.yml": "fhd-deploy.yml",
+    "preview-env.yml": "fhd-preview-env.yml",
 }
 
 MOD_RENAMES = {
