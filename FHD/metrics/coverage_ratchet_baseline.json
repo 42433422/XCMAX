@@ -1,10 +1,10 @@
 {
-  "_note": "覆盖率棘轮基线（只升不降）。行 floor 见 pyproject.toml fail_under；此处存分支 floor 与前端各项 floor。由 coverage_ratchet.py --bump 维护。基线锚定 2026-06-14 .venv CI 等价依赖实测。",
+  "_note": "覆盖率棘轮基线（只升不降）。行 floor 见 pyproject.toml fail_under；此处存分支 floor 与前端各项 floor。由 coverage_ratchet.py --bump 维护。",
   "backend_branch_floor": 17,
   "frontend_floors": {
-    "lines": 20,
-    "branches": 48,
-    "functions": 25,
-    "statements": 20
+    "lines": 21,
+    "branches": 51,
+    "functions": 27,
+    "statements": 21
   }
 }
