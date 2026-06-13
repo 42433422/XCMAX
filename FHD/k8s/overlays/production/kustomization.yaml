@@ -1,27 +1,24 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-# Full base stack via FHD/k8s/base (deployment + service + configmap + ingress + hpa + pdb +
-# networkpolicy). base/ pulls files from its parent, so this needs
+# Production K8s GitOps overlay (parallel track to the CVM tarball/compose prod path).
+# Uses the base defaults (replicas=3, ConfigMap production NeuroBus profile via envFrom,
+# XCAGI_ENV/FHD_ENV=production). base/ pulls files from its parent, so this needs
 # `--load-restrictor LoadRestrictionsNone` (ArgoCD argocd-cm via bootstrap_argocd.sh; locally
 # pass the flag). Referencing ../../base (not ../..) avoids the kustomize ancestor-cycle.
 resources:
   - ../../base
 
-namespace: xcagi-staging
+namespace: xcagi-prod
 
 labels:
   - pairs:
-      environment: staging
+      environment: production
     includeSelectors: false
 
-patches:
-  - path: replicas-patch.yaml
-  - path: config-patch.yaml
-
-# Image pin — CI gitops-image-bump / scripts/gitops/bump_image.sh sets newTag to sha-<gitsha>.
+# Image pin — CI / scripts/gitops/bump_image.sh sets newTag to the released sha-<gitsha>.
 images:
   - name: __DEPLOY_BACKEND_IMAGE__
     # lowercase: GHCR repo paths must be lowercase (repo is 42433422/XCMAX).
     newName: ghcr.io/42433422/xcmax/xcagi-fhd-api
-    newTag: staging
+    newTag: stable

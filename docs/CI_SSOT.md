@@ -95,6 +95,30 @@ bash /opt/fhd-staging/scripts/deploy/fhd-auto-update.sh
 
 本地 / 119.27.178.147 K3s 一键：`deploy_k8s_staging.sh`（见 `FHD/k8s/monitoring/STAGING_RUNBOOK.md`）。
 
+## GitOps（Phase 2 · ArgoCD App-of-Apps）
+
+声明式部署控制面，逐步取代 `fhd-deploy.yml` 的命令式 `kubectl apply`（后者保留为 break-glass）。
+
+**目录** `FHD/gitops/`：
+
+| 文件 | 角色 | 指向 |
+|------|------|------|
+| `app-of-apps.yaml` | root Application（bootstrap 一次） | 监听 `FHD/gitops/apps/` |
+| `apps/fhd-api-staging.yaml` | staging 自动 sync | `FHD/k8s/overlays/staging`（ns `xcagi-staging`） |
+| `apps/fhd-api-production.yaml` | production 自动 sync（K8s 轨，与 CVM prod 并行） | `FHD/k8s/overlays/production`（ns `xcagi-prod`） |
+| `apps/monitoring.yaml` | 可观测 CRD | `FHD/k8s/monitoring` |
+| `apps/rollouts.yaml` | Argo Rollouts 控制器（Helm，Phase 3 用） | `argo-rollouts` chart |
+
+**Kustomize 布局**：`FHD/k8s/base/`（聚合 `../*.yaml` 7 份清单，唯一 base）→ overlays `resources: ../../base` + `images:` 钉扎镜像 tag。overlay 引用父级 base 需 `--load-restrictor LoadRestrictionsNone`（`bootstrap_argocd.sh` 已在 `argocd-cm` 设 `kustomize.buildOptions`；本地手动加该 flag）。
+
+**集群 bootstrap**：`bash FHD/scripts/gitops/bootstrap_argocd.sh`（用现有 `KUBE_CONFIG`，幂等：装 ArgoCD → patch argocd-cm → apply App-of-Apps）。
+
+**镜像更新声明式化**：
+- `fhd-ci-cd.yml` job `gitops-image-bump`（**opt-in**：仓库变量 `GITOPS_BUMP_ENABLE=1`）：main push 构建成功后，把 staging overlay 的 `newTag` 写为 `sha-<gitsha>`、`[skip ci]` 提交回 main（`GITHUB_TOKEN` 推送不触发递归 CI），ArgoCD 自动 sync。
+- main 受保护无法直推时：保持开关关闭，改用 **ArgoCD Image Updater** 或经 orchestrator 晋级。
+- 生产晋级：`bash FHD/scripts/gitops/bump_image.sh production <sha-tag> --commit`（人工 / orchestrator）。
+- 制品身份恒 `git_sha` + `sha256` + cosign digest，**不 bump 版本**（v10 锁 `10.0.0`）。
+
 ## Secrets / Variables 清单
 
 **Settings → Secrets and variables → Actions**（Secrets 与 Variables 两页）。标「跳过」者缺失时对应步骤跳过（不致 CI 失败）。
@@ -114,6 +138,8 @@ bash /opt/fhd-staging/scripts/deploy/fhd-auto-update.sh
 | `STAGING_BASE_URL` | Var | 容量 k6 目标（`fhd-capacity-staging-monthly`） | 容量测试跳过 |
 | `STAGING_PROMETHEUS_URL` | Var / Secret | SLO 采集 Prometheus 端点 | SLO 采集降级 |
 | `XCMAX_GIT_BRANCH` / `XCMAX_REMOTE_ROOT` | Var | 企业站 `corp-site-deploy` 同步参数 | 用默认 |
+| `GITOPS_BUMP_ENABLE` | Var | 置 `1` 启用 `gitops-image-bump` 回写 staging overlay tag 到 main | 不设=关闭（不回写） |
+| `COSIGN_VERIFY_DISABLE` | Var | 置 `1` 临时跳过部署前 `cosign verify`（break-glass） | 不设=强制验证 |
 
 > Phase 1（供应链）起 cosign **keyless**（Sigstore + GitHub OIDC）签名**免私钥**，不新增长期密钥；集群凭证统一走 `KUBE_CONFIG`。
 

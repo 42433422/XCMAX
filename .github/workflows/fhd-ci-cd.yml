@@ -356,6 +356,10 @@ jobs:
   docker-build-fhd-api:
     needs: [backend-test, pack-verify, arch-fitness]
     runs-on: ubuntu-latest
+    # image_tag = the exact tag metadata-action produced (rely on outputs.version, not a
+    # hand-rolled short sha — see docker/metadata-action#479). Consumed by gitops-image-bump.
+    outputs:
+      image_tag: ${{ steps.meta_fhd.outputs.version }}
     permissions:
       contents: read
       packages: write
@@ -364,6 +368,15 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      # GHCR repo paths must be lowercase; github.repository here is 42433422/XCMAX (mixed case).
+      # metadata-action lowercases its own tags, but the manual cosign/SBOM/provenance refs below
+      # need an explicit lowercase name to avoid "repository name must be lowercase" failures.
+      - name: Compute lowercase FHD API image name
+        id: imgref
+        run: |
+          name="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_FHD_API }}"
+          echo "name=$(printf '%s' "$name" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
 
       - name: Download server release manifest
         uses: actions/download-artifact@v4
@@ -385,7 +398,7 @@ jobs:
         id: meta_fhd
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_FHD_API }}
+          images: ${{ steps.imgref.outputs.name }}
           tags: |
             type=sha,prefix=sha-
             type=ref,event=tag,enable=${{ startsWith(github.ref, 'refs/tags/FHD/v') }}
@@ -410,14 +423,14 @@ jobs:
       - name: Sign xcagi-fhd-api image (keyless / Sigstore OIDC)
         if: steps.build_fhd.outputs.digest != ''
         env:
-          IMAGE_DIGEST_REF: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_FHD_API }}@${{ steps.build_fhd.outputs.digest }}
+          IMAGE_DIGEST_REF: ${{ steps.imgref.outputs.name }}@${{ steps.build_fhd.outputs.digest }}
         run: cosign sign --yes "${IMAGE_DIGEST_REF}"
 
       - name: Generate SBOM (SPDX-JSON) for xcagi-fhd-api
         if: steps.build_fhd.outputs.digest != ''
         uses: anchore/sbom-action@v0
         with:
-          image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_FHD_API }}@${{ steps.build_fhd.outputs.digest }}
+          image: ${{ steps.imgref.outputs.name }}@${{ steps.build_fhd.outputs.digest }}
           format: spdx-json
           output-file: ${{ runner.temp }}/fhd-api-sbom.spdx.json
           upload-artifact: false
@@ -425,7 +438,7 @@ jobs:
       - name: Attest SBOM to image (cosign)
         if: steps.build_fhd.outputs.digest != ''
         env:
-          IMAGE_DIGEST_REF: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_FHD_API }}@${{ steps.build_fhd.outputs.digest }}
+          IMAGE_DIGEST_REF: ${{ steps.imgref.outputs.name }}@${{ steps.build_fhd.outputs.digest }}
           SBOM_FILE: ${{ runner.temp }}/fhd-api-sbom.spdx.json
         run: cosign attest --yes --predicate "${SBOM_FILE}" --type spdxjson "${IMAGE_DIGEST_REF}"
 
@@ -433,7 +446,7 @@ jobs:
         if: steps.build_fhd.outputs.digest != ''
         uses: actions/attest-build-provenance@v2
         with:
-          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_FHD_API }}
+          subject-name: ${{ steps.imgref.outputs.name }}
           subject-digest: ${{ steps.build_fhd.outputs.digest }}
           push-to-registry: true
 
@@ -449,7 +462,7 @@ jobs:
       - name: Merge image digest into manifest
         if: steps.build_fhd.outputs.digest != ''
         env:
-          FHD_IMAGE_REF: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_FHD_API }}
+          FHD_IMAGE_REF: ${{ steps.imgref.outputs.name }}
           FHD_IMAGE_DIGEST: ${{ steps.build_fhd.outputs.digest }}
         run: bash scripts/deploy/fhd-merge-manifest-image.sh
 
@@ -460,7 +473,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist/deploy
-          ref="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_FHD_API }}"
+          ref="${{ steps.imgref.outputs.name }}"
           # build-push-action 只推送到 GHCR，本地 daemon 无镜像；先 pull 再 save
           docker pull "${ref}@${FHD_IMAGE_DIGEST}"
           docker save "${ref}@${FHD_IMAGE_DIGEST}" -o FHD/dist/deploy/fhd-api-image.tar
@@ -477,6 +490,49 @@ jobs:
             FHD/dist/deploy/fhd-api-image.tar.gz
           if-no-files-found: error
           retention-days: 14
+
+  # GitOps 声明式回写：main 构建成功 → 把 staging overlay 镜像 tag 设为 sha-<gitsha> 并提交回 main，
+  # ArgoCD 自动 sync（FHD/gitops/apps/fhd-api-staging.yaml）。opt-in：仅当仓库变量
+  # GITOPS_BUMP_ENABLE=1 时启用——main 受保护或集群未接 ArgoCD 时保持关闭，避免直推被拒。
+  # 生产 overlay 走 fhd-release-orchestrator / 人工 `bump_image.sh production <tag> --commit` 晋级。
+  gitops-image-bump:
+    needs: [docker-build-fhd-api]
+    if: >-
+      vars.GITOPS_BUMP_ENABLE == '1' &&
+      needs.docker-build-fhd-api.result == 'success' &&
+      github.ref == 'refs/heads/main' &&
+      github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: gitops-bump-main
+      cancel-in-progress: false
+    steps:
+      # checkout is NOT rewritten by publish → clones the XCMAX root repo at main HEAD.
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Bump staging overlay image tag (declarative)
+        env:
+          # Exact tag metadata-action pushed (no short-sha guessing) — see docker-build-fhd-api outputs.
+          IMAGE_TAG: ${{ needs.docker-build-fhd-api.outputs.image_tag }}
+        run: |
+          set -euo pipefail
+          [ -n "${IMAGE_TAG}" ] || { echo "::error::empty image_tag from docker-build-fhd-api"; exit 1; }
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # run steps default to working-directory: FHD (injected by publish) → FHD-relative path.
+          bash scripts/gitops/bump_image.sh staging "${IMAGE_TAG}" --commit
+      - name: Push gitops commit to main
+        run: |
+          set -euo pipefail
+          # GITHUB_TOKEN pushes do NOT retrigger workflows (built-in loop guard); commit also [skip ci].
+          git pull --rebase --autostash origin main || true
+          if ! git push origin HEAD:main; then
+            echo "::warning::gitops push to main rejected (branch protection?). Enable ArgoCD Image Updater or promote via orchestrator instead."
+          fi
 
   # CVM 拉取式自动 CD（main 成功 + secrets 就绪时 scp manifest/tarball；无 secrets 则跳过）
   cvm-push-release:

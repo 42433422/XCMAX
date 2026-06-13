@@ -1,0 +1,33 @@
+# xcagi-fhd-api — staging (auto-sync). Image tag bumped by scripts/gitops/bump_image.sh.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: fhd-api-staging
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  labels:
+    app.kubernetes.io/part-of: xcagi
+    environment: staging
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/42433422/XCMAX.git
+    targetRevision: main
+    path: FHD/k8s/overlays/staging
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: xcagi-staging
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ApplyOutOfSyncOnly=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m
