@@ -107,3 +107,33 @@ PVC 默认 `storageClassName: local-path`（k3s）；Prometheus 15Gi、Loki 10Gi
 | Prometheus 重启丢数据 | Deployment 仍用 emptyDir；确认 PVC 已挂载 |
 | Grafana 无日志 | Loki/Promtail 未部署或数据源未配 |
 | 7d 截图缺失 | 见 BLOCKERS T36–T37；确认 Job 跑满 168h |
+
+## 7. GitOps + Rollouts 端到端演练（L3）
+
+前置：`KUBE_CONFIG`、ArgoCD bootstrap、`GITOPS_BUMP_ENABLE=1` 或 `post_merge_promote.sh`。
+
+```bash
+# 1) Bootstrap（幂等）
+bash FHD/scripts/gitops/bootstrap_argocd.sh
+bash FHD/scripts/gitops/bootstrap_rollouts.sh
+bash FHD/scripts/observability/bringup_stack.sh
+
+# 2) -rc tag 触发 CI → GitOps bump（或手动）
+git tag FHD/v10.0.0-rc1 && git push origin FHD/v10.0.0-rc1
+# 或：bash FHD/scripts/gitops/bump_image.sh staging sha-<gitsha> --commit && git push
+
+# 3) 观察 ArgoCD sync + Rollout 金丝雀
+kubectl -n argocd get applications
+kubectl argo rollouts get rollout xcagi -n xcagi-staging --watch
+
+# 4) SLO 分析门（Prometheus recording rules）
+#    xcagi:api_error_ratio:rate5m < 0.05 · xcagi:api_latency_p95:5m < 1.5
+
+# 5) 健康检查
+curl -sf https://xiu-ci.com/fhd-api/api/health
+
+# 6) 故意 SLO 违约演练（staging 仅）：注入高错误率后确认 Rollout abort/回滚
+kubectl argo rollouts abort xcagi -n xcagi-staging   # 或等待 AnalysisRun 失败
+```
+
+DORA 事件：`metrics/deploy_events.jsonl` · 日采集 `fhd-slo-metrics-collect.yml` → `metrics/dora-*.json`。

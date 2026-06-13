@@ -175,6 +175,8 @@ export MODSTORE_EMAIL_INTAKE_ENABLED="${MODSTORE_EMAIL_INTAKE_ENABLED:-1}"
 export MODSTORE_IMAP_HOST="${MODSTORE_IMAP_HOST:-imap.qq.com}"
 export MODSTORE_IMAP_PORT="${MODSTORE_IMAP_PORT:-993}"
 export MODSTORE_RELEASE_TRAIN_JSON="${XCMAX_ROOT}/FHD/config/release_train.json"
+# auto-merge 后 GitOps 晋级（与 fhd-ci-cd gitops-image-bump 双轨；SLO 熔断时 post_merge 会 exit 1）
+export MODSTORE_POST_MERGE_GITOPS_SCRIPT="${MODSTORE_POST_MERGE_GITOPS_SCRIPT:-${FHD_ROOT}/scripts/gitops/post_merge_promote.sh}"
 # TLS 证书到期巡检（K 节点）：写入 .env.local 或在此处设默认路径
 # 示例：MODSTORE_TLS_CERT_PATHS=/path/to/xiu-ci.com_bundle.pem
 export MODSTORE_TLS_CERT_PATHS="${MODSTORE_TLS_CERT_PATHS:-}"

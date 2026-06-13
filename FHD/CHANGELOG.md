@@ -6,6 +6,13 @@
 
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
+### L3 CI/CD 全自动端到端（v10 线内迭代 · 2026-06-13）
+- **GitOps**：ArgoCD App-of-Apps、`bump_image.sh`、`gitops-image-bump`（opt-in）
+- **Rollouts**：金丝雀 20→50→100 + `xcagi-slo-gate` Prometheus 分析门
+- **可观测性**：`monitoring/overlays/full`、`bringup_stack.sh`、`local_stack_up.sh`、DORA 采集
+- **预览**：`fhd-preview-env.yml` + `k8s/overlays/preview`
+- **日更闭环**：`post_merge_promote.sh` + `MODSTORE_POST_MERGE_GITOPS_SCRIPT`
+
 ### 术债收口 + Tier C 高并发（Wave 0–10 · v10 线内迭代）
 - **docs**：`SLO.md` Tier C 压测 SLO；`docs/evidence/arch/` 路由/OpenAPI 基线；`services_import_matrix.md`；`WAVE2_ROUTE_SSOT.md`
 - **loadtest**：`tier_c_smoke.js` / `tier_c_sustained.js` / `tier_c_chat_streams.js`；k6 7d `tier_c_ramp` 阶梯场景
@@ -22,6 +29,15 @@
 - **sql**：`sql_identifiers.py` + P0 标识符拼接修复；`count_raw_sql.py` 棘轮；`test_sql_identifiers.py`
 - **frontend**：ChatView 拆至 `components/chat/*`；`useChatPersistence`/`useChatTaskList`；vue-i18n zh-CN/en-US；`resolveApiError.ts`
 - **docs**：`MYPY_BATCH_STATUS.md`、`SQL_RAW_INVENTORY.md`、`I18N_ROLLOUT.md`、`deploy/RELEASE_CHECKLIST.md`
+
+### 技术债计划目标收尾 Phase 7–12（2026-06-13 · v10 线内迭代）
+
+- **Phase 7**：`useChatView.ts` facade + `useChatOrchestration`/`useChatWorkflowPanel` 等子 composable；`ChatView.vue` <400 行；去 `@ts-nocheck`
+- **Phase 8**：`compat_db` SQL 拼接 SSOT + `products_pg_*` 写路径；`count_raw_sql` 棘轮 **0**；`test_compat_products_sqli.py`
+- **Phase 9**：mypy 严格岛 + 宽口径分批（`tests.*` ignore）；middleware/di 类型修复；Ruff `ANN` 启用
+- **Phase 10**：Chat/Login/Settings `$t()`；auth `error_envelope`；`resolveApiError` 接线
+- **Phase 11**：`count_type_debt` 棘轮 **0**（any / type-ignore / nocheck）；`tsconfig.build` 全 strict
+- **Phase 12**：全量门禁见 `START_HERE.md` §技术债门禁；CD RC 需仓外 `FHD_PUSH_*` / `KUBE_CONFIG_B64`
 
 ### 三项技术债清偿（2026-06-13 · v10 线内迭代）
 
