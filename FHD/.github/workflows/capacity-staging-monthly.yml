@@ -25,7 +25,7 @@ jobs:
           fi
           curl -sL https://github.com/grafana/k6/releases/download/v0.54.0/k6-v0.54.0-linux-amd64.tar.gz | tar xz
           sudo mv k6-*/k6 /usr/local/bin/
-          k6 run -e BASE_URL="${STAGING_BASE_URL}" FHD/scripts/loadtest/load.js \
+          k6 run -e BASE_URL="${STAGING_BASE_URL}" scripts/loadtest/load.js \
             | tee k6-load-staging.log
           grep -E "http_reqs|http_req_failed|http_req_duration" k6-load-staging.log | tail -5
 

@@ -7,10 +7,8 @@ on:
         description: Upload ProGuard mapping to Firebase Crashlytics
         type: boolean
         default: false
-  push:
-    tags:
-      - "FHD/v10.*"
-      - "FHD/v*"
+  # Tag (FHD/v*) entry is centralized in fhd-release-orchestrator.yml (gated on
+  # verify-version-anchors, then dispatches this workflow) — avoids the double-run.
 
 concurrency:
   group: fhd-release-android-${{ github.ref }}

@@ -1,4 +1,5 @@
-# CI SSOT: generated from FHD/.github/workflows/test.yml — edit root copy only.
+# CI SSOT: generated from FHD/.github/workflows/test.yml — DO NOT edit here.
+# Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
 # Lightweight smoke CI for FHD (published to root as fhd-test.yml).
 # Full pipeline: ci-cd.yml → fhd-ci-cd.yml
 name: Smoke Tests

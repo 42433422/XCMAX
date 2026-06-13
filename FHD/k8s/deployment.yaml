@@ -36,6 +36,13 @@ spec:
           capabilities:
             drop:
               - ALL
+        # Full reliability/env baseline (FHD_ENV + NeuroBus DEDUP/CIRCUIT/RATE_LIMIT/
+        # TRACE/LIFELINE/DLQ_AUTO/SLA_LOG + HTTP/auth rate limits) sourced from the
+        # ConfigMap so every apply path (GitOps / kubectl apply / Argo Rollouts)
+        # enables it — not only the imperative `kubectl set env` in fhd-deploy.yml.
+        envFrom:
+        - configMapRef:
+            name: xcagi-config
         env:
         - name: XCAGI_ENV
           value: "production"

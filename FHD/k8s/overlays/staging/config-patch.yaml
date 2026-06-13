@@ -8,6 +8,11 @@ spec:
       containers:
         - name: xcagi
           env:
+            # Override ConfigMap FHD_ENV=production for the staging overlay so the
+            # GitOps/kustomize apply path yields the NeuroBus staging profile
+            # (bus.py treats FHD_ENV=staging specially). Explicit env wins over envFrom.
+            - name: FHD_ENV
+              value: "staging"
             - name: XCAGI_GUNICORN_WORKERS
               value: "2"
             - name: XCAGI_QUERY_CACHE_BACKEND

@@ -70,6 +70,14 @@ def _prefix_fhd_paths(content: str, out_name: str) -> str:
             f'gh workflow run "{wf}"',
             f'gh workflow run "fhd-{wf}"',
         )
+        # Defensive: unquoted matrix list entries (e.g. `- release-desktop.yml`)
+        # must reference the published root name. Idempotent — a `- fhd-...`
+        # entry is not preceded by `- ` + the bare name, so it won't re-match.
+        content = re.sub(
+            rf"(\n[ \t]+-[ \t]+){re.escape(wf)}(?=[ \t]*(?:\n|$))",
+            rf"\1fhd-{wf}",
+            content,
+        )
     content = content.replace(
         ".github/workflows/ci-mobile-android.yml",
         f".github/workflows/{out_name}",
@@ -85,18 +93,9 @@ def _prefix_fhd_paths(content: str, out_name: str) -> str:
 
     content = re.sub(r'-\s+"([^"]+)"', repl_path, content)
 
-    guard_old = """            if [[ "${file}" == XCAGI/tools/* ]] || [[ "${file}" == XCAGI/archive/* ]] || \\
-               [[ "${file}" == tools/* ]] || [[ "${file}" == archive/* ]]; then"""
-    guard_new = """            rel="${file#FHD/}"
-            if [[ "${rel}" == XCAGI/tools/* ]] || [[ "${rel}" == XCAGI/archive/* ]] || \\
-               [[ "${rel}" == tools/* ]] || [[ "${rel}" == archive/* ]]; then"""
-    content = content.replace(guard_old, guard_new)
-
-    guard_old2 = """            if [[ "${file}" =~ (^|/)产品文件夹/(fix_|check_|final_).+\\.py$ ]] || \\
-               [[ "${file}" =~ ^(fix_|check_|final_).+\\.py$ ]]; then"""
-    guard_new2 = """            if [[ "${rel}" =~ (^|/)产品文件夹/(fix_|check_|final_).+\\.py$ ]] || \\
-               [[ "${rel}" =~ ^(fix_|check_|final_).+\\.py$ ]]; then"""
-    content = content.replace(guard_old2, guard_new2)
+    # NOTE: the guard-temp-scripts allow-list/patterns now compute `rel="${file#FHD/}"`
+    # directly in the FHD source (ci-cd.yml), so the previous publish-time string
+    # rewrites for that block are no longer needed.
 
     content = content.replace(
         "cache-dependency-path: frontend/package-lock.json",
@@ -151,7 +150,10 @@ def publish_fhd() -> list[str]:
         out_name = WORKFLOW_RENAMES.get(src.name, f"fhd-{src.name}")
         body = _insert_defaults(body, DEFAULTS_FHD)
         body = _prefix_fhd_paths(body, out_name)
-        header = f"# CI SSOT: generated from FHD/.github/workflows/{src.name} — edit root copy only.\n"
+        header = (
+            f"# CI SSOT: generated from FHD/.github/workflows/{src.name} — DO NOT edit here.\n"
+            f"# Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py\n"
+        )
         (OUT / out_name).write_text(header + body, encoding="utf-8")
         written.append(out_name)
     return written
@@ -168,7 +170,8 @@ def publish_mod() -> list[str]:
         body = _prefix_mod_paths(body, out_name)
         header = (
             f"# CI SSOT: generated from MODstore_deploy/.github/workflows/{src.name} "
-            "— edit root copy only.\n"
+            "— DO NOT edit here.\n"
+            "# Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py\n"
         )
         (OUT / out_name).write_text(header + body, encoding="utf-8")
         written.append(out_name)
