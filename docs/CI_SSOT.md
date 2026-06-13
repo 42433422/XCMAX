@@ -202,6 +202,10 @@ Overlay：`FHD/k8s/overlays/preview/`（1 副本、资源收紧）。需 `KUBE_C
 
 Agent **无法**从本环境开启 branch protection。建议在 **Settings → Branches → main** 启用：
 
+> **个人私有仓限制**：Branch protection 的 required status checks 需 **GitHub Team 或 Enterprise** 计划；免费个人私有仓只能文档化门禁，无法在 UI 强制拦截 merge。
+
+> **Actions 账单**：若所有 job 在数秒内失败且 annotation 为 `recent account payments have failed or your spending limit needs to be increased`，须在 **Settings → Billing & plans** 修复付款或提高 spending limit；此阻断与 workflow/代码无关。
+
 - Required status checks：`backend-test`、`frontend-test`、`frontend-e2e`、`arch-fitness`、`security-scan`、`pack-verify`、`container-scan`、`docker-build-fhd-api`（及 `Release gate CI` 若启用）
 - Phase 1+：`cosign verify` 在 `fhd-deploy` 部署门禁（集群侧；非独立 check 名）
 - Phase 3+：Rollouts `AnalysisRun` 失败 = 集群内自动 abort（非 branch protection check）

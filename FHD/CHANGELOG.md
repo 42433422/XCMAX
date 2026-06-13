@@ -6,12 +6,19 @@
 
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
+### 真正员工运行时（EmployeeAgent · v10 线内迭代 · 2026-06-14）
+
+- **feat(employee_runtime)**：`EmployeeAgent` 编排对象接管 `execute_employee_task_local`；P0 多轮 `agent_loop` + `EmployeeMemoryManager`（短期 ConversationService / 长期 `emp:{id}` 向量索引）；P1 `tool_scope` 作用域工具 + `workspace_guard` 运行时强制 `scope_globs/forbidden_globs`；P2 `PerceptionPipeline`（document/vision/audio/text）；P3 `orchestrator` 本地 `depends_on` DAG + `triggers` NeuroBus 动态订阅；P4 写操作 `write_approval` 接 ApprovalGatedEngine 语义 + `metrics` 可观测
+- **feat(domain/employee)**：值对象 `MemoryScope` / `PerceptionSpec` / `CollaborationGraph` / `TriggerBinding` / 标准事件类型
+- **compat**：保留 echo/llm_md/direct_python handler；capabilities 已声明包无需改 manifest 即可派生工具子集；单轮 `_chat_completion` 仅保留给认知层
+
 ### L3 CI/CD 全自动端到端（v10 线内迭代 · 2026-06-13）
 - **GitOps**：ArgoCD App-of-Apps、`bump_image.sh`、`gitops-image-bump`（opt-in）
 - **Rollouts**：金丝雀 20→50→100 + `xcagi-slo-gate` Prometheus 分析门
 - **可观测性**：`monitoring/overlays/full`、`bringup_stack.sh`、`local_stack_up.sh`、DORA 采集
-- **预览**：`fhd-preview-env.yml` + `k8s/overlays/preview`
+- **预览**：`fhd-preview-env.yml` + `k8s/overlays/preview`（无 `KUBE_CONFIG` 时跳过构建并 PR 评论说明）
 - **日更闭环**：`post_merge_promote.sh` + `MODSTORE_POST_MERGE_GITOPS_SCRIPT`
+- **CI 阻断说明**：PR #20 全量红因 GitHub Actions **账单/spending limit**（非 workflow 缺陷）；修复付款后重跑；branch protection 需 Team/Enterprise（见 `docs/CI_SSOT.md`）
 
 ### 术债收口 + Tier C 高并发（Wave 0–10 · v10 线内迭代）
 - **docs**：`SLO.md` Tier C 压测 SLO；`docs/evidence/arch/` 路由/OpenAPI 基线；`services_import_matrix.md`；`WAVE2_ROUTE_SSOT.md`
