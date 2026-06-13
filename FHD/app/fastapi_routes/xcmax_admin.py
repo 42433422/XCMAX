@@ -16,7 +16,7 @@ import logging
 import os
 import time
 import urllib.request
-from typing import Any
+from typing import Any, cast
 
 from fastapi import APIRouter, Body, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -55,7 +55,7 @@ def _release_train_snapshot() -> dict[str, Any]:
     try:
         from modstore_server.release_train import snapshot_public
 
-        return snapshot_public()
+        return cast("dict[str, Any]", snapshot_public())
     except RECOVERABLE_ERRORS:
         pass
     from pathlib import Path
@@ -207,7 +207,7 @@ async def _remote_duty_health(request: Request) -> dict[str, Any]:
         return health_payload
     if hasattr(health_payload, "body"):
         try:
-            return json.loads(getattr(health_payload, "body", b"") or b"{}")
+            return cast("dict[str, Any]", json.loads(getattr(health_payload, "body", b"") or b"{}"))
         except RECOVERABLE_ERRORS:
             return {}
     return {}
@@ -745,6 +745,46 @@ async def local_duty_graph_health(request: Request):
             status_code=401,
         )
     return build_local_duty_graph_health()
+
+
+@router.get("/local/employees/{employee_id}/status", response_model=None)
+async def local_employee_status(request: Request, employee_id: str):
+    """本机员工包部署态与空执行统计（编制图 Phase2，不代理 MODstore）。"""
+    from app.application.local_duty_graph_health import build_local_employee_status
+    from app.fastapi_routes.domains.misc.helpers import _session_id_from_request
+
+    if not _session_id_from_request(request):
+        return JSONResponse(
+            {"success": False, "message": "请先登录"},
+            status_code=401,
+        )
+    pid = str(employee_id or "").strip()
+    if not pid:
+        return JSONResponse({"success": False, "message": "employee_id 必填"}, status_code=400)
+    return build_local_employee_status(pid)
+
+
+@router.get("/local/employees/{employee_id}/manifest", response_model=None)
+async def local_employee_manifest(request: Request, employee_id: str):
+    """读本机 mods/_employees/<id>/manifest.json（编制图 LLM/依赖解析）。"""
+    from app.application.local_duty_graph_health import read_local_employee_manifest
+    from app.fastapi_routes.domains.misc.helpers import _session_id_from_request
+
+    if not _session_id_from_request(request):
+        return JSONResponse(
+            {"success": False, "message": "请先登录"},
+            status_code=401,
+        )
+    pid = str(employee_id or "").strip()
+    if not pid:
+        return JSONResponse({"success": False, "message": "employee_id 必填"}, status_code=400)
+    row = read_local_employee_manifest(pid)
+    if not row:
+        return JSONResponse(
+            {"success": False, "message": f"员工包不存在: {pid}"},
+            status_code=404,
+        )
+    return row
 
 
 @router.get("/admin/modules", response_model=None)
