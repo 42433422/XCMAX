@@ -5,6 +5,7 @@ from __future__ import annotations
 import inspect
 import logging
 import os
+import threading
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -151,7 +152,15 @@ def create_fastapi_app(
     return app
 
 
+_app_singleton: FastAPI | None = None
+_app_singleton_lock = threading.Lock()
+
+
 def get_fastapi_app() -> FastAPI:
-    if not hasattr(get_fastapi_app, "_app"):
-        get_fastapi_app._app = create_fastapi_app()
-    return get_fastapi_app._app
+    """进程内单例 FastAPI 实例（线程安全，双重检查锁）。"""
+    global _app_singleton
+    if _app_singleton is None:
+        with _app_singleton_lock:
+            if _app_singleton is None:
+                _app_singleton = create_fastapi_app()
+    return _app_singleton

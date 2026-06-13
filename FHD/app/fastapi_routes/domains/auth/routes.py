@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Any
+from typing import Any, cast
 
 from fastapi import APIRouter, Body, Depends, File, Query, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
@@ -225,12 +225,13 @@ def _find_local_users_by_email(email: str) -> list:
     if not norm or "@" not in norm:
         return []
     with get_db() as db:
-        return (
+        return cast(
+            "list[Any]",
             db.query(User)
             .filter(func.lower(User.email) == norm)
             .filter(User.is_active.is_(True))
             .order_by(User.id.asc())
-            .all()
+            .all(),
         )
 
 
