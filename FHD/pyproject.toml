@@ -229,6 +229,10 @@ filterwarnings = [
 [tool.coverage.run]
 # 全量 app/ 口径（2026-06-13 技术债清偿）；禁止再用窄 include 凑门禁
 source = ["app"]
+# 分支覆盖独立统计（铁律6，2026-06-14）。开启 branch 后 coverage 的 percent_covered
+# 变为"行+分支合并"指标；行/分支 floor 由 scripts/dev/coverage_ratchet.py 分别把关，
+# 标准测量命令传 --cov-fail-under=0 把门禁交给棘轮（见 ci-cd.yml + COVERAGE_RAMP.md）。
+branch = true
 omit = [
     "*/tests/*",
     "*/xcagi_tests/*",
@@ -251,10 +255,13 @@ exclude_lines = [
     "@abstractmethod",
     "if DEBUG:",
 ]
-# 真实 full_app 基线（2026-06-13 全量口径 source=[app] 实测）：
-#   73,672 statements / 47,047 missed → 36.14%。
-# 旧值 58 来自被废弃的窄 include 口径（只统计"稳定"模块），与 source=[app] 不可比；
-# 已按诚实全量基线下调，留 ~1pt 余量防止回退。提升覆盖率应单独立项推进，禁止再用窄 include 凑数。
+# fail_under 语义 = 纯**行覆盖率** floor（铁律1 全量 source=[app]，铁律6 分支单独由棘轮把关）。
+# 真实可复现基线（2026-06-14 全量口径 source=[app] + branch，.venv CI 等价依赖实测，1789 passed）：
+#   74,982 statements / 47,729 missed → 行覆盖 36.35%；分支 4,055/22,014 → 18.42%；合并 32.28%。
+#   906 文件被测量。覆盖率随可选重依赖（torch/cv2/paddleocr/sklearn 等）是否安装而波动——
+#   CI 与本基线均不装 ml extra，故 36% 是诚实可复现 SSOT；历史 58/60.63/66.33 来自富依赖环境，已退役。
+# 留 ~1pt 余量防止回退。开启 branch 后 coverage 自带门禁按合并指标拦截，故标准命令传
+# --cov-fail-under=0，由 coverage_ratchet.py --check 按行/分支分别守护（floor 只升不降）。
 fail_under = 35
 
 [tool.coverage.html]

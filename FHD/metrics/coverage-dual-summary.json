@@ -1,16 +1,19 @@
 {
-  "captured_at": "2026-06-13T08:00:00Z",
-  "full_app": {
-    "pct": 60.63,
-    "covered": 46858,
-    "statements": 77286,
-    "source": "coverage-full.xml (2026-06-04 baseline)"
+  "_status": "RETIRED 2026-06-14",
+  "_reason": "此前的 full_app 60.63% / ci_gate 58 来自装了 ml extra（torch/cv2/sklearn 等）的富依赖环境，与 CI 不可比，导致与 pyproject 诚实基线 36% 互相矛盾。已退役，禁止再引用。",
+  "_ssot": "唯一可复现口径见 docs/reports/COVERAGE_RAMP.md 与 docs/reports/COVERAGE_GAP.md；门禁见 pyproject.toml fail_under + metrics/coverage_ratchet_baseline.json + scripts/dev/coverage_ratchet.py；趋势见 metrics/coverage-history.jsonl。",
+  "_retired_values": {
+    "full_app_pct": 60.63,
+    "ci_gate_pct": 58,
+    "captured_at": "2026-06-13T08:00:00Z",
+    "note": "富依赖环境，非 CI 等价；勿对外混报"
   },
-  "ci_gate": {
-    "pct": 58,
-    "source": "pyproject.toml [tool.coverage.report] fail_under",
-    "scope": "full app/ via source=[app]"
-  },
-  "plan_target_full_app_pct": 88,
-  "notes": "2026-06-13 技术债清偿：取消 CI_STABLE_ONLY 与窄 include；CI 门禁与 full_app 同口径，fail_under=58（真实基线 60.63% 留 2% 余量）。禁止再混报窄包 70%。"
+  "current_reproducible_baseline_2026_06_14": {
+    "backend_line_pct": 36.35,
+    "backend_branch_pct": 18.42,
+    "frontend_line_pct": 21.52,
+    "frontend_branch_pct": 49.07,
+    "frontend_function_pct": 26.08,
+    "scope": "source=[app] + branch, no ml extra (.venv = CI equivalent)"
+  }
 }
