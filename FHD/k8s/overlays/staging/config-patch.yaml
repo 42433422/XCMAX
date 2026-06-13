@@ -1,27 +1,15 @@
-apiVersion: apps/v1
-kind: Deployment
+# Staging env overrides via the ConfigMap (NOT a Rollout container patch — strategic-merge on a
+# CRD's container list atomically replaces it and drops image/probes/envFrom). The Rollout reads
+# these through envFrom, so patching ConfigMap data (merged by key) is the CRD-safe way.
+#
+# - FHD_ENV=staging: bus.py treats staging specially (NeuroBus staging profile).
+# - 2 gunicorn workers + 30 chat streams/pod: smaller staging footprint.
+# (DATABASE_READ_URL was optional + unset in base — omitted; add the key here to enable a replica.)
+apiVersion: v1
+kind: ConfigMap
 metadata:
-  name: xcagi
-spec:
-  template:
-    spec:
-      containers:
-        - name: xcagi
-          env:
-            # Override ConfigMap FHD_ENV=production for the staging overlay so the
-            # GitOps/kustomize apply path yields the NeuroBus staging profile
-            # (bus.py treats FHD_ENV=staging specially). Explicit env wins over envFrom.
-            - name: FHD_ENV
-              value: "staging"
-            - name: XCAGI_GUNICORN_WORKERS
-              value: "2"
-            - name: XCAGI_QUERY_CACHE_BACKEND
-              value: "redis"
-            - name: DATABASE_READ_URL
-              valueFrom:
-                configMapKeyRef:
-                  name: xcagi-config
-                  key: database_read_url
-                  optional: true
-            - name: XCAGI_CHAT_STREAM_MAX_PER_POD
-              value: "30"
+  name: xcagi-config
+data:
+  FHD_ENV: "staging"
+  XCAGI_GUNICORN_WORKERS: "2"
+  XCAGI_CHAT_STREAM_MAX_PER_POD: "30"

@@ -119,6 +119,28 @@ bash /opt/fhd-staging/scripts/deploy/fhd-auto-update.sh
 - 生产晋级：`bash FHD/scripts/gitops/bump_image.sh production <sha-tag> --commit`（人工 / orchestrator）。
 - 制品身份恒 `git_sha` + `sha256` + cosign digest，**不 bump 版本**（v10 锁 `10.0.0`）。
 
+## 渐进式交付（Phase 3 · Argo Rollouts + SLO 分析门）
+
+GitOps overlays（`staging` / `production`）引用 `FHD/k8s/rollouts/`（`Deployment` → `Rollout`），由 Argo Rollouts 控制器执行金丝雀 + Prometheus 自动分析 + 失败自动 abort/回滚。
+
+| 组件 | 路径 | 说明 |
+|------|------|------|
+| Rollout | `FHD/k8s/rollouts/rollout.yaml` | 金丝雀 20% → 50% → 100%，每步 `xcagi-slo-gate` 分析 |
+| AnalysisTemplate | `FHD/k8s/rollouts/analysis-template.yaml` | 查 `prometheus.monitoring:9090` 的 `xcagi:api_error_ratio:rate5m`（<5%）与 `xcagi:api_latency_p95:5m`（<1.5s） |
+| 控制器 | `FHD/gitops/apps/rollouts.yaml`（sync-wave -2） | Helm `argo-rollouts`；或 `bash FHD/scripts/gitops/bootstrap_rollouts.sh` |
+| 旧清单 | `FHD/k8s/archive/` | `canary.yaml` / `blue-green-deployment.yaml` 已归档 |
+
+**staging 环境覆盖**：`replicas-patch.yaml` 改 Rollout 副本；`config-patch.yaml` 改 `xcagi-config` ConfigMap（`FHD_ENV=staging` 等）——避免对 CRD 容器列表做 strategic-merge（会丢 image/probes）。
+
+**break-glass**：`fhd-deploy.yml` 的 `strategy=canary|blue-green` 仅打 warning，始终 rolling `Deployment`；渐进式交付走 GitOps。
+
+**运维 CLI**（可选插件）：
+```bash
+kubectl argo rollouts get rollout xcagi -n xcagi-staging --watch
+kubectl argo rollouts promote xcagi -n xcagi-staging   # 手动晋级
+kubectl argo rollouts abort   xcagi -n xcagi-staging   # 手动 abort
+```
+
 ## Secrets / Variables 清单
 
 **Settings → Secrets and variables → Actions**（Secrets 与 Variables 两页）。标「跳过」者缺失时对应步骤跳过（不致 CI 失败）。
