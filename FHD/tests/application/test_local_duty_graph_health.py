@@ -34,7 +34,9 @@ def test_build_local_duty_graph_health_shape() -> None:
     staffing = out["staffing"]
     assert staffing["planned_count"] == 2
     assert staffing["registered_count"] == 1
-    assert staffing["missing_employees"] == ["emp-b"]
+    # 本地 health：缺岗走 missing_local_employee_packs；missing_employees 恒 []（与 MODstore 对齐）
+    assert staffing["missing_employees"] == []
+    assert staffing["missing_local_employee_packs"] == ["emp-b"]
 
 
 class TestLocalDutyGraphRoutes:

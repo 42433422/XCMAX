@@ -158,6 +158,11 @@ def validate_dependencies(metadata: ModMetadata, loaded_mods: list[str]) -> bool
     for dep_id, version_spec in metadata.dependencies.items():
         if dep_id == "xcagi":
             if not _check_xcagi_version(version_spec):
+                logger.warning(
+                    "Mod %s requires xcagi %s but host version is 10.0.0",
+                    metadata.id,
+                    version_spec,
+                )
                 return False
         elif dep_id not in loaded_mods:
             logger.warning(

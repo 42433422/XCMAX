@@ -62,6 +62,7 @@ def test_seed_industry_mod_from_pool(tmp_path, monkeypatch):
                 "mods_root": str(mods_root),
                 "invalidate_scan_cache": lambda self: None,
                 "load_mod": lambda self, mid: True,
+                "unload_mod": lambda self, mid: True,
             },
         )(),
     )
