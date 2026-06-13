@@ -35,6 +35,14 @@ v7-reference/v7-server-extract/
 _scp_tmp/
 _personal_sync_bak/
 
+# XCMAX dev 栈运行时（scripts/start-xcmax.sh 生成，不入库）
+.xcmax-logs/
+.xcmax-pids/
+
+# macOS AppleDouble / 目录元数据（复制/压缩时产生）
+**/._*
+.DS_Store
+
 # XCMAX 工作区分析产物（由 scripts/build-xcmax-tree-data.py 等生成）
 .cache/
 xcmax-*.json
