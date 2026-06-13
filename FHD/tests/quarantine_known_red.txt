@@ -23,16 +23,13 @@ tests/neuro/test_sla_controller_threshold.py  # ASSERT:2
 tests/release/test_android_deliverable_contract.py  # ASSERT:1
 tests/routes/test_code_editor_permissions.py  # ASSERT:1
 tests/routes/test_desktop_runtime_status.py  # ASSERT:4
-tests/test_application/test_finance_app_service_parse_errors.py  # ASSERT:1
 tests/test_aux_employee_store.py  # ASSERT:2
 tests/test_coverage_ramp_routes.py  # ASSERT:10
-tests/test_db/test_sqlite_pk_reuse.py  # ASSERT:1
 tests/test_db/test_validators_edge_cases.py  # ASSERT:2
 tests/test_decoupling_mods.py  # ASSERT:5
 tests/test_deliverable_status.py  # ASSERT:1
 tests/test_im_sync.py  # ASSERT:1
 tests/test_infrastructure/test_db_engine_routing.py  # ASSERT:3
-tests/test_infrastructure/test_intent_cache_miss_expire.py  # ASSERT:1
 tests/test_infrastructure/test_mods_manifest_parse.py  # ASSERT:1
 tests/test_infrastructure/test_ocr_adapter_switch.py  # ASSERT:4
 tests/test_infrastructure/test_rag_hybrid_retriever_fallback.py  # ASSERT:3
@@ -62,7 +59,6 @@ tests/routes/test_fhd_meta_serialization.py  # OTHER:4
 tests/routes/test_health_k8s_probe.py  # OTHER:5
 tests/test_application/test_ai_chat_app_service.py  # OTHER:2
 tests/test_application/test_customer_app_service_merge_conflict.py  # OTHER:2
-tests/test_application/test_material_app_service_unit_conversion.py  # OTHER:1
 tests/test_coverage_ramp_phase41_routes.py  # OTHER:4
 tests/test_coverage_ramp_phase5_routes.py  # OTHER:2
 tests/test_db/test_session_module.py  # OTHER:3
