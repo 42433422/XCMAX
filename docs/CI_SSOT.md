@@ -218,6 +218,22 @@ bash /opt/fhd-full/scripts/deploy/fhd-apply-release-compose.sh
 
 > 把 safety / bandit-broad 设为 advisory 是有意为之（传递依赖 CVE 常需评估、不宜直接红）；真正的供应链信任在 **Phase 1** 由 SBOM + cosign 签名 + SLSA provenance + 部署前 `cosign verify` 补强。
 
+## 供应链信任（Phase 1 · SBOM + 签名 + Provenance）
+
+`fhd-ci-cd.yml` → job `docker-build-fhd-api` 在推送 `xcagi-fhd-api`（按 digest）后：
+
+| 步骤 | 工具 | 产物 |
+|------|------|------|
+| 镜像签名 | cosign **keyless**（Sigstore + GitHub OIDC，`id-token: write`，**无私钥**） | GHCR `.sig` |
+| SBOM | `anchore/sbom-action`（syft，SPDX-JSON） | `fhd-api-sbom` artifact + cosign attest 附着 |
+| Provenance | `actions/attest-build-provenance`（SLSA，`push-to-registry`） | GHCR attestation |
+
+**部署门禁**：`fhd-deploy.yml` 两个环境在 `kubectl apply` 前 `cosign verify`（keyless，校验 OIDC issuer + 本仓 workflow 身份）；验证失败 **拒绝部署**。
+
+- 身份正则：`^https://github.com/<org>/<repo>/.github/workflows/.+@refs/(heads/main|tags/FHD/v.+)$`
+- **Break-glass**：设仓库变量 `COSIGN_VERIFY_DISABLE=1` 临时跳过验证（仅紧急；恢复后清除）。
+- 制品身份仍为 `git_sha` + `sha256` + cosign digest，**不 bump 版本**（v10 锁）。
+
 ## Codecov（FHD 后端）
 
 `fhd-ci-cd.yml` → job `backend-test` 上传 `coverage.xml` 至 Codecov。**可选**：需在 GitHub **Settings → Secrets → Actions** 配置 `CODECOV_TOKEN`；无 token 时步骤 `continue-on-error`（不阻断 CI）。本地 `coverage.xml` / `htmlcov/` 仍为 SSOT。

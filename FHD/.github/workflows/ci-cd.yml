@@ -352,6 +352,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+      id-token: write      # cosign keyless (Sigstore OIDC) + provenance
+      attestations: write  # actions/attest-build-provenance (SLSA)
 
     steps:
       - uses: actions/checkout@v4
@@ -392,6 +394,50 @@ jobs:
           labels: ${{ steps.meta_fhd.outputs.labels }}
           cache-from: type=gha,scope=xcagi-fhd-api
           cache-to: type=gha,mode=max,scope=xcagi-fhd-api
+
+      # ── Supply-chain trust (only when image was pushed → digest present) ──
+      - name: Install Cosign
+        if: steps.build_fhd.outputs.digest != ''
+        uses: sigstore/cosign-installer@v3.7.0
+
+      - name: Sign xcagi-fhd-api image (keyless / Sigstore OIDC)
+        if: steps.build_fhd.outputs.digest != ''
+        env:
+          IMAGE_DIGEST_REF: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_FHD_API }}@${{ steps.build_fhd.outputs.digest }}
+        run: cosign sign --yes "${IMAGE_DIGEST_REF}"
+
+      - name: Generate SBOM (SPDX-JSON) for xcagi-fhd-api
+        if: steps.build_fhd.outputs.digest != ''
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_FHD_API }}@${{ steps.build_fhd.outputs.digest }}
+          format: spdx-json
+          output-file: ${{ runner.temp }}/fhd-api-sbom.spdx.json
+          upload-artifact: false
+
+      - name: Attest SBOM to image (cosign)
+        if: steps.build_fhd.outputs.digest != ''
+        env:
+          IMAGE_DIGEST_REF: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_FHD_API }}@${{ steps.build_fhd.outputs.digest }}
+          SBOM_FILE: ${{ runner.temp }}/fhd-api-sbom.spdx.json
+        run: cosign attest --yes --predicate "${SBOM_FILE}" --type spdxjson "${IMAGE_DIGEST_REF}"
+
+      - name: Generate SLSA build provenance attestation
+        if: steps.build_fhd.outputs.digest != ''
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_FHD_API }}
+          subject-digest: ${{ steps.build_fhd.outputs.digest }}
+          push-to-registry: true
+
+      - name: Upload SBOM artifact
+        if: steps.build_fhd.outputs.digest != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: fhd-api-sbom
+          path: ${{ runner.temp }}/fhd-api-sbom.spdx.json
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Merge image digest into manifest
         if: steps.build_fhd.outputs.digest != ''
