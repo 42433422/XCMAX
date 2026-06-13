@@ -45,7 +45,6 @@ tests/test_planner_tools_dispatch.py  # ASSERT:2
 tests/test_planner_tools_mod.py  # ASSERT:4
 tests/test_routes/test_admin_audit_logs.py  # ASSERT:3
 tests/test_routes/test_auth_phone_login.py  # ASSERT:3
-tests/test_routes/test_auth_subscription_register.py  # ASSERT:3
 tests/test_routes/test_health_capabilities.py  # ASSERT:1
 tests/test_routes/test_oidc_auth.py  # ASSERT:4
 tests/test_routes/test_search_v0.py  # ASSERT:2
@@ -54,7 +53,6 @@ tests/test_services/test_user_memory_persistence_failures.py  # ASSERT:11
 tests/test_shipment_tasks.py  # ASSERT:2
 tests/test_sla_health_probe.py  # ASSERT:1
 tests/test_utils/test_printer_automation.py  # ASSERT:10
-tests/unit/infrastructure/test_domain_registry.py  # ASSERT:1
 
 # ===== OTHER (46 文件) =====
 tests/neuro/test_command_gateway_dispatch_errors.py  # OTHER:1
@@ -84,11 +82,9 @@ tests/test_neuro_bus_handler_registry.py  # OTHER:3
 tests/test_neuro_bus_runtime.py  # OTHER:2
 tests/test_openapi_consistency.py  # OTHER:2
 tests/test_routes/test_im_v0.py  # OTHER:2
-tests/test_services/test_contract_expiry_notify.py  # OTHER:1
 tests/test_services/test_extract_log_service.py  # OTHER:3
 tests/test_services/test_printer_service.py  # OTHER:4
 tests/test_slo_metrics_histogram.py  # OTHER:2
-tests/test_start_lan_launcher.py  # OTHER:1
 tests/test_utils/test_mobile_api_responses.py  # OTHER:5
 tests/test_utils/test_redis_cache_fallback.py  # OTHER:7
 tests/test_utils/test_utils.py  # OTHER:8
