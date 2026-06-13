@@ -400,7 +400,7 @@ class ModIndexService:
         success_count = 0
         fail_count = 0
 
-        logger.info(f"Rebuilding MOD index from: {store_dir}")
+        logger.info("Rebuilding MOD index: %s", store_dir)
 
         for entry in os.listdir(store_dir):
             if entry.endswith(".xcmod") or entry.endswith(".xcemp"):

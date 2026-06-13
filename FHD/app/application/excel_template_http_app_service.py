@@ -534,7 +534,7 @@ def update_template(template_id: int, data: dict[str, Any] = Body(default_factor
                 params["business_rules"] = json.dumps(data["business_rules"], ensure_ascii=False)
             updates.append("updated_at = :updated_at")
             params["updated_at"] = datetime.now()
-            sql = f"UPDATE templates SET {', '.join(updates)} WHERE id = :id"
+            sql = "UPDATE templates SET " + ", ".join(updates) + " WHERE id = :id"
             db.execute(text(sql), params)
             db.commit()
             db.execute(

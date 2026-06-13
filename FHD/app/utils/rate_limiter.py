@@ -28,6 +28,10 @@ class RateLimitBackendError(RuntimeError):
     """需要分布式限流后端（Redis）但其不可用时抛出。"""
 
 
+class CircuitOpenError(RuntimeError):
+    """熔断器处于 open 状态、拒绝调用时抛出（替代裸 Exception，便于精确捕获）。"""
+
+
 def _fail_closed_without_redis() -> bool:
     """无 Redis 时是否「拒绝」（fail-closed）。
 
@@ -60,9 +64,16 @@ def _get_redis_client():
 class _InMemoryRateLimiter:
     """内存限流器（无 Redis 时使用）"""
 
-    def __init__(self, max_requests: int = 100, window_seconds: int = 60):
+    def __init__(
+        self,
+        max_requests: int = 100,
+        window_seconds: int = 60,
+        max_keys: int = 10000,
+    ):
         self._max_requests = max_requests
         self._window_seconds = window_seconds
+        # 限制追踪的 key 总数，避免长期运行下 _requests 无界增长导致内存泄漏。
+        self._max_keys = max_keys
         self._requests: OrderedDict[str, list] = OrderedDict()
         self._lock = Lock()
 
@@ -78,7 +89,12 @@ class _InMemoryRateLimiter:
             self._clean_old(key)
             now = time.time()
             if key not in self._requests:
+                # 容量上限：淘汰最久未活动的 key（OrderedDict 头部）。
+                while len(self._requests) >= self._max_keys:
+                    self._requests.popitem(last=False)
                 self._requests[key] = []
+            else:
+                self._requests.move_to_end(key)
             if len(self._requests[key]) < self._max_requests:
                 self._requests[key].append(now)
                 return True
@@ -166,7 +182,7 @@ class _CircuitBreaker:
 
     def call(self, func, *args, **kwargs):
         if self.state == "open":
-            raise Exception("Circuit breaker is open")
+            raise CircuitOpenError("Circuit breaker is open")
 
         try:
             result = func(*args, **kwargs)

@@ -4,6 +4,8 @@ name: CI/CD Pipeline
 on:
   push:
     branches: [ main, develop, master ]
+    tags:
+      - "FHD/v*"
   pull_request:
     branches: [ main, develop, master ]
   workflow_dispatch:
@@ -140,6 +142,11 @@ jobs:
 
       - name: Run mypy type checking
         run: mypy app/ --no-error-summary
+
+      - name: Type/SQL debt ratchet
+        run: |
+          python scripts/dev/count_type_debt.py
+          python scripts/dev/count_raw_sql.py
 
       - name: Route integrity tests
         env:
@@ -279,6 +286,7 @@ jobs:
             echo "::warning::safety reported advisories (non-blocking); see full-report above"
           }
           bandit -r app/ -lll --skip B101,B601,B110 --exit-zero
+          bandit -r app/ -lll -s B608
 
   # Container image vulnerability scan (built image from CI Dockerfile)
   container-scan:
@@ -389,7 +397,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist/deploy
-          ref="${{ env.REGISTRY }}/42433422/xcmax/xcagi-fhd-api"
+          ref="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_FHD_API }}"
           # build-push-action 只推送到 GHCR，本地 daemon 无镜像；先 pull 再 save
           docker pull "${ref}@${FHD_IMAGE_DIGEST}"
           docker save "${ref}@${FHD_IMAGE_DIGEST}" -o FHD/dist/deploy/fhd-api-image.tar
@@ -414,6 +422,7 @@ jobs:
       needs.docker-build-fhd-api.result == 'success' &&
       (
         (github.ref == 'refs/heads/main' && github.event_name == 'push') ||
+        (startsWith(github.ref, 'refs/tags/FHD/v') && github.event_name == 'push') ||
         (github.event_name == 'workflow_dispatch' && inputs.push_to_cvm == true)
       )
     runs-on: ubuntu-latest
@@ -495,36 +504,3 @@ jobs:
           cache-to: type=gha,mode=max
           build-args: |
             BUILD_DATE=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.created'] }}
-
-  # Release on tags
-  release:
-    needs: docker-build
-    if: startsWith(github.ref, 'refs/tags/FHD/v')
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          generate_release_notes: true
-          draft: false
-          prerelease: ${{ contains(github.ref, '-rc') || contains(github.ref, '-beta') }}
-
-  # Tag 发版时串联 deploy workflow（lint → test → scan → build → deploy）
-  trigger-deploy:
-    needs: [docker-build]
-    if: startsWith(github.ref, 'refs/tags/FHD/v')
-    runs-on: ubuntu-latest
-    permissions:
-      actions: write
-    steps:
-      - name: Trigger Deploy workflow
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh workflow run fhd-deploy.yml \
-            -f environment=production \
-            --ref "${{ github.ref_name }}"

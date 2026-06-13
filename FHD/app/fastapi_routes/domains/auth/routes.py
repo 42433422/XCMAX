@@ -9,6 +9,31 @@ from typing import Any
 from fastapi import APIRouter, Body, Depends, File, Query, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 
+from app.http.error_codes import (
+    ACCOUNT_DISABLED,
+    CREATE_FAILED,
+    INVALID_FILE,
+    INVALID_INPUT,
+    INVALID_ROLE,
+    INVALID_SESSION,
+    LOGIN_AFTER_REGISTER,
+    LOCAL_LOGIN_AFTER_REGISTER,
+    MARKET_NOT_BOUND,
+    MARKET_REGISTER_FAILED,
+    MARKET_RESET_FAILED,
+    MISSING_PASSWORD,
+    NO_SESSION,
+    NOT_FOUND,
+    QR_NOT_FOUND,
+    REGISTRATION_DISABLED,
+    SAVE_FAILED,
+    SELF_DELETE,
+    SEND_CODE_FAILED,
+    UNAUTHORIZED,
+    UPDATE_FAILED,
+    WEAK_PASSWORD,
+    error_envelope,
+)
 from app.infrastructure.auth.dependencies import (
     get_logged_in_user,
     require_permission,
@@ -61,19 +86,12 @@ def auth_me(request: Request):
     if not user:
         # 与 /api/auth/session/validate 一致：未登录用 200，避免前端 fetch 在控制台刷 401。
         return JSONResponse(
-            {
-                "success": False,
-                "valid": False,
-                "error": {"code": "UNAUTHORIZED", "message": "请先登录"},
-            },
+            {**error_envelope(UNAUTHORIZED, "请先登录"), "valid": False},
             status_code=200,
         )
     if not getattr(user, "is_active", True):
         return JSONResponse(
-            {
-                "success": False,
-                "error": {"code": "ACCOUNT_DISABLED", "message": "账户已被禁用"},
-            },
+            error_envelope(ACCOUNT_DISABLED, "账户已被禁用"),
             status_code=403,
         )
 
@@ -109,22 +127,14 @@ async def auth_session_validate(request: Request):
     if not session_id:
         # 使用 200：避免前端 api.get 将「未登录」当成 HTTP 错误刷屏；语义由 success/valid 表达。
         return JSONResponse(
-            {
-                "success": False,
-                "valid": False,
-                "error": {"code": "NO_SESSION", "message": "无会话信息"},
-            },
+            {**error_envelope(NO_SESSION, "无会话信息"), "valid": False},
             status_code=200,
         )
     auth_app_service = get_auth_app_service()
     session_info = auth_app_service.session_manager.get_session_info(session_id)
     if not session_info:
         return JSONResponse(
-            {
-                "success": False,
-                "valid": False,
-                "error": {"code": "INVALID_SESSION", "message": "会话无效或已过期"},
-            },
+            {**error_envelope(INVALID_SESSION, "会话无效或已过期"), "valid": False},
             status_code=200,
         )
 
@@ -138,15 +148,14 @@ async def auth_session_validate(request: Request):
             if not market_tok:
                 return JSONResponse(
                     {
-                        "success": False,
-                        "valid": False,
-                        "error": {
-                            "code": "MARKET_NOT_BOUND",
-                            "message": (
+                        **error_envelope(
+                            MARKET_NOT_BOUND,
+                            (
                                 "企业版需使用修茈市场企业级账号登录。"
                                 "若此前仅用本地管理员进入，请退出后重新登录。"
                             ),
-                        },
+                        ),
+                        "valid": False,
                     },
                     status_code=200,
                 )
@@ -331,10 +340,7 @@ def auth_subscription_status(request: Request):
     user = resolve_session_user(request)
     if not user:
         return JSONResponse(
-            {
-                "success": False,
-                "error": {"code": "UNAUTHORIZED", "message": "请先登录"},
-            },
+            error_envelope(UNAUTHORIZED, "请先登录"),
             status_code=200,
         )
     from app.application.tenant_subscription_app_service import subscription_status_for_user
@@ -367,10 +373,7 @@ def auth_forgot_account(body: dict = Body(default_factory=dict)):
     email = _normalize_auth_email(str(body.get("email") or ""))
     if not email or "@" not in email:
         return JSONResponse(
-            {
-                "success": False,
-                "error": {"code": "INVALID_INPUT", "message": "请填写有效邮箱"},
-            },
+            error_envelope(INVALID_INPUT, "请填写有效邮箱"),
             status_code=400,
         )
     users = _find_local_users_by_email(email)
@@ -394,10 +397,7 @@ async def auth_forgot_password_send_code(body: dict = Body(default_factory=dict)
     email = _normalize_auth_email(str(body.get("email") or ""))
     if not email or "@" not in email:
         return JSONResponse(
-            {
-                "success": False,
-                "error": {"code": "INVALID_INPUT", "message": "请填写有效邮箱"},
-            },
+            error_envelope(INVALID_INPUT, "请填写有效邮箱"),
             status_code=400,
         )
     local_users = _find_local_users_by_email(email)
@@ -407,7 +407,7 @@ async def auth_forgot_password_send_code(body: dict = Body(default_factory=dict)
         if local_users:
             hint = f"{hint}（本机库中有该邮箱用户，请确认修茈市场服务与邮件配置正常）"
         return JSONResponse(
-            {"success": False, "error": {"code": "SEND_CODE_FAILED", "message": hint}},
+            error_envelope(SEND_CODE_FAILED, hint),
             status_code=502,
         )
     return {
@@ -430,30 +430,18 @@ async def auth_forgot_password_reset(body: dict = Body(default_factory=dict)):
     new_password = str(body.get("new_password") or body.get("password") or "")
     if not email or "@" not in email:
         return JSONResponse(
-            {
-                "success": False,
-                "error": {"code": "INVALID_INPUT", "message": "请填写有效邮箱"},
-            },
+            error_envelope(INVALID_INPUT, "请填写有效邮箱"),
             status_code=400,
         )
     if len(new_password) < 6:
         return JSONResponse(
-            {
-                "success": False,
-                "error": {"code": "WEAK_PASSWORD", "message": "新密码至少 6 个字符"},
-            },
+            error_envelope(WEAK_PASSWORD, "新密码至少 6 个字符"),
             status_code=400,
         )
     market_result = await reset_market_password_with_code(email, code, new_password)
     if not market_result.get("success"):
         return JSONResponse(
-            {
-                "success": False,
-                "error": {
-                    "code": "MARKET_RESET_FAILED",
-                    "message": market_result.get("message", "重置失败"),
-                },
-            },
+            error_envelope(MARKET_RESET_FAILED, market_result.get("message", "重置失败")),
             status_code=400,
         )
     local_updated = _sync_local_password_for_email(email, new_password)
@@ -483,18 +471,12 @@ async def auth_register(request: Request, body: dict = Body(default_factory=dict
 
     if not username or not password:
         return JSONResponse(
-            {
-                "success": False,
-                "error": {"code": "INVALID_INPUT", "message": "用户名和密码不能为空"},
-            },
+            error_envelope(INVALID_INPUT, "用户名和密码不能为空"),
             status_code=400,
         )
     if len(password) < 6:
         return JSONResponse(
-            {
-                "success": False,
-                "error": {"code": "WEAK_PASSWORD", "message": "密码至少 6 个字符"},
-            },
+            error_envelope(WEAK_PASSWORD, "密码至少 6 个字符"),
             status_code=400,
         )
 
@@ -504,22 +486,16 @@ async def auth_register(request: Request, body: dict = Body(default_factory=dict
     if sku == "enterprise":
         if not email:
             return JSONResponse(
-                {
-                    "success": False,
-                    "error": {"code": "INVALID_INPUT", "message": "企业版注册需填写邮箱"},
-                },
+                error_envelope(INVALID_INPUT, "企业版注册需填写邮箱"),
                 status_code=400,
             )
         market_reg = await register_market_user(username, password, email, verification_code)
         if not market_reg.get("success"):
             return JSONResponse(
-                {
-                    "success": False,
-                    "error": {
-                        "code": "MARKET_REGISTER_FAILED",
-                        "message": market_reg.get("message", "修茈市场注册失败"),
-                    },
-                },
+                error_envelope(
+                    MARKET_REGISTER_FAILED,
+                    market_reg.get("message", "修茈市场注册失败"),
+                ),
                 status_code=400,
             )
         email_market = _market_user_email_from_raw(market_reg.get("raw")) or email
@@ -527,13 +503,10 @@ async def auth_register(request: Request, body: dict = Body(default_factory=dict
         result = auth_app_service.login(username, password)
         if not result.get("success"):
             return JSONResponse(
-                {
-                    "success": False,
-                    "error": {
-                        "code": "LOCAL_LOGIN_AFTER_REGISTER",
-                        "message": result.get("message", "注册成功但本地登录失败"),
-                    },
-                },
+                error_envelope(
+                    LOCAL_LOGIN_AFTER_REGISTER,
+                    result.get("message", "注册成功但本地登录失败"),
+                ),
                 status_code=500,
             )
         session_id = result.get("session_id")
@@ -554,13 +527,10 @@ async def auth_register(request: Request, body: dict = Body(default_factory=dict
     else:
         if not _open_registration_allowed(sku):
             return JSONResponse(
-                {
-                    "success": False,
-                    "error": {
-                        "code": "REGISTRATION_DISABLED",
-                        "message": "本部署未开放自助注册，请联系管理员创建账号",
-                    },
-                },
+                error_envelope(
+                    REGISTRATION_DISABLED,
+                    "本部署未开放自助注册，请联系管理员创建账号",
+                ),
                 status_code=403,
             )
         user_service = get_user_app_service()
@@ -576,19 +546,16 @@ async def auth_register(request: Request, body: dict = Body(default_factory=dict
             if "已存在" in msg or "unique" in msg.lower():
                 msg = "用户名已存在"
             return JSONResponse(
-                {"success": False, "error": {"code": "CREATE_FAILED", "message": msg}},
+                error_envelope(CREATE_FAILED, msg),
                 status_code=400,
             )
         result = auth_app_service.login(username, password)
         if not result.get("success"):
             return JSONResponse(
-                {
-                    "success": False,
-                    "error": {
-                        "code": "LOGIN_AFTER_REGISTER",
-                        "message": result.get("message", "注册成功但登录失败"),
-                    },
-                },
+                error_envelope(
+                    LOGIN_AFTER_REGISTER,
+                    result.get("message", "注册成功但登录失败"),
+                ),
                 status_code=500,
             )
         session_id = result.get("session_id")
@@ -637,10 +604,7 @@ async def auth_login(request: Request, body: dict = Body(default_factory=dict)):
             time.perf_counter() - login_start
         )
         return JSONResponse(
-            {
-                "success": False,
-                "error": {"code": "INVALID_INPUT", "message": "用户名和密码不能为空"},
-            },
+            error_envelope(INVALID_INPUT, "用户名和密码不能为空"),
             status_code=200,
         )
 
@@ -693,10 +657,7 @@ async def auth_login_with_phone_code(request: Request, body: dict = Body(default
             time.perf_counter() - login_start
         )
         return JSONResponse(
-            {
-                "success": False,
-                "error": {"code": "INVALID_INPUT", "message": "手机号和验证码不能为空"},
-            },
+            error_envelope(INVALID_INPUT, "手机号和验证码不能为空"),
             status_code=400,
         )
 
@@ -840,7 +801,7 @@ async def auth_qr_status(qr_id: str = Query(""), poll_secret: str = Query("")):
     rec = poll_auth_qr(qr_id, poll_secret)
     if not rec:
         return JSONResponse(
-            {"success": False, "error": {"code": "QR_NOT_FOUND", "message": "二维码无效"}},
+            error_envelope(QR_NOT_FOUND, "二维码无效"),
             status_code=404,
         )
     status = str(rec.get("status") or "pending")
@@ -884,16 +845,13 @@ def auth_profile_patch(body: dict = Body(default_factory=dict), user=Depends(get
         kwargs["email"] = str(email).strip()[:128]
     if not kwargs:
         return JSONResponse(
-            {"success": False, "error": {"code": "INVALID_INPUT", "message": "无有效字段"}},
+            error_envelope(INVALID_INPUT, "无有效字段"),
             status_code=400,
         )
     result = get_user_app_service().update_user(user.id, **kwargs)
     if not result.get("success"):
         return JSONResponse(
-            {
-                "success": False,
-                "error": {"code": "UPDATE_FAILED", "message": result.get("message", "更新失败")},
-            },
+            error_envelope(UPDATE_FAILED, result.get("message", "更新失败")),
             status_code=400,
         )
     from app.db.models.user import User
@@ -903,7 +861,7 @@ def auth_profile_patch(body: dict = Body(default_factory=dict), user=Depends(get
         row = db.query(User).filter(User.id == user.id).first()
         if row is None:
             return JSONResponse(
-                {"success": False, "error": {"code": "NOT_FOUND", "message": "用户不存在"}},
+                error_envelope(NOT_FOUND, "用户不存在"),
                 status_code=404,
             )
         payload = _user_public_dict(row)
@@ -918,7 +876,7 @@ async def auth_profile_avatar_upload(
     """上传并替换当前用户头像（png/jpg/gif/webp，≤4MB）。"""
     if file is None or not file.filename:
         return JSONResponse(
-            {"success": False, "error": {"code": "INVALID_INPUT", "message": "请选择图片文件"}},
+            error_envelope(INVALID_INPUT, "请选择图片文件"),
             status_code=400,
         )
     from app.utils.secure_filename import secure_filename
@@ -934,16 +892,13 @@ async def auth_profile_avatar_upload(
         save_user_avatar_file(user.id, content, ext)
     except ValueError as exc:
         return JSONResponse(
-            {"success": False, "error": {"code": "INVALID_FILE", "message": str(exc)}},
+            error_envelope(INVALID_FILE, str(exc)),
             status_code=400,
         )
     except OSError as exc:
         logger.exception("avatar save failed user_id=%s", user.id)
         return JSONResponse(
-            {
-                "success": False,
-                "error": {"code": "SAVE_FAILED", "message": f"头像保存失败：{exc}"},
-            },
+            error_envelope(SAVE_FAILED, f"头像保存失败：{exc}"),
             status_code=500,
         )
 
@@ -980,7 +935,7 @@ async def auth_update_company_brand(
     sid = session_id_from_request(request)
     if not sid:
         return JSONResponse(
-            {"success": False, "error": {"code": "NO_SESSION", "message": "无会话"}},
+            error_envelope(NO_SESSION, "无会话"),
             status_code=400,
         )
     from app.application.session_account_meta import (
@@ -1021,7 +976,7 @@ def auth_logout(request: Request):
     sid = session_id_from_request(request)
     if not sid:
         return JSONResponse(
-            {"success": False, "error": {"code": "NO_SESSION", "message": "无有效会话"}},
+            error_envelope(NO_SESSION, "无有效会话"),
             status_code=400,
         )
     auth_app_service = get_auth_app_service()
@@ -1047,15 +1002,12 @@ def auth_password_change(body: dict = Body(default_factory=dict), user=Depends(g
     new_password = body.get("new_password", "")
     if not old_password or not new_password:
         return JSONResponse(
-            {"success": False, "error": {"code": "INVALID_INPUT", "message": "请填写完整信息"}},
+            error_envelope(INVALID_INPUT, "请填写完整信息"),
             status_code=400,
         )
     if len(new_password) < 6:
         return JSONResponse(
-            {
-                "success": False,
-                "error": {"code": "WEAK_PASSWORD", "message": "新密码至少 6 个字符"},
-            },
+            error_envelope(WEAK_PASSWORD, "新密码至少 6 个字符"),
             status_code=400,
         )
     auth_app_service = get_auth_app_service()
@@ -1084,7 +1036,7 @@ def users_get(user_id: int, _user=Depends(_require_admin)):
     user = user_service.get_user(user_id)
     if not user:
         return JSONResponse(
-            {"success": False, "error": {"code": "NOT_FOUND", "message": "用户不存在"}},
+            error_envelope(NOT_FOUND, "用户不存在"),
             status_code=404,
         )
     return {"success": True, "data": {"user": user}}
@@ -1098,21 +1050,18 @@ def users_create(body: dict = Body(default_factory=dict), _user=Depends(_require
     password = body.get("password", "")
     if not username or not password:
         return JSONResponse(
-            {
-                "success": False,
-                "error": {"code": "INVALID_INPUT", "message": "用户名和密码不能为空"},
-            },
+            error_envelope(INVALID_INPUT, "用户名和密码不能为空"),
             status_code=400,
         )
     if len(password) < 6:
         return JSONResponse(
-            {"success": False, "error": {"code": "WEAK_PASSWORD", "message": "密码至少6个字符"}},
+            error_envelope(WEAK_PASSWORD, "密码至少6个字符"),
             status_code=400,
         )
     role = body.get("role", "viewer")
     if role not in ["viewer", "operator", "admin"]:
         return JSONResponse(
-            {"success": False, "error": {"code": "INVALID_ROLE", "message": "无效的角色"}},
+            error_envelope(INVALID_ROLE, "无效的角色"),
             status_code=400,
         )
     user_service = get_user_app_service()
@@ -1125,7 +1074,7 @@ def users_create(body: dict = Body(default_factory=dict), _user=Depends(_require
     )
     if not result["success"]:
         return JSONResponse(
-            {"success": False, "error": {"code": "CREATE_FAILED", "message": result["error"]}},
+            error_envelope(CREATE_FAILED, result["error"]),
             status_code=400,
         )
     return JSONResponse({"success": True, "data": {"user": result["user"]}}, status_code=201)
@@ -1140,7 +1089,7 @@ def users_update(
     role = body.get("role")
     if role and role not in ["viewer", "operator", "admin"]:
         return JSONResponse(
-            {"success": False, "error": {"code": "INVALID_ROLE", "message": "无效的角色"}},
+            error_envelope(INVALID_ROLE, "无效的角色"),
             status_code=400,
         )
     user_service = get_user_app_service()
@@ -1153,7 +1102,7 @@ def users_update(
     )
     if not result["success"]:
         return JSONResponse(
-            {"success": False, "error": {"code": "UPDATE_FAILED", "message": result["error"]}},
+            error_envelope(UPDATE_FAILED, result["error"]),
             status_code=400,
         )
     return {"success": True, "data": {"user": result["user"]}}
@@ -1163,7 +1112,7 @@ def users_update(
 def users_delete(user_id: int, user=Depends(_require_admin)):
     if user.id == user_id:
         return JSONResponse(
-            {"success": False, "error": {"code": "SELF_DELETE", "message": "不能删除自己"}},
+            error_envelope(SELF_DELETE, "不能删除自己"),
             status_code=400,
         )
     from app.application import get_user_app_service
@@ -1184,12 +1133,12 @@ def users_reset_password(
     new_password = body.get("new_password", "")
     if not new_password:
         return JSONResponse(
-            {"success": False, "error": {"code": "MISSING_PASSWORD", "message": "新密码不能为空"}},
+            error_envelope(MISSING_PASSWORD, "新密码不能为空"),
             status_code=400,
         )
     if len(new_password) < 6:
         return JSONResponse(
-            {"success": False, "error": {"code": "WEAK_PASSWORD", "message": "密码至少6个字符"}},
+            error_envelope(WEAK_PASSWORD, "密码至少6个字符"),
             status_code=400,
         )
     auth_app_service = get_auth_app_service()

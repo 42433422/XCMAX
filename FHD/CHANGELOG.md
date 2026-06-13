@@ -25,9 +25,11 @@
 
 ### 三项技术债清偿（2026-06-13 · v10 线内迭代）
 
-- **refactor(errors)**：`app/errors.py` 扩展 Mod/Workflow/ExternalService/Validation 等业务异常 SSOT；`operational_errors.py` 拆为 `INFRA_TRANSIENT`/`DATA_SHAPE`/`RECOVERABLE_ERRORS`；全仓 381 文件迁移；payment/auth 域窄 catch + `PaymentError`；新增 `scripts/migrate_operational_errors.py` 与 `scripts/ci/check_operational_errors_gate.py`
+- **refactor(errors)**：`app/errors.py` 扩展 Mod/Workflow/ExternalService/Validation 等业务异常 SSOT；`operational_errors.py` 拆为 `INFRA_TRANSIENT`/`DATA_SHAPE`/`RECOVERABLE_ERRORS`；全仓迁移、`app/` 下旧符号 `OPERATIONAL_ERRORS` 清零；payment/auth 域窄 catch + `PaymentError`；新增防回归门禁 `scripts/ci/check_operational_errors_gate.py`
 - **refactor(frontend-types)**：`ApiResponse` SSOT 于 `types/api.ts`；`ModManifest`/`ModCatalogItem` 拆分；`ApiChatMessage`/`UiChatMessage` 拆分；消除组件内重复 interface
-- **test(coverage)**：取消 `CI_STABLE_ONLY`；`source=[app]` 全量口径；`fail_under=58`；清空 `collect_ignore`；修复 routing/coverage_ramp 运行时 skip
+- **test(coverage)**：取消 `CI_STABLE_ONLY`；`source=[app]` 全量口径；清空 `collect_ignore`；修复 routing/coverage_ramp 运行时 skip
+- **test(rotten-fix)**：移除 stable-only 跳过后暴露的腐烂测试**全量修复**，后端 `tests/` **1780 passed / 101 skipped / 0 failed / 0 error**（`source=[app]`）。生产侧最小回归修复：`retry_handler` 纳入 `sqlite3.OperationalError`、`session_cache` 补 `delete()`/`make_key()`、`product_app_service.get_products` 接受 `unit_name`/`model_number` 并归一、`init_db.init_im_tables`、IM WS 测试模式 `X-User-ID` 回退、`metrics.record_ai_call`、`mobile_api` `per_page=0` 防除零、neuro `bus`/`health_monitor`/`sla_controller` 行为对齐
+- **test(coverage-baseline)**：`fail_under` 由失真的 `58`（旧窄 include 口径）按全量诚实基线**下调为 `35`**（实测 36.13%，~1pt 余量）；提升覆盖率单独立项，禁止再用窄 include 凑数
 
 ### v10 交付前全量修复（2026-06-12 · v10 线内迭代）
 

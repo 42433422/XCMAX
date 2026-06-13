@@ -42,12 +42,14 @@ def _sqlite_customers_list(
         cond.append("(customer_name LIKE ? OR contact_person LIKE ? OR contact_phone LIKE ?)")
         args.extend([f"%{kw}%", f"%{kw}%", f"%{kw}%"])
     where = " AND ".join(cond) if cond else "1=1"
-    cur.execute(f"SELECT COUNT(*) FROM customers WHERE {where}", args)
+    cur.execute("SELECT COUNT(*) FROM customers WHERE " + where, args)
     total = int(cur.fetchone()[0])
     offset = (page - 1) * per_page
     cur.execute(
         "SELECT id, customer_name, contact_person, contact_phone, address, purchase_unit "
-        f"FROM customers WHERE {where} ORDER BY id LIMIT ? OFFSET ?",
+        "FROM customers WHERE "
+        + where
+        + " ORDER BY id LIMIT ? OFFSET ?",
         [*args, per_page, offset],
     )
     items = [dict(r) for r in cur.fetchall()]

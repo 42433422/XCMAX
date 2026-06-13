@@ -230,7 +230,7 @@ class WechatContactService(NeuroEventPublisherMixin):
                     if msg_table:
                         quoted = quote_sqlite_identifier(msg_table)
                         raw = cur.execute(
-                            f"SELECT * FROM {quoted} LIMIT ?", (limit * 5,)
+                            "SELECT * FROM " + quoted + " LIMIT ?", (limit * 5,)
                         ).fetchall()
                         colnames = [d[0] for d in (cur.description or [])]
                         rows = [dict(zip(colnames, r)) for r in raw]

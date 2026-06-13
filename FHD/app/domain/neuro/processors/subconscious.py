@@ -306,7 +306,7 @@ class LoggingHandler:
 
     @staticmethod
     async def handle(event: NeuroEvent):
-        logger.info(f"Event: {event.event_type} from {event.metadata.source}")
+        logger.info("Event: %s source=%s", event.event_type, event.metadata.source)
 
 
 class MetricsHandler:

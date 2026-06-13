@@ -299,3 +299,23 @@ def _customer_body_name_contact(body: dict) -> tuple[str, str, str, str]:
     ph = str(body.get("contact_phone") or "").strip()
     addr = str(body.get("contact_address") or body.get("address") or "").strip()
     return name, cp, ph, addr
+
+
+def _sql_delete_where(table: str, where_sql: str) -> str:
+    return "DELETE FROM " + table + " WHERE " + where_sql
+
+
+def _sql_update_set_where(table: str, set_clause: str, where_sql: str) -> str:
+    return "UPDATE " + table + " SET " + set_clause + " WHERE " + where_sql
+
+
+def _sql_select_from_where(columns: str, table: str, where_sql: str) -> str:
+    return "SELECT " + columns + " FROM " + table + " WHERE " + where_sql
+
+
+def _sql_insert_returning(table: str, cols_sql: str, vals_sql: str) -> str:
+    return "INSERT INTO " + table + " (" + cols_sql + ") VALUES (" + vals_sql + ") RETURNING id"
+
+
+def _sql_statement_timeout_ms(ms: int) -> str:
+    return "SET statement_timeout TO " + str(int(ms))

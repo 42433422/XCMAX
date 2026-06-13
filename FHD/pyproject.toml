@@ -87,8 +87,7 @@ exclude = [
 ]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "B", "C4", "UP", "SIM", "PLC", "BLE001"]
-# ANN201 待 ④-B 测试收口后分批启用（见 MYPY_TECH_DEBT.md）
+select = ["E", "F", "I", "B", "C4", "UP", "SIM", "PLC", "BLE001", "ANN"]
 ignore = [
     "E501",    # line too long (handled by formatter)
     "E402",    # module-import-not-at-top (有意的延迟导入)
@@ -198,58 +197,10 @@ exclude = [
     "app/infrastructure/skills/skill-maker",
 ]
 
+# Phase 9：全 app/ 默认严格；仅 tests 保留 ignore_errors
 [[tool.mypy.overrides]]
 module = "tests.*"
 ignore_errors = true
-
-# Plan SSOT T24/T25: six wide overrides (TECH-DEBT-ID TD-P1-1-SURFACE-2026-10).
-# Strict gate targets app.application.shipment*, app.domain.shipment.*, app.http.* only;
-# remaining app.application.* stays ignored until batch fixes (see CLAIMED_VS_ACTUAL mypy row).
-[[tool.mypy.overrides]]
-module = [
-    "app.services.*",
-    "app.fastapi_routes.*",
-    "app.routes.*",
-    "app.mod_sdk.*",
-    "app.neuro_bus.*",
-    "app.legacy.*",
-]
-ignore_errors = true
-
-[[tool.mypy.overrides]]
-module = [
-    "app.infrastructure.*",
-    "app.utils.*",
-    "app.ai_engines.*",
-    "app.db.*",
-    "app.di.*",
-    "app.middleware.*",
-    "app.tasks.*",
-    "app.security.*",
-    "app.desktop_runtime.*",
-    "app.shell.*",
-    "app.fastapi_app.*",
-    "app.traditional_mode_fs",
-    "app.resources.*",
-    "app.contexts.*",
-    "app.control.*",
-    "app.enterprise.*",
-    "app.models.*",
-    "app.neuro_domains.*",
-    "app.application.*",
-    "app.domain.*",
-]
-ignore_errors = true
-
-[[tool.mypy.overrides]]
-module = [
-    "app.application.shipment_app_service",
-    "app.application.shipment_audit_app_service",
-    "app.application.facades.shipment_event_primary",
-    "app.domain.shipment.*",
-    "app.http.*",
-]
-ignore_errors = false
 
 # pytest 配置唯一真相源（2026-05-04 整合）：
 # - 旧 pytest.ini 已删除；当前 addopts 保留为不含 --cov，与历史 pytest.ini 的有效行为一致，
@@ -300,8 +251,11 @@ exclude_lines = [
     "@abstractmethod",
     "if DEBUG:",
 ]
-# 真实 full_app 基线 ~60.63%（2026-06-04）；留 2% 余量
-fail_under = 58
+# 真实 full_app 基线（2026-06-13 全量口径 source=[app] 实测）：
+#   73,672 statements / 47,047 missed → 36.14%。
+# 旧值 58 来自被废弃的窄 include 口径（只统计"稳定"模块），与 source=[app] 不可比；
+# 已按诚实全量基线下调，留 ~1pt 余量防止回退。提升覆盖率应单独立项推进，禁止再用窄 include 凑数。
+fail_under = 35
 
 [tool.coverage.html]
 directory = "htmlcov"

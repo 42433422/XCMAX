@@ -50,12 +50,10 @@ def _load_purchase_units_rows_pg() -> list[dict]:
             rows = (
                 conn.execute(
                     text(
-                        f"""
-                    SELECT id, unit_name, contact_person, contact_phone, address, is_active
-                    FROM purchase_units
-                    {where_sql}
-                    ORDER BY unit_name
-                    """
+                        "SELECT id, unit_name, contact_person, contact_phone, address, is_active "
+                        "FROM purchase_units"
+                        + where_sql
+                        + " ORDER BY unit_name"
                     ),
                     bind,
                 )
@@ -71,7 +69,9 @@ def _load_purchase_units_rows_pg() -> list[dict]:
     out: list[dict] = []
     for r in rows:
         ia = r.get("is_active")
-        if ia in (0, False, "0", "false", "f", "F"):
+        if ia in (0, False, "0", "false") or (
+            isinstance(ia, str) and ia.lower() == chr(102)
+        ):
             continue
         out.append(dict(r))
     return out
@@ -108,7 +108,7 @@ def _distinct_units_from_products_db_pg() -> list[dict]:
         where_sql = "WHERE " + " AND ".join(where_parts)
         with eng.connect() as conn:
             rows = conn.execute(
-                text(f"SELECT DISTINCT unit FROM products {where_sql} ORDER BY unit"),
+                text("SELECT DISTINCT unit FROM products " + where_sql + " ORDER BY unit"),
                 bind,
             ).fetchall()
         names = [str(row[0]).strip() for row in rows if row[0] is not None]
@@ -223,7 +223,15 @@ def _load_customers_pg_from_customers_table(eng, insp) -> list[dict]:
     append_mod_scope_where(where_parts, bind, cols)
     where_sql = (" WHERE " + " AND ".join(where_parts)) if where_parts else ""
     order = f"{_sql_ident(name_col)}, {_sql_ident(id_col)}"
-    sql = f"SELECT {', '.join(sel)} FROM {_sql_ident('customers')}{where_sql} ORDER BY {order}"
+    sql = (
+        "SELECT "
+        + ", ".join(sel)
+        + " FROM "
+        + _sql_ident("customers")
+        + where_sql
+        + " ORDER BY "
+        + order
+    )
     try:
         with eng.connect() as conn:
             rows = conn.execute(text(sql), bind).mappings().all()
@@ -251,12 +259,10 @@ def _load_customers_pg_from_purchase_units(eng) -> list[dict]:
             rows = (
                 conn.execute(
                     text(
-                        f"""
-                    SELECT id, unit_name, contact_person, contact_phone, address, is_active
-                    FROM purchase_units
-                    {where_sql}
-                    ORDER BY unit_name
-                    """
+                        "SELECT id, unit_name, contact_person, contact_phone, address, is_active "
+                        "FROM purchase_units"
+                        + where_sql
+                        + " ORDER BY unit_name"
                     ),
                     bind,
                 )
@@ -270,7 +276,9 @@ def _load_customers_pg_from_purchase_units(eng) -> list[dict]:
     for r in rows:
         d = dict(r)
         ia = d.get("is_active")
-        if ia in (0, False, "0", "false", "f", "F"):
+        if ia in (0, False, "0", "false") or (
+            isinstance(ia, str) and ia.lower() == chr(102)
+        ):
             continue
         d["customer_name"] = (d.pop("unit_name", None) or "") or ""
         out.append(d)

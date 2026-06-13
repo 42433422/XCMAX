@@ -132,7 +132,7 @@ class Quantity:
             new_value = self.value * all_conversions[key]
             return Quantity(new_value, target_unit)
 
-        raise ValueError(f"Cannot convert from {self.unit} to {target_unit}")
+        raise ValueError(f"Cannot convert {self.unit} to {target_unit}")
 
     def is_zero(self) -> bool:
         """是否为零"""

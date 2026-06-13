@@ -68,44 +68,18 @@ class CacheStats:
         return f"hits={self.hits}, misses={self.misses}, hit_rate={self.hit_rate:.2%}"
 
 
-class LRUCache:
-    """
-    LRU 缓存实现
+class _BaseCache:
+    """缓存通用骨架：底层容器 / 锁 / 统计，以及与淘汰策略无关的通用操作。
 
-    特点：
-    - 按访问顺序淘汰
-    - 支持容量限制
-    - 线程安全
+    ``LRUCache`` 与 ``LRUTTLCache`` 复用此基类，避免 ``clear`` / ``remove`` /
+    ``has`` / ``size`` / ``stats`` / ``__len__`` 等方法逐字重复。
     """
 
-    def __init__(self, max_size: int = 1000, name: str = "lru"):
+    def __init__(self, name: str):
         self._cache: OrderedDict = OrderedDict()
-        self._max_size = max_size
         self._lock = threading.RLock()
         self._name = name
         self._stats = CacheStats()
-
-    def get(self, key: str) -> Any | None:
-        """获取缓存值"""
-        with self._lock:
-            if key in self._cache:
-                self._cache.move_to_end(key)
-                self._stats.hits += 1
-                return self._cache[key]
-            self._stats.misses += 1
-            return None
-
-    def set(self, key: str, value: Any) -> None:
-        """设置缓存值"""
-        with self._lock:
-            if key in self._cache:
-                self._cache.move_to_end(key)
-            else:
-                if len(self._cache) >= self._max_size:
-                    self._cache.popitem(last=False)
-                    self._stats.evictions += 1
-            self._cache[key] = value
-            self._stats.sets += 1
 
     def clear(self) -> None:
         """清空缓存"""
@@ -139,7 +113,44 @@ class LRUCache:
         return self.size
 
 
-class LRUTTLCache:
+class LRUCache(_BaseCache):
+    """
+    LRU 缓存实现
+
+    特点：
+    - 按访问顺序淘汰
+    - 支持容量限制
+    - 线程安全
+    """
+
+    def __init__(self, max_size: int = 1000, name: str = "lru"):
+        super().__init__(name)
+        self._max_size = max_size
+
+    def get(self, key: str) -> Any | None:
+        """获取缓存值"""
+        with self._lock:
+            if key in self._cache:
+                self._cache.move_to_end(key)
+                self._stats.hits += 1
+                return self._cache[key]
+            self._stats.misses += 1
+            return None
+
+    def set(self, key: str, value: Any) -> None:
+        """设置缓存值"""
+        with self._lock:
+            if key in self._cache:
+                self._cache.move_to_end(key)
+            else:
+                if len(self._cache) >= self._max_size:
+                    self._cache.popitem(last=False)
+                    self._stats.evictions += 1
+            self._cache[key] = value
+            self._stats.sets += 1
+
+
+class LRUTTLCache(_BaseCache):
     """
     LRU + TTL 缓存
 
@@ -151,13 +162,10 @@ class LRUTTLCache:
     """
 
     def __init__(self, max_size: int = 1000, ttl_seconds: int = 300, name: str = "lru_ttl"):
-        self._cache: OrderedDict = OrderedDict()
+        super().__init__(name)
         self._timestamps: dict[str, float] = {}
         self._max_size = max_size
         self._ttl_seconds = ttl_seconds
-        self._lock = threading.RLock()
-        self._name = name
-        self._stats = CacheStats()
 
     def _is_expired(self, key: str) -> bool:
         """检查键是否过期"""
@@ -235,23 +243,10 @@ class LRUTTLCache:
                 return False
             return True
 
-    @property
-    def size(self) -> int:
-        """当前缓存大小"""
-        with self._lock:
-            return len(self._cache)
-
-    @property
-    def stats(self) -> CacheStats:
-        return self._stats
-
     def cleanup(self) -> int:
         """手动触发过期清理"""
         with self._lock:
             return self._evict_expired()
-
-    def __len__(self) -> int:
-        return self.size
 
 
 class TimedCache:
@@ -364,9 +359,13 @@ class CacheManager:
     def __init__(self):
         if getattr(self, "_initialized", False):
             return
-        self._initialized = True
-        self._caches: dict[str, Any] = {}
-        self._create_default_caches()
+        # 双重检查锁：_initialized 的检查与置位都在锁内，避免并发首次初始化竞态。
+        with CacheManager._lock:
+            if getattr(self, "_initialized", False):
+                return
+            self._caches: dict[str, Any] = {}
+            self._create_default_caches()
+            self._initialized = True
 
     def _create_default_caches(self):
         """创建默认缓存实例"""

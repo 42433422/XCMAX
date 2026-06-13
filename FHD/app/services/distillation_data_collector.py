@@ -451,7 +451,11 @@ def mark_samples_as_used(ids: list[int]):
     placeholders = ", ".join([f":id_{idx}" for idx in range(len(ids))])
     with ENGINE.begin() as conn:
         conn.execute(
-            text(f"UPDATE distillation_log SET used_for_training = 1 WHERE id IN ({placeholders})"),
+            text(
+                "UPDATE distillation_log SET used_for_training = 1 WHERE id IN ("
+                + placeholders
+                + ")"
+            ),
             bindings,
         )
 

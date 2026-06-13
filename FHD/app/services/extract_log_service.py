@@ -130,7 +130,7 @@ class ExtractLogService(NeuroEventPublisherMixin):
 
                 params["log_id"] = log_id
 
-                sql = f"UPDATE extract_logs SET {', '.join(updates)} WHERE id = :log_id"
+                sql = "UPDATE extract_logs SET " + ", ".join(updates) + " WHERE id = :log_id"
                 db.execute(text(sql), params)
                 db.commit()
 

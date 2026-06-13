@@ -62,7 +62,9 @@ jobs:
           name: xcagi-desktop-windows
           path: artifacts
       - name: Upload installers to update server
-        if: ${{ secrets.SERVER_SSH_KEY != '' }}
+        if: ${{ secrets.SERVER_SSH_KEY }}
+        env:
+          SERVER_SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
         run: |
           set -euo pipefail
           mkdir -p ~/.ssh

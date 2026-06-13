@@ -39,4 +39,3 @@ jobs:
         run: ./gradlew assemblePersonalDebug assembleEnterpriseDebug --no-daemon
       - name: Lint
         run: ./gradlew lintPersonalDebug --no-daemon
-        continue-on-error: true

@@ -25,13 +25,14 @@
 | MODstore Python CI | [`modstore-ci-backend-python.yml`](../.github/workflows/modstore-ci-backend-python.yml) |
 | Archive 卫生 | [`archive-hygiene.yml`](../.github/workflows/archive-hygiene.yml) |
 | FHD 服务器 API 发布包校验 | [`fhd-ci-cd.yml`](../.github/workflows/fhd-ci-cd.yml) → job `pack-verify` |
-| FHD API 生产镜像（GHCR） | [`fhd-ci-cd.yml`](../.github/workflows/fhd-ci-cd.yml) → job `docker-build-fhd-api` |
+| FHD 全产品线 tag 编排 | [`fhd-release-orchestrator.yml`](../.github/workflows/fhd-release-orchestrator.yml) |
+| FHD K8s 部署 | [`fhd-deploy.yml`](../.github/workflows/fhd-deploy.yml) |
 
 ## 发布 tag 约定（v10 线内）
 
 - **产品版本锚点**：恒 `10.0.0`（见 `FHD/VERSION.md`），**不因功能发版 bump 主版本**。
 - **Git tag（发版触发）**：`FHD/v10.0.0` 或 `FHD/v10.*`；**制品身份**用 tarball 内 `git_sha` + `sha256`，非 tag 名。
-- **串联**：`fhd-ci-cd.yml` 在 `FHD/v*` tag 上触发 `fhd-deploy.yml`（K8s，需 `KUBE_CONFIG`）；**生产 CVM compose/tarball** 由 CI job `cvm-push-release` 或本机 `fhd-push-release.sh` 推送至 update 目录，服务器 cron 应用（见下方 runbook）。
+- **串联**：`FHD/v*` tag 触发 `fhd-ci-cd.yml`（测试+镜像+CVM）、`fhd-release-orchestrator.yml`（GitHub Release + 触发 K8s/客户端）、`fhd-deploy.yml`（K8s）。详见 [FHD/docs/deploy/RELEASE_CHECKLIST.md](FHD/docs/deploy/RELEASE_CHECKLIST.md)。
 
 ## 多环境 channel（stable / staging）
 

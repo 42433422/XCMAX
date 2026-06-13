@@ -77,7 +77,7 @@ class SandboxContext:
             SideEffect(
                 effect_type=SideEffectType.READ,
                 target=key,
-                description=f"Read from {key}",
+                description="Read key " + key,
                 risk_level=1,
             )
         )
@@ -106,7 +106,7 @@ class SandboxContext:
             SideEffect(
                 effect_type=SideEffectType.DELETE,
                 target=key,
-                description=f"Delete {key}: {old_value}",
+                description="Remove key " + key + ": " + repr(old_value),
                 data={"deleted": old_value},
                 risk_level=4,
             )

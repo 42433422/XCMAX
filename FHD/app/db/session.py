@@ -64,7 +64,7 @@ def clear_query_cache():
 
 def _log_slow_query(query_name: str, duration: float, details: str = ""):
     if duration >= 1.0:
-        logger.warning(f"Slow query detected: {query_name} took {duration:.3f}s. {details}")
+        logger.warning("Slow query detected: %s took %.3fs. %s", query_name, duration, details)
 
 
 class _QueryTimer:
@@ -94,28 +94,27 @@ def timed_query(query_name: str):
     return decorator
 
 
-@contextmanager
-def get_db():
+def _db_session_scope():
+    """共享的 DB 会话生命周期（提交/回滚/关闭）。
+
+    ``get_db`` 与 ``get_db_dependency`` 复用同一实现，避免逻辑重复漂移：
+    前者是 ``contextmanager``（``with get_db() as db:``），后者是 FastAPI
+    依赖用的裸生成器（``Depends(get_db_dependency)``）。
+    """
     db = SessionLocal()
     try:
         yield db
         db.commit()
     except RECOVERABLE_ERRORS as e:
         db.rollback()
-        logger.error(f"数据库事务失败，已回滚: {e}")
+        logger.error("数据库事务失败，已回滚: %s", e)
         raise
     finally:
         db.close()
+
+
+get_db = contextmanager(_db_session_scope)
 
 
 def get_db_dependency():
-    db = SessionLocal()
-    try:
-        yield db
-        db.commit()
-    except RECOVERABLE_ERRORS as e:
-        db.rollback()
-        logger.error(f"数据库事务失败，已回滚: {e}")
-        raise
-    finally:
-        db.close()
+    yield from _db_session_scope()

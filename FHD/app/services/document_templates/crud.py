@@ -374,7 +374,10 @@ def _update_template_with_payload_inner(payload: dict):
                 field_name = update_clause.split("=")[0].strip()
                 if field_name not in allowed_fields:
                     return _j({"success": False, "message": f"无效的更新字段: {field_name}"}, 400)
-            db.execute(text(f"UPDATE templates SET {', '.join(updates)} WHERE id = :id"), params)
+            db.execute(
+                text("UPDATE templates SET " + ", ".join(updates) + " WHERE id = :id"),
+                params,
+            )
             db.commit()
 
             try:
