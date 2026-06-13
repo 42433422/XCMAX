@@ -97,7 +97,7 @@ class OCRService:
             pytesseract.get_tesseract_version()
             self.tesseract_available = True
             logger.info("OCR 回退引擎：Tesseract")
-        except (ImportError, RECOVERABLE_ERRORS):
+        except RECOVERABLE_ERRORS:
             self.tesseract_available = False
 
     def recognize(self, image) -> str:
