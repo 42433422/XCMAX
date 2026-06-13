@@ -5,30 +5,32 @@ set -e
 
 NAMESPACE="${NAMESPACE:-default}"
 DEPLOYMENT_NAME="${DEPLOYMENT_NAME:-xcagi}"
-REVISION="${1:-1}"
+# 默认回滚到“上一个”版本（CI 自动回滚用）。传入数字则回滚到指定 revision。
+REVISION="${1:-previous}"
 
-echo "开始回滚 $DEPLOYMENT_NAME 到修订版本 $REVISION..."
-
-# 获取历史版本
 echo "可用历史版本:"
-kubectl rollout history deployment/$DEPLOYMENT_NAME -n $NAMESPACE
+kubectl rollout history "deployment/${DEPLOYMENT_NAME}" -n "$NAMESPACE" || true
 
-# 执行回滚
-echo "执行回滚..."
-kubectl rollout undo deployment/$DEPLOYMENT_NAME -n $NAMESPACE --to-revision=$REVISION
+echo "执行回滚 ($DEPLOYMENT_NAME, revision=${REVISION})..."
+if [ "$REVISION" = "previous" ] || [ "$REVISION" = "0" ]; then
+    kubectl rollout undo "deployment/${DEPLOYMENT_NAME}" -n "$NAMESPACE"
+else
+    kubectl rollout undo "deployment/${DEPLOYMENT_NAME}" -n "$NAMESPACE" --to-revision="$REVISION"
+fi
 
-# 等待回滚完成
 echo "等待回滚完成..."
-kubectl rollout status deployment/$DEPLOYMENT_NAME -n $NAMESPACE --timeout=300s
+kubectl rollout status "deployment/${DEPLOYMENT_NAME}" -n "$NAMESPACE" --timeout=300s
 
-# 验证健康状态
-echo "验证服务健康状态..."
-HEALTH_URL="${HEALTH_URL:-http://localhost:5000/health/liveness}"
-if command -v curl &> /dev/null; then
-    curl -sf "$HEALTH_URL" || {
-        echo "健康检查失败!"
-        exit 1
-    }
+# 健康验证：CI/集群外环境设 ROLLBACK_SKIP_HEALTH=1 跳过（runner 无法直连集群内 :5000）。
+if [ "${ROLLBACK_SKIP_HEALTH:-0}" != "1" ]; then
+    echo "验证服务健康状态..."
+    HEALTH_URL="${HEALTH_URL:-http://localhost:5000/health/liveness}"
+    if command -v curl &> /dev/null; then
+        curl -sf "$HEALTH_URL" || {
+            echo "健康检查失败!"
+            exit 1
+        }
+    fi
 fi
 
 echo "回滚完成!"

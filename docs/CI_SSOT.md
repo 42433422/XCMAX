@@ -12,6 +12,12 @@
 | **FHD 实现源** | `FHD/.github/workflows/*.yml` | 编辑后运行 `python scripts/dev/publish_ci_workflows_to_root.py` 同步到根 |
 | **MODstore 实现源** | `成都修茈科技有限公司/MODstore_deploy/.github/workflows/*.yml` | 同上 |
 
+> **生成 vs 手写**：根仓 `fhd-*.yml` / `modstore-*.yml` 由 publish 脚本从实现源生成，文件头为
+> `# CI SSOT: generated from … — DO NOT edit here`。**请改实现源后重跑 publish**，勿直接改根副本。
+> 以下 **7 个根仓 workflow 为手写**（无生成头，直接在根仓维护）：
+> `android-build.yml`、`archive-hygiene.yml`、`corp-site-deploy.yml`、`desktop-macos-smoke.yml`、
+> `e2e.yml`、`e2e-playwright-reusable.yml`、`frontend-unit.yml`。
+
 ## 常用 workflow
 
 | 用途 | 根 workflow |
@@ -32,7 +38,7 @@
 
 - **产品版本锚点**：恒 `10.0.0`（见 `FHD/VERSION.md`），**不因功能发版 bump 主版本**。
 - **Git tag（发版触发）**：`FHD/v10.0.0` 或 `FHD/v10.*`；**制品身份**用 tarball 内 `git_sha` + `sha256`，非 tag 名。
-- **串联**：`FHD/v*` tag 触发 `fhd-ci-cd.yml`（测试+镜像+CVM）、`fhd-release-orchestrator.yml`（GitHub Release + 触发 K8s/客户端）、`fhd-deploy.yml`（K8s）。详见 [FHD/docs/deploy/RELEASE_CHECKLIST.md](FHD/docs/deploy/RELEASE_CHECKLIST.md)。
+- **串联（单一编排入口）**：`FHD/v*` tag 仅触发两个 workflow —— `fhd-ci-cd.yml`（测试+镜像+CVM）与 `fhd-release-orchestrator.yml`。后者先跑 `verify-version-anchors`，再 **dispatch** `fhd-deploy.yml`（K8s，`-rc`→staging / 否则 production）与客户端 `fhd-release-desktop/web/android.yml`。这些被编排的 workflow **已移除自身 `FHD/v*` tag 触发**，避免 tag 推送时双重运行。详见 [FHD/docs/deploy/RELEASE_CHECKLIST.md](FHD/docs/deploy/RELEASE_CHECKLIST.md)。
 
 ## 多环境 channel（stable / staging）
 
@@ -89,11 +95,33 @@ bash /opt/fhd-staging/scripts/deploy/fhd-auto-update.sh
 
 本地 / 119.27.178.147 K3s 一键：`deploy_k8s_staging.sh`（见 `FHD/k8s/monitoring/STAGING_RUNBOOK.md`）。
 
+## Secrets / Variables 清单
+
+**Settings → Secrets and variables → Actions**（Secrets 与 Variables 两页）。标「跳过」者缺失时对应步骤跳过（不致 CI 失败）。
+
+| 名称 | 类型 | 用途 | 缺失行为 |
+|------|------|------|---------|
+| `GITHUB_TOKEN` | 自动 | GHCR 推送、`gh workflow run` dispatch、GitHub Release | 自动注入 |
+| `FHD_PUSH_HOST` | Secret / Var | CVM 推送目标（默认 `119.27.178.147`） | CVM/桌面推送跳过 |
+| `FHD_PUSH_SSH_KEY` | Secret | CVM SSH 私钥（**勿入库**） | CVM 推送跳过 |
+| `FHD_PUSH_USER` | Secret | CVM SSH 用户（默认 `root`） | 用默认 |
+| `SERVER_SSH_KEY` | Secret | 桌面安装包上传 SSH 私钥（缺失则回退 `FHD_PUSH_SSH_KEY`） | 桌面上传跳过 |
+| `KUBE_CONFIG` / `KUBE_CONFIG_B64` | Secret | K8s 部署 kubeconfig | staging 跳过 apply；**production 硬失败** |
+| `K8S_NAMESPACE` | Var | 部署 namespace（默认 staging=`xcagi-staging`、prod=`default`） | 用默认 |
+| `CODECOV_TOKEN` | Secret | 覆盖率上传 | 步骤 `continue-on-error` |
+| `APPLE_ID` / `APPLE_APP_SPECIFIC_PASSWORD` / `APPLE_TEAM_ID` | Secret | macOS 公证 / 签名 | 出未公证包 |
+| `CSC_LINK` / `CSC_KEY_PASSWORD` | Secret | 桌面代码签名证书（electron-builder） | 出未签名包 |
+| `STAGING_BASE_URL` | Var | 容量 k6 目标（`fhd-capacity-staging-monthly`） | 容量测试跳过 |
+| `STAGING_PROMETHEUS_URL` | Var / Secret | SLO 采集 Prometheus 端点 | SLO 采集降级 |
+| `XCMAX_GIT_BRANCH` / `XCMAX_REMOTE_ROOT` | Var | 企业站 `corp-site-deploy` 同步参数 | 用默认 |
+
+> Phase 1（供应链）起 cosign **keyless**（Sigstore + GitHub OIDC）签名**免私钥**，不新增长期密钥；集群凭证统一走 `KUBE_CONFIG`。
+
 ## Branch protection（须仓库 Owner 在 GitHub UI 配置）
 
 Agent **无法**从本环境开启 branch protection。建议在 **Settings → Branches → main** 启用：
 
-- Required status checks：`backend-test`、`frontend-test`、`pack-verify`、`docker-build-fhd-api`、`container-scan`（及 `Release gate CI` 若启用）
+- Required status checks：`backend-test`、`frontend-test`、`frontend-e2e`、`arch-fitness`、`security-scan`、`pack-verify`、`container-scan`、`docker-build-fhd-api`（及 `Release gate CI` 若启用；Phase 1 起增 `cosign-verify`，Phase 3 起增 Rollouts 分析门）
 - Require branches up to date before merging
 - 可选：Environment `production` 需审批后再跑 `cvm-push-release`
 
@@ -170,7 +198,7 @@ bash /opt/fhd-full/scripts/deploy/fhd-apply-release-compose.sh
 5. 将 manifest `deploy_mode` 改为 `image`，或导出 `FHD_DEPLOY_MODE=image` 于 cron 环境  
 6. 手动跑一次 `fhd-apply-release-compose.sh` 验证，再依赖 cron  
 
-**冻结错误制品**（两种模式通用）：`mv .../fhd-manifest.json{,.hold}`
+**冻结错误制品**（两种模式通用，**手动运维操作**，CI 不自动执行）：`mv .../fhd-manifest.json{,.hold}`；cron 见 manifest 缺失即跳过，不会反复重试坏制品。
 
 ## Python 格式化 / lint（FHD）
 
@@ -179,15 +207,28 @@ bash /opt/fhd-full/scripts/deploy/fhd-apply-release-compose.sh
 | **Ruff** | `fhd-ci-cd.yml` / `fhd-test.yml` — 唯一 formatter + linter（`ruff check` + `ruff format --check`） |
 | **black / isort** | **不在 CI** — 与 Ruff 冲突；本地 pre-commit 可保留，勿在 CI 重加除非统一配置 |
 
+## 安全扫描门禁策略（FHD）
+
+| 扫描 | Job / 工具 | 策略 |
+|------|-----------|------|
+| 容器漏洞 | `container-scan`（Trivy，`severity: CRITICAL,HIGH`，`exit-code 1`） | **硬门禁**：决策矩阵"安全扫描 CRITICAL → 阻断"指此项 |
+| 依赖 CVE | `security-scan`（safety `--full-report`） | **Advisory**（非阻断）：输出 `::warning::`，需人工 triage |
+| 静态代码（广） | `security-scan`（bandit `-lll --skip B101,B601,B110 --exit-zero`） | **Advisory** |
+| 静态代码（SQL 注入） | `security-scan`（bandit `-lll -s B608`，无 `--exit-zero`） | **硬门禁** |
+
+> 把 safety / bandit-broad 设为 advisory 是有意为之（传递依赖 CVE 常需评估、不宜直接红）；真正的供应链信任在 **Phase 1** 由 SBOM + cosign 签名 + SLSA provenance + 部署前 `cosign verify` 补强。
+
 ## Codecov（FHD 后端）
 
 `fhd-ci-cd.yml` → job `backend-test` 上传 `coverage.xml` 至 Codecov。**可选**：需在 GitHub **Settings → Secrets → Actions** 配置 `CODECOV_TOKEN`；无 token 时步骤 `continue-on-error`（不阻断 CI）。本地 `coverage.xml` / `htmlcov/` 仍为 SSOT。
+
+**覆盖率门槛 SSOT**：唯一真值 = `FHD/pyproject.toml` → `[tool.coverage.report] fail_under`（当前 `35`，对应 `source=[app]` 全量诚实基线 ~36%）。`backend-test` **不再**用 CLI `--cov-fail-under` 硬编码阈值（旧 `58` 来自已废弃窄 include 口径，与全量口径不可比）。提升覆盖率请单独立项、上调 `fail_under`，禁止用窄 include 凑数。
 
 ## E2E 分层
 
 | 场景 | Workflow | 模式 | 用例 |
 |------|----------|------|------|
-| FHD 全量 CI（PR） | `fhd-ci-cd.yml` → `frontend-e2e` | `E2E_VITE_MOCK_API=1` + Vite :5001 | `npm run test:e2e:p0` → **9 pass / 5 skip** |
+| FHD 全量 CI（PR） | `fhd-ci-cd.yml` → `frontend-e2e` | `E2E_VITE_MOCK_API=1` + Vite :5001 | `npm run test:e2e:p0` → **8 pass / 6 skip** |
 | 前端 path 过滤 / nightly | `e2e.yml` → `e2e-playwright-reusable.yml` | mock 同上；`schedule` / `workflow_dispatch` 额外 `E2E_FULL_STACK=1` | 全栈 **14/14**（含 `plan2026-skeleton`） |
 
 SSOT 脚本：`FHD/frontend/package.json` → `test:e2e:p0`；编排见 `FHD/scripts/dev/e2e-full.sh`。

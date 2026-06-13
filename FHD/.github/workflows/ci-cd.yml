@@ -61,15 +61,25 @@ jobs:
           VIOLATIONS=""
           while IFS= read -r file; do
             [ -z "${file}" ] && continue
-            if [[ "${file}" == XCAGI/tools/* ]] || [[ "${file}" == XCAGI/archive/* ]] || \
-               [[ "${file}" == tools/* ]] || [[ "${file}" == archive/* ]]; then
+            # Root workflow runs against the XCMAX root repo where FHD paths are
+            # prefixed FHD/; strip it so allow-list/patterns compare FHD-relative.
+            rel="${file#FHD/}"
+            # Allow-listed homes for helper / launcher / throwaway scripts.
+            if [[ "${rel}" == XCAGI/tools/* ]] || [[ "${rel}" == XCAGI/archive/* ]] || \
+               [[ "${rel}" == tools/* ]] || [[ "${rel}" == archive/* ]] || \
+               [[ "${rel}" == scripts/launchers/* ]]; then
               continue
             fi
             if [[ "${file}" =~ (^|/)_fail.*\.txt$ ]]; then
               VIOLATIONS+="${file}"$'\n'
             fi
-            if [[ "${file}" =~ (^|/)产品文件夹/(fix_|check_|final_).+\.py$ ]] || \
-               [[ "${file}" =~ ^(fix_|check_|final_).+\.py$ ]]; then
+            # Block fix_/check_/final_ throwaway scripts at any subtree root and in the
+            # common dump dirs (产品文件夹/, scripts/<file>). scripts/launchers/ is
+            # allow-listed above; scripts/dev/ helpers (e.g. check_*.py) sit under a
+            # sub-dir, not directly in scripts/, so they are unaffected.
+            if [[ "${rel}" =~ (^|/)产品文件夹/(fix_|check_|final_).+\.py$ ]] || \
+               [[ "${rel}" =~ (^|/)scripts/(fix_|check_|final_).+\.py$ ]] || \
+               [[ "${rel}" =~ ^(fix_|check_|final_).+\.py$ ]]; then
               VIOLATIONS+="${file}"$'\n'
             fi
             if [[ "${file}" =~ \.v1_backup$ ]]; then
@@ -152,10 +162,12 @@ jobs:
           INTENT_BENCHMARK_RUN: "1"
         run: |
           mkdir -p coverage
+          # Coverage gate SSOT = FHD/pyproject.toml [tool.coverage.report] fail_under
+          # (honest full-app source=[app] baseline). Do NOT hardcode a threshold here;
+          # the old 58 came from a deprecated narrow include scope and conflicted with it.
           python -m pytest tests/ -v \
             --cov \
-            --cov-report=xml --cov-report=html --cov-report=term-missing \
-            --cov-fail-under=58
+            --cov-report=xml --cov-report=html --cov-report=term-missing
 
       # Codecov policy: optional until CODECOV_TOKEN is in repo secrets
       # (Settings → Secrets and variables → Actions). Without token this step is
@@ -210,8 +222,8 @@ jobs:
           path: frontend/coverage/
           retention-days: 7
 
-  # PR/push E2E: mock API (E2E_VITE_MOCK_API=1) — npm run test:e2e:p0 → 9 pass / 5 skip
-  # (smoke + critical-paths; plan2026-skeleton skipped without E2E_FULL_STACK).
+  # PR/push E2E: mock API (E2E_VITE_MOCK_API=1) — npm run test:e2e:p0 → 8 pass / 6 skip
+  # (smoke 3 pass + 1 skip, critical-paths 5 pass, plan2026-skeleton 5 skip w/o E2E_FULL_STACK).
   # Full-stack 14/14: root e2e.yml on schedule or workflow_dispatch (see e2e-playwright-reusable.yml).
   frontend-e2e:
     needs: [backend-test, frontend-test]
@@ -274,6 +286,11 @@ jobs:
 
       - name: Run security checks
         run: |
+          # Security gate policy (see docs/CI_SSOT.md → Security scanning):
+          #  - HARD gate for CRITICAL/HIGH = container-scan job (Trivy, exit-code 1).
+          #  - safety (dependency CVE advisories) is ADVISORY here (needs triage), non-blocking.
+          #  - bandit broad scan (--exit-zero) is ADVISORY; the focused B608 (SQL injection)
+          #    pass below is BLOCKING.
           pip install safety bandit
           safety check -r deploy/requirements-server-api.txt --full-report || {
             echo "::warning::safety reported advisories (non-blocking); see full-report above"
@@ -330,7 +347,7 @@ jobs:
 
   # FHD API 生产镜像（xcagi-fhd-api → GHCR；manifest v2 含 image_digest）
   docker-build-fhd-api:
-    needs: [backend-test, pack-verify]
+    needs: [backend-test, pack-verify, arch-fitness]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -419,7 +436,7 @@ jobs:
         (github.event_name == 'workflow_dispatch' && inputs.push_to_cvm == true)
       )
     runs-on: ubuntu-latest
-    environment: ${{ (github.event_name == 'workflow_dispatch' && inputs.release_channel == 'staging') && 'staging' || 'production' }}
+    environment: ${{ ((github.event_name == 'workflow_dispatch' && inputs.release_channel == 'staging') || (github.event_name == 'push' && contains(github.ref, '-rc'))) && 'staging' || 'production' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -434,7 +451,7 @@ jobs:
           FHD_PUSH_HOST: ${{ secrets.FHD_PUSH_HOST }}
           FHD_PUSH_USER: ${{ secrets.FHD_PUSH_USER }}
           FHD_PUSH_SSH_KEY_RAW: ${{ secrets.FHD_PUSH_SSH_KEY }}
-          FHD_RELEASE_CHANNEL: ${{ github.event_name == 'workflow_dispatch' && inputs.release_channel || 'stable' }}
+          FHD_RELEASE_CHANNEL: ${{ github.event_name == 'workflow_dispatch' && inputs.release_channel || (contains(github.ref, '-rc') && 'staging' || 'stable') }}
         run: |
           set -euo pipefail
           if [ -z "${FHD_PUSH_HOST:-}" ] || [ -z "${FHD_PUSH_SSH_KEY_RAW:-}" ]; then
@@ -454,7 +471,7 @@ jobs:
 
   # Docker Build & Push
   docker-build:
-    needs: [backend-test, frontend-test, frontend-e2e, security-scan, container-scan, pack-verify]
+    needs: [backend-test, frontend-test, frontend-e2e, security-scan, container-scan, pack-verify, arch-fitness]
     runs-on: ubuntu-latest
     permissions:
       contents: read

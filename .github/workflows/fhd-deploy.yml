@@ -1,11 +1,11 @@
-# CI SSOT: generated from FHD/.github/workflows/deploy.yml — edit root copy only.
+# CI SSOT: generated from FHD/.github/workflows/deploy.yml — DO NOT edit here.
+# Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
 name: Deploy
 
 on:
-  push:
-    tags:
-      - "FHD/v10.*"
-      - "FHD/v*"
+  # Tag (FHD/v*) entry is centralized in fhd-release-orchestrator.yml, which gates on
+  # verify-version-anchors and then dispatches this workflow (rc -> staging, else
+  # production). Removing the direct tag trigger eliminates the double K8s deploy.
   workflow_dispatch:
     inputs:
       environment:
@@ -146,6 +146,17 @@ jobs:
             kubectl -n "${NS}" rollout status deployment/xcagi --timeout=300s
           fi
 
+      - name: Auto-rollback on failed deploy (staging)
+        if: failure() && steps.kube.outputs.configured == '1'
+        env:
+          K8S_NAMESPACE_INPUT: ${{ vars.K8S_NAMESPACE }}
+          ROLLBACK_SKIP_HEALTH: "1"
+        run: |
+          set -uo pipefail
+          NS="${K8S_NAMESPACE_INPUT:-xcagi-staging}"
+          echo "::warning::Staging deploy failed — rolling back deployment/xcagi in ${NS}"
+          NAMESPACE="${NS}" bash scripts/rollback.sh || echo "::error::Auto-rollback finished with errors (staging)"
+
       - name: Deploy summary (staging)
         if: always()
         run: |
@@ -238,6 +249,17 @@ jobs:
           if [ "$STRATEGY" = "rolling" ]; then
             kubectl -n "${NS}" rollout status deployment/xcagi --timeout=300s
           fi
+
+      - name: Auto-rollback on failed deploy (production)
+        if: failure() && steps.kube.outputs.configured == '1'
+        env:
+          K8S_NAMESPACE_INPUT: ${{ vars.K8S_NAMESPACE }}
+          ROLLBACK_SKIP_HEALTH: "1"
+        run: |
+          set -uo pipefail
+          NS="${K8S_NAMESPACE_INPUT:-default}"
+          echo "::warning::Production deploy failed — rolling back deployment/xcagi in ${NS}"
+          NAMESPACE="${NS}" bash scripts/rollback.sh || echo "::error::Auto-rollback finished with errors (production)"
 
       - name: Deploy summary (production)
         if: always()

@@ -1,4 +1,5 @@
-# CI SSOT: generated from MODstore_deploy/.github/workflows/build-desktop.yml — edit root copy only.
+# CI SSOT: generated from MODstore_deploy/.github/workflows/build-desktop.yml — DO NOT edit here.
+# Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
 name: Build Desktop (clean v10)
 
 # 干净桌面构建链（替代损坏的 FHD 链）：electron-builder 出真 v10 安装包。

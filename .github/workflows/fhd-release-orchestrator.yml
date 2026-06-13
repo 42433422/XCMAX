@@ -1,4 +1,5 @@
-# CI SSOT: generated from FHD/.github/workflows/release-orchestrator.yml — edit root copy only.
+# CI SSOT: generated from FHD/.github/workflows/release-orchestrator.yml — DO NOT edit here.
+# Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
 name: Release Orchestrator
 
 on:
@@ -77,10 +78,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # Root workflow filenames: `gh workflow run` targets the repo-root
+        # .github/workflows/, where these client workflows are published as
+        # fhd-release-*.yml. Keep the fhd- prefix or dispatch 404s.
         workflow:
-          - release-desktop.yml
-          - release-web.yml
-          - release-android.yml
+          - fhd-release-desktop.yml
+          - fhd-release-web.yml
+          - fhd-release-android.yml
     steps:
       - name: Trigger ${{ matrix.workflow }}
         env:
