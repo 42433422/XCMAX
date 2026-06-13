@@ -7,13 +7,16 @@
 from __future__ import annotations
 
 import logging
-import os
 import time
 from collections import OrderedDict
 from threading import Lock
 from typing import Any
 
-from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.deployment import (
+    distributed_rate_limit_required,
+    env_flag,
+    redis_url_from_env,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -21,17 +24,25 @@ _redis_client: Any | None = None
 _redis_init_attempted = False
 
 
+class RateLimitBackendError(RuntimeError):
+    """需要分布式限流后端（Redis）但其不可用时抛出。"""
+
+
+def _fail_closed_without_redis() -> bool:
+    """无 Redis 时是否「拒绝」（fail-closed）。
+
+    仅当显式开启 ``XCAGI_REQUIRE_REDIS_RATE_LIMIT`` 才 fail-closed；默认 fail-open（回退内存限流），
+    保持既有生产行为不变。
+    """
+    return env_flag("XCAGI_REQUIRE_REDIS_RATE_LIMIT")
+
+
 def _get_redis_client():
     global _redis_client, _redis_init_attempted
     if _redis_init_attempted:
         return _redis_client
     _redis_init_attempted = True
-    url = (
-        os.environ.get("CACHE_REDIS_URL")
-        or os.environ.get("REDIS_URL")
-        or os.environ.get("XCAGI_REDIS_URL")
-        or ""
-    ).strip()
+    url = redis_url_from_env()
     if not url:
         return None
     try:
@@ -40,7 +51,7 @@ def _get_redis_client():
         _redis_client = redis.from_url(url, decode_responses=True)
         _redis_client.ping()
         logger.info("Rate limiter using Redis backend")
-    except RECOVERABLE_ERRORS as exc:
+    except Exception as exc:  # noqa: BLE001 - 任何 Redis 初始化失败都回退（不可中断启动）
         logger.warning("Rate limiter Redis unavailable, using in-memory: %s", exc)
         _redis_client = None
     return _redis_client
@@ -100,7 +111,8 @@ class _RedisRateLimiter:
 
     def is_allowed(self, key: str) -> bool:
         if self._redis is None:
-            return True
+            # 无 Redis：按 fail-closed/open 策略决定放行
+            return not _fail_closed_without_redis()
         rk = self._window_key(key)
         pipe = self._redis.pipeline()
         pipe.incr(rk)
@@ -113,7 +125,7 @@ class _RedisRateLimiter:
             return self._max_requests
         try:
             count = int(self._redis.get(self._window_key(key)) or 0)
-        except RECOVERABLE_ERRORS:
+        except Exception:  # noqa: BLE001 - 读取失败按保守 0 处理
             return 0
         return max(0, self._max_requests - count)
 
@@ -192,9 +204,22 @@ def get_rate_limiter(
         if name not in _rate_limiters:
             if _get_redis_client() is not None:
                 _rate_limiters[name] = _RedisRateLimiter(max_requests, window_seconds)
+            elif _fail_closed_without_redis():
+                raise RateLimitBackendError(f"分布式限流后端不可用（Redis 缺失）: {name}")
             else:
                 _rate_limiters[name] = _InMemoryRateLimiter(max_requests, window_seconds)
         return _rate_limiters[name]
+
+
+def ensure_rate_limit_backend() -> None:
+    """启动期校验：需要分布式限流但 Redis 不可用时抛 :class:`RateLimitBackendError`。
+
+    桌面/测试等不要求分布式限流的形态直接放行。
+    """
+    if not distributed_rate_limit_required():
+        return
+    if _get_redis_client() is None:
+        raise RateLimitBackendError("分布式限流要求 Redis 后端，但当前不可用")
 
 
 def check_rate_limit(
