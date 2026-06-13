@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-MOD_DIR = Path(__file__).resolve().parents[1] / "mods" / "xcagi-erp-domain-bridge"
+MOD_DIR = Path(__file__).resolve().parents[1] / "mods-admin-runtime" / "xcagi-erp-domain-bridge"
 
 
 def test_manifest_customers_via_service():
