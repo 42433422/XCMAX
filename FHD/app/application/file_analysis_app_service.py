@@ -14,6 +14,10 @@ import uuid
 from typing import Any
 
 from app.utils.external_sqlite import sqlite_conn
+from app.infrastructure.db.sql_identifiers import (
+    quote_sqlite_identifier,
+    resolve_products_table,
+)
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.path_utils import get_upload_dir
 from app.utils.secure_filename import secure_filename
@@ -192,15 +196,16 @@ class FileAnalysisService:
 
     def _extract_unit_candidates(self, cur: sqlite3.Cursor, table_names: list) -> list:
         """从 unit_products_db 提取购买单位候选列表"""
-        products_table = next((t for t in table_names if t and t.lower() == "products"), None)
+        products_table = resolve_products_table(table_names)
         if not products_table:
             return []
 
+        quoted_table = quote_sqlite_identifier(products_table)
         try:
             candidates = [
                 r[0]
                 for r in cur.execute(
-                    f'SELECT DISTINCT unit FROM "{products_table}" '
+                    f"SELECT DISTINCT unit FROM {quoted_table} "
                     f'WHERE unit IS NOT NULL AND TRIM(unit) != "" '
                     f"LIMIT 10"
                 ).fetchall()

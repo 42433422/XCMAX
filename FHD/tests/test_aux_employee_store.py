@@ -20,6 +20,9 @@ MODS = REPO / "mods"
 
 
 def test_lan_bridge_manifest_has_no_sidebar_menu() -> None:
+    from tests.mod_presence import skip_if_bridge_mod_absent
+
+    skip_if_bridge_mod_absent("xcagi-lan-license-bridge")
     raw = json.loads(
         (MODS / "xcagi-lan-license-bridge" / "manifest.json").read_text(encoding="utf-8")
     )
@@ -27,6 +30,8 @@ def test_lan_bridge_manifest_has_no_sidebar_menu() -> None:
 
 
 def test_lan_gate_ai_employee_manifest_and_store_row() -> None:
+    if not (MODS / "lan-gate-ai-employee" / "manifest.json").is_file():
+        pytest.skip("physical aux employee pack 'lan-gate-ai-employee' not present in this checkout")
     assert is_aux_employee_pack_mod_id("lan-gate-ai-employee")
     m = read_aux_employee_pack_manifest("lan-gate-ai-employee")
     assert m is not None

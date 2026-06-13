@@ -220,12 +220,12 @@ def with_sla(level: SLALevel, fallback=None):
             start = time.time()
 
             try:
-                # 使用 asyncio.wait_for 实现超时
-                timeout_sec = sla_config.max_ms / 1000.0
+                # 装饰器以 target_ms 为硬超时；max_ms 留给 SLAMonitor 事后判定
+                timeout_sec = sla_config.target_ms / 1000.0
                 result = await asyncio.wait_for(func(*args, **kwargs), timeout=timeout_sec)
 
                 elapsed_ms = (time.time() - start) * 1000
-                if elapsed_ms > sla_config.target_ms:
+                if elapsed_ms > sla_config.warning_threshold_ms:
                     logger.warning(
                         f"SLA warning: {func.__name__} took {elapsed_ms:.2f}ms, "
                         f"target: {sla_config.target_ms}ms"
@@ -234,10 +234,12 @@ def with_sla(level: SLALevel, fallback=None):
                 return result
 
             except TimeoutError:
-                logger.error(f"SLA violated: {func.__name__} exceeded {sla_config.max_ms}ms")
+                logger.error(
+                    f"SLA violated: {func.__name__} exceeded {sla_config.target_ms}ms"
+                )
                 if fallback:
                     return fallback(*args, **kwargs)
-                raise SLAViolation(f"Operation exceeded SLA of {sla_config.max_ms}ms")
+                raise SLAViolation(f"Operation exceeded SLA of {sla_config.target_ms}ms")
 
         return wrapper
 

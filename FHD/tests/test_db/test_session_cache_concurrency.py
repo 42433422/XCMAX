@@ -187,12 +187,8 @@ class TestSqliteWriteGuard:
             pass
 
     def test_desktop_mode_takes_lock(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        # Force is_desktop_mode() -> True to exercise the lock path.
+        from app.db.sqlite_write_guard import _write_lock
+
         monkeypatch.setattr("app.desktop_runtime.paths.is_desktop_mode", lambda: True)
         with sqlite_write_guard():
-            # Inside the guard, the lock should be held by the current thread.
-            lock = threading.Lock()
-            # If we got here, guard yielded. Verify nested acquire is impossible
-            # without timeout (i.e. lock is held by us).
-            assert not lock.acquire(blocking=False)
-            lock.release()
+            assert not _write_lock.acquire(blocking=False)

@@ -71,10 +71,20 @@ def mock_inventory_svc(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
     svc.inventory_in.return_value = {"success": True}
     svc.inventory_out.return_value = {"success": True}
     svc.inventory_transfer.return_value = {"success": True}
+    svc.parse_optional_datetime = lambda v: v
+
+    def _inventory_svc():
+        from app.application.inventory_app_service import InventoryAppService
+
+        inst = InventoryAppService.__new__(InventoryAppService)
+        inst._facade = svc
+        return inst
+
     monkeypatch.setattr(
         "app.application.facades.inventory_facade.InventoryService",
         MagicMock(return_value=svc),
     )
+    monkeypatch.setattr(inventory_routes, "_svc", _inventory_svc)
     return svc
 
 
@@ -175,7 +185,7 @@ def ops_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
         lambda: {"status": "ok", "checks": []},
     )
     monkeypatch.setattr(
-        "app.services.contract_expiry_scheduler.run_contract_expiry_scan",
+        "app.services.contract_lifecycle.run_contract_expiry_scan",
         lambda **kwargs: {"scanned": 2, "expiring": 0, **kwargs},
     )
     monkeypatch.setattr(

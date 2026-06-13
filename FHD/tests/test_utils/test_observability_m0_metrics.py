@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+from app.utils import metrics
+
 
 def test_neurobus_metric_counters_increment():
-    from app.utils import metrics
-
     before_pub = metrics.neurobus_events_published_total._value.get()
     before_lost = metrics.neurobus_events_lost_total._value.get()
     before_dlq = metrics.neurobus_events_dead_lettered_total._value.get()
@@ -22,8 +22,6 @@ def test_neurobus_metric_counters_increment():
 
 
 def test_record_api_request_increments_counter():
-    from app.utils import metrics
-
     before = metrics.api_requests_total.labels(
         method="GET", endpoint="/api/health", status="200"
     )._value.get()
@@ -37,7 +35,6 @@ def test_record_api_request_increments_counter():
 def test_refresh_mod_sqlite_copy_metrics_sets_gauge(tmp_path, monkeypatch):
     from app.db.init_db import DEFAULT_DB_FILES
     from app.db.sqlite_mod_paths import sqlite_filename_with_mod_suffix
-    from app.utils import metrics
 
     mod_id = "demo-mod"
     work_dir = tmp_path / "work"
@@ -48,17 +45,14 @@ def test_refresh_mod_sqlite_copy_metrics_sets_gauge(tmp_path, monkeypatch):
 
     monkeypatch.setenv("XCAGI_SQLITE_PER_MOD_COPIES", "1")
 
-    with patch("app.db.init_db.get_app_data_dir", return_value=str(work_dir)):
-        with patch("app.utils.path_utils.get_data_dir", return_value=str(tmp_path / "data")):
-            ready = metrics.refresh_mod_sqlite_copy_metrics([mod_id])
+    with patch("app.utils.path_utils.get_app_data_dir", return_value=str(work_dir)):
+        ready = metrics.refresh_mod_sqlite_copy_metrics([mod_id])
 
     assert ready == 1
     assert metrics.mod_sqlite_copy_present.labels(mod_id=mod_id)._value.get() == 1.0
 
 
 def test_seed_local_observability_metrics_sets_api_counters(monkeypatch):
-    from app.utils import metrics
-
     monkeypatch.setattr(
         "app.utils.metrics.refresh_mod_sqlite_copy_metrics",
         lambda *a, **k: 0,

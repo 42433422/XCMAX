@@ -11,6 +11,13 @@ if TYPE_CHECKING:
     from app.services import PrinterService, ProductsService
 
 
+def _normalize_optional_str(value: str | None) -> str | None:
+    if value is None:
+        return None
+    stripped = str(value).strip()
+    return stripped if stripped else None
+
+
 class ProductApplicationService:
     """产品应用服务 - 负责产品相关的用例编排"""
 
@@ -36,6 +43,8 @@ class ProductApplicationService:
     def get_products(
         self,
         unit: str | None = None,
+        unit_name: str | None = None,
+        model_number: str | None = None,
         keyword: str | None = None,
         page: int = 1,
         per_page: int = 20,
@@ -44,7 +53,9 @@ class ProductApplicationService:
         获取产品列表用例
 
         Args:
-            unit: 单位名称筛选
+            unit: 单位名称筛选（与 unit_name 二选一，unit_name 优先）
+            unit_name: 单位名称筛选
+            model_number: 型号筛选
             keyword: 搜索关键词
             page: 页码
             per_page: 每页数量
@@ -52,9 +63,22 @@ class ProductApplicationService:
         Returns:
             产品列表和分页信息
         """
+        resolved_unit = _normalize_optional_str(unit_name) or _normalize_optional_str(unit)
+        resolved_model = _normalize_optional_str(model_number)
+        if resolved_model:
+            resolved_model = resolved_model.upper()
+        resolved_keyword = _normalize_optional_str(keyword)
         return self._products_service.get_products(
-            unit_name=unit, keyword=keyword, page=page, per_page=per_page
+            unit_name=resolved_unit,
+            model_number=resolved_model,
+            keyword=resolved_keyword,
+            page=page,
+            per_page=per_page,
         )
+
+    def get_product_names(self, keyword: str | None = None) -> dict[str, Any]:
+        """获取产品名称列表用例。"""
+        return self._products_service.get_product_names(keyword=keyword)
 
     def get_product(self, product_id: int) -> dict[str, Any]:
         """
@@ -82,6 +106,10 @@ class ProductApplicationService:
         Returns:
             创建结果
         """
+        raw_unit = data.get("unit_name") or data.get("unit")
+        if not _normalize_optional_str(raw_unit if isinstance(raw_unit, str) else None):
+            return {"success": False, "message": "单位名称不能为空"}
+
         product_name = data.get("product_name") or data.get("name")
 
         if not product_name:

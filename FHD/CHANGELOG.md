@@ -15,6 +15,14 @@
 - **tasks**：`inference` Celery 队列（OCR/intent）；`workflow_excel_paths` 拆分巨型 `workflow.py`
 - **registry**：`app_service_pair_registry` 增加 `resolve_http_getter` / `resolve_neuro_getter`
 
+### 五项技术债全量修复（2026-06-13 · v10 线内迭代）
+
+- **ci/cd**：`fhd-release-orchestrator.yml` tag 编排 CVM+K8s+桌面/Web/Android；`fhd-ci-cd` 监听 `FHD/v*`；production K8s 无 kubeconfig 则 fail；Android release 统一 tag
+- **types**：mypy 解禁 `mod_sdk`/`neuro_bus`/`routes`/`legacy`；`count_type_debt.py` 棘轮；ESLint `no-explicit-any` error（Chat 债务文件 warn）
+- **sql**：`sql_identifiers.py` + P0 标识符拼接修复；`count_raw_sql.py` 棘轮；`test_sql_identifiers.py`
+- **frontend**：ChatView 拆至 `components/chat/*`；`useChatPersistence`/`useChatTaskList`；vue-i18n zh-CN/en-US；`resolveApiError.ts`
+- **docs**：`MYPY_BATCH_STATUS.md`、`SQL_RAW_INVENTORY.md`、`I18N_ROLLOUT.md`、`deploy/RELEASE_CHECKLIST.md`
+
 ### 三项技术债清偿（2026-06-13 · v10 线内迭代）
 
 - **refactor(errors)**：`app/errors.py` 扩展 Mod/Workflow/ExternalService/Validation 等业务异常 SSOT；`operational_errors.py` 拆为 `INFRA_TRANSIENT`/`DATA_SHAPE`/`RECOVERABLE_ERRORS`；全仓 381 文件迁移；payment/auth 域窄 catch + `PaymentError`；新增 `scripts/migrate_operational_errors.py` 与 `scripts/ci/check_operational_errors_gate.py`

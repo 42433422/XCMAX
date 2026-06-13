@@ -39,6 +39,13 @@ def _uid(user: CurrentUser) -> int:
 
 
 def _resolve_ws_user_id(ws: WebSocket) -> int | None:
+    from app.infrastructure.auth.dependencies import _allow_x_user_id_header
+
+    if _allow_x_user_id_header():
+        q_uid = ws.query_params.get("user_id")
+        if q_uid and str(q_uid).strip().isdigit():
+            return int(str(q_uid).strip())
+
     cookie_name = getattr(Config, "SESSION_COOKIE_NAME", "session_id")
     sid = ws.cookies.get(cookie_name) or ws.query_params.get("session_id")
     if not sid:

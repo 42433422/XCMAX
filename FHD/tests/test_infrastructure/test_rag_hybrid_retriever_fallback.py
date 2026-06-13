@@ -24,13 +24,13 @@ class TestBM25:
         bm = BM25()
         bm.fit(["the quick brown fox", "the lazy dog", "quick brown dog"])
         # query "quick brown" should produce non-zero score
-        s = bm.score("quick brown")
-        assert s > 0
+        scores = bm.score("quick brown")
+        assert max(scores) > 0
 
     def test_fit_empty(self) -> None:
         bm = BM25()
         bm.fit([])
-        assert bm.score("anything") == 0.0
+        assert bm.score("anything") == []
 
     def test_idf_computed(self) -> None:
         bm = BM25()
@@ -59,7 +59,7 @@ class TestHybridRetriever:
         try:
             from app.infrastructure.rag.citation_tracker import CitationTracker
 
-            t = CitationTracker()
+            t = CitationTracker(retrieved_chunks=[])
             assert t is not None
         except ImportError:
             pytest.skip("CitationTracker not importable")

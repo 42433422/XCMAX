@@ -347,7 +347,7 @@ class OCRService:
             except ValueError:
                 pass
 
-        product_pattern = r"([A-Za-z0-9]+)\s+(.+?)\s+(\d+)\s+([\d\.]+)\s+([\d\.]+)"
+        product_pattern = r"([A-Za-z0-9\-]+)\s+(.+?)\s+(\d+)\s+([\d\.]+)\s+([\d\.]+)"
         for match in re.finditer(product_pattern, text):
             product = {
                 "model": match.group(1),
@@ -434,19 +434,24 @@ class OCRService:
         if not text:
             return "unknown"
 
-        if re.match(r"^[\d\.\,\-\+]+$", text):
-            return "number"
-
         date_patterns = [r"\d{4}[-年]\d{1,2}[-月]\d{1,2}", r"\d{1,2}[-/]\d{1,2}[-/]\d{2,4}"]
         for pattern in date_patterns:
             if re.search(pattern, text):
                 return "date"
 
-        if re.search(r"[\d\.]+\s*(元|¥|dollar|$|€)", text):
-            return "amount"
+        amount_patterns = (
+            r"[\d\.]+\s*(元|¥|dollar|\$|€)",
+            r"[$¥€]\s*[\d\.]+",
+        )
+        for pattern in amount_patterns:
+            if re.search(pattern, text):
+                return "amount"
 
         if re.match(r"^[\d\-\+\(\)]{7,}$", text):
             return "phone"
+
+        if re.match(r"^[\d\.\,\-\+]+$", text):
+            return "number"
 
         return "text"
 

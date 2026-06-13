@@ -16,6 +16,10 @@ from sqlalchemy import or_
 from app.db.models import WechatContact, WechatContactContext
 from app.db.session import get_db
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
+from app.infrastructure.db.sql_identifiers import (
+    quote_sqlite_identifier,
+    resolve_wechat_message_table,
+)
 from app.utils.external_sqlite import sqlite_conn
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -222,18 +226,11 @@ class WechatContactService(NeuroEventPublisherMixin):
                         "SELECT name FROM sqlite_master WHERE type='table'"
                     ).fetchall()
                     table_names = [t[0] for t in tbls if t and t[0]]
-                    msg_table = (
-                        "MSG"
-                        if "MSG" in table_names
-                        else (
-                            "Message"
-                            if "Message" in table_names
-                            else next((t for t in table_names if str(t).startswith("Msg_")), "")
-                        )
-                    )
+                    msg_table = resolve_wechat_message_table(table_names)
                     if msg_table:
+                        quoted = quote_sqlite_identifier(msg_table)
                         raw = cur.execute(
-                            f"SELECT * FROM {msg_table} LIMIT ?", (limit * 5,)
+                            f"SELECT * FROM {quoted} LIMIT ?", (limit * 5,)
                         ).fetchall()
                         colnames = [d[0] for d in (cur.description or [])]
                         rows = [dict(zip(colnames, r)) for r in raw]

@@ -91,6 +91,8 @@ _COMMON_PHRASES = [
 
 
 def _build_warmup_phrases(limit: int) -> list[str]:
+    if limit <= 0:
+        return []
     merged = [*_HARDCODED_PRO_PHRASES, *_COMMON_PHRASES]
     ordered_unique: list[str] = []
     seen: set[str] = set()

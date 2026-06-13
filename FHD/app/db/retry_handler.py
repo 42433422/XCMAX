@@ -15,6 +15,16 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
+_sqlite_retry_errors: tuple[type[BaseException], ...] = ()
+try:
+    import sqlite3
+
+    _sqlite_retry_errors = (sqlite3.OperationalError,)
+except ImportError:
+    pass
+
+_RETRYABLE_DB_ERRORS: tuple[type[BaseException], ...] = RECOVERABLE_ERRORS + _sqlite_retry_errors
+
 T = TypeVar("T")
 
 # Default retry configuration
@@ -93,10 +103,13 @@ def with_sqlite_retry(
             last_exception: Exception | None = None
             delay = base_delay
 
+            if max_attempts < 1:
+                return func(*args, **kwargs)
+
             for attempt in range(1, max_attempts + 1):
                 try:
                     return func(*args, **kwargs)
-                except RECOVERABLE_ERRORS as e:
+                except _RETRYABLE_DB_ERRORS as e:
                     last_exception = e
 
                     # Check if this is a retryable database lock error
@@ -193,7 +206,7 @@ def execute_with_retry(
     for attempt in range(1, max_attempts + 1):
         try:
             return operation(*args, **kwargs)
-        except RECOVERABLE_ERRORS as e:
+        except _RETRYABLE_DB_ERRORS as e:
             if not is_database_locked_error(e):
                 raise
 

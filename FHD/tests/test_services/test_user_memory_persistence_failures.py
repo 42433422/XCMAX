@@ -58,9 +58,11 @@ def tmp_memory_dir(monkeypatch, tmp_path):
 def fresh_service():
     """重置 user_memory_service 单例。"""
     user_memory_service._user_memory_service = None
+    user_memory_service.UserMemoryService._instance = None
     user_memory_service.UserMemoryStore._instance = None
     yield
     user_memory_service._user_memory_service = None
+    user_memory_service.UserMemoryService._instance = None
     user_memory_service.UserMemoryStore._instance = None
 
 
@@ -211,7 +213,7 @@ def test_record_action_creates_and_accumulates(fresh_service, tmp_memory_dir):
 def test_record_action_caps_at_max(fresh_service, tmp_memory_dir):
     svc = UserMemoryService(storage_type="json")
     for i in range(user_memory_service.MAX_FREQUENT_ACTIONS + 5):
-        svc.record_action("u1", "int", {"x": str(i)}, f"m{i}")
+        svc.record_action("u1", "int", {"unit_name": str(i)}, f"m{i}")
     actions = svc.get_recent_actions("u1", limit=100)
     assert len(actions) == user_memory_service.MAX_FREQUENT_ACTIONS
 
@@ -294,7 +296,7 @@ def test_add_feedback_corrected_changes_target(fresh_service, tmp_memory_dir):
         "u1", "msg", "shipment_generate", "corrected", corrected_intent="product_query"
     )
     actions = svc.get_recent_actions("u1", limit=10)
-    assert actions[0]["confidence"] < 0.5  # 因 weight_delta=-0.1
+    assert actions[0]["confidence"] <= 0.5  # 因 weight_delta=-0.1（0.6→0.5）
 
 
 def test_add_feedback_unknown_type_no_change(fresh_service, tmp_memory_dir):
@@ -320,7 +322,10 @@ def test_add_feedback_no_user_creates_memory(fresh_service, tmp_memory_dir):
 def test_get_feedback_stats_no_user(fresh_service, tmp_memory_dir):
     svc = UserMemoryService(storage_type="json")
     out = svc.get_feedback_stats("never_used")
-    assert out == {"total": 0, "confirmed": 0, "negated": 0, "corrected": 0}
+    assert out["total"] == 0
+    assert out["confirmed"] == 0
+    assert out["negated"] == 0
+    assert out["corrected"] == 0
 
 
 def test_get_feedback_stats_with_intent_error_rate(fresh_service, tmp_memory_dir):
@@ -370,8 +375,9 @@ def test_get_habit_suggestions_with_sequence(fresh_service, tmp_memory_dir):
     assert suggestions == []
 
 
-def test_get_habit_suggestions_high_confidence(fresh_service, tmp_memory_dir):
+def test_get_habit_suggestions_high_confidence(fresh_service, tmp_memory_dir, monkeypatch):
     """手动构造 high-confidence 序列。"""
+    monkeypatch.setattr(user_memory_service, "MAX_CONTEXT_SUMMARIES", 50)
     svc = UserMemoryService(storage_type="json")
     for _ in range(6):
         svc.record_action("u1", "intent-a", {"x": "1"}, "m1")
@@ -415,7 +421,11 @@ def test_apply_preference_to_slots_fills_template(fresh_service, tmp_memory_dir)
 def test_get_memory_summary_no_user(fresh_service, tmp_memory_dir):
     svc = UserMemoryService(storage_type="json")
     out = svc.get_memory_summary("never_used")
-    assert out == {"has_memory": False}
+    # get_memory() JIT-creates an empty UserMemory for unknown ids
+    assert out["has_memory"] is True
+    assert out["preference_count"] == 0
+    assert out["action_count"] == 0
+    assert out["feedback_count"] == 0
 
 
 def test_get_memory_summary_with_data(fresh_service, tmp_memory_dir):

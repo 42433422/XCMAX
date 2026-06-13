@@ -1190,6 +1190,23 @@ def ensure_sessions_account_meta_columns(
         logger.warning("sessions 账号元数据列兼容补列失败: %s", exc)
 
 
+def init_im_tables(engine: Engine) -> None:
+    """在主库上创建企业内部 IM V0 表（im_conversations / members / messages）。"""
+    from app.db.base import Base
+    from app.db.models.im import (  # noqa: F401
+        ImConversation,
+        ImConversationMember,
+        ImMessage,
+    )
+
+    target_tables = [
+        ImConversation.__table__,
+        ImConversationMember.__table__,
+        ImMessage.__table__,
+    ]
+    Base.metadata.create_all(engine, tables=target_tables, checkfirst=True)
+
+
 def init_approval_tables(engine: Engine) -> None:
     """
     在主库上创建审批流相关表（approval_flows / approval_flow_nodes /

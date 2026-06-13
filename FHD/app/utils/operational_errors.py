@@ -27,6 +27,18 @@ try:
 except ImportError:
     pass
 
+# redis-py 的连接/超时错误继承自 ``redis.exceptions.RedisError(Exception)``，
+# 而非内建 ``ConnectionError``/``TimeoutError``（OSError 族），因此必须显式纳入，
+# 否则 redis 宕机时所有 ``except RECOVERABLE_ERRORS`` 探针都会 500。
+_redis_extra: tuple[type[BaseException], ...] = ()
+try:
+    from redis.exceptions import ConnectionError as _RedisConnectionError
+    from redis.exceptions import TimeoutError as _RedisTimeoutError
+
+    _redis_extra = (_RedisConnectionError, _RedisTimeoutError)
+except ImportError:
+    pass
+
 # L2: infrastructure transient failures (IO, network, external deps)
 INFRA_TRANSIENT: tuple[type[BaseException], ...] = (
     OSError,
@@ -37,6 +49,7 @@ INFRA_TRANSIENT: tuple[type[BaseException], ...] = (
     ArithmeticError,
     *_operational_extra,
     *_httpx_extra,
+    *_redis_extra,
 )
 
 # L2: data shape / parsing failures (often map to 400/422)
