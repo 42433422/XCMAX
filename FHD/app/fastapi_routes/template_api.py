@@ -14,7 +14,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Request
 
 from app.neuro_bus.application_neuro_bridge import publish_neuro_event
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +27,7 @@ def _templates_payload() -> dict:
 
         data = get_template_app_service().get_templates()
         return {"success": True, "templates": data.get("templates") or []}
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.warning("template_api: 模板服务加载失败: %s", e)
         # 返回 503-compatible 错误结构；GET /api/templates 自身不抛异常，
         # 但调用方（前端）可通过 service_unavailable 字段判断需要告警。
@@ -76,7 +76,7 @@ def _publish_template_event(event_type: str, payload: dict[str, Any]) -> None:
             payload,
             domain="template",
         )
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         pass  # 静默失败，不影响主流程
 
 
@@ -123,7 +123,7 @@ def templates_list_compat(request: Request):
         if result.get("service_unavailable"):
             return JSONResponse(result, status_code=503)
         return result
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         latency_ms = (time.perf_counter() - t0) * 1000.0
 
         # 发布请求失败事件

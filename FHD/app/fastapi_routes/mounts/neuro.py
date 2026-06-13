@@ -7,7 +7,7 @@ import logging
 from fastapi import FastAPI
 
 from app.fastapi_routes._route_helpers import is_ci_strict
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +19,7 @@ def register_neuro_routes(app: FastAPI) -> None:
 
         add_neurobus_routes(app)
         logger.info("Registered NeuroBus routes (/api/neurobus/*)")
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         if is_ci_strict():
             raise RuntimeError("NeuroBus routes required in CI") from exc
         logger.warning("NeuroBus routes skipped: %s", exc)

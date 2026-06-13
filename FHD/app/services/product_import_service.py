@@ -11,7 +11,7 @@ from typing import Any
 from app.db.models import Product
 from app.db.session import get_db
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -215,7 +215,7 @@ class ProductImportService(NeuroEventPublisherMixin):
                         )
                         db.add(product)
                         result["imported"] += 1
-                    except OPERATIONAL_ERRORS as e:
+                    except RECOVERABLE_ERRORS as e:
                         logger.error(f"导入产品失败：{e}")
                         result["failed"] += 1
                         result["details"]["failed_items"].append({"data": row, "error": str(e)})
@@ -226,7 +226,7 @@ class ProductImportService(NeuroEventPublisherMixin):
                 from app.infrastructure.mods.hooks import trigger
 
                 trigger("product.imported", count=result["imported"], products=data)
-            except OPERATIONAL_ERRORS as hook_err:
+            except RECOVERABLE_ERRORS as hook_err:
                 logger.warning(f"Hook trigger failed: {hook_err}")
 
             logger.info(
@@ -234,7 +234,7 @@ class ProductImportService(NeuroEventPublisherMixin):
                 f"跳过{result['skipped']}, 失败{result['failed']}"
             )
 
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.exception(f"导入产品数据失败：{e}")
             result["error"] = str(e)
 

@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +75,7 @@ def _items_from_db(
     try:
         from app.db import SessionLocal
         from app.db.models.finance import FinancialTransaction
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         return []
     items: list[dict[str, Any]] = []
     try:
@@ -103,7 +103,7 @@ def _items_from_db(
                 if track and entry["track"] != track:
                     continue
                 items.append(entry)
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         logger.debug("financial_transactions query skipped", exc_info=True)
     return items
 
@@ -128,7 +128,7 @@ def list_ledger(
             items = [x for x in items if x.get("track") == track]
         if items:
             return items[:cap]
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         logger.debug("crm invoice ledger fallback skipped", exc_info=True)
     return _items_from_pipeline(market_user_id, limit=cap)
 
@@ -169,7 +169,7 @@ def archive_from_crm_invoice(
             db.commit()
             db.refresh(txn)
             return {"archived": True, "transaction_id": txn.id}
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.debug("DB archive skipped: %s", exc)
         return {"archived": True, "transaction_id": None, "local_only": True, "entry": entry}
 

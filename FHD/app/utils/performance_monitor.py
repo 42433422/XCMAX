@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 from threading import Lock
 from typing import Any
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -202,7 +202,7 @@ class PerformanceMonitor:
 
         try:
             yield
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             error_occurred = True
             metadata["error"] = str(e)
             raise
@@ -235,7 +235,7 @@ class PerformanceMonitor:
                     self.record_metric(metric_name, duration_ms, success=True)
                     return result
 
-                except OPERATIONAL_ERRORS as e:
+                except RECOVERABLE_ERRORS as e:
                     duration_ms = (time.perf_counter() - start_time) * 1000
                     self.record_metric(metric_name, duration_ms, success=False, error=str(e))
                     raise
@@ -265,7 +265,7 @@ class PerformanceMonitor:
                         ip=None,
                     )
                     return result
-                except OPERATIONAL_ERRORS:
+                except RECOVERABLE_ERRORS:
                     duration_ms = (time.perf_counter() - start_time) * 1000
                     self.record_api_call(
                         endpoint=func.__name__,

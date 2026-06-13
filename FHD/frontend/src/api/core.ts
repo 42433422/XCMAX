@@ -104,12 +104,7 @@ export interface RequestOptions extends RequestInit {
   responseType?: 'json' | 'blob';
 }
 
-export interface ApiResponse<T = unknown> {
-  success: boolean;
-  data?: T;
-  message?: string;
-  total?: number;
-}
+export type { ApiResponse } from '@/types/api';
 
 async function request<T = unknown>(url: string, options: RequestOptions = {}): Promise<T | Response> {
   const fullUrl = buildApiUrl(url);

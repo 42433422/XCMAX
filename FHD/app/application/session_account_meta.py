@@ -7,7 +7,7 @@ from typing import Any, Literal
 
 from app.db.models.user import Session as UserSession
 from app.db.session import get_db
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -112,7 +112,7 @@ def persist_session_account_meta(
             if tenant_id is not None and hasattr(row, "tenant_id"):
                 row.tenant_id = int(tenant_id)
             db.commit()
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         logger.exception("persist_session_account_meta failed")
 
 
@@ -126,7 +126,7 @@ def load_session_account_meta(session_id: str) -> dict[str, Any] | None:
             if row is None:
                 return None
             return session_row_to_meta_dict(row)
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         logger.exception("load_session_account_meta failed")
         return None
 
@@ -194,7 +194,7 @@ def enrich_session_meta_with_tenant(session_id: str, user: Any) -> dict[str, Any
                     tenant = db.query(Tenant).filter(Tenant.id == int(tid)).first()
                     if tenant and (tenant.name or "").strip():
                         meta["tenant_name"] = str(tenant.name).strip()
-            except OPERATIONAL_ERRORS:
+            except RECOVERABLE_ERRORS:
                 logger.exception("enrich_session_meta tenant name lookup failed")
         if not meta.get("tenant_name") and company_brand:
             meta["tenant_name"] = company_brand
@@ -206,7 +206,7 @@ def enrich_session_meta_with_tenant(session_id: str, user: Any) -> dict[str, Any
                     if row is not None and getattr(row, "tenant_id", None) != int(tid):
                         row.tenant_id = int(tid)
                         db.commit()
-            except OPERATIONAL_ERRORS:
+            except RECOVERABLE_ERRORS:
                 logger.exception("persist sessions.tenant_id failed session=%s", sid)
 
     return meta
@@ -224,7 +224,7 @@ def clear_impersonation(session_id: str) -> None:
             row.impersonating_market_user_id = None
             row.impersonating_username = ""
             db.commit()
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         logger.exception("clear_impersonation failed")
 
 
@@ -271,5 +271,5 @@ def audit_admin_action(
             mod_id,
             detail or operator,
         )
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         logger.exception("audit_admin_action failed")

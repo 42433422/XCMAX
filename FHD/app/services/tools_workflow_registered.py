@@ -6,7 +6,7 @@ import logging
 import os
 from collections.abc import Callable
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -129,7 +129,7 @@ def _registered_router_products(
         price = params.get("unit_price", params.get("price", 0.0))
         try:
             price = float(price)
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             price = 0.0
         create_result = svc.create_product(
             {
@@ -312,7 +312,7 @@ def _registered_router_template_preview(
             if m:
                 try:
                     sheet_index = int(m.group(1))
-                except OPERATIONAL_ERRORS:
+                except RECOVERABLE_ERRORS:
                     sheet_index = None
 
         selected_sheet = None
@@ -745,7 +745,7 @@ def _registered_router_excel_import(
                     }
                 },
             }
-        except OPERATIONAL_ERRORS as err:
+        except RECOVERABLE_ERRORS as err:
             logger.error("Excel 导入执行失败: %s", err, exc_info=True)
             return {"success": False, "message": f"导入执行失败：{str(err)}"}
 

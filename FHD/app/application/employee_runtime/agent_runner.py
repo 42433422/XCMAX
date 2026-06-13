@@ -9,7 +9,7 @@ import logging
 import os
 from typing import Any
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +25,9 @@ def _run_async(coro):
         return pool.submit(asyncio.run, coro).result()
 
 
-async def _chat_completion(messages: list[dict[str, Any]], max_tokens: int = 4000) -> dict[str, Any]:
+async def _chat_completion(
+    messages: list[dict[str, Any]], max_tokens: int = 4000
+) -> dict[str, Any]:
     provider = (os.environ.get("FHD_EMPLOYEE_LLM_PROVIDER") or "deepseek").strip()
     model = (os.environ.get("FHD_EMPLOYEE_LLM_MODEL") or "deepseek-chat").strip()
     try:
@@ -39,7 +41,7 @@ async def _chat_completion(messages: list[dict[str, Any]], max_tokens: int = 400
                 "model": model,
             }
         return await adapter.chat_completion(messages, max_tokens=max_tokens)
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.exception("employee agent LLM failed: %s", exc)
         return {"error": str(exc)[:800]}
 

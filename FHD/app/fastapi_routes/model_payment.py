@@ -9,6 +9,7 @@ from typing import Any
 from fastapi import APIRouter, Body, Header, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
 
+from app.infrastructure.billing.saas_plans import list_saas_plans, plan_by_id
 from app.infrastructure.payment import alipay as mp_ali
 from app.infrastructure.payment import order_store as mp_orders
 from app.infrastructure.payment.payment_sot import (
@@ -20,8 +21,8 @@ from app.infrastructure.payment.payment_sot import (
     model_payment_backend,
     modstore_payment_hint,
 )
-from app.infrastructure.billing.saas_plans import list_saas_plans, plan_by_id
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.errors import ErrorCode, PaymentError
+from app.utils.operational_errors import INFRA_TRANSIENT, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -161,8 +162,9 @@ def checkout(
         )
     plan = _plan_by_id(plan_id)
     if not plan:
-        return JSONResponse(
-            {"success": False, "message": f"未知套餐: {plan_id}"},
+        raise PaymentError(
+            ErrorCode.PAYMENT_ORDER_NOT_FOUND,
+            message=f"未知套餐: {plan_id}",
             status_code=400,
         )
 
@@ -276,7 +278,7 @@ async def alipay_trade_notify(request: Request):
         return PlainTextResponse("fail", status_code=410)
     try:
         form = await request.form()
-    except OPERATIONAL_ERRORS as e:
+    except INFRA_TRANSIENT as e:
         logger.warning("alipay notify: bad form: %s", e)
         return PlainTextResponse("fail", status_code=400)
 
@@ -291,7 +293,7 @@ async def alipay_trade_notify(request: Request):
 
     try:
         ok = mp_ali.verify_notify(data, signature)
-    except OPERATIONAL_ERRORS as e:
+    except INFRA_TRANSIENT as e:
         logger.exception("alipay notify verify error: %s", e)
         return PlainTextResponse("fail", status_code=500)
 
@@ -339,7 +341,7 @@ def diagnostics():
         try:
             data["order_count"] = mp_orders.count_orders()
             data["json_migration_pending"] = mp_orders.json_store_has_unmigrated_orders()
-        except OPERATIONAL_ERRORS as exc:
+        except RECOVERABLE_ERRORS as exc:
             data["order_count_error"] = str(exc)[:200]
     return JSONResponse({"success": True, "data": data})
 

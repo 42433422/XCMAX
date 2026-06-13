@@ -2,6 +2,9 @@
 
 Route-level catch-all lives in ``app.middleware.error_handler``; inner code should
 only handle operational failures and let unexpected errors propagate.
+
+Programming bugs (``TypeError``, ``KeyError``, ``AttributeError``) are intentionally
+excluded — they should bubble to the HTTP boundary as 500s.
 """
 
 from __future__ import annotations
@@ -24,20 +27,25 @@ try:
 except ImportError:
     pass
 
-OPERATIONAL_ERRORS: tuple[type[BaseException], ...] = (
+# L2: infrastructure transient failures (IO, network, external deps)
+INFRA_TRANSIENT: tuple[type[BaseException], ...] = (
     OSError,
-    ValueError,
-    TypeError,
-    KeyError,
-    AttributeError,
-    RuntimeError,
-    ImportError,
-    LookupError,
     ConnectionError,
     TimeoutError,
-    json.JSONDecodeError,
+    RuntimeError,
+    ImportError,
     ArithmeticError,
-    UnicodeError,
     *_operational_extra,
     *_httpx_extra,
 )
+
+# L2: data shape / parsing failures (often map to 400/422)
+DATA_SHAPE: tuple[type[BaseException], ...] = (
+    ValueError,
+    json.JSONDecodeError,
+    UnicodeError,
+    LookupError,
+)
+
+# Union of recoverable operational failures (default inner catch tuple)
+RECOVERABLE_ERRORS: tuple[type[BaseException], ...] = INFRA_TRANSIENT + DATA_SHAPE

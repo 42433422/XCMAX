@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
 def _now_iso() -> str:
@@ -76,7 +76,7 @@ def maybe_send_intake_form_notice(
 
         result = get_desktop_automation_service().send_wechat_message(contact, text)
         ok = bool(result.get("success")) and bool(result.get("message_sent", result.get("success")))
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         return {"sent": False, "error": str(exc)[:300]}
     if ok:
         doc["intake_form_notice_sent"] = True

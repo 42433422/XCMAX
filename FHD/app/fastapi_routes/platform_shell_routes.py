@@ -7,7 +7,7 @@ import logging
 
 from fastapi import APIRouter, Request
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +24,7 @@ async def platform_shell_capabilities():
             mid = str(m.get("id") or "").strip()
             if mid:
                 installed.append(mid)
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.warning("platform_shell: list mods failed: %s", exc)
 
     from app.mod_sdk.platform_shell import build_platform_shell_payload
@@ -42,7 +42,7 @@ async def decoupling_progress():
             mid = str(m.get("id") or "").strip()
             if mid:
                 installed.append(mid)
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.warning("decoupling-progress: list mods failed: %s", exc)
 
     from app.mod_sdk.decoupling_progress import build_decoupling_progress_payload
@@ -63,7 +63,10 @@ async def platform_shell_industry_baseline(request: Request, industry_id: str = 
     """按行业返回建议补装的基础 Mod 清单（对话底座 + 行业基础线 + 行业包 + 账号定制）。"""
     from app.mod_sdk.industry_baseline import build_industry_baseline_plan_for_request
 
-    return {"success": True, "data": await build_industry_baseline_plan_for_request(request, industry_id)}
+    return {
+        "success": True,
+        "data": await build_industry_baseline_plan_for_request(request, industry_id),
+    }
 
 
 @router.get("/onboarding-industries")

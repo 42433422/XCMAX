@@ -21,7 +21,7 @@ from app.template_analysis_progress import (
     clear_template_analysis_progress,
     set_template_analysis_progress,
 )
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -131,7 +131,7 @@ def _analyze_template_with_upload_inner(file, template_name: str, template_scope
         _safe_remove(file_path)
         return _j({"success": False, "message": f"不支持的文件类型：{file_ext}"}, 400)
 
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.error(f"分析模板失败：{e}")
         import traceback
 
@@ -234,7 +234,7 @@ def _analyze_excel_template(
                 },
             }
         )
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.error(f"分析 Excel 模板失败：{e}")
         import traceback
 
@@ -367,7 +367,7 @@ def _analyze_word_template(
                 },
             }
         )
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.error(f"分析 Word 模板失败：{e}")
         import traceback
 
@@ -482,7 +482,7 @@ def _analyze_label_template(
             _cleanup_progress_tracking(task_id)
             _safe_remove(file_path)
             return _j({"success": False, "message": ocr_result.get("error", "标签生成失败")}, 500)
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.error(f"分析标签模板失败：{e}")
         import traceback
 

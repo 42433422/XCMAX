@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
 def _now_iso() -> str:
@@ -56,6 +56,6 @@ def finalize_intake_submission(
             if out.get("sent"):
                 doc["intake_done_notice_sent"] = True
                 doc = save_pipeline(doc)
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             pass
     return doc, meta

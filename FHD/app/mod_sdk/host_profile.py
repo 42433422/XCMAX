@@ -11,7 +11,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 if TYPE_CHECKING:
     pass
@@ -191,7 +191,7 @@ def _load_json(path: Path) -> dict[str, Any] | None:
             return None
         data = json.loads(path.read_text(encoding="utf-8"))
         return data if isinstance(data, dict) else None
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         logger.debug("host_profile: failed to read %s", path, exc_info=True)
         return None
 
@@ -462,7 +462,7 @@ def scan_workflow_employee_catalog_from_mods(mods_root: Path | None = None) -> d
     for manifest_path in sorted(root.glob("xcagi-workflow-employee-*/manifest.json")):
         try:
             data = json.loads(manifest_path.read_text(encoding="utf-8"))
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             continue
         wf_list = data.get("workflow_employees") or []
         wf = wf_list[0] if wf_list else {}

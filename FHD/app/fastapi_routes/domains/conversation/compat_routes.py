@@ -17,11 +17,11 @@ from app.application.planner_compat_service import (
     execute_compat_chat_batch,
 )
 from app.domain.ai.tier import assert_p2_elevated_claim_or_raise, resolve_ai_tier
-from app.utils.metrics import chat_stream_first_byte_seconds
 from app.fastapi_routes.domains.conversation.helpers import (
     XcagiCompatChatBatchBody,
     XcagiCompatChatBody,
 )
+from app.utils.metrics import chat_stream_first_byte_seconds
 
 router = APIRouter(tags=["xcagi-compat"])
 logger = logging.getLogger(__name__)
@@ -37,9 +37,9 @@ async def _chat_stream_with_first_byte_metric(
     try:
         async for chunk in compat_chat_stream_async(request, body, ai_tier=ai_tier):
             if first_byte:
-                chat_stream_first_byte_seconds.labels(
-                    model="compat", tenant_id="default"
-                ).observe(time.perf_counter() - start)
+                chat_stream_first_byte_seconds.labels(model="compat", tenant_id="default").observe(
+                    time.perf_counter() - start
+                )
                 first_byte = False
             yield chunk
     finally:
@@ -49,7 +49,7 @@ async def _chat_stream_with_first_byte_metric(
 @router.post("/ai/unified_chat/stream")
 @router.post("/ai/chat/stream")
 async def ai_unified_chat_stream(request: Request, body: XcagiCompatChatBody):
-    from app.middleware.chat_stream_limit import acquire_chat_stream_slot, release_chat_stream_slot
+    from app.middleware.chat_stream_limit import acquire_chat_stream_slot
 
     if not acquire_chat_stream_slot():
         from fastapi.responses import JSONResponse

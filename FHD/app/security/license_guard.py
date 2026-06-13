@@ -27,7 +27,7 @@ from app.security.license_store import (
     touch_session,
 )
 from app.security.license_token import TokenError, parse_token
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -37,13 +37,13 @@ def _read_cookie(scope: Scope, name: str) -> str | None:
     for k, v in headers:
         try:
             key = k.decode("latin-1") if isinstance(k, bytes) else str(k)
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             continue
         if key.lower() != "cookie":
             continue
         try:
             raw = v.decode("latin-1") if isinstance(v, bytes) else str(v)
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             continue
         for part in raw.split(";"):
             part = part.strip()
@@ -62,7 +62,7 @@ def _read_header(scope: Scope, name: str) -> str | None:
         if isinstance(k, bytes) and k.lower() == target:
             try:
                 return v.decode("latin-1") if isinstance(v, bytes) else str(v)
-            except OPERATIONAL_ERRORS:
+            except RECOVERABLE_ERRORS:
                 return None
     return None
 
@@ -132,7 +132,7 @@ class LanLicenseGuard:
                 scope["state"]["lan_client_ip"] = _client_ip_early
                 scope["state"]["lan_session_expires_at"] = 0
                 scope["state"]["lan_admin_host_bypass"] = True
-            except TypeError:
+            except RECOVERABLE_ERRORS:
                 pass
             await self.app(scope, receive, send)
             return
@@ -205,12 +205,12 @@ class LanLicenseGuard:
             scope["state"]["lan_is_admin"] = is_admin_session
             scope["state"]["lan_client_ip"] = client_ip
             scope["state"]["lan_session_expires_at"] = payload.exp
-        except TypeError:
+        except RECOVERABLE_ERRORS:
             pass
 
         try:
             touch_session(payload.jti)
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             logger.debug("touch_session failed for jti=%s", payload.jti, exc_info=True)
 
         await self.app(scope, receive, send)

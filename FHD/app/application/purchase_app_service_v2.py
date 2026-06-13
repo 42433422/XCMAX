@@ -14,7 +14,7 @@ import logging
 from datetime import datetime
 from typing import Any
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +53,7 @@ class PurchaseAppServiceV2:
                 priority=EventPriority.NORMAL,
             )
             bus.publish(event)
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.debug("NeuroBus 事件发布失败（非阻塞）: %s", e)
 
     # ── 供应商 ────────────────────────────────────────────────────

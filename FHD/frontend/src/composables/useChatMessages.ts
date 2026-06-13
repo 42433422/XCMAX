@@ -63,20 +63,11 @@ export function clearVoiceQueue() {
   stopSpeaking()
 }
 
-export interface ChatMessage {
-  role: 'user' | 'ai' | 'task'
-  content: string
-  time: string
-  thinkingSteps?: string
-  todoSteps?: string[]
-  workflowAction?: string
-  nodeResults?: Array<{ node_id: string; success: boolean; tool_id: string; action: string; error?: string }>
-  contextSummary?: string
-  /** 发货单文档下载链接（与右侧任务卡一致，便于在对话内直接下载） */
-  shipmentDownloadUrl?: string
-}
+import type { UiChatMessage, UiChatMessageExtras } from '@/types/chat-ui'
 
-export type ChatMessageExtras = Partial<Pick<ChatMessage, 'shipmentDownloadUrl'>>
+/** UI 聊天消息（与 ApiChatMessage 不同：role 用 ai、时间字段为 time） */
+export type ChatMessage = UiChatMessage
+export type ChatMessageExtras = UiChatMessageExtras
 
 export function useChatMessages(sessionId: Ref<string>) {
   const modsStore = useModsStore()

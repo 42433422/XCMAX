@@ -21,7 +21,7 @@ from typing import Any
 from fastapi import APIRouter, Body, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +56,7 @@ def _release_train_snapshot() -> dict[str, Any]:
         from modstore_server.release_train import snapshot_public
 
         return snapshot_public()
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         pass
     from pathlib import Path
 
@@ -77,7 +77,7 @@ def _release_train_snapshot() -> dict[str, Any]:
         raw = json.loads(path.read_text(encoding="utf-8"))
         if isinstance(raw, dict):
             return raw
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.warning("release-train json read failed: %s", exc)
     return {"epoch": "1.0.0.0", "current": "1.0.0.0", "day_index": 0}
 
@@ -101,7 +101,7 @@ async def _market_admin_proxy(
             _error_message,
             _proxy_json,
         )
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         return JSONResponse(
             {"success": False, "message": f"市场账号代理不可用: {exc}"},
             status_code=500,
@@ -188,7 +188,7 @@ async def _digest_local_or_proxy(
                     elif part.startswith("day="):
                         day = part.split("=", 1)[1]
                 return await digest_svc.list_action_items_local(kind=kind, day=day)
-        except OPERATIONAL_ERRORS as exc:
+        except RECOVERABLE_ERRORS as exc:
             logger.warning("local digest/action-items read failed path=%s: %s", path, exc)
             return JSONResponse({"success": False, "message": str(exc)}, status_code=502)
 
@@ -208,7 +208,7 @@ async def _remote_duty_health(request: Request) -> dict[str, Any]:
     if hasattr(health_payload, "body"):
         try:
             return json.loads(getattr(health_payload, "body", b"") or b"{}")
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             return {}
     return {}
 
@@ -442,7 +442,7 @@ def _collect_mod_modules() -> list[dict[str, Any]]:
                     "version": version,
                 }
             )
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.debug("collect_mod_modules failed: %s", exc)
     return rows
 
@@ -472,7 +472,7 @@ def _collect_employee_pack_modules() -> list[dict[str, Any]]:
                         "version": str(pack.get("version") or ""),
                     }
                 )
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.debug("collect_employee_pack_modules failed: %s", exc)
     return rows
 
@@ -550,7 +550,7 @@ async def admin_list_wechat_groups(
 
         rows = list_group_contacts(keyword=keyword or None, limit=limit)
         return {"success": True, "data": rows, "total": len(rows)}
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
 
 
@@ -563,7 +563,7 @@ async def admin_list_user_wechat_customers(request: Request, user_id: int):
         from app.services.wechat_group_customer_bridge import get_bindings_for_user
 
         return {"success": True, "data": get_bindings_for_user(user_id)}
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
 
 
@@ -584,7 +584,7 @@ async def admin_save_user_wechat_customers(
             ids = []
         result = save_bindings_for_user(user_id, ids)
         return result
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
 
 
@@ -912,7 +912,7 @@ def _probe_remote_health_sync() -> dict[str, Any]:
                     "port": REMOTE_PORT,
                 },
             }
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.debug("remote_status probe failed: %s", exc)
         return {
             "success": True,
@@ -1057,7 +1057,7 @@ async def ops_staffing_install_local(
         else:
             data = {"result": str(result)}
         return {"success": bool(data.get("success", True)), "data": data}
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.warning("ops_staffing_install_local failed: %s", exc)
         return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
 
@@ -1107,7 +1107,7 @@ async def ops_staffing_close_gap(
                         "message": str(data.get("message") or ""),
                     }
                 )
-            except OPERATIONAL_ERRORS as exc:
+            except RECOVERABLE_ERRORS as exc:
                 install_results.append(
                     {"employee_id": employee_id, "success": False, "message": str(exc)}
                 )
@@ -1137,7 +1137,7 @@ async def sync_status():
         db = SyncDb()
         info = db.get_status()
         return {"success": True, "data": info}
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.debug("sync_status db read failed: %s", exc)
         return {
             "success": True,
@@ -1161,7 +1161,7 @@ async def sync_push():
 
         result = push_outbox(remote_host=REMOTE_HOST, remote_port=REMOTE_PORT)
         return {"success": True, "data": result}
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.warning("sync_push failed: %s", exc)
         return JSONResponse(
             {"success": False, "message": f"推送失败: {exc}"},
@@ -1178,7 +1178,7 @@ async def sync_changes(since_cursor: int = Query(0, ge=0), limit: int = Query(10
         db = SyncDb()
         rows = db.get_changes(since_cursor=since_cursor, limit=limit)
         return {"success": True, "data": rows, "count": len(rows)}
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.debug("sync_changes read failed: %s", exc)
         return {"success": True, "data": [], "count": 0, "note": str(exc)}
 
@@ -1196,7 +1196,7 @@ async def sync_receive(body: dict | list):
             from app.application.xcmax_sync_app import apply_inbox
 
             result = apply_inbox(limit=len(items) + 50)
-        except OPERATIONAL_ERRORS as ae:
+        except RECOVERABLE_ERRORS as ae:
             result = {"applied": 0, "error": str(ae)}
         # 写审计事件
         try:
@@ -1206,10 +1206,10 @@ async def sync_receive(body: dict | list):
                 action="xcmax.sync.receive",
                 details={"received": written, "apply": result},
             )
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             pass
         return {"success": True, "received": written, "apply_result": result}
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.warning("sync_receive failed: %s", exc)
         return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
 
@@ -1223,7 +1223,7 @@ async def sync_pull():
         pull_result = pull_from_remote(remote_host=REMOTE_HOST, remote_port=REMOTE_PORT)
         apply_result = apply_inbox()
         return {"success": True, "data": {"pull": pull_result, "apply": apply_result}}
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.warning("sync_pull failed: %s", exc)
         return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
 
@@ -1264,7 +1264,7 @@ async def _sync_sse_generator(request: Request, since_cursor: int):
                     default=str,
                 )
                 yield f"data: {heartbeat}\n\n"
-        except OPERATIONAL_ERRORS as exc:
+        except RECOVERABLE_ERRORS as exc:
             err = _json.dumps({"type": "error", "message": str(exc)}, ensure_ascii=False)
             yield f"data: {err}\n\n"
         await asyncio.sleep(SYNC_POLL_INTERVAL_S)
@@ -1278,7 +1278,7 @@ async def list_conflicts(limit: int = Query(50, ge=1, le=500)):
 
         data = list_sync_conflicts(limit=limit)
         return {"success": True, "data": data, "count": len(data)}
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         return {"success": True, "data": [], "count": 0, "note": str(exc)}
 
 
@@ -1305,7 +1305,7 @@ async def resolve_conflict(inbox_id: int, body: dict):
 
             mark_inbox_skipped(inbox_id)
         return {"success": True, "inbox_id": inbox_id, "action": action}
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
 
 
@@ -1344,7 +1344,7 @@ async def xcmax_market_proxy_catchall(request: Request, subpath: str):
         try:
             body = await request.json()
             json_body = body if isinstance(body, dict) else None
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             json_body = None
     api_path = f"/api/{str(subpath or '').lstrip('/')}"
     return await _market_admin_proxy(request, method, api_path, json_body=json_body)

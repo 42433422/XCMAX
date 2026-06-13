@@ -7,7 +7,7 @@ from typing import Any
 from fastapi import Request
 
 from app.infrastructure.auth.dependencies import session_id_from_request
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
 def resolve_tenant_id(request: Request) -> int | None:
@@ -29,7 +29,7 @@ def resolve_tenant_id(request: Request) -> int | None:
             return None
         tid = getattr(user, "tenant_id", None)
         return int(tid) if tid is not None else None
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         return None
 
 

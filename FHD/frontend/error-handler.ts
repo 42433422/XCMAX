@@ -1,9 +1,11 @@
 /**
  * 前端统一错误处理工具
- * 
+ *
  * 使用后端统一返回的 { success, message, error_code } 格式
  * 替代之前混用的 error/message 字段
  */
+
+import type { ApiErrorResponse, ApiResponse } from './src/types/api';
 
 // 错误码映射表 - 用于精细化 UX 处理
 const ERROR_CODE_MAP: Record<string, { level: 'error' | 'warning' | 'info'; action: string }> = {
@@ -35,14 +37,6 @@ const ERROR_CODE_MAP: Record<string, { level: 'error' | 'warning' | 'info'; acti
   'general_error': { level: 'error', action: 'toast' },
 };
 
-interface ApiResponse {
-  success: boolean;
-  message?: string;
-  error_code?: string;
-  data?: any;
-  [key: string]: any;
-}
-
 interface ErrorHandlerOptions {
   useToast?: boolean;      // 使用 Toast 而非 Alert
   autoRetry?: boolean;     // 自动重试可重试的错误
@@ -60,7 +54,7 @@ interface ErrorHandlerOptions {
  * }
  */
 export function handleApiError(
-  response: ApiResponse,
+  response: ApiErrorResponse,
   options: ErrorHandlerOptions = {}
 ): { handled: boolean; userMessage: string; action?: string } {
   const { useToast = true, autoRetry = true, showDetails = false } = options;

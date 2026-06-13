@@ -13,7 +13,7 @@ from collections import OrderedDict
 from threading import Lock
 from typing import Any
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +40,7 @@ def _get_redis_client():
         _redis_client = redis.from_url(url, decode_responses=True)
         _redis_client.ping()
         logger.info("Rate limiter using Redis backend")
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.warning("Rate limiter Redis unavailable, using in-memory: %s", exc)
         _redis_client = None
     return _redis_client
@@ -113,7 +113,7 @@ class _RedisRateLimiter:
             return self._max_requests
         try:
             count = int(self._redis.get(self._window_key(key)) or 0)
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             return 0
         return max(0, self._max_requests - count)
 

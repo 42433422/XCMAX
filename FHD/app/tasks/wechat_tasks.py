@@ -11,7 +11,7 @@ from sqlalchemy import text
 
 from app.db import SessionLocal
 from app.extensions import celery_app
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +46,7 @@ def process_wechat_message(self, message_data: dict[str, Any]) -> bool:
         logger.info(f"微信消息处理完成：{result}")
         return result.get("success", False)
 
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.exception(f"处理微信消息失败：{e}")
         # 重试逻辑
         try:
@@ -80,14 +80,14 @@ def scan_wechat_messages(self, contact_id: int | None = None, limit: int = 20) -
         for t in new_tasks:
             try:
                 process_wechat_message.delay({"id": t.get("id")})
-            except OPERATIONAL_ERRORS as e:
+            except RECOVERABLE_ERRORS as e:
                 logger.warning("派发微信消息处理任务失败 task_id=%s: %s", t.get("id"), e)
 
         new_count = len(new_tasks)
         logger.info(f"扫描完成，发现 {new_count} 条新消息")
         return new_count
 
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.exception(f"扫描微信消息失败：{e}")
         try:
             self.retry(exc=e, countdown=300)
@@ -126,7 +126,7 @@ def cleanup_old_tasks(days: int = 30) -> int:
         logger.info(f"清理完成，共清理 {cleaned_count} 个任务")
         return cleaned_count
 
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.exception(f"清理旧任务失败：{e}")
         return 0
 

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from app.mod_sdk.platform_shell import PROTECTED_CLIENT_MOD_IDS
-
 # 太阳鸟演示账号（见 alembic seed SUNBIRD）；行业包 + 账号定制 Mod
 SUNBIRD_LOCAL_USERNAMES: frozenset[str] = frozenset({"SUNBIRD", "sunbird"})
 SUNBIRD_CLIENT_MOD_ID = "taiyangniao-pro"

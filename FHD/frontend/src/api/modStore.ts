@@ -1,43 +1,23 @@
 import { apiFetch } from '@/utils/apiBase';
 import { clearDeliverableStatusCache } from '@/utils/platformShellApi';
+import type { ModCatalogItem, ModCatalogItemUi } from '@/types/modCatalog';
 
-export interface ModInfo {
-  id: string;
-  name: string;
-  version: string;
-  author: string;
-  description: string;
-  package_file?: string;
-  pkg_id?: string;
-  download_url?: string;
-  source?: 'remote' | 'local' | string;
-  catalog_base_url?: string;
-  is_installed: boolean;
-  download_count?: number;
-  total_downloads?: number;
-  avg_rating?: number;
-  rating_count?: number;
-  created_at?: string;
-  dependencies?: Record<string, string>;
-  installationInProgress?: boolean;
-  uninstallationInProgress?: boolean;
-  updateInProgress?: boolean;
-}
+export type { ModCatalogItem, ModCatalogItemUi } from '@/types/modCatalog';
 
 export interface ModCatalog {
-  installed: ModInfo[];
-  available: ModInfo[];
+  installed: ModCatalogItemUi[];
+  available: ModCatalogItemUi[];
   indexed_count: number;
 }
 
 export interface MarketCatalogResult {
-  items: ModInfo[];
+  items: ModCatalogItemUi[];
   total: number;
   collection: string;
 }
 
 export interface ModSearchResult {
-  data: ModInfo[];
+  data: ModCatalogItemUi[];
   count: number;
 }
 
@@ -83,7 +63,7 @@ export interface InstallResult {
 export interface UploadResult {
   success: boolean;
   message: string;
-  data: ModInfo;
+  data: ModCatalogItemUi;
 }
 
 /**
@@ -158,7 +138,7 @@ export async function searchMods(
 /**
  * 获取热门 MOD
  */
-export async function getPopularMods(limit: number = 10): Promise<ModInfo[]> {
+export async function getPopularMods(limit: number = 10): Promise<ModCatalogItemUi[]> {
   const response = await apiFetch(`/api/mod-store/popular?limit=${limit}`);
   const data = await response.json();
   
@@ -172,7 +152,7 @@ export async function getPopularMods(limit: number = 10): Promise<ModInfo[]> {
 /**
  * 获取最新 MOD
  */
-export async function getRecentMods(limit: number = 10): Promise<ModInfo[]> {
+export async function getRecentMods(limit: number = 10): Promise<ModCatalogItemUi[]> {
   const response = await apiFetch(`/api/mod-store/recent?limit=${limit}`);
   const data = await response.json();
   
@@ -225,7 +205,7 @@ export async function uploadModPackage(
 /**
  * 安装 MOD
  */
-export async function installMod(mod: string | Pick<ModInfo, 'id' | 'pkg_id' | 'version' | 'package_file'>): Promise<InstallResult> {
+export async function installMod(mod: string | Pick<ModCatalogItemUi, 'id' | 'pkg_id' | 'version' | 'package_file'>): Promise<InstallResult> {
   const payload = typeof mod === 'string'
     ? { package_file: mod, activate: true, verify_signature: false }
     : {
@@ -495,6 +475,42 @@ export async function installHostFoundation(
   };
 }
 
+/** L2：从 industry-seeds 池安装所选行业中性 Mod（池缺失时 Catalog 兜底） */
+export async function installIndustrySeed(
+  industryId: string,
+): Promise<{ success: boolean; message: string; data?: Record<string, unknown> }> {
+  const response = await apiFetch('/api/mod-store/install-industry-seed', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ industry_id: String(industryId || '').trim() }),
+  });
+  let data: {
+    success?: boolean;
+    message?: string;
+    detail?: string;
+    error?: string;
+    data?: Record<string, unknown>;
+  } = {};
+  try {
+    data = (await response.json()) as typeof data;
+  } catch {
+    /* 非 JSON 响应 */
+  }
+  const errMsg =
+    (typeof data.message === 'string' && data.message) ||
+    (typeof data.detail === 'string' && data.detail) ||
+    (typeof data.error === 'string' && data.error) ||
+    '';
+  if (!response.ok) {
+    throw new Error(errMsg || response.statusText || '安装行业种子失败');
+  }
+  return {
+    success: Boolean(data.success),
+    message: errMsg || '安装完成',
+    data: (data.data as Record<string, unknown> | undefined) ?? undefined,
+  };
+}
+
 export async function bootstrapEditionPack(
   edition: 'minimal' | 'generic' | 'full' = 'generic',
 ): Promise<{ success: boolean; message?: string; data?: Record<string, unknown> }> {
@@ -539,11 +555,11 @@ export async function installOfficeEmployeePack(options?: {
   const { OFFICE_EMPLOYEE_PKG_IDS } = await import('@/constants/officeEmployeePack');
   const response = await apiFetch('/api/mod-store/catalog', { timeoutMs: 90_000 });
   const body = await response.json();
-  const available: ModInfo[] = body?.data?.available || body?.available || [];
+  const available: ModCatalogItemUi[] = body?.data?.available || body?.available || [];
   const errors: string[] = [];
   const targets = OFFICE_EMPLOYEE_PKG_IDS.map((id) =>
     available.find((m) => (m.pkg_id || m.id) === id),
-  ).filter(Boolean) as ModInfo[];
+  ).filter(Boolean) as ModCatalogItemUi[];
 
   for (let i = 0; i < targets.length; i += 1) {
     const mod = targets[i];

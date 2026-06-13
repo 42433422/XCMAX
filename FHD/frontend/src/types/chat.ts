@@ -1,4 +1,5 @@
-export interface ChatMessage {
+/** API 层聊天消息（/api/ai、/api/conversations 协议） */
+export interface ApiChatMessage {
   id?: number;
   role: 'user' | 'assistant' | 'system';
   content: string;
@@ -6,18 +7,21 @@ export interface ChatMessage {
   session_id?: string;
   metadata?: {
     intent?: string;
-    tool_calls?: any[];
-    [key: string]: any;
+    tool_calls?: unknown[];
+    [key: string]: unknown;
   };
 }
+
+/** @deprecated 使用 ApiChatMessage */
+export type ChatMessage = ApiChatMessage;
 
 export interface ChatSession {
   id: string;
   title?: string;
-  messages: ChatMessage[];
+  messages: ApiChatMessage[];
   created_at?: string;
   updated_at?: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 export interface ChatRequest {
@@ -27,19 +31,19 @@ export interface ChatRequest {
   user_id?: string;
   source?: string;
   mode?: string;
-  file_context?: Record<string, any>;
+  file_context?: Record<string, unknown>;
   /**
    * 可含 ``excel_analysis`` 等；多模态见 ``multimodal_attachments``：
    * ``{ kind: 'image'|'pdf', filename, mime_type, data_url }[]``（``data_url`` 为 data:…;base64,…）。
    */
-  context?: Record<string, any> | KittenRequestContext;
+  context?: Record<string, unknown> | KittenRequestContext;
 }
 
 export interface ChatResponse {
-  message: ChatMessage;
+  message: ApiChatMessage;
   session_id: string;
   intent?: string;
-  tool_results?: any[];
+  tool_results?: unknown[];
 }
 
 export interface KittenDatasetContext {

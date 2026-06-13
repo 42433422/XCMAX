@@ -19,7 +19,7 @@ from typing import Any
 
 from app.neuro_bus.bus import NeuroBus, get_neuro_bus
 from app.neuro_bus.events.base import NeuroEvent
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -197,7 +197,7 @@ class SubconsciousProcessor:
             logger.warning(f"SubconsciousProcessor timeout for {event.event_type}")
             return False
 
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             self._error_count += 1
             logger.exception(f"SubconsciousProcessor error: {e}")
             return False
@@ -224,7 +224,7 @@ class SubconsciousProcessor:
                 await self._flush_expired_batches()
             except asyncio.CancelledError:
                 break
-            except OPERATIONAL_ERRORS as e:
+            except RECOVERABLE_ERRORS as e:
                 logger.exception(f"Flush loop error: {e}")
 
     async def _flush_expired_batches(self):
@@ -271,7 +271,7 @@ class SubconsciousProcessor:
             if avg_latency > self.SLA_TARGET_MS:
                 logger.debug(f"Batch processing SLA warning: {avg_latency:.2f}ms avg")
 
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             self._error_count += len(events)
             logger.exception(f"Batch processing error: {e}")
 

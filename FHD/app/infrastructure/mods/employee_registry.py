@@ -9,7 +9,7 @@ import shutil
 import tempfile
 from typing import Any
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 from .artifact_constants import ARTIFACT_EMPLOYEE_PACK, normalize_artifact
 from .artifact_package import validate_employee_pack_manifest
@@ -157,16 +157,18 @@ class EmployeeRegistry:
                     from app.mod_sdk.employee_runtime import refresh_employee_pack_runtime
 
                     refresh_employee_pack_runtime(pack_id)
-                except OPERATIONAL_ERRORS:
+                except RECOVERABLE_ERRORS:
                     logger.warning(
-                        "employee pack installed but runtime refresh failed: %s", pack_id, exc_info=True
+                        "employee pack installed but runtime refresh failed: %s",
+                        pack_id,
+                        exc_info=True,
                     )
                 return True, f"员工包 {pack_id} 安装成功"
         except ModSignatureError as e:
             return False, f"签名验证失败：{e}"
         except ModPackageError as e:
             return False, str(e)
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.exception("employee pack install failed")
             return False, str(e)
 
@@ -183,7 +185,7 @@ class EmployeeRegistry:
             from app.mod_sdk.employee_runtime import refresh_employee_pack_runtime
 
             refresh_employee_pack_runtime()
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             logger.warning("employee pack uninstalled but runtime refresh failed", exc_info=True)
         return True, f"员工包 {pack_id} 已卸载"
 

@@ -10,7 +10,7 @@ import os
 
 from fastapi import HTTPException, Request
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
 def _normalize_mod_for_env(mod_id: str) -> str:
@@ -24,7 +24,7 @@ def _get_active_mod_id_from_ctx() -> str:
         from app.request_active_mod_ctx import get_request_active_mod_id
 
         return str(get_request_active_mod_id() or "").strip()
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         return ""
 
 

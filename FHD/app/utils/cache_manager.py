@@ -23,7 +23,7 @@ from dataclasses import dataclass
 from functools import wraps
 from typing import Any
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +40,7 @@ def _read_env_int(name: str, default: int) -> int:
         if value <= 0:
             raise ValueError("must be > 0")
         return value
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         logger.warning("无效环境变量 %s=%r，回退默认值 %s", name, raw, default)
         return default
 

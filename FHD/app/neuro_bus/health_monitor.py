@@ -21,7 +21,7 @@ from enum import Enum
 from typing import Any
 
 from app.neuro_bus.bus import get_neuro_bus
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -152,7 +152,7 @@ class HealthMonitor:
                 details=stats,
             )
 
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             return HealthCheckResult(
                 component="neuro_bus",
                 status=HealthStatus.UNHEALTHY,
@@ -197,7 +197,7 @@ class HealthMonitor:
                 },
             )
 
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             return HealthCheckResult(
                 component="event_queue",
                 status=HealthStatus.UNHEALTHY,
@@ -239,7 +239,7 @@ class HealthMonitor:
                 message="无法检查（psutil 未安装）",
                 latency_ms=(time.perf_counter() - t0) * 1000,
             )
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             return HealthCheckResult(
                 component="memory",
                 status=HealthStatus.UNHEALTHY,
@@ -270,7 +270,7 @@ class HealthMonitor:
 
             return result
 
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.error(f"[HealthMonitor] 检查失败 {name}: {e}")
             return None
 
@@ -318,7 +318,7 @@ class HealthMonitor:
         for callback in self._alert_callbacks:
             try:
                 callback(alert)
-            except OPERATIONAL_ERRORS as e:
+            except RECOVERABLE_ERRORS as e:
                 logger.error(f"[HealthMonitor] 告警回调失败: {e}")
 
         logger.warning(
@@ -348,7 +348,7 @@ class HealthMonitor:
             try:
                 await self.run_all_checks()
                 await asyncio.sleep(self._check_interval)
-            except OPERATIONAL_ERRORS as e:
+            except RECOVERABLE_ERRORS as e:
                 logger.error(f"[HealthMonitor] 监控循环错误: {e}")
                 await asyncio.sleep(5)
 

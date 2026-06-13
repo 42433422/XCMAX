@@ -14,7 +14,7 @@ import uuid
 from typing import Any
 
 from app.utils.external_sqlite import sqlite_conn
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.path_utils import get_upload_dir
 from app.utils.secure_filename import secure_filename
 
@@ -87,7 +87,7 @@ class FileAnalysisService:
                 header = f.read(16)
             if header.startswith(b"SQLite format 3"):
                 return ".db"
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             pass
         return ext
 
@@ -110,7 +110,7 @@ class FileAnalysisService:
                     try:
                         cols = cur.execute(f"PRAGMA table_info('{t}')").fetchall()
                         table_columns[t] = [c[1] for c in cols if c and len(c) >= 2]
-                    except OPERATIONAL_ERRORS:
+                    except RECOVERABLE_ERRORS:
                         table_columns[t] = []
 
                 suggested_use = self._determine_suggested_use(table_names, table_columns)
@@ -146,7 +146,7 @@ class FileAnalysisService:
                         "table_columns": table_columns,
                     },
                 }
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.exception(f"SQLite 数据库分析失败：{e}")
             return {"success": False, "message": f"文件分析失败：{str(e)}"}
 
@@ -187,7 +187,7 @@ class FileAnalysisService:
         try:
             base = os.path.splitext(raw_filename or "")[0] or os.path.splitext(filename or "")[0]
             return (base or "").strip()
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             return ""
 
     def _extract_unit_candidates(self, cur: sqlite3.Cursor, table_names: list) -> list:
@@ -207,7 +207,7 @@ class FileAnalysisService:
                 if r and r[0]
             ]
             return candidates
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             return []
 
 

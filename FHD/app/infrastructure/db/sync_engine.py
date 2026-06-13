@@ -20,7 +20,7 @@ from sqlalchemy.engine import Engine
 
 from app.infrastructure.db.mod_database_url import resolve_database_url_for_active_mod
 from app.shell import mod_database_gate
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -107,7 +107,7 @@ def _urls_equivalent(a: str | None, b: str) -> bool:
         return make_url(a).render_as_string(hide_password=True) == make_url(b).render_as_string(
             hide_password=True
         )
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         return (a or "").strip() == (b or "").strip()
 
 
@@ -190,7 +190,7 @@ def redact_database_url(url: str) -> str:
             host = p.hostname or ""
             port = f":{p.port}" if p.port else ""
             return f"{p.scheme}://{user}:***@{host}{port}{p.path or ''}"
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         logger.debug("suppressed exception", exc_info=True)
     return url
 

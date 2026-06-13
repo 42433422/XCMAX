@@ -16,7 +16,7 @@ from app.application.employee_runtime.loader import (
     parse_employee_config_v2,
     resolve_pack_dir,
 )
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -108,7 +108,7 @@ def invalidate_employee_tool_cache() -> None:
         from app.mod_sdk.employee_planner_bridge import invalidate_employee_planner_registry
 
         invalidate_employee_planner_registry()
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         pass
     logger.debug("employee tool registry cache cleared")
 
@@ -199,7 +199,7 @@ def build_employee_tools_status() -> dict[str, Any]:
         from app.mod_sdk.employee_pack_compat import list_office_pack_catalog
 
         office_ids = set(list_office_pack_catalog().get("pack_ids") or [])
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         office_ids = set()
     installed_ids = {t["pack_id"] for t in tools}
     return {

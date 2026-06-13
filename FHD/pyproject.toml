@@ -268,6 +268,7 @@ markers = [
     "integration: 集成测试",
     "e2e: 端到端测试",
     "asyncio: 异步测试 (pytest-asyncio)",
+    "release_gate: release train hard gate subset",
 ]
 filterwarnings = [
     "ignore::DeprecationWarning",
@@ -275,32 +276,8 @@ filterwarnings = [
 ]
 
 [tool.coverage.run]
-# M3 CI_STABLE_ONLY 窄包（2026-06-09）：仅纳入稳定子集实测 ≥70% 加权的路径；见 COVERAGE_RAMP.md
-include = [
-    "app/config.py",
-    "app/utils/password_hash.py",
-    "app/middleware/auth_rate_limit.py",
-    "app/neuro_bus/bus.py",
-    "app/neuro_bus/rate_limiter.py",
-    "app/domain/shipment/*",
-    "app/http/*",
-    "app/application/__init__.py",
-    "app/application/mod_store_catalog_app.py",
-    "app/application/workflow/types.py",
-    "app/application/facades/kitten_facade.py",
-    "app/application/ports/*",
-    "app/fastapi_routes/registry.py",
-    "app/fastapi_routes/materials.py",
-    "app/fastapi_routes/xcagi_compat.py",
-    "app/fastapi_routes/aibiz_terminal_api.py",
-    "app/fastapi_routes/mounts/business.py",
-    "app/fastapi_routes/mounts/essential_compat.py",
-    "app/fastapi_routes/mounts/infrastructure.py",
-    "app/fastapi_routes/mounts/lan.py",
-    "app/fastapi_routes/mounts/neuro.py",
-    "app/fastapi_routes/mounts/neuro_migration.py",
-    "app/fastapi_routes/domains/conversation/compat_routes.py",
-]
+# 全量 app/ 口径（2026-06-13 技术债清偿）；禁止再用窄 include 凑门禁
+source = ["app"]
 omit = [
     "*/tests/*",
     "*/xcagi_tests/*",
@@ -309,27 +286,6 @@ omit = [
     "*/alembic/*",
     "*/venv/*",
     "*/virtualenv/*",
-    # COVERAGE_RAMP：非关键路径分阶段纳入（见 docs/reports/COVERAGE_RAMP.md）
-    "app/shell/*",
-    "app/desktop_runtime/*",
-    "app/mod_sdk/*",
-    "app/routes/*",
-    "app/enterprise/*",
-    "app/contexts/*",
-    "app/control/*",
-    "app/models/*",
-    "app/neuro_domains/*",
-    "app/ai_engines/*",
-    "app/utils/performance_*.py",
-    "app/utils/performance_monitor.py",
-    "app/utils/performance_initializer.py",
-    "app/utils/query_optimizer.py",
-    "app/utils/request_deduplicator.py",
-    "app/utils/excel_template_analyzer.py",
-    "app/utils/logging_utils.py",
-    "app/utils/openapi_path.py",
-    "app/utils/mobile_api.py",
-    "app/utils/template_export_utils.py",
 ]
 
 [tool.coverage.report]
@@ -344,8 +300,8 @@ exclude_lines = [
     "@abstractmethod",
     "if DEBUG:",
 ]
-# M3 ramp — see docs/reports/COVERAGE_RAMP.md
-fail_under = 70
+# 真实 full_app 基线 ~60.63%（2026-06-04）；留 2% 余量
+fail_under = 58
 
 [tool.coverage.html]
 directory = "htmlcov"

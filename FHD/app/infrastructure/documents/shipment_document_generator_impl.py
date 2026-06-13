@@ -5,7 +5,7 @@ import os
 from datetime import datetime
 from typing import Any
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 try:
     from PIL import Image, ImageDraw, ImageFont
@@ -231,7 +231,7 @@ class SimpleLabelGenerator:
             logger.info(f"标签已生成: {output_path}")
             return filename
 
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.error(f"生成标签失败: {e}")
             return None
 

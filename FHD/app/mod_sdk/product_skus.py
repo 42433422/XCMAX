@@ -16,7 +16,7 @@ from app.mod_sdk.host_profile import (
     package_stage_mod_ids_for_sku,
 )
 from app.mod_sdk.platform_shell import GENERIC_HOST_MOD_IDS, MINIMAL_HOST_MOD_IDS
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -100,7 +100,7 @@ def _read_product_sku_file() -> ProductSku | None:
             meipass = Path(getattr(sys, "_MEIPASS", ""))
             if meipass:
                 candidates.append(meipass / "product-sku.json")
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         pass
     for path in candidates:
         try:
@@ -110,7 +110,7 @@ def _read_product_sku_file() -> ProductSku | None:
             sku = normalize_product_sku(str(data.get("sku") or data.get("product_sku") or ""))
             if sku:
                 return sku
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             logger.debug("product-sku.json read failed: %s", path, exc_info=True)
     return None
 

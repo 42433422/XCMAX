@@ -21,7 +21,7 @@ from app.db.models.finance import FinancialTransaction
 from app.db.models.purchase import PurchaseOrder, Supplier
 from app.db.models.shipment import ShipmentRecord
 from app.db.session import get_db
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.time import utc_now_naive
 
 logger = logging.getLogger(__name__)
@@ -269,7 +269,7 @@ class FinanceAppService:
                 db.commit()
                 db.refresh(txn)
                 return {"success": True, "data": txn.to_dict()}
-            except OPERATIONAL_ERRORS as e:
+            except RECOVERABLE_ERRORS as e:
                 db.rollback()
                 logger.error("create_transaction failed: %s", e)
                 return {"success": False, "message": str(e)}
@@ -306,7 +306,7 @@ class FinanceAppService:
                 db.commit()
                 db.refresh(txn)
                 return {"success": True, "data": txn.to_dict()}
-            except OPERATIONAL_ERRORS as e:
+            except RECOVERABLE_ERRORS as e:
                 db.rollback()
                 logger.error("update_transaction failed: %s", e)
                 return {"success": False, "message": str(e)}
@@ -322,7 +322,7 @@ class FinanceAppService:
                 db.delete(txn)
                 db.commit()
                 return {"success": True, "message": "凭证已删除"}
-            except OPERATIONAL_ERRORS as e:
+            except RECOVERABLE_ERRORS as e:
                 db.rollback()
                 logger.error("delete_transaction failed: %s", e)
                 return {"success": False, "message": str(e)}

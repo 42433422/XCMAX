@@ -31,7 +31,7 @@ from app.domain.context.session_context import (
 )
 from app.infrastructure.auth.db_token import effective_db_read_token
 from app.infrastructure.llm.client import set_mode as set_llm_mode
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -256,7 +256,7 @@ def _xcagi_compat_reply_payload(
                 tool_data["errors_preview"] = joined[:2000]
                 if len(errs) > 5:
                     tool_data["errors_truncated"] = True
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         logger.debug("compat: last tool result unavailable", exc_info=True)
 
     err_code = str(last_result.get("error") or "").strip()
@@ -388,7 +388,7 @@ def _ensure_vector_index_if_needed(message: str, runtime_context: dict) -> str |
             workspace_root=root,
         )
         result = json.loads(raw)
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.exception("xcagi vector pre-index failed")
         return f"我尝试为 `{file_path}` 建立向量索引时失败：{e}。请确认文件路径是否存在，或告诉我要索引的工作表名。"
     if isinstance(result, dict) and result.get("error"):
@@ -548,12 +548,12 @@ async def _xcagi_planner_stream_bytes_async(
         try:
             for chunk in _xcagi_planner_stream_bytes(request, body, ai_tier=ai_tier):
                 asyncio.run_coroutine_threadsafe(async_q.put(chunk), loop).result(timeout=120)
-        except BaseException as exc:
+        except BaseException as exc:  # noqa: BLE001
             err_msg = str(exc).strip() or exc.__class__.__name__
             err_line = _sse_event_line({"type": "error", "message": err_msg})
             try:
                 asyncio.run_coroutine_threadsafe(async_q.put(err_line), loop).result(timeout=5)
-            except OPERATIONAL_ERRORS:
+            except RECOVERABLE_ERRORS:
                 pass
         finally:
             asyncio.run_coroutine_threadsafe(async_q.put(_SENTINEL), loop).result(timeout=5)
@@ -654,7 +654,7 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
         else:
             done_reply = merged
         yield _sse_event_line({"type": "done", "result": _xcagi_compat_reply_payload(done_reply)})
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         exc = _xcagi_chat_http_exc(e)
         yield _sse_event_line(
             {

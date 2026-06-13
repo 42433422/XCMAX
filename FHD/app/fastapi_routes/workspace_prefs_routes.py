@@ -14,7 +14,7 @@ from app.application.tenant_workspace_prefs import (
     resolve_workspace_owner_id,
 )
 from app.infrastructure.auth.dependencies import get_logged_in_user, resolve_session_user
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +41,7 @@ async def get_workspace_prefs_endpoint(request: Request):
         owner_id = resolve_workspace_owner_id(request, user)
         prefs = get_workspace_prefs(owner_id) if owner_id else {}
         return {"success": True, "data": prefs, "owner_id": owner_id}
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         logger.exception("get_workspace_prefs_endpoint failed")
         return {"success": True, "data": {}, "owner_id": None}
 
@@ -60,5 +60,5 @@ async def patch_workspace_prefs_endpoint(body: WorkspacePrefsPatch, request: Req
         return {"success": True, "data": prefs, "owner_id": owner_id}
     except HTTPException:
         raise
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc

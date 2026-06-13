@@ -5,7 +5,7 @@ import os
 import sys
 from dataclasses import dataclass
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
 @dataclass(frozen=True)
@@ -30,7 +30,7 @@ def load_legacy_shipment_document_generator(*, caller_file: str) -> LegacyGenera
 
         resources_ai_assistant_dir = get_resource_path("tools_legacy", "AI助手")
         resources_ai_assistant_alt = get_resource_path("ai_assistant")
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         resources_ai_assistant_dir = None
         resources_ai_assistant_alt = None
 
@@ -70,7 +70,7 @@ def load_legacy_shipment_document_generator(*, caller_file: str) -> LegacyGenera
             PurchaseUnitInfo=PurchaseUnitInfo,
             legacy_dir=legacy_dir,
         )
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         # 方法 2：importlib 动态导入
         spec_path = os.path.join(legacy_dir, "shipment_document.py")
         if not os.path.exists(spec_path):

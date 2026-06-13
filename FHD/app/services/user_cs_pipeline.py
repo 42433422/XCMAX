@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +71,7 @@ def _resolve_data_roots() -> list[Path]:
         base = get_desktop_data_dir()
         add(base / "data" / "user_cs_pipelines")
         add(base / "user_cs_pipelines")
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         pass
 
     if not roots:

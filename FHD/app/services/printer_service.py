@@ -2,7 +2,7 @@ import json
 import logging
 import os
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.path_utils import get_app_data_dir
 from app.utils.print_utils import PrinterUtils
 from app.utils.printer_automation import EnhancedPrinterUtils
@@ -25,7 +25,7 @@ class PrinterService:
             with open(self._selection_file, encoding="utf-8") as f:
                 data = json.load(f)
             return data if isinstance(data, dict) else {}
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.warning(f"读取打印机配置失败: {e}")
             return {}
 
@@ -151,7 +151,7 @@ class PrinterService:
                 "count": len(printers),
                 **classified_info,
             }
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.error(f"获取打印机列表失败: {e}")
             return {"success": False, "message": str(e), "printers": []}
 
@@ -162,7 +162,7 @@ class PrinterService:
                 return {"success": True, "printer": printer}
             else:
                 return {"success": False, "message": "未找到默认打印机"}
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.error(f"获取默认打印机失败: {e}")
             return {"success": False, "message": str(e)}
 
@@ -202,7 +202,7 @@ class PrinterService:
                 return self.printer_utils.print_file(
                     file_path, printer_name, use_default_printer=False
                 )
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.error(f"打印文档失败: {e}")
             return {"success": False, "message": str(e)}
 
@@ -229,14 +229,14 @@ class PrinterService:
                 "successful": success_count,
                 "details": results,
             }
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.error(f"打印标签失败: {e}")
             return {"success": False, "message": str(e)}
 
     def test_printer(self, printer_name: str) -> dict:
         try:
             return self.printer_utils.test_printer(printer_name)
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.error(f"测试打印机失败: {e}")
             return {
                 "success": False,
@@ -267,7 +267,7 @@ class PrinterService:
                 }
 
             return {"valid": True, "doc_printer": doc_printer, "label_printer": label_printer}
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.error(f"验证打印机分离失败: {e}")
             return {"valid": False, "message": str(e)}
 
@@ -299,5 +299,5 @@ if (os.environ.get("XCAGI_INSTRUMENT_PRINTER_SERVICE") or "").strip() == "1":
         from app.neuro_bus.neuro_service_instrumentation import instrument_service_layer_class
 
         instrument_service_layer_class(PrinterService, "app.services.printer_service")
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         pass

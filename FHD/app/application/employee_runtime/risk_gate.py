@@ -61,18 +61,28 @@ def gate_action_or_block(
     if level == "low":
         return {"ok": True, "risk_level": level, "reason": reason}
     if level == "medium":
-        if _truthy(payload.get("allow_medium_risk")) or _truthy(payload.get("allow_high_risk_real_run")):
+        if _truthy(payload.get("allow_medium_risk")) or _truthy(
+            payload.get("allow_high_risk_real_run")
+        ):
             return {"ok": True, "risk_level": level, "reason": reason}
         ev2 = manifest.get("employee_config_v2") if isinstance(manifest, dict) else {}
         autonomy = ev2.get("autonomy") if isinstance(ev2, dict) else {}
         if _truthy((autonomy or {}).get("medium_self_approve")):
-            return {"ok": True, "risk_level": level, "reason": reason + "; medium_self_approve=true"}
+            return {
+                "ok": True,
+                "risk_level": level,
+                "reason": reason + "; medium_self_approve=true",
+            }
         return _blocked(level, reason, "medium 风险需 allow_medium_risk=True")
     token_required = _high_risk_gate_token()
     token_provided = str(payload.get("high_risk_gate_token") or "").strip()
     if _truthy(payload.get("allow_high_risk_real_run")):
         if not token_required:
-            return {"ok": True, "risk_level": level, "reason": reason + "; allow_high_risk_real_run=true"}
+            return {
+                "ok": True,
+                "risk_level": level,
+                "reason": reason + "; allow_high_risk_real_run=true",
+            }
         if token_provided and token_provided == token_required:
             return {"ok": True, "risk_level": level, "reason": reason + "; gate token 校验通过"}
         return _blocked(level, reason, "high 风险需匹配 high_risk_gate_token")

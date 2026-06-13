@@ -15,7 +15,7 @@ from app.infrastructure.auth.dependencies import (
     require_identified_user,
 )
 from app.infrastructure.im.ws_hub import im_ws_hub
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +67,7 @@ async def _notify_offline_im_members(member_ids: list[int], sender_id: int, body
                 body=preview,
                 data={"channel": "xcagi_im", "type": "im_message"},
             )
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         logger.exception("im offline push failed")
 
 
@@ -79,7 +79,7 @@ def im_list_conversations(user: CurrentUser = Depends(require_identified_user)):
     try:
         items = ImApplicationService(db).list_conversations(uid)
         return {"success": True, "user_id": uid, "conversations": items}
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.exception("im_list_conversations")
         return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
     finally:
@@ -105,7 +105,7 @@ def im_list_contacts(
                 or keyword in str(c.get("username", "")).lower()
             ]
         return {"success": True, "contacts": contacts}
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.exception("im_list_contacts")
         return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
     finally:
@@ -121,7 +121,7 @@ def im_unread_total(user: CurrentUser = Depends(require_identified_user)):
         items = ImApplicationService(db).list_conversations(uid)
         total = sum(int(c.get("unread_count") or 0) for c in items)
         return {"success": True, "unread_total": total}
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.exception("im_unread_total")
         return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
     finally:
@@ -144,7 +144,7 @@ def im_create_direct(
         return {"success": True, "conversation": conv}
     except ValueError as exc:
         return JSONResponse({"success": False, "message": str(exc)}, status_code=400)
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.exception("im_create_direct")
         return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
     finally:
@@ -168,7 +168,7 @@ def im_list_messages(
         return {"success": True, "messages": messages}
     except PermissionError as exc:
         return JSONResponse({"success": False, "message": str(exc)}, status_code=403)
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.exception("im_list_messages")
         return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
     finally:
@@ -210,7 +210,7 @@ async def im_send_message(
         return JSONResponse({"success": False, "message": str(exc)}, status_code=403)
     except ValueError as exc:
         return JSONResponse({"success": False, "message": str(exc)}, status_code=400)
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.exception("im_send_message")
         return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
     finally:
@@ -242,7 +242,7 @@ async def im_mark_read(
         return {"success": True, **result}
     except PermissionError as exc:
         return JSONResponse({"success": False, "message": str(exc)}, status_code=403)
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.exception("im_mark_read")
         return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
     finally:

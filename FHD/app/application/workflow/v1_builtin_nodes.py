@@ -15,7 +15,7 @@ from typing import Any
 
 import httpx
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 from .types import PlanGraph, WorkflowNode
 
@@ -108,7 +108,7 @@ def execute_http_request_node(
                 )
             try:
                 data = resp.json()
-            except OPERATIONAL_ERRORS:
+            except RECOVERABLE_ERRORS:
                 data = {"raw": resp.text}
             return {
                 "success": resp.status_code < 400,

@@ -8,7 +8,7 @@ import os
 from dataclasses import dataclass, field
 from typing import Any
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 from .artifact_constants import ARTIFACT_MOD, normalize_artifact
 
@@ -149,7 +149,7 @@ def parse_manifest(mod_path: str) -> ModMetadata | None:
     except json.JSONDecodeError as e:
         logger.error(f"[parse_manifest] Failed to parse manifest JSON: {e}")
         return None
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.error(f"[parse_manifest] Failed to read manifest: {e}")
         return None
 

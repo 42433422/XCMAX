@@ -10,7 +10,7 @@ import json
 import logging
 import os
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -24,7 +24,7 @@ from app.application.employee_runtime.loader import (
     resolve_pack_dir,
 )
 from app.application.employee_runtime.risk_gate import gate_action_or_block
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +36,9 @@ def _get_section(config: dict[str, Any], key: str) -> dict[str, Any]:
 
 def _normalize_actions_cfg(config: dict[str, Any]) -> dict[str, Any]:
     actions_cfg = _get_section(config, "actions")
-    inner = actions_cfg.get("actions") if isinstance(actions_cfg.get("actions"), dict) else actions_cfg
+    inner = (
+        actions_cfg.get("actions") if isinstance(actions_cfg.get("actions"), dict) else actions_cfg
+    )
     return inner if isinstance(inner, dict) else actions_cfg
 
 
@@ -108,7 +110,7 @@ def _load_rule_spec(pack_root: Path) -> dict[str, Any]:
     try:
         data = json.loads(spec_path.read_text(encoding="utf-8"))
         return data if isinstance(data, dict) else {}
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         return {}
 
 
@@ -121,7 +123,9 @@ def _action_vendor_convert(
     convert_py = _find_vendor_convert_module(pack_root)
     if convert_py is None:
         return {"handler": "direct_python", "ok": False, "error": DIRECT_PYTHON_RUNTIME_MISSING_MSG}
-    mod = _import_module_from_path(convert_py, f"_xcagi_emp_convert_{employee_id.replace('-', '_')}")
+    mod = _import_module_from_path(
+        convert_py, f"_xcagi_emp_convert_{employee_id.replace('-', '_')}"
+    )
     if mod is None or not callable(getattr(mod, "convert_file", None)):
         return {"handler": "direct_python", "ok": False, "error": "vendor convert 模块无效"}
     is_generate = "generate" in employee_id.lower()
@@ -146,7 +150,11 @@ def _action_vendor_convert(
             )
             src = payload_path
         if not src or not src.is_file():
-            return {"handler": "direct_python", "ok": False, "error": "生成类员工需要 JSON 输入或 user_request"}
+            return {
+                "handler": "direct_python",
+                "ok": False,
+                "error": "生成类员工需要 JSON 输入或 user_request",
+            }
     ctx = {"employee_id": employee_id, "workspace_root": str(workspace_root or os.getcwd())}
     convert_fn = mod.convert_file
     try:
@@ -159,7 +167,7 @@ def _action_vendor_convert(
             ctx=ctx,
             rule_spec=rule_spec,
         )
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.exception("vendor convert failed employee_id=%s", employee_id)
         return {"handler": "direct_python", "ok": False, "error": str(exc)[:800]}
     return {
@@ -178,7 +186,11 @@ def _action_direct_python_module(
     task: str,
     workspace_root: str | None,
 ) -> dict[str, Any]:
-    direct_cfg = actions_cfg.get("direct_python") if isinstance(actions_cfg.get("direct_python"), dict) else {}
+    direct_cfg = (
+        actions_cfg.get("direct_python")
+        if isinstance(actions_cfg.get("direct_python"), dict)
+        else {}
+    )
     module_name = str(direct_cfg.get("module") or "worker").strip() or "worker"
     module_path = pack_root / "backend" / "employees" / f"{module_name}.py"
     if not module_path.is_file():
@@ -226,10 +238,14 @@ def _action_direct_python_module(
     return {"handler": "direct_python", "ok": True, "output": out}
 
 
-def _cognition_fhd(config: dict[str, Any], perceived: dict[str, Any], memory: dict[str, Any], task: str) -> dict[str, Any]:
+def _cognition_fhd(
+    config: dict[str, Any], perceived: dict[str, Any], memory: dict[str, Any], task: str
+) -> dict[str, Any]:
     cog_cfg = _get_section(config, "cognition")
     agent = cog_cfg.get("agent") if isinstance(cog_cfg.get("agent"), dict) else {}
-    system_prompt = str(agent.get("system_prompt") or cog_cfg.get("system_prompt") or "你是智能员工助手。")
+    system_prompt = str(
+        agent.get("system_prompt") or cog_cfg.get("system_prompt") or "你是智能员工助手。"
+    )
     model_cfg = agent.get("model") if isinstance(agent.get("model"), dict) else {}
     max_tokens = int(model_cfg.get("max_tokens") or 4000)
     normalized = perceived.get("normalized_input") if isinstance(perceived, dict) else {}
@@ -242,7 +258,7 @@ def _cognition_fhd(config: dict[str, Any], perceived: dict[str, Any], memory: di
         from app.application.employee_runtime.agent_runner import _chat_completion, _run_async
 
         raw = _run_async(_chat_completion(messages, max_tokens=max_tokens))
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         return {"reasoning": "", "error": str(exc)[:800], "input": normalized, "memory": memory}
     if raw.get("error"):
         return {"reasoning": "", "error": raw["error"], "input": normalized, "memory": memory}
@@ -277,7 +293,11 @@ def _actions_fhd(
         elif handler == "direct_python":
             if not pack_has_direct_python_runtime(pack_root):
                 outputs.append(
-                    {"handler": "direct_python", "ok": False, "error": DIRECT_PYTHON_RUNTIME_MISSING_MSG}
+                    {
+                        "handler": "direct_python",
+                        "ok": False,
+                        "error": DIRECT_PYTHON_RUNTIME_MISSING_MSG,
+                    }
                 )
             else:
                 outputs.append(
@@ -290,7 +310,9 @@ def _actions_fhd(
         elif handler == "llm_md":
             outputs.append({"handler": "llm_md", "output": reasoning.get("reasoning", "")})
         else:
-            outputs.append({"handler": handler, "error": "unsupported handler in FHD local executor"})
+            outputs.append(
+                {"handler": handler, "error": "unsupported handler in FHD local executor"}
+            )
     return {
         "task": task,
         "handlers": handlers,
@@ -323,7 +345,9 @@ def execute_employee_task_local(
     payload = dict(input_data or {})
     if workspace_root and "workspace_root" not in payload:
         payload["workspace_root"] = workspace_root
-    logger.info("employee_execute_start_local employee_id=%s task_len=%s", employee_id, len(task or ""))
+    logger.info(
+        "employee_execute_start_local employee_id=%s task_len=%s", employee_id, len(task or "")
+    )
     try:
         pack = load_employee_pack_from_disk(employee_id)
         manifest = pack.get("manifest") or {}
@@ -345,7 +369,7 @@ def execute_employee_task_local(
                     "summary": "blocked by risk middleware",
                     "risk_gate": gate,
                 },
-                "executed_at": datetime.now(timezone.utc).isoformat(),
+                "executed_at": datetime.now(UTC).isoformat(),
                 "blocked_by_risk_gate": True,
                 "success": False,
             }
@@ -378,7 +402,7 @@ def execute_employee_task_local(
                         "summary": "cognition failed",
                         "cognition_error": reasoning.get("error"),
                     },
-                    "executed_at": datetime.now(timezone.utc).isoformat(),
+                    "executed_at": datetime.now(UTC).isoformat(),
                 }
         result = _actions_fhd(
             config,
@@ -396,10 +420,10 @@ def execute_employee_task_local(
             "duration_ms": duration_ms,
             "success": ok,
             "result": result,
-            "executed_at": datetime.now(timezone.utc).isoformat(),
+            "executed_at": datetime.now(UTC).isoformat(),
             "source": "employee_runtime.local",
         }
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         duration_ms = round((time.perf_counter() - t0) * 1000, 3)
         logger.exception("employee_execute_local failed employee_id=%s", employee_id)
         return {
@@ -407,7 +431,7 @@ def execute_employee_task_local(
             "duration_ms": duration_ms,
             "success": False,
             "error": str(exc)[:800],
-            "executed_at": datetime.now(timezone.utc).isoformat(),
+            "executed_at": datetime.now(UTC).isoformat(),
         }
 
 
