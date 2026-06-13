@@ -13,7 +13,7 @@ export interface UseChatResponseAttachDeps {
 export function useChatResponseAttach(deps: UseChatResponseAttachDeps) {
   const { messages, lastRequestContextSummary, taskList, upsertTask, createTaskId } = deps
 
-  function attachThinkingStepsToLastAiMessage(data: any): void {
+  function attachThinkingStepsToLastAiMessage(data: unknown): void {
     const thinkingSteps = String(
       data?.data?.data?.thinking_steps
       || data?.data?.thinking_steps
@@ -41,10 +41,10 @@ export function useChatResponseAttach(deps: UseChatResponseAttachDeps) {
     return ''
   }
 
-  function attachTodoStepsToLastAiMessage(data: any): void {
+  function attachTodoStepsToLastAiMessage(data: unknown): void {
     const todoRaw = data?.data?.data?.todo
     if (!Array.isArray(todoRaw) || !todoRaw.length) return
-    const todoSteps = todoRaw.map((x: any) => String(x || '').trim()).filter(Boolean)
+    const todoSteps = todoRaw.map((x: unknown) => String(x || '').trim()).filter(Boolean)
     if (!todoSteps.length) return
 
     for (let i = messages.value.length - 1; i >= 0; i -= 1) {
@@ -56,17 +56,17 @@ export function useChatResponseAttach(deps: UseChatResponseAttachDeps) {
     }
   }
 
-  function attachWorkflowTraceToLastAiMessage(data: any): void {
+  function attachWorkflowTraceToLastAiMessage(data: unknown): void {
     const action = String(data?.data?.action || '').trim()
     const nodeResultsRaw = data?.data?.data?.node_results
     const nodeResults = Array.isArray(nodeResultsRaw)
-      ? nodeResultsRaw.map((x: any) => ({
+      ? nodeResultsRaw.map((x: unknown) => ({
         node_id: String(x?.node_id || ''),
         success: !!x?.success,
         tool_id: String(x?.tool_id || ''),
         action: String(x?.action || ''),
         error: String(x?.error || '')
-      })).filter((x: any) => x.node_id)
+      })).filter((x: unknown) => x.node_id)
       : []
     if (!action && !nodeResults.length) return
 
@@ -94,7 +94,7 @@ export function useChatResponseAttach(deps: UseChatResponseAttachDeps) {
     }
   }
 
-  function syncTaskFromChatResponse(resp: any, userText: string) {
+  function syncTaskFromChatResponse(resp: unknown, userText: string) {
     const action = String(resp?.data?.action || '').trim()
     const messageRef = getLastAiMessageRef()
     if (action === 'workflow_confirmation_required') {
@@ -143,7 +143,7 @@ export function useChatResponseAttach(deps: UseChatResponseAttachDeps) {
     if (nodeResults.length) {
       const running = taskList.value.find((t) => t.type === 'workflow' && (t.status === 'queued' || t.status === 'running'))
       if (running) {
-        const done = nodeResults.filter((x: any) => !!x?.success).length
+        const done = nodeResults.filter((x: unknown) => !!x?.success).length
         const progress = Math.max(15, Math.floor((done / nodeResults.length) * 100))
         upsertTask({
           id: running.id,

@@ -8,7 +8,7 @@ export interface MediaFile {
   type: 'image' | 'video' | 'file';
   size: number;
   created_at?: string;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 export const mediaApi = {

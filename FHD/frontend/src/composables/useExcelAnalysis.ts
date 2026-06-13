@@ -13,7 +13,7 @@ const EXTRACT_GRID_SINGLE_SHEET_TIMEOUT_MS = 90_000
 const EXTRACT_GRID_PATH = '/api/templates/extract-grid'
 
 /** 读取响应体（含大 JSON）；若仅对 fetch 设 Abort，部分环境下 body 读取仍可能挂死，导致「分析中…」永不解除 */
-async function readResponseJsonWithTimeout(response: Response, ms: number): Promise<any> {
+async function readResponseJsonWithTimeout(response: Response, ms: number): Promise<unknown> {
   let to = 0
   const timeoutP = new Promise<never>((_, rej) => {
     to = window.setTimeout(
@@ -62,52 +62,52 @@ export interface ExcelAnalysisResult {
   sheets?: Array<{
     sheet_index?: number
     sheet_name?: string
-    fields?: any[]
-    sample_rows?: Record<string, any>[]
-    grid_preview?: { rows?: any[][] }
+    fields?: unknown[]
+    sample_rows?: Record<string, unknown>[]
+    grid_preview?: { rows?: unknown[][] }
     style_cache?: {
-      styles?: Record<string, any>
+      styles?: Record<string, unknown>
       cell_style_refs?: Record<string, string>
     }
     tables?: Array<{
       table_index?: number
       header_row?: number
-      fields?: any[]
-      sample_rows?: Record<string, any>[]
+      fields?: unknown[]
+      sample_rows?: Record<string, unknown>[]
     }>
   }>
   preview_data?: {
     sheet_name?: string
     sheet_names?: string[]
-    sample_rows?: Record<string, any>[]
+    sample_rows?: Record<string, unknown>[]
     grid_preview?: {
-      rows?: any[][]
+      rows?: unknown[][]
     }
     all_sheets?: Array<{
       sheet_index?: number
       sheet_name?: string
-      fields?: any[]
-      sample_rows?: Record<string, any>[]
-      grid_preview?: { rows?: any[][] }
+      fields?: unknown[]
+      sample_rows?: Record<string, unknown>[]
+      grid_preview?: { rows?: unknown[][] }
       style_cache?: {
-        styles?: Record<string, any>
+        styles?: Record<string, unknown>
         cell_style_refs?: Record<string, string>
       }
       tables?: Array<{
         table_index?: number
         header_row?: number
-        fields?: any[]
-        sample_rows?: Record<string, any>[]
+        fields?: unknown[]
+        sample_rows?: Record<string, unknown>[]
       }>
     }>
     tables?: Array<{
       table_index?: number
       header_row?: number
-      fields?: any[]
-      sample_rows?: Record<string, any>[]
+      fields?: unknown[]
+      sample_rows?: Record<string, unknown>[]
     }>
     grid_style_cache?: {
-      styles?: Record<string, any>
+      styles?: Record<string, unknown>
       cell_style_refs?: Record<string, string>
     }
   }
@@ -176,8 +176,8 @@ export function useExcelAnalysis(messages: UseChatMessagesReturn, options: UseEx
     const sheetList = Array.isArray(result?.sheets)
       ? result.sheets
       : (Array.isArray(result?.preview_data?.all_sheets) ? result.preview_data?.all_sheets : [])
-    const sheetNames = Array.isArray((result as any)?.preview_data?.sheet_names)
-      ? ((result as any).preview_data.sheet_names as any[])
+    const sheetNames = Array.isArray((result as unknown)?.preview_data?.sheet_names)
+      ? ((result as unknown).preview_data.sheet_names as unknown[])
           .map((x) => String(x || '').trim())
           .filter(Boolean)
       : []
@@ -190,13 +190,13 @@ export function useExcelAnalysis(messages: UseChatMessagesReturn, options: UseEx
       : 0
 
     const fieldNames = fields
-      .map((f) => String((f as any)?.label || (f as any)?.name || '').trim())
+      .map((f) => String((f as unknown)?.label || (f as unknown)?.name || '').trim())
       .filter(Boolean)
       .slice(0, 40)
 
     const sheetSummaryLines = sheetList
       .slice(0, 12)
-      .map((sheet: any, idx: number) => {
+      .map((sheet: unknown, idx: number) => {
         const no = Number(sheet?.sheet_index) || idx + 1
         const name = String(sheet?.sheet_name || `Sheet${no}`)
         const rowCount = Array.isArray(sheet?.grid_preview?.rows) ? sheet.grid_preview.rows.length : 0
@@ -204,23 +204,23 @@ export function useExcelAnalysis(messages: UseChatMessagesReturn, options: UseEx
         return `Sheet ${no}（${name}）：词条${fieldCount}，网格行${rowCount}`
       })
 
-    const totalStyleCellsFromSheets = sheetList.reduce((acc: number, sheet: any) => {
+    const totalStyleCellsFromSheets = sheetList.reduce((acc: number, sheet: unknown) => {
       const refs = sheet?.style_cache?.cell_style_refs
       return acc + (refs ? Object.keys(refs).length : 0)
     }, 0)
     const fallbackStyleRefs = result?.preview_data?.grid_style_cache?.cell_style_refs
     const totalStyleCells = totalStyleCellsFromSheets || (fallbackStyleRefs ? Object.keys(fallbackStyleRefs).length : 0)
-    const totalLogicalTables = sheetList.reduce((acc: number, sheet: any) => {
+    const totalLogicalTables = sheetList.reduce((acc: number, sheet: unknown) => {
       const tables = Array.isArray(sheet?.tables) ? sheet.tables.length : 0
       return acc + tables
     }, Array.isArray(result?.preview_data?.tables) ? result.preview_data.tables.length : 0)
 
     const tableSummaryLines = sheetList
-      .flatMap((sheet: any, idx: number) => {
+      .flatMap((sheet: unknown, idx: number) => {
         const no = Number(sheet?.sheet_index) || idx + 1
         const name = String(sheet?.sheet_name || `Sheet${no}`)
         const tables = Array.isArray(sheet?.tables) ? sheet.tables : []
-        return tables.slice(0, 5).map((tb: any) => {
+        return tables.slice(0, 5).map((tb: unknown) => {
           const tbNo = Number(tb?.table_index) || 1
           const tbFields = Array.isArray(tb?.fields) ? tb.fields.length : 0
           const tbSamples = Array.isArray(tb?.sample_rows) ? tb.sample_rows.length : 0
@@ -237,17 +237,17 @@ export function useExcelAnalysis(messages: UseChatMessagesReturn, options: UseEx
       grid_preview: { rows: Array.isArray(result?.preview_data?.grid_preview?.rows) ? result.preview_data?.grid_preview?.rows : [] }
     }]).slice(0, 8)
 
-    const sheetDetailLines = detailSheets.flatMap((sheet: any, idx: number) => {
+    const sheetDetailLines = detailSheets.flatMap((sheet: unknown, idx: number) => {
       const no = Number(sheet?.sheet_index) || idx + 1
       const name = String(sheet?.sheet_name || `Sheet${no}`)
       const sheetFields = (Array.isArray(sheet?.fields) ? sheet.fields : [])
-        .map((f: any) => String(f?.label || f?.name || '').trim())
+        .map((f: unknown) => String(f?.label || f?.name || '').trim())
         .filter(Boolean)
         .slice(0, 30)
       const sheetRows = Array.isArray(sheet?.grid_preview?.rows) ? sheet.grid_preview.rows.length : 0
       const sheetSamples = (Array.isArray(sheet?.sample_rows) ? sheet.sample_rows : [])
         .slice(0, 2)
-        .map((row: any, sIdx: number) => {
+        .map((row: unknown, sIdx: number) => {
           const pairs = Object.entries(row || {})
             .slice(0, 5)
             .map(([k, v]) => `${k}:${String(v ?? '').slice(0, 30)}`)
@@ -282,7 +282,7 @@ export function useExcelAnalysis(messages: UseChatMessagesReturn, options: UseEx
   }
 
   async function onExcelAnalyzeFileChange(e: Event): Promise<void> {
-    const file = (e?.target as any)?.files?.[0] as File | undefined
+    const file = (e?.target as unknown)?.files?.[0] as File | undefined
     ;(e.target as HTMLInputElement).value = ''
     if (!file) return
 
@@ -339,7 +339,7 @@ export function useExcelAnalysis(messages: UseChatMessagesReturn, options: UseEx
                 || (Array.isArray(data?.preview_data?.all_sheets) && data.preview_data.all_sheets.length > 0)
             const sheetNames = Array.isArray(data?.preview_data?.sheet_names) ? data.preview_data.sheet_names : []
             if (!hasMultiSheetDetails && sheetNames.length > 1) {
-              const detailedSheets: any[] = []
+              const detailedSheets: unknown[] = []
               for (let i = 0; i < sheetNames.length; i += 1) {
                 const name = String(sheetNames[i] || '').trim()
                 if (!name) continue
@@ -379,7 +379,7 @@ export function useExcelAnalysis(messages: UseChatMessagesReturn, options: UseEx
           } finally {
             window.clearTimeout(timeoutId)
           }
-        } catch (err: any) {
+        } catch (err: unknown) {
           const isAbort = err?.name === 'AbortError'
           const raw = String(err?.message || err || '')
           const netFail =

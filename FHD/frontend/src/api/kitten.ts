@@ -18,7 +18,7 @@ export const kittenApi = {
   generateFinancialReport: (metadata = {}) =>
     api.post('/api/ai/kitten/financial/report', { metadata }),
 
-  exportReport: (payload: Record<string, any> = {}) =>
+  exportReport: (payload: Record<string, unknown> = {}) =>
     api.post('/api/ai/kitten/report/export', payload, { responseType: 'blob' }),
 
   getSavedAnalyses: (type?: string) =>

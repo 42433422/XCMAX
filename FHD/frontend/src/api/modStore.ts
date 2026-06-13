@@ -287,7 +287,7 @@ export async function updateMod(
 export async function validateModPackage(packageFile: string): Promise<{
   success: boolean;
   message: string;
-  data: any;
+  data: unknown;
 }> {
   const response = await apiFetch(`/api/mod-store/validate?package_file=${encodeURIComponent(packageFile)}`);
   const data = await response.json();

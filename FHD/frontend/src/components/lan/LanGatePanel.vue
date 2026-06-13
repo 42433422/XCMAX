@@ -235,7 +235,7 @@ async function load() {
     if (status.value?.authorized) {
       await goHome(false);
     }
-  } catch (e: any) {
+  } catch (e: unknown) {
     errorMsg.value = `初始化失败：${e?.message || e}`;
   }
 }
@@ -250,7 +250,7 @@ async function submitAccessRequest() {
       note: requestForm.note.trim()
     });
     accessRequest.value = r.request || null;
-  } catch (e: any) {
+  } catch (e: unknown) {
     const detail = e?.data?.detail || e?.message || '提交申请失败';
     errorMsg.value = mapError(detail);
   } finally {
@@ -271,7 +271,7 @@ async function submit() {
     } else {
       errorMsg.value = '激活失败';
     }
-  } catch (e: any) {
+  } catch (e: unknown) {
     const detail = e?.data?.detail || e?.message || '激活失败';
     errorMsg.value = mapError(detail);
   } finally {

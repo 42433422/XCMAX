@@ -177,7 +177,7 @@ async function installWindowsVoice() {
     ElMessage.warning(resp?.message || '自动安装未成功，已为你打开手动安装说明')
     try { window.location.href = 'ms-settings:speech' } catch { /* ignore */ }
     psDialog.value = true
-  } catch (e: any) {
+  } catch (e: unknown) {
     hint.close()
     // 后端返回 4xx/5xx 会走这里；ApiError.data 里带着后端的中文说明
     const serverMsg = e?.data?.message
@@ -210,7 +210,7 @@ async function downloadOffline() {
     setEngineMode('offline')
     ElMessage.success('离线语音包就绪，已切换到本地合成')
     refresh()
-  } catch (e: any) {
+  } catch (e: unknown) {
     ElMessage.error(`下载失败：${e?.message || e}`)
     refresh()
   }

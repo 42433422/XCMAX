@@ -3,8 +3,8 @@ import { apiFetch, DEFAULT_MOD_API_TIMEOUT_MS } from '@/utils/apiBase'
 import { fetchModRoutesPayloadShared } from '@/utils/modRoutesSharedFetch'
 
 export function useModBootstrap() {
-  const mods = ref<any[]>([])
-  const modRoutes = ref<any[]>([])
+  const mods = ref<unknown[]>([])
+  const modRoutes = ref<unknown[]>([])
   const isLoaded = ref(false)
   const loadError = ref<string | null>(null)
 

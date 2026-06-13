@@ -12,32 +12,32 @@ export const useChatStore = defineStore('chat', () => {
   const isLoading = ref(false)
   const isStreamingReply = ref(false)
 
-  const messages = computed(() => jarvis.messages as any[])
+  const messages = computed(() => jarvis.messages as unknown[])
   const currentTask = computed(() => jarvis.currentTask)
 
   async function sendMessage(message: string): Promise<void> {
     isLoading.value = true
     try {
-      await (jarvis as any).sendMessage?.(message)
+      await (jarvis as unknown).sendMessage?.(message)
     } finally {
       isLoading.value = false
     }
   }
 
   function loadMoreMessages(): void {
-    ;(jarvis as any).loadMoreMessages?.()
+    ;(jarvis as unknown).loadMoreMessages?.()
   }
 
   async function executeTask(taskId: string): Promise<void> {
-    await (jarvis as any).executeTask?.(taskId)
+    await (jarvis as unknown).executeTask?.(taskId)
   }
 
   function clearTask(): void {
-    ;(jarvis as any).clearTask?.()
+    ;(jarvis as unknown).clearTask?.()
   }
 
   function initChat(): void {
-    ;(jarvis as any).initChat?.()
+    ;(jarvis as unknown).initChat?.()
   }
 
   return {

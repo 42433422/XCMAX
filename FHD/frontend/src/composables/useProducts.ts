@@ -14,7 +14,7 @@ export interface UseProductsReturn {
   loadProducts: (params?: ProductQueryParams) => Promise<ApiResponse<Product[]> | null>;
   createProduct: (data: ProductCreateDTO) => Promise<Product | null>;
   updateProduct: (id: number, data: ProductUpdateDTO) => Promise<Product | null>;
-  deleteProduct: (id: number, data?: Record<string, any>) => Promise<void | null>;
+  deleteProduct: (id: number, data?: Record<string, unknown>) => Promise<void | null>;
   batchDeleteProducts: (ids: (number | string)[]) => Promise<void | null>;
   refreshProducts: () => Promise<ApiResponse<Product[]> | null>;
 }
@@ -95,7 +95,7 @@ export function useProducts(): UseProductsReturn {
     }
   };
 
-  const deleteProduct = async (id: number, data?: Record<string, any>): Promise<void | null> => {
+  const deleteProduct = async (id: number, data?: Record<string, unknown>): Promise<void | null> => {
     loading.value = true;
     error.value = null;
     try {

@@ -87,17 +87,6 @@ export default [
     },
   },
   {
-    files: [
-      'src/composables/useChatView.ts',
-      'src/stores/tutorial.ts',
-      'src/utils/pretext.ts',
-    ],
-    rules: {
-      '@typescript-eslint/no-explicit-any': 'warn',
-      '@typescript-eslint/ban-ts-comment': 'warn',
-    },
-  },
-  {
     files: ['**/*.test.js', '**/*.spec.js', '**/*.test.ts', '**/*.spec.ts'],
     rules: {
       '@typescript-eslint/no-explicit-any': 'off',

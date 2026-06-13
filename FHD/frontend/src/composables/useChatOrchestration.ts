@@ -304,7 +304,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
             || String(persistedPath || '').split(/[\\/]/).pop()
             || 'excel.xlsx'
           const prefix = `@uploads/${displayFileName} `
-          const fillInput = (window as any).__VUE_CHAT_FILL__
+          const fillInput = (window as unknown).__VUE_CHAT_FILL__
           if (typeof fillInput === 'function' && fillInput(prefix)) return
 
           // 兜底：当宿主未注入 __VUE_CHAT_FILL__ 时，仍尝试直接写 DOM。
@@ -365,8 +365,8 @@ export function useChatOrchestration(options: UseChatViewOptions) {
   )
 
   setOnMultimodalFileChangeCallback(onMultimodalFileChange)
-  const taskTableColumns = computed(() => getTaskTableColumns(currentTask.value as any))
-  const taskTableItems = computed(() => getTaskTableItems(currentTask.value as any))
+  const taskTableColumns = computed(() => getTaskTableColumns(currentTask.value as unknown))
+  const taskTableItems = computed(() => getTaskTableItems(currentTask.value as unknown))
   const taskOrderNumber = computed(() => getTaskOrderNumber(currentTask.value))
   /** 出货管理 AI 员工：打印成功后拉取出货记录、统计与审计，并提示保存（导出）/推送 */
   async function runShipmentMgmtAfterPrintSuccess(ctx: {
@@ -517,8 +517,8 @@ export function useChatOrchestration(options: UseChatViewOptions) {
   function applyProRuntimeMode(actionType: string, enabled: boolean): boolean {
     if (!isProMode.value) return false
     const shouldEnable = enabled !== false
-    const toggleWorkMode = (window as any).setWorkModeFromChat
-    const toggleMonitorMode = (window as any).setMonitorModeFromChat
+    const toggleWorkMode = (window as unknown).setWorkModeFromChat
+    const toggleMonitorMode = (window as unknown).setMonitorModeFromChat
 
     if (actionType === 'show_monitor') {
       if (typeof toggleMonitorMode === 'function') {
@@ -535,8 +535,8 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       toggleWorkMode(shouldEnable)
     }
 
-    if (shouldEnable && typeof (window as any).refreshWorkModeMonitorList === 'function') {
-      ;(window as any).refreshWorkModeMonitorList()
+    if (shouldEnable && typeof (window as unknown).refreshWorkModeMonitorList === 'function') {
+      ;(window as unknown).refreshWorkModeMonitorList()
     }
 
     window.dispatchEvent(new CustomEvent('xcagi:pro-runtime-mode-changed', {
@@ -565,13 +565,13 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     if (!t || t.type !== 'shipment_generate' || t.completed) return
     orderNumberFetching.value = true
     try {
-      await hydrateTaskOrderNumber(t as any, { force: true })
+      await hydrateTaskOrderNumber(t as unknown, { force: true })
     } finally {
       orderNumberFetching.value = false
     }
   }
 
-  function shouldAutoRunTask(task: any): boolean {
+  function shouldAutoRunTask(task: unknown): boolean {
     if (!task || task?.completed) return false
     const taskType = String(task?.type || '').trim().toLowerCase()
     if (taskType === 'excel_import') return true
@@ -588,7 +588,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     return false
   }
 
-  function scheduleAutoConfirmTask(task: any): void {
+  function scheduleAutoConfirmTask(task: unknown): void {
     if (!task || task?.completed || !task?.api_url) return
     if (task.__xcagiAutoConfirmScheduled) return
     task.__xcagiAutoConfirmScheduled = true
@@ -599,7 +599,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     }, 0)
   }
 
-  function showTaskConfirm(task: any) {
+  function showTaskConfirm(task: unknown) {
     const nextTask = { ...(task || {}) }
     currentTask.value = nextTask
     if (shouldAutoRunTask(nextTask)) {
@@ -622,11 +622,11 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     }
 
     nextTask.customOrderNumber = ''
-    hydrateTaskOrderNumber(nextTask as any).catch(() => {})
-    enrichShipmentPreviewProducts(nextTask as any).catch(() => {})
+    hydrateTaskOrderNumber(nextTask as unknown).catch(() => {})
+    enrichShipmentPreviewProducts(nextTask as unknown).catch(() => {})
   }
 
-  function emitAssistantPush(payload: any = {}) {
+  function emitAssistantPush(payload: unknown = {}) {
     const detail = {
       title: String(payload.title || '任务推送').trim(),
       description: String(payload.description || '').trim(),
@@ -638,7 +638,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
   }
 
   /** 待确认的发货单生成任务出现时收起顶部副窗，突出右侧「当前任务」面板；若同时需打开产品副窗则不收起 */
-  function maybeCloseAssistantFloatForShipmentTask(task: any, autoAction: any) {
+  function maybeCloseAssistantFloatForShipmentTask(task: unknown, autoAction: unknown) {
     // 教程步骤若声明了 assistantTab，需要副窗保持打开以定位高亮；否则发货任务触发的「收起副窗」会与教程打开副窗竞态，导致点空气。
     if (tutorialStore.isActive && tutorialStore.currentStep?.assistantTab) {
       return
@@ -674,7 +674,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
   const { readWorkflowEmployeeEnabledMap, upsertWorkflowEmployeeTask } = workflowPanel
 
   /** 出货管理 AI 员工：打印成功后拉取出货记录、统计与审计，并提示保存（导出）/推送 */
-  function buildTaskCompletedDescription(successMsg: string, data: any): string {
+  function buildTaskCompletedDescription(successMsg: string, data: unknown): string {
     const parts = [successMsg || '任务执行成功']
     const docName = data?.doc_name || data?.data?.doc_name || data?.document?.filename
     const orderNo = data?.order_number || data?.data?.order_number || data?.document?.order_number
@@ -689,7 +689,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     return parts.join('；')
   }
 
-  function buildShipmentDownloadUrl(data: any): string {
+  function buildShipmentDownloadUrl(data: unknown): string {
     const directUrl = data?.download_url || data?.data?.download_url
     if (directUrl && typeof directUrl === 'string') return directUrl
 
@@ -699,7 +699,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     return `/api/shipment/download/${encodeURIComponent(docName)}`
   }
 
-  function normalizeRecordId(value: any): number | null {
+  function normalizeRecordId(value: unknown): number | null {
     if (value === null || value === undefined || value === '') return null
     const n = Number(value)
     if (!Number.isFinite(n)) return null
@@ -707,7 +707,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     return normalized > 0 ? normalized : null
   }
 
-  function extractShipmentExecutionContext(data: any) {
+  function extractShipmentExecutionContext(data: unknown) {
     const filePath = data?.file_path || data?.data?.file_path || data?.document?.filepath || ''
     const purchaseUnit = String(
       data?.purchase_unit
@@ -730,7 +730,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       : (Array.isArray(data?.data?.labels) ? data.data.labels : [])
 
     const labelPaths: string[] = []
-    labelsRaw.forEach((label: any) => {
+    labelsRaw.forEach((label: unknown) => {
       if (typeof label === 'string' && label.trim()) {
         labelPaths.push(label.trim())
         return
@@ -766,7 +766,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
 
     if (task?.type === 'shipment_generate') {
       if (!String(task?.customOrderNumber || '').trim()) {
-        await hydrateTaskOrderNumber(task as any)
+        await hydrateTaskOrderNumber(task as unknown)
       }
       const customOrderNumber = String(task?.customOrderNumber || '').trim()
       payload.params = { ...(payload.params || {}) }
@@ -870,7 +870,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
           failTask(shipmentTaskId, errMsg)
         }
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       await addAndSaveMessage('[失败] 任务执行失败：' + (e.message || '网络错误'), 'ai')
       if (shipmentTaskId) {
         failTask(shipmentTaskId, e.message || '网络错误')
@@ -888,7 +888,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     persistTaskPanelStateForSession()
   }
 
-  function handleAutoAction(action: any, userMessage: string = '') {
+  function handleAutoAction(action: unknown, userMessage: string = '') {
     console.log('[AutoAction] 触发:', action, '| 用户消息:', userMessage)
     const type = action?.type || ''
     const actionQuery = String(action?.query || action?.keyword || userMessage || '').trim()
@@ -957,8 +957,8 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       return
     }
 
-    if (typeof (window as any).legacyAutoActionHandler === 'function') {
-      ;(window as any).legacyAutoActionHandler(action, userMessage)
+    if (typeof (window as unknown).legacyAutoActionHandler === 'function') {
+      ;(window as unknown).legacyAutoActionHandler(action, userMessage)
     }
   }
   function maybePrefetchProductAssistantFloat(userText: string) {
@@ -1005,12 +1005,12 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       startWaitProgressTimer()
       try {
         const resp = await productsApi.searchProducts(kwFast)
-        if (resp && (resp as any).success === false) {
-          throw new Error(String((resp as any)?.message || '产品库查询失败'))
+        if (resp && (resp as unknown).success === false) {
+          throw new Error(String((resp as unknown)?.message || '产品库查询失败'))
         }
-        const raw = (resp as any)?.data ?? (resp as any)?.products ?? (resp as any)?.items
+        const raw = (resp as unknown)?.data ?? (resp as unknown)?.products ?? (resp as unknown)?.items
         const rows = Array.isArray(raw) ? raw : []
-        const lines = rows.slice(0, 3).map((row: any) => {
+        const lines = rows.slice(0, 3).map((row: unknown) => {
           const m = String(row.model_number || '').trim()
           const n = String(row.name || row.product_name || '-').trim()
           const p = Number(row.price || 0)
@@ -1024,19 +1024,19 @@ export function useChatOrchestration(options: UseChatViewOptions) {
         const responseText = hasResults
           ? `已帮你打开产品副窗并带入「${kwFast}」。可在卡片中查看与修改。${previewSuffix}`
           : `未在产品库中找到「${kwFast}」，请确认型号或关键词后重试。`
-        const payload: any = {
+        const payload: unknown = {
           success: true,
           response: responseText,
           ...(hasResults ? { autoAction: { type: 'show_products_float', query: kwFast } } : {})
         }
-        const mappedRows = rows.slice(0, 20).map((r: any) => ({
+        const mappedRows = rows.slice(0, 20).map((r: unknown) => ({
           id: r.id,
           model_number: r.model_number || '',
           name: r.name || r.product_name || '',
           price: Number(r.price || 0),
           unit: r.unit || ''
         }))
-        const totalFromApi = typeof (resp as any)?.total === 'number' ? (resp as any).total : rows.length
+        const totalFromApi = typeof (resp as unknown)?.total === 'number' ? (resp as unknown).total : rows.length
         await addAndSaveMessage(payload.response, 'ai')
         syncTaskFromChatResponse(payload, primaryText)
         attachContextSummaryToLastAiMessage()
@@ -1079,7 +1079,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       const killTimer = window.setTimeout(() => controller.abort(), timeoutMsS)
       const msgIndex = pushStreamingAiShell()
       let streamPlain = ''
-      let doneResult: any = null
+      let doneResult: unknown = null
       let sseError: string | null = null
       // TTS 增量朗读：以句末标点为界把已稳定的前缀丢给语音队列，避免边生成边合成后半句卡顿或被重复打断
       let ttsSpokenOffset = 0
@@ -1111,7 +1111,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
         const { body } = buildPlannerChatRequestPayload(primaryForStream, {
           fromWriteUnlock: !!opts?.fromWriteUnlock
         })
-        const res = await chatApi.sendChatStream(body as any, { signal: controller.signal })
+        const res = await chatApi.sendChatStream(body as unknown, { signal: controller.signal })
         if (!res.ok) {
           throw new Error(await parseChatStreamErrorResponse(res))
         }
@@ -1147,7 +1147,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
         if (sseError) {
           throw new Error(sseError)
         }
-        const finalText = String((doneResult as any)?.response ?? streamPlain).trim() || streamPlain || '（无内容）'
+        const finalText = String((doneResult as unknown)?.response ?? streamPlain).trim() || streamPlain || '（无内容）'
         applyPlainTextToMessageIndex(msgIndex, finalText)
         // 后端 done 事件可能带一段非 token 的尾部文本（比如总结段），统一再做一次兜底朗读
         if (ttsShouldSpeakThisMessage && ttsEnabled.value) {
@@ -1163,7 +1163,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
         await saveMessage('ai', finalText)
         const wrap =
           doneResult && typeof doneResult === 'object'
-            ? (doneResult as any)
+            ? (doneResult as unknown)
             : { success: true, response: finalText }
         syncTaskFromChatResponse(wrap, primaryText)
         attachContextSummaryToLastAiMessage()
@@ -1186,7 +1186,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
         if (wrap.task) {
           maybeCloseAssistantFloatForShipmentTask(wrap.task, wrap.autoAction)
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         const errText =
           err?.name === 'AbortError'
             ? `请求超时（>${Math.floor(timeoutMsS / 1000)}s）或已中断`
@@ -1212,7 +1212,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
         ? '专业意图处理中（普通界面槽位）...'
         : '正在理解你的问题...'
     )
-    let data: any
+    let data: unknown
     try {
       // 不再在发聊天前阻塞等待 /api/ai/test（最多 3s），否则「慢」往往来自这里而非 AI
       setLoadingProgress(
@@ -1239,7 +1239,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       } else if (head?.data?.action === 'workflow_failed') {
         setLoadingProgress('执行失败，正在整理错误信息...')
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       data = {
         success: false,
         message: err?.message || '请求失败'
@@ -1264,13 +1264,13 @@ export function useChatOrchestration(options: UseChatViewOptions) {
           }
         }
         attachContextSummaryToLastAiMessage()
-        const lastOk = [...data.results].reverse().find((p: any) => p && p.success)
+        const lastOk = [...data.results].reverse().find((p: unknown) => p && p.success)
         if (lastOk) {
           attachThinkingStepsToLastAiMessage(lastOk)
           attachTodoStepsToLastAiMessage(lastOk)
           attachWorkflowTraceToLastAiMessage(lastOk)
         }
-        const lastTask = [...data.results].reverse().find((p: any) => p?.task)
+        const lastTask = [...data.results].reverse().find((p: unknown) => p?.task)
         if (lastTask?.task) {
           showTaskConfirm(lastTask.task)
           emitAssistantPush({
@@ -1279,13 +1279,13 @@ export function useChatOrchestration(options: UseChatViewOptions) {
           })
         }
         const lastFloat = [...data.results].reverse().find(
-          (p: any) =>
+          (p: unknown) =>
             p?.autoAction?.type === 'show_products_float' || p?.autoAction?.type === 'show_products'
         )
         if (!lastTask?.task && lastFloat?.autoAction) {
           currentTask.value = null
         }
-        const lastAction = [...data.results].reverse().find((p: any) => p?.autoAction)
+        const lastAction = [...data.results].reverse().find((p: unknown) => p?.autoAction)
         if (lastAction?.autoAction) {
           handleAutoAction(lastAction.autoAction, remoteMessages[remoteMessages.length - 1] || '')
         }
@@ -1342,11 +1342,11 @@ export function useChatOrchestration(options: UseChatViewOptions) {
 
     if (
       isProMode.value &&
-      typeof (window as any).isProTaskAcquisitionMessage === 'function' &&
-      (window as any).isProTaskAcquisitionMessage(message) &&
-      typeof (window as any).jarvisSendMessage === 'function'
+      typeof (window as unknown).isProTaskAcquisitionMessage === 'function' &&
+      (window as unknown).isProTaskAcquisitionMessage(message) &&
+      typeof (window as unknown).jarvisSendMessage === 'function'
     ) {
-      ;(window as any).jarvisSendMessage(message)
+      ;(window as unknown).jarvisSendMessage(message)
       return
     }
 

@@ -47,7 +47,7 @@ function normalizeStarterPack(rows: unknown): StarterPackItem[] {
  *    或 industry 切换接口暂未受理），侧栏副标题/主单位/意图关键词仍能立刻按 mod 走，
  *    避免扩展模块与当前行业文案脱节。
  */
-function activeModForIndustry(mods: any[], activeModId: string, industryId: string) {
+function activeModForIndustry(mods: unknown[], activeModId: string, industryId: string) {
   if (activeModId) {
     const direct = mods.find((m) => str(m?.id) === activeModId)
     if (direct) {
@@ -56,7 +56,7 @@ function activeModForIndustry(mods: any[], activeModId: string, industryId: stri
       if (ext) return ext
     }
   }
-  let matched: any = null
+  let matched: unknown = null
   for (const mod of mods) {
     const modIndustryId = str(mod?.industry?.id)
     if (!modIndustryId || modIndustryId !== industryId) continue

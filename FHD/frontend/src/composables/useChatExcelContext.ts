@@ -40,7 +40,7 @@ export function useChatExcelContext(deps: UseChatExcelContextDeps) {
     return resolveExcelSheetOptionsFromContext(ctx)
   })
 
-  function injectExcelContextPayload(contextPayload: Record<string, any>, contextParts: string[]): boolean {
+  function injectExcelContextPayload(contextPayload: Record<string, unknown>, contextParts: string[]): boolean {
     const excelCtx = resolveExcelAnalysisContextForRequest()
     if (!excelCtx) return false
     contextPayload.excel_analysis = excelCtx
@@ -84,7 +84,7 @@ export function useChatExcelContext(deps: UseChatExcelContextDeps) {
   }
 
   function consumeMultimodalIntoPlannerContext(
-    contextPayload: Record<string, any>,
+    contextPayload: Record<string, unknown>,
     contextParts: string[]
   ) {
     const rows = multimodalStaging.value

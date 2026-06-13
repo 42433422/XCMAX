@@ -158,8 +158,8 @@ export const authApi = {
     return api.post<ApiResponse<{ avatar_url: string }>>('/api/auth/profile/avatar', form);
   },
 
-  async validateSession(): Promise<ApiResponse<any>> {
-    return api.get<ApiResponse<any>>('/api/auth/session/validate');
+  async validateSession(): Promise<ApiResponse<unknown>> {
+    return api.get<ApiResponse<unknown>>('/api/auth/session/validate');
   },
 
   async forgotAccount(email: string): Promise<

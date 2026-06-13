@@ -83,12 +83,12 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
       const data = await chatApi.getConversations({ limit: 20 })
       if (!data?.success) throw new Error(String(data?.message || '加载历史失败'))
 
-      const sessionsRaw = Array.isArray((data as any)?.sessions)
-        ? (data as any).sessions
-        : Array.isArray((data as any)?.data)
-          ? (data as any).data
-          : Array.isArray((data as any)?.conversations)
-            ? (data as any).conversations
+      const sessionsRaw = Array.isArray((data as unknown)?.sessions)
+        ? (data as unknown).sessions
+        : Array.isArray((data as unknown)?.data)
+          ? (data as unknown).data
+          : Array.isArray((data as unknown)?.conversations)
+            ? (data as unknown).conversations
             : []
       historySessions.value = mergeHistorySessions(sessionsRaw) as HistorySessionItem[]
     } catch (e) {
@@ -115,10 +115,10 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
 
     try {
       const data = await chatApi.getConversation(sid)
-      const serverMessages = Array.isArray((data as any)?.messages) ? (data as any).messages : []
+      const serverMessages = Array.isArray((data as unknown)?.messages) ? (data as unknown).messages : []
       const localMessages = readLocalMessagesBySession(sid)
       if (data.success && serverMessages.length > 0) {
-        loadMessages(serverMessages.map((msg: any) => ({
+        loadMessages(serverMessages.map((msg: unknown) => ({
           role: msg?.role === 'user' || msg?.role === 'task' ? msg.role : 'ai',
           content: normalizeServerContentToHtml(msg.content),
           time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
@@ -136,7 +136,7 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
           time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
         }])
       } else {
-        throw new Error(String((data as any)?.message || '加载会话失败'))
+        throw new Error(String((data as unknown)?.message || '加载会话失败'))
       }
       showHistory.value = false
     } catch (e) {
@@ -171,7 +171,7 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
     try {
       clearLocalHistoryCache()
       const data = await chatApi.clearConversations({ user_id: 'default' })
-      if (!data?.success) throw new Error(String((data as any)?.message || '清空历史失败'))
+      if (!data?.success) throw new Error(String((data as unknown)?.message || '清空历史失败'))
       historySessions.value = mergeHistorySessions([]) as HistorySessionItem[]
     } catch (e) {
       historySessions.value = mergeHistorySessions([]) as HistorySessionItem[]

@@ -60,5 +60,5 @@ export interface KittenRequestContext {
   kitten_analyzer?: boolean;
   has_dataset?: boolean;
   kitten_dataset?: KittenDatasetContext | null;
-  [key: string]: any;
+  [key: string]: unknown;
 }

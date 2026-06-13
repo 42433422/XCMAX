@@ -3,7 +3,7 @@ import type { ApiResponse } from '@/types/api';
 import type { Material, MaterialCreateDTO, MaterialUpdateDTO } from '@/types/material';
 
 export const materialsApi = {
-  getMaterials(params: Record<string, any> = {}): Promise<ApiResponse<Material[]>> {
+  getMaterials(params: Record<string, unknown> = {}): Promise<ApiResponse<Material[]>> {
     return api.get<ApiResponse<Material[]>>('/api/materials', params);
   },
 
@@ -32,13 +32,13 @@ export const materialsApi = {
   },
 
   searchMaterials(query: string, category: string): Promise<ApiResponse<Material[]>> {
-    const params: Record<string, any> = {};
+    const params: Record<string, unknown> = {};
     if (query) params.search = query;
     if (category) params.category = category;
     return api.get<ApiResponse<Material[]>>('/api/materials', params);
   },
 
-  exportMaterialsXlsx(params: Record<string, any> = {}): Promise<Response> {
+  exportMaterialsXlsx(params: Record<string, unknown> = {}): Promise<Response> {
     return api.download('/api/materials/export', params);
   }
 };

@@ -5,7 +5,7 @@ import { resolveApiErrorMessage } from '@/utils/resolveApiError';
 
 export interface UseApiOptions<T> {
   immediate?: boolean;
-  defaultParams?: Record<string, any>;
+  defaultParams?: Record<string, unknown>;
   onSuccess?: (data: T) => void;
   onError?: (error: Error) => void;
 }
@@ -14,7 +14,7 @@ export interface UseApiReturn<T> {
   data: Ref<T | null>;
   error: Ref<Error | null>;
   loading: Ref<boolean>;
-  execute: (params?: Record<string, any>) => Promise<T | null>;
+  execute: (params?: Record<string, unknown>) => Promise<T | null>;
   reset: () => void;
 }
 
@@ -36,7 +36,7 @@ function resolveApiError(err: unknown, fallback = ''): Error {
 }
 
 export function useApi<T>(
-  apiFn: (params: Record<string, any>) => Promise<T>,
+  apiFn: (params: Record<string, unknown>) => Promise<T>,
   options: UseApiOptions<T> = {}
 ): UseApiReturn<T> {
   const data = ref<T | null>(null) as Ref<T | null>;
@@ -44,7 +44,7 @@ export function useApi<T>(
   const loading = ref(false);
   const { immediate = false, defaultParams = {} } = options;
 
-  const execute = async (params: Record<string, any> = {}): Promise<T | null> => {
+  const execute = async (params: Record<string, unknown> = {}): Promise<T | null> => {
     loading.value = true;
     error.value = null;
     
@@ -80,18 +80,18 @@ export function useApi<T>(
   };
 }
 
-export interface UseMutationOptions<T, V = any> {
+export interface UseMutationOptions<T, V = unknown> {
   onSuccess?: (data: T, variables: V) => void;
   onError?: (error: Error, variables: V) => void;
 }
 
-export interface UseMutationReturn<T, V = any> {
+export interface UseMutationReturn<T, V = unknown> {
   loading: Ref<boolean>;
   error: Ref<Error | null>;
   mutate: (variables: V) => Promise<T | null>;
 }
 
-export function useMutation<T, V = any>(
+export function useMutation<T, V = unknown>(
   apiFn: (variables: V) => Promise<T>,
   options: UseMutationOptions<T, V> = {}
 ): UseMutationReturn<T, V> {
