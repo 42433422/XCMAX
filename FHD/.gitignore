@@ -51,6 +51,7 @@ ENV/
 htmlcov/
 *.cover
 coverage.xml
+coverage.json
 coverage/
 .tox/
 .vector_index/
