@@ -10,7 +10,7 @@ import logging
 import time
 from collections import OrderedDict
 from threading import Lock
-from typing import Any
+from typing import Any, cast
 
 from app.utils.deployment import (
     distributed_rate_limit_required,
@@ -109,7 +109,7 @@ class _InMemoryRateLimiter:
         with self._lock:
             self._clean_old(key)
             if key in self._requests and self._requests[key]:
-                return self._requests[key][0] + self._window_seconds
+                return cast("float | None", self._requests[key][0] + self._window_seconds)
             return None
 
 

@@ -13,7 +13,7 @@ import logging
 import os
 import secrets
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 from fastapi import Body, Header, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
@@ -113,11 +113,12 @@ def _node_query_for_user(node: ApprovalFlowNode, user_id: int) -> bool:
 
 
 def _ordered_nodes(db, flow_id: int) -> list[ApprovalFlowNode]:
-    return (
+    return cast(
+        "list[ApprovalFlowNode]",
         db.query(ApprovalFlowNode)
         .filter(ApprovalFlowNode.flow_id == flow_id, ApprovalFlowNode.is_active == True)  # noqa: E712
         .order_by(ApprovalFlowNode.node_order.asc())
-        .all()
+        .all(),
     )
 
 

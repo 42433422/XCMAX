@@ -198,14 +198,18 @@ def _registered_router_shipment_records(
     if action == "update":
         record_id = int(params.get("id"))
         payload = {k: v for k, v in params.items() if k != "id"}
-        return svc.update_shipment_record(record_id=record_id, **payload)
+        return cast("dict[Any, Any]", svc.update_shipment_record(record_id=record_id, **payload))
     if action == "delete":
-        return svc.delete_shipment_record(int(params.get("id")))
+        return cast("dict[Any, Any]", svc.delete_shipment_record(int(params.get("id"))))
     if action == "export":
-        return svc.export_shipment_records(
-            unit_name=str(params.get("unit") or params.get("unit_name") or "").strip() or None,
-            template_id=params.get("template_id"),
-            status_filter=params.get("status"),
+        return cast(
+            "dict[Any, Any]",
+            svc.export_shipment_records(
+                unit_name=str(params.get("unit") or params.get("unit_name") or "").strip()
+                or None,
+                template_id=params.get("template_id"),
+                status_filter=params.get("status"),
+            ),
         )
 
 
@@ -400,6 +404,7 @@ def _registered_router_template_preview(
             result = db.execute(
                 text(
                     """
+from typing import cast
                     INSERT INTO templates (
                         template_key, template_name, template_type,
                         original_file_path, analyzed_data, editable_config,

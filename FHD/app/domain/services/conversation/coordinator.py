@@ -22,7 +22,7 @@ import logging
 import time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any
+from typing import Any, cast
 
 from app.domain.services.conversation.context import (
     ContextFacade,
@@ -149,7 +149,7 @@ class UnifiedConversationCoordinator:
         """获取 ContextFacade"""
         if self._context_facade is None:
             self._context_facade = get_context_facade()
-        return self._context_facade
+        return cast("ContextFacade", self._context_facade)
 
     def process(
         self, user_id: str, message: str, context_data: dict[str, Any] = None
@@ -398,8 +398,11 @@ class UnifiedConversationCoordinator:
 
     def _execute_plan(self, intent: str, slots: dict[str, Any]) -> dict[str, Any]:
         """执行计划（委托给 TaskAgent）"""
-        return self.task_agent.execute_plan(
-            {"task_type": intent, "slots": slots}, original_message=""
+        return cast(
+            "dict[str, Any]",
+            self.task_agent.execute_plan(
+                {"task_type": intent, "slots": slots}, original_message=""
+            ),
         )
 
     def _get_action_description(self, intent: str, slots: dict[str, Any]) -> str:
