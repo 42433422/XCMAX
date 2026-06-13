@@ -31,6 +31,7 @@ WORKFLOW_RENAMES = {
     "release-desktop.yml": "fhd-release-desktop.yml",
     "release-web.yml": "fhd-release-web.yml",
     "release-android.yml": "fhd-release-android.yml",
+    "release-orchestrator.yml": "fhd-release-orchestrator.yml",
     "performance-smoke.yml": "fhd-performance-smoke.yml",
     "neuro_migration_check.yml": "fhd-neuro-migration-check.yml",
     "modstore-tests.yml": "fhd-modstore-tests.yml",
@@ -60,6 +61,15 @@ def _prefix_fhd_paths(content: str, out_name: str) -> str:
         "gh workflow run deploy.yml",
         "gh workflow run fhd-deploy.yml",
     )
+    for wf in (
+        "release-desktop.yml",
+        "release-web.yml",
+        "release-android.yml",
+    ):
+        content = content.replace(
+            f'gh workflow run "{wf}"',
+            f'gh workflow run "fhd-{wf}"',
+        )
     content = content.replace(
         ".github/workflows/ci-mobile-android.yml",
         f".github/workflows/{out_name}",

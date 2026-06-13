@@ -502,9 +502,14 @@ def _run_scheduled_digest_vibe_prep(
 
 
 def _repo_root() -> Path:
+    mono = os.environ.get("XCMAX_MONOREPO_ROOT", "").strip()
+    if mono:
+        return Path(mono).resolve()
     env = os.environ.get("MODSTORE_REPO_ROOT", "").strip()
     if env:
-        return Path(env).resolve()
+        p = Path(env).resolve()
+        if (p / "FHD").is_dir():
+            return p
     try:
         from modstore_server.integrations.ops_action_handlers import repo_root as _ops_rr
 
@@ -1674,6 +1679,24 @@ def run_daily_digest_email() -> None:
                 existing_token_hashes=existing_token_hashes,
             )
 
+        from modstore_server.digest_identity import extract_digest_identity_plain_from_html
+
+        pre_identity_code = extract_digest_identity_plain_from_html(staged_section_html)
+        identity_tokens_pre = [
+            t for t in (token_batch or []) if getattr(t, "kind", None) == "digest_identity"
+        ]
+        if identity_tokens_pre:
+            with sf() as session:
+                for t in identity_tokens_pre:
+                    session.add(t)
+                session.commit()
+            logger.info(
+                "daily digest: pre-persisted %d digest_identity token(s) for surface audit",
+                len(identity_tokens_pre),
+            )
+        if pre_identity_code:
+            os.environ["MODSTORE_SURFACE_AUDIT_DIGEST_CODE"] = pre_identity_code
+
         employee_briefs_html = ""
         if os.environ.get("MODSTORE_DAILY_BRIEF_ENABLED", "0").strip().lower() in (
             "1",
@@ -1838,10 +1861,21 @@ def run_daily_digest_email() -> None:
         ]
         if identity_tokens:
             with sf() as session:
+                existing = {
+                    str(row[0])
+                    for row in session.query(OpsApprovalToken.token_hash).all()
+                    if row[0]
+                }
+                added = 0
                 for t in identity_tokens:
+                    th = str(getattr(t, "token_hash", "") or "")
+                    if th and th in existing:
+                        continue
                     session.add(t)
+                    added += 1
                 session.commit()
-            logger.info("daily digest: persisted %d digest_identity token(s)", len(identity_tokens))
+            if added:
+                logger.info("daily digest: persisted %d digest_identity token(s)", added)
         if deploy_tokens and any_delivered:
             with sf() as session:
                 for t in deploy_tokens:

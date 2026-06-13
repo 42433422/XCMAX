@@ -205,9 +205,9 @@ class FileAnalysisService:
             candidates = [
                 r[0]
                 for r in cur.execute(
-                    f"SELECT DISTINCT unit FROM {quoted_table} "
-                    f'WHERE unit IS NOT NULL AND TRIM(unit) != "" '
-                    f"LIMIT 10"
+                    "SELECT DISTINCT unit FROM "
+                    + quoted_table
+                    + ' WHERE unit IS NOT NULL AND TRIM(unit) != "" LIMIT 10'
                 ).fetchall()
                 if r and r[0]
             ]

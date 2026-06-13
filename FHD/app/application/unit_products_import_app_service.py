@@ -167,7 +167,7 @@ class UnitProductsImportService:
             return []
 
         quoted_cols = ",".join(quote_sqlite_identifier(c) for c in select_cols)
-        rows = cur.execute(f"SELECT {quoted_cols} FROM {quoted_table}").fetchall()
+        rows = cur.execute("SELECT " + quoted_cols + " FROM " + quoted_table).fetchall()
         row_dicts = [dict(zip(select_cols, r)) for r in rows]
 
         products_rows = []

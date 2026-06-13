@@ -1,4 +1,5 @@
 import { isCoreWorkflowEmployeeId } from '@/constants/coreWorkflowMod'
+import type { TaskItem } from '@/composables/useChatPersistence'
 import { STAR_REFRESH_STORAGE_KEY } from '@/workflow/coreWorkflowPrefs'
 
 function starredRefreshOnFromStorage(): boolean {
@@ -76,4 +77,16 @@ export function coreWorkflowTaskDotTitle(empId: string, payload: Record<string, 
     return '状态：已收到客户反馈摘要（蓝）'
   }
   return null
+}
+
+export function workflowTaskDotStatusClassForTask(task: TaskItem): string {
+  if (!task.id?.startsWith('workflow_emp_')) return 'queued'
+  const empId = task.id.slice('workflow_emp_'.length)
+  return coreWorkflowTaskDotStatusClass(empId, (task.payload || {}) as Record<string, unknown>) || 'queued'
+}
+
+export function workflowTaskDotTitleForTask(task: TaskItem): string {
+  if (!task.id?.startsWith('workflow_emp_')) return ''
+  const empId = task.id.slice('workflow_emp_'.length)
+  return coreWorkflowTaskDotTitle(empId, (task.payload || {}) as Record<string, unknown>) || ''
 }

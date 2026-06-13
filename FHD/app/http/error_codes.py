@@ -1,0 +1,49 @@
+"""Stable API error codes for i18n-friendly responses."""
+
+from __future__ import annotations
+
+from typing import Any
+
+UNAUTHORIZED = "UNAUTHORIZED"
+WEAK_PASSWORD = "WEAK_PASSWORD"
+VALIDATION_ERROR = "VALIDATION_ERROR"
+EMPTY_MESSAGE = "EMPTY_MESSAGE"
+BATCH_LIMIT_EXCEEDED = "BATCH_LIMIT_EXCEEDED"
+NOT_FOUND = "NOT_FOUND"
+FORBIDDEN = "FORBIDDEN"
+INTERNAL_ERROR = "INTERNAL_ERROR"
+INVALID_INPUT = "INVALID_INPUT"
+NO_SESSION = "NO_SESSION"
+INVALID_SESSION = "INVALID_SESSION"
+ACCOUNT_DISABLED = "ACCOUNT_DISABLED"
+MARKET_NOT_BOUND = "MARKET_NOT_BOUND"
+SEND_CODE_FAILED = "SEND_CODE_FAILED"
+MARKET_RESET_FAILED = "MARKET_RESET_FAILED"
+MARKET_REGISTER_FAILED = "MARKET_REGISTER_FAILED"
+LOCAL_LOGIN_AFTER_REGISTER = "LOCAL_LOGIN_AFTER_REGISTER"
+REGISTRATION_DISABLED = "REGISTRATION_DISABLED"
+CREATE_FAILED = "CREATE_FAILED"
+LOGIN_AFTER_REGISTER = "LOGIN_AFTER_REGISTER"
+QR_NOT_FOUND = "QR_NOT_FOUND"
+UPDATE_FAILED = "UPDATE_FAILED"
+INVALID_FILE = "INVALID_FILE"
+SAVE_FAILED = "SAVE_FAILED"
+MISSING_PASSWORD = "MISSING_PASSWORD"
+INVALID_ROLE = "INVALID_ROLE"
+SELF_DELETE = "SELF_DELETE"
+
+
+def error_envelope(
+    code: str,
+    message: str,
+    *,
+    details: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Standard error body: ``{ success: false, error: { code, message, details? } }``."""
+    body: dict[str, Any] = {
+        "success": False,
+        "error": {"code": code, "message": message},
+    }
+    if details:
+        body["error"]["details"] = details
+    return body

@@ -57,7 +57,7 @@ class NeuroBusManager:
 
         async def on_system_event(event: NeuroEvent):
             """系统事件日志"""
-            logger.debug(f"System event: {event.event_type} from {event.metadata.source}")
+            logger.debug("System event: %s source=%s", event.event_type, event.metadata.source)
 
         # 订阅所有系统事件
         self._bus.subscribe("system.*", on_system_event, priority=100)

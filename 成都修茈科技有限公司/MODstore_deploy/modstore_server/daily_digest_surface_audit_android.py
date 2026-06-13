@@ -93,9 +93,9 @@ def _ensure_fhd_for_emulator() -> None:
         api_url = (
             os.environ.get("SURFACE_AUDIT_API_URL")
             or os.environ.get("MODSTORE_SURFACE_AUDIT_API_URL")
-            or "http://127.0.0.1:5000"
+            or "http://127.0.0.1:5102"
         )
-        port = _parse_port(api_url.rstrip("/"), 5000)
+        port = _parse_port(api_url.rstrip("/"), 5102)
         _ensure_fhd_api(port)
     except Exception:
         logger.warning("android audit: FHD API bootstrap failed", exc_info=True)
@@ -185,16 +185,16 @@ def run_android_surface_audit_sync(
     if not script.is_file():
         return [], {"ok": False, "error": f"缺少 {script}"}
 
-    api_port = 5000
+    api_port = 5102
     try:
         from modstore_server.surface_audit_deps import _parse_port
 
         api_url = (
             os.environ.get("SURFACE_AUDIT_API_URL")
             or os.environ.get("MODSTORE_SURFACE_AUDIT_API_URL")
-            or "http://127.0.0.1:5000"
+            or "http://127.0.0.1:5102"
         )
-        api_port = _parse_port(api_url.rstrip("/"), 5000)
+        api_port = _parse_port(api_url.rstrip("/"), 5102)
     except Exception:
         pass
 

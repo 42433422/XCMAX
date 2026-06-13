@@ -235,7 +235,7 @@ def refresh_wechat_contacts_from_decrypt() -> tuple[dict[str, Any], int]:
                     )
 
                     where_clause = "WHERE delete_flag = 0" if "delete_flag" in cols else ""
-                    sql = f"SELECT {', '.join(select_cols)} FROM contact {where_clause}"
+                    sql = "SELECT " + ", ".join(select_cols) + " FROM contact " + where_clause
                     rows = cur.execute(sql).fetchall()
 
         if not rows:

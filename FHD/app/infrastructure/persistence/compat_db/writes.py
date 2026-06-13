@@ -11,12 +11,18 @@ import logging
 from fastapi import HTTPException
 from sqlalchemy import inspect, text
 
+from app.infrastructure.db.sync_engine import get_sync_engine
 from app.infrastructure.persistence.compat_db.base import (
     _customer_pg_engine_insp,
     _customer_pg_products_has_unit,
     _pg_expr_norm_unit,
     _pg_purchase_unit_active_sql,
+    _product_parse_id,
+    _sql_delete_where,
     _sql_ident,
+    _sql_insert_returning,
+    _sql_select_from_where,
+    _sql_update_set_where,
 )
 from app.infrastructure.persistence.compat_db.queries import (
     _customer_row_for_api,
@@ -47,7 +53,7 @@ def _products_delete_by_unit_pg(eng, unit_name: str) -> int:
     where_sql = " AND ".join(where_parts)
     with eng.begin() as conn:
         r = conn.execute(
-            text(f"DELETE FROM products WHERE {where_sql}"),
+            text(_sql_delete_where("products", where_sql)),
             params,
         )
         return int(r.rowcount or 0)
@@ -71,7 +77,7 @@ def _purchase_units_delete_by_norm_unit_pg(eng, unit_name: str) -> int:
     where_sql = " AND ".join(where_parts)
     with eng.begin() as conn:
         r = conn.execute(
-            text(f"DELETE FROM purchase_units WHERE {where_sql}"),
+            text(_sql_delete_where("purchase_units", where_sql)),
             params,
         )
         return int(r.rowcount or 0)
@@ -96,7 +102,7 @@ def _customers_delete_by_norm_name_pg(eng, insp, customer_name: str) -> int:
     where_sql = " AND ".join(where_parts)
     with eng.begin() as conn:
         r = conn.execute(
-            text(f"DELETE FROM {_sql_ident('customers')} WHERE {where_sql}"),
+            text(_sql_delete_where(_sql_ident("customers"), where_sql)),
             params,
         )
         return int(r.rowcount or 0)
@@ -115,7 +121,7 @@ def _purchase_units_delete_by_id_pg(eng, customer_id: int) -> int:
     where_sql = " AND ".join(where_parts)
     with eng.begin() as conn:
         r = conn.execute(
-            text(f"DELETE FROM purchase_units WHERE {where_sql}"),
+            text(_sql_delete_where("purchase_units", where_sql)),
             params,
         )
         return int(r.rowcount or 0)
@@ -134,7 +140,7 @@ def _customers_delete_by_id_pg(eng, insp, customer_id: int) -> int:
     where_sql = " AND ".join(where_parts)
     with eng.begin() as conn:
         r = conn.execute(
-            text(f"DELETE FROM {_sql_ident('customers')} WHERE {where_sql}"),
+            text(_sql_delete_where(_sql_ident("customers"), where_sql)),
             params,
         )
         return int(r.rowcount or 0)
@@ -157,7 +163,7 @@ def _products_unit_replace_pg(eng, old_name: str, new_name: str) -> None:
     where_sql = " AND ".join(where_parts)
     with eng.connect() as conn:
         conn.execute(
-            text(f"UPDATE products SET unit = :nn WHERE {where_sql}"),
+            text(_sql_update_set_where("products", "unit = :nn", where_sql)),
             params,
         )
         conn.commit()
@@ -197,7 +203,7 @@ def _customer_pg_fetch_by_id(eng, insp, customer_id: int) -> dict:
     with eng.connect() as conn:
         r = (
             conn.execute(
-                text(f"SELECT {sel_sql} FROM purchase_units WHERE {where_sql}"),
+                text(_sql_select_from_where(sel_sql, "purchase_units", where_sql)),
                 params,
             )
             .mappings()
@@ -222,7 +228,7 @@ def _customer_pg_insert(name: str, cp: str, ph: str, addr: str) -> dict:
         append_mod_scope_where(dup_parts, dup_bind, pu_cols)
         dup_sql = " AND ".join(dup_parts)
         dup = conn.execute(
-            text(f"SELECT id FROM purchase_units WHERE {dup_sql}"),
+            text(_sql_select_from_where("id", "purchase_units", dup_sql)),
             dup_bind,
         ).first()
         if dup:
@@ -251,7 +257,7 @@ def _customer_pg_insert(name: str, cp: str, ph: str, addr: str) -> dict:
         cols_sql = ", ".join(_sql_ident(c) for c, _ in col_pairs)
         vals_sql = ", ".join(f":{bk}" for _, bk in col_pairs)
         r = conn.execute(
-            text(f"INSERT INTO purchase_units ({cols_sql}) VALUES ({vals_sql}) RETURNING id"),
+            text(_sql_insert_returning("purchase_units", cols_sql, vals_sql)),
             bind,
         )
         new_id = int(r.scalar_one())
@@ -268,7 +274,13 @@ def _customer_pg_update(customer_id: int, name: str, cp: str, ph: str, addr: str
         append_mod_scope_where(prev_parts, prev_bind, pu_cols)
         prev = (
             conn.execute(
-                text(f"SELECT id, unit_name FROM purchase_units WHERE {' AND '.join(prev_parts)}"),
+                text(
+                    _sql_select_from_where(
+                        "id, unit_name",
+                        "purchase_units",
+                        " AND ".join(prev_parts),
+                    )
+                ),
                 prev_bind,
             )
             .mappings()
@@ -285,7 +297,9 @@ def _customer_pg_update(customer_id: int, name: str, cp: str, ph: str, addr: str
         clash_bind: dict[str, object] = {"n": name, "id": int(customer_id)}
         append_mod_scope_where(clash_parts, clash_bind, pu_cols)
         clash = conn.execute(
-            text(f"SELECT id FROM purchase_units WHERE {' AND '.join(clash_parts)}"),
+            text(
+                _sql_select_from_where("id", "purchase_units", " AND ".join(clash_parts))
+            ),
             clash_bind,
         ).first()
         if clash:
@@ -337,13 +351,19 @@ def _customer_pg_select_customers_name_by_id(eng, insp, customer_id: int) -> tup
     where_parts = [f"{_sql_ident(id_col)} = :id"]
     cbind: dict[str, object] = {"id": int(customer_id)}
     append_mod_scope_where(where_parts, cbind, cols)
+    where_clause = " AND ".join(where_parts)
+    select_sql = (
+        "SELECT "
+        + _sql_ident(name_col)
+        + " AS nm FROM "
+        + _sql_ident("customers")
+        + " WHERE "
+        + where_clause
+    )
     with eng.connect() as conn:
         r = (
             conn.execute(
-                text(
-                    f"SELECT {_sql_ident(name_col)} AS nm FROM {_sql_ident('customers')} "
-                    f"WHERE {' AND '.join(where_parts)}"
-                ),
+                text(select_sql),
                 cbind,
             )
             .mappings()
@@ -367,7 +387,11 @@ def _customer_pg_delete_anywhere(customer_id: int) -> None:
         append_mod_scope_where(where_parts, pbind, pu_cols)
         with eng.connect() as conn:
             r = conn.execute(
-                text(f"SELECT unit_name FROM purchase_units WHERE {' AND '.join(where_parts)}"),
+                text(
+                    _sql_select_from_where(
+                        "unit_name", "purchase_units", " AND ".join(where_parts)
+                    )
+                ),
                 pbind,
             ).first()
             if r:
@@ -403,3 +427,181 @@ def _customer_pg_delete_anywhere(customer_id: int) -> None:
 
 def _customer_delete_unified(customer_id: int) -> None:
     _customer_pg_delete_anywhere(customer_id)
+
+
+def _products_pg_col_names() -> set[str]:
+    eng = get_sync_engine()
+    insp = inspect(eng)
+    return {c["name"] for c in insp.get_columns("products")}
+
+
+def products_pg_update_row(
+    pid: int,
+    body: dict,
+    *,
+    parse_price,
+    parse_quantity,
+    parse_is_active,
+) -> None:
+    eng = get_sync_engine()
+    col_names = _products_pg_col_names()
+    if not {"id", "model_number", "name"}.issubset(col_names):
+        raise HTTPException(
+            status_code=503,
+            detail="products 表缺少必要列（至少需要 id、model_number、name）。",
+        )
+    name = str(body.get("name") or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="产品名称不能为空")
+
+    sets: list[str] = []
+    params: dict[str, object] = {"pid": pid}
+
+    if "model_number" in col_names:
+        mn = body.get("model_number")
+        sets.append("model_number = :model_number")
+        params["model_number"] = (str(mn).strip() if mn is not None else "")[:120]
+    sets.append("name = :name")
+    params["name"] = name[:500]
+    if "specification" in col_names:
+        sp = body.get("specification")
+        sets.append("specification = :specification")
+        params["specification"] = None if sp is None else str(sp)
+    if "price" in col_names:
+        sets.append("price = :price")
+        params["price"] = parse_price(body.get("price"))
+    if "quantity" in col_names:
+        sets.append("quantity = :quantity")
+        params["quantity"] = parse_quantity(body.get("quantity"))
+    if "unit" in col_names:
+        un = body.get("unit")
+        sets.append("unit = :unit")
+        params["unit"] = (str(un).strip() if un is not None else "")[:200]
+    if "description" in col_names:
+        dv = body.get("description")
+        sets.append("description = :description")
+        params["description"] = None if dv is None else str(dv)
+    if "category" in col_names:
+        cv = body.get("category")
+        sets.append("category = :category")
+        params["category"] = None if cv is None else str(cv)[:200]
+    if "brand" in col_names:
+        bv = body.get("brand")
+        sets.append("brand = :brand")
+        params["brand"] = None if bv is None else str(bv)[:200]
+    if "is_active" in col_names:
+        ia = parse_is_active(body.get("is_active"))
+        if ia is not None:
+            sets.append("is_active = :is_active")
+            params["is_active"] = ia
+    if "updated_at" in col_names:
+        sets.append("updated_at = NOW()")
+    if not sets:
+        raise HTTPException(status_code=400, detail="没有可更新的列")
+
+    mod_and = products_update_or_delete_mod_and(col_names, params)
+    sql = "UPDATE products SET " + ", ".join(sets) + " WHERE id = :pid" + mod_and
+    with eng.begin() as conn:
+        r = conn.execute(text(sql), params)
+        if r.rowcount == 0:
+            raise HTTPException(status_code=404, detail="产品不存在")
+
+
+def products_pg_insert_row(
+    body: dict,
+    *,
+    parse_price,
+    parse_quantity,
+    parse_is_active,
+) -> int:
+    from app.application.excel_imports import _norm_model
+
+    eng = get_sync_engine()
+    col_names = _products_pg_col_names()
+    if not {"model_number", "name"}.issubset(col_names):
+        raise HTTPException(
+            status_code=503,
+            detail="products 表缺少必要列（至少需要 model_number、name）。",
+        )
+    name = str(body.get("name") or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="产品名称不能为空")
+    spec = str(body.get("specification") or "").strip()
+    mn_raw = body.get("model_number")
+    model_number = str(mn_raw).strip() if mn_raw is not None else ""
+    if not model_number:
+        model_number = _norm_model("", name, spec)
+
+    icols: list[str] = []
+    params: dict[str, object] = {}
+
+    def _add(col: str, val: object) -> None:
+        if col in col_names:
+            icols.append(col)
+            params[col] = val
+
+    _add("model_number", model_number[:120])
+    _add("name", name[:500])
+    _add("specification", spec or None)
+    _add("price", parse_price(body.get("price")))
+    _add("quantity", parse_quantity(body.get("quantity")))
+    unit = str(body.get("unit") or "").strip()[:200]
+    _add("unit", unit)
+    _add(
+        "description",
+        str(body.get("description") or "") if body.get("description") is not None else None,
+    )
+    _add(
+        "category",
+        str(body.get("category") or "")[:200] if body.get("category") is not None else None,
+    )
+    _add("brand", str(body.get("brand") or "")[:200] if body.get("brand") is not None else None)
+    ia = parse_is_active(body.get("is_active"))
+    if ia is not None and "is_active" in col_names:
+        _add("is_active", ia)
+    if not icols:
+        raise HTTPException(status_code=500, detail="无法构造 INSERT 列")
+    mid = scoped_mod_id()
+    if "xcagi_mod_id" in col_names and mid:
+        icols.append("xcagi_mod_id")
+        params["xcagi_mod_id"] = mid
+    quoted = ", ".join(_sql_ident(c) for c in icols)
+    ph = ", ".join(":" + c for c in icols)
+    sql = _sql_insert_returning("products", quoted, ph)
+    with eng.begin() as conn:
+        new_id = conn.execute(text(sql), params).scalar_one()
+    return int(new_id)
+
+
+def products_pg_delete_row(pid: int) -> None:
+    eng = get_sync_engine()
+    pcols = _products_pg_col_names()
+    del_params: dict[str, object] = {"pid": pid}
+    mod_and = products_update_or_delete_mod_and(pcols, del_params)
+    sql = "DELETE FROM products WHERE id = :pid" + mod_and
+    with eng.begin() as conn:
+        r = conn.execute(text(sql), del_params)
+        if r.rowcount == 0:
+            raise HTTPException(status_code=404, detail="产品不存在")
+
+
+def products_pg_batch_delete_rows(raw_ids: list) -> tuple[int, list[str]]:
+    eng = get_sync_engine()
+    pcols = _products_pg_col_names()
+    deleted = 0
+    skipped: list[str] = []
+    with eng.begin() as conn:
+        for raw in raw_ids:
+            pid = _product_parse_id(raw)
+            if pid is None:
+                skipped.append(str(raw))
+                continue
+            del_params = {"pid": pid}
+            mod_and = products_update_or_delete_mod_and(pcols, del_params)
+            sql = "DELETE FROM products WHERE id = :pid" + mod_and
+            r = conn.execute(text(sql), del_params)
+            if r.rowcount:
+                deleted += 1
+            else:
+                skipped.append(str(raw))
+    return deleted, skipped

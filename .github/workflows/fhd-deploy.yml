@@ -95,7 +95,7 @@ jobs:
             printf '%s\n' "${KUBE_CONFIG}" > ~/.kube/config
             echo "configured=1" >> "$GITHUB_OUTPUT"
           else
-            echo "::warning::No KUBE_CONFIG / KUBE_CONFIG_B64 — skipping cluster apply."
+            echo "::warning::No KUBE_CONFIG / KUBE_CONFIG_B64 — skipping cluster apply (staging)."
             echo "configured=0" >> "$GITHUB_OUTPUT"
           fi
 
@@ -184,8 +184,9 @@ jobs:
             printf '%s\n' "${KUBE_CONFIG}" > ~/.kube/config
             echo "configured=1" >> "$GITHUB_OUTPUT"
           else
-            echo "::warning::No KUBE_CONFIG / KUBE_CONFIG_B64 — skipping cluster apply."
+            echo "::error::Production deploy requires KUBE_CONFIG or KUBE_CONFIG_B64 secret."
             echo "configured=0" >> "$GITHUB_OUTPUT"
+            exit 1
           fi
 
       - name: Deploy FHD API (Kubernetes manifests)
@@ -243,9 +244,3 @@ jobs:
         run: |
           echo "Production deploy finished."
           echo "FHD API image: ${{ needs.resolve-fhd-api-image.outputs.fhd_api_image }}"
-
-      - name: Create GitHub Release
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/FHD/v')
-        uses: softprops/action-gh-release@v1
-        with:
-          generate_release_notes: true

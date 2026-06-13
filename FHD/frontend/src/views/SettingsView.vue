@@ -2,13 +2,13 @@
   <div class="page-view settings-page" id="view-settings">
     <div class="page-content settings-page__scroll">
       <div class="settings-layout">
-        <aside class="settings-profile" aria-label="账号">
+        <aside class="settings-profile" :aria-label="$t('settings.profileAria')">
           <button
             type="button"
             class="settings-profile__avatar"
             :class="{ 'is-guest': !isLoggedIn, 'is-loading': accountLoading || avatarUploading }"
             :disabled="!isLoggedIn || accountLoading || avatarUploading"
-            :title="isLoggedIn ? '点击更换头像' : '登录后可设置头像'"
+            :title="isLoggedIn ? $t('settings.changeAvatar') : $t('settings.avatarAfterLogin')"
             @click="onAvatarClick"
           >
             <img
@@ -19,7 +19,7 @@
             >
             <span v-else-if="avatarInitial" class="settings-profile__avatar-letter">{{ avatarInitial }}</span>
             <i v-else class="fa fa-user" aria-hidden="true"></i>
-            <span v-if="isLoggedIn" class="settings-profile__avatar-hint">更换</span>
+            <span v-if="isLoggedIn" class="settings-profile__avatar-hint">{{ $t('settings.changeAvatarShort') }}</span>
           </button>
           <input
             ref="avatarInputRef"
@@ -40,21 +40,21 @@
               :disabled="logoutLoading"
               @click="onLogout"
             >
-              {{ logoutLoading ? '退出中…' : '退出登录' }}
+              {{ logoutLoading ? $t('settings.loggingOut') : $t('settings.logout') }}
             </button>
             <router-link
               v-else
               class="settings-profile__btn settings-profile__btn--primary"
               :to="loginRoute"
             >
-              登录
+              {{ $t('settings.login') }}
             </router-link>
           </div>
         </aside>
 
         <div class="settings-layout__main">
         <header class="settings-page__hero">
-          <h1 class="settings-page__title">系统设置</h1>
+          <h1 class="settings-page__title">{{ $t('settings.pageTitle') }}</h1>
         </header>
 
         <div class="settings-list">
@@ -69,7 +69,7 @@
             <span class="settings-row__icon settings-row__icon--indigo" aria-hidden="true">
               <i class="fa fa-id-card"></i>
             </span>
-            <span class="settings-row__label">个人主页</span>
+            <span class="settings-row__label">{{ $t('settings.profileHome') }}</span>
             <span class="settings-row__meta">{{ profileHomeSummary }}</span>
             <span class="settings-row__arrow" aria-hidden="true"></span>
           </summary>
@@ -77,35 +77,35 @@
             <div class="settings-profile-form">
               <div class="settings-profile-form__editable">
                 <label class="settings-profile-form__field">
-                  <span class="settings-profile-form__label">展示名称</span>
+                  <span class="settings-profile-form__label">{{ $t('settings.displayName') }}</span>
                   <input
                     v-model="profileDisplayNameDraft"
                     class="settings-profile-form__input"
                     type="text"
                     maxlength="64"
-                    placeholder="在侧栏与协作中显示的名称"
+                    :placeholder="$t('settings.displayNamePlaceholder')"
                     autocomplete="name"
                   >
                 </label>
                 <label class="settings-profile-form__field">
-                  <span class="settings-profile-form__label">邮箱</span>
+                  <span class="settings-profile-form__label">{{ $t('settings.email') }}</span>
                   <input
                     v-model="profileEmailDraft"
                     class="settings-profile-form__input"
                     type="email"
                     maxlength="128"
-                    placeholder="可选，用于找回账号"
+                    :placeholder="$t('settings.emailPlaceholder')"
                     autocomplete="email"
                   >
                 </label>
               </div>
               <div class="settings-profile-form__readonly" aria-readonly="true">
-                <span class="settings-profile-form__label">登录名</span>
+                <span class="settings-profile-form__label">{{ $t('settings.loginName') }}</span>
                 <span class="settings-profile-form__readonly-value">{{
                   localUser?.username || '—'
                 }}</span>
                 <p class="settings-profile-form__hint muted">
-                  由修茈市场/本机账号绑定，此处不可修改。
+                  {{ $t('settings.loginNameHint') }}
                 </p>
               </div>
               <div class="settings-profile-form__actions">
@@ -115,7 +115,7 @@
                   :disabled="!profileFormDirty || profileSaving"
                   @click="saveProfile"
                 >
-                  {{ profileSaving ? '保存中…' : '保存资料' }}
+                  {{ profileSaving ? $t('settings.saving') : $t('settings.saveProfile') }}
                 </button>
               </div>
             </div>
@@ -132,8 +132,8 @@
             <span class="settings-row__icon settings-row__icon--blue" aria-hidden="true">
               <i class="fa fa-credit-card"></i>
             </span>
-            <span class="settings-row__label">模型服务</span>
-            <span class="settings-row__meta">钱包 · 套餐</span>
+            <span class="settings-row__label">{{ $t('settings.modelService') }}</span>
+            <span class="settings-row__meta">{{ $t('settings.modelServiceMeta') }}</span>
             <span class="settings-row__arrow" aria-hidden="true"></span>
           </summary>
           <div class="settings-card__body settings-card__body--flush">
@@ -145,7 +145,7 @@
               title="模型服务"
             />
             <p v-else class="muted" style="padding: 16px; margin: 0;">
-              模型支付 Mod（xcagi-model-payment-bridge）未安装。回装后可在此配置钱包与套餐。
+              {{ $t('settings.modelServiceMissing') }}
             </p>
           </div>
         </details>
@@ -254,7 +254,7 @@
             <span class="settings-row__icon settings-row__icon--green" aria-hidden="true">
               <i class="fa fa-sliders"></i>
             </span>
-            <span class="settings-row__label">基本设置</span>
+            <span class="settings-row__label">{{ $t('settings.basicSettings') }}</span>
             <span class="settings-row__meta">{{ basicSettingsSummary }}</span>
             <span class="settings-row__arrow" aria-hidden="true"></span>
           </summary>
@@ -265,7 +265,7 @@
             <span class="settings-item__icon settings-row__icon--cyan" aria-hidden="true">
               <i class="fa fa-columns"></i>
             </span>
-            <label class="settings-item__label" for="settings-sidebar-theme">侧栏样式</label>
+            <label class="settings-item__label" for="settings-sidebar-theme">{{ $t('settings.sidebarTheme') }}</label>
             <select
               id="settings-sidebar-theme"
               v-model="sidebarThemePreset"
@@ -307,22 +307,38 @@
             <span class="settings-item__icon settings-row__icon--indigo" aria-hidden="true">
               <i class="fa fa-user-circle"></i>
             </span>
-            <label class="settings-item__label" for="settings-assistant-name">助手名称</label>
+            <label class="settings-item__label" for="settings-assistant-name">{{ $t('settings.assistantName') }}</label>
             <input
               id="settings-assistant-name"
               v-model="assistantName"
               class="settings-item__control settings-item__control--text"
               type="text"
               maxlength="24"
-              placeholder="修茈"
+              :placeholder="$t('settings.assistantNamePlaceholder')"
             >
+          </div>
+
+          <div class="settings-item">
+            <span class="settings-item__icon settings-row__icon--indigo" aria-hidden="true">
+              <i class="fa fa-language"></i>
+            </span>
+            <label class="settings-item__label" for="settings-locale">{{ $t('settings.language') }}</label>
+            <select
+              id="settings-locale"
+              v-model="appLocale"
+              class="settings-item__control settings-item__control--select"
+              @change="onLocaleChange"
+            >
+              <option value="zh-CN">{{ $t('settings.localeZhCN') }}</option>
+              <option value="en-US">{{ $t('settings.localeEnUS') }}</option>
+            </select>
           </div>
 
           <div class="settings-item settings-item--readonly">
             <span class="settings-item__icon settings-row__icon--slate" aria-hidden="true">
               <i class="fa fa-desktop"></i>
             </span>
-            <span class="settings-item__label">系统名称</span>
+            <span class="settings-item__label">{{ $t('settings.systemName') }}</span>
             <span class="settings-item__value">{{ systemDisplayName }}</span>
           </div>
 
@@ -346,14 +362,14 @@
             <span class="settings-item__icon settings-row__icon--violet" aria-hidden="true">
               <i class="fa fa-cloud"></i>
             </span>
-            <label class="settings-item__label" for="settings-ai-mode">AI 模式</label>
+            <label class="settings-item__label" for="settings-ai-mode">{{ $t('settings.aiMode') }}</label>
             <select
               id="settings-ai-mode"
               v-model="aiMode"
               class="settings-item__control settings-item__control--select"
             >
-              <option value="online">在线（DeepSeek）</option>
-              <option value="offline">离线（本地）</option>
+              <option value="online">{{ $t('settings.aiModeOnline') }}</option>
+              <option value="offline">{{ $t('settings.aiModeOffline') }}</option>
             </select>
           </div>
         </div>
@@ -475,7 +491,7 @@
 
         <div class="settings-card__footer">
           <button class="settings-primary-btn" type="button" @click="saveSettings" :disabled="loading">
-            {{ loading ? '保存中…' : '保存设置' }}
+            {{ loading ? $t('settings.saving') : $t('settings.saveSettings') }}
           </button>
         </div>
           </div>
@@ -522,13 +538,13 @@
             <span class="settings-row__icon settings-row__icon--slate" aria-hidden="true">
               <i class="fa fa-info-circle"></i>
             </span>
-            <span class="settings-row__label">关于</span>
+            <span class="settings-row__label">{{ $t('settings.about') }}</span>
             <span class="settings-row__meta">{{ appVersionLabel }}</span>
             <span class="settings-row__arrow" aria-hidden="true"></span>
           </summary>
           <div class="settings-card__body settings-card__body--compact">
             <p class="settings-about-line">{{ systemDisplayName }}</p>
-            <p class="muted settings-about-hint">连点「关于」5 次可进入调试页面（仅本地流程模拟）</p>
+            <p class="muted settings-about-hint">{{ $t('settings.aboutDebugHint') }}</p>
           </div>
         </details>
         </div>
@@ -540,6 +556,7 @@
 
 <script setup lang="ts">
 import { onMounted, onActivated, onBeforeUnmount, ref, computed, watch, nextTick } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import { authApi, type User } from '../api/auth';
 import { LS_MARKET_USER_JSON } from '../api/marketAccount';
@@ -577,6 +594,14 @@ import HostModBridgeView from '@/components/HostModBridgeView.vue';
 import MobilePairingQrCard from '@/components/settings/MobilePairingQrCard.vue';
 import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl';
 import adminAuditApi, { type AuditLogEntry } from '@/api/adminAudit';
+import { setAppLocale } from '@/i18n';
+
+const { t, locale } = useI18n();
+const appLocale = ref<'zh-CN' | 'en-US'>((locale.value === 'en-US' ? 'en-US' : 'zh-CN'));
+
+function onLocaleChange() {
+  setAppLocale(appLocale.value);
+}
 
 const isAdminConsole = isAdminConsoleSpa();
 const industryStore = useIndustryStore();
@@ -797,14 +822,14 @@ const profileBrandTitle = computed(() => {
   const brand = String(accountProfileStore.displayBrand || '').trim();
   if (brand) return brand;
   const u = localUser.value;
-  if (!u) return '未登录';
+  if (!u) return t('settings.notLoggedIn');
   const name = String(u.display_name || u.username || '').trim();
-  return name || '用户';
+  return name || t('settings.user');
 });
 
 const profileSubline = computed(() => {
   const u = localUser.value;
-  if (!u) return '登录后同步修茈市场';
+  if (!u) return t('settings.loginSyncHint');
   const username = String(u.username || '').trim();
   if (isSunbirdAccountUsername(username)) {
     const mod = activeModMeta.value;
@@ -888,7 +913,7 @@ const profileAvatarUrl = computed(() => {
 
 const profileHomeSummary = computed(() => {
   const name = profileDisplayNameDraft.value.trim() || localUser.value?.username || '';
-  return name ? `${name} · 头像与资料` : '头像与资料';
+  return name ? `${name} · ${t('settings.profileHomeSummary')}` : t('settings.profileHomeSummary');
 });
 
 const profileFormDirty = computed(() => {
@@ -1060,7 +1085,7 @@ const modSettingsFoldMeta = computed(() => {
 });
 
 const basicSettingsSummary = computed(() => {
-  const mode = aiMode.value === 'offline' ? '离线' : '在线';
+  const mode = aiMode.value === 'offline' ? t('settings.offline') : t('settings.online');
   return `${normalizedAssistantName.value} · ${mode}`;
 });
 

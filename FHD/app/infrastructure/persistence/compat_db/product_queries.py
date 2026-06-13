@@ -14,7 +14,10 @@ from sqlalchemy import inspect, text
 from sqlalchemy.exc import OperationalError
 
 from app.infrastructure.db.sync_engine import get_sync_engine
-from app.infrastructure.persistence.compat_db.base import _EXPORT_MAX_ROWS
+from app.infrastructure.persistence.compat_db.base import (
+    _EXPORT_MAX_ROWS,
+    _sql_statement_timeout_ms,
+)
 from app.shell.mod_row_scope import append_mod_scope_where
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -49,7 +52,7 @@ def _load_products_list_impl_pg(
                 meta_timeout_ms = 2000
             try:
                 if meta_timeout_ms > 0:
-                    conn.execute(text(f"SET statement_timeout TO {meta_timeout_ms}"))
+                    conn.execute(text(_sql_statement_timeout_ms(meta_timeout_ms)))
                 insp = inspect(conn)
                 table_names = set(insp.get_table_names())
                 if "products" not in table_names:
@@ -103,7 +106,7 @@ def _load_products_list_impl_pg(
         where_sql = (" WHERE " + " AND ".join(where_parts)) if where_parts else ""
 
         total: int | None = None
-        count_sql = f"SELECT COUNT(*) FROM products{where_sql}"
+        count_sql = "SELECT COUNT(*) FROM products" + where_sql
         with eng.connect() as conn:
             try:
                 timeout_ms = int(
@@ -113,7 +116,7 @@ def _load_products_list_impl_pg(
                 timeout_ms = 1500
             try:
                 if timeout_ms > 0:
-                    conn.execute(text(f"SET statement_timeout TO {timeout_ms}"))
+                    conn.execute(text(_sql_statement_timeout_ms(timeout_ms)))
                 total = int(conn.execute(text(count_sql), params).scalar_one())
             except RECOVERABLE_ERRORS:
                 total = None
@@ -145,7 +148,15 @@ def _load_products_list_impl_pg(
             if (prefer_created_at and "created_at" in col_names)
             else "id DESC"
         )
-        data_sql = f"SELECT {', '.join(sel)} FROM products{where_sql} ORDER BY {order} LIMIT :lim OFFSET :off"
+        data_sql = (
+            "SELECT "
+            + ", ".join(sel)
+            + " FROM products"
+            + where_sql
+            + " ORDER BY "
+            + order
+            + " LIMIT :lim OFFSET :off"
+        )
         qparams = {**params, "lim": per_page, "off": offset}
         rows: list[Any] = []
         data_query_err: Exception | None = None
@@ -158,7 +169,7 @@ def _load_products_list_impl_pg(
                 query_timeout_ms = 8000
             try:
                 if query_timeout_ms > 0:
-                    conn.execute(text(f"SET statement_timeout TO {query_timeout_ms}"))
+                    conn.execute(text(_sql_statement_timeout_ms(query_timeout_ms)))
                 rows = conn.execute(text(data_sql), qparams).mappings().all()
             except RECOVERABLE_ERRORS as e:
                 data_query_err = e
