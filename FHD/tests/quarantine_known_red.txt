@@ -1,0 +1,112 @@
+# 后端测试隔离名单（known-red quarantine） — v10 线内迭代
+# 由 scripts/dev/test_fast.sh 读取并 --ignore；这是债务燃尽清单（非隐藏跳过）。
+# 背景：本分支 CI 与本地均红，含幽灵测试(测未实现API)/环境耦合(redis,postgres)/API漂移。
+# 见 docs/architecture/REFACTOR_DECOMPOSITION_PLAN.md §6。修一个删一行。
+#
+# 桶: INFRA=需外部服务/文件  DRIFT=测已删改API(幽灵/漂移)  ASSERT=断言  OTHER=其它
+
+# ===== INFRA (1 文件) =====
+tests/test_db/test_retry_handler_backoff.py  # INFRA:9
+
+# ===== DRIFT (11 文件) =====
+tests/neuro/test_bus_publish_failure_paths.py  # DRIFT:2
+tests/neuro/test_runtime_diagnostics_snapshot.py  # DRIFT:1
+tests/test_application/test_auth_app_service_token_rotation.py  # DRIFT:10
+tests/test_application/test_product_app_service_upsert_rollback.py  # DRIFT:6
+tests/test_coverage_ramp_phase54_routes.py  # DRIFT:8
+tests/test_coverage_ramp_phase55_backend.py  # DRIFT:5
+tests/test_db/test_session_cache_concurrency.py  # DRIFT:6
+tests/test_utils/test_audit_logger_failure_paths.py  # DRIFT:9
+tests/test_utils/test_deployment_env_probe.py  # DRIFT:18
+tests/test_utils/test_observability_m0_metrics.py  # DRIFT:4
+tests/test_utils/test_rate_limiter_circuit_breaker.py  # DRIFT:15
+
+# ===== ASSERT (39 文件) =====
+tests/application/test_local_duty_graph_health.py  # ASSERT:1
+tests/neuro/test_initializer_registration_rollback.py  # ASSERT:1
+tests/neuro/test_sla_controller_threshold.py  # ASSERT:2
+tests/release/test_android_deliverable_contract.py  # ASSERT:1
+tests/routes/test_code_editor_permissions.py  # ASSERT:1
+tests/routes/test_desktop_runtime_status.py  # ASSERT:4
+tests/test_application/test_finance_app_service_parse_errors.py  # ASSERT:1
+tests/test_aux_employee_store.py  # ASSERT:2
+tests/test_coverage_ramp_routes.py  # ASSERT:10
+tests/test_customer_service_pages_compat.py  # ASSERT:1
+tests/test_db/test_sqlite_pk_reuse.py  # ASSERT:1
+tests/test_db/test_validators_edge_cases.py  # ASSERT:2
+tests/test_decoupling_mods.py  # ASSERT:5
+tests/test_deliverable_status.py  # ASSERT:1
+tests/test_im_sync.py  # ASSERT:1
+tests/test_infrastructure/test_db_engine_routing.py  # ASSERT:3
+tests/test_infrastructure/test_intent_cache_miss_expire.py  # ASSERT:1
+tests/test_infrastructure/test_mods_manifest_parse.py  # ASSERT:1
+tests/test_infrastructure/test_ocr_adapter_switch.py  # ASSERT:4
+tests/test_infrastructure/test_rag_hybrid_retriever_fallback.py  # ASSERT:3
+tests/test_infrastructure/test_tts_edge_fallback.py  # ASSERT:3
+tests/test_middleware/test_security_headers_csp.py  # ASSERT:1
+tests/test_mod_views_compat.py  # ASSERT:2
+tests/test_neuro_migration_smoke.py  # ASSERT:2
+tests/test_planner_native_tools.py  # ASSERT:11
+tests/test_planner_tools_dispatch.py  # ASSERT:2
+tests/test_planner_tools_mod.py  # ASSERT:4
+tests/test_routes/test_admin_audit_logs.py  # ASSERT:3
+tests/test_routes/test_auth_phone_login.py  # ASSERT:3
+tests/test_routes/test_auth_subscription_register.py  # ASSERT:3
+tests/test_routes/test_health_capabilities.py  # ASSERT:1
+tests/test_routes/test_oidc_auth.py  # ASSERT:4
+tests/test_routes/test_search_v0.py  # ASSERT:2
+tests/test_routes/test_smoke_apis.py  # ASSERT:12
+tests/test_services/test_user_memory_persistence_failures.py  # ASSERT:11
+tests/test_shipment_tasks.py  # ASSERT:2
+tests/test_sla_health_probe.py  # ASSERT:1
+tests/test_utils/test_printer_automation.py  # ASSERT:10
+tests/unit/infrastructure/test_domain_registry.py  # ASSERT:1
+
+# ===== OTHER (46 文件) =====
+tests/neuro/test_command_gateway_dispatch_errors.py  # OTHER:1
+tests/neuro/test_health_monitor_probe_recovery.py  # OTHER:2
+tests/routes/test_debug_client_log_ingest.py  # OTHER:2
+tests/routes/test_fhd_meta_serialization.py  # OTHER:4
+tests/routes/test_health_k8s_probe.py  # OTHER:5
+tests/test_application/test_ai_chat_app_service.py  # OTHER:2
+tests/test_application/test_app_services.py  # OTHER:1
+tests/test_application/test_customer_app_service_merge_conflict.py  # OTHER:2
+tests/test_application/test_material_app_service_unit_conversion.py  # OTHER:1
+tests/test_application/test_tenant_subscription.py  # OTHER:1
+tests/test_approval_bridge_mod.py  # OTHER:2
+tests/test_approval_pages_compat.py  # OTHER:1
+tests/test_coverage_ramp_phase41_routes.py  # OTHER:4
+tests/test_coverage_ramp_phase5_routes.py  # OTHER:2
+tests/test_db/test_session_module.py  # OTHER:3
+tests/test_desktop_status_api.py  # OTHER:1
+tests/test_employee_pack_bridge_mod.py  # OTHER:1
+tests/test_erp_customers_facade.py  # OTHER:2
+tests/test_erp_domain_mod.py  # OTHER:9
+tests/test_erp_pages_compat.py  # OTHER:1
+tests/test_erp_products_facade.py  # OTHER:3
+tests/test_erp_repository_registry.py  # OTHER:4
+tests/test_industry_seed.py  # OTHER:1
+tests/test_lan_bridge_mod.py  # OTHER:2
+tests/test_lan_pages_compat.py  # OTHER:1
+tests/test_mobile_api.py  # OTHER:3
+tests/test_mobile_api_extensions.py  # OTHER:2
+tests/test_model_payment_bridge_mod.py  # OTHER:2
+tests/test_model_payment_pages_compat.py  # OTHER:1
+tests/test_mods_list_etag.py  # OTHER:1
+tests/test_neuro_bus_bridge_mod.py  # OTHER:2
+tests/test_neuro_bus_handler_registry.py  # OTHER:3
+tests/test_neuro_bus_runtime.py  # OTHER:2
+tests/test_openapi_consistency.py  # OTHER:2
+tests/test_planner_mod_facade.py  # OTHER:2
+tests/test_planner_pages_compat.py  # OTHER:2
+tests/test_routes/test_im_v0.py  # OTHER:2
+tests/test_services/test_contract_expiry_notify.py  # OTHER:1
+tests/test_services/test_extract_log_service.py  # OTHER:3
+tests/test_services/test_printer_service.py  # OTHER:4
+tests/test_slo_metrics_histogram.py  # OTHER:2
+tests/test_start_lan_launcher.py  # OTHER:1
+tests/test_utils/test_mobile_api_responses.py  # OTHER:5
+tests/test_utils/test_redis_cache_fallback.py  # OTHER:7
+tests/test_utils/test_utils.py  # OTHER:8
+tests/test_wechat_tasks.py  # OTHER:2
+
