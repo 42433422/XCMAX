@@ -1,72 +1,79 @@
-# 覆盖率分阶段提升与补测清单
+# 覆盖率分阶段提升与守护机制
 
-本文档与 [`pyproject.toml`](../../pyproject.toml) 中的 `tool.coverage.report.fail_under` 对齐。
+本文档与 [`pyproject.toml`](../../pyproject.toml) `[tool.coverage.report].fail_under`、
+[`metrics/coverage_ratchet_baseline.json`](../../metrics/coverage_ratchet_baseline.json) 与
+[`frontend/vitest.config.js`](../../frontend/vitest.config.js) thresholds 对齐。
 
-## 双口径 SSOT（禁止混报）
+## 唯一可复现 SSOT（2026-06-14 重订）
 
-| 口径 | 含义 | 当前实测（2026-06-04） | 门禁 |
-|------|------|------------------------|------|
-| **`full_app`** | `pytest --cov=app` 整棵 `app/` | **60.63%**（`metrics/coverage-dual-summary.json`） | 观测 only，**无** CI fail |
-| **CI 窄包** | `pyproject.toml` `[tool.coverage.run]` include/omit 子集 | 与 `full_app` 同次跑分可能不同 | **`fail_under=70`**（`ci-cd.yml`） |
+历史上存在三份互相矛盾的"全量"基线（36.14 / 60.63 / 66.33），语句数 51,781→77,286 漂移，
+根因是覆盖率随**可选重依赖**（torch/transformers/cv2/paddleocr/sklearn 等）是否安装而波动——
+缺依赖时大量模块 import 失败被记 0%。CI 与开发 `.venv` 均**不装 ml extra**，故：
 
-对外材料（周报、尽调、CLAIMED）须引用 **`full_app.pct`** 作为全量真实值；不得将 plan 目标 88% 或窄包达标误报为全量覆盖率。
+> **唯一对外口径 = 不含 ml extra 的全量 `source=[app]` 实测。** 富依赖环境数字（58/60.63/66.33）一律退役，禁止混报。
 
-## 阶段目标
+| 维度 | 后端基线 | 后端目标 | 前端基线 | 前端目标 |
+|------|---------:|---------:|---------:|---------:|
+| 行 | **36.35%** | ≥90% | **21.52%** | ≥80% |
+| 分支 | **18.42%** | ≥85% | **49.07%** | ≥75% |
+| 函数 | n/a（coverage.py 不原生统计） | — | **26.08%** | ≥80% |
 
-| 阶段 | `fail_under` 目标 | 说明 |
-|------|-------------------|------|
-| M1 | ~~40~~ | 已完成 |
-| M2 | ~~55~~ | 已完成（扩展 `app/infrastructure/templates/*`） |
-| **M3（当前）** | **70** | CI 窄包 + `app/application` / `app/domain/shipment` / `app/http` |
-| M4（计划） | **80** | 逐步缩减 `omit`（`mod_sdk` / `shell` 最后） |
+详见 [`COVERAGE_GAP.md`](COVERAGE_GAP.md)（Top-N 未覆盖清单）。
 
-每进入下一阶段前：在本地与 CI 执行 `pytest tests/ --cov=app --cov-report=term-missing`，确认全绿后再改 `fail_under`。
+## 铁律6：行/分支独立统计的工程取舍
 
-## 补测优先级（建议顺序）
+`coverage.py` 开启 `branch=true` 后，`percent_covered` 变成"行+分支合并"指标（基线 32.28%），
+不再等于纯行覆盖率。为保持 `fail_under` 仍是**行覆盖率** floor（与"35→90"一致）：
 
-### P0 — 变更频繁、故障代价高
+- `[tool.coverage.run] branch = true`：一次测量同时拿行+分支数据。
+- 标准命令传 `--cov-fail-under=0`：关掉 coverage 自带的合并指标门禁。
+- `scripts/dev/coverage_ratchet.py --check`：从 `coverage.json` 原始计数分别算
+  行覆盖率（`covered_lines/num_statements`）与分支覆盖率（`covered_branches/num_branches`），
+  各自对 floor 把关。行 floor 取自 `pyproject.toml fail_under`；分支 floor 与前端各项 floor 存
+  `metrics/coverage_ratchet_baseline.json`（只升不降）。
 
-1. **`app/application/`** — 应用服务编排
-2. **`app/neuro_bus/bus.py`** — 发布、队列满、可靠性层
+## 覆盖率棘轮（只升不降）
 
-### P1 — 领域与基础设施
-
-3. **`app/domain/shipment`**
-4. **`app/infrastructure/templates/`**
-5. **`app/http/response_envelope.py`** — API 信封 SSOT
-
-### P2 — 路由与集成
-
-6. **`app/fastapi_routes/`** — RouteRegistry、冲突检测
-
-## 配置位置
-
-- 根目录：[`pyproject.toml`](../../pyproject.toml) → `[tool.coverage.report]` → `fail_under`
-- CI：[`/.github/workflows/ci-cd.yml`](../../.github/workflows/ci-cd.yml) → `--cov-fail-under=70`
-
-## pytest 与路径说明
+与 `check_layer_ratchet.py` / `count_type_debt.py` / `count_raw_sql.py` 同级：
 
 ```bash
-CI_STABLE_ONLY=1 python -m pytest tests/ \
-  --cov=app.neuro_bus --cov=app.middleware --cov=app.fastapi_routes \
-  --cov=app.application --cov=app.domain.shipment --cov=app.http \
-  --cov=app.utils.rate_limiter --cov=app.utils.password_hash --cov=app.config \
-  --cov=app.db.session_cache --cov=app.utils.redis_cache \
-  --cov=app.infrastructure.templates \
-  --cov-fail-under=70
+# CI 门禁：覆盖率回退即失败（ci-cd.yml backend-test 已接入）
+python scripts/dev/coverage_ratchet.py --check --require-backend
+
+# 本地补测后提升基线（只升；同步 vitest thresholds + 写 metrics/coverage-history.jsonl）
+python scripts/dev/coverage_ratchet.py --bump
+
+# 趋势
+python scripts/dev/coverage_ratchet.py --history
 ```
 
-前端 Vitest 门槛：**50%** lines/statements（见 `frontend/vitest.config.js`；gate 聚焦已有单测的 constants/stores/utils/composables 子集，视图由 Playwright 覆盖）。
+与其它棘轮一致：**CI 只跑 `--check`**；`--bump`（提升 floor）是开发者本地动作，提交进版本库。
 
-## 本地 pytest + coverage 排障（2026-06-07）
+## 复测命令（可复现，铁律5）
 
-此前「66 个 SQLAlchemy 采集错误」实为 **pytest-cov 预 import + ORM 重复注册** 与 **缺失/错误 re-export**，并非数据库本身故障。
+```bash
+# 后端（.venv = CI 等价依赖）
+cd FHD
+XCAGI_SKIP_LEGACY_COMPAT_ROUTES=1 .venv/bin/python -m pytest tests/ \
+  --cov --cov-branch --cov-fail-under=0 \
+  --cov-report=json:coverage.json --cov-report=term-missing -q
 
-| 现象 | 根因 | 处理 |
-|------|------|------|
-| `Table 'ai_tool_categories' is already defined`（带 `--cov`） | cov 采集多次 import model | `tests/conftest.py` 顶部 `import app.db.models`；`pytest.ini` 勿设 `coverage:run source=app` |
-| `No module named app.db.models.miniprogram` | 模型文件缺失 | `app/db/models/miniprogram.py` |
-| `cannot import _business_mod_json_block` | `domains/db/*` 星号 export 不含 `_` 前缀 | `domains/db/{base,queries,writes,product_queries}.py` 显式 mirror |
-| 未落地模块 `ImportError` | coverage ramp 超前 | `tests/conftest.py` → `collect_ignore` |
+# 前端（全量 src/**）
+cd FHD/frontend && CI=true npm run test:coverage
+```
 
-本地验证（2026-06-07）：`1733` 用例可采集；全量跑通约 **30%** 窄包覆盖率（M3 70% 门槛仍待补测）。
+## 分阶段目标（前后端并行）
+
+| Phase | 后端行 | 前端行 | 重点区域 |
+|-------|-------:|-------:|----------|
+| 1（P0 核心） | ~55% | 起步 | routes/domains · *_app_service · middleware · db/models · http；stores · api · composables |
+| 2（P1 业务） | ~72% | ~中 | facades · services · infrastructure · domain · ai_engines；views · components |
+| 3（P2 完善） | ~85% | ~高 | neuro_bus · mod_sdk · desktop_runtime · contexts · di；router · utils |
+| 4（P3 长尾） | ≥90% | ≥80% | 零覆盖逐文件 · pragma 审计 · 变异测试（杀死率≥80%） · 定版 |
+
+每进入下一阶段：本地与 CI 跑全量复测，确认全绿 + `--check` 通过后再 `--bump`。
+
+## 历史（已退役口径，仅存档）
+
+- 旧 M1~M4（fail_under 40→55→70→80，"full_app 60.63%"）：来自富依赖 + 窄 include 混报口径，
+  与本 SSOT 不可比，已退役。见 `metrics/coverage-dual-summary.json`（标记 retired）。
