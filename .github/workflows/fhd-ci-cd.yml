@@ -53,10 +53,13 @@ jobs:
             BASE_REF="${{ github.base_ref }}"
             git fetch origin "${BASE_REF}" --depth=1
             ADDED_FILES="$(git diff --name-only --diff-filter=A "origin/${BASE_REF}"...HEAD || true)"
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            # Manual rerun: scan only files newly added in the tip commit (not entire tree).
+            ADDED_FILES="$(git diff --name-only --diff-filter=A HEAD~1 HEAD 2>/dev/null || true)"
           else
             BEFORE_SHA="${{ github.event.before }}"
             if [ -z "${BEFORE_SHA}" ] || [ "${BEFORE_SHA}" = "0000000000000000000000000000000000000000" ]; then
-              ADDED_FILES="$(git ls-files)"
+              ADDED_FILES="$(git diff --name-only --diff-filter=A HEAD~1 HEAD 2>/dev/null || true)"
             else
               ADDED_FILES="$(git diff --name-only --diff-filter=A "${BEFORE_SHA}" "${{ github.sha }}" || true)"
             fi
