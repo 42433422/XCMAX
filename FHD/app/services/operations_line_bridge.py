@@ -8,7 +8,7 @@ import os
 from datetime import UTC, datetime
 from typing import Any
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +53,7 @@ def _scan_pipelines() -> tuple[int, int, int, dict[str, int]]:
                         missing_crm += 1
                     if not data.get("erp_customer_id") and not data.get("erp_customer_name"):
                         missing_erp += 1
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         logger.debug("pipeline scan skipped", exc_info=True)
     return total, missing_crm, missing_erp, by_stage
 
@@ -96,7 +96,7 @@ def compute_operations_health() -> dict[str, Any]:
             )
             if resp.status_code < 400 and isinstance(resp.json(), dict):
                 market_payment_health = resp.json()
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             logger.debug("market payment health probe skipped", exc_info=True)
 
     pay_backend = (
@@ -120,7 +120,7 @@ def compute_operations_health() -> dict[str, Any]:
             "note": info.get("note") or "签收存储",
             **info,
         }
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         pass
 
     try:
@@ -134,7 +134,7 @@ def compute_operations_health() -> dict[str, Any]:
                 "note": "最近对账周期已执行",
                 "auto_confirm_enabled": rec.get("auto_confirm_enabled"),
             }
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         pass
 
     return {

@@ -5,7 +5,7 @@ import { productsApi } from '@/api/products'
 interface Company {
   id: number | string;
   name: string;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 interface LocalProduct {
@@ -15,7 +15,7 @@ interface LocalProduct {
   code?: string;
   companyId: number | string;
   companyName?: string;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 interface ProductQueryState {
@@ -128,7 +128,7 @@ export const useProductQueryStore = defineStore('productQuery', () => {
     searchQuery.value = query
   }
 
-  async function updateProduct(productId: number | string, data: any) {
+  async function updateProduct(productId: number | string, data: unknown) {
     loading.value = true
     error.value = null
     
@@ -150,7 +150,7 @@ export const useProductQueryStore = defineStore('productQuery', () => {
 
   async function exportProducts(companyId: number | string | null = null) {
     try {
-      const params: Record<string, any> = companyId ? { companyId } : {}
+      const params: Record<string, unknown> = companyId ? { companyId } : {}
       await productsApi.exportUnitProductsXlsx(params)
     } catch (err) {
       error.value = err instanceof Error ? err.message : '导出产品失败'

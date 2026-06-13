@@ -13,7 +13,7 @@ import os
 import time
 from typing import Any
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +76,7 @@ class PerformanceOptimizer:
             logger.info(
                 f"✅ Redis 缓存: {'已连接' if status['redis_cache'] else '不可用 (使用本地缓存)'}"
             )
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             status["redis_cache"] = False
             logger.warning(f"⚠️  Redis 缓存初始化失败: {e}")
 
@@ -87,7 +87,7 @@ class PerformanceOptimizer:
             self._query_optimizer = get_query_optimizer()
             status["query_optimizer"] = True
             logger.info("✅ 查询优化器: 已启用")
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             status["query_optimizer"] = False
             logger.error(f"❌ 查询优化器初始化失败: {e}")
 
@@ -98,7 +98,7 @@ class PerformanceOptimizer:
             self._async_task_manager = get_async_task_manager()
             status["async_tasks"] = True
             logger.info("✅ 异步任务管理: 已启用")
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             status["async_tasks"] = False
             logger.error(f"❌ 异步任务管理初始化失败: {e}")
 
@@ -109,7 +109,7 @@ class PerformanceOptimizer:
             self._request_deduplicator = get_request_deduplicator()
             status["request_dedup"] = True
             logger.info("✅ 请求去重: 已启用")
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             status["request_dedup"] = False
             logger.error(f"❌ 请求去重初始化失败: {e}")
 
@@ -120,7 +120,7 @@ class PerformanceOptimizer:
             self._performance_monitor = get_performance_monitor()
             status["performance_monitor"] = True
             logger.info("✅ 性能监控: 已启用")
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             status["performance_monitor"] = False
             logger.error(f"❌ 性能监控初始化失败: {e}")
 
@@ -131,7 +131,7 @@ class PerformanceOptimizer:
             _test_limiter = get_rate_limiter("health_check", max_requests=1000, window_seconds=60)
             status["rate_limiter"] = True
             logger.info("✅ 限流器: 已启用")
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             status["rate_limiter"] = False
             logger.error(f"❌ 限流器初始化失败: {e}")
 
@@ -144,7 +144,7 @@ class PerformanceOptimizer:
             )
             status["circuit_breaker"] = True
             logger.info("✅ 熔断器: 已启用")
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             status["circuit_breaker"] = False
             logger.error(f"❌ 熔断器初始化失败: {e}")
 

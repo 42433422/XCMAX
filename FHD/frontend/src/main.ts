@@ -91,6 +91,8 @@ async function bootstrap() {
   });
 
   app.use(pinia);
+  const { default: i18n } = await import('./i18n');
+  app.use(i18n);
   try {
     const shell = useAppShellStore()
     shell.setAppActive(true)

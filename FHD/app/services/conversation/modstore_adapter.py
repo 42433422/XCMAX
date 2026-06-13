@@ -36,7 +36,7 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -216,7 +216,7 @@ class ModstorePlatformAdapter:
         if request is not None:
             try:
                 request_auth = str(request.headers.get("Authorization") or "").strip()
-            except OPERATIONAL_ERRORS:
+            except RECOVERABLE_ERRORS:
                 request_auth = ""
 
         auth_token = (
@@ -259,7 +259,7 @@ class ModstorePlatformAdapter:
                         logger.debug("使用最近一次持久化的修茈市场Token作为模型服务凭据")
             except ImportError as e:
                 logger.error(f"无法导入market_account模块: {e}")
-            except OPERATIONAL_ERRORS as e:
+            except RECOVERABLE_ERRORS as e:
                 logger.error(f"从Session获取Token失败: {e}", exc_info=True)
 
         instance = cls(
@@ -333,7 +333,7 @@ class ModstorePlatformAdapter:
                 logger.warning("Session中未找到新Token")
                 return False
 
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.error(f"刷新Token失败: {e}", exc_info=True)
             return False
 
@@ -464,7 +464,7 @@ class ModstorePlatformAdapter:
                     token_count=0,
                     user_id=str(self.user_id or ""),
                 )
-            except OPERATIONAL_ERRORS:
+            except RECOVERABLE_ERRORS:
                 pass
 
             # 标准化响应格式为OpenAI兼容格式
@@ -481,7 +481,7 @@ class ModstorePlatformAdapter:
         except httpx.HTTPError as e:
             logger.error(f"[Modstore] HTTP请求失败: {e}")
             raise
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.error(f"[Modstore] 调用异常: {e}", exc_info=True)
             raise
 
@@ -542,6 +542,20 @@ class ModstorePlatformAdapter:
         if not self.platform_url:
             raise ValueError("修茈市场平台URL未配置 (MODSTORE_PLATFORM_URL)")
 
+        try:
+            from app.application.surface_audit_demo_account import is_local_demo_market_token
+            from app.fastapi_routes.market_account import _is_local_market_base
+
+            if is_local_demo_market_token(self.auth_token or "") and not _is_local_market_base(
+                self.platform_url
+            ):
+                raise ValueError(
+                    "当前会话为本地演示令牌，无法调用官网 LLM。"
+                    "请设置 XCAGI_USE_REMOTE_MARKET=1 重启后端并重新登录。"
+                )
+        except ImportError:
+            pass
+
         effective_provider, effective_model = self._resolve_provider_model(provider, model)
         url = f"{self.platform_url}/api/llm/chat"
         payload: Dict[str, Any] = {
@@ -578,7 +592,7 @@ class ModstorePlatformAdapter:
                 token_count=0,
                 user_id=str(self.user_id or ""),
             )
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             pass
 
         return self._normalize_response(result, effective_provider, effective_model)
@@ -766,7 +780,7 @@ class ModstorePlatformAdapter:
                 logger.warning(f"[Modstore] 获取供应商列表失败: {response.status_code}")
                 return []
 
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.error(f"[Modstore] 查询供应商异常: {e}")
             return []
 
@@ -792,7 +806,7 @@ class ModstorePlatformAdapter:
             else:
                 return {"error": f"HTTP {response.status_code}"}
 
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             return {"error": str(e)}
 
     async def close(self):

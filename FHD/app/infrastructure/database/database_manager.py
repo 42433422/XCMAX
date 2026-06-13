@@ -11,7 +11,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
 class DatabaseManager:
@@ -70,7 +70,7 @@ class DatabaseManager:
         try:
             yield session
             session.commit()
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             session.rollback()
             raise
         finally:

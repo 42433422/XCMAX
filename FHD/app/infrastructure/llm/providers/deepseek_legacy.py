@@ -10,7 +10,7 @@ import httpx
 
 from app.infrastructure.llm.providers.credentials import resolve_deepseek_credentials
 from app.utils.metrics import record_ai_call
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +65,7 @@ class DeepSeekLegacyProvider:
                 time.perf_counter() - t0,
             )
             return result
-        except OPERATIONAL_ERRORS as exc:
+        except RECOVERABLE_ERRORS as exc:
             record_ai_call(self.provider_id, "chat", "error", time.perf_counter() - t0)
             logger.error("DeepSeekLegacyProvider failed: %s", exc)
             return None

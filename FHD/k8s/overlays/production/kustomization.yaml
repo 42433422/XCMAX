@@ -1,0 +1,24 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Production K8s GitOps overlay (parallel track to the CVM tarball/compose prod path).
+# Progressive delivery via FHD/k8s/rollouts (Rollout canary + SLO AnalysisTemplate). Uses the
+# Rollout defaults (replicas=3, ConfigMap production NeuroBus profile via envFrom,
+# XCAGI_ENV/FHD_ENV=production). Needs `--load-restrictor LoadRestrictionsNone` (ArgoCD
+# argocd-cm via bootstrap_argocd.sh; locally pass the flag).
+resources:
+  - ../../rollouts
+
+namespace: xcagi-prod
+
+labels:
+  - pairs:
+      environment: production
+    includeSelectors: false
+
+# Image pin — CI / scripts/gitops/bump_image.sh sets newTag to the released sha-<gitsha>.
+images:
+  - name: __DEPLOY_BACKEND_IMAGE__
+    # lowercase: GHCR repo paths must be lowercase (repo is 42433422/XCMAX).
+    newName: ghcr.io/42433422/xcmax/xcagi-fhd-api
+    newTag: stable

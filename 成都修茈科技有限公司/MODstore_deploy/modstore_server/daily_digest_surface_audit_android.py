@@ -21,7 +21,9 @@ def _android_enabled() -> bool:
 
 
 def _fhd_root() -> Path:
-    mono = (os.environ.get("XCMAX_MONOREPO_ROOT") or os.environ.get("MODSTORE_REPO_ROOT") or "").strip()
+    mono = (
+        os.environ.get("XCMAX_MONOREPO_ROOT") or os.environ.get("MODSTORE_REPO_ROOT") or ""
+    ).strip()
     if mono:
         p = Path(mono).expanduser().resolve() / "FHD"
         if p.is_dir():
@@ -91,9 +93,9 @@ def _ensure_fhd_for_emulator() -> None:
         api_url = (
             os.environ.get("SURFACE_AUDIT_API_URL")
             or os.environ.get("MODSTORE_SURFACE_AUDIT_API_URL")
-            or "http://127.0.0.1:5000"
+            or "http://127.0.0.1:5102"
         )
-        port = _parse_port(api_url.rstrip("/"), 5000)
+        port = _parse_port(api_url.rstrip("/"), 5102)
         _ensure_fhd_api(port)
     except Exception:
         logger.warning("android audit: FHD API bootstrap failed", exc_info=True)
@@ -183,16 +185,16 @@ def run_android_surface_audit_sync(
     if not script.is_file():
         return [], {"ok": False, "error": f"缺少 {script}"}
 
-    api_port = 5000
+    api_port = 5102
     try:
         from modstore_server.surface_audit_deps import _parse_port
 
         api_url = (
             os.environ.get("SURFACE_AUDIT_API_URL")
             or os.environ.get("MODSTORE_SURFACE_AUDIT_API_URL")
-            or "http://127.0.0.1:5000"
+            or "http://127.0.0.1:5102"
         )
-        api_port = _parse_port(api_url.rstrip("/"), 5000)
+        api_port = _parse_port(api_url.rstrip("/"), 5102)
     except Exception:
         pass
 
@@ -254,9 +256,8 @@ def run_android_surface_audit_sync(
         pages = _filter_sample_pages(pages)
 
     meta: Dict[str, Any] = {
-        "ok": bool(payload.get("success")) or any(
-            isinstance(p, dict) and p.get("screenshot_b64") for p in pages
-        ),
+        "ok": bool(payload.get("success"))
+        or any(isinstance(p, dict) and p.get("screenshot_b64") for p in pages),
         "source": payload.get("source") or "android-adb",
         "page_count": len(pages),
         "device_count": payload.get("device_count"),

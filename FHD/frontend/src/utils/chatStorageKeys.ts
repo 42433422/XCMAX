@@ -17,8 +17,8 @@ export const CHAT_SESSION_META_PREFIX = 'xcagi_chat_session_meta_'
  * - 有租户无 Mod：``xcagi_chat_messages_tenant:42:<sessionId>``
  * - 未绑定租户（local 域）时与旧版格式兼容。
  */
-export function readActiveModIdFromStorage(): string {
-  return readActiveExtensionModIdFromStorage()
+export function readActiveModIdFromStorage(scope?: string): string {
+  return readActiveExtensionModIdFromStorage(scope)
 }
 
 function scopedSuffix(sessionId: string, modId: string, scope?: string): string {

@@ -10,11 +10,17 @@ MOD_DIR = REPO / "mods" / "xcagi-model-payment-bridge"
 
 
 def test_model_payment_manifest_facade_flag():
+    from tests.mod_presence import skip_if_bridge_mod_absent
+
+    skip_if_bridge_mod_absent("xcagi-model-payment-bridge")
     data = json.loads((MOD_DIR / "manifest.json").read_text(encoding="utf-8"))
     assert data.get("config", {}).get("model_payment_facade") is True
 
 
 def test_model_payment_blueprints_delegate_routes():
+    from tests.mod_presence import skip_if_bridge_mod_absent
+
+    skip_if_bridge_mod_absent("xcagi-model-payment-bridge")
     text = (MOD_DIR / "backend" / "blueprints.py").read_text(encoding="utf-8")
     assert "/model-payment/plans" in text
     assert "/model-payment/checkout" in text

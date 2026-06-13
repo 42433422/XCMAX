@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, Any
 
 from app.neuro_bus.bus import get_neuro_bus
 from app.neuro_bus.events.auth_events import *
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 if TYPE_CHECKING:
     pass  # 根据实际需要添加类型引用
@@ -78,7 +78,7 @@ class UserMemoryVectorAppServiceV2:
                 "message": f"{command_type} 命令已提交",
             }
 
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.exception(f"[UserMemoryVectorAppServiceV2] 执行命令失败: {e}")
             return {"success": False, "message": str(e)}
 

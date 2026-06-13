@@ -1,0 +1,26 @@
+# ArgoCD App-of-Apps root. Apply once (scripts/gitops/bootstrap_argocd.sh) — it then
+# manages the child Applications declaratively from FHD/gitops/apps/.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: fhd-app-of-apps
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/42433422/XCMAX.git
+    targetRevision: main
+    path: FHD/gitops/apps
+    directory:
+      recurse: false
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false

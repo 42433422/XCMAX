@@ -1,0 +1,35 @@
+{
+  "id": "taiyangniao-pro",
+  "name": "太阳鸟 PRO",
+  "version": "1.0.0",
+  "author": "XCAGI",
+  "description": "太阳鸟客户定制：考勤表转换、排班数据处理与客户专属能力。",
+  "primary": true,
+  "dependencies": {
+    "xcagi": ">=1.0.0",
+    "attendance-industry": ">=1.0.0"
+  },
+  "backend": {
+    "entry": "blueprints",
+    "init": "mod_init"
+  },
+  "frontend": {
+    "routes": "frontend/routes",
+    "pro_entry_path": "/taiyangniao-pro",
+    "menu": [
+      {
+        "id": "taiyangniao-pro-home",
+        "label": "考勤表转换",
+        "icon": "fa-file-excel-o",
+        "path": "/taiyangniao-pro"
+      }
+    ]
+  },
+  "onboarding": {
+    "custom_line_hint": "考勤表转换与客户定制能力"
+  },
+  "hooks": {},
+  "comms": {
+    "exports": []
+  }
+}

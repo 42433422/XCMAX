@@ -13,7 +13,7 @@ from typing import Any
 from app.domain.neuro.processors.coordinator import ProcessorType
 from app.domain.neuro.reflex_arc import IntentReflexArc, ReflexResult, ReflexType, get_reflex_arc
 from app.neuro_bus.domains.intent_domain import get_intent_domain
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +67,7 @@ def try_neuro_reflex_intent(message: str, user_id: str = "") -> dict[str, Any] |
             latency_ms=latency_ms,
             user_id=user_id,
         )
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         logger.debug("emit_reflex_triggered skipped (bus down?)", exc_info=True)
     return reflex_match_to_chat_intent_dict(rr)
 
@@ -122,7 +122,7 @@ class NeuroIntentRecognizer:
                     latency_ms=latency_ms,
                     user_id=user_id,
                 )
-            except OPERATIONAL_ERRORS:
+            except RECOVERABLE_ERRORS:
                 logger.debug("emit_reflex_triggered skipped", exc_info=True)
 
             return NeuroIntentResult(
@@ -152,7 +152,7 @@ class NeuroIntentRecognizer:
                     processor_used=ProcessorType.CONSCIOUS.value,
                     latency_ms=latency_ms,
                 )
-            except OPERATIONAL_ERRORS:
+            except RECOVERABLE_ERRORS:
                 logger.debug("emit_intent_recognized skipped", exc_info=True)
 
             return NeuroIntentResult(
@@ -178,7 +178,7 @@ class NeuroIntentRecognizer:
                 processor_used=ProcessorType.CONSCIOUS.value,
                 latency_ms=latency_ms,
             )
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             logger.debug("emit_intent_recognized skipped", exc_info=True)
 
         return NeuroIntentResult(
@@ -208,12 +208,12 @@ def integrate_with_intent_system() -> NeuroIntentRecognizer:
     try:
         get_reflex_arc()
         logger.info("ReflexArc ready")
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.warning("ReflexArc initialization error: %s", e)
     try:
         get_intent_domain()
         logger.info("IntentDomain ready")
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.warning("IntentDomain initialization error: %s", e)
     return NeuroIntentRecognizer()
 

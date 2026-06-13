@@ -16,7 +16,7 @@ from enum import Enum
 from threading import RLock
 
 from app.neuro_bus.events.base import EventPriority, NeuroEvent
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -135,7 +135,7 @@ class Lifeline:
                 if self._on_load_change:
                     try:
                         self._on_load_change(old_load, new_load)
-                    except OPERATIONAL_ERRORS as e:
+                    except RECOVERABLE_ERRORS as e:
                         logger.exception(f"Load change callback error: {e}")
 
             return self._current_load

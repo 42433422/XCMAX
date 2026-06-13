@@ -39,6 +39,7 @@ fun WorkbenchWebViewScreen(
     url: String,
     accessToken: String,
     refreshToken: String,
+    fhdAccessToken: String = "",
     onReloadTokens: () -> Unit,
 ) {
     var loading by remember { mutableStateOf(true) }
@@ -110,7 +111,7 @@ fun WorkbenchWebViewScreen(
                         override fun onPageFinished(view: WebView?, finishedUrl: String?) {
                             loading = false
                             view?.evaluateJavascript(
-                                buildTokenInjectScript(accessToken, refreshToken),
+                                buildTokenInjectScript(accessToken, refreshToken, fhdAccessToken),
                                 null,
                             )
                         }

@@ -39,38 +39,46 @@ class CurrentUser:
 
 
 def get_current_user(
+    request: Request,
     x_user_id: str | None = Header(default=None, alias="X-User-ID"),
 ) -> CurrentUser:
     """
-    FastAPI `Depends` 工厂：从 X-User-ID 请求头解析当前用户。
-
-    使用方式：
-        @router.delete("/api/shipment/records/{id}")
-        def delete_record(user: CurrentUser = Depends(get_current_user)):
-            ...
+    FastAPI `Depends` 工厂：优先从登录会话解析用户；测试模式可回退 X-User-ID。
     """
-    uid: int | None = None
-    if x_user_id and str(x_user_id).strip().lstrip("-").isdigit():
-        try:
-            uid = int(str(x_user_id).strip())
-        except (TypeError, ValueError):
-            uid = None
-    return CurrentUser(user_id=uid, raw_header=x_user_id)
+    user = resolve_session_user(request)
+    if user is not None and getattr(user, "id", None) is not None:
+        return CurrentUser(user_id=int(user.id), raw_header=x_user_id)
+    if _allow_x_user_id_header():
+        uid: int | None = None
+        if x_user_id and str(x_user_id).strip().lstrip("-").isdigit():
+            try:
+                uid = int(str(x_user_id).strip())
+            except (TypeError, ValueError):
+                uid = None
+        return CurrentUser(user_id=uid, raw_header=x_user_id)
+    return CurrentUser(user_id=None, raw_header=x_user_id)
+
+
+def _allow_x_user_id_header() -> bool:
+    return os.environ.get("FHD_ALLOW_X_USER_ID_HEADER", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+    }
 
 
 def require_identified_user(
+    request: Request,
     x_user_id: str | None = Header(default=None, alias="X-User-ID"),
 ) -> CurrentUser:
-    """严格版：若未提供合法 X-User-ID 则返回 401。用于高敏感操作（如删除审批流程）。"""
-    from fastapi import HTTPException
-
-    user = get_current_user(x_user_id=x_user_id)
+    """严格版：若未提供合法会话用户则返回 401。"""
+    user = get_current_user(request, x_user_id=x_user_id)
     if not user.is_identified and _write_lock_enabled():
         raise HTTPException(
             status_code=401,
             detail={
                 "error": "user_id_required",
-                "message": "此操作需要提供 X-User-ID 请求头以记录操作人。",
+                "message": "请先登录后再执行此操作。",
             },
         )
     return user

@@ -12,6 +12,11 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 import pytest
+
+pytest.importorskip(
+    "app.application.purchase_app_service",
+    reason="purchase_app_service (v1 delegating wrapper) removed; superseded by purchase_app_service_v2 with a different API",
+)
 from app.application.purchase_app_service import (
     PurchaseApplicationService,
     get_purchase_app_service,

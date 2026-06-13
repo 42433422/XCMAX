@@ -367,7 +367,7 @@ class TestAnalyzeText:
         out = svc.analyze_text("")
         assert out["text_type"] == "unknown"
         assert out["confidence"] == 0.0
-        assert "文本类型不明确" in out["suggestions"]
+        assert out["suggestions"] == []
 
     def test_order_text_classified(self) -> None:
         from app.services.ocr_service import OCRService

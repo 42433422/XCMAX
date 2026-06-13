@@ -14,7 +14,7 @@ import re
 from typing import Any
 
 from app.utils.cache_manager import get_intent_deepseek_cache
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -104,7 +104,7 @@ class DeepSeekIntentRecognizer:
                         config_module = importlib.util.module_from_spec(spec)
                         spec.loader.exec_module(config_module)
                         key = getattr(config_module, "DEEPSEEK_API_KEY", "") or ""
-            except OPERATIONAL_ERRORS:
+            except RECOVERABLE_ERRORS:
                 logger.debug("suppressed exception", exc_info=True)
         return key
 
@@ -166,7 +166,7 @@ class DeepSeekIntentRecognizer:
                     parsed = self._parse_response(content, message)
                     _intent_recognition_cache.set(cache_key, parsed)
                     return parsed
-            except OPERATIONAL_ERRORS as e:
+            except RECOVERABLE_ERRORS as e:
                 last_error = e
                 logger.warning(
                     f"DeepSeek 意图识别失败 (尝试 {attempt + 1}/{self.max_retries}): {e}"
@@ -349,7 +349,7 @@ class HybridIntentWithDeepSeek:
                 else:
                     logger.warning("蒸馏模型不可用，切换到 DeepSeek")
                     self.use_distilled = False
-            except OPERATIONAL_ERRORS as e:
+            except RECOVERABLE_ERRORS as e:
                 logger.warning(f"无法加载蒸馏模型: {e}")
                 self.use_distilled = False
 
@@ -430,7 +430,7 @@ class HybridIntentWithDeepSeek:
                         message, rule_result
                     )
                     return rule_result
-            except OPERATIONAL_ERRORS as e:
+            except RECOVERABLE_ERRORS as e:
                 logger.warning(f"蒸馏意图识别失败，降级到 DeepSeek: {e}")
 
         if not self.use_deepseek or not self.deepseek_recognizer:
@@ -460,7 +460,7 @@ class HybridIntentWithDeepSeek:
                 rule_result["intent_confidence"] = deepseek_result.get("confidence", 0.0)
                 rule_result["slots"] = deepseek_result.get("slots", {})
 
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.error(f"DeepSeek 意图识别失败: {e}")
             rule_result["final_intent"] = rule_result.get("primary_intent")
             rule_result["intent_source"] = "rule"
@@ -665,7 +665,7 @@ class HybridIntentWithDeepSeek:
                 return asyncio.run(self.recognize(message))
             else:
                 return asyncio.run(self.recognize(message))
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.error(f"混合意图识别失败: {e}")
             from .intent_service import recognize_intents
 
@@ -730,7 +730,7 @@ def get_deepseek_api_key() -> str:
                 config_module = importlib.util.module_from_spec(spec)
                 spec.loader.exec_module(config_module)
                 return getattr(config_module, "DEEPSEEK_API_KEY", "") or ""
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         logger.debug("suppressed exception", exc_info=True)
     return ""
 

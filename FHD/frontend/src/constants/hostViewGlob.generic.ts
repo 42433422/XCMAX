@@ -13,4 +13,8 @@ export const hostViewGlob = {
   ...import.meta.glob('../views/EmployeeWorkspaceView.vue'),
   ...import.meta.glob('../views/WorkflowVisualizationView.vue'),
   ...import.meta.glob('../views/SettingsView.vue'),
+  ...import.meta.glob('../views/ImMessengerView.vue'),
+  ...import.meta.glob('../views/ModStore.vue'),
+  ...import.meta.glob('../views/DesktopRuntimeView.vue'),
+  ...import.meta.glob('../views/DiscoverView.vue'),
 } as Record<string, ViewLoader>

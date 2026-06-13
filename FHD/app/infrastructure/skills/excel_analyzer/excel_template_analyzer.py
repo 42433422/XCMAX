@@ -12,7 +12,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -114,7 +114,7 @@ def analyze_template(
         return {"success": False, "message": "需要安装 openpyxl 库: pip install openpyxl"}
     except FileNotFoundError:
         return {"success": False, "message": f"文件不存在: {file_path}"}
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.error(f"分析Excel模板失败: {e}")
         return {"success": False, "message": f"分析失败: {str(e)}"}
 
@@ -141,7 +141,7 @@ def analyze_to_json(
 
         result["output_file"] = output_path
         return result
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         return {"success": False, "message": f"保存JSON失败: {str(e)}"}
 
 

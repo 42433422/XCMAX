@@ -9,7 +9,7 @@ import logging
 
 from PIL import Image
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -101,7 +101,7 @@ class BarcodeGenerator:
         except ImportError:
             logger.error("需要安装 python-barcode 库：pip install python-barcode")
             return self._generate_fallback_barcode(data, options)
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.error(f"生成条码失败：{e}")
             return self._generate_fallback_barcode(data, options)
 
@@ -196,7 +196,7 @@ class BarcodeGenerator:
                 logger.info(f"条码已保存：{filename}")
                 return True
             return False
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.error(f"保存条码失败：{e}")
             return False
 

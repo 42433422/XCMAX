@@ -29,13 +29,13 @@ export const traditionalApi = {
     options?: RequestOptions,
     /** 与列表里 size+mtime 一致的指纹，避免代理/浏览器缓存到旧内容 */
     cacheBust?: string
-  ): Promise<{ success: boolean; data?: { type: string; content: any }; error?: string }> {
+  ): Promise<{ success: boolean; data?: { type: string; content: unknown }; error?: string }> {
     const params: Record<string, string> = { file }
     if (cacheBust) params.v = cacheBust
     return api.get('/api/traditional-mode/read', params, options || {});
   },
 
-  write(data: { file: string; data: any; type: string }): Promise<{ success: boolean; error?: string }> {
+  write(data: { file: string; data: unknown; type: string }): Promise<{ success: boolean; error?: string }> {
     return api.post('/api/traditional-mode/write', data);
   },
 

@@ -9,7 +9,7 @@ from typing import Any
 
 from app.mod_sdk.host_profile import get_client_mod_policies
 from app.mod_sdk.platform_shell import PROTECTED_CLIENT_MOD_IDS
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -42,12 +42,14 @@ def _sqlite_customers_list(
         cond.append("(customer_name LIKE ? OR contact_person LIKE ? OR contact_phone LIKE ?)")
         args.extend([f"%{kw}%", f"%{kw}%", f"%{kw}%"])
     where = " AND ".join(cond) if cond else "1=1"
-    cur.execute(f"SELECT COUNT(*) FROM customers WHERE {where}", args)
+    cur.execute("SELECT COUNT(*) FROM customers WHERE " + where, args)
     total = int(cur.fetchone()[0])
     offset = (page - 1) * per_page
     cur.execute(
         "SELECT id, customer_name, contact_person, contact_phone, address, purchase_unit "
-        f"FROM customers WHERE {where} ORDER BY id LIMIT ? OFFSET ?",
+        "FROM customers WHERE "
+        + where
+        + " ORDER BY id LIMIT ? OFFSET ?",
         [*args, per_page, offset],
     )
     items = [dict(r) for r in cur.fetchall()]
@@ -72,7 +74,7 @@ def try_invoke_client_mod_customers_list(
     if not active and request is not None:
         try:
             active = parse_active_mod_header(request.headers)
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             active = ""
 
     target = resolve_client_erp_mod_for_request(active)
@@ -95,7 +97,7 @@ def try_invoke_client_mod_customers_list(
         out["source"] = f"mod:{target}"
         out["execution_path"] = "client_primary_mod_sqlite"
         return out
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         logger.exception("client mod customers.list failed mod=%s", target)
         return None
 
@@ -115,7 +117,7 @@ def client_primary_mod_on_disk_visible(mod_id: str) -> bool:
         if not is_desktop_mode() and resolve_product_sku() != "enterprise":
             return False
         return bool(get_mod_manager().resolve_mod_directory(mid))
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         logger.debug("client_primary_mod_on_disk_visible check failed", exc_info=True)
         return False
 

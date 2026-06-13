@@ -11,9 +11,9 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Any
+from typing import Any, cast
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +53,7 @@ class AIProductParser:
             if ai_result is not None:
                 validated = self._validate_required_fields(ai_result)
                 if validated["valid"]:
-                    return validated["data"]
+                    return cast("dict[str, Any]", validated["data"])
                 if not fallback_to_rule:
                     return self._build_invalid_result(
                         raw_text=text,
@@ -65,7 +65,7 @@ class AIProductParser:
         rule_result = self._rule_parse(text)
         validated = self._validate_required_fields(rule_result)
         if validated["valid"]:
-            return validated["data"]
+            return cast("dict[str, Any]", validated["data"])
 
         parse_method = "hybrid" if use_ai and fallback_to_rule else "rule"
         return self._build_invalid_result(
@@ -242,13 +242,16 @@ class AIProductParser:
 
             cache = _get_product_parse_cache()
             mod_id = get_request_active_mod_id()
-            return cache.get_or_compute(
-                text=text,
-                mod_id=mod_id,
-                compute_fn=lambda: self._call_ai_api(text),
-                should_cache=self._should_cache_ai_result,
+            return cast(
+                "dict[str, Any] | None",
+                cache.get_or_compute(
+                    text=text,
+                    mod_id=mod_id,
+                    compute_fn=lambda: self._call_ai_api(text),
+                    should_cache=self._should_cache_ai_result,
+                ),
             )
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.debug("product-parse cache path failed, falling back: %s", e)
             return self._call_ai_api(text)
 
@@ -349,7 +352,7 @@ class AIProductParser:
                     "parse_method": "ai",
                 }
 
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.error(f"AI 解析失败: {e}")
 
         return None

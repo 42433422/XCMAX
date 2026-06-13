@@ -30,8 +30,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from modstore_server.api.deps import _get_current_user
-from modstore_server.infrastructure.db import get_db
 from modstore_server.db.billing import AiModelPrice
+from modstore_server.infrastructure.db import get_db
 from modstore_server.llm_api import resolve_default_llm_route, run_billed_llm_chat
 from modstore_server.llm_key_resolver import KNOWN_PROVIDERS
 from modstore_server.models import User

@@ -210,14 +210,14 @@ function scoreVoice(v: SpeechSynthesisVoice): number {
   else if (lang.startsWith('zh')) score += 30
   else return -1
 
-  if ((v as any).localService) score += 50
+  if ((v as unknown).localService) score += 50
 
   // Yunxi 优先级拉满（默认偏好）
   if (/yunxi|云希/i.test(name)) score += 60
   if (NEURAL_KEYWORDS.some((k) => name.toLowerCase().includes(k.toLowerCase()))) score += 25
   if (CLASSIC_KEYWORDS.some((k) => name.toLowerCase().includes(k.toLowerCase()))) score += 10
   if (/natural|neural|online/i.test(name)) score += 10
-  if (/^google/i.test(name) && !(v as any).localService) score += 5
+  if (/^google/i.test(name) && !(v as unknown).localService) score += 5
 
   return score
 }
@@ -264,7 +264,7 @@ export function hasYunxiOrXiaoxiaoAvailable(): boolean {
 
 export function hasAnyChineseLocalVoice(): boolean {
   const list = voicesCache || []
-  return list.some((v) => (v.lang || '').toLowerCase().startsWith('zh') && (v as any).localService === true)
+  return list.some((v) => (v.lang || '').toLowerCase().startsWith('zh') && (v as unknown).localService === true)
 }
 
 export interface TtsStatus {
@@ -343,7 +343,7 @@ async function fetchOnlineTtsDataUri(text: string): Promise<string> {
     credentials: 'include',
     body: JSON.stringify({ text, lang: 'zh', voice, rate: `+${ratePercent - 100}%` }),
   })
-  let json: any = {}
+  let json: unknown = {}
   try {
     json = await res.json()
   } catch {
@@ -491,13 +491,13 @@ function exposeDebugHelpers(): void {
   if (typeof window === 'undefined') return
   debugExposed = true
   try {
-    ;(window as any).__xcagiTts = {
+    ;(window as unknown).__xcagiTts = {
       list(): Array<{ name: string; lang: string; localService: boolean; default: boolean }> {
         return (voicesCache || []).map((v) => ({
           name: v.name,
           lang: v.lang,
-          localService: (v as any).localService === true,
-          default: (v as any).default === true,
+          localService: (v as unknown).localService === true,
+          default: (v as unknown).default === true,
         }))
       },
       current(): string | null {

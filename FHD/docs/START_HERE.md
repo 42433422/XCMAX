@@ -138,6 +138,8 @@ FHD_API_IMAGE_DIGEST=sha256:... \
 ## 相关链接
 
 - 仓根地图：[`README.md`](../../README.md)
+- **发版检查清单**：[`docs/deploy/RELEASE_CHECKLIST.md`](deploy/RELEASE_CHECKLIST.md)（tag `FHD/v*` → CVM + K8s + 客户端）
+- **国际化**：[`docs/I18N_ROLLOUT.md`](I18N_ROLLOUT.md) · 前端 `src/i18n/`（zh-CN / en-US）；`localStorage.xcagi_locale` 切换
 - CI SSOT：[`docs/CI_SSOT.md`](../../docs/CI_SSOT.md)
 - OpenAPI：启动后 `http://127.0.0.1:5000/docs`
 - Android 实验骨架（非签约级）：`guides/MOBILE_ANDROID.md`

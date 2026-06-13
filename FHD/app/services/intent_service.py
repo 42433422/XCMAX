@@ -24,7 +24,7 @@ from typing import Any
 from app.domain.neuro.reflex_arc import ReflexType, get_reflex_arc
 from app.services.rule_engine import get_rule_engine, reload_rule_engine
 from app.utils.cache_manager import get_intent_rule_cache
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 from resources.config.intent_config import get_intent_config, reload_intent_config
 
 _intent_cache = get_intent_rule_cache()
@@ -252,7 +252,7 @@ def recognize_intents(message: str) -> dict[str, Any]:
     """对外接口：全流程意图识别入口（带异常兜底）"""
     try:
         return _recognize_intents_impl(message)
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.exception("recognize_intents failed: %s", e)
         return {
             "primary_intent": None,
@@ -310,7 +310,7 @@ def _recognize_intents_impl(message: str) -> dict[str, Any]:
 
     try:
         basic_intents = _reflex_basic_intents(message)
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.warning("reflex basic intents skipped: %s", exc)
         basic_intents = {
             "is_greeting": False,
@@ -459,7 +459,7 @@ def _recognize_intents_impl(message: str) -> dict[str, Any]:
 
         try:
             resolved = resolve_purchase_unit(potential_unit)
-        except OPERATIONAL_ERRORS as exc:
+        except RECOVERABLE_ERRORS as exc:
             logger.warning("resolve_purchase_unit skipped: %s", exc)
             resolved = None
         if resolved:

@@ -1,4 +1,4 @@
-import type { ModInfo } from '@/stores/mods'
+import type { ModInfo } from '@/types/modInfo'
 import type {
   ModTutorialContribution,
   TutorialBuildContext,

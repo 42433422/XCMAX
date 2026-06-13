@@ -8,7 +8,7 @@ function erpBase(): string {
 }
 
 export const customersApi = {
-  getCustomers(params: Record<string, any> = {}): Promise<ApiResponse<Customer[]>> {
+  getCustomers(params: Record<string, unknown> = {}): Promise<ApiResponse<Customer[]>> {
     return api.get<ApiResponse<Customer[]>>(`${erpBase()}/customers/list`, params);
   },
 
@@ -33,15 +33,15 @@ export const customersApi = {
   },
 
   exportCustomersXlsx(templateId?: string): Promise<Response> {
-    const params: Record<string, any> = {};
+    const params: Record<string, unknown> = {};
     if (templateId) {
       params.template_id = templateId;
     }
     return api.download(`${erpBase()}/customers/export`, params);
   },
 
-  importCustomersExcel(formData: FormData): Promise<ApiResponse<any>> {
-    return api.post<ApiResponse<any>>(`${erpBase()}/customers/import`, formData);
+  importCustomersExcel(formData: FormData): Promise<ApiResponse<unknown>> {
+    return api.post<ApiResponse<unknown>>(`${erpBase()}/customers/import`, formData);
   }
 };
 

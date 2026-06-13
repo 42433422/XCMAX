@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.QrCodeScanner
@@ -24,6 +25,7 @@ import com.xiuci.xcagi.mobile.ui.components.mobile.WeTopBar
 fun DiscoverScreen(
     onScan: () -> Unit,
     onOcr: () -> Unit,
+    onWorkbench: () -> Unit = {},
 ) {
     Column(Modifier.fillMaxSize().background(MobileTokens.surfaceWhite)) {
         WeTopBar(
@@ -60,6 +62,15 @@ fun DiscoverScreen(
             item {
                 WeSectionCaption("服务")
                 WeCellGroup {
+                    WeCell(
+                        title = "云端工作台",
+                        subtitle = "MODstore 工作台与行业 Mod",
+                        icon = Icons.Default.Dashboard,
+                        iconTint = MobileTokens.iconFgBlue,
+                        iconBg = MobileTokens.iconBgBlue,
+                        showArrow = true,
+                        onClick = onWorkbench,
+                    )
                     WeCell(
                         title = "Agent 控制",
                         subtitle = "远程操控电脑，执行任务和命令",

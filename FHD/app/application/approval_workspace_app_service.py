@@ -10,11 +10,12 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import secrets
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
-from fastapi import Body, Header, HTTPException, Query
+from fastapi import Body, Header, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
@@ -28,7 +29,7 @@ from app.db.models.approval import (
     ApprovalStatus,
 )
 from app.db.session import get_db
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.time import utc_now_naive
 
 logger = logging.getLogger(__name__)
@@ -39,9 +40,27 @@ logger = logging.getLogger(__name__)
 # --------------------------------------------------------------------------- #
 
 
-def _resolve_actor(x_user_id: str | None, fallback: int | None = None) -> int | None:
-    """从 ``X-User-ID`` 请求头解析当前用户 ID。"""
-    if x_user_id and str(x_user_id).strip().isdigit():
+def _allow_x_user_id_header() -> bool:
+    """测试/e2e 专用；生产环境不信任自报 X-User-ID。"""
+    return os.environ.get("FHD_ALLOW_X_USER_ID_HEADER", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+
+
+def _resolve_actor(
+    request: Request,
+    x_user_id: str | None = None,
+    fallback: int | None = None,
+) -> int | None:
+    """优先从登录会话解析操作人；测试模式可回退 X-User-ID。"""
+    from app.infrastructure.auth.dependencies import resolve_session_user
+
+    user = resolve_session_user(request)
+    if user is not None and getattr(user, "id", None) is not None:
+        return int(user.id)
+    if _allow_x_user_id_header() and x_user_id and str(x_user_id).strip().isdigit():
         return int(str(x_user_id).strip())
     if fallback is not None:
         try:
@@ -64,7 +83,7 @@ def _audit(db, *, actor: int | None, action: str, payload: dict) -> None:
                 "payload": json.dumps(payload, ensure_ascii=False, default=str),
             },
         )
-    except OPERATIONAL_ERRORS as exc:  # pragma: no cover - 审计失败不应阻塞主流程
+    except RECOVERABLE_ERRORS as exc:  # pragma: no cover - 审计失败不应阻塞主流程
         logger.warning("ai_action_audit 写入失败 action=%s: %s", action, exc)
 
 
@@ -94,11 +113,12 @@ def _node_query_for_user(node: ApprovalFlowNode, user_id: int) -> bool:
 
 
 def _ordered_nodes(db, flow_id: int) -> list[ApprovalFlowNode]:
-    return (
+    return cast(
+        "list[ApprovalFlowNode]",
         db.query(ApprovalFlowNode)
         .filter(ApprovalFlowNode.flow_id == flow_id, ApprovalFlowNode.is_active == True)  # noqa: E712
         .order_by(ApprovalFlowNode.node_order.asc())
-        .all()
+        .all(),
     )
 
 
@@ -193,6 +213,7 @@ def list_requests(
 
 
 def cleanup_requests(
+    request: Request,
     body: dict = Body(default_factory=dict),
     x_user_id: str | None = Header(default=None, alias="X-User-ID"),
 ):
@@ -208,9 +229,9 @@ def cleanup_requests(
           "dry_run": false    # true 时只返回待清理数量，不真正删除
         }
     """
-    actor = _resolve_actor(x_user_id, fallback=body.get("user_id"))
+    actor = _resolve_actor(request, x_user_id, fallback=body.get("user_id"))
     if actor is None:
-        raise HTTPException(status_code=401, detail="缺少 X-User-ID")
+        raise HTTPException(status_code=401, detail="请先登录")
 
     statuses = _normalize_statuses(body.get("statuses") or body.get("status"))
     dry_run = bool(body.get("dry_run", False))
@@ -301,6 +322,7 @@ def get_request_detail(request_id: int):
 
 
 def submit_request(
+    request: Request,
     body: dict = Body(default_factory=dict),
     x_user_id: str | None = Header(default=None, alias="X-User-ID"),
 ):
@@ -311,9 +333,9 @@ def submit_request(
     if not flow_key or not title:
         raise HTTPException(status_code=400, detail="flow_key 与 title 为必填项")
 
-    actor = _resolve_actor(x_user_id, fallback=body.get("applicant_id"))
+    actor = _resolve_actor(request, x_user_id, fallback=body.get("applicant_id"))
     if actor is None:
-        raise HTTPException(status_code=401, detail="缺少 X-User-ID 或 applicant_id")
+        raise HTTPException(status_code=401, detail="请先登录")
 
     business_id = body.get("business_id")
     business_data = body.get("business_data")
@@ -411,12 +433,13 @@ def _close_request_if_needed(
 
 def approve_request(
     request_id: int,
+    http_request: Request,
     body: dict = Body(default_factory=dict),
     x_user_id: str | None = Header(default=None, alias="X-User-ID"),
 ):
-    actor = _resolve_actor(x_user_id, fallback=body.get("approver_id"))
+    actor = _resolve_actor(http_request, x_user_id, fallback=body.get("approver_id"))
     if actor is None:
-        raise HTTPException(status_code=401, detail="缺少 X-User-ID 或 approver_id")
+        raise HTTPException(status_code=401, detail="请先登录")
 
     opinion = str(body.get("opinion") or "").strip() or "同意"
     approver_name = str(body.get("approver_name") or "").strip() or None
@@ -501,12 +524,13 @@ def approve_request(
 
 def reject_request(
     request_id: int,
+    http_request: Request,
     body: dict = Body(default_factory=dict),
     x_user_id: str | None = Header(default=None, alias="X-User-ID"),
 ):
-    actor = _resolve_actor(x_user_id, fallback=body.get("approver_id"))
+    actor = _resolve_actor(http_request, x_user_id, fallback=body.get("approver_id"))
     if actor is None:
-        raise HTTPException(status_code=401, detail="缺少 X-User-ID 或 approver_id")
+        raise HTTPException(status_code=401, detail="请先登录")
 
     reason = str(body.get("reason") or body.get("opinion") or "").strip()
     if not reason:
@@ -582,12 +606,13 @@ def reject_request(
 
 def withdraw_request(
     request_id: int,
+    http_request: Request,
     body: dict = Body(default_factory=dict),
     x_user_id: str | None = Header(default=None, alias="X-User-ID"),
 ):
-    actor = _resolve_actor(x_user_id, fallback=body.get("user_id"))
+    actor = _resolve_actor(http_request, x_user_id, fallback=body.get("user_id"))
     if actor is None:
-        raise HTTPException(status_code=401, detail="缺少 X-User-ID")
+        raise HTTPException(status_code=401, detail="请先登录")
 
     with get_db() as db:
         req = db.query(ApprovalRequest).filter(ApprovalRequest.id == request_id).first()
@@ -680,15 +705,16 @@ def _normalize_statuses(raw: Any) -> list[str]:
 
 def delete_request(
     request_id: int,
+    http_request: Request,
     x_user_id: str | None = Header(default=None, alias="X-User-ID"),
 ):
-    """物理删除单个审批申请（仅申请人本人，且必须处于终态）。
+    """物理删除单个审批申请（仅申请人本人，且必须处于终态。
 
     级联删除 ``approval_records``；会写入一条 ``approval.delete`` 审计。
     """
-    actor = _resolve_actor(x_user_id)
+    actor = _resolve_actor(http_request, x_user_id)
     if actor is None:
-        raise HTTPException(status_code=401, detail="缺少 X-User-ID")
+        raise HTTPException(status_code=401, detail="请先登录")
 
     with get_db() as db:
         req = db.query(ApprovalRequest).filter(ApprovalRequest.id == request_id).first()
@@ -753,7 +779,7 @@ def get_approval_users():
                 }
                 for u in rows
             ]
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         pass
 
     if not users:
@@ -766,7 +792,7 @@ def get_approval_users():
                     name = str(p.get("name") or p.get("product_name") or "").strip()
                     if name:
                         users.append({"id": p.get("id"), "name": name, "source": "roster"})
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             pass
 
     return {"success": True, "data": users, "count": len(users)}
@@ -789,7 +815,7 @@ def check_approver_orphan(user_id: int):
                 ids = []
                 try:
                     ids = json.loads(node.approver_ids or "[]")
-                except OPERATIONAL_ERRORS:
+                except RECOVERABLE_ERRORS:
                     pass
                 if user_id in ids:
                     orphan_flows.append(
@@ -843,6 +869,7 @@ def get_flow_detail(flow_id: int):
 
 
 def create_flow(
+    request: Request,
     body: dict = Body(default_factory=dict),
     x_user_id: str | None = Header(default=None, alias="X-User-ID"),
 ):
@@ -860,7 +887,7 @@ def create_flow(
     if not nodes_payload:
         raise HTTPException(status_code=400, detail="至少需要一个审批节点")
 
-    actor = _resolve_actor(x_user_id, fallback=flow_payload.get("created_by"))
+    actor = _resolve_actor(request, x_user_id, fallback=flow_payload.get("created_by"))
 
     with get_db() as db:
         existed = (
@@ -937,11 +964,12 @@ def create_flow(
 
 def update_flow(
     flow_id: int,
+    request: Request,
     body: dict = Body(default_factory=dict),
     x_user_id: str | None = Header(default=None, alias="X-User-ID"),
 ):
     """更新审批流程基础信息（不含节点，节点暂由 POST /flows 重建）。"""
-    actor = _resolve_actor(x_user_id)
+    actor = _resolve_actor(request, x_user_id)
     with get_db() as db:
         flow = (
             db.query(ApprovalFlow)
@@ -975,11 +1003,12 @@ def update_flow(
 
 def toggle_flow_active(
     flow_id: int,
+    request: Request,
     body: dict = Body(default_factory=dict),
     x_user_id: str | None = Header(default=None, alias="X-User-ID"),
 ):
     """启用 / 停用审批流程。body: {is_active: bool}"""
-    actor = _resolve_actor(x_user_id)
+    actor = _resolve_actor(request, x_user_id)
     is_active = bool(body.get("is_active", True))
     with get_db() as db:
         flow = (
@@ -1007,10 +1036,11 @@ def toggle_flow_active(
 
 def delete_flow(
     flow_id: int,
+    request: Request,
     x_user_id: str | None = Header(default=None, alias="X-User-ID"),
 ):
     """软删除审批流程（is_deleted = True）。"""
-    actor = _resolve_actor(x_user_id)
+    actor = _resolve_actor(request, x_user_id)
     with get_db() as db:
         flow = (
             db.query(ApprovalFlow)

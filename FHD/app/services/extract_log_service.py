@@ -11,7 +11,7 @@ from typing import Any
 
 from app.db.session import get_db
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +72,7 @@ class ExtractLogService(NeuroEventPublisherMixin):
                 logger.info(f"创建提取日志：id={log_id}, file={file_name}")
                 return log_id
 
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.error(f"创建提取日志失败：{e}")
             return -1
 
@@ -130,14 +130,14 @@ class ExtractLogService(NeuroEventPublisherMixin):
 
                 params["log_id"] = log_id
 
-                sql = f"UPDATE extract_logs SET {', '.join(updates)} WHERE id = :log_id"
+                sql = "UPDATE extract_logs SET " + ", ".join(updates) + " WHERE id = :log_id"
                 db.execute(text(sql), params)
                 db.commit()
 
                 logger.info(f"更新提取日志：id={log_id}, status={status}")
                 return True
 
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.error(f"更新提取日志失败：{e}")
             return False
 
@@ -180,7 +180,7 @@ class ExtractLogService(NeuroEventPublisherMixin):
                     }
                 return None
 
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.error(f"获取提取日志失败：{e}")
             return None
 
@@ -250,7 +250,7 @@ class ExtractLogService(NeuroEventPublisherMixin):
 
                 return logs
 
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.error(f"获取提取日志列表失败：{e}")
             return []
 

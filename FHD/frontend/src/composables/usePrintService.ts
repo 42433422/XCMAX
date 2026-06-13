@@ -81,7 +81,7 @@ export function usePrintService() {
 
   async function markAsPrinted(filePath: string, orderId?: number): Promise<PrintResult> {
     try {
-      const payload: Record<string, any> = { file_path: filePath }
+      const payload: Record<string, unknown> = { file_path: filePath }
       if (orderId) {
         payload.order_id = orderId
       }

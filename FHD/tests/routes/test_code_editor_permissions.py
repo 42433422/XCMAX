@@ -165,6 +165,13 @@ class TestDiff:
 
 class TestApply:
     def test_unknown_edit_id_404(self, client: TestClient) -> None:
-        r = client.post("/api/code-editor/apply/nonexistent")
-        # No request body needed; endpoint just raises 404
+        # apply 需 p2 授权才能进入 edit_id 校验；授权后未知 edit_id 应 404
+        with (
+            patch("app.fastapi_routes.code_editor.resolve_ai_tier", return_value="p2"),
+            patch(
+                "app.fastapi_routes.code_editor.assert_p2_elevated_claim_or_raise",
+                return_value=None,
+            ),
+        ):
+            r = client.post("/api/code-editor/apply/nonexistent")
         assert r.status_code == 404

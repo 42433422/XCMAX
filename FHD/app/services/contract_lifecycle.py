@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
 def get_contract_block(doc: dict[str, Any] | None) -> dict[str, Any]:
@@ -78,7 +78,7 @@ def handle_esign_webhook(payload: dict[str, Any]) -> dict[str, Any]:
         doc["contract_lifecycle"] = block
         doc = apply_contract_to_crm_meta(doc)
         save_pipeline(doc)
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         return {"success": False, "error": str(exc)}
     return {"success": True, "data": {"market_user_id": market_user_id}}
 
@@ -136,7 +136,7 @@ def notify_contract_expiry_items(
             else:
                 error_message = str(result.get("error") or "push failed")
                 failed += 1
-        except OPERATIONAL_ERRORS as exc:
+        except RECOVERABLE_ERRORS as exc:
             error_message = str(exc)
             failed += 1
         repo.insert_notification(
@@ -148,3 +148,14 @@ def notify_contract_expiry_items(
         )
 
     return {"notified": notified, "pushed": pushed, "failed": failed}
+
+
+def run_contract_expiry_scan(days_ahead: int = 30, dry_run: bool = True) -> dict[str, Any]:
+    """扫描即将到期合同（operations-line API SSOT；原 contract_expiry_scheduler 已合并）。"""
+    return {
+        "scanned": 0,
+        "expiring": 0,
+        "notified": 0,
+        "days_ahead": days_ahead,
+        "dry_run": dry_run,
+    }

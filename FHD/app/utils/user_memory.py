@@ -21,7 +21,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from typing import Any
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -131,7 +131,7 @@ class UserMemoryStore:
                     for user_id, memory_data in data.items():
                         self._memory_cache[user_id] = UserMemory.from_dict(memory_data)
                 logger.info(f"从 {JSON_MEMORY_PATH} 加载了 {len(self._memory_cache)} 个用户记忆")
-            except OPERATIONAL_ERRORS as e:
+            except RECOVERABLE_ERRORS as e:
                 logger.error(f"加载用户记忆失败: {e}")
                 self._memory_cache = {}
 
@@ -146,7 +146,7 @@ class UserMemoryStore:
             with open(JSON_MEMORY_PATH, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
             logger.debug(f"已保存 {len(self._memory_cache)} 个用户记忆到 {JSON_MEMORY_PATH}")
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.error(f"保存用户记忆失败: {e}")
 
     def get_memory(self, user_id: str) -> UserMemory | None:

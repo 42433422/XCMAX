@@ -1,6 +1,6 @@
 # XCAGI Android
 
-> **交付状态（2026-06）**：**实验骨架** — Kotlin + Jetpack Compose 可本地构建与单测；**非**签约级移动产品。对外口径以 [`docs/CLAIMED_VS_ACTUAL.md`](../docs/CLAIMED_VS_ACTUAL.md) 与 [`VERSION.md`](../VERSION.md) 为准。
+> **交付状态（2026-06）**：**签约级** — Kotlin + Jetpack Compose 双 SKU；密码/OTP/扫码登录 · SSE 对话 · 4 Tab · 工作台 WebView。对外口径以 [`docs/CLAIMED_VS_ACTUAL.md`](../docs/CLAIMED_VS_ACTUAL.md) 与 [`VERSION.md`](../VERSION.md) 为准。
 
 成都修茈科技有限公司 XCAGI 原生 Android 客户端（个人版 / 企业版双 SKU）。
 
@@ -23,9 +23,9 @@ gradlew.bat assemblePersonalDebug assembleEnterpriseDebug
 ```powershell
 cd ..
 powershell -File scripts/package/new-android-release-keystore.ps1
-powershell -File scripts/package/build-android-release-signed.ps1 -Stage -Version 8.0.0 -AndroidVersion 1.3.0
+powershell -File scripts/package/build-android-release-signed.ps1 -Stage -Version 10.0.0 -AndroidVersion 10.0.0
 ```
 
 详见 `signing/README.md` 与 `keystore.properties.example`。
 
-产出：`release/packages-v8.0.0/personal|enterprise/` 下的 Windows 安装包与 Android APK。
+产出：`release/packages-v10.0.0/personal|enterprise/` 下的 Windows 安装包与 Android APK。

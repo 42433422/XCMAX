@@ -1,0 +1,126 @@
+{
+  "id": "pdf-generate-employee",
+  "name": "PDF 生成员",
+  "version": "1.0.0",
+  "author": "XCAGI",
+  "description": "制作 PDF 生成员工包",
+  "artifact": "employee_pack",
+  "scope": "global",
+  "dependencies": {
+    "xcagi": ">=1.0.0"
+  },
+  "employee": {
+    "id": "pdf-generate-employee",
+    "label": "PDF 生成员",
+    "capabilities": [
+      "pdf.parse",
+      "pdf.write",
+      "pdf.polish_optional"
+    ]
+  },
+  "workflow_employees": [
+    {
+      "id": "pdf-generate-employee",
+      "label": "PDF 生成员",
+      "panel_title": "PDF 生成员",
+      "panel_summary": "上传 .pdf，JSON 中介后生成 PDF，可选润色。",
+      "capabilities": [
+        "pdf.parse",
+        "pdf.write",
+        "pdf.polish_optional"
+      ],
+      "api_base_path": "employees/pdf-generate-employee",
+      "entry_action": "run"
+    }
+  ],
+  "backend": {
+    "entry": "blueprints",
+    "init": "mod_init"
+  },
+  "employee_config_v2": {
+    "identity": {
+      "id": "pdf-generate-employee",
+      "version": "1.0.0",
+      "artifact": "employee_pack",
+      "name": "PDF 生成员",
+      "description": "制作 PDF 生成员工包"
+    },
+    "perception": {
+      "type": "file_or_text",
+      "accepted_extensions": [
+        ".pdf",
+        ".json",
+        ".txt"
+      ]
+    },
+    "memory": {
+      "type": "session"
+    },
+    "cognition": {
+      "agent": {
+        "system_prompt": "你是PDF 生成员。你负责读取 PDF、输出 JSON 中介并生成 generated_document.pdf。direct_python 必须真实解析；润色可走 agent，禁止无输入编造。",
+        "role": {
+          "name": "PDF 生成员",
+          "persona": "严谨的 PDF 生成员工",
+          "tone": "professional",
+          "expertise": [
+            "PDF 解析",
+            "JSON 中介",
+            "PDF 生成"
+          ]
+        },
+        "behavior_rules": [
+          "必须真实读取 PDF 并写出 document_parsed.json。",
+          "成功必须以写出 generated_document.pdf 为准。",
+          "润色时须基于 JSON，禁止无输入编造。"
+        ],
+        "few_shot_examples": [],
+        "model": {
+          "provider": "auto",
+          "model_name": "auto",
+          "temperature": 0.1,
+          "max_tokens": 2000,
+          "top_p": 0.9
+        }
+      },
+      "skills": [
+        {
+          "name": "pdf.generate",
+          "brief": "上传 pdf → JSON → 写 generated pdf，可选润色。"
+        }
+      ]
+    },
+    "collaboration": {
+      "workflow": {
+        "workflow_id": 0,
+        "name": "PDF 生成员"
+      }
+    },
+    "actions": {
+      "handlers": [
+        "direct_python"
+      ],
+      "direct_python": {
+        "module": "pdf_generate_employee",
+        "action": "convert",
+        "default_output_relpath": "outputs/document_parsed.json",
+        "default_pdf_output_relpath": "outputs/generated_document.pdf"
+      }
+    }
+  },
+  "metadata": {
+    "framework_version": "2.0.0",
+    "created_by": "asset_pipeline"
+  },
+  "actions": {
+    "handlers": [
+      "direct_python"
+    ],
+    "direct_python": {
+      "module": "pdf_generate_employee",
+      "action": "convert",
+      "default_output_relpath": "outputs/document_parsed.json",
+      "default_pdf_output_relpath": "outputs/generated_document.pdf"
+    }
+  }
+}

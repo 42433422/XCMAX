@@ -16,7 +16,7 @@ from typing import Any, Callable, TypeVar
 
 logger = logging.getLogger(__name__)
 
-F = TypeVar("F", bound=Callable[..., Any])
+FuncT = TypeVar("FuncT", bound=Callable[..., Any])
 
 
 def _build_celery_stub() -> Any:
@@ -34,8 +34,8 @@ def _build_celery_stub() -> Any:
             bind: bool = False,
             max_retries: int = 0,
             **kwargs: Any,
-        ) -> Callable[[F], F]:
-            def decorator(fn: F) -> F:
+        ) -> Callable[[FuncT], FuncT]:
+            def decorator(fn: FuncT) -> FuncT:
                 @functools.wraps(fn)
                 def wrapper(*a: Any, **kw: Any) -> Any:
                     if bind:

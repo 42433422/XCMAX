@@ -6,7 +6,7 @@ import type { ApiResponse } from '@/types/api'
 
 interface OperationResult {
   success: boolean;
-  data?: any;
+  data?: unknown;
   message?: string;
 }
 
@@ -17,14 +17,14 @@ export const useOrdersStore = defineStore('orders', () => {
 
   const orderCount = computed(() => orders.value.length)
 
-  function normalizeOrders(data: any): Order[] {
+  function normalizeOrders(data: unknown): Order[] {
     if (Array.isArray(data?.data)) return data.data
     if (Array.isArray(data?.orders)) return data.orders
     if (Array.isArray(data)) return data
     return []
   }
 
-  async function fetchOrders(params: Record<string, any> = {}): Promise<OperationResult> {
+  async function fetchOrders(params: Record<string, unknown> = {}): Promise<OperationResult> {
     loading.value = true
     error.value = null
     try {

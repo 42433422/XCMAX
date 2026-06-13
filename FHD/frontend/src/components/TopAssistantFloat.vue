@@ -312,7 +312,9 @@ import { useRouter } from 'vue-router';
 import { ApiError } from '@/api';
 import productsApi from '@/api/products';
 import { useTutorialStore } from '@/stores/tutorial';
+import { useOnboardingTutorialStore } from '@/stores/onboardingTutorial';
 import { useTutorialCatalog } from '@/composables/useTutorialCatalog';
+import { launchAdvancedDriverTour } from '@/tutorial/promptAdvancedTutorial';
 import { DEFAULT_TUTORIAL_TRACK_ID } from '@/constants/productFlow';
 import { useModsStore } from '@/stores/mods';
 import { useWorkflowAiEmployeesStore } from '@/stores/workflowAiEmployees';
@@ -333,6 +335,7 @@ import ExcelPreview from '@/components/template/ExcelPreview.vue';
 
 const router = useRouter();
 const tutorialStore = useTutorialStore();
+const onboardingTutorialStore = useOnboardingTutorialStore();
 const { tutorialTracks, advancedTrackHint, buildContext: tutorialBuildContext } = useTutorialCatalog();
 const modsStore = useModsStore();
 const uiText = useIndustryUiText();
@@ -729,6 +732,7 @@ const startTutorialGuide = async (track = DEFAULT_TUTORIAL_TRACK_ID) => {
     await startHostOnboardingGuide();
     return;
   }
+  const useDriverTour = t === 'advanced';
   const extractChatMessagesSnapshot = () => {
     const nodes = Array.from(document.querySelectorAll('#chatMessages .message'));
     return nodes.slice(-30).map((node) => {
@@ -800,24 +804,39 @@ const startTutorialGuide = async (track = DEFAULT_TUTORIAL_TRACK_ID) => {
   lastProductSearchQuery.value = '';
   lastProductSearchTotal.value = null;
   operationHistory.value = [];
-  isOpen.value = true;
-  hasUnreadPush.value = false;
-  popupNotice.value = null;
-  activeTab.value = 'tutorial';
+  if (useDriverTour) {
+    isOpen.value = false;
+    await launchAdvancedDriverTour({
+      router,
+      buildContext: tutorialBuildContext.value,
+      skipNavigation: true,
+      returnContext: {
+        routeName: previousRouteName || 'chat',
+        assistantOpen: previousOpen,
+        assistantTab: previousTab || 'push',
+        assistantState: snapshotState,
+      },
+    });
+  } else {
+    isOpen.value = true;
+    hasUnreadPush.value = false;
+    popupNotice.value = null;
+    activeTab.value = 'tutorial';
+    tutorialStore.startTutorial({
+      isProMode: !!window.__XCAGI_IS_PRO_MODE,
+      track: t,
+      buildContext: tutorialBuildContext.value,
+      returnContext: {
+        routeName: previousRouteName || 'chat',
+        assistantOpen: previousOpen,
+        assistantTab: previousTab || 'push',
+        assistantState: snapshotState,
+      },
+    });
+  }
   // 若用户已在教程标签，startTutorial 前再触发一次预热（仅首次会真正请求）
   queueMicrotask(() => {
     window.dispatchEvent(new CustomEvent('xcagi:warmup-tutorial-tts'));
-  });
-  tutorialStore.startTutorial({
-    isProMode: !!window.__XCAGI_IS_PRO_MODE,
-    track: t,
-    buildContext: tutorialBuildContext.value,
-    returnContext: {
-      routeName: previousRouteName || 'chat',
-      assistantOpen: previousOpen,
-      assistantTab: previousTab || 'push',
-      assistantState: snapshotState,
-    },
   });
   const tutorialPack = {
     version: 1,
@@ -830,17 +849,28 @@ const startTutorialGuide = async (track = DEFAULT_TUTORIAL_TRACK_ID) => {
       chatMessages: extractChatMessagesSnapshot(),
     },
     tutorial: {
-      track: tutorialStore.currentTrack ?? t,
+      track: useDriverTour ? t : (tutorialStore.currentTrack ?? t),
       requestedTrack: t,
-      stepCount: tutorialStore.steps.length,
-      steps: tutorialStore.steps.map((step, idx) => ({
-        index: idx + 1,
-        id: step.id,
-        title: step.title,
-        description: step.description,
-        actionType: step.actionType,
-        targetSelector: step.targetSelector,
-      })),
+      stepCount: useDriverTour
+        ? onboardingTutorialStore.schedules.length
+        : tutorialStore.steps.length,
+      steps: useDriverTour
+        ? onboardingTutorialStore.schedules.map((step, idx) => ({
+            index: idx + 1,
+            id: step.id,
+            title: step.title,
+            description: step.description,
+            actionType: step.actionType,
+            targetSelector: step.waitFor,
+          }))
+        : tutorialStore.steps.map((step, idx) => ({
+            index: idx + 1,
+            id: step.id,
+            title: step.title,
+            description: step.description,
+            actionType: step.actionType,
+            targetSelector: step.targetSelector,
+          })),
     },
   };
   void cacheTutorialGuidePack(tutorialPack);

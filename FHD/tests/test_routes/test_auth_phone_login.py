@@ -32,17 +32,15 @@ def test_login_with_phone_code_market_fail(
 ) -> None:
     monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
 
-    async def _fail(phone: str, code: str):
-        return {
-            "success": False,
-            "message": "验证码无效",
-            "status_code": 401,
-            "market_base_url": "http://test",
-        }
+    from fastapi.responses import JSONResponse
 
+    err_resp = JSONResponse(
+        {"success": False, "message": "验证码无效"},
+        status_code=401,
+    )
     with patch(
-        "app.fastapi_routes.market_account.login_market_with_phone_code",
-        new=AsyncMock(side_effect=_fail),
+        "app.application.enterprise_login_flow.run_market_first_login",
+        new=AsyncMock(return_value=(None, err_resp)),
     ):
         resp = client.post(
             "/api/auth/login-with-phone-code",
@@ -51,7 +49,16 @@ def test_login_with_phone_code_market_fail(
     assert resp.status_code == 401
 
 
-def test_market_send_phone_code_proxy(client: TestClient) -> None:
+def test_market_send_phone_code_proxy() -> None:
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from app.fastapi_routes.market_account import router as market_router
+
+    app = FastAPI()
+    app.include_router(market_router)
+    client = TestClient(app, raise_server_exceptions=False)
+
     with patch(
         "app.fastapi_routes.market_account.send_market_phone_code",
         new=AsyncMock(return_value={"success": True, "message": "验证码已发送"}),

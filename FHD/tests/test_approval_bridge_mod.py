@@ -10,11 +10,17 @@ MOD_DIR = REPO / "mods" / "xcagi-approval-bridge"
 
 
 def test_approval_manifest_facade_flag():
+    from tests.mod_presence import skip_if_bridge_mod_absent
+
+    skip_if_bridge_mod_absent("xcagi-approval-bridge")
     data = json.loads((MOD_DIR / "manifest.json").read_text(encoding="utf-8"))
     assert data.get("config", {}).get("approval_facade") is True
 
 
 def test_approval_blueprints_delegate_routes():
+    from tests.mod_presence import skip_if_bridge_mod_absent
+
+    skip_if_bridge_mod_absent("xcagi-approval-bridge")
     text = (MOD_DIR / "backend" / "blueprints.py").read_text(encoding="utf-8")
     assert "/requests" in text
     assert "/flows" in text

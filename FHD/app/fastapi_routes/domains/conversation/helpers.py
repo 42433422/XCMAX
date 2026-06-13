@@ -31,7 +31,7 @@ from app.domain.context.session_context import (
 )
 from app.infrastructure.auth.db_token import effective_db_read_token
 from app.infrastructure.llm.client import set_mode as set_llm_mode
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -185,6 +185,23 @@ def _xcagi_chat_http_exc(exc: BaseException) -> HTTPException:
     if isinstance(exc, TimeoutError):
         msg = str(exc).strip() or "大模型响应超时，请稍后重试。"
         return HTTPException(status_code=504, detail=msg)
+    try:
+        import httpx
+
+        if isinstance(exc, httpx.ConnectError):
+            market = (
+                os.environ.get("XCAGI_MARKET_BASE_URL")
+                or os.environ.get("MODSTORE_PLATFORM_URL")
+                or "修茈市场"
+            ).rstrip("/")
+            return HTTPException(
+                status_code=503,
+                detail=f"无法连接修茈平台 LLM（{market}）：{exc}",
+            )
+        if isinstance(exc, httpx.HTTPError):
+            return HTTPException(status_code=502, detail=f"修茈平台 LLM 请求失败: {exc}")
+    except ImportError:
+        pass
     if isinstance(exc, AuthenticationError):
         return HTTPException(status_code=401, detail=f"大模型鉴权失败: {exc}")
     if isinstance(exc, RateLimitError):
@@ -195,6 +212,15 @@ def _xcagi_chat_http_exc(exc: BaseException) -> HTTPException:
         return HTTPException(status_code=502, detail=f"大模型接口错误: {exc}")
     if isinstance(exc, RuntimeError):
         return HTTPException(status_code=503, detail=str(exc))
+    if isinstance(exc, ValueError):
+        msg = str(exc).strip()
+        if "余额不足" in msg or "402" in msg:
+            return HTTPException(
+                status_code=402,
+                detail="修茈市场模型余额不足，请在「模型支付」充值后重试。",
+            )
+        if "平台错误" in msg:
+            return HTTPException(status_code=502, detail=msg)
     logger.exception("xcagi ai chat compat unexpected error")
     return HTTPException(status_code=500, detail=f"对话处理失败: {exc}")
 
@@ -230,7 +256,7 @@ def _xcagi_compat_reply_payload(
                 tool_data["errors_preview"] = joined[:2000]
                 if len(errs) > 5:
                     tool_data["errors_truncated"] = True
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         logger.debug("compat: last tool result unavailable", exc_info=True)
 
     err_code = str(last_result.get("error") or "").strip()
@@ -362,7 +388,7 @@ def _ensure_vector_index_if_needed(message: str, runtime_context: dict) -> str |
             workspace_root=root,
         )
         result = json.loads(raw)
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.exception("xcagi vector pre-index failed")
         return f"我尝试为 `{file_path}` 建立向量索引时失败：{e}。请确认文件路径是否存在，或告诉我要索引的工作表名。"
     if isinstance(result, dict) and result.get("error"):
@@ -469,7 +495,10 @@ def _xcagi_guarded_planner_stream_events(
         if item is done_marker:
             return
         if isinstance(item, BaseException):
-            raise item
+            exc = _xcagi_chat_http_exc(item)
+            detail = exc.detail if isinstance(exc.detail, str) else str(exc.detail)
+            yield {"type": "error", "message": detail, "status_code": exc.status_code}
+            return
 
         first_event_seen = True
         yield item
@@ -519,8 +548,13 @@ async def _xcagi_planner_stream_bytes_async(
         try:
             for chunk in _xcagi_planner_stream_bytes(request, body, ai_tier=ai_tier):
                 asyncio.run_coroutine_threadsafe(async_q.put(chunk), loop).result(timeout=120)
-        except OPERATIONAL_ERRORS as exc:
-            asyncio.run_coroutine_threadsafe(async_q.put(exc), loop).result(timeout=5)
+        except BaseException as exc:  # noqa: BLE001
+            err_msg = str(exc).strip() or exc.__class__.__name__
+            err_line = _sse_event_line({"type": "error", "message": err_msg})
+            try:
+                asyncio.run_coroutine_threadsafe(async_q.put(err_line), loop).result(timeout=5)
+            except RECOVERABLE_ERRORS:
+                pass
         finally:
             asyncio.run_coroutine_threadsafe(async_q.put(_SENTINEL), loop).result(timeout=5)
 
@@ -531,8 +565,6 @@ async def _xcagi_planner_stream_bytes_async(
         item = await async_q.get()
         if item is _SENTINEL:
             break
-        if isinstance(item, BaseException):
-            raise item
         yield item
 
 
@@ -588,6 +620,9 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
             client=llm_client,
         ):
             et = ev.get("type")
+            if et == "error":
+                yield _sse_event_line(ev)
+                return
             if et == "token":
                 text = str(ev.get("text") or "")
                 if not ev.get("ephemeral"):
@@ -604,13 +639,22 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
         if halted_for_write_token:
             return
         merged = "".join(reply_parts)
+        if not merged.strip():
+            market = (
+                os.environ.get("XCAGI_MARKET_BASE_URL")
+                or os.environ.get("MODSTORE_PLATFORM_URL")
+                or "修茈市场"
+            ).rstrip("/")
+            msg = f"修茈平台未返回内容，请确认已登录且 {market} 可访问。"
+            yield _sse_event_line({"type": "error", "message": msg})
+            return
         thinking = _thinking_steps_from_planner_stream_text(merged)
         if thinking:
             done_reply: str | dict = {"response": merged, "thinking_steps": thinking}
         else:
             done_reply = merged
         yield _sse_event_line({"type": "done", "result": _xcagi_compat_reply_payload(done_reply)})
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         exc = _xcagi_chat_http_exc(e)
         yield _sse_event_line(
             {

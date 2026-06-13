@@ -271,7 +271,9 @@ def record_cr_validation_failure_for_evolution(
             auto_dispatch=False,
         )
     except Exception as exc:  # noqa: BLE001
-        logger.exception("record_cr_validation_failure_for_evolution failed cr=%s", change_request_id)
+        logger.exception(
+            "record_cr_validation_failure_for_evolution failed cr=%s", change_request_id
+        )
         return {"ok": False, "error": str(exc)}
 
 

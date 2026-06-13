@@ -97,6 +97,15 @@ def test_seed_skips_existing(tmp_path, monkeypatch):
     assert row["status"] == "skipped"
 
 
+def test_seed_edition_does_not_include_open_industry_mods():
+    from app.mod_sdk.edition_policy import edition_mod_ids
+    from app.mod_sdk.industry_seed import open_industry_seed_mod_ids
+
+    edition_ids = set(edition_mod_ids("generic"))
+    for mid in open_industry_seed_mod_ids():
+        assert mid not in edition_ids
+
+
 def test_decoupling_adcdfg_complete():
     from app.mod_sdk.decoupling_progress import build_decoupling_progress_payload
 

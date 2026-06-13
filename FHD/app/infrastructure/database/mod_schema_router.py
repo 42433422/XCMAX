@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 
 from app.db.sqlite_mod_paths import mod_suffix_token
 from app.request_active_mod_ctx import get_request_active_mod_id
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +46,7 @@ def set_search_path(dbapi_connection, connection_record):
         cursor.execute(f"SET search_path TO {schema_name}, public")
         cursor.close()
         logger.debug(f"Set search_path to {schema_name} for Mod {active_mod_id}")
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.warning(f"Failed to set search_path for Mod {active_mod_id}: {e}")
 
 
@@ -71,7 +71,7 @@ def ensure_mod_schema(db: Session, mod_id: str) -> bool:
         db.commit()
         logger.info(f"Ensured schema {schema_name} for Mod {mod_id}")
         return True
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.error(f"Failed to create schema {schema_name}: {e}")
         db.rollback()
         return False
@@ -82,7 +82,7 @@ def get_current_schema(db: Session) -> str:
     try:
         result = db.execute("SHOW search_path").scalar()
         return str(result)
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         return "unknown"
 
 
@@ -99,5 +99,5 @@ def init_mod_schema_routing():
         # The proxy engine
         try:
             setup_mod_schema_routing(engine)
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.warning(f"Could not setup schema routing on engine proxy: {e}")

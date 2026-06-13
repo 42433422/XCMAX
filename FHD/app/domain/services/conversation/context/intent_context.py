@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -275,7 +275,7 @@ class IntentContext:
                     notifier.notify_pending_created(user_id, pending_data)
                 elif event == "updated":
                     notifier.notify_pending_updated(user_id, pending_data)
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.warning(f"[INTENT_CONTEXT] Failed to notify: {e}")
 
     def _notify_cleared(self, user_id: str, reason: str) -> None:
@@ -284,7 +284,7 @@ class IntentContext:
             notifier = self._get_notifier()
             if notifier:
                 notifier.notify_pending_cleared(user_id, reason)
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.warning(f"[INTENT_CONTEXT] Failed to notify: {e}")
 
     def _notify_preserved(self, user_id: str, pending: PendingIntent, action: str) -> None:
@@ -294,7 +294,7 @@ class IntentContext:
             if notifier:
                 pending_data = pending.to_dict()
                 notifier.notify_pending_preserved(user_id, pending_data, action)
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.warning(f"[INTENT_CONTEXT] Failed to notify: {e}")
 
     def _get_notifier(self):

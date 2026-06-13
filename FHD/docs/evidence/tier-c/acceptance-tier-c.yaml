@@ -1,0 +1,20 @@
+# Tier C acceptance template — fill after staging load tests
+version: tier-c-v1
+date: null
+sustained:
+  script: scripts/loadtest/tier_c_sustained.js
+  rps_target: 1000
+  duration: 10m
+  error_rate: null
+  p95_ms: null
+  report: docs/evidence/tier-c/sustained-report.json
+chat_streams:
+  script: scripts/loadtest/tier_c_chat_streams.js
+  concurrency: 200
+  duration: 15m
+  first_byte_p95_ms: null
+  report: docs/evidence/tier-c/chat-streams-report.json
+slo_m0:
+  window: 7d
+  k6_job: k8s/monitoring/k6-7day-job.yaml
+  scenario: tier_c_ramp

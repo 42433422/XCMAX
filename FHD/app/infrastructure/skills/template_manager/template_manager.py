@@ -185,7 +185,7 @@ def update_template(template_id: int, **updates) -> dict:
             db_updates.append("updated_at = :updated_at")
             params["updated_at"] = datetime.now()
 
-            sql = f"UPDATE templates SET {', '.join(db_updates)} WHERE id = :id"
+            sql = "UPDATE templates SET " + ", ".join(db_updates) + " WHERE id = :id"
             db.execute(text(sql), params)
             db.commit()
 

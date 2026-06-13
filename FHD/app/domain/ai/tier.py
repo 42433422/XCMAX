@@ -5,6 +5,7 @@ Phase 3 从 ``app.legacy.ai_tier`` 迁入。
 
 from __future__ import annotations
 
+import hmac
 import os
 from collections.abc import Mapping
 from typing import Any
@@ -26,7 +27,8 @@ def resolve_ai_tier(request: Request | None) -> str:
         return "p1"
     secret = (os.environ.get("FHD_AI_ELEVATED_TOKEN") or "").strip()
     token = _header(request, "X-XCAGI-Elevated-Token")
-    if secret and token and token == secret:
+    # 恒定时间比较，避免按字符短路导致的时序侧信道（与 mobile_jwt 校验一致）。
+    if secret and token and hmac.compare_digest(token.encode("utf-8"), secret.encode("utf-8")):
         return "p2"
     return "p1"
 

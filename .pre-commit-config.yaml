@@ -60,7 +60,7 @@ repos:
     hooks:
       - id: mypy
         additional_dependencies: [types-all]
-        args: [--ignore-missing-imports, --no-strict-optional]
+        args: [--config-file=FHD/pyproject.toml]
         files: '^FHD/app/'
 
   # ----- 通用检查：禁止提交超大文件 -----

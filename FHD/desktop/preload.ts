@@ -8,6 +8,9 @@ contextBridge.exposeInMainWorld('xcagiDesktop', {
   checkForUpdates: () => ipcRenderer.invoke('xcagi:check-for-updates'),
   installUpdate: () => ipcRenderer.invoke('xcagi:install-update'),
   getPairingQrPayload: () => ipcRenderer.invoke('xcagi:pairing-qr'),
+  setBadge: (count: number) => ipcRenderer.invoke('xcagi:set-badge', count),
+  showNotification: (title: string, body: string) =>
+    ipcRenderer.invoke('xcagi:show-notification', { title, body }),
   onUpdateEvent: (callback: (event: unknown) => void) => {
     const listener = (_event: Electron.IpcRendererEvent, payload: unknown) => callback(payload)
     ipcRenderer.on('xcagi:update-event', listener)

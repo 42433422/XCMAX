@@ -1,0 +1,24 @@
+{
+  "errors": {
+    "UNAUTHORIZED": "请先登录",
+    "WEAK_PASSWORD": "新密码至少 6 个字符",
+    "VALIDATION_ERROR": "请求参数无效",
+    "EMPTY_MESSAGE": "消息内容不能为空",
+    "BATCH_LIMIT_EXCEEDED": "单次批量最多 20 条",
+    "NOT_FOUND": "资源不存在",
+    "FORBIDDEN": "无权访问",
+    "INTERNAL_ERROR": "服务器内部错误",
+    "INVALID_INPUT": "请求参数无效",
+    "NO_SESSION": "无会话信息",
+    "INVALID_SESSION": "会话无效或已过期",
+    "ACCOUNT_DISABLED": "账户已被禁用",
+    "MARKET_NOT_BOUND": "企业版需使用修茈市场企业级账号登录",
+    "SEND_CODE_FAILED": "发送验证码失败",
+    "MARKET_RESET_FAILED": "重置失败",
+    "MARKET_REGISTER_FAILED": "修茈市场注册失败",
+    "REGISTRATION_DISABLED": "本部署未开放自助注册",
+    "CREATE_FAILED": "创建用户失败",
+    "UPDATE_FAILED": "更新失败",
+    "QR_NOT_FOUND": "二维码无效"
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "brief": "Excel生成员工：JSON 为中介，上传 .json（含 sheets 或 columns/rows）写出 outputs/output.xlsx，使用 direct_python，禁止编造表格数据。",
+  "mode": "direct_python_file_transform",
+  "accepted_extensions": [
+    ".json",
+    ".txt"
+  ],
+  "default_action": "convert",
+  "default_output_relpath": "outputs/output.xlsx",
+  "runtime_kind": "excel_generate",
+  "output_schema": [
+    "sheets",
+    "columns",
+    "rows",
+    "sheet_count",
+    "meta"
+  ],
+  "requirements": [
+    "Use direct_python only; handlers must be [\"direct_python\"].",
+    "Read JSON / user_query 纯文本 / .txt; write outputs/output.xlsx via openpyxl.",
+    "Support payload.table_json; optional LLM structures plain text to sheets.",
+    "Never fabricate rows when inputs/ is empty and payload has no table.",
+    "Return {ok, summary, items, warnings, error, meta}."
+  ],
+  "pack_id": "excel-generate-employee"
+}

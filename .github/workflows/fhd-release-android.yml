@@ -1,0 +1,51 @@
+# CI SSOT: generated from FHD/.github/workflows/release-android.yml — DO NOT edit here.
+# Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
+name: Release Android
+
+on:
+  workflow_dispatch:
+    inputs:
+      upload_crashlytics_mapping:
+        description: Upload ProGuard mapping to Firebase Crashlytics
+        type: boolean
+        default: false
+  # Tag (FHD/v*) entry is centralized in fhd-release-orchestrator.yml (gated on
+  # verify-version-anchors, then dispatches this workflow) — avoids the double-run.
+
+concurrency:
+  group: fhd-release-android-${{ github.ref }}
+  cancel-in-progress: true
+
+
+defaults:
+  run:
+    working-directory: FHD
+
+jobs:
+  assemble-release:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile-android
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+      - name: Ensure gradlew executable
+        run: chmod +x ./gradlew
+      - name: Assemble Release (personal + enterprise)
+        run: |
+          ./gradlew assemblePersonalRelease assembleEnterpriseRelease \
+            -PuploadCrashlyticsMapping=${{ github.event.inputs.upload_crashlytics_mapping == true && 'true' || 'false' }} \
+            --no-daemon
+      - name: Upload APK artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcagi-android-release-apks
+          path: |
+            FHD/mobile-android/app/build/outputs/apk/personal/release/*.apk
+            FHD/mobile-android/app/build/outputs/apk/enterprise/release/*.apk
+          if-no-files-found: error

@@ -30,12 +30,6 @@ _EXTRA_POST = [
 @pytest.mark.parametrize("path", _EXTRA_GET)
 def test_coverage_ramp_get_not_5xx(client: TestClient, path: str) -> None:
     r = client.get(path)
-    if r.status_code >= 500 and path in (
-        "/api/health",
-        "/health/liveness",
-        "/api/system/health",
-    ):
-        pytest.skip("health endpoint unavailable or warming in CI/stable subset")
     assert r.status_code < 500, f"GET {path} -> {r.status_code}: {r.text[:200]}"
 
 
@@ -47,8 +41,7 @@ def test_coverage_ramp_post_not_5xx(client: TestClient, path: str, payload: dict
 
 def test_neurobus_health_reliability_shape(client: TestClient) -> None:
     r = client.get("/api/neurobus/health")
-    if r.status_code >= 500:
-        pytest.skip("neurobus health unavailable in this environment")
+    assert r.status_code < 500
     if r.status_code != 200:
         return
     body = r.json()

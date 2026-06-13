@@ -4,7 +4,7 @@ import json
 import logging
 import os
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +66,7 @@ def _load_template_scope_required_terms():
             if isinstance(rule, dict) and "requiredTerms" in rule:
                 merged[scope_key] = list((rule or {}).get("requiredTerms") or [])
         return merged
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         return default_rules
 
 

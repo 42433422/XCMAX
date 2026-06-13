@@ -21,7 +21,7 @@ from app.domain.services.conversation.coordinator import (
     get_conversation_coordinator as get_base_coordinator,
 )
 from app.neuro_bus.domains.intent_domain import get_intent_domain
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -103,7 +103,7 @@ class NeuroConversationCoordinator:
                 processor_used="legacy_coordinator",
                 latency_ms=0.0,
             )
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             logger.debug("intent emit skipped for legacy coordinator path", exc_info=True)
 
         return NeuroProcessingResult(

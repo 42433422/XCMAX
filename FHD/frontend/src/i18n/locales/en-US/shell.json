@@ -1,0 +1,10 @@
+{
+  "shell": {
+    "send": "Send",
+    "newChat": "New chat",
+    "history": "History",
+    "upload": "Upload",
+    "uploadAnalyzing": "Analyzing...",
+    "settings": "Settings"
+  }
+}

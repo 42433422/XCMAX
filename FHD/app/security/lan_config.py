@@ -17,7 +17,7 @@ from functools import lru_cache
 from ipaddress import ip_network
 from pathlib import Path
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 LAN_LICENSE_SECRET_MIN_LENGTH = 8
 
@@ -252,7 +252,7 @@ def get_lan_config() -> LanConfig:
             bootstrap_key = overrides.admin_bootstrap_key.strip()
         if overrides.allowed_cidrs is not None:
             cidrs = [str(x).strip() for x in overrides.allowed_cidrs if str(x).strip()]
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         # 任何读/解析失败都不阻断系统启动，只走 env 路径。
         pass
 

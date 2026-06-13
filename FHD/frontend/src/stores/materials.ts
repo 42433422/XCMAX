@@ -6,7 +6,7 @@ import type { ApiResponse } from '@/types/api'
 
 interface OperationResult {
   success: boolean;
-  data?: any;
+  data?: unknown;
   message?: string;
   total?: number;
 }
@@ -20,16 +20,16 @@ export const useMaterialsStore = defineStore('materials', () => {
 
   const lowStockMaterials = computed(() => {
     return materials.value.filter(m =>
-      m.quantity !== null && (m as any).min_stock !== null && m.quantity < (m as any).min_stock
+      m.quantity !== null && (m as unknown).min_stock !== null && m.quantity < (m as unknown).min_stock
     )
   })
 
   const categories = computed(() => {
-    const cats = new Set(materials.value.map((m: any) => m.category).filter(Boolean))
+    const cats = new Set(materials.value.map((m: unknown) => m.category).filter(Boolean))
     return Array.from(cats)
   })
 
-  async function fetchMaterials(params: Record<string, any> = {}): Promise<OperationResult> {
+  async function fetchMaterials(params: Record<string, unknown> = {}): Promise<OperationResult> {
     loading.value = true
     error.value = null
     try {
@@ -130,7 +130,7 @@ export const useMaterialsStore = defineStore('materials', () => {
     }
   }
 
-  async function exportMaterials(params: Record<string, any> = {}): Promise<Response> {
+  async function exportMaterials(params: Record<string, unknown> = {}): Promise<Response> {
     return materialsApi.exportMaterialsXlsx(params)
   }
 

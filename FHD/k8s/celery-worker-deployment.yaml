@@ -1,0 +1,76 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: xcagi-celery-worker
+  labels:
+    app: xcagi-celery-worker
+    version: v10.0.0
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: xcagi-celery-worker
+  template:
+    metadata:
+      labels:
+        app: xcagi-celery-worker
+        version: v10.0.0
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+        - name: celery-worker
+          image: __DEPLOY_BACKEND_IMAGE__
+          command:
+            - celery
+            - -A
+            - app.extensions:celery_app
+            - worker
+            - --loglevel=INFO
+            - -Q
+            - default,inference,export
+            - --concurrency=4
+          env:
+            - name: XCAGI_ENV
+              value: production
+            - name: CELERY_BROKER_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: xcagi-config
+                  key: redis_url
+            - name: CELERY_RESULT_BACKEND
+              valueFrom:
+                configMapKeyRef:
+                  name: xcagi-config
+                  key: redis_url
+            - name: XCAGI_INFERENCE_WORKER
+              value: "1"
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "1Gi"
+            limits:
+              cpu: "2000m"
+              memory: "4Gi"
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: xcagi-celery-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: xcagi-celery-worker
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 75

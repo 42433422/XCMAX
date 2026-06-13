@@ -1,0 +1,7 @@
+# 禁止扩大 legacy_gaps_batch 路由面
+
+Phase 2 主路径收敛期间：
+
+- **禁止**在 `app/fastapi_routes/legacy_gaps_batch1.py` / `legacy_gaps_batch2.py` 新增路由或业务逻辑。
+- 新 API：仅 `app/fastapi_routes/<domain>.py` + `app/application/`。
+- 见 `docs/reports/LEGACY_CLEANUP_TRACKING.md` Phase 2D。

@@ -75,7 +75,7 @@ async function modPost<T>(path: string, body?: unknown): Promise<ApiResponse<T>>
 }
 
 export const privateDbAssistantApi = {
-  status(): Promise<ApiResponse<any>> {
+  status(): Promise<ApiResponse<unknown>> {
     return modGet(`${BASE}/status`);
   },
 
@@ -83,11 +83,11 @@ export const privateDbAssistantApi = {
     return modGet(`${BASE}/sources`);
   },
 
-  selectSource(sourceId: string): Promise<ApiResponse<any>> {
+  selectSource(sourceId: string): Promise<ApiResponse<unknown>> {
     return modPost(`${BASE}/sources/select`, { source_id: sourceId });
   },
 
-  refreshSource(sourceId: string, refreshType: 'contacts' | 'messages' | 'all' = 'contacts'): Promise<ApiResponse<any>> {
+  refreshSource(sourceId: string, refreshType: 'contacts' | 'messages' | 'all' = 'contacts'): Promise<ApiResponse<unknown>> {
     return modPost(`${BASE}/sources/refresh`, {
       source_id: sourceId,
       refresh_type: refreshType,
@@ -98,13 +98,13 @@ export const privateDbAssistantApi = {
     return modGet(`${BASE}/contacts/search?source_id=${encodeURIComponent(sourceId)}&q=${encodeURIComponent(q)}`);
   },
 
-  getContext(sourceId: string, contactId: number | string): Promise<ApiResponse<any[]>> {
+  getContext(sourceId: string, contactId: number | string): Promise<ApiResponse<unknown[]>> {
     return modGet(
       `${BASE}/contacts/${encodeURIComponent(String(contactId))}/context?source_id=${encodeURIComponent(sourceId)}`,
     );
   },
 
-  sendMessage(sourceId: string, contactName: string, message: string): Promise<ApiResponse<any>> {
+  sendMessage(sourceId: string, contactName: string, message: string): Promise<ApiResponse<unknown>> {
     return modPost(`${BASE}/send`, {
       source_id: sourceId,
       contact_name: contactName,

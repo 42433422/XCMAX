@@ -6,7 +6,7 @@ import re
 from datetime import UTC, datetime
 from typing import Any
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
 def _now_iso() -> str:
@@ -117,6 +117,6 @@ def try_confirm_payment_and_invoice(
             doc = issue_crm_invoice_for_pipeline(doc)
             outcome["invoice"] = doc.get("invoice")
             outcome["invoice_created"] = bool(outcome["invoice"])
-        except OPERATIONAL_ERRORS as exc:
+        except RECOVERABLE_ERRORS as exc:
             outcome["error"] = str(exc)[:300]
     return outcome

@@ -11,7 +11,7 @@ from typing import Any
 import pandas as pd
 
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +39,7 @@ class DataAnalysisService(NeuroEventPublisherMixin):
                 "download_url": f"/api/ai/analyze/export/{uuid.uuid4().hex[:12]}",
             }
             return result
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             return {"success": False, "message": f"分析失败: {str(e)}"}
 
     def _load_file(self, file_path: str) -> pd.DataFrame | None:
@@ -59,7 +59,7 @@ class DataAnalysisService(NeuroEventPublisherMixin):
                 return pd.read_csv(file_path, sep="\t")
             else:
                 return None
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             return None
 
     def _generate_statistics(self, df: pd.DataFrame) -> dict:
@@ -129,7 +129,7 @@ class DataAnalysisService(NeuroEventPublisherMixin):
             df = pd.DataFrame({"分析结果": ["导出成功"]})
             df.to_excel(output_path, index=False)
             return True
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             return False
 
 

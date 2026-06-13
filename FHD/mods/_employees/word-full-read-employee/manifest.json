@@ -1,0 +1,131 @@
+{
+  "id": "word-full-read-employee",
+  "name": "Word 全量读取员",
+  "version": "1.0.0",
+  "author": "XCAGI",
+  "description": "Word全量读取员工：上传 .docx，direct_python 全量提取段落/表格/样式，输出 document_full.json，禁止 LLM 编造",
+  "artifact": "employee_pack",
+  "scope": "global",
+  "dependencies": {
+    "xcagi": ">=1.0.0"
+  },
+  "employee": {
+    "id": "word-full-read-employee",
+    "label": "Word 全量读取员",
+    "capabilities": [
+      "doc.full_extract",
+      "doc.tables",
+      "doc.images",
+      "doc.metadata",
+      "doc.styles"
+    ]
+  },
+  "workflow_employees": [
+    {
+      "id": "word-full-read-employee",
+      "label": "Word 全量读取员",
+      "panel_title": "Word 全量读取员",
+      "panel_summary": "上传 Word，全量提取正文/表格/图片/样式/元数据并交付 JSON。",
+      "capabilities": [
+        "doc.full_extract",
+        "doc.tables",
+        "doc.images",
+        "doc.metadata",
+        "doc.styles"
+      ],
+      "api_base_path": "employees/word-full-read-employee",
+      "entry_action": "run"
+    }
+  ],
+  "backend": {
+    "entry": "blueprints",
+    "init": "mod_init"
+  },
+  "employee_config_v2": {
+    "identity": {
+      "id": "word-full-read-employee",
+      "version": "1.0.0",
+      "artifact": "employee_pack",
+      "name": "Word 全量读取员",
+      "description": "Word全量读取员工：上传 .docx，direct_python 全量提取段落/表格/样式，输出 document_full.json，禁止 LLM 编造"
+    },
+    "perception": {
+      "type": "file_or_text",
+      "accepted_extensions": [
+        ".docx",
+        ".doc"
+      ]
+    },
+    "memory": {
+      "type": "session"
+    },
+    "cognition": {
+      "agent": {
+        "system_prompt": "你是Word 全量读取员。你负责全量提取 Word 文档的所有格式与信息：段落、表格、图片、样式、页眉页脚、元数据与批注。必须真实执行 direct_python 解析，输出 document_full.json 与 txt，禁止 LLM 编造文档内容。",
+        "role": {
+          "name": "Word 全量读取员",
+          "persona": "严谨的 Word 全量提取员工",
+          "tone": "professional",
+          "expertise": [
+            "Word 解析",
+            "OOXML",
+            "文档结构化"
+          ]
+        },
+        "behavior_rules": [
+          "必须真实解析 docx，禁止编造段落或表格内容。",
+          "成功必须以写出 document_full.json 为准。",
+          "JSON 须含 paragraphs、tables、images、core_properties 等字段。"
+        ],
+        "few_shot_examples": [],
+        "model": {
+          "provider": "auto",
+          "model_name": "auto",
+          "temperature": 0.1,
+          "max_tokens": 2000,
+          "top_p": 0.9
+        }
+      },
+      "skills": [
+        {
+          "name": "doc.full_extract",
+          "brief": "全量解析 docx，输出 JSON/txt/图片等结构化结果。"
+        }
+      ]
+    },
+    "collaboration": {
+      "workflow": {
+        "workflow_id": 0,
+        "name": "Word 全量读取员"
+      }
+    },
+    "actions": {
+      "handlers": [
+        "direct_python"
+      ],
+      "direct_python": {
+        "module": "word_full_read_employee",
+        "action": "convert",
+        "default_output_relpath": "outputs/document_full.json",
+        "default_template_relpath": "",
+        "default_use_personnel_roster": true
+      }
+    }
+  },
+  "metadata": {
+    "framework_version": "2.0.0",
+    "created_by": "asset_pipeline"
+  },
+  "actions": {
+    "handlers": [
+      "direct_python"
+    ],
+    "direct_python": {
+      "module": "word_full_read_employee",
+      "action": "convert",
+      "default_output_relpath": "outputs/document_full.json",
+      "default_template_relpath": "",
+      "default_use_personnel_roster": true
+    }
+  }
+}

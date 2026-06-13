@@ -6,6 +6,104 @@
 
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
+### 真正员工运行时（EmployeeAgent · v10 线内迭代 · 2026-06-14）
+
+- **feat(employee_runtime)**：`EmployeeAgent` 编排对象接管 `execute_employee_task_local`；P0 多轮 `agent_loop` + `EmployeeMemoryManager`（短期 ConversationService / 长期 `emp:{id}` 向量索引）；P1 `tool_scope` 作用域工具 + `workspace_guard` 运行时强制 `scope_globs/forbidden_globs`；P2 `PerceptionPipeline`（document/vision/audio/text）；P3 `orchestrator` 本地 `depends_on` DAG + `triggers` NeuroBus 动态订阅；P4 写操作 `write_approval` 接 ApprovalGatedEngine 语义 + `metrics` 可观测
+- **feat(domain/employee)**：值对象 `MemoryScope` / `PerceptionSpec` / `CollaborationGraph` / `TriggerBinding` / 标准事件类型
+- **compat**：保留 echo/llm_md/direct_python handler；capabilities 已声明包无需改 manifest 即可派生工具子集；单轮 `_chat_completion` 仅保留给认知层
+
+### L3 CI/CD 全自动端到端（v10 线内迭代 · 2026-06-13）
+- **GitOps**：ArgoCD App-of-Apps、`bump_image.sh`、`gitops-image-bump`（opt-in）
+- **Rollouts**：金丝雀 20→50→100 + `xcagi-slo-gate` Prometheus 分析门
+- **可观测性**：`monitoring/overlays/full`、`bringup_stack.sh`、`local_stack_up.sh`、DORA 采集
+- **预览**：`fhd-preview-env.yml` + `k8s/overlays/preview`（无 `KUBE_CONFIG` 时跳过构建并 PR 评论说明）
+- **日更闭环**：`post_merge_promote.sh` + `MODSTORE_POST_MERGE_GITOPS_SCRIPT`
+- **CI 阻断说明**：PR #20 全量红因 GitHub Actions **账单/spending limit**（非 workflow 缺陷）；修复付款后重跑；branch protection 需 Team/Enterprise（见 `docs/CI_SSOT.md`）
+
+### 术债收口 + Tier C 高并发（Wave 0–10 · v10 线内迭代）
+- **docs**：`SLO.md` Tier C 压测 SLO；`docs/evidence/arch/` 路由/OpenAPI 基线；`services_import_matrix.md`；`WAVE2_ROUTE_SSOT.md`
+- **loadtest**：`tier_c_smoke.js` / `tier_c_sustained.js` / `tier_c_chat_streams.js`；k6 7d `tier_c_ramp` 阶梯场景
+- **infra**：`DATABASE_READ_URL` + `get_read_session`；`pool_sizing.py`；staging/prod Redis 查询缓存与连接池文档
+- **k8s**：`celery-worker-deployment.yaml` + HPA；API `deployment`/`hpa` Tier C 资源；chat 流式 Redis 信号量
+- **migrate**：`catalog_client`/`catalog_visibility` → `infrastructure/mods/`（services shim）；`mod_store_routes` 走 application 门面
+- **tasks**：`inference` Celery 队列（OCR/intent）；`workflow_excel_paths` 拆分巨型 `workflow.py`
+- **registry**：`app_service_pair_registry` 增加 `resolve_http_getter` / `resolve_neuro_getter`
+
+### 五项技术债全量修复（2026-06-13 · v10 线内迭代）
+
+- **ci/cd**：`fhd-release-orchestrator.yml` tag 编排 CVM+K8s+桌面/Web/Android；`fhd-ci-cd` 监听 `FHD/v*`；production K8s 无 kubeconfig 则 fail；Android release 统一 tag
+- **types**：mypy 解禁 `mod_sdk`/`neuro_bus`/`routes`/`legacy`；`count_type_debt.py` 棘轮；ESLint `no-explicit-any` error（Chat 债务文件 warn）
+- **sql**：`sql_identifiers.py` + P0 标识符拼接修复；`count_raw_sql.py` 棘轮；`test_sql_identifiers.py`
+- **frontend**：ChatView 拆至 `components/chat/*`；`useChatPersistence`/`useChatTaskList`；vue-i18n zh-CN/en-US；`resolveApiError.ts`
+- **docs**：`MYPY_BATCH_STATUS.md`、`SQL_RAW_INVENTORY.md`、`I18N_ROLLOUT.md`、`deploy/RELEASE_CHECKLIST.md`
+
+### 技术债计划目标收尾 Phase 7–12（2026-06-13 · v10 线内迭代）
+
+- **Phase 7**：`useChatView.ts` facade + `useChatOrchestration`/`useChatWorkflowPanel` 等子 composable；`ChatView.vue` <400 行；去 `@ts-nocheck`
+- **Phase 8**：`compat_db` SQL 拼接 SSOT + `products_pg_*` 写路径；`count_raw_sql` 棘轮 **0**；`test_compat_products_sqli.py`
+- **Phase 9**：mypy 严格岛 + 宽口径分批（`tests.*` ignore）；middleware/di 类型修复；Ruff `ANN` 启用
+- **Phase 10**：Chat/Login/Settings `$t()`；auth `error_envelope`；`resolveApiError` 接线
+- **Phase 11**：`count_type_debt` 棘轮 **0**（any / type-ignore / nocheck）；`tsconfig.build` 全 strict
+- **Phase 12**：全量门禁见 `START_HERE.md` §技术债门禁；CD RC 需仓外 `FHD_PUSH_*` / `KUBE_CONFIG_B64`
+
+### 三项技术债清偿（2026-06-13 · v10 线内迭代）
+
+- **refactor(errors)**：`app/errors.py` 扩展 Mod/Workflow/ExternalService/Validation 等业务异常 SSOT；`operational_errors.py` 拆为 `INFRA_TRANSIENT`/`DATA_SHAPE`/`RECOVERABLE_ERRORS`；全仓迁移、`app/` 下旧符号 `OPERATIONAL_ERRORS` 清零；payment/auth 域窄 catch + `PaymentError`；新增防回归门禁 `scripts/ci/check_operational_errors_gate.py`
+- **refactor(frontend-types)**：`ApiResponse` SSOT 于 `types/api.ts`；`ModManifest`/`ModCatalogItem` 拆分；`ApiChatMessage`/`UiChatMessage` 拆分；消除组件内重复 interface
+- **test(coverage)**：取消 `CI_STABLE_ONLY`；`source=[app]` 全量口径；清空 `collect_ignore`；修复 routing/coverage_ramp 运行时 skip
+- **test(rotten-fix)**：移除 stable-only 跳过后暴露的腐烂测试**全量修复**，后端 `tests/` **1780 passed / 101 skipped / 0 failed / 0 error**（`source=[app]`）。生产侧最小回归修复：`retry_handler` 纳入 `sqlite3.OperationalError`、`session_cache` 补 `delete()`/`make_key()`、`product_app_service.get_products` 接受 `unit_name`/`model_number` 并归一、`init_db.init_im_tables`、IM WS 测试模式 `X-User-ID` 回退、`metrics.record_ai_call`、`mobile_api` `per_page=0` 防除零、neuro `bus`/`health_monitor`/`sla_controller` 行为对齐
+- **test(coverage-baseline)**：`fail_under` 由失真的 `58`（旧窄 include 口径）按全量诚实基线**下调为 `35`**（实测 36.13%，~1pt 余量）；提升覆盖率单独立项，禁止再用窄 include 凑数
+
+### v10 交付前全量修复（2026-06-12 · v10 线内迭代）
+
+- **feat(android)**：AuthScreen 密码/手机号 OTP 双模式；NavHost 注册 `CONNECT`/`WORKBENCH`；发现/我的入口工作台
+- **test(android)**：`RoutesTest` + `NavRoutesInstrumentedTest`；gradle 单测/instrumented 依赖；lint 门禁启用
+- **docs(android)**：`VERSION.md` Android 签约级；`MOBILE_ANDROID.md` / `CLAIMED_VS_ACTUAL` 对齐
+- **test(backend)**：time_rail / production_line_event / business mount / shipment_parser / mod_store_catalog 单测；CI 稳定子集扩面
+- **test(frontend)**：修复 `plannerPagePaths` 租户隔离 mock；Vitest gate ≥50% 绿
+- **docs(v2)**：`*_v2` 24 模块为受控双入口 SSOT（非 tech debt）；allowlist guard 零漂移
+- **fix(except)**：`chat_stream_limit` / `agent_runner` / `inference_tasks` / 流式 bridge 缩窄为 `OPERATIONAL_ERRORS`
+- **deps**：生产 lock SSOT 为 `deploy/requirements-server-api.lock.txt`（见 `scripts/dev/check_requirements_lock.py`）
+- **release 制品核对（2026-06-12）**：Win Enterprise `XCAGI-Enterprise-Setup-10.0.0-x64.exe`（CDN）；macOS dmg 见 `config/download_release.json`；Docker `docker/Dockerfile.fhd-api`；Android `./gradlew assemble*Release` + CI `fhd-release-android.yml`
+
+### 四阶段架构与可靠性闭环（2026-06-12 · v10 线内迭代）
+- **evidence**：Round-1 归档 `acceptance-round1-invalid-20260612.yaml`；Round-2 k6 已启动（ES5 兼容 `k6_7d_contract.js` · 镜像 `0.50.0`）
+- **obs**：`export_m0_panels.sh`、`check_round2_metrics_gate.sh`、`xcagi-slo.json` 五域面板、`staging_rollout_metrics.sh`
+- **capacity**：`capacity-planning.md` §6 staging k6 + probe 实测
+- **deploy**：`Dockerfile.fhd-api` Gunicorn；`deploy_k8s_staging.sh` 2 副本；`k8s/overlays/staging/`
+- **adr**：`ADR-route-a-desktop-private.md`；`M0-remaining-gaps.md` 更新
+- **ci**：`capacity-staging-monthly.yml`、`legacy-usage-weekly.yml`
+- **fix(metrics)**：登录/手机验证码 `auth_login_duration_seconds`、流式 `chat_stream_first_byte_seconds`
+- **fix(admin-console)**：挂载 `im_routes`；时间轨 MODstore 不可达时 degraded 200 替代 503；全景 HTML 字体改 `fonts.googleapis.cn`；管理端跳过 IM 未读轮询
+- **fix(all-hands)**：MODstore 单员工汇报 300s 超时，避免 19/20 卡 95%；收集阶段进度封顶 88%；ServerFunctions 阶段文案与停滞提示
+- **fix(admin-console)**：本地 duty-graph health 不再把「未安装 employee_pack」误标为 catalog 缺岗，编制图谱恢复展示；`missing_local_employee_packs` 区分本机未落盘
+- **test**：`test_slo_metrics_histogram.py`
+
+### 行业种子分层隔离 L2（2026-06-12 · v10 线内迭代）
+- **feat(backend)**：`industry_seed.py` + `POST /api/mod-store/install-industry-seed`（池内 copy → Catalog 兜底；换行业卸载其它 open 中性 Mod）
+- **feat(package)**：`industry-seeds/` 只读池（`onboarding_open` 行业）；`stage-industry-seeds.ps1` + `verify-industry-seeds.ps1`
+- **feat(web)**：引导 `runBootstrap` 优先 `installIndustrySeed`；L3 定制仍 `installMod`
+
+### 办公 employee_pack Planner 桥接（2026-06-12 · v10 线内迭代）
+- **feat(backend)**：`employee_runtime` 包（loader / executor / risk_gate / agent_runner）对齐 MODstore `execute_employee_task`；`employee_tool_registry` 合并进 `get_workflow_tool_registry`
+- **feat(backend)**：工具名 = pack_id；装包/卸载/启动 warm scan + `invalidate_workflow_tool_registry`；bridge `POST .../execute`、`GET /api/platform-shell/employee-tools`
+- **feat(web)**：`useOfficeEmployeePackReady`；runBootstrap / Mod Store 装齐后刷新 registry；Mod Store `?tab=office` + driver 教程验收
+
+### 人工试用阻断修复（2026-06-12 · v10 线内迭代）
+- **feat(web)**：注册 `/im` 路由与侧栏「消息」入口；未读角标 + `useImUnreadBadge`
+- **fix(web)**：企业版不再被平台壳拦截设置/Mod 商店/IM；跳过首次引导拦截员工工作台
+- **fix(web)**：设置页「关于」版本读取 `package.json`（10.0.0）；商标导出副窗默认文案
+- **fix(chat)**：流式桥接线程异常转为 SSE error 事件；修茈平台连接失败返回明确 503 而非空流
+- **fix(market)**：`XCAGI_USE_REMOTE_MARKET=1` 优先于本地 `.env.local-market`，避免演示 shim 误挡官网 LLM
+- **fix(backend)**：`httpx` 传输错误纳入 `OPERATIONAL_ERRORS`；流式桥接线程异常转为 SSE error 事件
+
+### 桌面/移动上线阻断项修复（2026-06-12 · v10 线内迭代）
+- **fix(desktop)**：`update-available` 后自动 `downloadUpdate`；`installUpdate` 校验已下载；preload 暴露 `setBadge` / `showNotification` IPC
+- **fix(android)**：Release 允许局域网 HTTP/ws（`network_security_config`）；LAN WebView 注入 `session_id` cookie；推送注册失败可见提示
+- **fix(android)**：Crashlytics mapping 上传默认关闭（`-PuploadCrashlyticsMapping=true` 显式开启）；新增 `fhd-release-android.yml`
+- **fix(backend)**：审批操作人优先 session 鉴权，生产不信任 `X-User-ID`（测试 `FHD_ALLOW_X_USER_ID_HEADER=1`）
+- **chore**：Android `versionName` 纳入 `verify_version_anchors.py`
+
 ### 发版制品与构建链收口（2026-06-12 · v10 线内迭代）
 - **fix(release)**：Enterprise Windows `XCAGI-Enterprise-Setup-10.0.0-x64.exe`（Electron 薄壳）已上传 `update.xcagi.com`；完整内嵌 PyInstaller 后端仍需 Windows 或 GitHub Actions
 - **feat(scripts)**：新增 `build-windows-electron-only.sh`（Mac/Linux 交叉编译 Windows NSIS 薄壳）；Wine Docker 默认 DaoCloud 镜像

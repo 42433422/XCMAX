@@ -10,7 +10,9 @@ MOD_DIR = REPO / "mods" / "xcagi-customer-service-bridge"
 
 
 def test_customer_service_manifest_pages():
-    assert MOD_DIR.is_dir(), "sync platform mod first"
+    from tests.mod_presence import skip_if_bridge_mod_absent
+
+    skip_if_bridge_mod_absent("xcagi-customer-service-bridge")
     data = json.loads((MOD_DIR / "manifest.json").read_text(encoding="utf-8"))
     assert data.get("config", {}).get("customer_service_pages_via_mod") is True
     assert (MOD_DIR / "frontend" / "routes.js").is_file()

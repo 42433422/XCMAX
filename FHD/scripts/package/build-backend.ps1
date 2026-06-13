@@ -24,6 +24,7 @@ if ($ProductSku) {
   }
   $FrontendEdition = $skuFrontendMap[$ProductSku]
   & "$PSScriptRoot\stage-bundled-mods.ps1" -ProductSku $ProductSku
+  & "$PSScriptRoot\stage-industry-seeds.ps1" -ProductSku $ProductSku
 }
 
 if (-not $SkipFrontend) {
@@ -68,10 +69,15 @@ if ($ProductSku) {
     python "$PSScriptRoot\generate_mods_index.py"
     if ($LASTEXITCODE -ne 0) { throw "generate_mods_index.py failed" }
   }
+  $industryStageDir = Join-Path $Root "build\staged-industry-seeds-$ProductSku"
+  if (Test-Path $industryStageDir) {
+    $env:XCAGI_STAGED_INDUSTRY_SEEDS_DIR = $industryStageDir
+  }
 }
 python -m PyInstaller --noconfirm --clean "scripts\package\xcagi_backend.spec"
 if ($ProductSku) {
   Remove-Item Env:XCAGI_STAGED_MODS_DIR -ErrorAction SilentlyContinue
+  Remove-Item Env:XCAGI_STAGED_INDUSTRY_SEEDS_DIR -ErrorAction SilentlyContinue
 }
 
 Write-Host "Backend build complete: dist\xcagi-backend"

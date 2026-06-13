@@ -1,10 +1,9 @@
 name: Deploy
 
 on:
-  push:
-    tags:
-      - "FHD/v10.*"
-      - "FHD/v*"
+  # Tag (FHD/v*) entry is centralized in fhd-release-orchestrator.yml, which gates on
+  # verify-version-anchors and then dispatches this workflow (rc -> staging, else
+  # production). Removing the direct tag trigger eliminates the double K8s deploy.
   workflow_dispatch:
     inputs:
       environment:
@@ -47,11 +46,13 @@ jobs:
           INPUT_DIGEST: ${{ github.event.inputs.image_digest }}
         run: |
           set -euo pipefail
-          REF="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_FHD_API }}"
+          # GHCR repo path must be lowercase (github.repository = 42433422/XCMAX is mixed case).
+          REF="$(printf '%s' "${{ env.REGISTRY }}/${{ env.IMAGE_NAME_FHD_API }}" | tr '[:upper:]' '[:lower:]')"
           if [ -n "${INPUT_DIGEST:-}" ]; then
             IMAGE="${REF}@${INPUT_DIGEST}"
           else
-            SHA="$(git rev-parse --short=12 HEAD)"
+            # 7-char short sha matches docker/metadata-action type=sha default (CI's fhd-ci-cd.yml).
+            SHA="$(git rev-parse --short=7 HEAD)"
             IMAGE="${REF}:sha-${SHA}"
           fi
           echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
@@ -60,6 +61,9 @@ jobs:
   deploy-staging:
     runs-on: ubuntu-latest
     needs: resolve-fhd-api-image
+    permissions:
+      contents: write
+      packages: read
     if: |
       (github.event_name == 'workflow_dispatch' && inputs.environment == 'staging') ||
       (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/FHD/v') && contains(github.ref, '-rc'))
@@ -89,9 +93,36 @@ jobs:
             printf '%s\n' "${KUBE_CONFIG}" > ~/.kube/config
             echo "configured=1" >> "$GITHUB_OUTPUT"
           else
-            echo "::warning::No KUBE_CONFIG / KUBE_CONFIG_B64 — skipping cluster apply."
+            echo "::warning::No KUBE_CONFIG / KUBE_CONFIG_B64 — skipping cluster apply (staging)."
             echo "configured=0" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Log in to GHCR (cosign verify)
+        if: steps.kube.outputs.configured == '1' && vars.COSIGN_VERIFY_DISABLE != '1'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install Cosign
+        if: steps.kube.outputs.configured == '1' && vars.COSIGN_VERIFY_DISABLE != '1'
+        uses: sigstore/cosign-installer@v3.7.0
+
+      - name: Verify image signature (cosign keyless gate)
+        if: steps.kube.outputs.configured == '1' && vars.COSIGN_VERIFY_DISABLE != '1'
+        env:
+          FHD_API_IMAGE: ${{ needs.resolve-fhd-api-image.outputs.fhd_api_image }}
+        run: |
+          set -euo pipefail
+          ISSUER="https://token.actions.githubusercontent.com"
+          IDENTITY_RE="^https://github.com/${{ github.repository }}/\.github/workflows/.+@refs/(heads/main|tags/FHD/v.+)$"
+          echo "Verifying signature for ${FHD_API_IMAGE} ..."
+          cosign verify \
+            --certificate-oidc-issuer "${ISSUER}" \
+            --certificate-identity-regexp "${IDENTITY_RE}" \
+            "${FHD_API_IMAGE}" >/dev/null
+          echo "cosign verify OK — image signed by this repo's CI; proceeding to deploy."
 
       - name: Deploy FHD API (Kubernetes manifests)
         if: steps.kube.outputs.configured == '1'
@@ -109,21 +140,16 @@ jobs:
           for f in service configmap ingress hpa pdb networkpolicy; do
             cp "k8s/${f}.yaml" "${TMP}/${f}.yaml"
           done
-          if [ "$STRATEGY" = "blue-green" ]; then
-            sed "s|__DEPLOY_BACKEND_IMAGE__|${FHD_API_IMAGE}|g" \
-              k8s/blue-green-deployment.yaml > "${TMP}/blue-green.yaml"
-            kubectl apply -f "${TMP}/blue-green.yaml" -n "${NS}" --validate=true
-          elif [ "$STRATEGY" = "canary" ]; then
-            sed "s|__DEPLOY_BACKEND_IMAGE__|${FHD_API_IMAGE}|g" \
-              k8s/canary.yaml > "${TMP}/canary.yaml"
-            kubectl apply -f "${TMP}/canary.yaml" -n "${NS}" --validate=true
-          else
-            kubectl apply -f "${TMP}/configmap.yaml" -n "${NS}" --validate=true
-            kubectl apply -f "${TMP}/service.yaml" -n "${NS}" --validate=true
-            kubectl apply -f "${TMP}/deployment.yaml" -n "${NS}" --validate=true
-            kubectl apply -f "${TMP}/pdb.yaml" -n "${NS}" --validate=true
-            kubectl apply -f "${TMP}/networkpolicy.yaml" -n "${NS}" --validate=true
+          # Progressive delivery (canary/blue-green) moved to GitOps Argo Rollouts
+          # (FHD/k8s/rollouts + FHD/gitops). This imperative path is break-glass → always rolling.
+          if [ "$STRATEGY" = "blue-green" ] || [ "$STRATEGY" = "canary" ]; then
+            echo "::warning::strategy=$STRATEGY is now handled by GitOps Argo Rollouts; break-glass deploy.yml applies a rolling update instead."
           fi
+          kubectl apply -f "${TMP}/configmap.yaml" -n "${NS}" --validate=true
+          kubectl apply -f "${TMP}/service.yaml" -n "${NS}" --validate=true
+          kubectl apply -f "${TMP}/deployment.yaml" -n "${NS}" --validate=true
+          kubectl apply -f "${TMP}/pdb.yaml" -n "${NS}" --validate=true
+          kubectl apply -f "${TMP}/networkpolicy.yaml" -n "${NS}" --validate=true
           kubectl -n "${NS}" set env deployment/xcagi \
             FHD_ENV=staging \
             XCAGI_NEURO_BUS_DEDUP=1 \
@@ -140,6 +166,37 @@ jobs:
             kubectl -n "${NS}" rollout status deployment/xcagi --timeout=300s
           fi
 
+      - name: Auto-rollback on failed deploy (staging)
+        if: failure() && steps.kube.outputs.configured == '1'
+        env:
+          K8S_NAMESPACE_INPUT: ${{ vars.K8S_NAMESPACE }}
+          ROLLBACK_SKIP_HEALTH: "1"
+        run: |
+          set -uo pipefail
+          NS="${K8S_NAMESPACE_INPUT:-xcagi-staging}"
+          echo "::warning::Staging deploy failed — rolling back deployment/xcagi in ${NS}"
+          NAMESPACE="${NS}" bash scripts/rollback.sh || echo "::error::Auto-rollback finished with errors (staging)"
+
+      - name: Emit deploy event (DORA)
+        if: always() && steps.kube.outputs.configured == '1'
+        env:
+          DEPLOY_STATUS: ${{ job.status == 'success' && 'success' || 'failed' }}
+        run: |
+          python3 scripts/observability/emit_deploy_event.py \
+            --status "${DEPLOY_STATUS}" \
+            --source-workflow fhd-deploy-staging \
+            --environment staging \
+            --git-sha "${{ github.sha }}"
+
+      - name: Commit deploy event (DORA)
+        if: always() && steps.kube.outputs.configured == '1'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add metrics/deploy_events.jsonl
+          git diff --staged --quiet || git commit -m "chore(metrics): deploy event staging [skip ci]"
+          git push || true
+
       - name: Deploy summary (staging)
         if: always()
         run: |
@@ -149,6 +206,9 @@ jobs:
   deploy-production:
     runs-on: ubuntu-latest
     needs: resolve-fhd-api-image
+    permissions:
+      contents: write
+      packages: read
     if: |
       (github.event_name == 'workflow_dispatch' && inputs.environment == 'production') ||
       (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/FHD/v') && !contains(github.ref, '-rc'))
@@ -178,9 +238,37 @@ jobs:
             printf '%s\n' "${KUBE_CONFIG}" > ~/.kube/config
             echo "configured=1" >> "$GITHUB_OUTPUT"
           else
-            echo "::warning::No KUBE_CONFIG / KUBE_CONFIG_B64 — skipping cluster apply."
+            echo "::error::Production deploy requires KUBE_CONFIG or KUBE_CONFIG_B64 secret."
             echo "configured=0" >> "$GITHUB_OUTPUT"
+            exit 1
           fi
+
+      - name: Log in to GHCR (cosign verify)
+        if: steps.kube.outputs.configured == '1' && vars.COSIGN_VERIFY_DISABLE != '1'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install Cosign
+        if: steps.kube.outputs.configured == '1' && vars.COSIGN_VERIFY_DISABLE != '1'
+        uses: sigstore/cosign-installer@v3.7.0
+
+      - name: Verify image signature (cosign keyless gate)
+        if: steps.kube.outputs.configured == '1' && vars.COSIGN_VERIFY_DISABLE != '1'
+        env:
+          FHD_API_IMAGE: ${{ needs.resolve-fhd-api-image.outputs.fhd_api_image }}
+        run: |
+          set -euo pipefail
+          ISSUER="https://token.actions.githubusercontent.com"
+          IDENTITY_RE="^https://github.com/${{ github.repository }}/\.github/workflows/.+@refs/(heads/main|tags/FHD/v.+)$"
+          echo "Verifying signature for ${FHD_API_IMAGE} ..."
+          cosign verify \
+            --certificate-oidc-issuer "${ISSUER}" \
+            --certificate-identity-regexp "${IDENTITY_RE}" \
+            "${FHD_API_IMAGE}" >/dev/null
+          echo "cosign verify OK — image signed by this repo's CI; proceeding to deploy."
 
       - name: Deploy FHD API (Kubernetes manifests)
         if: steps.kube.outputs.configured == '1'
@@ -198,21 +286,16 @@ jobs:
           for f in service configmap ingress hpa pdb networkpolicy; do
             cp "k8s/${f}.yaml" "${TMP}/${f}.yaml"
           done
-          if [ "$STRATEGY" = "blue-green" ]; then
-            sed "s|__DEPLOY_BACKEND_IMAGE__|${FHD_API_IMAGE}|g" \
-              k8s/blue-green-deployment.yaml > "${TMP}/blue-green.yaml"
-            kubectl apply -f "${TMP}/blue-green.yaml" -n "${NS}" --validate=true
-          elif [ "$STRATEGY" = "canary" ]; then
-            sed "s|__DEPLOY_BACKEND_IMAGE__|${FHD_API_IMAGE}|g" \
-              k8s/canary.yaml > "${TMP}/canary.yaml"
-            kubectl apply -f "${TMP}/canary.yaml" -n "${NS}" --validate=true
-          else
-            kubectl apply -f "${TMP}/configmap.yaml" -n "${NS}" --validate=true
-            kubectl apply -f "${TMP}/service.yaml" -n "${NS}" --validate=true
-            kubectl apply -f "${TMP}/deployment.yaml" -n "${NS}" --validate=true
-            kubectl apply -f "${TMP}/pdb.yaml" -n "${NS}" --validate=true
-            kubectl apply -f "${TMP}/networkpolicy.yaml" -n "${NS}" --validate=true
+          # Progressive delivery (canary/blue-green) moved to GitOps Argo Rollouts
+          # (FHD/k8s/rollouts + FHD/gitops). This imperative path is break-glass → always rolling.
+          if [ "$STRATEGY" = "blue-green" ] || [ "$STRATEGY" = "canary" ]; then
+            echo "::warning::strategy=$STRATEGY is now handled by GitOps Argo Rollouts; break-glass deploy.yml applies a rolling update instead."
           fi
+          kubectl apply -f "${TMP}/configmap.yaml" -n "${NS}" --validate=true
+          kubectl apply -f "${TMP}/service.yaml" -n "${NS}" --validate=true
+          kubectl apply -f "${TMP}/deployment.yaml" -n "${NS}" --validate=true
+          kubectl apply -f "${TMP}/pdb.yaml" -n "${NS}" --validate=true
+          kubectl apply -f "${TMP}/networkpolicy.yaml" -n "${NS}" --validate=true
           kubectl -n "${NS}" set env deployment/xcagi \
             FHD_ENV=production \
             XCAGI_NEURO_BUS_DEDUP=1 \
@@ -232,14 +315,39 @@ jobs:
             kubectl -n "${NS}" rollout status deployment/xcagi --timeout=300s
           fi
 
+      - name: Auto-rollback on failed deploy (production)
+        if: failure() && steps.kube.outputs.configured == '1'
+        env:
+          K8S_NAMESPACE_INPUT: ${{ vars.K8S_NAMESPACE }}
+          ROLLBACK_SKIP_HEALTH: "1"
+        run: |
+          set -uo pipefail
+          NS="${K8S_NAMESPACE_INPUT:-default}"
+          echo "::warning::Production deploy failed — rolling back deployment/xcagi in ${NS}"
+          NAMESPACE="${NS}" bash scripts/rollback.sh || echo "::error::Auto-rollback finished with errors (production)"
+
+      - name: Emit deploy event (DORA)
+        if: always() && steps.kube.outputs.configured == '1'
+        env:
+          DEPLOY_STATUS: ${{ job.status == 'success' && 'success' || 'failed' }}
+        run: |
+          python3 scripts/observability/emit_deploy_event.py \
+            --status "${DEPLOY_STATUS}" \
+            --source-workflow fhd-deploy-production \
+            --environment production \
+            --git-sha "${{ github.sha }}"
+
+      - name: Commit deploy event (DORA)
+        if: always() && steps.kube.outputs.configured == '1'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add metrics/deploy_events.jsonl
+          git diff --staged --quiet || git commit -m "chore(metrics): deploy event production [skip ci]"
+          git push || true
+
       - name: Deploy summary (production)
         if: always()
         run: |
           echo "Production deploy finished."
           echo "FHD API image: ${{ needs.resolve-fhd-api-image.outputs.fhd_api_image }}"
-
-      - name: Create GitHub Release
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/FHD/v')
-        uses: softprops/action-gh-release@v1
-        with:
-          generate_release_notes: true

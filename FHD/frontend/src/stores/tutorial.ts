@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import { createTutorialBuildContext } from '@/tutorial/buildContext'
@@ -165,7 +164,7 @@ export const useTutorialStore = defineStore('tutorial', () => {
         markStepStatus(currentStep.value.id, 'passed')
         return
       }
-      stepTargetPollTimer = window.setTimeout(poll, 100)
+      stepTargetPollTimer = window.setTimeout(poll, 100) as unknown as ReturnType<typeof setTimeout>
     }
     stepTargetPollTimer = window.setTimeout(poll, 80)
   }

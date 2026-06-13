@@ -12,7 +12,11 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from app.domain.services.intent_recognition_service import IntentRecognitionService
+try:
+    from app.domain.services.intent_recognition_service import IntentRecognitionService
+except ModuleNotFoundError:
+    # Legacy tuple-returning service removed; superseded by UnifiedIntentRecognizer (dict API).
+    IntentRecognitionService = None  # type: ignore[assignment,misc]
 
 from app.application.customer_app_service import CustomerApplicationService
 from app.application.extract_log_app_service import ExtractLogApplicationService
@@ -210,24 +214,28 @@ class TestCustomerApplicationService:
 
     def test_get_all_customers(self):
         """测试获取所有客户"""
-        with patch("app.application.customer_app_service._get_customers_engine"):
-            with patch("app.application.customer_app_service._CustomersSessionLocal"):
-                service = CustomerApplicationService()
-                session_mock = MagicMock()
-                query_mock = MagicMock()
-                query_mock.count.return_value = 0
-                query_mock.order_by.return_value = query_mock
-                query_mock.offset.return_value = query_mock
-                query_mock.limit.return_value = query_mock
-                query_mock.all.return_value = []
+        # 该服务已迁移为惰性 session（_get_session），不再有模块级 engine/SessionLocal；
+        # 直接 patch 实例的 _get_session 即可隔离 DB。
+        service = CustomerApplicationService()
+        session_mock = MagicMock()
+        query_mock = MagicMock()
+        query_mock.count.return_value = 0
+        query_mock.order_by.return_value = query_mock
+        query_mock.offset.return_value = query_mock
+        query_mock.limit.return_value = query_mock
+        query_mock.all.return_value = []
 
-                with patch.object(service, "_get_session", return_value=session_mock):
-                    session_mock.query.return_value = query_mock
-                    result = service.get_all()
+        with patch.object(service, "_get_session", return_value=session_mock):
+            session_mock.query.return_value = query_mock
+            result = service.get_all()
 
-                    assert result["success"] is True
+            assert result["success"] is True
 
 
+@pytest.mark.skipif(
+    IntentRecognitionService is None,
+    reason="legacy IntentRecognitionService removed; superseded by UnifiedIntentRecognizer (dict API)",
+)
 class TestIntentRecognitionService:
     """测试意图识别领域服务"""
 

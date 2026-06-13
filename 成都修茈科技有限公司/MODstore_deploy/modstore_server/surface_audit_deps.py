@@ -36,24 +36,33 @@ def _auto_start_enabled() -> bool:
 
 
 def _repo_root() -> Path:
+    mono = (os.environ.get("XCMAX_MONOREPO_ROOT") or "").strip()
+    if mono:
+        return Path(mono).expanduser().resolve()
+    repo = (os.environ.get("MODSTORE_REPO_ROOT") or "").strip()
+    if repo:
+        p = Path(repo).expanduser().resolve()
+        if (p / "FHD").is_dir():
+            return p
     try:
         from modstore_server.daily_digest import _repo_root as root_fn
 
         return Path(root_fn())
     except Exception:
-        mono = (os.environ.get("XCMAX_MONOREPO_ROOT") or os.environ.get("MODSTORE_REPO_ROOT") or "").strip()
-        if mono:
-            return Path(mono).expanduser().resolve()
         return Path(__file__).resolve().parents[3]
 
 
 def _fhd_root() -> Path:
+    candidates: List[Path] = []
+    mono = (os.environ.get("XCMAX_MONOREPO_ROOT") or "").strip()
+    if mono:
+        candidates.append(Path(mono).expanduser().resolve() / "FHD")
     root = _repo_root()
-    fhd = root / "FHD"
-    if fhd.is_dir():
-        return fhd
-    alt = root.parent / "FHD"
-    return alt if alt.is_dir() else fhd
+    candidates.extend((root / "FHD", root.parent / "FHD"))
+    for fhd in candidates:
+        if fhd.is_dir():
+            return fhd
+    return candidates[0] if candidates else root / "FHD"
 
 
 def _modstore_deploy_root() -> Path:
@@ -94,9 +103,32 @@ def _http_ok(url: str, *, timeout: float = 2.0) -> bool:
         return False
 
 
+def _fhd_api_health_ok(url: str, *, timeout: float = 2.0) -> bool:
+    """FHD /api/health 须 200 且 JSON 含 healthy/xcagi；避免 macOS AirPlay 占 :5000 误判。"""
+    try:
+        req = urllib.request.Request(url, method="GET", headers={"Accept": "application/json"})
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            if int(getattr(resp, "status", 200) or 200) != 200:
+                return False
+            body = resp.read(1024).decode("utf-8", errors="replace").lower()
+            return '"status"' in body and ("healthy" in body or "xcagi" in body)
+    except Exception:
+        return False
+
+
 def _wait_http(url: str, *, label: str, tries: int = 45) -> bool:
     for _ in range(max(1, tries)):
         if _http_ok(url):
+            logger.info("surface audit deps: %s ready %s", label, url)
+            return True
+        time.sleep(1)
+    logger.warning("surface audit deps: %s not ready after %ds (%s)", label, tries, url)
+    return False
+
+
+def _wait_fhd_api_health(url: str, *, label: str, tries: int = 45) -> bool:
+    for _ in range(max(1, tries)):
+        if _fhd_api_health_ok(url):
             logger.info("surface audit deps: %s ready %s", label, url)
             return True
         time.sleep(1)
@@ -143,7 +175,7 @@ def _spawn(
 
 def _ensure_fhd_api(api_port: int) -> Dict[str, Any]:
     health = f"http://127.0.0.1:{api_port}/api/health"
-    if _http_ok(health):
+    if _fhd_api_health_ok(health):
         return {"ok": True, "skipped": True, "url": health}
     if not _auto_start_enabled():
         return {"ok": False, "skipped": True, "reason": "auto_start_disabled", "url": health}
@@ -186,12 +218,21 @@ def _ensure_fhd_api(api_port: int) -> Dict[str, Any]:
         str(run_py),
     ]
     if run_py.name == "run_fastapi.py":
-        cmd += ["--desktop", "--headless", "--host", "127.0.0.1", "--port", str(api_port), "--data-dir", data_dir]
+        cmd += [
+            "--desktop",
+            "--headless",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            str(api_port),
+            "--data-dir",
+            data_dir,
+        ]
     else:
         env["FASTAPI_PORT"] = str(api_port)
 
     out = _spawn("fhd-api", cmd, cwd=xcagi if run_py.parent == xcagi else fhd, env=env)
-    out["ready"] = _wait_http(health, label="FHD API")
+    out["ready"] = _wait_fhd_api_health(health, label="FHD API")
     out["url"] = health
     return out
 
@@ -233,7 +274,16 @@ def _ensure_modstore_api(port: int) -> Dict[str, Any]:
     py = _python_bin()
     out = _spawn(
         "modstore",
-        [py, "-m", "uvicorn", "modstore_server.app:app", "--host", "127.0.0.1", "--port", str(port)],
+        [
+            py,
+            "-m",
+            "uvicorn",
+            "modstore_server.app:app",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            str(port),
+        ],
         cwd=deploy,
     )
     out["ready"] = _wait_http(health, label="MODstore API")
@@ -352,7 +402,9 @@ def ensure_surface_audit_deps() -> Dict[str, Any]:
     """截图前确保本地依赖就绪；返回各服务探活/拉起结果。"""
     out: Dict[str, Any] = {"ok": True, "services": {}}
 
-    ps_enabled = (os.environ.get("MODSTORE_SURFACE_AUDIT_PS_ENABLED", "1") or "").strip().lower() not in (
+    ps_enabled = (
+        os.environ.get("MODSTORE_SURFACE_AUDIT_PS_ENABLED", "1") or ""
+    ).strip().lower() not in (
         "0",
         "false",
         "no",
@@ -366,14 +418,14 @@ def ensure_surface_audit_deps() -> Dict[str, Any]:
     api_url = (
         os.environ.get("SURFACE_AUDIT_API_URL")
         or os.environ.get("MODSTORE_SURFACE_AUDIT_API_URL")
-        or "http://127.0.0.1:5000"
+        or "http://127.0.0.1:5102"
     ).rstrip("/")
     digest_base = (
         os.environ.get("MODSTORE_DAILY_SURFACE_AUDIT_BASE_URL") or "https://xiu-ci.com"
     ).rstrip("/")
     internal_api = resolve_internal_api_base()
 
-    api_port = _parse_port(api_url, 5000)
+    api_port = _parse_port(api_url, 5102)
     web_port = _parse_port(ps_base, 5001)
     modstore_port = _parse_port(internal_api, 8788)
 

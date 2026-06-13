@@ -10,11 +10,17 @@ MOD_DIR = REPO / "mods" / "xcagi-lan-license-bridge"
 
 
 def test_lan_manifest_facade_flag():
+    from tests.mod_presence import skip_if_bridge_mod_absent
+
+    skip_if_bridge_mod_absent("xcagi-lan-license-bridge")
     data = json.loads((MOD_DIR / "manifest.json").read_text(encoding="utf-8"))
     assert data.get("config", {}).get("lan_facade") is True
 
 
 def test_lan_blueprints_delegate_routes():
+    from tests.mod_presence import skip_if_bridge_mod_absent
+
+    skip_if_bridge_mod_absent("xcagi-lan-license-bridge")
     text = (MOD_DIR / "backend" / "blueprints.py").read_text(encoding="utf-8")
     assert "/lan/activate" in text
     assert "/lan/admin/keys" in text

@@ -14,7 +14,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.application.ports.product_repository import ProductRepository
 from app.db.models.product import Product
 from app.db.session import get_db
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 TRIVIAL_MEASURE_UNITS = frozenset(
@@ -119,7 +119,7 @@ class SQLAlchemyProductRepository(ProductRepository):
                         table_names = inspector.get_table_names() or []
                     if not isinstance(table_names, (list, tuple, set)):
                         table_names = []
-                except OPERATIONAL_ERRORS:
+                except RECOVERABLE_ERRORS:
                     table_names = []
 
                 if "products" not in table_names:
@@ -216,7 +216,7 @@ class SQLAlchemyProductRepository(ProductRepository):
                 "per_page": per_page,
             }
 
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             return {
                 "success": False,
                 "message": f"查询失败：{str(e)}",
@@ -235,7 +235,7 @@ class SQLAlchemyProductRepository(ProductRepository):
                     return self._product_to_dict(product)
                 return None
 
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             return None
 
     def find_product_units(self) -> list[str]:
@@ -285,7 +285,7 @@ class SQLAlchemyProductRepository(ProductRepository):
                                 add_label(r[0], from_products=False)
             finally:
                 cs.close()
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             logger.debug("suppressed exception", exc_info=True)
 
         if purchase_units_authoritative:
@@ -298,7 +298,7 @@ class SQLAlchemyProductRepository(ProductRepository):
                     for u in db.query(Product.unit).distinct().all():
                         if u and u[0] is not None:
                             add_label(u[0], from_products=True)
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             logger.debug("suppressed exception", exc_info=True)
 
         return ordered
@@ -334,7 +334,7 @@ class SQLAlchemyProductRepository(ProductRepository):
 
             return {"success": True, "message": "产品创建成功", "product_id": product.id}
 
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             return {"success": False, "message": f"创建失败：{str(e)}"}
 
     def update(self, product_id: int, data: dict[str, Any]) -> dict[str, Any]:
@@ -385,7 +385,7 @@ class SQLAlchemyProductRepository(ProductRepository):
 
             return {"success": True, "message": "产品更新成功"}
 
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             return {"success": False, "message": f"更新失败：{str(e)}"}
 
     def delete(self, product_id: int) -> bool:
@@ -400,7 +400,7 @@ class SQLAlchemyProductRepository(ProductRepository):
                 db.commit()
                 return True
 
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             return False
 
     def batch_create(self, products_data: list[dict[str, Any]]) -> dict[str, Any]:
@@ -449,7 +449,7 @@ class SQLAlchemyProductRepository(ProductRepository):
                                 }
                             )
 
-                        except OPERATIONAL_ERRORS as e:
+                        except RECOVERABLE_ERRORS as e:
                             failed_products.append({"index": batch_start + index, "reason": str(e)})
 
                     if batch_records:
@@ -466,7 +466,7 @@ class SQLAlchemyProductRepository(ProductRepository):
                                     db.flush()
                                     product_ids.append(product.id)
                                     success_count += 1
-                                except OPERATIONAL_ERRORS:
+                                except RECOVERABLE_ERRORS:
                                     failed_products.append(
                                         {"index": batch_start + idx, "reason": "单条插入失败"}
                                     )
@@ -489,7 +489,7 @@ class SQLAlchemyProductRepository(ProductRepository):
 
             return result
 
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             return {"success": False, "message": f"批量添加失败：{str(e)}"}
 
     def batch_delete(self, product_ids: list[int]) -> dict[str, Any]:
@@ -514,7 +514,7 @@ class SQLAlchemyProductRepository(ProductRepository):
                     "deleted_count": len(products),
                 }
 
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             return {"success": False, "message": f"批量删除失败：{str(e)}"}
 
     def exists(self, product_id: int) -> bool:
@@ -522,7 +522,7 @@ class SQLAlchemyProductRepository(ProductRepository):
             with get_db() as db:
                 product = db.query(Product).filter(Product.id == product_id).first()
                 return product is not None
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             return False
 
     def find_names(self, keyword: str | None = None) -> list[str]:
@@ -542,7 +542,7 @@ class SQLAlchemyProductRepository(ProductRepository):
 
                 return names
 
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             return []
 
     def export_to_excel(
@@ -607,7 +607,7 @@ class SQLAlchemyProductRepository(ProductRepository):
                             ).strip()
                             if candidate_path and os.path.exists(candidate_path):
                                 template_path = candidate_path
-                    except OPERATIONAL_ERRORS:
+                    except RECOVERABLE_ERRORS:
                         template_path = None
 
                 records = [
@@ -658,7 +658,7 @@ class SQLAlchemyProductRepository(ProductRepository):
                     "count": len(products),
                 }
 
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             return {
                 "success": False,
                 "message": f"导出失败：{str(e)}",

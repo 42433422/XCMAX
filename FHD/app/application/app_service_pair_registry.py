@@ -246,3 +246,35 @@ def iter_pairs() -> tuple[AppServicePair, ...]:
 
 def domains_on_v1_http() -> tuple[str, ...]:
     return tuple(p.domain for p in APP_SERVICE_PAIRS if p.http_layer == "v1")
+
+
+def get_pair(domain: str) -> AppServicePair | None:
+    for p in APP_SERVICE_PAIRS:
+        if p.domain == domain:
+            return p
+    return None
+
+
+def resolve_neuro_getter(domain: str) -> str:
+    """Neuro / 事件路径 SSOT：始终 V2 getter。"""
+    pair = get_pair(domain)
+    if pair is None or not pair.v2_getter:
+        raise KeyError(domain)
+    return pair.v2_getter
+
+
+def resolve_http_getter(domain: str) -> str:
+    """HTTP 路径 SSOT：当前仍为 V1；合并完成后改 http_layer 为 v2。"""
+    pair = get_pair(domain)
+    if pair is None:
+        raise KeyError(domain)
+    if pair.http_layer == "v2" and pair.v2_getter:
+        return pair.v2_getter
+    return pair.v1_getter
+
+
+def neuro_v2_module_path(domain: str) -> str:
+    pair = get_pair(domain)
+    if pair is None:
+        raise KeyError(domain)
+    return f"app.application.{pair.v2_module}"

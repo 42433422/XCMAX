@@ -70,6 +70,7 @@ import com.xiuci.xcagi.mobile.ui.components.mobile.WeTopBar
 fun ProfileScreen(
     vm: AppViewModel,
     onConnectPc: () -> Unit,
+    onWorkbench: () -> Unit = {},
     onAbout: () -> Unit,
     onSettings: () -> Unit,
     onLogout: () -> Unit,
@@ -147,6 +148,24 @@ fun ProfileScreen(
             item {
                 WeSpacer(8.dp)
                 WeCellGroup {
+                    WeCell(
+                        title = "云端工作台",
+                        subtitle = "打开 MODstore 工作台",
+                        icon = Icons.Default.Store,
+                        iconTint = MobileTokens.iconFgBlue,
+                        iconBg = MobileTokens.iconBgBlue,
+                        showArrow = true,
+                        onClick = onWorkbench,
+                    )
+                    WeCell(
+                        title = "连接电脑",
+                        subtitle = "扫码绑定局域网 FHD",
+                        icon = Icons.Default.QrCode2,
+                        iconTint = MobileTokens.iconFgGreen,
+                        iconBg = MobileTokens.iconBgGreen,
+                        showArrow = true,
+                        onClick = onConnectPc,
+                    )
                     WeCell(
                         title = "服务",
                         subtitle = ProductSkuConfig.displayEditionLabel,

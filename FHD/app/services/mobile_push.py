@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +65,7 @@ def send_jpush(
             logger.warning("jpush failed: %s %s", r.status_code, r.text[:500])
             return False
         return True
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.warning("jpush error: %s", exc)
         return False
 
@@ -126,7 +126,7 @@ def send_fcm(
             else:
                 logger.warning("fcm token fail: %s", r.text[:300])
         return ok_any
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.warning("fcm error: %s", exc)
         return False
 

@@ -1,0 +1,26 @@
+{
+  "brief": "Excel读取员工：上传 .xlsx/.xlsm，使用 direct_python 全量读取 sheet、表头、数据与单元格内容，输出 JSON 中介 outputs/workbook.json，禁止 LLM 编造单元格。",
+  "mode": "direct_python_file_transform",
+  "accepted_extensions": [
+    ".xlsx",
+    ".xlsm"
+  ],
+  "default_action": "convert",
+  "default_output_relpath": "outputs/workbook.json",
+  "runtime_kind": "excel_full_read",
+  "output_schema": [
+    "sheets",
+    "headers",
+    "rows",
+    "cells",
+    "meta"
+  ],
+  "requirements": [
+    "Use direct_python only; handlers must be [\"direct_python\"].",
+    "Parse .xlsx/.xlsm with openpyxl; write outputs/workbook.json.",
+    "JSON must include sheets[].name, headers, rows, cells (row/col/value/formula), meta.",
+    "Never claim success unless workbook.json is actually written.",
+    "Return {ok, summary, items, warnings, error, meta}."
+  ],
+  "pack_id": "excel-full-read-employee"
+}

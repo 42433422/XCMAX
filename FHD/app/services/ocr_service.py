@@ -14,7 +14,7 @@ from typing import Any
 
 import numpy as np
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +59,7 @@ class OCRService:
                     get_paddle_ocr_instance()
                     self._paddle_enabled = True
                     logger.info("OCR 主引擎：PaddleOCR")
-            except OPERATIONAL_ERRORS as e:
+            except RECOVERABLE_ERRORS as e:
                 logger.warning("PaddleOCR 初始化失败: %s", e)
 
         if backend == "paddle" and not self._paddle_enabled:
@@ -85,7 +85,7 @@ class OCRService:
         except ImportError:
             logger.warning("EasyOCR 未安装")
             self.reader = None
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.error("EasyOCR 初始化失败: %s", e)
             self.reader = None
 
@@ -97,7 +97,7 @@ class OCRService:
             pytesseract.get_tesseract_version()
             self.tesseract_available = True
             logger.info("OCR 回退引擎：Tesseract")
-        except (ImportError, OPERATIONAL_ERRORS):
+        except RECOVERABLE_ERRORS:
             self.tesseract_available = False
 
     def recognize(self, image) -> str:
@@ -143,7 +143,7 @@ class OCRService:
                 text = pytesseract.image_to_string(pil_image, lang="chi_sim+eng")
                 return self._clean_text(text)
 
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.error("OCR识别失败: %s", e)
 
         return ""
@@ -193,7 +193,7 @@ class OCRService:
                         "y_center": cy,
                     }
                 )
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.error("EasyOCR 分块识别失败: %s", e)
         return blocks
 
@@ -219,7 +219,7 @@ class OCRService:
 
             return {"success": True, "message": "识别成功", "text": text, "file_path": file_path}
 
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.exception(f"识别文件失败: {e}")
             return {"success": False, "message": f"识别失败: {str(e)}", "text": ""}
 
@@ -259,7 +259,7 @@ class OCRService:
                 )
                 results.append(ocr_result)
 
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.error("OCR识别失败: %s", e)
 
         return results
@@ -285,7 +285,7 @@ class OCRService:
                 return {"success": bool(text.strip()), "text": text, "confidence": avg}
             text = self.recognize(img)
             return {"success": bool(text.strip()), "text": text, "confidence": 0.0}
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.exception("从字节 OCR 失败: %s", e)
             return {"success": False, "message": str(e), "text": "", "confidence": 0.0}
 
@@ -347,7 +347,7 @@ class OCRService:
             except ValueError:
                 pass
 
-        product_pattern = r"([A-Za-z0-9]+)\s+(.+?)\s+(\d+)\s+([\d\.]+)\s+([\d\.]+)"
+        product_pattern = r"([A-Za-z0-9\-]+)\s+(.+?)\s+(\d+)\s+([\d\.]+)\s+([\d\.]+)"
         for match in re.finditer(product_pattern, text):
             product = {
                 "model": match.group(1),
@@ -434,19 +434,24 @@ class OCRService:
         if not text:
             return "unknown"
 
-        if re.match(r"^[\d\.\,\-\+]+$", text):
-            return "number"
-
         date_patterns = [r"\d{4}[-年]\d{1,2}[-月]\d{1,2}", r"\d{1,2}[-/]\d{1,2}[-/]\d{2,4}"]
         for pattern in date_patterns:
             if re.search(pattern, text):
                 return "date"
 
-        if re.search(r"[\d\.]+\s*(元|¥|dollar|$|€)", text):
-            return "amount"
+        amount_patterns = (
+            r"[\d\.]+\s*(元|¥|dollar|\$|€)",
+            r"[$¥€]\s*[\d\.]+",
+        )
+        for pattern in amount_patterns:
+            if re.search(pattern, text):
+                return "amount"
 
         if re.match(r"^[\d\-\+\(\)]{7,}$", text):
             return "phone"
+
+        if re.match(r"^[\d\.\,\-\+]+$", text):
+            return "number"
 
         return "text"
 

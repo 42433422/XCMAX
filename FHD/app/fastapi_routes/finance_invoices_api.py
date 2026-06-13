@@ -10,7 +10,7 @@ from fastapi import APIRouter, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -86,7 +86,7 @@ def finance_crm_invoices_list(
             offset=offset,
         )
         return {"success": True, "finance_self_hosted": True, **data}
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.exception("crm invoices list failed")
         return JSONResponse({"success": False, "message": str(exc)[:500]}, status_code=500)
 
@@ -103,7 +103,7 @@ def finance_crm_invoice_detail(request: Request, invoice_id: int):
         if not inv:
             return JSONResponse({"success": False, "message": "发票不存在"}, status_code=404)
         return {"success": True, "invoice": inv}
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.exception("crm invoice detail failed")
         return JSONResponse({"success": False, "message": str(exc)[:500]}, status_code=500)
 
@@ -157,7 +157,7 @@ def finance_crm_invoice_issue(request: Request, body: CrmInvoiceIssueBody):
         return {"success": True, "pipeline": doc, "invoice": inv}
     except ValueError as exc:
         return JSONResponse({"success": False, "message": str(exc)}, status_code=400)
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.exception("crm invoice issue failed")
         return JSONResponse({"success": False, "message": str(exc)[:500]}, status_code=500)
 
@@ -182,7 +182,7 @@ def finance_crm_invoice_archive(request: Request, invoice_id: int):
             "archive": result,
             "invoice": inv,
         }
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.exception("crm invoice archive failed")
         return JSONResponse({"success": False, "message": str(exc)[:500]}, status_code=500)
 

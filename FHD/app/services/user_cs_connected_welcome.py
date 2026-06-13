@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
 def maybe_send_connected_welcome(
@@ -33,7 +33,7 @@ def maybe_send_connected_welcome(
 
         result = get_desktop_automation_service().send_wechat_message(contact, text)
         ok = bool(result.get("success")) and bool(result.get("message_sent", result.get("success")))
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         return {"sent": False, "error": str(exc)[:300]}
     if ok:
         doc["connected_welcome_sent"] = True
