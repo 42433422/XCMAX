@@ -16,10 +16,7 @@ tests/test_application/test_product_app_service_upsert_rollback.py  # DRIFT:6
 tests/test_coverage_ramp_phase54_routes.py  # DRIFT:8
 tests/test_coverage_ramp_phase55_backend.py  # DRIFT:5
 tests/test_db/test_session_cache_concurrency.py  # DRIFT:6
-tests/test_utils/test_audit_logger_failure_paths.py  # DRIFT:9
 tests/test_utils/test_observability_m0_metrics.py  # DRIFT:4
-tests/test_utils/test_rate_limiter_circuit_breaker.py  # DRIFT:15
-
 # ===== ASSERT (39 文件) =====
 tests/application/test_local_duty_graph_health.py  # ASSERT:1
 tests/neuro/test_initializer_registration_rollback.py  # ASSERT:1
