@@ -66,9 +66,9 @@ def employee_mods_root(tmp_path, monkeypatch):
     mods_root = tmp_path / "mods"
     mods_root.mkdir()
     monkeypatch.setenv("XCAGI_MODS_ROOT", str(mods_root))
+    from app.application.tools.workflow import invalidate_workflow_tool_registry
     from app.infrastructure.mods import employee_registry as er
     from app.infrastructure.mods import mod_manager as mm
-    from app.application.tools.workflow import invalidate_workflow_tool_registry
 
     er._registry.clear()
     mm._mod_manager = None
@@ -98,7 +98,10 @@ def test_execute_employee_csv_read_tool(employee_mods_root, tmp_path):
     csv_file = tmp_path / "sample.csv"
     csv_file.write_text("a,b\n1,2\n3,4\n", encoding="utf-8")
 
-    from app.mod_sdk.employee_tool_registry import execute_employee_tool, invalidate_employee_tool_cache
+    from app.mod_sdk.employee_tool_registry import (
+        execute_employee_tool,
+        invalidate_employee_tool_cache,
+    )
 
     invalidate_employee_tool_cache()
     raw = execute_employee_tool(pack_id, {"file_path": str(csv_file)}, str(tmp_path))
@@ -132,7 +135,10 @@ def test_legacy_tool_alias_still_resolves(employee_mods_root):
 
 def test_employee_tools_status_counts(employee_mods_root):
     _write_csv_read_pack(employee_mods_root)
-    from app.mod_sdk.employee_tool_registry import build_employee_tools_status, invalidate_employee_tool_cache
+    from app.mod_sdk.employee_tool_registry import (
+        build_employee_tools_status,
+        invalidate_employee_tool_cache,
+    )
 
     invalidate_employee_tool_cache()
     status = build_employee_tools_status()

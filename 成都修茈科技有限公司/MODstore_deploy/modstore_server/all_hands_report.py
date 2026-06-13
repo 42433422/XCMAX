@@ -55,6 +55,16 @@ def clamp_all_hands_max_employees(raw: int | float | str | None, *, default: int
     return max(1, min(n, MAX_ALL_HANDS_EMPLOYEES))
 
 
+def all_hands_employee_timeout_sec() -> float:
+    """单员工汇报上限；避免末位员工 LLM/联网挂死导致 UI 长期停在 19/20。"""
+    raw = (os.environ.get("MODSTORE_ALL_HANDS_EMPLOYEE_TIMEOUT_SEC") or "300").strip()
+    try:
+        sec = float(raw)
+    except (TypeError, ValueError):
+        sec = 300.0
+    return max(30.0, min(sec, 900.0))
+
+
 logger = logging.getLogger(__name__)
 
 AllHandsProgressCallback = Callable[[Dict[str, Any]], Awaitable[None]]
@@ -1263,6 +1273,8 @@ async def build_all_hands_report(
     done_ok = 0
     done_error = 0
 
+    employee_timeout = all_hands_employee_timeout_sec()
+
     async def _wrapped(pid: str, name: str) -> Dict[str, Any]:
         nonlocal done_count, done_ok, done_error, stagger_seq
         async with sem:
@@ -1271,22 +1283,41 @@ async def build_all_hands_report(
                     idx = stagger_seq
                     stagger_seq += 1
                 await asyncio.sleep(min(idx * stagger_sec * 0.25, 6.0))
-            row = await _report_one_employee(
-                pkg_id=pid,
-                display_name=name,
-                other_employees=[x for x in other_ids if x != pid],
-                user_id=user_id,
-                bench_provider=bench_prov,
-                bench_model=bench_mdl,
-                with_research=with_research,
-                user_question=user_question,
-            )
+            try:
+                row = await asyncio.wait_for(
+                    _report_one_employee(
+                        pkg_id=pid,
+                        display_name=name,
+                        other_employees=[x for x in other_ids if x != pid],
+                        user_id=user_id,
+                        bench_provider=bench_prov,
+                        bench_model=bench_mdl,
+                        with_research=with_research,
+                        user_question=user_question,
+                    ),
+                    timeout=employee_timeout,
+                )
+            except asyncio.TimeoutError:
+                row = {
+                    "employee_id": pid,
+                    "name": name,
+                    "area": yuangon_area_for_pkg(pid) or "",
+                    "status": "error",
+                    "started_at": datetime.now(timezone.utc).isoformat(),
+                    "completed_at": datetime.now(timezone.utc).isoformat(),
+                    "report_markdown": "",
+                    "cognition_error": f"单员工汇报超时（>{int(employee_timeout)}s）",
+                    "warnings": [f"超时 {int(employee_timeout)}s，已跳过该员工继续大会"],
+                    "manifest_signals": _manifest_signals(pid),
+                    "recent_failures": _recent_failures(pid),
+                    "research_sources": [],
+                }
         status = str(row.get("status") or "")
         async with done_lock:
             done_count += 1
             if status == "ok":
                 done_ok += 1
-            elif status in {"error", "model_error"}:
+            elif status in {"error", "model_error", "empty"}:
                 done_error += 1
             snap_done = done_count
             snap_ok = done_ok
@@ -1309,7 +1340,7 @@ async def build_all_hands_report(
     employees = await asyncio.gather(*[_wrapped(p, n) for p, n in pairs])
 
     ok_count = sum(1 for e in employees if e.get("status") == "ok")
-    error_count = sum(1 for e in employees if e.get("status") in {"error", "model_error"})
+    error_count = sum(1 for e in employees if e.get("status") in {"error", "model_error", "empty"})
     summary = {
         "total": len(employees),
         "ok": ok_count,

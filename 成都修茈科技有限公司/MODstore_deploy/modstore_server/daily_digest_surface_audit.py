@@ -127,9 +127,7 @@ _PS_DESKTOP_PAGES: Tuple[Tuple[str, str], ...] = (
     ("规划桥 Mod", "/mod/xcagi-planner-bridge/chat"),
 )
 
-_AI_STORE_TABS: Tuple[Tuple[str, str], ...] = (
-    ("AI市场-AI员工", "ai_employee"),
-)
+_AI_STORE_TABS: Tuple[Tuple[str, str], ...] = (("AI市场-AI员工", "ai_employee"),)
 
 _AI_STORE_TAB_LABELS: Dict[str, str] = {
     "all": "全部商品",
@@ -193,7 +191,9 @@ def _safe_slug_name(name: str) -> str:
     return re.sub(r'[\\/:*?"<>|]+', "-", str(name or "")).strip()[:96] or "page"
 
 
-def _fetch_market_catalog_sync(base: str, *, max_items: Optional[int] = None) -> List[Dict[str, Any]]:
+def _fetch_market_catalog_sync(
+    base: str, *, max_items: Optional[int] = None
+) -> List[Dict[str, Any]]:
     """拉取 AI 市场公开目录（用于 /market/catalog/:id 截图）；不全量分页，够筛 1–3 即停。"""
     cap = _catalog_screenshot_max()
     if cap <= 0:
@@ -382,9 +382,7 @@ def _pick_sample_targets(full: List[SurfaceTarget]) -> List[SurfaceTarget]:
     return out
 
 
-def _limit_targets_per_lane(
-    targets: List[SurfaceTarget], *, per_lane: int
-) -> List[SurfaceTarget]:
+def _limit_targets_per_lane(targets: List[SurfaceTarget], *, per_lane: int) -> List[SurfaceTarget]:
     if per_lane <= 0:
         return list(targets)
     counts: Dict[str, int] = {}
@@ -398,9 +396,7 @@ def _limit_targets_per_lane(
     return out
 
 
-def _append_pw_catalog_targets(
-    out: List[SurfaceTarget], catalog: List[Dict[str, Any]]
-) -> None:
+def _append_pw_catalog_targets(out: List[SurfaceTarget], catalog: List[Dict[str, Any]]) -> None:
     for item in catalog:
         cid = item.get("id")
         if cid is None:
@@ -517,9 +513,7 @@ def build_digest_surface_targets() -> List[SurfaceTarget]:
     if _ps_audit_enabled():
         ps_base = _ps_base_url()
         for name, path in _PS_DESKTOP_PAGES:
-            out.append(
-                SurfaceTarget("P-S", "软件 P-S", name, path, "desktop", base=ps_base)
-            )
+            out.append(SurfaceTarget("P-S", "软件 P-S", name, path, "desktop", base=ps_base))
 
     for name, path in _PAPP_PUBLIC_PAGES:
         out.append(SurfaceTarget("P-App", "App P-App", name, path, "mobile"))
@@ -551,9 +545,7 @@ def build_surface_targets() -> List[SurfaceTarget]:
     if _ps_audit_enabled():
         ps_base = _ps_base_url()
         for name, path in _PS_DESKTOP_PAGES:
-            out.append(
-                SurfaceTarget("P-S", "软件 P-S", name, path, "desktop", base=ps_base)
-            )
+            out.append(SurfaceTarget("P-S", "软件 P-S", name, path, "desktop", base=ps_base))
 
     for name, path in _PAPP_PUBLIC_PAGES:
         out.append(SurfaceTarget("P-App", "App P-App", name, path, "mobile"))
@@ -716,7 +708,9 @@ def _parse_set_cookie_headers(headers: Any) -> Dict[str, str]:
 def _login_surface_audit_sync() -> Dict[str, str]:
     """Playwright 截图前登录 MODstore，写入 modstore_token（对齐 FHD surface_audit_auth.mjs）。"""
     api_base = (
-        (os.environ.get("MODSTORE_SURFACE_AUDIT_API_URL") or _internal_api_base()).strip().rstrip("/")
+        (os.environ.get("MODSTORE_SURFACE_AUDIT_API_URL") or _internal_api_base())
+        .strip()
+        .rstrip("/")
     )
     user = (os.environ.get("MODSTORE_SURFACE_AUDIT_USER") or "admin").strip()
     password = (os.environ.get("MODSTORE_SURFACE_AUDIT_PASSWORD") or "admin123").strip()
@@ -771,7 +765,9 @@ def _login_surface_audit_sync() -> Dict[str, str]:
 def _fetch_admin_digest_code_sync(auth: Dict[str, str]) -> str:
     """从 MODstore API 拉取管理端 6 位校验码（对齐 FHD digest-identity 自签发）。"""
     api_base = (
-        (os.environ.get("MODSTORE_SURFACE_AUDIT_API_URL") or _internal_api_base()).strip().rstrip("/")
+        (os.environ.get("MODSTORE_SURFACE_AUDIT_API_URL") or _internal_api_base())
+        .strip()
+        .rstrip("/")
     )
     headers = {"Accept": "application/json", "User-Agent": "MODstore-surface-audit/1.0"}
     token = str(auth.get("access_token") or "").strip()
@@ -1165,9 +1161,7 @@ async def analyze_surface_lanes(report: Dict[str, Any], *, user_id: int = 0) -> 
                     "source": "rule",
                 }
                 continue
-            raise RuntimeError(
-                f"surface audit lane analysis: bench LLM 未配置（lane={lane}）"
-            )
+            raise RuntimeError(f"surface audit lane analysis: bench LLM 未配置（lane={lane}）")
         system = _LANE_ANALYSIS_SYSTEM.format(lane=lane, owners="、".join(owners[:3]) or lane)
         user_content = _build_lane_analysis_user_content(lane, lane_labels.get(lane, lane), rows)
         try:
@@ -1188,9 +1182,7 @@ async def analyze_surface_lanes(report: Dict[str, Any], *, user_id: int = 0) -> 
                 )
         except Exception as exc:  # noqa: BLE001
             logger.warning("surface audit: lane analysis dispatch failed lane=%s err=%s", lane, exc)
-            raise RuntimeError(
-                f"surface audit lane analysis failed lane={lane}: {exc}"
-            ) from exc
+            raise RuntimeError(f"surface audit lane analysis failed lane={lane}: {exc}") from exc
         md = ""
         if isinstance(result, dict) and result.get("ok"):
             md = str(result.get("content") or "").strip()
@@ -1465,11 +1457,7 @@ async def run_surface_audit_async() -> Dict[str, Any]:
             r["analysis_owners"] = la.get("owners") or []
 
     if not ok:
-        bad = [
-            r
-            for r in results
-            if r.get("error") or int(r.get("status") or 0) >= 400
-        ]
+        bad = [r for r in results if r.get("error") or int(r.get("status") or 0) >= 400]
         sample = bad[0] if bad else {}
         raise RuntimeError(
             f"surface audit failed: {len(bad)} page(s) with errors; "
@@ -1636,7 +1624,8 @@ def _lane_count_overview_html(results: List[Dict[str, Any]]) -> str:
         warn = sum(
             1
             for r in rows
-            if not ((r.get("status") or 0) >= 400 or r.get("error")) and (r.get("console_errors") or [])
+            if not ((r.get("status") or 0) >= 400 or r.get("error"))
+            and (r.get("console_errors") or [])
         )
         ok = total - bad - warn
         if total == 0:

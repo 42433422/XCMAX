@@ -114,13 +114,15 @@ GET /api/platform-shell/deliverable-status
 ### 5.1 业务含义
 
 - **宿主** = 空壳 + 通用 bridge（阶段 2）  
-- **行业 MOD** = 涂料 ERP、出货、太阳鸟考勤等（客户从平台下载）  
+- **行业 MOD（L2）** = 中性行业包（如 `coating-industry`）；enterprise 安装包内 `industry-seeds/` 只读池，**选行业后单拷**到 userData/mods  
+- **账号定制（L3）** = `sz-qsm-pro` 等；不进安装包，entitlement 通过后 Catalog 安装  
 - 装行业 MOD 后：侧栏菜单、首页、员工卡、行业词汇由 Mod 的 `manifest` 驱动  
 
 ### 5.2 界面路径
 
 | 用户选择 | 跳转 | 结果 |
 |----------|------|------|
+| 一键装齐本行业推荐项 | `/onboarding?step=host-pack` | L1 host-foundation + L2 industry-seed + L3 定制（若有 entitlement） |
 | 打开扩展市场 | `/mod-store` | 浏览 Catalog → 安装 → 刷新 Mod 列表 |
 | 先使用对话 | `/` 或 planner Mod 对话页 | 仅通用能力；稍后可再装 MOD |
 

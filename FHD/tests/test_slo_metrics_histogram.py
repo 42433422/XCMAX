@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -37,7 +37,7 @@ def test_auth_login_duration_histogram_after_invalid_login(client: TestClient):
 
 def test_chat_stream_first_byte_metric_on_stream(client: TestClient):
     async def _fake_stream(request, body, *, ai_tier: str):
-        yield b"data: {\"type\":\"token\",\"text\":\"hi\"}\n\n"
+        yield b'data: {"type":"token","text":"hi"}\n\n'
 
     with patch(
         "app.fastapi_routes.domains.conversation.compat_routes.compat_chat_stream_async",

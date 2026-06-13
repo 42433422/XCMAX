@@ -314,6 +314,7 @@ import productsApi from '@/api/products';
 import { useTutorialStore } from '@/stores/tutorial';
 import { useOnboardingTutorialStore } from '@/stores/onboardingTutorial';
 import { useTutorialCatalog } from '@/composables/useTutorialCatalog';
+import { launchAdvancedDriverTour } from '@/tutorial/promptAdvancedTutorial';
 import { DEFAULT_TUTORIAL_TRACK_ID } from '@/constants/productFlow';
 import { useModsStore } from '@/stores/mods';
 import { useWorkflowAiEmployeesStore } from '@/stores/workflowAiEmployees';
@@ -805,20 +806,10 @@ const startTutorialGuide = async (track = DEFAULT_TUTORIAL_TRACK_ID) => {
   operationHistory.value = [];
   if (useDriverTour) {
     isOpen.value = false;
-  } else {
-    isOpen.value = true;
-    hasUnreadPush.value = false;
-    popupNotice.value = null;
-    activeTab.value = 'tutorial';
-  }
-  // 若用户已在教程标签，startTutorial 前再触发一次预热（仅首次会真正请求）
-  queueMicrotask(() => {
-    window.dispatchEvent(new CustomEvent('xcagi:warmup-tutorial-tts'));
-  });
-  if (useDriverTour) {
-    onboardingTutorialStore.start({
-      track: t,
+    await launchAdvancedDriverTour({
+      router,
       buildContext: tutorialBuildContext.value,
+      skipNavigation: true,
       returnContext: {
         routeName: previousRouteName || 'chat',
         assistantOpen: previousOpen,
@@ -827,6 +818,10 @@ const startTutorialGuide = async (track = DEFAULT_TUTORIAL_TRACK_ID) => {
       },
     });
   } else {
+    isOpen.value = true;
+    hasUnreadPush.value = false;
+    popupNotice.value = null;
+    activeTab.value = 'tutorial';
     tutorialStore.startTutorial({
       isProMode: !!window.__XCAGI_IS_PRO_MODE,
       track: t,
@@ -839,6 +834,10 @@ const startTutorialGuide = async (track = DEFAULT_TUTORIAL_TRACK_ID) => {
       },
     });
   }
+  // 若用户已在教程标签，startTutorial 前再触发一次预热（仅首次会真正请求）
+  queueMicrotask(() => {
+    window.dispatchEvent(new CustomEvent('xcagi:warmup-tutorial-tts'));
+  });
   const tutorialPack = {
     version: 1,
     type: 'xcagi_tutorial_guide_pack',

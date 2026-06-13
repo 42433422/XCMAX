@@ -45,18 +45,31 @@ const rootStyle = computed(() => ({
   opacity: visible.value ? '1' : '0',
 }))
 
-function resolvePoint(target: HTMLElement | { x: number; y: number }) {
+function centerOf(el: HTMLElement) {
+  const rect = el.getBoundingClientRect()
+  return {
+    x: rect.left + rect.width / 2,
+    y: rect.top + rect.height / 2,
+  }
+}
+
+function resolvePoint(
+  target: HTMLElement | { x: number; y: number },
+  scroll = true,
+) {
   if (target instanceof HTMLElement) {
-    try {
-      target.scrollIntoView({ behavior: 'smooth', block: 'center' })
-    } catch {
-      /* ignore */
+    if (scroll) {
+      try {
+        target.scrollIntoView({ behavior: 'instant', block: 'center' })
+      } catch {
+        try {
+          target.scrollIntoView({ block: 'center' })
+        } catch {
+          /* ignore */
+        }
+      }
     }
-    const rect = target.getBoundingClientRect()
-    return {
-      x: rect.left + rect.width / 2,
-      y: rect.top + rect.height / 2,
-    }
+    return centerOf(target)
   }
   return { x: target.x, y: target.y }
 }
@@ -77,12 +90,17 @@ function moveTo(
   const dur = options.duration ?? 500
   duration.value = dur
   label.value = options.label ?? ''
-  const pt = resolvePoint(target)
-  visible.value = true
-  requestAnimationFrame(() => {
+  const applyPoint = (scroll: boolean) => {
+    const pt = resolvePoint(target, scroll)
     x.value = pt.x
     y.value = pt.y
-  })
+  }
+  visible.value = true
+  requestAnimationFrame(() => applyPoint(true))
+  // 侧栏展开/滚动动画结束后重算，避免光标落在旧坐标
+  window.setTimeout(() => {
+    if (target instanceof HTMLElement) applyPoint(false)
+  }, 320)
   if (options.click) {
     window.setTimeout(() => playClickRipple(), dur)
   }

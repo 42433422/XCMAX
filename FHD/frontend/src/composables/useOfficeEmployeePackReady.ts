@@ -1,9 +1,7 @@
 import { ref, computed, onUnmounted } from 'vue'
 import { OFFICE_EMPLOYEE_PKG_IDS } from '@/constants/officeEmployeePack'
-import {
-  fetchEmployeePlannerStatus,
-  type EmployeePlannerStatus,
-} from '@/utils/platformShellApi'
+import { fetchEmployeePlannerStatus } from '@/utils/platformShellApi'
+import type { EmployeePlannerStatus } from '@/constants/platformShell'
 
 const DEFAULT_STATUS: EmployeePlannerStatus = {
   installed_employee_pack_count: 0,

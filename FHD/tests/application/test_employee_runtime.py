@@ -28,9 +28,13 @@ def _write_csv_read_pack(root: Path, pack_id: str = "csv-full-read-employee") ->
             "cognition": {"agent": {"system_prompt": "读取 CSV"}},
         },
     }
-    (pack_dir / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False), encoding="utf-8")
+    (pack_dir / "manifest.json").write_text(
+        json.dumps(manifest, ensure_ascii=False), encoding="utf-8"
+    )
     (pack_dir / "rule_spec.json").write_text(
-        json.dumps({"runtime_kind": "csv_full_read", "default_output_relpath": "outputs/data.json"}),
+        json.dumps(
+            {"runtime_kind": "csv_full_read", "default_output_relpath": "outputs/data.json"}
+        ),
         encoding="utf-8",
     )
     (vendor / "convert.py").write_text(
@@ -117,7 +121,10 @@ def test_execute_employee_task_local_csv(employee_mods_root, tmp_path):
 
 def test_workflow_registry_includes_employee_tools(employee_mods_root):
     _write_csv_read_pack(employee_mods_root)
-    from app.application.tools.workflow import get_workflow_tool_registry, invalidate_workflow_tool_registry
+    from app.application.tools.workflow import (
+        get_workflow_tool_registry,
+        invalidate_workflow_tool_registry,
+    )
 
     invalidate_workflow_tool_registry()
     reg = get_workflow_tool_registry()

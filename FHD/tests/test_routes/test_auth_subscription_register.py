@@ -32,16 +32,19 @@ def test_subscription_status_requires_login(client: TestClient) -> None:
 def test_subscription_status_trial(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     fake_user = SimpleNamespace(id=42, role="viewer", username="trial-user", is_active=True)
 
-    with patch(
-        "app.fastapi_routes.domains.auth.routes.resolve_session_user",
-        return_value=fake_user,
-    ), patch(
-        "app.application.tenant_subscription_app_service.subscription_status_for_user",
-        return_value={
-            "active": True,
-            "reason": "trial",
-            "trial_days_remaining": 13,
-        },
+    with (
+        patch(
+            "app.fastapi_routes.domains.auth.routes.resolve_session_user",
+            return_value=fake_user,
+        ),
+        patch(
+            "app.application.tenant_subscription_app_service.subscription_status_for_user",
+            return_value={
+                "active": True,
+                "reason": "trial",
+                "trial_days_remaining": 13,
+            },
+        ),
     ):
         resp = client.get("/api/auth/subscription/status")
 

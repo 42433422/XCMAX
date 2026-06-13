@@ -190,7 +190,9 @@ def build_chart_spec(
             **base,
             "xAxis": {"type": "category", "data": labels},
             "yAxis": {"type": "value"},
-            "series": [{"type": "line", "smooth": True, "data": values, "areaStyle": {"opacity": 0.08}}],
+            "series": [
+                {"type": "line", "smooth": True, "data": values, "areaStyle": {"opacity": 0.08}}
+            ],
         }
     if chart_type == "dashboard":
         pie_spec = build_chart_spec("pie", columns, rows, title="结构占比")
@@ -281,7 +283,9 @@ async def convert_file(
 ) -> Dict[str, Any]:
     del template_path, payload
     columns, rows = _load_dataset(src_path)
-    chart_type = str(rule_spec.get("chart_type") or resolve_kitten_chart_type(rule_spec.get("brief") or ""))
+    chart_type = str(
+        rule_spec.get("chart_type") or resolve_kitten_chart_type(rule_spec.get("brief") or "")
+    )
     pack_id = str(rule_spec.get("pack_id") or "")
     title_map = {
         "chart-bar-employee": "柱状图 · 分类对比",
