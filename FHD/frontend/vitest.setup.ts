@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, vi } from 'vitest'
+import { config } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
+import { i18n } from '@/i18n'
+
+config.global.plugins = [i18n]
 
 beforeEach(() => {
   setActivePinia(createPinia())
