@@ -1,0 +1,28 @@
+# Observability — ServiceMonitor + PrometheusRule for xcagi (requires Prometheus Operator).
+# Phase 4 extends this to the full Prometheus/Grafana/Loki/Alertmanager bring-up.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: monitoring
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  labels:
+    app.kubernetes.io/part-of: xcagi
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/42433422/XCMAX.git
+    targetRevision: main
+    path: FHD/k8s/monitoring
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      # PrometheusRule/ServiceMonitor CRDs must already exist (Prometheus Operator).
+      - ServerSideApply=true

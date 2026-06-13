@@ -53,11 +53,13 @@ jobs:
           INPUT_DIGEST: ${{ github.event.inputs.image_digest }}
         run: |
           set -euo pipefail
-          REF="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_FHD_API }}"
+          # GHCR repo path must be lowercase (github.repository = 42433422/XCMAX is mixed case).
+          REF="$(printf '%s' "${{ env.REGISTRY }}/${{ env.IMAGE_NAME_FHD_API }}" | tr '[:upper:]' '[:lower:]')"
           if [ -n "${INPUT_DIGEST:-}" ]; then
             IMAGE="${REF}@${INPUT_DIGEST}"
           else
-            SHA="$(git rev-parse --short=12 HEAD)"
+            # 7-char short sha matches docker/metadata-action type=sha default (CI's fhd-ci-cd.yml).
+            SHA="$(git rev-parse --short=7 HEAD)"
             IMAGE="${REF}:sha-${SHA}"
           fi
           echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"

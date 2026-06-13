@@ -1,0 +1,35 @@
+# xcagi-fhd-api — production K8s track (parallel to CVM prod). Auto-sync is safe because
+# Phase 3 turns the workload into an Argo Rollout: ArgoCD updates the spec, the Rollout
+# controller does the canary + Prometheus AnalysisTemplate gate + auto-rollback.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: fhd-api-production
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  labels:
+    app.kubernetes.io/part-of: xcagi
+    environment: production
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/42433422/XCMAX.git
+    targetRevision: main
+    path: FHD/k8s/overlays/production
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: xcagi-prod
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ApplyOutOfSyncOnly=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m
