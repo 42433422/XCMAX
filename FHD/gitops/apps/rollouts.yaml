@@ -5,6 +5,9 @@ kind: Application
 metadata:
   name: argo-rollouts
   namespace: argocd
+  annotations:
+    # Install controller + CRDs first so fhd-api-* (wave 0) can create Rollout/AnalysisTemplate CRs.
+    argocd.argoproj.io/sync-wave: "-2"
   finalizers:
     - resources-finalizer.argocd.argoproj.io
   labels:

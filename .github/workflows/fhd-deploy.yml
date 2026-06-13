@@ -147,21 +147,16 @@ jobs:
           for f in service configmap ingress hpa pdb networkpolicy; do
             cp "k8s/${f}.yaml" "${TMP}/${f}.yaml"
           done
-          if [ "$STRATEGY" = "blue-green" ]; then
-            sed "s|__DEPLOY_BACKEND_IMAGE__|${FHD_API_IMAGE}|g" \
-              k8s/blue-green-deployment.yaml > "${TMP}/blue-green.yaml"
-            kubectl apply -f "${TMP}/blue-green.yaml" -n "${NS}" --validate=true
-          elif [ "$STRATEGY" = "canary" ]; then
-            sed "s|__DEPLOY_BACKEND_IMAGE__|${FHD_API_IMAGE}|g" \
-              k8s/canary.yaml > "${TMP}/canary.yaml"
-            kubectl apply -f "${TMP}/canary.yaml" -n "${NS}" --validate=true
-          else
-            kubectl apply -f "${TMP}/configmap.yaml" -n "${NS}" --validate=true
-            kubectl apply -f "${TMP}/service.yaml" -n "${NS}" --validate=true
-            kubectl apply -f "${TMP}/deployment.yaml" -n "${NS}" --validate=true
-            kubectl apply -f "${TMP}/pdb.yaml" -n "${NS}" --validate=true
-            kubectl apply -f "${TMP}/networkpolicy.yaml" -n "${NS}" --validate=true
+          # Progressive delivery (canary/blue-green) moved to GitOps Argo Rollouts
+          # (FHD/k8s/rollouts + FHD/gitops). This imperative path is break-glass → always rolling.
+          if [ "$STRATEGY" = "blue-green" ] || [ "$STRATEGY" = "canary" ]; then
+            echo "::warning::strategy=$STRATEGY is now handled by GitOps Argo Rollouts; break-glass deploy.yml applies a rolling update instead."
           fi
+          kubectl apply -f "${TMP}/configmap.yaml" -n "${NS}" --validate=true
+          kubectl apply -f "${TMP}/service.yaml" -n "${NS}" --validate=true
+          kubectl apply -f "${TMP}/deployment.yaml" -n "${NS}" --validate=true
+          kubectl apply -f "${TMP}/pdb.yaml" -n "${NS}" --validate=true
+          kubectl apply -f "${TMP}/networkpolicy.yaml" -n "${NS}" --validate=true
           kubectl -n "${NS}" set env deployment/xcagi \
             FHD_ENV=staging \
             XCAGI_NEURO_BUS_DEDUP=1 \
@@ -278,21 +273,16 @@ jobs:
           for f in service configmap ingress hpa pdb networkpolicy; do
             cp "k8s/${f}.yaml" "${TMP}/${f}.yaml"
           done
-          if [ "$STRATEGY" = "blue-green" ]; then
-            sed "s|__DEPLOY_BACKEND_IMAGE__|${FHD_API_IMAGE}|g" \
-              k8s/blue-green-deployment.yaml > "${TMP}/blue-green.yaml"
-            kubectl apply -f "${TMP}/blue-green.yaml" -n "${NS}" --validate=true
-          elif [ "$STRATEGY" = "canary" ]; then
-            sed "s|__DEPLOY_BACKEND_IMAGE__|${FHD_API_IMAGE}|g" \
-              k8s/canary.yaml > "${TMP}/canary.yaml"
-            kubectl apply -f "${TMP}/canary.yaml" -n "${NS}" --validate=true
-          else
-            kubectl apply -f "${TMP}/configmap.yaml" -n "${NS}" --validate=true
-            kubectl apply -f "${TMP}/service.yaml" -n "${NS}" --validate=true
-            kubectl apply -f "${TMP}/deployment.yaml" -n "${NS}" --validate=true
-            kubectl apply -f "${TMP}/pdb.yaml" -n "${NS}" --validate=true
-            kubectl apply -f "${TMP}/networkpolicy.yaml" -n "${NS}" --validate=true
+          # Progressive delivery (canary/blue-green) moved to GitOps Argo Rollouts
+          # (FHD/k8s/rollouts + FHD/gitops). This imperative path is break-glass → always rolling.
+          if [ "$STRATEGY" = "blue-green" ] || [ "$STRATEGY" = "canary" ]; then
+            echo "::warning::strategy=$STRATEGY is now handled by GitOps Argo Rollouts; break-glass deploy.yml applies a rolling update instead."
           fi
+          kubectl apply -f "${TMP}/configmap.yaml" -n "${NS}" --validate=true
+          kubectl apply -f "${TMP}/service.yaml" -n "${NS}" --validate=true
+          kubectl apply -f "${TMP}/deployment.yaml" -n "${NS}" --validate=true
+          kubectl apply -f "${TMP}/pdb.yaml" -n "${NS}" --validate=true
+          kubectl apply -f "${TMP}/networkpolicy.yaml" -n "${NS}" --validate=true
           kubectl -n "${NS}" set env deployment/xcagi \
             FHD_ENV=production \
             XCAGI_NEURO_BUS_DEDUP=1 \
