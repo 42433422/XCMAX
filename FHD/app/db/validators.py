@@ -8,7 +8,7 @@ import logging
 
 from sqlalchemy.orm import validates
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
 class ModelValidators:
@@ -94,7 +94,7 @@ def register_model_validators():
         logger.info(f"模型验证器已初始化 ({validated_count} 个模型)")
         return True
 
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.warning(f"模型验证器初始化跳过: {e}")
         return False
 

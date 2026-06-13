@@ -11,9 +11,14 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from app.fastapi_routes.mobile_api import get_mobile_user
-from app.security.mobile_pairing import consume_by_shortcode, consume_pairing_nonce, issue_pairing_nonce, lookup_by_shortcode
+from app.security.mobile_pairing import (
+    consume_by_shortcode,
+    consume_pairing_nonce,
+    issue_pairing_nonce,
+    lookup_by_shortcode,
+)
 from app.utils.mobile_api import format_mobile_response, paginate_list
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +37,7 @@ def _ensure_mobile_device_table() -> None:
             insp = inspect(bind)
             if not insp.has_table(MobileDeviceToken.__tablename__):
                 MobileDeviceToken.__table__.create(bind, checkfirst=True)
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.warning("mobile_device_tokens ensure: %s", exc)
 
 
@@ -266,12 +271,14 @@ async def mobile_pairing_lookup(body: PairingLookupBody):
             format_mobile_response(None, "配对码无效或已过期", success=False, code=404),
             status_code=404,
         )
-    return format_mobile_response(data={
-        "host": rec["host"],
-        "port": rec["port"],
-        "nonce": rec["nonce"],
-        "exp": rec.get("exp", 0),
-    })
+    return format_mobile_response(
+        data={
+            "host": rec["host"],
+            "port": rec["port"],
+            "nonce": rec["nonce"],
+            "exp": rec.get("exp", 0),
+        }
+    )
 
 
 @extension_router.post("/pairing/exchange")
@@ -315,7 +322,7 @@ def _mobile_mod_items() -> list[dict[str, str]]:
             if mid:
                 items.append({"id": mid, "name": name})
         return items[:100]
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.warning("mobile mods list: %s", exc)
         return []
 
@@ -355,7 +362,7 @@ async def mobile_home(user=Depends(get_mobile_user)):
         from app.db.xcmax_sync import SyncDb
 
         sync_data = SyncDb().get_status()
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         sync_data = {"error": str(exc)}
     return format_mobile_response(
         data={
@@ -436,7 +443,7 @@ async def mobile_sync_status(user=Depends(get_mobile_user)):
             st["inbox_pending"] = conn.execute(
                 "SELECT COUNT(*) FROM sync_inbox WHERE status='pending'",
             ).fetchone()[0]
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         st = {"error": str(exc), "healthy": False}
     return format_mobile_response(data=st)
 
@@ -467,7 +474,7 @@ async def mobile_sync_pull(body: SyncPullBody, user=Depends(get_mobile_user)):
                 "shipments": _shipment_items(),
             },
         )
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.warning("mobile_sync_pull: %s", exc)
         return JSONResponse(
             format_mobile_response(None, str(exc), success=False, code=500),
@@ -502,10 +509,10 @@ async def mobile_sync_push(body: SyncPushBody, user=Depends(get_mobile_user)):
             from app.application.xcmax_sync_app import apply_inbox
 
             apply_result = apply_inbox(limit=written + 50) or {}
-        except OPERATIONAL_ERRORS as ae:
+        except RECOVERABLE_ERRORS as ae:
             apply_result = {"error": str(ae)}
         return format_mobile_response(data={"written": written, "apply": apply_result})
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.warning("mobile_sync_push: %s", exc)
         return JSONResponse(
             format_mobile_response(None, str(exc), success=False, code=500),
@@ -525,7 +532,7 @@ async def mobile_sync_ack(body: SyncAckBody, user=Depends(get_mobile_user)):
         sync_db = SyncDb()
         sync_db.update_remote_cursor(int(body.cursor))
         return format_mobile_response(data={"acked": int(body.cursor)})
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.warning("mobile_sync_ack: %s", exc)
         return JSONResponse(
             format_mobile_response(None, str(exc), success=False, code=500),
@@ -552,7 +559,7 @@ async def mobile_sync_conflicts(user=Depends(get_mobile_user)):
                 """,
             ).fetchall()
             items = [dict(r) for r in rows]
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         return format_mobile_response(data={"items": [], "error": str(exc)})
     return format_mobile_response(data={"items": items})
 
@@ -632,7 +639,7 @@ async def mobile_auth_qr_confirm(body: AuthQrConfirmBody, request: Request):
                 import json
 
                 msg = json.loads(err.body.decode("utf-8")).get("message") or msg
-            except OPERATIONAL_ERRORS:
+            except RECOVERABLE_ERRORS:
                 pass
         return JSONResponse(
             format_mobile_response(None, msg, success=False, code=401),
@@ -676,7 +683,7 @@ async def mobile_auth_oidc_exchange(body: OidcExchangeBody):
         )
     try:
         profile = await exchange_code_for_userinfo(body.code)
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         return JSONResponse(
             format_mobile_response(None, str(exc), success=False, code=502),
             status_code=502,
@@ -796,7 +803,7 @@ async def mobile_auth_qr_confirm(body: AuthQrConfirmBody, request: Request):
     if err:
         try:
             payload = err.body.decode("utf-8") if hasattr(err, "body") else str(err)
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             payload = "登录失败"
         return JSONResponse(
             format_mobile_response(None, payload, success=False, code=401),
@@ -840,7 +847,7 @@ async def mobile_auth_oidc_exchange(body: OidcExchangeBody):
         )
     try:
         profile = await exchange_code_for_userinfo(body.code)
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         return JSONResponse(
             format_mobile_response(None, str(exc), success=False, code=502),
             status_code=502,

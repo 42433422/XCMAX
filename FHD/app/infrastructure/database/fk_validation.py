@@ -7,7 +7,7 @@
 import logging
 
 from app.db import SessionLocal
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +52,7 @@ class ForeignKeyValidator:
                         "Foreign key violation: purchase_units.id=%s does not exist", unit_id
                     )
                 return exists
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             # 数据库查询失败时，记录错误但允许操作继续（降级模式）
             logger.error("Failed to validate purchase_unit FK: %s", e)
             # 生产环境应该返回 False，但这里选择保守策略
@@ -83,7 +83,7 @@ class ForeignKeyValidator:
                         "Foreign key violation: products.id=%s does not exist", product_id
                     )
                 return exists
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.error("Failed to validate product FK: %s", e)
             return True  # 保守策略
 
@@ -111,7 +111,7 @@ class ForeignKeyValidator:
                         "Foreign key violation: customers.id=%s does not exist", customer_id
                     )
                 return exists
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.error("Failed to validate customer FK: %s", e)
             return True  # 保守策略
 

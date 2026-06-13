@@ -3,16 +3,16 @@ import { ref, type Ref } from 'vue'
 import { useProModeStore } from './proMode'
 import { speakText, stopSpeaking, cleanTextForSpeech } from '../utils/tts'
 
-interface ChatMessage {
+interface JarvisChatMessage {
   id: number;
   content: string;
   type: 'user' | 'ai' | 'task';
   timestamp: string;
-  taskData?: any;
+  taskData?: unknown;
 }
 
 interface JarvisChatState {
-  messages: ChatMessage[];
+  messages: JarvisChatMessage[];
   isRecording: boolean;
   isPlaying: boolean;
   voiceQueue: string[];
@@ -22,7 +22,7 @@ interface JarvisChatState {
 }
 
 export const useJarvisChatStore = defineStore('jarvisChat', () => {
-  const messages = ref<ChatMessage[]>([]) as Ref<ChatMessage[]>
+  const messages = ref<JarvisChatMessage[]>([]) as Ref<JarvisChatMessage[]>
   const isRecording = ref(false)
   const isPlaying = ref(false)
   const voiceQueue = ref<string[]>([])
@@ -30,7 +30,7 @@ export const useJarvisChatStore = defineStore('jarvisChat', () => {
   const statusText = ref('准备就绪')
   const isCoreSpeaking = ref(false)
 
-  const lastMessage = ref<ChatMessage | undefined>(undefined)
+  const lastMessage = ref<JarvisChatMessage | undefined>(undefined)
   const hasPendingVoice = ref(false)
 
   function updateLastMessage() {

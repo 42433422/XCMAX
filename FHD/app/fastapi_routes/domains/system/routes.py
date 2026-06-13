@@ -8,7 +8,7 @@ from fastapi import APIRouter, Body, File, Form, Query, Request, UploadFile
 from fastapi.responses import JSONResponse, PlainTextResponse
 
 from app.template_analysis_progress import get_template_analysis_progress
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.path_utils import get_base_dir
 
 logger = logging.getLogger(__name__)
@@ -28,7 +28,7 @@ def system_config_get():
                 "available_industries": ic.get_available_industries(),
             },
         }
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.exception("system config: %s", e)
         return {
             "success": True,
@@ -47,7 +47,7 @@ def system_info_get():
         from app.application.facades.session_facade import get_system_service
 
         return {"success": True, "data": get_system_service().get_system_info()}
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         return JSONResponse({"success": False, "message": str(e)}, status_code=500)
 
 
@@ -57,7 +57,7 @@ def system_printer_get():
         from app.application.facades.session_facade import get_system_service
 
         return {"success": True, "data": get_system_service().get_printer_config()}
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         return JSONResponse({"success": False, "message": str(e)}, status_code=500)
 
 
@@ -83,7 +83,7 @@ def system_startup_get():
         from app.application.facades.session_facade import get_system_service
 
         return {"success": True, "data": get_system_service().get_startup_config()}
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         return JSONResponse({"success": False, "message": str(e)}, status_code=500)
 
 
@@ -102,7 +102,7 @@ def system_startup_delete():
 
         result = get_system_service().disable_startup()
         return JSONResponse(result, status_code=200 if result.get("success") else 500)
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         return JSONResponse({"success": False, "message": str(e)}, status_code=500)
 
 
@@ -112,7 +112,7 @@ def database_backups_list():
         from app.application.facades.session_facade import get_database_service
 
         return get_database_service().list_backups()
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         return JSONResponse({"success": False, "message": str(e)}, status_code=500)
 
 
@@ -123,7 +123,7 @@ def database_backup_delete(backup_file: str):
 
         result = get_database_service().delete_backup(backup_file)
         return JSONResponse(result, status_code=200 if result.get("success") else 500)
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         return JSONResponse({"success": False, "message": str(e)}, status_code=500)
 
 
@@ -135,7 +135,7 @@ def database_backup():
         db_service = get_database_service()
         result = db_service.backup_database()
         return JSONResponse(result, status_code=200 if result.get("success") else 500)
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         return JSONResponse({"success": False, "message": str(e)}, status_code=500)
 
 
@@ -154,7 +154,7 @@ def database_restore(body: dict = Body(default_factory=dict)):
         db_service = get_database_service()
         result = db_service.restore_database(backup_file)
         return JSONResponse(result, status_code=200 if result.get("success") else 400)
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         return JSONResponse({"success": False, "message": str(e)}, status_code=500)
 
 
@@ -172,7 +172,7 @@ def performance_status():
                 status_code=503,
             )
         return {"success": True, "data": optimizer.get_status(), "timestamp": _time.time()}
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         return JSONResponse({"success": False, "message": str(e), "data": None}, status_code=500)
 
 
@@ -198,7 +198,7 @@ def performance_health():
         if "issues" in health:
             resp["issues"] = health["issues"]
         return JSONResponse(resp, status_code=code)
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         return JSONResponse(
             {"status": "unhealthy", "error": str(e), "timestamp": _time.time()},
             status_code=500,
@@ -219,7 +219,7 @@ def performance_metrics_summary(minutes: int = Query(default=5)):
             )
         summary = optimizer.performance_monitor.get_metrics_summary(minutes=minutes)
         return {"success": True, "data": summary}
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         return JSONResponse({"success": False, "message": str(e), "data": None}, status_code=500)
 
 
@@ -235,7 +235,7 @@ def performance_metrics_prometheus():
             optimizer.performance_monitor.get_prometheus_metrics(),
             media_type="text/plain; version=0.0.4; charset=utf-8",
         )
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         return PlainTextResponse(f"# Error: {str(e)}\n", status_code=500)
 
 
@@ -251,7 +251,7 @@ def performance_cache_stats():
                 status_code=503,
             )
         return {"success": True, "data": optimizer.redis_cache.stats}
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         return JSONResponse({"success": False, "message": str(e), "data": None}, status_code=500)
 
 
@@ -272,7 +272,7 @@ def performance_cache_clear(pattern: str | None = Query(default=None)):
             optimizer.redis_cache.clear_local_cache()
             message = "已清除本地缓存"
         return {"success": True, "message": message}
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         return JSONResponse({"success": False, "message": str(e)}, status_code=500)
 
 
@@ -298,7 +298,7 @@ def performance_cache_invalidate(body: dict = Body(default_factory=dict)):
             "data": {"deleted_count": deleted, "requested_keys": len(keys)},
             "message": f"已删除 {deleted} 个缓存键",
         }
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         return JSONResponse({"success": False, "message": str(e)}, status_code=500)
 
 
@@ -352,7 +352,7 @@ def performance_tasks_status(task_id: str | None = Query(default=None)):
                 "stats": stats,
             },
         }
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         return JSONResponse({"success": False, "message": str(e), "data": None}, status_code=500)
 
 
@@ -369,7 +369,7 @@ def performance_alerts(level: str | None = Query(default=None), limit: int = Que
             )
         alerts = optimizer.performance_monitor.get_alerts(level=level, limit=limit)
         return {"success": True, "data": alerts, "count": len(alerts)}
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         return JSONResponse({"success": False, "message": str(e), "data": []}, status_code=500)
 
 
@@ -386,7 +386,7 @@ def performance_slow_queries(limit: int = Query(default=20)):
             )
         slow = optimizer.query_optimizer.get_slow_queries(limit=limit)
         return {"success": True, "data": slow, "count": len(slow)}
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         return JSONResponse({"success": False, "message": str(e), "data": []}, status_code=500)
 
 
@@ -401,7 +401,7 @@ def performance_optimize_reinitialize():
             "message": "性能优化系统已重新初始化",
             "data": optimizer.get_status(),
         }
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.exception("performance reinit: %s", e)
         return JSONResponse({"success": False, "message": str(e)}, status_code=500)
 
@@ -462,7 +462,7 @@ def templates_delete(request: Request, body: dict = Body(default_factory=dict)):
         if db_id is not None:
             try:
                 init_template_tables()
-            except OPERATIONAL_ERRORS:
+            except RECOVERABLE_ERRORS:
                 pass
             with get_db() as db:
                 row = db.execute(
@@ -487,7 +487,7 @@ def templates_delete(request: Request, body: dict = Body(default_factory=dict)):
         return JSONResponse(
             {"success": False, "message": f"暂不支持删除该模板类型: {template_id}"}, status_code=400
         )
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         return JSONResponse({"success": False, "message": f"删除失败：{str(e)}"}, status_code=500)
 
 
@@ -537,7 +537,7 @@ def skills_list():
 
         registry = get_skill_registry()
         return {"success": True, "skills": registry.list_all()}
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         return JSONResponse({"success": False, "message": str(e)}, status_code=500)
 
 
@@ -560,7 +560,7 @@ def skills_info(skill_id: str):
                 },
             }
         return JSONResponse({"success": False, "message": "技能不存在"}, status_code=404)
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         return JSONResponse({"success": False, "message": str(e)}, status_code=500)
 
 

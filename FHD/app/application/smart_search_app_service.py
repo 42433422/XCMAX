@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Literal
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +45,7 @@ class SmartSearchApplicationService:
             return {"success": True, "query": keyword, "hits": [], "index_id": None}
         try:
             return svc.query(index_id=index_id, query_text=keyword, top_k=top_k)
-        except OPERATIONAL_ERRORS as exc:
+        except RECOVERABLE_ERRORS as exc:
             logger.exception("search_excel_vector")
             return {"success": False, "message": str(exc), "hits": [], "index_id": index_id}
 
@@ -67,21 +67,21 @@ class SmartSearchApplicationService:
         if scope in ("products", "all"):
             try:
                 out["results"]["products"] = self.search_products(q, per_page=per_page)
-            except OPERATIONAL_ERRORS as exc:
+            except RECOVERABLE_ERRORS as exc:
                 logger.exception("smart_search products")
                 out["results"]["products"] = {"success": False, "message": str(exc), "data": []}
 
         if scope in ("customers", "all"):
             try:
                 out["results"]["customers"] = self.search_customers(q, per_page=per_page)
-            except OPERATIONAL_ERRORS as exc:
+            except RECOVERABLE_ERRORS as exc:
                 logger.exception("smart_search customers")
                 out["results"]["customers"] = {"success": False, "message": str(exc), "data": []}
 
         if scope in ("excel", "all"):
             try:
                 out["results"]["excel_vector"] = self.search_excel_vector(q, top_k=5)
-            except OPERATIONAL_ERRORS as exc:
+            except RECOVERABLE_ERRORS as exc:
                 logger.exception("smart_search excel")
                 out["results"]["excel_vector"] = {"success": False, "message": str(exc), "hits": []}
 

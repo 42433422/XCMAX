@@ -12,7 +12,7 @@ import time
 import uuid
 from typing import Any
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +51,7 @@ def verify_mobile_jwt(token: str) -> dict[str, Any] | None:
         if payload.get("aud") != MOBILE_JWT_AUD:
             return None
         return payload
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.debug("mobile jwt verify failed: %s", exc)
         return None
 

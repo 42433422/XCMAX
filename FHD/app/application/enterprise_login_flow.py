@@ -15,7 +15,7 @@ from app.application.session_account_meta import (
     persist_session_account_meta,
     validate_account_kind_for_market,
 )
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -94,7 +94,7 @@ async def ensure_local_user_after_market(
         ensure_runtime_auth_bootstrap(swallow_errors=True)
         with get_db() as db:
             exists = db.query(User).filter(User.username == username).first()
-    except OPERATIONAL_ERRORS as db_exc:
+    except RECOVERABLE_ERRORS as db_exc:
         logger.exception("enterprise login user lookup failed")
         return None, JSONResponse(
             {
@@ -175,7 +175,7 @@ def bind_tenant_for_login(
             out["tenant_name"] = name
         elif company_brand:
             out["tenant_name"] = company_brand
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         logger.exception("bind_tenant_for_login failed user_id=%s", user_id)
     return out
 
@@ -308,7 +308,7 @@ async def finalize_enterprise_login(
                 "is_enterprise": bool(market_result.get("is_enterprise")),
                 "is_market_admin": bool(market_result.get("is_market_admin")),
             }
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         result["market_account"] = {
             "success": False,
             "message": f"市场账号自动同步失败：{exc}",
@@ -340,7 +340,7 @@ async def finalize_enterprise_login(
                 cached = get_cached_entitled_client_mod_ids()
                 if cached:
                     result["entitled_mod_ids"] = sorted(cached)
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             logger.exception("account_mod_binding fallback on login failed")
 
     return result

@@ -6,7 +6,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +35,7 @@ def refresh_employee_pack_runtime(pack_id: str | None = None) -> dict[str, Any]:
         else:
             load_employee_pack_routes(app, mm)
             registered = ["*"]
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         logger.warning("refresh_employee_pack_runtime failed pack=%s", pack_id, exc_info=True)
 
     status = build_employee_tools_status()

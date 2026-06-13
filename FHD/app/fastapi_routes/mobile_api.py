@@ -18,7 +18,7 @@ from app.security.mobile_jwt import (
     verify_mobile_jwt,
 )
 from app.utils.mobile_api import format_mobile_response
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -321,7 +321,7 @@ async def mobile_me(request: Request, user=Depends(get_mobile_user)):
             mid = str(entry.get("id") or entry.get("mod_id") or "")
             if mid:
                 mods_summary.append({"id": mid})
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.debug("mods list for mobile me: %s", exc)
 
     return format_mobile_response(

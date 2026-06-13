@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import json
 from typing import Any
 
 from app.mod_sdk.employee_tool_registry import execute_employee_tool, is_employee_tool

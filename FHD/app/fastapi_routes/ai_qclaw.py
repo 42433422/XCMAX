@@ -25,7 +25,7 @@ from fastapi.responses import JSONResponse
 from starlette.testclient import TestClient
 
 from app.application.aiopen.service import AIOPEN_STATE, openclaw_chat_proxy
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -123,7 +123,7 @@ def ai_qclaw_test_route(request: Request, body: dict = Body(default_factory=dict
             "status_code": resp.status_code,
             "result": "ok" if ok else "error",
         }
-    except OPERATIONAL_ERRORS as err:
+    except RECOVERABLE_ERRORS as err:
         return JSONResponse(
             {"success": False, "path": path, "method": method, "message": str(err)},
             status_code=500,

@@ -1,5 +1,5 @@
 import { CLIENT_PRIMARY_ERP_MOD_ID } from '@/constants/genericModPack';
-import type { ModInfo } from '@/stores/mods';
+import type { ModInfo } from '@/types/modInfo';
 
 /** 与 mods/attendance-industry/manifest.json frontend.menu 保持一致 */
 export const ATTENDANCE_INDUSTRY_MOD_FALLBACK_MENU: NonNullable<ModInfo['menu']> = [

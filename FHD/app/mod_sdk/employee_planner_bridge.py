@@ -3,12 +3,10 @@
 
 from __future__ import annotations
 
-import json
 from typing import Any
 
 from app.mod_sdk.employee_tool_registry import (
     build_employee_tools_status,
-    execute_employee_tool,
     invalidate_employee_tool_cache,
     is_employee_tool,
     pack_id_to_legacy_tool_name,
@@ -25,7 +23,10 @@ def tool_name_to_pack_id(tool_name: str) -> str | None:
 
 
 def pack_has_runtime(pack_id: str) -> bool:
-    from app.application.employee_runtime.loader import pack_has_direct_python_runtime, resolve_pack_dir
+    from app.application.employee_runtime.loader import (
+        pack_has_direct_python_runtime,
+        resolve_pack_dir,
+    )
 
     pdir = resolve_pack_dir(pack_id)
     return pack_has_direct_python_runtime(pdir) if pdir else False

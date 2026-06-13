@@ -17,7 +17,7 @@ from app.middleware.global_rate_limit import GlobalRateLimitMiddleware
 from app.middleware.security_headers import SecurityHeadersMiddleware
 from app.middleware.xss_sanitizer import XSSSanitizerMiddleware
 from app.security import LanCidrGuard, LanLicenseGuard
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 from .cors import (
     lan_origin_regex_enabled,
@@ -122,7 +122,7 @@ def create_fastapi_app(
         from app.utils.metrics import init_metrics
 
         init_metrics("XCAGI", os.environ.get("XCAGI_VERSION", "10.0.0"))
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.warning("Prometheus init_metrics skipped: %s", e)
 
     register_extra_middleware(app)
@@ -132,7 +132,7 @@ def create_fastapi_app(
         from app.fastapi_app.mod_startup import bootstrap_mod_extensions_sync
 
         bootstrap_mod_extensions_sync(app)
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.warning("Mod extensions staged load failed (lifespan may retry): %s", e)
 
     mount_xcmax_dashboard_static(app)
@@ -144,7 +144,7 @@ def create_fastapi_app(
 
         register_spa_history_fallback(app)
         logger.info("Registered Vue history fallback (/{fallback:path}) as the last route")
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.exception("Failed to register SPA history fallback: %s", e)
         raise
 

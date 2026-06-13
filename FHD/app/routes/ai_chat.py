@@ -10,7 +10,7 @@ import logging
 from typing import Any
 
 from app.utils.ai_helpers import format_money, safe_float
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +83,7 @@ def _fetch_product_meta_by_models(models, unit_name: str = "") -> dict[str, dict
                     meta[model_raw] = meta_payload
                 if model_norm:
                     meta[model_norm] = meta_payload
-    except OPERATIONAL_ERRORS as err:
+    except RECOVERABLE_ERRORS as err:
         logger.warning("补全预览产品信息失败：%s", err, exc_info=True)
     return meta
 
@@ -307,7 +307,7 @@ def unified_chat_single_payload(
                     "data": {"parsed_data": parsed_retry},
                 },
             }
-        except OPERATIONAL_ERRORS as local_parse_err:
+        except RECOVERABLE_ERRORS as local_parse_err:
             logger.error("普通版本地编号解析异常：%s", local_parse_err, exc_info=True)
             return {
                 "success": False,

@@ -11,7 +11,7 @@ from app.services.tools_execution.registry import (
 )
 from app.services.tools_payload_legacy import dispatch_legacy_tool_payload
 from app.services.tools_workflow_registered import execute_registered_workflow_tool
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +66,6 @@ def _execute_tool_from_payload_inner(data):
             parse_order_text_fn=_parse_order_text,
         )
 
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.error(f"执行工具失败: {e}")
         return _j({"success": False, "message": str(e)}, 500)

@@ -15,7 +15,7 @@ from app.neuro_async_bridge import run_coroutine_on_neuro_loop
 from app.neuro_bus.bus import get_neuro_bus
 from app.neuro_bus.command_gateway import get_command_gateway
 from app.neuro_bus.events.base import EventPriority, NeuroEvent
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +45,7 @@ class ShipmentApplicationServiceEventPrimary:
     def _run_cmd(self, coro):
         try:
             return run_coroutine_on_neuro_loop(coro, timeout=120.0)
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.exception("event-primary shipment command failed: %s", e)
             return {"success": False, "message": str(e)}
 

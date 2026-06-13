@@ -13,7 +13,7 @@ import time
 from dataclasses import dataclass
 from enum import Enum
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -314,7 +314,7 @@ class IntentReflexArc:
 
             return result
 
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             elapsed_us = (time.perf_counter() - start_time) * 1_000_000
             logger.exception(f"Reflex arc error after {elapsed_us:.0f}us: {e}")
             return ReflexResult(

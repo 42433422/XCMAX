@@ -21,7 +21,7 @@ from pathlib import Path
 
 import torch
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logging.basicConfig(
     level=logging.INFO,
@@ -86,7 +86,7 @@ def train_model(
         logger.info("=" * 60)
         return str(model_path)
 
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.error(f"训练失败: {e}", exc_info=True)
         return None
 

@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 from app.infrastructure.auth.db_token import configured_db_write_token
 from app.infrastructure.excel.schema_service import ExcelSchemaUnderstandingService
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 _workflow_tool_registry_cache: list[dict[str, Any]] | None = None
 _workflow_tool_registry_bulk_token_present: bool | None = None
@@ -87,7 +87,7 @@ def run_natural_language_pandas(
             out = local_ns.get("result", local_ns.get("df"))
             if isinstance(out, pd.DataFrame):
                 result_df = out
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         error_msg = str(e)
 
     records = json.loads(
@@ -117,7 +117,7 @@ def handle_excel_analysis(
     root = workspace_root or str(Path.cwd())
     try:
         p = resolve_safe_excel_path(root, file_path)
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         return {"success": False, "error": str(e), "workspace_root": root, "file_path": file_path}
     if not p.exists():
         return {
@@ -129,7 +129,7 @@ def handle_excel_analysis(
         }
     try:
         df = _read_excel_dataframe(p, sheet_name=sheet_name, header_row_1based=header_1b)
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         return {
             "success": False,
             "error": f"read failed: {e}",
@@ -165,7 +165,7 @@ def handle_excel_analysis(
             ).strip()
             if customer_hint:
                 out["customer_hint"] = customer_hint
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             logger.debug("suppressed exception", exc_info=True)
         if header_1b is not None:
             out["header_row"] = header_1b
@@ -463,7 +463,7 @@ def invalidate_workflow_tool_registry() -> None:
         from app.mod_sdk.employee_tool_registry import invalidate_employee_tool_cache
 
         invalidate_employee_tool_cache()
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         logger.debug("employee tool cache invalidate skipped", exc_info=True)
 
 
@@ -486,7 +486,7 @@ def get_workflow_tool_registry() -> list[dict[str, Any]]:
         emp_tools = build_employee_pack_tool_definitions()
         if emp_tools:
             reg = reg + emp_tools
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         logger.debug("employee pack tools merge skipped", exc_info=True)
     if bulk_on:
         reg.append(
@@ -523,14 +523,14 @@ def execute_workflow_tool(
     if isinstance(args, str):
         try:
             args = json.loads(args or "{}")
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             args = {}
     try:
         from app.mod_sdk.employee_tool_registry import execute_employee_tool, is_employee_tool
 
         if is_employee_tool(name):
             return execute_employee_tool(name, args, workspace_root)
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         logger.debug("employee tool dispatch skipped", exc_info=True)
     try:
         from app.mod_sdk.planner_native_tools import try_execute_native_planner_tool
@@ -540,7 +540,7 @@ def execute_workflow_tool(
         )
         if native_raw is not None:
             return native_raw
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         logger.debug("planner native tool dispatch skipped", exc_info=True)
     try:
         from app.application.employee_pack_runner import try_execute_employee_planner_tool
@@ -550,7 +550,7 @@ def execute_workflow_tool(
         )
         if emp_raw is not None:
             return emp_raw
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         logger.debug("legacy employee planner tool dispatch skipped", exc_info=True)
     if name == "excel_analysis":
         return json.dumps(
@@ -641,7 +641,7 @@ def execute_workflow_tool(
                 return json.dumps(
                     {"success": False, "error": f"unknown action: {action}"}, ensure_ascii=False
                 )
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             return json.dumps({"success": False, "error": str(e)}, ensure_ascii=False)
     if name == "excel_prophet":
         try:
@@ -699,7 +699,7 @@ def execute_workflow_tool(
                 },
                 ensure_ascii=False,
             )
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             return json.dumps(
                 {"action": "forecast", "future_forecast": [], "error": str(e)}, ensure_ascii=False
             )
@@ -726,7 +726,7 @@ def execute_workflow_tool(
             svc = ExcelSchemaUnderstandingService()
             out = svc.understand_dataframe(df, file_path=file_path)
             return json.dumps(out, ensure_ascii=False)
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             return json.dumps(
                 {"success": False, "error": str(e), "message": f"读取 Excel 文件失败: {e}"},
                 ensure_ascii=False,
@@ -808,7 +808,7 @@ def execute_workflow_tool(
                 },
                 ensure_ascii=False,
             )
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             return json.dumps({"success": False, "error": str(e)}, ensure_ascii=False)
     return json.dumps({"success": False, "error": "unknown_tool", "tool": name}, ensure_ascii=False)
 
@@ -914,7 +914,7 @@ def _handle_import_excel_to_database(
                             if hits:
                                 unit_name = str(hits[0]).strip()
                                 break
-                except OPERATIONAL_ERRORS:
+                except RECOVERABLE_ERRORS:
                     logger.debug("suppressed exception", exc_info=True)
             if not unit_name:
                 try:
@@ -924,7 +924,7 @@ def _handle_import_excel_to_database(
                         _extract_customer_hint_from_excel(str(p), sheet_n if sheet_n else None)
                         or ""
                     ).strip()
-                except OPERATIONAL_ERRORS:
+                except RECOVERABLE_ERRORS:
                     logger.debug("suppressed exception", exc_info=True)
 
         preview_only = bool(args.get("preview_only", False))
@@ -943,11 +943,11 @@ def _handle_import_excel_to_database(
                     excel_analysis_ctx,
                     preferred_sheet_name=str(sheet_n or "").strip() or None,
                 )
-            except OPERATIONAL_ERRORS:
+            except RECOVERABLE_ERRORS:
                 header_1b = None
         try:
             df = _read_excel_dataframe(p, sheet_name=sheet_n, header_row_1based=header_1b)
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             return json.dumps(
                 {
                     "success": False,
@@ -1026,7 +1026,7 @@ def _handle_import_excel_to_database(
                 ensure_ascii=False,
             )
 
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         return json.dumps({"success": False, "error": str(e)}, ensure_ascii=False)
 
 
@@ -1160,7 +1160,7 @@ def _excel_cell_as_clean_str(val: Any) -> str:
     try:
         if pd.isna(val):
             return ""
-    except TypeError:
+    except RECOVERABLE_ERRORS:
         pass
     if isinstance(val, float) and val != val:
         return ""
@@ -1183,7 +1183,7 @@ def _excel_cell_as_float(val: Any, default: float = 0.0) -> float:
             return default
         if pd.isna(val):
             return default
-    except TypeError:
+    except RECOVERABLE_ERRORS:
         pass
     try:
         v = float(val)
@@ -1394,7 +1394,7 @@ def _import_products_preview_or_execute(
             ensure_ascii=False,
         )
 
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         return json.dumps({"success": False, "error": f"导入失败: {str(e)}"}, ensure_ascii=False)
 
 
@@ -1458,7 +1458,7 @@ def _import_customers_preview_or_execute(df, columns, confirm, row_count):
             ensure_ascii=False,
         )
 
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         return json.dumps({"success": False, "error": f"导入失败: {str(e)}"}, ensure_ascii=False)
 
 
@@ -1550,7 +1550,7 @@ def _import_orders_preview_or_execute(df, columns, unit_name, confirm, row_count
                     imported += 1
                 else:
                     failed += 1
-            except OPERATIONAL_ERRORS:
+            except RECOVERABLE_ERRORS:
                 failed += 1
 
         return json.dumps(
@@ -1563,7 +1563,7 @@ def _import_orders_preview_or_execute(df, columns, unit_name, confirm, row_count
             },
             ensure_ascii=False,
         )
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         return json.dumps(
             {"success": False, "error": f"订单导入失败: {str(e)}"}, ensure_ascii=False
         )

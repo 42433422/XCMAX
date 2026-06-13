@@ -12,7 +12,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -82,7 +82,7 @@ class SemanticChunker:
         # 1) 计算相邻句相似度
         try:
             embeddings = [self._embedder(s["text"]) for s in sentences]
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.warning("embedder 调用失败，降级 fixed: %s", e)
             return self.split_by_fixed(text)
 

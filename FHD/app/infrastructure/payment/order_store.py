@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -180,9 +180,7 @@ def _apply_saas_subscription_if_needed(*, plan_id: str, local_user_id: Any) -> N
     try:
         uid = int(local_user_id)
     except (TypeError, ValueError):
-        logger.warning(
-            "[model-payment] saas plan paid but no local_user_id plan_id=%s", plan_id
-        )
+        logger.warning("[model-payment] saas plan paid but no local_user_id plan_id=%s", plan_id)
         return
     try:
         from app.application.tenant_subscription_app_service import apply_paid_plan_for_user
@@ -196,7 +194,7 @@ def _apply_saas_subscription_if_needed(*, plan_id: str, local_user_id: Any) -> N
                 uid,
                 plan_id,
             )
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         logger.exception(
             "[model-payment] saas subscription apply failed user_id=%s plan_id=%s",
             local_user_id,

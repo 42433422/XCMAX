@@ -12,7 +12,7 @@ from app.application.employee_runtime.config_v2_adapter import (
     needs_executor_translation,
     translate_v2_to_executor_config,
 )
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import DATA_SHAPE, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -120,9 +120,7 @@ def parse_employee_config_v2(manifest: dict[str, Any]) -> dict[str, Any]:
         "memory": {"type": "session"},
         "cognition": {
             "agent": {
-                "system_prompt": (
-                    f"你是员工助手：{label or manifest.get('name') or 'assistant'}"
-                ),
+                "system_prompt": (f"你是员工助手：{label or manifest.get('name') or 'assistant'}"),
                 "model": {"provider": "auto", "model_name": "auto", "max_tokens": 4000},
             }
         },
@@ -185,9 +183,9 @@ def list_installed_pack_records() -> list[dict[str, Any]]:
                 continue
             try:
                 out.append(load_employee_pack_from_disk(pack_id))
-            except (ValueError, OPERATIONAL_ERRORS):
+            except (ValueError, DATA_SHAPE):
                 logger.debug("skip broken employee pack %s", pack_id, exc_info=True)
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         logger.debug("list_installed_pack_records failed", exc_info=True)
     return out
 

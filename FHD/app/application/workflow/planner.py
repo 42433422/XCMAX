@@ -9,7 +9,7 @@ from typing import Any
 import httpx
 
 from app.services import get_ai_conversation_service
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.path_utils import ensure_fhd_repo_on_syspath
 
 from .types import PlanGraph, WorkflowNode, validate_plan_graph
@@ -736,7 +736,7 @@ def _execute_excel_schema_tool(params: dict[str, Any]) -> dict[str, Any]:
         )
     except ImportError:
         pass
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.warning("excel_analysis_app_service 不可用，降级 openpyxl: %s", e)
 
     try:
@@ -820,7 +820,7 @@ def _execute_excel_analysis_tool(params: dict[str, Any]) -> dict[str, Any]:
         )
     except ImportError:
         pass
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.warning("excel_analysis_app_service 不可用，降级 openpyxl: %s", e)
 
     try:

@@ -21,7 +21,7 @@ import time
 from dataclasses import dataclass
 
 from app.security.lan_config import LAN_LICENSE_SECRET_MIN_LENGTH
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
 def _b64u_encode(raw: bytes) -> str:
@@ -87,13 +87,13 @@ def parse_token(secret: str, token: str) -> TokenPayload:
     expected = hmac.new(secret.encode("utf-8"), body_b64.encode("ascii"), hashlib.sha256).digest()
     try:
         provided = _b64u_decode(sig_b64)
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         raise TokenError("invalid signature encoding") from exc
     if not hmac.compare_digest(expected, provided):
         raise TokenError("signature mismatch")
     try:
         body = json.loads(_b64u_decode(body_b64))
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         raise TokenError("invalid payload encoding") from exc
     try:
         return TokenPayload(

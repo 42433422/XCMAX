@@ -17,6 +17,7 @@ ALLOWLIST_SUFFIXES = (
     "utils/error_handling.py",
     "neuro_bus/bus.py",
     "fastapi_app/lifespan.py",
+    "infrastructure/mods/mod_auth.py",
 )
 
 

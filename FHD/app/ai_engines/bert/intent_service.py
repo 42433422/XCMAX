@@ -18,7 +18,7 @@ from transformers import (
     BertTokenizer,
 )
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -138,7 +138,7 @@ class BertIntentClassifier:
             logger.info("BERT 模型加载成功")
             return True
 
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.error(f"BERT 模型加载失败：{e}")
             return False
 
@@ -183,7 +183,7 @@ class BertIntentClassifier:
 
             return result
 
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.error(f"BERT 预测失败：{e}")
             return {"intent": "unk", "confidence": 0.0, "message": str(e)}
 

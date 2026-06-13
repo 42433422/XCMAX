@@ -19,7 +19,7 @@ from app.fastapi_routes.domains.product.routes import router as product_legacy_r
 from app.fastapi_routes.domains.template.routes import router as template_router
 from app.fastapi_routes.domains.wechat.compat_routes import router as wechat_compat_router
 from app.fastapi_routes.domains.wechat.routes import router as wechat_legacy_router
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +51,7 @@ def _register_router_events():
             "[XCAGICompat] 路由已注册到 NeuroBus，当前订阅者: %s",
             len(bus.subscribers),
         )
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.debug("[XCAGICompat] NeuroBus 注册跳过: %s", e)
 
 

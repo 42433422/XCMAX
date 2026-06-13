@@ -7,7 +7,7 @@ from typing import Any
 import httpx
 
 from app.services import get_ai_conversation_service
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 from .types import NodeExecutionResult, PlanGraph, WorkflowNode, WorkflowRunResult
 
@@ -344,7 +344,7 @@ class WorkflowEngine:
                 "reasoning": reasoning,
             }
 
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.warning("AgenticLoop LLM 决策失败: %s", e, exc_info=True)
             return None
 
@@ -392,7 +392,7 @@ class WorkflowEngine:
                         retries=retries,
                     )
                 last_error = str(output.get("message") or output.get("error") or "unknown error")
-            except OPERATIONAL_ERRORS as err:
+            except RECOVERABLE_ERRORS as err:
                 last_error = str(err)
                 logger.warning(
                     "AgenticLoop 工具执行失败 %s.%s: %s", tool_id, action, err, exc_info=True
@@ -471,7 +471,7 @@ class WorkflowEngine:
                         retries=retries,
                     )
                 last_error = str(output.get("message") or output.get("error") or "unknown error")
-            except OPERATIONAL_ERRORS as err:
+            except RECOVERABLE_ERRORS as err:
                 last_error = str(err)
                 logger.warning("执行节点失败 node=%s err=%s", node.node_id, err, exc_info=True)
             retries += 1

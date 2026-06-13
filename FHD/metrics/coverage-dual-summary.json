@@ -1,20 +1,16 @@
 {
-  "captured_at": "2026-06-04T16:27:10Z",
+  "captured_at": "2026-06-13T08:00:00Z",
   "full_app": {
     "pct": 60.63,
     "covered": 46858,
     "statements": 77286,
-    "source": "coverage-full.xml"
+    "source": "coverage-full.xml (2026-06-04 baseline)"
   },
-  "measured_core_c1": {
-    "pct": 60.63,
-    "covered": 46858,
-    "statements": 77286,
-    "source": "pyproject.toml include+omit (coverage.json totals)"
+  "ci_gate": {
+    "pct": 58,
+    "source": "pyproject.toml [tool.coverage.report] fail_under",
+    "scope": "full app/ via source=[app]"
   },
-  "pass_stub_files": 145,
-  "omit_excluded_lines_approx": 0,
-  "ci_gate_narrow_pct": 70,
   "plan_target_full_app_pct": 88,
-  "notes": "full_app 为整棵 app/ 权威口径（尽调/CLAIMED 须引用 full_app.pct，当前 60.63%）。ci_gate_narrow_pct=70 为 CI 窄包门禁，不得与 full_app 混报。plan_target_full_app_pct=88 仅为路线图目标，非实测。pass_stub_files 含独立 pass 行，由 exclude_lines 排除。"
+  "notes": "2026-06-13 技术债清偿：取消 CI_STABLE_ONLY 与窄 include；CI 门禁与 full_app 同口径，fail_under=58（真实基线 60.63% 留 2% 余量）。禁止再混报窄包 70%。"
 }

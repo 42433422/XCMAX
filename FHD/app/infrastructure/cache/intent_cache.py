@@ -28,7 +28,7 @@ import time
 from collections.abc import Callable
 from typing import Any
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.redis_cache import RedisCache, get_redis_cache
 
 logger = logging.getLogger(__name__)
@@ -102,7 +102,7 @@ class IntentCache:
                 return None
             self._backend = get_redis_cache(client)
             return self._backend
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.debug("IntentCache: Redis backend not available: %s", e)
             return None
 
@@ -119,7 +119,7 @@ class IntentCache:
             return None
         try:
             return backend.get(self.make_key(text, mod_id))
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.debug("IntentCache.get failed: %s", e)
             _observe_error(self._scope, "get")
             return None
@@ -140,7 +140,7 @@ class IntentCache:
             return bool(
                 backend.set(self.make_key(text, mod_id), value, ttl=ttl or self._default_ttl)
             )
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.debug("IntentCache.set failed: %s", e)
             _observe_error(self._scope, "set")
             return False
@@ -178,7 +178,7 @@ class IntentCache:
                 if cached is not None:
                     _observe_hit(self._scope, mod_id)
                     return cached
-            except OPERATIONAL_ERRORS as e:
+            except RECOVERABLE_ERRORS as e:
                 logger.debug("IntentCache lookup failed: %s", e)
                 _observe_error(self._scope, "lookup")
 
@@ -193,7 +193,7 @@ class IntentCache:
             try:
                 if predicate(result):
                     backend.set(key, result, ttl=ttl or self._default_ttl)
-            except OPERATIONAL_ERRORS as e:
+            except RECOVERABLE_ERRORS as e:
                 logger.debug("IntentCache set failed: %s", e)
                 _observe_error(self._scope, "set")
 
@@ -205,7 +205,7 @@ class IntentCache:
             return
         try:
             backend.delete(self.make_key(text, mod_id))
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.debug("IntentCache.invalidate failed: %s", e)
 
 
@@ -236,7 +236,7 @@ def _build_redis_client():
     """
     try:
         import redis  # type: ignore
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         return None
     url = (
         os.environ.get("CACHE_REDIS_URL")
@@ -247,7 +247,7 @@ def _build_redis_client():
         client = redis.from_url(url, decode_responses=True, socket_connect_timeout=1)
         client.ping()
         return client
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.debug("IntentCache: redis.from_url(%s) failed: %s", url, e)
         return None
 
@@ -257,7 +257,7 @@ def _observe_hit(scope: str, mod_id: str | None) -> None:
         from app.utils import metrics as _m
 
         _m.intent_cache_hits_total.labels(scope=scope, mod_id=mod_id or "_global").inc()
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         pass
 
 
@@ -267,7 +267,7 @@ def _observe_miss(scope: str, mod_id: str | None, elapsed_sec: float) -> None:
 
         _m.intent_cache_misses_total.labels(scope=scope, mod_id=mod_id or "_global").inc()
         _m.intent_cache_compute_seconds.labels(scope=scope).observe(elapsed_sec)
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         pass
 
 
@@ -276,7 +276,7 @@ def _observe_error(scope: str, stage: str) -> None:
         from app.utils import metrics as _m
 
         _m.intent_cache_errors_total.labels(scope=scope, stage=stage).inc()
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         pass
 
 

@@ -7,3 +7,6 @@ export * from './customer';
 export * from './material';
 export * from './order';
 export * from './chat';
+export * from './chat-ui';
+export * from './modInfo';
+export * from './modCatalog';

@@ -15,7 +15,7 @@ from datetime import datetime
 from fastapi import APIRouter, Body, HTTPException, Query
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 router = APIRouter(tags=["xcagi-compat"])
 logger = logging.getLogger(__name__)
@@ -203,7 +203,7 @@ def wechat_work_mode_feed(per_contact: int = Query(default=1, ge=1, le=100)) -> 
                     uname, nick, remark = r
                     contact_names[uname] = remark if remark else nick if nick else uname
                 cconn.close()
-            except OPERATIONAL_ERRORS:
+            except RECOVERABLE_ERRORS:
                 logger.debug("suppressed exception", exc_info=True)
 
         items = []
@@ -241,12 +241,12 @@ def wechat_work_mode_feed(per_contact: int = Query(default=1, ge=1, le=100)) -> 
                                 summary = zstd_dctx.decompress(summary).decode(
                                     "utf-8", errors="replace"
                                 )
-                            except OPERATIONAL_ERRORS:
+                            except RECOVERABLE_ERRORS:
                                 summary = "(compressed)"
                         else:
                             try:
                                 summary = summary.decode("utf-8", errors="replace")
-                            except OPERATIONAL_ERRORS:
+                            except RECOVERABLE_ERRORS:
                                 summary = "(compressed; pip install zstandard)"
                     if isinstance(summary, str) and ":\n" in summary:
                         summary = summary.split(":\n", 1)[1]
@@ -291,12 +291,12 @@ def wechat_work_mode_feed(per_contact: int = Query(default=1, ge=1, le=100)) -> 
         finally:
             try:
                 os.remove(tmp_path)
-            except OPERATIONAL_ERRORS:
+            except RECOVERABLE_ERRORS:
                 logger.debug("suppressed exception", exc_info=True)
 
         return {"items": items[:per_contact], "per_contact": per_contact, "total": len(items)}
 
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.exception("wechat_work_mode_feed error")
         return {"items": [], "per_contact": per_contact, "error": str(e)}
 

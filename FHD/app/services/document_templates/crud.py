@@ -12,7 +12,7 @@ from app.services.document_templates.variables import (
     _infer_business_scope,
     _validate_required_terms,
 )
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +37,7 @@ def _ensure_template_tables_ready():
         from app.db.init_db import init_template_tables
 
         init_template_tables()
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.warning(f"确保模板表结构失败: {e}")
 
 
@@ -180,7 +180,7 @@ def _create_template_with_payload_inner(payload: dict):
                     {"template_id": template_id, "result": f"创建模板：{template_name}"},
                 )
                 db.commit()
-            except OPERATIONAL_ERRORS as e:
+            except RECOVERABLE_ERRORS as e:
                 logger.warning(f"记录模板创建日志失败: {e}")
 
         return _j(
@@ -201,7 +201,7 @@ def _create_template_with_payload_inner(payload: dict):
                 },
             }
         )
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         return _j({"success": False, "message": f"创建失败：{str(e)}"}, 500)
 
 
@@ -388,7 +388,7 @@ def _update_template_with_payload_inner(payload: dict):
                     {"template_id": db_id, "result": "更新模板配置"},
                 )
                 db.commit()
-            except OPERATIONAL_ERRORS as e:
+            except RECOVERABLE_ERRORS as e:
                 logger.warning(f"记录模板更新日志失败: {e}")
 
             refreshed = db.execute(
@@ -410,5 +410,5 @@ def _update_template_with_payload_inner(payload: dict):
                 "template": _build_template_payload_from_row(refreshed),
             }
         )
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         return _j({"success": False, "message": f"更新失败：{str(e)}"}, 500)

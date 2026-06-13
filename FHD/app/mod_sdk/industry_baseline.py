@@ -7,7 +7,7 @@ from functools import lru_cache
 from typing import Any
 
 from app.mod_sdk.host_profile import resolve_fhd_config_dir
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
 def _load_json(path):
@@ -15,7 +15,7 @@ def _load_json(path):
 
     try:
         return json.loads(path.read_text(encoding="utf-8"))
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         return None
 
 
@@ -45,7 +45,7 @@ def _installed_mod_ids() -> list[str]:
         if ids:
             return ids
         return [m.id for m in mm.scan_mods() if getattr(m, "id", None)]
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         return []
 
 
@@ -111,7 +111,7 @@ def _read_mod_manifest_json(mod_id: str) -> dict[str, Any]:
             return {}
         data = json.loads(mf.read_text(encoding="utf-8"))
         return data if isinstance(data, dict) else {}
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         return {}
 
 
@@ -153,7 +153,7 @@ def _mod_installed(mod_id: str, installed: set[str]) -> bool:
         for leg in legacy_mod_ids_for(cid):
             if leg in installed:
                 return True
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         pass
     return False
 
@@ -320,11 +320,13 @@ def build_onboarding_industry_catalog() -> dict[str, Any]:
         from app.mod_sdk.host_profile import load_industry_presets_document
 
         presets_doc = load_industry_presets_document()
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         presets_doc = {}
     presets = presets_doc.get("presets") if isinstance(presets_doc.get("presets"), dict) else {}
 
-    open_packages = [_onboarding_package_row(iid, selectable=True, presets=presets) for iid in open_ids]
+    open_packages = [
+        _onboarding_package_row(iid, selectable=True, presets=presets) for iid in open_ids
+    ]
 
     preset_ids = presets_doc.get("preset_ids")
     if not isinstance(preset_ids, list):
@@ -512,7 +514,9 @@ def build_industry_baseline_plan(
     }
 
 
-async def build_industry_baseline_plan_for_request(request, industry_id: str = "通用") -> dict[str, Any]:
+async def build_industry_baseline_plan_for_request(
+    request, industry_id: str = "通用"
+) -> dict[str, Any]:
     """会话感知：同步 market entitlement，管理员可跳过账号定制强制。"""
     import os
 

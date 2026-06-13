@@ -10,7 +10,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
 def _find_existing_mod_db_in_workspace(filename: str) -> Path | None:
@@ -95,7 +95,7 @@ def resolve_mod_private_sqlite_path(filename: str) -> Path:
                     db_dir = Path(get_data_dir()).resolve() / "mod_dbs"
                     db_dir.mkdir(parents=True, exist_ok=True)
                     return db_dir / name
-                except OPERATIONAL_ERRORS:
+                except RECOVERABLE_ERRORS:
                     base_path = Path(os.getcwd()).resolve()
 
     db_dir = base_path / "data" / "mod_dbs"

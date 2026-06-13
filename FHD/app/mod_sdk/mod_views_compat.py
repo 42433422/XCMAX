@@ -8,7 +8,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 PHYSICAL_VIEW_MODS: dict[str, list[str]] = {
     "xcagi-lan-license-bridge": ["LanGateView.vue"],
@@ -71,7 +71,7 @@ def _resolve_mod_dir(mod_id: str) -> Path | None:
         meta = get_mod_manager().get_mod(mod_id)
         if meta and meta.mod_path and (Path(meta.mod_path) / "manifest.json").is_file():
             return Path(meta.mod_path)
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         pass
     trial = Path(__file__).resolve().parents[2] / "mods" / mod_id
     return trial if (trial / "manifest.json").is_file() else None
@@ -90,7 +90,7 @@ def is_mod_views_physical_enabled(mod_id: str) -> bool:
             json.loads((mod_dir / "manifest.json").read_text(encoding="utf-8")).get("config") or {}
         )
         return isinstance(cfg, dict) and cfg.get("views_physical") is True
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         return False
 
 

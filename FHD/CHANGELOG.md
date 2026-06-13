@@ -15,6 +15,12 @@
 - **tasks**：`inference` Celery 队列（OCR/intent）；`workflow_excel_paths` 拆分巨型 `workflow.py`
 - **registry**：`app_service_pair_registry` 增加 `resolve_http_getter` / `resolve_neuro_getter`
 
+### 三项技术债清偿（2026-06-13 · v10 线内迭代）
+
+- **refactor(errors)**：`app/errors.py` 扩展 Mod/Workflow/ExternalService/Validation 等业务异常 SSOT；`operational_errors.py` 拆为 `INFRA_TRANSIENT`/`DATA_SHAPE`/`RECOVERABLE_ERRORS`；全仓 381 文件迁移；payment/auth 域窄 catch + `PaymentError`；新增 `scripts/migrate_operational_errors.py` 与 `scripts/ci/check_operational_errors_gate.py`
+- **refactor(frontend-types)**：`ApiResponse` SSOT 于 `types/api.ts`；`ModManifest`/`ModCatalogItem` 拆分；`ApiChatMessage`/`UiChatMessage` 拆分；消除组件内重复 interface
+- **test(coverage)**：取消 `CI_STABLE_ONLY`；`source=[app]` 全量口径；`fail_under=58`；清空 `collect_ignore`；修复 routing/coverage_ramp 运行时 skip
+
 ### v10 交付前全量修复（2026-06-12 · v10 线内迭代）
 
 - **feat(android)**：AuthScreen 密码/手机号 OTP 双模式；NavHost 注册 `CONNECT`/`WORKBENCH`；发现/我的入口工作台

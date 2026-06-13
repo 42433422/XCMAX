@@ -36,7 +36,7 @@ from app.fastapi_routes.xcagi_compat_chat_helpers import (
 )
 from app.infrastructure.llm.client import set_mode as set_llm_mode
 from app.services.conversation.modstore_adapter import create_modstore_openai_client_from_request
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +58,7 @@ async def execute_compat_chat(request: Request, body: XcagiCompatChatBody) -> di
 
         runtime_context = await enrich_kitten_analyzer_runtime(runtime_context, body.message)
         kitten_extra = kitten_reply_attachments(runtime_context)
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         logger.debug("kitten planner context enrich skipped", exc_info=True)
         kitten_extra = {}
     ok_read, read_req = _ensure_chat_db_read_authorized(
@@ -131,7 +131,7 @@ async def execute_compat_chat(request: Request, body: XcagiCompatChatBody) -> di
             pass
     except TimeoutError:
         return _xcagi_chat_timeout_error_payload(timeout)
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         raise _xcagi_chat_http_exc(e) from e
     return _xcagi_compat_reply_payload(reply, kitten_attachments=kitten_extra or None)
 
@@ -203,7 +203,7 @@ async def execute_compat_chat_batch(
             results.append(_xcagi_compat_reply_payload(reply))
         except TimeoutError:
             results.append(_xcagi_chat_timeout_error_payload(timeout))
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             err = _xcagi_chat_http_exc(e)
             results.append(
                 {

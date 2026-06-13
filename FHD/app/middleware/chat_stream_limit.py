@@ -6,13 +6,11 @@ import logging
 import os
 import threading
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
-_local_slots = threading.Semaphore(
-    int(os.environ.get("XCAGI_CHAT_STREAM_MAX_PER_POD", "50"))
-)
+_local_slots = threading.Semaphore(int(os.environ.get("XCAGI_CHAT_STREAM_MAX_PER_POD", "50")))
 
 
 def acquire_chat_stream_slot() -> bool:
@@ -30,7 +28,7 @@ def acquire_chat_stream_slot() -> bool:
                 cache.incr(key, -1, ttl=300)
                 return False
             return True
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.debug("Redis chat stream slot unavailable, falling back to local: %s", exc)
     return _local_slots.acquire(blocking=False)
 
@@ -43,7 +41,7 @@ def release_chat_stream_slot() -> None:
         if cache.is_available:
             cache.incr("chat_stream:active", -1, ttl=300)
             return
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.debug("Redis chat stream release skipped: %s", exc)
     try:
         _local_slots.release()

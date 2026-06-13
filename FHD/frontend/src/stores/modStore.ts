@@ -1,11 +1,11 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import * as modStoreApi from '@/api/modStore';
-import type { ModInfo, ModCatalog, ModDetails } from '@/api/modStore';
+import type { ModCatalogItemUi, ModCatalog, ModDetails } from '@/api/modStore';
 
 export const useModStoreStore = defineStore('modStore', () => {
   const modCatalog = ref<ModCatalog | null>(null);
-  const selectedMod = ref<ModInfo | null>(null);
+  const selectedMod = ref<ModCatalogItemUi | null>(null);
   const modDetails = ref<ModDetails | null>(null);
   const loading = ref(false);
   const error = ref<string | null>(null);
@@ -22,7 +22,7 @@ export const useModStoreStore = defineStore('modStore', () => {
     const installed = installedMods.value;
     const available = availableMods.value;
     
-    const modMap = new Map<string, ModInfo>();
+    const modMap = new Map<string, ModCatalogItemUi>();
     
     available.forEach(mod => {
       modMap.set(mod.id, { ...mod });

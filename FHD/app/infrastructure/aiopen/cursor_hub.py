@@ -18,7 +18,7 @@ from typing import Any
 
 from fastapi import WebSocket
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +37,9 @@ class AiOpenCursorHub:
 
     # ---- 会话管理 -------------------------------------------------
 
-    async def connect(self, session_id: str, ws: WebSocket, meta: dict[str, Any] | None = None) -> None:
+    async def connect(
+        self, session_id: str, ws: WebSocket, meta: dict[str, Any] | None = None
+    ) -> None:
         async with self._lock:
             self._sessions[session_id] = ws
             self._session_meta[session_id] = {
@@ -51,7 +53,9 @@ class AiOpenCursorHub:
         async with self._lock:
             self._sessions.pop(session_id, None)
             self._session_meta.pop(session_id, None)
-        logger.info("aiopen cursor ws disconnect session=%s total=%s", session_id, len(self._sessions))
+        logger.info(
+            "aiopen cursor ws disconnect session=%s total=%s", session_id, len(self._sessions)
+        )
 
     def session_ids(self) -> list[str]:
         return list(self._sessions.keys())
@@ -92,17 +96,29 @@ class AiOpenCursorHub:
         loop = asyncio.get_running_loop()
         fut: asyncio.Future = loop.create_future()
         self._pending[req_id] = fut
-        self._log_command({"id": req_id, "session_id": target, "action": action, "params": params or {}, "ts": time.time()})
+        self._log_command(
+            {
+                "id": req_id,
+                "session_id": target,
+                "action": action,
+                "params": params or {},
+                "ts": time.time(),
+            }
+        )
         try:
             await ws.send_text(json.dumps(payload, ensure_ascii=False))
-        except OPERATIONAL_ERRORS as err:
+        except RECOVERABLE_ERRORS as err:
             self._pending.pop(req_id, None)
             await self.disconnect(target)
             return {"success": False, "message": f"指令下发失败：{err}"}
         try:
             result = await asyncio.wait_for(fut, timeout=timeout)
-        except asyncio.TimeoutError:
-            return {"success": False, "message": f"虚拟光标回执超时（{timeout:.0f}s）", "action": action}
+        except TimeoutError:
+            return {
+                "success": False,
+                "message": f"虚拟光标回执超时（{timeout:.0f}s）",
+                "action": action,
+            }
         finally:
             self._pending.pop(req_id, None)
         if isinstance(result, dict):
@@ -135,7 +151,7 @@ class AiOpenCursorHub:
             del self._command_log[:overflow]
 
     def recent_commands(self, limit: int = 50) -> list[dict[str, Any]]:
-        return list(self._command_log[-max(1, int(limit)):])
+        return list(self._command_log[-max(1, int(limit)) :])
 
 
 aiopen_cursor_hub = AiOpenCursorHub()

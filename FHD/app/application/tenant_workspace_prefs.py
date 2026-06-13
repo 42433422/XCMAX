@@ -9,7 +9,7 @@ from typing import Any
 from fastapi import Request
 
 from app.infrastructure.auth.dependencies import session_id_from_request
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +48,7 @@ def resolve_workspace_owner_id(request: Request, user: Any) -> str | None:
             from app.application.session_account_meta import enrich_session_meta_with_tenant
 
             meta = enrich_session_meta_with_tenant(sid, user)
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             logger.exception("resolve_workspace_owner_id enrich failed")
 
     tid = _safe_positive_int(meta.get("tenant_id"))
@@ -75,7 +75,7 @@ def get_workspace_prefs(owner_id: str) -> dict[str, Any]:
             return {}
         data = json.loads(raw)
         return data if isinstance(data, dict) else {}
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         logger.exception("get_workspace_prefs failed owner=%s", owner)
         return {}
 
@@ -131,7 +131,9 @@ def get_selected_industry_id(owner_id: str | None) -> str | None:
     return text or None
 
 
-def save_selected_industry(owner_id: str, industry_id: str, *, industry_mod_id: str = "") -> dict[str, Any]:
+def save_selected_industry(
+    owner_id: str, industry_id: str, *, industry_mod_id: str = ""
+) -> dict[str, Any]:
     payload: dict[str, Any] = {"selected_industry_id": str(industry_id or "").strip()}
     mid = str(industry_mod_id or "").strip()
     if mid:

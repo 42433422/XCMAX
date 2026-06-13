@@ -17,7 +17,7 @@ from app.db.models.customer import Customer
 from app.db.models.product import Product
 from app.db.session import get_db
 from app.utils.external_sqlite import sqlite_conn
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.path_utils import get_upload_dir
 
 logger = logging.getLogger(__name__)
@@ -108,7 +108,7 @@ class UnitProductsImportService:
                 "failed_products": failed_products,
             }
 
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.exception(f"导入购买单位+产品列表失败：{e}")
             return {"success": False, "message": f"导入失败：{str(e)}"}
 
@@ -207,14 +207,14 @@ class UnitProductsImportService:
         """安全解析浮点数"""
         try:
             return float(value) if value is not None and str(value).strip() != "" else 0.0
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             return 0.0
 
     def _parse_int(self, value: Any) -> int | None:
         """安全解析整数"""
         try:
             return int(value) if value is not None and str(value).strip() != "" else None
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             return None
 
     def _ensure_unit_exists(self, unit_name: str, create_purchase_unit: bool) -> bool:

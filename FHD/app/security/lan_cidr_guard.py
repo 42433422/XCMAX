@@ -17,7 +17,7 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 from app.security.lan_config import get_lan_config, lan_guard_path_is_bypassed
 from app.security.lan_ip import get_client_ip
 from app.security.license_store import is_ip_explicitly_allowed, touch_allowed_client
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -86,11 +86,11 @@ class LanCidrGuard:
             scope.setdefault("state", {})
             try:
                 scope["state"]["lan_client_ip"] = client_ip
-            except TypeError:
+            except RECOVERABLE_ERRORS:
                 pass
             try:
                 touch_allowed_client(client_ip or "")
-            except OPERATIONAL_ERRORS:
+            except RECOVERABLE_ERRORS:
                 logger.debug("touch_allowed_client failed for ip=%s", client_ip, exc_info=True)
             await self.app(scope, receive, send)
             return

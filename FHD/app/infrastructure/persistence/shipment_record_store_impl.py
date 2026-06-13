@@ -7,7 +7,7 @@ from typing import Any
 from app.application.ports.shipment_record_store import ShipmentRecordStorePort
 from app.db.models import ShipmentRecord
 from app.db.session import get_db
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
 class SQLAlchemyShipmentRecordStore(ShipmentRecordStorePort):
@@ -34,7 +34,7 @@ class SQLAlchemyShipmentRecordStore(ShipmentRecordStorePort):
         if quantity_kg is None:
             try:
                 quantity_kg = float(quantity_tins or 0) * float(tin_spec or 0)
-            except OPERATIONAL_ERRORS:
+            except RECOVERABLE_ERRORS:
                 quantity_kg = 0.0
         unit_price = first.get("unit_price")
         if unit_price is None:
@@ -43,7 +43,7 @@ class SQLAlchemyShipmentRecordStore(ShipmentRecordStorePort):
         if amount is None:
             try:
                 amount = float(unit_price or 0) * float(quantity_kg or 0)
-            except OPERATIONAL_ERRORS:
+            except RECOVERABLE_ERRORS:
                 amount = 0.0
 
         now = datetime.now()

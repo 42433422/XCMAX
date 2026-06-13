@@ -9,7 +9,7 @@ import sys
 from fastapi import APIRouter, Body, Query
 from fastapi.responses import JSONResponse
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -74,7 +74,7 @@ def wechat_tasks(
         service = get_wechat_task_app_service()
         tasks = service.get_tasks(contact_id=contact_id, status=status, limit=limit)
         return {"success": True, "data": tasks, "total": len(tasks)}
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         return JSONResponse({"success": False, "message": f"查询失败：{str(e)}"}, status_code=500)
 
 
@@ -94,7 +94,7 @@ def _wechat_message_timestamp_seconds(msg: dict) -> float:
         try:
             iso = text.replace("Z", "+00:00")
             return _dt.datetime.fromisoformat(iso).timestamp()
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             continue
     return 0.0
 
@@ -175,7 +175,7 @@ def wechat_starred_messages(
         items.sort(key=lambda row: float(row.get("timestamp") or 0), reverse=True)
         page = items[:limit]
         return {"success": True, "data": page, "total": len(items)}
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         return JSONResponse({"success": False, "message": f"查询失败：{str(e)}"}, status_code=500)
 
 
@@ -211,7 +211,7 @@ def wechat_groups_sync_messages(
             }
         # 业务失败（未配置解密库等）仍返回 200 + success:false，避免前端 Network 标红
         return JSONResponse(result, status_code=200)
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
 
 
@@ -226,7 +226,7 @@ def wechat_groups_list(
 
         rows = list_group_contacts(keyword=keyword or None, limit=limit)
         return {"success": True, "data": rows, "total": len(rows)}
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
 
 
@@ -250,7 +250,7 @@ def wechat_contacts_list_api(
         )
         if mod_out is not None:
             return mod_out
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         import logging
 
         logging.getLogger(__name__).debug(
@@ -267,7 +267,7 @@ def wechat_contacts_list_api(
             limit=limit,
         )
         return {"success": True, "data": contacts, "total": len(contacts)}
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         return JSONResponse({"success": False, "message": f"查询失败：{str(e)}"}, status_code=500)
 
 
@@ -281,7 +281,7 @@ def wechat_contact_get_api(contact_id: int):
         if contact:
             return {"success": True, "data": contact}
         return JSONResponse({"success": False, "message": "联系人不存在"}, status_code=404)
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         return JSONResponse({"success": False, "message": f"查询失败：{str(e)}"}, status_code=500)
 
 
@@ -293,7 +293,7 @@ def wechat_contact_delete_api(contact_id: int):
         service = get_wechat_contact_app_service()
         result = service.delete_contact(contact_id)
         return JSONResponse(result, status_code=200 if result.get("success") else 400)
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         return JSONResponse({"success": False, "message": f"删除失败：{str(e)}"}, status_code=500)
 
 
@@ -310,14 +310,14 @@ def wechat_contact_context_api(contact_id: int, refresh: bool = False):
                 )
 
                 prepare_wechat_message_db_for_read(force_decrypt=True, retry_key_scan=False)
-            except OPERATIONAL_ERRORS:
+            except RECOVERABLE_ERRORS:
                 logger.debug("context refresh: prepare_wechat_message_db skipped", exc_info=True)
             refresh_fn = getattr(service, "refresh_messages", None)
             if callable(refresh_fn):
                 refresh_fn(int(contact_id), limit=80)
         messages = service.get_contact_context(contact_id)
         return {"success": True, "messages": messages, "count": len(messages)}
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         return JSONResponse({"success": False, "message": f"查询失败：{str(e)}"}, status_code=500)
 
 
@@ -396,7 +396,7 @@ def wechat_status():
             "logined": is_logined,
             "message": "微信已登录" if is_logined else "微信未登录",
         }
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         return {"success": False, "logined": False, "message": f"检测失败：{str(e)}"}
 
 
@@ -434,7 +434,7 @@ def wechat_scan(body: dict = Body(default_factory=dict)):
             {"success": True, "message": "扫描任务已触发", "task_id": task.id, "count": 0},
             status_code=202,
         )
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         return JSONResponse({"success": False, "message": f"扫描失败：{str(e)}"}, status_code=500)
 
 
@@ -475,7 +475,7 @@ def wechat_contacts_get_by_id(contact_id: int):
         if contact:
             return {"success": True, "data": contact}
         return JSONResponse({"success": False, "message": "联系人不存在"}, status_code=404)
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         return JSONResponse({"success": False, "message": f"查询失败：{str(e)}"}, status_code=500)
 
 
@@ -495,7 +495,7 @@ def wechat_contacts_send_message(body: dict = Body(default_factory=dict)):
         if out.get("success"):
             return out
         return JSONResponse(out, status_code=500)
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.exception("wechat_contacts send_message: %s", e)
         return JSONResponse({"success": False, "message": f"发送失败：{str(e)}"}, status_code=500)
 
@@ -527,6 +527,6 @@ def wechat_contacts_send_message_to_id(contact_id: int, body: dict = Body(defaul
         if out.get("success"):
             return out
         return JSONResponse(out, status_code=500)
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.exception("wechat_contacts send to id: %s", e)
         return JSONResponse({"success": False, "message": f"发送失败：{str(e)}"}, status_code=500)

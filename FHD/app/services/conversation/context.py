@@ -3,7 +3,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -104,7 +104,7 @@ class ContextMixin:
                 )
 
                 out["kitten_business_snapshot"] = build_kitten_business_snapshot()
-            except OPERATIONAL_ERRORS as exc:
+            except RECOVERABLE_ERRORS as exc:
                 logger.warning("kitten business snapshot build failed: %s", exc)
                 out["kitten_business_snapshot"] = {
                     "success": False,
@@ -129,7 +129,7 @@ class ContextMixin:
             from app.infrastructure.web_search import kitten_web_search
 
             result = await kitten_web_search(message.strip(), user_key=user_id or "anonymous")
-        except OPERATIONAL_ERRORS as exc:
+        except RECOVERABLE_ERRORS as exc:
             logger.warning("kitten web search: %s", exc)
             out = dict(context)
             out["web_search_results"] = []

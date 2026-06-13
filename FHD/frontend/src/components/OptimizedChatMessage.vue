@@ -114,26 +114,10 @@
 import { computed, ref, watch, onMounted } from 'vue';
 import DOMPurify from 'dompurify';
 import { measureText, type MeasureResult } from '@/utils/pretext';
-
-interface ChatMessage {
-  role: 'user' | 'ai';
-  content: string;
-  time: string;
-  shipmentDownloadUrl?: string;
-  contextSummary?: string;
-  thinkingSteps?: string;
-  todoSteps?: string[];
-  workflowAction?: string;
-  nodeResults?: Array<{
-    success: boolean;
-    node_id: string;
-    tool_id: string;
-    action: string;
-  }>;
-}
+import type { UiChatMessage } from '@/types/chat-ui';
 
 interface Props {
-  message: ChatMessage;
+  message: UiChatMessage;
   maxWidth: number;
   canCollapse?: boolean;
   canSpeak?: boolean;

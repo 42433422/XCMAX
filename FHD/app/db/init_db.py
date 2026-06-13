@@ -18,7 +18,7 @@ from collections.abc import Iterable, Sequence
 from typing import TYPE_CHECKING, Any
 
 from app.utils.external_sqlite import sqlite_conn
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 if TYPE_CHECKING:
     from sqlalchemy.engine import Engine
@@ -80,7 +80,7 @@ def initialize_databases(db_files: Iterable[str] = DEFAULT_DB_FILES) -> None:
                 cur = conn.cursor()
                 cur.execute("SELECT name FROM sqlite_master WHERE type='table'")
                 _ = cur.fetchall()
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.warning("复制数据库失败 %s -> %s: %s", source_path, target_path, e)
 
 
@@ -122,7 +122,7 @@ def ensure_sqlite_per_mod_database_copies(
             try:
                 shutil.copy2(base_path, dest_path)
                 logger.info("已为 Mod %s 从母库复制专用 SQLite：%s", mod_id, dest_name)
-            except OPERATIONAL_ERRORS as e:
+            except RECOVERABLE_ERRORS as e:
                 logger.warning(
                     "复制 Mod 专用库失败 mod=%s %s -> %s: %s",
                     mod_id,
@@ -153,7 +153,7 @@ def build_mod_database_seed_plan() -> dict[str, Any]:
 
         mm = get_mod_manager()
         metas = mm.list_loaded_mods() or mm.scan_mods()
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         metas = []
 
     for m in metas:
@@ -184,7 +184,7 @@ def build_mod_database_seed_plan() -> dict[str, Any]:
                         sp = os.path.normpath(os.path.join(mod_path, str(raw_sql).strip()))
                         if os.path.isfile(sp):
                             extra_seeds.append({"path": sp})
-                except OPERATIONAL_ERRORS:
+                except RECOVERABLE_ERRORS:
                     pass
 
         seeds: list[dict[str, str]] = [
@@ -568,7 +568,7 @@ def _resolve_auth_bootstrap_engine(
             from app.db import _create_engine_for_url
 
             real_engine = _create_engine_for_url(url)
-        except OPERATIONAL_ERRORS as exc:
+        except RECOVERABLE_ERRORS as exc:
             logger.warning("auth bootstrap: 无法按 DATABASE_URL 创建引擎: %s", exc)
     if real_engine is None and engine is not None:
         if isinstance(engine, _Engine):
@@ -578,14 +578,14 @@ def _resolve_auth_bootstrap_engine(
                 from app.db import _get_engine as _get_real_engine
 
                 real_engine = _get_real_engine()
-            except OPERATIONAL_ERRORS:
+            except RECOVERABLE_ERRORS:
                 real_engine = None
     if real_engine is None:
         try:
             from app.db import _get_engine as _get_real_engine
 
             real_engine = _get_real_engine()
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             return None
     return real_engine
 
@@ -653,7 +653,7 @@ def ensure_sqlite_auth_bootstrap(
                 checkfirst=True,
             )
         _seed_default_admin_user(real_engine)
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         if swallow_errors:
             logger.warning("ensure_sqlite_auth_bootstrap 失败: %s", exc, exc_info=True)
             return
@@ -726,7 +726,7 @@ def ensure_sqlite_rbac_bootstrap(
                 checkfirst=True,
             )
         _seed_sqlite_rbac_defaults(real_engine)
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         if swallow_errors:
             logger.warning("ensure_sqlite_rbac_bootstrap 失败: %s", exc, exc_info=True)
             return
@@ -770,7 +770,7 @@ def ensure_sqlite_inventory_bootstrap(
                 ],
                 checkfirst=True,
             )
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         if swallow_errors:
             logger.warning("ensure_sqlite_inventory_bootstrap 失败: %s", exc, exc_info=True)
             return
@@ -802,7 +802,7 @@ def ensure_user_preferences_bootstrap(
                 tables=[UserPreference.__table__],
                 checkfirst=True,
             )
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         if swallow_errors:
             logger.warning("ensure_user_preferences_bootstrap 失败: %s", exc, exc_info=True)
             return
@@ -931,7 +931,7 @@ def ensure_postgresql_auth_bootstrap(
                 )
 
         _seed_default_admin_user(real_engine)
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.warning(
             "ensure_postgresql_auth_bootstrap 失败（可改用手工 alembic）：%s", exc, exc_info=True
         )
@@ -959,7 +959,7 @@ def ensure_sessions_market_access_token_column(
             from app.db import _create_engine_for_url
 
             real_engine = _create_engine_for_url(url)
-        except OPERATIONAL_ERRORS as exc:
+        except RECOVERABLE_ERRORS as exc:
             logger.warning(
                 "无法按 DATABASE_URL 创建引擎以补齐 sessions.market_access_token: %s", exc
             )
@@ -970,7 +970,7 @@ def ensure_sessions_market_access_token_column(
             from app.db import _get_engine as _get_real_engine
 
             real_engine = _get_real_engine()
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             return
 
     try:
@@ -990,7 +990,7 @@ def ensure_sessions_market_access_token_column(
             else:
                 conn.execute(text("ALTER TABLE sessions ADD COLUMN market_access_token TEXT"))
         logger.info("sessions.market_access_token 已补齐")
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.warning(
             "sessions.market_access_token 兼容补列失败（可在仓库根执行 alembic upgrade head）：%s",
             exc,
@@ -1009,7 +1009,7 @@ def ensure_sessions_market_access_token_column(
             )
     except RuntimeError:
         raise
-    except OPERATIONAL_ERRORS as verify_exc:
+    except RECOVERABLE_ERRORS as verify_exc:
         logger.warning("sessions.market_access_token 列校验跳过: %s", verify_exc)
 
 
@@ -1028,7 +1028,7 @@ def ensure_sessions_market_refresh_token_column(
             from app.db import _create_engine_for_url
 
             real_engine = _create_engine_for_url(url)
-        except OPERATIONAL_ERRORS as exc:
+        except RECOVERABLE_ERRORS as exc:
             logger.warning(
                 "无法按 DATABASE_URL 创建引擎以补齐 sessions.market_refresh_token: %s", exc
             )
@@ -1039,7 +1039,7 @@ def ensure_sessions_market_refresh_token_column(
             from app.db import _get_engine as _get_real_engine
 
             real_engine = _get_real_engine()
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             return
 
     try:
@@ -1059,7 +1059,7 @@ def ensure_sessions_market_refresh_token_column(
             else:
                 conn.execute(text("ALTER TABLE sessions ADD COLUMN market_refresh_token TEXT"))
         logger.info("sessions.market_refresh_token 已补齐")
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.warning(
             "sessions.market_refresh_token 兼容补列失败（可在仓库根执行 alembic upgrade head）：%s",
             exc,
@@ -1081,7 +1081,7 @@ def ensure_sessions_enterprise_entitlement_columns(
             from app.db import _create_engine_for_url
 
             real_engine = _create_engine_for_url(url)
-        except OPERATIONAL_ERRORS as exc:
+        except RECOVERABLE_ERRORS as exc:
             logger.warning("无法按 DATABASE_URL 创建引擎以补齐 sessions 企业权益列: %s", exc)
     if real_engine is None and engine is not None:
         real_engine = engine
@@ -1090,7 +1090,7 @@ def ensure_sessions_enterprise_entitlement_columns(
             from app.db import _get_engine as _get_real_engine
 
             real_engine = _get_real_engine()
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             return
 
     try:
@@ -1119,7 +1119,7 @@ def ensure_sessions_enterprise_entitlement_columns(
                     )
                 else:
                     conn.execute(text("ALTER TABLE sessions ADD COLUMN entitled_mod_ids_json TEXT"))
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.warning(
             "sessions 企业权益列兼容补列失败（可执行 alembic upgrade head）：%s",
             exc,
@@ -1141,7 +1141,7 @@ def ensure_sessions_account_meta_columns(
             from app.db import _create_engine_for_url
 
             real_engine = _create_engine_for_url(url)
-        except OPERATIONAL_ERRORS as exc:
+        except RECOVERABLE_ERRORS as exc:
             logger.warning("无法创建引擎以补齐 sessions 账号元数据列: %s", exc)
     if real_engine is None and engine is not None:
         real_engine = engine
@@ -1150,7 +1150,7 @@ def ensure_sessions_account_meta_columns(
             from app.db import _get_engine as _get_real_engine
 
             real_engine = _get_real_engine()
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             return
 
     additions = [
@@ -1186,7 +1186,7 @@ def ensure_sessions_account_meta_columns(
                     conn.execute(
                         text(f"ALTER TABLE sessions ADD COLUMN {name} {col_type}{default_clause}")
                     )
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.warning("sessions 账号元数据列兼容补列失败: %s", exc)
 
 
@@ -1222,12 +1222,12 @@ def init_approval_tables(engine: Engine) -> None:
         from app.db import _get_engine as _get_real_engine
 
         real_engine = _get_real_engine()
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         pass
 
     try:
         Base.metadata.create_all(real_engine, tables=target_tables, checkfirst=True)
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.warning("approval 表 create_all 失败（继续尝试 ALTER 兼容）：%s", exc)
 
     try:
@@ -1258,7 +1258,7 @@ def init_approval_tables(engine: Engine) -> None:
                             )
                         )
                 logger.info("approval_flows.business_type 已补齐")
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.warning("approval_flows.business_type 兼容补列失败: %s", exc)
 
 
@@ -1272,7 +1272,7 @@ def ensure_product_query_indexes(engine: Engine) -> None:
     try:
         insp = inspect(engine)
         names = set(insp.get_table_names() or [])
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         names = set()
 
     if "products" not in names:
@@ -1286,7 +1286,7 @@ def ensure_product_query_indexes(engine: Engine) -> None:
         for sql in stmts:
             try:
                 conn.execute(text(sql))
-            except OPERATIONAL_ERRORS as e:
+            except RECOVERABLE_ERRORS as e:
                 logger.debug("创建 products 索引跳过: %s | %s", sql, e)
 
 
@@ -1308,11 +1308,11 @@ def init_service_bridge_tables(engine: Engine) -> None:
         from app.db import _get_engine as _get_real_engine
 
         real_engine = _get_real_engine()
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         pass
 
     try:
         Base.metadata.create_all(real_engine, tables=target_tables, checkfirst=True)
         logger.info("service_bridge 表已就绪")
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.warning("service_bridge 表 create_all 失败: %s", exc)

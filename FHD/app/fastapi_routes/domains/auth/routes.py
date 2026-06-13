@@ -15,7 +15,7 @@ from app.infrastructure.auth.dependencies import (
     resolve_session_user,
     session_id_from_request,
 )
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import INFRA_TRANSIENT
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +39,10 @@ def _user_public_dict(user) -> dict[str, Any]:
 
 
 def _session_meta_for_response(request: Request, user=None) -> dict[str, Any]:
-    from app.application.session_account_meta import enrich_session_meta_with_tenant, load_session_account_meta
+    from app.application.session_account_meta import (
+        enrich_session_meta_with_tenant,
+        load_session_account_meta,
+    )
 
     sid = session_id_from_request(request)
     if not sid:
@@ -147,7 +150,7 @@ async def auth_session_validate(request: Request):
                     },
                     status_code=200,
                 )
-    except OPERATIONAL_ERRORS:
+    except INFRA_TRANSIENT:
         logger.exception("enterprise market session check on validate failed")
 
     entitled_mod_ids: list[str] = []
@@ -164,7 +167,7 @@ async def auth_session_validate(request: Request):
             cached = get_cached_entitled_client_mod_ids()
             if cached is not None:
                 entitled_mod_ids = sorted(cached)
-    except OPERATIONAL_ERRORS:
+    except INFRA_TRANSIENT:
         logger.exception("sync enterprise entitlements on validate failed")
     user = resolve_session_user(request)
     session_meta = _session_meta_for_response(request, user)
@@ -258,7 +261,7 @@ def _jit_create_local_user_for_enterprise(username: str, password: str, email: s
             )
             db.commit()
         return True
-    except OPERATIONAL_ERRORS as exc:
+    except INFRA_TRANSIENT as exc:
         logger.exception("_jit_create_local_user_for_enterprise failed for %s: %s", username, exc)
         return False
 
@@ -314,12 +317,10 @@ def _enrich_register_with_tenant(
                 str(session_id),
                 account_kind=account_kind,
                 company_brand=company_brand or "",
-                tenant_id=(
-                    int(tenant_info["tenant_id"]) if tenant_info.get("tenant_id") else None
-                ),
+                tenant_id=(int(tenant_info["tenant_id"]) if tenant_info.get("tenant_id") else None),
             )
             result.setdefault("account_kind", account_kind)
-    except OPERATIONAL_ERRORS:
+    except INFRA_TRANSIENT:
         logger.exception("register tenant provision failed for user_id=%s", user_id)
     return result
 
@@ -601,7 +602,7 @@ async def auth_register(request: Request, body: dict = Body(default_factory=dict
                     result["market_access_token"] = mtok
                     if mrefresh:
                         result["market_refresh_token"] = mrefresh
-        except OPERATIONAL_ERRORS:
+        except INFRA_TRANSIENT:
             logger.exception("optional market sync after local register failed")
 
         result = _enrich_register_with_tenant(
@@ -787,7 +788,7 @@ async def auth_oidc_callback(request: Request):
 
     try:
         profile = await exchange_code_for_userinfo(code)
-    except OPERATIONAL_ERRORS as exc:
+    except INFRA_TRANSIENT as exc:
         logger.exception("OIDC exchange failed")
         return RedirectResponse(
             url=f"{base}?oidc_error=OIDC_EXCHANGE&oidc_message={quote(str(exc))}",
@@ -1030,7 +1031,7 @@ def auth_logout(request: Request):
         from app.enterprise.mod_entitlements import clear_session_entitlements
 
         clear_session_entitlements()
-    except OPERATIONAL_ERRORS:
+    except INFRA_TRANSIENT:
         pass
     resp = JSONResponse(result)
     cookie_name = os.environ.get("SESSION_COOKIE_NAME", "session_id")

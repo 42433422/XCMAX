@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Replace ``except Exception`` with ``except OPERATIONAL_ERRORS`` across FHD/app."""
+"""ARCHIVED (2026-06): superseded by RECOVERABLE_ERRORS migration. Do not run."""
+"""Replace ``except Exception`` with ``except RECOVERABLE_ERRORS`` across FHD/app."""
 
 from __future__ import annotations
 

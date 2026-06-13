@@ -7,7 +7,7 @@ import threading
 from collections import OrderedDict
 from dataclasses import dataclass
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 DEFAULT_EDGE_VOICE = "zh-CN-XiaoxiaoNeural"
 _CACHE_MAX_SIZE = 50
@@ -163,7 +163,7 @@ def trigger_common_tts_warmup() -> None:
         for phrase in _build_warmup_phrases(_CACHE_MAX_SIZE):
             try:
                 synthesize_to_data_uri(text=phrase, lang="zh", voice=DEFAULT_EDGE_VOICE)
-            except OPERATIONAL_ERRORS:
+            except RECOVERABLE_ERRORS:
                 # 预热失败不影响主流程；首次真实请求仍可按需合成。
                 continue
 

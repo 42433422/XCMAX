@@ -7,7 +7,7 @@ from functools import lru_cache
 from typing import Any
 
 from app.mod_sdk.host_profile import resolve_fhd_config_dir
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
 def _load_json(path):
@@ -15,7 +15,7 @@ def _load_json(path):
 
     try:
         return json.loads(path.read_text(encoding="utf-8"))
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         return None
 
 
@@ -60,7 +60,7 @@ def _entitled_matches_mod(mod_id: str, entitled: set[str]) -> bool:
         for raw in entitled:
             if canonical_mod_id(raw) == cid:
                 return True
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         pass
     return False
 
