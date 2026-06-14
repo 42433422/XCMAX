@@ -1,4 +1,5 @@
 export type CommandIntentType = 'sales_contract' | 'price_list' | 'start_print'
+import { asRecord, asArray, asString, asBoolean, asDisposable, asNumber } from '@/utils/typeGuards'
 
 export type CommandHandlerKey =
   | 'handleSalesContractCommand'
@@ -157,14 +158,17 @@ function safeParseEntries(raw: string | null): CommandBufferEntry[] {
     const parsed = JSON.parse(raw)
     if (!Array.isArray(parsed)) return []
     return parsed
-      .map((x: unknown) => ({
-        intent: x?.intent,
-        handlerKey: x?.handlerKey,
-        normalizedText: String(x?.normalizedText || ''),
-        hitCount: Number(x?.hitCount || 0),
-        createdAt: Number(x?.createdAt || 0),
-        lastUsedAt: Number(x?.lastUsedAt || 0)
-      }))
+      .map((x: unknown) => {
+        const row = asRecord(x)
+        return {
+          intent: row.intent as CommandIntentType,
+          handlerKey: row.handlerKey as CommandHandlerKey,
+          normalizedText: asString(row.normalizedText),
+          hitCount: asNumber(row.hitCount),
+          createdAt: asNumber(row.createdAt),
+          lastUsedAt: asNumber(row.lastUsedAt),
+        } satisfies CommandBufferEntry
+      })
       .filter((x: CommandBufferEntry) =>
         !!x.intent &&
         !!x.handlerKey &&

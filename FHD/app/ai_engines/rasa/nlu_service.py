@@ -33,7 +33,7 @@ import asyncio
 import glob
 import logging
 import os
-from typing import Any
+from typing import Any, cast
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -145,7 +145,7 @@ class RasaNLUService:
             return False
 
         try:
-            from rasa.core.agent import Agent  # type: ignore
+            from rasa.core.agent import Agent
         except RECOVERABLE_ERRORS as e:  # ImportError or its downstream side effects
             self._load_error = f"rasa_import_failed: {e}"
             return False
@@ -186,7 +186,7 @@ class RasaNLUService:
 
     def _parse_via_server(self, text: str) -> dict[str, Any]:
         try:
-            import requests  # type: ignore
+            import requests
         except RECOVERABLE_ERRORS as e:
             return self._empty_result(f"requests_unavailable: {e}")
 
@@ -205,7 +205,7 @@ class RasaNLUService:
             return self._empty_result(f"server_status_{resp.status_code}")
 
         try:
-            return resp.json()
+            return cast("dict[str, Any]", resp.json())
         except RECOVERABLE_ERRORS as e:
             return self._empty_result(f"server_bad_json: {e}")
 
@@ -213,7 +213,7 @@ class RasaNLUService:
         try:
             # rasa 的 parse_message 是 async；这里同步等待。
             result = asyncio.run(self._agent.parse_message(text))
-            return result
+            return cast("dict[str, Any]", result)
         except RuntimeError:
             # 已经在事件循环里 —— 用新循环兜底，避免 "asyncio.run cannot be called from a running loop"。
             loop = asyncio.new_event_loop()
@@ -242,7 +242,7 @@ class RasaNLUService:
             return False
         if self.use_server:
             try:
-                import requests  # type: ignore
+                import requests
 
                 resp = requests.get(f"{self.rasa_url}/status", timeout=2)
                 self._last_status["server_reachable"] = resp.status_code == 200

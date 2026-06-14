@@ -25,6 +25,11 @@ export interface WorkflowEmployeeManifestEntry {
   workflow_placeholder?: boolean
   /** manifest 常用：与 workflow_placeholder 等价 */
   workflow_ui_kind?: 'placeholder'
+  /** 企业四部门：tools | execution | service | management（或中文层名） */
+  enterprise_layer?: string
+  /** 显式归属企业 Mod 组件（行业包或定制 mod id） */
+  host_mod_id?: string
+  enterprise_mod_id?: string
   /** 电话业务员通道：wechat | adb（宿主任务 UI 用） */
   phone_channel?: 'wechat' | 'adb' | string
 }
@@ -56,9 +61,17 @@ export type ModWithWorkflowEmployees = {
 export function isEmployeePackModEntry(m: ModWithWorkflowEmployees | undefined): boolean {
   if (!m) return false
   const t = String(m.type || '').trim().toLowerCase()
-  if (t === 'employee_pack') return true
+  if (t !== 'employee_pack') return false
   const id = String(m.id || '').trim()
-  return id === 'xcagi-host-foundation-employee'
+  if (id === 'xcagi-host-foundation-employee') return true
+  /** AI 市场安装的工位型员工包（manifest 含工位 workflow_employees）应参与四部门图谱 */
+  const wf = m.workflow_employees || []
+  const hasDeskWorkflowEmployee = wf.some((e) => {
+    const eid = String(e?.id || '').trim()
+    return eid && !isNonWorkflowDeskEmployeeId(eid)
+  })
+  if (hasDeskWorkflowEmployee) return false
+  return true
 }
 
 function _idMatchesAnySuffix(id: string, suffixes: string[]): boolean {
@@ -69,11 +82,25 @@ function _idMatchesAnyPrefix(id: string, prefixes: string[]): boolean {
   return prefixes.some((p) => id.startsWith(p))
 }
 
+/** 账号定制阶段桥接 Mod：只补侧栏，不往员工空间注入工位（与 industry_baseline custom_employee_extension 对齐） */
+export const CUSTOM_PHASE_EMPLOYEE_CARRIER_MOD_IDS = new Set([
+  'xcagi-core-workflow-employees',
+  'xcagi-office-employee-pack-bridge',
+  'wechat-contacts-ai-employee',
+  'lan-gate-ai-employee',
+])
+
+export function isCustomPhaseEmployeeCarrierModId(modId: string | undefined | null): boolean {
+  const id = String(modId || '').trim()
+  return !!(id && CUSTOM_PHASE_EMPLOYEE_CARRIER_MOD_IDS.has(id))
+}
+
 /** 仅工作流员工 Mod 或行业 Mod 显式声明的 workflow_employees 参与副窗/员工空间。 */
 export function isWorkflowRegistrySourceMod(m: ModWithWorkflowEmployees | undefined): boolean {
   if (!m || isEmployeePackModEntry(m)) return false
   const id = String(m.id || '').trim()
   if (!id) return false
+  if (isCustomPhaseEmployeeCarrierModId(id)) return false
 
   const rules = employeeRegistryRules.value
   if (rules) {

@@ -5,7 +5,7 @@ import logging
 import os
 import uuid
 from datetime import UTC, datetime
-from typing import Optional
+from typing import Optional, cast
 
 import httpx
 from fastapi import APIRouter, HTTPException, Query
@@ -49,7 +49,7 @@ def _get_config_value(key: str, default: str = "") -> str:
 
         cfg = db.query(ServiceBridgeConfig).filter(ServiceBridgeConfig.config_key == key).first()
         if cfg:
-            return cfg.config_value
+            return cast("str", cfg.config_value)
     env_key = f"SERVICE_BRIDGE_{key.upper()}"
     return os.environ.get(env_key, default)
 

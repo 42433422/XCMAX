@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import logging
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Optional, cast
 
 from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -124,25 +124,25 @@ class UserMemory(Base):
     @property
     def preferences_dict(self) -> dict[str, Any]:
         if self.preferences:
-            return json.loads(self.preferences)
+            return cast("dict[str, Any]", json.loads(self.preferences))
         return {}
 
     @property
     def frequent_actions_list(self) -> list[dict[str, Any]]:
         if self.frequent_actions:
-            return json.loads(self.frequent_actions)
+            return cast("list[dict[str, Any]]", json.loads(self.frequent_actions))
         return []
 
     @property
     def historical_contexts_list(self) -> list[dict[str, Any]]:
         if self.historical_contexts:
-            return json.loads(self.historical_contexts)
+            return cast("list[dict[str, Any]]", json.loads(self.historical_contexts))
         return []
 
     @property
     def feedback_history_list(self) -> list[dict[str, Any]]:
         if self.feedback_history:
-            return json.loads(self.feedback_history)
+            return cast("list[dict[str, Any]]", json.loads(self.feedback_history))
         return []
 
     def update_from_dict(self, data: dict[str, Any]) -> None:
@@ -197,5 +197,5 @@ class UserMemory(Base):
         result = db_session.query(cls).filter(cls.updated_at < cutoff).delete()
 
         db_session.commit()
-        logger.info(f"Cleaned up {result} old UserMemory records older than {days} days")
-        return result
+        logger.info("Cleaned up %s old UserMemory records older than %s days", result, days)
+        return cast("int", result)

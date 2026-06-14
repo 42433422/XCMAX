@@ -15,7 +15,7 @@ import logging
 import os
 from datetime import date
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from fastapi import Request
 from fastapi.responses import JSONResponse, Response
@@ -513,7 +513,7 @@ async def fetch_surface_page_payload(
         )
     )
     if surface_raw.get("_error_response"):
-        return surface_raw["_error_response"]
+        return cast("dict[str, Any] | JSONResponse", surface_raw["_error_response"])
     if surface_raw.get("success") and isinstance(surface_raw.get("data"), dict):
         return {"success": True, "data": surface_raw["data"]}
     return JSONResponse(

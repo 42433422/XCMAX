@@ -12,7 +12,7 @@ import logging
 import time
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any
+from typing import Any, cast
 
 from app.neuro_bus.events.base import EventPriority, NeuroEvent
 
@@ -60,7 +60,7 @@ class SLAConfig:
     @classmethod
     def get_for_level(cls, level: SLALevel) -> SLATimeout:
         """获取指定级别的配置"""
-        return getattr(cls, level.value.upper())
+        return cast("SLATimeout", getattr(cls, level.value.upper()))
 
 
 class SLAMonitor:
@@ -114,7 +114,7 @@ class SLAMonitor:
 
     def is_violated(self) -> bool:
         """检查是否已违反 SLA"""
-        return self.check()["status"] == "violated"
+        return cast("bool", self.check()["status"] == "violated")
 
 
 class SLAController:
@@ -235,7 +235,7 @@ def with_sla(level: SLALevel, fallback=None):
 
             except TimeoutError:
                 logger.error(
-                    f"SLA violated: {func.__name__} exceeded {sla_config.target_ms}ms"
+                    "SLA violated: %s exceeded %sms", func.__name__, sla_config.target_ms
                 )
                 if fallback:
                     return fallback(*args, **kwargs)

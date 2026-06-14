@@ -10,7 +10,7 @@ except ModuleNotFoundError as exc:
     if exc.name != "transformers":
         raise
 
-    class BertIntentClassifier:  # type: ignore[no-redef]
+    class BertIntentClassifier:
         def __init__(self, *args, **kwargs):
             self.available = False
 

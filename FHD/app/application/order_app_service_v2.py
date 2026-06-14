@@ -12,7 +12,7 @@ order_app_service V2 - 事件驱动版本
 
 import logging
 from datetime import datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from app.neuro_bus.bus import get_neuro_bus
 from app.neuro_bus.events.base import EventPriority, NeuroEvent
@@ -63,7 +63,7 @@ class OrderAppServiceV2:
             self._bus.publish(event)
             return event
         except RECOVERABLE_ERRORS as e:
-            logger.error(f"[OrderAppServiceV2] 发布事件失败: {e}")
+            logger.error("[OrderAppServiceV2] 发布事件失败: %s", e)
             return None
 
     # ========== Level 2: 事件驱动核心方法 ==========
@@ -98,7 +98,7 @@ class OrderAppServiceV2:
 
             self._bus.publish(event)
 
-            logger.info(f"[OrderAppServiceV2] 订单提交事件已发布: {order_id}")
+            logger.info("[OrderAppServiceV2] 订单提交事件已发布: %s", order_id)
 
             return {
                 "success": True,
@@ -110,7 +110,7 @@ class OrderAppServiceV2:
             }
 
         except RECOVERABLE_ERRORS as e:
-            logger.exception(f"[OrderAppServiceV2] 提交订单失败: {e}")
+            logger.exception("[OrderAppServiceV2] 提交订单失败: %s", e)
             return {"success": False, "message": str(e), "error": str(e)}
 
     async def confirm_order(self, order_id: str, confirmed_by: str | None = None) -> dict[str, Any]:
@@ -140,7 +140,7 @@ class OrderAppServiceV2:
             if not event:
                 return {"success": False, "message": "发布事件失败"}
 
-            logger.info(f"[OrderAppServiceV2] 订单确认事件已发布: {order_id}")
+            logger.info("[OrderAppServiceV2] 订单确认事件已发布: %s", order_id)
 
             return {
                 "success": True,
@@ -152,7 +152,7 @@ class OrderAppServiceV2:
             }
 
         except RECOVERABLE_ERRORS as e:
-            logger.exception(f"[OrderAppServiceV2] 确认订单失败: {e}")
+            logger.exception("[OrderAppServiceV2] 确认订单失败: %s", e)
             return {"success": False, "message": str(e), "error": str(e)}
 
     async def pay_order(self, order_id: str, payment_data: dict[str, Any]) -> dict[str, Any]:
@@ -190,7 +190,7 @@ class OrderAppServiceV2:
 
             self._bus.publish(event)
 
-            logger.info(f"[OrderAppServiceV2] 订单支付事件已发布: {order_id}, 金额: {amount}")
+            logger.info("[OrderAppServiceV2] 订单支付事件已发布: %s, 金额: %s", order_id, amount)
 
             return {
                 "success": True,
@@ -203,7 +203,7 @@ class OrderAppServiceV2:
             }
 
         except RECOVERABLE_ERRORS as e:
-            logger.exception(f"[OrderAppServiceV2] 支付订单失败: {e}")
+            logger.exception("[OrderAppServiceV2] 支付订单失败: %s", e)
             return {"success": False, "message": str(e), "error": str(e)}
 
     async def ship_order(self, order_id: str, shipment_data: dict[str, Any]) -> dict[str, Any]:
@@ -241,7 +241,7 @@ class OrderAppServiceV2:
             self._bus.publish(event)
 
             logger.info(
-                f"[OrderAppServiceV2] 订单发货事件已发布: {order_id}, 发货单: {shipment_id}"
+                "[OrderAppServiceV2] 订单发货事件已发布: %s, 发货单: %s", order_id, shipment_id
             )
 
             return {
@@ -255,7 +255,7 @@ class OrderAppServiceV2:
             }
 
         except RECOVERABLE_ERRORS as e:
-            logger.exception(f"[OrderAppServiceV2] 订单发货失败: {e}")
+            logger.exception("[OrderAppServiceV2] 订单发货失败: %s", e)
             return {"success": False, "message": str(e), "error": str(e)}
 
     async def complete_order(
@@ -284,7 +284,7 @@ class OrderAppServiceV2:
 
             self._bus.publish(event)
 
-            logger.info(f"[OrderAppServiceV2] 订单完成事件已发布: {order_id}")
+            logger.info("[OrderAppServiceV2] 订单完成事件已发布: %s", order_id)
 
             return {
                 "success": True,
@@ -296,7 +296,7 @@ class OrderAppServiceV2:
             }
 
         except RECOVERABLE_ERRORS as e:
-            logger.exception(f"[OrderAppServiceV2] 完成订单失败: {e}")
+            logger.exception("[OrderAppServiceV2] 完成订单失败: %s", e)
             return {"success": False, "message": str(e), "error": str(e)}
 
     async def cancel_order(
@@ -328,7 +328,7 @@ class OrderAppServiceV2:
             if not event:
                 return {"success": False, "message": "发布事件失败"}
 
-            logger.info(f"[OrderAppServiceV2] 订单取消事件已发布: {order_id}, 原因: {reason}")
+            logger.info("[OrderAppServiceV2] 订单取消事件已发布: %s, 原因: %s", order_id, reason)
 
             return {
                 "success": True,
@@ -340,7 +340,7 @@ class OrderAppServiceV2:
             }
 
         except RECOVERABLE_ERRORS as e:
-            logger.exception(f"[OrderAppServiceV2] 取消订单失败: {e}")
+            logger.exception("[OrderAppServiceV2] 取消订单失败: %s", e)
             return {"success": False, "message": str(e), "error": str(e)}
 
     async def refund_order(self, order_id: str, refund_data: dict[str, Any]) -> dict[str, Any]:
@@ -377,7 +377,7 @@ class OrderAppServiceV2:
             if not event:
                 return {"success": False, "message": "发布事件失败"}
 
-            logger.info(f"[OrderAppServiceV2] 订单退款事件已发布: {order_id}, 退款金额: {amount}")
+            logger.info("[OrderAppServiceV2] 订单退款事件已发布: %s, 退款金额: %s", order_id, amount)
 
             return {
                 "success": True,
@@ -390,7 +390,7 @@ class OrderAppServiceV2:
             }
 
         except RECOVERABLE_ERRORS as e:
-            logger.exception(f"[OrderAppServiceV2] 订单退款失败: {e}")
+            logger.exception("[OrderAppServiceV2] 订单退款失败: %s", e)
             return {"success": False, "message": str(e), "error": str(e)}
 
     # ========== 统一命令执行入口 ==========
@@ -427,12 +427,12 @@ class OrderAppServiceV2:
             }
 
         try:
-            return await handler(**data)
+            return cast("dict[str, Any]", await handler(**data))
         except TypeError as e:
-            logger.error(f"[OrderAppServiceV2] 命令参数错误: {e}")
+            logger.error("[OrderAppServiceV2] 命令参数错误: %s", e)
             return {"success": False, "message": f"命令参数错误: {e}", "command": command}
         except RECOVERABLE_ERRORS as e:
-            logger.exception(f"[OrderAppServiceV2] 执行命令失败: {command}")
+            logger.exception("[OrderAppServiceV2] 执行命令失败: %s", command)
             return {"success": False, "message": f"执行命令失败: {str(e)}", "command": command}
 
 

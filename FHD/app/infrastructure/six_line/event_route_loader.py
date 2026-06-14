@@ -6,7 +6,7 @@ import json
 import logging
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +42,7 @@ def load_routes_config() -> dict[str, Any]:
         logger.warning("six_line_event_routes.json missing: %s", path)
         return {}
     with path.open(encoding="utf-8") as f:
-        return json.load(f)
+        return cast("dict[str, Any]", json.load(f))
 
 
 def append_jsonl(filename: str, entry: dict[str, Any]) -> Path:

@@ -158,6 +158,21 @@ def set_sqlite_pragma(dbapi_connection, connection_record):
         cursor.close()
 
 
+def _resolve_host_database_url() -> str:
+    """宿主基库 URL：不应用 ``X-XCAGI-Active-Mod-Id`` 分库后缀（users/sessions 仅存于此）。"""
+    test_mgr = _get_test_db_manager()
+    if test_mgr and test_mgr.is_enabled():
+        return f"sqlite:///{test_mgr.resolved_test_db_path()}"
+    env_url = (os.environ.get("DATABASE_URL") or "").strip()
+    if env_url:
+        return env_url
+    if _sqlite_desktop_mode():
+        from app.desktop_runtime.db import configure_sqlite_defaults
+
+        return configure_sqlite_defaults()
+    return _DEFAULT_DATABASE_URL
+
+
 def _get_database_url(db_path: str | None = None) -> str:
     test_mgr = _get_test_db_manager()
     if test_mgr and test_mgr.is_enabled():
@@ -258,11 +273,38 @@ def _get_session_local():
         return created
 
 
+def _get_host_engine():
+    return _get_engine_for_url(_resolve_host_database_url())
+
+
+def _get_host_session_local():
+    want_url = _resolve_host_database_url()
+    key = "host:" + _database_url_cache_key(want_url)
+    with _engine_cache_lock:
+        cached = _session_local_cache.get(key)
+        if cached is not None:
+            return cached
+        created = sessionmaker(
+            autocommit=False, autoflush=False, bind=_get_host_engine()
+        )
+        _session_local_cache[key] = created
+        return created
+
+
 # Backward-compatible export:
 # Some parts of the codebase (and older modules) import `SessionLocal` from `app.db`
 # and expect it to be callable (returns a SQLAlchemy Session instance).
 def SessionLocal():
     return _get_session_local()()
+
+
+def HostSessionLocal():
+    """宿主基库会话（users/sessions/IM 等），不受 Active-Mod 分库影响。"""
+    return _get_host_session_local()()
+
+
+def get_host_engine():
+    return _get_host_engine()
 
 
 def dispose_and_recreate_engine():

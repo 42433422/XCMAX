@@ -430,7 +430,7 @@ def _parse_order_text(order_text: str) -> dict:
                                 ],
                             }
         except RECOVERABLE_ERRORS as ai_err:
-            logger.warning(f"AI 结构化抽取兜底失败，回退规则流程: {ai_err}")
+            logger.warning("AI 结构化抽取兜底失败，回退规则流程: %s", ai_err)
 
         parts = text.split()
         if len(parts) >= 2:
@@ -453,5 +453,5 @@ def _parse_order_text(order_text: str) -> dict:
         }
 
     except RECOVERABLE_ERRORS as e:
-        logger.error(f"解析订单文本失败：{e}")
+        logger.error("解析订单文本失败：%s", e)
         return {"success": False, "message": f"解析失败：{str(e)}"}

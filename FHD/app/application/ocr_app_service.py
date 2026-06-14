@@ -4,7 +4,7 @@ OCR 应用服务
 负责 OCR 文字识别相关的用例编排
 """
 
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Optional, cast
 
 if TYPE_CHECKING:
     from app.services import OCRService
@@ -33,7 +33,7 @@ class OCRApplicationService:
         Returns:
             识别结果
         """
-        return self._ocr_service.recognize_text(image_path)
+        return cast("dict[str, Any]", self._ocr_service.recognize_text(image_path))
 
     def recognize_text_from_bytes(self, image_bytes: bytes) -> dict[str, Any]:
         """
@@ -45,7 +45,7 @@ class OCRApplicationService:
         Returns:
             识别结果
         """
-        return self._ocr_service.recognize_text_from_bytes(image_bytes)
+        return cast("dict[str, Any]", self._ocr_service.recognize_text_from_bytes(image_bytes))
 
     def recognize_trademark(self, image_path: str) -> dict[str, Any]:
         """
@@ -57,7 +57,7 @@ class OCRApplicationService:
         Returns:
             商标识别结果
         """
-        return self._ocr_service.recognize_trademark(image_path)
+        return cast("dict[str, Any]", self._ocr_service.recognize_trademark(image_path))
 
     def recognize_product(self, image_path: str) -> dict[str, Any]:
         """
@@ -69,11 +69,11 @@ class OCRApplicationService:
         Returns:
             产品识别结果
         """
-        return self._ocr_service.recognize_product(image_path)
+        return cast("dict[str, Any]", self._ocr_service.recognize_product(image_path))
 
     def extract_structured_data(self, text: str) -> dict[str, Any]:
         """从 OCR 原文提取结构化字段（委托领域 OCRService）。"""
-        return self._ocr_service.extract_structured_data(text)
+        return cast("dict[str, Any]", self._ocr_service.extract_structured_data(text))
 
     def batch_recognize(self, image_paths: list) -> dict[str, Any]:
         """

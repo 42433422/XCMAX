@@ -87,13 +87,13 @@ def register_model_validators():
 
         for model in models_to_validate:
             if hasattr(model, "__tablename__"):
-                logger.debug(f"验证器已就绪: {model.__tablename__}")
+                logger.debug("验证器已就绪: %s", model.__tablename__)
 
-        logger.info(f"模型验证器已初始化 ({validated_count} 个模型)")
+        logger.info("模型验证器已初始化 (%s 个模型)", validated_count)
         return True
 
     except RECOVERABLE_ERRORS as e:
-        logger.warning(f"模型验证器初始化跳过: {e}")
+        logger.warning("模型验证器初始化跳过: %s", e)
         return False
 
 

@@ -262,11 +262,23 @@ exclude_lines = [
 #   CI 与本基线均不装 ml extra，故 36% 是诚实可复现 SSOT；历史 58/60.63/66.33 来自富依赖环境，已退役。
 # 留 ~1pt 余量防止回退。开启 branch 后 coverage 自带门禁按合并指标拦截，故标准命令传
 # --cov-fail-under=0，由 coverage_ratchet.py --check 按行/分支分别守护（floor 只升不降）。
-fail_under = 37
+fail_under = 47
 
 [tool.coverage.html]
 directory = "htmlcov"
 show_contexts = true
+
+# Phase 4 变异测试基础设施（mutmut · v10 线内迭代 · 2026-06-14）
+# 用法：pip install mutmut && mutmut run
+# 首轮聚焦 Phase 4 长尾纯函数目录；逐步扩大 source_paths。
+[tool.mutmut]
+source_paths = [
+    "app/http/",
+    "app/contexts/",
+    "app/di/",
+]
+runner = "python -m pytest tests/test_http tests/test_contexts tests/test_di -x --tb=no -q"
+dict_synonyms = ["Struct", "NamedTuple"]
 
 [build-system]
 requires = ["setuptools>=61"]

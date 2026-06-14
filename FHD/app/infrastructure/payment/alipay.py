@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from app.utils.operational_errors import INFRA_TRANSIENT
 
@@ -57,7 +57,7 @@ def _default_bundled_alipay_public_key() -> str:
     if not p.is_file():
         return ""
     try:
-        return p.read_text(encoding="utf-8").strip()
+        return cast("str", p.read_text(encoding="utf-8").strip())
     except OSError:
         logger.warning("无法读取默认支付宝公钥文件: %s", p)
         return ""

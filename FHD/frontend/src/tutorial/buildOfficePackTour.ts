@@ -1,20 +1,44 @@
 import type { TutorialStep } from './types'
 import { createStep } from './stepFactory'
 
-/** 进阶教程末尾：能力库装齐办公 10 员工 + 对话验收 Planner 工具可见 */
+/** 进阶教程末尾：智能生态 → 员工商店 → 办公员工包（基础能力 + 教学演示） */
 export function buildOfficeEmployeePackSteps(): TutorialStep[] {
   return [
     createStep({
-      id: 'office-pack-nav-tab',
-      title: '能力库 · 办公员工包',
+      id: 'office-pack-ecosystem-nav',
+      title: '智能生态 · 入口',
       description:
-        'CSV/Excel/PDF 等表格类员工在「办公员工包」分类。装齐后 Planner 会自动加载对应工具（无需重启）。请点击左侧「办公员工包」。',
+        '办公员工包（CSV/Excel/PDF 等表格类 AI 员工）是软件的基础能力，也适合教学演示。请先点击侧栏「智能生态」。',
+      targetSelector: '.sidebar .menu-item[data-view="ai-ecosystem"]',
+      actionType: 'click',
+      routeName: 'ai-ecosystem',
+      track: 'advanced',
+      excludeInPro: false,
+    }),
+    createStep({
+      id: 'office-pack-open-modstore',
+      title: '员工商店',
+      description:
+        '在智能生态首页点击「员工商店」，进入能力库浏览与安装本机/市场员工包（与侧栏「能力库」同页）。',
+      routeName: 'ai-ecosystem',
+      targetSelector: '[data-tour="ecosystem-launcher-modstore"]',
+      highlightSelector: '[data-tour="ecosystem-launcher-modstore"]',
+      actionType: 'click',
+      track: 'advanced',
+      excludeInPro: false,
+    }),
+    createStep({
+      id: 'office-pack-nav-tab',
+      title: '办公员工包',
+      description:
+        '左侧选择「办公员工包」分类。装齐后 Planner 会自动加载对应工具（无需重启），可用于日常办公与教程演示。',
       routeName: 'mod-store',
       routeQuery: { tab: 'office' },
       targetSelector: '[data-tour="store-nav-office"]',
       highlightSelector: '[data-tour="store-nav-office"]',
       actionType: 'click',
       track: 'advanced',
+      excludeInPro: false,
     }),
     createStep({
       id: 'office-pack-one-click',
@@ -27,6 +51,7 @@ export function buildOfficeEmployeePackSteps(): TutorialStep[] {
       highlightSelector: '[data-tour="store-one-click-install"]',
       actionType: 'click',
       track: 'advanced',
+      excludeInPro: false,
     }),
     createStep({
       id: 'office-pack-wait-ready',
@@ -39,6 +64,7 @@ export function buildOfficeEmployeePackSteps(): TutorialStep[] {
       actionType: 'observe',
       track: 'advanced',
       noAutoSkipWhenMissing: true,
+      excludeInPro: false,
     }),
     createStep({
       id: 'office-pack-chat-verify',
@@ -50,6 +76,7 @@ export function buildOfficeEmployeePackSteps(): TutorialStep[] {
       highlightSelector: '[data-tour="chat-input-area"]',
       actionType: 'observe',
       track: 'advanced',
+      excludeInPro: false,
     }),
   ]
 }

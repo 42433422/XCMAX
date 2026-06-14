@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import zipfile
-from typing import Any
+from typing import Any, cast
 
 from .artifact_constants import normalize_artifact
 
@@ -22,11 +22,11 @@ def peek_manifest_from_zip(package_path: str) -> dict[str, Any]:
         names = zf.namelist()
         if "manifest.json" in names:
             raw = zf.read("manifest.json").decode("utf-8")
-            return json.loads(raw)
+            return cast("dict[str, Any]", json.loads(raw))
         candidates = [n for n in names if n.endswith("/manifest.json") and n.count("/") == 1]
         if len(candidates) == 1:
             raw = zf.read(candidates[0]).decode("utf-8")
-            return json.loads(raw)
+            return cast("dict[str, Any]", json.loads(raw))
         if not candidates:
             raise ValueError("zip 内未找到 manifest.json")
         # 多个一级 manifest：取与 manifest.id 路径一致者
@@ -35,11 +35,11 @@ def peek_manifest_from_zip(package_path: str) -> dict[str, Any]:
                 data = json.loads(zf.read(c).decode("utf-8"))
                 mid = (data.get("id") or "").strip()
                 if mid and c.startswith(mid + "/"):
-                    return data
+                    return cast("dict[str, Any]", data)
             except json.JSONDecodeError:
                 continue
         raw = zf.read(sorted(candidates)[0]).decode("utf-8")
-        return json.loads(raw)
+        return cast("dict[str, Any]", json.loads(raw))
 
 
 def peek_artifact(package_path: str) -> str:

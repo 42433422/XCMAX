@@ -94,7 +94,7 @@ class ProductCacheInvalidatedEvent(NeuroEvent):
 
 
 # 事件处理器注册表
-PRODUCT_EVENT_HANDLERS = {
+PRODUCT_EVENT_HANDLERS: object = {
     "product.created": [],
     "product.updated": [],
     "product.deleted": [],

@@ -71,11 +71,25 @@ describe('platformShellMode', () => {
       expect(isPlatformShellModeEnabled()).toBe(true)
     })
 
-    it('bootstrapMinimal sets shell mode', () => {
-      vi.stubEnv('VITE_XCAGI_EDITION', 'minimal')
-      vi.stubEnv('VITE_XCAGI_DEFAULT_PLATFORM_SHELL', '1')
-      bootstrapMinimalEditionDefaults()
-      expect(localStorage.getItem(LS_PLATFORM_SHELL_MODE)).toBe('1')
+  it('bootstrapMinimal sets shell mode', () => {
+    vi.stubEnv('VITE_XCAGI_EDITION', 'minimal')
+    vi.stubEnv('VITE_XCAGI_DEFAULT_PLATFORM_SHELL', '1')
+    bootstrapMinimalEditionDefaults()
+    expect(localStorage.getItem(LS_PLATFORM_SHELL_MODE)).toBe('1')
     })
+  })
+
+  it('expands ERP menu keys when account custom mod is installed', async () => {
+    const { resolvePlatformShellMenuKeys, INDUSTRY_DELIVERY_ERP_MENU_KEYS } = await import(
+      './platformShellMode'
+    )
+    const bare = resolvePlatformShellMenuKeys([])
+    expect(bare.has('products')).toBe(false)
+    const withCustom = resolvePlatformShellMenuKeys(['taiyangniao-pro', 'attendance-industry'])
+    expect(withCustom.has('products')).toBe(true)
+    expect(withCustom.has('customers')).toBe(true)
+    for (const k of INDUSTRY_DELIVERY_ERP_MENU_KEYS) {
+      expect(withCustom.has(k)).toBe(true)
+    }
   })
 })

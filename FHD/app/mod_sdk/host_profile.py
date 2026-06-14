@@ -9,7 +9,7 @@ import os
 from copy import deepcopy
 from functools import lru_cache
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -398,7 +398,7 @@ def get_employee_registry_rules() -> dict[str, Any]:
     rules = prof.get("employee_registry_rules")
     if isinstance(rules, dict):
         return rules
-    return load_host_profile()["employee_registry_rules"]
+    return cast("dict[str, Any]", load_host_profile()["employee_registry_rules"])
 
 
 def bundled_mod_ids_for_profile_sku(sku: str | None = None) -> tuple[str, ...]:
@@ -416,7 +416,7 @@ def package_stage_mod_ids_for_sku(sku: str | None = None) -> tuple[str, ...]:
     key = sku or _resolve_product_sku()
     if not key:
         key = "enterprise"
-    prof = load_host_profile(key)  # type: ignore[arg-type]
+    prof = load_host_profile(key)
     ids = prof.get("package_stage_ids")
     if isinstance(ids, list) and ids:
         return tuple(str(x) for x in ids)

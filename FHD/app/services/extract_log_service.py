@@ -7,7 +7,7 @@
 import json
 import logging
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 from app.db.session import get_db
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
@@ -69,11 +69,11 @@ class ExtractLogService(NeuroEventPublisherMixin):
                 )
                 log_id = result.lastrowid
                 db.commit()
-                logger.info(f"创建提取日志：id={log_id}, file={file_name}")
-                return log_id
+                logger.info("创建提取日志：id=%s, file=%s", log_id, file_name)
+                return cast("int", log_id)
 
         except RECOVERABLE_ERRORS as e:
-            logger.error(f"创建提取日志失败：{e}")
+            logger.error("创建提取日志失败：%s", e)
             return -1
 
     def update_log(
@@ -134,11 +134,11 @@ class ExtractLogService(NeuroEventPublisherMixin):
                 db.execute(text(sql), params)
                 db.commit()
 
-                logger.info(f"更新提取日志：id={log_id}, status={status}")
+                logger.info("更新提取日志：id=%s, status=%s", log_id, status)
                 return True
 
         except RECOVERABLE_ERRORS as e:
-            logger.error(f"更新提取日志失败：{e}")
+            logger.error("更新提取日志失败：%s", e)
             return False
 
     def get_log(self, log_id: int) -> dict[str, Any] | None:
@@ -181,7 +181,7 @@ class ExtractLogService(NeuroEventPublisherMixin):
                 return None
 
         except RECOVERABLE_ERRORS as e:
-            logger.error(f"获取提取日志失败：{e}")
+            logger.error("获取提取日志失败：%s", e)
             return None
 
     def get_logs(
@@ -251,7 +251,7 @@ class ExtractLogService(NeuroEventPublisherMixin):
                 return logs
 
         except RECOVERABLE_ERRORS as e:
-            logger.error(f"获取提取日志列表失败：{e}")
+            logger.error("获取提取日志列表失败：%s", e)
             return []
 
 

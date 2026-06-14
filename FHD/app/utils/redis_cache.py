@@ -19,7 +19,7 @@ import os
 import time
 import uuid
 from collections.abc import Callable
-from typing import Any
+from typing import Any, cast
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -64,7 +64,7 @@ class RedisCache:
         if self._redis is None:
             return False
         try:
-            return self._redis.ping()
+            return cast("bool", self._redis.ping())
         except RECOVERABLE_ERRORS:
             return False
 
@@ -194,7 +194,7 @@ class RedisCache:
         try:
             deleted = self._redis.delete(*full_keys)
             self._stats["deletes"] += deleted
-            return deleted > 0
+            return cast("bool", deleted > 0)
         except RECOVERABLE_ERRORS as e:
             logger.error("Redis DELETE 失败: %s", e)
             self._stats["errors"] += 1
@@ -267,7 +267,7 @@ class RedisCache:
             if ttl:
                 pipe.expire(full_key, ttl)
             results = pipe.execute()
-            return results[0]
+            return cast("int", results[0])
         except RECOVERABLE_ERRORS as e:
             logger.error("Redis INCR 失败 [%s]: %s", key, e)
             self._stats["errors"] += 1
@@ -286,7 +286,7 @@ class RedisCache:
         if not self.is_available:
             return -1
         try:
-            return self._redis.ttl(self._make_key(key))
+            return cast("int", self._redis.ttl(self._make_key(key)))
         except RECOVERABLE_ERRORS:
             return -1
 

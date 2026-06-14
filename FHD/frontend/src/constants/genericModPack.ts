@@ -224,22 +224,39 @@ export function normalizeModSidebarNavKey(key: string): string {
   return k.replace(/^mod-mod-/, 'mod-');
 }
 
+/** 账号定制 Mod（侧栏菜单应在企业端展示） */
+export const ACCOUNT_CUSTOM_MOD_IDS = ['taiyangniao-pro', 'sz-qsm-pro'] as const
+
+export function hasInstalledAccountCustomMod(installedModIds: Iterable<string>): boolean {
+  const ids = installedSet(Array.from(installedModIds))
+  return ACCOUNT_CUSTOM_MOD_IDS.some((mid) => ids.has(mid))
+}
+
+/** 账号定制 Mod 侧栏入口（企业端须保留，与行业包占位菜单区分） */
+export const ACCOUNT_CUSTOM_SIDEBAR_MENU_KEYS = new Set([
+  'taiyangniao-pro-home',
+  'mod-taiyangniao-pro-home',
+  'taiyangniao-pro-settings',
+  'mod-taiyangniao-pro-settings',
+  'qsm-pro-home',
+  'mod-qsm-pro-home',
+  'sz-qsm-pro-home',
+  'mod-sz-qsm-pro-home',
+])
+
 /** 考勤 Mod 侧栏入口（manifest.menu.id 与 mod- 前缀 key 两种形态） */
 export const ATTENDANCE_MOD_SIDEBAR_MENU_KEYS = new Set([
   'attendance-industry-home',
   'mod-attendance-industry-home',
   'attendance-industry-settings',
   'mod-attendance-industry-settings',
-  'taiyangniao-pro-home',
-  'mod-taiyangniao-pro-home',
-  'taiyangniao-pro-settings',
-  'mod-taiyangniao-pro-settings',
 ])
 
-/** 企业端 / 管理端不展示「考勤表转换」；太阳鸟客户端仍保留 */
+/** 企业端 / 管理端不展示行业包占位「考勤表转换」；账号定制 Mod 菜单保留 */
 export function shouldHideAttendanceModSidebarMenu(menuKey: string): boolean {
   if (String(import.meta.env.VITE_XCMAX_SUNBIRD_CONSOLE || '').trim() === '1') return false
   const key = normalizeModSidebarNavKey(String(menuKey || '').trim())
+  if (ACCOUNT_CUSTOM_SIDEBAR_MENU_KEYS.has(key)) return false
   if (!ATTENDANCE_MOD_SIDEBAR_MENU_KEYS.has(key)) return false
   const sku = String(import.meta.env.VITE_XCAGI_PRODUCT_SKU || '').trim().toLowerCase()
   if (sku === 'enterprise') return true

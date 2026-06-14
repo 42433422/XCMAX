@@ -1,5 +1,6 @@
 import { ref, computed, onUnmounted } from 'vue';
 import { useJarvisChatStore } from '@/stores/jarvisChat';
+import { asRecord, asArray, asString, asBoolean, asDisposable } from '@/utils/typeGuards'
 
 type SpeechRecognitionLike = {
   lang: string;
@@ -44,9 +45,13 @@ export function useJarvisChat(): unknown {
       return;
     }
 
-    const SpeechRecognitionCtor =
-      (window as unknown).SpeechRecognition || (window as unknown).webkitSpeechRecognition;
-    recognition.value = new SpeechRecognitionCtor() as SpeechRecognitionLike;
+    const win = window as Window & {
+      SpeechRecognition?: new () => SpeechRecognitionLike
+      webkitSpeechRecognition?: new () => SpeechRecognitionLike
+    }
+    const SpeechRecognitionCtor = win.SpeechRecognition || win.webkitSpeechRecognition
+    if (!SpeechRecognitionCtor) return
+    recognition.value = new SpeechRecognitionCtor()
     recognition.value.lang = 'zh-CN';
     recognition.value.continuous = false;
     recognition.value.interimResults = false;
@@ -57,7 +62,9 @@ export function useJarvisChat(): unknown {
     };
 
     recognition.value.onresult = (event: unknown) => {
-      const transcript = event?.results?.[0]?.[0]?.transcript || '';
+      const row = asRecord(event)
+      const results = asArray(asRecord(asArray(row.results)[0])[0])
+      const transcript = asString(results[0])
       store.stopRecording();
       if (transcript) {
         void sendMessage(transcript);
@@ -65,7 +72,7 @@ export function useJarvisChat(): unknown {
     };
 
     recognition.value.onerror = (event: unknown) => {
-      console.error('Speech recognition error:', event?.error);
+      console.error('Speech recognition error:', asString(asRecord(event).error));
       store.stopRecording();
       isListening.value = false;
     };

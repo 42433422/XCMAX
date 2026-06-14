@@ -74,11 +74,11 @@ class PerformanceOptimizer:
 
             status["redis_cache"] = self._redis_cache is not None and self._redis_cache.is_available
             logger.info(
-                f"✅ Redis 缓存: {'已连接' if status['redis_cache'] else '不可用 (使用本地缓存)'}"
+                "✅ Redis 缓存: %s", '已连接' if status['redis_cache'] else '不可用 (使用本地缓存)'
             )
         except RECOVERABLE_ERRORS as e:
             status["redis_cache"] = False
-            logger.warning(f"⚠️  Redis 缓存初始化失败: {e}")
+            logger.warning("⚠️  Redis 缓存初始化失败: %s", e)
 
         # 2. 查询优化器
         try:
@@ -89,7 +89,7 @@ class PerformanceOptimizer:
             logger.info("✅ 查询优化器: 已启用")
         except RECOVERABLE_ERRORS as e:
             status["query_optimizer"] = False
-            logger.error(f"❌ 查询优化器初始化失败: {e}")
+            logger.error("❌ 查询优化器初始化失败: %s", e)
 
         # 3. 异步任务管理
         try:
@@ -100,7 +100,7 @@ class PerformanceOptimizer:
             logger.info("✅ 异步任务管理: 已启用")
         except RECOVERABLE_ERRORS as e:
             status["async_tasks"] = False
-            logger.error(f"❌ 异步任务管理初始化失败: {e}")
+            logger.error("❌ 异步任务管理初始化失败: %s", e)
 
         # 4. 请求去重
         try:
@@ -111,7 +111,7 @@ class PerformanceOptimizer:
             logger.info("✅ 请求去重: 已启用")
         except RECOVERABLE_ERRORS as e:
             status["request_dedup"] = False
-            logger.error(f"❌ 请求去重初始化失败: {e}")
+            logger.error("❌ 请求去重初始化失败: %s", e)
 
         # 5. 性能监控
         try:
@@ -122,7 +122,7 @@ class PerformanceOptimizer:
             logger.info("✅ 性能监控: 已启用")
         except RECOVERABLE_ERRORS as e:
             status["performance_monitor"] = False
-            logger.error(f"❌ 性能监控初始化失败: {e}")
+            logger.error("❌ 性能监控初始化失败: %s", e)
 
         # 6. 限流器
         try:
@@ -133,7 +133,7 @@ class PerformanceOptimizer:
             logger.info("✅ 限流器: 已启用")
         except RECOVERABLE_ERRORS as e:
             status["rate_limiter"] = False
-            logger.error(f"❌ 限流器初始化失败: {e}")
+            logger.error("❌ 限流器初始化失败: %s", e)
 
         # 7. 熔断器预加载
         try:
@@ -146,7 +146,7 @@ class PerformanceOptimizer:
             logger.info("✅ 熔断器: 已启用")
         except RECOVERABLE_ERRORS as e:
             status["circuit_breaker"] = False
-            logger.error(f"❌ 熔断器初始化失败: {e}")
+            logger.error("❌ 熔断器初始化失败: %s", e)
 
         self._initialized = True
         init_duration = (time.perf_counter() - init_start) * 1000
@@ -156,7 +156,7 @@ class PerformanceOptimizer:
 
         logger.info("=" * 60)
         logger.info(
-            f"🎉 性能优化系统初始化完成 ({success_count}/{total_count} 成功, 耗时 {init_duration:.2f}ms)"
+            f"🎉 性能优化系统初始化完成 ({success_count}/{total_count} 成功, 耗时 {init_duration:.2f}ms)"  # noqa: G004
         )
         logger.info("=" * 60)
 

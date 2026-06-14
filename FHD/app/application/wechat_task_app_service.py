@@ -9,7 +9,7 @@ import os
 import re
 import sys
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import func, or_
 from sqlalchemy.exc import IntegrityError
@@ -52,7 +52,7 @@ class WechatTaskApplicationService:
                         .first()
                     )
                     if existing:
-                        return existing.id
+                        return cast("int | None", existing.id)
 
                 task = WechatTask(
                     contact_id=contact_id,
@@ -79,10 +79,10 @@ class WechatTaskApplicationService:
                         .first()
                     )
                     if existing:
-                        return existing.id
+                        return cast("int | None", existing.id)
             return None
         except RECOVERABLE_ERRORS as e:
-            logger.error(f"插入 wechat_task 失败：{e}")
+            logger.error("插入 wechat_task 失败：%s", e)
             return None
 
     def scan_messages(
@@ -206,7 +206,7 @@ class WechatTaskApplicationService:
             return result
 
         except RECOVERABLE_ERRORS as e:
-            logger.exception(f"处理微信消息失败：{e}")
+            logger.exception("处理微信消息失败：%s", e)
             return {"success": False, "message": f"处理失败：{str(e)}"}
 
     def recognize_order(self, text: str) -> dict[str, Any] | None:
@@ -240,7 +240,7 @@ class WechatTaskApplicationService:
             return None
 
         except RECOVERABLE_ERRORS as e:
-            logger.error(f"识别订单失败：{e}")
+            logger.error("识别订单失败：%s", e)
             return None
 
     def recognize_shipment(self, text: str) -> dict[str, Any] | None:
@@ -268,7 +268,7 @@ class WechatTaskApplicationService:
             return None
 
         except RECOVERABLE_ERRORS as e:
-            logger.error(f"识别发货单失败：{e}")
+            logger.error("识别发货单失败：%s", e)
             return None
 
     def confirm_task(self, task_id: int) -> dict[str, Any]:
@@ -281,7 +281,7 @@ class WechatTaskApplicationService:
             return {"success": True, "message": "任务已确认"}
 
         except RECOVERABLE_ERRORS as e:
-            logger.exception(f"确认任务失败：{e}")
+            logger.exception("确认任务失败：%s", e)
             return {"success": False, "message": f"确认失败：{str(e)}"}
 
     def ignore_task(self, task_id: int) -> dict[str, Any]:
@@ -294,14 +294,14 @@ class WechatTaskApplicationService:
             return {"success": True, "message": "任务已忽略"}
 
         except RECOVERABLE_ERRORS as e:
-            logger.exception(f"忽略任务失败：{e}")
+            logger.exception("忽略任务失败：%s", e)
             return {"success": False, "message": f"忽略失败：{str(e)}"}
 
     def get_tasks(
         self, contact_id: int | None = None, status: str = "pending", limit: int = 20
     ) -> list[dict[str, Any]]:
         try:
-            logger.info(f"查询任务列表，contact_id={contact_id}, status={status}")
+            logger.info("查询任务列表，contact_id=%s, status=%s", contact_id, status)
 
             with get_db() as db:
                 query = db.query(WechatTask).filter(WechatTask.status == status)
@@ -335,12 +335,12 @@ class WechatTaskApplicationService:
                 ]
 
         except RECOVERABLE_ERRORS as e:
-            logger.exception(f"查询任务列表失败：{e}")
+            logger.exception("查询任务列表失败：%s", e)
             return []
 
     def get_contacts(self, keyword: str | None = None, limit: int = 100) -> list[dict[str, Any]]:
         try:
-            logger.info(f"查询联系人列表，keyword={keyword}, limit={limit}")
+            logger.info("查询联系人列表，keyword=%s, limit=%s", keyword, limit)
 
             with get_db() as db:
                 query = db.query(
@@ -381,11 +381,11 @@ class WechatTaskApplicationService:
                         }
                     )
 
-            logger.info(f"查询到 {len(contacts)} 个联系人")
+            logger.info("查询到 %s 个联系人", len(contacts))
             return contacts
 
         except RECOVERABLE_ERRORS as e:
-            logger.exception(f"查询联系人列表失败：{e}")
+            logger.exception("查询联系人列表失败：%s", e)
             return []
 
     def _get_task(self, task_id: int) -> dict[str, Any] | None:
@@ -409,7 +409,7 @@ class WechatTaskApplicationService:
                     }
                 return None
         except RECOVERABLE_ERRORS as e:
-            logger.error(f"获取任务失败：{e}")
+            logger.error("获取任务失败：%s", e)
             return None
 
     def _task_exists(self, task_id: int) -> bool:
@@ -420,7 +420,7 @@ class WechatTaskApplicationService:
                 )
                 return exists
         except RECOVERABLE_ERRORS as e:
-            logger.error(f"检查任务存在失败：{e}")
+            logger.error("检查任务存在失败：%s", e)
             return False
 
     def _update_task_status(self, task_id: int, status: str) -> bool:
@@ -438,7 +438,7 @@ class WechatTaskApplicationService:
                     return True
                 return False
         except RECOVERABLE_ERRORS as e:
-            logger.error(f"更新任务状态失败：{e}")
+            logger.error("更新任务状态失败：%s", e)
             return False
 
     def _recognize_message_type(self, text: str) -> str:
@@ -461,13 +461,13 @@ class WechatTaskApplicationService:
             unit = order_info.get("unit", "")
 
             logger.info(
-                f"收到订单：产品={product_name}, 数量={quantity} {unit}, 原始消息={raw_text}"
+                "收到订单：产品=%s, 数量=%s %s, 原始消息=%s", product_name, quantity, unit, raw_text
             )
 
             return {"success": True, "message": "订单已记录", "order_info": order_info}
 
         except RECOVERABLE_ERRORS as e:
-            logger.exception(f"处理订单消息失败：{e}")
+            logger.exception("处理订单消息失败：%s", e)
             return {"success": False, "message": f"处理失败：{str(e)}"}
 
     def _process_shipment_message(self, task: dict[str, Any]) -> dict[str, Any]:
@@ -480,12 +480,12 @@ class WechatTaskApplicationService:
             products = shipment_info.get("products")
             content = shipment_info.get("content", "")
 
-            logger.info(f"收到发货单：内容={content}, 产品={products}, 原始消息={raw_text}")
+            logger.info("收到发货单：内容=%s, 产品=%s, 原始消息=%s", content, products, raw_text)
 
             return {"success": True, "message": "发货单已记录", "shipment_info": shipment_info}
 
         except RECOVERABLE_ERRORS as e:
-            logger.exception(f"处理发货单消息失败：{e}")
+            logger.exception("处理发货单消息失败：%s", e)
             return {"success": False, "message": f"处理失败：{str(e)}"}
 
 

@@ -26,13 +26,13 @@ class HookManager:
         if event not in self._subscribers:
             self._subscribers[event] = []
         self._subscribers[event].append(handler)
-        logger.debug(f"Hook subscribed: {event} -> {handler.__name__}")
+        logger.debug("Hook subscribed: %s -> %s", event, handler.__name__)
 
     def unsubscribe(self, event: str, handler: Callable) -> None:
         if event in self._subscribers:
             try:
                 self._subscribers[event].remove(handler)
-                logger.debug(f"Hook unsubscribed: {event} -> {handler.__name__}")
+                logger.debug("Hook unsubscribed: %s -> %s", event, handler.__name__)
             except ValueError:
                 pass
 
@@ -44,7 +44,7 @@ class HookManager:
             try:
                 handler(*args, **kwargs)
             except RECOVERABLE_ERRORS as e:
-                logger.error(f"Hook handler failed: {event} -> {handler.__name__}: {e}")
+                logger.error("Hook handler failed: %s -> %s: %s", event, handler.__name__, e)
 
     def list_subscribers(self, event: str) -> list[str]:
         if event not in self._subscribers:
@@ -66,7 +66,7 @@ def trigger(event: str, *args, **kwargs) -> None:
         from app.routes.state import read_client_mods_off_state
 
         if read_client_mods_off_state():
-            logger.debug(f"Hook skipped (client_mods_off=True): {event}")
+            logger.debug("Hook skipped (client_mods_off=True): %s", event)
             return
     except RECOVERABLE_ERRORS:
         pass

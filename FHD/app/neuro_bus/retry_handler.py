@@ -14,7 +14,7 @@ import random
 import time
 from collections.abc import Callable
 from functools import wraps
-from typing import Any
+from typing import Any, cast
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -135,7 +135,7 @@ class RetryHandler:
                 if context._attempt > 0:
                     report = context.get_report()
                     logger.info(
-                        f"Retry succeeded after {report['attempts']} attempts: {operation_name}"
+                        "Retry succeeded after %s attempts: %s", report['attempts'], operation_name
                     )
 
                 return result
@@ -145,8 +145,8 @@ class RetryHandler:
                     # 不可重试或次数耗尽
                     report = context.get_report()
                     logger.error(
-                        f"Retry exhausted for {operation_name}: "
-                        f"{report['attempts']} attempts, last error: {e}"
+                        "Retry exhausted for %s: "
+                        f"%s attempts, last error: %s", operation_name, report['attempts'], e
                     )
                     raise
 
@@ -232,7 +232,7 @@ class NeuroRetryHandler:
         if domain not in self._handlers:
             config = self.DOMAIN_CONFIGS.get(domain, self.DOMAIN_CONFIGS["default"])
             self._handlers[domain] = RetryHandler(config)
-        return self._handlers[domain]
+        return cast("RetryHandler", self._handlers[domain])
 
     async def execute_for_event(self, domain: str, operation: Callable, *args, **kwargs) -> Any:
         """为事件执行操作，带领域特定的重试"""

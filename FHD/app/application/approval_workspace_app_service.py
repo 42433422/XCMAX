@@ -766,7 +766,7 @@ def get_approval_users():
     """
     users: list[dict] = []
     try:
-        from app.db.models import User  # type: ignore
+        from app.db.models import User
 
         with get_db() as db:
             rows = db.query(User).filter(User.is_active == True).all()  # noqa: E712

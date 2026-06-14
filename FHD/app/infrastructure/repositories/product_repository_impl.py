@@ -1,7 +1,7 @@
 import logging
 import re
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import inspect
 
@@ -239,7 +239,7 @@ class SQLAlchemyProductRepository(ProductRepository):
 
     def count(self) -> int:
         with get_db() as db:
-            return db.query(ProductModel).count()
+            return cast("int", db.query(ProductModel).count())
 
     def find_product_units(self) -> list[str]:
         """与 persistence.SQLAlchemyProductRepository.find_product_units 行为对齐。"""

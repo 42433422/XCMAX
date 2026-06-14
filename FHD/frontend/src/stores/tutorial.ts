@@ -113,7 +113,7 @@ export const useTutorialStore = defineStore('tutorial', () => {
     blockedTip.value = ''
   }
 
-  let stepTargetPollTimer: ReturnType<typeof setTimeout> | null = null
+  let stepTargetPollTimer: number | null = null
   const clearStepTargetPoll = () => {
     if (stepTargetPollTimer !== null) {
       clearTimeout(stepTargetPollTimer)
@@ -164,7 +164,7 @@ export const useTutorialStore = defineStore('tutorial', () => {
         markStepStatus(currentStep.value.id, 'passed')
         return
       }
-      stepTargetPollTimer = window.setTimeout(poll, 100) as unknown as ReturnType<typeof setTimeout>
+      stepTargetPollTimer = window.setTimeout(poll, 100)
     }
     stepTargetPollTimer = window.setTimeout(poll, 80)
   }

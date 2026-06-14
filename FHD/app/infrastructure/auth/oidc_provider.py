@@ -8,7 +8,7 @@ import json
 import logging
 import os
 import time
-from typing import Any
+from typing import Any, cast
 from urllib.parse import urlencode
 
 import httpx
@@ -89,14 +89,14 @@ async def _discovery() -> dict[str, Any]:
         return {}
     cached = _discovery_cache.get(issuer)
     if cached:
-        return cached
+        return cast("dict[str, Any]", cached)
     url = f"{issuer}/.well-known/openid-configuration"
     async with httpx.AsyncClient(timeout=15.0, trust_env=False) as client:
         res = await client.get(url)
         res.raise_for_status()
         data = res.json()
     _discovery_cache[issuer] = data
-    return data
+    return cast("dict[str, Any]", data)
 
 
 async def build_authorize_url(*, state: str) -> str:

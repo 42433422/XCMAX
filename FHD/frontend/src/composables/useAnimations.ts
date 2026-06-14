@@ -1,4 +1,5 @@
 import { ref, onUnmounted, type Ref } from 'vue';
+import { asRecord, asArray, asString } from '@/utils/typeGuards'
 
 type EasingFn = (t: number) => number;
 type FrameCallback = (...args: unknown[]) => void;
@@ -183,7 +184,8 @@ export function useTransition(elementRef: Ref<HTMLElement | null>, options: Anim
     isTransitioning.value = true;
 
     const property = options.property;
-    const startValue = parseFloat((elementRef.value.style as unknown)[property] || '0');
+    const style = elementRef.value.style as unknown as Record<string, string>
+    const startValue = parseFloat(String(style[property] || '0'))
     const startTime = performance.now();
 
     const animate = (currentTime: number) => {
@@ -192,7 +194,7 @@ export function useTransition(elementRef: Ref<HTMLElement | null>, options: Anim
       const easedProgress = options.easing ? options.easing(ratio) : ratio;
       const currentValue = startValue + (toValue - startValue) * easedProgress;
 
-      (elementRef.value!.style as unknown)[property] = `${currentValue}${options.unit || 'px'}`;
+      style[property] = `${currentValue}${options.unit || 'px'}`
 
       if (ratio < 1) {
         requestAnimationFrame(animate);

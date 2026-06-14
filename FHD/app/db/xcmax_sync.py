@@ -169,7 +169,7 @@ class SyncDb:
                     (change_id, entity_type, entity_id, operation, payload_json, now),
                 )
             conn.commit()
-        return change_id  # type: ignore[return-value]
+        return change_id
 
     def enqueue_inbox(
         self,

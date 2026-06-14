@@ -37,9 +37,9 @@ class InventoryServiceDomainHandlers:
 
     async def handle_stock_in(self, event: NeuroEvent) -> dict[str, Any]:
         """处理 stock_in 事件"""
-        logger.info(f"[InventoryServiceDomain] 处理 stock_in: {event.payload}")
+        logger.info("[InventoryServiceDomain] 处理 stock_in: %s", event.payload)
         if isinstance(event, InventoryStockInEvent):
-            logger.info(f"[InventoryServiceDomain] Product: {event.payload.get('product_id')}")
+            logger.info("[InventoryServiceDomain] Product: %s", event.payload.get('product_id'))
         if os.environ.get("XCAGI_NEURO_UOW_ON_INVENTORY", "").strip().lower() in {
             "1",
             "true",
@@ -54,14 +54,14 @@ class InventoryServiceDomainHandlers:
 
     async def handle_stock_out(self, event: NeuroEvent) -> dict[str, Any]:
         """处理 stock_out 事件"""
-        logger.info(f"[InventoryServiceDomain] 处理 stock_out: {event.payload}")
+        logger.info("[InventoryServiceDomain] 处理 stock_out: %s", event.payload)
         if isinstance(event, InventoryStockOutEvent):
-            logger.info(f"[InventoryServiceDomain] Quantity: {event.payload.get('quantity')}")
+            logger.info("[InventoryServiceDomain] Quantity: %s", event.payload.get('quantity'))
         return {"success": True, "event_type": "inventory.stock_out"}
 
     async def handle_transfer(self, event: NeuroEvent) -> dict[str, Any]:
         """处理 transfer 事件"""
-        logger.info(f"[InventoryServiceDomain] 处理 transfer: {event.payload}")
+        logger.info("[InventoryServiceDomain] 处理 transfer: %s", event.payload)
         if isinstance(event, InventoryTransferEvent):
             logger.info(
                 "[InventoryServiceDomain] origin: %s",
@@ -71,9 +71,9 @@ class InventoryServiceDomainHandlers:
 
     async def handle_check_completed(self, event: NeuroEvent) -> dict[str, Any]:
         """处理 check_completed 事件"""
-        logger.info(f"[InventoryServiceDomain] 处理 check_completed: {event.payload}")
+        logger.info("[InventoryServiceDomain] 处理 check_completed: %s", event.payload)
         if isinstance(event, InventoryCheckCompletedEvent):
-            logger.info(f"[InventoryServiceDomain] Check ID: {event.payload.get('check_id')}")
+            logger.info("[InventoryServiceDomain] Check ID: %s", event.payload.get('check_id'))
         return {"success": True, "event_type": "inventory.check_completed"}
 
 

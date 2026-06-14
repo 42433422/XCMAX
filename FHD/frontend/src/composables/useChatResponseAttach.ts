@@ -1,6 +1,8 @@
 import { type Ref } from 'vue'
 import type { ChatMessage } from './useChatMessages'
 import type { TaskItem } from './useChatPersistence'
+import type { ChatPlannerPayload } from '@/types/chat'
+import { asRecord, asArray, asString } from '@/utils/typeGuards'
 
 export interface UseChatResponseAttachDeps {
   messages: Ref<ChatMessage[]>
@@ -10,15 +12,18 @@ export interface UseChatResponseAttachDeps {
   createTaskId: (prefix: string) => string
 }
 
+function nestedData(data: ChatPlannerPayload): Record<string, unknown> {
+  return asRecord(asRecord(data.data).data)
+}
+
 export function useChatResponseAttach(deps: UseChatResponseAttachDeps) {
   const { messages, lastRequestContextSummary, taskList, upsertTask, createTaskId } = deps
 
-  function attachThinkingStepsToLastAiMessage(data: unknown): void {
-    const thinkingSteps = String(
-      data?.data?.data?.thinking_steps
-      || data?.data?.thinking_steps
-      || data?.thinking_steps
-      || ''
+  function attachThinkingStepsToLastAiMessage(data: ChatPlannerPayload): void {
+    const inner = nestedData(data)
+    const envelope = asRecord(data.data)
+    const thinkingSteps = asString(
+      inner.thinking_steps || envelope.thinking_steps || data.thinking_steps,
     ).trim()
     if (!thinkingSteps) return
 
@@ -41,10 +46,10 @@ export function useChatResponseAttach(deps: UseChatResponseAttachDeps) {
     return ''
   }
 
-  function attachTodoStepsToLastAiMessage(data: unknown): void {
-    const todoRaw = data?.data?.data?.todo
+  function attachTodoStepsToLastAiMessage(data: ChatPlannerPayload): void {
+    const todoRaw = nestedData(data).todo
     if (!Array.isArray(todoRaw) || !todoRaw.length) return
-    const todoSteps = todoRaw.map((x: unknown) => String(x || '').trim()).filter(Boolean)
+    const todoSteps = todoRaw.map((x) => asString(x).trim()).filter(Boolean)
     if (!todoSteps.length) return
 
     for (let i = messages.value.length - 1; i >= 0; i -= 1) {
@@ -56,18 +61,19 @@ export function useChatResponseAttach(deps: UseChatResponseAttachDeps) {
     }
   }
 
-  function attachWorkflowTraceToLastAiMessage(data: unknown): void {
-    const action = String(data?.data?.action || '').trim()
-    const nodeResultsRaw = data?.data?.data?.node_results
-    const nodeResults = Array.isArray(nodeResultsRaw)
-      ? nodeResultsRaw.map((x: unknown) => ({
-        node_id: String(x?.node_id || ''),
-        success: !!x?.success,
-        tool_id: String(x?.tool_id || ''),
-        action: String(x?.action || ''),
-        error: String(x?.error || '')
-      })).filter((x: unknown) => x.node_id)
-      : []
+  function attachWorkflowTraceToLastAiMessage(data: ChatPlannerPayload): void {
+    const envelope = asRecord(data.data)
+    const action = asString(envelope.action).trim()
+    const nodeResultsRaw = nestedData(data).node_results
+    const nodeResults = asArray<Record<string, unknown>>(nodeResultsRaw)
+      .map((x) => ({
+        node_id: asString(x.node_id),
+        success: !!x.success,
+        tool_id: asString(x.tool_id),
+        action: asString(x.action),
+        error: asString(x.error),
+      }))
+      .filter((x) => x.node_id)
     if (!action && !nodeResults.length) return
 
     for (let i = messages.value.length - 1; i >= 0; i -= 1) {
@@ -94,11 +100,12 @@ export function useChatResponseAttach(deps: UseChatResponseAttachDeps) {
     }
   }
 
-  function syncTaskFromChatResponse(resp: unknown, userText: string) {
-    const action = String(resp?.data?.action || '').trim()
+  function syncTaskFromChatResponse(resp: ChatPlannerPayload, userText: string) {
+    const envelope = asRecord(resp.data)
+    const action = asString(envelope.action).trim()
     const messageRef = getLastAiMessageRef()
     if (action === 'workflow_confirmation_required') {
-      const pendingId = String(resp?.data?.data?.pending_workflow_id || createTaskId('wf'))
+      const pendingId = asString(nestedData(resp).pending_workflow_id) || createTaskId('wf')
       upsertTask({
         id: pendingId,
         type: 'workflow',
@@ -133,17 +140,17 @@ export function useChatResponseAttach(deps: UseChatResponseAttachDeps) {
           source: target.source,
           title: target.title,
           status: 'failed',
-          error: String(resp?.message || '工作流执行失败'),
+          error: asString(resp.message) || '工作流执行失败',
           messageRef
         })
       }
       return
     }
-    const nodeResults = Array.isArray(resp?.data?.data?.node_results) ? resp.data.data.node_results : []
+    const nodeResults = asArray<Record<string, unknown>>(nestedData(resp).node_results)
     if (nodeResults.length) {
       const running = taskList.value.find((t) => t.type === 'workflow' && (t.status === 'queued' || t.status === 'running'))
       if (running) {
-        const done = nodeResults.filter((x: unknown) => !!x?.success).length
+        const done = nodeResults.filter((x) => !!x.success).length
         const progress = Math.max(15, Math.floor((done / nodeResults.length) * 100))
         upsertTask({
           id: running.id,

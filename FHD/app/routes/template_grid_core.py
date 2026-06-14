@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Any
+from typing import Any, cast
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -223,7 +223,7 @@ def _extract_structured_excel_preview(
             _extract_structured_excel_preview as _legacy,
         )
 
-        return _legacy(file_path, sheet_name=sheet_name, sample_limit=sample_limit)
+        return cast("dict[str, Any]", _legacy(file_path, sheet_name=sheet_name, sample_limit=sample_limit))
 
     try:
         from openpyxl import load_workbook
@@ -236,7 +236,7 @@ def _extract_structured_excel_preview(
             _extract_structured_excel_preview as _legacy,
         )
 
-        return _legacy(file_path, sheet_name=sheet_name, sample_limit=sample_limit)
+        return cast("dict[str, Any]", _legacy(file_path, sheet_name=sheet_name, sample_limit=sample_limit))
 
     try:
         wb = load_workbook(file_path, data_only=True)

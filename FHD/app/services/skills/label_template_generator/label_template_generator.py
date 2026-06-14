@@ -55,7 +55,7 @@ def analyze_image(image_path: str, verbose: bool = False) -> dict[str, Any]:
     except FileNotFoundError:
         return {"success": False, "message": f"文件不存在：{image_path}"}
     except RECOVERABLE_ERRORS as e:
-        logger.error(f"分析图片失败：{e}")
+        logger.error("分析图片失败：%s", e)
         return {"success": False, "message": f"分析失败：{str(e)}"}
 
 
@@ -172,7 +172,7 @@ def extract_text_with_ocr(image_path: str, use_regions: bool = True) -> dict[str
         horizontal_lines = merge_close_lines(horizontal_lines, threshold=50)
         vertical_lines = merge_close_lines(vertical_lines, threshold=50)
 
-        logger.info(f"检测到网格：{len(horizontal_lines)}条水平线，{len(vertical_lines)}条垂直线")
+        logger.info("检测到网格：%s条水平线，%s条垂直线", len(horizontal_lines), len(vertical_lines))
 
         # 2. OCR 识别（与 /api/ocr 共用 OCRService：默认 PaddleOCR，可回退 EasyOCR）
         from app.services.ocr_service import get_ocr_service
@@ -318,7 +318,7 @@ def extract_text_with_ocr(image_path: str, use_regions: bool = True) -> dict[str
             "fallback_fields": _extract_fields_by_pattern(image_path),
         }
     except RECOVERABLE_ERRORS as e:
-        logger.error(f"OCR 提取失败：{e}")
+        logger.error("OCR 提取失败：%s", e)
         import traceback
 
         traceback.print_exc()
@@ -1345,7 +1345,7 @@ class LabelTemplateGeneratorSkill:
             if enable_ocr:
                 ocr_result = extract_text_with_ocr(image_path)
                 if ocr_result.get("success"):
-                    logger.info(f"OCR 识别成功，提取 {len(ocr_result.get('fields', []))} 个字段")
+                    logger.info("OCR 识别成功，提取 %s 个字段", len(ocr_result.get('fields', [])))
 
             code = generate_template_code(image_path, class_name, ocr_result, verbose)
 
@@ -1362,7 +1362,7 @@ class LabelTemplateGeneratorSkill:
             return result
 
         except RECOVERABLE_ERRORS as e:
-            logger.error(f"生成标签模板失败：{e}")
+            logger.error("生成标签模板失败：%s", e)
             return {"success": False, "message": str(e)}
 
     def get_skill_info(self) -> dict[str, Any]:

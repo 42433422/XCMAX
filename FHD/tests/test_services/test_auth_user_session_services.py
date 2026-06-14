@@ -80,19 +80,12 @@ def test_user_service_create_user_duplicate(mock_get_db):
     assert "已存在" in out["message"]
 
 
-@patch("app.infrastructure.session.session_manager.get_db")
-def test_session_service_validate_expired_deletes(mock_get_db):
-    sess_row = MagicMock()
-    sess_row.expires_at = datetime(2000, 1, 1)
-    sess_row.user = MagicMock()
-
-    mock_db = MagicMock()
-    mock_db.query.return_value.options.return_value.filter.return_value.first.return_value = (
-        sess_row
-    )
-    mock_get_db.return_value = _db_cm(mock_db)
+@patch("app.infrastructure.session.session_manager.get_session_manager")
+def test_session_service_validate_expired_deletes(mock_get_mgr):
+    mgr = MagicMock()
+    mgr.validate_session.return_value = None
+    mock_get_mgr.return_value = mgr
 
     SessionService().validate_session("any-id")
 
-    mock_db.delete.assert_called_once_with(sess_row)
-    mock_db.commit.assert_called()
+    mgr.validate_session.assert_called_once_with("any-id")

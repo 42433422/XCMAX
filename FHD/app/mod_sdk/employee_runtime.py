@@ -38,8 +38,17 @@ def refresh_employee_pack_runtime(pack_id: str | None = None) -> dict[str, Any]:
     except RECOVERABLE_ERRORS:
         logger.warning("refresh_employee_pack_runtime failed pack=%s", pack_id, exc_info=True)
 
+    trigger_status: dict[str, Any] = {}
+    try:
+        from app.application.employee_runtime.triggers import refresh_employee_triggers
+
+        trigger_status = refresh_employee_triggers(pack_id)
+    except RECOVERABLE_ERRORS:
+        logger.debug("refresh_employee_triggers skipped pack=%s", pack_id, exc_info=True)
+
     status = build_employee_tools_status()
     status["routes_reloaded"] = registered
+    status["triggers"] = trigger_status
     tool_count = int(status.get("registered_tool_count") or 0)
     logger.info(
         "employee runtime refreshed pack=%s registered_tools=%s",
@@ -56,6 +65,12 @@ def warm_employee_tool_registry() -> dict[str, Any]:
 
     reg = get_workflow_tool_registry()
     status = build_employee_tools_status()
+    try:
+        from app.application.employee_runtime.triggers import refresh_employee_triggers
+
+        status["triggers"] = refresh_employee_triggers()
+    except RECOVERABLE_ERRORS:
+        logger.debug("warm employee triggers skipped", exc_info=True)
     logger.info(
         "employee tool registry warm scan: %s employee tools in workflow registry (total %s)",
         status.get("registered_tool_count"),

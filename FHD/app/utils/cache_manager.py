@@ -409,7 +409,7 @@ class CacheManager:
         """打印缓存统计"""
         logger.info("=== 缓存统计 ===")
         for name, stats in self.get_stats().items():
-            logger.info(f"  {name}: {stats}")
+            logger.info("  %s: %s", name, stats)
 
 
 _cache_manager: CacheManager | None = None

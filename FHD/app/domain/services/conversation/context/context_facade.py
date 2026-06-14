@@ -138,9 +138,9 @@ class ContextFacade:
             ProcessingResult 处理结果
         """
         logger.info(
-            f"[CONTEXT_FACADE] Processing: user={user_id}, "
-            f"intent={intent_result.primary_intent}, "
-            f"msg={message[:30]}..."
+            "[CONTEXT_FACADE] Processing: user=%s, "
+            f"intent=%s, "
+            f"msg=%s...", user_id, intent_result.primary_intent, message[:30]
         )
 
         is_dup, cached_resp, is_exact = self._chat_context.is_duplicate(
@@ -164,7 +164,7 @@ class ContextFacade:
             )
             self._chat_context.add_turn(user_id, turn)
 
-            logger.info(f"[CONTEXT_FACADE] Duplicate response: user={user_id}")
+            logger.info("[CONTEXT_FACADE] Duplicate response: user=%s", user_id)
             return ProcessingResult(
                 action=ProcessingAction.DUPLICATE_RESPONSE,
                 text=cached_resp,
@@ -565,13 +565,13 @@ class ContextFacade:
                 pending_data = pending.to_dict()
                 notifier.notify_pending_preserved(user_id, pending_data, action)
         except RECOVERABLE_ERRORS as e:
-            logger.warning(f"[CONTEXT_FACADE] Failed to notify preserved: {e}")
+            logger.warning("[CONTEXT_FACADE] Failed to notify preserved: %s", e)
 
     def _get_notifier(self):
         """懒加载获取通知器"""
         if not hasattr(self, "_notifier"):
             try:
-                from app.routes.context_api import get_context_notifier
+                from app.contexts.context_notifier import get_context_notifier
 
                 self._notifier = get_context_notifier()
             except ImportError:

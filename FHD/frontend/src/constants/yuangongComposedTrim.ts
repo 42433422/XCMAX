@@ -1,18 +1,14 @@
 /**
- * 全景「四工位横拼」：在 desk 逻辑画布上裁掉四周透明边，再边对边贴齐。
- * 画布宽高优先使用运行时读到的 `naturalWidth`/`naturalHeight`（见 useYuangongDeskIntrinsicSize），
- * 未加载前回退为下列默认值。更换素材后可微调 TRIM。
- *
- * 高度 100 与素材 desk.png（576×1024 portrait）目视比例更接近——之前 58 让条带过扁，
- * 在全景页表现为「上方/下方一大片黑底，工位挤在顶部」。当 desk.png 放大且超过
- * `COMPOSED_DESK_LAYOUT_MAX_DIM` 时，StitchStage 会回退到这里的 80×100 作为逻辑格。
+ * 全景横拼逻辑格：与 `public/yuangong/desk.svg`（96×64）对齐。
+ * 运行时以 `useYuangongDeskIntrinsicSize` 读到的 natural 尺寸为准。
  */
-export const YUANGONG_CANVAS_W = 80
-export const YUANGONG_CANVAS_H = 100
+export const YUANGONG_CANVAS_W = 96
+export const YUANGONG_CANVAS_H = 64
 
+/** 仅用于高清 PNG 素材裁透明边；SVG 默认不裁 */
 export const YUANGONG_COMPOSED_TRIM = {
-  left: 6,
-  right: 6,
+  left: 0,
+  right: 0,
   top: 0,
   bottom: 0,
 } as const
@@ -22,7 +18,7 @@ export function yuangongComposedBaseSize(): { width: number; height: number } {
   return yuangongComposedBaseSizeFromCanvas(YUANGONG_CANVAS_W, YUANGONG_CANVAS_H)
 }
 
-/** 已知 desk 实际像素尺寸时的裁后可视区域 */
+/** 已知 desk 实际像素尺寸时的逻辑格（与素材宽高比一致，contain 时不留左右黑边） */
 export function yuangongComposedBaseSizeFromCanvas(canvasW: number, canvasH: number): { width: number; height: number } {
   const t = YUANGONG_COMPOSED_TRIM
   return {

@@ -9,6 +9,7 @@ import {
   buildChatMessagesKey,
   buildChatSessionMetaKey,
 } from '@/utils/chatStorageKeys'
+import { asRecord, asArray, asString, asBoolean, asDisposable } from '@/utils/typeGuards'
 
 const WELCOME_MESSAGE_PREFIX = '您好！我是您的'
 
@@ -197,13 +198,15 @@ export function useChatMessages(sessionId: Ref<string>) {
   function sanitizeMessagesList(rawList: unknown[]): ChatMessage[] {
     return (Array.isArray(rawList) ? rawList : [])
       .map((msg: unknown) => {
-        const role = (msg?.role === 'user' || msg?.role === 'task') ? msg.role : 'ai'
-        const content = String(msg?.content || '')
+        const row = asRecord(msg)
+        const roleRaw = asString(row.role)
+        const role = (roleRaw === 'user' || roleRaw === 'task') ? roleRaw : 'ai'
+        const content = asString(row.content)
         if (!hasMeaningfulContent(content)) return null
         return {
           role,
           content,
-          time: String(msg?.time || '').trim()
+          time: asString(row.time).trim()
             || new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
         } as ChatMessage
       })
@@ -301,14 +304,19 @@ export function useChatMessages(sessionId: Ref<string>) {
       const sid = String(sessionId.value || '').trim()
       if (!sid) return false
       const data = await chatApi.getConversation(sid)
-      const serverMessages = Array.isArray((data as unknown)?.messages) ? (data as unknown).messages : []
+      const dataRow = asRecord(data)
+      const serverMessages = asArray(dataRow.messages)
       if (!serverMessages.length) return false
 
-      const mapped: ChatMessage[] = serverMessages.map((msg: unknown) => ({
-        role: (msg?.role === 'user' || msg?.role === 'task') ? msg.role : 'ai',
-        content: normalizeServerContentToHtml(msg?.content),
-        time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-      }))
+      const mapped: ChatMessage[] = serverMessages.map((msg: unknown) => {
+        const row = asRecord(msg)
+        const roleRaw = asString(row.role)
+        return {
+          role: (roleRaw === 'user' || roleRaw === 'task') ? roleRaw : 'ai',
+          content: normalizeServerContentToHtml(row.content),
+          time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
+        }
+      })
       const sanitized = sanitizeMessagesList(mapped)
       if (!sanitized.length) return false
       loadMessages(sanitized)

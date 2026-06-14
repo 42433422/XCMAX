@@ -595,6 +595,7 @@ import MobilePairingQrCard from '@/components/settings/MobilePairingQrCard.vue';
 import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl';
 import adminAuditApi, { type AuditLogEntry } from '@/api/adminAudit';
 import { setAppLocale } from '@/i18n';
+import { asRecord, asArray, asString, asBoolean, asDisposable } from '@/utils/typeGuards'
 
 const { t, locale } = useI18n();
 const appLocale = ref<'zh-CN' | 'en-US'>((locale.value === 'en-US' ? 'en-US' : 'zh-CN'));
@@ -990,8 +991,7 @@ async function onLogout() {
     accountProfileStore.clear();
     localUser.value = null;
     sessionValid.value = false;
-    await appAlert('已退出登录');
-    window.location.reload();
+    await router.replace({ name: 'login', query: { redirect: '/' } });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     await appAlert(`退出失败：${msg}`);
@@ -1328,9 +1328,10 @@ async function loadCurrentIndustryDetail() {
       // 主单位优先采用 active mod 的 manifest.industry.units.primary —— 让"切 mod"
       // 在后端尚未对齐前也能立刻把主单位切对。
       const fromMod = activeModIndustry.value?.units?.primary;
+      const units = asRecord(response.data).units as Record<string, unknown> | undefined
       currentIndustryUnit.value =
         (typeof fromMod === 'string' && fromMod.trim()) ||
-        response.data?.units?.primary ||
+        asString(units?.primary) ||
         '天';
       updateIndustryKeywords();
     }
@@ -1350,7 +1351,7 @@ function updateIndustryKeywords() {
   // 没有 mod 或 mod 未声明 intent_keywords 时回到 industryStore.currentConfig。
   const modKw = activeModIndustry.value?.intent_keywords;
   const config = industryStore.currentConfig;
-  const kw = (modKw && typeof modKw === 'object' ? modKw : (config && config.intent_keywords)) as IntentKeywordMap | undefined;
+  const kw = (modKw && typeof modKw === 'object' ? modKw : asRecord(config).intent_keywords) as IntentKeywordMap | undefined;
   if (!kw || typeof kw !== 'object') return;
   const keywords: string[] = [];
   if (kw.create_order) {

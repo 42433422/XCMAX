@@ -1,35 +1,72 @@
 <template>
-  <div class="page-view panorama-view" id="view-yuangong-stitch-full">
-    <div class="page-content panorama">
-      <header class="panorama-head">
-        <div class="panorama-head-row">
-          <router-link :to="{ name: 'workflow-employee-space' }" class="panorama-btn">
+  <div class="page-view" id="view-yuangong-stitch-full">
+    <div class="page-content psf">
+      <header class="psf-head">
+        <div class="psf-head-row">
+          <router-link :to="{ name: 'workflow-employee-space' }" class="psf-link-btn">
             返回员工空间
           </router-link>
           <router-link
             v-if="showWorkflowPanoramaNav"
             :to="workflowVisualizationLocation"
-            class="panorama-btn"
+            class="psf-link-btn psf-link-btn--ghost"
           >
             流程全景说明
           </router-link>
         </div>
-        <h2 class="panorama-title">员工工作流全景</h2>
-        <p class="panorama-sub">
-          左侧为四工位像素横向无缝拼接（无格缝），与右侧开关、快照一致。中键拖移、工具栏缩放。
-        </p>
+        <div class="psf-head-text">
+          <h2 class="psf-title">员工工作流全景</h2>
+          <p class="psf-sub">
+            企业端<strong class="psf-sub-em">四部门节点图</strong>：员工归属「行业通用 + 定制」组成的企业 Mod，上岗后进入该栈下的工具 / 执行 / 服务 / 管理四部门。
+          </p>
+        </div>
       </header>
 
-      <div class="panorama-device" role="region" aria-label="员工工作流全景画框">
-        <div class="panorama-body" :style="panoramaPaneStyle">
-          <div class="panorama-stage">
-            <StitchStage
-              mode="composed"
-              image-src=""
+      <div class="psf-stats" role="list" aria-label="工位概要">
+        <div class="psf-stat" role="listitem">
+          <p class="psf-stat-k">总工位</p>
+          <p class="psf-stat-v">{{ totalCount }}</p>
+          <p class="psf-stat-sub">已上岗 AI 员工（企业 Mod 栈内）</p>
+        </div>
+        <div class="psf-stat" role="listitem">
+          <p class="psf-stat-k">已托管</p>
+          <p class="psf-stat-v psf-stat-v--ok">{{ enabledCount }}</p>
+          <p class="psf-stat-sub">副窗「一键托管」开</p>
+        </div>
+        <div class="psf-stat" role="listitem">
+          <p class="psf-stat-k">工作中</p>
+          <p class="psf-stat-v psf-stat-v--busy">{{ busyCount }}</p>
+          <p class="psf-stat-sub">最近活跃 · 视觉忙态</p>
+        </div>
+        <div class="psf-stat" role="listitem">
+          <p class="psf-stat-k">待命</p>
+          <p class="psf-stat-v psf-stat-v--idle">{{ idleEnabledCount }}</p>
+          <p class="psf-stat-sub">已托管但暂无忙态</p>
+        </div>
+      </div>
+
+      <section
+        class="psf-monitor"
+        role="region"
+        aria-labelledby="psf-monitor-h"
+        :style="panoramaPaneStyle"
+      >
+        <div class="psf-monitor-head">
+          <div>
+            <h3 id="psf-monitor-h" class="psf-monitor-title">四部门节点图</h3>
+            <p class="psf-monitor-desc">
+              四栏为四部门；横幅展示当前企业 Mod（行业包 + 定制 Mod）。AI 市场安装的员工自动挂靠该栈并上岗。绿点=已托管、蓝点=忙。
+            </p>
+          </div>
+        </div>
+
+        <div class="psf-layout">
+          <div class="psf-stage-wrap">
+            <EnterpriseEstablishmentGraph
+              :desks="panoramaDesks"
               :selected-emp-id="selectedEmpId"
-              :hotspots="EMPTY_HOTSPOTS"
-              :desks="onDutyDesks"
-              :resolve-station-aria-label="stationReaderLabel"
+              :is-busy="isBusy"
+              :enterprise-stack-label="enterpriseStackLabel"
               @select="onSelectEmp"
             />
             <PaneResizeHandle
@@ -40,37 +77,79 @@
               @reset="resetPanoramaPaneWidth"
             />
           </div>
-          <div v-if="isPanoramaPaneResizable" class="panorama-divider" aria-hidden="true" />
           <WorkflowEmployeeInspector
             v-model:selected-emp-id="selectedEmpId"
-            :desks="onDutyDesks"
-            :pixel-skin="true"
+            :desks="panoramaDesks"
+            hide-workspace-link
           />
         </div>
-      </div>
+      </section>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import PaneResizeHandle from '@/components/PaneResizeHandle.vue'
 import { useResizablePane } from '@/composables/useResizablePane'
-import StitchStage from '@/components/workflow/StitchStage.vue'
+import EnterpriseEstablishmentGraph from '@/components/workflow/EnterpriseEstablishmentGraph.vue'
 import WorkflowEmployeeInspector from '@/components/workflow/WorkflowEmployeeInspector.vue'
-import { useWorkflowEmployeeDesks } from '@/composables/useWorkflowEmployeeDesks'
-import type { YuangongStitchHotspot } from '@/constants/yuangongStitchHotspots'
+import {
+  useWorkflowEmployeeDesks,
+  type WorkflowEmployeeDeskRow,
+} from '@/composables/useWorkflowEmployeeDesks'
 import { resolveWorkflowVisualizationLocation } from '@/utils/workflowNav'
 import { useWorkflowPanoramaNavVisible } from '@/composables/useWorkflowPanoramaNavVisible'
+import {
+  employeeBelongsToEnterpriseStack,
+  isWorkflowCarrierModId,
+  type EnterpriseModStack,
+} from '@/constants/enterpriseModStack'
+import { isHostBridgeModId } from '@/constants/genericModPack'
+import { resolveEnterpriseModStack } from '@/utils/enterpriseModStackApi'
 
 const workflowVisualizationLocation = resolveWorkflowVisualizationLocation()
 const { showWorkflowPanoramaNav } = useWorkflowPanoramaNavVisible()
-const EMPTY_HOTSPOTS: YuangongStitchHotspot[] = []
 const PANORAMA_LAYOUT_MQ = '(max-width: 960px)'
 
-const { desks, onDutyDesks, ariaLabel } = useWorkflowEmployeeDesks()
+const enterpriseStack = ref<EnterpriseModStack | null>(null)
+const enterpriseStackLabel = computed(() => enterpriseStack.value?.stackLabel || '')
+
+const { desks, isBusy } = useWorkflowEmployeeDesks()
+
+const panoramaDesks = computed<WorkflowEmployeeDeskRow[]>(() => {
+  const stack = enterpriseStack.value
+  return desks.value.filter((d) => {
+    const host = d.hostModId
+    if (!host) return false
+    if (stack) return employeeBelongsToEnterpriseStack(host, stack)
+    return isWorkflowCarrierModId(host) || isHostBridgeModId(host)
+  })
+})
 
 const selectedEmpId = ref<string | null>(null)
+
+const totalCount = computed(() => panoramaDesks.value.length)
+const enabledCount = computed(() => panoramaDesks.value.filter((d) => d.enabled).length)
+const busyCount = computed(() => panoramaDesks.value.filter((d) => isBusy(d)).length)
+const idleEnabledCount = computed(() => Math.max(0, enabledCount.value - busyCount.value))
+
+watch(
+  () => panoramaDesks.value.map((d) => d.empId).join('\0'),
+  () => {
+    const list = panoramaDesks.value
+    if (!list.length) {
+      selectedEmpId.value = null
+      return
+    }
+    const cur = selectedEmpId.value
+    if (!cur || !list.some((d) => d.empId === cur)) {
+      selectedEmpId.value = list[0].empId
+    }
+  },
+  { immediate: true },
+)
+
 const isPanoramaPaneResizable = ref(true)
 let panoramaPaneViewportMedia: MediaQueryList | null = null
 
@@ -81,22 +160,17 @@ const {
   stopResize: stopPanoramaPaneResize,
 } = useResizablePane({
   paneKey: 'workflow.panorama-inspector',
-  cssVarName: '--panorama-inspector-width',
+  cssVarName: '--psf-inspector-width',
   orientation: 'vertical',
   invertDelta: true,
-  defaultSize: 340,
+  defaultSize: 300,
   minSize: 240,
-  maxSize: 520,
+  maxSize: 420,
   enabled: () => isPanoramaPaneResizable.value,
 })
 
 function onSelectEmp(empId: string) {
   selectedEmpId.value = empId
-}
-
-function stationReaderLabel(empId: string): string {
-  const row = onDutyDesks.value.find((d) => d.empId === empId)
-  return row ? ariaLabel(row) : `员工 ${empId}`
 }
 
 function onPanoramaPaneViewportChange(event: MediaQueryList | MediaQueryListEvent): void {
@@ -107,6 +181,9 @@ function onPanoramaPaneViewportChange(event: MediaQueryList | MediaQueryListEven
 }
 
 onMounted(() => {
+  void resolveEnterpriseModStack().then((stack) => {
+    enterpriseStack.value = stack
+  })
   panoramaPaneViewportMedia = window.matchMedia(PANORAMA_LAYOUT_MQ)
   onPanoramaPaneViewportChange(panoramaPaneViewportMedia)
   if (typeof panoramaPaneViewportMedia.addEventListener === 'function') {
@@ -128,143 +205,195 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
-
-.panorama-view {
-  background: radial-gradient(ellipse at top, #1e293b 0%, #0f172a 55%, #020617 100%);
-}
-
-.panorama {
-  max-width: 100%;
+.psf {
   display: flex;
   flex-direction: column;
   gap: 14px;
   min-height: min(calc(100dvh - 96px), 1200px);
+  --psf-inspector-width: 300px;
 }
 
-.panorama-head {
-  margin-bottom: 0;
-}
-
-.panorama-head-row {
+.psf-head-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
-  margin-bottom: 10px;
+  gap: 8px;
+  margin-bottom: 12px;
 }
 
-.panorama-btn {
-  display: inline-block;
-  padding: 10px 12px;
-  border: 3px solid #64748b;
-  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.35), 3px 3px 0 rgba(0, 0, 0, 0.35);
-  background: #334155;
-  color: #f8fafc;
-  font-family: 'Press Start 2P', ui-monospace, monospace;
-  font-size: 7px;
-  line-height: 1.6;
-  letter-spacing: 0.03em;
+.psf-link-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 7px 12px;
+  border-radius: 8px;
+  border: 1px solid #d1d5db;
+  background: #fff;
+  color: #374151;
+  font-size: 13px;
+  font-weight: 600;
   text-decoration: none;
-  image-rendering: pixelated;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
-.panorama-btn:hover {
-  background: #475569;
-  color: #fff;
+.psf-link-btn:hover {
+  background: #f3f4f6;
+  border-color: #cbd5e1;
+  color: #111827;
 }
 
-.panorama-title {
-  margin: 0 0 8px;
-  font-family: 'Press Start 2P', ui-monospace, monospace;
+.psf-link-btn--ghost {
+  background: transparent;
+  border-color: #e5e7eb;
+  color: #6b7280;
+}
+
+.psf-link-btn--ghost:hover {
+  background: #f9fafb;
+  color: #374151;
+}
+
+.psf-title {
+  margin: 0 0 6px;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.psf-sub {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #64748b;
+  max-width: 56rem;
+}
+
+.psf-sub-em {
+  font-weight: 700;
+  color: #334155;
+  font-style: normal;
+}
+
+.psf-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+@media (max-width: 880px) {
+  .psf-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.psf-stat {
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+  background: #fff;
+}
+
+.psf-stat-k {
+  margin: 0;
   font-size: 12px;
-  line-height: 1.6;
-  letter-spacing: 0.04em;
-  color: #f1f5f9;
-  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.45);
+  font-weight: 600;
+  color: #6b7280;
 }
 
-.panorama-sub {
+.psf-stat-v {
+  margin: 4px 0 2px;
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1.2;
+  color: #111827;
+  font-variant-numeric: tabular-nums;
+}
+
+.psf-stat-v--ok {
+  color: #059669;
+}
+
+.psf-stat-v--busy {
+  color: #2563eb;
+}
+
+.psf-stat-v--idle {
+  color: #7c3aed;
+}
+
+.psf-stat-sub {
   margin: 0;
   font-size: 11px;
-  line-height: 1.55;
-  color: #94a3b8;
-  max-width: 52rem;
+  line-height: 1.45;
+  color: #9ca3af;
 }
 
-.panorama-device {
+.psf-monitor {
   flex: 1;
   display: flex;
   flex-direction: column;
   min-height: 0;
-  border: 4px solid #475569;
-  box-shadow:
-    inset 0 0 0 2px #0f172a,
-    6px 6px 0 rgba(0, 0, 0, 0.35);
-  background: #0f172a;
+  padding: 14px 14px 16px;
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+  background: linear-gradient(180deg, #f9fafb 0%, #fff 55%);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04);
 }
 
-.panorama-body {
+.psf-monitor-head {
+  margin-bottom: 12px;
+}
+
+.psf-monitor-title {
+  margin: 0 0 4px;
+  font-size: 15px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.psf-monitor-desc {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.55;
+  color: #6b7280;
+  max-width: 56rem;
+}
+
+.psf-layout {
   flex: 1;
-  display: flex;
-  gap: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--psf-inspector-width);
+  gap: 14px;
   align-items: stretch;
-  min-height: min(calc(100dvh - 220px), 860px);
+  min-height: min(calc(100dvh - 320px), 720px);
   min-width: 0;
-  --panorama-inspector-width: 340px;
 }
 
 @media (max-width: 960px) {
-  .panorama-body {
-    flex-direction: column;
+  .psf-layout {
+    grid-template-columns: 1fr;
     min-height: 0;
   }
-
-  .panorama-divider {
-    min-height: 6px;
-    width: 100% !important;
-    background: repeating-linear-gradient(
-      90deg,
-      #334155 0,
-      #334155 4px,
-      #1e293b 4px,
-      #1e293b 8px
-    ) !important;
-  }
 }
 
-.panorama-stage {
+.psf-stage-wrap {
   position: relative;
-  flex: 1 1 auto;
   display: flex;
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  padding: 10px 8px 10px 10px;
 }
 
-.panorama-divider {
-  width: 6px;
-  background: repeating-linear-gradient(
-    180deg,
-    #334155 0,
-    #334155 4px,
-    #1e293b 4px,
-    #1e293b 8px
-  );
-  box-shadow: inset 2px 0 0 #0f172a, inset -2px 0 0 #0f172a;
-}
-
-.panorama-body > :deep(.wfe-inspector--pixel) {
-  flex: 0 0 var(--panorama-inspector-width);
-  width: var(--panorama-inspector-width);
-  margin: 10px 10px 10px 0;
+.psf-layout > :deep(.wfe-inspector) {
   min-height: 0;
+  max-height: none;
+}
+
+.psf-layout > :deep(.wfe-inspector-list) {
+  max-height: min(58vh, 640px);
 }
 
 @media (max-width: 960px) {
-  .panorama-body > :deep(.wfe-inspector--pixel) {
-    width: 100%;
-    margin: 0 10px 10px;
+  .psf-layout > :deep(.wfe-inspector-list) {
+    max-height: min(42vh, 480px);
   }
 }
 </style>

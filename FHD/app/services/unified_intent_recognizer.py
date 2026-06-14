@@ -108,7 +108,7 @@ class UnifiedIntentRecognizer:
                 logger.info("蒸馏模型不可用")
                 self._distilled_recognizer = None
         except RECOVERABLE_ERRORS as e:
-            logger.warning(f"蒸馏模型加载失败: {e}")
+            logger.warning("蒸馏模型加载失败: %s", e)
             self._distilled_recognizer = None
 
         try:
@@ -126,12 +126,12 @@ class UnifiedIntentRecognizer:
             )
 
             if os.path.exists(distillation_model_path):
-                logger.info(f"发现本地蒸馏模型：{distillation_model_path}")
+                logger.info("发现本地蒸馏模型：%s", distillation_model_path)
                 self._bert_recognizer = BertIntentClassifier(
                     model_path=distillation_model_path, local_files_only=True
                 )
             elif os.path.exists(chinese_bert_path):
-                logger.info(f"发现 chinese-bert-wwm-ext 模型：{chinese_bert_path}")
+                logger.info("发现 chinese-bert-wwm-ext 模型：%s", chinese_bert_path)
                 self._bert_recognizer = BertIntentClassifier(
                     model_path=chinese_bert_path, local_files_only=True
                 )
@@ -146,7 +146,7 @@ class UnifiedIntentRecognizer:
                 logger.warning("BERT识别器不可用")
                 self._bert_recognizer = None
         except RECOVERABLE_ERRORS as e:
-            logger.warning(f"BERT识别器加载失败: {e}")
+            logger.warning("BERT识别器加载失败: %s", e)
             self._bert_recognizer = None
 
         try:
@@ -155,7 +155,7 @@ class UnifiedIntentRecognizer:
             self._deepseek_recognizer = DeepSeekIntentRecognizer()
             logger.info("DeepSeek识别器已加载")
         except RECOVERABLE_ERRORS as e:
-            logger.warning(f"DeepSeek识别器加载失败: {e}")
+            logger.warning("DeepSeek识别器加载失败: %s", e)
             self._deepseek_recognizer = None
 
         try:
@@ -164,7 +164,7 @@ class UnifiedIntentRecognizer:
             self._rasa_service = RasaNLUService()
             logger.info("RASA NLU已加载")
         except RECOVERABLE_ERRORS as e:
-            logger.warning(f"RASA NLU加载失败: {e}")
+            logger.warning("RASA NLU加载失败: %s", e)
             self._rasa_service = None
 
         try:
@@ -173,7 +173,7 @@ class UnifiedIntentRecognizer:
             self._hybrid_service = HybridIntentService()
             logger.info("混合意图服务已加载")
         except RECOVERABLE_ERRORS as e:
-            logger.warning(f"混合意图服务加载失败: {e}")
+            logger.warning("混合意图服务加载失败: %s", e)
             self._hybrid_service = None
 
     def recognize(
@@ -206,7 +206,7 @@ class UnifiedIntentRecognizer:
                     sources_used.append("quick")
                     context_used = quick_result.get("context_inherited", False)
                     logger.info(
-                        f"[CONTEXT] quick_recognize hit: intent={quick_result.get('primary_intent')}, context_used={context_used}"
+                        "[CONTEXT] quick_recognize hit: intent=%s, context_used=%s", quick_result.get('primary_intent'), context_used
                     )
                     return RecognizerResult(
                         primary_intent=quick_result.get("primary_intent"),
@@ -230,7 +230,7 @@ class UnifiedIntentRecognizer:
                         raw_results={"quick_result": quick_result},
                     )
         except RECOVERABLE_ERRORS as e:
-            logger.warning(f"快速识别失败: {e}")
+            logger.warning("快速识别失败: %s", e)
 
         rule_result = self._recognize_rule(message)
         if rule_result:
@@ -333,7 +333,7 @@ class UnifiedIntentRecognizer:
                 }
 
         except RECOVERABLE_ERRORS as e:
-            logger.warning(f"上下文识别失败: {e}")
+            logger.warning("上下文识别失败: %s", e)
 
         return None
 
@@ -344,7 +344,7 @@ class UnifiedIntentRecognizer:
 
             return recognize_intents(message)
         except RECOVERABLE_ERRORS as e:
-            logger.error(f"规则识别失败: {e}")
+            logger.error("规则识别失败: %s", e)
             return None
 
     def _recognize_distilled(self, message: str) -> dict[str, Any] | None:
@@ -362,7 +362,7 @@ class UnifiedIntentRecognizer:
                 }
             return None
         except RECOVERABLE_ERRORS as e:
-            logger.error(f"蒸馏模型识别失败: {e}")
+            logger.error("蒸馏模型识别失败: %s", e)
             return None
 
     def _recognize_bert(self, message: str) -> dict[str, Any] | None:
@@ -380,7 +380,7 @@ class UnifiedIntentRecognizer:
                 }
             return None
         except RECOVERABLE_ERRORS as e:
-            logger.error(f"BERT识别失败: {e}")
+            logger.error("BERT识别失败: %s", e)
             return None
 
     def _recognize_deepseek(
@@ -409,7 +409,7 @@ class UnifiedIntentRecognizer:
                 }
             return None
         except RECOVERABLE_ERRORS as e:
-            logger.error(f"DeepSeek识别失败: {e}")
+            logger.error("DeepSeek识别失败: %s", e)
             return None
 
     def _merge_results(

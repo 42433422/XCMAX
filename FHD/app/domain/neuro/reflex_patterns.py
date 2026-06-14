@@ -140,7 +140,7 @@ class ReflexPatternMatcher:
                     pattern = re.compile(rule.pattern, re.IGNORECASE | re.UNICODE)
                     compiled.append((pattern, rule.weight))
                 except re.error as e:
-                    logger.error(f"Failed to compile pattern {rule.pattern}: {e}")
+                    logger.error("Failed to compile pattern %s: %s", rule.pattern, e)
 
             self._pattern_groups[reflex_type] = compiled
 
@@ -200,11 +200,11 @@ class ReflexPatternMatcher:
                 self._pattern_groups[reflex_type] = []
 
             self._pattern_groups[reflex_type].append((compiled, weight))
-            logger.info(f"Added custom pattern for {reflex_type}: {pattern}")
+            logger.info("Added custom pattern for %s: %s", reflex_type, pattern)
             return True
 
         except re.error as e:
-            logger.error(f"Invalid pattern {pattern}: {e}")
+            logger.error("Invalid pattern %s: %s", pattern, e)
             return False
 
 

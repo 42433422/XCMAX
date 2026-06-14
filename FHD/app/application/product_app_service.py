@@ -5,7 +5,7 @@
 """
 
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Optional, cast
 
 if TYPE_CHECKING:
     from app.services import PrinterService, ProductsService
@@ -179,7 +179,7 @@ class ProductApplicationService:
         if result.get("success"):
             self._log_action("import_products", count=result.get("count", 0), unit_name=unit_name)
 
-        return result
+        return cast("dict[str, Any]", result)
 
     def get_product_labels(
         self, product_id: int, quantity: int = 1, label_type: str = "default"
@@ -235,7 +235,7 @@ class ProductApplicationService:
 
         label_data = label_result.get("data")
 
-        return self._printer_service.print_labels([label_data])
+        return cast("dict[str, Any]", self._printer_service.print_labels([label_data]))
 
     def search_products(
         self, keyword: str, filters: dict[str, Any] | None = None

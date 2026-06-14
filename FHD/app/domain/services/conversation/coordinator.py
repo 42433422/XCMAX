@@ -163,7 +163,7 @@ class UnifiedConversationCoordinator:
         3. 验证槽位
         4. 缺失 → 追问，完整 → 执行
         """
-        logger.info(f"[COORDINATOR] Processing: user={user_id}, msg={message[:50]}")
+        logger.info("[COORDINATOR] Processing: user=%s, msg=%s", user_id, message[:50])
 
         pending = self._get_pending(user_id)
 
@@ -251,7 +251,7 @@ class UnifiedConversationCoordinator:
         self, user_id: str, message: str, pending: PendingIntent
     ) -> ProcessingResult:
         """处理确认意图"""
-        logger.info(f"[COORDINATOR] User confirmed: user={user_id}, intent={pending.intent}")
+        logger.info("[COORDINATOR] User confirmed: user=%s, intent=%s", user_id, pending.intent)
 
         result = self._execute_plan(pending.intent, pending.slots)
 
@@ -308,7 +308,7 @@ class UnifiedConversationCoordinator:
         self, user_id: str, message: str, intent_result: IntentResult, pending: PendingIntent
     ) -> ProcessingResult:
         """处理 pending 任务的续接"""
-        logger.info(f"[COORDINATOR] Pending continuation: user={user_id}, pending={pending.intent}")
+        logger.info("[COORDINATOR] Pending continuation: user=%s, pending=%s", user_id, pending.intent)
 
         merged = pending.merge_slots(intent_result.slots)
 

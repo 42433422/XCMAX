@@ -28,7 +28,10 @@ EXPECTED_PLATFORM_MODS = (
 )
 
 
-@pytest.mark.parametrize("mod_id", ("attendance-industry", "coating-industry"))
+@pytest.mark.parametrize(
+    "mod_id",
+    ("attendance-industry", "coating-industry", "taiyangniao-pro", "sz-qsm-pro"),
+)
 def test_protected_industry_mod_present(mod_id: str) -> None:
     p = MODS_ROOT / mod_id
     assert (p / "manifest.json").is_file(), f"protected mod missing manifest: {mod_id}"

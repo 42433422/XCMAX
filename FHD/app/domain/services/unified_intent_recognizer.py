@@ -9,7 +9,7 @@
 
 import logging
 import os
-from typing import Any
+from typing import Any, cast
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -53,14 +53,14 @@ class UnifiedIntentRecognizer:
             try:
                 from app.ai_engines.bert.intent_service import BertIntentClassifier
             except RECOVERABLE_ERRORS:
-                from app.services.bert_intent_service import BertIntentClassifier  # type: ignore
+                from app.services.bert_intent_service import BertIntentClassifier
             self.bert_recognizer = BertIntentClassifier()
             loader = getattr(self.bert_recognizer, "load_model", None)
             if callable(loader):
                 loader()
             logger.info("BERT识别器已加载")
         except RECOVERABLE_ERRORS as e:
-            logger.warning(f"BERT识别器加载失败：{e}")
+            logger.warning("BERT识别器加载失败：%s", e)
             self._engine_errors["bert"] = str(e)
 
         try:
@@ -68,13 +68,13 @@ class UnifiedIntentRecognizer:
             # 直接 import DistilledIntentClassifier 会失败；这里做兼容。
             try:
                 from app.services.distilled_intent_service import (
-                    get_distilled_recognizer,  # type: ignore
+                    get_distilled_recognizer,
                 )
 
                 self.distilled_recognizer = get_distilled_recognizer()
             except RECOVERABLE_ERRORS:
                 from app.services.distilled_intent_service import (
-                    DistilledIntentClassifier,  # type: ignore
+                    DistilledIntentClassifier,
                 )
 
                 self.distilled_recognizer = DistilledIntentClassifier()
@@ -83,18 +83,18 @@ class UnifiedIntentRecognizer:
                     loader()
             logger.info("蒸馏模型识别器已加载")
         except RECOVERABLE_ERRORS as e:
-            logger.warning(f"蒸馏模型加载失败：{e}")
+            logger.warning("蒸馏模型加载失败：%s", e)
             self._engine_errors["distilled"] = str(e)
 
         try:
             # 兼容两套命名：ai_engines 用 DeepseekIntentClassifier；services 用 DeepSeekIntentRecognizer。
             try:
                 from app.ai_engines.deepseek.intent_service import (
-                    DeepseekIntentClassifier as _DeepseekImpl,  # type: ignore
+                    DeepseekIntentClassifier as _DeepseekImpl,
                 )
             except RECOVERABLE_ERRORS:
                 from app.services.deepseek_intent_service import (
-                    DeepSeekIntentRecognizer as _DeepseekImpl,  # type: ignore
+                    DeepSeekIntentRecognizer as _DeepseekImpl,
                 )
             self.deepseek_recognizer = _DeepseekImpl()
             loader = getattr(self.deepseek_recognizer, "load_model", None)
@@ -102,7 +102,7 @@ class UnifiedIntentRecognizer:
                 loader()
             logger.info("DeepSeek识别器已加载")
         except RECOVERABLE_ERRORS as e:
-            logger.warning(f"DeepSeek识别器加载失败：{e}")
+            logger.warning("DeepSeek识别器加载失败：%s", e)
             self._engine_errors["deepseek"] = str(e)
 
         try:
@@ -110,12 +110,12 @@ class UnifiedIntentRecognizer:
             try:
                 from app.ai_engines.rasa.nlu_service import RasaNLUService
             except RECOVERABLE_ERRORS:
-                from app.services.rasa_nlu_service import RasaNLUService  # type: ignore
+                from app.services.rasa_nlu_service import RasaNLUService
             self.rasa_recognizer = RasaNLUService()
             self.rasa_recognizer.load_model()
             logger.info("RASA NLU已加载")
         except RECOVERABLE_ERRORS as e:
-            logger.warning(f"RASA NLU加载失败：{e}")
+            logger.warning("RASA NLU加载失败：%s", e)
             self._engine_errors["rasa"] = str(e)
 
         self._initialized = True
@@ -152,18 +152,18 @@ class UnifiedIntentRecognizer:
                 result = self.distilled_recognizer.predict(text)
                 if result.get("confidence", 0) > 0.7:
                     result["source"] = "distilled"
-                    return result
+                    return cast("dict[str, Any]", result)
             except RECOVERABLE_ERRORS as e:
-                logger.warning(f"蒸馏模型预测失败：{e}")
+                logger.warning("蒸馏模型预测失败：%s", e)
 
         if self.bert_recognizer:
             try:
                 result = self.bert_recognizer.predict(text)
                 if result.get("confidence", 0) > 0.7:
                     result["source"] = "bert"
-                    return result
+                    return cast("dict[str, Any]", result)
             except RECOVERABLE_ERRORS as e:
-                logger.warning(f"BERT预测失败：{e}")
+                logger.warning("BERT预测失败：%s", e)
 
         if self.rasa_recognizer and _env_flag("ENABLE_RASA", "1"):
             try:
@@ -180,7 +180,7 @@ class UnifiedIntentRecognizer:
                         "source": "rasa",
                     }
             except RECOVERABLE_ERRORS as e:
-                logger.warning(f"RASA 预测失败：{e}")
+                logger.warning("RASA 预测失败：%s", e)
 
         if self.deepseek_recognizer:
             try:
@@ -194,7 +194,7 @@ class UnifiedIntentRecognizer:
                         result["source"] = result.get("source") or "deepseek"
                         return result
             except RECOVERABLE_ERRORS as e:
-                logger.warning(f"DeepSeek 预测失败：{e}")
+                logger.warning("DeepSeek 预测失败：%s", e)
 
         return {"intent": "unk", "confidence": 0.0, "source": "unified"}
 
@@ -207,7 +207,7 @@ class UnifiedIntentRecognizer:
             except RECOVERABLE_ERRORS as e:
                 logger.debug("UnifiedIntentRecognizer.load() 失败：%s", e)
         # 规则层始终可用；只要这里完成初始化即 ready。
-        return self._initialized
+        return cast("bool", self._initialized)
 
     def get_engine_status(self) -> dict[str, Any]:
         """返回各子识别器的可用状态，供诊断/健康端点使用。"""

@@ -13,8 +13,12 @@ def test_feature_vector_length():
 
 def test_policy_predict_with_in_memory_model():
     """无需 policy_v0.pt：用内存 MLP 验证 predict_action_index 行为。"""
-    torch = pytest.importorskip("torch")
     import app.neuro_bus.routing.policy_nn as policy_nn
+
+    torch_mod = policy_nn.torch
+    if torch_mod is None or not hasattr(torch_mod, "Tensor"):
+        pytest.skip("PyTorch not available")
+
     from app.neuro_bus.routing.policy_nn import RoutingMLP
 
     model = RoutingMLP()

@@ -101,7 +101,7 @@ class ConversationService(NeuroEventPublisherMixin):
                 return conversation.id
             except RECOVERABLE_ERRORS as e:
                 db.rollback()
-                logger.error(f"保存对话消息失败: {e}")
+                logger.error("保存对话消息失败: %s", e)
                 raise
 
     def get_session_messages(self, session_id: str, limit: int = 50) -> list[tuple]:
@@ -141,7 +141,7 @@ class ConversationService(NeuroEventPublisherMixin):
                     )
                 return result
             except RECOVERABLE_ERRORS as e:
-                logger.error(f"获取会话消息失败: {e}")
+                logger.error("获取会话消息失败: %s", e)
                 raise
 
     def get_sessions(self, user_id: str | None = None, limit: int = 20) -> list[tuple]:
@@ -185,7 +185,7 @@ class ConversationService(NeuroEventPublisherMixin):
                     )
                 return result
             except RECOVERABLE_ERRORS as e:
-                logger.error(f"获取会话列表失败: {e}")
+                logger.error("获取会话列表失败: %s", e)
                 raise
 
     def update_session_title(self, session_id: str, title: str) -> bool:
@@ -214,7 +214,7 @@ class ConversationService(NeuroEventPublisherMixin):
                 return False
             except RECOVERABLE_ERRORS as e:
                 db.rollback()
-                logger.error(f"更新会话标题失败: {e}")
+                logger.error("更新会话标题失败: %s", e)
                 raise
 
     def delete_session(self, session_id: str) -> bool:
@@ -243,7 +243,7 @@ class ConversationService(NeuroEventPublisherMixin):
                 return True
             except RECOVERABLE_ERRORS as e:
                 db.rollback()
-                logger.error(f"删除会话失败：{e}")
+                logger.error("删除会话失败：%s", e)
                 raise
 
     def create_session(self, user_id: str = "default", title: str = None) -> str:
@@ -273,7 +273,7 @@ class ConversationService(NeuroEventPublisherMixin):
                 return session_id
             except RECOVERABLE_ERRORS as e:
                 db.rollback()
-                logger.error(f"创建会话失败：{e}")
+                logger.error("创建会话失败：%s", e)
                 raise
 
 

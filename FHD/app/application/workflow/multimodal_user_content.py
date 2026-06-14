@@ -50,7 +50,7 @@ def _decode_data_url(data_url: str) -> tuple[bytes, str]:
 def _maybe_downscale_image_jpeg(raw: bytes, mime: str) -> tuple[str, str]:
     """过大图片压成 JPEG data URL，降低 token / 限流风险。失败则回退原图 base64 data URL。"""
     try:
-        from PIL import Image  # type: ignore[import-not-found]
+        from PIL import Image
     except RECOVERABLE_ERRORS:
         b64 = base64.standard_b64encode(raw).decode("ascii")
         return f"data:{mime};base64,{b64}", mime
@@ -72,7 +72,7 @@ def _maybe_downscale_image_jpeg(raw: bytes, mime: str) -> tuple[str, str]:
 
 def _pdf_bytes_to_text(raw: bytes, filename: str) -> str:
     try:
-        import pdfplumber  # type: ignore[import-not-found]
+        import pdfplumber
     except RECOVERABLE_ERRORS as exc:
         return f"[PDF {filename}: 无法读取（缺少 pdfplumber: {exc}）]"
 

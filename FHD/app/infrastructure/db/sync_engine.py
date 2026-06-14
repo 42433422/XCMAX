@@ -48,7 +48,7 @@ def set_mode(mode: str) -> None:
         raise ValueError("mode must be production or test")
     global _mode, _engine, _bound_engine_url
     with _lock:
-        _mode = mode  # type: ignore[assignment]
+        _mode = mode
         _engine = None
         _bound_engine_url = None
 

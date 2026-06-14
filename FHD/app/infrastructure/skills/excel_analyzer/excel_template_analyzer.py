@@ -115,7 +115,7 @@ def analyze_template(
     except FileNotFoundError:
         return {"success": False, "message": f"文件不存在: {file_path}"}
     except RECOVERABLE_ERRORS as e:
-        logger.error(f"分析Excel模板失败: {e}")
+        logger.error("分析Excel模板失败: %s", e)
         return {"success": False, "message": f"分析失败: {str(e)}"}
 
 

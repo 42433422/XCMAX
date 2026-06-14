@@ -87,7 +87,7 @@ class QueryOptimizer:
         if stats.is_slow:
             self._slow_queries.append(stats)
             logger.warning(
-                f"慢查询检测 [{stats.query_id}]: {duration_ms:.2f}ms > {SLOW_QUERY_THRESHOLD * 1000:.0f}ms | SQL: {sql[:200]}"
+                f"慢查询检测 [{stats.query_id}]: {duration_ms:.2f}ms > {SLOW_QUERY_THRESHOLD * 1000:.0f}ms | SQL: {sql[:200]}"  # noqa: G004
             )
 
         if len(self._query_stats) > self._max_stats:
@@ -157,7 +157,7 @@ class QueryOptimizer:
                     return result
 
                 except RECOVERABLE_ERRORS as e:
-                    logger.error(f"缓存查询执行失败 [{func.__name__}]: {e}")
+                    logger.error("缓存查询执行失败 [%s]: %s", func.__name__, e)
                     raise
 
             wrapper.invalidate_cache = lambda *a, **kw: (
@@ -245,7 +245,7 @@ class QueryOptimizer:
             return result
         except RECOVERABLE_ERRORS as e:
             session.rollback()
-            logger.error(f"批量插入失败: {e}")
+            logger.error("批量插入失败: %s", e)
             raise
 
     def optimized_pagination(
@@ -294,7 +294,7 @@ class QueryOptimizer:
             return items, total, metadata
 
         except RECOVERABLE_ERRORS as e:
-            logger.error(f"分页查询失败: {e}")
+            logger.error("分页查询失败: %s", e)
             raise
 
     def eager_load(self, query, relationships: list[str]):

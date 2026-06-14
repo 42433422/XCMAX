@@ -1,6 +1,7 @@
 import { ref, type Ref } from 'vue'
 import type { ChatMessageExtras } from './useChatMessages'
 import { normalizeModel, toNumber, parseShipmentCommand, extractModelQtySpec } from '../utils/textParser'
+import { asRecord, asArray, asString, asBoolean, asDisposable } from '@/utils/typeGuards'
 
 export interface ShipmentProduct {
   quantity?: number
@@ -232,9 +233,9 @@ export function useShipmentTask(
         if (!best) continue
 
         return {
-          name: String(best?.name || best?.product_name || '').trim(),
-          unit_price: toNumber(best?.price ?? best?.unit_price) ?? undefined,
-          tin_spec: toNumber(best?.tin_spec ?? best?.specification ?? best?.spec) ?? undefined
+          name: asString(best.name || best.product_name).trim(),
+          unit_price: toNumber(best.price ?? best.unit_price) ?? undefined,
+          tin_spec: toNumber(best.tin_spec ?? best.specification ?? best.spec) ?? undefined
         }
       } catch (_err) {
         // Ignore network/query errors in preview enrichment.
@@ -243,9 +244,9 @@ export function useShipmentTask(
     return null
   }
 
-  function pickBestProductRecord(records: unknown[], target: string): unknown | null {
+  function pickBestProductRecord(records: unknown[], target: string): Record<string, unknown> | null {
     if (!Array.isArray(records) || !records.length) return null
-    if (!target) return records[0]
+    if (!target) return asRecord(records[0])
 
     const normalizeProductToken = (value: string) =>
       String(value || '').trim().toUpperCase().replace(/\s+/g, '').replace(/-/g, '')
@@ -253,18 +254,21 @@ export function useShipmentTask(
     const targetNorm = normalizeProductToken(target)
 
     for (const row of records) {
-      const recModel = normalizeProductToken(row?.model_number)
-      if (recModel && recModel === targetNorm) return row
+      const rec = asRecord(row)
+      const recModel = normalizeProductToken(asString(rec.model_number))
+      if (recModel && recModel === targetNorm) return rec
     }
     for (const row of records) {
-      const recName = normalizeProductToken(row?.name || row?.product_name)
-      if (recName && recName.includes(targetNorm)) return row
+      const rec = asRecord(row)
+      const recName = normalizeProductToken(asString(rec.name || rec.product_name))
+      if (recName && recName.includes(targetNorm)) return rec
     }
     for (const row of records) {
-      const recModel = normalizeProductToken(row?.model_number)
-      if (recModel && recModel.includes(targetNorm)) return row
+      const rec = asRecord(row)
+      const recModel = normalizeProductToken(asString(rec.model_number))
+      if (recModel && recModel.includes(targetNorm)) return rec
     }
-    return records[0]
+    return asRecord(records[0])
   }
 
   function updateShipmentTaskPreview(task: ShipmentTask, nextProducts: ShipmentProduct[]) {
@@ -275,13 +279,14 @@ export function useShipmentTask(
     const oldItems = Array.isArray(task.items) ? task.items : []
     const oldByModel: Record<string, ShipmentProduct> = {}
     oldItems.forEach((it) => {
-      const key = normalizeModel(it?.型号 || it?.model_number || '')
-      if (key) oldByModel[key] = it
+      const item = asRecord(it) as ShipmentProduct
+      const key = normalizeModel(item?.型号 || item?.model_number || '')
+      if (key) oldByModel[key] = item
     })
 
     const unitName = String(
       task.payload?.params?.unit_name ||
-      (oldItems[0] && oldItems[0]['单位']) ||
+      (oldItems[0] && asRecord(oldItems[0])['单位']) ||
       ''
     ).trim()
 
@@ -415,18 +420,19 @@ export function useShipmentTask(
     return Object.keys(items[0] || {})
   }
 
-  function getTaskTableItems(task: ShipmentTask): unknown[] {
+  function getTaskTableItems(task: ShipmentTask): Record<string, unknown>[] {
     const items = Array.isArray(task?.items) ? task.items : []
     if (!items.length) return []
 
     if (task?.type !== 'shipment_generate') {
-      return items
+      return items.filter((x): x is Record<string, unknown> => !!x && typeof x === 'object') as Record<string, unknown>[]
     }
 
     return items.map((item) => {
+      const rec = asRecord(item)
       const row: Record<string, unknown> = {}
       SHIPMENT_PREVIEW_COLUMNS.forEach((col) => {
-        const value = item?.[col]
+        const value = rec[col]
         row[col] = (value === null || typeof value === 'undefined' || value === '') ? '-' : value
       })
       return row

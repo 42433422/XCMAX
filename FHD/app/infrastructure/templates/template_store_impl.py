@@ -5,7 +5,7 @@ import logging
 import os
 import shutil
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import text
 
@@ -293,7 +293,7 @@ class FileSystemTemplateStore(TemplateStorePort):
                             {"id": db_id},
                         ).fetchone()
                     if row and row.original_file_path and os.path.exists(row.original_file_path):
-                        return row.original_file_path
+                        return cast("str | None", row.original_file_path)
                 except RECOVERABLE_ERRORS:
                     pass
 

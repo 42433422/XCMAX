@@ -18,6 +18,7 @@ const SELECTOR_TOUR_MAP: Record<string, string> = {
   '#view-chat .chat-container': '[data-tour="chat-thread"]',
   '#view-chat .input-area': '[data-tour="chat-input-area"]',
   '[data-tour="store-nav-office"]': '[data-tour="store-nav-office"]',
+  '[data-tour="ecosystem-launcher-modstore"]': '[data-tour="ecosystem-launcher-modstore"]',
   '[data-tour="store-one-click-install"]': '[data-tour="store-one-click-install"]',
   '[data-tour="store-shell"]': '[data-tour="store-shell"]',
 }

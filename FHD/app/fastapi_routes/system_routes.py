@@ -93,7 +93,7 @@ async def get_industries():
             },
         }
     except RECOVERABLE_ERRORS as e:
-        logger.error(f"Failed to get industries: {e}")
+        logger.error("Failed to get industries: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -212,7 +212,7 @@ async def set_industry_endpoint(request_body: SetIndustryRequest, request: Reque
     except HTTPException:
         raise
     except RECOVERABLE_ERRORS as e:
-        logger.error(f"Failed to set industry: {e}")
+        logger.error("Failed to set industry: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -308,5 +308,5 @@ async def get_industry_detail(industry_id: str):
     except HTTPException:
         raise
     except RECOVERABLE_ERRORS as e:
-        logger.error(f"Failed to get industry {industry_id}: {e}")
+        logger.error("Failed to get industry %s: %s", industry_id, e)
         raise HTTPException(status_code=500, detail=str(e))

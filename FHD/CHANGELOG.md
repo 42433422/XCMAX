@@ -6,6 +6,13 @@
 
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
+### Phase 4 覆盖率长尾与变异测试（v10 线内迭代 · 2026-06-14）
+
+- **test(contexts/di)**：补 `manifest` / `flags` / `registry` / `fastapi_deps` 纯函数单测
+- **chore(coverage)**：`health_k8s` 移除 2 处可测 `pragma: no cover`（诊断分支已有探针单测）
+- **chore(mutmut)**：`pyproject.toml` 新增 `[tool.mutmut]`，首轮 `app/http` · `app/contexts` · `app/di`
+- **chore(stryker)**：`frontend/stryker.conf.json` + `docs/reports/MUTATION_TESTING.md`（需 `npm i -D @stryker-mutator/*`）
+
 ### 企业引导 Mod 种子（v10 线内迭代 · 2026-06-14）
 
 - **chore(mods)**：`scripts/dev/sync-enterprise-mod-seeds.sh` 从 desktop-dev / admin-runtime 补全 `FHD/mods/` bridge、core-workflow、planner-excel 等种子

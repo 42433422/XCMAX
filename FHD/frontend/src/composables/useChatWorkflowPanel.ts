@@ -118,9 +118,9 @@ export interface UseChatWorkflowPanelDeps {
   sortTaskList: () => void
   createTaskId: (prefix: string) => string
   persistTaskPanelStateForSession: (targetSessionId?: string) => void
-  showTaskConfirm: (task: unknown) => void
+  showTaskConfirm: (task: ShipmentTask | null | undefined) => void
   emitAssistantPush: (payload?: Record<string, unknown>) => void
-  maybeCloseAssistantFloatForShipmentTask: (task: unknown, autoAction: unknown) => void
+  maybeCloseAssistantFloatForShipmentTask: (task: ShipmentTask | null | undefined, autoAction: Record<string, unknown> | null | undefined) => void
 }
 
 export function useChatWorkflowPanel(deps: UseChatWorkflowPanelDeps) {

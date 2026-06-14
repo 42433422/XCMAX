@@ -1,6 +1,6 @@
 import logging
 import time
-from typing import Any
+from typing import Any, cast
 
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
 from app.services.conversation.context import ConversationContext
@@ -174,15 +174,15 @@ class ApiMixin(NeuroEventPublisherMixin):
                     )
                 except RECOVERABLE_ERRORS:
                     logger.debug("neuro_notify_ai_model_roundtrip skipped", exc_info=True)
-                return result
-            logger.warning(f"DeepSeek API 返回空响应：{result}")
+                return cast("dict[str, Any] | None", result)
+            logger.warning("DeepSeek API 返回空响应：%s", result)
             return None
 
         except httpx.HTTPError as e:
-            logger.error(f"DeepSeek API 请求失败：{e}")
+            logger.error("DeepSeek API 请求失败：%s", e)
             return None
         except RECOVERABLE_ERRORS as e:
-            logger.error(f"调用 DeepSeek API 异常：{e}")
+            logger.error("调用 DeepSeek API 异常：%s", e)
             return None
 
     # 向后兼容别名
@@ -375,13 +375,13 @@ XCAGI 系统主要功能：
             mode_tag = "📦降级"
             provider_info = f"DeepSeek/{self.model}"
 
-        logger.info(f"准备调用 LLM API [{mode_tag}]: {provider_info}")
+        logger.info("准备调用 LLM API [%s]: %s", mode_tag, provider_info)
 
         response = await self.call_llm_api(messages)  # 使用三级路由方法
 
         logger.info(
-            f"LLM API 响应 [{mode_tag} {provider_info}]: "
-            f"{str(response)[:150] if response else 'None'}..."
+            "LLM API 响应 [%s %s]: "
+            f"%s...", mode_tag, provider_info, str(response)[:150] if response else 'None'
         )
 
         if response and response.get("choices"):

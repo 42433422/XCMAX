@@ -281,7 +281,7 @@ def dispatch_legacy_tool_payload(
                                 PurchaseUnit, unit_name=resolved.unit_name
                             )
                     except RECOVERABLE_ERRORS as e:
-                        logger.warning(f"解析购买单位失败: {e}")
+                        logger.warning("解析购买单位失败: %s", e)
 
             return _j(
                 {
@@ -547,7 +547,7 @@ def dispatch_legacy_tool_payload(
             return _j(payload, status_code)
 
         except RECOVERABLE_ERRORS as e:
-            logger.error(f"生成发货单失败：{e}", exc_info=True)
+            logger.error("生成发货单失败：%s", e, exc_info=True)
             return _j({"success": False, "message": f"生成失败：{str(e)}"}, 500)
     elif tool_id == "print":
         from app.services import get_printer_service
@@ -699,7 +699,7 @@ def dispatch_legacy_tool_payload(
                 {"success": False, "message": "Excel分析技能未正确安装，请检查openpyxl库"}, 500
             )
         except RECOVERABLE_ERRORS as e:
-            logger.error(f"Excel Analyzer执行失败: {e}")
+            logger.error("Excel Analyzer执行失败: %s", e)
             return _j({"success": False, "message": f"分析失败: {str(e)}"}, 500)
     elif tool_id == "template_extract":
         if action in (None, "", "view"):
@@ -759,7 +759,7 @@ def dispatch_legacy_tool_payload(
                 200,
             )
         except RECOVERABLE_ERRORS as e:
-            logger.error(f"template_extract 执行失败: {e}", exc_info=True)
+            logger.error("template_extract 执行失败: %s", e, exc_info=True)
             return _j({"success": False, "message": f"提取失败: {str(e)}"}, 500)
     elif tool_id == "excel_toolkit":
         file_path = params.get("file_path")
@@ -784,7 +784,7 @@ def dispatch_legacy_tool_payload(
                 {"success": False, "message": "Excel工具技能未正确安装，请检查openpyxl库"}, 500
             )
         except RECOVERABLE_ERRORS as e:
-            logger.error(f"Excel Toolkit执行失败: {e}")
+            logger.error("Excel Toolkit执行失败: %s", e)
             return _j({"success": False, "message": f"执行失败: {str(e)}"}, 500)
     elif tool_id == "shipment_template":
         if action == "view":

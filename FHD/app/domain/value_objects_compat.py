@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 from app.domain.value_objects_industry import get_current_industry_config
 
@@ -97,27 +97,27 @@ class Quantity:
     @property
     def primary_label(self) -> str:
         """获取主单位标签（如：桶数、件数、斤数）"""
-        return self._industry_config.get("primary_label", "数量")
+        return cast("str", self._industry_config.get("primary_label", "数量"))
 
     @property
     def secondary_label(self) -> str:
         """获取辅助单位标签（如：公斤、箱数）"""
-        return self._industry_config.get("secondary_label", "重量")
+        return cast("str", self._industry_config.get("secondary_label", "重量"))
 
     @property
     def spec_label(self) -> str:
         """获取规格标签"""
-        return self._industry_config.get("spec_label", "规格")
+        return cast("str", self._industry_config.get("spec_label", "规格"))
 
     @property
     def primary_unit(self) -> str:
         """获取主单位（如：桶、件、斤）"""
-        return self._industry_config.get("primary", "桶")
+        return cast("str", self._industry_config.get("primary", "桶"))
 
     @property
     def secondary_unit(self) -> str:
         """获取辅助单位（如：kg、箱）"""
-        return self._industry_config.get("secondary", "kg")
+        return cast("str", self._industry_config.get("secondary", "kg"))
 
     def __repr__(self) -> str:
         return f"Quantity({self.primary}{self.primary_unit}, {self.secondary}{self.secondary_unit}, spec={self.spec})"

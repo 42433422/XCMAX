@@ -1,3 +1,5 @@
+import { asRecord, asArray, asString, asBoolean, asDisposable } from '@/utils/typeGuards'
+
 export interface ResourceEntry {
   resource: unknown;
   type: string;
@@ -75,19 +77,20 @@ export class ResourceManager {
     const entry = this.resources.get(id);
     if (!entry) return false;
 
-    const { resource, type } = entry;
+    const { resource, type } = entry
 
     try {
-      if (resource && typeof resource.dispose === 'function') {
-        resource.dispose();
-      } else if (resource && typeof resource.destroy === 'function') {
-        resource.destroy();
-      } else if (resource && typeof resource.cleanup === 'function') {
-        resource.cleanup();
-      } else if (resource instanceof HTMLElement && resource.remove) {
-        resource.remove();
-      } else if (resource && (resource as unknown) instanceof EventTarget && (resource as unknown).removeEventListener) {
-        this.removeAllListeners(resource as EventTarget);
+      const disposable = asDisposable(resource)
+      if (disposable?.dispose) {
+        disposable.dispose()
+      } else if (disposable?.destroy) {
+        disposable.destroy()
+      } else if (disposable?.cleanup) {
+        disposable.cleanup()
+      } else if (resource instanceof HTMLElement) {
+        resource.remove()
+      } else if (resource instanceof EventTarget) {
+        this.removeAllListeners(resource)
       }
     } catch (error) {
       console.error(`ResourceManager: Error releasing resource "${id}":`, error);
@@ -274,7 +277,7 @@ export function cleanupObject(obj: Record<string, unknown>): void {
 
   for (const key in obj) {
     if (obj[key] && typeof obj[key] === 'object') {
-      cleanupObject(obj[key]);
+      cleanupObject(asRecord(obj[key]));
     }
     obj[key] = null;
   }

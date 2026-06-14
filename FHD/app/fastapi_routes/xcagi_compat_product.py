@@ -11,18 +11,18 @@ from urllib.parse import quote
 from fastapi import APIRouter, Body, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, Response
 
-from app.fastapi_routes.xcagi_compat_db_base import (
+from app.infrastructure.persistence.compat_db.base import (
     _business_mod_json_block,
     _product_parse_id,
     _product_parse_is_active,
     _product_parse_quantity,
     _products_write_raise,
 )
-from app.fastapi_routes.xcagi_compat_db_product_queries import (
+from app.infrastructure.persistence.compat_db.product_queries import (
     _load_products_all_for_export,
     _load_products_list_impl_pg,
 )
-from app.fastapi_routes.xcagi_compat_db_queries import (
+from app.infrastructure.persistence.compat_db.queries import (
     _merged_purchase_unit_entries,
     _products_units_for_select,
 )

@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Any
+from typing import Any, cast
 
 from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -118,7 +118,7 @@ def products_get(request: Request, product_id: int) -> dict | JSONResponse:
             result = {**result, "data": data.to_dict()}
         result["source"] = f"mod:{ERP_DOMAIN_BRIDGE_MOD_ID}"
         result["execution_path"] = "products_service"
-        return result
+        return cast("dict[Any, Any] | JSONResponse", result)
     return JSONResponse(result, status_code=404)
 
 
@@ -228,7 +228,7 @@ def products_product_names(keyword: str = "") -> dict[str, Any]:
     out = _service().get_product_names(keyword=keyword or None)
     out["source"] = f"mod:{ERP_DOMAIN_BRIDGE_MOD_ID}"
     out["execution_path"] = "products_service"
-    return out
+    return cast("dict[str, Any]", out)
 
 
 def products_batch(body: dict[str, Any]) -> dict[str, Any]:
@@ -239,7 +239,7 @@ def products_batch(body: dict[str, Any]) -> dict[str, Any]:
     out = _service().batch_add_products(mapped)
     out["source"] = f"mod:{ERP_DOMAIN_BRIDGE_MOD_ID}"
     out["execution_path"] = "products_service"
-    return out
+    return cast("dict[str, Any]", out)
 
 
 __all__ = [

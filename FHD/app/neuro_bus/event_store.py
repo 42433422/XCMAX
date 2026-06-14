@@ -107,7 +107,7 @@ class EventStore:
         # 回调
         self._append_callbacks: list[Callable[[StoredEvent], None]] = []
 
-        logger.info(f"[EventStore] 初始化完成 (mode={mode.value}, max_events={max_events})")
+        logger.info("[EventStore] 初始化完成 (mode=%s, max_events=%s)", mode.value, max_events)
 
     # ========== 存储操作 ==========
 
@@ -147,14 +147,14 @@ class EventStore:
                 self._stream_events[stream_id] = []
             self._stream_events[stream_id].append(store_id)
 
-        logger.debug(f"[EventStore] 事件存储: {event.event_type} (store_id={store_id})")
+        logger.debug("[EventStore] 事件存储: %s (store_id=%s)", event.event_type, store_id)
 
         # 触发回调
         for callback in self._append_callbacks:
             try:
                 callback(stored)
             except RECOVERABLE_ERRORS as e:
-                logger.error(f"[EventStore] 回调失败: {e}")
+                logger.error("[EventStore] 回调失败: %s", e)
 
         return store_id
 
@@ -247,7 +247,7 @@ class EventStore:
         self._snapshots[stream_id] = snapshot
 
         logger.debug(
-            f"[EventStore] 快照保存: {stream_id} (seq={sequence_number}, snap_id={snapshot_id})"
+            "[EventStore] 快照保存: %s (seq=%s, snap_id=%s)", stream_id, sequence_number, snapshot_id
         )
 
         return snapshot_id
@@ -307,15 +307,15 @@ class EventStore:
                     callback(stored.event)
                     count += 1
                 except RECOVERABLE_ERRORS as e:
-                    logger.error(f"[EventStore] 重播失败: {e}")
+                    logger.error("[EventStore] 重播失败: %s", e)
             else:
                 # 默认：只记录
                 logger.info(
-                    f"[EventStore] 重播: {stored.event.event_type} (store_id={stored.store_id})"
+                    "[EventStore] 重播: %s (store_id=%s)", stored.event.event_type, stored.store_id
                 )
                 count += 1
 
-        logger.info(f"[EventStore] 重播完成: {count} 个事件")
+        logger.info("[EventStore] 重播完成: %s 个事件", count)
         return count
 
     def replay_stream(
@@ -356,7 +356,7 @@ class EventStore:
             result["snapshot_sequence"] = snapshot.sequence_number
             result["snapshot_age_seconds"] = (datetime.now() - snapshot.created_at).total_seconds()
 
-        logger.info(f"[EventStore] 流重播完成: {stream_id} (applied={applied_count})")
+        logger.info("[EventStore] 流重播完成: %s (applied=%s)", stream_id, applied_count)
 
         return result
 
@@ -436,7 +436,7 @@ class EventStore:
         if stream_id in self._snapshots:
             del self._snapshots[stream_id]
 
-        logger.info(f"[EventStore] 删除流: {stream_id} ({count} 个事件)")
+        logger.info("[EventStore] 删除流: %s (%s 个事件)", stream_id, count)
         return count
 
     def clear(self):
@@ -465,7 +465,7 @@ class EventStore:
                 if stored.store_id in stream_list:
                     stream_list.remove(stored.store_id)
 
-        logger.warning(f"[EventStore] 清理旧事件: {len(to_remove)} 个")
+        logger.warning("[EventStore] 清理旧事件: %s 个", len(to_remove))
 
 
 # ========== 全局实例 ==========

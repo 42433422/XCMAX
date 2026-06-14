@@ -14,7 +14,7 @@ import {
   SETTINGS_MENU_ITEM,
 } from '@/constants/coreMenuCatalog'
 import { useAccountProfileStore } from '@/stores/accountProfile'
-import { isPlatformShellModeEnabled, SHELL_CORE_MENU_KEYS } from '@/constants/platformShellMode'
+import { isPlatformShellModeEnabled, resolvePlatformShellMenuKeys } from '@/constants/platformShellMode'
 import {
   isClientErpSidebarContext,
   keepHostNavKeyVisibleWhenModSidebarFacetSuppressed,
@@ -107,7 +107,7 @@ export function useVisibleNavItems() {
     ),
   )
 
-  const coreMenuOverrides = computed(() => buildCoreMenuOverrides(modsForUi.value || []))
+  const coreMenuOverrides = computed(() => buildCoreMenuOverrides(mods.value || []))
 
   const industryId = computed(() =>
     String(industryStore.currentIndustryId || DEFAULT_INDUSTRY_ID),
@@ -177,7 +177,10 @@ export function useVisibleNavItems() {
     }).filter((item) => {
       if (!item) return false
       if (isSandboxMode() && !SANDBOX_MENU_KEYS.has(item.key)) return false
-      if (isPlatformShellMode() && !SHELL_CORE_MENU_KEYS.has(item.key)) return false
+      if (isPlatformShellMode()) {
+        const shellKeys = resolvePlatformShellMenuKeys(installedModIds.value)
+        if (!shellKeys.has(item.key)) return false
+      }
       return true
     }) as ResolvedSidebarMenuItem[]
     return [...adminOperatorTop, ...baseCore]

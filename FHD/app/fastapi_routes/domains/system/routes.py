@@ -587,7 +587,7 @@ async def admin_llm_reload() -> JSONResponse:
 
     from app.infrastructure.llm.providers import registry as reg_mod
 
-    reg_mod._registry = None  # type: ignore[attr-defined]
+    reg_mod._registry = None
     return JSONResponse(
         {
             "success": True,

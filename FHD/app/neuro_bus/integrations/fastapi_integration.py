@@ -63,7 +63,7 @@ async def setup_neurobus_lifespan(app: FastAPI):
             await run_lifespan_teardown()
             logger.info("NeuroBus core stopped")
         except RECOVERABLE_ERRORS as e:
-            logger.exception(f"NeuroBus shutdown error: {e}")
+            logger.exception("NeuroBus shutdown error: %s", e)
         logger.info("NeuroBus: Shutdown complete")
 
 

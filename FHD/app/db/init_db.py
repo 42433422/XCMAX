@@ -46,7 +46,7 @@ def _iter_seed_dirs() -> Iterable[str]:
     yield get_resource_path("db_seed")
     yield get_base_dir()
     if hasattr(sys, "_MEIPASS"):
-        yield sys._MEIPASS  # type: ignore[attr-defined]
+        yield sys._MEIPASS
 
 
 def initialize_databases(db_files: Iterable[str] = DEFAULT_DB_FILES) -> None:

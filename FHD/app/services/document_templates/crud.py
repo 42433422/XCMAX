@@ -38,7 +38,7 @@ def _ensure_template_tables_ready():
 
         init_template_tables()
     except RECOVERABLE_ERRORS as e:
-        logger.warning(f"确保模板表结构失败: {e}")
+        logger.warning("确保模板表结构失败: %s", e)
 
 
 def _build_template_payload_from_row(row):
@@ -181,7 +181,7 @@ def _create_template_with_payload_inner(payload: dict):
                 )
                 db.commit()
             except RECOVERABLE_ERRORS as e:
-                logger.warning(f"记录模板创建日志失败: {e}")
+                logger.warning("记录模板创建日志失败: %s", e)
 
         return _j(
             {
@@ -392,7 +392,7 @@ def _update_template_with_payload_inner(payload: dict):
                 )
                 db.commit()
             except RECOVERABLE_ERRORS as e:
-                logger.warning(f"记录模板更新日志失败: {e}")
+                logger.warning("记录模板更新日志失败: %s", e)
 
             refreshed = db.execute(
                 text(

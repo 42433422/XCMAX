@@ -863,8 +863,8 @@ export const useModsStore = defineStore('mods', () => {
     }
     const installedIds = mods.value.map((m) => String(m.id || '').trim()).filter(Boolean);
     if (isClientErpSidebarContext(installedIds, activeModId.value)) {
-      const extensions = ui.filter((m) => isSelectableExtensionModId(String(m.id || '')));
-      if (extensions.length) return extensions;
+      const fromFull = full.filter((m) => isSelectableExtensionModId(String(m.id || '')));
+      if (fromFull.length) return fromFull;
     }
     return ui;
   }

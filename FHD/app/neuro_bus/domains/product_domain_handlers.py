@@ -45,11 +45,11 @@ class ProductDomainHandlers:
         4. 发送通知（如果需要）
         """
         logger.info(
-            f"[ProductDomain] 处理产品创建: {event.payload.get('product_name')} "
-            f"(ID: {event.payload.get('product_id')})"
+            "[ProductDomain] 处理产品创建: %s "
+            f"(ID: %s)", event.payload.get('product_name'), event.payload.get('product_id')
         )
 
-        result = {"success": True, "product_id": event.payload.get("product_id"), "actions": []}
+        result: object = {"success": True, "product_id": event.payload.get("product_id"), "actions": []}
 
         try:
             # 1. 记录审计日志
@@ -71,7 +71,7 @@ class ProductDomainHandlers:
             # 例如：通知搜索服务索引新产品
 
         except RECOVERABLE_ERRORS as e:
-            logger.error(f"[ProductDomain] 处理产品创建事件失败: {e}")
+            logger.error("[ProductDomain] 处理产品创建事件失败: %s", e)
             result["success"] = False
             result["error"] = str(e)
 
@@ -86,9 +86,9 @@ class ProductDomainHandlers:
         2. 检查价格变更并触发价格变更事件
         3. 使相关缓存失效
         """
-        logger.info(f"[ProductDomain] 处理产品更新: {event.payload.get('product_id')}")
+        logger.info("[ProductDomain] 处理产品更新: %s", event.payload.get('product_id'))
 
-        result = {"success": True, "product_id": event.payload.get("product_id"), "actions": []}
+        result: object = {"success": True, "product_id": event.payload.get("product_id"), "actions": []}
 
         try:
             # 1. 记录变更历史
@@ -125,7 +125,7 @@ class ProductDomainHandlers:
             result["actions"].append("cache_invalidated")
 
         except RECOVERABLE_ERRORS as e:
-            logger.error(f"[ProductDomain] 处理产品更新事件失败: {e}")
+            logger.error("[ProductDomain] 处理产品更新事件失败: %s", e)
             result["success"] = False
             result["error"] = str(e)
 
@@ -140,9 +140,9 @@ class ProductDomainHandlers:
         2. 使相关缓存失效
         3. 清理相关关联数据
         """
-        logger.info(f"[ProductDomain] 处理产品删除: {event.payload.get('product_id')}")
+        logger.info("[ProductDomain] 处理产品删除: %s", event.payload.get('product_id'))
 
-        result = {"success": True, "product_id": event.payload.get("product_id"), "actions": []}
+        result: object = {"success": True, "product_id": event.payload.get("product_id"), "actions": []}
 
         try:
             # 1. 记录删除审计
@@ -162,7 +162,7 @@ class ProductDomainHandlers:
             result["actions"].append("cache_invalidated")
 
         except RECOVERABLE_ERRORS as e:
-            logger.error(f"[ProductDomain] 处理产品删除事件失败: {e}")
+            logger.error("[ProductDomain] 处理产品删除事件失败: %s", e)
             result["success"] = False
             result["error"] = str(e)
 
@@ -178,8 +178,8 @@ class ProductDomainHandlers:
         3. 发送导入完成通知
         """
         logger.info(
-            f"[ProductDomain] 处理产品批量导入: {event.payload.get('unit_name')} "
-            f"(数量: {event.payload.get('count', 0)})"
+            "[ProductDomain] 处理产品批量导入: %s "
+            f"(数量: %s)", event.payload.get('unit_name'), event.payload.get('count', 0)
         )
 
         result = {
@@ -207,7 +207,7 @@ class ProductDomainHandlers:
             result["actions"].append("bulk_cache_invalidated")
 
         except RECOVERABLE_ERRORS as e:
-            logger.error(f"[ProductDomain] 处理产品导入事件失败: {e}")
+            logger.error("[ProductDomain] 处理产品导入事件失败: %s", e)
             result["success"] = False
             result["error"] = str(e)
 
@@ -223,8 +223,8 @@ class ProductDomainHandlers:
         3. 通知相关业务方
         """
         logger.info(
-            f"[ProductDomain] 处理价格变更: {event.payload.get('product_id')} "
-            f"({event.payload.get('old_price')} -> {event.payload.get('new_price')})"
+            "[ProductDomain] 处理价格变更: %s "
+            f"(%s -> %s)", event.payload.get('product_id'), event.payload.get('old_price'), event.payload.get('new_price')
         )
 
         result = {
@@ -242,7 +242,7 @@ class ProductDomainHandlers:
             # 如果价格变动超过阈值，发送预警
 
         except RECOVERABLE_ERRORS as e:
-            logger.error(f"[ProductDomain] 处理价格变更事件失败: {e}")
+            logger.error("[ProductDomain] 处理价格变更事件失败: %s", e)
             result["success"] = False
             result["error"] = str(e)
 
@@ -259,9 +259,9 @@ class ProductDomainHandlers:
         payload = event.payload
 
         if "product_id" in payload:
-            logger.info(f"[ProductDomain] 清除产品缓存: {payload.get('product_id')}")
+            logger.info("[ProductDomain] 清除产品缓存: %s", payload.get('product_id'))
         elif "unit_name" in payload:
-            logger.info(f"[ProductDomain] 清除单位缓存: {payload.get('unit_name')}")
+            logger.info("[ProductDomain] 清除单位缓存: %s", payload.get('unit_name'))
 
         result = {"success": True, "invalidated": payload, "actions": ["cache_cleared"]}
 
@@ -270,7 +270,7 @@ class ProductDomainHandlers:
             # 可以调用 ProductsService 的缓存清除方法
             pass
         except RECOVERABLE_ERRORS as e:
-            logger.error(f"[ProductDomain] 处理缓存失效事件失败: {e}")
+            logger.error("[ProductDomain] 处理缓存失效事件失败: %s", e)
             result["success"] = False
             result["error"] = str(e)
 

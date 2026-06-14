@@ -4,7 +4,40 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Body, Depends, Path, Query, Request, Response
+from fastapi import APIRouter, Body, Depends, Path, Request, Response
+
+from app.fastapi_routes.lan_admin_routes import (
+    AccessRequestReview,
+    IssueKeyRequest,
+    approve_access_request_endpoint,
+    issue_key_endpoint,
+    kick_session_endpoint,
+    list_access_requests_endpoint,
+    list_allowlist_endpoint,
+    list_audit_endpoint,
+    list_keys_endpoint,
+    list_sessions_endpoint,
+    reject_access_request_endpoint,
+    require_admin,
+    revoke_allowlist_endpoint,
+    revoke_key_endpoint,
+    whoami,
+)
+from app.fastapi_routes.lan_routes import (
+    AccessRequestPayload,
+    ActivateRequest,
+    activate,
+    host_info,
+    logout,
+    my_access_request,
+    request_access,
+    status,
+)
+from app.fastapi_routes.lan_settings_routes import (
+    LanSettingsUpdate,
+    get_settings as get_settings_view,
+    update_settings as update_settings_view,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -12,39 +45,6 @@ HOST_PREFIXES = ["/api/lan"]
 
 
 def register_fastapi_routes(app, mod_id: str) -> None:
-    from app.fastapi_routes.lan_admin_routes import (
-        AccessRequestReview,
-        IssueKeyRequest,
-        approve_access_request_endpoint,
-        issue_key_endpoint,
-        kick_session_endpoint,
-        list_access_requests_endpoint,
-        list_allowlist_endpoint,
-        list_audit_endpoint,
-        list_keys_endpoint,
-        list_sessions_endpoint,
-        reject_access_request_endpoint,
-        require_admin,
-        revoke_allowlist_endpoint,
-        revoke_key_endpoint,
-        whoami,
-    )
-    from app.fastapi_routes.lan_routes import (
-        AccessRequestPayload,
-        ActivateRequest,
-        activate,
-        host_info,
-        logout,
-        my_access_request,
-        request_access,
-        status,
-    )
-    from app.fastapi_routes.lan_settings_routes import (
-        LanSettingsUpdate,
-        get_settings as get_settings_view,
-        update_settings as update_settings_view,
-    )
-
     router = APIRouter(prefix=f"/api/mod/{mod_id}", tags=[f"lan-bridge-{mod_id}"])
 
     @router.get("/status")
@@ -96,7 +96,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
 
     @router.post("/lan/admin/keys")
     async def mod_issue_key(
-        payload: IssueKeyRequest = Body(...),
+        payload: IssueKeyRequest,
         actor: dict = Depends(require_admin),
     ):
         return await issue_key_endpoint(payload, actor)

@@ -1,5 +1,6 @@
 import api, { ApiError } from './core';
 import type { RequestOptions } from './core';
+import { asRecord, asArray, asString } from '@/utils/typeGuards'
 
 /**
  * 开发环境下若把 VITE_TEMPLATE_* 配成 http://127.0.0.1:5000/api/... 绝对地址，
@@ -7,7 +8,7 @@ import type { RequestOptions } from './core';
  * 故在 DEV 且 host 为 localhost/127.0.0.1 时强制改为相对路径，走 Vite 同源代理。
  */
 function getConfiguredEndpoint(envKey: string, fallbackPath: string): string {
-  const configured = String((import.meta as unknown)?.env?.[envKey] || '').trim();
+  const configured = String(import.meta.env[envKey] || '').trim();
   if (!configured) return fallbackPath;
   if (
     import.meta.env.DEV &&

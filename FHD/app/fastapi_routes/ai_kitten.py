@@ -274,7 +274,7 @@ def kitten_document_generate(body: dict = Body(default_factory=dict)):
     try:
         from app.application.facades.kitten_facade import generate_office_file
 
-        content, file_name = generate_office_file(prompt, fmt)  # type: ignore[arg-type]
+        content, file_name = generate_office_file(prompt, fmt)
         mime = (
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             if fmt == "xlsx"

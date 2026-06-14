@@ -209,7 +209,7 @@ def wechat_work_mode_feed(per_contact: int = Query(default=1, ge=1, le=100)) -> 
         items = []
         zstd_dctx = None
         try:
-            import zstandard as zstd  # type: ignore[import-untyped]
+            import zstandard as zstd
 
             zstd_dctx = zstd.ZstdDecompressor()
         except ImportError:

@@ -40,7 +40,7 @@ class PrintNeuroDomain(NeuroDomain):
         async def on_started(event):
             self._active_jobs += 1
             job_id = event.payload.get("job_id")
-            logger.info(f"Print started: {job_id}")
+            logger.info("Print started: %s", job_id)
             bump_domain_handler_metric("print.job.started")
 
         @self.on("print.job.completed", priority=2)
@@ -48,7 +48,7 @@ class PrintNeuroDomain(NeuroDomain):
             self._active_jobs -= 1
             self._completed_jobs += 1
             job_id = event.payload.get("job_id")
-            logger.info(f"Print completed: {job_id}")
+            logger.info("Print completed: %s", job_id)
             bump_domain_handler_metric("print.job.completed")
 
     async def initialize(self):

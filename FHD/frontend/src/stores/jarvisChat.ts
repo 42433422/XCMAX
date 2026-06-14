@@ -2,6 +2,17 @@ import { defineStore } from 'pinia'
 import { ref, type Ref } from 'vue'
 import { useProModeStore } from './proMode'
 import { speakText, stopSpeaking, cleanTextForSpeech } from '../utils/tts'
+import { asRecord, asArray, asString, asBoolean, asDisposable } from '@/utils/typeGuards'
+
+type LegacyChatWindow = Window & {
+  setMonitorModeFromChat?: (enabled: boolean) => void
+  setWorkModeFromChat?: (enabled: boolean) => void
+  refreshWorkModeMonitorList?: () => void
+}
+
+function legacyChatWindow(): LegacyChatWindow {
+  return window as LegacyChatWindow
+}
 
 interface JarvisChatMessage {
   id: number;
@@ -60,26 +71,21 @@ export const useJarvisChatStore = defineStore('jarvisChat', () => {
   }
 
   function syncLegacyMonitorMode(): boolean {
-    const monitorToggle = (window as unknown).setMonitorModeFromChat
+    const win = legacyChatWindow()
+    const monitorToggle = win.setMonitorModeFromChat
     if (typeof monitorToggle !== 'function') return false
 
-    // Keep legacy runtime as source of truth for overlay mode classes.
     monitorToggle(true)
-    if (typeof (window as unknown).refreshWorkModeMonitorList === 'function') {
-      ;(window as unknown).refreshWorkModeMonitorList()
-    }
+    win.refreshWorkModeMonitorList?.()
     return true
   }
 
   function syncLegacyWorkMode(): boolean {
-    const workToggle = (window as unknown).setWorkModeFromChat
+    const workToggle = legacyChatWindow().setWorkModeFromChat
     if (typeof workToggle !== 'function') return false
 
-    // Keep legacy runtime as source of truth for overlay mode classes.
     workToggle(true)
-    if (typeof (window as unknown).refreshWorkModeMonitorList === 'function') {
-      ;(window as unknown).refreshWorkModeMonitorList()
-    }
+    legacyChatWindow().refreshWorkModeMonitorList?.()
     return true
   }
 

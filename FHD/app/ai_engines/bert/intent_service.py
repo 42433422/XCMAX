@@ -99,7 +99,7 @@ class BertIntentClassifier:
 
         try:
             if self.model_path and os.path.exists(self.model_path):
-                logger.info(f"加载 BERT 模型：{self.model_path}, 设备：{self.device}")
+                logger.info("加载 BERT 模型：%s, 设备：%s", self.model_path, self.device)
 
                 config = AutoConfig.from_pretrained(
                     self.model_path,
@@ -117,7 +117,7 @@ class BertIntentClassifier:
                 )
             else:
                 default_model = self.DEFAULT_MODELS.get(self.model_name, self.model_name)
-                logger.info(f"加载默认 BERT 模型：{default_model}, 设备：{self.device}")
+                logger.info("加载默认 BERT 模型：%s, 设备：%s", default_model, self.device)
                 self.model = AutoModelForSequenceClassification.from_pretrained(
                     default_model,
                     num_labels=len(INTENT_LABELS),
@@ -139,7 +139,7 @@ class BertIntentClassifier:
             return True
 
         except RECOVERABLE_ERRORS as e:
-            logger.error(f"BERT 模型加载失败：{e}")
+            logger.error("BERT 模型加载失败：%s", e)
             return False
 
     def predict(self, text: str) -> dict[str, Any]:
@@ -184,7 +184,7 @@ class BertIntentClassifier:
             return result
 
         except RECOVERABLE_ERRORS as e:
-            logger.error(f"BERT 预测失败：{e}")
+            logger.error("BERT 预测失败：%s", e)
             return {"intent": "unk", "confidence": 0.0, "message": str(e)}
 
     def predict_batch(self, texts: list[str]) -> list[dict[str, Any]]:

@@ -220,7 +220,7 @@ class OCRService:
             return {"success": True, "message": "识别成功", "text": text, "file_path": file_path}
 
         except RECOVERABLE_ERRORS as e:
-            logger.exception(f"识别文件失败: {e}")
+            logger.exception("识别文件失败: %s", e)
             return {"success": False, "message": f"识别失败: {str(e)}", "text": ""}
 
     def recognize_with_details(self, image: np.ndarray) -> list[OCRResult]:
@@ -309,7 +309,7 @@ class OCRService:
 
     def extract_structured_data(self, text: str) -> dict[str, Any]:
         """从OCR文本中提取结构化数据"""
-        structured_data = {
+        structured_data: object = {
             "purchase_unit": None,
             "contact_person": None,
             "contact_phone": None,

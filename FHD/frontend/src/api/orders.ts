@@ -1,7 +1,8 @@
-import { api } from './core';
+import { api, ApiError } from './core';
 import type { ApiResponse } from '@/types/api';
 import type { Order, OrderCreateDTO } from '@/types/order';
 import { resolveErpApiPath } from '@/utils/erpDomainPaths';
+import { asRecord, asArray, asString } from '@/utils/typeGuards'
 
 const erp = (path: string) => resolveErpApiPath(path);
 
@@ -34,7 +35,7 @@ export const ordersApi = {
     try {
       return await api.get<ApiResponse<unknown[]>>(erp('/api/shipment/shipment-records/units'));
     } catch (e: unknown) {
-      const st = e?.status;
+      const st = e instanceof ApiError ? e.status : Number(asRecord(e).status)
       if (st === 404) {
         return api.get<ApiResponse<unknown[]>>(erp('/api/purchase_units'));
       }
@@ -56,7 +57,7 @@ export const ordersApi = {
     return api.patch<ApiResponse<unknown>>(erp('/api/shipment/shipment-records/record'), payload);
   },
 
-  deleteShipmentRecord(payload: unknown): Promise<ApiResponse<unknown>> {
+  deleteShipmentRecord(payload: Record<string, unknown>): Promise<ApiResponse<unknown>> {
     return api.delete<ApiResponse<unknown>>(erp('/api/shipment/shipment-records/record'), payload);
   },
 

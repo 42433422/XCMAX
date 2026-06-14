@@ -116,5 +116,22 @@ def _db_session_scope():
 get_db = contextmanager(_db_session_scope)
 
 
+@contextmanager
+def get_host_db():
+    """宿主基库事务：users/sessions 等，不受 Active-Mod 分库影响。"""
+    from app.db import HostSessionLocal
+
+    db = HostSessionLocal()
+    try:
+        yield db
+        db.commit()
+    except RECOVERABLE_ERRORS as e:
+        db.rollback()
+        logger.error("宿主库事务失败，已回滚: %s", e)
+        raise
+    finally:
+        db.close()
+
+
 def get_db_dependency():
     yield from _db_session_scope()

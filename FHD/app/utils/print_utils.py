@@ -12,9 +12,9 @@ try:
     _PRINT_BACKEND_AVAILABLE = True
     _PRINT_BACKEND_ERROR = ""
 except ImportError as _print_import_error:
-    pythoncom = None  # type: ignore[assignment]
-    win32api = None  # type: ignore[assignment]
-    win32print = None  # type: ignore[assignment]
+    pythoncom = None
+    win32api = None
+    win32print = None
     _PRINT_BACKEND_AVAILABLE = False
     _PRINT_BACKEND_ERROR = str(_print_import_error)
 
@@ -44,7 +44,7 @@ class PrinterUtils:
                 pythoncom.CoInitialize()
                 self._com_initialized = True
             except RECOVERABLE_ERRORS as e:
-                logger.warning(f"COM初始化警告: {e}")
+                logger.warning("COM初始化警告: %s", e)
 
     def get_available_printers(self) -> list[dict[str, str]]:
         if not self._is_print_backend_available():
@@ -56,7 +56,7 @@ class PrinterUtils:
 
             try:
                 default_printer = win32print.GetDefaultPrinter()
-                logger.info(f"默认打印机: {default_printer}")
+                logger.info("默认打印机: %s", default_printer)
             except:
                 default_printer = None
                 logger.warning("无法获取默认打印机")
@@ -65,11 +65,11 @@ class PrinterUtils:
                 win32print.PRINTER_ENUM_LOCAL | win32print.PRINTER_ENUM_CONNECTIONS
             )
 
-            logger.info(f"找到 {len(all_printers)} 个打印机")
+            logger.info("找到 %s 个打印机", len(all_printers))
 
             for printer_info in all_printers:
-                logger.info(f"打印机信息: {printer_info}")
-                logger.info(f"打印机信息长度: {len(printer_info)}")
+                logger.info("打印机信息: %s", printer_info)
+                logger.info("打印机信息长度: %s", len(printer_info))
 
                 if len(printer_info) >= 3:
                     printer_name = printer_info[2]
@@ -91,12 +91,12 @@ class PrinterUtils:
                     {"name": printer_name, "status": status_text, "is_default": is_default}
                 )
 
-                logger.info(f"  - {printer_name} (默认: {is_default}, 状态: {status_text})")
+                logger.info("  - %s (默认: %s, 状态: %s)", printer_name, is_default, status_text)
 
             return printers
 
         except RECOVERABLE_ERRORS as e:
-            logger.error(f"获取打印机列表失败: {e}", exc_info=True)
+            logger.error("获取打印机列表失败: %s", e, exc_info=True)
             return []
 
     def _get_printer_status(self, status_code: int) -> str:
@@ -133,7 +133,7 @@ class PrinterUtils:
             logger.warning(self._build_unavailable_result()["message"])
             return False
         try:
-            logger.info(f"开始监控打印机 {printer_name} 的打印任务...")
+            logger.info("开始监控打印机 %s 的打印任务...", printer_name)
 
             start_time = time.time()
 
@@ -148,22 +148,22 @@ class PrinterUtils:
                             logger.info("打印机队列为空，打印任务已完成")
                             return True
                         else:
-                            logger.info(f"打印机队列中有 {len(jobs)} 个任务，等待完成...")
+                            logger.info("打印机队列中有 %s 个任务，等待完成...", len(jobs))
                             for i, job in enumerate(jobs):
-                                logger.info(f"   任务 {i + 1}: {job}")
+                                logger.info("   任务 %s: %s", i + 1, job)
                     finally:
                         win32print.ClosePrinter(hPrinter)
 
                 except RECOVERABLE_ERRORS as e:
-                    logger.warning(f"监控打印任务失败: {e}")
+                    logger.warning("监控打印任务失败: %s", e)
 
                 time.sleep(1)
 
-            logger.warning(f"监控打印任务超时（{timeout}秒）")
+            logger.warning("监控打印任务超时（%s秒）", timeout)
             return False
 
         except RECOVERABLE_ERRORS as e:
-            logger.error(f"监控打印任务时发生错误: {e}")
+            logger.error("监控打印任务时发生错误: %s", e)
             return False
 
     def print_file(
@@ -182,16 +182,16 @@ class PrinterUtils:
                 logger.error("未指定打印机名称，拒绝打印")
                 return {"success": False, "message": "未指定打印机名称，无法打印"}
 
-            logger.info(f"准备打印文件: {file_path}")
-            logger.info(f"使用打印机: {printer_name}")
+            logger.info("准备打印文件: %s", file_path)
+            logger.info("使用打印机: %s", printer_name)
 
             original_default_printer = None
 
             if use_default_printer:
                 try:
                     original_default_printer = win32print.GetDefaultPrinter()
-                    logger.info(f"当前默认打印机: {original_default_printer}")
-                    logger.info(f"目标打印机: {printer_name}")
+                    logger.info("当前默认打印机: %s", original_default_printer)
+                    logger.info("目标打印机: %s", printer_name)
 
                     if original_default_printer != printer_name:
                         logger.info("正在修改默认打印机...")
@@ -199,7 +199,7 @@ class PrinterUtils:
                             win32print.SetDefaultPrinter(printer_name)
                             logger.info("SetDefaultPrinter 调用完成")
                         except RECOVERABLE_ERRORS as e:
-                            logger.error(f"SetDefaultPrinter 调用失败: {e}")
+                            logger.error("SetDefaultPrinter 调用失败: %s", e)
                             import traceback
 
                             logger.error(traceback.format_exc())
@@ -207,28 +207,28 @@ class PrinterUtils:
                         time.sleep(0.5)
                         try:
                             new_default = win32print.GetDefaultPrinter()
-                            logger.info(f"验证 - 当前默认打印机: {new_default}")
+                            logger.info("验证 - 当前默认打印机: %s", new_default)
                         except RECOVERABLE_ERRORS as e:
-                            logger.error(f"GetDefaultPrinter 调用失败: {e}")
+                            logger.error("GetDefaultPrinter 调用失败: %s", e)
                             new_default = original_default_printer
 
                         if new_default == printer_name:
-                            logger.info(f"默认打印机修改成功: {new_default}")
+                            logger.info("默认打印机修改成功: %s", new_default)
                         else:
                             logger.error(
-                                f"默认打印机修改失败！当前: {new_default}, 目标: {printer_name}"
+                                "默认打印机修改失败！当前: %s, 目标: %s", new_default, printer_name
                             )
                             try:
                                 win32print.SetDefaultPrinter(printer_name)
                                 time.sleep(0.5)
                                 new_default = win32print.GetDefaultPrinter()
-                                logger.info(f"第二次修改后默认打印机: {new_default}")
+                                logger.info("第二次修改后默认打印机: %s", new_default)
                             except RECOVERABLE_ERRORS as e:
-                                logger.error(f"第二次修改失败: {e}")
+                                logger.error("第二次修改失败: %s", e)
                     else:
                         logger.info("当前默认打印机已经是目标打印机，无需修改")
                 except RECOVERABLE_ERRORS as e:
-                    logger.error(f"修改默认打印机失败: {e}")
+                    logger.error("修改默认打印机失败: %s", e)
                     import traceback
 
                     logger.error(traceback.format_exc())
@@ -250,29 +250,29 @@ class PrinterUtils:
                 if use_default_printer and original_default_printer:
                     try:
                         if original_default_printer != printer_name:
-                            logger.info(f"恢复默认打印机为: {original_default_printer}")
+                            logger.info("恢复默认打印机为: %s", original_default_printer)
                             win32print.SetDefaultPrinter(original_default_printer)
                             logger.info("默认打印机恢复成功")
                     except RECOVERABLE_ERRORS as e:
-                        logger.warning(f"恢复默认打印机失败: {e}")
+                        logger.warning("恢复默认打印机失败: %s", e)
 
             return print_result
 
         except RECOVERABLE_ERRORS as e:
-            logger.error(f"打印文件失败: {e}")
+            logger.error("打印文件失败: %s", e)
             return {"success": False, "message": f"打印失败: {str(e)}"}
 
     def _print_excel(self, file_path: str, printer_name: str) -> dict:
         if not self._is_print_backend_available():
             return self._build_unavailable_result()
         try:
-            logger.info(f"开始打印Excel文件: {file_path}")
-            logger.info(f"使用打印机: {printer_name}")
+            logger.info("开始打印Excel文件: %s", file_path)
+            logger.info("使用打印机: %s", printer_name)
 
             try:
                 logger.info("方法1: 使用os.startfile打印")
                 os.startfile(file_path, "print")
-                logger.info(f"os.startfile打印成功: {file_path}")
+                logger.info("os.startfile打印成功: %s", file_path)
                 return {
                     "success": True,
                     "message": "打印任务已发送（os.startfile）",
@@ -280,14 +280,14 @@ class PrinterUtils:
                     "printer": printer_name,
                 }
             except RECOVERABLE_ERRORS as e1:
-                logger.warning(f"方法1失败: {e1}")
+                logger.warning("方法1失败: %s", e1)
 
                 try:
                     logger.info("方法2: 使用ShellExecute print")
                     result = win32api.ShellExecute(0, "print", file_path, None, ".", 1)
 
                     if result > 32:
-                        logger.info(f"ShellExecute打印成功: {file_path}")
+                        logger.info("ShellExecute打印成功: %s", file_path)
                         return {
                             "success": True,
                             "message": "打印任务已发送到打印机",
@@ -298,12 +298,12 @@ class PrinterUtils:
                         raise Exception(f"ShellExecute失败，错误代码: {result}")
 
                 except RECOVERABLE_ERRORS as e2:
-                    logger.warning(f"方法2失败: {e2}")
+                    logger.warning("方法2失败: %s", e2)
 
                     try:
                         logger.info("方法3: 打开文件让用户手动打印")
                         os.startfile(file_path)
-                        logger.info(f"已打开文件: {file_path}")
+                        logger.info("已打开文件: %s", file_path)
                         return {
                             "success": True,
                             "message": "文件已打开，请手动打印",
@@ -312,18 +312,18 @@ class PrinterUtils:
                             "manual": True,
                         }
                     except RECOVERABLE_ERRORS as e3:
-                        logger.error(f"方法3也失败: {e3}")
+                        logger.error("方法3也失败: %s", e3)
                         raise Exception(f"所有打印方法都失败: {e1}; {e2}; {e3}")
 
         except RECOVERABLE_ERRORS as e:
-            logger.error(f"打印Excel文件失败: {e}")
+            logger.error("打印Excel文件失败: %s", e)
             return {"success": False, "message": f"打印失败: {str(e)}"}
 
     def _print_pdf(self, file_path: str, printer_name: str) -> dict:
         if not self._is_print_backend_available():
             return self._build_unavailable_result()
         try:
-            logger.info(f"尝试使用win32print直接打印PDF到 {printer_name}")
+            logger.info("尝试使用win32print直接打印PDF到 %s", printer_name)
 
             try:
                 hprinter = win32print.OpenPrinter(printer_name)
@@ -338,7 +338,7 @@ class PrinterUtils:
                     win32print.EndPagePrinter(hprinter)
                     win32print.EndDocPrinter(hprinter)
 
-                    logger.info(f"PDF文件已通过win32print发送到打印机: {file_path}")
+                    logger.info("PDF文件已通过win32print发送到打印机: %s", file_path)
                     return {
                         "success": True,
                         "message": "PDF文件已发送到打印机",
@@ -350,7 +350,7 @@ class PrinterUtils:
                     win32print.ClosePrinter(hprinter)
 
             except RECOVERABLE_ERRORS as e:
-                logger.warning(f"win32print打印失败: {e}")
+                logger.warning("win32print打印失败: %s", e)
 
             logger.info("尝试使用subprocess调用外部程序")
             try:
@@ -363,7 +363,7 @@ class PrinterUtils:
 
                 for adobe_path in adobe_paths:
                     if os.path.exists(adobe_path):
-                        logger.info(f"使用Adobe Reader: {adobe_path}")
+                        logger.info("使用Adobe Reader: %s", adobe_path)
 
                         subprocess.run(
                             [adobe_path, "/t", file_path, printer_name],
@@ -384,12 +384,12 @@ class PrinterUtils:
                 logger.warning("未找到Adobe Reader")
 
             except RECOVERABLE_ERRORS as e:
-                logger.warning(f"subprocess方法失败: {e}")
+                logger.warning("subprocess方法失败: %s", e)
 
             raise Exception("所有PDF打印方法都失败")
 
         except RECOVERABLE_ERRORS as e:
-            logger.error(f"打印PDF文件失败: {e}")
+            logger.error("打印PDF文件失败: %s", e)
             return {"success": False, "message": f"打印PDF失败: {str(e)}"}
 
     def _print_default(self, file_path: str, printer_name: str, show_app: bool = False) -> dict:
@@ -401,7 +401,7 @@ class PrinterUtils:
             win32api.ShellExecute(0, "print", file_path, f'/d:"{printer_name}"', ".", show_cmd)
 
             app_status = "（显示应用窗口）" if show_app else "（隐藏应用窗口）"
-            logger.info(f"文件已发送到打印机{app_status}: {file_path}")
+            logger.info("文件已发送到打印机%s: %s", app_status, file_path)
             return {
                 "success": True,
                 "message": f"打印任务已发送到打印机{app_status}",
@@ -411,7 +411,7 @@ class PrinterUtils:
             }
 
         except RECOVERABLE_ERRORS as e:
-            logger.error(f"打印文件失败: {e}")
+            logger.error("打印文件失败: %s", e)
             return {"success": False, "message": f"打印失败: {str(e)}"}
 
     def get_default_printer(self) -> str | None:
@@ -421,7 +421,7 @@ class PrinterUtils:
         try:
             return win32print.GetDefaultPrinter()
         except RECOVERABLE_ERRORS as e:
-            logger.error(f"获取默认打印机失败: {e}")
+            logger.error("获取默认打印机失败: %s", e)
             return None
 
     def test_printer(self, printer_name: str) -> dict:
@@ -444,7 +444,7 @@ class PrinterUtils:
             }
 
         except RECOVERABLE_ERRORS as e:
-            logger.error(f"测试打印机失败: {e}")
+            logger.error("测试打印机失败: %s", e)
             return {
                 "success": False,
                 "available": False,
@@ -482,7 +482,7 @@ class PrinterUtils:
             return printers[0]["name"] if printers else None
 
         except RECOVERABLE_ERRORS as e:
-            logger.error(f"获取发货单打印机失败: {e}")
+            logger.error("获取发货单打印机失败: %s", e)
             return None
 
     def get_label_printer(self) -> str | None:
@@ -505,5 +505,5 @@ class PrinterUtils:
             return printers[-1]["name"] if printers else None
 
         except RECOVERABLE_ERRORS as e:
-            logger.error(f"获取标签打印机失败: {e}")
+            logger.error("获取标签打印机失败: %s", e)
             return None

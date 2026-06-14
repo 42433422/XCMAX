@@ -147,9 +147,9 @@ class HybridIntentService(NeuroEventPublisherMixin):
                 confidence_threshold=self.bert_confidence_threshold,
                 use_fallback=self.bert_fallback_to_rule,
             )
-            logger.info(f"BERT 意图服务已初始化，模型路径: {self.bert_model_path}")
+            logger.info("BERT 意图服务已初始化，模型路径: %s", self.bert_model_path)
         except RECOVERABLE_ERRORS as e:
-            logger.warning(f"无法初始化 BERT 服务: {e}")
+            logger.warning("无法初始化 BERT 服务: %s", e)
             self.use_bert = False
 
     async def recognize(self, message: str) -> dict[str, Any]:
@@ -243,7 +243,7 @@ class HybridIntentService(NeuroEventPublisherMixin):
         except RuntimeError:
             return asyncio.run(self.recognize(message))
         except RECOVERABLE_ERRORS as e:
-            logger.error(f"混合意图识别失败: {e}")
+            logger.error("混合意图识别失败: %s", e)
             return rule_recognize_intents(message)
 
 

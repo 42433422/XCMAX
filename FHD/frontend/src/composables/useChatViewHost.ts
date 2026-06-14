@@ -6,6 +6,7 @@ import {
   PRO_INTENT_EXPERIENCE_KEY,
 } from '@/constants/clientModeTiers'
 import { resolveHostBusinessPageRedirect } from '@/utils/hostBusinessPageRedirect'
+import { asRecord } from '@/utils/typeGuards'
 import type { useModsStore } from '@/stores/mods'
 
 const CHAT_RIGHT_PANE_MQ = '(max-width: 1023px)'
@@ -31,7 +32,7 @@ export interface UseChatViewHostDeps {
   latestAssistantPush: Ref<{ title: string; description: string } | null>
   syncProModeState: () => void
   syncSessionMessages: () => Promise<void>
-  chatHandleAutoAction: (action: unknown, userMessage?: string) => void
+  chatHandleAutoAction: (action: Record<string, unknown>, userMessage?: string) => void
   sendMessage: () => Promise<void>
   batchCalculateHeights: () => void
   stopMessageTts: () => void
@@ -199,7 +200,7 @@ export function useChatViewHost(deps: UseChatViewHostDeps) {
 
     legacyAutoActionHandler =
       typeof (window as unknown as { handleAutoAction?: unknown }).handleAutoAction === 'function'
-        ? (window as unknown as { handleAutoAction: (a: unknown, m?: string) => void }).handleAutoAction
+        ? (window as Window & { handleAutoAction?: (a: unknown, m?: string) => void }).handleAutoAction ?? null
         : null
     ;(window as unknown as { __VUE_CHAT_SEND__?: (m: string) => Promise<boolean> }).__VUE_CHAT_SEND__ =
       async (message: string) => {
@@ -220,10 +221,10 @@ export function useChatViewHost(deps: UseChatViewHostDeps) {
       return true
     }
     ;(window as unknown as { __VUE_HANDLE_AUTO_ACTION__?: boolean }).__VUE_HANDLE_AUTO_ACTION__ = true
-    ;(window as unknown as { handleAutoAction: (a: unknown, m?: string) => void }).handleAutoAction = (
-      action,
-      userMessage,
-    ) => chatHandleAutoAction(action, userMessage)
+    ;(window as Window & { handleAutoAction: (a: unknown, m?: string) => void }).handleAutoAction = (
+      action: unknown,
+      userMessage?: string,
+    ) => chatHandleAutoAction(asRecord(action), userMessage)
     syncProModeState()
     window.addEventListener('xcagi:pro-task-status', setProRuntimeTaskFromEvent)
 

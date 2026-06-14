@@ -4,7 +4,7 @@ import json
 import logging
 import sqlite3
 import time
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 
@@ -174,4 +174,4 @@ class SQLiteVectorStore(VectorStorePort):
                 "DELETE FROM excel_vector_indexes WHERE index_id = ?", (index_id,)
             )
             conn.commit()
-        return result.rowcount > 0
+        return cast("bool", result.rowcount > 0)

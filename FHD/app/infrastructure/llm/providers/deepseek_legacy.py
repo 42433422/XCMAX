@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any
+from typing import Any, cast
 
 import httpx
 
@@ -64,7 +64,7 @@ class DeepSeekLegacyProvider:
                 "success",
                 time.perf_counter() - t0,
             )
-            return result
+            return cast("dict[str, Any] | None", result)
         except RECOVERABLE_ERRORS as exc:
             record_ai_call(self.provider_id, "chat", "error", time.perf_counter() - t0)
             logger.error("DeepSeekLegacyProvider failed: %s", exc)

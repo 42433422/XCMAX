@@ -125,7 +125,7 @@ def _register_mods_endpoints(router) -> None:
                 },
             }
         except RECOVERABLE_ERRORS as e:
-            logger.exception(f"get_loading_status failed: {e}")
+            logger.exception("get_loading_status failed: %s", e)
             return {
                 "success": True,
                 "data": {
@@ -170,7 +170,7 @@ def _register_mods_endpoints(router) -> None:
                 headers={"ETag": f'"{etag}"', "Cache-Control": "private, max-age=30"},
             )
         except RECOVERABLE_ERRORS as e:
-            logger.exception(f"list_mods failed: {e}")
+            logger.exception("list_mods failed: %s", e)
             err = str(e)
             return {"success": False, "message": err, "error": err, "data": []}
 
@@ -184,7 +184,7 @@ def _register_mods_endpoints(router) -> None:
             routes = mm.get_routes()
             return {"success": True, "data": routes}
         except RECOVERABLE_ERRORS as e:
-            logger.exception(f"list_routes failed: {e}")
+            logger.exception("list_routes failed: %s", e)
             err = str(e)
             return {"success": False, "message": err, "error": err, "data": []}
 

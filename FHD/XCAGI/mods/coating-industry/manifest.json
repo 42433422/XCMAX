@@ -3,7 +3,7 @@
   "name": "涂料行业包",
   "version": "1.0.0",
   "author": "XCAGI",
-  "description": "涂料化工行业通用包占位；完整实现由客户 .xcmod 交付，客户品牌见 customer_delivery.json。",
+  "description": "涂料化工行业通用包：配方词汇、批次与出货门面；客户/产品与 AI 员工见账号定制 Mod。",
   "primary": true,
   "legacy_mod_ids": ["sz-qsm-pro"],
   "dependencies": {
@@ -19,8 +19,8 @@
     "menu": []
   },
   "onboarding": {
-    "custom_line_hint": "涂料配方、批次与客户服务；完整能力由定制 Mod 交付",
-    "custom_mod_ids": []
+    "custom_line_hint": "客户/产品菜单、批次处理与定制 AI 员工",
+    "custom_mod_ids": ["sz-qsm-pro"]
   },
   "hooks": {},
   "industry": {

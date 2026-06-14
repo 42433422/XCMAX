@@ -10,6 +10,7 @@ import {
 } from './useChatPersistence'
 import type { ShipmentTask } from './useShipmentTask'
 import type { ChatMessage } from './useChatMessages'
+import { asRecord, asArray, asString, asBoolean, asDisposable } from '@/utils/typeGuards'
 
 export interface UseChatSessionHistoryDeps {
   sessionId: Ref<string>
@@ -83,13 +84,10 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
       const data = await chatApi.getConversations({ limit: 20 })
       if (!data?.success) throw new Error(String(data?.message || '加载历史失败'))
 
-      const sessionsRaw = Array.isArray((data as unknown)?.sessions)
-        ? (data as unknown).sessions
-        : Array.isArray((data as unknown)?.data)
-          ? (data as unknown).data
-          : Array.isArray((data as unknown)?.conversations)
-            ? (data as unknown).conversations
-            : []
+      const dataRow = asRecord(data)
+      const sessionsRaw = asArray(
+        dataRow.sessions ?? dataRow.data ?? dataRow.conversations,
+      )
       historySessions.value = mergeHistorySessions(sessionsRaw) as HistorySessionItem[]
     } catch (e) {
       const localFallback = mergeHistorySessions([]) as HistorySessionItem[]
@@ -115,20 +113,29 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
 
     try {
       const data = await chatApi.getConversation(sid)
-      const serverMessages = Array.isArray((data as unknown)?.messages) ? (data as unknown).messages : []
+      const dataRow = asRecord(data)
+      const serverMessages = asArray(dataRow.messages)
       const localMessages = readLocalMessagesBySession(sid)
       if (data.success && serverMessages.length > 0) {
-        loadMessages(serverMessages.map((msg: unknown) => ({
-          role: msg?.role === 'user' || msg?.role === 'task' ? msg.role : 'ai',
-          content: normalizeServerContentToHtml(msg.content),
-          time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-        })))
+        loadMessages(serverMessages.map((msg: unknown) => {
+          const row = asRecord(msg)
+          const roleRaw = asString(row.role)
+          return {
+            role: roleRaw === 'user' || roleRaw === 'task' ? roleRaw : 'ai',
+            content: normalizeServerContentToHtml(asString(row.content)),
+            time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
+          }
+        }))
       } else if (localMessages.length > 0) {
-        loadMessages(localMessages.map((msg) => ({
-          role: msg.role === 'user' || msg.role === 'task' ? msg.role : 'ai',
-          content: normalizeServerContentToHtml(msg.content),
-          time: msg.time || new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-        })))
+        loadMessages(localMessages.map((msg) => {
+          const row = asRecord(msg)
+          const roleRaw = asString(row.role || (msg as { role?: string }).role)
+          return {
+            role: roleRaw === 'user' || roleRaw === 'task' ? roleRaw : 'ai',
+            content: normalizeServerContentToHtml(asString(row.content || (msg as { content?: string }).content)),
+            time: asString((msg as { time?: string }).time) || new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
+          }
+        }))
       } else if (data.success) {
         loadMessages([{
           role: 'ai',
@@ -136,17 +143,21 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
           time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
         }])
       } else {
-        throw new Error(String((data as unknown)?.message || '加载会话失败'))
+        throw new Error(asString((data as { message?: unknown }).message, '加载会话失败'))
       }
       showHistory.value = false
     } catch (e) {
       const localMessages = readLocalMessagesBySession(sid)
       if (localMessages.length > 0) {
-        loadMessages(localMessages.map((msg) => ({
-          role: msg.role === 'user' || msg.role === 'task' ? msg.role : 'ai',
-          content: normalizeServerContentToHtml(msg.content),
-          time: msg.time || new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-        })))
+        loadMessages(localMessages.map((msg) => {
+          const row = asRecord(msg)
+          const roleRaw = asString(row.role || (msg as { role?: string }).role)
+          return {
+            role: roleRaw === 'user' || roleRaw === 'task' ? roleRaw : 'ai',
+            content: normalizeServerContentToHtml(asString(row.content || (msg as { content?: string }).content)),
+            time: asString((msg as { time?: string }).time) || new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
+          }
+        }))
         historyError.value = ''
         showHistory.value = false
       } else {
@@ -171,7 +182,7 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
     try {
       clearLocalHistoryCache()
       const data = await chatApi.clearConversations({ user_id: 'default' })
-      if (!data?.success) throw new Error(String((data as unknown)?.message || '清空历史失败'))
+      if (!data?.success) throw new Error(asString((data as { message?: unknown }).message, '清空历史失败'))
       historySessions.value = mergeHistorySessions([]) as HistorySessionItem[]
     } catch (e) {
       historySessions.value = mergeHistorySessions([]) as HistorySessionItem[]

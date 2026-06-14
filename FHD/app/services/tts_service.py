@@ -180,7 +180,7 @@ def trigger_common_tts_warmup() -> None:
 
 
 async def _synthesize_mp3_bytes(req: TtsRequest) -> bytes:
-    import edge_tts  # type: ignore
+    import edge_tts
 
     kwargs: dict = {"text": req.text, "voice": req.voice}
     if req.rate:

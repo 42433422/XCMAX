@@ -222,9 +222,9 @@ def materialize_host_foundation_bridges(edition: str | None = None) -> dict[str,
         seed_edition_mods_from_bundle,
     )
 
-    ed: Edition = edition or resolve_edition() or "generic"  # type: ignore[assignment]
+    ed: Edition = edition or resolve_edition() or "generic"
     if ed not in ("minimal", "generic", "full"):
-        ed = "generic"  # type: ignore[assignment]
+        ed = "generic"
 
     seeded = seed_edition_mods_from_bundle(ed)
     mm = get_mod_manager()

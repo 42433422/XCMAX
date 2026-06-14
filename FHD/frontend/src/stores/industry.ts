@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import { systemApi } from '@/api/system'
 import { useModsStore } from '@/stores/mods'
 import { DEFAULT_INDUSTRY_ID } from '@/constants/industryDefaults'
+import { asRecord, asArray, asString, asBoolean, asDisposable } from '@/utils/typeGuards'
 
 interface Industry {
   id: number | string;
@@ -26,9 +27,9 @@ function mergeModIndustriesInto(
   const out: Industry[] = Array.isArray(base) ? [...base] : []
   const seen = new Set(out.map((ind) => String(ind.id ?? '').trim()).filter(Boolean))
   for (const mod of modList) {
-    const ind = mod && typeof mod === 'object' ? (mod as unknown).industry : null
-    if (!ind || typeof ind !== 'object') continue
-    const id = String(ind.id ?? '').trim()
+    const ind = asRecord(mod.industry)
+    if (!Object.keys(ind).length) continue
+    const id = asString(ind.id).trim()
     if (!id || seen.has(id)) continue
     seen.add(id)
     out.push({
@@ -73,11 +74,13 @@ export const useIndustryStore = defineStore('industry', () => {
   })
 
   const primaryUnit = computed(() => {
-    return currentConfig.value?.units?.primary || '天'
+    const units = asRecord(asRecord(currentConfig.value).units)
+    return asString(units.primary, '天')
   })
 
   const primaryLabel = computed(() => {
-    return currentConfig.value?.quantity_fields?.primary_label || '出勤天数'
+    const qf = asRecord(asRecord(currentConfig.value).quantity_fields)
+    return asString(qf.primary_label, '出勤天数')
   })
 
   const isLoaded = computed(() => {
@@ -85,17 +88,17 @@ export const useIndustryStore = defineStore('industry', () => {
   })
 
   /** 从 modsStore 当前选中的 mod 取 manifest.industry，找不到时返回 null */
-  function activeModIndustryConfig(): unknown | null {
+  function activeModIndustryConfig(): Record<string, unknown> | null {
     try {
       const modsStore = useModsStore()
       const activeId = String(modsStore.activeModId || '').trim()
       const list = Array.isArray(modsStore.mods) ? modsStore.mods : []
       const exact = activeId
-        ? list.find((m: unknown) => String(m?.id || '').trim() === activeId)
+        ? list.find((m: unknown) => String(asRecord(m).id || '').trim() === activeId)
         : null
       const candidate = exact || list[0] || null
-      const ind = candidate && (candidate as unknown).industry
-      return ind && typeof ind === 'object' ? ind : null
+      const ind = candidate ? asRecord(asRecord(candidate).industry) : {}
+      return Object.keys(ind).length ? ind : null
     } catch {
       return null
     }
@@ -109,7 +112,7 @@ export const useIndustryStore = defineStore('industry', () => {
       const response = await systemApi.getIndustries()
       let serverIndustries: Industry[] = []
       if (response.success && response.data) {
-        serverIndustries = (response.data as unknown).industries || []
+        serverIndustries = asArray<Industry>(asRecord(response.data).industries)
       }
       let modList: ReadonlyArray<Record<string, unknown>> = []
       try {

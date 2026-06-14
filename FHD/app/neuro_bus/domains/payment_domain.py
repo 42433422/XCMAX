@@ -44,14 +44,14 @@ class PaymentNeuroDomain(NeuroDomain):
             self._transaction_count += 1
             amount = Decimal(event.payload.get("amount", "0"))
             self._total_amount += amount
-            logger.info(f"Payment completed: amount={amount}")
+            logger.info("Payment completed: amount=%s", amount)
             bump_domain_handler_metric("payment.completed")
 
         @self.on("payment.failed", priority=0, channel=DomainChannel.CRITICAL)
         async def on_failed(event):
             self._failed_count += 1
             error = event.payload.get("error")
-            logger.error(f"Payment failed: {error}")
+            logger.error("Payment failed: %s", error)
             bump_domain_handler_metric("payment.failed")
 
     async def initialize(self):

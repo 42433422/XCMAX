@@ -54,7 +54,7 @@ class EventDeduplicator:
         self._lock = RLock()
         self._last_cleanup = time.time()
 
-        logger.info(f"EventDeduplicator initialized (ttl={ttl_seconds}s, max={max_entries})")
+        logger.info("EventDeduplicator initialized (ttl=%ss, max=%s)", ttl_seconds, max_entries)
 
     def is_duplicate(self, event: NeuroEvent) -> bool:
         """
@@ -74,7 +74,7 @@ class EventDeduplicator:
                 age = time.time() - entry.timestamp
 
                 if age < self._ttl:
-                    logger.debug(f"Duplicate detected: {dedup_key[:16]}... (age={age:.1f}s)")
+                    logger.debug(f"Duplicate detected: {dedup_key[:16]}... (age={age:.1f}s)")  # noqa: G004
                     return True
                 else:
                     # 已过期，删除旧记录
@@ -108,7 +108,7 @@ class EventDeduplicator:
 
                 if age < self._ttl and not entry.processed:
                     # 正在处理中，视为重复
-                    logger.warning(f"Event already processing: {dedup_key[:16]}...")
+                    logger.warning("Event already processing: %s...", dedup_key[:16])
                     return False
 
             # 容量检查
@@ -137,7 +137,7 @@ class EventDeduplicator:
                 entry = self._entries[dedup_key]
                 entry.processed = True
                 entry.result = result
-                logger.debug(f"Marked processed: {dedup_key[:16]}...")
+                logger.debug("Marked processed: %s...", dedup_key[:16])
 
     def get_result(self, event: NeuroEvent) -> Any | None:
         """获取已处理事件的结果（用于幂等返回）"""
@@ -180,7 +180,7 @@ class EventDeduplicator:
                 del self._event_to_key[entry.event_id]
 
         if expired_keys:
-            logger.debug(f"Cleaned up {len(expired_keys)} expired entries")
+            logger.debug("Cleaned up %s expired entries", len(expired_keys))
 
     def _evict_oldest(self):
         """淘汰最老的条目（LRU策略）"""
@@ -193,7 +193,7 @@ class EventDeduplicator:
         if entry.event_id in self._event_to_key:
             del self._event_to_key[entry.event_id]
 
-        logger.debug(f"Evicted oldest entry: {oldest_key[:16]}...")
+        logger.debug("Evicted oldest entry: %s...", oldest_key[:16])
 
     def get_stats(self) -> dict:
         """获取统计信息"""

@@ -216,7 +216,7 @@ class ProductImportService(NeuroEventPublisherMixin):
                         db.add(product)
                         result["imported"] += 1
                     except RECOVERABLE_ERRORS as e:
-                        logger.error(f"导入产品失败：{e}")
+                        logger.error("导入产品失败：%s", e)
                         result["failed"] += 1
                         result["details"]["failed_items"].append({"data": row, "error": str(e)})
 
@@ -227,15 +227,15 @@ class ProductImportService(NeuroEventPublisherMixin):
 
                 trigger("product.imported", count=result["imported"], products=data)
             except RECOVERABLE_ERRORS as hook_err:
-                logger.warning(f"Hook trigger failed: {hook_err}")
+                logger.warning("Hook trigger failed: %s", hook_err)
 
             logger.info(
-                f"产品导入完成：成功{result['imported']}, "
-                f"跳过{result['skipped']}, 失败{result['failed']}"
+                "产品导入完成：成功%s, "
+                f"跳过%s, 失败%s", result['imported'], result['skipped'], result['failed']
             )
 
         except RECOVERABLE_ERRORS as e:
-            logger.exception(f"导入产品数据失败：{e}")
+            logger.exception("导入产品数据失败：%s", e)
             result["error"] = str(e)
 
         return result

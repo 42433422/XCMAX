@@ -136,13 +136,13 @@ class PerformanceConfig:
 
         for key, value in cls.get_all_configs().items():
             display_key = key.replace("_", " ").title()
-            logger.info(f"  {display_key}: {value}")
+            logger.info("  %s: %s", display_key, value)
 
         issues = cls.validate()
         if issues:
-            logger.warning(f"⚠️  配置问题 ({len(issues)}):")
+            logger.warning("⚠️  配置问题 (%s):", len(issues))
             for issue in issues:
-                logger.warning(f"    - {issue}")
+                logger.warning("    - %s", issue)
         else:
             logger.info("✅ 所有配置有效")
 

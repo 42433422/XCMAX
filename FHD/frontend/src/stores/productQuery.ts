@@ -1,14 +1,16 @@
 import { defineStore } from 'pinia'
 import { ref, computed, type Ref } from 'vue'
 import { productsApi } from '@/api/products'
+import type { ProductUpdateDTO } from '@/types/product'
+import { asRecord, asArray, asString } from '@/utils/typeGuards'
 
-interface Company {
+export interface Company {
   id: number | string;
   name: string;
   [key: string]: unknown;
 }
 
-interface LocalProduct {
+export interface LocalProduct {
   id: number | string;
   name: string;
   model?: string;
@@ -128,7 +130,7 @@ export const useProductQueryStore = defineStore('productQuery', () => {
     searchQuery.value = query
   }
 
-  async function updateProduct(productId: number | string, data: unknown) {
+  async function updateProduct(productId: number | string, data: ProductUpdateDTO) {
     loading.value = true
     error.value = null
     

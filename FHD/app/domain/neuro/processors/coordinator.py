@@ -195,7 +195,7 @@ class ProcessorCoordinator:
             self._error_count += 1
             elapsed_ms = (time.perf_counter() - start_time) * 1000
 
-            logger.exception(f"Processing error: {e}")
+            logger.exception("Processing error: %s", e)
 
             # 紧急降级到 Reflex
             try:
@@ -339,7 +339,7 @@ class ProcessorCoordinator:
                 )
 
         except RECOVERABLE_ERRORS as e:
-            logger.exception(f"Failed to emit intent event: {e}")
+            logger.exception("Failed to emit intent event: %s", e)
 
     def get_stats(self) -> dict[str, Any]:
         """获取统计"""

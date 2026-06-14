@@ -198,7 +198,7 @@ class _CircuitBreaker:
                 self._last_failure_time = time.time()
                 if self._failure_count >= self._failure_threshold:
                     self._state = "open"
-                    logger.warning(f"Circuit breaker opened after {self._failure_count} failures")
+                    logger.warning("Circuit breaker opened after %s failures", self._failure_count)
             raise e
 
     def reset(self) -> None:

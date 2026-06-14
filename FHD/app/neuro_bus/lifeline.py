@@ -129,14 +129,14 @@ class Lifeline:
 
             # 触发回调
             if new_load != old_load:
-                logger.warning(f"System load changed: {old_load.value} -> {new_load.value}")
+                logger.warning("System load changed: %s -> %s", old_load.value, new_load.value)
                 self._current_load = new_load
 
                 if self._on_load_change:
                     try:
                         self._on_load_change(old_load, new_load)
                     except RECOVERABLE_ERRORS as e:
-                        logger.exception(f"Load change callback error: {e}")
+                        logger.exception("Load change callback error: %s", e)
 
             return self._current_load
 
@@ -163,8 +163,8 @@ class Lifeline:
             self._dropped_stats[event.event_type] = self._dropped_stats.get(event.event_type, 0) + 1
 
             logger.warning(
-                f"Lifeline dropped event: {event.event_type} "
-                f"(priority={event.priority.name}, load={load.value})"
+                "Lifeline dropped event: %s "
+                f"(priority=%s, load=%s)", event.event_type, event.priority.name, load.value
             )
             return False
 

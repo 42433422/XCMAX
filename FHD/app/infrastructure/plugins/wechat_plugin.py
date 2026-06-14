@@ -39,7 +39,7 @@ class WechatPlugin:
         self._available = bool(self._decrypt_path or self._cv_path)
         if self._available:
             logger.info(
-                f"WeChat plugin available. decrypt={bool(self._decrypt_path)}, cv={bool(self._cv_path)}"
+                "WeChat plugin available. decrypt=%s, cv=%s", bool(self._decrypt_path), bool(self._cv_path)
             )
         return self._available
 
@@ -69,7 +69,7 @@ class WechatPlugin:
                 paths_added += 1
 
         if paths_added > 0:
-            logger.debug(f"Added {paths_added} WeChat paths to sys.path")
+            logger.debug("Added %s WeChat paths to sys.path", paths_added)
         return paths_added > 0
 
     def get_decrypted_db_path(self, db_type: str = "message") -> str | None:

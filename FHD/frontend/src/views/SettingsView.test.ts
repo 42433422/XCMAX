@@ -10,6 +10,21 @@ function makeRouter() {
   })
 }
 
+const globalStubs = {
+  RouterLink: true,
+  ElButton: true,
+  ElInput: true,
+  ElSwitch: true,
+  ElTabs: true,
+  ElTabPane: true,
+  ElSelect: true,
+  ElOption: true,
+  ElForm: true,
+  ElFormItem: true,
+  ElDivider: true,
+  ElAlert: true,
+}
+
 describe('SettingsView.vue', () => {
   it('mounts without throwing', async () => {
     const router = makeRouter()
@@ -18,16 +33,22 @@ describe('SettingsView.vue', () => {
     const wrapper = mount(SettingsView, {
       global: {
         plugins: [router],
-        stubs: {
-          RouterLink: true,
-          ElButton: true,
-          ElInput: true,
-          ElSwitch: true,
-          ElTabs: true,
-          ElTabPane: true,
-        },
+        stubs: globalStubs,
       },
     })
     expect(wrapper.exists()).toBe(true)
+  })
+
+  it('renders settings shell text', async () => {
+    const router = makeRouter()
+    await router.push('/settings')
+    await router.isReady()
+    const wrapper = mount(SettingsView, {
+      global: {
+        plugins: [router],
+        stubs: globalStubs,
+      },
+    })
+    expect(wrapper.text().length).toBeGreaterThan(10)
   })
 })

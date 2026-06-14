@@ -113,7 +113,7 @@ class UnitProductsImportService:
             }
 
         except RECOVERABLE_ERRORS as e:
-            logger.exception(f"导入购买单位+产品列表失败：{e}")
+            logger.exception("导入购买单位+产品列表失败：%s", e)
             return {"success": False, "message": f"导入失败：{str(e)}"}
 
     def _validate_params(self, saved_name: str, unit_name: str) -> dict[str, Any] | None:

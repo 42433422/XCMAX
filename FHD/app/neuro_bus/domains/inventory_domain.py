@@ -37,13 +37,13 @@ class InventoryNeuroDomain(NeuroDomain):
         async def on_low_stock(event):
             product_id = event.payload.get("product_id")
             current = event.payload.get("current_quantity")
-            logger.warning(f"Low stock alert: product={product_id}, qty={current}")
+            logger.warning("Low stock alert: product=%s, qty=%s", product_id, current)
             bump_domain_handler_metric("inventory.low_stock")
 
         @self.on("inventory.out_of_stock", priority=0, channel=DomainChannel.CRITICAL)
         async def on_out_of_stock(event):
             product_id = event.payload.get("product_id")
-            logger.error(f"Out of stock: product={product_id}")
+            logger.error("Out of stock: product=%s", product_id)
             bump_domain_handler_metric("inventory.out_of_stock")
 
     async def initialize(self):

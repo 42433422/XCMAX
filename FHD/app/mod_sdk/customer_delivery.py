@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
-from typing import Any
+from typing import Any, cast
 
 from app.mod_sdk.host_profile import resolve_fhd_config_dir
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -25,7 +25,7 @@ def load_customer_delivery_document() -> dict[str, Any]:
     if cfg:
         doc = _load_json(cfg / "customer_delivery.json")
         if doc and isinstance(doc.get("deliveries"), list):
-            return doc
+            return cast("dict[str, Any]", doc)
     return {"schema_version": 1, "deliveries": []}
 
 

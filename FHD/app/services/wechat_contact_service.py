@@ -9,7 +9,7 @@ import json
 import logging
 import re
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import or_
 
@@ -102,7 +102,7 @@ class WechatContactService(NeuroEventPublisherMixin):
                 return results
 
         except RECOVERABLE_ERRORS as e:
-            logger.exception(f"获取联系人列表失败：{e}")
+            logger.exception("获取联系人列表失败：%s", e)
             return []
 
     def _search_contacts_from_wechat_db(
@@ -209,7 +209,7 @@ class WechatContactService(NeuroEventPublisherMixin):
                 logger.debug("WeChat plugin not available, skipping cv integration")
 
             try:
-                from wechat_db_read import get_recent_messages  # type: ignore
+                from wechat_db_read import get_recent_messages
             except RECOVERABLE_ERRORS as e:
                 logger.warning("导入 wechat_db_read 失败，无法从微信 DB 搜索联系人：%s", e)
                 return []
@@ -336,7 +336,7 @@ class WechatContactService(NeuroEventPublisherMixin):
                 }
 
         except RECOVERABLE_ERRORS as e:
-            logger.error(f"获取联系人失败：{e}")
+            logger.error("获取联系人失败：%s", e)
             return None
 
     def add_contact(
@@ -386,7 +386,7 @@ class WechatContactService(NeuroEventPublisherMixin):
                 return {"success": True, "message": "联系人添加成功", "contact_id": contact.id}
 
         except RECOVERABLE_ERRORS as e:
-            logger.exception(f"添加联系人失败：{e}")
+            logger.exception("添加联系人失败：%s", e)
             return {"success": False, "message": str(e)}
 
     def update_contact(
@@ -435,7 +435,7 @@ class WechatContactService(NeuroEventPublisherMixin):
                 return {"success": True, "message": "联系人更新成功"}
 
         except RECOVERABLE_ERRORS as e:
-            logger.exception(f"更新联系人失败：{e}")
+            logger.exception("更新联系人失败：%s", e)
             return {"success": False, "message": str(e)}
 
     def delete_contact(self, contact_id: int) -> dict[str, Any]:
@@ -458,7 +458,7 @@ class WechatContactService(NeuroEventPublisherMixin):
                 return {"success": True, "message": "联系人已删除"}
 
         except RECOVERABLE_ERRORS as e:
-            logger.exception(f"删除联系人失败：{e}")
+            logger.exception("删除联系人失败：%s", e)
             return {"success": False, "message": str(e)}
 
     def star_contact(self, contact_id: int, starred: bool = True) -> dict[str, Any]:
@@ -483,7 +483,7 @@ class WechatContactService(NeuroEventPublisherMixin):
                 }
 
         except RECOVERABLE_ERRORS as e:
-            logger.exception(f"取消星标失败：{e}")
+            logger.exception("取消星标失败：%s", e)
             return {"success": False, "message": str(e)}
 
     def get_contact_context(self, contact_id: int) -> list[dict[str, Any]]:
@@ -500,12 +500,12 @@ class WechatContactService(NeuroEventPublisherMixin):
                     return []
 
                 try:
-                    return json.loads(context.context_json)
+                    return cast("list[dict[str, Any]]", json.loads(context.context_json))
                 except RECOVERABLE_ERRORS:
                     return []
 
         except RECOVERABLE_ERRORS as e:
-            logger.error(f"获取联系人上下文失败：{e}")
+            logger.error("获取联系人上下文失败：%s", e)
             return []
 
     def save_contact_context(
@@ -538,7 +538,7 @@ class WechatContactService(NeuroEventPublisherMixin):
                 return True
 
         except RECOVERABLE_ERRORS as e:
-            logger.exception(f"保存联系人上下文失败：{e}")
+            logger.exception("保存联系人上下文失败：%s", e)
             return False
 
     def resolve_send_message(self, message: str) -> tuple[str | None, str | None]:
@@ -690,7 +690,7 @@ class WechatContactService(NeuroEventPublisherMixin):
                     contact_id=contact_id, wechat_id=wechat_id, messages=messages
                 )
 
-                logger.info(f"刷新联系人消息成功 contact_id={contact_id}, count={len(messages)}")
+                logger.info("刷新联系人消息成功 contact_id=%s, count=%s", contact_id, len(messages))
 
                 return {
                     "success": True,
@@ -699,7 +699,7 @@ class WechatContactService(NeuroEventPublisherMixin):
                 }
 
         except RECOVERABLE_ERRORS as e:
-            logger.exception(f"刷新联系人消息失败：{e}")
+            logger.exception("刷新联系人消息失败：%s", e)
             return {"success": False, "message": f"刷新失败：{str(e)}"}
 
 

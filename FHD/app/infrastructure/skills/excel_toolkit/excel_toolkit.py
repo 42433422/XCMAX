@@ -76,7 +76,7 @@ def view_excel_content(
     except FileNotFoundError:
         return {"success": False, "message": f"文件不存在: {file_path}"}
     except RECOVERABLE_ERRORS as e:
-        logger.error(f"查看Excel内容失败: {e}")
+        logger.error("查看Excel内容失败: %s", e)
         return {"success": False, "message": f"读取失败: {str(e)}"}
 
 

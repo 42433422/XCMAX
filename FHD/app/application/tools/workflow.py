@@ -18,7 +18,7 @@ import logging
 import os
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pandas as pd
 
@@ -76,7 +76,7 @@ def run_natural_language_pandas(
     result_df = df
 
     try:
-        from app.legacy.excel_text_to_pandas import ExcelTextToPandas  # type: ignore
+        from app.legacy.excel_text_to_pandas import ExcelTextToPandas
 
         converter = ExcelTextToPandas()
         code = converter.translate(natural_language, df)
@@ -787,7 +787,7 @@ def execute_workflow_tool(
             from app.services.kitten_ai_document.generate import generate_office_file
             from app.services.kitten_ai_document.pickup import store_document_pickup
 
-            content, fname = generate_office_file(req, fmt)  # type: ignore[arg-type]
+            content, fname = generate_office_file(req, fmt)
             mime = (
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 if fmt == "xlsx"

@@ -24,7 +24,12 @@
           <span class="app-launcher-name">生产员工</span>
           <span class="app-launcher-desc">部署与调度生产 AI 员工，编排任务流、监控工位运行与自动化交付</span>
         </button>
-        <button class="app-launcher app-launcher--modstore" type="button" @click="goShellPage('mod-store')">
+        <button
+          class="app-launcher app-launcher--modstore"
+          type="button"
+          data-tour="ecosystem-launcher-modstore"
+          @click="goShellPage('mod-store')"
+        >
           <span class="app-launcher-icon app-launcher-icon--modstore" aria-hidden="true">
             <ModStoreLauncherIcon />
           </span>

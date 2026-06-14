@@ -64,7 +64,7 @@ class ReflexPattern:
             try:
                 self._compiled.append(re.compile(p, re.IGNORECASE))
             except re.error as e:
-                logger.error(f"Invalid pattern {p}: {e}")
+                logger.error("Invalid pattern %s: %s", p, e)
 
     def match(self, text: str) -> tuple[bool, float]:
         """
@@ -316,7 +316,7 @@ class IntentReflexArc:
 
         except RECOVERABLE_ERRORS as e:
             elapsed_us = (time.perf_counter() - start_time) * 1_000_000
-            logger.exception(f"Reflex arc error after {elapsed_us:.0f}us: {e}")
+            logger.exception(f"Reflex arc error after {elapsed_us:.0f}us: {e}")  # noqa: G004
             return ReflexResult(
                 triggered=False,
                 reflex_type=ReflexType.UNKNOWN,

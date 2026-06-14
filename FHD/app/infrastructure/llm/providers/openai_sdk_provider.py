@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from typing import Any
+from typing import Any, cast
 
 from app.utils.metrics import record_ai_call
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -48,8 +48,8 @@ class OpenAISdkProvider:
                 **{k: v for k, v in kwargs.items() if k not in ("model",)},
             )
             if hasattr(resp, "model_dump"):
-                return resp.model_dump()
-            return dict(resp)  # type: ignore[arg-type]
+                return cast("dict[str, Any]", resp.model_dump())
+            return dict(resp)
 
         try:
             result = await asyncio.to_thread(_sync_call)

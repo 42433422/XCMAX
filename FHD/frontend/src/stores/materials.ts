@@ -3,6 +3,7 @@ import { ref, computed, type Ref } from 'vue'
 import materialsApi from '../api/materials'
 import type { Material, MaterialCreateDTO, MaterialUpdateDTO } from '@/types/material'
 import type { ApiResponse } from '@/types/api'
+import { asRecord, asArray, asString } from '@/utils/typeGuards'
 
 interface OperationResult {
   success: boolean;
@@ -19,13 +20,21 @@ export const useMaterialsStore = defineStore('materials', () => {
   const materialCount = computed(() => materials.value.length)
 
   const lowStockMaterials = computed(() => {
-    return materials.value.filter(m =>
-      m.quantity !== null && (m as unknown).min_stock !== null && m.quantity < (m as unknown).min_stock
-    )
+    return materials.value.filter((m) => {
+      const row = asRecord(m)
+      const minStock = row.min_stock
+      return (
+        m.quantity != null
+        && typeof minStock === 'number'
+        && m.quantity < minStock
+      )
+    })
   })
 
   const categories = computed(() => {
-    const cats = new Set(materials.value.map((m: unknown) => m.category).filter(Boolean))
+    const cats = new Set(
+      materials.value.map((m) => asRecord(m).category).filter(Boolean),
+    )
     return Array.from(cats)
   })
 

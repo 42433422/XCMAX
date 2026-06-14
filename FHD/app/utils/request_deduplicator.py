@@ -110,9 +110,9 @@ class RequestDeduplicator:
                     self._stats["deduplicated"] += 1
                     if use_cache and record.result is not None:
                         self._stats["cache_hits"] += 1
-                        logger.debug(f"请求去重命中 (缓存): {func.__name__}")
+                        logger.debug("请求去重命中 (缓存): %s", func.__name__)
                         return (True, record.result)
-                    logger.debug(f"请求去重命中 (处理中): {func.__name__}")
+                    logger.debug("请求去重命中 (处理中): %s", func.__name__)
                     return (True, None)
 
             new_record = DedupRecord(key=key, is_processing=True)
@@ -282,7 +282,7 @@ def idempotent_operation(idempotency_key_func: Callable | None = None, ttl: int 
             )
 
             if is_dup:
-                logger.info(f"幂等操作跳过: {key}")
+                logger.info("幂等操作跳过: %s", key)
 
             return result
 

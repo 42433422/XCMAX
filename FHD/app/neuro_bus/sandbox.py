@@ -13,7 +13,7 @@ import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any
+from typing import Any, cast
 
 from app.neuro_bus.events.base import NeuroEvent
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -203,7 +203,7 @@ class Sandbox:
         try:
             simulator(context)
         except RECOVERABLE_ERRORS as e:
-            logger.exception(f"Sandbox simulation error: {e}")
+            logger.exception("Sandbox simulation error: %s", e)
             return SandboxReport(
                 event_id=event.metadata.event_id,
                 event_type=event.event_type,
@@ -263,11 +263,11 @@ class Sandbox:
         report = self.simulate(event)
 
         if not report.can_execute:
-            logger.warning(f"Sandbox validation failed: {report.warnings}")
+            logger.warning("Sandbox validation failed: %s", report.warnings)
             return False
 
         if report.risk_score > max_risk_score:
-            logger.warning(f"Risk score {report.risk_score} exceeds threshold {max_risk_score}")
+            logger.warning("Risk score %s exceeds threshold %s", report.risk_score, max_risk_score)
             return False
 
         return True
@@ -306,11 +306,11 @@ class NeuroSandbox:
 
         if not report.can_execute or report.risk_score > 70:
             logger.error(
-                f"Event {event.event_type} failed prescreening: "
-                f"risk={report.risk_score}, warnings={report.warnings}"
+                "Event %s failed prescreening: "
+                f"risk=%s, warnings=%s", event.event_type, report.risk_score, report.warnings
             )
 
-        return report
+        return cast("SandboxReport | None", report)
 
     def register_simulator(self, event_type: str, simulator: Callable):
         """注册模拟器"""
@@ -320,4 +320,4 @@ class NeuroSandbox:
         """验证事件"""
         if not self.should_prescreen(event):
             return True
-        return self._sandbox.validate(event)
+        return cast("bool", self._sandbox.validate(event))

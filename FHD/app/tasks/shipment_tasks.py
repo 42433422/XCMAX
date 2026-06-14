@@ -6,7 +6,7 @@
 
 import logging
 import os
-from typing import Any
+from typing import Any, cast
 
 from app.extensions import celery_app
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -37,7 +37,7 @@ def generate_shipment_order(
             - message: 响应消息
     """
     try:
-        logger.info(f"开始生成发货单：{unit_name}, 产品数量：{len(products)}")
+        logger.info("开始生成发货单：%s, 产品数量：%s", unit_name, len(products))
 
         # 调用服务层生成发货单
         from app.bootstrap import get_shipment_app_service
@@ -47,11 +47,11 @@ def generate_shipment_order(
             unit_name=unit_name, products=products, date=date
         )
 
-        logger.info(f"发货单生成完成：{result}")
-        return result
+        logger.info("发货单生成完成：%s", result)
+        return cast("dict[str, Any]", result)
 
     except RECOVERABLE_ERRORS as e:
-        logger.exception(f"生成发货单失败：{e}")
+        logger.exception("生成发货单失败：%s", e)
         try:
             self.retry(exc=e, countdown=60)
         except self.MaxRetriesExceededError:
@@ -84,7 +84,7 @@ def generate_batch_shipment_orders(self, orders: list[dict[str, Any]]) -> dict[s
             - results: 每个订单的结果
     """
     try:
-        logger.info(f"开始批量生成发货单，订单数：{len(orders)}")
+        logger.info("开始批量生成发货单，订单数：%s", len(orders))
 
         results = []
         succeeded = 0
@@ -103,11 +103,11 @@ def generate_batch_shipment_orders(self, orders: list[dict[str, Any]]) -> dict[s
                 else:
                     failed += 1
             except RECOVERABLE_ERRORS as e:
-                logger.exception(f"生成单个发货单失败：{e}")
+                logger.exception("生成单个发货单失败：%s", e)
                 failed += 1
                 results.append({"success": False, "message": str(e)})
 
-        logger.info(f"批量生成完成：成功 {succeeded}, 失败 {failed}")
+        logger.info("批量生成完成：成功 %s, 失败 %s", succeeded, failed)
 
         return {
             "success": failed == 0,
@@ -118,7 +118,7 @@ def generate_batch_shipment_orders(self, orders: list[dict[str, Any]]) -> dict[s
         }
 
     except RECOVERABLE_ERRORS as e:
-        logger.exception(f"批量生成发货单失败：{e}")
+        logger.exception("批量生成发货单失败：%s", e)
         try:
             self.retry(exc=e, countdown=120)
         except self.MaxRetriesExceededError:
@@ -151,7 +151,7 @@ def print_shipment_document(
             - message: 响应消息
     """
     try:
-        logger.info(f"开始打印发货单：{file_path}, 打印机：{printer_name}, 份数：{copies}")
+        logger.info("开始打印发货单：%s, 打印机：%s, 份数：%s", file_path, printer_name, copies)
 
         # 1. 验证文件存在
         import os
@@ -166,11 +166,11 @@ def print_shipment_document(
             "printed_at": None,
         }
 
-        logger.info(f"打印完成：{result}")
+        logger.info("打印完成：%s", result)
         return result
 
     except RECOVERABLE_ERRORS as e:
-        logger.exception(f"打印发货单失败：{e}")
+        logger.exception("打印发货单失败：%s", e)
         try:
             self.retry(exc=e, countdown=30)
         except self.MaxRetriesExceededError:
@@ -190,7 +190,7 @@ def cleanup_old_shipment_documents(days: int = 90) -> int:
         清理的文件数量
     """
     try:
-        logger.info(f"开始清理 {days} 天前的发货单文件")
+        logger.info("开始清理 %s 天前的发货单文件", days)
 
         from datetime import datetime, timedelta
 
@@ -199,7 +199,7 @@ def cleanup_old_shipment_documents(days: int = 90) -> int:
         output_dir = os.path.join(get_app_data_dir(), "shipment_outputs")
 
         if not os.path.exists(output_dir):
-            logger.info(f"发货单输出目录不存在：{output_dir}")
+            logger.info("发货单输出目录不存在：%s", output_dir)
             return 0
 
         cutoff_date = datetime.now() - timedelta(days=days)
@@ -217,15 +217,15 @@ def cleanup_old_shipment_documents(days: int = 90) -> int:
                 try:
                     os.remove(file_path)
                     cleaned_count += 1
-                    logger.info(f"已删除旧发货单：{filename}")
+                    logger.info("已删除旧发货单：%s", filename)
                 except RECOVERABLE_ERRORS as e:
-                    logger.warning(f"删除文件失败 {filename}: {e}")
+                    logger.warning("删除文件失败 %s: %s", filename, e)
 
-        logger.info(f"清理完成，共清理 {cleaned_count} 个文件")
+        logger.info("清理完成，共清理 %s 个文件", cleaned_count)
         return cleaned_count
 
     except RECOVERABLE_ERRORS as e:
-        logger.exception(f"清理旧文件失败：{e}")
+        logger.exception("清理旧文件失败：%s", e)
         return 0
 
 
@@ -252,18 +252,18 @@ def export_shipment_records_task(
             - count: 导出记录数
     """
     try:
-        logger.info(f"开始异步导出出货记录：unit={unit_name}, start={start_date}, end={end_date}")
+        logger.info("开始异步导出出货记录：unit=%s, start=%s, end=%s", unit_name, start_date, end_date)
 
         from app.bootstrap import get_shipment_app_service
 
         app_service = get_shipment_app_service()
         result = app_service.export_shipment_records(unit_name=unit_name)
 
-        logger.info(f"导出完成：{result}")
-        return result
+        logger.info("导出完成：%s", result)
+        return cast("dict[str, Any]", result)
 
     except RECOVERABLE_ERRORS as e:
-        logger.exception(f"导出出货记录失败：{e}")
+        logger.exception("导出出货记录失败：%s", e)
         try:
             self.retry(exc=e, countdown=60)
         except self.MaxRetriesExceededError:
@@ -297,7 +297,7 @@ def import_products_batch_task(
             - failed: 失败数量
     """
     try:
-        logger.info(f"开始异步批量导入产品：unit={unit_name}, 数量={len(products_data)}")
+        logger.info("开始异步批量导入产品：unit=%s, 数量=%s", unit_name, len(products_data))
 
         from app.services import get_products_service
 
@@ -323,11 +323,11 @@ def import_products_batch_task(
                         failed += 1
                         failed_items.append(item)
                 except RECOVERABLE_ERRORS as item_err:
-                    logger.warning(f"导入单个产品失败：{item_err}")
+                    logger.warning("导入单个产品失败：%s", item_err)
                     failed += 1
                     failed_items.append(item)
 
-        logger.info(f"批量导入完成：成功={imported}, 跳过={skipped}, 失败={failed}")
+        logger.info("批量导入完成：成功=%s, 跳过=%s, 失败=%s", imported, skipped, failed)
         return {
             "success": failed == 0,
             "imported": imported,
@@ -337,7 +337,7 @@ def import_products_batch_task(
         }
 
     except RECOVERABLE_ERRORS as e:
-        logger.exception(f"批量导入产品失败：{e}")
+        logger.exception("批量导入产品失败：%s", e)
         try:
             self.retry(exc=e, countdown=60)
         except self.MaxRetriesExceededError:
@@ -371,7 +371,7 @@ def generate_labels_batch_task(self, labels: list[dict[str, Any]]) -> dict[str, 
             - file_path: 文件路径
     """
     try:
-        logger.info(f"开始异步批量生成标签：数量={len(labels)}")
+        logger.info("开始异步批量生成标签：数量=%s", len(labels))
 
         from app.services import get_printer_service
 
@@ -392,10 +392,10 @@ def generate_labels_batch_task(self, labels: list[dict[str, Any]]) -> dict[str, 
                     generated += 1
                 results.append(result)
             except RECOVERABLE_ERRORS as label_err:
-                logger.warning(f"生成单个标签失败：{label_err}")
+                logger.warning("生成单个标签失败：%s", label_err)
                 results.append({"success": False, "message": str(label_err)})
 
-        logger.info(f"批量生成标签完成：成功={generated}")
+        logger.info("批量生成标签完成：成功=%s", generated)
         return {
             "success": generated > 0,
             "generated": generated,
@@ -404,7 +404,7 @@ def generate_labels_batch_task(self, labels: list[dict[str, Any]]) -> dict[str, 
         }
 
     except RECOVERABLE_ERRORS as e:
-        logger.exception(f"批量生成标签失败：{e}")
+        logger.exception("批量生成标签失败：%s", e)
         try:
             self.retry(exc=e, countdown=60)
         except self.MaxRetriesExceededError:
@@ -437,7 +437,7 @@ def generate_parallel_shipment_orders(self, orders: list[dict[str, Any]]) -> dic
     try:
         from celery import group
 
-        logger.info(f"开始并行生成发货单，订单数：{len(orders)}")
+        logger.info("开始并行生成发货单，订单数：%s", len(orders))
 
         job = group(
             generate_shipment_order.s(
@@ -449,7 +449,7 @@ def generate_parallel_shipment_orders(self, orders: list[dict[str, Any]]) -> dic
         result = job.apply_async()
         task_ids = result.results
 
-        logger.info(f"并行任务已提交，task_ids: {[t.id for t in task_ids]}")
+        logger.info("并行任务已提交，task_ids: %s", [t.id for t in task_ids])
 
         return {
             "success": True,
@@ -460,7 +460,7 @@ def generate_parallel_shipment_orders(self, orders: list[dict[str, Any]]) -> dic
         }
 
     except RECOVERABLE_ERRORS as e:
-        logger.exception(f"并行生成发货单失败：{e}")
+        logger.exception("并行生成发货单失败：%s", e)
         return {
             "success": False,
             "message": f"任务提交失败：{str(e)}",

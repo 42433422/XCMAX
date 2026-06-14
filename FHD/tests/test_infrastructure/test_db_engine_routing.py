@@ -221,7 +221,20 @@ def test_sqlite_url_invalid_base_returns_unchanged():
     assert db_mod._sqlite_url_with_mod_suffix("not-a-url", "mod") == "not-a-url"
 
 
-def test_database_url_for_active_mod_sqlite_suffix():
+def test_resolve_host_database_url_ignores_active_mod():
+    with patch.object(db_mod, "get_request_active_mod_id", return_value="coating-industry"):
+        host = db_mod._resolve_host_database_url()
+        routed = db_mod._get_database_url()
+        assert host
+        assert routed != host or "coating" not in routed.lower()
+
+
+def test_host_session_local_uses_base_sqlite_file():
+    with patch.object(db_mod, "_resolve_host_database_url", return_value="sqlite:///host_only.db"):
+        factory = db_mod._get_host_session_local()
+        assert factory is db_mod._get_host_session_local()
+
+
     with patch.object(db_mod, "get_request_active_mod_id", return_value="M"):
         with patch.object(db_mod, "_mod_db_url_from_env", return_value=""):
             with patch.object(

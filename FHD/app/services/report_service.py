@@ -351,7 +351,7 @@ class ReportService(NeuroEventPublisherMixin):
                 "content_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             }
         except RECOVERABLE_ERRORS as e:
-            logger.error(f"导出Excel失败: {e}")
+            logger.error("导出Excel失败: %s", e)
             return {"success": False, "message": str(e)}
 
 

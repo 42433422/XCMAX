@@ -42,7 +42,7 @@ async def register_domain_handlers_only(bus: NeuroBus | None = None) -> None:
         register_product_domain_handlers(bus)
         logger.info("[NeuroDomainRegistration] Product 领域处理器注册完成")
     except RECOVERABLE_ERRORS as e:
-        logger.error(f"[NeuroDomainRegistration] Product 领域注册失败: {e}")
+        logger.error("[NeuroDomainRegistration] Product 领域注册失败: %s", e)
 
     # 3. Shipment 领域
     try:
@@ -51,7 +51,7 @@ async def register_domain_handlers_only(bus: NeuroBus | None = None) -> None:
         register_shipment_domain_handlers(bus)
         logger.info("[NeuroDomainRegistration] Shipment 领域处理器注册完成")
     except RECOVERABLE_ERRORS as e:
-        logger.error(f"[NeuroDomainRegistration] Shipment 领域注册失败: {e}")
+        logger.error("[NeuroDomainRegistration] Shipment 领域注册失败: %s", e)
 
     # 4. Order 领域
     try:
@@ -63,7 +63,7 @@ async def register_domain_handlers_only(bus: NeuroBus | None = None) -> None:
     except ImportError:
         logger.info("[NeuroDomainRegistration] Order 领域处理器不存在，跳过")
     except RECOVERABLE_ERRORS as e:
-        logger.error(f"[NeuroDomainRegistration] Order 领域注册失败: {e}")
+        logger.error("[NeuroDomainRegistration] Order 领域注册失败: %s", e)
 
     # 5. Customer 领域
     try:
@@ -74,7 +74,7 @@ async def register_domain_handlers_only(bus: NeuroBus | None = None) -> None:
     except ImportError:
         logger.info("[NeuroDomainRegistration] Customer 领域处理器不存在，跳过")
     except RECOVERABLE_ERRORS as e:
-        logger.error(f"[NeuroDomainRegistration] Customer 领域注册失败: {e}")
+        logger.error("[NeuroDomainRegistration] Customer 领域注册失败: %s", e)
 
     # 6. Inventory 领域
     try:
@@ -87,7 +87,7 @@ async def register_domain_handlers_only(bus: NeuroBus | None = None) -> None:
     except ImportError:
         logger.info("[NeuroDomainRegistration] Inventory 领域处理器不存在，跳过")
     except RECOVERABLE_ERRORS as e:
-        logger.error(f"[NeuroDomainRegistration] Inventory 领域注册失败: {e}")
+        logger.error("[NeuroDomainRegistration] Inventory 领域注册失败: %s", e)
 
     # 7. Payment 领域
     try:
@@ -98,7 +98,7 @@ async def register_domain_handlers_only(bus: NeuroBus | None = None) -> None:
     except ImportError:
         logger.info("[NeuroDomainRegistration] Payment 领域处理器不存在，跳过")
     except RECOVERABLE_ERRORS as e:
-        logger.error(f"[NeuroDomainRegistration] Payment 领域注册失败: {e}")
+        logger.error("[NeuroDomainRegistration] Payment 领域注册失败: %s", e)
 
     # 8. OCR 领域
     try:
@@ -109,7 +109,7 @@ async def register_domain_handlers_only(bus: NeuroBus | None = None) -> None:
     except ImportError:
         logger.info("[NeuroDomainRegistration] OCR 领域处理器不存在，跳过")
     except RECOVERABLE_ERRORS as e:
-        logger.error(f"[NeuroDomainRegistration] OCR 领域注册失败: {e}")
+        logger.error("[NeuroDomainRegistration] OCR 领域注册失败: %s", e)
 
     # 9. WeChat 领域
     try:
@@ -120,7 +120,7 @@ async def register_domain_handlers_only(bus: NeuroBus | None = None) -> None:
     except ImportError:
         logger.info("[NeuroDomainRegistration] WeChat 领域处理器不存在，跳过")
     except RECOVERABLE_ERRORS as e:
-        logger.error(f"[NeuroDomainRegistration] WeChat 领域注册失败: {e}")
+        logger.error("[NeuroDomainRegistration] WeChat 领域注册失败: %s", e)
 
     # 10. Print 领域
     try:
@@ -131,7 +131,7 @@ async def register_domain_handlers_only(bus: NeuroBus | None = None) -> None:
     except ImportError:
         logger.info("[NeuroDomainRegistration] Print 领域处理器不存在，跳过")
     except RECOVERABLE_ERRORS as e:
-        logger.error(f"[NeuroDomainRegistration] Print 领域注册失败: {e}")
+        logger.error("[NeuroDomainRegistration] Print 领域注册失败: %s", e)
 
     # 11. AI 领域
     try:
@@ -142,7 +142,7 @@ async def register_domain_handlers_only(bus: NeuroBus | None = None) -> None:
     except ImportError:
         logger.info("[NeuroDomainRegistration] AI 领域处理器不存在，跳过")
     except RECOVERABLE_ERRORS as e:
-        logger.error(f"[NeuroDomainRegistration] AI 领域注册失败: {e}")
+        logger.error("[NeuroDomainRegistration] AI 领域注册失败: %s", e)
 
     # 12. Auth 领域
     try:
@@ -153,7 +153,7 @@ async def register_domain_handlers_only(bus: NeuroBus | None = None) -> None:
     except ImportError:
         logger.info("[NeuroDomainRegistration] Auth 领域处理器不存在，跳过")
     except RECOVERABLE_ERRORS as e:
-        logger.error(f"[NeuroDomainRegistration] Auth 领域注册失败: {e}")
+        logger.error("[NeuroDomainRegistration] Auth 领域注册失败: %s", e)
 
     # 13. Material 领域
     try:
@@ -164,7 +164,7 @@ async def register_domain_handlers_only(bus: NeuroBus | None = None) -> None:
     except ImportError:
         logger.info("[NeuroDomainRegistration] Material 领域处理器不存在，跳过")
     except RECOVERABLE_ERRORS as e:
-        logger.error(f"[NeuroDomainRegistration] Material 领域注册失败: {e}")
+        logger.error("[NeuroDomainRegistration] Material 领域注册失败: %s", e)
 
     # 14. Conversation 领域
     try:
@@ -177,7 +177,7 @@ async def register_domain_handlers_only(bus: NeuroBus | None = None) -> None:
     except ImportError:
         logger.info("[NeuroDomainRegistration] Conversation 领域处理器不存在，跳过")
     except RECOVERABLE_ERRORS as e:
-        logger.error(f"[NeuroDomainRegistration] Conversation 领域注册失败: {e}")
+        logger.error("[NeuroDomainRegistration] Conversation 领域注册失败: %s", e)
 
     logger.info("[NeuroDomainRegistration] 所有领域处理器注册完成")
 
@@ -196,7 +196,7 @@ async def register_all_domains_complete(bus: NeuroBus | None = None) -> None:
         register_all_neuro_domains()
         logger.info("[NeuroDomainRegistration] 基础领域处理器注册完成")
     except RECOVERABLE_ERRORS as e:
-        logger.warning(f"[NeuroDomainRegistration] 基础领域注册部分失败: {e}")
+        logger.warning("[NeuroDomainRegistration] 基础领域注册部分失败: %s", e)
 
     await register_domain_handlers_only(bus)
 

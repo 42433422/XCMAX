@@ -65,7 +65,7 @@ class SQLAlchemyExtractLogStore(ExtractLogStorePort):
                     "per_page": per_page,
                 }
         except RECOVERABLE_ERRORS as e:
-            logger.error(f"获取提取日志列表失败：{e}")
+            logger.error("获取提取日志列表失败：%s", e)
             return {"success": False, "message": f"获取失败：{str(e)}", "data": [], "total": 0}
 
     def find_by_id(self, log_id: int) -> dict[str, Any] | None:
@@ -81,7 +81,7 @@ class SQLAlchemyExtractLogStore(ExtractLogStorePort):
 
                 return self._row_to_dict(row)
         except RECOVERABLE_ERRORS as e:
-            logger.error(f"获取提取日志失败：{e}")
+            logger.error("获取提取日志失败：%s", e)
             return None
 
     def create(self, log_data: dict[str, Any]) -> dict[str, Any]:
@@ -113,7 +113,7 @@ class SQLAlchemyExtractLogStore(ExtractLogStorePort):
 
                 return {"success": True, "message": "提取日志创建成功", "log_id": log_id}
         except RECOVERABLE_ERRORS as e:
-            logger.error(f"创建提取日志失败：{e}")
+            logger.error("创建提取日志失败：%s", e)
             return {"success": False, "message": f"创建失败：{str(e)}"}
 
     def delete(self, log_id: int) -> dict[str, Any]:
@@ -123,7 +123,7 @@ class SQLAlchemyExtractLogStore(ExtractLogStorePort):
                 db.commit()
                 return {"success": True, "message": "提取日志删除成功"}
         except RECOVERABLE_ERRORS as e:
-            logger.error(f"删除提取日志失败：{e}")
+            logger.error("删除提取日志失败：%s", e)
             return {"success": False, "message": f"删除失败：{str(e)}"}
 
     def clear_old(self, days: int = 30) -> dict[str, Any]:
@@ -146,5 +146,5 @@ class SQLAlchemyExtractLogStore(ExtractLogStorePort):
                     "deleted_count": deleted_count,
                 }
         except RECOVERABLE_ERRORS as e:
-            logger.error(f"清理旧日志失败：{e}")
+            logger.error("清理旧日志失败：%s", e)
             return {"success": False, "message": f"清理失败：{str(e)}"}

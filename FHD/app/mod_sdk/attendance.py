@@ -12,13 +12,13 @@ try:
     from app.shell.taiyangniao_attendance.paths import attendance_workspace_root  # noqa: F401
 except ModuleNotFoundError:
 
-    def convert_attendance_file(*_args, **_kwargs):  # type: ignore[misc]
+    def convert_attendance_file(*_args, **_kwargs):
         raise RuntimeError(
             "attendance-industry mod 未安装（考勤转换不可用）。"
             "请确认 FHD/mods/attendance-industry/ 已安装。"
         )
 
-    def attendance_workspace_root(*_args, **_kwargs):  # type: ignore[misc]
+    def attendance_workspace_root(*_args, **_kwargs):
         raise RuntimeError(
             "attendance-industry mod 未安装（考勤工作区不可用）。"
             "请确认 FHD/mods/attendance-industry/ 已安装。"

@@ -111,7 +111,7 @@ class PerformanceMonitor:
             self._metrics.append(metric)
 
         if not success or duration_ms > self._slow_api_threshold:
-            logger.warning(f"性能异常 [{name}]: {duration_ms:.2f}ms")
+            logger.warning(f"性能异常 [{name}]: {duration_ms:.2f}ms")  # noqa: G004
 
     def record_api_call(
         self,

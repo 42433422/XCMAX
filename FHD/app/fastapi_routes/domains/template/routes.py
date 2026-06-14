@@ -276,7 +276,7 @@ def _extract_single_sheet_bundle(
         "max_col": 0,
         "header_row_index": 1,
     }
-    empty_cache = {"styles": {}, "cell_style_refs": {}}
+    empty_cache: object = {"styles": {}, "cell_style_refs": {}}
 
     if not matrix:
         return {

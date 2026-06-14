@@ -45,9 +45,9 @@ def set_search_path(dbapi_connection, connection_record):
         cursor = dbapi_connection.cursor()
         cursor.execute(f"SET search_path TO {schema_name}, public")
         cursor.close()
-        logger.debug(f"Set search_path to {schema_name} for Mod {active_mod_id}")
+        logger.debug("Set search_path to %s for Mod %s", schema_name, active_mod_id)
     except RECOVERABLE_ERRORS as e:
-        logger.warning(f"Failed to set search_path for Mod {active_mod_id}: {e}")
+        logger.warning("Failed to set search_path for Mod %s: %s", active_mod_id, e)
 
 
 def setup_mod_schema_routing(engine: Engine) -> None:
@@ -69,10 +69,10 @@ def ensure_mod_schema(db: Session, mod_id: str) -> bool:
     try:
         db.execute(f"CREATE SCHEMA IF NOT EXISTS {schema_name}")
         db.commit()
-        logger.info(f"Ensured schema {schema_name} for Mod {mod_id}")
+        logger.info("Ensured schema %s for Mod %s", schema_name, mod_id)
         return True
     except RECOVERABLE_ERRORS as e:
-        logger.error(f"Failed to create schema {schema_name}: {e}")
+        logger.error("Failed to create schema %s: %s", schema_name, e)
         db.rollback()
         return False
 
@@ -100,4 +100,4 @@ def init_mod_schema_routing():
         try:
             setup_mod_schema_routing(engine)
         except RECOVERABLE_ERRORS as e:
-            logger.warning(f"Could not setup schema routing on engine proxy: {e}")
+            logger.warning("Could not setup schema routing on engine proxy: %s", e)

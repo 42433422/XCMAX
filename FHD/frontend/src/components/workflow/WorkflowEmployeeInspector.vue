@@ -8,6 +8,8 @@ const props = defineProps<{
   selectedEmpId: string | null
   /** 与全景页统一的像素风外观 */
   pixelSkin?: boolean
+  /** 嵌入员工空间页时隐藏「去员工空间」脚注 */
+  hideWorkspaceLink?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -92,7 +94,7 @@ function progressWidth(row: WorkflowEmployeeDeskRow): string {
       </div>
     </div>
 
-    <p class="wfe-inspector-foot">
+    <p v-if="!hideWorkspaceLink" class="wfe-inspector-foot">
       <router-link
         :to="{ name: 'workflow-employee-space', hash: '#ews-workflow-monitor' }"
         class="wfe-inspector-link"

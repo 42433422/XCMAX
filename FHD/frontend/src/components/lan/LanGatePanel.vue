@@ -152,6 +152,17 @@ import { useRouter } from 'vue-router';
 import { lanGateApi, type AccessRequestEntry, type LanHostInfo } from '@/api/lanGate';
 import { useLanGate } from '@/composables/useLanGate';
 import { useModsStore } from '@/stores/mods';
+import { asRecord, asArray, asString, asBoolean, asDisposable } from '@/utils/typeGuards'
+import { ApiError } from '@/api/core'
+
+function errorDetail(e: unknown, fallback = ''): string {
+  if (e instanceof ApiError) {
+    const data = asRecord(e.data)
+    return asString(data.detail || data.message || e.message, fallback)
+  }
+  if (e instanceof Error) return e.message
+  return asString(e, fallback)
+}
 
 const props = withDefaults(
   defineProps<{
@@ -236,7 +247,7 @@ async function load() {
       await goHome(false);
     }
   } catch (e: unknown) {
-    errorMsg.value = `初始化失败：${e?.message || e}`;
+    errorMsg.value = `初始化失败：${errorDetail(e, '未知错误')}`;
   }
 }
 
@@ -251,7 +262,7 @@ async function submitAccessRequest() {
     });
     accessRequest.value = r.request || null;
   } catch (e: unknown) {
-    const detail = e?.data?.detail || e?.message || '提交申请失败';
+    const detail = errorDetail(e, '提交申请失败');
     errorMsg.value = mapError(detail);
   } finally {
     requestForm.submitting = false;
@@ -272,7 +283,7 @@ async function submit() {
       errorMsg.value = '激活失败';
     }
   } catch (e: unknown) {
-    const detail = e?.data?.detail || e?.message || '激活失败';
+    const detail = errorDetail(e, '激活失败');
     errorMsg.value = mapError(detail);
   } finally {
     submitting.value = false;

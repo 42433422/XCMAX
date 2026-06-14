@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useWorkflowAiEmployeesStore } from '@/stores/workflowAiEmployees'
 import {
   formatWorkDurationShort,
@@ -9,27 +9,54 @@ import {
   type WorkflowEmployeeDeskRow,
 } from '@/composables/useWorkflowEmployeeDesks'
 import YuangongStation from '@/components/workflow/YuangongStation.vue'
-import EmployeeDetailPanel from '@/components/workflow/EmployeeDetailPanel.vue'
+import WorkflowEmployeeInspector from '@/components/workflow/WorkflowEmployeeInspector.vue'
 import {
   YUANGONG_ENTRY_STITCH_PNG,
   YUANGONG_ENTRY_WORKFLOW_PNG,
   YUANGONG_ENTRY_WORKFLOW_SVG,
 } from '@/constants/yuangongAssets'
+import {
+  employeeBelongsToEnterpriseStack,
+  isWorkflowCarrierModId,
+  type EnterpriseModStack,
+} from '@/constants/enterpriseModStack'
+import { isHostBridgeModId } from '@/constants/genericModPack'
+import { isCustomPhaseEmployeeCarrierModId } from '@/utils/modWorkflowEmployees'
+import { resolveEnterpriseModStack } from '@/utils/enterpriseModStackApi'
 
 const ENTRY_BG_STITCH = YUANGONG_ENTRY_STITCH_PNG
 const ENTRY_BG_WORKFLOW_PNG = YUANGONG_ENTRY_WORKFLOW_PNG
 const ENTRY_BG_WORKFLOW_SVG = YUANGONG_ENTRY_WORKFLOW_SVG
 
 const wfEmp = useWorkflowAiEmployeesStore()
-const { desks, onDutyDesks, statusLine, ariaLabel, isBusy } = useWorkflowEmployeeDesks()
+const { desks, statusLine, ariaLabel, isBusy } = useWorkflowEmployeeDesks()
 const nowMs = useNowMsTicker(30000)
+
+const enterpriseStack = ref<EnterpriseModStack | null>(null)
+
+/** 企业 Mod 栈内 AI 员工工位（排除平台编制 employee_pack 等游离项） */
+const workspaceDesks = computed(() => {
+  const stack = enterpriseStack.value
+  const list = desks.value
+  return list.filter((d) => {
+    const host = d.hostModId
+    if (!host || isCustomPhaseEmployeeCarrierModId(host)) return false
+    if (stack) {
+      if (stack.customModIds.length || stack.industryModId) {
+        return stack.packageModIds.includes(host)
+      }
+      return employeeBelongsToEnterpriseStack(host, stack)
+    }
+    return isWorkflowCarrierModId(host) || isHostBridgeModId(host)
+  })
+})
 
 const selectedEmpId = ref<string | null>(null)
 
 watch(
-  () => onDutyDesks.value.map((d) => d.empId).join('\0'),
+  () => workspaceDesks.value.map((d) => d.empId).join('\0'),
   () => {
-    const list = onDutyDesks.value
+    const list = workspaceDesks.value
     if (!list.length) {
       selectedEmpId.value = null
       return
@@ -41,12 +68,6 @@ watch(
   },
   { immediate: true }
 )
-
-const selectedRow = computed<WorkflowEmployeeDeskRow | null>(() => {
-  const id = selectedEmpId.value
-  if (!id) return null
-  return onDutyDesks.value.find((d) => d.empId === id) ?? null
-})
 
 function selectDesk(empId: string) {
   selectedEmpId.value = empId
@@ -62,10 +83,23 @@ function onEntryBgError() {
   }
 }
 
-const totalCount = computed(() => desks.value.length)
-const enabledCount = computed(() => desks.value.filter((d) => d.enabled).length)
-const busyCount = computed(() => desks.value.filter((d) => isBusy(d)).length)
+const totalCount = computed(() => workspaceDesks.value.length)
+const enabledCount = computed(() => workspaceDesks.value.filter((d) => d.enabled).length)
+const busyCount = computed(() => workspaceDesks.value.filter((d) => isBusy(d)).length)
 const idleEnabledCount = computed(() => Math.max(0, enabledCount.value - busyCount.value))
+
+const workspaceStatSub = computed(() => {
+  const label = enterpriseStack.value?.stackShortLabel
+  return label
+    ? `企业 Mod「${label}」内已上岗 AI 员工`
+    : '企业 Mod 栈内已上岗 AI 员工'
+})
+
+onMounted(() => {
+  void resolveEnterpriseModStack().then((stack) => {
+    enterpriseStack.value = stack
+  })
+})
 
 function progressPct(row: WorkflowEmployeeDeskRow): number {
   if (!row.enabled) return 0
@@ -133,7 +167,7 @@ function workShort(row: WorkflowEmployeeDeskRow): string {
       <div class="ews-stat" role="listitem">
         <p class="ews-stat-k">总工位</p>
         <p class="ews-stat-v">{{ totalCount }}</p>
-        <p class="ews-stat-sub">仅已安装工作流员工 Mod</p>
+        <p class="ews-stat-sub">{{ workspaceStatSub }}</p>
       </div>
       <div class="ews-stat" role="listitem">
         <p class="ews-stat-k">已托管</p>
@@ -163,7 +197,7 @@ function workShort(row: WorkflowEmployeeDeskRow): string {
         <div>
           <h4 id="ews-monitor-h" class="ews-monitor-title">工位实况</h4>
           <p class="ews-monitor-desc">
-            实时工位状态来自副窗「一键托管」开关与任务面板快照；点击工位卡片可在右侧详情查看像素特写。
+            实时工位状态来自副窗「一键托管」开关与任务面板快照；左侧点工位卡片、右侧员工列表均可切换选中并与开关联动。
           </p>
         </div>
       </div>
@@ -171,7 +205,7 @@ function workShort(row: WorkflowEmployeeDeskRow): string {
       <div class="ews-layout">
         <div class="ews-grid" role="list" aria-label="工位卡片列表">
           <div
-            v-for="row in onDutyDesks"
+            v-for="row in workspaceDesks"
             :key="row.empId"
             class="ews-desk"
             :class="{
@@ -250,7 +284,11 @@ function workShort(row: WorkflowEmployeeDeskRow): string {
           </div>
         </div>
 
-        <EmployeeDetailPanel :row="selectedRow" />
+        <WorkflowEmployeeInspector
+          v-model:selected-emp-id="selectedEmpId"
+          :desks="workspaceDesks"
+          hide-workspace-link
+        />
       </div>
     </div>
   </section>
@@ -789,5 +827,5 @@ function workShort(row: WorkflowEmployeeDeskRow): string {
   font-variant-numeric: tabular-nums;
 }
 
-/* —— 右侧特写卡片由 <EmployeeDetailPanel> 统一负责，自带样式 —— */
+/* —— 右侧员工列表由 <WorkflowEmployeeInspector> 负责，与全景页同源 —— */
 </style>

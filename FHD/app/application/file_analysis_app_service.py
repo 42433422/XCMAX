@@ -11,7 +11,7 @@ import logging
 import os
 import sqlite3
 import uuid
-from typing import Any
+from typing import Any, cast
 
 from app.utils.external_sqlite import sqlite_conn
 from app.infrastructure.db.sql_identifiers import (
@@ -63,7 +63,7 @@ class FileAnalysisService:
             return self._analyze_sqlite_db(saved_path, saved_name, raw_filename, filename)
 
         if ext in (".xlsx", ".xls"):
-            return self._analyze_excel_file(saved_path, saved_name, raw_filename, filename)
+            return cast("dict[str, Any]", self._analyze_excel_file(saved_path, saved_name, raw_filename, filename))
 
         return {
             "success": False,
@@ -151,7 +151,7 @@ class FileAnalysisService:
                     },
                 }
         except RECOVERABLE_ERRORS as e:
-            logger.exception(f"SQLite 数据库分析失败：{e}")
+            logger.exception("SQLite 数据库分析失败：%s", e)
             return {"success": False, "message": f"文件分析失败：{str(e)}"}
 
     def _determine_suggested_use(self, table_names: list, table_columns: dict[str, list]) -> str:

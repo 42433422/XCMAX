@@ -4,7 +4,7 @@ import json
 import logging
 import os
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import or_
 
@@ -406,7 +406,7 @@ class SQLAlchemyWechatContactStore(WechatContactStorePort):
             if not ctx or not ctx.context_json:
                 return []
             try:
-                return json.loads(ctx.context_json)
+                return cast("list[dict[str, Any]]", json.loads(ctx.context_json))
             except RECOVERABLE_ERRORS:
                 return []
 

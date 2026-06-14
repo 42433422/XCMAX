@@ -1,6 +1,6 @@
 import logging
 import os
-from typing import Any
+from typing import Any, cast
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -30,7 +30,7 @@ class IntentMixin:
                 self.user_preference_service.set_preference(user_id, "aiMode", mode)
                 return mode
         except RECOVERABLE_ERRORS as e:
-            logger.warning(f"读取 aiMode 偏好失败，回退在线模式: {e}")
+            logger.warning("读取 aiMode 偏好失败，回退在线模式: %s", e)
         return "online"
 
     @staticmethod
@@ -177,7 +177,7 @@ class IntentMixin:
             neuro_notify_intent_resolved(user_id, intent_result)
         except RECOVERABLE_ERRORS:
             logger.debug("neuro_notify_intent_resolved skipped", exc_info=True)
-        return intent_result
+        return cast("dict[str, Any]", intent_result)
 
     def _convert_recognizer_result(self, recognizer_result) -> dict[str, Any]:
         return {

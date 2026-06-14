@@ -9,7 +9,7 @@ import re
 import subprocess
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -107,7 +107,7 @@ def _cache_file(lane: str) -> Path:
 def _load_config() -> dict[str, Any]:
     if not _CONFIG_PATH.is_file():
         return {"lanes": {}}
-    return json.loads(_CONFIG_PATH.read_text(encoding="utf-8"))
+    return cast("dict[str, Any]", json.loads(_CONFIG_PATH.read_text(encoding="utf-8")))
 
 
 def _read_cache_path(path: Path) -> dict[str, Any] | None:
@@ -327,7 +327,7 @@ def run_surface_audit_lane(lane: str, *, refresh: bool = False) -> dict[str, Any
         payload["from_cache"] = False
         payload["cached_at"] = datetime.now(UTC).isoformat()
         _write_cache(lane, payload)
-    return payload
+    return cast("dict[str, Any]", payload)
 
 
 def get_surface_audit_lane(lane: str, *, refresh: bool = False) -> dict[str, Any]:

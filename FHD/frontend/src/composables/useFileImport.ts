@@ -1,6 +1,7 @@
 import { ref, reactive, type Ref } from 'vue';
 import { api } from '../api/index';
 import type { ApiResponse } from '@/types/api';
+import { asRecord, asArray, asString, asBoolean, asDisposable } from '@/utils/typeGuards'
 
 export const FILE_TYPES = {
   EXCEL: ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-excel'],
@@ -72,21 +73,21 @@ export function useFileImport(): UseFileImportReturn {
 
   function detectFileType(file: File): FileType {
     const fileName = file.name.toLowerCase();
-    const mimeType = file.type;
+    const mimeType = asString(file.type)
 
-    if (FILE_TYPES.EXCEL.includes(mimeType as unknown) || FILE_EXTENSIONS.EXCEL.some(ext => fileName.endsWith(ext))) {
+    if ((FILE_TYPES.EXCEL as readonly string[]).includes(mimeType) || FILE_EXTENSIONS.EXCEL.some(ext => fileName.endsWith(ext))) {
       return 'excel';
     }
-    if (FILE_TYPES.CSV.includes(mimeType as unknown) || FILE_EXTENSIONS.CSV.some(ext => fileName.endsWith(ext))) {
+    if ((FILE_TYPES.CSV as readonly string[]).includes(mimeType) || FILE_EXTENSIONS.CSV.some(ext => fileName.endsWith(ext))) {
       return 'csv';
     }
-    if (FILE_TYPES.IMAGE.includes(mimeType as unknown) || FILE_EXTENSIONS.IMAGE.some(ext => fileName.endsWith(ext))) {
+    if ((FILE_TYPES.IMAGE as readonly string[]).includes(mimeType) || FILE_EXTENSIONS.IMAGE.some(ext => fileName.endsWith(ext))) {
       return 'image';
     }
-    if (FILE_TYPES.PDF.includes(mimeType as unknown) || FILE_EXTENSIONS.PDF.some(ext => fileName.endsWith(ext))) {
+    if ((FILE_TYPES.PDF as readonly string[]).includes(mimeType) || FILE_EXTENSIONS.PDF.some(ext => fileName.endsWith(ext))) {
       return 'pdf';
     }
-    if (FILE_TYPES.WORD.includes(mimeType as unknown) || FILE_EXTENSIONS.WORD.some(ext => fileName.endsWith(ext))) {
+    if ((FILE_TYPES.WORD as readonly string[]).includes(mimeType) || FILE_EXTENSIONS.WORD.some(ext => fileName.endsWith(ext))) {
       return 'word';
     }
     return 'other';

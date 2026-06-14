@@ -2,7 +2,7 @@
 
 import logging
 import uuid
-from typing import Any
+from typing import Any, cast
 
 from app.db.models import Permission, Role, User
 from app.db.session import get_db
@@ -211,10 +211,10 @@ class AuthApplicationService:
             }
 
     def logout(self, session_id: str) -> bool:
-        return self.session_manager.delete_session(session_id)
+        return cast("bool", self.session_manager.delete_session(session_id))
 
     def get_current_user(self, session_id: str) -> User | None:
-        return self.session_manager.validate_session(session_id)
+        return cast("User | None", self.session_manager.validate_session(session_id))
 
     def get_user_permissions(self, user: User) -> list:
         try:

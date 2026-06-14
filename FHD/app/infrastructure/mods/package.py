@@ -119,12 +119,12 @@ class ModPackage:
                     rel_path = os.path.relpath(file_path, self.mod_path)
 
                     if self._should_exclude(rel_path, default_excludes):
-                        logger.debug(f"Excluding: {rel_path}")
+                        logger.debug("Excluding: %s", rel_path)
                         continue
 
                     arcname = os.path.join(self.mod_id, rel_path)
                     zipf.write(file_path, arcname)
-                    logger.debug(f"Added: {arcname}")
+                    logger.debug("Added: %s", arcname)
 
             if include_signature:
                 signature_data = self._generate_signature(private_key)
@@ -133,7 +133,7 @@ class ModPackage:
                     json.dumps(signature_data, indent=2, ensure_ascii=False),
                 )
 
-        logger.info(f"MOD package created: {package_path}")
+        logger.info("MOD package created: %s", package_path)
         return package_path
 
     def _should_exclude(self, rel_path: str, patterns: set) -> bool:
@@ -188,7 +188,7 @@ class ModPackage:
                 logger.warning("cryptography 库未安装，使用无签名模式")
                 signature["signature"] = ""
             except RECOVERABLE_ERRORS as e:
-                logger.error(f"签名生成失败：{e}")
+                logger.error("签名生成失败：%s", e)
                 signature["signature"] = ""
         else:
             signature["signature"] = ""
@@ -231,7 +231,7 @@ class ModPackage:
                     cls._verify_package_signature(target_dir, zipf)
             else:
                 if verify_signature:
-                    logger.warning(f"MOD 包缺少签名文件：{package_path}")
+                    logger.warning("MOD 包缺少签名文件：%s", package_path)
 
         manifest_path = os.path.join(target_dir, "manifest.json")
         if not os.path.isfile(manifest_path):
@@ -250,7 +250,7 @@ class ModPackage:
         else:
             extracted_path = target_dir
 
-        logger.info(f"MOD package extracted: {extracted_path}")
+        logger.info("MOD package extracted: %s", extracted_path)
         return extracted_path, manifest
 
     @classmethod
@@ -297,7 +297,7 @@ class ModPackage:
         except ModSignatureError:
             raise
         except RECOVERABLE_ERRORS as e:
-            logger.error(f"签名验证失败：{e}")
+            logger.error("签名验证失败：%s", e)
             return False
 
     def get_package_info(self) -> dict[str, Any]:

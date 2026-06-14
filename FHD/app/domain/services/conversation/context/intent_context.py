@@ -122,9 +122,9 @@ class IntentContext:
         """
         self._pending_store[user_id] = pending
         logger.info(
-            f"[INTENT_CONTEXT] Set pending: user={user_id}, "
-            f"intent={pending.intent}, missing={pending.missing_slots}, "
-            f"turn_count={pending.turn_count}"
+            "[INTENT_CONTEXT] Set pending: user=%s, "
+            f"intent=%s, missing=%s, "
+            f"turn_count=%s", user_id, pending.intent, pending.missing_slots, pending.turn_count
         )
         self._notify_update(user_id, pending, "created")
 
@@ -147,7 +147,7 @@ class IntentContext:
 
         if pending.is_expired():
             logger.info(
-                f"[INTENT_CONTEXT] Pending expired: user={user_id}, intent={pending.intent}"
+                "[INTENT_CONTEXT] Pending expired: user=%s, intent=%s", user_id, pending.intent
             )
             self.clear_pending(user_id)
             return None
@@ -160,8 +160,8 @@ class IntentContext:
             old_pending = self._pending_store[user_id]
             del self._pending_store[user_id]
             logger.info(
-                f"[INTENT_CONTEXT] Cleared pending: user={user_id}, "
-                f"intent={old_pending.intent}, turn_count={old_pending.turn_count}"
+                "[INTENT_CONTEXT] Cleared pending: user=%s, "
+                f"intent=%s, turn_count=%s", user_id, old_pending.intent, old_pending.turn_count
             )
             self._notify_cleared(user_id, reason)
 
@@ -257,7 +257,7 @@ class IntentContext:
             self.clear_pending(user_id)
 
         if expired_users:
-            logger.info(f"[INTENT_CONTEXT] Cleaned up {len(expired_users)} expired pending")
+            logger.info("[INTENT_CONTEXT] Cleaned up %s expired pending", len(expired_users))
 
         return len(expired_users)
 
@@ -276,7 +276,7 @@ class IntentContext:
                 elif event == "updated":
                     notifier.notify_pending_updated(user_id, pending_data)
         except RECOVERABLE_ERRORS as e:
-            logger.warning(f"[INTENT_CONTEXT] Failed to notify: {e}")
+            logger.warning("[INTENT_CONTEXT] Failed to notify: %s", e)
 
     def _notify_cleared(self, user_id: str, reason: str) -> None:
         """通知 pending 清除"""
@@ -285,7 +285,7 @@ class IntentContext:
             if notifier:
                 notifier.notify_pending_cleared(user_id, reason)
         except RECOVERABLE_ERRORS as e:
-            logger.warning(f"[INTENT_CONTEXT] Failed to notify: {e}")
+            logger.warning("[INTENT_CONTEXT] Failed to notify: %s", e)
 
     def _notify_preserved(self, user_id: str, pending: PendingIntent, action: str) -> None:
         """通知 pending 保留（特殊意图时）"""
@@ -295,13 +295,13 @@ class IntentContext:
                 pending_data = pending.to_dict()
                 notifier.notify_pending_preserved(user_id, pending_data, action)
         except RECOVERABLE_ERRORS as e:
-            logger.warning(f"[INTENT_CONTEXT] Failed to notify: {e}")
+            logger.warning("[INTENT_CONTEXT] Failed to notify: %s", e)
 
     def _get_notifier(self):
         """懒加载获取通知器"""
         if not hasattr(self, "_notifier"):
             try:
-                from app.routes.context_api import get_context_notifier
+                from app.contexts.context_notifier import get_context_notifier
 
                 self._notifier = get_context_notifier()
             except ImportError:

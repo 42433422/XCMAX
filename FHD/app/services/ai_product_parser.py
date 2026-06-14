@@ -353,7 +353,7 @@ class AIProductParser:
                 }
 
         except RECOVERABLE_ERRORS as e:
-            logger.error(f"AI 解析失败: {e}")
+            logger.error("AI 解析失败: %s", e)
 
         return None
 
