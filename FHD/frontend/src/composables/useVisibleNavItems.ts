@@ -10,11 +10,17 @@ import {
   ADMIN_EMPLOYEE_WORKFLOW_MENU_CHILDREN,
   CORE_MENU_ITEMS_BASE,
   CORE_MENU_ITEMS_TRAILING,
+  INDUSTRY_DELIVERY_CORE_ITEMS,
   SANDBOX_MENU_KEYS,
   SETTINGS_MENU_ITEM,
 } from '@/constants/coreMenuCatalog'
 import { useAccountProfileStore } from '@/stores/accountProfile'
-import { isPlatformShellModeEnabled, resolvePlatformShellMenuKeys } from '@/constants/platformShellMode'
+import {
+  isPlatformShellModeEnabled,
+  resolvePlatformShellMenuKeys,
+  shouldExposeIndustrySidebar,
+} from '@/constants/platformShellMode'
+import { hostPackAcknowledgedRef } from '@/constants/productFlow'
 import {
   isClientErpSidebarContext,
   keepHostNavKeyVisibleWhenModSidebarFacetSuppressed,
@@ -87,8 +93,14 @@ export function useVisibleNavItems() {
   const { modsForUi, activeModId, mods } = storeToRefs(modsStore)
   const { modMenuItems } = useModRoutes()
 
+  const hostPackAck = hostPackAcknowledgedRef()
+
   const installedModIds = computed(() =>
     (mods.value || []).map((m) => String(m.id || '').trim()).filter(Boolean),
+  )
+
+  const exposeIndustrySidebar = computed(() =>
+    shouldExposeIndustrySidebar(installedModIds.value, hostPackAck.value),
   )
 
   const hasIndustryBusinessMod = computed(() =>
@@ -178,12 +190,27 @@ export function useVisibleNavItems() {
       if (!item) return false
       if (isSandboxMode() && !SANDBOX_MENU_KEYS.has(item.key)) return false
       if (isPlatformShellMode()) {
-        const shellKeys = resolvePlatformShellMenuKeys(installedModIds.value)
+        const shellKeys = resolvePlatformShellMenuKeys(installedModIds.value, hostPackAck.value)
         if (!shellKeys.has(item.key)) return false
       }
       return true
     }) as ResolvedSidebarMenuItem[]
-    return [...adminOperatorTop, ...baseCore]
+
+    // 引导第三步完成（或已装账号定制）后，平台壳主导航长出行业业务核心项。
+    // 这些项独立于 erp-domain-bridge 的 hidden override（壳模式改用宿主槽位承载），
+    // 仅取行业/定制 label 覆盖；其同名 mod 入口会在 merge 阶段因占用宿主槽位被去重。
+    const industryDelivery: ResolvedSidebarMenuItem[] = []
+    if (!adminShell && isPlatformShellMode() && exposeIndustrySidebar.value) {
+      for (const item of INDUSTRY_DELIVERY_CORE_ITEMS) {
+        const override = coreMenuOverrides.value.get(item.key)
+        industryDelivery.push({
+          ...item,
+          name: resolveCoreNavLabel(item.key, id, modsForUi.value) || item.name,
+          iconClass: override?.iconClass || item.iconClass,
+        })
+      }
+    }
+    return [...adminOperatorTop, ...baseCore, ...industryDelivery]
   })
 
   const trailingLocalized = computed((): ResolvedSidebarMenuItem[] => {

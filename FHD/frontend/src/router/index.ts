@@ -8,6 +8,7 @@ import {
   SHELL_CORE_ROUTE_NAMES,
 } from '@/constants/platformShellMode';
 import { shouldRouteToProductOnboarding } from '@/composables/useProductFlow';
+import { readHostPackAcknowledged } from '@/constants/productFlow';
 import {
   resolveHostPackOnboardingStep,
   shouldRouteToHostPackOnboarding,
@@ -569,6 +570,7 @@ router.beforeEach(async (to, _from, next) => {
     !isIndustryDeliveryRouteName(
       String(to.name),
       useModsStore().mods.map((m) => String(m.id || '').trim()).filter(Boolean),
+      readHostPackAcknowledged(),
     ) &&
     !to.meta?.mod
   ) {
