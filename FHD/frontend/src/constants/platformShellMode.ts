@@ -78,9 +78,27 @@ export const INDUSTRY_DELIVERY_ROUTE_NAMES = new Set<string>([
   'sz-qsm-pro-home',
 ])
 
-export function resolvePlatformShellMenuKeys(installedModIds: Iterable<string>): Set<string> {
+/**
+ * 平台壳模式下是否放开行业业务侧栏（主导航长出行业菜单）。
+ * 触发任一：
+ * - 引导第三步「补基础线」已确认（host_pack_acknowledged）—— 用户走完引导即长出；
+ * - 已安装账号定制 Mod（太阳鸟/奇士美等 entitlement 直发场景）。
+ * 未走引导且无定制时保持初始化的 4 项壳菜单。
+ */
+export function shouldExposeIndustrySidebar(
+  installedModIds: Iterable<string>,
+  hostPackAcknowledged = false,
+): boolean {
+  if (hostPackAcknowledged) return true
+  return hasInstalledAccountCustomMod(installedModIds)
+}
+
+export function resolvePlatformShellMenuKeys(
+  installedModIds: Iterable<string>,
+  hostPackAcknowledged = false,
+): Set<string> {
   const keys = new Set(SHELL_CORE_MENU_KEYS)
-  if (!hasInstalledAccountCustomMod(installedModIds)) return keys
+  if (!shouldExposeIndustrySidebar(installedModIds, hostPackAcknowledged)) return keys
   for (const k of INDUSTRY_DELIVERY_ERP_MENU_KEYS) keys.add(k)
   return keys
 }
@@ -88,10 +106,11 @@ export function resolvePlatformShellMenuKeys(installedModIds: Iterable<string>):
 export function isIndustryDeliveryRouteName(
   routeName: string,
   installedModIds: Iterable<string>,
+  hostPackAcknowledged = false,
 ): boolean {
   const name = String(routeName || '').trim()
   if (!name || !INDUSTRY_DELIVERY_ROUTE_NAMES.has(name)) return false
-  return hasInstalledAccountCustomMod(installedModIds)
+  return shouldExposeIndustrySidebar(installedModIds, hostPackAcknowledged)
 }
 
 export function readPlatformShellModeFromStorage(): boolean {

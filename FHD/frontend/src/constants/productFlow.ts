@@ -2,6 +2,8 @@
  * 可交付宿主标准用户流程（与 docs/guides/PRODUCT_USER_FLOW.md 对齐）
  */
 
+import { ref, type Ref } from 'vue'
+
 export const LS_PRODUCT_FLOW_COMPLETED = 'xcagi_product_flow_completed'
 export const LS_PRODUCT_FLOW_HOST_ACK = 'xcagi_product_flow_host_ack'
 
@@ -126,7 +128,26 @@ export function readHostPackAcknowledged(): boolean {
   }
 }
 
+/**
+ * 响应式「第三步补基础线已确认」标记：供侧栏等在引导完成后即时长出行业菜单，
+ * 无需刷新页面。同页 mark 时直接更新；跨标签页经 storage 事件同步。
+ */
+const hostPackAckRef: Ref<boolean> = ref(readHostPackAcknowledged())
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (e) => {
+    if (e.key === LS_PRODUCT_FLOW_HOST_ACK) {
+      hostPackAckRef.value = readHostPackAcknowledged()
+    }
+  })
+}
+
+export function hostPackAcknowledgedRef(): Ref<boolean> {
+  return hostPackAckRef
+}
+
 export function markHostPackAcknowledged(): void {
+  hostPackAckRef.value = true
   if (typeof localStorage === 'undefined') return
   try {
     localStorage.setItem(LS_PRODUCT_FLOW_HOST_ACK, '1')

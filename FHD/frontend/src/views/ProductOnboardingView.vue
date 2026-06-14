@@ -138,8 +138,8 @@
             v-if="baselineOk && !loading"
             class="sidebar-shell-note muted"
           >
-            日常侧栏仍保持<strong>干净入口</strong>（智能对话、智能生态、员工工作台、消息等），与「桥接 Mod 已装」不矛盾。
-            业务菜单改名、部门/人员与 AI 员工在<strong>行业包 + 账号定制 Mod</strong>装齐后才会出现。
+            进入对话后，主导航会<strong>立刻长出本行业业务菜单</strong>（如产品/客户/出货单等，名称随<strong>{{ pickedIndustryName }}</strong>自动适配）。
+            部门/人员等业务改名与 AI 员工，仍由<strong>账号定制 Mod</strong>装齐后补充。
           </p>
           <p
             v-if="showNoAccountCustomHint"

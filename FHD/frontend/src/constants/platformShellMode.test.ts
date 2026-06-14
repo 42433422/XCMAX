@@ -92,4 +92,25 @@ describe('platformShellMode', () => {
       expect(withCustom.has(k)).toBe(true)
     }
   })
+
+  it('expands ERP menu keys once onboarding step 3 (host pack) is acknowledged', async () => {
+    const { resolvePlatformShellMenuKeys, shouldExposeIndustrySidebar } = await import(
+      './platformShellMode'
+    )
+    // 未走引导、未装定制：保持壳 4 项
+    expect(shouldExposeIndustrySidebar(['attendance-industry'], false)).toBe(false)
+    expect(resolvePlatformShellMenuKeys(['attendance-industry'], false).has('products')).toBe(false)
+    // 第三步「补基础线」确认后：即便没有定制 Mod，主导航也长出行业业务项
+    expect(shouldExposeIndustrySidebar(['attendance-industry'], true)).toBe(true)
+    expect(resolvePlatformShellMenuKeys(['attendance-industry'], true).has('products')).toBe(true)
+  })
+
+  it('isIndustryDeliveryRouteName honours host pack acknowledgement', async () => {
+    const { isIndustryDeliveryRouteName } = await import('./platformShellMode')
+    expect(isIndustryDeliveryRouteName('products', [], false)).toBe(false)
+    expect(isIndustryDeliveryRouteName('products', [], true)).toBe(true)
+    expect(isIndustryDeliveryRouteName('products', ['taiyangniao-pro'], false)).toBe(true)
+    // 非交付路由始终不放行
+    expect(isIndustryDeliveryRouteName('not-a-route', [], true)).toBe(false)
+  })
 })
