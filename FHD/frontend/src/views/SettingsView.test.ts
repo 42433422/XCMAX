@@ -1,7 +1,17 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import SettingsView from './SettingsView.vue'
+
+vi.mock('@/utils/apiBase', () => ({
+  apiFetch: vi.fn().mockResolvedValue({ ok: true, json: async () => ({ success: true, data: {} }) }),
+  getApiBase: () => '',
+  DEFAULT_MOD_API_TIMEOUT_MS: 90_000,
+}))
+vi.mock('@/utils/appDialog', () => ({
+  appAlert: vi.fn(),
+  appConfirm: vi.fn().mockResolvedValue(true),
+}))
 
 function makeRouter() {
   return createRouter({

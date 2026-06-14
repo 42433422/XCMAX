@@ -3,9 +3,10 @@
 
 from __future__ import annotations
 
+from unittest.mock import MagicMock, patch
+
 import pytest
 
-from app.application.employee_runtime import metrics as m
 from app.application.employee_runtime.write_approval import (
     build_write_approval_gate,
     compose_gates,
@@ -30,14 +31,48 @@ class TestBuildWriteApprovalGate:
         gate = build_write_approval_gate("e")
         assert gate("import_excel_to_database", {})["ok"] is True
 
-    def test_write_tool_without_approval_returns_verdict(self, monkeypatch):
-        # 无 env token、无 approved_write：进入审批引擎评估，返回 dict（auto 放行或 pending 拦截）
+    def test_write_tool_pending_approval_returns_verdict(self, monkeypatch):
+        """无 token 时走审批引擎 pending 分支；mock 引擎避免全套顺序污染 DB。"""
         monkeypatch.delenv("FHD_DB_WRITE_TOKEN", raising=False)
         gate = build_write_approval_gate("e")
-        verdict = gate("import_excel_to_database", {"foo": "bar"})
-        assert "ok" in verdict
-        if verdict["ok"] is False:
-            assert "reason" in verdict
+        decision = MagicMock()
+        decision.all_approved = False
+        decision.any_rejected = False
+        decision.pending_approval = True
+        decision.approval_request_ids = ["req-1"]
+        with patch(
+            "app.application.workflow.approval_gated_engine.ApprovalGatedEngine"
+        ) as mock_cls:
+            mock_cls.return_value.evaluate_plan.return_value = decision
+            verdict = gate("import_excel_to_database", {"foo": "bar"})
+        assert verdict["ok"] is False
+        assert verdict.get("pending_approval") is True
+        assert "reason" in verdict
+
+    def test_write_tool_auto_approved_by_engine(self, monkeypatch):
+        monkeypatch.delenv("FHD_DB_WRITE_TOKEN", raising=False)
+        gate = build_write_approval_gate("e")
+        decision = MagicMock()
+        decision.all_approved = True
+        decision.any_rejected = False
+        decision.pending_approval = False
+        with patch(
+            "app.application.workflow.approval_gated_engine.ApprovalGatedEngine"
+        ) as mock_cls:
+            mock_cls.return_value.evaluate_plan.return_value = decision
+            verdict = gate("import_excel_to_database", {})
+        assert verdict["ok"] is True
+
+    def test_write_tool_engine_failure_falls_back_to_block(self, monkeypatch):
+        monkeypatch.delenv("FHD_DB_WRITE_TOKEN", raising=False)
+        gate = build_write_approval_gate("e")
+        with patch(
+            "app.application.workflow.approval_gated_engine.ApprovalGatedEngine",
+            side_effect=RuntimeError("engine down"),
+        ):
+            verdict = gate("import_excel_to_database", {})
+        assert verdict["ok"] is False
+        assert "reason" in verdict
 
 
 class TestComposeGates:

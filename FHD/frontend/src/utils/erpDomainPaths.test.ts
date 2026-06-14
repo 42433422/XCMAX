@@ -113,6 +113,30 @@ describe('erpDomainPaths', () => {
     )
   })
 
+  it('routes ERP API via bridge when active mod is industry shell (attendance-industry)', () => {
+    writeActiveExtensionModIdToStorage('attendance-industry', TEST_SCOPE)
+    const ids = ['attendance-industry', 'xcagi-erp-domain-bridge']
+    expect(resolveErpApiBase(ids)).toBe('/api/mod/xcagi-erp-domain-bridge')
+    expect(resolveErpApiPath('/api/customers/list', ids)).toBe(
+      '/api/mod/xcagi-erp-domain-bridge/customers/list',
+    )
+    expect(resolveErpApiPath('/api/products/list', ids)).toBe(
+      '/api/mod/xcagi-erp-domain-bridge/products/list',
+    )
+    expect(resolveErpApiPath('/api/purchase_units', ids)).toBe(
+      '/api/mod/xcagi-erp-domain-bridge/purchase_units',
+    )
+  })
+
+  it('routes ERP API via bridge when primary is industry shell without facade flag', () => {
+    localStorage.removeItem(LS)
+    const ids = ['attendance-industry', 'xcagi-erp-domain-bridge']
+    expect(resolveErpApiBase(ids)).toBe('/api/mod/xcagi-erp-domain-bridge')
+    expect(resolveErpApiPath('/api/shipment/shipment-records/units', ids)).toBe(
+      '/api/mod/xcagi-erp-domain-bridge/shipment/shipment-records/units',
+    )
+  })
+
   it('does not map wechat_contacts to attendance-industry client mod', () => {
     localStorage.setItem(LS, '1')
     const ids = ['attendance-industry', 'xcagi-erp-domain-bridge']

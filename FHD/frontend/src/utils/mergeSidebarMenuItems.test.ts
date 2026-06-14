@@ -7,14 +7,14 @@ describe('mergeSidebarMenuItems', () => {
     const mod = [
       {
         key: 'mod-enterprise-customer-service',
-        name: '外部客服',
+        name: '企业专属客服',
         iconClass: 'fa-headphones',
         modId: 'xcagi-customer-service-bridge',
         path: '/mod/xcagi-customer-service-bridge/enterprise-customer-service',
       },
     ]
     const trailing = [
-      { key: 'enterprise-customer-service', name: '外部客服', iconClass: 'fa-headphones' },
+      { key: 'enterprise-customer-service', name: '企业专属客服', iconClass: 'fa-headphones' },
       { key: 'internal-customer-service', name: '内部客服', iconClass: 'fa-headphones' },
     ]
     const merged = mergeSidebarMenuItems(core, mod, [], trailing, ['taiyangniao-pro'])

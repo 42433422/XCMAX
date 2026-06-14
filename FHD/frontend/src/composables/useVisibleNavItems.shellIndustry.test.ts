@@ -102,6 +102,10 @@ describe('useVisibleNavItems · 平台壳第三步完成后长出行业菜单', 
     expect(keys).toContain('products')
     expect(keys).toContain('customers')
     expect(keys).toContain('orders')
+    expect(keys).toContain('data-sources')
+    expect(keys).toContain('template-preview')
+    expect(keys).toContain('printer-list')
+    expect(keys).not.toContain('enterprise-customer-service')
 
     const products = visibleNavItems.value.find((i) => i.key === 'products')
     const customers = visibleNavItems.value.find((i) => i.key === 'customers')
