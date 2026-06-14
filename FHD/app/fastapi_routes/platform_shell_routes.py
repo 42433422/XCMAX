@@ -5,7 +5,9 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, File, Request, UploadFile
+from fastapi import Body
+from pydantic import BaseModel, Field
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -91,3 +93,106 @@ async def platform_shell_employee_tools():
     from app.mod_sdk.employee_tool_registry import build_employee_tools_status
 
     return {"success": True, "data": build_employee_tools_status()}
+
+
+class OfficeSampleCleanupBody(BaseModel):
+    file_paths: list[str] = Field(default_factory=list)
+
+
+@router.post("/office-sample-upload")
+async def platform_shell_office_sample_upload(file: UploadFile = File(...)):
+    """教程 / 办公包演示：把样本存到 workspace/uploads/tutorial，供 Word 读取员使用。"""
+    import os
+    import uuid
+    from pathlib import Path
+
+    from fastapi import HTTPException
+
+    from app.utils.secure_filename import secure_filename
+
+    name = (file.filename or "").strip()
+    suffix = Path(name).suffix.lower()
+    if suffix not in {".xlsx", ".xlsm", ".docx", ".doc"}:
+        raise HTTPException(status_code=400, detail="仅支持 .xlsx/.xlsm/.docx/.doc")
+
+    workspace_root = Path(os.environ.get("WORKSPACE_ROOT", os.getcwd())).resolve()
+    upload_dir = workspace_root / "uploads" / "tutorial"
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    safe = secure_filename(name) or f"tutorial{suffix}"
+    if not safe.lower().startswith("xcagi-quickstart") and "教程" not in safe:
+        safe = f"xcagi-quickstart-{uuid.uuid4().hex[:8]}{suffix}"
+    dest = upload_dir / safe
+    dest.write_bytes(await file.read())
+    try:
+        rel = dest.relative_to(workspace_root).as_posix()
+    except ValueError:
+        rel = str(dest)
+    return {"success": True, "data": {"file_path": rel, "filename": name, "workspace_root": str(workspace_root)}}
+
+
+@router.get("/workspace-root")
+async def platform_shell_workspace_root():
+    import os
+    from pathlib import Path
+
+    root = Path(os.environ.get("WORKSPACE_ROOT", os.getcwd())).resolve()
+    return {"success": True, "data": {"workspace_root": str(root)}}
+
+
+@router.post("/chat-office-file-upload")
+async def platform_shell_chat_office_file_upload(file: UploadFile = File(...)):
+    """智能对话上传：存到 workspace/uploads/chat，并返回 workspace_root 供办公员工读取。"""
+    import os
+    import uuid
+    from pathlib import Path
+
+    from fastapi import HTTPException
+
+    from app.utils.secure_filename import secure_filename
+
+    name = (file.filename or "").strip()
+    suffix = Path(name).suffix.lower()
+    if suffix not in {".xlsx", ".xlsm", ".docx", ".doc"}:
+        raise HTTPException(status_code=400, detail="仅支持 .xlsx/.xlsm/.docx/.doc")
+
+    workspace_root = Path(os.environ.get("WORKSPACE_ROOT", os.getcwd())).resolve()
+    upload_dir = workspace_root / "uploads" / "chat"
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    safe = secure_filename(name) or f"upload{suffix}"
+    if not safe.lower().endswith(suffix):
+        safe = f"{safe}{suffix}"
+    dest = upload_dir / f"{uuid.uuid4().hex[:12]}-{safe}"
+    dest.write_bytes(await file.read())
+    try:
+        rel = dest.relative_to(workspace_root).as_posix()
+    except ValueError:
+        rel = str(dest)
+    return {
+        "success": True,
+        "data": {"file_path": rel, "filename": name, "workspace_root": str(workspace_root)},
+    }
+
+
+@router.post("/office-sample-cleanup")
+async def platform_shell_office_sample_cleanup(body: OfficeSampleCleanupBody | None = Body(default=None)):
+    """删除教程上传的临时办公样本（仅 uploads/tutorial 下路径）。"""
+    import os
+    from pathlib import Path
+
+    workspace_root = Path(os.environ.get("WORKSPACE_ROOT", os.getcwd())).resolve()
+    tutorial_root = (workspace_root / "uploads" / "tutorial").resolve()
+    removed: list[str] = []
+    for raw in (body.file_paths if body else []) or []:
+        rel = str(raw or "").strip().lstrip("/").replace("\\", "/")
+        if not rel:
+            continue
+        candidate = (workspace_root / rel).resolve()
+        if not str(candidate).startswith(str(tutorial_root) + os.sep) and candidate != tutorial_root:
+            continue
+        if candidate.is_file():
+            try:
+                candidate.unlink()
+                removed.append(rel)
+            except OSError:
+                pass
+    return {"success": True, "data": {"removed": removed}}

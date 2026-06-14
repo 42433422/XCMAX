@@ -202,13 +202,15 @@ def build_employee_tools_status() -> dict[str, Any]:
     except RECOVERABLE_ERRORS:
         office_ids = set()
     installed_ids = {t["pack_id"] for t in tools}
+    office_installed = sorted(office_ids & installed_ids) if office_ids else []
     return {
         "installed_employee_pack_count": len(tools),
         "registered_tool_count": len(tool_names),
         "registered_tool_names": tool_names,
         "employee_pack_tools": tools,
         "office_catalog_count": len(office_ids),
-        "office_installed_count": len(office_ids & installed_ids),
+        "office_installed_count": len(office_installed),
+        "office_installed_ids": office_installed,
         "missing_office_pack_ids": sorted(office_ids - installed_ids) if office_ids else [],
         "office_ready": bool(office_ids) and not (office_ids - installed_ids),
         "runtime_missing_pack_ids": [t["pack_id"] for t in tools if not t.get("runtime_ok")],

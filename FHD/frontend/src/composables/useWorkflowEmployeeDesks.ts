@@ -14,6 +14,7 @@ export type WorkflowEmployeeDeskRow = {
   shortName: string
   enabled: boolean
   hostModId?: string
+  carrierModId?: string
   snapshot?: WorkflowEmployeeSpaceSnapshot
   session?: WorkflowEmployeeSession
 }
@@ -84,6 +85,7 @@ export function useWorkflowEmployeeDesks() {
         shortName: snap?.shortName || shortNameFromPanelTitle(panelTitle),
         enabled: en,
         hostModId: entry?.hostModId,
+        carrierModId: entry?.carrierModId,
         snapshot: snap,
         session: sess,
       }

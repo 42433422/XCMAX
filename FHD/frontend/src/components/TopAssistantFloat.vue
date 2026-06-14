@@ -4,6 +4,7 @@
       ref="floatToggleRef"
       class="assistant-float-toggle"
       type="button"
+      data-tour="assistant-float-toggle"
       @click="toggleOpen"
       :title="isOpen ? '收起副窗' : '打开副窗'"
       :aria-expanded="isOpen ? 'true' : 'false'"
@@ -35,7 +36,7 @@
     >
       <div class="assistant-float-header">
         <div id="xcagi-assistant-float-title" class="assistant-title">助手副窗</div>
-        <button type="button" class="assistant-close" aria-label="关闭副窗" @click="closeAssistantPanelUi">
+        <button type="button" class="assistant-close" aria-label="关闭副窗" data-tour="assistant-float-close" @click="closeAssistantPanelUi">
           ×
         </button>
       </div>
@@ -309,7 +310,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useRouter } from 'vue-router';
-import { ApiError } from '@/api';
+import api, { ApiError } from '@/api';
 import productsApi from '@/api/products';
 import { useTutorialStore } from '@/stores/tutorial';
 import { useOnboardingTutorialStore } from '@/stores/onboardingTutorial';
@@ -331,6 +332,8 @@ import { shouldTryWechatShipmentPreview } from '@/utils/wechatShipmentDetect';
 import { resolveErpApiPath } from '@/utils/erpDomainPaths';
 import { resolveWorkflowVisualizationLocation } from '@/utils/workflowNav';
 import { useWorkflowPanoramaNavVisible } from '@/composables/useWorkflowPanoramaNavVisible';
+import { useEnterpriseScopedWorkflowRegistry } from '@/composables/useEnterpriseScopedWorkflowRegistry';
+import { syncEnterpriseWorkflowRegistry } from '@/utils/syncEnterpriseWorkflowRegistry';
 import ExcelPreview from '@/components/template/ExcelPreview.vue';
 
 const router = useRouter();
@@ -341,7 +344,8 @@ const modsStore = useModsStore();
 const uiText = useIndustryUiText();
 const { modWorkflowEmployeesActive } = useWorkflowModsRuntimeContext();
 const workflowAiEmployeesStore = useWorkflowAiEmployeesStore();
-const { enabled: workflowEmployeesEnabled, registryEntries: workflowRegistryEntries, registryLoaded: workflowRegistryLoaded } = storeToRefs(workflowAiEmployeesStore);
+const { enabled: workflowEmployeesEnabled, registryLoaded: workflowRegistryLoaded } = storeToRefs(workflowAiEmployeesStore);
+const { scopedRegistryEntries } = useEnterpriseScopedWorkflowRegistry();
 
 const isOpen = ref(false);
 const activeTab = ref('push');
@@ -416,7 +420,7 @@ const workflowEmployeeDefs = computed(() => {
     if (key === 'shipmentOrderName') return `${uiText.shipmentOrderName.value}管理 AI 员工`;
     return key;
   };
-  return workflowRegistryEntries.value.map((entry) => ({
+  return scopedRegistryEntries.value.map((entry) => ({
     id: entry.id,
     label: resolveLabel(entry, i18nResolver),
   }));
@@ -743,14 +747,10 @@ const startTutorialGuide = async (track = DEFAULT_TUTORIAL_TRACK_ID) => {
   };
   const cacheTutorialGuidePack = async (pack) => {
     try {
-      await fetch('/api/preferences', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          user_id: 'default',
-          key: 'tutorial_guide_pack_cache',
-          value: JSON.stringify(pack),
-        }),
+      await api.post('/api/preferences', {
+        user_id: 'default',
+        key: 'tutorial_guide_pack_cache',
+        value: JSON.stringify(pack),
       });
     } catch (_e) {
       // 缓存失败不影响教程主流程
@@ -1321,22 +1321,15 @@ onMounted(() => {
   if (modsStore.clientModsUiOff) {
     workflowAiEmployeesStore.stripModWorkflowEmployeeKeys();
   } else {
-    workflowAiEmployeesStore.hydrateFromMods(modsStore.modsForWorkflowUi);
-    workflowAiEmployeesStore.pruneOrphanWorkflowEmployeeToggles(modsStore.modsForWorkflowUi);
-  }
-  if (!workflowRegistryLoaded.value) {
-    workflowAiEmployeesStore.loadRegistry(modsStore.modsForWorkflowUi);
+    void syncEnterpriseWorkflowRegistry(modsStore.modsForWorkflowUi);
   }
 });
 
 watch(
   () => modsStore.modsForWorkflowUi,
   (list) => {
-    workflowAiEmployeesStore.hydrateFromMods(list);
-    workflowAiEmployeesStore.pruneOrphanWorkflowEmployeeToggles(list);
-    if (workflowRegistryLoaded.value) {
-      workflowAiEmployeesStore.loadRegistry(list);
-    }
+    if (modsStore.clientModsUiOff) return;
+    void syncEnterpriseWorkflowRegistry(list);
   },
   { deep: true }
 );
