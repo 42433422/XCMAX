@@ -2,16 +2,34 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { ref } from 'vue'
 import { setActivePinia, createPinia } from 'pinia'
 
+const {
+  handleChatRequiresToken,
+  applyPlainTextToMessageIndex,
+  pushStreamingAiShell,
+  saveMessage,
+  sendChatStream,
+  readPlannerSseResponse,
+  requestChatByModeWithTimeout,
+} = vi.hoisted(() => ({
+  handleChatRequiresToken: vi.fn(),
+  applyPlainTextToMessageIndex: vi.fn(),
+  pushStreamingAiShell: vi.fn(() => 0),
+  saveMessage: vi.fn().mockResolvedValue(undefined),
+  sendChatStream: vi.fn(),
+  readPlannerSseResponse: vi.fn(),
+  requestChatByModeWithTimeout: vi.fn(),
+}))
+
 vi.mock('./useChatMessages', async () => {
   const { ref } = await import('vue')
   return {
     useChatMessages: () => ({
       messages: ref([]),
       addMessage: vi.fn(),
-      addAndSaveMessage: vi.fn(),
-      saveMessage: vi.fn(),
-      pushStreamingAiShell: vi.fn(),
-      applyPlainTextToMessageIndex: vi.fn(),
+      addAndSaveMessage: vi.fn().mockResolvedValue(undefined),
+      saveMessage,
+      pushStreamingAiShell,
+      applyPlainTextToMessageIndex,
       clearMessages: vi.fn(),
       loadMessages: vi.fn(),
       syncFromServer: vi.fn().mockResolvedValue(undefined),
@@ -46,7 +64,7 @@ vi.mock('./useChatPersistence', () => ({
   persistExcelAnalysisContext: vi.fn(),
   resolveExcelFilePathFromAnalysis: vi.fn(),
   resolveExcelSheetOptionsFromContext: vi.fn(() => []),
-  extractLikelyProductQueryKeyword: vi.fn(),
+  extractLikelyProductQueryKeyword: vi.fn(() => null),
   clearPersistedTaskPanelState: vi.fn(),
   useChatHistoryPersistence: () => ({ toPlainText: (s: string) => s, isWelcomeMessage: () => false }),
   useChatTaskPanelPersistence: () => ({
@@ -111,10 +129,12 @@ vi.mock('./useChatWorkflowPanel', () => ({
 }))
 vi.mock('./useChatDbTokenGate', () => ({
   useChatDbTokenGate: () => ({
-    handleChatRequiresToken: vi.fn(),
+    handleChatRequiresToken,
     resolveEffectiveProModeState: vi.fn(() => false),
     syncProModeState: vi.fn(),
     onDbWriteUnlockedForChatRetry: vi.fn(),
+    getModeScopedUserId: vi.fn(() => 'u1'),
+    resolveChatDbTokensForPayload: vi.fn(() => ({})),
   }),
 }))
 vi.mock('./useChatExcelContext', () => ({
@@ -133,17 +153,12 @@ vi.mock('./useChatExcelContext', () => ({
     onMultimodalFileChange: vi.fn(),
   }),
 }))
-const requestChatByModeWithTimeout = vi.fn().mockResolvedValue({
-  success: true,
-  response: '好的',
-  data: { text: '好的', action: 'followup', data: {} },
-})
 vi.mock('./useChatRequest', () => ({
   useChatRequest: () => ({
     loadingProgressText: ref(''),
     chatBatchQueue: ref([]),
     enqueueChatBatchMessage: vi.fn(),
-    buildPlannerChatRequestPayload: vi.fn(() => ({})),
+    buildPlannerChatRequestPayload: vi.fn(() => ({ body: { message: 'hello' } })),
     requestChatByMode: vi.fn(),
     requestChatByModeBatch: vi.fn(),
     getChatBatchDebounceMs: () => 0,
@@ -183,14 +198,19 @@ vi.mock('@/stores/tutorial', () => ({ useTutorialStore: () => ({}) }))
 vi.mock('@/stores/mods', () => ({
   useModsStore: () => ({ activeModId: '', mods: [], modsForUi: [], setActiveModId: vi.fn() }),
 }))
-vi.mock('@/api/chat', () => ({ default: {}, parseChatStreamErrorResponse: vi.fn() }))
-vi.mock('@/api/products', () => ({
-  default: { searchProducts: vi.fn() },
+vi.mock('@/api/chat', () => ({
+  default: { sendChatStream },
+  parseChatStreamErrorResponse: vi.fn().mockResolvedValue('流式接口错误'),
 }))
-vi.mock('@/utils/chatSseStream', () => ({
-  readPlannerSseResponse: vi.fn(),
-  isChatStreamEnabled: () => false,
-}))
+vi.mock('@/api/products', () => ({ default: { searchProducts: vi.fn() } }))
+vi.mock('@/utils/chatSseStream', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/utils/chatSseStream')>()
+  return {
+    ...actual,
+    isChatStreamEnabled: () => true,
+    readPlannerSseResponse,
+  }
+})
 vi.mock('@/utils/shipmentMgmtPostPrint', () => ({
   fetchShipmentRecordsForUnit: vi.fn(),
   summarizeShipmentRecordsForAudit: vi.fn(),
@@ -199,83 +219,54 @@ vi.mock('@/workflow/coreWorkflowDispatcher', () => ({ dispatchCoreWorkflowModRun
 vi.mock('@/constants/coreWorkflowMod', () => ({ isCoreWorkflowModInstalled: () => false }))
 
 import { useChatOrchestration } from './useChatOrchestration'
-import { extractLikelyProductQueryKeyword } from './useChatPersistence'
-import productsApi from '@/api/products'
 
-describe('useChatOrchestration deep', () => {
+describe('useChatOrchestration stream', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     localStorage.clear()
+    vi.clearAllMocks()
+    pushStreamingAiShell.mockReturnValue(0)
+    sendChatStream.mockResolvedValue({ ok: true, body: {} })
+    readPlannerSseResponse.mockImplementation(async (_res, onEvent) => {
+      onEvent({ type: 'token', text: '你' })
+      onEvent({ type: 'done', result: { success: true, response: '你好' } })
+    })
   })
 
-  it('cancelTask clears current task state', () => {
+  it('sendMessage uses SSE stream when enabled', async () => {
     const api = useChatOrchestration({ sessionId: ref('s'), proIntentExperienceEnabled: ref(false) })
-    api.cancelTask()
-    expect(api.currentTask).toBeDefined()
-  })
-
-  it('scrollToBottom is callable', () => {
-    const api = useChatOrchestration({ sessionId: ref('s'), proIntentExperienceEnabled: ref(false) })
-    document.body.innerHTML = '<div id="chat-messages"></div>'
-    expect(() => api.scrollToBottom()).not.toThrow()
-  })
-
-  it('generateSessionId returns string', () => {
-    const api = useChatOrchestration({ sessionId: ref('s'), proIntentExperienceEnabled: ref(false) })
-    expect(typeof api.generateSessionId()).toBe('string')
-    expect(api.generateSessionId().length).toBeGreaterThan(0)
-  })
-
-  it('copyAssistantPushContent resolves', async () => {
-    const api = useChatOrchestration({ sessionId: ref('s'), proIntentExperienceEnabled: ref(false) })
-    await expect(api.copyAssistantPushContent()).resolves.toBeUndefined()
-  })
-
-  it('handleShipmentDownloadClick is callable', () => {
-    const api = useChatOrchestration({ sessionId: ref('s'), proIntentExperienceEnabled: ref(false) })
-    expect(() => api.handleShipmentDownloadClick()).not.toThrow()
-  })
-
-  it('setTtsEnabled persists preference and clears queue when off', () => {
-    const api = useChatOrchestration({ sessionId: ref('s'), proIntentExperienceEnabled: ref(false) })
-    api.setTtsEnabled(true)
-    expect(localStorage.getItem('xcagi_chat_tts_enabled')).toBe('1')
-    expect(api.ttsEnabled.value).toBe(true)
-    api.setTtsEnabled(false)
-    expect(localStorage.getItem('xcagi_chat_tts_enabled')).toBe('0')
-    expect(api.ttsEnabled.value).toBe(false)
-  })
-
-  it('sendMessage triggers remote chat round when debounce disabled', async () => {
-    requestChatByModeWithTimeout.mockClear()
-    vi.mocked(extractLikelyProductQueryKeyword).mockReturnValue(null)
-    const api = useChatOrchestration({ sessionId: ref('s'), proIntentExperienceEnabled: ref(false) })
-    await api.sendMessage('查5003产品')
-    expect(requestChatByModeWithTimeout).toHaveBeenCalled()
-  })
-
-  it('sendMessage uses product fast path when keyword extracted', async () => {
-    requestChatByModeWithTimeout.mockClear()
-    vi.mocked(extractLikelyProductQueryKeyword).mockReturnValue('5003A')
-    vi.mocked(productsApi.searchProducts).mockResolvedValue({
-      success: true,
-      data: [{ model_number: '5003A', name: '清漆', price: 120 }],
-      total: 1,
-    } as never)
-    const api = useChatOrchestration({ sessionId: ref('s'), proIntentExperienceEnabled: ref(false) })
-    await api.sendMessage('查5003A')
-    expect(productsApi.searchProducts).toHaveBeenCalledWith('5003A')
+    await api.sendMessage('hello')
+    expect(sendChatStream).toHaveBeenCalled()
+    expect(readPlannerSseResponse).toHaveBeenCalled()
+    expect(applyPlainTextToMessageIndex).toHaveBeenCalled()
+    expect(saveMessage).toHaveBeenCalledWith('ai', '你好')
     expect(requestChatByModeWithTimeout).not.toHaveBeenCalled()
   })
 
-  it('isStartPrintMessage is exposed', () => {
+  it('sendMessage stream handles requires_token event', async () => {
+    readPlannerSseResponse.mockImplementation(async (_res, onEvent) => {
+      onEvent({ type: 'requires_token', token_name: 'DB_WRITE_TOKEN', token_description: '写入' })
+      onEvent({ type: 'done', result: { success: true, response: '' } })
+    })
     const api = useChatOrchestration({ sessionId: ref('s'), proIntentExperienceEnabled: ref(false) })
-    expect(typeof api.isStartPrintMessage).toBe('function')
-    expect(api.isStartPrintMessage('开始打印')).toBe(true)
+    await api.sendMessage('导入数据库')
+    expect(handleChatRequiresToken).toHaveBeenCalled()
+    expect(applyPlainTextToMessageIndex).toHaveBeenCalled()
   })
 
-  it('newConversation is callable', () => {
+  it('sendMessage stream surfaces HTTP error', async () => {
+    sendChatStream.mockResolvedValue({ ok: false, status: 502 })
     const api = useChatOrchestration({ sessionId: ref('s'), proIntentExperienceEnabled: ref(false) })
-    expect(() => api.newConversation()).not.toThrow()
+    await api.sendMessage('hello')
+    expect(applyPlainTextToMessageIndex).toHaveBeenCalledWith(0, expect.stringContaining('处理失败'))
+  })
+
+  it('sendMessage stream surfaces SSE error event', async () => {
+    readPlannerSseResponse.mockImplementation(async (_res, onEvent) => {
+      onEvent({ type: 'error', message: '模型不可用' })
+    })
+    const api = useChatOrchestration({ sessionId: ref('s'), proIntentExperienceEnabled: ref(false) })
+    await api.sendMessage('hello')
+    expect(applyPlainTextToMessageIndex).toHaveBeenCalledWith(0, expect.stringContaining('模型不可用'))
   })
 })

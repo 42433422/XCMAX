@@ -74,10 +74,10 @@ export default defineConfig({
       // 阈值 = 全量诚实基线（2026-06-14 实测），floor 只升不降，由
       // scripts/dev/coverage_ratchet.py 维护。历史 50/30/35/50 来自窄 include，不可比，已退役。
       thresholds: {
-        lines: 53,
+        lines: 54,
         branches: 62,
         functions: 50,
-        statements: 53,
+        statements: 54,
       },
     },
   },

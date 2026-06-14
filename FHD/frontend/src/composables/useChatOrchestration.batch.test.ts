@@ -2,15 +2,27 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { ref } from 'vue'
 import { setActivePinia, createPinia } from 'pinia'
 
+const {
+  requestChatByModeWithTimeout,
+  requestChatByModeBatchWithTimeout,
+  enqueueChatBatchMessage,
+  addAndSaveMessage,
+} = vi.hoisted(() => ({
+  requestChatByModeWithTimeout: vi.fn(),
+  requestChatByModeBatchWithTimeout: vi.fn(),
+  enqueueChatBatchMessage: vi.fn(),
+  addAndSaveMessage: vi.fn().mockResolvedValue(undefined),
+}))
+
 vi.mock('./useChatMessages', async () => {
   const { ref } = await import('vue')
   return {
     useChatMessages: () => ({
       messages: ref([]),
       addMessage: vi.fn(),
-      addAndSaveMessage: vi.fn(),
+      addAndSaveMessage,
       saveMessage: vi.fn(),
-      pushStreamingAiShell: vi.fn(),
+      pushStreamingAiShell: vi.fn(() => 0),
       applyPlainTextToMessageIndex: vi.fn(),
       clearMessages: vi.fn(),
       loadMessages: vi.fn(),
@@ -46,7 +58,7 @@ vi.mock('./useChatPersistence', () => ({
   persistExcelAnalysisContext: vi.fn(),
   resolveExcelFilePathFromAnalysis: vi.fn(),
   resolveExcelSheetOptionsFromContext: vi.fn(() => []),
-  extractLikelyProductQueryKeyword: vi.fn(),
+  extractLikelyProductQueryKeyword: vi.fn(() => null),
   clearPersistedTaskPanelState: vi.fn(),
   useChatHistoryPersistence: () => ({ toPlainText: (s: string) => s, isWelcomeMessage: () => false }),
   useChatTaskPanelPersistence: () => ({
@@ -115,6 +127,8 @@ vi.mock('./useChatDbTokenGate', () => ({
     resolveEffectiveProModeState: vi.fn(() => false),
     syncProModeState: vi.fn(),
     onDbWriteUnlockedForChatRetry: vi.fn(),
+    getModeScopedUserId: vi.fn(() => 'u1'),
+    resolveChatDbTokensForPayload: vi.fn(() => ({})),
   }),
 }))
 vi.mock('./useChatExcelContext', () => ({
@@ -133,36 +147,21 @@ vi.mock('./useChatExcelContext', () => ({
     onMultimodalFileChange: vi.fn(),
   }),
 }))
-const requestChatByModeWithTimeout = vi.fn().mockResolvedValue({
-  success: true,
-  response: '好的',
-  data: { text: '好的', action: 'followup', data: {} },
-})
 vi.mock('./useChatRequest', () => ({
   useChatRequest: () => ({
     loadingProgressText: ref(''),
     chatBatchQueue: ref([]),
-    enqueueChatBatchMessage: vi.fn(),
-    buildPlannerChatRequestPayload: vi.fn(() => ({})),
+    enqueueChatBatchMessage,
+    buildPlannerChatRequestPayload: vi.fn(() => ({ body: {} })),
     requestChatByMode: vi.fn(),
     requestChatByModeBatch: vi.fn(),
-    getChatBatchDebounceMs: () => 0,
+    getChatBatchDebounceMs: () => 300,
     setLoadingProgress: vi.fn(),
     startWaitProgressTimer: vi.fn(),
     stopLoadingProgress: vi.fn(),
     requestChatByModeWithTimeout,
-    requestChatByModeBatchWithTimeout: vi.fn(),
+    requestChatByModeBatchWithTimeout,
     resolveChatTimeoutMs: () => 30_000,
-  }),
-}))
-vi.mock('./useChatResponseAttach', () => ({
-  useChatResponseAttach: () => ({
-    getLastAiMessageRef: vi.fn(),
-    attachThinkingStepsToLastAiMessage: vi.fn(),
-    attachTodoStepsToLastAiMessage: vi.fn(),
-    attachWorkflowTraceToLastAiMessage: vi.fn(),
-    attachContextSummaryToLastAiMessage: vi.fn(),
-    syncTaskFromChatResponse: vi.fn(),
   }),
 }))
 vi.mock('./useChatSessionHistory', () => ({
@@ -184,9 +183,7 @@ vi.mock('@/stores/mods', () => ({
   useModsStore: () => ({ activeModId: '', mods: [], modsForUi: [], setActiveModId: vi.fn() }),
 }))
 vi.mock('@/api/chat', () => ({ default: {}, parseChatStreamErrorResponse: vi.fn() }))
-vi.mock('@/api/products', () => ({
-  default: { searchProducts: vi.fn() },
-}))
+vi.mock('@/api/products', () => ({ default: { searchProducts: vi.fn() } }))
 vi.mock('@/utils/chatSseStream', () => ({
   readPlannerSseResponse: vi.fn(),
   isChatStreamEnabled: () => false,
@@ -199,83 +196,49 @@ vi.mock('@/workflow/coreWorkflowDispatcher', () => ({ dispatchCoreWorkflowModRun
 vi.mock('@/constants/coreWorkflowMod', () => ({ isCoreWorkflowModInstalled: () => false }))
 
 import { useChatOrchestration } from './useChatOrchestration'
-import { extractLikelyProductQueryKeyword } from './useChatPersistence'
-import productsApi from '@/api/products'
 
-describe('useChatOrchestration deep', () => {
+describe('useChatOrchestration batch/json', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
-    localStorage.clear()
-  })
-
-  it('cancelTask clears current task state', () => {
-    const api = useChatOrchestration({ sessionId: ref('s'), proIntentExperienceEnabled: ref(false) })
-    api.cancelTask()
-    expect(api.currentTask).toBeDefined()
-  })
-
-  it('scrollToBottom is callable', () => {
-    const api = useChatOrchestration({ sessionId: ref('s'), proIntentExperienceEnabled: ref(false) })
-    document.body.innerHTML = '<div id="chat-messages"></div>'
-    expect(() => api.scrollToBottom()).not.toThrow()
-  })
-
-  it('generateSessionId returns string', () => {
-    const api = useChatOrchestration({ sessionId: ref('s'), proIntentExperienceEnabled: ref(false) })
-    expect(typeof api.generateSessionId()).toBe('string')
-    expect(api.generateSessionId().length).toBeGreaterThan(0)
-  })
-
-  it('copyAssistantPushContent resolves', async () => {
-    const api = useChatOrchestration({ sessionId: ref('s'), proIntentExperienceEnabled: ref(false) })
-    await expect(api.copyAssistantPushContent()).resolves.toBeUndefined()
-  })
-
-  it('handleShipmentDownloadClick is callable', () => {
-    const api = useChatOrchestration({ sessionId: ref('s'), proIntentExperienceEnabled: ref(false) })
-    expect(() => api.handleShipmentDownloadClick()).not.toThrow()
-  })
-
-  it('setTtsEnabled persists preference and clears queue when off', () => {
-    const api = useChatOrchestration({ sessionId: ref('s'), proIntentExperienceEnabled: ref(false) })
-    api.setTtsEnabled(true)
-    expect(localStorage.getItem('xcagi_chat_tts_enabled')).toBe('1')
-    expect(api.ttsEnabled.value).toBe(true)
-    api.setTtsEnabled(false)
-    expect(localStorage.getItem('xcagi_chat_tts_enabled')).toBe('0')
-    expect(api.ttsEnabled.value).toBe(false)
-  })
-
-  it('sendMessage triggers remote chat round when debounce disabled', async () => {
-    requestChatByModeWithTimeout.mockClear()
-    vi.mocked(extractLikelyProductQueryKeyword).mockReturnValue(null)
-    const api = useChatOrchestration({ sessionId: ref('s'), proIntentExperienceEnabled: ref(false) })
-    await api.sendMessage('查5003产品')
-    expect(requestChatByModeWithTimeout).toHaveBeenCalled()
-  })
-
-  it('sendMessage uses product fast path when keyword extracted', async () => {
-    requestChatByModeWithTimeout.mockClear()
-    vi.mocked(extractLikelyProductQueryKeyword).mockReturnValue('5003A')
-    vi.mocked(productsApi.searchProducts).mockResolvedValue({
+    vi.clearAllMocks()
+    enqueueChatBatchMessage.mockImplementation((_msg: string, _ms: number, cb: (m: string[]) => void) => {
+      cb(['first', 'second'])
+    })
+    requestChatByModeBatchWithTimeout.mockResolvedValue({
       success: true,
-      data: [{ model_number: '5003A', name: '清漆', price: 120 }],
-      total: 1,
-    } as never)
-    const api = useChatOrchestration({ sessionId: ref('s'), proIntentExperienceEnabled: ref(false) })
-    await api.sendMessage('查5003A')
-    expect(productsApi.searchProducts).toHaveBeenCalledWith('5003A')
-    expect(requestChatByModeWithTimeout).not.toHaveBeenCalled()
+      batch: true,
+      results: [
+        { success: true, response: 'part-1' },
+        { success: true, response: 'part-2', autoAction: { type: 'show_products_float', query: '5003' } },
+      ],
+    })
+    requestChatByModeWithTimeout.mockResolvedValue({
+      success: true,
+      response: '请确认工作流',
+      data: { action: 'workflow_confirmation_required', data: { pending_workflow_id: 'wf-1' } },
+    })
   })
 
-  it('isStartPrintMessage is exposed', () => {
+  it('sendMessage debounce triggers batch chat round', async () => {
     const api = useChatOrchestration({ sessionId: ref('s'), proIntentExperienceEnabled: ref(false) })
-    expect(typeof api.isStartPrintMessage).toBe('function')
-    expect(api.isStartPrintMessage('开始打印')).toBe(true)
+    await api.sendMessage('批量问题')
+    expect(enqueueChatBatchMessage).toHaveBeenCalled()
+    expect(requestChatByModeBatchWithTimeout).toHaveBeenCalledWith(['first', 'second'], expect.any(Number))
+    expect(addAndSaveMessage).toHaveBeenCalledWith('part-1', 'ai', undefined, expect.any(Object))
   })
 
-  it('newConversation is callable', () => {
+  it('single json path handles workflow confirmation response', async () => {
+    enqueueChatBatchMessage.mockImplementation((_m: string, _d: number, cb: (msgs: string[]) => void) => {
+      cb(['only-one'])
+    })
+    requestChatByModeWithTimeout.mockResolvedValueOnce({
+      success: true,
+      response: '请确认',
+      data: { action: 'workflow_confirmation_required', data: { pending_workflow_id: 'wf-2' } },
+    })
     const api = useChatOrchestration({ sessionId: ref('s'), proIntentExperienceEnabled: ref(false) })
-    expect(() => api.newConversation()).not.toThrow()
+    await api.sendMessage('执行计划')
+    expect(requestChatByModeWithTimeout).toHaveBeenCalled()
+    expect(addAndSaveMessage).toHaveBeenCalledWith('请确认', 'ai', undefined, expect.any(Object))
   })
 })

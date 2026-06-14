@@ -97,6 +97,31 @@ def test_build_mod_database_seed_plan_empty(monkeypatch: pytest.MonkeyPatch) -> 
     assert plan["mods"] == []
 
 
+def test_ensure_sqlite_product_business_bootstrap_creates_purchase_units(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    work_dir = tmp_path / "appdata" / "data"
+    work_dir.mkdir(parents=True)
+    db_file = work_dir / "xcagi.db"
+    with sqlite3.connect(db_file) as conn:
+        conn.execute("CREATE TABLE templates (id INTEGER PRIMARY KEY)")
+        conn.commit()
+
+    monkeypatch.setattr(init_db_mod, "get_app_data_dir", lambda: str(tmp_path / "appdata"))
+    init_db_mod.ensure_desktop_sqlite_business_tables_all_files(
+        data_dir=str(tmp_path / "appdata")
+    )
+    with sqlite3.connect(db_file) as conn:
+        tables = {
+            row[0]
+            for row in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()
+        }
+    assert "purchase_units" in tables
+    assert "products" in tables
+
+
 def test_build_mod_database_seed_plan_with_manifest(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
     mod_path = tmp_path / "demo_mod"
     mod_path.mkdir()
