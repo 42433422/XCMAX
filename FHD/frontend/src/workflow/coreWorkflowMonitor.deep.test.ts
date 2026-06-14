@@ -203,6 +203,55 @@ describe('coreWorkflowMonitor', () => {
     })
   })
 
+  it('computeCoreWorkflowProgressState label_print idle without star refresh', () => {
+    withStarRefresh(false, () => {
+      const state = computeCoreWorkflowProgressState('label_print', [], {})
+      expect(state.workflowProgressStarted).toBe(false)
+      expect(state.progressLabel).toContain('星标自动刷新')
+    })
+  })
+
+  it('computeCoreWorkflowProgressState label_print idle with star refresh on', () => {
+    withStarRefresh(true, () => {
+      const state = computeCoreWorkflowProgressState('label_print', [], {})
+      expect(state.progressLabel).toContain('等待微信侧标签')
+    })
+  })
+
+  it('computeCoreWorkflowProgressState shipment_mgmt idle awaits audit', () => {
+    const state = computeCoreWorkflowProgressState('shipment_mgmt', [], {})
+    expect(state.workflowProgressStarted).toBe(false)
+    expect(state.progressLabel).toContain('打印后审计')
+  })
+
+  it('computeCoreWorkflowProgressState wechat_msg idle without star refresh', () => {
+    withStarRefresh(false, () => {
+      const state = computeCoreWorkflowProgressState('wechat_msg', [], {})
+      expect(state.workflowProgressStarted).toBe(false)
+      expect(state.progressLabel).toContain('星标自动刷新')
+    })
+  })
+
+  it('computeCoreWorkflowProgressState wechat_msg idle with star refresh on', () => {
+    withStarRefresh(true, () => {
+      const state = computeCoreWorkflowProgressState('wechat_msg', [], {})
+      expect(state.progressLabel).toContain('等待新消息')
+    })
+  })
+
+  it('computeCoreWorkflowProgressState label_print started with signal', () => {
+    withStarRefresh(true, () => {
+      const steps = buildCoreWorkflowStepsForEmployee('label_print', {
+        lastLabelPrint: { at: Date.now(), line: 'print ok' },
+      })
+      const state = computeCoreWorkflowProgressState('label_print', steps, {
+        lastLabelPrint: { at: Date.now(), line: 'print ok' },
+      })
+      expect(state.workflowProgressStarted).toBe(true)
+      expect(state.progressPct).toBeGreaterThan(0)
+    })
+  })
+
   it('mergeCorePayloadFromExisting prefers opts over existing payload', () => {
     const merged = mergeCorePayloadFromExisting(
       'wechat_msg',
@@ -228,5 +277,57 @@ describe('coreWorkflowMonitor', () => {
     const result = computeWorkflowProgressFromSteps(steps)
     expect(result.pct).toBe(100)
     expect(result.label).not.toContain('进行中')
+  })
+
+  it('buildCoreWorkflowStepsForEmployee wechat_msg with pro intent label', () => {
+    localStorage.setItem('xcagi_pro_intent_experience', '1')
+    try {
+      const steps = buildCoreWorkflowStepsForEmployee('wechat_msg', {
+        lastWechat: { at: Date.now(), line: 'hi' },
+      })
+      const step4 = steps.find((s) => s.id === 'wx4')
+      expect(step4?.label).toContain('intent/test')
+      expect(step4?.status).toBe('done')
+    } finally {
+      localStorage.removeItem('xcagi_pro_intent_experience')
+    }
+  })
+
+  it('buildCoreWorkflowStepsForEmployee shipment_mgmt with audit active', () => {
+    const steps = buildCoreWorkflowStepsForEmployee('shipment_mgmt', {
+      lastShipmentAudit: { at: Date.now(), line: '审计完成' },
+    })
+    expect(steps.some((s) => s.status === 'active')).toBe(true)
+  })
+
+  it('computeCoreWorkflowCurrentHint wechat with monitor polled', () => {
+    withStarRefresh(true, () => {
+      const hint = computeCoreWorkflowCurrentHint('wechat_msg', {}, {
+        lastPolledAt: Date.now(),
+      })
+      expect(hint).toContain('轮询')
+    })
+  })
+
+  it('computeCoreWorkflowCurrentHint receipt_confirm requires star refresh', () => {
+    withStarRefresh(false, () => {
+      const hint = computeCoreWorkflowCurrentHint('receipt_confirm', {})
+      expect(hint).toContain('星标聊天自动刷新')
+    })
+  })
+
+  it('computeCoreWorkflowCurrentHint receipt_confirm with feedback detail', () => {
+    withStarRefresh(true, () => {
+      const long = 'x'.repeat(250)
+      const hint = computeCoreWorkflowCurrentHint('receipt_confirm', {
+        lastReceiptFeedback: { at: Date.now(), line: '签收', detail: long },
+      })
+      expect(hint.endsWith('…')).toBe(true)
+    })
+  })
+
+  it('computeCoreWorkflowCurrentHint shipment_mgmt idle explains audit flow', () => {
+    const hint = computeCoreWorkflowCurrentHint('shipment_mgmt', {})
+    expect(hint).toContain('开始打印')
   })
 })

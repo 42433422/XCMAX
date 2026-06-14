@@ -106,6 +106,54 @@ async def test_market_payment_plans(market_client: TestClient, monkeypatch: pyte
     assert r.status_code == 200
 
 
+@pytest.mark.asyncio
+async def test_market_payment_direct_checkout_signed(
+    market_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls: list[tuple[str, str]] = []
+
+    async def _proxy(method, path, **k):
+        calls.append((method, path))
+        if path == "/api/payment/sign-checkout":
+            return {
+                "request_id": "rid-1",
+                "timestamp": 1700000000,
+                "signature": "sig-1",
+                "subject": "钱包充值",
+                "total_amount": 10.0,
+                "plan_id": "",
+                "item_id": 0,
+                "wallet_recharge": True,
+            }
+        if path == "/api/payment/checkout":
+            return {
+                "ok": True,
+                "type": "page",
+                "redirect_url": "https://openapi.alipay.com/gateway.do?demo=1",
+                "order_id": "MOD123",
+            }
+        if path == "/api/auth/me":
+            return {"user": {"id": 33, "username": "xcagi-enterprise-demo"}}
+        return {}
+
+    monkeypatch.setattr(market_mod, "_proxy_json", _proxy)
+
+    async def _auth(request, body):
+        return "Bearer tok", None
+
+    monkeypatch.setattr(market_mod, "_resolve_market_authorization_for_checkout", _auth)
+    r = market_client.post(
+        "/api/market/payment/direct-checkout",
+        json={"wallet_recharge": True, "total_amount": 10, "subject": "钱包充值"},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["success"] is True
+    assert body["data"]["redirect_url"].startswith("https://openapi.alipay.com")
+    assert calls[0] == ("POST", "/api/payment/sign-checkout")
+    assert calls[1] == ("POST", "/api/payment/checkout")
+
+
 # ---------------------------------------------------------------------------
 # xcagi_compat_chat_helpers
 # ---------------------------------------------------------------------------

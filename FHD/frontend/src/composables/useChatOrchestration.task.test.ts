@@ -1,6 +1,13 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { ref } from 'vue'
 import { setActivePinia, createPinia } from 'pinia'
+
+const lastShipmentExecution = ref<Record<string, unknown> | null>(null)
+const addAndSaveMessage = vi.fn().mockResolvedValue(undefined)
+const executePrintTask = vi.fn()
+const buildPrintSummaryMessage = vi.fn(() => '打印完成')
+const upsertTask = vi.fn()
+const handleChatRequiresToken = vi.fn()
 
 vi.mock('./useChatMessages', async () => {
   const { ref } = await import('vue')
@@ -8,9 +15,9 @@ vi.mock('./useChatMessages', async () => {
     useChatMessages: () => ({
       messages: ref([]),
       addMessage: vi.fn(),
-      addAndSaveMessage: vi.fn(),
+      addAndSaveMessage,
       saveMessage: vi.fn(),
-      pushStreamingAiShell: vi.fn(),
+      pushStreamingAiShell: vi.fn(() => 0),
       applyPlainTextToMessageIndex: vi.fn(),
       clearMessages: vi.fn(),
       loadMessages: vi.fn(),
@@ -30,7 +37,7 @@ vi.mock('./useChatTaskList', () => ({
     filteredTaskList: ref([]),
     createTaskId: (p: string) => `${p}-1`,
     sortTaskList: vi.fn(),
-    upsertTask: vi.fn(),
+    upsertTask,
     finishTask: vi.fn(),
     failTask: vi.fn(),
     cancelTask: vi.fn(),
@@ -46,7 +53,7 @@ vi.mock('./useChatPersistence', () => ({
   persistExcelAnalysisContext: vi.fn(),
   resolveExcelFilePathFromAnalysis: vi.fn(),
   resolveExcelSheetOptionsFromContext: vi.fn(() => []),
-  extractLikelyProductQueryKeyword: vi.fn(),
+  extractLikelyProductQueryKeyword: vi.fn(() => null),
   clearPersistedTaskPanelState: vi.fn(),
   useChatHistoryPersistence: () => ({ toPlainText: (s: string) => s, isWelcomeMessage: () => false }),
   useChatTaskPanelPersistence: () => ({
@@ -75,7 +82,7 @@ vi.mock('./useShipmentTask', async () => {
   const { ref } = await import('vue')
   return {
     useShipmentTask: () => ({
-      lastShipmentExecution: ref(null),
+      lastShipmentExecution,
       handleModifyCommand: vi.fn(),
       hydrateTaskOrderNumber: vi.fn(),
       enrichShipmentPreviewProducts: vi.fn(),
@@ -97,8 +104,8 @@ vi.mock('./usePrintService', async () => {
   return {
     usePrintService: () => ({
       isPrinting: ref(false),
-      executePrintTask: vi.fn(),
-      buildPrintSummaryMessage: vi.fn(),
+      executePrintTask,
+      buildPrintSummaryMessage,
     }),
   }
 })
@@ -107,14 +114,18 @@ vi.mock('./useChatWorkflowPanel', () => ({
     registerWorkflowPanelWatchers: vi.fn(),
     mountWorkflowPanel: vi.fn(),
     unmountWorkflowPanel: vi.fn(),
+    readWorkflowEmployeeEnabledMap: vi.fn(() => ({ shipment_mgmt: false })),
+    upsertWorkflowEmployeeTask: vi.fn(),
   }),
 }))
 vi.mock('./useChatDbTokenGate', () => ({
   useChatDbTokenGate: () => ({
-    handleChatRequiresToken: vi.fn(),
+    handleChatRequiresToken,
     resolveEffectiveProModeState: vi.fn(() => false),
     syncProModeState: vi.fn(),
     onDbWriteUnlockedForChatRetry: vi.fn(),
+    getModeScopedUserId: vi.fn(() => 'u1'),
+    resolveChatDbTokensForPayload: vi.fn(() => ({})),
   }),
 }))
 vi.mock('./useChatExcelContext', () => ({
@@ -133,31 +144,26 @@ vi.mock('./useChatExcelContext', () => ({
     onMultimodalFileChange: vi.fn(),
   }),
 }))
-const requestChatByModeWithTimeout = vi.fn().mockResolvedValue({
-  success: true,
-  response: '好的',
-  data: { text: '好的', action: 'followup', data: {} },
-})
 vi.mock('./useChatRequest', () => ({
   useChatRequest: () => ({
     loadingProgressText: ref(''),
     chatBatchQueue: ref([]),
     enqueueChatBatchMessage: vi.fn(),
-    buildPlannerChatRequestPayload: vi.fn(() => ({})),
+    buildPlannerChatRequestPayload: vi.fn(() => ({ body: {} })),
     requestChatByMode: vi.fn(),
     requestChatByModeBatch: vi.fn(),
     getChatBatchDebounceMs: () => 0,
     setLoadingProgress: vi.fn(),
     startWaitProgressTimer: vi.fn(),
     stopLoadingProgress: vi.fn(),
-    requestChatByModeWithTimeout,
+    requestChatByModeWithTimeout: vi.fn(),
     requestChatByModeBatchWithTimeout: vi.fn(),
     resolveChatTimeoutMs: () => 30_000,
   }),
 }))
 vi.mock('./useChatResponseAttach', () => ({
   useChatResponseAttach: () => ({
-    getLastAiMessageRef: vi.fn(),
+    getLastAiMessageRef: vi.fn(() => '0'),
     attachThinkingStepsToLastAiMessage: vi.fn(),
     attachTodoStepsToLastAiMessage: vi.fn(),
     attachWorkflowTraceToLastAiMessage: vi.fn(),
@@ -184,98 +190,110 @@ vi.mock('@/stores/mods', () => ({
   useModsStore: () => ({ activeModId: '', mods: [], modsForUi: [], setActiveModId: vi.fn() }),
 }))
 vi.mock('@/api/chat', () => ({ default: {}, parseChatStreamErrorResponse: vi.fn() }))
-vi.mock('@/api/products', () => ({
-  default: { searchProducts: vi.fn() },
-}))
+vi.mock('@/api/products', () => ({ default: { searchProducts: vi.fn() } }))
 vi.mock('@/utils/chatSseStream', () => ({
   readPlannerSseResponse: vi.fn(),
   isChatStreamEnabled: () => false,
 }))
 vi.mock('@/utils/shipmentMgmtPostPrint', () => ({
   fetchShipmentRecordsForUnit: vi.fn(),
-  summarizeShipmentRecordsForAudit: vi.fn(),
+  summarizeShipmentRecordsForAudit: vi.fn().mockResolvedValue('audit ok'),
 }))
 vi.mock('@/workflow/coreWorkflowDispatcher', () => ({ dispatchCoreWorkflowModRun: vi.fn() }))
 vi.mock('@/constants/coreWorkflowMod', () => ({ isCoreWorkflowModInstalled: () => false }))
 
 import { useChatOrchestration } from './useChatOrchestration'
-import { extractLikelyProductQueryKeyword } from './useChatPersistence'
-import productsApi from '@/api/products'
 
-describe('useChatOrchestration deep', () => {
+describe('useChatOrchestration task/print', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
-    localStorage.clear()
+    vi.clearAllMocks()
+    lastShipmentExecution.value = null
+    executePrintTask.mockResolvedValue({ success: true, message: 'ok' })
   })
 
-  it('cancelTask clears current task state', () => {
-    const api = useChatOrchestration({ sessionId: ref('s'), proIntentExperienceEnabled: ref(false) })
-    api.cancelTask()
-    expect(api.currentTask).toBeDefined()
+  afterEach(() => {
+    vi.unstubAllGlobals()
   })
 
-  it('scrollToBottom is callable', () => {
+  it('sendMessage start print without context replies hint', async () => {
     const api = useChatOrchestration({ sessionId: ref('s'), proIntentExperienceEnabled: ref(false) })
-    document.body.innerHTML = '<div id="chat-messages"></div>'
-    expect(() => api.scrollToBottom()).not.toThrow()
+    await api.sendMessage('开始打印')
+    expect(addAndSaveMessage).toHaveBeenCalledWith(
+      expect.stringContaining('暂无可打印'),
+      'ai',
+      undefined,
+      expect.any(Object),
+    )
+    expect(executePrintTask).not.toHaveBeenCalled()
   })
 
-  it('generateSessionId returns string', () => {
+  it('sendMessage start print runs executePrintTask when context exists', async () => {
+    lastShipmentExecution.value = {
+      filePath: '/tmp/doc.pdf',
+      labelPaths: ['/tmp/label.pdf'],
+      purchaseUnit: '甲公司',
+    }
     const api = useChatOrchestration({ sessionId: ref('s'), proIntentExperienceEnabled: ref(false) })
-    expect(typeof api.generateSessionId()).toBe('string')
-    expect(api.generateSessionId().length).toBeGreaterThan(0)
+    await api.sendMessage('开始打印')
+    expect(executePrintTask).toHaveBeenCalled()
+    expect(buildPrintSummaryMessage).toHaveBeenCalled()
   })
 
-  it('copyAssistantPushContent resolves', async () => {
+  it('confirmTask without api_url reports failure', async () => {
     const api = useChatOrchestration({ sessionId: ref('s'), proIntentExperienceEnabled: ref(false) })
-    await expect(api.copyAssistantPushContent()).resolves.toBeUndefined()
+    api.showTaskConfirm({ type: 'custom', title: 't', api_url: '', payload: {} })
+    await api.confirmTask()
+    expect(addAndSaveMessage).toHaveBeenCalledWith(
+      expect.stringContaining('缺少 API'),
+      'ai',
+      undefined,
+      expect.any(Object),
+    )
   })
 
-  it('handleShipmentDownloadClick is callable', () => {
+  it('confirmTask POST success keeps completed task card', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, message: '执行成功' }),
+      }),
+    )
     const api = useChatOrchestration({ sessionId: ref('s'), proIntentExperienceEnabled: ref(false) })
-    expect(() => api.handleShipmentDownloadClick()).not.toThrow()
+    api.showTaskConfirm({
+      type: 'custom',
+      title: '测试任务',
+      api_url: '/api/test',
+      method: 'POST',
+      payload: { params: {} },
+    })
+    await api.confirmTask()
+    expect(fetch).toHaveBeenCalled()
+    expect(api.currentTask.value?.completed).toBe(true)
   })
 
-  it('setTtsEnabled persists preference and clears queue when off', () => {
+  it('confirmTask handles requires_token response', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          requires_token: true,
+          token_name: 'DB_WRITE_TOKEN',
+          message: '需要写入令牌',
+        }),
+      }),
+    )
     const api = useChatOrchestration({ sessionId: ref('s'), proIntentExperienceEnabled: ref(false) })
-    api.setTtsEnabled(true)
-    expect(localStorage.getItem('xcagi_chat_tts_enabled')).toBe('1')
-    expect(api.ttsEnabled.value).toBe(true)
-    api.setTtsEnabled(false)
-    expect(localStorage.getItem('xcagi_chat_tts_enabled')).toBe('0')
-    expect(api.ttsEnabled.value).toBe(false)
-  })
-
-  it('sendMessage triggers remote chat round when debounce disabled', async () => {
-    requestChatByModeWithTimeout.mockClear()
-    vi.mocked(extractLikelyProductQueryKeyword).mockReturnValue(null)
-    const api = useChatOrchestration({ sessionId: ref('s'), proIntentExperienceEnabled: ref(false) })
-    await api.sendMessage('查5003产品')
-    expect(requestChatByModeWithTimeout).toHaveBeenCalled()
-  })
-
-  it('sendMessage uses product fast path when keyword extracted', async () => {
-    requestChatByModeWithTimeout.mockClear()
-    vi.mocked(extractLikelyProductQueryKeyword).mockReturnValue('5003A')
-    vi.mocked(productsApi.searchProducts).mockResolvedValue({
-      success: true,
-      data: [{ model_number: '5003A', name: '清漆', price: 120 }],
-      total: 1,
-    } as never)
-    const api = useChatOrchestration({ sessionId: ref('s'), proIntentExperienceEnabled: ref(false) })
-    await api.sendMessage('查5003A')
-    expect(productsApi.searchProducts).toHaveBeenCalledWith('5003A')
-    expect(requestChatByModeWithTimeout).not.toHaveBeenCalled()
-  })
-
-  it('isStartPrintMessage is exposed', () => {
-    const api = useChatOrchestration({ sessionId: ref('s'), proIntentExperienceEnabled: ref(false) })
-    expect(typeof api.isStartPrintMessage).toBe('function')
-    expect(api.isStartPrintMessage('开始打印')).toBe(true)
-  })
-
-  it('newConversation is callable', () => {
-    const api = useChatOrchestration({ sessionId: ref('s'), proIntentExperienceEnabled: ref(false) })
-    expect(() => api.newConversation()).not.toThrow()
+    api.showTaskConfirm({
+      type: 'custom',
+      title: '写库',
+      api_url: '/api/write',
+      payload: {},
+    })
+    await api.confirmTask()
+    expect(handleChatRequiresToken).toHaveBeenCalled()
+    expect(api.currentTask.value?.description).toContain('令牌')
   })
 })
