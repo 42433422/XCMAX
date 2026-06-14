@@ -11,7 +11,7 @@
       type="button"
       data-tutorial-id="toolbar-excel-analyze"
       :title="$t('chat.uploadTitle')"
-      @click="$emit('trigger-upload')"
+      @click="onUploadClick"
       :disabled="excelAnalyzeUploading"
     >
       <i class="fa fa-upload" aria-hidden="true"></i>
@@ -21,7 +21,7 @@
     <input
       ref="fileInputRef"
       type="file"
-      accept=".xlsx,.xlsm,image/jpeg,image/png,image/webp,image/gif,.pdf,application/pdf"
+      accept=".xlsx,.xlsm,.xls,image/jpeg,image/png,image/webp,image/gif,.pdf,application/pdf"
       multiple
       style="display:none"
       @change="onFileChange"
@@ -65,7 +65,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, type Ref } from 'vue'
+import { ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 useI18n()
@@ -77,13 +77,13 @@ const props = defineProps<{
   proIntentExperienceEnabled: boolean
   autoRefreshStarredWechat: boolean
   ttsEnabled: boolean
-  excelAnalyzeInputRef?: Ref<HTMLInputElement | null>
 }>()
 
 const emit = defineEmits<{
   'new-conversation': []
   'show-history': []
   'trigger-upload': []
+  'register-excel-input': [el: HTMLInputElement | null]
   'excel-file-change': [event: Event]
   'pro-intent-change': [enabled: boolean]
   'auto-refresh-change': [enabled: boolean]
@@ -93,12 +93,14 @@ const emit = defineEmits<{
 const fileInputRef = ref<HTMLInputElement | null>(null)
 
 watch(fileInputRef, (el) => {
-  if (props.excelAnalyzeInputRef) {
-    // Parent-owned ref bridge for Excel upload input
-    // eslint-disable-next-line vue/no-mutating-props -- intentional ref forwarding
-    props.excelAnalyzeInputRef.value = el
-  }
+  emit('register-excel-input', el)
 }, { immediate: true })
+
+function onUploadClick() {
+  if (props.excelAnalyzeUploading) return
+  fileInputRef.value?.click()
+  emit('trigger-upload')
+}
 
 function onFileChange(event: Event) {
   emit('excel-file-change', event)

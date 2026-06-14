@@ -15,20 +15,17 @@ import {
   YUANGONG_ENTRY_WORKFLOW_PNG,
   YUANGONG_ENTRY_WORKFLOW_SVG,
 } from '@/constants/yuangongAssets'
-import {
-  employeeBelongsToEnterpriseStack,
-  isWorkflowCarrierModId,
-  type EnterpriseModStack,
-} from '@/constants/enterpriseModStack'
-import { isHostBridgeModId } from '@/constants/genericModPack'
-import { isCustomPhaseEmployeeCarrierModId } from '@/utils/modWorkflowEmployees'
+import { workflowRegistryEntryBelongsToStack } from '@/utils/workflowEmployeeScope'
+import type { EnterpriseModStack } from '@/constants/enterpriseModStack'
 import { resolveEnterpriseModStack } from '@/utils/enterpriseModStackApi'
+import { useWorkflowEmployeeRegistrySync } from '@/composables/useWorkflowEmployeeRegistrySync'
 
 const ENTRY_BG_STITCH = YUANGONG_ENTRY_STITCH_PNG
 const ENTRY_BG_WORKFLOW_PNG = YUANGONG_ENTRY_WORKFLOW_PNG
 const ENTRY_BG_WORKFLOW_SVG = YUANGONG_ENTRY_WORKFLOW_SVG
 
 const wfEmp = useWorkflowAiEmployeesStore()
+useWorkflowEmployeeRegistrySync()
 const { desks, statusLine, ariaLabel, isBusy } = useWorkflowEmployeeDesks()
 const nowMs = useNowMsTicker(30000)
 
@@ -37,18 +34,7 @@ const enterpriseStack = ref<EnterpriseModStack | null>(null)
 /** 企业 Mod 栈内 AI 员工工位（排除平台编制 employee_pack 等游离项） */
 const workspaceDesks = computed(() => {
   const stack = enterpriseStack.value
-  const list = desks.value
-  return list.filter((d) => {
-    const host = d.hostModId
-    if (!host || isCustomPhaseEmployeeCarrierModId(host)) return false
-    if (stack) {
-      if (stack.customModIds.length || stack.industryModId) {
-        return stack.packageModIds.includes(host)
-      }
-      return employeeBelongsToEnterpriseStack(host, stack)
-    }
-    return isWorkflowCarrierModId(host) || isHostBridgeModId(host)
-  })
+  return desks.value.filter((d) => workflowRegistryEntryBelongsToStack(d, stack))
 })
 
 const selectedEmpId = ref<string | null>(null)
@@ -91,8 +77,8 @@ const idleEnabledCount = computed(() => Math.max(0, enabledCount.value - busyCou
 const workspaceStatSub = computed(() => {
   const label = enterpriseStack.value?.stackShortLabel
   return label
-    ? `企业 Mod「${label}」内已上岗 AI 员工`
-    : '企业 Mod 栈内已上岗 AI 员工'
+    ? `企业 Mod「${label}」栈内工位`
+    : '企业 Mod 栈内工位'
 })
 
 onMounted(() => {
@@ -131,7 +117,7 @@ function workShort(row: WorkflowEmployeeDeskRow): string {
 </script>
 
 <template>
-  <section class="ews" aria-labelledby="ews-heading">
+  <section class="ews" aria-labelledby="ews-heading" data-tour="employee-workspace-desks">
     <h3 id="ews-heading" class="ews-sr-only">员工工作流：入口与工位实况</h3>
 
     <router-link

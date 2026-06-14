@@ -9,6 +9,7 @@ const saveMessage = vi.fn().mockResolvedValue(undefined)
 describe('useExcelAnalysis', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    document.cookie = 'csrf_token=test-csrf'
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       text: async () => JSON.stringify({ success: true, sheets: [] }),

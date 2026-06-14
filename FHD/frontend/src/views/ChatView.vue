@@ -72,7 +72,7 @@
         :pro-intent-experience-enabled="proIntentExperienceEnabled"
         :auto-refresh-starred-wechat="autoRefreshStarredWechat"
         :tts-enabled="ttsEnabled"
-        :excel-analyze-input-ref="chatRefBag.excelAnalyzeInputRef"
+        @register-excel-input="onRegisterExcelInput"
         @new-conversation="newConversation"
         @show-history="showHistoryPanel"
         @trigger-upload="triggerUpload"
@@ -192,7 +192,10 @@ if (!_storedSessionId) writeAiSessionIdToStorage(currentSessionId.value)
 const chatViewApi = useChatView({ sessionId: currentSessionId, proIntentExperienceEnabled })
 const chatRefBag = {
   chatMessagesRef: chatViewApi.chatMessagesRef,
-  excelAnalyzeInputRef: chatViewApi.excelAnalyzeInputRef,
+}
+
+function onRegisterExcelInput(el: HTMLInputElement | null) {
+  chatViewApi.excelAnalyzeInputRef.value = el
 }
 
 const {

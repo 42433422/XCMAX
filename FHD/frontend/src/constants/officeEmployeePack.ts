@@ -1,4 +1,3 @@
-/** 办公员工包：Excel/CSV/PDF/PPT/Word 读+写，共 10 个表格类公开市场员工。 */
 export const OFFICE_EMPLOYEE_PKG_IDS = [
   'excel-generate-employee',
   'excel-full-read-employee',
@@ -11,6 +10,9 @@ export const OFFICE_EMPLOYEE_PKG_IDS = [
   'word-generate-employee',
   'word-full-read-employee',
 ] as const
+
+export const EXCEL_FULL_READ_EMPLOYEE_ID = 'excel-full-read-employee'
+export const WORD_FULL_READ_EMPLOYEE_ID = 'word-full-read-employee'
 
 /** 办公员工附属包1：JSON 量化报告 + 智慧分析可视化图表员工。 */
 export const OFFICE_AUX_PACK_1_PKG_IDS = [
