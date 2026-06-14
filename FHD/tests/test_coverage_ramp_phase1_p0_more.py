@@ -62,6 +62,77 @@ def test_market_base_url_default(monkeypatch: pytest.MonkeyPatch) -> None:
     assert market_mod._market_base_url().startswith("http")
 
 
+def test_bootstrap_overview_needs_live_merge() -> None:
+    complete = {
+        "user": {"id": 1},
+        "wallet": {"balance": 0},
+        "membership": {"tier": "free"},
+    }
+    assert market_mod._bootstrap_overview_needs_live_merge(complete) is False
+    assert market_mod._bootstrap_overview_needs_live_merge({"user": {"id": 1}}) is True
+    assert market_mod._bootstrap_overview_needs_live_merge(
+        {"user": {"id": 1}, "wallet": {"balance": 0}}
+    ) is True
+
+
+@pytest.mark.asyncio
+async def test_market_account_overview_skips_legacy_when_bootstrap_complete(
+    market_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def _auth(req, body):
+        return "Bearer tok"
+
+    calls: list[str] = []
+
+    async def _proxy(method, path, **kwargs):
+        calls.append(path)
+        if path == "/api/account/bootstrap":
+            return {
+                "data": {
+                    "user": {"id": 1},
+                    "wallet": {"balance": 10},
+                    "membership": {"tier": "vip"},
+                }
+            }
+        return {"__proxy_error__": True, "status_code": 500, "payload": {}}
+
+    monkeypatch.setattr(market_mod, "_authorization_from_request_resolved", _auth)
+    monkeypatch.setattr(market_mod, "_proxy_json", _proxy)
+    market_mod._ACCOUNT_OVERVIEW_CACHE.clear()
+    r = market_client.post("/api/market/account-overview", json={"refresh": True})
+    assert r.status_code == 200
+    assert calls == ["/api/account/bootstrap"]
+
+
+@pytest.mark.asyncio
+async def test_market_account_overview_uses_server_cache(
+    market_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def _auth(req, body):
+        return "Bearer cached-tok"
+
+    calls: list[str] = []
+
+    async def _proxy(method, path, **kwargs):
+        calls.append(path)
+        return {
+            "data": {
+                "user": {"id": 2},
+                "wallet": {"balance": 5},
+                "membership": {"tier": "free"},
+            }
+        }
+
+    monkeypatch.setattr(market_mod, "_authorization_from_request_resolved", _auth)
+    monkeypatch.setattr(market_mod, "_proxy_json", _proxy)
+    market_mod._ACCOUNT_OVERVIEW_CACHE.clear()
+    r1 = market_client.post("/api/market/account-overview", json={})
+    r2 = market_client.post("/api/market/account-overview", json={})
+    assert r1.status_code == 200
+    assert r2.status_code == 200
+    assert calls == ["/api/account/bootstrap"]
+
+
 # ---------------------------------------------------------------------------
 # market routes (mock httpx)
 # ---------------------------------------------------------------------------
