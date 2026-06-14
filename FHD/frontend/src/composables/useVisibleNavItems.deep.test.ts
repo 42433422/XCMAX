@@ -52,9 +52,10 @@ vi.mock('@/constants/genericModPack', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/constants/genericModPack')>()
   return { ...actual, isClientErpSidebarContext: () => false }
 })
-vi.mock('@/constants/customerServiceNav', () => ({
-  isCustomerServiceNavVisible: () => true,
-}))
+vi.mock('@/constants/customerServiceNav', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/constants/customerServiceNav')>()
+  return { ...actual, isCustomerServiceNavVisible: () => true }
+})
 vi.mock('@/utils/adminConsoleUrl', () => ({
   isAdminConsoleSpa: () => false,
 }))
@@ -65,6 +66,11 @@ vi.mock('@/utils/roleMenuProfile', () => ({
     canSeeSettings: true,
   }),
   canShowCoreMenuKey: () => true,
+}))
+vi.mock('@/constants/attendanceIndustryMod', () => ({
+  shouldHideAttendanceModSidebarMenu: () => false,
+  ADMIN_OPERATOR_ATTENDANCE_MOD_IDS: new Set<string>(),
+  ADMIN_OPERATOR_HIDDEN_MOD_IDS: new Set<string>(),
 }))
 
 import { useVisibleNavItems } from './useVisibleNavItems'

@@ -4,7 +4,11 @@ import { createRouter, createMemoryHistory } from 'vue-router'
 import { createPinia, setActivePinia } from 'pinia'
 import ModStore from './ModStore.vue'
 
-vi.mock('@/utils/apiBase', () => ({ apiFetch: vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) }) }))
+vi.mock('@/utils/apiBase', () => ({
+  apiFetch: vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) }),
+  getApiBase: () => '',
+  DEFAULT_MOD_API_TIMEOUT_MS: 90_000,
+}))
 vi.mock('@/api/modStore', () => ({
   fetchMarketCatalog: vi.fn().mockResolvedValue({ mods: [], categories: [] }),
   installHostFoundation: vi.fn().mockResolvedValue({ success: true }),
