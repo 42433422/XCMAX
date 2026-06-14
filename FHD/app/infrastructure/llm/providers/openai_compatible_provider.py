@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 import time
-from typing import Any
+from typing import Any, cast
 
 from app.utils.metrics import record_ai_call
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -68,7 +68,7 @@ class OpenAICompatibleProvider:
                 **kwargs,
             )
             record_ai_call(self.provider_id, "chat", "success", time.perf_counter() - t0)
-            return result
+            return cast("dict[str, Any] | None", result)
         except RECOVERABLE_ERRORS:
             record_ai_call(self.provider_id, "chat", "error", time.perf_counter() - t0)
             raise

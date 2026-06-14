@@ -3,6 +3,8 @@ import { useLanGate } from '@/composables/useLanGate';
 import {
   isPlatformShellModeEnabled,
   isShellEditionBuild,
+  isIndustryDeliveryRouteName,
+  INDUSTRY_DELIVERY_ROUTE_NAMES,
   SHELL_CORE_ROUTE_NAMES,
 } from '@/constants/platformShellMode';
 import { shouldRouteToProductOnboarding } from '@/composables/useProductFlow';
@@ -401,6 +403,7 @@ function filterPlatformShellRoutes(routes: RouteRecordRaw[]): RouteRecordRaw[] {
   return routes.filter((r) => {
     if (!r.name) return false;
     if (SHELL_CORE_ROUTE_NAMES.has(r.name as string)) return true;
+    if (INDUSTRY_DELIVERY_ROUTE_NAMES.has(r.name as string)) return true;
     if (r.meta?.mod === true) return true;
     if (r.meta?.hostAdmin === true) return true;
     if (r.path === '/employee-workspace' || r.path === '/yuangong-stitch') return true;
@@ -563,6 +566,10 @@ router.beforeEach(async (to, _from, next) => {
     isPlatformShellModeEnabled() &&
     to.name &&
     !SHELL_CORE_ROUTE_NAMES.has(String(to.name)) &&
+    !isIndustryDeliveryRouteName(
+      String(to.name),
+      useModsStore().mods.map((m) => String(m.id || '').trim()).filter(Boolean),
+    ) &&
     !to.meta?.mod
   ) {
     const modPage = resolveHostBusinessPageRedirect(String(to.name));

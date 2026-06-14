@@ -19,7 +19,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import re
-from typing import Any
+from typing import Any, cast
 
 from app.domain.neuro.reflex_arc import ReflexType, get_reflex_arc
 from app.services.rule_engine import get_rule_engine, reload_rule_engine
@@ -292,9 +292,9 @@ def _recognize_intents_impl(message: str) -> dict[str, Any]:
     cache_key = _make_intent_cache_key(message)
     cached_result = _intent_cache.get(cache_key)
     if cached_result is not None:
-        return cached_result
+        return cast("dict[str, Any]", cached_result)
 
-    result = {
+    result: object = {
         "primary_intent": None,
         "tool_key": None,
         "intent_hints": [],
@@ -518,7 +518,7 @@ def quick_recognize(message: str, context: dict[str, Any] | None = None) -> dict
     msg = _normalize(message)
     msg_lower = msg.lower()
 
-    result = {
+    result: object = {
         "fast_path": True,
         "primary_intent": None,
         "tool_key": None,

@@ -18,7 +18,7 @@ from collections import defaultdict
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from heapq import heappop, heappush
-from typing import Any
+from typing import Any, cast
 
 from app.neuro_bus.events.base import AsyncEventHandler, EventHandler, NeuroEvent
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -156,10 +156,10 @@ class PriorityEventQueue:
                     _, _, _, old_event = heappop(self._queue)
                     self._event_ids.discard(old_event.metadata.event_id)
                     self._dropped_count += 1
-                    logger.warning(f"Dropped low priority event due to queue full: {old_event}")
+                    logger.warning("Dropped low priority event due to queue full: %s", old_event)
                 else:
                     self._dropped_count += 1
-                    logger.warning(f"Queue full, dropping event: {event}")
+                    logger.warning("Queue full, dropping event: %s", event)
                     return False
 
             # 放入队列 (优先级数值小的在前)
@@ -177,14 +177,14 @@ class PriorityEventQueue:
                 return None
             _, _, event_id, event = heappop(self._queue)
             self._event_ids.discard(event_id)
-            return event
+            return cast("NeuroEvent | None", event)
 
     def peek(self) -> NeuroEvent | None:
         """查看最高优先级事件（不取出）"""
         with self._lock:
             if not self._queue:
                 return None
-            return self._queue[0][3]
+            return cast("NeuroEvent | None", self._queue[0][3])
 
     def size(self) -> int:
         """队列大小"""
@@ -371,7 +371,7 @@ class NeuroBus:
 
                 # 检查超时
                 if event.is_expired():
-                    logger.warning(f"Event expired: {event}")
+                    logger.warning("Event expired: %s", event)
                     self._dropped_count += 1
                     continue
 
@@ -381,7 +381,7 @@ class NeuroBus:
             except asyncio.CancelledError:
                 break
             except RECOVERABLE_ERRORS as e:
-                logger.exception(f"Error in processing loop: {e}")
+                logger.exception("Error in processing loop: %s", e)
                 self._error_count += 1
 
     async def _dispatch_event(self, event: NeuroEvent):
@@ -420,7 +420,7 @@ class NeuroBus:
                     any_failed = True
 
         if handlers_called == 0:
-            logger.debug(f"No handlers for event: {event}")
+            logger.debug("No handlers for event: %s", event)
 
         self._processed_count += 1
 
@@ -455,7 +455,7 @@ class NeuroBus:
                 self._rel_circuit.record_success()
 
         except RECOVERABLE_ERRORS as e:
-            logger.exception(f"Handler error for event {event}: {e}")
+            logger.exception("Handler error for event %s: %s", event, e)
             subscription.record_call(success=False)
             self._error_count += 1
             if self._rel_circuit is not None:
@@ -607,7 +607,7 @@ class NeuroBus:
         # 按优先级排序
         self._handlers[event_type].sort(key=lambda s: s.priority)
 
-        logger.debug(f"Subscribed to {event_type}: {handler.__name__}")
+        logger.debug("Subscribed to %s: %s", event_type, handler.__name__)
         return subscription
 
     def subscribe_event(
@@ -653,7 +653,7 @@ class NeuroBus:
         self._domain_handlers[domain][event_type].append(subscription)
         self._domain_handlers[domain][event_type].sort(key=lambda s: s.priority)
 
-        logger.debug(f"Subscribed to {domain}.{event_type}: {handler.__name__}")
+        logger.debug("Subscribed to %s.%s: %s", domain, event_type, handler.__name__)
         return subscription
 
     def subscribe_all(
@@ -669,7 +669,7 @@ class NeuroBus:
         )
 
         self._global_handlers.append(subscription)
-        logger.debug(f"Global subscription: {handler.__name__}")
+        logger.debug("Global subscription: %s", handler.__name__)
         return subscription
 
     def unsubscribe(self, subscription: HandlerSubscription) -> bool:

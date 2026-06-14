@@ -11,7 +11,7 @@ import hashlib
 import logging
 import os
 import re
-from typing import Any
+from typing import Any, cast
 
 from app.utils.cache_manager import get_intent_deepseek_cache
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -116,9 +116,9 @@ class DeepSeekIntentRecognizer:
         cached = _intent_recognition_cache.get(cache_key)
         if cached:
             logger.info(
-                f"[INTENT_CACHE] 命中缓存: {message[:30]}... -> {cached.get('intent')}, slots={cached.get('slots')}"
+                "[INTENT_CACHE] 命中缓存: %s... -> %s, slots=%s", message[:30], cached.get('intent'), cached.get('slots')
             )
-            return cached
+            return cast("dict[str, Any]", cached)
 
         logger.info("[INTENT_CACHE] 缓存未命中，需要调用 DeepSeek API")
 
@@ -169,14 +169,14 @@ class DeepSeekIntentRecognizer:
             except RECOVERABLE_ERRORS as e:
                 last_error = e
                 logger.warning(
-                    f"DeepSeek 意图识别失败 (尝试 {attempt + 1}/{self.max_retries}): {e}"
+                    "DeepSeek 意图识别失败 (尝试 %s/%s): %s", attempt + 1, self.max_retries, e
                 )
                 if attempt < self.max_retries - 1:
                     import asyncio
 
                     await asyncio.sleep(0.5 * (attempt + 1))
 
-        logger.error(f"DeepSeek 意图识别最终失败: {last_error}")
+        logger.error("DeepSeek 意图识别最终失败: %s", last_error)
         fallback = self._fallback_result(message)
         _intent_recognition_cache.set(cache_key, fallback)
         return fallback
@@ -350,7 +350,7 @@ class HybridIntentWithDeepSeek:
                     logger.warning("蒸馏模型不可用，切换到 DeepSeek")
                     self.use_distilled = False
             except RECOVERABLE_ERRORS as e:
-                logger.warning(f"无法加载蒸馏模型: {e}")
+                logger.warning("无法加载蒸馏模型: %s", e)
                 self.use_distilled = False
 
         if self.use_deepseek:
@@ -366,7 +366,7 @@ class HybridIntentWithDeepSeek:
         rule_result = rule_recognize(message)
         rule_result["sources_used"] = ["rule"]
         logger.info(
-            f"[HYBRID] 规则识别结果: intent={rule_result.get('primary_intent')}, tool_key={rule_result.get('tool_key')}, is_greeting={rule_result.get('is_greeting')}, slots={rule_result.get('slots')}"
+            "[HYBRID] 规则识别结果: intent=%s, tool_key=%s, is_greeting=%s, slots=%s", rule_result.get('primary_intent'), rule_result.get('tool_key'), rule_result.get('is_greeting'), rule_result.get('slots')
         )
 
         if (
@@ -379,14 +379,14 @@ class HybridIntentWithDeepSeek:
             )
             rule_result["intent_source"] = "rule"
             rule_result["slots"] = self._extract_slots_from_rule(message, rule_result)
-            logger.info(f"[HYBRID] 简单意图，直接返回: {rule_result.get('primary_intent')}")
+            logger.info("[HYBRID] 简单意图，直接返回: %s", rule_result.get('primary_intent'))
             return rule_result
 
         if rule_result.get("primary_intent") and rule_result.get("primary_intent") != "unk":
             rule_result["final_intent"] = rule_result["primary_intent"]
             rule_result["intent_source"] = "rule"
             rule_result["slots"] = self._extract_slots_from_rule(message, rule_result)
-            logger.info(f"[HYBRID] 规则已命中，跳过 DeepSeek: {rule_result.get('primary_intent')}")
+            logger.info("[HYBRID] 规则已命中，跳过 DeepSeek: %s", rule_result.get('primary_intent'))
             return rule_result
 
         if (
@@ -431,7 +431,7 @@ class HybridIntentWithDeepSeek:
                     )
                     return rule_result
             except RECOVERABLE_ERRORS as e:
-                logger.warning(f"蒸馏意图识别失败，降级到 DeepSeek: {e}")
+                logger.warning("蒸馏意图识别失败，降级到 DeepSeek: %s", e)
 
         if not self.use_deepseek or not self.deepseek_recognizer:
             rule_result["final_intent"] = rule_result.get("primary_intent")
@@ -461,7 +461,7 @@ class HybridIntentWithDeepSeek:
                 rule_result["slots"] = deepseek_result.get("slots", {})
 
         except RECOVERABLE_ERRORS as e:
-            logger.error(f"DeepSeek 意图识别失败: {e}")
+            logger.error("DeepSeek 意图识别失败: %s", e)
             rule_result["final_intent"] = rule_result.get("primary_intent")
             rule_result["intent_source"] = "rule"
             rule_result["slots"] = self._extract_slots_from_rule(message, rule_result)
@@ -585,23 +585,23 @@ class HybridIntentWithDeepSeek:
             elif len(products) > 1:
                 slots["products"] = products
 
-        logger.info(f"[SLOT_EXTRACTION_START] slots={slots}")
+        logger.info("[SLOT_EXTRACTION_START] slots=%s", slots)
 
         # 处理 DeepSeek 可能返回的 contact_person 作为 unit_name
         if "contact_person" in slots and "unit_name" not in slots:
             contact = slots.pop("contact_person")
             slots["unit_name"] = contact
-            logger.info(f"[SLOT_EXTRACTION] converted contact_person to unit_name: {contact}")
+            logger.info("[SLOT_EXTRACTION] converted contact_person to unit_name: %s", contact)
 
         invalid_unit_patterns = ["帮我", "查询", "请问", "请帮", "什么", "哪个"]
         if "unit_name" in slots:
             unit_name = slots["unit_name"]
             needs_fix = any(p in unit_name for p in invalid_unit_patterns) or len(unit_name) > 6
-            logger.info(f"[SLOT_EXTRACTION] unit_name={unit_name}, needs_fix={needs_fix}")
+            logger.info("[SLOT_EXTRACTION] unit_name=%s, needs_fix=%s", unit_name, needs_fix)
             if needs_fix and "keyword" in slots:
                 keyword = slots["keyword"]
                 unit_match = re.search(r"([^\s 的]{2,6}) 的 (\d{4}[A-Z]?)", keyword)
-                logger.info(f"[SLOT_EXTRACTION] keyword={keyword}, unit_match={unit_match}")
+                logger.info("[SLOT_EXTRACTION] keyword=%s, unit_match=%s", keyword, unit_match)
                 if unit_match:
                     potential_unit = unit_match.group(1)
                     model = unit_match.group(2)
@@ -610,7 +610,7 @@ class HybridIntentWithDeepSeek:
                     )
 
                     resolved = resolve_purchase_unit(potential_unit)
-                    logger.info(f"[SLOT_EXTRACTION] resolved={resolved}")
+                    logger.info("[SLOT_EXTRACTION] resolved=%s", resolved)
                     if resolved:
                         slots["unit_name"] = resolved.unit_name
                         slots["model_number"] = model
@@ -621,25 +621,25 @@ class HybridIntentWithDeepSeek:
                 from app.infrastructure.lookups.purchase_unit_resolver import resolve_purchase_unit
 
                 resolved = resolve_purchase_unit(unit_name)
-                logger.info(f"[SLOT_EXTRACTION] resolved unit_name={resolved}")
+                logger.info("[SLOT_EXTRACTION] resolved unit_name=%s", resolved)
                 if resolved:
                     slots["unit_name"] = resolved.unit_name
 
         if "keyword" in slots and "unit_name" not in slots:
             keyword = slots["keyword"]
-            logger.info(f"[SLOT_EXTRACTION_KEYWORD] keyword={keyword}")
+            logger.info("[SLOT_EXTRACTION_KEYWORD] keyword=%s", keyword)
             unit_match = re.search(r"([^\s 的]{2,6}) 的 (\d{4}[A-Z]?)", keyword)
-            logger.info(f"[SLOT_EXTRACTION_KEYWORD] unit_match={unit_match}")
+            logger.info("[SLOT_EXTRACTION_KEYWORD] unit_match=%s", unit_match)
             if unit_match:
                 potential_unit = unit_match.group(1)
                 model = unit_match.group(2)
                 logger.info(
-                    f"[SLOT_EXTRACTION_KEYWORD] potential_unit={potential_unit}, model={model}"
+                    "[SLOT_EXTRACTION_KEYWORD] potential_unit=%s, model=%s", potential_unit, model
                 )
                 from app.infrastructure.lookups.purchase_unit_resolver import resolve_purchase_unit
 
                 resolved = resolve_purchase_unit(potential_unit)
-                logger.info(f"[SLOT_EXTRACTION_KEYWORD] resolved={resolved}")
+                logger.info("[SLOT_EXTRACTION_KEYWORD] resolved=%s", resolved)
                 if resolved:
                     slots["unit_name"] = resolved.unit_name
                     slots["model_number"] = model
@@ -653,7 +653,7 @@ class HybridIntentWithDeepSeek:
             if model_match:
                 slots["model_number"] = model_match.group(1)
 
-        logger.info(f"[SLOT_EXTRACTION_END] final_slots={slots}")
+        logger.info("[SLOT_EXTRACTION_END] final_slots=%s", slots)
         return slots
 
     def recognize_sync(self, message: str) -> dict[str, Any]:
@@ -666,7 +666,7 @@ class HybridIntentWithDeepSeek:
             else:
                 return asyncio.run(self.recognize(message))
         except RECOVERABLE_ERRORS as e:
-            logger.error(f"混合意图识别失败: {e}")
+            logger.error("混合意图识别失败: %s", e)
             from .intent_service import recognize_intents
 
             rule_result = recognize_intents(message)

@@ -63,7 +63,7 @@ class NeuroBusInitializer:
             # 3. 初始化事件存储
             self._event_store = get_event_store(mode=event_store_mode)
             logger.info(
-                f"[NeuroBusInitializer] ✓ 事件存储已初始化 (模式: {event_store_mode.value})"
+                "[NeuroBusInitializer] ✓ 事件存储已初始化 (模式: %s)", event_store_mode.value
             )
 
             # 4. 初始化健康监控
@@ -104,7 +104,7 @@ class NeuroBusInitializer:
             return True
 
         except RECOVERABLE_ERRORS as e:
-            logger.error(f"[NeuroBusInitializer] 初始化失败: {e}")
+            logger.error("[NeuroBusInitializer] 初始化失败: %s", e)
             return False
 
     def shutdown(self) -> None:
@@ -119,7 +119,7 @@ class NeuroBusInitializer:
                 logger.info("[NeuroBusInitializer] ✓ 健康监控已停止")
         except RECOVERABLE_ERRORS as e:
             # 健康监控停止失败不得阻断系统拆除——状态必须在 finally 中清理。
-            logger.error(f"[NeuroBusInitializer] 关闭健康监控时出错: {e}")
+            logger.error("[NeuroBusInitializer] 关闭健康监控时出错: %s", e)
         finally:
             self._initialized = False
             logger.info("[NeuroBusInitializer] ✓ NeuroBus 系统已关闭")

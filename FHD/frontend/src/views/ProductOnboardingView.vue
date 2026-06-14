@@ -44,8 +44,8 @@
           </div>
           <ul class="flow-list bullets">
             <li><strong>干净起步</strong>：侧栏默认只有智能对话、智能生态，不堆满菜单</li>
-            <li><strong>先定行业</strong>：选好方向后，再告诉您还要补哪些基础 Mod</li>
-            <li><strong>AI 员工</strong>：住在 Mod 里，按需唤醒，开口交代即可</li>
+            <li><strong>先定行业</strong>：选好方向后，再告诉您还要补哪些侧栏能力卡片</li>
+            <li><strong>AI 员工</strong>：从市场或定制 Mod 安装后上岗，不在本步基础线里批量装</li>
           </ul>
           <div class="actions">
             <button type="button" class="btn primary" @click="goStep('industry')">下一步：行业定型</button>
@@ -92,7 +92,7 @@
           </div>
           <div class="actions">
             <button type="button" class="btn primary" @click="confirmIndustryAndNext">
-              下一步：看要补哪些基础线
+              下一步：看要补哪些侧栏基础线
             </button>
             <button type="button" class="btn ghost" @click="openModStore">打开扩展市场</button>
             <button type="button" class="btn link" @click="finishToChat">先跳过，直接用对话</button>
@@ -100,10 +100,14 @@
         </template>
 
         <template v-else-if="currentStep === 'host-pack'">
-          <h1>补基础线（按需）</h1>
-          <p v-if="baselinePlan?.summary" class="lead">{{ baselinePlan.summary }}</p>
-          <p v-else class="lead">
-            您选了<strong>{{ pickedIndustryName }}</strong>。下面按行业列出建议补装项，可一键装齐，也可以先进入对话。
+          <h1>补侧栏基础线（按需）</h1>
+          <p class="lead baseline-scope-note">
+            本步安装的是<strong>侧栏菜单与宿主能力卡片</strong>（桥接 Mod），用于打开对话、生态、业务菜单等入口；
+            <strong>不是</strong>安装 AI 员工实体。AI 员工请在扩展市场或<strong>账号定制 Mod</strong>装齐后自动上岗。
+          </p>
+          <p v-if="baselinePlan?.summary" class="lead muted">{{ baselinePlan.summary }}</p>
+          <p v-else class="lead muted">
+            您选了<strong>{{ pickedIndustryName }}</strong>。下面列出建议补装的侧栏能力项，可一键装齐，也可以先进入对话。
           </p>
           <div
             class="status-card"
@@ -113,13 +117,17 @@
               <i class="fa fa-spinner fa-spin"></i> 正在检测…
             </template>
             <template v-else-if="baselineOk">
-              <i class="fa fa-check-circle"></i> 本行业推荐基础线已齐，可以开始使用了。
+              <i class="fa fa-check-circle"></i>
+              侧栏宿主桥接已齐，可以进入智能对话。
+              <span v-if="missingAccountCustomCount > 0">
+                （账号定制 Mod / AI 员工另 {{ missingAccountCustomCount }} 项，不阻塞本步）
+              </span>
             </template>
             <template v-else>
               <i class="fa fa-exclamation-circle"></i>
-              还缺 {{ missingRequiredCount }} 项必需基础线
+              还缺 {{ missingSidebarBaselineCount || missingRequiredCount }} 项侧栏宿主桥接
               <span v-if="missingAccountCustomCount > 0">
-                （另 {{ missingAccountCustomCount }} 项账号定制 Mod 待安装）
+                （另 {{ missingAccountCustomCount }} 项账号定制 Mod / 员工待安装）
               </span>
               <span v-else-if="missingIndustryPackageCount > 0">
                 （另 {{ missingIndustryPackageCount }} 项行业包可选安装）
@@ -127,12 +135,71 @@
             </template>
           </div>
           <p
+            v-if="baselineOk && !loading"
+            class="sidebar-shell-note muted"
+          >
+            日常侧栏仍保持<strong>干净入口</strong>（智能对话、智能生态、员工工作台、消息等），与「桥接 Mod 已装」不矛盾。
+            业务菜单改名、部门/人员与 AI 员工在<strong>行业包 + 账号定制 Mod</strong>装齐后才会出现。
+          </p>
+          <p
             v-if="showNoAccountCustomHint"
             class="account-custom-empty-hint muted"
           >
-            当前账号未绑定定制 Mod，可联系管理员或在扩展市场购买。
+            当前账号未绑定定制 Mod；定制能力与 AI 员工需在账号开通后从此处或扩展市场安装。
           </p>
-          <div v-if="baselineGroups.length" class="baseline-groups">
+          <div v-if="sidebarBaselineGroups.length" class="baseline-groups">
+            <p class="baseline-section-title">侧栏宿主桥接（本步重点）</p>
+            <section v-for="group in sidebarBaselineGroups" :key="group.id" class="baseline-group">
+              <h3>{{ group.title }}</h3>
+              <p class="baseline-group-hint">{{ group.hint }}</p>
+              <ul class="baseline-list">
+                <li
+                  v-for="item in group.items"
+                  :key="item.mod_id"
+                  :class="{
+                    ok: item.installed,
+                    warn: !item.installed && item.required,
+                    optional: !item.required && !item.installed,
+                  }"
+                >
+                  <i
+                    class="fa"
+                    :class="item.installed ? 'fa-check-circle' : item.required ? 'fa-exclamation-circle' : 'fa-circle-o'"
+                    aria-hidden="true"
+                  ></i>
+                  <span>{{ item.label }}</span>
+                  <span v-if="!item.installed && item.show_mod_id !== false" class="mono">{{ item.mod_id }}</span>
+                </li>
+              </ul>
+            </section>
+          </div>
+          <div v-if="supplementBaselineGroups.length" class="baseline-groups baseline-groups--supplement">
+            <p class="baseline-section-title">行业包与账号定制（不阻塞进入对话）</p>
+            <section v-for="group in supplementBaselineGroups" :key="group.id" class="baseline-group">
+              <h3>{{ group.title }}</h3>
+              <p class="baseline-group-hint">{{ group.hint }}</p>
+              <ul class="baseline-list">
+                <li
+                  v-for="item in group.items"
+                  :key="item.mod_id"
+                  :class="{
+                    ok: item.installed,
+                    warn: !item.installed && item.required,
+                    optional: !item.required && !item.installed,
+                  }"
+                >
+                  <i
+                    class="fa"
+                    :class="item.installed ? 'fa-check-circle' : item.required ? 'fa-exclamation-circle' : 'fa-circle-o'"
+                    aria-hidden="true"
+                  ></i>
+                  <span>{{ item.label }}</span>
+                  <span v-if="!item.installed && item.show_mod_id !== false" class="mono">{{ item.mod_id }}</span>
+                </li>
+              </ul>
+            </section>
+          </div>
+          <div v-if="!sidebarBaselineGroups.length && baselineGroups.length" class="baseline-groups">
             <section v-for="group in baselineGroups" :key="group.id" class="baseline-group">
               <h3>{{ group.title }}</h3>
               <p class="baseline-group-hint">{{ group.hint }}</p>
@@ -160,7 +227,7 @@
           <div class="actions">
             <button type="button" class="btn primary" :disabled="bootstrapBusy" @click="runBootstrap">
               <i class="fa" :class="bootstrapBusy ? 'fa-spinner fa-spin' : 'fa-download'"></i>
-              一键装齐本行业推荐项
+              一键装齐本行业侧栏推荐项
             </button>
             <button type="button" class="btn ghost" :disabled="loading" @click="refreshStatus">重新检测</button>
             <button v-if="baselineOk" type="button" class="btn primary" @click="finishToChat">
@@ -193,7 +260,9 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { installHostFoundation, installMod, installOfficeEmployeePack, installIndustrySeed } from '@/api/modStore'
+import { installHostFoundation, installMod, installIndustrySeed } from '@/api/modStore'
+import { autoOnboardWorkflowEmployeesFromMods } from '@/utils/workflowEmployeeOnboard'
+import { useModsStore } from '@/stores/mods'
 import { readBuildEdition } from '@/constants/genericModPack'
 import { fetchProductSku, isEnterpriseEdition } from '@/utils/productSku'
 import { DEFAULT_INDUSTRY_ID } from '@/constants/industryDefaults'
@@ -341,6 +410,22 @@ function onWelcomeLogoError() {
 const productSku = ref('generic')
 const baselineOk = computed(() => baselinePlan.value?.baseline_ready === true)
 const baselineGroups = computed(() => baselinePlan.value?.groups || [])
+const SIDEBAR_BASELINE_GROUP_IDS = new Set(['core', 'host'])
+const sidebarBaselineGroups = computed(() =>
+  baselineGroups.value.filter((g) => SIDEBAR_BASELINE_GROUP_IDS.has(String(g?.id || ''))),
+)
+const supplementBaselineGroups = computed(() =>
+  baselineGroups.value.filter((g) => !SIDEBAR_BASELINE_GROUP_IDS.has(String(g?.id || ''))),
+)
+const missingSidebarBaselineCount = computed(() => {
+  const ids = new Set()
+  for (const g of sidebarBaselineGroups.value) {
+    for (const it of g.items || []) {
+      if (it?.required && !it?.installed && it?.mod_id) ids.add(String(it.mod_id))
+    }
+  }
+  return ids.size
+})
 const missingRequiredCount = computed(
   () => baselinePlan.value?.missing_required_mod_ids?.length || 0,
 )
@@ -429,13 +514,6 @@ async function runBootstrap() {
     await flow.refreshDeliverable(true)
     await refreshBaseline(true)
 
-    const officeResult = await installOfficeEmployeePack({
-      onProgress: (msg) => {
-        console.info('[ProductOnboarding]', msg)
-      },
-    })
-    await refreshBaseline(true)
-
     const industryMissing = [...(baselinePlan.value?.missing_industry_mod_ids || [])]
     const customMissing = [...(baselinePlan.value?.missing_account_custom_mod_ids || [])]
     const installErrors = []
@@ -465,6 +543,16 @@ async function runBootstrap() {
     }
     await refreshBaseline(true)
 
+    if (customMissing.length) {
+      try {
+        const modsStore = useModsStore()
+        await modsStore.refresh()
+        await autoOnboardWorkflowEmployeesFromMods(modsStore.modsForUi)
+      } catch (err) {
+        console.warn('[ProductOnboarding] custom employee onboard failed:', err)
+      }
+    }
+
     if (baselineOk.value) {
       invalidateHostPackCompletionCache()
       flow.markHostPackAcknowledged()
@@ -475,11 +563,11 @@ async function runBootstrap() {
         router,
         buildContext: tutorialBuildContext.value,
         message:
-          '本行业推荐基础线已装齐，可以开始使用了。\n\n是否现在观看进阶教程，快速熟悉菜单与智能对话？',
+          '本行业推荐侧栏基础线已装齐，可以开始使用了。\n\n是否现在观看进阶教程，快速熟悉菜单与智能对话？',
         returnContext: { routeName: 'chat' },
       })
       if (promptResult === 'already_completed') {
-        await appAlert('本行业推荐基础线已装齐，可以开始使用了。')
+        await appAlert('本行业推荐侧栏基础线已装齐，可以开始使用了。')
       }
       return
     }
@@ -494,9 +582,6 @@ async function runBootstrap() {
     }
     if (installErrors.length) {
       detailParts.push(installErrors.join('；'))
-    }
-    if (!officeResult.success && officeResult.errors.length) {
-      detailParts.push(`办公员工包：${officeResult.errors.slice(0, 3).join('；')}`)
     }
     await appAlert(detailParts.join('\n') || '部分项目未装齐，可稍后在扩展市场继续安装。')
   } catch (err) {
@@ -782,6 +867,16 @@ onMounted(async () => {
   font-size: 15px;
 }
 
+.baseline-scope-note {
+  margin-bottom: 4px;
+  color: #334155;
+}
+
+.lead.muted {
+  font-size: 14px;
+  color: #64748b;
+}
+
 .welcome-tagline {
   margin: 6px 0 0;
   font-size: 16px;
@@ -926,6 +1021,25 @@ onMounted(async () => {
   flex-direction: column;
   gap: 14px;
   margin-bottom: 16px;
+}
+
+.baseline-groups--supplement {
+  padding-top: 4px;
+  border-top: 1px dashed #cbd5e1;
+}
+
+.baseline-section-title {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.sidebar-shell-note {
+  margin: 10px 0 12px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: #64748b;
 }
 
 .baseline-group h3 {

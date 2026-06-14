@@ -45,6 +45,14 @@ describe('buildDriverScheduleFromTutorialSteps', () => {
   it('passes mod-store tour selectors and route query', () => {
     const steps: TutorialStep[] = [
       {
+        id: 'office-pack-open-modstore',
+        title: '员工商店',
+        description: 'd',
+        targetSelector: '[data-tour="ecosystem-launcher-modstore"]',
+        actionType: 'click',
+        routeName: 'ai-ecosystem',
+      },
+      {
         id: 'office-pack-nav-tab',
         title: '办公员工包',
         description: 'd',
@@ -55,8 +63,9 @@ describe('buildDriverScheduleFromTutorialSteps', () => {
       },
     ]
     const schedule = buildDriverScheduleFromTutorialSteps(steps)
-    expect(schedule[0].waitFor).toBe('[data-tour="store-nav-office"]')
-    expect(schedule[0].routeQuery).toEqual({ tab: 'office' })
+    expect(schedule[0].waitFor).toBe('[data-tour="ecosystem-launcher-modstore"]')
+    expect(schedule[1].waitFor).toBe('[data-tour="store-nav-office"]')
+    expect(schedule[1].routeQuery).toEqual({ tab: 'office' })
   })
 })
 

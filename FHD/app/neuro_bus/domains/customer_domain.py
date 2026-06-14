@@ -36,13 +36,13 @@ class CustomerNeuroDomain(NeuroDomain):
         @self.on("customer.registered", priority=1)
         async def on_registered(event):
             customer_id = event.payload.get("customer_id")
-            logger.info(f"Customer registered: {customer_id}")
+            logger.info("Customer registered: %s", customer_id)
             bump_domain_handler_metric("customer.registered")
 
         @self.on("customer.login", priority=2)
         async def on_login(event):
             customer_id = event.payload.get("customer_id")
-            logger.info(f"Customer login: {customer_id}")
+            logger.info("Customer login: %s", customer_id)
             bump_domain_handler_metric("customer.login")
 
     async def initialize(self):

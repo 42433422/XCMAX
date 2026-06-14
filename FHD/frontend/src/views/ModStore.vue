@@ -8,8 +8,8 @@
       <div class="store-top__row">
         <div class="store-top__brand">
           <p class="store-eyebrow">XCAGI · 能力库</p>
-          <h1 class="store-title">MOD 扩展 · AI 员工市场</h1>
-          <p class="store-sub">浏览并安装 Mod 与 AI 员工；分类与修茈 AI 市场同源，无需跳转。</p>
+          <h1 class="store-title">AI 员工市场</h1>
+          <p class="store-sub">浏览并安装 AI 员工包；分类与修茈 AI 市场同源，安装后自动上岗至企业四部门编制。</p>
         </div>
         <form class="store-search" @submit.prevent="searchMods">
           <input
@@ -171,6 +171,13 @@
               </header>
               <p class="card-desc">{{ mod.description || '暂无描述' }}</p>
               <div class="card-badges">
+                <span v-if="isEmployeePackItem(mod)" class="tag tag-employee-pack">员工包</span>
+                <span v-if="enterpriseModLabel(mod)" class="tag tag-enterprise-mod">{{ enterpriseModLabel(mod) }}</span>
+                <span
+                  v-if="enterpriseLayerLabel(mod)"
+                  class="tag tag-enterprise-layer"
+                  :style="enterpriseLayerTagStyle(mod)"
+                >{{ enterpriseLayerLabel(mod) }}</span>
                 <span v-if="collectionLabel(mod)" class="tag tag-industry">{{ collectionLabel(mod) }}</span>
                 <span class="tag" :class="mod.source === 'remote' ? 'tag-remote' : 'tag-local'">
                   {{ mod.source === 'remote' ? '远端 Catalog' : '本机' }}
@@ -268,6 +275,11 @@ import {
   readMarketCatalogCache,
   writeMarketCatalogCache,
 } from '@/utils/marketCatalogCache';
+import {
+  resolveEnterpriseOrgLayerForCatalogItem,
+} from '@/constants/enterpriseWorkflowEstablishment';
+import { autoOnboardInstalledMarketItem } from '@/utils/workflowEmployeeOnboard';
+import { resolveEnterpriseModStack } from '@/utils/enterpriseModStackApi';
 
 export default {
   name: 'ModStore',
@@ -286,6 +298,7 @@ export default {
       import.meta.env.VITE_MARKET_BASE || 'https://xiu-ci.com/market',
     ).replace(/\/$/, '');
     const modsStore = useModsStore();
+    const enterpriseStackLabel = ref('');
     const { buildContext: tutorialBuildContext } = useTutorialCatalog();
 
     function refreshHostMods() {
@@ -446,8 +459,16 @@ export default {
         body: JSON.stringify(payload),
       });
       const data = await response.json();
+      const ok = Boolean(data.success);
+      if (ok) {
+        try {
+          await autoOnboardInstalledMarketItem(mod);
+        } catch (e) {
+          console.warn('[ModStore] silent auto onboard failed:', e);
+        }
+      }
       return {
-        success: Boolean(data.success),
+        success: ok,
         message: data.error || data.detail || data.message || '',
       };
     };
@@ -573,6 +594,41 @@ export default {
       if (sc === STORE_COLLECTION_WORKFLOW_EMPLOYEE) return '工作流员工';
       if (sc === STORE_COLLECTION_INDUSTRY_MOD) return '行业扩展';
       return '';
+    };
+
+    const enterpriseLayerForMod = (mod) => resolveEnterpriseOrgLayerForCatalogItem(mod || {});
+
+    const enterpriseLayerLabel = (mod) => {
+      const layer = enterpriseLayerForMod(mod);
+      return layer ? `${layer.code} ${layer.label}` : '';
+    };
+
+    const isEmployeePackItem = (mod) =>
+      String(mod?.artifact || '').trim().toLowerCase() === 'employee_pack';
+
+    const enterpriseModLabel = (mod) => {
+      const art = String(mod?.artifact || '').trim().toLowerCase();
+      if (art !== 'employee_pack' && art !== 'mod') return '';
+      const label = enterpriseStackLabel.value;
+      return label ? `企业 Mod：${label}` : '';
+    };
+
+    const marketItemKindLabel = (mod) =>
+      isEmployeePackItem(mod) ? '员工' : '扩展 Mod';
+
+    const installSuccessMessage = (mod, onboardNote = '') => {
+      const kind = marketItemKindLabel(mod);
+      return `${kind} ${mod.name} 安装成功！${onboardNote}`;
+    };
+
+    const enterpriseLayerTagStyle = (mod) => {
+      const layer = enterpriseLayerForMod(mod);
+      if (!layer) return {};
+      return {
+        color: layer.color,
+        borderColor: `${layer.color}66`,
+        background: `${layer.color}14`,
+      };
     };
 
     const refineMarketItems = (items, tab) => {
@@ -897,9 +953,24 @@ export default {
 
         if (data.success) {
           mod.is_installed = true;
-          await appAlert(`MOD ${mod.name} 安装成功！`);
           await loadMods();
           refreshHostMods();
+          let onboardNote = '';
+          try {
+            const {
+              onboardedIds,
+              plannerRefreshed,
+              enterpriseStackLabel: stackLabel,
+            } = await autoOnboardInstalledMarketItem(mod);
+            if (onboardedIds.length) {
+              onboardNote = `，已上岗至企业 Mod「${stackLabel}」`;
+            } else if (plannerRefreshed && isEmployeePackItem(mod)) {
+              onboardNote = `，已注册至企业 Mod「${stackLabel}」`;
+            }
+          } catch (e) {
+            console.warn('[ModStore] auto onboard failed:', e);
+          }
+          await appAlert(installSuccessMessage(mod, onboardNote));
         } else {
           await appAlert(`安装失败：${data.error || data.detail}`);
         }
@@ -1017,6 +1088,9 @@ export default {
       void warmCatalogSnapshot();
       void loadMods(false);
       void refreshDeliverable();
+      void resolveEnterpriseModStack().then((stack) => {
+        enterpriseStackLabel.value = stack.stackLabel;
+      });
       mobileMedia = window.matchMedia('(max-width: 768px)');
       onMobileViewportChange(mobileMedia);
       if (typeof mobileMedia.addEventListener === 'function') {
@@ -1074,6 +1148,11 @@ export default {
       isMobileViewport,
       marketModUrl,
       collectionLabel,
+      enterpriseLayerLabel,
+      enterpriseLayerTagStyle,
+      enterpriseModLabel,
+      isEmployeePackItem,
+      marketItemKindLabel,
       HOST_FOUNDATION_EMPLOYEE_PACK_ID,
       storeNavTabs,
       mainListTitle,
@@ -1471,6 +1550,28 @@ export default {
   border-radius: 999px;
   background: #f1f5f9;
   color: #64748b;
+}
+
+.tag-employee-pack {
+  color: #0f766e;
+  background: #ccfbf1;
+  border: 1px solid #99f6e4;
+  font-weight: 600;
+}
+
+.tag-enterprise-mod {
+  color: #1d4ed8;
+  background: #dbeafe;
+  border: 1px solid #93c5fd;
+  font-weight: 600;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tag-enterprise-layer {
+  font-weight: 600;
+  border: 1px solid transparent;
 }
 
 .tag-industry {

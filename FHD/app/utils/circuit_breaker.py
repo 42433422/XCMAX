@@ -95,7 +95,7 @@ class CircuitBreaker:
             if self._state == CircuitState.HALF_OPEN:
                 self._half_open_calls += 1
                 if self._half_open_calls >= self.half_open_max_calls:
-                    logger.info(f"Circuit {self.name}: Resetting to CLOSED")
+                    logger.info("Circuit %s: Resetting to CLOSED", self.name)
                     self._state = CircuitState.CLOSED
                     self._failure_count = 0
                     self._update_metrics()
@@ -110,13 +110,13 @@ class CircuitBreaker:
             self._last_failure_time = time.time()
 
             if self._state == CircuitState.HALF_OPEN:
-                logger.warning(f"Circuit {self.name}: Failure in HALF_OPEN, opening")
+                logger.warning("Circuit %s: Failure in HALF_OPEN, opening", self.name)
                 self._state = CircuitState.OPEN
                 self._update_metrics()
 
             elif self._state == CircuitState.CLOSED:
                 if self._failure_count >= self.failure_threshold:
-                    logger.warning(f"Circuit {self.name}: Failure threshold reached, opening")
+                    logger.warning("Circuit %s: Failure threshold reached, opening", self.name)
                     self._state = CircuitState.OPEN
                     self._update_metrics()
 

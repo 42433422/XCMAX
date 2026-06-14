@@ -159,6 +159,21 @@ def _mod_installed(mod_id: str, installed: set[str]) -> bool:
     return False
 
 
+def _custom_employee_extension_ids(
+    industry_key: str,
+    row: dict[str, Any],
+    doc: dict[str, Any],
+) -> list[str]:
+    """账号定制阶段随定制 Mod 一并安装的 AI 员工桥接（非侧栏基准线）。"""
+    doc_level = _dedupe(
+        [str(x) for x in (doc.get("custom_employee_extension_mod_ids") or []) if x]
+    )
+    row_level = _dedupe(
+        [str(x) for x in (row.get("custom_employee_extension_mod_ids") or []) if x]
+    )
+    return _dedupe(doc_level + row_level)
+
+
 def _label_for_custom_mod(mod_id: str, industry_key: str, labels: dict[str, str]) -> str:
     label = _label_for_mod(mod_id, industry_key, labels)
     if label != mod_id:
@@ -412,20 +427,24 @@ def build_industry_baseline_plan(
 
     from app.mod_sdk.customer_delivery import account_custom_mod_ids_for_industry
 
-    account_custom_ids = account_custom_mod_ids_for_industry(industry_key, entitled_mod_ids)
+    account_custom_base = account_custom_mod_ids_for_industry(industry_key, entitled_mod_ids)
+    employee_extension_ids = (
+        _custom_employee_extension_ids(industry_key, row, doc) if account_custom_base else []
+    )
+    account_custom_ids = _dedupe(account_custom_base + employee_extension_ids)
     custom_mod_ids = _dedupe(industry_mod_ids + account_custom_ids)
 
     groups: list[dict[str, Any]] = [
         {
             "id": "core",
-            "title": "对话底座",
-            "hint": "干净页面所需：智能对话与智能生态",
+            "title": "侧栏对话底座",
+            "hint": "干净起步：侧栏挂上智能对话与智能生态入口（宿主桥接，非员工数据）",
             "items": [_item(mid, "core", True) for mid in core_ids],
         },
         {
             "id": "host",
-            "title": "行业基础线",
-            "hint": "按所选行业建议安装的宿主 Mod",
+            "title": "行业侧栏基础线",
+            "hint": "按行业补侧栏业务菜单与表格工具等宿主能力卡片（不含 AI 员工）",
             "items": [_item(mid, "host", True) for mid in required_ids if mid not in core_ids],
         },
     ]
@@ -434,7 +453,7 @@ def build_industry_baseline_plan(
             {
                 "id": "industry_package",
                 "title": "行业包",
-                "hint": custom_hint or "按所选行业安装中性行业 Mod",
+                "hint": custom_hint or "行业通用 Mod：侧栏与业务门面（不含账号定制员工）",
                 "items": [
                     _item(mid, "industry_package", False, show_mod_id=False)
                     for mid in industry_mod_ids
@@ -446,7 +465,7 @@ def build_industry_baseline_plan(
             {
                 "id": "account_custom",
                 "title": "账号定制",
-                "hint": "已从官网账号同步的定制 Mod，装齐后解锁完整行业能力",
+                "hint": "账号定制 Mod：装齐后解锁定制能力与定制 AI 员工",
                 "items": [
                     _item(mid, "account_custom", True, show_mod_id=True)
                     for mid in account_custom_ids
@@ -510,7 +529,9 @@ def build_industry_baseline_plan(
         "missing_account_custom_mod_ids": missing_account_custom,
         "host_baseline_ready": host_baseline_ready,
         "account_custom_ready": account_custom_ready,
-        "baseline_ready": host_baseline_ready and account_custom_ready,
+        "custom_employee_extension_mod_ids": employee_extension_ids,
+        "baseline_ready": host_baseline_ready,
+        "full_stack_ready": host_baseline_ready and account_custom_ready and industry_mod_ready,
         "industry_mod_ready": industry_mod_ready,
     }
 

@@ -52,6 +52,7 @@ export interface ExcelAnalysisResult {
 export interface ExcelExtractGridResponse {
   success?: boolean;
   fields?: ExcelFieldInfo[];
+  sheets?: ExcelSheetDetail[];
   preview_data?: ExcelPreviewData;
   message?: string;
 }

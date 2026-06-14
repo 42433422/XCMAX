@@ -33,6 +33,7 @@ export interface DisposableResource {
   cleanup?: () => void;
 }
 
-export function asDisposable(value: unknown): DisposableResource {
-  return asRecord(value) as DisposableResource;
+export function asDisposable(value: unknown): DisposableResource | null {
+  if (value === null || typeof value !== 'object') return null
+  return value as DisposableResource
 }

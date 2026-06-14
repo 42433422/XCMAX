@@ -252,6 +252,7 @@ import KittenLauncherIcon from '@/components/kitten/KittenLauncherIcon.vue'
 import KittenVizEmployeeStrip from '@/components/kitten/KittenVizEmployeeStrip.vue'
 import { useKittenVizEmployees } from '@/composables/useKittenVizEmployees'
 import type { KittenChartType } from '@/composables/useKittenAnalyzer'
+import { asRecord, asArray, asString, asBoolean, asDisposable } from '@/utils/typeGuards'
 import {
   useKittenAnalyzer,
   kittenQuickActions,
@@ -348,9 +349,28 @@ const runFinancialBriefAndClose = () => {
 }
 
 type VoiceState = 'idle' | 'recording' | 'transcribing' | 'error'
+type SpeechRecognitionLike = {
+  lang: string
+  continuous: boolean
+  interimResults: boolean
+  maxAlternatives: number
+  onstart: (() => void) | null
+  onresult: ((event: unknown) => void) | null
+  onerror: ((event: unknown) => void) | null
+  onend: (() => void) | null
+  start: () => void
+  stop: () => void
+  abort: () => void
+}
+
+type SpeechWindow = Window & {
+  SpeechRecognition?: new () => SpeechRecognitionLike
+  webkitSpeechRecognition?: new () => SpeechRecognitionLike
+}
+
 const voiceState = ref<VoiceState>('idle')
 const voiceErrorText = ref('')
-let voiceRecognition: unknown = null
+let voiceRecognition: SpeechRecognitionLike | null = null
 
 const voiceButtonDisabled = computed(() => voiceState.value === 'transcribing' || isChatLoading.value)
 const voiceButtonClass = computed(() => ({
@@ -362,8 +382,9 @@ const voiceButtonClass = computed(() => ({
 
 const startVoiceInput = () => {
   if (voiceState.value === 'recording' || voiceState.value === 'transcribing') return
-  const SpeechRecognition = (window as unknown).SpeechRecognition || (window as unknown).webkitSpeechRecognition
-  if (!SpeechRecognition) {
+  const win = window as SpeechWindow
+  const SpeechRecognitionCtor = win.SpeechRecognition || win.webkitSpeechRecognition
+  if (!SpeechRecognitionCtor) {
     voiceState.value = 'error'
     voiceErrorText.value = '当前浏览器不支持语音识别'
     return
@@ -371,7 +392,7 @@ const startVoiceInput = () => {
   if (voiceRecognition) {
     voiceRecognition.abort()
   }
-  voiceRecognition = new SpeechRecognition()
+  voiceRecognition = new SpeechRecognitionCtor()
   voiceRecognition.lang = 'zh-CN'
   voiceRecognition.continuous = false
   voiceRecognition.interimResults = false
@@ -382,16 +403,19 @@ const startVoiceInput = () => {
     voiceErrorText.value = ''
   }
   voiceRecognition.onresult = (event: unknown) => {
-    const text = event.results[0][0].transcript
+    const row = asRecord(event)
+    const results = asArray(asArray(row.results)[0])
+    const text = asString(asRecord(results[0]).transcript)
     inputText.value = (inputText.value || '') + text
   }
   voiceRecognition.onerror = (event: unknown) => {
-    if (event.error === 'no-speech') {
+    const err = asString(asRecord(event).error)
+    if (err === 'no-speech') {
       voiceState.value = 'idle'
       return
     }
     voiceState.value = 'error'
-    voiceErrorText.value = event.error || '语音识别失败'
+    voiceErrorText.value = err || '语音识别失败'
   }
   voiceRecognition.onend = () => {
     if (voiceState.value === 'recording') voiceState.value = 'idle'

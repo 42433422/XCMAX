@@ -15,6 +15,7 @@
 import { getApiBase } from './apiBase'
 import { readCsrfTokenFromCookie, shouldAttachCsrfHeader } from './csrfCookie'
 import { playOfflinePcm, synthesizeOffline, ensureOfflineReady, isOfflineReady, isOfflineLoading, getOfflineProgress, stopOffline } from './offlineTts'
+import { asRecord, asArray, asString, asBoolean, asDisposable } from '@/utils/typeGuards'
 
 const VOICE_PREF_KEY = 'xcagi_tts_voice'
 const ENGINE_PREF_KEY = 'xcagi_tts_engine' // 'auto' | 'system' | 'offline' | 'online'
@@ -200,6 +201,10 @@ function loadVoicesOnce(): Promise<SpeechSynthesisVoice[]> {
   return voicesReadyPromise
 }
 
+function voiceHasLocalService(v: SpeechSynthesisVoice): boolean {
+  return Boolean((v as { localService?: boolean }).localService)
+}
+
 function scoreVoice(v: SpeechSynthesisVoice): number {
   const lang = (v.lang || '').toLowerCase()
   const name = v.name || ''
@@ -210,14 +215,14 @@ function scoreVoice(v: SpeechSynthesisVoice): number {
   else if (lang.startsWith('zh')) score += 30
   else return -1
 
-  if ((v as unknown).localService) score += 50
+  if (voiceHasLocalService(v)) score += 50
 
   // Yunxi 优先级拉满（默认偏好）
   if (/yunxi|云希/i.test(name)) score += 60
   if (NEURAL_KEYWORDS.some((k) => name.toLowerCase().includes(k.toLowerCase()))) score += 25
   if (CLASSIC_KEYWORDS.some((k) => name.toLowerCase().includes(k.toLowerCase()))) score += 10
   if (/natural|neural|online/i.test(name)) score += 10
-  if (/^google/i.test(name) && !(v as unknown).localService) score += 5
+  if (/^google/i.test(name) && !voiceHasLocalService(v)) score += 5
 
   return score
 }
@@ -264,7 +269,7 @@ export function hasYunxiOrXiaoxiaoAvailable(): boolean {
 
 export function hasAnyChineseLocalVoice(): boolean {
   const list = voicesCache || []
-  return list.some((v) => (v.lang || '').toLowerCase().startsWith('zh') && (v as unknown).localService === true)
+  return list.some((v) => (v.lang || '').toLowerCase().startsWith('zh') && voiceHasLocalService(v))
 }
 
 export interface TtsStatus {
@@ -343,16 +348,17 @@ async function fetchOnlineTtsDataUri(text: string): Promise<string> {
     credentials: 'include',
     body: JSON.stringify({ text, lang: 'zh', voice, rate: `+${ratePercent - 100}%` }),
   })
-  let json: unknown = {}
+  let json: Record<string, unknown> = {}
   try {
-    json = await res.json()
+    json = asRecord(await res.json())
   } catch {
     json = {}
   }
   if (!res.ok || !json.success) {
-    throw new Error(json.message || `在线 TTS 失败（HTTP ${res.status}）`)
+    throw new Error(asString(json.message) || `在线 TTS 失败（HTTP ${res.status}）`)
   }
-  const uri = json.data?.audioBase64
+  const ttsData = asRecord(json.data)
+  const uri = ttsData.audioBase64
   if (!uri || typeof uri !== 'string') {
     throw new Error('在线 TTS 响应缺少音频')
   }
@@ -491,13 +497,13 @@ function exposeDebugHelpers(): void {
   if (typeof window === 'undefined') return
   debugExposed = true
   try {
-    ;(window as unknown).__xcagiTts = {
+    ;(window as Window & { __xcagiTts?: unknown }).__xcagiTts = {
       list(): Array<{ name: string; lang: string; localService: boolean; default: boolean }> {
         return (voicesCache || []).map((v) => ({
           name: v.name,
           lang: v.lang,
-          localService: (v as unknown).localService === true,
-          default: (v as unknown).default === true,
+          localService: voiceHasLocalService(v),
+          default: v.default === true,
         }))
       },
       current(): string | null {

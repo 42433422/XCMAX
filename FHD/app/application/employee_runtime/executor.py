@@ -9,21 +9,14 @@ import inspect
 import json
 import logging
 import os
-import time
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from app.application.employee_runtime.agent_runner import run_agent_handler
 from app.application.employee_runtime.loader import (
     DIRECT_PYTHON_RUNTIME_MISSING_MSG,
-    build_employee_context,
-    load_employee_pack_from_disk,
     pack_has_direct_python_runtime,
-    parse_employee_config_v2,
-    resolve_pack_dir,
 )
-from app.application.employee_runtime.risk_gate import gate_action_or_block
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -283,6 +276,10 @@ def _actions_fhd(
     employee_id: str,
     pack_root: Path,
     workspace_root: str | None,
+    *,
+    agent_tools: list[dict[str, Any]] | None = None,
+    agent_gate: Any = None,
+    agent_max_iterations: int | None = None,
 ) -> dict[str, Any]:
     actions_cfg = _normalize_actions_cfg(config)
     handlers = _handler_list(actions_cfg)
@@ -306,7 +303,18 @@ def _actions_fhd(
                     )
                 )
         elif handler == "agent":
-            outputs.append(run_agent_handler(actions_cfg, reasoning, task, employee_id))
+            outputs.append(
+                run_agent_handler(
+                    actions_cfg,
+                    reasoning,
+                    task,
+                    employee_id,
+                    workspace_root=workspace_root,
+                    tools=agent_tools,
+                    gate=agent_gate,
+                    max_iterations=agent_max_iterations,
+                )
+            )
         elif handler == "llm_md":
             outputs.append({"handler": "llm_md", "output": reasoning.get("reasoning", "")})
         else:
@@ -338,101 +346,22 @@ def execute_employee_task_local(
     user_id: int = 0,
     *,
     workspace_root: str | None = None,
+    session_id: str | None = None,
 ) -> dict[str, Any]:
-    """本地 employee_pack 执行入口（无 MODstore DB 依赖）。"""
-    _ = user_id
-    t0 = time.perf_counter()
-    payload = dict(input_data or {})
-    if workspace_root and "workspace_root" not in payload:
-        payload["workspace_root"] = workspace_root
-    logger.info(
-        "employee_execute_start_local employee_id=%s task_len=%s", employee_id, len(task or "")
+    """本地 employee_pack 执行入口（无 MODstore DB 依赖）。
+
+    委托给 :class:`app.application.employee_runtime.agent.EmployeeAgent`：
+    感知 → 记忆召回 → 认知 → 行动（多轮）→ 记忆回写。保留原返回结构与所有调用方兼容。
+    """
+    from app.application.employee_runtime.agent import EmployeeAgent
+
+    return EmployeeAgent(employee_id).run(
+        task,
+        input_data,
+        user_id=user_id,
+        workspace_root=workspace_root,
+        session_id=session_id,
     )
-    try:
-        pack = load_employee_pack_from_disk(employee_id)
-        manifest = pack.get("manifest") or {}
-        pack_root = Path(str(pack.get("pack_dir") or resolve_pack_dir(employee_id) or ""))
-        config = parse_employee_config_v2(manifest)
-        actions_cfg = _normalize_actions_cfg(config)
-        handler_list = _handler_list(actions_cfg)
-        gate = gate_action_or_block(employee_id, manifest, handler_list, payload)
-        if not gate.get("ok"):
-            duration_ms = round((time.perf_counter() - t0) * 1000, 3)
-            return {
-                "employee_id": employee_id,
-                "pack": {"id": pack["pack_id"], "version": pack.get("version")},
-                "duration_ms": duration_ms,
-                "result": {
-                    "task": task,
-                    "handlers": handler_list,
-                    "outputs": [],
-                    "summary": "blocked by risk middleware",
-                    "risk_gate": gate,
-                },
-                "executed_at": datetime.now(UTC).isoformat(),
-                "blocked_by_risk_gate": True,
-                "success": False,
-            }
-        ctx = build_employee_context(employee_id, payload)
-        perceived = _perception_real(config, payload)
-        file_path_fast = str(payload.get("file_path") or payload.get("path") or "").strip()
-        direct_only = handler_list == ["direct_python"] and bool(file_path_fast)
-        if direct_only:
-            memory: dict[str, Any] = {}
-            reasoning = {
-                "input": dict(payload),
-                "reasoning": "",
-                "skipped_cognition": True,
-                **{k: payload[k] for k in ("file_path", "path", "user_request") if k in payload},
-            }
-        else:
-            memory = _memory_light(ctx)
-            reasoning = _cognition_fhd(config, perceived, memory, task)
-            if reasoning.get("error") and handler_list != ["direct_python"]:
-                duration_ms = round((time.perf_counter() - t0) * 1000, 3)
-                return {
-                    "employee_id": employee_id,
-                    "pack": {"id": pack["pack_id"], "version": pack.get("version")},
-                    "duration_ms": duration_ms,
-                    "success": False,
-                    "result": {
-                        "task": task,
-                        "handlers": handler_list,
-                        "outputs": [],
-                        "summary": "cognition failed",
-                        "cognition_error": reasoning.get("error"),
-                    },
-                    "executed_at": datetime.now(UTC).isoformat(),
-                }
-        result = _actions_fhd(
-            config,
-            reasoning,
-            task,
-            employee_id,
-            pack_root,
-            payload.get("workspace_root") or workspace_root,
-        )
-        duration_ms = round((time.perf_counter() - t0) * 1000, 3)
-        ok = _handlers_execution_ok(result)
-        return {
-            "employee_id": employee_id,
-            "pack": {"id": pack["pack_id"], "version": pack.get("version")},
-            "duration_ms": duration_ms,
-            "success": ok,
-            "result": result,
-            "executed_at": datetime.now(UTC).isoformat(),
-            "source": "employee_runtime.local",
-        }
-    except RECOVERABLE_ERRORS as exc:
-        duration_ms = round((time.perf_counter() - t0) * 1000, 3)
-        logger.exception("employee_execute_local failed employee_id=%s", employee_id)
-        return {
-            "employee_id": employee_id,
-            "duration_ms": duration_ms,
-            "success": False,
-            "error": str(exc)[:800],
-            "executed_at": datetime.now(UTC).isoformat(),
-        }
 
 
 __all__ = ["execute_employee_task_local"]

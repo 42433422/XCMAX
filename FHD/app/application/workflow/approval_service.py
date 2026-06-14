@@ -113,7 +113,7 @@ class ApprovalService:
                 "runtime_context": runtime_context or {},
                 "plan_id": plan_id,
             }
-        logger.info(f"创建审批请求: {request_id} for {node.tool_id}.{node.action}")
+        logger.info("创建审批请求: %s for %s.%s", request_id, node.tool_id, node.action)
 
         # 同时持久化到 DB（防止重启丢失，且与 /api/approval/requests 工作台共享可见性）
         self._persist_request_to_db(request)
@@ -170,31 +170,31 @@ class ApprovalService:
     def approve(self, request_id: str, comment: str = "") -> bool:
         request = self._pending_requests.get(request_id)
         if not request:
-            logger.warning(f"审批请求不存在: {request_id}")
+            logger.warning("审批请求不存在: %s", request_id)
             return False
         if request.status != ApprovalStatus.PENDING:
-            logger.warning(f"审批请求状态不是pending: {request_id}, status={request.status}")
+            logger.warning("审批请求状态不是pending: %s, status=%s", request_id, request.status)
             return False
 
         request.status = ApprovalStatus.APPROVED
         request.approved_at = datetime.now()
         request.approver_comment = comment
-        logger.info(f"审批通过: {request_id}")
+        logger.info("审批通过: %s", request_id)
         return True
 
     def reject(self, request_id: str, comment: str = "") -> bool:
         request = self._pending_requests.get(request_id)
         if not request:
-            logger.warning(f"审批请求不存在: {request_id}")
+            logger.warning("审批请求不存在: %s", request_id)
             return False
         if request.status != ApprovalStatus.PENDING:
-            logger.warning(f"审批请求状态不是pending: {request_id}, status={request.status}")
+            logger.warning("审批请求状态不是pending: %s, status=%s", request_id, request.status)
             return False
 
         request.status = ApprovalStatus.REJECTED
         request.rejected_at = datetime.now()
         request.approver_comment = comment
-        logger.info(f"审批拒绝: {request_id}")
+        logger.info("审批拒绝: %s", request_id)
         return True
 
     def cancel(self, request_id: str) -> bool:
@@ -202,7 +202,7 @@ class ApprovalService:
         if not request:
             return False
         request.status = ApprovalStatus.CANCELLED
-        logger.info(f"审批取消: {request_id}")
+        logger.info("审批取消: %s", request_id)
         return True
 
     def is_approved(self, plan_id: str) -> bool:

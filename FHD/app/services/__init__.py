@@ -25,7 +25,7 @@ from __future__ import annotations
 try:
     from app.ai_engines.bert import BertIntentClassifier
 except ModuleNotFoundError:
-    BertIntentClassifier = None  # type: ignore[misc, assignment]
+    BertIntentClassifier = None
 from app.ai_engines.deepseek.intent_service import DeepseekIntentClassifier
 from app.ai_engines.rasa.nlu_service import RasaNLUService, get_rasa_nlu_service
 from app.domain.services.unified_intent_recognizer import (

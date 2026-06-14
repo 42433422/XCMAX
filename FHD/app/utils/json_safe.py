@@ -30,7 +30,7 @@ def json_safe(value: Any) -> Any:
         except RECOVERABLE_ERRORS:
             return ""
     try:
-        import numpy as np  # type: ignore
+        import numpy as np
 
         if isinstance(value, np.generic):
             return value.item()

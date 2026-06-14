@@ -247,7 +247,7 @@ def publish_route_event(
         except RECOVERABLE_ERRORS:
             logger.debug("suppressed exception", exc_info=True)
 
-        return wrapper  # type: ignore[return-value]
+        return wrapper
 
     return decorator
 

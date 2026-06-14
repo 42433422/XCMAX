@@ -234,6 +234,43 @@ export const useWorkflowAiEmployeesStore = defineStore('workflowAiEmployees', ()
     setAll(next)
   }
 
+  /**
+   * 上岗：将指定员工设为已托管（AI 市场安装员工包后自动调用）。
+   * @returns 实际从 false→true 的员工 id
+   */
+  function assignHostMod(employeeIds: string[], hostModId: string) {
+    const hid = String(hostModId || '').trim()
+    if (!hid) return
+    let changed = false
+    const next = registryEntries.value.map((entry) => {
+      if (!employeeIds.includes(entry.id)) return entry
+      if (entry.hostModId === hid) return entry
+      changed = true
+      return { ...entry, hostModId: hid }
+    })
+    if (changed) registryEntries.value = next
+  }
+
+  function enableEmployees(ids: string[], options?: { onlyNew?: boolean }) {
+    const onlyNew = Boolean(options?.onlyNew)
+    const next = { ...enabled.value }
+    const turnedOn: string[] = []
+    for (const raw of ids) {
+      const id = String(raw || '').trim()
+      if (!id || isNonWorkflowDeskEmployeeId(id)) continue
+      if (onlyNew && next[id] === true) continue
+      if (!next[id]) {
+        turnedOn.push(id)
+      }
+      next[id] = true
+    }
+    if (JSON.stringify(next) !== JSON.stringify(enabled.value)) {
+      enabled.value = next
+      persistAndNotify()
+    }
+    return turnedOn
+  }
+
   function getEmployeeLabel(id: string, i18nResolver?: (key: string) => string): string {
     const entry = registryEntries.value.find((e) => e.id === id)
     if (entry) return resolveLabel(entry, i18nResolver)
@@ -263,6 +300,8 @@ export const useWorkflowAiEmployeesStore = defineStore('workflowAiEmployees', ()
     setAll,
     toggle,
     enableAllOn,
+    enableEmployees,
+    assignHostMod,
     persistAndNotify,
     getEmployeeLabel,
     refreshRegistry,

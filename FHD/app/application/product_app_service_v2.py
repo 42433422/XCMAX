@@ -12,7 +12,7 @@ product_app_service V2 - 事件驱动版本
 
 import logging
 from datetime import datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from app.neuro_bus.bus import get_neuro_bus
 from app.neuro_bus.events.base import EventPriority, NeuroEvent
@@ -63,7 +63,7 @@ class ProductAppServiceV2:
             self._bus.publish(event)
             return event
         except RECOVERABLE_ERRORS as e:
-            logger.error(f"[ProductAppServiceV2] 发布事件失败: {e}")
+            logger.error("[ProductAppServiceV2] 发布事件失败: %s", e)
             return None
 
     # ========== Level 2: 事件驱动核心方法 ==========
@@ -98,7 +98,7 @@ class ProductAppServiceV2:
 
             self._bus.publish(event)
 
-            logger.info(f"[ProductAppServiceV2] 产品创建事件已发布: {product_id}")
+            logger.info("[ProductAppServiceV2] 产品创建事件已发布: %s", product_id)
 
             return {
                 "success": True,
@@ -110,7 +110,7 @@ class ProductAppServiceV2:
             }
 
         except RECOVERABLE_ERRORS as e:
-            logger.exception(f"[ProductAppServiceV2] 创建产品失败: {e}")
+            logger.exception("[ProductAppServiceV2] 创建产品失败: %s", e)
             return {"success": False, "message": str(e), "error": str(e)}
 
     async def update_product(self, product_id: str, updates: dict[str, Any]) -> dict[str, Any]:
@@ -168,7 +168,7 @@ class ProductAppServiceV2:
             }
 
         except RECOVERABLE_ERRORS as e:
-            logger.exception(f"[ProductAppServiceV2] 更新产品失败: {e}")
+            logger.exception("[ProductAppServiceV2] 更新产品失败: %s", e)
             return {"success": False, "message": str(e)}
 
     async def delete_product(
@@ -214,7 +214,7 @@ class ProductAppServiceV2:
             }
 
         except RECOVERABLE_ERRORS as e:
-            logger.exception(f"[ProductAppServiceV2] 删除产品失败: {e}")
+            logger.exception("[ProductAppServiceV2] 删除产品失败: %s", e)
             return {"success": False, "message": str(e)}
 
     async def import_products(
@@ -254,7 +254,7 @@ class ProductAppServiceV2:
             }
 
         except RECOVERABLE_ERRORS as e:
-            logger.exception(f"[ProductAppServiceV2] 批量导入产品失败: {e}")
+            logger.exception("[ProductAppServiceV2] 批量导入产品失败: %s", e)
             return {"success": False, "message": str(e)}
 
     async def invalidate_cache(
@@ -290,7 +290,7 @@ class ProductAppServiceV2:
             }
 
         except RECOVERABLE_ERRORS as e:
-            logger.exception(f"[ProductAppServiceV2] 缓存失效失败: {e}")
+            logger.exception("[ProductAppServiceV2] 缓存失效失败: %s", e)
             return {"success": False, "message": str(e)}
 
     # ========== 通用命令方法 (向后兼容) ==========
@@ -315,7 +315,7 @@ class ProductAppServiceV2:
         }
 
         if command_type in command_map:
-            return await command_map[command_type](payload)
+            return cast("dict[str, Any]", await command_map[command_type](payload))
 
         # 未知命令：直接发布原始事件
         try:
@@ -340,7 +340,7 @@ class ProductAppServiceV2:
             }
 
         except RECOVERABLE_ERRORS as e:
-            logger.exception(f"[ProductAppServiceV2] 执行命令失败: {e}")
+            logger.exception("[ProductAppServiceV2] 执行命令失败: %s", e)
             return {"success": False, "message": str(e)}
 
 

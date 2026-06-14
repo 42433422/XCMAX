@@ -3,6 +3,7 @@ import {
   shouldAutoEnableEditionPlatformShell,
   shouldAutoEnableMinimalPlatformShell,
   shouldAutoEnablePlatformShell,
+  hasInstalledAccountCustomMod,
 } from '@/constants/genericModPack'
 import { removeTenantScopedStorageItem } from '@/utils/tenantStorageScope'
 import { XCAGI_ACTIVE_EXTENSION_MOD_ID_KEY } from '@/utils/xcagiStorageKeys'
@@ -45,6 +46,53 @@ export const SHELL_CORE_ROUTE_NAMES = new Set([
   'lan-gate',
   'login',
 ])
+
+/** 账号定制 Mod 装齐后开放的宿主 ERP 侧栏（与 industry preset menuLabels 对齐） */
+export const INDUSTRY_DELIVERY_ERP_MENU_KEYS = [
+  'products',
+  'customers',
+  'orders',
+  'shipment-records',
+  'materials',
+  'traditional-mode',
+  'print',
+  'tools',
+  'approval-hub',
+  'enterprise-customer-service',
+  'internal-customer-service',
+  'wechat-contacts',
+] as const
+
+export const INDUSTRY_DELIVERY_ROUTE_NAMES = new Set<string>([
+  ...INDUSTRY_DELIVERY_ERP_MENU_KEYS,
+  'inventory',
+  'printer-list',
+  'template-preview',
+  'data-sources',
+  'kitten-finance',
+  'workflow-visualization',
+  'workflow-employee-space',
+  'other-tools',
+  'taiyangniao-pro-home',
+  'qsm-pro-home',
+  'sz-qsm-pro-home',
+])
+
+export function resolvePlatformShellMenuKeys(installedModIds: Iterable<string>): Set<string> {
+  const keys = new Set(SHELL_CORE_MENU_KEYS)
+  if (!hasInstalledAccountCustomMod(installedModIds)) return keys
+  for (const k of INDUSTRY_DELIVERY_ERP_MENU_KEYS) keys.add(k)
+  return keys
+}
+
+export function isIndustryDeliveryRouteName(
+  routeName: string,
+  installedModIds: Iterable<string>,
+): boolean {
+  const name = String(routeName || '').trim()
+  if (!name || !INDUSTRY_DELIVERY_ROUTE_NAMES.has(name)) return false
+  return hasInstalledAccountCustomMod(installedModIds)
+}
 
 export function readPlatformShellModeFromStorage(): boolean {
   if (typeof localStorage === 'undefined') return false

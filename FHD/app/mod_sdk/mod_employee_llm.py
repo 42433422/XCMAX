@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Any
+from typing import Any, cast
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -95,7 +95,7 @@ async def _call_openai_compatible_chat(
         async with httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=15.0)) as client:
             r = await client.post(chat_url, headers=headers, json=payload)
             r.raise_for_status()
-            return r.json()
+            return cast("dict[str, Any] | None", r.json())
     except RECOVERABLE_ERRORS as e:  # noqa: BLE001
         logger.exception("mod_employee_complete: OpenAI-compatible chat 请求失败: %s", e)
         return None

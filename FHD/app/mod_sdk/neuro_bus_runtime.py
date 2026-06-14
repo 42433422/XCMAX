@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import logging
 from functools import lru_cache
-from typing import Any
+from typing import Any, cast
 
 from app.mod_sdk.neuro_bus_compat import NEURO_BUS_BRIDGE_MOD_ID, is_neuro_bus_via_mod_enabled
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -41,7 +41,7 @@ def _get_bundle() -> dict[str, Any]:
     if not mod_path:
         raise RuntimeError("neuro bus runtime mod not installed")
     mod = _load_runtime_providers(mod_path, mod_id or NEURO_BUS_BRIDGE_MOD_ID)
-    return mod.create_bus_runtime_bundle()
+    return cast("dict[str, Any]", mod.create_bus_runtime_bundle())
 
 
 async def run_lifespan_setup() -> None:
@@ -102,7 +102,7 @@ def get_neuro_bus_health_runtime() -> dict[str, Any]:
         manager = get_neuro_bus_manager()
         return manager.get_health() if manager else {}
     bundle = _get_bundle()
-    return bundle["health"]()
+    return cast("dict[str, Any]", bundle["health"]())
 
 
 __all__ = [

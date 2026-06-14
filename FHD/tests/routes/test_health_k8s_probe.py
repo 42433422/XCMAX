@@ -212,6 +212,27 @@ class TestCapabilities:
         assert r.status_code == 200
         assert "error" in r.json()["intent_engines"]
 
+    def test_capabilities_get_engine_status_error(self, client: TestClient) -> None:
+        with (
+            patch(
+                "app.fastapi_routes.health_k8s._check_rasa_nlu", return_value={"status": "healthy"}
+            ),
+            patch(
+                "app.fastapi_routes.health_k8s._check_pgvector", return_value={"status": "healthy"}
+            ),
+            patch(
+                "app.fastapi_routes.health_k8s._check_ai_service",
+                return_value={"status": "healthy"},
+            ),
+            patch("app.domain.services.unified_intent_recognizer.get_unified_intent_recognizer") as g,
+        ):
+            rec = MagicMock()
+            rec.get_engine_status.side_effect = RuntimeError("engine snapshot fail")
+            g.return_value = rec
+            r = client.get("/api/diagnostics/capabilities")
+        assert r.status_code == 200
+        assert r.json()["intent_engines"] == {"error": "engine snapshot fail"}
+
 
 class TestCheckHelpers:
     def test_check_database_healthy(self) -> None:
@@ -243,3 +264,17 @@ class TestCheckHelpers:
             out = _check_pgvector()
         assert out["status"] == "disabled"
         assert out["dialect"] == "sqlite"
+
+    def test_check_ai_service_engine_status_error(self) -> None:
+        from app.fastapi_routes.health_k8s import _check_ai_service
+
+        with patch(
+            "app.domain.services.unified_intent_recognizer.get_unified_intent_recognizer"
+        ) as g:
+            rec = MagicMock()
+            rec.is_ready.return_value = True
+            rec.get_engine_status.side_effect = RuntimeError("status fail")
+            g.return_value = rec
+            out = _check_ai_service()
+        assert out["status"] == "healthy"
+        assert out["engines"] == {"error": "status fail"}

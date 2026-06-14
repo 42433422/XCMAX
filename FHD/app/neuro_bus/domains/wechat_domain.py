@@ -46,7 +46,7 @@ class WechatNeuroDomain(NeuroDomain):
         async def on_payment(event):
             order_id = event.payload.get("order_id")
             status = event.payload.get("status")
-            logger.info(f"WeChat payment: order={order_id}, status={status}")
+            logger.info("WeChat payment: order=%s, status=%s", order_id, status)
             bump_domain_handler_metric("wechat.payment.callback")
 
     async def initialize(self):

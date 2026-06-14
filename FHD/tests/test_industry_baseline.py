@@ -35,16 +35,25 @@ def test_industry_baseline_attendance_plan():
 def test_industry_baseline_attendance_with_entitled_custom():
     data = build_industry_baseline_plan(
         "考勤",
-        installed_mod_ids=["xcagi-planner-bridge", "xcagi-neuro-bus-bridge"],
+        installed_mod_ids=[
+            "xcagi-planner-bridge",
+            "xcagi-neuro-bus-bridge",
+            "xcagi-erp-domain-bridge",
+            "xcagi-planner-excel-tools",
+        ],
         entitled_mod_ids={"taiyangniao-pro"},
     )
     custom_group = next(g for g in data["groups"] if g["id"] == "account_custom")
+    custom_mod_ids = {it["mod_id"] for it in custom_group["items"]}
+    assert "taiyangniao-pro" in custom_mod_ids
+    assert "xcagi-core-workflow-employees" in custom_mod_ids
     assert custom_group["items"][0]["mod_id"] == "taiyangniao-pro"
     assert custom_group["items"][0]["label"] == "太阳鸟 PRO"
     assert custom_group["items"][0]["required"] is True
     assert data["account_custom_ready"] is False
     assert data["baseline_ready"] is False
     assert "taiyangniao-pro" in data["missing_account_custom_mod_ids"]
+    assert "xcagi-core-workflow-employees" in data["missing_account_custom_mod_ids"]
 
 
 def test_industry_baseline_attendance_custom_installed():
@@ -54,15 +63,40 @@ def test_industry_baseline_attendance_custom_installed():
             "xcagi-planner-bridge",
             "xcagi-neuro-bus-bridge",
             "xcagi-erp-domain-bridge",
-            "xcagi-core-workflow-employees",
             "xcagi-planner-excel-tools",
+            "xcagi-core-workflow-employees",
             "xcagi-office-employee-pack-bridge",
+            "wechat-contacts-ai-employee",
             "taiyangniao-pro",
         ],
         entitled_mod_ids={"taiyangniao-pro"},
     )
     assert data["account_custom_ready"] is True
     assert data["missing_account_custom_mod_ids"] == []
+    assert data["baseline_ready"] is True
+    assert data["full_stack_ready"] is True
+
+
+def test_industry_baseline_coating_with_entitled_custom():
+    data = build_industry_baseline_plan(
+        "涂料",
+        installed_mod_ids=[
+            "xcagi-planner-bridge",
+            "xcagi-neuro-bus-bridge",
+            "xcagi-erp-domain-bridge",
+            "xcagi-planner-excel-tools",
+            "xcagi-approval-bridge",
+            "xcagi-customer-service-bridge",
+        ],
+        entitled_mod_ids={"sz-qsm-pro"},
+    )
+    custom_group = next(g for g in data["groups"] if g["id"] == "account_custom")
+    custom_mod_ids = {it["mod_id"] for it in custom_group["items"]}
+    assert "sz-qsm-pro" in custom_mod_ids
+    assert "xcagi-core-workflow-employees" in custom_mod_ids
+    assert data["account_custom_ready"] is False
+    assert data["baseline_ready"] is False
+    assert "sz-qsm-pro" in data["missing_account_custom_mod_ids"]
 
 
 def test_onboarding_industry_catalog_neutral_names():

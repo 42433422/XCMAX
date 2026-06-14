@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any
+from typing import Any, cast
 
 from fastapi import APIRouter, HTTPException, Request
 
@@ -48,7 +48,7 @@ def _find_template_row(template_id: str) -> dict[str, Any] | None:
     if raw.startswith("db:"):
         for t in templates:
             if str((t or {}).get("id") or "") == raw:
-                return t
+                return cast("dict[str, Any] | None", t)
         try:
             n = int(raw.split(":", 1)[1])
         except (ValueError, IndexError):
@@ -56,15 +56,15 @@ def _find_template_row(template_id: str) -> dict[str, Any] | None:
         if n is not None:
             for t in templates:
                 if (t or {}).get("db_id") == n:
-                    return t
+                    return cast("dict[str, Any] | None", t)
     if raw.isdigit():
         n = int(raw)
         for t in templates:
             if (t or {}).get("db_id") == n or str((t or {}).get("id") or "") == raw:
-                return t
+                return cast("dict[str, Any] | None", t)
     for t in templates:
         if str((t or {}).get("id") or "") == raw:
-            return t
+            return cast("dict[str, Any] | None", t)
     return None
 
 

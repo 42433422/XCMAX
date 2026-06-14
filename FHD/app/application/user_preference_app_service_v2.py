@@ -68,7 +68,7 @@ class UserPreferenceAppServiceV2:
             self._bus.publish(event)
 
             logger.info(
-                f"[UserPreferenceAppServiceV2] 命令已发布: {command_type} (event_id={event.metadata.event_id})"
+                "[UserPreferenceAppServiceV2] 命令已发布: %s (event_id=%s)", command_type, event.metadata.event_id
             )
 
             return {
@@ -79,7 +79,7 @@ class UserPreferenceAppServiceV2:
             }
 
         except RECOVERABLE_ERRORS as e:
-            logger.exception(f"[UserPreferenceAppServiceV2] 执行命令失败: {e}")
+            logger.exception("[UserPreferenceAppServiceV2] 执行命令失败: %s", e)
             return {"success": False, "message": str(e)}
 
 

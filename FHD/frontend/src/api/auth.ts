@@ -1,6 +1,7 @@
 import { api, primeCsrfCookie } from './core';
 import { LS_MARKET_ACCESS_TOKEN, LS_MARKET_USER_JSON } from './marketAccount';
 import { invalidateEnterpriseSessionCache } from '@/utils/authSessionCache';
+import { clearAutoLoginPreference } from '@/utils/loginPreferences';
 import type { ApiResponse } from '@/types/api';
 
 export type AccountKind = 'personal' | 'enterprise' | 'admin';
@@ -121,6 +122,7 @@ export const authApi = {
   },
 
   async logout(): Promise<ApiResponse<void>> {
+    clearAutoLoginPreference();
     invalidateEnterpriseSessionCache();
     try {
       const { useAccountProfileStore } = await import('@/stores/accountProfile');

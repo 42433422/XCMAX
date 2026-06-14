@@ -3,7 +3,7 @@
   "name": "考勤行业包",
   "version": "1.0.0",
   "author": "XCAGI",
-  "description": "考勤行业通用包：排班、出勤统计与行业 AI 员工；考勤表转换见账号定制 Mod。",
+  "description": "考勤行业通用包：排班、出勤统计与行业词汇；部门/人员菜单与 AI 员工见账号定制 Mod。",
   "primary": true,
   "legacy_mod_ids": ["taiyangniao-pro"],
   "dependencies": {
@@ -16,20 +16,10 @@
   "frontend": {
     "routes": "frontend/routes",
     "pro_entry_path": "/attendance-industry",
-    "menu": [],
-    "menu_overrides": [
-      {
-        "key": "products",
-        "label": "人员管理"
-      },
-      {
-        "key": "customers",
-        "label": "部门管理"
-      }
-    ]
+    "menu": []
   },
   "onboarding": {
-    "custom_line_hint": "考勤转换、排班菜单与行业 AI 员工",
+    "custom_line_hint": "考勤转换、排班菜单与定制 AI 员工",
     "custom_mod_ids": ["taiyangniao-pro"]
   },
   "hooks": {},
@@ -112,15 +102,6 @@
       "label": "排班任务",
       "hint": "快速创建排班安排",
       "text": "给客服部生成明天早班排班单"
-    }
-  ],
-  "workflow_employees": [
-    {
-      "id": "attendance_ai",
-      "label": "考勤ai助手",
-      "panel_title": "工作流 · 考勤ai助手",
-      "panel_summary": "协助处理出勤记录、异常说明与排班相关问答；后续可接入考勤系统 API 与状态轮询。",
-      "workflow_placeholder": true
     }
   ],
   "comms": {

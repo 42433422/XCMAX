@@ -1,4 +1,5 @@
 import { defineAsyncComponent, type App, type Component } from 'vue';
+import { asRecord, asArray, asString, asBoolean, asDisposable } from '@/utils/typeGuards'
 
 const loadingComponent = {
   template: '<div class="async-loading"></div>'
@@ -142,19 +143,17 @@ export function getComponent(name: string) {
   return ProModeComponents[name] || null;
 }
 
+type LazyAsyncComponent = Component & { loader?: () => void | Promise<unknown> }
+
 export function preloadComponent(name: string) {
-  const component = ProModeComponents[name] as unknown;
-  if (component && component.loader) {
-    component.loader();
-  }
+  const component = ProModeComponents[name] as LazyAsyncComponent | undefined
+  component?.loader?.()
 }
 
 export function preloadAllComponents() {
-  Object.values(ProModeComponents).forEach((component: unknown) => {
-    if (component.loader) {
-      component.loader();
-    }
-  });
+  Object.values(ProModeComponents).forEach((component) => {
+    (component as LazyAsyncComponent).loader?.()
+  })
 }
 
 export const componentPreloadMap: Record<string, string[]> = {

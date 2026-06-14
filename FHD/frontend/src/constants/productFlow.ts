@@ -44,7 +44,7 @@ export const PRODUCT_FLOW_STEPS: ProductFlowStepMeta[] = [
     id: 'host-pack',
     index: 3,
     title: '补基础线',
-    subtitle: '按所选行业查看还缺哪些基础 Mod，按需装齐（可跳过）',
+    subtitle: '装侧栏宿主能力卡片（桥接 Mod），非 AI 员工；定制 Mod 才补员工',
   },
   {
     id: 'done',
@@ -86,7 +86,8 @@ export function industryBaselineHint(industryId: string): string {
       '通用场景：工作流员工、Planner 工具、企微与局域网入口等基础线，用到哪补哪即可。',
     涂料: '涂料/批发类：在通用基础线上，出货、客户、标签打印等行业 Mod 可按需从扩展市场安装。',
     批发: '批发分销：基础线装齐后，库存与客户相关 Mod 建议从扩展市场按需加载。',
-    考勤: '考勤排班：基础线装齐后，排班与考勤单等行业 Mod 可按需安装。',
+    考勤:
+      '考勤排班：先补 ERP 门面与表格工具侧栏，再装行业包；部门/人员与 AI 员工在账号定制 Mod。',
     烤禽: '烤禽冷链：基础线装齐后，配送与货品管理 Mod 可按需安装。',
     电商: '电商零售：基础线装齐后，订单与 SKU 相关 Mod 可按需安装。',
     餐饮: '餐饮门店：基础线装齐后，食材与订货 Mod 可按需安装。',

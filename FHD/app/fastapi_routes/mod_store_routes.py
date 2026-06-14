@@ -725,7 +725,7 @@ async def _install_host_foundation_internal(edition: str | None) -> ModStoreInst
     if ed not in ("minimal", "generic", "full"):
         ed = "generic"
     try:
-        data = materialize_host_foundation_bridges(ed)  # type: ignore[arg-type]
+        data = materialize_host_foundation_bridges(ed)
     except RECOVERABLE_ERRORS as exc:
         logger.exception("materialize_host_foundation_bridges failed (edition=%s)", ed)
         return ModStoreInstallResult(
@@ -779,7 +779,7 @@ async def mod_store_bootstrap_edition_pack(
         assert_bootstrap_edition_allowed(edition)
     except PermissionError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    data = await bootstrap_edition_pack(ed)  # type: ignore[arg-type]
+    data = await bootstrap_edition_pack(ed)
     if data.get("ready"):
         msg = "通用宿主包已装齐"
     else:

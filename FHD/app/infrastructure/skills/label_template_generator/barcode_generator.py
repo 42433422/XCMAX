@@ -27,7 +27,7 @@ class BarcodeGenerator:
             barcode_type: 条形码类型，默认 code128
         """
         if barcode_type.lower() not in self.SUPPORTED_TYPES:
-            logger.warning(f"不支持的条码类型：{barcode_type}，使用默认的 code128")
+            logger.warning("不支持的条码类型：%s，使用默认的 code128", barcode_type)
             barcode_type = "code128"
 
         self.barcode_type = barcode_type.lower()
@@ -82,7 +82,7 @@ class BarcodeGenerator:
             cleaned_data = self._clean_barcode_data(data, self.barcode_type)
 
             if not cleaned_data:
-                logger.error(f"条码数据格式不正确：{data}")
+                logger.error("条码数据格式不正确：%s", data)
                 return None
 
             # 生成条码图像
@@ -102,7 +102,7 @@ class BarcodeGenerator:
             logger.error("需要安装 python-barcode 库：pip install python-barcode")
             return self._generate_fallback_barcode(data, options)
         except RECOVERABLE_ERRORS as e:
-            logger.error(f"生成条码失败：{e}")
+            logger.error("生成条码失败：%s", e)
             return self._generate_fallback_barcode(data, options)
 
     def _clean_barcode_data(self, data: str, barcode_type: str) -> str:
@@ -193,11 +193,11 @@ class BarcodeGenerator:
             img = self.generate(data, options)
             if img:
                 img.save(filename)
-                logger.info(f"条码已保存：{filename}")
+                logger.info("条码已保存：%s", filename)
                 return True
             return False
         except RECOVERABLE_ERRORS as e:
-            logger.error(f"保存条码失败：{e}")
+            logger.error("保存条码失败：%s", e)
             return False
 
     @staticmethod

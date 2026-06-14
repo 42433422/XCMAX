@@ -1,4 +1,5 @@
 import { ref, onMounted, onUnmounted } from 'vue';
+import { asRecord, asArray, asString } from '@/utils/typeGuards'
 
 interface PerformanceUpdateEvent {
   type: string;
@@ -95,9 +96,11 @@ export function usePerformanceMonitor(options: PerformanceMonitorOptions = {}) {
 
   const measureMemory = () => {
     if (!enableMemory) return;
-    const perfAny = performance as unknown;
+    const perfAny = performance as Performance & {
+      memory?: { usedJSHeapSize: number }
+    }
     if (perfAny.memory) {
-      memory.value = Math.round(perfAny.memory.usedJSHeapSize / 1048576);
+      memory.value = Math.round(perfAny.memory.usedJSHeapSize / 1048576)
       performanceMetrics.value.memoryUsage = memory.value;
 
       if (onPerformanceUpdate) {
@@ -152,7 +155,7 @@ export function usePerformanceMonitor(options: PerformanceMonitorOptions = {}) {
             detectLongTask(entry);
           }
         });
-        observer.observe({ entryTypes: ['longtask'] as unknown });
+        observer.observe({ entryTypes: ['longtask'] as string[] })
       } catch (_e) {
         console.warn('Long task detection not supported');
       }

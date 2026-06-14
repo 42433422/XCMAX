@@ -10,6 +10,7 @@ import {
   resolveChatStreamPath,
   type PlannerSseEvent,
 } from '@/utils/chatSseStream';
+import { asRecord, asString } from '@/utils/typeGuards'
 import {
   resolvePlannerChatBatchPath,
   resolvePlannerChatPath,
@@ -59,8 +60,8 @@ export async function parseChatStreamErrorResponse(res: Response): Promise<strin
   try {
     const ct = res.headers.get('content-type') || '';
     if (ct.includes('application/json')) {
-      const j = await res.json();
-      msg = String((j as unknown)?.message || (j as unknown)?.detail || msg);
+      const j = asRecord(await res.json());
+      msg = asString(j.message || j.detail) || msg;
     }
   } catch {
     /* ignore */

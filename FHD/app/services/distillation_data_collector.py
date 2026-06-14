@@ -204,7 +204,7 @@ def get_deepseek_api_key() -> str:
                 spec.loader.exec_module(config_module)
                 return getattr(config_module, "DEEPSEEK_API_KEY", "") or ""
         except RECOVERABLE_ERRORS as e:
-            logger.warning(f"读取配置文件失败: {e}")
+            logger.warning("读取配置文件失败: %s", e)
 
     return ""
 
@@ -283,7 +283,7 @@ async def call_deepseek_intent(api_key: str, message: str) -> dict[str, Any] | N
                 "confidence": 1.0,
             }
     except RECOVERABLE_ERRORS as e:
-        logger.error(f"DeepSeek API 调用失败: {e}")
+        logger.error("DeepSeek API 调用失败: %s", e)
 
     return None
 
@@ -337,7 +337,7 @@ def generate_samples_from_queries(queries: dict[str, list[str]]) -> int:
             save_distillation_sample(query, intent, slots, confidence=0.95, source="template")
             count += 1
 
-    logger.info(f"生成了 {count} 个蒸馏样本")
+    logger.info("生成了 %s 个蒸馏样本", count)
     return count
 
 
@@ -347,7 +347,7 @@ async def collect_samples_via_deepseek(api_key: str, target_count: int = 500) ->
 
     count = 0
     existing_count = get_sample_count()
-    logger.info(f"当前样本数: {existing_count}, 目标: {target_count}")
+    logger.info("当前样本数: %s, 目标: %s", existing_count, target_count)
 
     if existing_count >= target_count:
         logger.info("样本数量已满足要求")
@@ -378,11 +378,11 @@ async def collect_samples_via_deepseek(api_key: str, target_count: int = 500) ->
                     )
                     count += 1
                 else:
-                    logger.warning(f"未知意图: {intent}, query: {query}")
+                    logger.warning("未知意图: %s, query: %s", intent, query)
             else:
-                logger.warning(f"API 返回无效结果: {result}")
+                logger.warning("API 返回无效结果: %s", result)
 
-        logger.info(f"已收集 {count} 个新样本")
+        logger.info("已收集 %s 个新样本", count)
         await asyncio.sleep(0.5)
 
     return count
@@ -438,7 +438,7 @@ def export_training_data(output_path: str | None = None, format: str = "jsonl") 
             for query, intent, slots in rows:
                 f.write(f"{query}\t{intent}\n")
 
-    logger.info(f"导出训练数据到: {output_path}, 共 {len(rows)} 条")
+    logger.info("导出训练数据到: %s, 共 %s 条", output_path, len(rows))
     return output_path
 
 

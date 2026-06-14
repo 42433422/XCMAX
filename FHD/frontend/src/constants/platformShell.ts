@@ -101,9 +101,11 @@ export interface IndustryBaselinePlan {
   missing_industry_mod_ids: string[]
   account_custom_mod_ids?: string[]
   missing_account_custom_mod_ids?: string[]
+  custom_employee_extension_mod_ids?: string[]
   host_baseline_ready?: boolean
   account_custom_ready?: boolean
   baseline_ready: boolean
+  full_stack_ready?: boolean
   industry_mod_ready: boolean
 }
 

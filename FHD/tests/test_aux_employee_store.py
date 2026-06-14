@@ -19,14 +19,16 @@ REPO = Path(__file__).resolve().parents[1]
 MODS = REPO / "mods"
 
 
-def test_lan_bridge_manifest_has_no_sidebar_menu() -> None:
+def test_lan_bridge_manifest_menu_points_to_lan_gate() -> None:
     from tests.mod_presence import skip_if_bridge_mod_absent
 
     skip_if_bridge_mod_absent("xcagi-lan-license-bridge")
     raw = json.loads(
         (MODS / "xcagi-lan-license-bridge" / "manifest.json").read_text(encoding="utf-8")
     )
-    assert raw.get("frontend", {}).get("menu") == []
+    menu = raw.get("frontend", {}).get("menu") or []
+    assert len(menu) >= 1
+    assert menu[0].get("path", "").endswith("/lan-gate")
 
 
 def test_lan_gate_ai_employee_manifest_and_store_row() -> None:

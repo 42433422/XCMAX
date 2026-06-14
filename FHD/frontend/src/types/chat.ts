@@ -62,3 +62,25 @@ export interface KittenRequestContext {
   kitten_dataset?: KittenDatasetContext | null;
   [key: string]: unknown;
 }
+
+/** Planner / chat round JSON envelope (SSE done event or /api/ai/chat body) */
+export interface ChatAutoAction extends Record<string, unknown> {
+  type?: string;
+  query?: string;
+  keyword?: string;
+  enabled?: boolean;
+  hydrateProductSearch?: { rows?: Record<string, unknown>[]; total?: number };
+}
+
+export interface ChatPlannerPayload extends Record<string, unknown> {
+  success?: boolean;
+  response?: string;
+  message?: string;
+  task?: Record<string, unknown>;
+  autoAction?: ChatAutoAction;
+  data?: Record<string, unknown>;
+  batch?: boolean;
+  results?: ChatPlannerPayload[];
+  requires_token?: boolean;
+  thinking_steps?: string;
+}

@@ -67,7 +67,7 @@ class IntentNeuroDomain(NeuroDomain):
                 self._reflex_count += 1
 
             logger.debug(
-                f"Intent recognized: {intent_type} (confidence={confidence:.2f}, processor={processor})"
+                f"Intent recognized: {intent_type} (confidence={confidence:.2f}, processor={processor})"  # noqa: G004
             )
             try:
                 from app.neuro_bus.neuro_trace_config import bump_domain_handler_metric
@@ -80,7 +80,7 @@ class IntentNeuroDomain(NeuroDomain):
         async def on_intent_processing(event: NeuroEvent):
             """意图处理中"""
             intent_type = event.payload.get("intent_type")
-            logger.debug(f"Intent processing: {intent_type}")
+            logger.debug("Intent processing: %s", intent_type)
             try:
                 from app.neuro_bus.neuro_trace_config import bump_domain_handler_metric
 
@@ -94,7 +94,7 @@ class IntentNeuroDomain(NeuroDomain):
             self._failed_count += 1
             intent_type = event.payload.get("intent_type")
             error = event.payload.get("error", "Unknown")
-            logger.error(f"Intent failed: {intent_type}, error: {error}")
+            logger.error("Intent failed: %s, error: %s", intent_type, error)
             try:
                 from app.neuro_bus.neuro_trace_config import bump_domain_handler_metric
 
@@ -108,7 +108,7 @@ class IntentNeuroDomain(NeuroDomain):
             self._reflex_count += 1
             reflex_type = event.payload.get("reflex_type")
             latency_ms = event.payload.get("latency_ms", 0)
-            logger.debug(f"Reflex triggered: {reflex_type} ({latency_ms:.2f}ms)")
+            logger.debug(f"Reflex triggered: {reflex_type} ({latency_ms:.2f}ms)")  # noqa: G004
             try:
                 from app.neuro_bus.neuro_trace_config import bump_domain_handler_metric
 

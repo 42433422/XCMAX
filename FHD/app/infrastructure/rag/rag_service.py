@@ -116,7 +116,7 @@ def get_default_embedder() -> Callable[[str], list[float]] | None:
     返回 None 时调用方需自带 embedder。
     """
     try:
-        from app.infrastructure.llm import get_default_embedding_service  # type: ignore
+        from app.infrastructure.llm import get_default_embedding_service
 
         svc = get_default_embedding_service()
         return lambda text: svc.embed(text)

@@ -14,8 +14,8 @@
 
 | 维度 | 后端基线 | 后端目标 | 前端基线 | 前端目标 |
 |------|---------:|---------:|---------:|---------:|
-| 行 | **36.35%** | ≥90% | **21.52%** | ≥80% |
-| 分支 | **18.42%** | ≥85% | **49.07%** | ≥75% |
+| 行 | **40.48%**（本回合实测） | ≥90% | **21.52%** | ≥80% |
+| 分支 | **23.09%**（本回合实测） | ≥85% | **49.07%** | ≥75% |
 | 函数 | n/a（coverage.py 不原生统计） | — | **26.08%** | ≥80% |
 
 详见 [`COVERAGE_GAP.md`](COVERAGE_GAP.md)（Top-N 未覆盖清单）。
@@ -72,6 +72,63 @@ cd FHD/frontend && CI=true npm run test:coverage
 | 4（P3 长尾） | ≥90% | ≥80% | 零覆盖逐文件 · pragma 审计 · 变异测试（杀死率≥80%） · 定版 |
 
 每进入下一阶段：本地与 CI 跑全量复测，确认全绿 + `--check` 通过后再 `--bump`。
+
+## Phase 4 剩余清单（p4-tail-mutation · 2026-06-14）
+
+当前整体远未达 Phase 4 定版门禁（后端行 **40.48%** / 分支 **23.09%** vs 目标 90/85），本回合仅完成基础设施与长尾补测。**勿**提前将 `fail_under` 硬改为 90。棘轮已 bump：行 floor **39**、分支 floor **22**。
+
+### pragma 审计（已完成扫描）
+
+| 指标 | 值 |
+|------|-----|
+| `app/` 内 `pragma: no cover` 行数 | **7**（削减 2：health_k8s 诊断分支） |
+| 相对语句数占比 | **~0.009%**（阈值 0.5%，无需批量削减） |
+| 保留项（合理） | ImportError 回退（extensions/policy_nn/openapi_route_compat）、`__main__`（domain_registry）、平台可选（legacy_compat/tts_install）、审计容错（approval_workspace） |
+
+### 变异测试基础设施（已落地）
+
+| 工具 | 状态 | 入口 |
+|------|------|------|
+| **mutmut** | `[tool.mutmut]` 已配置 | `pip install mutmut && mutmut run` |
+| **Stryker** | `frontend/stryker.conf.json` | `npm i -D @stryker-mutator/core @stryker-mutator/vitest-runner && npx stryker run` |
+| 文档 | `docs/reports/MUTATION_TESTING.md` | — |
+
+### 本回合补测（已完成）
+
+- `tests/test_contexts/test_manifest_and_flags.py` — `manifest.py` + `flags.py`
+- `tests/test_di/test_registry_and_deps.py` — `registry.py` + `fastapi_deps.py`
+- `tests/routes/test_health_k8s_probe.py` — 诊断 `get_engine_status` 异常分支（去 pragma）
+
+### 待补（按优先级）
+
+**后端零覆盖小文件（<150 行纯函数）**
+
+| 路径 | 行数 | 备注 |
+|------|-----:|------|
+| `app/http/__init__.py` | ~5 | re-export smoke |
+| `app/contexts/__init__.py` | ~5 | re-export smoke |
+| `app/di/__init__.py` | ~5 | re-export smoke |
+| `app/contexts/context_notifier.py` | 16 | 已有单测；待 SSE 实现后扩展 |
+| `app/mod_sdk/*.py` 零覆盖尾巴 | 若干 | Phase 3 遗留，按文件 <150 行逐个补 |
+| `app/neuro_bus/*.py` 诊断/可选路径 | 大量 | Phase 3 主战场，mock NeuroBus |
+
+**pragma 可进一步削减（非必须，占比已极低）**
+
+- `approval_workspace_app_service.py:86` — mock `db.execute` 抛 `OperationalError` 即可覆盖审计容错
+- `tts_install.py:165` / `legacy_compat.py:141` — 平台/ctypes 可选，保留合理
+
+**变异测试 rollout**
+
+1. mutmut 首轮绿 → 扩大 `paths_to_mutate` 至 `app/application/` 纯函数
+2. Stryker 首轮绿 → 扩大至 `src/stores/`、`src/api/`
+3. CI nightly 接入，杀死率 floor ≥80%
+
+**定版前检查**
+
+- [ ] 后端行 ≥90%、分支 ≥85%（`coverage_ratchet.py --check`）
+- [ ] 前端 lines ≥80%（vitest thresholds）
+- [ ] mutmut + Stryker 杀死率 ≥80%
+- [ ] `fail_under` 升至 90（仅整体达标后）
 
 ## 历史（已退役口径，仅存档）
 

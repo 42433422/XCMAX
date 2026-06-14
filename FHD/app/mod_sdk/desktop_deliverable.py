@@ -77,7 +77,7 @@ async def ensure_deliverable_runtime(app: FastAPI) -> None:
     try:
         from app.mod_sdk.edition_bootstrap import bootstrap_edition_pack
 
-        result = await bootstrap_edition_pack(edition)  # type: ignore[arg-type]
+        result = await bootstrap_edition_pack(edition)
         app.state.deliverable_bootstrap = result
         logger.info("Auto bootstrap edition pack: ready=%s", result.get("ready"))
     except RECOVERABLE_ERRORS as exc:

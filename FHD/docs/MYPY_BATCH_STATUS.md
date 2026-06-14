@@ -2,36 +2,38 @@
 
 SSOT：[pyproject.toml](../pyproject.toml) `[tool.mypy]`。
 
-## 当前严格岛
+## 当前策略（Phase 9 · 2026-06-13）
 
-| 模块 | `ignore_errors` |
+| 范围 | `ignore_errors` |
 |------|-----------------|
-| `app.application.shipment*` | false |
-| `app.application.facades.shipment_event_primary` | false |
-| `app.domain.shipment.*` | false |
-| `app.http.*` | false |
-| `app.schemas.*`、根模块 `app/*.py` | 基线检查（未列入宽口径 ignore） |
+| `tests.*` | **true**（保留） |
+| `app.application.shipment*`、`app.domain.shipment.*`、`app.http.*`、`app.schemas.*`、`app.di.*`、`app.middleware.*` 等严格岛 | **false** |
+| `app.services.*`、`app.fastapi_routes.*`、`app.infrastructure.*`、`app.db.*`、`app.security.*` 等宽口径 | **true**（待 B2–B4 逐批移除） |
 
-## 宽口径 ignore（待分批移除）
+`mypy app/ --no-error-summary` 在严格岛 + 宽口径 ignore 组合下 **绿**。
+
+## 批次进度
 
 | 批次 | 模块前缀 | 状态 |
 |------|----------|------|
-| B1 | `app.schemas.*` + 根模块补注解 | pending |
-| B2 | `app.security.*`、`app.db.*` | pending |
+| B1 | `app.schemas.*` + 根模块 | 严格岛 |
+| B2 | `app.security.*`、`app.db.*` | pending（仍宽口径 ignore） |
 | B3 | `app.application.*`（除 shipment） | pending |
 | B4 | `app.fastapi_routes.*` → `app.services.*` → `app.infrastructure.*` | pending |
-| — | `app.mod_sdk.*`、`app.neuro_bus.*`、`app.routes.*`、`app.legacy.*` | **done（2026-06-13）** |
+| — | `app.mod_sdk.*`、`app.neuro_bus.*`、`app.routes.*`、`app.legacy.*` | **done** |
 | tests | `tests.*` | ignore（保留） |
 
 ## inline `# type: ignore`
 
-基线：**69** 处 / **41** 文件（`python scripts/dev/count_type_debt.py`）。
+终态：**0**（`python3 scripts/dev/count_type_debt.py --max-type-ignore 0`）。
 
-Top 文件：`domain/services/unified_intent_recognizer.py`、`extensions.py`、`utils/printer_automation.py`。
+## Ruff ANN201
+
+`[tool.ruff.lint] select` 含 `ANN`；公共 API 返回注解逐步补齐。
 
 ## 验收
 
 ```bash
-cd FHD && mypy app/ --no-error-summary
-python scripts/dev/count_type_debt.py --max-type-ignore 0  # 终态目标
+cd FHD && python3 -m mypy app/ --no-error-summary
+python3 scripts/dev/count_type_debt.py --max-type-ignore 0
 ```

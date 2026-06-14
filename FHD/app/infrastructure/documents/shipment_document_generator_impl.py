@@ -13,9 +13,9 @@ try:
     _PIL_AVAILABLE = True
     _PIL_IMPORT_ERROR = ""
 except ImportError as _pil_import_error:
-    Image = None  # type: ignore[assignment]
-    ImageDraw = None  # type: ignore[assignment]
-    ImageFont = None  # type: ignore[assignment]
+    Image = None
+    ImageDraw = None
+    ImageFont = None
     _PIL_AVAILABLE = False
     _PIL_IMPORT_ERROR = str(_pil_import_error)
 
@@ -82,7 +82,7 @@ class SimpleLabelGenerator:
         self, product_data: dict[str, Any], order_number: str, label_index: int = 1
     ) -> str | None:
         if not _PIL_AVAILABLE:
-            logger.warning(f"PIL 不可用，跳过标签生成：{_PIL_IMPORT_ERROR}")
+            logger.warning("PIL 不可用，跳过标签生成：%s", _PIL_IMPORT_ERROR)
             return None
         try:
             image = Image.new("RGB", (self.width, self.height), self.bg_color)
@@ -228,11 +228,11 @@ class SimpleLabelGenerator:
             filename = f"{order_number}_第{label_index}项_{safe_name}.png"
             output_path = os.path.join(self.output_dir, filename)
             image.save(output_path)
-            logger.info(f"标签已生成: {output_path}")
+            logger.info("标签已生成: %s", output_path)
             return filename
 
         except RECOVERABLE_ERRORS as e:
-            logger.error(f"生成标签失败: {e}")
+            logger.error("生成标签失败: %s", e)
             return None
 
     def generate_labels_for_order(

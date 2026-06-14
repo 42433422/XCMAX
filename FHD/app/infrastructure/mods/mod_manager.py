@@ -41,7 +41,7 @@ def _default_mods_root() -> str:
     源码树：app/infrastructure/mods/mod_manager.py；默认 mods 目录为 XCAGI/mods（由 run.py 设置 XCAGI_MODS_ROOT）
     若包装进 site-packages，上一级不再是项目根，需回退到环境变量或从 cwd 向上查找。
     """
-    logger.info(f"[_default_mods_root] Resolving mods root, CWD: {os.getcwd()}")
+    logger.info("[_default_mods_root] Resolving mods root, CWD: %s", os.getcwd())
 
     env = (os.environ.get("XCAGI_MODS_ROOT") or os.environ.get("XCAGI_MODS_DIR") or "").strip()
     if env:
@@ -59,7 +59,7 @@ def _default_mods_root() -> str:
         os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(file_here)))), "mods"
     )
     logger.info(
-        f"[_default_mods_root] Checking package-relative path: {from_pkg_layout}, exists: {os.path.isdir(from_pkg_layout)}"
+        "[_default_mods_root] Checking package-relative path: %s, exists: %s", from_pkg_layout, os.path.isdir(from_pkg_layout)
     )
     if os.path.isdir(from_pkg_layout):
         logger.info("[_default_mods_root] Mods root (next to app package): %s", from_pkg_layout)
@@ -67,7 +67,7 @@ def _default_mods_root() -> str:
 
     cwd_mods = os.path.join(os.getcwd(), "mods")
     logger.info(
-        f"[_default_mods_root] Checking CWD mods: {cwd_mods}, exists: {os.path.isdir(cwd_mods)}"
+        "[_default_mods_root] Checking CWD mods: %s, exists: %s", cwd_mods, os.path.isdir(cwd_mods)
     )
     if os.path.isdir(cwd_mods):
         logger.info("[_default_mods_root] Mods root (./mods from cwd): %s", cwd_mods)
@@ -76,7 +76,7 @@ def _default_mods_root() -> str:
     cur = os.path.abspath(os.getcwd())
     for i in range(8):
         trial = os.path.join(cur, "mods")
-        logger.info(f"[_default_mods_root] Walking up: {trial}, exists: {os.path.isdir(trial)}")
+        logger.info("[_default_mods_root] Walking up: %s, exists: %s", trial, os.path.isdir(trial))
         if os.path.isdir(trial):
             logger.info("[_default_mods_root] Mods root (walk up from cwd): %s", trial)
             return trial
@@ -139,7 +139,13 @@ def import_mod_backend_py(mod_path: str, mod_id: str, stem: str):
     if not os.path.isfile(path):
         raise FileNotFoundError(f"Mod {mod_id} backend file missing: {path}")
     safe = "".join(c if c.isalnum() else "_" for c in mod_id)
-    spec_name = f"_xcagi_mod_{safe}_{stem}"
+    # 同一 mod_id 可能来自 mods/ 与 mods-admin-runtime/ 等不同物理路径；须纳入缓存键避免错用旧模块。
+    import hashlib
+
+    path_digest = hashlib.sha256(
+        os.path.normpath(os.path.abspath(mod_path)).encode()
+    ).hexdigest()[:16]
+    spec_name = f"_xcagi_mod_{safe}_{path_digest}_{stem}"
     existing = sys.modules.get(spec_name)
     if existing is not None:
         return existing
@@ -472,10 +478,10 @@ class ModManager:
 
         registry = get_mod_registry()
 
-        logger.info(f"[ModManager] Attempting to load mod: {mod_id}")
+        logger.info("[ModManager] Attempting to load mod: %s", mod_id)
 
         if registry.get_mod_metadata(mod_id):
-            logger.info(f"[ModManager] Mod {mod_id} is already loaded")
+            logger.info("[ModManager] Mod %s is already loaded", mod_id)
             # 与 load_mod_routes 对齐：历史上偶发「注册表已有元数据但 _loaded_mods 漏记」，
             # 会导致该 Mod 的 /api/mod/<id>/... 永远不挂载（仅命中 SPA 兜底 404）。
             if mod_id not in self._loaded_mods:
@@ -487,7 +493,7 @@ class ModManager:
             return True
 
         mod_path = self.resolve_mod_directory(mod_id)
-        logger.info(f"[ModManager] Mod path: {mod_path}")
+        logger.info("[ModManager] Mod path: %s", mod_path)
         if not mod_path:
             self._record_load_failure(
                 mod_id,
@@ -498,12 +504,12 @@ class ModManager:
 
         metadata = parse_manifest(mod_path)
         if not metadata:
-            logger.error(f"[ModManager] Failed to parse manifest for mod: {mod_id}")
+            logger.error("[ModManager] Failed to parse manifest for mod: %s", mod_id)
             self._record_load_failure(mod_id, "manifest", "manifest.json 无效或缺少 id")
             return False
 
         logger.info(
-            f"[ModManager] Mod metadata parsed: id={metadata.id}, name={metadata.name}, version={metadata.version}"
+            "[ModManager] Mod metadata parsed: id=%s, name=%s, version=%s", metadata.id, metadata.name, metadata.version
         )
 
         if normalize_artifact({"artifact": metadata.artifact}) == ARTIFACT_BUNDLE:
@@ -517,9 +523,9 @@ class ModManager:
             return True
 
         deps = registry.list_mod_ids()
-        logger.info(f"[ModManager] Current loaded mods for dependency check: {deps}")
+        logger.info("[ModManager] Current loaded mods for dependency check: %s", deps)
         if not validate_dependencies(metadata, deps):
-            logger.warning(f"[ModManager] Dependencies not satisfied for mod: {mod_id}")
+            logger.warning("[ModManager] Dependencies not satisfied for mod: %s", mod_id)
             self._record_load_failure(
                 mod_id,
                 "dependencies",
@@ -540,14 +546,14 @@ class ModManager:
             )
             return True
         except RECOVERABLE_ERRORS as e:
-            logger.error(f"[ModManager] Failed to load mod {mod_id}: {e}", exc_info=True)
+            logger.error("[ModManager] Failed to load mod %s: %s", mod_id, e, exc_info=True)
             self._record_load_failure(mod_id, "backend", _short_exc_message(e))
             return False
 
     def _load_mod_backend(self, mod_id: str, mod_path: str, metadata: ModMetadata):
         backend_path = os.path.join(mod_path, "backend")
         if not os.path.isdir(backend_path):
-            logger.debug(f"No backend directory for mod: {mod_id}")
+            logger.debug("No backend directory for mod: %s", mod_id)
             return
 
         if backend_path not in sys.path:
@@ -563,7 +569,7 @@ class ModManager:
                         init_fn()
             except RECOVERABLE_ERRORS as e:
                 logger.error(
-                    f"Failed to load backend entry for {mod_id}: {e}",
+                    "Failed to load backend entry for %s: %s", mod_id, e,
                     exc_info=True,
                 )
                 raise
@@ -578,7 +584,7 @@ class ModManager:
             try:
                 instance.cleanup()
             except RECOVERABLE_ERRORS as e:
-                logger.error(f"Error cleaning up mod {mod_id}: {e}")
+                logger.error("Error cleaning up mod %s: %s", mod_id, e)
 
         registry.unregister_mod(mod_id)
         if mod_id in self._loaded_mods:
@@ -591,7 +597,7 @@ class ModManager:
         except RECOVERABLE_ERRORS as e:
             logger.warning("Mod comms cleanup failed for %s: %s", mod_id, e)
 
-        logger.info(f"Mod unloaded: {mod_id}")
+        logger.info("Mod unloaded: %s", mod_id)
         return True
 
     def install_mod_package(
@@ -616,7 +622,7 @@ class ModManager:
             os.makedirs(self.mods_root, exist_ok=True)
 
             self.invalidate_scan_cache()
-            logger.info(f"Installing MOD package: {package_path}")
+            logger.info("Installing MOD package: %s", package_path)
 
             with tempfile.TemporaryDirectory() as temp_dir:
                 try:
@@ -646,12 +652,12 @@ class ModManager:
                     existing_version = existing_metadata.version if existing_metadata else "unknown"
                     new_version = manifest.get("version", "unknown")
                     logger.info(
-                        f"MOD {mod_id} already exists (v{existing_version}), updating to v{new_version}"
+                        "MOD %s already exists (v%s), updating to v%s", mod_id, existing_version, new_version
                     )
                     shutil.rmtree(target_path)
 
                 shutil.copytree(extract_path, target_path)
-                logger.info(f"MOD installed to: {target_path}")
+                logger.info("MOD installed to: %s", target_path)
 
                 if activate:
                     if self.load_mod(mod_id):
@@ -692,7 +698,7 @@ class ModManager:
                     return ok, msg
                 return False, f"MOD {mod_id} 未加载或不存在"
 
-            logger.info(f"Uninstalling MOD: {mod_id}")
+            logger.info("Uninstalling MOD: %s", mod_id)
 
             if mod_id in self._loaded_mods:
                 self.unload_mod(mod_id)
@@ -701,7 +707,7 @@ class ModManager:
                 mod_path = os.path.join(self.mods_root, mod_id)
                 if os.path.exists(mod_path):
                     shutil.rmtree(mod_path)
-                    logger.info(f"MOD files removed: {mod_path}")
+                    logger.info("MOD files removed: %s", mod_path)
 
             return True, f"MOD {mod_id} 卸载成功"
 
@@ -739,7 +745,7 @@ class ModManager:
             current_version = current_metadata.version
             new_version = new_manifest.get("version", "unknown")
 
-            logger.info(f"Updating MOD {mod_id}: v{current_version} -> v{new_version}")
+            logger.info("Updating MOD %s: v%s -> v%s", mod_id, current_version, new_version)
 
             was_loaded = mod_id in self._loaded_mods
 
@@ -757,7 +763,7 @@ class ModManager:
                     )
                     shutil.copytree(extract_path, mod_path)
                 except RECOVERABLE_ERRORS as e:
-                    logger.error(f"Failed to extract package: {e}")
+                    logger.error("Failed to extract package: %s", e)
                     if was_loaded:
                         self.load_mod(mod_id)
                     return False, f"更新失败：{e}", None
@@ -953,7 +959,7 @@ class ModManager:
         mods = self.scan_mods()
         # primary Mod 先加载，便于后续依赖其它 Mod 的声明顺序（当前主要影响日志与排查顺序）
         mods.sort(key=lambda m: (not m.primary, (m.id or "").lower()))
-        logger.info(f"[ModManager] load_all_mods: scanned {len(mods)} mods")
+        logger.info("[ModManager] load_all_mods: scanned %s mods", len(mods))
         loaded = []
 
         for metadata in mods:
@@ -968,12 +974,12 @@ class ModManager:
                     continue
             except RECOVERABLE_ERRORS:
                 pass
-            logger.info(f"[ModManager] Checking dependencies for mod: {metadata.id}")
+            logger.info("[ModManager] Checking dependencies for mod: %s", metadata.id)
             if metadata.dependencies:
                 deps_satisfied = validate_dependencies(metadata, loaded)
                 if not deps_satisfied:
                     logger.warning(
-                        f"[ModManager] Skipping mod {metadata.id} due to unsatisfied dependencies"
+                        "[ModManager] Skipping mod %s due to unsatisfied dependencies", metadata.id
                     )
                     self._record_load_failure(
                         metadata.id,
@@ -984,11 +990,11 @@ class ModManager:
 
             if self.load_mod(metadata.id):
                 loaded.append(metadata.id)
-                logger.info(f"[ModManager] Successfully loaded mod: {metadata.id}")
+                logger.info("[ModManager] Successfully loaded mod: %s", metadata.id)
             else:
-                logger.warning(f"[ModManager] Failed to load mod: {metadata.id}")
+                logger.warning("[ModManager] Failed to load mod: %s", metadata.id)
 
-        logger.info(f"[ModManager] load_all_mods result: {loaded}")
+        logger.info("[ModManager] load_all_mods result: %s", loaded)
         return loaded
 
 

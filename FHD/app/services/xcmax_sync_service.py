@@ -28,7 +28,7 @@ import logging
 import os
 import urllib.error
 import urllib.request
-from typing import Any
+from typing import Any, cast
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -61,7 +61,7 @@ def _read_sync_meta(key: str) -> dict[str, Any]:
     if not row:
         return {}
     try:
-        return json.loads(row[0] or "{}")
+        return cast("dict[str, Any]", json.loads(row[0] or "{}"))
     except (json.JSONDecodeError, TypeError):
         return {}
 

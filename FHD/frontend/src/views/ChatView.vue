@@ -49,6 +49,7 @@
         @confirm-task="confirmTask"
         @cancel-task="cancelTask"
         @refetch-order-number="refetchTaskOrderNumber"
+        @set-custom-order-number="setTaskCustomOrderNumber"
         @shipment-download-click="handleShipmentDownloadClick"
         @start-print="startPrintFromTaskCard"
         @switch-view="emitSwitchView"
@@ -251,6 +252,12 @@ const {
   ttsEnabled,
   setTtsEnabled,
 } = chatViewApi
+
+function setTaskCustomOrderNumber(value: string) {
+  if (currentTask.value) {
+    currentTask.value.customOrderNumber = value
+  }
+}
 
 const messageInput = ref('')
 

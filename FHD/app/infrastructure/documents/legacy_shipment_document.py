@@ -63,7 +63,7 @@ def load_legacy_shipment_document_generator(*, caller_file: str) -> LegacyGenera
         sys.path.insert(0, legacy_dir)
 
     try:
-        from shipment_document import PurchaseUnitInfo, ShipmentDocumentGenerator  # type: ignore
+        from shipment_document import PurchaseUnitInfo, ShipmentDocumentGenerator
 
         return LegacyGeneratorLoadResult(
             ShipmentDocumentGenerator=ShipmentDocumentGenerator,

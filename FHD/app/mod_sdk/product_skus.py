@@ -80,7 +80,7 @@ def normalize_product_sku(raw: str | None) -> ProductSku | None:
         return None
     key = raw.strip().lower()
     if key in ("personal", "enterprise"):
-        return key  # type: ignore[return-value]
+        return key
     return None
 
 

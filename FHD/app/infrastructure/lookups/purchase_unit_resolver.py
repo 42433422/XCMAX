@@ -11,8 +11,8 @@ try:
 
     _HAS_PYPINYIN = True
 except ImportError:
-    Style = None  # type: ignore[assignment]
-    pinyin = None  # type: ignore[assignment]
+    Style = None
+    pinyin = None
     _HAS_PYPINYIN = False
 
 from app.db.models import PurchaseUnit

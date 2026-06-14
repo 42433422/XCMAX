@@ -64,7 +64,7 @@ def _check_ai_service() -> dict[str, Any]:
         if callable(getter):
             try:
                 engines = getter()
-            except RECOVERABLE_ERRORS as exc:  # pragma: no cover - diagnostic only
+            except RECOVERABLE_ERRORS as exc:
                 engines = {"error": str(exc)}
 
         return {
@@ -257,7 +257,7 @@ def capabilities_diagnostics():
         getter = getattr(recognizer, "get_engine_status", None)
         if callable(getter):
             intent_engines = getter()
-    except RECOVERABLE_ERRORS as exc:  # pragma: no cover - diagnostic only
+    except RECOVERABLE_ERRORS as exc:
         intent_engines = {"error": str(exc)}
 
     return JSONResponse(

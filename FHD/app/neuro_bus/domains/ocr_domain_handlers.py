@@ -33,23 +33,23 @@ class OCRServiceDomainHandlers:
 
     async def handle_task_submitted(self, event: NeuroEvent) -> dict[str, Any]:
         """处理 task_submitted 事件"""
-        logger.info(f"[OCRServiceDomain] 处理 task_submitted: {event.payload}")
+        logger.info("[OCRServiceDomain] 处理 task_submitted: %s", event.payload)
         if isinstance(event, OCRTaskSubmittedEvent):
-            logger.info(f"[OCRServiceDomain] Task ID: {event.payload.get('task_id')}")
+            logger.info("[OCRServiceDomain] Task ID: %s", event.payload.get('task_id'))
         return {"success": True, "event_type": "ocr.task_submitted"}
 
     async def handle_task_completed(self, event: NeuroEvent) -> dict[str, Any]:
         """处理 task_completed 事件"""
-        logger.info(f"[OCRServiceDomain] 处理 task_completed: {event.payload}")
+        logger.info("[OCRServiceDomain] 处理 task_completed: %s", event.payload)
         if isinstance(event, OCRTaskCompletedEvent):
-            logger.info(f"[OCRServiceDomain] Result: {event.payload.get('result')}")
+            logger.info("[OCRServiceDomain] Result: %s", event.payload.get('result'))
         return {"success": True, "event_type": "ocr.task_completed"}
 
     async def handle_batch_started(self, event: NeuroEvent) -> dict[str, Any]:
         """处理 batch_started 事件"""
-        logger.info(f"[OCRServiceDomain] 处理 batch_started: {event.payload}")
+        logger.info("[OCRServiceDomain] 处理 batch_started: %s", event.payload)
         if isinstance(event, OCRBatchProcessingCompletedEvent):
-            logger.info(f"[OCRServiceDomain] Batch: {event.payload.get('batch_id')}")
+            logger.info("[OCRServiceDomain] Batch: %s", event.payload.get('batch_id'))
         return {"success": True, "event_type": "ocr.batch_started"}
 
 

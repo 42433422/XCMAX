@@ -5,7 +5,7 @@
 """
 
 import logging
-from typing import Any
+from typing import Any, cast
 
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
 
@@ -285,7 +285,7 @@ class IntentConfirmationService(NeuroEventPublisherMixin):
             if resolved:
                 merged["unit_name"] = resolved.unit_name
 
-        return merged
+        return cast("dict[str, Any]", merged)
 
 
 _confirmation_service: IntentConfirmationService | None = None

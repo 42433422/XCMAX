@@ -9,7 +9,7 @@
 """
 
 import logging
-from typing import Any, TypeVar
+from typing import Any, TypeVar, cast
 
 from app.db.session import get_db
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
@@ -152,7 +152,7 @@ class UnifiedQueryService(NeuroEventPublisherMixin):
                         else:
                             query = query.order_by(attr.asc())
 
-            return query.offset(offset).limit(limit).all()
+            return cast("list[T]", query.offset(offset).limit(limit).all())
 
     @staticmethod
     def get_first(
@@ -176,7 +176,7 @@ class UnifiedQueryService(NeuroEventPublisherMixin):
                 if condition is not None:
                     query = query.filter(condition)
 
-            return query.first()
+            return cast("T | None", query.first())
 
     @staticmethod
     def exists(
@@ -224,7 +224,7 @@ class UnifiedQueryService(NeuroEventPublisherMixin):
                 if condition is not None:
                     query = query.filter(condition)
 
-            return query.count()
+            return cast("int", query.count())
 
     @staticmethod
     def delete(
@@ -253,7 +253,7 @@ class UnifiedQueryService(NeuroEventPublisherMixin):
                 query.delete(synchronize_session=False)
                 db.commit()
 
-            return count
+            return cast("int", count)
 
 
 # 全局单例

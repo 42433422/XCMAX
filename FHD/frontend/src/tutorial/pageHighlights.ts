@@ -287,9 +287,11 @@ export const HOST_PAGE_HIGHLIGHTS: Record<string, TutorialPageHighlight[]> = {
     },
     {
       idSuffix: 'launcher',
-      title: 'AI生态 · 启动器',
-      description: '进入子应用后，顶栏一般可返回本列表',
-      targetSelector: '#view-ai-ecosystem .launcher-grid',
+      title: 'AI生态 · 员工商店',
+      description:
+        '点击「员工商店」进入能力库：办公员工包等基础能力在此安装，亦用于进阶教程演示表格/文档类 AI 员工。',
+      targetSelector: '[data-tour="ecosystem-launcher-modstore"]',
+      highlightSelector: '[data-tour="ecosystem-launcher-modstore"]',
     },
   ],
 }

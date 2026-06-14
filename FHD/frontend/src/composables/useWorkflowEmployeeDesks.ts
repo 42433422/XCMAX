@@ -13,6 +13,7 @@ export type WorkflowEmployeeDeskRow = {
   panelTitle: string
   shortName: string
   enabled: boolean
+  hostModId?: string
   snapshot?: WorkflowEmployeeSpaceSnapshot
   session?: WorkflowEmployeeSession
 }
@@ -72,6 +73,7 @@ export function useWorkflowEmployeeDesks() {
 
   const desks = computed<WorkflowEmployeeDeskRow[]>(() => {
     return employeeIds.value.map((empId) => {
+      const entry = registryEntries.value.find((e) => e.id === empId)
       const panelTitle = resolvePanelTitle(empId)
       const en = workflowEnabled.value[empId] === true
       const snap = snapshots.value[empId]
@@ -81,6 +83,7 @@ export function useWorkflowEmployeeDesks() {
         panelTitle,
         shortName: snap?.shortName || shortNameFromPanelTitle(panelTitle),
         enabled: en,
+        hostModId: entry?.hostModId,
         snapshot: snap,
         session: sess,
       }

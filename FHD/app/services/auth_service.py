@@ -2,7 +2,7 @@
 
 import logging
 import uuid
-from typing import Any
+from typing import Any, cast
 
 from app.db.models import Permission, Role, User
 from app.db.session import get_db
@@ -91,10 +91,10 @@ class AuthService(NeuroEventPublisherMixin):
     def logout(self, session_id: str) -> bool:
         result = self.session_service.delete_session(session_id)
         audit_logger.audit_log("logout", None, "", {"session_id": session_id, "success": result})
-        return result
+        return cast("bool", result)
 
     def get_current_user(self, session_id: str) -> User | None:
-        return self.session_service.validate_session(session_id)
+        return cast("User | None", self.session_service.validate_session(session_id))
 
     def get_user_permissions(self, user: User) -> list:
         with get_db() as db:

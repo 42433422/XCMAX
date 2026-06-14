@@ -53,21 +53,21 @@ function fallbackFinal(): string {
   return props.busy ? YUANGONG_FALLBACK_STAFF_BUSY : YUANGONG_FALLBACK_STAFF
 }
 
-const sceneSrc = ref(primaryPng())
+const sceneSrc = ref(primarySvg())
 
 watch(
   () => [props.enabled, props.busy] as const,
   () => {
-    sceneSrc.value = primaryPng()
+    sceneSrc.value = primarySvg()
   }
 )
 
 function onSceneError() {
-  const png = primaryPng()
   const svg = primarySvg()
+  const png = primaryPng()
   const last = fallbackFinal()
-  if (sceneSrc.value === png) sceneSrc.value = svg
-  else if (sceneSrc.value === svg) sceneSrc.value = last
+  if (sceneSrc.value === svg) sceneSrc.value = png
+  else if (sceneSrc.value === png) sceneSrc.value = last
 }
 </script>
 

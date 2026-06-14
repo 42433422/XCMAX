@@ -48,7 +48,7 @@ def get_optimizer_components():
             components["async_manager"] = optimizer.async_task_manager
 
     except RECOVERABLE_ERRORS as e:
-        logger.debug(f"优化组件加载失败: {e}")
+        logger.debug("优化组件加载失败: %s", e)
 
     return components
 
@@ -78,7 +78,7 @@ class OptimizedServiceMixin:
         self._deduplicator = components["deduplicator"]
         self._async_manager = components["async_manager"]
 
-        logger.debug(f"服务 {self.__class__.__name__} 优化组件已初始化")
+        logger.debug("服务 %s 优化组件已初始化", self.__class__.__name__)
 
 
 def cached(
@@ -140,7 +140,7 @@ def cached(
                 return result
 
             except RECOVERABLE_ERRORS as e:
-                logger.warning(f"缓存操作失败 [{func.__name__}]: {e}")
+                logger.warning("缓存操作失败 [%s]: %s", func.__name__, e)
                 return func(*args, **kwargs)
 
         wrapper.invalidate_cache = lambda *a, **kw: (
@@ -210,7 +210,7 @@ def rate_limited(
                 return func(*args, **kwargs)
 
             except RECOVERABLE_ERRORS as e:
-                logger.warning(f"限流检查失败 [{func.__name__}]: {e}")
+                logger.warning("限流检查失败 [%s]: %s", func.__name__, e)
                 return func(*args, **kwargs)
 
         return wrapper
@@ -255,7 +255,7 @@ def monitored(name: str | None = None, slow_threshold_ms: float = 1000.0):
 
                 if duration_ms > slow_threshold_ms:
                     logger.warning(
-                        f"慢调用检测 [{metric_name}]: {duration_ms:.2f}ms > {slow_threshold_ms:.0f}ms"
+                        f"慢调用检测 [{metric_name}]: {duration_ms:.2f}ms > {slow_threshold_ms:.0f}ms"  # noqa: G004
                     )
 
                 return result
@@ -298,7 +298,7 @@ def deduplicated(window_seconds: int = 30, by_content: bool = True):
             is_dup, result = deduplicator.deduplicate(func, *args, **kwargs)
 
             if is_dup:
-                logger.debug(f"去重命中 [{func.__name__}]")
+                logger.debug("去重命中 [%s]", func.__name__)
 
             return result
 
@@ -413,13 +413,13 @@ def circuit_breaker(
             if state["is_open"]:
                 if current_time - state["last_failure_time"] < recovery_timeout:
                     if fallback_func:
-                        logger.info(f"熔断降级 [{func.__name__}]")
+                        logger.info("熔断降级 [%s]", func.__name__)
                         return fallback_func(*args, **kwargs)
                     raise Exception(f"服务熔断中，{recovery_timeout}s后重试")
                 else:
                     state["is_open"] = False
                     state["failures"] = 0
-                    logger.info(f"熔断恢复 [{func.__name__}]")
+                    logger.info("熔断恢复 [%s]", func.__name__)
 
             try:
                 result = func(*args, **kwargs)
@@ -432,7 +432,7 @@ def circuit_breaker(
 
                 if state["failures"] >= failure_threshold:
                     state["is_open"] = True
-                    logger.error(f"熔断触发 [{func.__name__}]: 连续失败 {state['failures']} 次")
+                    logger.error("熔断触发 [%s]: 连续失败 %s 次", func.__name__, state['failures'])
 
                 raise
 
@@ -490,7 +490,7 @@ def retry(
                         time.sleep(current_delay)
                         current_delay *= backoff_factor
                     else:
-                        logger.error(f"重试耗尽 [{func.__name__}]: {e}")
+                        logger.error("重试耗尽 [%s]: %s", func.__name__, e)
 
             raise last_exception
 

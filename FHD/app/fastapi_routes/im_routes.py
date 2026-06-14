@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 
 from app.application.im_app_service import ImApplicationService, ensure_im_tables
 from app.config import Config
-from app.db import SessionLocal, engine
+from app.db import HostSessionLocal, get_host_engine
 from app.infrastructure.auth.dependencies import (
     CurrentUser,
     require_identified_user,
@@ -28,7 +28,7 @@ def _ensure_schema() -> None:
     global _schema_ready
     if _schema_ready:
         return
-    ensure_im_tables(engine)
+    ensure_im_tables(get_host_engine())
     _schema_ready = True
 
 
@@ -82,7 +82,7 @@ async def _notify_offline_im_members(member_ids: list[int], sender_id: int, body
 def im_list_conversations(user: CurrentUser = Depends(require_identified_user)):
     _ensure_schema()
     uid = _uid(user)
-    db = SessionLocal()
+    db = HostSessionLocal()
     try:
         items = ImApplicationService(db).list_conversations(uid)
         return {"success": True, "user_id": uid, "conversations": items}
@@ -100,7 +100,7 @@ def im_list_contacts(
 ):
     _ensure_schema()
     uid = _uid(user)
-    db = SessionLocal()
+    db = HostSessionLocal()
     try:
         contacts = ImApplicationService(db).list_contacts(uid)
         keyword = (q or "").strip().lower()
@@ -123,7 +123,7 @@ def im_list_contacts(
 def im_unread_total(user: CurrentUser = Depends(require_identified_user)):
     _ensure_schema()
     uid = _uid(user)
-    db = SessionLocal()
+    db = HostSessionLocal()
     try:
         items = ImApplicationService(db).list_conversations(uid)
         total = sum(int(c.get("unread_count") or 0) for c in items)
@@ -145,7 +145,7 @@ def im_create_direct(
     peer = int(body.get("peer_user_id") or 0)
     if peer <= 0:
         return JSONResponse({"success": False, "message": "peer_user_id 无效"}, status_code=400)
-    db = SessionLocal()
+    db = HostSessionLocal()
     try:
         conv = ImApplicationService(db).get_or_create_direct(uid, peer)
         return {"success": True, "conversation": conv}
@@ -167,7 +167,7 @@ def im_list_messages(
 ):
     _ensure_schema()
     uid = _uid(user)
-    db = SessionLocal()
+    db = HostSessionLocal()
     try:
         messages = ImApplicationService(db).list_messages(
             conversation_id, uid, limit=limit, before_id=before_id
@@ -190,7 +190,7 @@ async def im_send_message(
 ):
     _ensure_schema()
     uid = _uid(user)
-    db = SessionLocal()
+    db = HostSessionLocal()
     try:
         result = ImApplicationService(db).send_message(
             conversation_id, uid, str(body.get("body") or "")
@@ -233,7 +233,7 @@ async def im_mark_read(
     _ensure_schema()
     uid = _uid(user)
     last_id = int(body.get("last_message_id") or 0)
-    db = SessionLocal()
+    db = HostSessionLocal()
     try:
         result = ImApplicationService(db).mark_read(conversation_id, uid, last_id)
         read_payload = {

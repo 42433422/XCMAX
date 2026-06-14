@@ -111,7 +111,7 @@ class AsyncTaskManager:
     def register_task(self, config: AsyncTaskConfig) -> None:
         """注册任务配置"""
         self._task_configs[config.name] = config
-        logger.info(f"已注册异步任务: {config.name}")
+        logger.info("已注册异步任务: %s", config.name)
 
     def submit(
         self,
@@ -176,7 +176,7 @@ class AsyncTaskManager:
         self, task_name: str, args: tuple, kwargs: dict, result: TaskResult, config: AsyncTaskConfig
     ) -> TaskResult:
         """同步执行任务（用于测试/调试）"""
-        logger.info(f"[同步执行] 任务 {task_name} (ID: {result.task_id})")
+        logger.info("[同步执行] 任务 %s (ID: %s)", task_name, result.task_id)
         result.status = TaskStatus.RUNNING
         result.started_at = time.time()
 
@@ -195,13 +195,13 @@ class AsyncTaskManager:
             if config.on_success:
                 config.on_success(result)
 
-            logger.info(f"[同步完成] 任务 {result.task_id}: {result.duration_ms:.2f}ms")
+            logger.info(f"[同步完成] 任务 {result.task_id}: {result.duration_ms:.2f}ms")  # noqa: G004
 
         except RECOVERABLE_ERRORS as e:
             result.status = TaskStatus.FAILURE
             result.error = str(e)
             result.completed_at = time.time()
-            logger.error(f"[同步失败] 任务 {task_name}: {e}")
+            logger.error("[同步失败] 任务 %s: %s", task_name, e)
 
             if config.on_failure:
                 config.on_failure(result)
@@ -236,7 +236,7 @@ class AsyncTaskManager:
             logger.warning("Celery 不可用，回退到同步执行")
             return self._execute_sync(task_name, args, kwargs, result, config)
 
-        logger.info(f"[异步提交] 任务 {task_name} → 队列: {config.queue}")
+        logger.info("[异步提交] 任务 %s → 队列: %s", task_name, config.queue)
 
         try:
             celery_result = celery_app.send_task(
@@ -255,10 +255,10 @@ class AsyncTaskManager:
             result.metadata["celery_task_id"] = celery_result.id
             result.metadata["queue"] = config.queue
 
-            logger.info(f"任务已提交: {result.task_id} (Celery ID: {celery_result.id})")
+            logger.info("任务已提交: %s (Celery ID: %s)", result.task_id, celery_result.id)
 
         except RECOVERABLE_ERRORS as e:
-            logger.error(f"任务提交失败 [{task_name}]: {e}")
+            logger.error("任务提交失败 [%s]: %s", task_name, e)
             result.status = TaskStatus.FAILURE
             result.error = f"任务提交失败: {str(e)}"
 
@@ -312,7 +312,7 @@ class AsyncTaskManager:
                 try:
                     callback(current, total or 100)
                 except RECOVERABLE_ERRORS as e:
-                    logger.warning(f"进度回调失败: {e}")
+                    logger.warning("进度回调失败: %s", e)
 
     def cancel(self, task_id: str) -> bool:
         """取消任务"""
@@ -336,7 +336,7 @@ class AsyncTaskManager:
 
         cleaned = len(old_keys)
         if cleaned > 0:
-            logger.info(f"清理了 {cleaned} 个旧任务记录")
+            logger.info("清理了 %s 个旧任务记录", cleaned)
         return cleaned
 
     @property
@@ -473,7 +473,7 @@ def background_task(
                 return {"status": "threaded", "task_name": task_name}
 
             except RECOVERABLE_ERRORS as e:
-                logger.error(f"后台任务提交失败 [{task_name}]: {e}")
+                logger.error("后台任务提交失败 [%s]: %s", task_name, e)
                 raise
 
         return wrapper
@@ -509,13 +509,13 @@ def retry_on_failure(
                     last_exception = e
                     if attempt < max_retries:
                         logger.warning(
-                            f"重试 [{func.__name__}] 第 {attempt + 1}/{max_retries} 次 "
-                            f"(等待 {current_delay}s): {e}"
+                            "重试 [%s] 第 %s/%s 次 "
+                            f"(等待 %ss): %s", func.__name__, attempt + 1, max_retries, current_delay, e
                         )
                         time.sleep(current_delay)
                         current_delay *= backoff_factor
                     else:
-                        logger.error(f"重试耗尽 [{func.__name__}]: {e}")
+                        logger.error("重试耗尽 [%s]: %s", func.__name__, e)
 
             raise last_exception
 

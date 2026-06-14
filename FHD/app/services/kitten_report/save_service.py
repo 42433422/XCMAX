@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import os
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -100,7 +100,7 @@ class AnalysisSaveService(NeuroEventPublisherMixin):
                     data = json.load(f)
 
                 if data.get("id") == analysis_id:
-                    return data
+                    return cast("dict[str, Any] | None", data)
 
             return None
         except RECOVERABLE_ERRORS as e:

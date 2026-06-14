@@ -1,7 +1,7 @@
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -26,12 +26,12 @@ class ConversationContext:
 
 class ContextMixin:
     def get_context(self, user_id: str) -> ConversationContext | None:
-        return self.contexts.get(user_id)
+        return cast("ConversationContext | None", self.contexts.get(user_id))
 
     def create_context(self, user_id: str) -> ConversationContext:
         context = ConversationContext(user_id=user_id)
         self.contexts[user_id] = context
-        logger.info(f"为用户 {user_id} 创建新的对话上下文")
+        logger.info("为用户 %s 创建新的对话上下文", user_id)
         return context
 
     def update_context(self, user_id: str, **kwargs) -> ConversationContext | None:
@@ -44,7 +44,7 @@ class ContextMixin:
                 setattr(context, key, value)
 
         context.updated_at = time.time()
-        return context
+        return cast("ConversationContext | None", context)
 
     def set_pending_confirmation(self, user_id: str, confirmation_data: dict[str, Any]) -> bool:
         context = self.contexts.get(user_id)
@@ -201,12 +201,12 @@ class ContextMixin:
     def clear_context(self, user_id: str) -> bool:
         if user_id in self.contexts:
             del self.contexts[user_id]
-            logger.info(f"已清除用户 {user_id} 的对话上下文")
+            logger.info("已清除用户 %s 的对话上下文", user_id)
             return True
         return False
 
     def get_all_contexts(self) -> dict[str, ConversationContext]:
-        return self.contexts.copy()
+        return cast("dict[str, ConversationContext]", self.contexts.copy())
 
     def cleanup_old_contexts(self, max_age_seconds: int = 3600) -> int:
         current_time = time.time()
@@ -220,6 +220,6 @@ class ContextMixin:
             del self.contexts[user_id]
 
         if to_remove:
-            logger.info(f"清理了 {len(to_remove)} 个过期的对话上下文")
+            logger.info("清理了 %s 个过期的对话上下文", len(to_remove))
 
         return len(to_remove)

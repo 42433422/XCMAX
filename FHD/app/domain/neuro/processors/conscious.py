@@ -107,7 +107,7 @@ class ConsciousProcessor:
     ):
         """注册处理器"""
         self._handlers[event_type] = handler
-        logger.debug(f"Registered conscious handler for {event_type}")
+        logger.debug("Registered conscious handler for %s", event_type)
 
     async def process(self, event: NeuroEvent) -> ProcessingResult:
         """
@@ -229,7 +229,7 @@ class ConsciousProcessor:
             self._error_count += 1
             self._processed_count += 1
 
-            logger.exception(f"Conscious processing error: {e}")
+            logger.exception("Conscious processing error: %s", e)
 
             return ProcessingResult(
                 success=False,

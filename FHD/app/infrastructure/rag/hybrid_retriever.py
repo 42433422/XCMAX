@@ -11,7 +11,7 @@ import re
 from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -211,4 +211,4 @@ class HybridRetriever:
         nb = sum(x * x for x in b) ** 0.5
         if na == 0 or nb == 0:
             return 0.0
-        return dot / (na * nb)
+        return cast("float", dot / (na * nb))

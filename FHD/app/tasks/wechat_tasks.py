@@ -5,7 +5,7 @@
 """
 
 import logging
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import text
 
@@ -34,7 +34,7 @@ def process_wechat_message(self, message_data: dict[str, Any]) -> bool:
         是否处理成功
     """
     try:
-        logger.info(f"开始处理微信消息：{message_data.get('message_id')}")
+        logger.info("开始处理微信消息：%s", message_data.get('message_id'))
 
         # 调用服务层处理消息（基于 task_id）
         from app.services import get_wechat_task_service
@@ -43,16 +43,16 @@ def process_wechat_message(self, message_data: dict[str, Any]) -> bool:
         task_id = message_data.get("id")
         result = service.process_message(task_id)
 
-        logger.info(f"微信消息处理完成：{result}")
-        return result.get("success", False)
+        logger.info("微信消息处理完成：%s", result)
+        return cast("bool", result.get("success", False))
 
     except RECOVERABLE_ERRORS as e:
-        logger.exception(f"处理微信消息失败：{e}")
+        logger.exception("处理微信消息失败：%s", e)
         # 重试逻辑
         try:
             self.retry(exc=e, countdown=60)
         except self.MaxRetriesExceededError:
-            logger.error(f"微信消息处理达到最大重试次数：{message_data.get('message_id')}")
+            logger.error("微信消息处理达到最大重试次数：%s", message_data.get('message_id'))
             return False
 
 
@@ -69,7 +69,7 @@ def scan_wechat_messages(self, contact_id: int | None = None, limit: int = 20) -
         发现的新消息数量
     """
     try:
-        logger.info(f"开始扫描微信消息，联系人 ID: {contact_id}, 限制：{limit}")
+        logger.info("开始扫描微信消息，联系人 ID: %s, 限制：%s", contact_id, limit)
 
         from app.services import get_wechat_task_service
 
@@ -84,11 +84,11 @@ def scan_wechat_messages(self, contact_id: int | None = None, limit: int = 20) -
                 logger.warning("派发微信消息处理任务失败 task_id=%s: %s", t.get("id"), e)
 
         new_count = len(new_tasks)
-        logger.info(f"扫描完成，发现 {new_count} 条新消息")
+        logger.info("扫描完成，发现 %s 条新消息", new_count)
         return new_count
 
     except RECOVERABLE_ERRORS as e:
-        logger.exception(f"扫描微信消息失败：{e}")
+        logger.exception("扫描微信消息失败：%s", e)
         try:
             self.retry(exc=e, countdown=300)
         except self.MaxRetriesExceededError:
@@ -108,7 +108,7 @@ def cleanup_old_tasks(days: int = 30) -> int:
         清理的任务数量
     """
     try:
-        logger.info(f"开始清理 {days} 天前的旧任务")
+        logger.info("开始清理 %s 天前的旧任务", days)
         with SessionLocal() as db:
             result = db.execute(
                 text(
@@ -123,11 +123,11 @@ def cleanup_old_tasks(days: int = 30) -> int:
             db.commit()
             cleaned_count = int(result.rowcount or 0)
 
-        logger.info(f"清理完成，共清理 {cleaned_count} 个任务")
+        logger.info("清理完成，共清理 %s 个任务", cleaned_count)
         return cleaned_count
 
     except RECOVERABLE_ERRORS as e:
-        logger.exception(f"清理旧任务失败：{e}")
+        logger.exception("清理旧任务失败：%s", e)
         return 0
 
 

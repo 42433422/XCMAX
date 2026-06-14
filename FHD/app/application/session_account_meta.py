@@ -6,7 +6,7 @@ import logging
 from typing import Any, Literal
 
 from app.db.models.user import Session as UserSession
-from app.db.session import get_db
+from app.db.session import get_host_db
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -18,8 +18,8 @@ VALID_ACCOUNT_KINDS: frozenset[str] = frozenset({"personal", "enterprise", "admi
 def normalize_account_kind(raw: Any, *, default: str = "enterprise") -> AccountKind:
     v = str(raw or default).strip().lower()
     if v in VALID_ACCOUNT_KINDS:
-        return v  # type: ignore[return-value]
-    return default  # type: ignore[return-value]
+        return v
+    return default
 
 
 def extract_market_user_blob(market_result: dict[str, Any] | None) -> dict[str, Any]:
@@ -93,7 +93,7 @@ def persist_session_account_meta(
     if not sid:
         return
     try:
-        with get_db() as db:
+        with get_host_db() as db:
             row = db.query(UserSession).filter(UserSession.session_id == sid).first()
             if row is None:
                 return
@@ -121,7 +121,7 @@ def load_session_account_meta(session_id: str) -> dict[str, Any] | None:
     if not sid:
         return None
     try:
-        with get_db() as db:
+        with get_host_db() as db:
             row = db.query(UserSession).filter(UserSession.session_id == sid).first()
             if row is None:
                 return None
@@ -190,7 +190,7 @@ def enrich_session_meta_with_tenant(session_id: str, user: Any) -> dict[str, Any
             try:
                 from app.db.models.tenant import Tenant
 
-                with get_db() as db:
+                with get_host_db() as db:
                     tenant = db.query(Tenant).filter(Tenant.id == int(tid)).first()
                     if tenant and (tenant.name or "").strip():
                         meta["tenant_name"] = str(tenant.name).strip()
@@ -201,7 +201,7 @@ def enrich_session_meta_with_tenant(session_id: str, user: Any) -> dict[str, Any
 
         if sid:
             try:
-                with get_db() as db:
+                with get_host_db() as db:
                     row = db.query(UserSession).filter(UserSession.session_id == sid).first()
                     if row is not None and getattr(row, "tenant_id", None) != int(tid):
                         row.tenant_id = int(tid)
@@ -217,7 +217,7 @@ def clear_impersonation(session_id: str) -> None:
     if not sid:
         return
     try:
-        with get_db() as db:
+        with get_host_db() as db:
             row = db.query(UserSession).filter(UserSession.session_id == sid).first()
             if row is None:
                 return

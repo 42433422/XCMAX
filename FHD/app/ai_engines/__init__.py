@@ -12,7 +12,7 @@ AI 引擎层
 try:
     from app.ai_engines.bert import BertIntentClassifier
 except ModuleNotFoundError:
-    BertIntentClassifier = None  # type: ignore[misc, assignment]
+    BertIntentClassifier = None
 
 __all__ = [
     "BertIntentClassifier",

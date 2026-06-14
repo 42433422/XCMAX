@@ -113,7 +113,7 @@ class CustomerApplicationService:
                 session.close()
 
         except RECOVERABLE_ERRORS as e:
-            logger.exception(f"获取客户列表失败: {e}")
+            logger.exception("获取客户列表失败: %s", e)
             return {"success": False, "message": str(e), "data": [], "total": 0}
 
     def get_by_id(self, customer_id: int) -> dict[str, Any]:
@@ -148,7 +148,7 @@ class CustomerApplicationService:
                 session.close()
 
         except RECOVERABLE_ERRORS as e:
-            logger.exception(f"获取客户失败: {e}")
+            logger.exception("获取客户失败: %s", e)
             return {"success": False, "message": str(e), "data": None}
 
     def create(self, data: dict[str, Any]) -> dict[str, Any]:
@@ -199,7 +199,7 @@ class CustomerApplicationService:
                 session.close()
 
         except RECOVERABLE_ERRORS as e:
-            logger.exception(f"创建客户失败: {e}")
+            logger.exception("创建客户失败: %s", e)
             return {"success": False, "message": str(e)}
 
     def update(self, customer_id: int, data: dict[str, Any]) -> dict[str, Any]:
@@ -258,7 +258,7 @@ class CustomerApplicationService:
                 session.close()
 
         except RECOVERABLE_ERRORS as e:
-            logger.exception(f"更新客户失败: {e}")
+            logger.exception("更新客户失败: %s", e)
             return {"success": False, "message": str(e)}
 
     def _check_shipment_associations(self, unit_name: str) -> dict[str, Any]:
@@ -307,7 +307,7 @@ class CustomerApplicationService:
                     "sample_records": sample_records,
                 }
         except RECOVERABLE_ERRORS as e:
-            logger.warning(f"检查发货记录关联失败: {e}")
+            logger.warning("检查发货记录关联失败: %s", e)
             return {
                 "has_associations": False,
                 "shipment_count": 0,
@@ -369,7 +369,7 @@ class CustomerApplicationService:
                 session.close()
 
         except RECOVERABLE_ERRORS as e:
-            logger.exception(f"删除客户失败: {e}")
+            logger.exception("删除客户失败: %s", e)
             return {"success": False, "message": str(e), "deleted_count": 0}
 
     def batch_delete(self, ids: list[int], force: bool = False) -> dict[str, Any]:
@@ -430,7 +430,7 @@ class CustomerApplicationService:
                 session.close()
 
         except RECOVERABLE_ERRORS as e:
-            logger.exception(f"批量删除失败: {e}")
+            logger.exception("批量删除失败: %s", e)
             return {"success": False, "message": str(e), "deleted_count": 0}
 
     def import_data(
@@ -531,7 +531,7 @@ class CustomerApplicationService:
                 session.close()
 
         except RECOVERABLE_ERRORS as e:
-            logger.exception(f"导入客户数据失败: {e}")
+            logger.exception("导入客户数据失败: %s", e)
             return {
                 "success": False,
                 "imported": 0,
@@ -548,7 +548,7 @@ class CustomerApplicationService:
             with sqlite_write_guard():
                 return self._import_from_excel_locked(file)
         except RECOVERABLE_ERRORS as e:
-            logger.exception(f"导入客户数据失败: {e}")
+            logger.exception("导入客户数据失败: %s", e)
             return {
                 "success": False,
                 "imported": 0,
@@ -618,7 +618,7 @@ class CustomerApplicationService:
                 session.close()
 
         except RECOVERABLE_ERRORS as e:
-            logger.exception(f"导入失败: {e}")
+            logger.exception("导入失败: %s", e)
             return {"success": False, "message": str(e), "updated": 0, "inserted": 0, "skipped": 0}
 
     def export_to_excel(
@@ -725,7 +725,7 @@ class CustomerApplicationService:
                 session.close()
 
         except RECOVERABLE_ERRORS as e:
-            logger.exception(f"导出失败: {e}")
+            logger.exception("导出失败: %s", e)
             return {"success": False, "message": str(e)}
 
     def get_purchase_unit_by_name(self, name: str) -> PurchaseUnit | None:
@@ -760,7 +760,7 @@ class CustomerApplicationService:
                 session.close()
 
         except RECOVERABLE_ERRORS as e:
-            logger.exception(f"查询购买单位失败: {e}")
+            logger.exception("查询购买单位失败: %s", e)
             return None
 
     def match_purchase_unit(self, input_name: str) -> PurchaseUnit | None:
@@ -816,7 +816,7 @@ class CustomerApplicationService:
                 session.close()
 
         except RECOVERABLE_ERRORS as e:
-            logger.exception(f"匹配购买单位失败：{e}")
+            logger.exception("匹配购买单位失败：%s", e)
             return None
 
 

@@ -999,7 +999,7 @@ export function useKittenAnalyzer() {
         const XLSX = await loadXlsx()
         const workbook = buildReportWorkbook(XLSX)
         const workbookArray = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' })
-        const blob = new Blob([workbookArray], {
+        const blob = new Blob([workbookArray as unknown as BlobPart], {
           type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         })
         const fileName = `智慧分析报告_${formatExportTimestamp()}.xlsx`

@@ -129,9 +129,9 @@ class UserMemoryStore:
                     data = json.load(f)
                     for user_id, memory_data in data.items():
                         self._memory_cache[user_id] = UserMemory.from_dict(memory_data)
-                logger.info(f"从 {JSON_MEMORY_PATH} 加载了 {len(self._memory_cache)} 个用户记忆")
+                logger.info("从 %s 加载了 %s 个用户记忆", JSON_MEMORY_PATH, len(self._memory_cache))
             except RECOVERABLE_ERRORS as e:
-                logger.error(f"加载用户记忆失败: {e}")
+                logger.error("加载用户记忆失败: %s", e)
                 self._memory_cache = {}
 
     def _save_all_memories(self) -> None:
@@ -144,9 +144,9 @@ class UserMemoryStore:
             data = {user_id: memory.to_dict() for user_id, memory in self._memory_cache.items()}
             with open(JSON_MEMORY_PATH, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
-            logger.debug(f"已保存 {len(self._memory_cache)} 个用户记忆到 {JSON_MEMORY_PATH}")
+            logger.debug("已保存 %s 个用户记忆到 %s", len(self._memory_cache), JSON_MEMORY_PATH)
         except RECOVERABLE_ERRORS as e:
-            logger.error(f"保存用户记忆失败: {e}")
+            logger.error("保存用户记忆失败: %s", e)
 
     def get_memory(self, user_id: str) -> UserMemory | None:
         """获取用户记忆"""
@@ -218,7 +218,7 @@ class UserMemoryService(NeuroEventPublisherMixin):
         }
 
         self._store.save_memory(user_id, memory)
-        logger.debug(f"用户 {user_id} 偏好已更新: {key} = {value}")
+        logger.debug("用户 %s 偏好已更新: %s = %s", user_id, key, value)
 
     def get_preference(self, user_id: str, key: str, default: Any = None) -> Any:
         """
@@ -292,7 +292,7 @@ class UserMemoryService(NeuroEventPublisherMixin):
         self._save_context_summary(memory, intent, slots, message)
 
         self._store.save_memory(user_id, memory)
-        logger.debug(f"用户 {user_id} 操作已记录: intent={intent}, slots={slots}")
+        logger.debug("用户 %s 操作已记录: intent=%s, slots=%s", user_id, intent, slots)
 
     def _make_pattern_key(self, intent: str, slots: dict[str, Any]) -> str:
         """生成模式唯一键"""
@@ -446,7 +446,7 @@ class UserMemoryService(NeuroEventPublisherMixin):
 
         self._store.save_memory(user_id, memory)
         logger.debug(
-            f"用户 {user_id} 反馈已记录: feedback={feedback}, recognized={recognized_intent}"
+            "用户 %s 反馈已记录: feedback=%s, recognized=%s", user_id, feedback, recognized_intent
         )
 
     def _adjust_pattern_weights(
@@ -483,8 +483,8 @@ class UserMemoryService(NeuroEventPublisherMixin):
         if not memory:
             return {"total": 0, "confirmed": 0, "negated": 0, "corrected": 0}
 
-        feedback_counts = defaultdict(int)
-        intent_error_rates = defaultdict(lambda: {"total": 0, "errors": 0})
+        feedback_counts: object = defaultdict(int)
+        intent_error_rates: object = defaultdict(lambda: {"total": 0, "errors": 0})
 
         for record in memory.feedback_history:
             fb_type = record.get("user_feedback", "unknown")
@@ -537,7 +537,7 @@ class UserMemoryService(NeuroEventPublisherMixin):
 
     def _analyze_action_sequence(self, memory: UserMemory) -> list[dict[str, Any]]:
         """分析操作序列"""
-        sequences = defaultdict(lambda: {"count": 0, "first_action": ""})
+        sequences: object = defaultdict(lambda: {"count": 0, "first_action": ""})
 
         for i in range(len(memory.historical_contexts) - 1):
             current = memory.historical_contexts[i]

@@ -113,7 +113,7 @@ class DeadLetterQueue:
         }
 
         logger.info(
-            f"[DeadLetterQueue] 初始化完成 (max_size={max_size}, retention={retention_hours}h)"
+            "[DeadLetterQueue] 初始化完成 (max_size=%s, retention=%sh)", max_size, retention_hours
         )
 
     # ========== 核心操作 ==========
@@ -159,8 +159,8 @@ class DeadLetterQueue:
         self._stats["total_entries"] += 1
 
         logger.error(
-            f"[DeadLetterQueue] 事件进入死信队列: {event.event_type} "
-            f"(reason={reason.value}, entry_id={entry_id}, retries={retry_count})"
+            "[DeadLetterQueue] 事件进入死信队列: %s "
+            f"(reason=%s, entry_id=%s, retries=%s)", event.event_type, reason.value, entry_id, retry_count
         )
 
         # 触发告警
@@ -188,11 +188,11 @@ class DeadLetterQueue:
         """
         entry = self._entries.get(entry_id)
         if not entry:
-            logger.warning(f"[DeadLetterQueue] 重播失败：找不到条目 {entry_id}")
+            logger.warning("[DeadLetterQueue] 重播失败：找不到条目 %s", entry_id)
             return False
 
         logger.info(
-            f"[DeadLetterQueue] 重播事件: {entry.original_event.event_type} (entry_id={entry_id})"
+            "[DeadLetterQueue] 重播事件: %s (entry_id=%s)", entry.original_event.event_type, entry_id
         )
 
         # 触发重播回调
@@ -200,7 +200,7 @@ class DeadLetterQueue:
             try:
                 callback(entry.original_event)
             except RECOVERABLE_ERRORS as e:
-                logger.error(f"[DeadLetterQueue] 重播回调失败: {e}")
+                logger.error("[DeadLetterQueue] 重播回调失败: %s", e)
 
         # 更新统计
         self._stats["replayed"] += 1
@@ -241,7 +241,7 @@ class DeadLetterQueue:
             if self.replay(entry_id):
                 count += 1
 
-        logger.info(f"[DeadLetterQueue] 批量重播完成: {count}/{len(to_replay)} 个事件")
+        logger.info("[DeadLetterQueue] 批量重播完成: %s/%s 个事件", count, len(to_replay))
         return count
 
     # ========== 管理操作 ==========
@@ -257,7 +257,7 @@ class DeadLetterQueue:
             return False
 
         logger.info(
-            f"[DeadLetterQueue] 手动解决: {entry_id} (resolution={resolution}, by={resolved_by})"
+            "[DeadLetterQueue] 手动解决: %s (resolution=%s, by=%s)", entry_id, resolution, resolved_by
         )
 
         entry.metadata["resolved"] = True
@@ -287,7 +287,7 @@ class DeadLetterQueue:
         self._stats["expired"] += len(expired)
 
         if expired:
-            logger.info(f"[DeadLetterQueue] 清理过期条目: {len(expired)} 个")
+            logger.info("[DeadLetterQueue] 清理过期条目: %s 个", len(expired))
 
         return len(expired)
 
@@ -338,7 +338,7 @@ class DeadLetterQueue:
             try:
                 callback(entry)
             except RECOVERABLE_ERRORS as e:
-                logger.error(f"[DeadLetterQueue] 告警回调失败: {e}")
+                logger.error("[DeadLetterQueue] 告警回调失败: %s", e)
 
     # ========== 内部方法 ==========
 
@@ -349,7 +349,7 @@ class DeadLetterQueue:
 
         oldest = min(self._entries.values(), key=lambda e: e.first_failure_time)
         del self._entries[oldest.entry_id]
-        logger.warning(f"[DeadLetterQueue] 驱逐最老条目: {oldest.entry_id}")
+        logger.warning("[DeadLetterQueue] 驱逐最老条目: %s", oldest.entry_id)
 
 
 # ========== 与 NeuroBus 集成 ==========

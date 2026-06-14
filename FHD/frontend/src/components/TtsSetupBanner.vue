@@ -108,9 +108,10 @@
 </template>
 
 <script setup lang="ts">
+import { asRecord, asArray, asString } from '@/utils/typeGuards'
 import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
 import { ElMessage, ElDialog } from 'element-plus'
-import { api } from '@/api'
+import { api, ApiError } from '@/api'
 import {
   getTtsStatus,
   onTtsStatusChange,
@@ -180,11 +181,11 @@ async function installWindowsVoice() {
   } catch (e: unknown) {
     hint.close()
     // 后端返回 4xx/5xx 会走这里；ApiError.data 里带着后端的中文说明
-    const serverMsg = e?.data?.message
+    const serverMsg = e instanceof ApiError ? asString(asRecord(e.data).message) : ''
     if (serverMsg) {
       ElMessage.warning(serverMsg)
     } else {
-      const msg = e?.message || String(e)
+      const msg = e instanceof Error ? e.message : String(e)
       ElMessage.warning(`自动安装不可用（${msg}），已切换到手动安装模式`)
     }
     try { window.location.href = 'ms-settings:speech' } catch { /* ignore */ }
@@ -211,7 +212,7 @@ async function downloadOffline() {
     ElMessage.success('离线语音包就绪，已切换到本地合成')
     refresh()
   } catch (e: unknown) {
-    ElMessage.error(`下载失败：${e?.message || e}`)
+    ElMessage.error(`下载失败：${e instanceof Error ? e.message : String(e)}`)
     refresh()
   }
 }

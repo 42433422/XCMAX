@@ -7,6 +7,7 @@ import os
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
+from typing import Awaitable, Callable
 
 _SKIP_PREFIXES = (
     "/api/auth/",
@@ -34,7 +35,11 @@ def _subscription_gate_enabled() -> bool:
 
 
 class SubscriptionGateMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next) -> Response:
+    async def dispatch(
+        self,
+        request: Request,
+        call_next: Callable[[Request], Awaitable[Response]],
+    ) -> Response:
         if not _subscription_gate_enabled():
             return await call_next(request)
 

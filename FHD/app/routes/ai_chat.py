@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, cast
 
 from app.utils.ai_helpers import format_money, safe_float
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -40,17 +40,17 @@ def _fetch_product_meta_by_models(models, unit_name: str = "") -> dict[str, dict
             for r in records:
                 rec_model = _normalize_model_token((r or {}).get("model_number"))
                 if rec_model and rec_model == target:
-                    return r
+                    return cast("dict[str, Any]", r)
 
             for r in records:
                 rec_name = _normalize_model_token((r or {}).get("name"))
                 if rec_name and target in rec_name:
-                    return r
+                    return cast("dict[str, Any]", r)
 
             for r in records:
                 rec_model = _normalize_model_token((r or {}).get("model_number"))
                 if rec_model and target in rec_model:
-                    return r
+                    return cast("dict[str, Any]", r)
 
             return records[0] or {}
 

@@ -14,8 +14,8 @@ try:
     import torch
     import torch.nn as nn
 except ImportError:  # pragma: no cover
-    torch = None  # type: ignore
-    nn = None  # type: ignore
+    torch = None
+    nn = None
 
 
 FEATURE_DIM = 16
@@ -26,7 +26,7 @@ NUM_ACTIONS = 3
 _NNModule = nn.Module if nn is not None else object
 
 
-class RoutingMLP(_NNModule):  # type: ignore[misc,valid-type]
+class RoutingMLP(_NNModule):
     def __init__(self, in_dim: int = FEATURE_DIM, hidden: int = 32, out_dim: int = NUM_ACTIONS):
         super().__init__()
         self.net = nn.Sequential(

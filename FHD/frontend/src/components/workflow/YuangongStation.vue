@@ -97,21 +97,21 @@ function onStaffError() {
   >
     <template v-if="pixelLayout === 'composed'">
       <img
+        v-if="composedIdleDeskVisible"
+        class="yuangong-composed-figure yuangong-composed-desk"
+        :src="deskSrc"
+        alt=""
+        decoding="async"
+        @error="onDeskError"
+      />
+      <img
         v-if="enabled"
-        class="yuangong-composed-figure"
+        class="yuangong-composed-figure yuangong-composed-staff"
         :class="{ 'yuangong-composed-figure--bob': busy }"
         :src="staffSrc"
         alt=""
         decoding="async"
         @error="onStaffError"
-      />
-      <img
-        v-else-if="composedIdleDeskVisible"
-        class="yuangong-composed-figure"
-        :src="deskSrc"
-        alt=""
-        decoding="async"
-        @error="onDeskError"
       />
     </template>
     <template v-else>
@@ -149,22 +149,35 @@ function onStaffError() {
   min-width: 0;
   min-height: 0;
   box-sizing: border-box;
-  overflow: hidden;
-  /* 略拉宽像素图，在保留 contain 的前提下贴齐横拼；与 StitchStage 格间重叠配合 */
-  --yg-composed-stretch: 1.14;
+  overflow: visible;
 }
 
-/* 全景横拼：contain 保头部与全身；cover + bottom 会裁掉头顶 */
+/* 横拼：desk 铺满并略溢出，组内负 margin 叠格后消除竖缝 */
 .yuangong-composed-figure {
   display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  object-position: center bottom;
-  transform: scaleX(var(--yg-composed-stretch));
-  transform-origin: center bottom;
   image-rendering: pixelated;
   pointer-events: none;
+}
+
+.yuangong-composed-desk {
+  width: 108%;
+  height: 100%;
+  margin-left: -4%;
+  object-fit: cover;
+  object-position: center bottom;
+}
+
+.yuangong-composed-staff {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 52%;
+  max-width: 100%;
+  height: 88%;
+  margin: 0 auto;
+  object-fit: contain;
+  object-position: center bottom;
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -214,10 +227,10 @@ function onStaffError() {
 @keyframes yuangong-bob-composed {
   0%,
   100% {
-    transform: translateY(0) scaleX(var(--yg-composed-stretch));
+    transform: translateY(0);
   }
   50% {
-    transform: translateY(-3px) scaleX(var(--yg-composed-stretch));
+    transform: translateY(-3px);
   }
 }
 </style>

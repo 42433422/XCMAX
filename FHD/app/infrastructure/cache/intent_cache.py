@@ -235,7 +235,7 @@ def _build_redis_client():
     依赖应用实例；DDD 迁移过程里我们优先让 domain 层可脱壳运行。
     """
     try:
-        import redis  # type: ignore
+        import redis
     except RECOVERABLE_ERRORS:
         return None
     url = (

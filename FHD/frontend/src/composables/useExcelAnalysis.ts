@@ -1,5 +1,15 @@
 import { ref } from 'vue'
 import type { ChatMessageExtras } from './useChatMessages'
+import type {
+  ExcelAnalysisResult,
+  ExcelExtractGridResponse,
+  ExcelFieldInfo,
+  ExcelSheetDetail,
+  ExcelTableSlice,
+} from '@/types/excel'
+import { asArray, asRecord, asString } from '@/utils/typeGuards'
+
+export type { ExcelAnalysisResult } from '@/types/excel'
 
 /** 多表 xlsx 在服务端 openpyxl 解析可能远超 30s；过短会 Abort 且任务面板卡在「解析工作簿」进度 */
 const EXTRACT_GRID_TIMEOUT_MS = 180_000
@@ -13,7 +23,7 @@ const EXTRACT_GRID_SINGLE_SHEET_TIMEOUT_MS = 90_000
 const EXTRACT_GRID_PATH = '/api/templates/extract-grid'
 
 /** 读取响应体（含大 JSON）；若仅对 fetch 设 Abort，部分环境下 body 读取仍可能挂死，导致「分析中…」永不解除 */
-async function readResponseJsonWithTimeout(response: Response, ms: number): Promise<unknown> {
+async function readResponseJsonWithTimeout(response: Response, ms: number): Promise<ExcelExtractGridResponse> {
   let to = 0
   const timeoutP = new Promise<never>((_, rej) => {
     to = window.setTimeout(
@@ -26,7 +36,7 @@ async function readResponseJsonWithTimeout(response: Response, ms: number): Prom
     window.clearTimeout(to)
     if (!text) return {}
     try {
-      return JSON.parse(text)
+      return JSON.parse(text) as ExcelExtractGridResponse
     } catch {
       return {}
     }
@@ -57,63 +67,7 @@ interface UseExcelAnalysisOptions {
   onAnalyzeDone?: (payload: { fileName: string; success: boolean; message?: string }) => void
 }
 
-export interface ExcelAnalysisResult {
-  fields?: string[]
-  sheets?: Array<{
-    sheet_index?: number
-    sheet_name?: string
-    fields?: unknown[]
-    sample_rows?: Record<string, unknown>[]
-    grid_preview?: { rows?: unknown[][] }
-    style_cache?: {
-      styles?: Record<string, unknown>
-      cell_style_refs?: Record<string, string>
-    }
-    tables?: Array<{
-      table_index?: number
-      header_row?: number
-      fields?: unknown[]
-      sample_rows?: Record<string, unknown>[]
-    }>
-  }>
-  preview_data?: {
-    sheet_name?: string
-    sheet_names?: string[]
-    sample_rows?: Record<string, unknown>[]
-    grid_preview?: {
-      rows?: unknown[][]
-    }
-    all_sheets?: Array<{
-      sheet_index?: number
-      sheet_name?: string
-      fields?: unknown[]
-      sample_rows?: Record<string, unknown>[]
-      grid_preview?: { rows?: unknown[][] }
-      style_cache?: {
-        styles?: Record<string, unknown>
-        cell_style_refs?: Record<string, string>
-      }
-      tables?: Array<{
-        table_index?: number
-        header_row?: number
-        fields?: unknown[]
-        sample_rows?: Record<string, unknown>[]
-      }>
-    }>
-    tables?: Array<{
-      table_index?: number
-      header_row?: number
-      fields?: unknown[]
-      sample_rows?: Record<string, unknown>[]
-    }>
-    grid_style_cache?: {
-      styles?: Record<string, unknown>
-      cell_style_refs?: Record<string, string>
-    }
-  }
-}
-
-async function extractSingleSheetDetail(file: File, sheetName: string): Promise<any | null> {
+async function extractSingleSheetDetail(file: File, sheetName: string): Promise<ExcelSheetDetail | null> {
   try {
     const formData = new FormData()
     formData.append('file', file)
@@ -129,13 +83,14 @@ async function extractSingleSheetDetail(file: File, sheetName: string): Promise<
       })
       const data = await readResponseJsonWithTimeout(response, 60_000)
       if (!response.ok || !data?.success) return null
+      const preview = data.preview_data
       return {
         sheet_name: sheetName,
-        fields: Array.isArray(data?.fields) ? data.fields : [],
-        sample_rows: Array.isArray(data?.preview_data?.sample_rows) ? data.preview_data.sample_rows : [],
-        grid_preview: data?.preview_data?.grid_preview || { rows: [] },
-        style_cache: data?.preview_data?.grid_style_cache || { styles: {}, cell_style_refs: {} },
-        tables: Array.isArray(data?.preview_data?.tables) ? data.preview_data.tables : []
+        fields: asArray<ExcelFieldInfo>(data.fields),
+        sample_rows: asArray(preview?.sample_rows),
+        grid_preview: preview?.grid_preview || { rows: [] },
+        style_cache: preview?.grid_style_cache || { styles: {}, cell_style_refs: {} },
+        tables: asArray<ExcelTableSlice>(preview?.tables),
       }
     } finally {
       window.clearTimeout(timeoutId)
@@ -173,57 +128,56 @@ export function useExcelAnalysis(messages: UseChatMessagesReturn, options: UseEx
   }
 
   function summarizeExcelAnalysisResult(result: ExcelAnalysisResult): string {
-    const sheetList = Array.isArray(result?.sheets)
+    const sheetList: ExcelSheetDetail[] = Array.isArray(result?.sheets)
       ? result.sheets
-      : (Array.isArray(result?.preview_data?.all_sheets) ? result.preview_data?.all_sheets : [])
-    const sheetNames = Array.isArray((result as unknown)?.preview_data?.sheet_names)
-      ? ((result as unknown).preview_data.sheet_names as unknown[])
-          .map((x) => String(x || '').trim())
-          .filter(Boolean)
-      : []
+      : (Array.isArray(result?.preview_data?.all_sheets) ? result.preview_data.all_sheets : [])
+    const sheetNames = asArray(result?.preview_data?.sheet_names)
+      .map((x) => asString(x).trim())
+      .filter(Boolean)
 
-    const fields = Array.isArray(result?.fields) ? result.fields : []
-    const sampleRows = Array.isArray(result?.preview_data?.sample_rows) ? result.preview_data.sample_rows : []
+    const fields = asArray(result?.fields)
+    const sampleRows = asArray(result?.preview_data?.sample_rows)
     const sheetName = result?.preview_data?.sheet_name || 'Sheet1'
-    const gridRows = Array.isArray(result?.preview_data?.grid_preview?.rows)
-      ? result.preview_data.grid_preview.rows.length
-      : 0
+    const gridRows = asArray(result?.preview_data?.grid_preview?.rows).length
 
-    const fieldNames = fields
-      .map((f) => String((f as unknown)?.label || (f as unknown)?.name || '').trim())
+    const fieldNames = asArray<ExcelFieldInfo | string>(fields)
+      .map((f) => {
+        if (typeof f === 'string') return f.trim()
+        return asString(f.label || f.name).trim()
+      })
       .filter(Boolean)
       .slice(0, 40)
 
     const sheetSummaryLines = sheetList
       .slice(0, 12)
-      .map((sheet: unknown, idx: number) => {
+      .map((sheet, idx) => {
         const no = Number(sheet?.sheet_index) || idx + 1
-        const name = String(sheet?.sheet_name || `Sheet${no}`)
-        const rowCount = Array.isArray(sheet?.grid_preview?.rows) ? sheet.grid_preview.rows.length : 0
-        const fieldCount = Array.isArray(sheet?.fields) ? sheet.fields.length : 0
+        const name = asString(sheet?.sheet_name || `Sheet${no}`)
+        const rowCount = asArray(sheet?.grid_preview?.rows).length
+        const fieldCount = asArray(sheet?.fields).length
         return `Sheet ${no}（${name}）：词条${fieldCount}，网格行${rowCount}`
       })
 
-    const totalStyleCellsFromSheets = sheetList.reduce((acc: number, sheet: unknown) => {
+    const totalStyleCellsFromSheets = sheetList.reduce((acc, sheet) => {
       const refs = sheet?.style_cache?.cell_style_refs
       return acc + (refs ? Object.keys(refs).length : 0)
     }, 0)
     const fallbackStyleRefs = result?.preview_data?.grid_style_cache?.cell_style_refs
     const totalStyleCells = totalStyleCellsFromSheets || (fallbackStyleRefs ? Object.keys(fallbackStyleRefs).length : 0)
-    const totalLogicalTables = sheetList.reduce((acc: number, sheet: unknown) => {
-      const tables = Array.isArray(sheet?.tables) ? sheet.tables.length : 0
+    const totalLogicalTables = sheetList.reduce((acc, sheet) => {
+      const tables = asArray(sheet?.tables).length
       return acc + tables
-    }, Array.isArray(result?.preview_data?.tables) ? result.preview_data.tables.length : 0)
+    }, asArray(result?.preview_data?.tables).length)
 
     const tableSummaryLines = sheetList
-      .flatMap((sheet: unknown, idx: number) => {
+      .flatMap((sheet, idx) => {
         const no = Number(sheet?.sheet_index) || idx + 1
-        const name = String(sheet?.sheet_name || `Sheet${no}`)
-        const tables = Array.isArray(sheet?.tables) ? sheet.tables : []
-        return tables.slice(0, 5).map((tb: unknown) => {
+        const name = asString(sheet?.sheet_name || `Sheet${no}`)
+        const tables = asArray<ExcelTableSlice>(sheet?.tables)
+        return tables.slice(0, 5).map((tb) => {
           const tbNo = Number(tb?.table_index) || 1
-          const tbFields = Array.isArray(tb?.fields) ? tb.fields.length : 0
-          const tbSamples = Array.isArray(tb?.sample_rows) ? tb.sample_rows.length : 0
+          const tbFields = asArray(tb?.fields).length
+          const tbSamples = asArray(tb?.sample_rows).length
           return `Sheet ${no}（${name}）- 表${tbNo}：词条${tbFields}，样例${tbSamples}`
         })
       })
@@ -232,25 +186,25 @@ export function useExcelAnalysis(messages: UseChatMessagesReturn, options: UseEx
     const detailSheets = (sheetList.length ? sheetList : [{
       sheet_index: 1,
       sheet_name: sheetName,
-      fields,
+      fields: fields as ExcelFieldInfo[],
       sample_rows: sampleRows,
-      grid_preview: { rows: Array.isArray(result?.preview_data?.grid_preview?.rows) ? result.preview_data?.grid_preview?.rows : [] }
+      grid_preview: { rows: asArray(result?.preview_data?.grid_preview?.rows) }
     }]).slice(0, 8)
 
-    const sheetDetailLines = detailSheets.flatMap((sheet: unknown, idx: number) => {
+    const sheetDetailLines = detailSheets.flatMap((sheet, idx) => {
       const no = Number(sheet?.sheet_index) || idx + 1
-      const name = String(sheet?.sheet_name || `Sheet${no}`)
-      const sheetFields = (Array.isArray(sheet?.fields) ? sheet.fields : [])
-        .map((f: unknown) => String(f?.label || f?.name || '').trim())
+      const name = asString(sheet?.sheet_name || `Sheet${no}`)
+      const sheetFields = asArray<ExcelFieldInfo>(sheet?.fields)
+        .map((f) => asString(f?.label || f?.name).trim())
         .filter(Boolean)
         .slice(0, 30)
-      const sheetRows = Array.isArray(sheet?.grid_preview?.rows) ? sheet.grid_preview.rows.length : 0
-      const sheetSamples = (Array.isArray(sheet?.sample_rows) ? sheet.sample_rows : [])
+      const sheetRows = asArray(sheet?.grid_preview?.rows).length
+      const sheetSamples = asArray(sheet?.sample_rows)
         .slice(0, 2)
-        .map((row: unknown, sIdx: number) => {
-          const pairs = Object.entries(row || {})
+        .map((row, sIdx) => {
+          const pairs = Object.entries(asRecord(row))
             .slice(0, 5)
-            .map(([k, v]) => `${k}:${String(v ?? '').slice(0, 30)}`)
+            .map(([k, v]) => `${k}:${asString(v).slice(0, 30)}`)
             .join('；')
           return `  ${sIdx + 1}. ${pairs || '无'}`
         })
@@ -282,7 +236,7 @@ export function useExcelAnalysis(messages: UseChatMessagesReturn, options: UseEx
   }
 
   async function onExcelAnalyzeFileChange(e: Event): Promise<void> {
-    const file = (e?.target as unknown)?.files?.[0] as File | undefined
+    const file = (e.target as HTMLInputElement).files?.[0]
     ;(e.target as HTMLInputElement).value = ''
     if (!file) return
 
@@ -322,10 +276,10 @@ export function useExcelAnalysis(messages: UseChatMessagesReturn, options: UseEx
               body: formData,
               signal: controller.signal
             })
-            const data = await readResponseJsonWithTimeout(response, 120_000)
+            const data: ExcelExtractGridResponse = await readResponseJsonWithTimeout(response, 120_000)
 
             if (!response.ok || !data?.success) {
-              throw new Error(data?.message || `HTTP ${response.status}`)
+              throw new Error(asString(data?.message) || `HTTP ${response.status}`)
             }
 
             options.onAnalyzeProgress?.({
@@ -337,9 +291,9 @@ export function useExcelAnalysis(messages: UseChatMessagesReturn, options: UseEx
             const hasMultiSheetDetails =
               Array.isArray(data?.sheets) && data.sheets.length > 0
                 || (Array.isArray(data?.preview_data?.all_sheets) && data.preview_data.all_sheets.length > 0)
-            const sheetNames = Array.isArray(data?.preview_data?.sheet_names) ? data.preview_data.sheet_names : []
+            const sheetNames = asArray<string>(data?.preview_data?.sheet_names)
             if (!hasMultiSheetDetails && sheetNames.length > 1) {
-              const detailedSheets: unknown[] = []
+              const detailedSheets: ExcelSheetDetail[] = []
               for (let i = 0; i < sheetNames.length; i += 1) {
                 const name = String(sheetNames[i] || '').trim()
                 if (!name) continue
@@ -368,22 +322,23 @@ export function useExcelAnalysis(messages: UseChatMessagesReturn, options: UseEx
               step: '正在生成对话摘要…',
               progress: 82
             })
-            const summary = summarizeExcelAnalysisResult(data)
+            const summary = summarizeExcelAnalysisResult(data as ExcelAnalysisResult)
             appendChatLine(summary, 'ai')
             options.onAnalyzed?.({
               fileName: file.name,
               summary,
-              result: data
+              result: data as ExcelAnalysisResult
             })
             options.onAnalyzeDone?.({ fileName: file.name, success: true })
           } finally {
             window.clearTimeout(timeoutId)
           }
         } catch (err: unknown) {
-          const isAbort = err?.name === 'AbortError'
-          const raw = String(err?.message || err || '')
+          const errObj = err as { name?: string; message?: string }
+          const isAbort = errObj?.name === 'AbortError'
+          const raw = String(errObj?.message || err || '')
           const netFail =
-            /Failed to fetch|NetworkError|Load failed|网络/i.test(raw) || err?.name === 'TypeError'
+            /Failed to fetch|NetworkError|Load failed|网络/i.test(raw) || errObj?.name === 'TypeError'
           let hint = ''
           if (netFail && !isAbort) {
             hint =

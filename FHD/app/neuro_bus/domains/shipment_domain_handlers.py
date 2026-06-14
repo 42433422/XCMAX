@@ -67,11 +67,11 @@ class ShipmentDomainHandlers:
         3. 记录操作日志
         """
         logger.info(
-            f"[ShipmentDomain] 处理添加产品: shipment={event.payload.get('shipment_id')} "
-            f"product={event.payload.get('product_id')} qty={event.payload.get('quantity')}"
+            "[ShipmentDomain] 处理添加产品: shipment=%s "
+            f"product=%s qty=%s", event.payload.get('shipment_id'), event.payload.get('product_id'), event.payload.get('quantity')
         )
 
-        result = {"success": True, "shipment_id": event.payload.get("shipment_id"), "actions": []}
+        result: object = {"success": True, "shipment_id": event.payload.get("shipment_id"), "actions": []}
 
         try:
             # 1. 记录操作
@@ -86,7 +86,7 @@ class ShipmentDomainHandlers:
             # 3. 可以触发库存检查
 
         except RECOVERABLE_ERRORS as e:
-            logger.error(f"[ShipmentDomain] 处理添加产品事件失败: {e}")
+            logger.error("[ShipmentDomain] 处理添加产品事件失败: %s", e)
             result["success"] = False
             result["error"] = str(e)
 
@@ -149,11 +149,11 @@ class ShipmentDomainHandlers:
         3. 可以触发文件上传/清理
         """
         logger.info(
-            f"[ShipmentDomain] 处理导出: {event.payload.get('file_path')} "
-            f"({event.payload.get('record_count', 0)} 条记录)"
+            "[ShipmentDomain] 处理导出: %s "
+            f"(%s 条记录)", event.payload.get('file_path'), event.payload.get('record_count', 0)
         )
 
-        result = {"success": True, "file_path": event.payload.get("file_path"), "actions": []}
+        result: object = {"success": True, "file_path": event.payload.get("file_path"), "actions": []}
 
         try:
             # 1. 记录导出
@@ -165,7 +165,7 @@ class ShipmentDomainHandlers:
             # 3. 可以触发文件处理
 
         except RECOVERABLE_ERRORS as e:
-            logger.error(f"[ShipmentDomain] 处理导出事件失败: {e}")
+            logger.error("[ShipmentDomain] 处理导出事件失败: %s", e)
             result["success"] = False
             result["error"] = str(e)
 
@@ -183,11 +183,11 @@ class ShipmentDomainHandlers:
         3. 检查库存预警
         """
         logger.info(
-            f"[ShipmentDomain] 处理库存扣减: {event.payload.get('shipment_id')} "
-            f"items={len(event.payload.get('items', []))}"
+            "[ShipmentDomain] 处理库存扣减: %s "
+            f"items=%s", event.payload.get('shipment_id'), len(event.payload.get('items', []))
         )
 
-        result = {"success": True, "shipment_id": event.payload.get("shipment_id"), "actions": []}
+        result: object = {"success": True, "shipment_id": event.payload.get("shipment_id"), "actions": []}
 
         try:
             # 1. 执行库存扣减
@@ -205,7 +205,7 @@ class ShipmentDomainHandlers:
             result["actions"].append("alert_checked")
 
         except RECOVERABLE_ERRORS as e:
-            logger.error(f"[ShipmentDomain] 处理库存扣减事件失败: {e}")
+            logger.error("[ShipmentDomain] 处理库存扣减事件失败: %s", e)
             result["success"] = False
             result["error"] = str(e)
 

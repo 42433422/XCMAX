@@ -1,5 +1,6 @@
 import { api } from './core';
 import type { ApiResponse } from '@/types/api';
+import { asRecord, asArray, asString } from '@/utils/typeGuards'
 
 export interface SalesContractProduct {
   model_number: string;
@@ -140,7 +141,16 @@ export const salesContractApi = {
     return_buckets_actual: number;
     signatures: Record<string, string>;
   }>> {
-    return api.get<ApiResponse<unknown>>('/api/sales-contract/preview/default');
+    return api.get<ApiResponse<{
+      customer_name: string;
+      contract_date: string;
+      products: SalesContractProduct[];
+      total_quantity: number;
+      total_amount: number;
+      return_buckets_expected: number;
+      return_buckets_actual: number;
+      signatures: Record<string, string>;
+    }>>('/api/sales-contract/preview/default');
   }
 };
 

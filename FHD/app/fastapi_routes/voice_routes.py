@@ -42,7 +42,7 @@ def _resolve_device() -> str:
     if d in ("cpu", "cuda"):
         return d
     try:
-        import torch  # type: ignore
+        import torch
 
         return "cuda" if torch.cuda.is_available() else "cpu"
     except RECOVERABLE_ERRORS:
@@ -64,7 +64,7 @@ def _resolve_model_name() -> str:
 def _get_model():
     """返回已就绪的 faster-whisper 模型实例；未安装 faster-whisper 时抛 HTTPException 503"""
     try:
-        from faster_whisper import WhisperModel  # type: ignore
+        from faster_whisper import WhisperModel
     except ImportError as exc:
         logger.error("faster-whisper 未安装，无法处理语音转写请求: %s", exc)
         raise HTTPException(
@@ -198,7 +198,7 @@ async def transcribe_audio(
 async def voice_health():
     """轻量健康检查：只检查 faster-whisper 是否可导入，不触发模型加载（避免健康检查拖慢冷启动）。"""
     try:
-        import faster_whisper  # type: ignore  # noqa: F401
+        import faster_whisper
 
         ready = True
         reason = ""

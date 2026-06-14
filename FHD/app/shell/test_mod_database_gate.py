@@ -29,7 +29,7 @@ def test_gate_closed_raises_in_get_database_url(
         encoding="utf-8",
     )
     monkeypatch.setenv("FHD_SHELL_MODS_JSON", str(p))
-    from app.legacy import database
+    from app.infrastructure.db import sync_engine as database
 
     database.dispose_sync_engine()
     with pytest.raises(RuntimeError, match="database_mod_gate_closed"):
@@ -47,7 +47,7 @@ def test_get_db_status_when_gate_closed(monkeypatch: pytest.MonkeyPatch, tmp_pat
         encoding="utf-8",
     )
     monkeypatch.setenv("FHD_SHELL_MODS_JSON", str(p))
-    from app.legacy import database
+    from app.infrastructure.db import sync_engine as database
 
     database.dispose_sync_engine()
     st = database.get_db_status()
