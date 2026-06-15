@@ -8,7 +8,8 @@ namespace XcagiInstaller.Services;
 /// </summary>
 public static class InstallProgressTracker
 {
-    private const long DefaultEstimatedBytes = 1_500L * 1024 * 1024;
+    // 企业版含 Electron + PyInstaller 后端，解压后常达 800MB～1.5GB
+    private const long DefaultEstimatedBytes = 900L * 1024 * 1024;
 
     public static long EstimateInstalledBytes(string setupExePath, string installDirectory)
     {
@@ -24,11 +25,30 @@ public static class InstallProgressTracker
         }
 
         var baseline = GetDirectorySize(installDirectory);
-        var fromPayload = compressed > 0 ? (long)(compressed * 2.4) : 0;
-        return Math.Max(DefaultEstimatedBytes, Math.Max(baseline + 50_000_000, fromPayload));
+        // 静默 NSIS 内嵌 Electron + 后端，膨胀倍数高于普通应用
+        var fromPayload = compressed > 0 ? (long)(compressed * 3.2) : 0;
+        return Math.Max(DefaultEstimatedBytes, Math.Max(baseline + 80_000_000, fromPayload));
     }
 
-    public static async Task MonitorInstallAsync(
+    /// <summary>静默 NSIS 解压完毕时关键文件应齐全；进程可能仍挂起。</summary>
+    public static bool IsInstallComplete(string installDirectory)
+    {
+        if (string.IsNullOrWhiteSpace(installDirectory) || !Directory.Exists(installDirectory))
+            return false;
+
+        var appExe = Path.Combine(installDirectory, "XCAGI.exe");
+        if (!File.Exists(appExe))
+            return false;
+
+        var asar = Path.Combine(installDirectory, "resources", "app.asar");
+        if (!File.Exists(asar))
+            return false;
+
+        var backend = Path.Combine(installDirectory, "resources", "backend", "xcagi-backend.exe");
+        return File.Exists(backend);
+    }
+
+    public static async Task<bool> MonitorInstallAsync(
         Process process,
         string installDirectory,
         long estimatedTotalBytes,
@@ -39,43 +59,78 @@ public static class InstallProgressTracker
         var started = Stopwatch.StartNew();
         var expectedMs = EstimateInstallDurationMs(estimatedTotalBytes);
         var targetBytes = Math.Max(estimatedTotalBytes, 1);
+        var lastSize = 0L;
+        var stagnantLoops = 0;
+        var completeStallLoops = 0;
+        var hungAfterComplete = false;
 
         while (!process.HasExited)
         {
             cancellationToken.ThrowIfCancellationRequested();
             var current = GetDirectorySize(installDirectory);
+            if (current <= lastSize)
+                stagnantLoops++;
+            else
+            {
+                stagnantLoops = 0;
+                lastSize = current;
+            }
+
+            if (IsInstallComplete(installDirectory))
+            {
+                completeStallLoops++;
+                // 文件已齐全但 NSIS 子进程未退出（常见）：约 5s 后视为完成
+                if (completeStallLoops >= 12)
+                {
+                    hungAfterComplete = true;
+                    break;
+                }
+            }
+            else
+            {
+                completeStallLoops = 0;
+            }
 
             var sizePct = (int)Math.Min(99, current * 100 / targetBytes);
             var timePct = expectedMs > 0
-                ? (int)Math.Min(98, started.ElapsedMilliseconds * 100 / expectedMs)
+                ? (int)Math.Min(99, started.ElapsedMilliseconds * 100 / expectedMs)
                 : 0;
 
-            // 覆盖安装时目录体积可能长期不变，用时间进度兜底，避免长时间停在 12%
             var blended = Math.Max(sizePct, timePct);
+
+            if (IsInstallComplete(installDirectory))
+                blended = Math.Max(blended, 95);
+            else if (lastReported >= 75 && stagnantLoops > 8)
+            {
+                var creep = (int)Math.Min(99, 75 + started.ElapsedMilliseconds / 5000);
+                blended = Math.Max(blended, creep);
+            }
+
             var pct = Math.Max(lastReported, Math.Min(99, blended));
-            if (pct > lastReported + 2)
-                pct = lastReported + 2;
+            if (pct > lastReported + 3)
+                pct = lastReported + 3;
 
             if (pct != lastReported)
             {
                 lastReported = pct;
-                progress?.Report(new InstallProgressUpdate(pct, DescribeStage(installDirectory, current, pct)));
+                progress?.Report(new InstallProgressUpdate(pct, DescribeStage(installDirectory, current, pct, stagnantLoops)));
             }
 
             await Task.Delay(400, cancellationToken).ConfigureAwait(false);
         }
 
         progress?.Report(new InstallProgressUpdate(100, "安装完成"));
+        return hungAfterComplete;
     }
 
     private static long EstimateInstallDurationMs(long estimatedTotalBytes)
     {
-        // 按体积估算耗时（约 6MB/s）+ NSIS 固定开销；限制在 25s～4min
-        var fromSize = (long)(estimatedTotalBytes / (6.0 * 1024 * 1024) * 1000);
-        return Math.Clamp(fromSize + 15_000, 25_000, 240_000);
+        // 大体积 + 海量小文件（PyInstaller）；上限 15 分钟
+        var fromSize = (long)(estimatedTotalBytes / (4.5 * 1024 * 1024) * 1000);
+        return Math.Clamp(fromSize + 20_000, 35_000, 900_000);
     }
 
-    private static string DescribeStage(string installDirectory, long bytesWritten, int percent)
+    private static string DescribeStage(string installDirectory, long bytesWritten, int percent, int stagnantLoops)
     {
         if (bytesWritten < 5_000_000)
             return "正在初始化安装…";
@@ -90,6 +145,9 @@ public static class InstallProgressTracker
 
         if (percent < 85)
             return $"正在部署本地服务与前端… {percent}%";
+
+        if (stagnantLoops > 8)
+            return $"正在完成安装与注册（杀毒软件可能拖慢，请耐心等待）… {percent}%";
 
         return "正在创建快捷方式并完成配置…";
     }

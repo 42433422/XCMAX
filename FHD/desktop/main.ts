@@ -19,6 +19,9 @@ import { checkForUpdates, configureUpdater, installUpdate } from './updater'
 
 const APP_NAME = 'XCAGI'
 
+// 与 paths.py / 安装器太阳鸟种子目录一致（勿用 package.json 默认 xcagi-desktop）
+app.setPath('userData', path.join(app.getPath('appData'), 'XCAGI'))
+
 /** macOS 12+「隔空播放接收器」占用 :5000，TCP 可达但返回 AirTunes 空 403 → Electron 白屏。 */
 function resolveDefaultDesktopPort(): number {
   const env = process.env.XCAGI_DESKTOP_PORT
@@ -154,8 +157,16 @@ function backendExecutable(): { command: string; args: string[]; cwd: string } {
   }
 }
 
+function packagedBackendHealthTimeoutMs(): number {
+  if (!app.isPackaged) {
+    return 60_000
+  }
+  // 首次启动：Alembic、Mod 种子、太阳鸟花名册等可能超过 60s
+  return process.platform === 'win32' ? 180_000 : 120_000
+}
+
 /** 须确认 uvicorn /api/health，避免 macOS AirPlay 占 5000 时 TCP 误判就绪。 */
-async function waitForBackendHealth(port: number, timeoutMs = 60_000): Promise<void> {
+async function waitForBackendHealth(port: number, timeoutMs = packagedBackendHealthTimeoutMs()): Promise<void> {
   const started = Date.now()
   while (Date.now() - started <= timeoutMs) {
     try {
@@ -179,7 +190,12 @@ async function waitForBackendHealth(port: number, timeoutMs = 60_000): Promise<v
     process.platform === 'darwin' && port === 5000
       ? ' macOS「隔空播放接收器」占用 5000，请在系统设置中关闭，或设置 XCAGI_DESKTOP_PORT=17500。'
       : ''
-  throw new Error(`后端 /api/health 在 ${timeoutMs}ms 内未就绪（端口 ${port}）。${airplayHint}`)
+  const firstBootHint = app.isPackaged
+    ? ' 若仍失败，请查看数据目录 logs/ 下后端日志，或从菜单导出诊断包。'
+    : ''
+  throw new Error(
+    `后端 /api/health 在 ${timeoutMs}ms 内未就绪（端口 ${port}）。${airplayHint}${firstBootHint}`
+  )
 }
 
 type DesktopStartupMarks = {
