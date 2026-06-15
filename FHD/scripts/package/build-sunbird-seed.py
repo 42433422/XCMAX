@@ -96,6 +96,8 @@ def main() -> int:
     parser.add_argument("--template-src", type=Path, default=None)
     args = parser.parse_args()
     summary = build_sunbird_seed(seed_root=args.seed_root.resolve(), template_src=args.template_src)
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
     print(json.dumps(summary, ensure_ascii=False, indent=2))
     return 0
 
