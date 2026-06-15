@@ -58,16 +58,15 @@ public sealed class NsisSilentInstaller
 
         var estimated = InstallProgressTracker.EstimateInstalledBytes(setupExePath, dir);
 
+        bool hungAfterComplete;
         try
         {
-            var monitor = InstallProgressTracker.MonitorInstallAsync(
+            hungAfterComplete = await InstallProgressTracker.MonitorInstallAsync(
                 process,
                 dir,
                 estimated,
                 progress,
-                cancellationToken);
-            await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
-            await monitor.ConfigureAwait(false);
+                cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -84,8 +83,39 @@ public sealed class NsisSilentInstaller
             return InstallResult.Fail("安装已取消。");
         }
 
-        if (process.ExitCode != 0)
-            return InstallResult.Fail($"安装程序退出码 {process.ExitCode}。");
+        if (!process.HasExited)
+        {
+            if (hungAfterComplete || InstallProgressTracker.IsInstallComplete(dir))
+            {
+                try
+                {
+                    process.Kill(entireProcessTree: true);
+                    await process.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false);
+                }
+                catch
+                {
+                    // 文件已齐全时仍视为成功
+                }
+            }
+            else
+            {
+                try
+                {
+                    await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    return InstallResult.Fail("安装已取消。");
+                }
+            }
+        }
+
+        if (!InstallProgressTracker.IsInstallComplete(dir))
+        {
+            if (process.ExitCode != 0)
+                return InstallResult.Fail($"安装程序退出码 {process.ExitCode}。");
+            return InstallResult.Fail("安装未完成：缺少 XCAGI 主程序或后端文件。");
+        }
 
         var appExe = Path.Combine(dir, "XCAGI.exe");
         if (!File.Exists(appExe))
