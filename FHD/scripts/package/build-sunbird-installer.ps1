@@ -44,12 +44,10 @@ Write-Host "  seed zip: $SeedZip"
 if (-not $SkipBuild) {
   Write-Host "==> Install Python runtime deps (mod staging + PyInstaller) ..."
   python -m pip install --upgrade pip -q
-  $RuntimeRequirements = Join-Path $env:TEMP "xcagi-runtime-requirements.txt"
-  Get-Content (Join-Path $FhdRoot "XCAGI\requirements.txt") |
-    Where-Object { $_ -notmatch '^\s*pytest($|[-=<>])' } |
-    Set-Content -Path $RuntimeRequirements -Encoding UTF8
-  python -m pip install -r $RuntimeRequirements -q
+  python -m pip install -e $FhdRoot -q
+  if ($LASTEXITCODE -ne 0) { throw "pip install -e FHD failed" }
   python -m pip install "pyinstaller>=6.0" appdirs -q
+  if ($LASTEXITCODE -ne 0) { throw "pip install pyinstaller/appdirs failed" }
 
   Write-Host "==> Building Sunbird custom installer (enterprise base + embedded seed) ..."
   & (Join-Path $PSScriptRoot "build-installer.ps1") `
