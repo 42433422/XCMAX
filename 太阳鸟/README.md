@@ -30,18 +30,29 @@
 
 ---
 
-## 供应商打包（Windows 开发机）
+## 供应商打包
+
+### 方式 A：Mac 上用 GitHub Actions（推荐，等同云端 Windows 虚拟机）
+
+先 push 本仓库（含 `sunbird-installer.yml`），然后：
+
+```bash
+bash FHD/scripts/package/stage-sunbird-delivery.sh --ci
+```
+
+会在 `windows-latest` 上编译，并自动下载 `太阳鸟-Setup-10.0.0-x64.exe` 到本目录。
+
+### 方式 B：本机或虚拟机 Windows
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File FHD\scripts\package\build-sunbird-installer.ps1
 ```
 
-产物：
+### 方式 C：UTM / Parallels 虚拟机
 
-- `FHD/release/xcagi-v10.0.0/sunbird/太阳鸟-Setup-10.0.0-x64.exe`
-- 复制到本目录 `太阳鸟/`
+在 Windows 虚拟机里克隆仓库，执行方式 B 即可。Mac 无法本地直编 `.exe`（NSIS + WPF 安装壳限制）。
 
-种子数据 SSOT：`FHD/delivery/sunbird-seed/`（由 `build-sunbird-seed.py` 维护）
+种子数据 SSOT：`FHD/delivery/sunbird-seed/`
 
 ---
 
