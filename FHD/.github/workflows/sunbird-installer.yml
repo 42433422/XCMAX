@@ -55,5 +55,5 @@ jobs:
         with:
           name: sunbird-installer
           path: |
-            release/xcagi-v*/sunbird/**
-            ../太阳鸟/**
+            release/xcagi-v*/sunbird/*.exe
+            release/xcagi-v*/sunbird/manifest.json
