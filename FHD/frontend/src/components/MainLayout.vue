@@ -595,7 +595,8 @@ const onHoverTriggerClick = () => {
 }
 
 const onViewportChange = (event) => {
-  isSidebarFeatureEnabled.value = !event.matches
+  const matches = Boolean(event?.matches)
+  isSidebarFeatureEnabled.value = !matches
   clearSidebarHoverTimer()
   clearSidebarCollapseTimer()
   if (!isSidebarFeatureEnabled.value) {
@@ -607,7 +608,7 @@ const onViewportChange = (event) => {
 }
 
 const onMobileNavViewportChange = (event) => {
-  showMobileBottomNav.value = event.matches
+  showMobileBottomNav.value = Boolean(event?.matches)
 }
 
 const mobileBottomNavVisible = computed(
@@ -650,19 +651,23 @@ onMounted(async () => {
       // 行业信息加载失败时，顶部标题保持默认文案
     }
   }
-  sidebarViewportMedia = window.matchMedia(SIDEBAR_DISABLE_MQ)
-  onViewportChange(sidebarViewportMedia)
-  if (typeof sidebarViewportMedia.addEventListener === 'function') {
-    sidebarViewportMedia.addEventListener('change', onViewportChange)
-  } else if (typeof sidebarViewportMedia.addListener === 'function') {
-    sidebarViewportMedia.addListener(onViewportChange)
+  sidebarViewportMedia = window.matchMedia?.(SIDEBAR_DISABLE_MQ) ?? null
+  if (sidebarViewportMedia) {
+    onViewportChange(sidebarViewportMedia)
+    if (typeof sidebarViewportMedia.addEventListener === 'function') {
+      sidebarViewportMedia.addEventListener('change', onViewportChange)
+    } else if (typeof sidebarViewportMedia.addListener === 'function') {
+      sidebarViewportMedia.addListener(onViewportChange)
+    }
   }
-  mobileBottomNavMedia = window.matchMedia(MOBILE_BOTTOM_NAV_MQ)
-  onMobileNavViewportChange(mobileBottomNavMedia)
-  if (typeof mobileBottomNavMedia.addEventListener === 'function') {
-    mobileBottomNavMedia.addEventListener('change', onMobileNavViewportChange)
-  } else if (typeof mobileBottomNavMedia.addListener === 'function') {
-    mobileBottomNavMedia.addListener(onMobileNavViewportChange)
+  mobileBottomNavMedia = window.matchMedia?.(MOBILE_BOTTOM_NAV_MQ) ?? null
+  if (mobileBottomNavMedia) {
+    onMobileNavViewportChange(mobileBottomNavMedia)
+    if (typeof mobileBottomNavMedia.addEventListener === 'function') {
+      mobileBottomNavMedia.addEventListener('change', onMobileNavViewportChange)
+    } else if (typeof mobileBottomNavMedia.addListener === 'function') {
+      mobileBottomNavMedia.addListener(onMobileNavViewportChange)
+    }
   }
   ACTIVITY_EVENTS.forEach((eventName) => {
     window.addEventListener(eventName, handleGlobalActivity, { passive: true })

@@ -479,6 +479,7 @@ def init_redis_cache_from_app(app) -> RedisCache | None:
     if redis_client is None:
         try:
             import redis
+
             from app.utils.deployment import redis_url_from_env
 
             redis_url = ""

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import date, timedelta
 
 from app.application.surface_audit_service import (
     _load_config,
@@ -94,9 +95,19 @@ def test_config_pw_public_pages():
     assert not any(str(p.get("path", "")).startswith("/market/catalog/") for p in pages)
 
 
-def test_resolve_lane_page_png_path_falls_back_to_prior_day():
+def test_resolve_lane_page_png_path_falls_back_to_prior_day(monkeypatch, tmp_path):
+    from app.application import surface_audit_service as svc
+
+    lane = "P-W"
+    prior_day = (date.today() - timedelta(days=1)).isoformat()
+    day_dir = tmp_path / "png" / lane.replace("/", "_") / prior_day
+    day_dir.mkdir(parents=True)
+    (day_dir / "000_home.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+
+    monkeypatch.setattr(svc, "_CACHE_DIR", tmp_path)
+
     page = {"id": "home", "name": "官网首页"}
-    hit = resolve_lane_page_png_path("P-W", 0, page)
+    hit = resolve_lane_page_png_path(lane, 0, page)
     assert hit is not None
     assert hit.name == "000_home.png"
     assert hit.is_file()

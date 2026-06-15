@@ -206,8 +206,7 @@ def _registered_router_shipment_records(
         return cast(
             "dict[Any, Any]",
             svc.export_shipment_records(
-                unit_name=str(params.get("unit") or params.get("unit_name") or "").strip()
-                or None,
+                unit_name=str(params.get("unit") or params.get("unit_name") or "").strip() or None,
                 template_id=params.get("template_id"),
                 status_filter=params.get("status"),
             ),
