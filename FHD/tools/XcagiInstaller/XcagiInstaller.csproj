@@ -12,8 +12,9 @@
     <Product>XCAGI</Product>
     <Version>8.0.0</Version>
     <RootNamespace>XcagiInstaller</RootNamespace>
-    <!-- 打包时由 build-installer.ps1 传入 NSIS 产物路径 -->
+    <!-- 打包时由 build-installer.ps1 / build-sunbird-installer.ps1 传入 -->
     <SetupPayloadPath Condition="'$(SetupPayloadPath)' == ''"></SetupPayloadPath>
+    <SunbirdSeedZipPath Condition="'$(SunbirdSeedZipPath)' == ''"></SunbirdSeedZipPath>
     <LicenseFilePath Condition="'$(LicenseFilePath)' == ''">Assets\LICENSE.zh-CN.txt</LicenseFilePath>
     <!-- 下载包 exe / 任务栏图标：优先 Assets\app.ico（由 generate-desktop-resources.py 生成） -->
     <InstallerIconPath Condition="Exists('Assets\app.ico')">Assets\app.ico</InstallerIconPath>
@@ -30,6 +31,10 @@
 
   <ItemGroup Condition="'$(SetupPayloadPath)' != '' and Exists('$(SetupPayloadPath)')">
     <EmbeddedResource Include="$(SetupPayloadPath)" LogicalName="XCAGI.SetupPayload" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(SunbirdSeedZipPath)' != '' and Exists('$(SunbirdSeedZipPath)')">
+    <EmbeddedResource Include="$(SunbirdSeedZipPath)" LogicalName="XCAGI.SunbirdSeedPayload" />
   </ItemGroup>
 
   <!-- 与 SetupPayload 分开声明，避免大文件嵌入时覆盖许可资源 -->
