@@ -71,6 +71,11 @@ FHD/mobile-android/.toolchain/
 .trae/
 .runtime/
 
+# 太阳鸟交付包大文件（目录结构与说明入库；exe/xlsx 由 stage-sunbird-delivery 本地生成）
+太阳鸟/*.exe
+太阳鸟/**/*.xlsx
+太阳鸟/manifest.json
+
 # 根目录本地素材（非交付树）
 /*.jpg
 /*.png
