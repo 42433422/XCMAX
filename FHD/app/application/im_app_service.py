@@ -221,7 +221,9 @@ class ImApplicationService:
             "updated_at_ms": updated_at_ms,
         }
 
-    def mark_read(self, conversation_id: int, user_id: int, last_message_id: int) -> dict[str, Any]:
+    def mark_read(
+        self, conversation_id: int, user_id: int, last_message_id: int
+    ) -> dict[str, Any]:
         member = self._get_member(conversation_id, user_id)
         if not member:
             raise PermissionError("非会话成员")
