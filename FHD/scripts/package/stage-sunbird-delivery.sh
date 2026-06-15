@@ -78,12 +78,17 @@ if [[ "${USE_CI}" == "1" ]]; then
   fi
   echo "==> Trigger GitHub Actions (windows-latest 云端打包) ..."
   cd "${REPO_ROOT}"
-  if ! gh workflow run "Sunbird Installer" -f "version=${VERSION}" 2>/dev/null; then
-    gh workflow run sunbird-installer.yml -f "version=${VERSION}"
+  WF="fhd-sunbird-installer.yml"
+  if ! gh workflow run "${WF}" -f "version=${VERSION}" 2>/dev/null; then
+    gh workflow run "Sunbird Installer" -f "version=${VERSION}" || \
+      gh workflow run sunbird-installer.yml -f "version=${VERSION}"
   fi
   echo "==> Waiting for workflow run ..."
   sleep 8
-  run_id="$(gh run list --workflow=sunbird-installer.yml --limit 1 --json databaseId --jq '.[0].databaseId')"
+  run_id="$(gh run list --workflow="${WF}" --limit 1 --json databaseId --jq '.[0].databaseId' 2>/dev/null || true)"
+  if [[ -z "${run_id}" || "${run_id}" == "null" ]]; then
+    run_id="$(gh run list --workflow=sunbird-installer.yml --limit 1 --json databaseId --jq '.[0].databaseId')"
+  fi
   if [[ -z "${run_id}" || "${run_id}" == "null" ]]; then
     echo "ERROR: 未找到 workflow run。请先 git push 上传 sunbird-installer.yml" >&2
     exit 1
