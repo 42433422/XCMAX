@@ -1,107 +1,79 @@
 package com.xiuci.xcagi.mobile.ui
 
-import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.work.Constraints
-import androidx.work.ExistingPeriodicWorkPolicy
-import androidx.work.NetworkType
-import androidx.work.PeriodicWorkRequestBuilder
-import androidx.work.WorkManager
-import com.xiuci.xcagi.mobile.BuildConfig
-import com.xiuci.xcagi.mobile.core.ProductSkuConfig
 import com.xiuci.xcagi.mobile.core.datastore.SessionStore
-import com.xiuci.xcagi.mobile.core.model.AppConfigResponse
-import com.xiuci.xcagi.mobile.core.model.ApprovalDetail
 import com.xiuci.xcagi.mobile.core.model.ListItem
-import com.xiuci.xcagi.mobile.core.model.ModInfo
-import com.xiuci.xcagi.mobile.core.model.ModMenuItem
-import com.xiuci.xcagi.mobile.core.network.PairingQrCodec
+import com.xiuci.xcagi.mobile.core.model.ApprovalDetail
 import com.xiuci.xcagi.mobile.core.network.ServerMode
 import com.xiuci.xcagi.mobile.core.network.ServerRouter
+import com.xiuci.xcagi.mobile.BuildConfig
+import com.xiuci.xcagi.mobile.core.ProductSkuConfig
+import com.xiuci.xcagi.mobile.core.model.AppConfigResponse
 import com.xiuci.xcagi.mobile.core.observability.XcagiAnalytics
 import com.xiuci.xcagi.mobile.core.push.PushRegistrar
 import com.xiuci.xcagi.mobile.core.repository.XcagiRepository
 import com.xiuci.xcagi.mobile.core.sync.MobileSyncRepository
 import com.xiuci.xcagi.mobile.core.work.MobileSyncWorker
 import com.xiuci.xcagi.mobile.navigation.Routes
+import androidx.work.Constraints
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.NetworkType
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
-import java.util.concurrent.TimeUnit
-import javax.inject.Inject
+import android.content.Context
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.Job
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
+import javax.inject.Inject
 
 data class UiMessage(val text: String, val isError: Boolean = false)
 
 data class UpdatePrompt(
-        val force: Boolean,
-        val versionName: String,
-        val downloadUrl: String,
+    val force: Boolean,
+    val versionName: String,
+    val downloadUrl: String,
 )
 
 @HiltViewModel
-class AppViewModel
-@Inject
-constructor(
-        @ApplicationContext private val appContext: Context,
-        private val repo: XcagiRepository,
-        private val sessionStore: SessionStore,
-        private val serverRouter: ServerRouter,
-        private val syncRepo: MobileSyncRepository,
-        private val pushRegistrar: PushRegistrar,
-        private val analytics: XcagiAnalytics,
+class AppViewModel @Inject constructor(
+    @ApplicationContext private val appContext: Context,
+    private val repo: XcagiRepository,
+    private val sessionStore: SessionStore,
+    private val serverRouter: ServerRouter,
+    private val syncRepo: MobileSyncRepository,
+    private val pushRegistrar: PushRegistrar,
+    private val analytics: XcagiAnalytics,
 ) : ViewModel() {
-    val isLoggedIn =
-            sessionStore.isLoggedInFlow.stateIn(
-                    viewModelScope,
-                    SharingStarted.WhileSubscribed(5_000),
-                    false
-            )
-    val isSetupComplete =
-            sessionStore.isSetupCompleteFlow.stateIn(
-                    viewModelScope,
-                    SharingStarted.WhileSubscribed(5_000),
-                    false
-            )
-    val autoLanProbe =
-            sessionStore.autoLanProbeFlow.stateIn(
-                    viewModelScope,
-                    SharingStarted.WhileSubscribed(5_000),
-                    false
-            )
-    val fhdHost =
-            sessionStore.fhdHostFlow.stateIn(
-                    viewModelScope,
-                    SharingStarted.WhileSubscribed(5_000),
-                    ""
-            )
+    val isLoggedIn = sessionStore.isLoggedInFlow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+    val isSetupComplete = sessionStore.isSetupCompleteFlow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+    val autoLanProbe = sessionStore.autoLanProbeFlow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+    val fhdHost = sessionStore.fhdHostFlow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "")
 
-    val displayName =
-            sessionStore.fhdUsernameFlow.stateIn(
-                    viewModelScope,
-                    SharingStarted.WhileSubscribed(5_000),
-                    "",
-            )
+    val displayName = sessionStore.fhdUsernameFlow.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5_000),
+        "",
+    )
 
-    val serverModeLabel =
-            combine(sessionStore.serverModeFlow, sessionStore.fhdHostFlow) { mode, host ->
-                        when {
-                            host.isNotBlank() -> "Agent 控制 · $host"
-                            mode == "cloud" -> "云端模式"
-                            else -> "云端模式"
-                        }
-                    }
-                    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "云端模式")
+    val serverModeLabel = combine(sessionStore.serverModeFlow, sessionStore.fhdHostFlow) { mode, host ->
+        when {
+            mode == "cloud" -> "云端模式"
+            host.isNotBlank() -> "局域网 · $host"
+            else -> "局域网（未配置电脑）"
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "云端模式")
 
     private val _marketAccess = MutableStateFlow("")
     val marketAccess: StateFlow<String> = _marketAccess.asStateFlow()
@@ -109,24 +81,10 @@ constructor(
     private val _marketRefresh = MutableStateFlow("")
     val marketRefresh: StateFlow<String> = _marketRefresh.asStateFlow()
 
-    val fhdAccess =
-            sessionStore.fhdAccessFlow.stateIn(
-                    viewModelScope,
-                    SharingStarted.WhileSubscribed(5_000),
-                    "",
-            )
-
-    private fun registerPushWithHint() {
-        viewModelScope.launch {
-            val result = pushRegistrar.registerAll()
-            result.hint?.let { snack(it, isError = true) }
-        }
-    }
-
     private val _navReady = MutableStateFlow(false)
     val navReady: StateFlow<Boolean> = _navReady.asStateFlow()
 
-    private val _startRoute = MutableStateFlow(Routes.LEGAL)
+    private val _startRoute = MutableStateFlow(Routes.CONNECT)
     val startRoute: StateFlow<String> = _startRoute.asStateFlow()
 
     private val _message = MutableStateFlow<UiMessage?>(null)
@@ -159,27 +117,17 @@ constructor(
     private val _listError = MutableStateFlow<String?>(null)
     val listError: StateFlow<String?> = _listError.asStateFlow()
 
-    val isCloudMode =
-            sessionStore
-                    .serverModeFlow
-                    .map { it == "cloud" }
-                    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
+    val isCloudMode = sessionStore.serverModeFlow
+        .map { it == "cloud" }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
 
-    val chatConnectionChip =
-            combine(sessionStore.serverModeFlow, sessionStore.fhdHostFlow) { mode, host ->
-                        when {
-                            host.isNotBlank() -> "Agent"
-                            mode == "cloud" -> "云端"
-                            else -> "云端"
-                        }
-                    }
-                    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "云端")
-
-    val isAgentControlActive =
-            sessionStore
-                    .fhdHostFlow
-                    .map { it.isNotBlank() }
-                    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+    val chatConnectionChip = combine(sessionStore.serverModeFlow, sessionStore.fhdHostFlow) { mode, host ->
+        when {
+            mode == "cloud" -> "云端"
+            host.isNotBlank() -> "局域网"
+            else -> "未连电脑"
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "云端")
 
     private val _homeHub = MutableStateFlow(HomeHubState())
     val homeHub: StateFlow<HomeHubState> = _homeHub.asStateFlow()
@@ -193,54 +141,37 @@ constructor(
     private val _chatAction = MutableStateFlow<ChatAction?>(null)
     val chatAction: StateFlow<ChatAction?> = _chatAction.asStateFlow()
 
-    val syncStaleHint =
-            combine(sessionStore.lastSyncAtFlow, sessionStore.fhdHostFlow) { last, host ->
-                        host.isNotBlank() && last.isBlank()
-                    }
-                    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+    val syncStaleHint = combine(sessionStore.lastSyncAtFlow, sessionStore.fhdHostFlow) { last, host ->
+        host.isNotBlank() && last.isBlank()
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
-    val canUseNativeChat =
-            sessionStore
-                    .fhdAccessFlow
-                    .map { it.isNotBlank() }
-                    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+    val canUseNativeChat = sessionStore.fhdAccessFlow
+        .map { it.isNotBlank() }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
-    val autoSync =
-            sessionStore.autoSyncFlow.stateIn(
-                    viewModelScope,
-                    SharingStarted.WhileSubscribed(5_000),
-                    true,
-            )
+    val autoSync = sessionStore.autoSyncFlow.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5_000),
+        true,
+    )
 
     private val _appConfig = MutableStateFlow<AppConfigResponse?>(null)
     val appConfig: StateFlow<AppConfigResponse?> = _appConfig.asStateFlow()
 
     private val _updatePrompt = MutableStateFlow<UpdatePrompt?>(null)
-    private val _autoLoggingIn = MutableStateFlow(false)
-    val autoLoggingIn: StateFlow<Boolean> = _autoLoggingIn.asStateFlow()
     val updatePrompt: StateFlow<UpdatePrompt?> = _updatePrompt.asStateFlow()
 
-    private val _modInfos = MutableStateFlow<List<ModInfo>>(emptyList())
-    val modInfos: StateFlow<List<ModInfo>> = _modInfos.asStateFlow()
+    val biometricEnabled = sessionStore.biometricEnabledFlow.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5_000),
+        false,
+    )
 
-    val dynamicMenuItems: StateFlow<List<ModMenuItem>> =
-            _modInfos
-                    .map { mods -> mods.flatMap { it.frontend_menu } }
-                    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
-
-    val biometricEnabled =
-            sessionStore.biometricEnabledFlow.stateIn(
-                    viewModelScope,
-                    SharingStarted.WhileSubscribed(5_000),
-                    false,
-            )
-
-    val themeMode =
-            sessionStore.themeModeFlow.stateIn(
-                    viewModelScope,
-                    SharingStarted.WhileSubscribed(5_000),
-                    "system",
-            )
+    val themeMode = sessionStore.themeModeFlow.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5_000),
+        "system",
+    )
 
     private var chatJob: Job? = null
 
@@ -250,7 +181,6 @@ constructor(
         viewModelScope.launch {
             repo.fetchAppConfig().onSuccess {
                 _appConfig.value = it
-                ProductSkuConfig.remoteSku = it.sku
                 refreshStartRoute()
             }
             checkForUpdate(manual = false)
@@ -278,219 +208,166 @@ constructor(
         }
     }
 
-    fun refreshStartRoute() =
-            viewModelScope.launch {
-                val cfg = _appConfig.value
-                val accepted = sessionStore.legalAcceptedVersion()
-                val needLegal = cfg != null && accepted != cfg.legal_version
-                if (needLegal) {
-                    _startRoute.value = Routes.LEGAL
-                    return@launch
-                }
-                val loggedIn = sessionStore.isLoggedInFlow.first()
-                _startRoute.value =
-                        when {
-                            needLegal -> Routes.LEGAL
-                            !loggedIn && sessionStore.canAutoLogin() -> Routes.AUTH_AUTO_LOGIN
-                            !loggedIn -> Routes.AUTH
-                            else -> Routes.CHAT
-                        }
-            }
+    fun refreshStartRoute() = viewModelScope.launch {
+        val cfg = _appConfig.value
+        val accepted = sessionStore.legalAcceptedVersion()
+        val needLegal = cfg != null && accepted != cfg.legal_version
+        if (needLegal) {
+            _startRoute.value = Routes.LEGAL
+            return@launch
+        }
+        val setup = sessionStore.isSetupComplete()
+        val loggedIn = sessionStore.isLoggedInFlow.first()
+        _startRoute.value = when {
+            !setup -> Routes.CONNECT
+            !loggedIn -> Routes.AUTH
+            else -> Routes.CHAT
+        }
+    }
 
-    /** 免登录：使用已保存的凭证自动登录 */
-    fun tryAutoLogin() =
-            viewModelScope.launch {
-                val u = sessionStore.savedUsername()
-                val p = sessionStore.savedPassword()
-                if (u.isBlank() || p.isBlank()) return@launch
-                _autoLoggingIn.value = true
-                repo.loginUnified(u, p)
-                        .onSuccess {
-                            sessionStore.setSetupComplete(true)
-                            sessionStore.setServerMode("cloud")
-                            serverRouter.mode = ServerMode.CLOUD
-                            snack("欢迎回来，$it")
-                            refreshMarketTokens()
-                            registerPushWithHint()
-                            _startRoute.value = Routes.CHAT
-                        }
-                        .onFailure { snack("自动登录失败，请手动登录", true) }
-                        .also { _autoLoggingIn.value = false }
-            }
+    fun acceptLegal(onDone: () -> Unit) = viewModelScope.launch {
+        val ver = _appConfig.value?.legal_version ?: "1"
+        sessionStore.setLegalAcceptedVersion(ver)
+        refreshStartRoute()
+        onDone()
+    }
 
-    fun acceptLegal(onDone: () -> Unit) =
-            viewModelScope.launch {
-                val ver = _appConfig.value?.legal_version ?: "1"
-                sessionStore.setLegalAcceptedVersion(ver)
-                refreshStartRoute()
-                onDone()
-            }
-
-    fun checkForUpdate(manual: Boolean) =
-            viewModelScope.launch {
-                val cfg =
-                        _appConfig.value
-                                ?: repo.fetchAppConfig().getOrNull().also {
-                                    _appConfig.value = it
-                                    ProductSkuConfig.remoteSku = it?.sku ?: ""
-                                }
-                                        ?: return@launch
-                val cur = BuildConfig.VERSION_CODE
-                val devOrLan = BuildConfig.DEBUG || sessionStore.serverModeFlow.first() != "cloud"
-                val forceRequired =
-                        cur < cfg.min_android_version ||
-                                (cfg.force_update && cur < cfg.latest_android_version)
-                if (forceRequired && devOrLan && !manual) return@launch
-                if (forceRequired) {
-                    _updatePrompt.value =
-                            UpdatePrompt(
-                                    force = true,
-                                    versionName = cfg.latest_android_version_name,
-                                    downloadUrl = cfg.apk_download_url,
-                            )
-                } else if (manual && cur < cfg.latest_android_version) {
-                    _updatePrompt.value =
-                            UpdatePrompt(
-                                    force = false,
-                                    versionName = cfg.latest_android_version_name,
-                                    downloadUrl = cfg.apk_download_url,
-                            )
-                } else if (manual) {
-                    snack("已是最新版本")
-                }
-            }
+    fun checkForUpdate(manual: Boolean) = viewModelScope.launch {
+        val cfg = _appConfig.value ?: repo.fetchAppConfig().getOrNull().also { _appConfig.value = it } ?: return@launch
+        val cur = BuildConfig.VERSION_CODE
+        if (cur < cfg.min_android_version || (cfg.force_update && cur < cfg.latest_android_version)) {
+            _updatePrompt.value = UpdatePrompt(
+                force = true,
+                versionName = cfg.latest_android_version_name,
+                downloadUrl = cfg.apk_download_url,
+            )
+        } else if (manual && cur < cfg.latest_android_version) {
+            _updatePrompt.value = UpdatePrompt(
+                force = false,
+                versionName = cfg.latest_android_version_name,
+                downloadUrl = cfg.apk_download_url,
+            )
+        } else if (manual) {
+            snack("当前已是最新版本")
+        }
+    }
 
     fun dismissUpdatePrompt() {
         _updatePrompt.value = null
     }
 
-    fun setBiometricEnabled(enabled: Boolean) =
-            viewModelScope.launch { sessionStore.setBiometricEnabled(enabled) }
+    fun setBiometricEnabled(enabled: Boolean) = viewModelScope.launch {
+        sessionStore.setBiometricEnabled(enabled)
+    }
 
-    fun setThemeMode(mode: String) = viewModelScope.launch { sessionStore.setThemeMode(mode) }
+    fun setThemeMode(mode: String) = viewModelScope.launch {
+        sessionStore.setThemeMode(mode)
+    }
 
-    fun submitFeedback(message: String, onDone: () -> Unit = {}) =
-            viewModelScope.launch {
-                repo.submitFeedback(message)
-                        .onSuccess {
-                            snack("感谢您的反馈，我们会尽快处理")
-                            onDone()
-                        }
-                        .onFailure { snack(it.message ?: "反馈提交失败，请稍后重试", true) }
-            }
+    fun submitFeedback(message: String, onDone: () -> Unit = {}) = viewModelScope.launch {
+        repo.submitFeedback(message).onSuccess {
+            snack("感谢反馈")
+            onDone()
+        }.onFailure { snack(it.message ?: "提交失败", true) }
+    }
 
-    fun deleteAccount(password: String, onDone: () -> Unit) =
-            viewModelScope.launch {
-                repo.deleteAccount(password)
-                        .onSuccess {
-                            pushRegistrar.unregisterAll()
-                            snack("账号已成功注销")
-                            refreshStartRoute()
-                            onDone()
-                        }
-                        .onFailure { snack(it.message ?: "注销失败，请检查网络后重试", true) }
-            }
+    fun deleteAccount(password: String, onDone: () -> Unit) = viewModelScope.launch {
+        repo.deleteAccount(password).onSuccess {
+            pushRegistrar.unregisterAll()
+            snack("账号已注销")
+            refreshStartRoute()
+            onDone()
+        }.onFailure { snack(it.message ?: "注销失败", true) }
+    }
 
-    fun exportAccount(onPath: (String) -> Unit) =
-            viewModelScope.launch {
-                repo.exportAccountData().onSuccess { snack("数据导出完成") }.onFailure {
-                    snack(it.message ?: "导出失败，请稍后重试", true)
+    fun exportAccount(onPath: (String) -> Unit) = viewModelScope.launch {
+        repo.exportAccountData().onSuccess {
+            snack("导出数据已就绪")
+        }.onFailure { snack(it.message ?: "导出失败", true) }
+    }
+
+    fun loadHomeHub() = viewModelScope.launch {
+        _homeHub.value = _homeHub.value.copy(loading = true)
+        val host = sessionStore.fhdHostFlow.first()
+        val online = host.isNotBlank() && repo.checkHealth(host)
+        val syncLabel = syncRepo.statusLabel(online)
+        val (mods, fromCloud) = if (online) {
+            val list = repo.fetchHome().getOrNull()?.let { data ->
+                @Suppress("UNCHECKED_CAST")
+                val raw = (data["mods"] as? List<Map<String, Any?>>) ?: emptyList()
+                raw.mapNotNull { row ->
+                    val id = row["id"]?.toString()?.trim().orEmpty()
+                    val name = row["name"]?.toString()?.trim().orEmpty()
+                    if (id.isNotBlank()) ListItem(id, name.ifBlank { id }) else null
                 }
-            }
-
-    fun loadHomeHub() =
-            viewModelScope.launch {
-                _homeHub.value = _homeHub.value.copy(loading = true)
-                val host = sessionStore.fhdHostFlow.first()
-                val online = host.isNotBlank() && repo.checkHealth(host)
-                val syncLabel = syncRepo.statusLabel(online)
-                val (mods, fromCloud) =
-                        if (online) {
-                            val list =
-                                    repo.fetchHome().getOrNull()?.let { data ->
-                                        @Suppress("UNCHECKED_CAST")
-                                        val raw =
-                                                (data["mods"] as? List<Map<String, Any?>>)
-                                                        ?: emptyList()
-                                        raw.mapNotNull { row ->
-                                            val id = row["id"]?.toString()?.trim().orEmpty()
-                                            val name = row["name"]?.toString()?.trim().orEmpty()
-                                            if (id.isNotBlank()) ListItem(id, name.ifBlank { id })
-                                            else null
-                                        }
-                                    }
-                                            ?: repo.mods().getOrElse { emptyList() }
-                            list to false
-                        } else {
-                            repo.marketCatalog().getOrElse { emptyList() } to true
-                        }
-                _homeHub.value =
-                        HomeHubState(
-                                loading = false,
-                                pcOnline = online,
-                                mods = mods,
-                                modsFromCloud = fromCloud,
-                                syncLabel = syncLabel,
-                        )
-                rebuildChatSuggestions(mods, online)
-            }
+            } ?: repo.mods().getOrElse { emptyList() }
+            list to false
+        } else {
+            repo.marketCatalog().getOrElse { emptyList() } to true
+        }
+        _homeHub.value = HomeHubState(
+            loading = false,
+            pcOnline = online,
+            mods = mods,
+            modsFromCloud = fromCloud,
+            syncLabel = syncLabel,
+        )
+        rebuildChatSuggestions(mods, online)
+    }
 
     private fun rebuildChatSuggestions(mods: List<ListItem>, pcOnline: Boolean) {
-        val base =
-                mutableListOf(
-                        ChatSuggestion("打开工作台", "帮我打开工作台首页"),
-                        ChatSuggestion("今日待办", "总结我今天的待办和审批"),
-                )
+        val base = mutableListOf(
+            ChatSuggestion("打开工作台", "帮我打开工作台首页"),
+            ChatSuggestion("今日待办", "总结我今天的待办和审批"),
+        )
         if (pcOnline) {
             base.add(ChatSuggestion("同步状态", "我的手机和电脑数据同步了吗？"))
         }
-        mods.take(6).forEach { m -> base.add(ChatSuggestion(m.title, "打开 Mod ${m.id} 并说明能做什么")) }
+        mods.take(6).forEach { m ->
+            base.add(ChatSuggestion(m.title, "打开 Mod ${m.id} 并说明能做什么"))
+        }
         _chatSuggestions.value = base
     }
 
-    fun runSyncNow() =
-            viewModelScope.launch {
-                _homeHub.value = _homeHub.value.copy(syncing = true)
-                syncRepo.pullAndCache()
-                        .onSuccess { summary ->
-                            snack("数据同步完成")
-                            _homeHub.value =
-                                    _homeHub.value.copy(
-                                            syncing = false,
-                                            syncLabel = summary.label,
-                                    )
-                        }
-                        .onFailure {
-                            snack(it.message ?: "同步失败，请检查网络连接", true)
-                            _homeHub.value = _homeHub.value.copy(syncing = false)
-                        }
-                loadHomeHub()
+    fun runSyncNow() = viewModelScope.launch {
+        _homeHub.value = _homeHub.value.copy(syncing = true)
+        syncRepo.pullAndCache()
+            .onSuccess { summary ->
+                snack("同步完成")
+                _homeHub.value = _homeHub.value.copy(
+                    syncing = false,
+                    syncLabel = summary.label,
+                )
             }
+            .onFailure {
+                snack(it.message ?: "同步失败", true)
+                _homeHub.value = _homeHub.value.copy(syncing = false)
+            }
+        loadHomeHub()
+    }
 
-    fun setAutoSync(enabled: Boolean) =
-            viewModelScope.launch {
-                sessionStore.setAutoSync(enabled)
-                updateSyncWork(enabled)
-            }
+    fun setAutoSync(enabled: Boolean) = viewModelScope.launch {
+        sessionStore.setAutoSync(enabled)
+        updateSyncWork(enabled)
+    }
 
     private fun updateSyncWork(enabled: Boolean) {
-        val wm =
-                try {
-                    WorkManager.getInstance(appContext)
-                } catch (_: Exception) {
-                    return
-                }
+        val wm = try {
+            WorkManager.getInstance(appContext)
+        } catch (_: Exception) {
+            return
+        }
         if (enabled) {
-            val constraints =
-                    Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
-            val req =
-                    PeriodicWorkRequestBuilder<MobileSyncWorker>(15, TimeUnit.MINUTES)
-                            .setConstraints(constraints)
-                            .build()
+            val constraints = Constraints.Builder()
+                .setRequiredNetworkType(NetworkType.CONNECTED)
+                .build()
+            val req = PeriodicWorkRequestBuilder<MobileSyncWorker>(15, TimeUnit.MINUTES)
+                .setConstraints(constraints)
+                .build()
             wm.enqueueUniquePeriodicWork(
-                    "xcagi_mobile_sync",
-                    ExistingPeriodicWorkPolicy.UPDATE,
-                    req,
+                "xcagi_mobile_sync",
+                ExistingPeriodicWorkPolicy.UPDATE,
+                req,
             )
         } else {
             wm.cancelUniqueWork("xcagi_mobile_sync")
@@ -499,205 +376,130 @@ constructor(
 
     fun workbenchUrl(): String = repo.workbenchHomeUrl()
 
-    fun refreshMarketTokens() =
-            viewModelScope.launch {
-                val cloudFirst = sessionStore.serverModeFlow.first() == "cloud"
-                if (!cloudFirst && repo.hasNativeFhdAuth()) {
-                    try {
-                        kotlinx.coroutines.withTimeout(5_000) { repo.syncMarketSessionHandoff() }
-                    } catch (_: Exception) {}
-                }
-                val (access, refresh) = repo.marketTokensForWeb()
-                _marketAccess.value = access
-                _marketRefresh.value = refresh
+    fun refreshMarketTokens() = viewModelScope.launch {
+        val cloudFirst = sessionStore.serverModeFlow.first() == "cloud"
+        if (!cloudFirst && repo.hasNativeFhdAuth()) {
+            try {
+                kotlinx.coroutines.withTimeout(5_000) { repo.syncMarketSessionHandoff() }
+            } catch (_: Exception) {
             }
-
-    fun completeSetup() =
-            viewModelScope.launch {
-                sessionStore.setSetupComplete(true)
-                refreshStartRoute()
-            }
-
-    fun skipToCloud(onDone: () -> Unit) =
-            viewModelScope.launch {
-                sessionStore.setSetupComplete(true)
-                sessionStore.setServerMode("cloud")
-                serverRouter.mode = ServerMode.CLOUD
-                snack("已切换至云端模式")
-                refreshStartRoute()
-                onDone()
-            }
-
-    fun setAutoLanProbe(enabled: Boolean) =
-            viewModelScope.launch { sessionStore.setAutoLanProbe(enabled) }
-
-    fun snack(text: String, isError: Boolean = false) {
-        _message.value = UiMessage(text, isError)
-    }
-    fun clearSnack() {
-        _message.value = null
+        }
+        val (access, refresh) = repo.marketTokensForWeb()
+        _marketAccess.value = access
+        _marketRefresh.value = refresh
     }
 
-    fun setHost(host: String, markSetup: Boolean = false) =
-            viewModelScope.launch {
-                sessionStore.setFhdHost(host)
-                serverRouter.fhdHost = host
-                if (markSetup) {
-                    sessionStore.setSetupComplete(true)
-                    refreshStartRoute()
-                }
-            }
+    fun completeSetup() = viewModelScope.launch {
+        sessionStore.setSetupComplete(true)
+        refreshStartRoute()
+    }
 
-    fun setMode(cloud: Boolean) =
-            viewModelScope.launch {
-                sessionStore.setServerMode(if (cloud) "cloud" else "lan")
-                serverRouter.mode = if (cloud) ServerMode.CLOUD else ServerMode.LAN
-            }
+    fun skipToCloud(onDone: () -> Unit) = viewModelScope.launch {
+        sessionStore.setSetupComplete(true)
+        sessionStore.setServerMode("cloud")
+        serverRouter.mode = ServerMode.CLOUD
+        snack("已切换云端模式，可登录使用")
+        refreshStartRoute()
+        onDone()
+    }
 
-    fun probeHealth(host: String, onResult: (Boolean) -> Unit) =
-            viewModelScope.launch { onResult(repo.checkHealth(host)) }
+    fun setAutoLanProbe(enabled: Boolean) = viewModelScope.launch {
+        sessionStore.setAutoLanProbe(enabled)
+    }
 
-    fun scanSubnet(prefix: String) =
-            viewModelScope.launch {
-                _scanResults.value = repo.scanLan(prefix)
-                snack("已发现 ${_scanResults.value.size} 台设备")
-            }
+    fun snack(text: String, isError: Boolean = false) { _message.value = UiMessage(text, isError) }
+    fun clearSnack() { _message.value = null }
 
-    fun loginFhd(
-            u: String,
-            p: String,
-            isAdmin: Boolean = false,
-            rememberPass: Boolean = false,
-            autoLogin: Boolean = false,
-            onDone: (Boolean) -> Unit
-    ) =
-            viewModelScope.launch {
-                repo.loginUnified(u, p, isAdmin)
-                        .onSuccess {
-                            // 登录成功后自动完成设置 + 切换云端模式
-                            sessionStore.setSetupComplete(true)
-                            sessionStore.setServerMode("cloud")
-                            serverRouter.mode = ServerMode.CLOUD
-                            if (rememberPass) sessionStore.saveCredentials(u, p)
-                            else sessionStore.clearSavedCredentials()
-                            sessionStore.setAutoLogin(autoLogin)
-                            snack("欢迎回来，$it")
-                            analytics.log("login_success", mapOf("method" to "password"))
-                            refreshMarketTokens()
-                            registerPushWithHint()
-                            onDone(true)
-                        }
-                        .onFailure {
-                            analytics.log("login_fail", mapOf("method" to "password"))
-                            snack(it.message ?: "登录失败，请检查账号密码", true)
-                            onDone(false)
-                        }
-            }
+    fun setHost(host: String, markSetup: Boolean = false) = viewModelScope.launch {
+        sessionStore.setFhdHost(host)
+        serverRouter.fhdHost = host
+        if (markSetup) {
+            sessionStore.setSetupComplete(true)
+            refreshStartRoute()
+        }
+    }
 
-    fun register(u: String, p: String, e: String, onDone: (Boolean) -> Unit) =
-            viewModelScope.launch {
-                repo.register(u, p, e)
-                        .onSuccess {
-                            snack("注册成功，请登录")
-                            onDone(true)
-                        }
-                        .onFailure {
-                            snack(it.message ?: "注册失败，请稍后重试", true)
-                            onDone(false)
-                        }
-            }
+    fun setMode(cloud: Boolean) = viewModelScope.launch {
+        sessionStore.setServerMode(if (cloud) "cloud" else "lan")
+        serverRouter.mode = if (cloud) ServerMode.CLOUD else ServerMode.LAN
+    }
 
-    fun sendCode(phone: String, onDone: (() -> Unit)? = null) =
-            viewModelScope.launch {
-                repo.sendMarketCode(phone).onSuccess { snack("验证码已发送至手机") }.onFailure {
-                    snack(it.message ?: "验证码发送失败", true)
-                }
-                onDone?.invoke()
-            }
+    fun probeHealth(host: String, onResult: (Boolean) -> Unit) = viewModelScope.launch {
+        onResult(repo.checkHealth(host))
+    }
 
-    fun loginPhone(phone: String, code: String, onDone: (Boolean) -> Unit) =
-            viewModelScope.launch {
-                repo.loginMarketPhone(phone, code)
-                        .onSuccess {
-                            snack(it)
-                            analytics.log("login_success", mapOf("method" to "phone"))
-                            refreshMarketTokens()
-                            registerPushWithHint()
-                            onDone(true)
-                        }
-                        .onFailure {
-                            analytics.log("login_fail", mapOf("method" to "phone"))
-                            snack(it.message ?: "操作失败，请稍后重试", true)
-                            onDone(false)
-                        }
-            }
+    fun scanSubnet(prefix: String) = viewModelScope.launch {
+        _scanResults.value = repo.scanLan(prefix)
+        snack("发现 ${_scanResults.value.size} 台主机")
+    }
 
-    fun exchangeQr(
-            raw: String,
-            targetHost: String = "",
-            targetPort: Int = 0,
-            onDone: (Boolean) -> Unit,
-    ) =
-            viewModelScope.launch {
-                val parsed = PairingQrCodec.parse(raw)
-                if (parsed != null) {
-                            // v2 纯 token 模式：通过 code 或 token 做 exchange
-                            if (parsed.version >= 2 && parsed.token.isNotBlank()) {
-                                val useCode =
-                                        if (parsed.token.length == 6 &&
-                                                        parsed.token.all { it.isDigit() }
-                                        )
-                                                parsed.token
-                                        else ""
-                                repo.pairingExchange(
-                                        nonce = if (useCode.isBlank()) parsed.token else "",
-                                        code = useCode,
-                                )
-                            } else {
-                                // v1 直连模式：host:port + nonce
-                                repo.pairingExchange(
-                                        nonce = parsed.nonce,
-                                        exchangeHost = parsed.host.ifBlank { targetHost },
-                                        exchangePort = parsed.port.takeIf { it > 0 } ?: targetPort,
-                                )
-                            }
-                        } else {
-                            // fallback: 原始文本直接当 nonce
-                            repo.pairingExchange(nonce = raw.trim())
-                        }
-                        .onSuccess { (_, _) ->
-                            sessionStore.setSetupComplete(true)
-                            refreshStartRoute()
-                            snack("设备绑定成功")
-                            onDone(true)
-                        }
-                        .onFailure {
-                            snack(it.message ?: "设备配对失败，请重试", true)
-                            onDone(false)
-                        }
-            }
+    fun loginFhd(u: String, p: String, onDone: (Boolean) -> Unit) = viewModelScope.launch {
+        repo.loginUnified(u, p).onSuccess {
+            snack("欢迎 $it")
+            analytics.log("login_success", mapOf("method" to "password"))
+            refreshMarketTokens()
+            pushRegistrar.registerAll()
+            onDone(true)
+        }.onFailure {
+            analytics.log("login_fail", mapOf("method" to "password"))
+            snack(it.message ?: "失败", true)
+            onDone(false)
+        }
+    }
+
+    fun register(u: String, p: String, e: String, onDone: (Boolean) -> Unit) = viewModelScope.launch {
+        repo.register(u, p, e).onSuccess { snack("注册成功"); onDone(true) }
+            .onFailure { snack(it.message ?: "失败", true); onDone(false) }
+    }
+
+    fun sendCode(phone: String) = viewModelScope.launch {
+        repo.sendMarketCode(phone).onSuccess { snack("验证码已发送") }
+            .onFailure { snack(it.message ?: "失败", true) }
+    }
+
+    fun loginPhone(phone: String, code: String, onDone: (Boolean) -> Unit) = viewModelScope.launch {
+        repo.loginMarketPhone(phone, code).onSuccess {
+            snack(it)
+            analytics.log("login_success", mapOf("method" to "phone"))
+            refreshMarketTokens()
+            pushRegistrar.registerAll()
+            onDone(true)
+        }.onFailure {
+            analytics.log("login_fail", mapOf("method" to "phone"))
+            snack(it.message ?: "失败", true)
+            onDone(false)
+        }
+    }
+
+    fun exchangeQr(nonce: String, onDone: (Boolean) -> Unit) = viewModelScope.launch {
+        repo.pairingExchange(nonce).onSuccess { (h, _) ->
+            sessionStore.setFhdHost(h)
+            serverRouter.fhdHost = h
+            sessionStore.setSetupComplete(true)
+            refreshStartRoute()
+            snack("已绑定 $h")
+            onDone(true)
+        }.onFailure { snack(it.message ?: "配对失败", true); onDone(false) }
+    }
 
     fun confirmAuthQr(qrId: String, username: String, password: String, onDone: (Boolean) -> Unit) =
-            viewModelScope.launch {
-                repo.confirmAuthQr(qrId, username, password)
-                        .onSuccess {
-                            snack("已确认登录")
-                            onDone(true)
-                        }
-                        .onFailure {
-                            snack(it.message ?: "扫码登录失败，请重试", true)
-                            onDone(false)
-                        }
+        viewModelScope.launch {
+            repo.confirmAuthQr(qrId, username, password).onSuccess {
+                snack("已确认 PC 登录")
+                onDone(true)
+            }.onFailure {
+                snack(it.message ?: "扫码登录失败", true)
+                onDone(false)
             }
+        }
 
-    fun lanRequest(note: String) =
-            viewModelScope.launch {
-                repo.requestLanAccess(note).onSuccess { snack(it) }.onFailure {
-                    snack(it.message ?: "请求失败", true)
-                }
-            }
+    fun lanRequest(note: String) = viewModelScope.launch {
+        repo.requestLanAccess(note).onSuccess { snack(it) }.onFailure { snack(it.message ?: "", true) }
+    }
 
-    fun loadChatCache() = viewModelScope.launch { _chatMessages.value = repo.loadCachedChat() }
+    fun loadChatCache() = viewModelScope.launch {
+        _chatMessages.value = repo.loadCachedChat()
+    }
 
     fun clearChat() {
         chatJob?.cancel()
@@ -706,79 +508,62 @@ constructor(
         _chatAction.value = null
     }
 
-    fun refreshApprovalCount() =
-            viewModelScope.launch {
-                if (!ProductSkuConfig.showsEnterpriseNav) {
-                    _approvalPendingCount.value = 0
-                    return@launch
-                }
-                repo.approvals().onSuccess { _approvalPendingCount.value = it.size }
-            }
+    fun refreshApprovalCount() = viewModelScope.launch {
+        if (!ProductSkuConfig.showsEnterpriseNav) {
+            _approvalPendingCount.value = 0
+            return@launch
+        }
+        repo.approvals().onSuccess { _approvalPendingCount.value = it.size }
+    }
 
     fun sendChat(text: String) {
         chatJob?.cancel()
         _chatAction.value = null
         _chatMessages.value = _chatMessages.value + ("user" to text)
+        if (!canUseNativeChat.value) {
+            _chatMessages.value = _chatMessages.value + (
+                "assistant" to "当前为云端账号，完整 AI 对话需连接电脑端并登录；您可在「工作台」使用网页版 AI。"
+            )
+            return
+        }
         _streaming.value = true
         var acc = ""
-        chatJob =
-                viewModelScope.launch {
-                    if (repo.hasNativeFhdAuth()) {
-                        // 有本地 FHD 认证，走局域网
-                        repo.streamChat(
-                                text,
-                                onToken = { t ->
-                                    acc += t
-                                    _chatMessages.value =
-                                            _chatMessages.value.dropLast(1) + ("assistant" to acc)
-                                },
-                                onDone = { full ->
-                                    _streaming.value = false
-                                    _chatMessages.value =
-                                            _chatMessages.value.dropLast(1) + ("assistant" to full)
-                                    inferChatAction(text, full)
-                                },
-                                onError = { e ->
-                                    _streaming.value = false
-                                    _chatMessages.value =
-                                            _chatMessages.value + ("assistant" to "错误: $e")
-                                },
-                        )
-                    } else {
-                        // 无本地认证，走云端 API
-                        repo.streamChatCloud(
-                                text,
-                                onToken = { t ->
-                                    acc += t
-                                    _chatMessages.value =
-                                            _chatMessages.value.dropLast(1) + ("assistant" to acc)
-                                },
-                                onDone = { full ->
-                                    _streaming.value = false
-                                    _chatMessages.value =
-                                            _chatMessages.value.dropLast(1) + ("assistant" to full)
-                                    inferChatAction(text, full)
-                                },
-                                onError = { e ->
-                                    _streaming.value = false
-                                    _chatMessages.value =
-                                            _chatMessages.value +
-                                                    ("assistant" to "云端对话暂不可用，请连接电脑或稍后重试。")
-                                },
-                        )
-                    }
-                }
+        chatJob = viewModelScope.launch {
+            if (!repo.hasNativeFhdAuth()) {
+                _streaming.value = false
+                _chatMessages.value = _chatMessages.value + (
+                    "assistant" to "请先使用电脑端账号登录，或在工作台使用云端 AI。"
+                )
+                return@launch
+            }
+            repo.streamChat(
+                text,
+                onToken = { t ->
+                    acc += t
+                    _chatMessages.value = _chatMessages.value.dropLast(1) + ("assistant" to acc)
+                },
+                onDone = { full ->
+                    _streaming.value = false
+                    _chatMessages.value = _chatMessages.value.dropLast(1) + ("assistant" to full)
+                    inferChatAction(text, full)
+                },
+                onError = { e ->
+                    _streaming.value = false
+                    _chatMessages.value = _chatMessages.value + ("assistant" to "错误: $e")
+                },
+            )
+        }
     }
 
     private fun inferChatAction(userText: String, reply: String) {
         val lower = (userText + " " + reply).lowercase()
         when {
-            lower.contains("审批") -> _chatAction.value = ChatAction("approval", label = "审批")
+            lower.contains("工作台") -> _chatAction.value = ChatAction("workbench", label = "工作台")
+            lower.contains("审批") -> _chatAction.value = ChatAction("workbench", label = "审批")
             else -> {
-                val mod =
-                        _homeHub.value.mods.firstOrNull { m ->
-                            lower.contains(m.id.lowercase()) || lower.contains(m.title.lowercase())
-                        }
+                val mod = _homeHub.value.mods.firstOrNull { m ->
+                    lower.contains(m.id.lowercase()) || lower.contains(m.title.lowercase())
+                }
                 if (mod != null) {
                     _chatAction.value = ChatAction("mod", mod.id, mod.title)
                 }
@@ -790,166 +575,129 @@ constructor(
         _chatAction.value = null
     }
 
-    fun stopChat() {
-        chatJob?.cancel()
-        _streaming.value = false
-    }
+    fun stopChat() { chatJob?.cancel(); _streaming.value = false }
 
-    private fun loadEnterpriseList(block: suspend () -> Result<List<ListItem>>) =
-            viewModelScope.launch {
-                _listLoading.value = true
-                _listError.value = null
-                block()
-                        .onSuccess { list ->
-                            _items.value = list
-                            if (list.any { it.subtitle.contains("离线缓存") }) {
-                                _listError.value = "网络不可用，已显示本地缓存"
-                            }
-                        }
-                        .onFailure { err -> _listError.value = err.message ?: "加载失败" }
-                _listLoading.value = false
+    private fun loadEnterpriseList(block: suspend () -> Result<List<ListItem>>) = viewModelScope.launch {
+        _listLoading.value = true
+        _listError.value = null
+        block()
+            .onSuccess { list ->
+                _items.value = list
+                if (list.any { it.subtitle.contains("离线缓存") }) {
+                    _listError.value = "网络不可用，已显示本地缓存"
+                }
             }
+            .onFailure { err ->
+                _listError.value = err.message ?: "加载失败"
+            }
+        _listLoading.value = false
+    }
 
     fun loadApprovals() = loadEnterpriseList { repo.approvals() }
 
-    fun loadApprovalDetail(id: Int) =
-            viewModelScope.launch {
-                _approvalDetailLoading.value = true
-                _approvalDetail.value = null
-                repo.approvalDetail(id)
-                        .onSuccess { raw ->
-                            _approvalDetail.value = ApprovalDetail.fromResponse(raw)
-                            if (_approvalDetail.value == null) {
-                                _detailJson.value = raw.toString()
-                            }
-                        }
-                        .onFailure { snack(it.message ?: "加载失败", true) }
-                _approvalDetailLoading.value = false
+    fun loadApprovalDetail(id: Int) = viewModelScope.launch {
+        _approvalDetailLoading.value = true
+        _approvalDetail.value = null
+        repo.approvalDetail(id)
+            .onSuccess { raw ->
+                _approvalDetail.value = ApprovalDetail.fromResponse(raw)
+                if (_approvalDetail.value == null) {
+                    _detailJson.value = raw.toString()
+                }
             }
+            .onFailure {
+                snack(it.message ?: "", true)
+            }
+        _approvalDetailLoading.value = false
+    }
 
-    fun approve(id: Int, opinion: String, onDone: () -> Unit) =
-            viewModelScope.launch {
-                repo.approve(id, opinion)
-                        .onSuccess {
-                            snack("审批已通过")
-                            onDone()
-                        }
-                        .onFailure { snack(it.message ?: "审批失败", true) }
-            }
+    fun approve(id: Int, opinion: String, onDone: () -> Unit) = viewModelScope.launch {
+        repo.approve(id, opinion).onSuccess { snack("已通过"); onDone() }
+            .onFailure { snack(it.message ?: "", true) }
+    }
 
-    fun reject(id: Int, reason: String, onDone: () -> Unit) =
-            viewModelScope.launch {
-                repo.reject(id, reason)
-                        .onSuccess {
-                            snack("审批已驳回")
-                            onDone()
-                        }
-                        .onFailure { snack(it.message ?: "驳回失败", true) }
-            }
+    fun reject(id: Int, reason: String, onDone: () -> Unit) = viewModelScope.launch {
+        repo.reject(id, reason).onSuccess { snack("已驳回"); onDone() }
+            .onFailure { snack(it.message ?: "", true) }
+    }
 
     fun loadCustomers() = loadEnterpriseList { repo.customers() }
 
     fun loadShipments() = loadEnterpriseList { repo.shipments() }
 
-    fun loadBridge() =
-            viewModelScope.launch {
-                repo.bridgeRequests().onSuccess { _items.value = it }.onFailure {
-                    snack(it.message ?: "加载失败", true)
-                }
-            }
+    fun loadBridge() = viewModelScope.launch {
+        repo.bridgeRequests().onSuccess { _items.value = it }.onFailure { snack(it.message ?: "", true) }
+    }
 
-    fun loadMods() =
-            viewModelScope.launch {
-                repo.mods().onSuccess { _items.value = it }.onFailure {
-                    val msg = it.message ?: ""
-                    when {
-                        msg.contains("connect", ignoreCase = true) ||
-                                msg.contains("refused", ignoreCase = true) ||
-                                msg.contains("timeout", ignoreCase = true) ->
-                                snack("生态功能加载中，请稍候", true)
-                        msg.contains("401", ignoreCase = true) ||
-                                msg.contains("403", ignoreCase = true) -> snack("登录已过期，请重新登录", true)
-                        else -> snack("生态功能暂不可用，云端同步中", true)
-                    }
-                }
-                repo.loadModInfos().onSuccess { _modInfos.value = it }.onFailure {
-                    /* modInfos 加载失败时静默，不干扰用户 */
-                }
-            }
+    fun loadMods() = viewModelScope.launch {
+        repo.mods().onSuccess { _items.value = it }.onFailure { snack(it.message ?: "", true) }
+    }
 
-    fun loadMarket() = loadEnterpriseList { repo.marketCatalog() }
+    fun loadMarket() = viewModelScope.launch {
+        repo.marketCatalog().onSuccess { _items.value = it }.onFailure { snack(it.message ?: "", true) }
+    }
 
-    fun loadInventory() =
-            viewModelScope.launch {
-                _listLoading.value = true
-                _listError.value = null
-                repo.inventory()
-                        .onSuccess { lines -> _items.value = lines.map { ListItem(it, it) } }
-                        .onFailure { err -> _listError.value = err.message ?: "加载失败" }
-                _listLoading.value = false
-            }
+    fun loadInventory() = viewModelScope.launch {
+        _listLoading.value = true
+        _listError.value = null
+        repo.inventory()
+            .onSuccess { lines -> _items.value = lines.map { ListItem(it, it) } }
+            .onFailure { err -> _listError.value = err.message ?: "加载失败" }
+        _listLoading.value = false
+    }
 
-    fun loadFinance() =
-            viewModelScope.launch {
-                repo.financeSummary().onSuccess { _detailJson.value = it }.onFailure {
-                    snack(it.message ?: "加载失败", true)
-                }
-            }
+    fun loadFinance() = viewModelScope.launch {
+        repo.financeSummary().onSuccess { _detailJson.value = it }
+            .onFailure { snack(it.message ?: "", true) }
+    }
 
     suspend fun modUrl(modId: String) = repo.modWebUrl(modId)
 
     suspend fun modOpensInCloudWorkbench() = repo.modOpensInCloudWorkbench()
 
-    fun requestModOpen(modId: String, onCloud: () -> Unit, onNative: () -> Unit) =
-            viewModelScope.launch { if (modOpensInCloudWorkbench()) onCloud() else onNative() }
+    fun requestModOpen(modId: String, onCloud: () -> Unit, onNative: () -> Unit) = viewModelScope.launch {
+        if (modOpensInCloudWorkbench()) onCloud() else onNative()
+    }
 
     suspend fun bearerToken(): String {
         val t = sessionStore.fhdAccessFlow.first()
         return if (t.isBlank()) "" else "Bearer $t"
     }
 
-    fun bridgeRespond(id: Int, text: String, onDone: () -> Unit) =
-            viewModelScope.launch {
-                repo.bridgeRespond(id, text)
-                        .onSuccess {
-                            snack("回复发送成功")
-                            onDone()
-                        }
-                        .onFailure { snack(it.message ?: "回复失败", true) }
-            }
+    fun bridgeRespond(id: Int, text: String, onDone: () -> Unit) = viewModelScope.launch {
+        repo.bridgeRespond(id, text).onSuccess { snack("已回复"); onDone() }
+            .onFailure { snack(it.message ?: "", true) }
+    }
 
     fun connectImWebSocket() = viewModelScope.launch { repo.connectImWebSocket() }
 
     fun disconnectImWebSocket() = repo.disconnectImWebSocket()
 
-    suspend fun imOpenDirect(peerUserId: Int): Result<Map<String, Any?>> =
-            repo.imOpenDirect(peerUserId)
+    suspend fun imOpenDirect(peerUserId: Int): Result<Map<String, Any?>> = repo.imOpenDirect(peerUserId)
 
     fun observeImMessages(conversationId: Int) = repo.observeImMessages(conversationId)
 
-    suspend fun seedImMessages(conversationId: Int): Result<Unit> =
-            repo.seedImMessages(conversationId)
+    suspend fun seedImMessages(conversationId: Int): Result<Unit> = repo.seedImMessages(conversationId)
 
     suspend fun imSendMessage(conversationId: Int, text: String): Result<Map<String, Any?>> =
-            repo.imSendMessage(conversationId, text)
+        repo.imSendMessage(conversationId, text)
 
-    fun logout(onDone: () -> Unit) =
-            viewModelScope.launch {
-                pushRegistrar.unregisterAll()
-                repo.logout()
-                refreshStartRoute()
-                onDone()
-            }
+    fun logout(onDone: () -> Unit) = viewModelScope.launch {
+        pushRegistrar.unregisterAll()
+        repo.logout()
+        refreshStartRoute()
+        onDone()
+    }
 
     fun handleDeepLink(route: String, nav: (String) -> Unit) {
         when {
+            route.contains("workbench") -> nav(Routes.WORKBENCH)
             route.contains("chat") -> nav(Routes.CHAT)
             route.contains("approval") -> {
                 val id = Regex("approval/(\\d+)").find(route)?.groupValues?.getOrNull(1)
                 if (id != null) nav("approval/$id") else nav(Routes.APPROVAL)
             }
-            route.contains("home") || route.contains("home_hub") -> nav(Routes.CHAT)
-            else -> nav(Routes.CHAT)
+            else -> nav(Routes.HOME_HUB)
         }
     }
 }
