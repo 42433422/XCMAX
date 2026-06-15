@@ -106,7 +106,7 @@ if [[ "${USE_CI}" == "1" ]]; then
   fi
   rm -rf "${DELIVERY:?}/"*
   mkdir -p "${DELIVERY}"
-  gh run download "${run_id}" -n sunbird-installer -D "${DELIVERY}" --dir
+  gh run download "${run_id}" -n sunbird-installer -D "${DELIVERY}"
   # artifact 可能带 sunbird/ 或 太阳鸟/ 子目录，展平到交付根
   if [[ -f "${DELIVERY}/太阳鸟/${SETUP}" ]]; then
     mv "${DELIVERY}/太阳鸟/"* "${DELIVERY}/"

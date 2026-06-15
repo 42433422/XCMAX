@@ -53,9 +53,16 @@ jobs:
         run: |
           $v = "${{ github.event.inputs.version }}".TrimStart('v','V')
           scripts/package/build-sunbird-installer.ps1 -Version $v
+      - name: Stage sunbird installer for upload
+        shell: pwsh
+        run: |
+          $v = "${{ github.event.inputs.version }}".TrimStart('v','V')
+          $src = "release/xcagi-v$v/sunbird"
+          $dst = "build/ci-sunbird-artifact"
+          New-Item -ItemType Directory -Force -Path $dst | Out-Null
+          Get-ChildItem $src -Filter "*.exe" -File | Where-Object { $_.Name -like "*Setup*" } | Copy-Item -Destination $dst -Force
+          if (-not (Get-ChildItem $dst -Filter "*.exe")) { throw "No sunbird Setup exe in $src" }
       - uses: actions/upload-artifact@v4
         with:
           name: sunbird-installer
-          path: |
-            release/xcagi-v*/sunbird/*.exe
-            release/xcagi-v*/sunbird/manifest.json
+          path: build/ci-sunbird-artifact/**
