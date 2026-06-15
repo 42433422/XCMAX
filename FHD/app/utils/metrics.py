@@ -158,17 +158,13 @@ def record_api_request(method: str, endpoint: str, status: int | str) -> None:
         pass
 
 
-def record_ai_call(
-    provider_id: str, operation: str, status: str, duration_seconds: float
-) -> None:
+def record_ai_call(provider_id: str, operation: str, status: str, duration_seconds: float) -> None:
     """LLM Provider 统一埋点（见 infrastructure/llm/providers/*）。"""
     try:
         ai_requests_total.labels(service=provider_id, status=status).inc()
         ai_request_duration_seconds.labels(service=provider_id).observe(duration_seconds)
         if status == "error":
-            ai_request_errors_total.labels(
-                service=provider_id, error_type=operation
-            ).inc()
+            ai_request_errors_total.labels(service=provider_id, error_type=operation).inc()
     except RECOVERABLE_ERRORS:
         pass
 

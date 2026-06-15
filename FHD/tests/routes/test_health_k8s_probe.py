@@ -180,7 +180,9 @@ class TestCapabilities:
                 "app.fastapi_routes.health_k8s._check_ai_service",
                 return_value={"status": "healthy", "engines": {}},
             ),
-            patch("app.domain.services.unified_intent_recognizer.get_unified_intent_recognizer") as g,
+            patch(
+                "app.domain.services.unified_intent_recognizer.get_unified_intent_recognizer"
+            ) as g,
         ):
             rec = MagicMock()
             rec.get_engine_status.return_value = {"rule": True, "bert": False}

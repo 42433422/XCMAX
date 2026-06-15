@@ -74,7 +74,11 @@ class TestLocalDutyGraphRoutes:
                 return_value={
                     "employee_id": "seo-sitemap-curator",
                     "deployed": True,
-                    "execution_stats": {"total_executions": 0, "success_count": 0, "success_rate": 0},
+                    "execution_stats": {
+                        "total_executions": 0,
+                        "success_count": 0,
+                        "success_rate": 0,
+                    },
                 },
             ),
         ):

@@ -10,7 +10,6 @@ from urllib.parse import quote
 
 from fastapi import APIRouter, Body, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, Response
-from sqlalchemy import inspect, text
 
 from app.fastapi_routes.domains.db.base import (
     _business_mod_json_block,
@@ -18,7 +17,6 @@ from app.fastapi_routes.domains.db.base import (
     _product_parse_is_active,
     _product_parse_quantity,
     _products_write_raise,
-    _sql_ident,
 )
 from app.fastapi_routes.domains.db.product_queries import (
     _load_products_all_for_export,
@@ -29,16 +27,11 @@ from app.fastapi_routes.domains.db.queries import (
     _products_units_for_select,
 )
 from app.infrastructure.auth.db_token import verify_db_read_token_header
-from app.infrastructure.db.sync_engine import get_sync_engine
 from app.infrastructure.persistence.compat_db.writes import (
     products_pg_batch_delete_rows,
     products_pg_delete_row,
     products_pg_insert_row,
     products_pg_update_row,
-)
-from app.shell.mod_row_scope import (
-    products_update_or_delete_mod_and,
-    scoped_mod_id,
 )
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 

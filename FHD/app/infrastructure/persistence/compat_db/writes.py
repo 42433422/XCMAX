@@ -297,9 +297,7 @@ def _customer_pg_update(customer_id: int, name: str, cp: str, ph: str, addr: str
         clash_bind: dict[str, object] = {"n": name, "id": int(customer_id)}
         append_mod_scope_where(clash_parts, clash_bind, pu_cols)
         clash = conn.execute(
-            text(
-                _sql_select_from_where("id", "purchase_units", " AND ".join(clash_parts))
-            ),
+            text(_sql_select_from_where("id", "purchase_units", " AND ".join(clash_parts))),
             clash_bind,
         ).first()
         if clash:
@@ -388,9 +386,7 @@ def _customer_pg_delete_anywhere(customer_id: int) -> None:
         with eng.connect() as conn:
             r = conn.execute(
                 text(
-                    _sql_select_from_where(
-                        "unit_name", "purchase_units", " AND ".join(where_parts)
-                    )
+                    _sql_select_from_where("unit_name", "purchase_units", " AND ".join(where_parts))
                 ),
                 pbind,
             ).first()

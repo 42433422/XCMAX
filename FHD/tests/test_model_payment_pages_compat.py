@@ -10,7 +10,6 @@ REPO = Path(__file__).resolve().parents[1]
 
 def test_model_payment_pages_registry_physical():
     from app.mod_sdk.model_payment_pages_compat import list_model_payment_pages_registry
-
     from tests.mod_presence import skip_if_bridge_mod_absent
 
     mod_dir = skip_if_bridge_mod_absent("xcagi-model-payment-bridge")
