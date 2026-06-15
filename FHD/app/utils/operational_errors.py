@@ -11,6 +11,23 @@ from __future__ import annotations
 
 import json
 
+# Legacy alias for im-sync-backend compatibility
+OPERATIONAL_ERRORS: tuple[type[BaseException], ...] = (
+    OSError,
+    ValueError,
+    TypeError,
+    KeyError,
+    AttributeError,
+    RuntimeError,
+    ImportError,
+    LookupError,
+    ConnectionError,
+    TimeoutError,
+    json.JSONDecodeError,
+    ArithmeticError,
+    UnicodeError,
+)
+
 _operational_extra: tuple[type[BaseException], ...] = ()
 try:
     from sqlalchemy.exc import OperationalError as SQLAlchemyOperationalError
