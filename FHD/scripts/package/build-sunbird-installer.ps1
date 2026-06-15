@@ -18,6 +18,7 @@ $ReleaseExe = Join-Path $FhdRoot "release\xcagi-v$Version\sunbird\$SetupName"
 New-Item -ItemType Directory -Force -Path $DeliveryDir, $BuildDir | Out-Null
 
 Write-Host "==> Building sunbird seed (template + roster + mod db) ..."
+python -m pip install "openpyxl>=3.1" -q
 python (Join-Path $FhdRoot "scripts\package\build-sunbird-seed.py")
 if ($LASTEXITCODE -ne 0) { throw "build-sunbird-seed.py failed" }
 
