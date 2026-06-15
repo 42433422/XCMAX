@@ -12,11 +12,11 @@ from __future__ import annotations
 import functools
 import logging
 import os
-from typing import Any, Callable, TypeVar
+from typing import Any, Callable, TypeVar, cast
 
 logger = logging.getLogger(__name__)
 
-F = TypeVar("F", bound=Callable[..., Any])
+FuncT = TypeVar("FuncT", bound=Callable[..., Any])
 
 
 def _build_celery_stub() -> Any:
@@ -34,17 +34,18 @@ def _build_celery_stub() -> Any:
             bind: bool = False,
             max_retries: int = 0,
             **kwargs: Any,
-        ) -> Callable[[F], F]:
-            def decorator(fn: F) -> F:
+        ) -> Callable[[FuncT], FuncT]:
+            def decorator(fn: FuncT) -> FuncT:
                 @functools.wraps(fn)
                 def wrapper(*a: Any, **kw: Any) -> Any:
                     if bind:
                         return fn(_RetryableSelf(), *a, **kw)
                     return fn(*a, **kw)
 
-                wrapper.delay = lambda *a2, **k2: wrapper(*a2, **k2)  # type: ignore[attr-defined]
-                wrapper.apply_async = lambda *a2, **k2: wrapper(*a2, **k2)  # type: ignore[attr-defined]
-                return wrapper  # type: ignore[return-value]
+                task_fn = cast(Any, wrapper)
+                task_fn.delay = lambda *a2, **k2: wrapper(*a2, **k2)
+                task_fn.apply_async = lambda *a2, **k2: wrapper(*a2, **k2)
+                return cast(FuncT, task_fn)
 
             return decorator
 
@@ -52,7 +53,7 @@ def _build_celery_stub() -> Any:
 
 
 try:
-    from celery import Celery  # type: ignore[import-untyped]
+    from celery import Celery
 
     _broker = (os.environ.get("CELERY_BROKER_URL") or "memory://").strip()
     _backend = (os.environ.get("CELERY_RESULT_BACKEND") or "cache+memory://").strip()

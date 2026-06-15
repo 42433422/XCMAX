@@ -8,7 +8,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
 def json_safe(value: Any) -> Any:
@@ -27,10 +27,10 @@ def json_safe(value: Any) -> Any:
     if isinstance(value, bytes):
         try:
             return value.decode("utf-8", errors="replace")
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             return ""
     try:
-        import numpy as np  # type: ignore
+        import numpy as np
 
         if isinstance(value, np.generic):
             return value.item()

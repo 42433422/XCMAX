@@ -7,7 +7,7 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from typing import Any, TypeVar
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +50,7 @@ class NeuroUnitOfWork:
                 if self._on_commit is not None:
                     try:
                         self._on_commit()
-                    except OPERATIONAL_ERRORS:
+                    except RECOVERABLE_ERRORS:
                         logger.exception("NeuroUnitOfWork on_commit hook failed")
             else:
                 self._session.rollback()

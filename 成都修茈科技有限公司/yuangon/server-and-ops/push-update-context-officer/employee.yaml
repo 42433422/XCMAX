@@ -1,53 +1,73 @@
 id: push-update-context-officer
 name: 推送更新员工
-version: "10.0.0"
+version: "1.0.1"
+domain: 在合并、推送与发布前汇总当前 Git 状态与设备/部署档位；不直接执行生产发布，不修改业务源码。
 owner: admin
 area: server-and-ops
-domain: >-
-  在合并、推送与发布前汇总当前 Git 状态与设备/部署档位；不直接执行生产发布，不修改业务源码。
 
 scope_globs:
   - .gitignore
   - .gitleaks.toml
-  - ".github/**"
+  - .github/**
   - MODstore_deploy/.gitignore
-  - "MODstore_deploy/.github/**"
+  - MODstore_deploy/.github/**
   - MODstore_deploy/git-push.sh
   - MODstore_deploy/git-push.bat
   - "*.code-workspace"
+  # yuangon → MODstore 回流流水线
   - MODstore_deploy/docs/runbooks/yuangon-resync.md
-  - "MODstore_deploy/scripts/yuangon_*.py"
-  - "scripts/yuangon_*.sh"
-  - "scripts/yuangon_*.ps1"
-  - "scripts/yuangon_*.py"
-  - "yuangon/server-and-ops/push-update-context-officer/**"
+  - MODstore_deploy/scripts/yuangon_*.py
+  - scripts/yuangon_*.sh
+  - scripts/yuangon_*.ps1
+  - scripts/yuangon_*.py
 
 forbidden_globs:
-  - "_local_secrets/**"
+  - _local_secrets/**
   - "*.vue"
   - "vibe-coding/src/**"
-  - "yuangon/**/employee.yaml"
-  - "yuangon/**/skills/**"
-  - "yuangon/**/prompts/**"
-
-depends_on:
-  - deploy-release-officer
-
-actions:
-  handlers:
-    - llm_md
-    - echo
-    - shell_exec
+  - yuangon/**/employee.yaml         # 不直接改员工定义；只触发 onboard
+  - yuangon/**/skills/**             # 同上
+  - yuangon/**/prompts/**            # 同上
 
 triggers:
   on_error: false
   on_quality_fail: false
+  on_coverage_miss: false
+  schedule:
+    cron: "30 2 * * *"          # 每日 02:30 兜底回流（手贱忘 push 时）
+    timezone: "Asia/Shanghai"
+  subscribes:
+    # 任意员工 yaml/skill/prompt 改动后回流到线上员工包
+    - "yuangon.def.changed"
+  max_patch_budget_tokens: 2000
+  max_patch_steps: 3
+
+sla:
+  timeout_seconds: 120
+  retry_max: 1
+  escalate_to_human: true
+
+llm_default: "auto"
+llm_reasoning: "auto"
 
 skills:
-  - skill-push-update-context
-  - skill-yuangon-resync
+  - skills/skill-push-update-context.md
+  - skills/skill-yuangon-resync.md
+
+actions:
+  handlers: ["llm_md", "echo", "shell_exec"]
+  shell_exec:
+    command_id: git-repo-context
+    args:
+      root: "."
+
+depends_on:
+  - deploy-release-officer
 
 changelog:
-  - version: "10.0.0"
-    date: "2026-06-07"
-    note: "yuangon 骨架由 bootstrap_yuangon.py 从 manifest 反向生成（v10 线内迭代）"
+  - version: "1.0.1"
+    date: "2026-05-08"
+    note: "全覆盖 Phase2：scope 纳入 .gitleaks.toml"
+  - version: "1.0.0"
+    date: "2026-05-07"
+    note: "初始创建：Git/档位上下文岗"

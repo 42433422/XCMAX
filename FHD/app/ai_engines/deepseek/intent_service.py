@@ -14,10 +14,10 @@ import logging
 import os
 import time
 from collections import OrderedDict
-from typing import Any
+from typing import Any, cast
 
 from app.utils.cache_manager import get_intent_deepseek_cache
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +41,7 @@ class _IntentRecognitionCache:
             del self._timestamps[key]
             return None
         self._cache.move_to_end(key)
-        return self._cache[key]
+        return cast("dict[str, Any] | None", self._cache[key])
 
     def set(self, message: str, result: dict[str, Any]) -> None:
         key = self._make_key(message)
@@ -140,7 +140,7 @@ class DeepseekIntentClassifier:
                         config_module = importlib.util.module_from_spec(spec)
                         spec.loader.exec_module(config_module)
                         key = getattr(config_module, "DEEPSEEK_API_KEY", "") or ""
-            except OPERATIONAL_ERRORS:
+            except RECOVERABLE_ERRORS:
                 pass
         return key
 
@@ -152,7 +152,7 @@ class DeepseekIntentClassifier:
     ) -> dict[str, Any]:
         cached = _intent_recognition_cache.get(message)
         if cached:
-            return cached
+            return cast("dict[str, Any]", cached)
 
         intent_list = "\n".join([f"- {k}: {v}" for k, v in INTENT_DESCRIPTIONS.items()])
         slot_list = "\n".join([f"- {k}: {v}" for k, v in SLOT_DEFINITIONS.items()])
@@ -211,11 +211,11 @@ class DeepseekIntentClassifier:
                 result = json.loads(content)
                 result["source"] = "deepseek"
                 _intent_recognition_cache.set(message, result)
-                return result
+                return cast("dict[str, Any]", result)
 
-            except OPERATIONAL_ERRORS as e:
+            except RECOVERABLE_ERRORS as e:
                 last_error = e
-                logger.warning(f"DeepSeek API 调用失败（第 {attempt + 1} 次）：{e}")
+                logger.warning("DeepSeek API 调用失败（第 %s 次）：%s", attempt + 1, e)
                 if attempt < self.max_retries - 1:
                     await asyncio.sleep(0.5 * (attempt + 1))
 

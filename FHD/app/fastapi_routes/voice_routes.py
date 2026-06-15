@@ -20,7 +20,7 @@ from typing import Any
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -42,10 +42,10 @@ def _resolve_device() -> str:
     if d in ("cpu", "cuda"):
         return d
     try:
-        import torch  # type: ignore
+        import torch
 
         return "cuda" if torch.cuda.is_available() else "cpu"
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         return "cpu"
 
 
@@ -64,7 +64,7 @@ def _resolve_model_name() -> str:
 def _get_model():
     """返回已就绪的 faster-whisper 模型实例；未安装 faster-whisper 时抛 HTTPException 503"""
     try:
-        from faster_whisper import WhisperModel  # type: ignore
+        from faster_whisper import WhisperModel
     except ImportError as exc:
         logger.error("faster-whisper 未安装，无法处理语音转写请求: %s", exc)
         raise HTTPException(
@@ -90,7 +90,7 @@ def _get_model():
     )
     try:
         instance = WhisperModel(model_name, device=device, compute_type=compute_type)
-    except OPERATIONAL_ERRORS as exc:  # 例如 CUDA 不可用、模型未下载、依赖 DLL 缺失
+    except RECOVERABLE_ERRORS as exc:  # 例如 CUDA 不可用、模型未下载、依赖 DLL 缺失
         logger.exception("加载 faster-whisper 模型失败: %s", exc)
         raise HTTPException(
             status_code=503,
@@ -144,7 +144,7 @@ def _run_transcribe(path: Path, language: str | None) -> dict[str, Any]:
             condition_on_previous_text=False,
             without_timestamps=True,
         )
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.exception("faster-whisper 转写失败: %s", exc)
         raise HTTPException(status_code=500, detail=f"语音识别执行失败：{exc}") from exc
 
@@ -180,7 +180,7 @@ async def transcribe_audio(
     finally:
         try:
             tmp_path.unlink(missing_ok=True)
-        except OPERATIONAL_ERRORS as exc:
+        except RECOVERABLE_ERRORS as exc:
             logger.debug("删除 ASR 临时文件失败（可忽略）: %s", exc)
     elapsed_ms = int((time.monotonic() - t0) * 1000)
 
@@ -198,11 +198,11 @@ async def transcribe_audio(
 async def voice_health():
     """轻量健康检查：只检查 faster-whisper 是否可导入，不触发模型加载（避免健康检查拖慢冷启动）。"""
     try:
-        import faster_whisper  # type: ignore  # noqa: F401
+        import faster_whisper
 
         ready = True
         reason = ""
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         ready = False
         reason = str(exc)
     return {

@@ -1,7 +1,9 @@
 import { computed } from 'vue';
 import { useProductQueryStore } from '@/stores/productQuery';
+import type { Company, LocalProduct } from '@/stores/productQuery'
+import { asRecord, asArray, asString } from '@/utils/typeGuards'
 
-export function useProductQuery(): any {
+export function useProductQuery(): unknown {
   const store = useProductQueryStore();
 
   const loading = computed(() => store.loading);
@@ -25,11 +27,11 @@ export function useProductQuery(): any {
     await store.loadAllProducts();
   };
 
-  const selectCompany = (company: any) => {
+  const selectCompany = (company: Company) => {
     store.selectCompany(company);
   };
 
-  const selectProduct = (product: any) => {
+  const selectProduct = (product: LocalProduct) => {
     store.selectProduct(product);
   };
 
@@ -37,7 +39,7 @@ export function useProductQuery(): any {
     store.searchProducts(query);
   };
 
-  const updateProduct = async (productId: number | string, data: Record<string, any>) => {
+  const updateProduct = async (productId: number | string, data: Record<string, unknown>) => {
     await store.updateProduct(productId, data);
   };
 

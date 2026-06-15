@@ -19,7 +19,7 @@ from app.db.models import (
     Warehouse,
 )
 from app.db.session import get_db
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -78,9 +78,9 @@ class InventoryService:
                 db.commit()
                 db.refresh(warehouse)
                 return {"success": True, "data": self._model_to_dict(warehouse)}
-            except OPERATIONAL_ERRORS as e:
+            except RECOVERABLE_ERRORS as e:
                 db.rollback()
-                logger.error(f"创建仓库失败: {e}")
+                logger.error("创建仓库失败: %s", e)
                 return {"success": False, "message": str(e)}
 
     def update_warehouse(self, warehouse_id: int, data: dict[str, Any]) -> dict[str, Any]:
@@ -98,9 +98,9 @@ class InventoryService:
                 db.commit()
                 db.refresh(warehouse)
                 return {"success": True, "data": self._model_to_dict(warehouse)}
-            except OPERATIONAL_ERRORS as e:
+            except RECOVERABLE_ERRORS as e:
                 db.rollback()
-                logger.error(f"更新仓库失败: {e}")
+                logger.error("更新仓库失败: %s", e)
                 return {"success": False, "message": str(e)}
 
     def delete_warehouse(self, warehouse_id: int) -> dict[str, Any]:
@@ -112,9 +112,9 @@ class InventoryService:
                 warehouse.status = "deleted"
                 db.commit()
                 return {"success": True, "message": "仓库已删除"}
-            except OPERATIONAL_ERRORS as e:
+            except RECOVERABLE_ERRORS as e:
                 db.rollback()
-                logger.error(f"删除仓库失败: {e}")
+                logger.error("删除仓库失败: %s", e)
                 return {"success": False, "message": str(e)}
 
     def get_storage_locations(self, warehouse_id: int, status: str | None = None) -> dict[str, Any]:
@@ -145,9 +145,9 @@ class InventoryService:
                 db.commit()
                 db.refresh(location)
                 return {"success": True, "data": self._model_to_dict(location)}
-            except OPERATIONAL_ERRORS as e:
+            except RECOVERABLE_ERRORS as e:
                 db.rollback()
-                logger.error(f"创建库位失败: {e}")
+                logger.error("创建库位失败: %s", e)
                 return {"success": False, "message": str(e)}
 
     def update_storage_location(self, location_id: int, data: dict[str, Any]) -> dict[str, Any]:
@@ -168,9 +168,9 @@ class InventoryService:
                 db.commit()
                 db.refresh(location)
                 return {"success": True, "data": self._model_to_dict(location)}
-            except OPERATIONAL_ERRORS as e:
+            except RECOVERABLE_ERRORS as e:
                 db.rollback()
-                logger.error(f"更新库位失败: {e}")
+                logger.error("更新库位失败: %s", e)
                 return {"success": False, "message": str(e)}
 
     def get_inventory(
@@ -329,9 +329,9 @@ class InventoryService:
                         "total_quantity": float(ledger.quantity),
                     },
                 }
-            except OPERATIONAL_ERRORS as e:
+            except RECOVERABLE_ERRORS as e:
                 db.rollback()
-                logger.error(f"入库失败: {e}")
+                logger.error("入库失败: %s", e)
                 return {"success": False, "message": str(e)}
 
     def inventory_out(
@@ -397,9 +397,9 @@ class InventoryService:
                         "remaining_quantity": float(ledger.quantity),
                     },
                 }
-            except OPERATIONAL_ERRORS as e:
+            except RECOVERABLE_ERRORS as e:
                 db.rollback()
-                logger.error(f"出库失败: {e}")
+                logger.error("出库失败: %s", e)
                 return {"success": False, "message": str(e)}
 
     def inventory_transfer(
@@ -514,9 +514,9 @@ class InventoryService:
                         "quantity": quantity,
                     },
                 }
-            except OPERATIONAL_ERRORS as e:
+            except RECOVERABLE_ERRORS as e:
                 db.rollback()
-                logger.error(f"调拨失败: {e}")
+                logger.error("调拨失败: %s", e)
                 return {"success": False, "message": str(e)}
 
     def get_inventory_transactions(

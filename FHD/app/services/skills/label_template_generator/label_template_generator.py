@@ -13,7 +13,7 @@ from typing import Any
 
 from PIL import Image
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -54,8 +54,8 @@ def analyze_image(image_path: str, verbose: bool = False) -> dict[str, Any]:
 
     except FileNotFoundError:
         return {"success": False, "message": f"文件不存在：{image_path}"}
-    except OPERATIONAL_ERRORS as e:
-        logger.error(f"分析图片失败：{e}")
+    except RECOVERABLE_ERRORS as e:
+        logger.error("分析图片失败：%s", e)
         return {"success": False, "message": f"分析失败：{str(e)}"}
 
 
@@ -172,7 +172,7 @@ def extract_text_with_ocr(image_path: str, use_regions: bool = True) -> dict[str
         horizontal_lines = merge_close_lines(horizontal_lines, threshold=50)
         vertical_lines = merge_close_lines(vertical_lines, threshold=50)
 
-        logger.info(f"检测到网格：{len(horizontal_lines)}条水平线，{len(vertical_lines)}条垂直线")
+        logger.info("检测到网格：%s条水平线，%s条垂直线", len(horizontal_lines), len(vertical_lines))
 
         # 2. OCR 识别（与 /api/ocr 共用 OCRService：默认 PaddleOCR，可回退 EasyOCR）
         from app.services.ocr_service import get_ocr_service
@@ -317,8 +317,8 @@ def extract_text_with_ocr(image_path: str, use_regions: bool = True) -> dict[str
             "message": f"缺少图像处理依赖：{e}（需 Pillow、numpy、opencv-python；OCR 需 paddleocr 或 easyocr）",
             "fallback_fields": _extract_fields_by_pattern(image_path),
         }
-    except OPERATIONAL_ERRORS as e:
-        logger.error(f"OCR 提取失败：{e}")
+    except RECOVERABLE_ERRORS as e:
+        logger.error("OCR 提取失败：%s", e)
         import traceback
 
         traceback.print_exc()
@@ -983,7 +983,7 @@ class {class_name}:
             logger.info(f"标签已生成：{{output_path}}")
             return filename
             
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.error(f"生成标签失败：{{e}}")
             return None
     
@@ -1083,7 +1083,7 @@ class {class_name}:
             # python-barcode 未安装时绘制占位符
             draw.rectangle([40, y_offset, self.width - 40, y_offset + 80], outline=self.border_color, width=1)
             draw.text((self.width // 2 - 60, y_offset + 90), "1txm.com", font=self._get_font(20), fill=self.text_color)
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.error(f"绘制条码失败：{{e}}")
             draw.rectangle([40, y_offset, self.width - 40, y_offset + 80], outline=self.border_color, width=1)
     
@@ -1234,7 +1234,7 @@ class {class_name}:
             logger.info(f"标签已生成：{{output_path}}")
             return filename
             
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.error(f"生成标签失败：{{e}}")
             return None
     
@@ -1345,7 +1345,7 @@ class LabelTemplateGeneratorSkill:
             if enable_ocr:
                 ocr_result = extract_text_with_ocr(image_path)
                 if ocr_result.get("success"):
-                    logger.info(f"OCR 识别成功，提取 {len(ocr_result.get('fields', []))} 个字段")
+                    logger.info("OCR 识别成功，提取 %s 个字段", len(ocr_result.get('fields', [])))
 
             code = generate_template_code(image_path, class_name, ocr_result, verbose)
 
@@ -1356,13 +1356,13 @@ class LabelTemplateGeneratorSkill:
                     with open(output_file, "w", encoding="utf-8") as f:
                         f.write(code)
                     result["output_file"] = output_file
-                except OPERATIONAL_ERRORS as e:
+                except RECOVERABLE_ERRORS as e:
                     result["output_error"] = str(e)
 
             return result
 
-        except OPERATIONAL_ERRORS as e:
-            logger.error(f"生成标签模板失败：{e}")
+        except RECOVERABLE_ERRORS as e:
+            logger.error("生成标签模板失败：%s", e)
             return {"success": False, "message": str(e)}
 
     def get_skill_info(self) -> dict[str, Any]:

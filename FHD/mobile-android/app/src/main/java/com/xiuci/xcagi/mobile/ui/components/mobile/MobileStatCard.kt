@@ -28,7 +28,7 @@ fun MobileStatCard(
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
         shape = MobileTokens.cornerCard,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = MobileTokens.elevationCard),
     ) {
         Column(
             Modifier.padding(16.dp),

@@ -1,32 +1,35 @@
-        # 用户客服员工 (`user-customer-service-officer`)
+# 用户客服员工（`user-customer-service-officer`）
 
-        **area**：`platform-core`  
-        **yuangon 路径**：`成都修茈科技有限公司/yuangon/platform-core/user-customer-service-officer/`
+## 一句话职责
 
-        ## 职责
+面向**终端用户**的客服 AI 员工：绑定 Mac 微信账号资产，在「内部客服」页工作；首要能力为**需求采集**（生成话术 + 推送落地页表单链接）。
 
-        面向终端用户的客服 AI 员工：绑定微信账号资产，在 Mac 本地协助沟通；首要能力为需求采集（询问客户需求并推送表单链接）。
+## 与现有模块的区别
 
-        ## 上游依赖 (`depends_on`)
+| 模块 | 角色 |
+|------|------|
+| **内部客服**（页面） | 管理员总机 UI，本员工的工作台 |
+| **外部客服**（页面） | 企业分机 → 总机联络 |
+| **用户客服员工**（编制岗） | 面向 C 端用户的 AI 员工，微信沟通 + 需求采集 |
+| **wechat-contacts-ai-employee**（Mod） | 微信联系人/本地 DB 数据源（资产） |
+| **intake-dispatcher** | 接收表单/工单后归一化任务 |
 
-        - `intake-dispatcher`
+## 资产
 
-        ## 支持的 Handlers
+- **微信账号**：Mac 本地登录；通过「导入微信」+ 群聊工作台同步消息
 
-        - `llm_md`：接收 Markdown 任务描述，调用 LLM 输出结构化结果
-- `echo`：调试用：原样返回输入，用于 smoke 测试
+## 首要能力：需求采集
 
-        ## Scope（核心文件范围）
+1. 管理员在内部客服页填写**业务背景**（brief）
+2. 员工生成可复制到微信的话术 + `https://xiu-ci.com/market/about` 表单链接
+3. 客户填写 `landing_contact_submissions` → 后续接入 CRM / intake-dispatcher
 
-        - `customer-service/sessions/**`
-- `customer-service/wechat/**`
-- `FHD/mods/_employees/user-customer-service-officer/**`
-- `yuangon/platform-core/user-customer-service-officer/**`
+## API
 
-        ## 相关链接
+- 员工包：`POST /api/mod/user-customer-service-officer/employees/user-customer-service-officer/run`
+- 客服桥接：`POST /api/mod/xcagi-customer-service-bridge/user-cs/demand-intake`
 
-        - manifest：`FHD/mods/_employees/user-customer-service-officer/manifest.json`
-        - runbook：[runbook.md](./runbook.md)
+## 工作区
 
-        ---
-        *本文件由 `bootstrap_yuangon.py` 生成，v10 线内迭代*
+- `customer-service/sessions/` — 需求采集会话
+- `customer-service/wechat/` — 微信 relay 元数据

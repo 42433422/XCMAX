@@ -7,11 +7,14 @@ import os
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
+from typing import Awaitable, Callable
 
 _SKIP_PREFIXES = (
     "/api/auth/",
     "/api/health",
     "/api/model-payment/",
+    # AIOPEN 开放平台：外部 AI Agent 无登录态，安全由 X-AIOPEN-Key 承担
+    "/api/aiopen/",
     "/api/market/",
     "/api/app/",
     "/docs",
@@ -32,7 +35,11 @@ def _subscription_gate_enabled() -> bool:
 
 
 class SubscriptionGateMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next) -> Response:
+    async def dispatch(
+        self,
+        request: Request,
+        call_next: Callable[[Request], Awaitable[Response]],
+    ) -> Response:
         if not _subscription_gate_enabled():
             return await call_next(request)
 

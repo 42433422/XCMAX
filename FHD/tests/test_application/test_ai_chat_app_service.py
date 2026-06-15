@@ -16,7 +16,13 @@ class TestAIChatApplicationService:
 
     def test_process_chat_empty_message(self):
         """测试空消息处理"""
-        with patch("app.application.ai_chat_app_service.get_ai_conversation_service"):
+        with (
+            patch("app.application.ai_chat_app_service.get_ai_conversation_service"),
+            patch("app.application.ai_chat_app_service.LLMWorkflowPlanner"),
+            patch("app.application.ai_chat_app_service.HybridRiskGate"),
+            patch("app.application.ai_chat_app_service.WorkflowEngine"),
+            patch("app.application.ai_chat_app_service.get_approval_service"),
+        ):
             from app.application.ai_chat_app_service import AIChatApplicationService
 
             service = AIChatApplicationService()
@@ -156,7 +162,10 @@ class TestAIChatApplicationService:
     def test_execute_customers_query_failure(self):
         """测试执行客户查询失败"""
         with patch("app.application.ai_chat_app_service.get_ai_conversation_service"):
-            with patch("app.bootstrap.get_customer_app_service", side_effect=Exception("查询失败")):
+            with patch(
+                "app.bootstrap.get_customer_app_service",
+                side_effect=RuntimeError("查询失败"),
+            ):
                 from app.application.ai_chat_app_service import AIChatApplicationService
 
                 service = AIChatApplicationService()

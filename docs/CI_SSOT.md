@@ -12,6 +12,12 @@
 | **FHD 实现源** | `FHD/.github/workflows/*.yml` | 编辑后运行 `python scripts/dev/publish_ci_workflows_to_root.py` 同步到根 |
 | **MODstore 实现源** | `成都修茈科技有限公司/MODstore_deploy/.github/workflows/*.yml` | 同上 |
 
+> **生成 vs 手写**：根仓 `fhd-*.yml` / `modstore-*.yml` 由 publish 脚本从实现源生成，文件头为
+> `# CI SSOT: generated from … — DO NOT edit here`。**请改实现源后重跑 publish**，勿直接改根副本。
+> 以下 **7 个根仓 workflow 为手写**（无生成头，直接在根仓维护）：
+> `android-build.yml`、`archive-hygiene.yml`、`corp-site-deploy.yml`、`desktop-macos-smoke.yml`、
+> `e2e.yml`、`e2e-playwright-reusable.yml`、`frontend-unit.yml`。
+
 ## 常用 workflow
 
 | 用途 | 根 workflow |
@@ -25,13 +31,14 @@
 | MODstore Python CI | [`modstore-ci-backend-python.yml`](../.github/workflows/modstore-ci-backend-python.yml) |
 | Archive 卫生 | [`archive-hygiene.yml`](../.github/workflows/archive-hygiene.yml) |
 | FHD 服务器 API 发布包校验 | [`fhd-ci-cd.yml`](../.github/workflows/fhd-ci-cd.yml) → job `pack-verify` |
-| FHD API 生产镜像（GHCR） | [`fhd-ci-cd.yml`](../.github/workflows/fhd-ci-cd.yml) → job `docker-build-fhd-api` |
+| FHD 全产品线 tag 编排 | [`fhd-release-orchestrator.yml`](../.github/workflows/fhd-release-orchestrator.yml) |
+| FHD K8s 部署 | [`fhd-deploy.yml`](../.github/workflows/fhd-deploy.yml) |
 
 ## 发布 tag 约定（v10 线内）
 
 - **产品版本锚点**：恒 `10.0.0`（见 `FHD/VERSION.md`），**不因功能发版 bump 主版本**。
 - **Git tag（发版触发）**：`FHD/v10.0.0` 或 `FHD/v10.*`；**制品身份**用 tarball 内 `git_sha` + `sha256`，非 tag 名。
-- **串联**：`fhd-ci-cd.yml` 在 `FHD/v*` tag 上触发 `fhd-deploy.yml`（K8s，需 `KUBE_CONFIG`）；**生产 CVM compose/tarball** 由 CI job `cvm-push-release` 或本机 `fhd-push-release.sh` 推送至 update 目录，服务器 cron 应用（见下方 runbook）。
+- **串联（单一编排入口）**：`FHD/v*` tag 仅触发两个 workflow —— `fhd-ci-cd.yml`（测试+镜像+CVM）与 `fhd-release-orchestrator.yml`。后者先跑 `verify-version-anchors`，再 **dispatch** `fhd-deploy.yml`（K8s，`-rc`→staging / 否则 production）与客户端 `fhd-release-desktop/web/android.yml`。这些被编排的 workflow **已移除自身 `FHD/v*` tag 触发**，避免 tag 推送时双重运行。详见 [FHD/docs/deploy/RELEASE_CHECKLIST.md](FHD/docs/deploy/RELEASE_CHECKLIST.md)。
 
 ## 多环境 channel（stable / staging）
 
@@ -88,13 +95,116 @@ bash /opt/fhd-staging/scripts/deploy/fhd-auto-update.sh
 
 本地 / 119.27.178.147 K3s 一键：`deploy_k8s_staging.sh`（见 `FHD/k8s/monitoring/STAGING_RUNBOOK.md`）。
 
-## Branch protection（须仓库 Owner 在 GitHub UI 配置）
+## GitOps（Phase 2 · ArgoCD App-of-Apps）
 
-Agent **无法**从本环境开启 branch protection。建议在 **Settings → Branches → main** 启用：
+声明式部署控制面，逐步取代 `fhd-deploy.yml` 的命令式 `kubectl apply`（后者保留为 break-glass）。
 
-- Required status checks：`backend-test`、`frontend-test`、`pack-verify`、`docker-build-fhd-api`、`container-scan`（及 `Release gate CI` 若启用）
-- Require branches up to date before merging
-- 可选：Environment `production` 需审批后再跑 `cvm-push-release`
+**目录** `FHD/gitops/`：
+
+| 文件 | 角色 | 指向 |
+|------|------|------|
+| `app-of-apps.yaml` | root Application（bootstrap 一次） | 监听 `FHD/gitops/apps/` |
+| `apps/fhd-api-staging.yaml` | staging 自动 sync | `FHD/k8s/overlays/staging`（ns `xcagi-staging`） |
+| `apps/fhd-api-production.yaml` | production 自动 sync（K8s 轨，与 CVM prod 并行） | `FHD/k8s/overlays/production`（ns `xcagi-prod`） |
+| `apps/monitoring.yaml` | 可观测 CRD | `FHD/k8s/monitoring` |
+| `apps/rollouts.yaml` | Argo Rollouts 控制器（Helm，Phase 3 用） | `argo-rollouts` chart |
+
+**Kustomize 布局**：`FHD/k8s/base/`（聚合 `../*.yaml` 7 份清单，唯一 base）→ overlays `resources: ../../base` + `images:` 钉扎镜像 tag。overlay 引用父级 base 需 `--load-restrictor LoadRestrictionsNone`（`bootstrap_argocd.sh` 已在 `argocd-cm` 设 `kustomize.buildOptions`；本地手动加该 flag）。
+
+**集群 bootstrap**：`bash FHD/scripts/gitops/bootstrap_argocd.sh`（用现有 `KUBE_CONFIG`，幂等：装 ArgoCD → patch argocd-cm → apply App-of-Apps）。
+
+**镜像更新声明式化**：
+- `fhd-ci-cd.yml` job `gitops-image-bump`（**opt-in**：仓库变量 `GITOPS_BUMP_ENABLE=1`）：main push 构建成功后，把 staging overlay 的 `newTag` 写为 `sha-<gitsha>`、`[skip ci]` 提交回 main（`GITHUB_TOKEN` 推送不触发递归 CI），ArgoCD 自动 sync。
+- main 受保护无法直推时：保持开关关闭，改用 **ArgoCD Image Updater** 或经 orchestrator 晋级。
+- 生产晋级：`bash FHD/scripts/gitops/bump_image.sh production <sha-tag> --commit`（人工 / orchestrator）。
+- 制品身份恒 `git_sha` + `sha256` + cosign digest，**不 bump 版本**（v10 锁 `10.0.0`）。
+
+## 渐进式交付（Phase 3 · Argo Rollouts + SLO 分析门）
+
+GitOps overlays（`staging` / `production`）引用 `FHD/k8s/rollouts/`（`Deployment` → `Rollout`），由 Argo Rollouts 控制器执行金丝雀 + Prometheus 自动分析 + 失败自动 abort/回滚。
+
+| 组件 | 路径 | 说明 |
+|------|------|------|
+| Rollout | `FHD/k8s/rollouts/rollout.yaml` | 金丝雀 20% → 50% → 100%，每步 `xcagi-slo-gate` 分析 |
+| AnalysisTemplate | `FHD/k8s/rollouts/analysis-template.yaml` | 查 `prometheus.monitoring:9090` 的 `xcagi:api_error_ratio:rate5m`（<5%）与 `xcagi:api_latency_p95:5m`（<1.5s） |
+| 控制器 | `FHD/gitops/apps/rollouts.yaml`（sync-wave -2） | Helm `argo-rollouts`；或 `bash FHD/scripts/gitops/bootstrap_rollouts.sh` |
+| 旧清单 | `FHD/k8s/archive/` | `canary.yaml` / `blue-green-deployment.yaml` 已归档 |
+
+**staging 环境覆盖**：`replicas-patch.yaml` 改 Rollout 副本；`config-patch.yaml` 改 `xcagi-config` ConfigMap（`FHD_ENV=staging` 等）——避免对 CRD 容器列表做 strategic-merge（会丢 image/probes）。
+
+**break-glass**：`fhd-deploy.yml` 的 `strategy=canary|blue-green` 仅打 warning，始终 rolling `Deployment`；渐进式交付走 GitOps。
+
+**运维 CLI**（可选插件）：
+```bash
+kubectl argo rollouts get rollout xcagi -n xcagi-staging --watch
+kubectl argo rollouts promote xcagi -n xcagi-staging   # 手动晋级
+kubectl argo rollouts abort   xcagi -n xcagi-staging   # 手动 abort
+```
+
+## 可观测性（Phase 4 · 一键全栈 + DORA）
+
+| 路径 | 用途 |
+|------|------|
+| `FHD/k8s/monitoring/overlays/full/` | GitOps 全栈（Prometheus/Grafana/Loki/Alertmanager + 看板） |
+| `bash FHD/scripts/observability/bringup_stack.sh` | 非 GitOps 一键 `kubectl apply -k` |
+| `bash FHD/scripts/observability/local_stack_up.sh` | 本地 Docker Prometheus `:9091` + Grafana `:3000` |
+| `FHD/scripts/observability/emit_deploy_event.py` | 部署事件 → `metrics/deploy_events.jsonl` |
+| `FHD/scripts/observability/collect_dora.py` | DORA 四指标 → `metrics/dora-YYYYMMDD.json` |
+| `fhd-slo-metrics-collect.yml` | 每日 08:00 UTC 采集 SLO + DORA 并 commit |
+
+Grafana 预置看板：`xcagi-slo` · `xcagi-rollouts` · `xcagi-dora`（`overlays/full` ConfigMap 挂载）。
+
+## 每 PR 预览环境（Phase 5）
+
+| 触发 | Workflow | 行为 |
+|------|----------|------|
+| PR opened/synchronize | `fhd-preview-env.yml` | 构建 `pr-<num>` 镜像 → `xcagi-pr-<num>` namespace |
+| PR closed | 同上 `teardown` job | `kubectl delete namespace xcagi-pr-<num>` |
+
+Overlay：`FHD/k8s/overlays/preview/`（1 副本、资源收紧）。需 `KUBE_CONFIG`；无则跳过并在 PR 评论说明。
+
+## 日更编排闭环（Phase 6）
+
+| 组件 | 说明 |
+|------|------|
+| `run_modstore_daily_local.sh` | export `MODSTORE_POST_MERGE_GITOPS_SCRIPT` → `post_merge_promote.sh` |
+| `FHD/scripts/gitops/post_merge_promote.sh` | 等 `fhd-ci-cd` 绿 → `bump_image.sh staging`；**SLO 熔断**（`MODSTORE_SLO_HALT_AUTO_MERGE`）时 exit 1 |
+| `FHD/config/release_train.json` | MODstore **日更节奏** SSOT（`+0.0.0.1` epoch）；**≠** 产品 v10 锚点 `10.0.0` |
+| `GITOPS_BUMP_ENABLE=1` | CI 自动回写 staging tag（与 post_merge **双轨**，二选一或并存） |
+
+闭环：auto-PR → merge main → CI 签名 → GitOps bump → ArgoCD sync → Rollouts 金丝雀 → SLO 分析 → DORA 事件 → 次日 digest。
+
+## Secrets / Variables 清单
+
+**Settings → Secrets and variables → Actions**（Secrets 与 Variables 两页）。标「跳过」者缺失时对应步骤跳过（不致 CI 失败）。
+
+| 名称 | 类型 | 用途 | 缺失行为 |
+|------|------|------|---------|
+| `GITHUB_TOKEN` | 自动 | GHCR 推送、`gh workflow run` dispatch、GitHub Release | 自动注入 |
+| `FHD_PUSH_HOST` | Secret / Var | CVM 推送目标（默认 `119.27.178.147`） | CVM/桌面推送跳过 |
+| `FHD_PUSH_SSH_KEY` | Secret | CVM SSH 私钥（**勿入库**） | CVM 推送跳过 |
+| `FHD_PUSH_USER` | Secret | CVM SSH 用户（默认 `root`） | 用默认 |
+| `SERVER_SSH_KEY` | Secret | 桌面安装包上传 SSH 私钥（缺失则回退 `FHD_PUSH_SSH_KEY`） | 桌面上传跳过 |
+| `KUBE_CONFIG` / `KUBE_CONFIG_B64` | Secret | K8s 部署 kubeconfig | staging 跳过 apply；**production 硬失败** |
+| `K8S_NAMESPACE` | Var | 部署 namespace（默认 staging=`xcagi-staging`、prod=`default`） | 用默认 |
+| `CODECOV_TOKEN` | Secret | 覆盖率上传 | 步骤 `continue-on-error` |
+| `APPLE_ID` / `APPLE_APP_SPECIFIC_PASSWORD` / `APPLE_TEAM_ID` | Secret | macOS 公证 / 签名 | 出未公证包 |
+| `CSC_LINK` / `CSC_KEY_PASSWORD` | Secret | 桌面代码签名证书（electron-builder） | 出未签名包 |
+| `STAGING_BASE_URL` | Var | 容量 k6 目标（`fhd-capacity-staging-monthly`） | 容量测试跳过 |
+| `STAGING_PROMETHEUS_URL` | Var / Secret | SLO 采集 Prometheus 端点 | SLO 采集降级 |
+| `XCMAX_GIT_BRANCH` / `XCMAX_REMOTE_ROOT` | Var | 企业站 `corp-site-deploy` 同步参数 | 用默认 |
+| `GITOPS_BUMP_ENABLE` | Var | 置 `1` 启用 `gitops-image-bump` 回写 staging overlay tag 到 main | 不设=关闭（不回写） |
+| `COSIGN_VERIFY_DISABLE` | Var | 置 `1` 临时跳过部署前 `cosign verify`（break-glass） | 不设=强制验证 |
+
+> Phase 1（供应链）起 cosign **keyless**（Sigstore + GitHub OIDC）签名**免私钥**，不新增长期密钥；集群凭证统一走 `KUBE_CONFIG`。
+
+## Branch protection（main）
+
+已通过 API 配置（2026-06-13）：required status checks 含 `guard-temp-scripts`、`backend-test`、`frontend-test`、`frontend-e2e`、`arch-fitness`、`security-scan`、`pack-verify`、`container-scan`、`docker-build-fhd-api`；`required_approving_review_count=0`。
+
+> **Public 仓库**：`42433422/XCMAX` 已为 **PUBLIC**；Actions 对 public repo 有免费额度。若 job 仍报 `payments have failed or spending limit`，在 [Payment information](https://github.com/settings/billing/payment_information) 添加有效支付方式。
+
+> **Actions 账单**：若所有 job 在数秒内失败且 annotation 为 `recent account payments have failed or your spending limit needs to be increased`，须在 **Settings → Billing & plans** 修复付款或提高 spending limit；此阻断与 workflow/代码无关。
 
 ## FHD 生产服务器部署 runbook（tarball 拉取式）
 
@@ -169,7 +279,7 @@ bash /opt/fhd-full/scripts/deploy/fhd-apply-release-compose.sh
 5. 将 manifest `deploy_mode` 改为 `image`，或导出 `FHD_DEPLOY_MODE=image` 于 cron 环境  
 6. 手动跑一次 `fhd-apply-release-compose.sh` 验证，再依赖 cron  
 
-**冻结错误制品**（两种模式通用）：`mv .../fhd-manifest.json{,.hold}`
+**冻结错误制品**（两种模式通用，**手动运维操作**，CI 不自动执行）：`mv .../fhd-manifest.json{,.hold}`；cron 见 manifest 缺失即跳过，不会反复重试坏制品。
 
 ## Python 格式化 / lint（FHD）
 
@@ -178,15 +288,44 @@ bash /opt/fhd-full/scripts/deploy/fhd-apply-release-compose.sh
 | **Ruff** | `fhd-ci-cd.yml` / `fhd-test.yml` — 唯一 formatter + linter（`ruff check` + `ruff format --check`） |
 | **black / isort** | **不在 CI** — 与 Ruff 冲突；本地 pre-commit 可保留，勿在 CI 重加除非统一配置 |
 
+## 安全扫描门禁策略（FHD）
+
+| 扫描 | Job / 工具 | 策略 |
+|------|-----------|------|
+| 容器漏洞 | `container-scan`（Trivy，`severity: CRITICAL,HIGH`，`exit-code 1`） | **硬门禁**：决策矩阵"安全扫描 CRITICAL → 阻断"指此项 |
+| 依赖 CVE | `security-scan`（safety `--full-report`） | **Advisory**（非阻断）：输出 `::warning::`，需人工 triage |
+| 静态代码（广） | `security-scan`（bandit `-lll --skip B101,B601,B110 --exit-zero`） | **Advisory** |
+| 静态代码（SQL 注入） | `security-scan`（bandit `-lll -s B608`，无 `--exit-zero`） | **硬门禁** |
+
+> 把 safety / bandit-broad 设为 advisory 是有意为之（传递依赖 CVE 常需评估、不宜直接红）；真正的供应链信任在 **Phase 1** 由 SBOM + cosign 签名 + SLSA provenance + 部署前 `cosign verify` 补强。
+
+## 供应链信任（Phase 1 · SBOM + 签名 + Provenance）
+
+`fhd-ci-cd.yml` → job `docker-build-fhd-api` 在推送 `xcagi-fhd-api`（按 digest）后：
+
+| 步骤 | 工具 | 产物 |
+|------|------|------|
+| 镜像签名 | cosign **keyless**（Sigstore + GitHub OIDC，`id-token: write`，**无私钥**） | GHCR `.sig` |
+| SBOM | `anchore/sbom-action`（syft，SPDX-JSON） | `fhd-api-sbom` artifact + cosign attest 附着 |
+| Provenance | `actions/attest-build-provenance`（SLSA，`push-to-registry`） | GHCR attestation |
+
+**部署门禁**：`fhd-deploy.yml` 两个环境在 `kubectl apply` 前 `cosign verify`（keyless，校验 OIDC issuer + 本仓 workflow 身份）；验证失败 **拒绝部署**。
+
+- 身份正则：`^https://github.com/<org>/<repo>/.github/workflows/.+@refs/(heads/main|tags/FHD/v.+)$`
+- **Break-glass**：设仓库变量 `COSIGN_VERIFY_DISABLE=1` 临时跳过验证（仅紧急；恢复后清除）。
+- 制品身份仍为 `git_sha` + `sha256` + cosign digest，**不 bump 版本**（v10 锁）。
+
 ## Codecov（FHD 后端）
 
 `fhd-ci-cd.yml` → job `backend-test` 上传 `coverage.xml` 至 Codecov。**可选**：需在 GitHub **Settings → Secrets → Actions** 配置 `CODECOV_TOKEN`；无 token 时步骤 `continue-on-error`（不阻断 CI）。本地 `coverage.xml` / `htmlcov/` 仍为 SSOT。
+
+**覆盖率门槛 SSOT**：唯一真值 = `FHD/pyproject.toml` → `[tool.coverage.report] fail_under`（当前 `35`，对应 `source=[app]` 全量诚实基线 ~36%）。`backend-test` **不再**用 CLI `--cov-fail-under` 硬编码阈值（旧 `58` 来自已废弃窄 include 口径，与全量口径不可比）。提升覆盖率请单独立项、上调 `fail_under`，禁止用窄 include 凑数。
 
 ## E2E 分层
 
 | 场景 | Workflow | 模式 | 用例 |
 |------|----------|------|------|
-| FHD 全量 CI（PR） | `fhd-ci-cd.yml` → `frontend-e2e` | `E2E_VITE_MOCK_API=1` + Vite :5001 | `npm run test:e2e:p0` → **9 pass / 5 skip** |
+| FHD 全量 CI（PR） | `fhd-ci-cd.yml` → `frontend-e2e` | `E2E_VITE_MOCK_API=1` + Vite :5001 | `npm run test:e2e:p0` → **8 pass / 6 skip** |
 | 前端 path 过滤 / nightly | `e2e.yml` → `e2e-playwright-reusable.yml` | mock 同上；`schedule` / `workflow_dispatch` 额外 `E2E_FULL_STACK=1` | 全栈 **14/14**（含 `plan2026-skeleton`） |
 
 SSOT 脚本：`FHD/frontend/package.json` → `test:e2e:p0`；编排见 `FHD/scripts/dev/e2e-full.sh`。

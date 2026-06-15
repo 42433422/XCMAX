@@ -1,10 +1,9 @@
 id: site-content-editor
 name: 静态站内容编辑员
-version: "10.0.0"
+version: "1.0.0"
+domain: 维护 xiu-ci.com 营销静态页面的内容、文案、图片引用与数据 JSON；不涉及服务器配置或后端逻辑。
 owner: admin
 area: site-and-marketing
-domain: >-
-  维护 xiu-ci.com 营销静态页面的内容、文案、图片引用与数据 JSON；不涉及服务器配置或后端逻辑。
 
 scope_globs:
   - index.html
@@ -23,8 +22,9 @@ scope_globs:
   - main.js
   - news.json
   - activities.json
-  - "assets/**"
-  - "src/**"
+  - assets/**
+  # 根 Vite 工具链（与 MODstore_deploy/market 是两套，不要混用）
+  - src/**
   - package.json
   - package-lock.json
   - vite.config.ts
@@ -36,36 +36,41 @@ scope_globs:
   - .prettierrc
   - .prettierignore
   - env.d.ts
-  - "yuangon/site-and-marketing/site-content-editor/**"
 
 forbidden_globs:
   - app.py
   - requirements.txt
-  - "nginx-*.conf"
-  - "MODstore_deploy/**"
-  - "vibe-coding/**"
-  - "_local_secrets/**"
-  - "deploy/**"
-  - "docker/**"
-  - sitemap.xml
-  - robots.txt
-
-depends_on:
-  - seo-sitemap-curator
-
-actions:
-  handlers:
-    - llm_md
-    - echo
+  - nginx-*.conf
+  - MODstore_deploy/**
+  - vibe-coding/**
+  - _local_secrets/**
+  - deploy/**
+  - docker/**
+  - sitemap.xml             # 归 seo-sitemap-curator
+  - robots.txt              # 归 seo-sitemap-curator
 
 triggers:
   on_error: true
   on_quality_fail: true
+  on_coverage_miss: false
+  max_patch_budget_tokens: 3000
+  max_patch_steps: 4
+
+sla:
+  timeout_seconds: 90
+  retry_max: 2
+  escalate_to_human: true
+
+llm_default: "auto"
+llm_reasoning: "auto"
 
 skills:
-  - skill-static-page-update
+  - skills/skill-static-page-update.md
+
+depends_on:
+  - seo-sitemap-curator   # 内容变更后通知 SEO 员工更新 sitemap
 
 changelog:
-  - version: "10.0.0"
-    date: "2026-06-07"
-    note: "yuangon 骨架由 bootstrap_yuangon.py 从 manifest 反向生成（v10 线内迭代）"
+  - version: "1.0.0"
+    date: "2026-05-06"
+    note: "初始创建"

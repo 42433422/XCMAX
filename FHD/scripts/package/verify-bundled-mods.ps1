@@ -51,3 +51,9 @@ if ($missing.Count -gt 0) {
   throw "Installer missing profile stage mods: $($missing -join ', ')"
 }
 Write-Host "OK: all $($expectedIds.Count) profile stage mod(s) present"
+
+$verifyIndustryScript = Join-Path $PSScriptRoot "verify-industry-seeds.ps1"
+if (Test-Path $verifyIndustryScript) {
+  $internalDir = Split-Path $UnpackedDir -Parent
+  & $verifyIndustryScript -ProductSku $ProductSku -UnpackedInternalDir $internalDir
+}

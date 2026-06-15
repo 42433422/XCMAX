@@ -11,7 +11,7 @@ from app.services.tools_execution.registry import (
 )
 from app.services.tools_payload_legacy import dispatch_legacy_tool_payload
 from app.services.tools_workflow_registered import execute_registered_workflow_tool
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +22,7 @@ def execute_tool_from_payload(data):
 
 def _execute_tool_from_payload_inner(data):
     try:
-        logger.info(f"[DEBUG] /api/tools/execute 收到请求 - data: {data}")
+        logger.info("[DEBUG] /api/tools/execute 收到请求 - data: %s", data)
 
         if not data:
             logger.error("[DEBUG] /api/tools/execute 请求数据为空")
@@ -50,11 +50,11 @@ def _execute_tool_from_payload_inner(data):
             return _j(routed, status_code)
 
         logger.info(
-            f"[DEBUG] tool_id={tool_id}, action={action}, params_keys={list(params.keys())}"
+            "[DEBUG] tool_id=%s, action=%s, params_keys=%s", tool_id, action, list(params.keys())
         )
         if "order_text" in params:
             logger.info(
-                f"[DEBUG] order_text={params.get('order_text')[:200] if params.get('order_text') else None}"
+                "[DEBUG] order_text=%s", params.get('order_text')[:200] if params.get('order_text') else None
             )
 
         return dispatch_legacy_tool_payload(
@@ -66,6 +66,6 @@ def _execute_tool_from_payload_inner(data):
             parse_order_text_fn=_parse_order_text,
         )
 
-    except OPERATIONAL_ERRORS as e:
-        logger.error(f"执行工具失败: {e}")
+    except RECOVERABLE_ERRORS as e:
+        logger.error("执行工具失败: %s", e)
         return _j({"success": False, "message": str(e)}, 500)

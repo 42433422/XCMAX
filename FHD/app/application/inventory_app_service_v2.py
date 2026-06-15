@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any
 from app.neuro_bus.bus import get_neuro_bus
 from app.neuro_bus.events.base import EventPriority, NeuroEvent
 from app.neuro_bus.events.inventory_events import *
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 if TYPE_CHECKING:
     pass
@@ -56,8 +56,8 @@ class InventoryAppServiceV2:
             )
             self._bus.publish(event)
             return event
-        except OPERATIONAL_ERRORS as e:
-            logger.error(f"[InventoryAppServiceV2] 发布事件失败: {e}")
+        except RECOVERABLE_ERRORS as e:
+            logger.error("[InventoryAppServiceV2] 发布事件失败: %s", e)
             return None
 
     # ========== Level 2: 事件驱动核心方法 ==========
@@ -88,7 +88,7 @@ class InventoryAppServiceV2:
 
             self._bus.publish(event)
 
-            logger.info(f"[InventoryAppServiceV2] 入库事件已发布: {batch_no}")
+            logger.info("[InventoryAppServiceV2] 入库事件已发布: %s", batch_no)
 
             return {
                 "success": True,
@@ -99,8 +99,8 @@ class InventoryAppServiceV2:
                 "mode": "event_driven",
             }
 
-        except OPERATIONAL_ERRORS as e:
-            logger.exception(f"[InventoryAppServiceV2] 入库失败: {e}")
+        except RECOVERABLE_ERRORS as e:
+            logger.exception("[InventoryAppServiceV2] 入库失败: %s", e)
             return {"success": False, "message": str(e), "error": str(e)}
 
     async def stock_out(self, data: dict[str, Any]) -> dict[str, Any]:
@@ -136,8 +136,8 @@ class InventoryAppServiceV2:
                 "mode": "event_driven",
             }
 
-        except OPERATIONAL_ERRORS as e:
-            logger.exception(f"[InventoryAppServiceV2] 出库失败: {e}")
+        except RECOVERABLE_ERRORS as e:
+            logger.exception("[InventoryAppServiceV2] 出库失败: %s", e)
             return {"success": False, "message": str(e), "error": str(e)}
 
     async def transfer(self, data: dict[str, Any]) -> dict[str, Any]:
@@ -162,7 +162,7 @@ class InventoryAppServiceV2:
 
             self._bus.publish(event)
 
-            logger.info(f"[InventoryAppServiceV2] 调拨事件已发布: {transfer_id}")
+            logger.info("[InventoryAppServiceV2] 调拨事件已发布: %s", transfer_id)
 
             return {
                 "success": True,
@@ -173,8 +173,8 @@ class InventoryAppServiceV2:
                 "mode": "event_driven",
             }
 
-        except OPERATIONAL_ERRORS as e:
-            logger.exception(f"[InventoryAppServiceV2] 调拨失败: {e}")
+        except RECOVERABLE_ERRORS as e:
+            logger.exception("[InventoryAppServiceV2] 调拨失败: %s", e)
             return {"success": False, "message": str(e), "error": str(e)}
 
     async def adjust_stock(self, data: dict[str, Any]) -> dict[str, Any]:
@@ -207,8 +207,8 @@ class InventoryAppServiceV2:
                 "mode": "event_driven",
             }
 
-        except OPERATIONAL_ERRORS as e:
-            logger.exception(f"[InventoryAppServiceV2] 库存调整失败: {e}")
+        except RECOVERABLE_ERRORS as e:
+            logger.exception("[InventoryAppServiceV2] 库存调整失败: %s", e)
             return {"success": False, "message": str(e), "error": str(e)}
 
     # ========== 统一命令执行入口 ==========
@@ -234,7 +234,7 @@ class InventoryAppServiceV2:
             return await handler(**data)
         except TypeError as e:
             return {"success": False, "message": f"命令参数错误: {e}", "command": command}
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             return {"success": False, "message": f"执行命令失败: {str(e)}", "command": command}
 
 

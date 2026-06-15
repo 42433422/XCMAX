@@ -1,0 +1,55 @@
+# 组件级 CI：vibe-coding 独立 Python 包
+#
+# 责任边界：仅负责 vibe-coding/ 子项目；与 modstore_server 无共享 CI。
+
+name: CI - Vibe Coding
+
+on:
+  pull_request:
+    paths:
+      - 'vibe-coding/**'
+      - '.github/workflows/ci-vibe-coding.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'vibe-coding/**'
+      - '.github/workflows/ci-vibe-coding.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ci-vibe-coding-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  vibe-coding-ci:
+    name: vibe-coding (Python package)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: vibe-coding
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[test]"
+
+      # pyproject.toml 中声明 pytest 入口；若缺失则退化为"能否导入包"的烟雾测试
+      - name: Run tests
+        run: |
+          if [ -d tests ]; then
+            pytest -q
+          else
+            python -c "import vibe_coding; print('vibe_coding import ok:', vibe_coding.__name__)"
+          fi

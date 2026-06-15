@@ -21,7 +21,7 @@ from app.template_analysis_progress import (
     clear_template_analysis_progress,
     set_template_analysis_progress,
 )
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +88,7 @@ def _analyze_template_with_upload_inner(file, template_name: str, template_scope
         if file is None:
             logger.error("没有上传文件")
             return _j({"success": False, "message": "没有上传文件"}, 400)
-        logger.info(f"文件名：{file.filename}, 模板名：{template_name}")
+        logger.info("文件名：%s, 模板名：%s", file.filename, template_name)
 
         if file.filename == "":
             logger.error("文件名为空")
@@ -131,8 +131,8 @@ def _analyze_template_with_upload_inner(file, template_name: str, template_scope
         _safe_remove(file_path)
         return _j({"success": False, "message": f"不支持的文件类型：{file_ext}"}, 400)
 
-    except OPERATIONAL_ERRORS as e:
-        logger.error(f"分析模板失败：{e}")
+    except RECOVERABLE_ERRORS as e:
+        logger.error("分析模板失败：%s", e)
         import traceback
 
         traceback.print_exc()
@@ -234,8 +234,8 @@ def _analyze_excel_template(
                 },
             }
         )
-    except OPERATIONAL_ERRORS as e:
-        logger.error(f"分析 Excel 模板失败：{e}")
+    except RECOVERABLE_ERRORS as e:
+        logger.error("分析 Excel 模板失败：%s", e)
         import traceback
 
         traceback.print_exc()
@@ -367,8 +367,8 @@ def _analyze_word_template(
                 },
             }
         )
-    except OPERATIONAL_ERRORS as e:
-        logger.error(f"分析 Word 模板失败：{e}")
+    except RECOVERABLE_ERRORS as e:
+        logger.error("分析 Word 模板失败：%s", e)
         import traceback
 
         traceback.print_exc()
@@ -405,7 +405,7 @@ def _analyze_label_template(
 
         _update_progress(task_id, 90, 4, "分析字段...")
 
-        logger.info(f"OCR 识别结果：{ocr_result}")
+        logger.info("OCR 识别结果：%s", ocr_result)
 
         if ocr_result.get("success"):
             fields = []
@@ -415,12 +415,12 @@ def _analyze_label_template(
 
             if ocr_data and ocr_data.get("fields"):
                 ocr_fields = ocr_data["fields"]
-                logger.info(f"OCR 提取到 {len(ocr_fields)} 个字段")
+                logger.info("OCR 提取到 %s 个字段", len(ocr_fields))
 
                 import uuid
 
                 for field in ocr_fields:
-                    logger.info(f"字段：{field}")
+                    logger.info("字段：%s", field)
                     fields.append(
                         {
                             "id": uuid.uuid4().hex,
@@ -463,7 +463,7 @@ def _analyze_label_template(
 
             if ocr_data and ocr_data.get("grid"):
                 preview_data["grid"] = ocr_data["grid"]
-                logger.info(f"网格信息：{ocr_data['grid']}")
+                logger.info("网格信息：%s", ocr_data['grid'])
             else:
                 logger.warning("未找到网格信息")
 
@@ -482,8 +482,8 @@ def _analyze_label_template(
             _cleanup_progress_tracking(task_id)
             _safe_remove(file_path)
             return _j({"success": False, "message": ocr_result.get("error", "标签生成失败")}, 500)
-    except OPERATIONAL_ERRORS as e:
-        logger.error(f"分析标签模板失败：{e}")
+    except RECOVERABLE_ERRORS as e:
+        logger.error("分析标签模板失败：%s", e)
         import traceback
 
         traceback.print_exc()

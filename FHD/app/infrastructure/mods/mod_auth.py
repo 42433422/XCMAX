@@ -20,7 +20,7 @@ from fastapi import HTTPException, Request
 from starlette.requests import Request as StarletteRequest
 from starlette.types import ASGIApp, Receive, Scope, Send
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -182,9 +182,16 @@ class ModContextMiddleware:
                     from app.infrastructure.mods.mod_manager import ensure_mod_api_ready
 
                     ensure_mod_api_ready(mod_context.mod_id, session_id=sid or None)
-                except OPERATIONAL_ERRORS as exc:
+                except RECOVERABLE_ERRORS as exc:
                     logger.warning(
                         "ensure_mod_api_ready(%s) failed: %s",
+                        mod_context.mod_id,
+                        exc,
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    # 过期/伪造 session + Active-Mod 头时，权益恢复或按需 load 可能触发 DB 异常；不得拖垮宿主 API。
+                    logger.warning(
+                        "Mod context bootstrap failed for %s: %s",
                         mod_context.mod_id,
                         exc,
                     )

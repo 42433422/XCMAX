@@ -9,7 +9,7 @@ import os
 import time
 from typing import Any
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
 def get_debug_log_path() -> str:
@@ -59,7 +59,7 @@ def debug_ndjson(payload: dict[str, Any]) -> None:
 
         with open(log_path, "a", encoding="utf-8") as f:
             f.write(json.dumps(payload, ensure_ascii=False) + "\n")
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         pass
 
 
@@ -84,13 +84,13 @@ def debug_client_log() -> dict[str, Any]:
             if raw:
                 try:
                     data = json.loads(raw.decode())
-                except OPERATIONAL_ERRORS:
+                except RECOVERABLE_ERRORS:
                     data = {}
             else:
                 data = {}
 
         return ingest_client_debug_json(data)
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.exception("处理客户端调试日志失败")
         return {"success": False, "message": str(e)}
 

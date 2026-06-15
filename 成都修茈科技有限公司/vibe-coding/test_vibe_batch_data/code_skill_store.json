@@ -1,0 +1,2336 @@
+{
+  "code_events": [],
+  "code_runs": [
+    {
+      "completed_at": "2026-05-05T09:20:47.033914+00:00",
+      "diagnosis": {},
+      "error": "",
+      "input_data": {
+        "data": "[{\"col1\": \"a\", \"col2\": 10}, {\"col1\": \"b\", \"col2\": 20}]"
+      },
+      "output_data": {
+        "rows": 2,
+        "sum": 30
+      },
+      "patch": null,
+      "run_id": "3d442cf00d934ad5a55ec8bacfc5ca83",
+      "skill_id": "csv-json-column-sum",
+      "stage": "static",
+      "started_at": "2026-05-05T09:20:46.766768+00:00"
+    },
+    {
+      "completed_at": "2026-05-05T09:21:04.742920+00:00",
+      "diagnosis": {},
+      "error": "",
+      "input_data": {
+        "dict1": {
+          "a": 1,
+          "b": 2
+        },
+        "dict2": {
+          "b": 3,
+          "c": 4
+        }
+      },
+      "output_data": {
+        "a": 1,
+        "b": [
+          2,
+          3
+        ],
+        "c": 4
+      },
+      "patch": null,
+      "run_id": "b90685f4b1e14371aeee9d48cb316fab",
+      "skill_id": "merge-dicts-with-list-values",
+      "stage": "static",
+      "started_at": "2026-05-05T09:21:04.500405+00:00"
+    },
+    {
+      "completed_at": "2026-05-05T09:21:22.566283+00:00",
+      "diagnosis": {},
+      "error": "",
+      "input_data": {
+        "n": 10
+      },
+      "output_data": {
+        "result": 55
+      },
+      "patch": null,
+      "run_id": "358b059beb2544d98d65c9438e1d3317",
+      "skill_id": "cached-fibonacci",
+      "stage": "static",
+      "started_at": "2026-05-05T09:21:22.312972+00:00"
+    },
+    {
+      "completed_at": "2026-05-05T09:21:50.378707+00:00",
+      "diagnosis": {
+        "error_message": "quality_gate:missing_key:word; missing_key:count",
+        "error_type": "ValueError",
+        "failing_line": "",
+        "local_variables": {},
+        "suggested_fix_type": "invalid_value",
+        "traceback_str": ""
+      },
+      "error": "Dynamic phase rejected: input is outside skill domain",
+      "input_data": {
+        "n": 2,
+        "text": "hello world hello python hello world"
+      },
+      "output_data": {},
+      "patch": null,
+      "run_id": "4e512ebf14db4a659e8bc38320a1fd43",
+      "skill_id": "word-frequency-top-n",
+      "stage": "domain_rejected",
+      "started_at": "2026-05-05T09:21:50.115500+00:00"
+    },
+    {
+      "completed_at": "2026-05-05T10:07:01.053444+00:00",
+      "diagnosis": {},
+      "error": "",
+      "input_data": {
+        "json_csv_data": "{\"header\": [\"name\", \"value\"], \"rows\": [[\"a\", \"10\"], [\"b\", \"20\"], [\"c\", \"30\"]]}"
+      },
+      "output_data": {
+        "rows": 3,
+        "sum": 60.0
+      },
+      "patch": null,
+      "run_id": "9be373d140384ec490bdba2460d98cc4",
+      "skill_id": "csv-json-column-sum",
+      "stage": "static",
+      "started_at": "2026-05-05T10:07:00.780489+00:00"
+    },
+    {
+      "completed_at": "2026-05-05T10:07:19.478724+00:00",
+      "diagnosis": {},
+      "error": "",
+      "input_data": {
+        "dict1": {
+          "a": 1,
+          "b": 2
+        },
+        "dict2": {
+          "b": 3,
+          "c": 4
+        }
+      },
+      "output_data": {
+        "a": 1,
+        "b": [
+          2,
+          3
+        ],
+        "c": 4
+      },
+      "patch": null,
+      "run_id": "29f7428dc9974b60978fe31ee12b3808",
+      "skill_id": "merge-dicts-with-list-values",
+      "stage": "static",
+      "started_at": "2026-05-05T10:07:19.175380+00:00"
+    },
+    {
+      "completed_at": "2026-05-05T10:15:48.653884+00:00",
+      "diagnosis": {
+        "error_message": "quality_gate:missing_key:input_string",
+        "error_type": "ValueError",
+        "failing_line": "",
+        "local_variables": {},
+        "suggested_fix_type": "invalid_value",
+        "traceback_str": ""
+      },
+      "error": "Dynamic phase rejected: input is outside skill domain",
+      "input_data": {
+        "input_string": "hello"
+      },
+      "output_data": {},
+      "patch": null,
+      "run_id": "cc818253766a43dca0f7318fcc1f07f8",
+      "skill_id": "reverse-string",
+      "stage": "domain_rejected",
+      "started_at": "2026-05-05T10:15:48.413187+00:00"
+    },
+    {
+      "completed_at": "2026-05-05T10:16:17.904316+00:00",
+      "diagnosis": {},
+      "error": "",
+      "input_data": {
+        "json_csv_data": "[{\"col1\": \"a\", \"col2\": 10}, {\"col1\": \"b\", \"col2\": 20}, {\"col1\": \"c\", \"col2\": 30}]"
+      },
+      "output_data": {
+        "rows": 3,
+        "sum": 60
+      },
+      "patch": null,
+      "run_id": "2b38e03698a1452ab307f7b6c67291c8",
+      "skill_id": "csv-json-column-sum",
+      "stage": "static",
+      "started_at": "2026-05-05T10:16:17.670520+00:00"
+    },
+    {
+      "completed_at": "2026-05-05T10:16:36.649833+00:00",
+      "diagnosis": {},
+      "error": "",
+      "input_data": {
+        "dict1": {
+          "a": 1,
+          "b": 2
+        },
+        "dict2": {
+          "b": 3,
+          "c": 4
+        }
+      },
+      "output_data": {
+        "merged_dict": {
+          "a": 1,
+          "b": [
+            2,
+            3
+          ],
+          "c": 4
+        }
+      },
+      "patch": null,
+      "run_id": "5af417504983411aa045b46b334bfc03",
+      "skill_id": "merge-dicts-with-list-values",
+      "stage": "static",
+      "started_at": "2026-05-05T10:16:36.394345+00:00"
+    },
+    {
+      "completed_at": "2026-05-05T10:17:05.929401+00:00",
+      "diagnosis": {
+        "error_message": "quality_gate:missing_key:sorted_list; missing_key:target",
+        "error_type": "ValueError",
+        "failing_line": "",
+        "local_variables": {},
+        "suggested_fix_type": "invalid_value",
+        "traceback_str": ""
+      },
+      "error": "Dynamic phase rejected: input is outside skill domain",
+      "input_data": {
+        "sorted_list": [
+          1,
+          3,
+          5,
+          7,
+          9
+        ],
+        "target": 5
+      },
+      "output_data": {},
+      "patch": null,
+      "run_id": "6e9475a836304e978ac54e0405a7d082",
+      "skill_id": "binary-search",
+      "stage": "domain_rejected",
+      "started_at": "2026-05-05T10:17:05.654187+00:00"
+    },
+    {
+      "completed_at": "2026-05-05T10:17:28.566378+00:00",
+      "diagnosis": {
+        "error_message": "quality_gate:missing_key:word; missing_key:count",
+        "error_type": "ValueError",
+        "failing_line": "",
+        "local_variables": {},
+        "suggested_fix_type": "invalid_value",
+        "traceback_str": ""
+      },
+      "error": "Dynamic phase rejected: input is outside skill domain",
+      "input_data": {
+        "n": 2,
+        "text": "Hello world hello Python world hello"
+      },
+      "output_data": {},
+      "patch": null,
+      "run_id": "2594aaf1ac3a489786938a291b8abf35",
+      "skill_id": "word-frequency-top-n",
+      "stage": "domain_rejected",
+      "started_at": "2026-05-05T10:17:28.118576+00:00"
+    },
+    {
+      "completed_at": "2026-05-05T10:41:30.819767+00:00",
+      "diagnosis": {
+        "error_message": "quality_gate:missing_key:input_string",
+        "error_type": "ValueError",
+        "failing_line": "",
+        "local_variables": {},
+        "suggested_fix_type": "invalid_value",
+        "traceback_str": ""
+      },
+      "error": "Dynamic phase rejected: input is outside skill domain",
+      "input_data": {
+        "input_string": "hello"
+      },
+      "output_data": {},
+      "patch": null,
+      "run_id": "9e3ffa6431644e578d18d4f32b26d484",
+      "skill_id": "reverse-string",
+      "stage": "domain_rejected",
+      "started_at": "2026-05-05T10:41:30.615145+00:00"
+    },
+    {
+      "completed_at": "2026-05-05T10:42:06.068121+00:00",
+      "diagnosis": {},
+      "error": "",
+      "input_data": {
+        "json_data": "{\"header\": [\"name\", \"value\"], \"rows\": [[\"a\", \"10\"], [\"b\", \"20\"], [\"c\", \"30\"]]}"
+      },
+      "output_data": {
+        "rows": 3,
+        "sum": 60.0
+      },
+      "patch": null,
+      "run_id": "8474559a67c64a438feee4fdfc6cebaf",
+      "skill_id": "json-csv-column-sum",
+      "stage": "static",
+      "started_at": "2026-05-05T10:42:05.862123+00:00"
+    },
+    {
+      "completed_at": "2026-05-05T10:42:27.197338+00:00",
+      "diagnosis": {},
+      "error": "",
+      "input_data": {
+        "dict1": {
+          "a": 1,
+          "b": 2
+        },
+        "dict2": {
+          "b": 3,
+          "c": 4
+        }
+      },
+      "output_data": {
+        "a": 1,
+        "b": [
+          2,
+          3
+        ],
+        "c": 4
+      },
+      "patch": null,
+      "run_id": "2d7954068b674fadb457652f345cd931",
+      "skill_id": "merge-dicts-with-list-values",
+      "stage": "static",
+      "started_at": "2026-05-05T10:42:26.952922+00:00"
+    },
+    {
+      "completed_at": "2026-05-05T10:42:55.408834+00:00",
+      "diagnosis": {},
+      "error": "",
+      "input_data": {
+        "n": 10
+      },
+      "output_data": {
+        "cache_hit": false,
+        "n": 10,
+        "result": 55
+      },
+      "patch": null,
+      "run_id": "a2140c1f95e246c0a27c5e5d138cef99",
+      "skill_id": "fibonacci-with-cache",
+      "stage": "static",
+      "started_at": "2026-05-05T10:42:55.217196+00:00"
+    },
+    {
+      "completed_at": "2026-05-05T10:43:14.758541+00:00",
+      "diagnosis": {
+        "error_message": "quality_gate:missing_key:sorted_list; missing_key:target",
+        "error_type": "ValueError",
+        "failing_line": "",
+        "local_variables": {},
+        "suggested_fix_type": "invalid_value",
+        "traceback_str": ""
+      },
+      "error": "Dynamic phase rejected: input is outside skill domain",
+      "input_data": {
+        "sorted_list": [
+          1,
+          3,
+          5,
+          7,
+          9
+        ],
+        "target": 5
+      },
+      "output_data": {},
+      "patch": null,
+      "run_id": "f655a8e5825d4b29af7aeb0f4321eaad",
+      "skill_id": "binary-search",
+      "stage": "domain_rejected",
+      "started_at": "2026-05-05T10:43:14.544038+00:00"
+    },
+    {
+      "completed_at": "2026-05-05T11:29:51.976477+00:00",
+      "diagnosis": {},
+      "error": "",
+      "input_data": {
+        "input_string": "hello"
+      },
+      "output_data": {
+        "reversed_string": "olleh"
+      },
+      "patch": null,
+      "run_id": "9567f08fe51c4dec80ed26f0d7df0774",
+      "skill_id": "string-reversal",
+      "stage": "static",
+      "started_at": "2026-05-05T11:29:51.634672+00:00"
+    },
+    {
+      "completed_at": "2026-05-05T11:31:55.657504+00:00",
+      "diagnosis": {},
+      "error": "",
+      "input_data": {
+        "strings": [
+          "banana",
+          "apple",
+          "cat",
+          "dog",
+          "elephant"
+        ]
+      },
+      "output_data": {
+        "result": [
+          "apple",
+          "banana",
+          "elephant"
+        ]
+      },
+      "patch": null,
+      "run_id": "7cf76ba4040f4ea1a790f0b7fd5a51cf",
+      "skill_id": "filter-sort-strings-by-length",
+      "stage": "static",
+      "started_at": "2026-05-05T11:31:55.424930+00:00"
+    },
+    {
+      "completed_at": "2026-05-05T11:34:32.615245+00:00",
+      "diagnosis": {},
+      "error": "",
+      "input_data": {
+        "json_data": "[[\"name\", 10], [\"age\", 20], [\"city\", 30]]"
+      },
+      "output_data": {
+        "rows": 3,
+        "sum": 60
+      },
+      "patch": null,
+      "run_id": "acf522943bae40abab2a030cfd11d72d",
+      "skill_id": "json-csv-column-sum",
+      "stage": "static",
+      "started_at": "2026-05-05T11:34:32.345956+00:00"
+    },
+    {
+      "completed_at": "2026-05-05T11:35:56.845715+00:00",
+      "diagnosis": {},
+      "error": "",
+      "input_data": {
+        "dict1": {
+          "a": 1,
+          "b": 2
+        },
+        "dict2": {
+          "b": 3,
+          "c": 4
+        }
+      },
+      "output_data": {
+        "a": 1,
+        "b": [
+          2,
+          3
+        ],
+        "c": 4
+      },
+      "patch": null,
+      "run_id": "8871dcec4faf4d0a9389ce111197cec3",
+      "skill_id": "merge-dicts-with-list-values",
+      "stage": "static",
+      "started_at": "2026-05-05T11:35:56.615909+00:00"
+    },
+    {
+      "completed_at": "2026-05-05T11:37:35.056083+00:00",
+      "diagnosis": {},
+      "error": "",
+      "input_data": {
+        "n": 5
+      },
+      "output_data": {
+        "fibonacci_number": 5
+      },
+      "patch": null,
+      "run_id": "7ebc353aa009420eba876431b1a4eb93",
+      "skill_id": "fibonacci-with-cache",
+      "stage": "static",
+      "started_at": "2026-05-05T11:37:34.832190+00:00"
+    },
+    {
+      "completed_at": "2026-05-05T11:39:08.561768+00:00",
+      "diagnosis": {
+        "error_message": "quality_gate:missing_key:sorted_list; missing_key:target",
+        "error_type": "ValueError",
+        "failing_line": "",
+        "local_variables": {},
+        "suggested_fix_type": "invalid_value",
+        "traceback_str": ""
+      },
+      "error": "Dynamic phase rejected: input is outside skill domain",
+      "input_data": {
+        "sorted_list": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "target": 3
+      },
+      "output_data": {},
+      "patch": null,
+      "run_id": "094a6d42d5604ea29d5703bbdc2853fc",
+      "skill_id": "binary-search",
+      "stage": "domain_rejected",
+      "started_at": "2026-05-05T11:39:08.308219+00:00"
+    },
+    {
+      "completed_at": "2026-05-05T12:02:29.541817+00:00",
+      "diagnosis": {},
+      "error": "",
+      "input_data": {
+        "nested_list": [
+          1,
+          [
+            2,
+            3
+          ],
+          [
+            4,
+            5
+          ],
+          {
+            "a": 6
+          }
+        ]
+      },
+      "output_data": {
+        "result": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          {
+            "a": 6
+          }
+        ]
+      },
+      "patch": null,
+      "run_id": "f4bc078ed62c497f8ab525f8dca21341",
+      "skill_id": "flatten-nested-list",
+      "stage": "static",
+      "started_at": "2026-05-05T12:02:29.358333+00:00"
+    }
+  ],
+  "code_skills": {
+    "binary-search": {
+      "active_version": 3,
+      "created_at": "2026-05-05T10:17:05.631960+00:00",
+      "domain": "在有序列表中执行二分查找以定位目标值",
+      "name": "Binary Search in Sorted List",
+      "skill_id": "binary-search",
+      "updated_at": "2026-05-05T11:39:08.275191+00:00",
+      "versions": [
+        {
+          "created_at": "2026-05-05T10:17:05.631960+00:00",
+          "dependencies": [],
+          "domain_keywords": [
+            "二分查找",
+            "有序列表",
+            "索引",
+            "查找算法",
+            "O(log n)"
+          ],
+          "function_name": "binary_search",
+          "quality_gate": {
+            "required_keys": [
+              "sorted_list",
+              "target"
+            ]
+          },
+          "signature": {
+            "params": [
+              "sorted_list",
+              "target"
+            ],
+            "required_params": [
+              "sorted_list",
+              "target"
+            ],
+            "return_type": "int"
+          },
+          "source_code": "def binary_search(sorted_list: list, target: int) -> int:\n    \"\"\"在有序列表中执行二分查找，返回目标值的索引，未找到则返回-1。\n    \n    Args:\n        sorted_list: 已排序的列表（升序）\n        target: 要查找的目标值\n    \n    Returns:\n        int: 目标值在列表中的索引，未找到返回-1\n    \"\"\"\n    if not isinstance(sorted_list, list):\n        return -1\n    \n    left, right = 0, len(sorted_list) - 1\n    \n    while left <= right:\n        mid = (left + right) // 2\n        if sorted_list[mid] == target:\n            return mid\n        elif sorted_list[mid] < target:\n            left = mid + 1\n        else:\n            right = mid - 1\n    \n    return -1",
+          "source_run_id": "vibe-e9f95a8c",
+          "test_cases": [
+            {
+              "assert_fn": null,
+              "case_id": "happy_path",
+              "expected_output": 2,
+              "input_data": {
+                "sorted_list": [
+                  1,
+                  3,
+                  5,
+                  7,
+                  9
+                ],
+                "target": 5
+              }
+            },
+            {
+              "assert_fn": null,
+              "case_id": "edge_empty",
+              "expected_output": -1,
+              "input_data": {
+                "sorted_list": [],
+                "target": 10
+              }
+            },
+            {
+              "assert_fn": null,
+              "case_id": "edge_not_found",
+              "expected_output": -1,
+              "input_data": {
+                "sorted_list": [
+                  2,
+                  4,
+                  6,
+                  8
+                ],
+                "target": 5
+              }
+            }
+          ],
+          "trigger_policy": {
+            "force_dynamic": false,
+            "on_error": true,
+            "on_quality_below_threshold": true
+          },
+          "version": 1
+        },
+        {
+          "created_at": "2026-05-05T10:43:14.526010+00:00",
+          "dependencies": [],
+          "domain_keywords": [
+            "二分查找",
+            "有序列表",
+            "索引",
+            "查找算法",
+            "O(log n)"
+          ],
+          "function_name": "binary_search",
+          "quality_gate": {
+            "required_keys": [
+              "sorted_list",
+              "target"
+            ]
+          },
+          "signature": {
+            "params": [
+              "sorted_list",
+              "target"
+            ],
+            "required_params": [
+              "sorted_list",
+              "target"
+            ],
+            "return_type": "int"
+          },
+          "source_code": "def binary_search(sorted_list: list, target: int) -> int:\n    \"\"\"\n    在有序列表中使用二分查找算法查找目标值。\n    \n    参数:\n        sorted_list (list): 已排序的列表（升序）。\n        target (int): 要查找的目标值。\n    \n    返回:\n        int: 如果找到目标值，返回其索引；否则返回 -1。\n    \"\"\"\n    left = 0\n    right = len(sorted_list) - 1\n    \n    while left <= right:\n        mid = (left + right) // 2\n        if sorted_list[mid] == target:\n            return mid\n        elif sorted_list[mid] < target:\n            left = mid + 1\n        else:\n            right = mid - 1\n    \n    return -1",
+          "source_run_id": "vibe-29a4cbe6",
+          "test_cases": [
+            {
+              "assert_fn": null,
+              "case_id": "happy_path",
+              "expected_output": 2,
+              "input_data": {
+                "sorted_list": [
+                  1,
+                  3,
+                  5,
+                  7,
+                  9
+                ],
+                "target": 5
+              }
+            },
+            {
+              "assert_fn": null,
+              "case_id": "edge_empty",
+              "expected_output": -1,
+              "input_data": {
+                "sorted_list": [],
+                "target": 1
+              }
+            },
+            {
+              "assert_fn": null,
+              "case_id": "edge_not_found",
+              "expected_output": -1,
+              "input_data": {
+                "sorted_list": [
+                  2,
+                  4,
+                  6,
+                  8
+                ],
+                "target": 5
+              }
+            }
+          ],
+          "trigger_policy": {
+            "force_dynamic": false,
+            "on_error": true,
+            "on_quality_below_threshold": true
+          },
+          "version": 2
+        },
+        {
+          "created_at": "2026-05-05T11:39:08.275191+00:00",
+          "dependencies": [],
+          "domain_keywords": [
+            "binary search",
+            "sorted list",
+            "index",
+            "search algorithm"
+          ],
+          "function_name": "binary_search",
+          "quality_gate": {
+            "required_keys": [
+              "sorted_list",
+              "target"
+            ]
+          },
+          "signature": {
+            "params": [
+              "sorted_list",
+              "target"
+            ],
+            "required_params": [
+              "sorted_list",
+              "target"
+            ],
+            "return_type": "int"
+          },
+          "source_code": "def binary_search(sorted_list, target) -> dict:\n    \"\"\"\n    在有序列表中执行二分查找以定位目标值。\n\n    参数:\n    sorted_list (list): 一个已排序的列表。\n    target: 要查找的目标值。\n\n    返回:\n    dict: 包含索引或错误信息的字典。成功时返回 {\"index\": index}，其中 index 是目标值的索引，如果未找到则为 -1。失败时返回 {\"error\": \"错误信息\"}。\n    \"\"\"\n    try:\n        left = 0\n        right = len(sorted_list) - 1\n\n        while left <= right:\n            mid = (left + right) // 2\n            if sorted_list[mid] == target:\n                return {\"index\": mid}\n            elif sorted_list[mid] < target:\n                left = mid + 1\n            else:\n                right = mid - 1\n\n        return {\"index\": -1}\n    except Exception as e:\n        return {\"error\": str(e)}",
+          "source_run_id": "vibe-78411bbf",
+          "test_cases": [
+            {
+              "assert_fn": null,
+              "case_id": "happy_path",
+              "expected_output": {
+                "index": 2
+              },
+              "input_data": {
+                "sorted_list": [
+                  1,
+                  2,
+                  3,
+                  4,
+                  5
+                ],
+                "target": 3
+              }
+            },
+            {
+              "assert_fn": null,
+              "case_id": "edge_empty",
+              "expected_output": {
+                "index": -1
+              },
+              "input_data": {
+                "sorted_list": [],
+                "target": 1
+              }
+            },
+            {
+              "assert_fn": null,
+              "case_id": "edge_invalid",
+              "expected_output": {
+                "index": -1
+              },
+              "input_data": {
+                "sorted_list": [
+                  1,
+                  2,
+                  3
+                ],
+                "target": 4
+              }
+            }
+          ],
+          "trigger_policy": {
+            "force_dynamic": false,
+            "on_error": true,
+            "on_quality_below_threshold": true
+          },
+          "version": 3
+        }
+      ]
+    },
+    "cached-fibonacci": {
+      "active_version": 1,
+      "created_at": "2026-05-05T09:21:22.296653+00:00",
+      "domain": "计算斐波那契数列的第n项，支持缓存以提高重复计算效率",
+      "name": "带缓存的斐波那契数列计算",
+      "skill_id": "cached-fibonacci",
+      "updated_at": "2026-05-05T09:21:22.296653+00:00",
+      "versions": [
+        {
+          "created_at": "2026-05-05T09:21:22.296653+00:00",
+          "dependencies": [],
+          "domain_keywords": [
+            "斐波那契",
+            "缓存",
+            "数列",
+            "递归",
+            "性能优化"
+          ],
+          "function_name": "cached_fibonacci",
+          "quality_gate": {
+            "required_keys": [
+              "result"
+            ]
+          },
+          "signature": {
+            "params": [
+              "n"
+            ],
+            "required_params": [
+              "n"
+            ],
+            "return_type": "dict"
+          },
+          "source_code": "def cached_fibonacci(n) -> dict:\n    # 检查输入是否为整数\n    if not isinstance(n, int):\n        return {'error': 'n must be an integer'}\n    # 检查输入是否为非负整数\n    if n < 0:\n        return {'error': 'n must be a non-negative integer'}\n    # 使用缓存字典存储已计算的斐波那契数\n    cache = {0: 0, 1: 1}\n    # 递归函数，使用缓存\n    def fib(k):\n        if k in cache:\n            return cache[k]\n        cache[k] = fib(k-1) + fib(k-2)\n        return cache[k]\n    # 计算第n项\n    result = fib(n)\n    return {'result': result}",
+          "source_run_id": "vibe-68a8e052",
+          "test_cases": [
+            {
+              "assert_fn": null,
+              "case_id": "happy_path",
+              "expected_output": {
+                "result": 55
+              },
+              "input_data": {
+                "n": 10
+              }
+            },
+            {
+              "assert_fn": null,
+              "case_id": "edge_zero",
+              "expected_output": {
+                "result": 0
+              },
+              "input_data": {
+                "n": 0
+              }
+            },
+            {
+              "assert_fn": null,
+              "case_id": "edge_negative",
+              "expected_output": null,
+              "input_data": {
+                "n": -5
+              }
+            },
+            {
+              "assert_fn": null,
+              "case_id": "edge_non_integer",
+              "expected_output": null,
+              "input_data": {
+                "n": 3.5
+              }
+            }
+          ],
+          "trigger_policy": {
+            "force_dynamic": false,
+            "on_error": true,
+            "on_quality_below_threshold": true
+          },
+          "version": 1
+        }
+      ]
+    },
+    "csv-json-column-sum": {
+      "active_version": 3,
+      "created_at": "2026-05-05T09:20:46.751803+00:00",
+      "domain": "解析JSON格式的CSV数据并提取指定列数值求和",
+      "name": "CSV JSON Column Sum",
+      "skill_id": "csv-json-column-sum",
+      "updated_at": "2026-05-05T10:16:17.650858+00:00",
+      "versions": [
+        {
+          "created_at": "2026-05-05T09:20:46.751803+00:00",
+          "dependencies": [],
+          "domain_keywords": [
+            "JSON",
+            "CSV",
+            "列求和",
+            "数据解析",
+            "数值提取"
+          ],
+          "function_name": "sum_csv_json_column",
+          "quality_gate": {
+            "required_keys": [
+              "sum",
+              "rows"
+            ]
+          },
+          "signature": {
+            "params": [
+              "data"
+            ],
+            "required_params": [
+              "data"
+            ],
+            "return_type": "dict"
+          },
+          "source_code": "def sum_csv_json_column(data: str) -> dict:\n    import json\n    try:\n        parsed = json.loads(data)\n        if not isinstance(parsed, list):\n            return {'error': 'Data is not a list'}\n        total = 0\n        count = 0\n        for item in parsed:\n            if isinstance(item, dict) and 'col2' in item:\n                value = item['col2']\n                if isinstance(value, (int, float)):\n                    total += value\n                    count += 1\n        return {'sum': total, 'rows': count}\n    except json.JSONDecodeError:\n        return {'error': 'Invalid JSON'}\n    except Exception as e:\n        return {'error': str(e)}",
+          "source_run_id": "vibe-734ecb35",
+          "test_cases": [
+            {
+              "assert_fn": null,
+              "case_id": "happy_path",
+              "expected_output": {
+                "rows": 2,
+                "sum": 30
+              },
+              "input_data": {
+                "data": "[{\"col1\": \"a\", \"col2\": 10}, {\"col1\": \"b\", \"col2\": 20}]"
+              }
+            },
+            {
+              "assert_fn": null,
+              "case_id": "edge_empty",
+              "expected_output": {
+                "rows": 0,
+                "sum": 0
+              },
+              "input_data": {
+                "data": "[]"
+              }
+            },
+            {
+              "assert_fn": null,
+              "case_id": "edge_invalid",
+              "expected_output": null,
+              "input_data": {
+                "data": "invalid json"
+              }
+            }
+          ],
+          "trigger_policy": {
+            "force_dynamic": false,
+            "on_error": true,
+            "on_quality_below_threshold": true
+          },
+          "version": 1
+        },
+        {
+          "created_at": "2026-05-05T10:07:00.755730+00:00",
+          "dependencies": [],
+          "domain_keywords": [
+            "CSV",
+            "JSON",
+            "列求和",
+            "数据解析",
+            "数值提取"
+          ],
+          "function_name": "sum_second_column",
+          "quality_gate": {
+            "required_keys": [
+              "sum",
+              "rows"
+            ]
+          },
+          "signature": {
+            "params": [
+              "json_csv_data"
+            ],
+            "required_params": [
+              "json_csv_data"
+            ],
+            "return_type": "dict"
+          },
+          "source_code": "def sum_second_column(json_csv_data: str) -> dict:\n    \"\"\"\n    解析JSON格式的CSV数据并计算第二列的数值总和。\n    \n    参数:\n        json_csv_data (str): JSON格式的CSV数据字符串，包含header和rows字段。\n    \n    返回:\n        dict: 包含sum（数值总和）和rows（有效数据行数）的字典。\n              如果数据无效或解析失败，返回包含error字段的字典。\n    \"\"\"\n    import json\n    \n    try:\n        data = json.loads(json_csv_data)\n        \n        # 检查必要的字段是否存在\n        if not isinstance(data, dict) or 'header' not in data or 'rows' not in data:\n            return {'error': 'Invalid JSON structure: missing header or rows'}\n        \n        header = data['header']\n        rows = data['rows']\n        \n        # 检查header是否为列表且至少有两列\n        if not isinstance(header, list) or len(header) < 2:\n            return {'error': 'Invalid header: must be a list with at least two columns'}\n        \n        # 检查rows是否为列表\n        if not isinstance(rows, list):\n            return {'error': 'Invalid rows: must be a list'}\n        \n        total_sum = 0\n        valid_rows = 0\n        \n        for row in rows:\n            # 每行必须是列表且至少有两个元素\n            if not isinstance(row, list) or len(row) < 2:\n                return {'error': 'Invalid row format: each row must be a list with at least two elements'}\n            \n            value_str = row[1]\n            \n            # 尝试将第二列的值转换为数字\n            try:\n                value = float(value_str)\n                total_sum += value\n                valid_rows += 1\n            except (ValueError, TypeError):\n                # 如果转换失败，根据测试用例，整个操作应返回错误\n                return {'error': 'Invalid numeric value in second column'}\n        \n        return {'sum': total_sum, 'rows': valid_rows}\n    \n    except json.JSONDecodeError:\n        return {'error': 'Invalid JSON format'}\n    except Exception as e:\n        return {'error': f'Unexpected error: {str(e)}'}",
+          "source_run_id": "vibe-0df60e29",
+          "test_cases": [
+            {
+              "assert_fn": null,
+              "case_id": "happy_path",
+              "expected_output": {
+                "rows": 3,
+                "sum": 60
+              },
+              "input_data": {
+                "json_csv_data": "{\"header\": [\"name\", \"value\"], \"rows\": [[\"a\", \"10\"], [\"b\", \"20\"], [\"c\", \"30\"]]}"
+              }
+            },
+            {
+              "assert_fn": null,
+              "case_id": "edge_empty",
+              "expected_output": {
+                "rows": 0,
+                "sum": 0
+              },
+              "input_data": {
+                "json_csv_data": "{\"header\": [\"name\", \"value\"], \"rows\": []}"
+              }
+            },
+            {
+              "assert_fn": null,
+              "case_id": "edge_invalid",
+              "expected_output": null,
+              "input_data": {
+                "json_csv_data": "{\"header\": [\"name\", \"value\"], \"rows\": [[\"a\", \"abc\"], [\"b\", \"20\"]]}"
+              }
+            }
+          ],
+          "trigger_policy": {
+            "force_dynamic": false,
+            "on_error": true,
+            "on_quality_below_threshold": true
+          },
+          "version": 2
+        },
+        {
+          "created_at": "2026-05-05T10:16:17.650858+00:00",
+          "dependencies": [
+            "json"
+          ],
+          "domain_keywords": [
+            "JSON",
+            "CSV",
+            "列求和",
+            "数据解析",
+            "数值提取"
+          ],
+          "function_name": "sum_second_column",
+          "quality_gate": {
+            "required_keys": [
+              "sum",
+              "rows"
+            ]
+          },
+          "signature": {
+            "params": [
+              "json_csv_data"
+            ],
+            "required_params": [
+              "json_csv_data"
+            ],
+            "return_type": "dict"
+          },
+          "source_code": "def sum_second_column(json_csv_data: str) -> dict:\n    \"\"\"\n    解析JSON格式的CSV数据并提取第二列数值求和，同时统计有效行数。\n    \n    参数:\n        json_csv_data (str): JSON格式的字符串，表示一个列表，每个元素是一个字典，\n                            字典中包含至少两列，第二列（col2）应为数值。\n    \n    返回:\n        dict: 包含'sum'（第二列数值总和）和'rows'（有效行数）的字典。\n              如果输入无效，返回包含'error'字段的字典。\n    \"\"\"\n    try:\n        import json\n        data = json.loads(json_csv_data)\n        if not isinstance(data, list):\n            return {\"error\": \"Input is not a JSON array\"}\n        total = 0\n        valid_rows = 0\n        for item in data:\n            if isinstance(item, dict) and 'col2' in item:\n                value = item['col2']\n                if isinstance(value, (int, float)):\n                    total += value\n                    valid_rows += 1\n                else:\n                    # 如果col2不是数值，跳过该行但不计入有效行数？\n                    # 根据测试用例，似乎只统计有数值的行，但测试用例中所有col2都是数值\n                    # 为了安全，我们只累加数值，但只统计有col2且为数值的行\n                    pass\n        return {\"sum\": total, \"rows\": valid_rows}\n    except json.JSONDecodeError:\n        return {\"error\": \"Invalid JSON format\"}\n    except Exception as e:\n        return {\"error\": str(e)}",
+          "source_run_id": "vibe-cd923820",
+          "test_cases": [
+            {
+              "assert_fn": null,
+              "case_id": "happy_path",
+              "expected_output": {
+                "rows": 3,
+                "sum": 60
+              },
+              "input_data": {
+                "json_csv_data": "[{\"col1\": \"a\", \"col2\": 10}, {\"col1\": \"b\", \"col2\": 20}, {\"col1\": \"c\", \"col2\": 30}]"
+              }
+            },
+            {
+              "assert_fn": null,
+              "case_id": "edge_empty",
+              "expected_output": {
+                "rows": 0,
+                "sum": 0
+              },
+              "input_data": {
+                "json_csv_data": "[]"
+              }
+            },
+            {
+              "assert_fn": null,
+              "case_id": "edge_invalid",
+              "expected_output": null,
+              "input_data": {
+                "json_csv_data": "invalid json"
+              }
+            }
+          ],
+          "trigger_policy": {
+            "force_dynamic": false,
+            "on_error": true,
+            "on_quality_below_threshold": true
+          },
+          "version": 3
+        }
+      ]
+    },
+    "fibonacci-with-cache": {
+      "active_version": 2,
+      "created_at": "2026-05-05T10:42:55.197044+00:00",
+      "domain": "计算斐波那契数列的第n项，支持缓存以提高效率。",
+      "name": "Fibonacci Calculator with Cache",
+      "skill_id": "fibonacci-with-cache",
+      "updated_at": "2026-05-05T11:37:34.807130+00:00",
+      "versions": [
+        {
+          "created_at": "2026-05-05T10:42:55.197044+00:00",
+          "dependencies": [],
+          "domain_keywords": [
+            "斐波那契",
+            "缓存",
+            "数列",
+            "递归",
+            "性能优化"
+          ],
+          "function_name": "fibonacci_with_cache",
+          "quality_gate": {
+            "required_keys": [
+              "n",
+              "result",
+              "cache_hit"
+            ]
+          },
+          "signature": {
+            "params": [
+              "n"
+            ],
+            "required_params": [
+              "n"
+            ],
+            "return_type": "dict"
+          },
+          "source_code": "def fibonacci_with_cache(n) -> dict:\n    \"\"\"计算斐波那契数列，支持缓存以提高重复计算效率。\n\n    Args:\n        n: 非负整数，表示要计算的斐波那契数列的索引。\n\n    Returns:\n        dict: 包含以下键的字典：\n            - n: 输入的n值\n            - result: 斐波那契数列第n项的值\n            - cache_hit: 是否命中缓存（布尔值）\n        如果输入无效（非整数或负数），返回包含error字段的字典。\n    \"\"\"\n    # 检查输入是否为整数\n    if not isinstance(n, int):\n        return {\"error\": \"n must be an integer\"}\n    # 检查输入是否为非负整数\n    if n < 0:\n        return {\"error\": \"n must be a non-negative integer\"}\n    \n    # 使用模块级缓存（静态变量）\n    if not hasattr(fibonacci_with_cache, \"cache\"):\n        fibonacci_with_cache.cache = {0: 0, 1: 1}\n    \n    cache = fibonacci_with_cache.cache\n    cache_hit = n in cache\n    \n    if cache_hit:\n        result = cache[n]\n    else:\n        # 计算斐波那契数列并缓存结果\n        a, b = 0, 1\n        for i in range(2, n + 1):\n            a, b = b, a + b\n            # 缓存中间结果以提高后续查询效率\n            if i not in cache:\n                cache[i] = b\n        result = b\n    \n    return {\"n\": n, \"result\": result, \"cache_hit\": cache_hit}",
+          "source_run_id": "vibe-c04ce4bd",
+          "test_cases": [
+            {
+              "assert_fn": null,
+              "case_id": "happy_path",
+              "expected_output": {
+                "cache_hit": false,
+                "n": 10,
+                "result": 55
+              },
+              "input_data": {
+                "n": 10
+              }
+            },
+            {
+              "assert_fn": null,
+              "case_id": "edge_zero",
+              "expected_output": {
+                "cache_hit": true,
+                "n": 0,
+                "result": 0
+              },
+              "input_data": {
+                "n": 0
+              }
+            },
+            {
+              "assert_fn": null,
+              "case_id": "edge_negative",
+              "expected_output": null,
+              "input_data": {
+                "n": -5
+              }
+            },
+            {
+              "assert_fn": null,
+              "case_id": "edge_non_integer",
+              "expected_output": null,
+              "input_data": {
+                "n": "abc"
+              }
+            }
+          ],
+          "trigger_policy": {
+            "force_dynamic": false,
+            "on_error": true,
+            "on_quality_below_threshold": true
+          },
+          "version": 1
+        },
+        {
+          "created_at": "2026-05-05T11:37:34.807130+00:00",
+          "dependencies": [],
+          "domain_keywords": [
+            "fibonacci",
+            "cache",
+            "dynamic programming",
+            "sequence",
+            "optimization"
+          ],
+          "function_name": "fibonacci_with_cache",
+          "quality_gate": {
+            "required_keys": [
+              "fibonacci_number"
+            ]
+          },
+          "signature": {
+            "params": [
+              "n"
+            ],
+            "required_params": [
+              "n"
+            ],
+            "return_type": "dict"
+          },
+          "source_code": "def fibonacci_with_cache(n):\n    \"\"\"计算斐波那契数列的第n项，支持缓存以提高效率。\n\n    参数:\n        n (int): 非负整数，表示斐波那契数列的索引。\n\n    返回:\n        dict: 成功时返回 {\"fibonacci_number\": value}，失败时返回 {\"error\": \"error message\"}。\n    \"\"\"\n    if not isinstance(n, int):\n        return {\"error\": \"n must be an integer\"}\n    \n    if n < 0:\n        return {\"error\": \"n must be non-negative\"}\n    \n    if not hasattr(fibonacci_with_cache, \"cache\"):\n        fibonacci_with_cache.cache = {}\n    cache = fibonacci_with_cache.cache\n    \n    if n in cache:\n        return {\"fibonacci_number\": cache[n]}\n    \n    def fib(k):\n        if k in cache:\n            return cache[k]\n        if k <= 1:\n            cache[k] = k\n            return k\n        cache[k] = fib(k-1) + fib(k-2)\n        return cache[k]\n    \n    result = fib(n)\n    return {\"fibonacci_number\": result}",
+          "source_run_id": "vibe-210e6f74",
+          "test_cases": [
+            {
+              "assert_fn": null,
+              "case_id": "happy_path",
+              "expected_output": {
+                "fibonacci_number": 5
+              },
+              "input_data": {
+                "n": 5
+              }
+            },
+            {
+              "assert_fn": null,
+              "case_id": "edge_empty",
+              "expected_output": {
+                "fibonacci_number": 0
+              },
+              "input_data": {
+                "n": 0
+              }
+            },
+            {
+              "assert_fn": null,
+              "case_id": "edge_invalid",
+              "expected_output": null,
+              "input_data": {
+                "n": -1
+              }
+            }
+          ],
+          "trigger_policy": {
+            "force_dynamic": false,
+            "on_error": true,
+            "on_quality_below_threshold": true
+          },
+          "version": 2
+        }
+      ]
+    },
+    "filter-sort-strings-by-length": {
+      "active_version": 1,
+      "created_at": "2026-05-05T11:31:55.402720+00:00",
+      "domain": "处理字符串列表，基于长度过滤并按字母顺序排序。",
+      "name": "Filter and Sort Strings by Length",
+      "skill_id": "filter-sort-strings-by-length",
+      "updated_at": "2026-05-05T11:31:55.402720+00:00",
+      "versions": [
+        {
+          "created_at": "2026-05-05T11:31:55.402720+00:00",
+          "dependencies": [],
+          "domain_keywords": [
+            "string filtering",
+            "length check",
+            "alphabetical sorting",
+            "list processing"
+          ],
+          "function_name": "filter_sort_strings",
+          "quality_gate": {
+            "required_keys": [
+              "result"
+            ]
+          },
+          "signature": {
+            "params": [
+              "strings"
+            ],
+            "required_params": [
+              "strings"
+            ],
+            "return_type": "dict"
+          },
+          "source_code": "def filter_sort_strings(strings) -> dict:\n    '''\n    从输入的字符串列表中筛选出长度大于3的字符串，并按字母顺序排序。\n\n    参数:\n        strings (list): 字符串列表。\n\n    返回:\n        dict: 成功时返回 {'result': sorted_list}，失败时返回 {'error': error_message}。\n    '''\n    # 检查输入是否为列表\n    if not isinstance(strings, list):\n        return {'error': 'Input must be a list'}\n    \n    # 检查所有元素是否为字符串\n    for item in strings:\n        if not isinstance(item, str):\n            return {'error': 'All elements must be strings'}\n    \n    # 筛选长度大于3的字符串\n    filtered = [s for s in strings if len(s) > 3]\n    \n    # 按字母顺序排序\n    sorted_list = sorted(filtered)\n    \n    # 返回结果\n    return {'result': sorted_list}",
+          "source_run_id": "vibe-d6a9490f",
+          "test_cases": [
+            {
+              "assert_fn": null,
+              "case_id": "happy_path",
+              "expected_output": {
+                "result": [
+                  "apple",
+                  "banana",
+                  "elephant"
+                ]
+              },
+              "input_data": {
+                "strings": [
+                  "banana",
+                  "apple",
+                  "cat",
+                  "dog",
+                  "elephant"
+                ]
+              }
+            },
+            {
+              "assert_fn": null,
+              "case_id": "edge_empty",
+              "expected_output": {
+                "result": []
+              },
+              "input_data": {
+                "strings": []
+              }
+            },
+            {
+              "assert_fn": null,
+              "case_id": "edge_invalid",
+              "expected_output": null,
+              "input_data": {
+                "strings": [
+                  1,
+                  "abc",
+                  null
+                ]
+              }
+            }
+          ],
+          "trigger_policy": {
+            "force_dynamic": false,
+            "on_error": true,
+            "on_quality_below_threshold": true
+          },
+          "version": 1
+        }
+      ]
+    },
+    "flatten-nested-list": {
+      "active_version": 1,
+      "created_at": "2026-05-05T12:02:29.338689+00:00",
+      "domain": "展平任意深度的嵌套列表，支持列表中包含字典和元组",
+      "name": "Flatten Nested List",
+      "skill_id": "flatten-nested-list",
+      "updated_at": "2026-05-05T12:02:29.338689+00:00",
+      "versions": [
+        {
+          "created_at": "2026-05-05T12:02:29.338689+00:00",
+          "dependencies": [],
+          "domain_keywords": [
+            "flatten",
+            "nested",
+            "list",
+            "dictionary",
+            "tuple"
+          ],
+          "function_name": "flatten_nested_list",
+          "quality_gate": {
+            "required_keys": []
+          },
+          "signature": {
+            "params": [
+              "nested_list"
+            ],
+            "required_params": [
+              "nested_list"
+            ],
+            "return_type": "list"
+          },
+          "source_code": "def flatten_nested_list(nested_list) -> dict:\n    \"\"\"展平任意深度的嵌套列表，支持列表和元组，保留字典和其它非列表元素作为原子值。\n\n    参数:\n        nested_list: 要展平的嵌套列表或元组。\n\n    返回:\n        dict: 成功时包含 'result' 键，值为展平后的列表；失败时包含 'error' 键，值为错误信息。\n    \"\"\"\n    if not isinstance(nested_list, (list, tuple)):\n        return {\"error\": \"Input must be a list or tuple\"}\n\n    def flatten(item):\n        if isinstance(item, (list, tuple)):\n            result = []\n            for sub_item in item:\n                result.extend(flatten(sub_item))\n            return result\n        else:\n            return [item]\n\n    flattened = flatten(nested_list)\n    return {\"result\": flattened}",
+          "source_run_id": "vibe-c4b8fb47",
+          "test_cases": [
+            {
+              "assert_fn": null,
+              "case_id": "happy_path",
+              "expected_output": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                {
+                  "a": 6
+                }
+              ],
+              "input_data": {
+                "nested_list": [
+                  1,
+                  [
+                    2,
+                    3
+                  ],
+                  [
+                    4,
+                    5
+                  ],
+                  {
+                    "a": 6
+                  }
+                ]
+              }
+            },
+            {
+              "assert_fn": null,
+              "case_id": "edge_empty",
+              "expected_output": [],
+              "input_data": {
+                "nested_list": []
+              }
+            },
+            {
+              "assert_fn": null,
+              "case_id": "edge_invalid",
+              "expected_output": null,
+              "input_data": {
+                "nested_list": "not a list"
+              }
+            }
+          ],
+          "trigger_policy": {
+            "force_dynamic": false,
+            "on_error": true,
+            "on_quality_below_threshold": true
+          },
+          "version": 1
+        }
+      ]
+    },
+    "json-csv-column-sum": {
+      "active_version": 2,
+      "created_at": "2026-05-05T10:42:05.839385+00:00",
+      "domain": "解析JSON格式的CSV数据，提取第二列的数字并求和",
+      "name": "JSON CSV Column Sum Extractor",
+      "skill_id": "json-csv-column-sum",
+      "updated_at": "2026-05-05T11:34:32.320939+00:00",
+      "versions": [
+        {
+          "created_at": "2026-05-05T10:42:05.839385+00:00",
+          "dependencies": [],
+          "domain_keywords": [
+            "JSON",
+            "CSV",
+            "列求和",
+            "数值提取",
+            "数据解析"
+          ],
+          "function_name": "sum_second_column",
+          "quality_gate": {
+            "required_keys": [
+              "sum",
+              "rows"
+            ]
+          },
+          "signature": {
+            "params": [
+              "json_data"
+            ],
+            "required_params": [
+              "json_data"
+            ],
+            "return_type": "dict"
+          },
+          "source_code": "def sum_second_column(json_data: str) -> dict:\n    \"\"\"\n    解析JSON格式的CSV数据并计算第二列的数值总和。\n    \n    参数:\n        json_data (str): JSON格式的字符串，包含header和rows字段。\n    \n    返回:\n        dict: 包含sum（总和）和rows（有效行数）的字典。\n              如果数据无效或解析失败，返回包含error字段的字典。\n    \"\"\"\n    import json\n    \n    try:\n        data = json.loads(json_data)\n        \n        # 检查必要字段\n        if not isinstance(data, dict) or 'header' not in data or 'rows' not in data:\n            return {'error': 'Invalid JSON structure: missing header or rows'}\n        \n        header = data['header']\n        rows = data['rows']\n        \n        # 检查header是否为列表且至少有两列\n        if not isinstance(header, list) or len(header) < 2:\n            return {'error': 'Invalid header: must be a list with at least two elements'}\n        \n        # 检查rows是否为列表\n        if not isinstance(rows, list):\n            return {'error': 'Invalid rows: must be a list'}\n        \n        total_sum = 0\n        valid_rows = 0\n        \n        for row in rows:\n            # 检查每行是否为列表且至少有两列\n            if not isinstance(row, list) or len(row) < 2:\n                continue  # 跳过无效行，但不返回错误\n            \n            value_str = row[1]\n            \n            # 尝试将第二列转换为数字\n            try:\n                value = float(value_str)\n                total_sum += value\n                valid_rows += 1\n            except (ValueError, TypeError):\n                # 如果转换失败，跳过该行\n                continue\n        \n        return {'sum': total_sum, 'rows': valid_rows}\n    \n    except json.JSONDecodeError:\n        return {'error': 'Invalid JSON format'}\n    except Exception as e:\n        return {'error': f'Unexpected error: {str(e)}'}",
+          "source_run_id": "vibe-91960f85",
+          "test_cases": [
+            {
+              "assert_fn": null,
+              "case_id": "happy_path",
+              "expected_output": {
+                "rows": 3,
+                "sum": 60
+              },
+              "input_data": {
+                "json_data": "{\"header\": [\"name\", \"value\"], \"rows\": [[\"a\", \"10\"], [\"b\", \"20\"], [\"c\", \"30\"]]}"
+              }
+            },
+            {
+              "assert_fn": null,
+              "case_id": "edge_empty",
+              "expected_output": {
+                "rows": 0,
+                "sum": 0
+              },
+              "input_data": {
+                "json_data": "{\"header\": [\"name\", \"value\"], \"rows\": []}"
+              }
+            },
+            {
+              "assert_fn": null,
+              "case_id": "edge_invalid",
+              "expected_output": null,
+              "input_data": {
+                "json_data": "{\"header\": [\"name\", \"value\"], \"rows\": [[\"a\", \"abc\"], [\"b\", \"20\"]]}"
+              }
+            }
+          ],
+          "trigger_policy": {
+            "force_dynamic": false,
+            "on_error": true,
+            "on_quality_below_threshold": true
+          },
+          "version": 1
+        },
+        {
+          "created_at": "2026-05-05T11:34:32.320939+00:00",
+          "dependencies": [],
+          "domain_keywords": [
+            "JSON",
+            "CSV",
+            "column extraction",
+            "sum",
+            "data parsing",
+            "numeric sum"
+          ],
+          "function_name": "sum_second_column_from_json_csv",
+          "quality_gate": {
+            "required_keys": [
+              "sum",
+              "rows"
+            ]
+          },
+          "signature": {
+            "params": [
+              "json_data"
+            ],
+            "required_params": [
+              "json_data"
+            ],
+            "return_type": "dict"
+          },
+          "source_code": "def sum_second_column_from_json_csv(json_data) -> dict:\n    \"\"\"\n    解析JSON格式的CSV数据，提取第二列的数字并求和，同时返回数据行数。\n\n    参数:\n        json_data (str): JSON格式的字符串，表示一个列表的列表。\n\n    返回:\n        dict: 包含 \"sum\" 和 \"rows\" 键的字典，或在错误时包含 \"error\" 键。\n    \"\"\"\n    import json\n    try:\n        data = json.loads(json_data)\n    except json.JSONDecodeError as e:\n        return {\"error\": f\"Invalid JSON format: {str(e)}\"}\n\n    if not isinstance(data, list):\n        return {\"error\": \"Data is not a list\"}\n\n    total_sum = 0\n    row_count = 0\n\n    for row in data:\n        if not isinstance(row, list):\n            return {\"error\": \"Each row must be a list\"}\n        if len(row) < 2:\n            return {\"error\": \"Each row must have at least two columns\"}\n        value = row[1]\n        if not isinstance(value, (int, float)):\n            return {\"error\": \"Second column must be numeric\"}\n        total_sum += value\n        row_count += 1\n\n    return {\"sum\": total_sum, \"rows\": row_count}",
+          "source_run_id": "vibe-05132e48",
+          "test_cases": [
+            {
+              "assert_fn": null,
+              "case_id": "happy_path",
+              "expected_output": {
+                "rows": 3,
+                "sum": 60
+              },
+              "input_data": {
+                "json_data": "[[\"name\", 10], [\"age\", 20], [\"city\", 30]]"
+              }
+            },
+            {
+              "assert_fn": null,
+              "case_id": "edge_empty",
+              "expected_output": {
+                "rows": 0,
+                "sum": 0
+              },
+              "input_data": {
+                "json_data": "[]"
+              }
+            },
+            {
+              "assert_fn": null,
+              "case_id": "edge_invalid",
+              "expected_output": null,
+              "input_data": {
+                "json_data": "invalid json string"
+              }
+            }
+          ],
+          "trigger_policy": {
+            "force_dynamic": false,
+            "on_error": true,
+            "on_quality_below_threshold": true
+          },
+          "version": 2
+        }
+      ]
+    },
+    "merge-dicts-with-list-values": {
+      "active_version": 5,
+      "created_at": "2026-05-05T09:21:04.479952+00:00",
+      "domain": "合并两个字典，当键冲突时将值合并为列表，不处理嵌套字典或其他数据类型。",
+      "name": "合并字典并处理冲突",
+      "skill_id": "merge-dicts-with-list-values",
+      "updated_at": "2026-05-05T11:35:56.591894+00:00",
+      "versions": [
+        {
+          "created_at": "2026-05-05T09:21:04.479952+00:00",
+          "dependencies": [],
+          "domain_keywords": [
+            "字典合并",
+            "键冲突",
+            "列表合并",
+            "字典操作"
+          ],
+          "function_name": "merge_dicts_with_list_values",
+          "quality_gate": {
+            "required_keys": [
+              "a",
+              "b",
+              "c"
+            ]
+          },
+          "signature": {
+            "params": [
+              "dict1",
+              "dict2"
+            ],
+            "required_params": [
+              "dict1",
+              "dict2"
+            ],
+            "return_type": "dict"
+          },
+          "source_code": "def merge_dicts_with_list_values(dict1, dict2) -> dict:\n    if not isinstance(dict1, dict) or not isinstance(dict2, dict):\n        return {'error': 'Both inputs must be dictionaries'}\n    result = {}\n    for key, value in dict1.items():\n        result[key] = value\n    for key, value in dict2.items():\n        if key in result:\n            existing = result[key]\n            if isinstance(existing, list):\n                result[key] = existing + [value]\n            else:\n                result[key] = [existing, value]\n        else:\n            result[key] = value\n    return result",
+          "source_run_id": "vibe-e90fafc5",
+          "test_cases": [
+            {
+              "assert_fn": null,
+              "case_id": "happy_path",
+              "expected_output": {
+                "a": 1,
+                "b": [
+                  2,
+                  3
+                ],
+                "c": 4
+              },
+              "input_data": {
+                "dict1": {
+                  "a": 1,
+                  "b": 2
+                },
+                "dict2": {
+                  "b": 3,
+                  "c": 4
+                }
+              }
+            },
+            {
+              "assert_fn": null,
+              "case_id": "edge_empty",
+              "expected_output": null,
+              "input_data": {
+                "dict1": {},
+                "dict2": {}
+              }
+            },
+            {
+              "assert_fn": null,
+              "case_id": "edge_invalid",
+              "expected_output": null,
+              "input_data": {
+                "dict1": "not_a_dict",
+                "dict2": {
+                  "a": 1
+                }
+              }
+            }
+          ],
+          "trigger_policy": {
+            "force_dynamic": false,
+            "on_error": true,
+            "on_quality_below_threshold": true
+          },
+          "version": 1
+        },
+        {
+          "created_at": "2026-05-05T10:07:19.119671+00:00",
+          "dependencies": [],
+          "domain_keywords": [
+            "合并",
+            "字典",
+            "键冲突",
+            "列表",
+            "值合并"
+          ],
+          "function_name": "merge_dicts_with_list_values",
+          "quality_gate": {
+            "required_keys": [
+              "a",
+              "b",
+              "c"
+            ]
+          },
+          "signature": {
+            "params": [
+              "dict1",
+              "dict2"
+            ],
+            "required_params": [
+              "dict1",
+              "dict2"
+            ],
+            "return_type": "dict"
+          },
+          "source_code": "def merge_dicts_with_list_values(dict1, dict2) -> dict:\n    \"\"\"合并两个字典，当键冲突时将值合并为列表。\n\n    参数:\n        dict1 (dict): 第一个字典\n        dict2 (dict): 第二个字典\n\n    返回:\n        dict: 合并后的字典，冲突键的值为列表；如果输入无效则返回包含错误信息的字典。\n    \"\"\"\n    # 检查输入是否为字典\n    if not isinstance(dict1, dict) or not isinstance(dict2, dict):\n        return {\"error\": \"Both inputs must be dictionaries\"}\n\n    # 创建结果字典的副本，避免修改原字典\n    result = dict1.copy()\n\n    # 遍历第二个字典\n    for key, value in dict2.items():\n        if key in result:\n            # 键冲突：将现有值和新值合并为列表\n            existing = result[key]\n            if isinstance(existing, list):\n                # 如果已经是列表，直接追加\n                result[key] = existing + [value]\n            else:\n                # 否则，创建新列表\n                result[key] = [existing, value]\n        else:\n            # 无冲突，直接添加\n            result[key] = value\n\n    return result",
+          "source_run_id": "vibe-72811941",
+          "test_cases": [
+            {
+              "assert_fn": null,
+              "case_id": "happy_path",
+              "expected_output": {
+                "a": 1,
+                "b": [
+                  2,
+                  3
+                ],
+                "c": 4
+              },
+              "input_data": {
+                "dict1": {
+                  "a": 1,
+                  "b": 2
+                },
+                "dict2": {
+                  "b": 3,
+                  "c": 4
+                }
+              }
+            },
+            {
+              "assert_fn": null,
+              "case_id": "edge_empty",
+              "expected_output": {},
+              "input_data": {
+                "dict1": {},
+                "dict2": {}
+              }
+            },
+            {
+              "assert_fn": null,
+              "case_id": "edge_invalid",
+              "expected_output": null,
+              "input_data": {
+                "dict1": {
+                  "a": 1
+                },
+                "dict2": "not_a_dict"
+              }
+            }
+          ],
+          "trigger_policy": {
+            "force_dynamic": false,
+            "on_error": true,
+            "on_quality_below_threshold": true
+          },
+          "version": 2
+        },
+        {
+          "created_at": "2026-05-05T10:16:36.370210+00:00",
+          "dependencies": [],
+          "domain_keywords": [
+            "字典合并",
+            "键冲突",
+            "列表合并",
+            "字典操作"
+          ],
+          "function_name": "merge_dicts_with_list_values",
+          "quality_gate": {
+            "required_keys": [
+              "merged_dict"
+            ]
+          },
+          "signature": {
+            "params": [
+              "dict1",
+              "dict2"
+            ],
+            "required_params": [
+              "dict1",
+              "dict2"
+            ],
+            "return_type": "dict"
+          },
+          "source_code": "def merge_dicts_with_list_values(dict1, dict2) -> dict:\n    \"\"\"合并两个字典，当键冲突时将值合并为列表。\n\n    参数:\n        dict1 (dict): 第一个字典\n        dict2 (dict): 第二个字典\n\n    返回:\n        dict: 合并后的字典，包含键 'merged_dict'，其值为合并结果；\n              如果输入无效，返回包含 'error' 字段的字典。\n    \"\"\"\n    # 验证输入是否为字典\n    if not isinstance(dict1, dict) or not isinstance(dict2, dict):\n        return {\"error\": \"Both inputs must be dictionaries\"}\n    \n    # 初始化结果字典\n    merged = {}\n    \n    # 处理 dict1 的所有键\n    for key, value in dict1.items():\n        merged[key] = value\n    \n    # 处理 dict2 的所有键，处理冲突\n    for key, value in dict2.items():\n        if key in merged:\n            # 如果键已存在，将现有值和新值合并为列表\n            existing = merged[key]\n            if isinstance(existing, list):\n                # 如果已经是列表，直接追加\n                existing.append(value)\n            else:\n                # 否则，创建新列表包含两个值\n                merged[key] = [existing, value]\n        else:\n            # 键不存在，直接添加\n            merged[key] = value\n    \n    # 按规约要求返回包含 'merged_dict' 键的字典\n    return {\"merged_dict\": merged}",
+          "source_run_id": "vibe-ee6bcda2",
+          "test_cases": [
+            {
+              "assert_fn": null,
+              "case_id": "happy_path",
+              "expected_output": {
+                "merged_dict": {
+                  "a": 1,
+                  "b": [
+                    2,
+                    3
+                  ],
+                  "c": 4
+                }
+              },
+              "input_data": {
+                "dict1": {
+                  "a": 1,
+                  "b": 2
+                },
+                "dict2": {
+                  "b": 3,
+                  "c": 4
+                }
+              }
+            },
+            {
+              "assert_fn": null,
+              "case_id": "edge_empty",
+              "expected_output": {
+                "merged_dict": {}
+              },
+              "input_data": {
+                "dict1": {},
+                "dict2": {}
+              }
+            },
+            {
+              "assert_fn": null,
+              "case_id": "edge_invalid",
+              "expected_output": null,
+              "input_data": {
+                "dict1": "not_a_dict",
+                "dict2": {
+                  "a": 1
+                }
+              }
+            }
+          ],
+          "trigger_policy": {
+            "force_dynamic": false,
+            "on_error": true,
+            "on_quality_below_threshold": true
+          },
+          "version": 3
+        },
+        {
+          "created_at": "2026-05-05T10:42:26.922785+00:00",
+          "dependencies": [],
+          "domain_keywords": [
+            "合并",
+            "字典",
+            "键冲突",
+            "列表",
+            "值合并"
+          ],
+          "function_name": "merge_dicts_with_list_values",
+          "quality_gate": {
+            "required_keys": [
+              "a",
+              "b",
+              "c"
+            ]
+          },
+          "signature": {
+            "params": [
+              "dict1",
+              "dict2"
+            ],
+            "required_params": [
+              "dict1",
+              "dict2"
+            ],
+            "return_type": "dict"
+          },
+          "source_code": "def merge_dicts_with_list_values(dict1, dict2) -> dict:\n    \"\"\"合并两个字典，当键冲突时将值合并为列表。\n    \n    参数:\n        dict1 (dict): 第一个字典\n        dict2 (dict): 第二个字典\n    \n    返回:\n        dict: 合并后的字典，冲突键的值为列表\n        如果输入不是字典，返回包含error字段的字典\n    \"\"\"\n    # 验证输入是否为字典\n    if not isinstance(dict1, dict) or not isinstance(dict2, dict):\n        return {\"error\": \"Both inputs must be dictionaries\"}\n    \n    # 创建结果字典的副本，避免修改原始字典\n    result = dict1.copy()\n    \n    # 遍历第二个字典\n    for key, value in dict2.items():\n        if key in result:\n            # 键冲突：将现有值和新值合并为列表\n            existing_value = result[key]\n            # 如果现有值已经是列表，则追加；否则创建新列表\n            if isinstance(existing_value, list):\n                result[key] = existing_value + [value]\n            else:\n                result[key] = [existing_value, value]\n        else:\n            # 无冲突：直接添加\n            result[key] = value\n    \n    return result",
+          "source_run_id": "vibe-09584b4d",
+          "test_cases": [
+            {
+              "assert_fn": null,
+              "case_id": "happy_path",
+              "expected_output": {
+                "a": 1,
+                "b": [
+                  2,
+                  3
+                ],
+                "c": 4
+              },
+              "input_data": {
+                "dict1": {
+                  "a": 1,
+                  "b": 2
+                },
+                "dict2": {
+                  "b": 3,
+                  "c": 4
+                }
+              }
+            },
+            {
+              "assert_fn": null,
+              "case_id": "edge_empty",
+              "expected_output": {},
+              "input_data": {
+                "dict1": {},
+                "dict2": {}
+              }
+            },
+            {
+              "assert_fn": null,
+              "case_id": "edge_invalid",
+              "expected_output": null,
+              "input_data": {
+                "dict1": "not_a_dict",
+                "dict2": {
+                  "a": 1
+                }
+              }
+            }
+          ],
+          "trigger_policy": {
+            "force_dynamic": false,
+            "on_error": true,
+            "on_quality_below_threshold": true
+          },
+          "version": 4
+        },
+        {
+          "created_at": "2026-05-05T11:35:56.591894+00:00",
+          "dependencies": [],
+          "domain_keywords": [
+            "dictionary",
+            "merge",
+            "conflict",
+            "list",
+            "combine"
+          ],
+          "function_name": "merge_dicts_with_list",
+          "quality_gate": {
+            "required_keys": []
+          },
+          "signature": {
+            "params": [
+              "dict1",
+              "dict2"
+            ],
+            "required_params": [
+              "dict1",
+              "dict2"
+            ],
+            "return_type": "dict"
+          },
+          "source_code": "def merge_dicts_with_list(dict1, dict2) -> dict:\n    \"\"\"\n    合并两个字典，当键冲突时将值合并为列表。\n    \n    参数:\n        dict1 (dict): 第一个字典\n        dict2 (dict): 第二个字典\n    \n    返回:\n        dict: 合并后的字典，冲突键的值为列表；如果输入无效，返回带 error 字段的字典。\n    \"\"\"\n    # 检查输入是否为字典\n    if not isinstance(dict1, dict) or not isinstance(dict2, dict):\n        return {\"error\": \"Both arguments must be dictionaries\"}\n    \n    result = {}\n    # 复制 dict1 的键值对\n    for key, value in dict1.items():\n        result[key] = value\n    \n    # 合并 dict2\n    for key, value in dict2.items():\n        if key in result:\n            current_value = result[key]\n            if isinstance(current_value, list):\n                current_value.append(value)\n            else:\n                result[key] = [current_value, value]\n        else:\n            result[key] = value\n    \n    return result",
+          "source_run_id": "vibe-a742bfa0",
+          "test_cases": [
+            {
+              "assert_fn": null,
+              "case_id": "happy_path",
+              "expected_output": {
+                "a": 1,
+                "b": [
+                  2,
+                  3
+                ],
+                "c": 4
+              },
+              "input_data": {
+                "dict1": {
+                  "a": 1,
+                  "b": 2
+                },
+                "dict2": {
+                  "b": 3,
+                  "c": 4
+                }
+              }
+            },
+            {
+              "assert_fn": null,
+              "case_id": "edge_empty",
+              "expected_output": {},
+              "input_data": {
+                "dict1": {},
+                "dict2": {}
+              }
+            },
+            {
+              "assert_fn": null,
+              "case_id": "edge_invalid",
+              "expected_output": null,
+              "input_data": {
+                "dict1": "not a dict",
+                "dict2": {
+                  "a": 1
+                }
+              }
+            }
+          ],
+          "trigger_policy": {
+            "force_dynamic": false,
+            "on_error": true,
+            "on_quality_below_threshold": true
+          },
+          "version": 5
+        }
+      ]
+    },
+    "reverse-string": {
+      "active_version": 2,
+      "created_at": "2026-05-05T10:15:48.395420+00:00",
+      "domain": "基础字符串处理",
+      "name": "字符串反转",
+      "skill_id": "reverse-string",
+      "updated_at": "2026-05-05T10:41:30.598098+00:00",
+      "versions": [
+        {
+          "created_at": "2026-05-05T10:15:48.395420+00:00",
+          "dependencies": [],
+          "domain_keywords": [
+            "反转",
+            "逆序",
+            "字符串操作",
+            "文本处理"
+          ],
+          "function_name": "reverse_string",
+          "quality_gate": {
+            "required_keys": [
+              "input_string"
+            ]
+          },
+          "signature": {
+            "params": [
+              "input_string"
+            ],
+            "required_params": [
+              "input_string"
+            ],
+            "return_type": "str"
+          },
+          "source_code": "def reverse_string(input_string) -> dict:\n    \"\"\"将输入的字符串进行反转，返回反转后的字符串。\n\n    Args:\n        input_string: 要反转的字符串。\n\n    Returns:\n        dict: 包含反转结果的字典。成功时返回 {'result': 反转后的字符串}，失败时返回 {'error': 错误信息}。\n    \"\"\"\n    try:\n        if not isinstance(input_string, str):\n            return {'error': '输入必须是字符串类型'}\n        reversed_str = input_string[::-1]\n        return {'result': reversed_str}\n    except Exception as e:\n        return {'error': str(e)}",
+          "source_run_id": "vibe-7d520947",
+          "test_cases": [
+            {
+              "assert_fn": null,
+              "case_id": "happy_path",
+              "expected_output": "olleh",
+              "input_data": {
+                "input_string": "hello"
+              }
+            },
+            {
+              "assert_fn": null,
+              "case_id": "edge_empty",
+              "expected_output": "",
+              "input_data": {
+                "input_string": ""
+              }
+            },
+            {
+              "assert_fn": null,
+              "case_id": "edge_invalid",
+              "expected_output": null,
+              "input_data": {
+                "input_string": 123
+              }
+            }
+          ],
+          "trigger_policy": {
+            "force_dynamic": false,
+            "on_error": true,
+            "on_quality_below_threshold": true
+          },
+          "version": 1
+        },
+        {
+          "created_at": "2026-05-05T10:41:30.598098+00:00",
+          "dependencies": [],
+          "domain_keywords": [
+            "字符串",
+            "反转",
+            "文本处理",
+            "字符串操作"
+          ],
+          "function_name": "reverse_string",
+          "quality_gate": {
+            "required_keys": [
+              "input_string"
+            ]
+          },
+          "signature": {
+            "params": [
+              "input_string"
+            ],
+            "required_params": [
+              "input_string"
+            ],
+            "return_type": "str"
+          },
+          "source_code": "def reverse_string(input_string) -> dict:\n    \"\"\"\n    将输入的字符串进行反转操作，返回反转后的字符串。\n    \n    参数:\n        input_string (str): 需要反转的字符串。\n    \n    返回:\n        dict: 包含反转结果或错误信息的字典。\n              成功时返回 {'result': 反转后的字符串}，失败时返回 {'error': 错误信息}。\n    \"\"\"\n    if not isinstance(input_string, str):\n        return {'error': '输入必须是字符串类型'}\n    try:\n        reversed_str = input_string[::-1]\n        return {'result': reversed_str}\n    except Exception as e:\n        return {'error': f'反转字符串时发生错误: {str(e)}'}",
+          "source_run_id": "vibe-6429ebaa",
+          "test_cases": [
+            {
+              "assert_fn": null,
+              "case_id": "happy_path",
+              "expected_output": "olleh",
+              "input_data": {
+                "input_string": "hello"
+              }
+            },
+            {
+              "assert_fn": null,
+              "case_id": "edge_empty",
+              "expected_output": "",
+              "input_data": {
+                "input_string": ""
+              }
+            },
+            {
+              "assert_fn": null,
+              "case_id": "edge_invalid",
+              "expected_output": null,
+              "input_data": {
+                "input_string": 12345
+              }
+            }
+          ],
+          "trigger_policy": {
+            "force_dynamic": false,
+            "on_error": true,
+            "on_quality_below_threshold": true
+          },
+          "version": 2
+        }
+      ]
+    },
+    "string-reversal": {
+      "active_version": 1,
+      "created_at": "2026-05-05T11:29:51.602444+00:00",
+      "domain": "反转输入的字符串并返回结果",
+      "name": "String Reversal Skill",
+      "skill_id": "string-reversal",
+      "updated_at": "2026-05-05T11:29:51.602444+00:00",
+      "versions": [
+        {
+          "created_at": "2026-05-05T11:29:51.601911+00:00",
+          "dependencies": [],
+          "domain_keywords": [
+            "string",
+            "reverse",
+            "text manipulation"
+          ],
+          "function_name": "reverse_string",
+          "quality_gate": {
+            "required_keys": [
+              "reversed_string"
+            ]
+          },
+          "signature": {
+            "params": [
+              "input_string"
+            ],
+            "required_params": [
+              "input_string"
+            ],
+            "return_type": "dict"
+          },
+          "source_code": "def reverse_string(input_string) -> dict:\n    \"\"\"反转输入的字符串并返回结果。\n\n    参数:\n    input_string (str): 要反转的字符串。\n\n    返回:\n    dict: 包含反转后字符串的字典，或错误信息。\n    \"\"\"\n    if input_string is None:\n        return {\"error\": \"Invalid input: input_string is None\"}\n    reversed_str = input_string[::-1]\n    return {\"reversed_string\": reversed_str}",
+          "source_run_id": "vibe-3eb511c7",
+          "test_cases": [
+            {
+              "assert_fn": null,
+              "case_id": "happy_path",
+              "expected_output": {
+                "reversed_string": "olleh"
+              },
+              "input_data": {
+                "input_string": "hello"
+              }
+            },
+            {
+              "assert_fn": null,
+              "case_id": "edge_empty",
+              "expected_output": {
+                "reversed_string": ""
+              },
+              "input_data": {
+                "input_string": ""
+              }
+            },
+            {
+              "assert_fn": null,
+              "case_id": "edge_invalid",
+              "expected_output": null,
+              "input_data": {
+                "input_string": null
+              }
+            }
+          ],
+          "trigger_policy": {
+            "force_dynamic": false,
+            "on_error": true,
+            "on_quality_below_threshold": true
+          },
+          "version": 1
+        }
+      ]
+    },
+    "word-frequency-top-n": {
+      "active_version": 2,
+      "created_at": "2026-05-05T09:21:50.092609+00:00",
+      "domain": "英文文本词频统计与排序",
+      "name": "Word Frequency Top N",
+      "skill_id": "word-frequency-top-n",
+      "updated_at": "2026-05-05T10:17:28.034976+00:00",
+      "versions": [
+        {
+          "created_at": "2026-05-05T09:21:50.092609+00:00",
+          "dependencies": [],
+          "domain_keywords": [
+            "word frequency",
+            "top N",
+            "text analysis",
+            "English text",
+            "counting"
+          ],
+          "function_name": "get_top_n_word_frequencies",
+          "quality_gate": {
+            "required_keys": [
+              "word",
+              "count"
+            ]
+          },
+          "signature": {
+            "params": [
+              "text",
+              "n"
+            ],
+            "required_params": [
+              "text",
+              "n"
+            ],
+            "return_type": "dict"
+          },
+          "source_code": "def get_top_n_word_frequencies(text: str, n: int) -> dict:\n    if not isinstance(text, str) or not isinstance(n, int):\n        return {\"error\": \"Invalid input types\"}\n    if n < 0:\n        return {\"error\": \"n must be non-negative\"}\n    if not text:\n        return {}\n    words = text.lower().split()\n    freq = {}\n    for word in words:\n        freq[word] = freq.get(word, 0) + 1\n    sorted_words = sorted(freq.items(), key=lambda x: x[1], reverse=True)\n    top_n = sorted_words[:n]\n    return {word: count for word, count in top_n}",
+          "source_run_id": "vibe-026ca7ae",
+          "test_cases": [
+            {
+              "assert_fn": null,
+              "case_id": "happy_path",
+              "expected_output": {
+                "hello": 3,
+                "world": 2
+              },
+              "input_data": {
+                "n": 2,
+                "text": "hello world hello python hello world"
+              }
+            },
+            {
+              "assert_fn": null,
+              "case_id": "edge_empty_text",
+              "expected_output": null,
+              "input_data": {
+                "n": 5,
+                "text": ""
+              }
+            },
+            {
+              "assert_fn": null,
+              "case_id": "edge_n_greater_than_unique_words",
+              "expected_output": {
+                "apple": 2,
+                "banana": 1
+              },
+              "input_data": {
+                "n": 10,
+                "text": "apple banana apple"
+              }
+            },
+            {
+              "assert_fn": null,
+              "case_id": "edge_n_zero",
+              "expected_output": null,
+              "input_data": {
+                "n": 0,
+                "text": "test test test"
+              }
+            }
+          ],
+          "trigger_policy": {
+            "force_dynamic": false,
+            "on_error": true,
+            "on_quality_below_threshold": true
+          },
+          "version": 1
+        },
+        {
+          "created_at": "2026-05-05T10:17:28.034976+00:00",
+          "dependencies": [],
+          "domain_keywords": [
+            "word frequency",
+            "text analysis",
+            "top N",
+            "English text",
+            "counting"
+          ],
+          "function_name": "get_top_n_word_frequencies",
+          "quality_gate": {
+            "required_keys": [
+              "word",
+              "count"
+            ]
+          },
+          "signature": {
+            "params": [
+              "text",
+              "n"
+            ],
+            "required_params": [
+              "text",
+              "n"
+            ],
+            "return_type": "dict"
+          },
+          "source_code": "def get_top_n_word_frequencies(text: str, n: int) -> dict:\n    \"\"\"\n    Analyze English text to count word frequencies and return the top N words.\n\n    Args:\n        text (str): The input English text to analyze.\n        n (int): The number of top frequent words to return.\n\n    Returns:\n        dict: A dictionary where keys are words and values are their counts,\n              sorted by frequency descending. Returns empty dict if text is empty\n              or n <= 0.\n    \"\"\"\n    import re\n    from collections import Counter\n\n    # Handle edge cases\n    if not text or n <= 0:\n        return {}\n\n    # Normalize text to lowercase and extract words using regex\n    words = re.findall(r'[a-z]+', text.lower())\n\n    # Count word frequencies\n    word_counts = Counter(words)\n\n    # Get the top n words by frequency\n    top_n = word_counts.most_common(n)\n\n    # Convert to dictionary\n    result = {word: count for word, count in top_n}\n    return result",
+          "source_run_id": "vibe-6156d901",
+          "test_cases": [
+            {
+              "assert_fn": null,
+              "case_id": "happy_path",
+              "expected_output": {
+                "hello": 3,
+                "world": 2
+              },
+              "input_data": {
+                "n": 2,
+                "text": "Hello world hello Python world hello"
+              }
+            },
+            {
+              "assert_fn": null,
+              "case_id": "edge_empty_text",
+              "expected_output": {},
+              "input_data": {
+                "n": 5,
+                "text": ""
+              }
+            },
+            {
+              "assert_fn": null,
+              "case_id": "edge_n_larger_than_unique_words",
+              "expected_output": {
+                "apple": 2,
+                "banana": 1
+              },
+              "input_data": {
+                "n": 10,
+                "text": "apple banana apple"
+              }
+            },
+            {
+              "assert_fn": null,
+              "case_id": "edge_n_zero",
+              "expected_output": {},
+              "input_data": {
+                "n": 0,
+                "text": "some text here"
+              }
+            }
+          ],
+          "trigger_policy": {
+            "force_dynamic": false,
+            "on_error": true,
+            "on_quality_below_threshold": true
+          },
+          "version": 2
+        }
+      ]
+    }
+  }
+}

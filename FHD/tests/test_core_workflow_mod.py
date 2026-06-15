@@ -9,6 +9,8 @@ from pathlib import Path
 
 import pytest
 
+from app.http.response_envelope import read_success
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 MOD_ID = "xcagi-core-workflow-employees"
 EMPLOYEE_IDS = ("label_print", "shipment_mgmt", "receipt_confirm", "wechat_msg")
@@ -76,7 +78,7 @@ def test_employee_run_callable(mod_dir: Path, emp: str) -> None:
         import asyncio
 
         out = asyncio.run(mod.run({"action": "status"}, {}))
-        assert out.get("success") is True
+        assert read_success(out) is True
         assert out.get("meta", {}).get("employee_id") == emp or emp in str(out.get("summary", ""))
     finally:
         if str(REPO_ROOT) in sys.path:
@@ -107,7 +109,7 @@ def test_employee_run_extended_actions(mod_dir: Path, emp: str, action: str) -> 
         import asyncio
 
         out = asyncio.run(mod.run(payload, {}))
-        assert out.get("success") is True
+        assert read_success(out) is True
         assert out.get("meta", {}).get("employee_id") == emp
     finally:
         if str(REPO_ROOT) in sys.path:

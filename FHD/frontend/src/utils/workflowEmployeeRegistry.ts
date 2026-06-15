@@ -68,6 +68,33 @@ export function mergeModManifestEntries(
   )
   const modMeta = buildModWorkflowPanelMeta(filterWorkflowRegistrySourceMods(mods))
 
+  for (const m of filterWorkflowRegistrySourceMods(mods)) {
+    const declaringModId = String(m.id || '').trim()
+    for (const e of m.workflow_employees || []) {
+      const id = String(e?.id || '').trim()
+      if (!id || isNonWorkflowDeskEmployeeId(id)) continue
+      const explicitHost = String(e.host_mod_id || e.enterprise_mod_id || '').trim()
+      const resolvedHost = explicitHost || declaringModId
+      if (baseMap.has(id)) {
+        const cur = baseMap.get(id)!
+        if (!cur.carrierModId && declaringModId) cur.carrierModId = declaringModId
+        if (!cur.hostModId && resolvedHost) cur.hostModId = resolvedHost
+        continue
+      }
+      const meta = modMeta[id]
+      const t = (meta?.title || '').replace(/^工作流 ·\s*/, '').trim()
+      baseMap.set(id, {
+        id,
+        label: t || String(e.label || '').trim() || id,
+        kind: 'mod_extension',
+        order: 100 + baseMap.size,
+        source: 'mod_manifest',
+        carrierModId: declaringModId || undefined,
+        hostModId: resolvedHost || undefined,
+      })
+    }
+  }
+
   for (const [id, meta] of Object.entries(modMeta)) {
     if (isNonWorkflowDeskEmployeeId(id)) continue
     if (baseMap.has(id)) continue

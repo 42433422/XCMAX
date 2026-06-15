@@ -12,7 +12,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +52,7 @@ def handle_price_list_export(
         products = svc.search_products(keyword=keyword) if keyword else svc.get_all_products()
         if not isinstance(products, list):
             products = []
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.error("price_list_export: 获取产品失败: %s", e)
         return {"success": False, "message": f"获取产品列表失败: {e}"}
 
@@ -70,7 +70,7 @@ def handle_price_list_export(
             quote_date=export_date,
             products=products,
         )
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.error("price_list_export: 生成 Word 失败: %s", e)
         return {"success": False, "message": f"价格表生成失败: {e}"}
 
@@ -93,6 +93,6 @@ def handle_price_list_export(
             "customer_name": customer_name,
             "product_count": len(products),
         }
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.error("price_list_export: 写文件失败: %s", e)
         return {"success": False, "message": f"写文件失败: {e}"}

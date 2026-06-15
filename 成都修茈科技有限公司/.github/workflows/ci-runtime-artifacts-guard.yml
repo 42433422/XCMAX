@@ -1,0 +1,90 @@
+# 运行期产物提交门禁：阻止 outbox JSONL、webhook 投递 JSON、payment_orders 等
+# 运行期数据文件被 git add / git commit。
+#
+# 这是"先治理后拆仓"的最后一道提交期门禁。拆仓后 modstore-backend 仓库需要同样
+# 的 guard（模板见 docs/migration/new-repo-templates/modstore-backend/.github/...）。
+
+name: CI - Runtime Artifacts Guard
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  forbid-runtime-artifacts:
+    name: Forbid committed runtime artifacts
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # 需要历史以便在 PR 上做 base...HEAD 的 diff
+          fetch-depth: 0
+
+      - name: Forbidden path check (tracked files)
+        # 已经在 git 索引里的禁止路径：这些文件不应存在于仓库中。
+        # 失败说明历史里已经提交了运行期产物，需要跑 scripts/cleanup-committed-runtime-artifacts.sh 清理。
+        run: |
+          set -euo pipefail
+          FORBIDDEN_PATTERNS=(
+            'MODstore_deploy/modstore_server/webhook_events/.*\.json'
+            'MODstore_deploy/modstore_server/data/event_outbox\.jsonl'
+            'MODstore_deploy/modstore_server/data/event_outbox_.*\.jsonl'
+            'MODstore_deploy/modstore_server/data/payment_orders/'
+            'MODstore_deploy/modstore_server/data/chroma/'
+          )
+          failures=0
+          for pat in "${FORBIDDEN_PATTERNS[@]}"; do
+            matches=$(git ls-files | grep -E "$pat" || true)
+            if [ -n "$matches" ]; then
+              echo "::error ::Found forbidden runtime artifacts tracked in git (pattern: $pat):"
+              echo "$matches" | sed 's/^/  - /'
+              failures=$((failures + 1))
+            fi
+          done
+          if [ "$failures" -gt 0 ]; then
+            echo ""
+            echo "运行期产物（outbox / webhook 投递 JSON / payment_orders / chroma）不应进入 git。"
+            echo "请在生产 / compose 里用 MODSTORE_RUNTIME_DIR 指向数据盘，并运行"
+            echo "  bash scripts/cleanup-committed-runtime-artifacts.sh"
+            echo "从历史中清掉这些文件。"
+            exit 1
+          fi
+          echo "[ok] no tracked runtime artifacts"
+
+      - name: Forbidden path check (PR diff)
+        # 针对本 PR 新增/修改的文件，显式阻止运行期产物被添加。
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          FORBIDDEN_PATTERNS=(
+            'MODstore_deploy/modstore_server/webhook_events/.*\.json'
+            'MODstore_deploy/modstore_server/data/event_outbox\.jsonl'
+            'MODstore_deploy/modstore_server/data/event_outbox_.*\.jsonl'
+            'MODstore_deploy/modstore_server/data/payment_orders/'
+            'MODstore_deploy/modstore_server/data/chroma/'
+          )
+          git fetch origin "$BASE_SHA" --depth=1 || true
+          changed=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" || true)
+          failures=0
+          for pat in "${FORBIDDEN_PATTERNS[@]}"; do
+            hits=$(echo "$changed" | grep -E "$pat" || true)
+            if [ -n "$hits" ]; then
+              echo "::error ::PR adds/modifies forbidden runtime artifacts (pattern: $pat):"
+              echo "$hits" | sed 's/^/  - /'
+              failures=$((failures + 1))
+            fi
+          done
+          if [ "$failures" -gt 0 ]; then
+            exit 1
+          fi
+          echo "[ok] PR does not touch runtime-artifact paths"

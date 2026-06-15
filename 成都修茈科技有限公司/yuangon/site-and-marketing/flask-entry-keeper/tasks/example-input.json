@@ -1,0 +1,19 @@
+{
+  "task": "add-flask-route",
+  "description": "在 app.py 中新增一个 POST 路由",
+  "input": {
+    "file": "app.py",
+    "action": "add_route",
+    "route": {
+      "path": "/api/contact",
+      "method": "POST",
+      "description": "接收联系我们表单提交，返回 JSON 确认",
+      "required_fields": ["name", "email", "message"]
+    }
+  },
+  "validation": {
+    "syntax_check": true,
+    "smoke_test": true,
+    "audit_deps": false
+  }
+}

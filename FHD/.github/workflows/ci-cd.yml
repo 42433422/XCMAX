@@ -3,6 +3,8 @@ name: CI/CD Pipeline
 on:
   push:
     branches: [ main, develop, master ]
+    tags:
+      - "FHD/v*"
   pull_request:
     branches: [ main, develop, master ]
   workflow_dispatch:
@@ -44,10 +46,13 @@ jobs:
             BASE_REF="${{ github.base_ref }}"
             git fetch origin "${BASE_REF}" --depth=1
             ADDED_FILES="$(git diff --name-only --diff-filter=A "origin/${BASE_REF}"...HEAD || true)"
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            # Manual rerun: scan only files newly added in the tip commit (not entire tree).
+            ADDED_FILES="$(git diff --name-only --diff-filter=A HEAD~1 HEAD 2>/dev/null || true)"
           else
             BEFORE_SHA="${{ github.event.before }}"
             if [ -z "${BEFORE_SHA}" ] || [ "${BEFORE_SHA}" = "0000000000000000000000000000000000000000" ]; then
-              ADDED_FILES="$(git ls-files)"
+              ADDED_FILES="$(git diff --name-only --diff-filter=A HEAD~1 HEAD 2>/dev/null || true)"
             else
               ADDED_FILES="$(git diff --name-only --diff-filter=A "${BEFORE_SHA}" "${{ github.sha }}" || true)"
             fi
@@ -59,15 +64,25 @@ jobs:
           VIOLATIONS=""
           while IFS= read -r file; do
             [ -z "${file}" ] && continue
-            if [[ "${file}" == XCAGI/tools/* ]] || [[ "${file}" == XCAGI/archive/* ]] || \
-               [[ "${file}" == tools/* ]] || [[ "${file}" == archive/* ]]; then
+            # Root workflow runs against the XCMAX root repo where FHD paths are
+            # prefixed FHD/; strip it so allow-list/patterns compare FHD-relative.
+            rel="${file#FHD/}"
+            # Allow-listed homes for helper / launcher / throwaway scripts.
+            if [[ "${rel}" == XCAGI/tools/* ]] || [[ "${rel}" == XCAGI/archive/* ]] || \
+               [[ "${rel}" == tools/* ]] || [[ "${rel}" == archive/* ]] || \
+               [[ "${rel}" == scripts/launchers/* ]]; then
               continue
             fi
             if [[ "${file}" =~ (^|/)_fail.*\.txt$ ]]; then
               VIOLATIONS+="${file}"$'\n'
             fi
-            if [[ "${file}" =~ (^|/)产品文件夹/(fix_|check_|final_).+\.py$ ]] || \
-               [[ "${file}" =~ ^(fix_|check_|final_).+\.py$ ]]; then
+            # Block fix_/check_/final_ throwaway scripts at any subtree root and in the
+            # common dump dirs (产品文件夹/, scripts/<file>). scripts/launchers/ is
+            # allow-listed above; scripts/dev/ helpers (e.g. check_*.py) sit under a
+            # sub-dir, not directly in scripts/, so they are unaffected.
+            if [[ "${rel}" =~ (^|/)产品文件夹/(fix_|check_|final_).+\.py$ ]] || \
+               [[ "${rel}" =~ (^|/)scripts/(fix_|check_|final_).+\.py$ ]] || \
+               [[ "${rel}" =~ ^(fix_|check_|final_).+\.py$ ]]; then
               VIOLATIONS+="${file}"$'\n'
             fi
             if [[ "${file}" =~ \.v1_backup$ ]]; then
@@ -134,6 +149,11 @@ jobs:
       - name: Run mypy type checking
         run: mypy app/ --no-error-summary
 
+      - name: Type/SQL debt ratchet
+        run: |
+          python scripts/dev/count_type_debt.py
+          python scripts/dev/count_raw_sql.py
+
       - name: Route integrity tests
         env:
           XCAGI_SKIP_LEGACY_COMPAT_ROUTES: "1"
@@ -141,15 +161,23 @@ jobs:
 
       - name: Run tests with coverage
         env:
-          CI_STABLE_ONLY: "1"
           XCAGI_SKIP_LEGACY_COMPAT_ROUTES: "1"
+          INTENT_BENCHMARK_RUN: "1"
         run: |
           mkdir -p coverage
+          # 行 floor SSOT = pyproject.toml [tool.coverage.report] fail_under（铁律1 全量 source=[app]）。
+          # 开启 branch=true 后 coverage 自带门禁按"行+分支合并"指标拦截，故 --cov-fail-under=0，
+          # 把行/分支门禁交给 coverage_ratchet.py --check（分支/前端 floor 见
+          # metrics/coverage_ratchet_baseline.json）。禁止再硬编码窄包阈值。
           python -m pytest tests/ -v \
-            --cov \
-            --cov-report=xml --cov-report=html --cov-report=term-missing \
-            --cov-fail-under=70 \
-            --ignore=tests/test_intent.py
+            --cov --cov-branch --cov-fail-under=0 \
+            --cov-report=xml --cov-report=json:coverage.json \
+            --cov-report=html --cov-report=term-missing
+
+      - name: Coverage ratchet check (行/分支只升不降)
+        env:
+          XCAGI_SKIP_LEGACY_COMPAT_ROUTES: "1"
+        run: python scripts/dev/coverage_ratchet.py --check --require-backend
 
       # Codecov policy: optional until CODECOV_TOKEN is in repo secrets
       # (Settings → Secrets and variables → Actions). Without token this step is
@@ -204,8 +232,8 @@ jobs:
           path: frontend/coverage/
           retention-days: 7
 
-  # PR/push E2E: mock API (E2E_VITE_MOCK_API=1) — npm run test:e2e:p0 → 9 pass / 5 skip
-  # (smoke + critical-paths; plan2026-skeleton skipped without E2E_FULL_STACK).
+  # PR/push E2E: mock API (E2E_VITE_MOCK_API=1) — npm run test:e2e:p0 → 8 pass / 6 skip
+  # (smoke 3 pass + 1 skip, critical-paths 5 pass, plan2026-skeleton 5 skip w/o E2E_FULL_STACK).
   # Full-stack 14/14: root e2e.yml on schedule or workflow_dispatch (see e2e-playwright-reusable.yml).
   frontend-e2e:
     needs: [backend-test, frontend-test]
@@ -268,11 +296,17 @@ jobs:
 
       - name: Run security checks
         run: |
+          # Security gate policy (see docs/CI_SSOT.md → Security scanning):
+          #  - HARD gate for CRITICAL/HIGH = container-scan job (Trivy, exit-code 1).
+          #  - safety (dependency CVE advisories) is ADVISORY here (needs triage), non-blocking.
+          #  - bandit broad scan (--exit-zero) is ADVISORY; the focused B608 (SQL injection)
+          #    pass below is BLOCKING.
           pip install safety bandit
           safety check -r deploy/requirements-server-api.txt --full-report || {
             echo "::warning::safety reported advisories (non-blocking); see full-report above"
           }
           bandit -r app/ -lll --skip B101,B601,B110 --exit-zero
+          bandit -r app/ -lll -s B608
 
   # Container image vulnerability scan (built image from CI Dockerfile)
   container-scan:
@@ -323,14 +357,29 @@ jobs:
 
   # FHD API 生产镜像（xcagi-fhd-api → GHCR；manifest v2 含 image_digest）
   docker-build-fhd-api:
-    needs: [backend-test, pack-verify]
+    needs: [backend-test, pack-verify, arch-fitness]
     runs-on: ubuntu-latest
+    # image_tag = the exact tag metadata-action produced (rely on outputs.version, not a
+    # hand-rolled short sha — see docker/metadata-action#479). Consumed by gitops-image-bump.
+    outputs:
+      image_tag: ${{ steps.meta_fhd.outputs.version }}
     permissions:
       contents: read
       packages: write
+      id-token: write      # cosign keyless (Sigstore OIDC) + provenance
+      attestations: write  # actions/attest-build-provenance (SLSA)
 
     steps:
       - uses: actions/checkout@v4
+
+      # GHCR repo paths must be lowercase; github.repository here is 42433422/XCMAX (mixed case).
+      # metadata-action lowercases its own tags, but the manual cosign/SBOM/provenance refs below
+      # need an explicit lowercase name to avoid "repository name must be lowercase" failures.
+      - name: Compute lowercase FHD API image name
+        id: imgref
+        run: |
+          name="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_FHD_API }}"
+          echo "name=$(printf '%s' "$name" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
 
       - name: Download server release manifest
         uses: actions/download-artifact@v4
@@ -352,7 +401,7 @@ jobs:
         id: meta_fhd
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_FHD_API }}
+          images: ${{ steps.imgref.outputs.name }}
           tags: |
             type=sha,prefix=sha-
             type=ref,event=tag,enable=${{ startsWith(github.ref, 'refs/tags/FHD/v') }}
@@ -369,10 +418,54 @@ jobs:
           cache-from: type=gha,scope=xcagi-fhd-api
           cache-to: type=gha,mode=max,scope=xcagi-fhd-api
 
+      # ── Supply-chain trust (only when image was pushed → digest present) ──
+      - name: Install Cosign
+        if: steps.build_fhd.outputs.digest != ''
+        uses: sigstore/cosign-installer@v3.7.0
+
+      - name: Sign xcagi-fhd-api image (keyless / Sigstore OIDC)
+        if: steps.build_fhd.outputs.digest != ''
+        env:
+          IMAGE_DIGEST_REF: ${{ steps.imgref.outputs.name }}@${{ steps.build_fhd.outputs.digest }}
+        run: cosign sign --yes "${IMAGE_DIGEST_REF}"
+
+      - name: Generate SBOM (SPDX-JSON) for xcagi-fhd-api
+        if: steps.build_fhd.outputs.digest != ''
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ steps.imgref.outputs.name }}@${{ steps.build_fhd.outputs.digest }}
+          format: spdx-json
+          output-file: ${{ runner.temp }}/fhd-api-sbom.spdx.json
+          upload-artifact: false
+
+      - name: Attest SBOM to image (cosign)
+        if: steps.build_fhd.outputs.digest != ''
+        env:
+          IMAGE_DIGEST_REF: ${{ steps.imgref.outputs.name }}@${{ steps.build_fhd.outputs.digest }}
+          SBOM_FILE: ${{ runner.temp }}/fhd-api-sbom.spdx.json
+        run: cosign attest --yes --predicate "${SBOM_FILE}" --type spdxjson "${IMAGE_DIGEST_REF}"
+
+      - name: Generate SLSA build provenance attestation
+        if: steps.build_fhd.outputs.digest != ''
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ${{ steps.imgref.outputs.name }}
+          subject-digest: ${{ steps.build_fhd.outputs.digest }}
+          push-to-registry: true
+
+      - name: Upload SBOM artifact
+        if: steps.build_fhd.outputs.digest != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: fhd-api-sbom
+          path: ${{ runner.temp }}/fhd-api-sbom.spdx.json
+          if-no-files-found: warn
+          retention-days: 14
+
       - name: Merge image digest into manifest
         if: steps.build_fhd.outputs.digest != ''
         env:
-          FHD_IMAGE_REF: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_FHD_API }}
+          FHD_IMAGE_REF: ${{ steps.imgref.outputs.name }}
           FHD_IMAGE_DIGEST: ${{ steps.build_fhd.outputs.digest }}
         run: bash scripts/deploy/fhd-merge-manifest-image.sh
 
@@ -383,7 +476,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist/deploy
-          ref="${{ env.REGISTRY }}/42433422/xcmax/xcagi-fhd-api"
+          ref="${{ steps.imgref.outputs.name }}"
           # build-push-action 只推送到 GHCR，本地 daemon 无镜像；先 pull 再 save
           docker pull "${ref}@${FHD_IMAGE_DIGEST}"
           docker save "${ref}@${FHD_IMAGE_DIGEST}" -o dist/deploy/fhd-api-image.tar
@@ -401,6 +494,65 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  # GitOps 声明式回写：main 构建成功 → 把 staging overlay 镜像 tag 设为 sha-<gitsha> 并提交回 main，
+  # ArgoCD 自动 sync（FHD/gitops/apps/fhd-api-staging.yaml）。opt-in：仅当仓库变量
+  # GITOPS_BUMP_ENABLE=1 时启用——main 受保护或集群未接 ArgoCD 时保持关闭，避免直推被拒。
+  # 生产 overlay 走 fhd-release-orchestrator / 人工 `bump_image.sh production <tag> --commit` 晋级。
+  gitops-image-bump:
+    needs: [docker-build-fhd-api]
+    if: >-
+      vars.GITOPS_BUMP_ENABLE == '1' &&
+      needs.docker-build-fhd-api.result == 'success' &&
+      github.ref == 'refs/heads/main' &&
+      github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: gitops-bump-main
+      cancel-in-progress: false
+    steps:
+      # checkout is NOT rewritten by publish → clones the XCMAX root repo at main HEAD.
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Bump staging overlay image tag (declarative)
+        env:
+          # Exact tag metadata-action pushed (no short-sha guessing) — see docker-build-fhd-api outputs.
+          IMAGE_TAG: ${{ needs.docker-build-fhd-api.outputs.image_tag }}
+        run: |
+          set -euo pipefail
+          [ -n "${IMAGE_TAG}" ] || { echo "::error::empty image_tag from docker-build-fhd-api"; exit 1; }
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # run steps default to working-directory: FHD (injected by publish) → FHD-relative path.
+          bash scripts/gitops/bump_image.sh staging "${IMAGE_TAG}" --commit
+      - name: Push gitops commit to main
+        run: |
+          set -euo pipefail
+          # GITHUB_TOKEN pushes do NOT retrigger workflows (built-in loop guard); commit also [skip ci].
+          git pull --rebase --autostash origin main || true
+          if ! git push origin HEAD:main; then
+            echo "::warning::gitops push to main rejected (branch protection?). Enable ArgoCD Image Updater or promote via orchestrator instead."
+          fi
+      - name: Emit GitOps deploy event (DORA)
+        if: success()
+        run: |
+          python3 scripts/observability/emit_deploy_event.py \
+            --status success \
+            --source-workflow fhd-ci-cd-gitops-image-bump \
+            --environment staging \
+            --git-sha "${{ github.sha }}"
+      - name: Commit GitOps deploy event (DORA)
+        if: success()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add metrics/deploy_events.jsonl || true
+          git diff --staged --quiet || git commit -m "chore(metrics): gitops staging bump [skip ci]"
+          git push || true
+
   # CVM 拉取式自动 CD（main 成功 + secrets 就绪时 scp manifest/tarball；无 secrets 则跳过）
   cvm-push-release:
     needs: [docker-build-fhd-api]
@@ -408,10 +560,11 @@ jobs:
       needs.docker-build-fhd-api.result == 'success' &&
       (
         (github.ref == 'refs/heads/main' && github.event_name == 'push') ||
+        (startsWith(github.ref, 'refs/tags/FHD/v') && github.event_name == 'push') ||
         (github.event_name == 'workflow_dispatch' && inputs.push_to_cvm == true)
       )
     runs-on: ubuntu-latest
-    environment: ${{ (github.event_name == 'workflow_dispatch' && inputs.release_channel == 'staging') && 'staging' || 'production' }}
+    environment: ${{ ((github.event_name == 'workflow_dispatch' && inputs.release_channel == 'staging') || (github.event_name == 'push' && contains(github.ref, '-rc'))) && 'staging' || 'production' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -426,7 +579,7 @@ jobs:
           FHD_PUSH_HOST: ${{ secrets.FHD_PUSH_HOST }}
           FHD_PUSH_USER: ${{ secrets.FHD_PUSH_USER }}
           FHD_PUSH_SSH_KEY_RAW: ${{ secrets.FHD_PUSH_SSH_KEY }}
-          FHD_RELEASE_CHANNEL: ${{ github.event_name == 'workflow_dispatch' && inputs.release_channel || 'stable' }}
+          FHD_RELEASE_CHANNEL: ${{ github.event_name == 'workflow_dispatch' && inputs.release_channel || (contains(github.ref, '-rc') && 'staging' || 'stable') }}
         run: |
           set -euo pipefail
           if [ -z "${FHD_PUSH_HOST:-}" ] || [ -z "${FHD_PUSH_SSH_KEY_RAW:-}" ]; then
@@ -446,7 +599,7 @@ jobs:
 
   # Docker Build & Push
   docker-build:
-    needs: [backend-test, frontend-test, frontend-e2e, security-scan, container-scan, pack-verify]
+    needs: [backend-test, frontend-test, frontend-e2e, security-scan, container-scan, pack-verify, arch-fitness]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -489,36 +642,3 @@ jobs:
           cache-to: type=gha,mode=max
           build-args: |
             BUILD_DATE=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.created'] }}
-
-  # Release on tags
-  release:
-    needs: docker-build
-    if: startsWith(github.ref, 'refs/tags/FHD/v')
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          generate_release_notes: true
-          draft: false
-          prerelease: ${{ contains(github.ref, '-rc') || contains(github.ref, '-beta') }}
-
-  # Tag 发版时串联 deploy workflow（lint → test → scan → build → deploy）
-  trigger-deploy:
-    needs: [docker-build]
-    if: startsWith(github.ref, 'refs/tags/FHD/v')
-    runs-on: ubuntu-latest
-    permissions:
-      actions: write
-    steps:
-      - name: Trigger Deploy workflow
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh workflow run deploy.yml \
-            -f environment=production \
-            --ref "${{ github.ref_name }}"

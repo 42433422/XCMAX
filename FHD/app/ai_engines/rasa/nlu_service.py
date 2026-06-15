@@ -33,9 +33,9 @@ import asyncio
 import glob
 import logging
 import os
-from typing import Any
+from typing import Any, cast
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -145,8 +145,8 @@ class RasaNLUService:
             return False
 
         try:
-            from rasa.core.agent import Agent  # type: ignore
-        except OPERATIONAL_ERRORS as e:  # ImportError or its downstream side effects
+            from rasa.core.agent import Agent
+        except RECOVERABLE_ERRORS as e:  # ImportError or its downstream side effects
             self._load_error = f"rasa_import_failed: {e}"
             return False
 
@@ -154,7 +154,7 @@ class RasaNLUService:
             self._agent = Agent.load(self.model_path)
             self._last_status["agent_loaded"] = True
             return True
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             self._load_error = f"agent_load_failed: {e}"
             self._agent = None
             return False
@@ -186,8 +186,8 @@ class RasaNLUService:
 
     def _parse_via_server(self, text: str) -> dict[str, Any]:
         try:
-            import requests  # type: ignore
-        except OPERATIONAL_ERRORS as e:
+            import requests
+        except RECOVERABLE_ERRORS as e:
             return self._empty_result(f"requests_unavailable: {e}")
 
         try:
@@ -196,7 +196,7 @@ class RasaNLUService:
                 json={"text": text},
                 timeout=5,
             )
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             self._last_status["server_reachable"] = False
             return self._empty_result(f"server_unreachable: {e}")
 
@@ -205,15 +205,15 @@ class RasaNLUService:
             return self._empty_result(f"server_status_{resp.status_code}")
 
         try:
-            return resp.json()
-        except OPERATIONAL_ERRORS as e:
+            return cast("dict[str, Any]", resp.json())
+        except RECOVERABLE_ERRORS as e:
             return self._empty_result(f"server_bad_json: {e}")
 
     def _parse_via_embedded(self, text: str) -> dict[str, Any]:
         try:
             # rasa 的 parse_message 是 async；这里同步等待。
             result = asyncio.run(self._agent.parse_message(text))
-            return result
+            return cast("dict[str, Any]", result)
         except RuntimeError:
             # 已经在事件循环里 —— 用新循环兜底，避免 "asyncio.run cannot be called from a running loop"。
             loop = asyncio.new_event_loop()
@@ -221,7 +221,7 @@ class RasaNLUService:
                 return loop.run_until_complete(self._agent.parse_message(text))
             finally:
                 loop.close()
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             return self._empty_result(f"parse_failed: {e}")
 
     # ------------------------------------------------------------------
@@ -242,12 +242,12 @@ class RasaNLUService:
             return False
         if self.use_server:
             try:
-                import requests  # type: ignore
+                import requests
 
                 resp = requests.get(f"{self.rasa_url}/status", timeout=2)
                 self._last_status["server_reachable"] = resp.status_code == 200
                 return resp.status_code == 200
-            except OPERATIONAL_ERRORS:
+            except RECOVERABLE_ERRORS:
                 self._last_status["server_reachable"] = False
                 return False
         if self._agent is None:

@@ -6,7 +6,7 @@ import logging
 
 from fastapi import FastAPI
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +29,7 @@ def register_health_routes(app: FastAPI) -> None:
                 payload["neuro"] = get_neurobus_health()
             else:
                 payload["neuro"] = {"enabled": False}
-        except OPERATIONAL_ERRORS as exc:
+        except RECOVERABLE_ERRORS as exc:
             payload["neuro"] = {"enabled": True, "error": str(exc)}
         return payload
 

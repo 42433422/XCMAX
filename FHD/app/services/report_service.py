@@ -23,7 +23,7 @@ from app.db.models import (
 )
 from app.db.session import get_db
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -350,8 +350,8 @@ class ReportService(NeuroEventPublisherMixin):
                 "filename": f"{filename}.xlsx",
                 "content_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             }
-        except OPERATIONAL_ERRORS as e:
-            logger.error(f"导出Excel失败: {e}")
+        except RECOVERABLE_ERRORS as e:
+            logger.error("导出Excel失败: %s", e)
             return {"success": False, "message": str(e)}
 
 

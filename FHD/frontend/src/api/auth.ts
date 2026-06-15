@@ -1,6 +1,7 @@
 import { api, primeCsrfCookie } from './core';
 import { LS_MARKET_ACCESS_TOKEN, LS_MARKET_USER_JSON } from './marketAccount';
 import { invalidateEnterpriseSessionCache } from '@/utils/authSessionCache';
+import { clearAutoLoginPreference } from '@/utils/loginPreferences';
 import type { ApiResponse } from '@/types/api';
 
 export type AccountKind = 'personal' | 'enterprise' | 'admin';
@@ -121,6 +122,7 @@ export const authApi = {
   },
 
   async logout(): Promise<ApiResponse<void>> {
+    clearAutoLoginPreference();
     invalidateEnterpriseSessionCache();
     try {
       const { useAccountProfileStore } = await import('@/stores/accountProfile');
@@ -158,8 +160,8 @@ export const authApi = {
     return api.post<ApiResponse<{ avatar_url: string }>>('/api/auth/profile/avatar', form);
   },
 
-  async validateSession(): Promise<ApiResponse<any>> {
-    return api.get<ApiResponse<any>>('/api/auth/session/validate');
+  async validateSession(): Promise<ApiResponse<unknown>> {
+    return api.get<ApiResponse<unknown>>('/api/auth/session/validate');
   },
 
   async forgotAccount(email: string): Promise<

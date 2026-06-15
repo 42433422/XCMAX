@@ -7,7 +7,7 @@
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any
+from typing import Any, cast
 
 
 class CustomerType(Enum):
@@ -125,9 +125,9 @@ class PricingEngine:
         subtotal = sum(item.get("price", 0.0) * item.get("quantity", 1) for item in items)
 
         if len(items) >= 20:
-            return subtotal * 0.05
+            return cast("float", subtotal * 0.05)
         elif len(items) >= 10:
-            return subtotal * 0.03
+            return cast("float", subtotal * 0.03)
 
         return 0.0
 

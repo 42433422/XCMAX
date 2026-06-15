@@ -2,6 +2,9 @@ package com.xiuci.xcagi.mobile.core.push
 
 import android.app.PendingIntent
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.core.content.ContextCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.google.firebase.messaging.FirebaseMessagingService
@@ -34,13 +37,23 @@ class XcagiMessagingService : FirebaseMessagingService() {
         )
         val channel = message.data["channel"] ?: NotificationChannels.SYSTEM
         val notification = NotificationCompat.Builder(this, channel)
-            .setSmallIcon(R.mipmap.ic_launcher)
+            .setSmallIcon(R.mipmap.ic_launcher_foreground)
             .setContentTitle(title)
             .setContentText(body)
             .setContentIntent(pending)
             .setAutoCancel(true)
             .build()
-        NotificationManagerCompat.from(this).notify(route.hashCode(), notification)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(this, android.Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
+        try {
+            NotificationManagerCompat.from(this).notify(route.hashCode(), notification)
+        } catch (_: SecurityException) {
+            /* 用户拒绝通知权限时不拖垮 FCM 回调 */
+        }
     }
 }
 

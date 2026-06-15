@@ -5,13 +5,14 @@ from pathlib import Path
 
 from sqlalchemy import create_engine, event, inspection, pool
 from sqlalchemy.engine import Engine, make_url
+from sqlalchemy.exc import ArgumentError as SQLAlchemyArgumentError
 from sqlalchemy.orm import scoped_session, sessionmaker
 from sqlalchemy.pool import NullPool
 
 from app.db.base import Base
 from app.db.sqlite_mod_paths import mod_suffix_token, sqlite_filename_with_mod_suffix
 from app.request_active_mod_ctx import get_request_active_mod_id
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +39,7 @@ def _mod_db_url_from_env(active_mod_id: str) -> str:
                 v = str(obj.get(active_mod_id) or "").strip()
                 if v:
                     return v
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             logger.warning("XCAGI_MOD_DATABASE_URLS is invalid JSON; ignored")
     env_key = f"XCAGI_MOD_DATABASE_URL_{_normalize_mod_for_env(active_mod_id)}"
     return str(os.environ.get(env_key) or "").strip()
@@ -50,7 +51,7 @@ def _sqlite_url_with_mod_suffix(base_url: str, active_mod_id: str) -> str:
         return base_url
     try:
         u = make_url(base_url)
-    except OPERATIONAL_ERRORS:
+    except (*RECOVERABLE_ERRORS, SQLAlchemyArgumentError):
         return base_url
     if u.get_dialect().name != "sqlite":
         return base_url
@@ -63,7 +64,7 @@ def _sqlite_url_with_mod_suffix(base_url: str, active_mod_id: str) -> str:
         return base_url
     try:
         return u.set(database=str(p.with_name(new_name))).render_as_string(hide_password=False)
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         logger.warning("无法为 SQLite URL 附加 Mod 后缀，已回退原 URL", exc_info=True)
         return base_url
 
@@ -87,7 +88,7 @@ def _postgres_url_with_mod_db(base_url: str, active_mod_id: str) -> str:
         return base_url
     try:
         u = make_url(base_url)
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         return base_url
     if u.get_dialect().name != "postgresql":
         return base_url
@@ -97,7 +98,7 @@ def _postgres_url_with_mod_db(base_url: str, active_mod_id: str) -> str:
     try:
         # 注意：str(URL) 会把密码打成 ***，必须用 render_as_string(hide_password=False)
         return u.set(database=f"{base_db}__{suffix}").render_as_string(hide_password=False)
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         logger.warning("无法为 PostgreSQL URL 附加 Mod 库名后缀，已回退原 URL", exc_info=True)
         return base_url
 
@@ -114,7 +115,7 @@ def _database_url_for_active_mod(base_url: str) -> str:
                 getattr(getattr(req, "url", None), "path", "") or ""
             ):
                 active_mod_id = ""
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             pass
     if not active_mod_id:
         return base_url
@@ -123,9 +124,9 @@ def _database_url_for_active_mod(base_url: str) -> str:
         return mapped
     try:
         u = make_url(base_url)
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         u = None
-    if u is not None and u.get_dialect().name == "sqlite":
+    if u is not None and u.get_dialect().name == "sqlite" and _mod_isolated_databases_enabled():
         return _sqlite_url_with_mod_suffix(base_url, active_mod_id)
     if u is not None and u.get_dialect().name == "postgresql" and _mod_isolated_databases_enabled():
         return _postgres_url_with_mod_db(base_url, active_mod_id)
@@ -142,7 +143,7 @@ def _get_test_db_manager():
         from app.db.test_db_manager import get_test_db_manager
 
         return get_test_db_manager()
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         return None
 
 
@@ -155,6 +156,21 @@ def set_sqlite_pragma(dbapi_connection, connection_record):
         cursor.execute("PRAGMA cache_size=-64000")
         cursor.execute("PRAGMA foreign_keys=ON")
         cursor.close()
+
+
+def _resolve_host_database_url() -> str:
+    """宿主基库 URL：不应用 ``X-XCAGI-Active-Mod-Id`` 分库后缀（users/sessions 仅存于此）。"""
+    test_mgr = _get_test_db_manager()
+    if test_mgr and test_mgr.is_enabled():
+        return f"sqlite:///{test_mgr.resolved_test_db_path()}"
+    env_url = (os.environ.get("DATABASE_URL") or "").strip()
+    if env_url:
+        return env_url
+    if _sqlite_desktop_mode():
+        from app.desktop_runtime.db import configure_sqlite_defaults
+
+        return configure_sqlite_defaults()
+    return _DEFAULT_DATABASE_URL
 
 
 def _get_database_url(db_path: str | None = None) -> str:
@@ -224,7 +240,7 @@ _session_local_cache: dict[str, sessionmaker] = {}
 def _database_url_cache_key(url: str) -> str:
     try:
         return make_url(url).render_as_string(hide_password=False)
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         return str(url)
 
 
@@ -257,11 +273,38 @@ def _get_session_local():
         return created
 
 
+def _get_host_engine():
+    return _get_engine_for_url(_resolve_host_database_url())
+
+
+def _get_host_session_local():
+    want_url = _resolve_host_database_url()
+    key = "host:" + _database_url_cache_key(want_url)
+    with _engine_cache_lock:
+        cached = _session_local_cache.get(key)
+        if cached is not None:
+            return cached
+        created = sessionmaker(
+            autocommit=False, autoflush=False, bind=_get_host_engine()
+        )
+        _session_local_cache[key] = created
+        return created
+
+
 # Backward-compatible export:
 # Some parts of the codebase (and older modules) import `SessionLocal` from `app.db`
 # and expect it to be callable (returns a SQLAlchemy Session instance).
 def SessionLocal():
     return _get_session_local()()
+
+
+def HostSessionLocal():
+    """宿主基库会话（users/sessions/IM 等），不受 Active-Mod 分库影响。"""
+    return _get_host_session_local()()
+
+
+def get_host_engine():
+    return _get_host_engine()
 
 
 def dispose_and_recreate_engine():
@@ -274,7 +317,7 @@ def dispose_and_recreate_engine():
         from app.application.customer_app_service import reset_customers_engine
 
         reset_customers_engine()
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         pass
 
 

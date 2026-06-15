@@ -1,59 +1,65 @@
 id: vibe-coding-maintainer
 name: Vibe-Coding 维护员
-version: "10.0.0"
+version: "2.0.0"
+domain: 全权维护 vibe-coding 平台核心库（代码工厂、工作流工厂、自然语言解析、运行时校验器、Agent 层、安全模块）、配套测试、文档、示例代码；为 employee-pack-curator 提供稳定的 vibe_eskill_adapter 接口。
 owner: admin
 area: platform-core
-domain: >-
-  全权维护 vibe-coding 平台核心库（代码工厂、工作流工厂、自然语言解析、运行时校验器、Agent 层、安全模块）、配套测试、文档、示例代码；为 employee-pack-curator 提供稳定的 vibe_eskill_adapter 接口。
 
 scope_globs:
-  - "vibe-coding/src/vibe_coding/**"
-  - "vibe-coding/tests/**"
-  - "vibe-coding/scripts/**"
+  - vibe-coding/src/vibe_coding/**
+  - vibe-coding/tests/**
+  - vibe-coding/scripts/**
   - vibe-coding/pyproject.toml
   - vibe-coding/setup.py
-  - "vibe-coding/requirements*.txt"
-  - "vibe-coding/docs/**"
-  - "vibe-coding/examples/**"
+  - vibe-coding/requirements*.txt
+  - vibe-coding/docs/**
+  - vibe-coding/examples/**
   - vibe-coding/CHANGELOG.md
   - vibe-coding/README.md
   - vibe-coding/README_GITHUB.md
   - vibe-coding/.gitignore
   - vibe-coding/.dockerignore
-  - "vibe-coding/test_vibe_*.py"
-  - "yuangon/platform-core/vibe-coding-maintainer/**"
+  - vibe-coding/test_vibe_*.py        # 根级 demo / 验证脚本
 
 forbidden_globs:
-  - "MODstore_deploy/modstore_server/**"
-  - "MODstore_deploy/market/src/**"
-  - "_local_secrets/**"
+  - MODstore_deploy/modstore_server/**   # 不直接改 MODstore 后端接口
+  - MODstore_deploy/market/src/**
+  - _local_secrets/**
   - "*.vue"
-
-depends_on:
-  []
-
-actions:
-  handlers:
-    - vibe_edit
-    - direct_python
-    - agent
-    - llm_md
-    - echo
 
 triggers:
   on_error: true
   on_quality_fail: true
+  on_coverage_miss: true
+  subscribes:
+    - "employee.task.failed:test-qa-runner"
+    - "employee.task.done:modstore-backend-api"
+  max_patch_budget_tokens: 5000
+  max_patch_steps: 6
+
+sla:
+  timeout_seconds: 180
+  retry_max: 2
+  escalate_to_human: true
+
+llm_default: "auto"
+llm_reasoning: "auto"
 
 skills:
-  - skill-vibe-core-test
-  - skill-nl-parsing-update
-  - skill-doc-sync-vibe
-  - skill-agent-layer-test
-  - skill-security-harden
-  - skill-workflow-engine-update
-  - skill-cursor-sdk-delegate
+  - skills/skill-vibe-core-test.md
+  - skills/skill-nl-parsing-update.md
+  - skills/skill-doc-sync-vibe.md
+  - skills/skill-agent-layer-test.md
+  - skills/skill-security-harden.md
+  - skills/skill-workflow-engine-update.md
+  - skills/skill-adapter-compat-check.md
+
+depends_on: []
 
 changelog:
-  - version: "10.0.0"
-    date: "2026-06-07"
-    note: "yuangon 骨架由 bootstrap_yuangon.py 从 manifest 反向生成（v10 线内迭代）"
+  - version: "2.0.0"
+    date: "2026-05-07"
+    note: "全权负责升级：新增文档维护、Agent 层测试、安全加固、工作流引擎维护、适配器兼容性检查 5 个 Skill；扩展 scope_globs 覆盖 docs/examples/README/CHANGELOG；显式开启 on_coverage_miss 触发"
+  - version: "1.0.0"
+    date: "2026-05-06"
+    note: "初始创建"

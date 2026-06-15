@@ -7,7 +7,7 @@ from typing import Any
 from app.db.models import User
 from app.db.session import get_db
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.password_hash import generate_password_hash
 from app.utils.time import utc_now_naive
 
@@ -69,7 +69,7 @@ class UserService(NeuroEventPublisherMixin):
                 db.commit()
                 db.refresh(user)
                 return {"success": True, "user": self._user_to_dict(user)}
-            except OPERATIONAL_ERRORS:
+            except RECOVERABLE_ERRORS:
                 db.rollback()
                 err_id = uuid.uuid4().hex[:12]
                 logger.exception("create_user failed (error_id=%s username=%s)", err_id, username)
@@ -105,7 +105,7 @@ class UserService(NeuroEventPublisherMixin):
                 db.commit()
                 db.refresh(user)
                 return {"success": True, "user": self._user_to_dict(user)}
-            except OPERATIONAL_ERRORS:
+            except RECOVERABLE_ERRORS:
                 db.rollback()
                 err_id = uuid.uuid4().hex[:12]
                 logger.exception("update_user failed (error_id=%s user_id=%s)", err_id, user_id)
@@ -125,7 +125,7 @@ class UserService(NeuroEventPublisherMixin):
                 user.is_active = False
                 db.commit()
                 return {"success": True, "message": "用户已删除"}
-            except OPERATIONAL_ERRORS:
+            except RECOVERABLE_ERRORS:
                 db.rollback()
                 err_id = uuid.uuid4().hex[:12]
                 logger.exception("delete_user failed (error_id=%s user_id=%s)", err_id, user_id)

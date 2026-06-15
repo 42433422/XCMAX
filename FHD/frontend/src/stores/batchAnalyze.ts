@@ -7,10 +7,10 @@ export interface SheetInfo {
   sheetIndex: number
   fields: string[]
   rowCount: number
-  sampleRows: Record<string, any>[]
-  gridPreview?: { rows: any[][] }
-  rawSheet?: any
-  gridData?: any
+  sampleRows: Record<string, unknown>[]
+  gridPreview?: { rows: unknown[][] }
+  rawSheet?: unknown
+  gridData?: unknown
 }
 
 export interface SheetGroup {
@@ -167,7 +167,7 @@ export const useBatchAnalyzeStore = defineStore('batchAnalyze', () => {
     }
   }
 
-  function updateSheetGridData(fileName: string, sheetName: string, gridData: any) {
+  function updateSheetGridData(fileName: string, sheetName: string, gridData: unknown) {
     const sheet = extractedSheets.value.find(s => s.fileName === fileName && s.sheetName === sheetName)
     if (sheet) {
       sheet.gridData = gridData

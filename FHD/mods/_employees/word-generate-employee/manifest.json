@@ -1,0 +1,125 @@
+{
+  "id": "word-generate-employee",
+  "name": "Word 生成员",
+  "version": "1.0.0",
+  "author": "XCAGI",
+  "description": "Word生成员工：支持 document_full.json、user_query 纯文本或 .txt；可选 template.docx；输出 generated_document.docx",
+  "artifact": "employee_pack",
+  "scope": "global",
+  "dependencies": {
+    "xcagi": ">=1.0.0"
+  },
+  "employee": {
+    "id": "word-generate-employee",
+    "label": "Word 生成员",
+    "capabilities": [
+      "doc.generate",
+      "doc.template_merge",
+      "doc.styles"
+    ]
+  },
+  "workflow_employees": [
+    {
+      "id": "word-generate-employee",
+      "label": "Word 生成员",
+      "panel_title": "Word 生成员",
+      "panel_summary": "上传 JSON（document_full.json），可选模板 docx，生成 Word 文档。",
+      "capabilities": [
+        "doc.generate",
+        "doc.template_merge",
+        "doc.styles"
+      ],
+      "api_base_path": "employees/word-generate-employee",
+      "entry_action": "run"
+    }
+  ],
+  "backend": {
+    "entry": "blueprints",
+    "init": "mod_init"
+  },
+  "employee_config_v2": {
+    "identity": {
+      "id": "word-generate-employee",
+      "version": "1.0.0",
+      "artifact": "employee_pack",
+      "name": "Word 生成员",
+      "description": "Word生成员工：支持 document_full.json、user_query 纯文本或 .txt；可选 template.docx；输出 generated_document.docx"
+    },
+    "perception": {
+      "type": "file_or_text",
+      "accepted_extensions": [
+        ".json",
+        ".txt"
+      ]
+    },
+    "memory": {
+      "type": "session"
+    },
+    "cognition": {
+      "agent": {
+        "system_prompt": "你是Word 生成员。你负责读取 document_full.json（或与 Word 全量读取同 schema 的 JSON），可选 template.docx 模板，生成 generated_document.docx。direct_python 必须真实写 docx；禁止无 JSON 编造正文。",
+        "role": {
+          "name": "Word 生成员",
+          "persona": "严谨的 Word 生成员工",
+          "tone": "professional",
+          "expertise": [
+            "Word 生成",
+            "JSON 中介",
+            "模板合并"
+          ]
+        },
+        "behavior_rules": [
+          "必须基于 JSON 真实生成 docx，禁止无输入编造正文。",
+          "成功必须以写出 generated_document.docx 为准。",
+          "可选模板仅用于样式，不得覆盖 JSON 正文语义。"
+        ],
+        "few_shot_examples": [],
+        "model": {
+          "provider": "auto",
+          "model_name": "auto",
+          "temperature": 0.1,
+          "max_tokens": 2000,
+          "top_p": 0.9
+        }
+      },
+      "skills": [
+        {
+          "name": "doc.generate",
+          "brief": "JSON + 可选模板 → 生成 docx。"
+        }
+      ]
+    },
+    "collaboration": {
+      "workflow": {
+        "workflow_id": 0,
+        "name": "Word 生成员"
+      }
+    },
+    "actions": {
+      "handlers": [
+        "direct_python"
+      ],
+      "direct_python": {
+        "module": "word_generate_employee",
+        "action": "convert",
+        "default_output_relpath": "outputs/generated_document.docx",
+        "default_template_relpath": "inputs/template.docx"
+      }
+    }
+  },
+  "metadata": {
+    "framework_version": "2.0.0",
+    "created_by": "asset_pipeline"
+  },
+  "actions": {
+    "handlers": [
+      "direct_python"
+    ],
+    "direct_python": {
+      "module": "word_generate_employee",
+      "action": "convert",
+      "default_output_relpath": "outputs/generated_document.docx",
+      "default_template_relpath": "inputs/template.docx"
+    }
+  }
+}

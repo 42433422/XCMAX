@@ -1,0 +1,28 @@
+{
+  "brief": "制作 PPT 生成员工包（Codex 级）。compose-first：无模板时从零合成多页 output.pptx；enhance：复制 template.pptx 后按 LLM 编排的 ppt_edit_plan 注入 OOXML 动画；输入 presentation_full v2 JSON / user_query / .txt，可选 template_file；输出 output.pptx 与 ppt_edit_plan.json；作业跑马灯用 homework_marquee 配方；direct_python。",
+  "mode": "direct_python_file_transform",
+  "accepted_extensions": [
+    ".json",
+    ".txt"
+  ],
+  "default_action": "convert",
+  "default_output_relpath": "outputs/output.pptx",
+  "runtime_kind": "ppt_generate",
+  "optional_llm_polish": false,
+  "output_schema": [
+    "title",
+    "slides",
+    "slide_count",
+    "stats",
+    "metadata"
+  ],
+  "requirements": [
+    "handlers must include \"direct_python\"; may include \"agent\" for optional polish.",
+    "Run modstore_server.ppt_generate_pipeline.run_ppt_generate: route → plan → compose/enhance → OOXML.",
+    "When template_path is .pptx, copy template; else compose deck from plan slides.",
+    "LLM planner outputs ppt_edit_plan.json; executor applies inject_timing presets.",
+    "Never fabricate slides when input is empty; fallback to text-only only with warnings.",
+    "Return {ok, summary, items, warnings, error, meta}."
+  ],
+  "pack_id": "ppt-generate-employee"
+}

@@ -13,7 +13,7 @@ from collections.abc import Callable
 from typing import Any
 
 from app.neuro_bus.application_neuro_bridge import neuro_trace_app_service_call
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 _tls = threading.local()
 
@@ -26,7 +26,7 @@ def _app_enter() -> bool:
             from app.neuro_bus.neuro_trace_config import should_sample_app_service
 
             _tls.app_emit = should_sample_app_service()
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             _tls.app_emit = True
     return bool(getattr(_tls, "app_emit", False))
 
@@ -49,7 +49,7 @@ def _wrap_function(
                 neuro_trace_app_service_call(service_label, method_name, "start")
             try:
                 out = await fn(*args, **kwargs)
-            except OPERATIONAL_ERRORS as exc:
+            except RECOVERABLE_ERRORS as exc:
                 if emit:
                     neuro_trace_app_service_call(
                         service_label,
@@ -80,7 +80,7 @@ def _wrap_function(
             neuro_trace_app_service_call(service_label, method_name, "start")
         try:
             out = fn(*args, **kwargs)
-        except OPERATIONAL_ERRORS as exc:
+        except RECOVERABLE_ERRORS as exc:
             if emit:
                 neuro_trace_app_service_call(
                     service_label,

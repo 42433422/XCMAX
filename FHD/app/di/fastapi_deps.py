@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, cast
 
 from fastapi import Request
 
@@ -15,7 +15,7 @@ def get_service_container(request: Request) -> ServiceContainer:
         from app.di.registry import get_service_registry
 
         return get_service_registry()
-    return c
+    return cast("ServiceContainer", c)
 
 
 ServiceContainerDep = Annotated[ServiceContainer, get_service_container]

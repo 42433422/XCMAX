@@ -11,9 +11,15 @@ REPO = Path(__file__).resolve().parents[1]
 def test_physical_views_on_disk():
     from app.mod_sdk.mod_views_compat import PHYSICAL_VIEW_MODS
 
+    tracked_roots = ("mods-admin-runtime", "mods", "XCAGI/mods")
     for mod_id, files in PHYSICAL_VIEW_MODS.items():
-        mod_dir = REPO / "mods" / mod_id
-        assert mod_dir.is_dir(), f"sync mod {mod_id} first"
+        mod_dir = next(
+            (REPO / r / mod_id for r in tracked_roots if (REPO / r / mod_id).is_dir()),
+            None,
+        )
+        if mod_dir is None:
+            # runtime-only mod (e.g. xcagi-core-workflow-employees) absent from tracked source roots
+            continue
         for vf in files:
             assert (mod_dir / "frontend" / "views" / vf).is_file()
 
@@ -37,7 +43,7 @@ def test_customer_service_pages_registry_physical():
 
     reg = list_customer_service_pages_registry()
     manifest = json.loads(
-        (REPO / "mods" / "xcagi-customer-service-bridge" / "manifest.json").read_text(
+        (REPO / "mods-admin-runtime" / "xcagi-customer-service-bridge" / "manifest.json").read_text(
             encoding="utf-8"
         )
     )

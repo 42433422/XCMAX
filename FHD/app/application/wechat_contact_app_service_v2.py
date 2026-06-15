@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, Any
 
 from app.neuro_bus.bus import get_neuro_bus
 from app.neuro_bus.events.wechat_events import *
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 if TYPE_CHECKING:
     pass  # 根据实际需要添加类型引用
@@ -68,7 +68,7 @@ class WechatContactAppServiceV2:
             self._bus.publish(event)
 
             logger.info(
-                f"[WechatContactAppServiceV2] 命令已发布: {command_type} (event_id={event.metadata.event_id})"
+                "[WechatContactAppServiceV2] 命令已发布: %s (event_id=%s)", command_type, event.metadata.event_id
             )
 
             return {
@@ -78,8 +78,8 @@ class WechatContactAppServiceV2:
                 "message": f"{command_type} 命令已提交",
             }
 
-        except OPERATIONAL_ERRORS as e:
-            logger.exception(f"[WechatContactAppServiceV2] 执行命令失败: {e}")
+        except RECOVERABLE_ERRORS as e:
+            logger.exception("[WechatContactAppServiceV2] 执行命令失败: %s", e)
             return {"success": False, "message": str(e)}
 
 

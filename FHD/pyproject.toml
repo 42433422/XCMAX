@@ -87,8 +87,7 @@ exclude = [
 ]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "B", "C4", "UP", "SIM", "PLC", "BLE001"]
-# ANN201 待 ④-B 测试收口后分批启用（见 MYPY_TECH_DEBT.md）
+select = ["E", "F", "I", "B", "C4", "UP", "SIM", "PLC", "BLE001", "ANN"]
 ignore = [
     "E501",    # line too long (handled by formatter)
     "E402",    # module-import-not-at-top (有意的延迟导入)
@@ -198,62 +197,14 @@ exclude = [
     "app/infrastructure/skills/skill-maker",
 ]
 
+# Phase 9：全 app/ 默认严格；仅 tests 保留 ignore_errors
 [[tool.mypy.overrides]]
 module = "tests.*"
 ignore_errors = true
 
-# Plan SSOT T24/T25: six wide overrides (TECH-DEBT-ID TD-P1-1-SURFACE-2026-10).
-# Strict gate targets app.application.shipment*, app.domain.shipment.*, app.http.* only;
-# remaining app.application.* stays ignored until batch fixes (see CLAIMED_VS_ACTUAL mypy row).
-[[tool.mypy.overrides]]
-module = [
-    "app.services.*",
-    "app.fastapi_routes.*",
-    "app.routes.*",
-    "app.mod_sdk.*",
-    "app.neuro_bus.*",
-    "app.legacy.*",
-]
-ignore_errors = true
-
-[[tool.mypy.overrides]]
-module = [
-    "app.infrastructure.*",
-    "app.utils.*",
-    "app.ai_engines.*",
-    "app.db.*",
-    "app.di.*",
-    "app.middleware.*",
-    "app.tasks.*",
-    "app.security.*",
-    "app.desktop_runtime.*",
-    "app.shell.*",
-    "app.fastapi_app.*",
-    "app.traditional_mode_fs",
-    "app.resources.*",
-    "app.contexts.*",
-    "app.control.*",
-    "app.enterprise.*",
-    "app.models.*",
-    "app.neuro_domains.*",
-    "app.application.*",
-    "app.domain.*",
-]
-ignore_errors = true
-
-[[tool.mypy.overrides]]
-module = [
-    "app.application.shipment_app_service",
-    "app.application.shipment_audit_app_service",
-    "app.application.facades.shipment_event_primary",
-    "app.domain.shipment.*",
-    "app.http.*",
-]
-ignore_errors = false
-
 # pytest 配置唯一真相源（2026-05-04 整合）：
 # - 旧 pytest.ini 已删除；当前 addopts 保留为不含 --cov，与历史 pytest.ini 的有效行为一致，
-#   避免本地交互式运行因 fail_under=52 产生噪音。CI 通过显式 --cov=app 等参数生效（见
+#   避免本地交互式运行因 fail_under（当前 36，由棘轮维护）产生噪音。CI 通过显式 --cov 等参数生效（见
 #   .github/workflows/ci-cd.yml + test.yml）。
 [tool.pytest.ini_options]
 # 唯一默认后端套件：tests/（与 CI 一致）。勿与 XCAGI/xcagi_tests 同跑——模块名冲突且部分用例已迁移。
@@ -268,6 +219,7 @@ markers = [
     "integration: 集成测试",
     "e2e: 端到端测试",
     "asyncio: 异步测试 (pytest-asyncio)",
+    "release_gate: release train hard gate subset",
 ]
 filterwarnings = [
     "ignore::DeprecationWarning",
@@ -275,32 +227,12 @@ filterwarnings = [
 ]
 
 [tool.coverage.run]
-# M3 CI_STABLE_ONLY 窄包（2026-06-09）：仅纳入稳定子集实测 ≥70% 加权的路径；见 COVERAGE_RAMP.md
-include = [
-    "app/config.py",
-    "app/utils/password_hash.py",
-    "app/middleware/auth_rate_limit.py",
-    "app/neuro_bus/bus.py",
-    "app/neuro_bus/rate_limiter.py",
-    "app/domain/shipment/*",
-    "app/http/*",
-    "app/application/__init__.py",
-    "app/application/mod_store_catalog_app.py",
-    "app/application/workflow/types.py",
-    "app/application/facades/kitten_facade.py",
-    "app/application/ports/*",
-    "app/fastapi_routes/registry.py",
-    "app/fastapi_routes/materials.py",
-    "app/fastapi_routes/xcagi_compat.py",
-    "app/fastapi_routes/aibiz_terminal_api.py",
-    "app/fastapi_routes/mounts/business.py",
-    "app/fastapi_routes/mounts/essential_compat.py",
-    "app/fastapi_routes/mounts/infrastructure.py",
-    "app/fastapi_routes/mounts/lan.py",
-    "app/fastapi_routes/mounts/neuro.py",
-    "app/fastapi_routes/mounts/neuro_migration.py",
-    "app/fastapi_routes/domains/conversation/compat_routes.py",
-]
+# 全量 app/ 口径（2026-06-13 技术债清偿）；禁止再用窄 include 凑门禁
+source = ["app"]
+# 分支覆盖独立统计（铁律6，2026-06-14）。开启 branch 后 coverage 的 percent_covered
+# 变为"行+分支合并"指标；行/分支 floor 由 scripts/dev/coverage_ratchet.py 分别把关，
+# 标准测量命令传 --cov-fail-under=0 把门禁交给棘轮（见 ci-cd.yml + COVERAGE_RAMP.md）。
+branch = true
 omit = [
     "*/tests/*",
     "*/xcagi_tests/*",
@@ -309,27 +241,6 @@ omit = [
     "*/alembic/*",
     "*/venv/*",
     "*/virtualenv/*",
-    # COVERAGE_RAMP：非关键路径分阶段纳入（见 docs/reports/COVERAGE_RAMP.md）
-    "app/shell/*",
-    "app/desktop_runtime/*",
-    "app/mod_sdk/*",
-    "app/routes/*",
-    "app/enterprise/*",
-    "app/contexts/*",
-    "app/control/*",
-    "app/models/*",
-    "app/neuro_domains/*",
-    "app/ai_engines/*",
-    "app/utils/performance_*.py",
-    "app/utils/performance_monitor.py",
-    "app/utils/performance_initializer.py",
-    "app/utils/query_optimizer.py",
-    "app/utils/request_deduplicator.py",
-    "app/utils/excel_template_analyzer.py",
-    "app/utils/logging_utils.py",
-    "app/utils/openapi_path.py",
-    "app/utils/mobile_api.py",
-    "app/utils/template_export_utils.py",
 ]
 
 [tool.coverage.report]
@@ -344,9 +255,53 @@ exclude_lines = [
     "@abstractmethod",
     "if DEBUG:",
 ]
-# M3 ramp — see docs/reports/COVERAGE_RAMP.md
-fail_under = 70
+# fail_under 语义 = 纯**行覆盖率** floor（铁律1 全量 source=[app]，铁律6 分支单独由棘轮把关）。
+# 真实可复现基线（2026-06-14 全量口径 source=[app] + branch，.venv CI 等价依赖实测，1789 passed）：
+#   74,982 statements / 47,729 missed → 行覆盖 36.35%；分支 4,055/22,014 → 18.42%；合并 32.28%。
+#   906 文件被测量。覆盖率随可选重依赖（torch/cv2/paddleocr/sklearn 等）是否安装而波动——
+#   CI 与本基线均不装 ml extra，故 36% 是诚实可复现 SSOT；历史 58/60.63/66.33 来自富依赖环境，已退役。
+# 留 ~1pt 余量防止回退。开启 branch 后 coverage 自带门禁按合并指标拦截，故标准命令传
+# --cov-fail-under=0，由 coverage_ratchet.py --check 按行/分支分别守护（floor 只升不降）。
+fail_under = 51
 
 [tool.coverage.html]
 directory = "htmlcov"
 show_contexts = true
+
+# Phase 4 变异测试基础设施（mutmut · v10 线内迭代 · 2026-06-14）
+# 用法：pip install mutmut && mutmut run
+# 首轮聚焦 Phase 4 长尾纯函数目录；逐步扩大 source_paths。
+[tool.mutmut]
+source_paths = [
+    "app/http/",
+    "app/contexts/",
+    "app/di/",
+]
+runner = "python -m pytest tests/test_http tests/test_contexts tests/test_di -x --tb=no -q"
+dict_synonyms = ["Struct", "NamedTuple"]
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+# 桌面/CI 构建时 `pip install -e .` 仅暴露 app 包，避免 FHD 根目录杂项目录触发 setuptools 误判。
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]
+exclude = [
+    "tests*",
+    "frontend*",
+    "mods*",
+    "mods-admin-runtime*",
+    "mobile-android*",
+    "desktop*",
+    "admin-console*",
+    "sunbird-console*",
+    "templates*",
+    "alembic*",
+    "scripts*",
+    "docs*",
+    "XCAGI*",
+    "MODstore*",
+]
+namespaces = false

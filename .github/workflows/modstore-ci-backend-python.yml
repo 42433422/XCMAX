@@ -1,4 +1,5 @@
-# CI SSOT: generated from MODstore_deploy/.github/workflows/ci-backend-python.yml — edit root copy only.
+# CI SSOT: generated from MODstore_deploy/.github/workflows/ci-backend-python.yml — DO NOT edit here.
+# Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
 name: CI - Backend Python
 
 on:

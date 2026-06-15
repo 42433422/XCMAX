@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 _PWSH = shutil.which("pwsh")
+_POWERSHELL = shutil.which("powershell")
 
 
 REPO = Path(__file__).resolve().parents[1]
@@ -40,6 +41,9 @@ def test_stop_only_skip_kill_exits_quickly():
     assert r.returncode == 0, (r.returncode, r.stdout, r.stderr)
 
 
+@pytest.mark.skipif(
+    not _POWERSHELL, reason="Windows PowerShell 进程枚举测试；非 Windows 环境无 powershell"
+)
 def test_stop_existing_enumeration_and_path_reads_are_quick():
     """与 Stop-Existing 相同：Get-Process 通配符 + .Path 判定；不在单测里调 WMI（Get-CimInstance 可能整段阻塞，无法被 25s 预算打断）。"""
     repo = str(REPO).replace("'", "''")
@@ -78,7 +82,7 @@ Write-Host "OK enumMs=$($sw.ElapsedMilliseconds) pathMs=$pathMs repoHits=$n tota
         repo,
     )
     r = subprocess.run(
-        ["powershell", "-NoProfile", "-Command", script],
+        [_POWERSHELL, "-NoProfile", "-Command", script],
         cwd=str(REPO),
         capture_output=True,
         text=True,

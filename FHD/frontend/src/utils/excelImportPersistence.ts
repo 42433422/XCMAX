@@ -12,12 +12,12 @@ const STORAGE_PREFIX = 'xcagi_excel_pending_import_'
  */
 export interface PendingExcelImport {
   pending_id: string
-  records: Record<string, any>[]
+  records: Record<string, unknown>[]
   excel_analysis: {
     file_name: string
     file_path: string
     sheet_name: string
-    fields: any[]
+    fields: unknown[]
     summary: string
   }
   created_at: number

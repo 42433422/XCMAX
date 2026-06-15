@@ -12,12 +12,12 @@ shipment_app_service V2 - 事件驱动版本
 
 import logging
 from datetime import datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from app.neuro_bus.bus import get_neuro_bus
 from app.neuro_bus.events.base import EventPriority, NeuroEvent
 from app.neuro_bus.events.shipment_events import *
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 if TYPE_CHECKING:
     pass  # 根据实际需要添加类型引用
@@ -62,8 +62,8 @@ class ShipmentAppServiceV2:
             )
             self._bus.publish(event)
             return event
-        except OPERATIONAL_ERRORS as e:
-            logger.error(f"[ShipmentAppServiceV2] 发布事件失败: {e}")
+        except RECOVERABLE_ERRORS as e:
+            logger.error("[ShipmentAppServiceV2] 发布事件失败: %s", e)
             return None
 
     # ========== Level 2: 事件驱动核心方法 ==========
@@ -97,7 +97,7 @@ class ShipmentAppServiceV2:
 
             self._bus.publish(event)
 
-            logger.info(f"[ShipmentAppServiceV2] 发货单创建事件已发布: {shipment_id}")
+            logger.info("[ShipmentAppServiceV2] 发货单创建事件已发布: %s", shipment_id)
 
             return {
                 "success": True,
@@ -108,8 +108,8 @@ class ShipmentAppServiceV2:
                 "mode": "event_driven",  # Level 2 标志
             }
 
-        except OPERATIONAL_ERRORS as e:
-            logger.exception(f"[ShipmentAppServiceV2] 创建发货单失败: {e}")
+        except RECOVERABLE_ERRORS as e:
+            logger.exception("[ShipmentAppServiceV2] 创建发货单失败: %s", e)
             return {"success": False, "message": str(e), "error": str(e)}
 
     async def add_item_to_shipment(self, shipment_id: str, item: dict[str, Any]) -> dict[str, Any]:
@@ -146,8 +146,8 @@ class ShipmentAppServiceV2:
                 "mode": "event_driven",
             }
 
-        except OPERATIONAL_ERRORS as e:
-            logger.exception(f"[ShipmentAppServiceV2] 添加产品失败: {e}")
+        except RECOVERABLE_ERRORS as e:
+            logger.exception("[ShipmentAppServiceV2] 添加产品失败: %s", e)
             return {"success": False, "message": str(e)}
 
     async def print_shipment(
@@ -185,8 +185,8 @@ class ShipmentAppServiceV2:
                 "mode": "event_driven",
             }
 
-        except OPERATIONAL_ERRORS as e:
-            logger.exception(f"[ShipmentAppServiceV2] 打印发货单失败: {e}")
+        except RECOVERABLE_ERRORS as e:
+            logger.exception("[ShipmentAppServiceV2] 打印发货单失败: %s", e)
             return {"success": False, "message": str(e)}
 
     async def cancel_shipment(
@@ -223,8 +223,8 @@ class ShipmentAppServiceV2:
                 "mode": "event_driven",
             }
 
-        except OPERATIONAL_ERRORS as e:
-            logger.exception(f"[ShipmentAppServiceV2] 取消发货单失败: {e}")
+        except RECOVERABLE_ERRORS as e:
+            logger.exception("[ShipmentAppServiceV2] 取消发货单失败: %s", e)
             return {"success": False, "message": str(e)}
 
     async def delete_shipment(self, shipment_id: str) -> dict[str, Any]:
@@ -248,8 +248,8 @@ class ShipmentAppServiceV2:
                 "mode": "event_driven",
             }
 
-        except OPERATIONAL_ERRORS as e:
-            logger.exception(f"[ShipmentAppServiceV2] 删除发货单失败: {e}")
+        except RECOVERABLE_ERRORS as e:
+            logger.exception("[ShipmentAppServiceV2] 删除发货单失败: %s", e)
             return {"success": False, "message": str(e)}
 
     async def export_shipments(self, query: dict[str, Any], file_path: str) -> dict[str, Any]:
@@ -284,8 +284,8 @@ class ShipmentAppServiceV2:
                 "mode": "event_driven",
             }
 
-        except OPERATIONAL_ERRORS as e:
-            logger.exception(f"[ShipmentAppServiceV2] 导出发货单失败: {e}")
+        except RECOVERABLE_ERRORS as e:
+            logger.exception("[ShipmentAppServiceV2] 导出发货单失败: %s", e)
             return {"success": False, "message": str(e)}
 
     # ========== 通用命令方法 (向后兼容) ==========
@@ -311,7 +311,7 @@ class ShipmentAppServiceV2:
         }
 
         if command_type in command_map:
-            return await command_map[command_type](payload)
+            return cast("dict[str, Any]", await command_map[command_type](payload))
 
         # 未知命令：直接发布原始事件
         try:
@@ -335,8 +335,8 @@ class ShipmentAppServiceV2:
                 "mode": "event_driven",
             }
 
-        except OPERATIONAL_ERRORS as e:
-            logger.exception(f"[ShipmentAppServiceV2] 执行命令失败: {e}")
+        except RECOVERABLE_ERRORS as e:
+            logger.exception("[ShipmentAppServiceV2] 执行命令失败: %s", e)
             return {"success": False, "message": str(e)}
 
 

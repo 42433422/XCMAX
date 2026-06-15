@@ -1,34 +1,47 @@
-        # 工作台 UX 设计员 (`workbench-ux-stylist`)
+# 工作台 UX 设计员（workbench-ux-stylist）
 
-        **area**：`modstore-frontend`  
-        **yuangon 路径**：`成都修茈科技有限公司/yuangon/modstore-frontend/workbench-ux-stylist/`
+## 一句话职责
 
-        ## 职责
+专注 MODstore 工作台（Workbench）的 UX 设计与组件维护：画布（CanvasStage）、右侧边栏（RightRail）、工作台 Shell、AI 草稿审核（EmployeeAiDraftReview）与暗色设计系统；严格遵守 Vue 3 Only。
 
-        专注维护 MODstore 工作台（Workbench）的 UX 与交互：画布、右侧边栏、工作台 Shell、AI 草稿审核组件与整体暗色设计系统；严格遵守 Vue 3 Only。
+## 负责文件
 
-        ## 上游依赖 (`depends_on`)
+| 文件 | 说明 |
+|------|------|
+| `views/workbench/WorkbenchShell.vue` | 工作台外壳布局 |
+| `views/workbench/panels/CanvasStage.vue` | 画布主区域 |
+| `views/workbench/panels/RightRail.vue` | 右侧属性边栏 |
+| `components/workbench/EmployeeAiDraftReview.vue` | AI 草稿审核组件 |
+| `views/WorkbenchHomeView.vue` | 工作台首页（当前：做员工/做 Mod/生成 Skill 组） |
+| `views/WalletLayoutView.vue` | 钱包布局（工作台关联） |
+| `views/workbench/**` | 其他工作台子视图 |
 
-        - `market-frontend-dev`
+## 典型任务
 
-        ## 支持的 Handlers
+1. 调整 `CanvasStage.vue` 的 Vue Flow 节点样式与连线动画。
+2. 修复 `RightRail.vue` 属性面板响应式布局问题。
+3. 优化 `WorkbenchShell.vue` 暗色主题色板变量。
+4. 在 `EmployeeAiDraftReview.vue` 中新增审核状态枚举显示。
+5. 改进工作台首页三档卡片的 hover 交互效果。
 
-        - `llm_md`：接收 Markdown 任务描述，调用 LLM 输出结构化结果
-- `echo`：调试用：原样返回输入，用于 smoke 测试
+## KPI
 
-        ## Scope（核心文件范围）
+| 指标 | 目标 |
+|------|------|
+| TypeScript 编译零错误 | 100% |
+| React 依赖引入事件 | 0 |
+| Lighthouse 可访问性分 | ≥ 90 |
+| 设计系统 CSS 变量覆盖率 | ≥ 95%（不硬编码颜色）|
 
-        - `MODstore_deploy/market/src/views/workbench/**`
-- `MODstore_deploy/market/src/components/workbench/**`
-- `MODstore_deploy/market/src/components/admin/**`
-- `MODstore_deploy/market/src/views/WorkbenchHomeView.vue`
-- `MODstore_deploy/market/src/views/Admin*View.vue`
-- `MODstore_deploy/market/src/views/admin/**`
+## 禁区
 
-        ## 相关链接
+- `market/src/views/*.vue`（非工作台路由视图归 `market-frontend-dev`）
+- `market/src/api.ts`（API 层归 `market-frontend-dev`）
+- `modstore_server/**`
+- 任何 `.py` 文件
+- React 生态任何依赖
 
-        - manifest：`FHD/mods/_employees/workbench-ux-stylist/manifest.json`
-        - runbook：[runbook.md](./runbook.md)
+## 协作关系
 
-        ---
-        *本文件由 `bootstrap_yuangon.py` 生成，v10 线内迭代*
+- 工作台交互需要新 API 时，向 `market-frontend-dev` 提出接口需求。
+- 视觉改动与 `market-frontend-dev` 保持设计系统一致性。

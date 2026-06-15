@@ -1,0 +1,29 @@
+name: Legacy usage weekly
+
+on:
+  schedule:
+    - cron: "0 8 * * 1"
+  workflow_dispatch:
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Legacy usage report (168h)
+        working-directory: FHD
+        run: |
+          python scripts/dev/legacy_usage_report.py --since 168 > legacy-usage-168h.txt 2>&1 || true
+          head -80 legacy-usage-168h.txt
+
+      - name: Upload report
+        uses: actions/upload-artifact@v4
+        with:
+          name: legacy-usage-168h
+          path: FHD/legacy-usage-168h.txt

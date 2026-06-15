@@ -11,11 +11,11 @@ from __future__ import annotations
 import json
 import logging
 import re
-from typing import Any
+from typing import Any, cast
 
 import httpx
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 from .types import PlanGraph, WorkflowNode
 
@@ -38,7 +38,7 @@ def _resolve_template(value: Any, ctx: dict[str, Any]) -> Any:
                 if isinstance(cur, dict) and part in cur:
                     cur = cur[part]
                 else:
-                    return m.group(0)
+                    return cast("str", m.group(0))
             return str(cur)
 
         return _VAR_PATTERN.sub(repl, value)
@@ -108,7 +108,7 @@ def execute_http_request_node(
                 )
             try:
                 data = resp.json()
-            except OPERATIONAL_ERRORS:
+            except RECOVERABLE_ERRORS:
                 data = {"raw": resp.text}
             return {
                 "success": resp.status_code < 400,
@@ -215,17 +215,17 @@ def _set_by_path(obj: dict[str, Any], path: str, value: Any) -> None:
 def _eval_condition(actual: Any, op: str, expected: Any) -> bool:
     try:
         if op == "eq":
-            return actual == expected
+            return cast("bool", actual == expected)
         if op == "neq":
-            return actual != expected
+            return cast("bool", actual != expected)
         if op == "gt":
-            return actual > expected
+            return cast("bool", actual > expected)
         if op == "lt":
-            return actual < expected
+            return cast("bool", actual < expected)
         if op == "gte":
-            return actual >= expected
+            return cast("bool", actual >= expected)
         if op == "lte":
-            return actual <= expected
+            return cast("bool", actual <= expected)
         if op == "contains":
             return expected in str(actual or "")
     except (TypeError, ValueError):

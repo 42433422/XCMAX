@@ -1,0 +1,13 @@
+{
+  "task": "export-employee-pack",
+  "description": "将 yuangon 中的员工定义导出为 .xcemp 并入库",
+  "input": {
+    "employee_path": "yuangon/site-and-marketing/site-content-editor",
+    "output_dir": "MODstore_deploy/modstore_server/market_files/",
+    "register": true
+  },
+  "validation": {
+    "schema_valid": true,
+    "registry_check": true
+  }
+}

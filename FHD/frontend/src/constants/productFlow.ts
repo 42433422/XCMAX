@@ -2,6 +2,8 @@
  * 可交付宿主标准用户流程（与 docs/guides/PRODUCT_USER_FLOW.md 对齐）
  */
 
+import { ref, type Ref } from 'vue'
+
 export const LS_PRODUCT_FLOW_COMPLETED = 'xcagi_product_flow_completed'
 export const LS_PRODUCT_FLOW_HOST_ACK = 'xcagi_product_flow_host_ack'
 
@@ -44,7 +46,7 @@ export const PRODUCT_FLOW_STEPS: ProductFlowStepMeta[] = [
     id: 'host-pack',
     index: 3,
     title: '补基础线',
-    subtitle: '按所选行业查看还缺哪些基础 Mod，按需装齐（可跳过）',
+    subtitle: '装侧栏宿主能力卡片（桥接 Mod），非 AI 员工；定制 Mod 才补员工',
   },
   {
     id: 'done',
@@ -54,14 +56,24 @@ export const PRODUCT_FLOW_STEPS: ProductFlowStepMeta[] = [
   },
 ]
 
-/** 引导「行业定型」当前开放可选（其余仅展示） */
+/** 引导「行业定型」当前开放可选（其余仅展示）；运行时以服务器 catalog 为准 */
 export const ONBOARDING_OPEN_INDUSTRY_IDS = ['涂料', '考勤'] as const
 
 export type OnboardingOpenIndustryId = (typeof ONBOARDING_OPEN_INDUSTRY_IDS)[number]
 
+let runtimeOpenIndustryIds: readonly string[] | null = null
+
+export function setRuntimeOnboardingOpenIndustryIds(ids: string[] | null | undefined): void {
+  runtimeOpenIndustryIds = ids?.length ? ids : null
+}
+
+export function readRuntimeOnboardingOpenIndustryIds(): readonly string[] {
+  return runtimeOpenIndustryIds ?? ONBOARDING_OPEN_INDUSTRY_IDS
+}
+
 export function isOnboardingIndustryOpen(industryId: string): boolean {
   const id = String(industryId || '').trim()
-  return (ONBOARDING_OPEN_INDUSTRY_IDS as readonly string[]).includes(id)
+  return readRuntimeOnboardingOpenIndustryIds().includes(id)
 }
 
 export function defaultOnboardingIndustryId(): OnboardingOpenIndustryId {
@@ -76,7 +88,8 @@ export function industryBaselineHint(industryId: string): string {
       '通用场景：工作流员工、Planner 工具、企微与局域网入口等基础线，用到哪补哪即可。',
     涂料: '涂料/批发类：在通用基础线上，出货、客户、标签打印等行业 Mod 可按需从扩展市场安装。',
     批发: '批发分销：基础线装齐后，库存与客户相关 Mod 建议从扩展市场按需加载。',
-    考勤: '考勤排班：基础线装齐后，排班与考勤单等行业 Mod 可按需安装。',
+    考勤:
+      '考勤排班：先补 ERP 门面与表格工具侧栏，再装行业包；部门/人员与 AI 员工在账号定制 Mod。',
     烤禽: '烤禽冷链：基础线装齐后，配送与货品管理 Mod 可按需安装。',
     电商: '电商零售：基础线装齐后，订单与 SKU 相关 Mod 可按需安装。',
     餐饮: '餐饮门店：基础线装齐后，食材与订货 Mod 可按需安装。',
@@ -101,6 +114,9 @@ export function markProductFlowCompleted(): void {
   } catch {
     /* ignore */
   }
+  void import('@/utils/workspacePrefsApi').then(({ queueWorkspacePrefsSync }) => {
+    queueWorkspacePrefsSync({ product_flow_completed: true })
+  }).catch(() => {})
 }
 
 export function readHostPackAcknowledged(): boolean {
@@ -112,13 +128,35 @@ export function readHostPackAcknowledged(): boolean {
   }
 }
 
+/**
+ * 响应式「第三步补基础线已确认」标记：供侧栏等在引导完成后即时长出行业菜单，
+ * 无需刷新页面。同页 mark 时直接更新；跨标签页经 storage 事件同步。
+ */
+const hostPackAckRef: Ref<boolean> = ref(readHostPackAcknowledged())
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (e) => {
+    if (e.key === LS_PRODUCT_FLOW_HOST_ACK) {
+      hostPackAckRef.value = readHostPackAcknowledged()
+    }
+  })
+}
+
+export function hostPackAcknowledgedRef(): Ref<boolean> {
+  return hostPackAckRef
+}
+
 export function markHostPackAcknowledged(): void {
+  hostPackAckRef.value = true
   if (typeof localStorage === 'undefined') return
   try {
     localStorage.setItem(LS_PRODUCT_FLOW_HOST_ACK, '1')
   } catch {
     /* ignore */
   }
+  void import('@/utils/workspacePrefsApi').then(({ queueWorkspacePrefsSync }) => {
+    queueWorkspacePrefsSync({ host_pack_acknowledged: true })
+  }).catch(() => {})
 }
 
 export function parseFlowStepQuery(raw: unknown): ProductFlowStepId {

@@ -1,5 +1,6 @@
-import api from './core';
+import api, { ApiError } from './core';
 import { resolveLanApiPath } from '@/utils/lanPaths';
+import { asRecord, asArray, asString } from '@/utils/typeGuards'
 
 const lp = (path: string) => resolveLanApiPath(path);
 
@@ -200,9 +201,8 @@ export const lanGateApi = {
   async updateSettings(payload: LanSettingsUpdate): Promise<LanSettingsView> {
     try {
       return await api.post<LanSettingsView>(lp('/api/lan/admin/settings'), payload);
-    } catch (error: any) {
-      // 兼容旧服务端只接受 PUT 的情况，避免页面保存直接报 405。
-      if (Number(error?.status) === 405) {
+    } catch (error: unknown) {
+      if (error instanceof ApiError && error.status === 405) {
         return api.put<LanSettingsView>(lp('/api/lan/admin/settings'), payload);
       }
       throw error;

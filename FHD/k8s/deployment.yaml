@@ -36,6 +36,13 @@ spec:
           capabilities:
             drop:
               - ALL
+        # Full reliability/env baseline (FHD_ENV + NeuroBus DEDUP/CIRCUIT/RATE_LIMIT/
+        # TRACE/LIFELINE/DLQ_AUTO/SLA_LOG + HTTP/auth rate limits) sourced from the
+        # ConfigMap so every apply path (GitOps / kubectl apply / Argo Rollouts)
+        # enables it — not only the imperative `kubectl set env` in fhd-deploy.yml.
+        envFrom:
+        - configMapRef:
+            name: xcagi-config
         env:
         - name: XCAGI_ENV
           value: "production"
@@ -49,13 +56,19 @@ spec:
             secretKeyRef:
               name: xcagi-secrets
               key: deepseek_api_key
+        - name: XCAGI_GUNICORN_WORKERS
+          value: "4"
+        - name: XCAGI_QUERY_CACHE_BACKEND
+          value: "redis"
+        - name: XCAGI_CHAT_STREAM_MAX_PER_POD
+          value: "50"
         resources:
           requests:
-            cpu: "250m"
-            memory: "512Mi"
+            cpu: "500m"
+            memory: "1Gi"
           limits:
-            cpu: "1000m"
-            memory: "2Gi"
+            cpu: "2000m"
+            memory: "4Gi"
         livenessProbe:
           httpGet:
             path: /health/liveness

@@ -22,7 +22,7 @@ from app.db.models import (
 from app.db.session import get_db
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
 from app.services.inventory_service import InventoryService
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -94,9 +94,9 @@ class PurchaseService(NeuroEventPublisherMixin):
                 db.commit()
                 db.refresh(supplier)
                 return {"success": True, "data": self._model_to_dict(supplier)}
-            except OPERATIONAL_ERRORS as e:
+            except RECOVERABLE_ERRORS as e:
                 db.rollback()
-                logger.error(f"创建供应商失败: {e}")
+                logger.error("创建供应商失败: %s", e)
                 return {"success": False, "message": str(e)}
 
     def update_supplier(self, supplier_id: int, data: dict[str, Any]) -> dict[str, Any]:
@@ -114,9 +114,9 @@ class PurchaseService(NeuroEventPublisherMixin):
                 db.commit()
                 db.refresh(supplier)
                 return {"success": True, "data": self._model_to_dict(supplier)}
-            except OPERATIONAL_ERRORS as e:
+            except RECOVERABLE_ERRORS as e:
                 db.rollback()
-                logger.error(f"更新供应商失败: {e}")
+                logger.error("更新供应商失败: %s", e)
                 return {"success": False, "message": str(e)}
 
     def delete_supplier(self, supplier_id: int) -> dict[str, Any]:
@@ -128,9 +128,9 @@ class PurchaseService(NeuroEventPublisherMixin):
                 supplier.status = "deleted"
                 db.commit()
                 return {"success": True, "message": "供应商已删除"}
-            except OPERATIONAL_ERRORS as e:
+            except RECOVERABLE_ERRORS as e:
                 db.rollback()
-                logger.error(f"删除供应商失败: {e}")
+                logger.error("删除供应商失败: %s", e)
                 return {"success": False, "message": str(e)}
 
     def get_purchase_orders(
@@ -253,9 +253,9 @@ class PurchaseService(NeuroEventPublisherMixin):
                     "data": self._model_to_dict(order),
                     "message": "采购订单创建成功",
                 }
-            except OPERATIONAL_ERRORS as e:
+            except RECOVERABLE_ERRORS as e:
                 db.rollback()
-                logger.error(f"创建采购订单失败: {e}")
+                logger.error("创建采购订单失败: %s", e)
                 return {"success": False, "message": str(e)}
 
     def update_purchase_order(self, order_id: int, data: dict[str, Any]) -> dict[str, Any]:
@@ -314,9 +314,9 @@ class PurchaseService(NeuroEventPublisherMixin):
                 db.commit()
                 db.refresh(order)
                 return {"success": True, "data": self._model_to_dict(order)}
-            except OPERATIONAL_ERRORS as e:
+            except RECOVERABLE_ERRORS as e:
                 db.rollback()
-                logger.error(f"更新采购订单失败: {e}")
+                logger.error("更新采购订单失败: %s", e)
                 return {"success": False, "message": str(e)}
 
     def approve_purchase_order(self, order_id: int, approver: str) -> dict[str, Any]:
@@ -339,9 +339,9 @@ class PurchaseService(NeuroEventPublisherMixin):
 
                 db.commit()
                 return {"success": True, "message": "审核成功"}
-            except OPERATIONAL_ERRORS as e:
+            except RECOVERABLE_ERRORS as e:
                 db.rollback()
-                logger.error(f"审核采购订单失败: {e}")
+                logger.error("审核采购订单失败: %s", e)
                 return {"success": False, "message": str(e)}
 
     def cancel_purchase_order(self, order_id: int) -> dict[str, Any]:
@@ -362,9 +362,9 @@ class PurchaseService(NeuroEventPublisherMixin):
 
                 db.commit()
                 return {"success": True, "message": "订单已取消"}
-            except OPERATIONAL_ERRORS as e:
+            except RECOVERABLE_ERRORS as e:
                 db.rollback()
-                logger.error(f"取消采购订单失败: {e}")
+                logger.error("取消采购订单失败: %s", e)
                 return {"success": False, "message": str(e)}
 
     def create_purchase_inbound(self, data: dict[str, Any]) -> dict[str, Any]:
@@ -429,7 +429,7 @@ class PurchaseService(NeuroEventPublisherMixin):
                         remark=f"采购入库单: {inbound_no}",
                     )
                     if not result.get("success"):
-                        logger.warning(f"库存入库失败: {result.get('message')}")
+                        logger.warning("库存入库失败: %s", result.get('message'))
 
                 inbound.total_amount = total_amount
                 inbound.status = "completed"
@@ -444,9 +444,9 @@ class PurchaseService(NeuroEventPublisherMixin):
                     "data": self._model_to_dict(inbound),
                     "message": "入库成功",
                 }
-            except OPERATIONAL_ERRORS as e:
+            except RECOVERABLE_ERRORS as e:
                 db.rollback()
-                logger.error(f"创建采购入库单失败: {e}")
+                logger.error("创建采购入库单失败: %s", e)
                 return {"success": False, "message": str(e)}
 
     def _update_order_received_quantity(self, db, order_id: int):

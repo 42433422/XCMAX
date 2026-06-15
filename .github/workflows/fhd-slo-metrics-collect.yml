@@ -1,4 +1,5 @@
-# CI SSOT: generated from FHD/.github/workflows/slo-metrics-collect.yml — edit root copy only.
+# CI SSOT: generated from FHD/.github/workflows/slo-metrics-collect.yml — DO NOT edit here.
+# Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
 name: SLO metrics collect (daily)
 
 on:
@@ -60,6 +61,10 @@ jobs:
           PY
           }
 
+      - name: Collect DORA metrics
+        run: |
+          python3 scripts/observability/collect_dora.py --window-days 7
+
       - name: Ensure deploy_events.jsonl exists
         run: |
           if [ ! -f metrics/deploy_events.jsonl ]; then
@@ -71,6 +76,6 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add metrics/slo-measured-*.json metrics/sla-snapshot.json metrics/deploy_events.jsonl
+          git add metrics/slo-measured-*.json metrics/sla-snapshot.json metrics/deploy_events.jsonl metrics/dora-*.json
           git diff --staged --quiet || git commit -m "chore(metrics): slo measured $(date -u +%Y%m%d)"
           git push || true

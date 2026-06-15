@@ -17,7 +17,6 @@ class AuthInterceptor @Inject constructor(
     override fun intercept(chain: Interceptor.Chain): Response {
         val fhdToken = runBlocking { sessionStore.fhdAccessFlow.first() }
         val marketToken = runBlocking { sessionStore.marketTokenFlow.first() }
-        val userId = runBlocking { sessionStore.userIdFlow.first() }
         val url = chain.request().url.toString()
         val modstoreHost = BuildConfig.MODSTORE_BASE_URL.trimEnd('/')
         val isModstore = url.startsWith(modstoreHost)
@@ -34,9 +33,6 @@ class AuthInterceptor @Inject constructor(
             .header("X-XCAGI-SKU", ProductSkuConfig.sku)
         if (bearer.isNotBlank()) {
             builder.header("Authorization", "Bearer $bearer")
-        }
-        if (userId > 0) {
-            builder.header("X-User-ID", userId.toString())
         }
         return chain.proceed(builder.build())
     }

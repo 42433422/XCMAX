@@ -1,0 +1,54 @@
+{
+  "id": "taiyangniao-pro",
+  "name": "太阳鸟 PRO",
+  "version": "1.0.0",
+  "author": "XCAGI",
+  "description": "太阳鸟客户定制：部门/人员管理、考勤表转换、排班数据处理与考勤 AI 员工。",
+  "primary": true,
+  "dependencies": {
+    "xcagi": ">=1.0.0",
+    "attendance-industry": ">=1.0.0"
+  },
+  "backend": {
+    "entry": "blueprints",
+    "init": "mod_init"
+  },
+  "frontend": {
+    "routes": "frontend/routes",
+    "pro_entry_path": "/taiyangniao-pro",
+    "menu": [
+      {
+        "id": "taiyangniao-pro-home",
+        "label": "考勤表转换",
+        "icon": "fa-file-excel-o",
+        "path": "/taiyangniao-pro"
+      }
+    ],
+    "menu_overrides": [
+      {
+        "key": "products",
+        "label": "人员管理"
+      },
+      {
+        "key": "customers",
+        "label": "部门管理"
+      }
+    ]
+  },
+  "onboarding": {
+    "custom_line_hint": "部门/人员管理、考勤表转换与考勤 AI 员工"
+  },
+  "hooks": {},
+  "workflow_employees": [
+    {
+      "id": "attendance_ai",
+      "label": "考勤ai助手",
+      "panel_title": "工作流 · 考勤ai助手",
+      "panel_summary": "协助处理出勤记录、异常说明与排班相关问答；后续可接入考勤系统 API 与状态轮询。",
+      "workflow_placeholder": true
+    }
+  ],
+  "comms": {
+    "exports": []
+  }
+}

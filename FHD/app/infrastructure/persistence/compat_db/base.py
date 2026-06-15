@@ -14,7 +14,7 @@ from fastapi import HTTPException, Request
 
 from app.infrastructure.auth.db_token import verify_db_write_token_header
 from app.infrastructure.db.sync_engine import get_sync_engine
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -154,11 +154,11 @@ def _insp_table_exists(insp, table_name: str) -> bool:
     if callable(ht):
         try:
             return bool(ht(table_name))
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             logger.debug("suppressed exception", exc_info=True)
     try:
         return table_name in insp.get_table_names()
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         return False
 
 
@@ -246,7 +246,7 @@ def _business_mod_json_block() -> dict | None:
             "success": False,
             "message": business_data_hidden_reason() or "扩展 Mod 未就绪，业务接口已关闭。",
         }
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         return None
 
 
@@ -264,7 +264,7 @@ def _customers_write_raise(request: Request) -> None:
             )
     except HTTPException:
         raise
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         raise HTTPException(
             status_code=503,
             detail=f"无法校验 PostgreSQL 库结构: {e}",
@@ -285,7 +285,7 @@ def _products_write_raise(request: Request) -> None:
             )
     except HTTPException:
         raise
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         raise HTTPException(
             status_code=503,
             detail=f"无法校验 PostgreSQL 库结构: {e}",
@@ -299,3 +299,23 @@ def _customer_body_name_contact(body: dict) -> tuple[str, str, str, str]:
     ph = str(body.get("contact_phone") or "").strip()
     addr = str(body.get("contact_address") or body.get("address") or "").strip()
     return name, cp, ph, addr
+
+
+def _sql_delete_where(table: str, where_sql: str) -> str:
+    return "DELETE FROM " + table + " WHERE " + where_sql
+
+
+def _sql_update_set_where(table: str, set_clause: str, where_sql: str) -> str:
+    return "UPDATE " + table + " SET " + set_clause + " WHERE " + where_sql
+
+
+def _sql_select_from_where(columns: str, table: str, where_sql: str) -> str:
+    return "SELECT " + columns + " FROM " + table + " WHERE " + where_sql
+
+
+def _sql_insert_returning(table: str, cols_sql: str, vals_sql: str) -> str:
+    return "INSERT INTO " + table + " (" + cols_sql + ") VALUES (" + vals_sql + ") RETURNING id"
+
+
+def _sql_statement_timeout_ms(ms: int) -> str:
+    return "SET statement_timeout TO " + str(int(ms))

@@ -85,6 +85,9 @@ jobs:
       - name: Verify v10 version anchors
         run: python scripts/dev/verify_version_anchors.py
 
+      - name: Layer debt ratchet (services/ frozen, routes→application only)
+        run: python scripts/dev/check_layer_ratchet.py
+
       - name: Ruff lint (app + tests)
         run: ruff check app/ tests/
 

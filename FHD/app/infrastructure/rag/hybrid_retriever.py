@@ -11,9 +11,9 @@ import re
 from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -139,7 +139,7 @@ class HybridRetriever:
         if self._embedder is not None:
             try:
                 self._embeddings = [self._embedder(c.text) for c in chunks]
-            except OPERATIONAL_ERRORS as e:
+            except RECOVERABLE_ERRORS as e:
                 logger.warning("embedder 计算失败，混合检索降级为 BM25: %s", e)
                 self._embeddings = []
         else:
@@ -168,7 +168,7 @@ class HybridRetriever:
                     key=lambda i: sims[i],
                     reverse=True,
                 )[: self._top_k_vector]
-            except OPERATIONAL_ERRORS as e:
+            except RECOVERABLE_ERRORS as e:
                 logger.warning("向量检索失败: %s", e)
 
         # 3) RRF
@@ -211,4 +211,4 @@ class HybridRetriever:
         nb = sum(x * x for x in b) ** 0.5
         if na == 0 or nb == 0:
             return 0.0
-        return dot / (na * nb)
+        return cast("float", dot / (na * nb))

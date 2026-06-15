@@ -27,14 +27,19 @@ vi.mock('@/stores/industry', () => ({
 }))
 import { setActivePinia, createPinia } from 'pinia'
 import { useModsStore } from '@/stores/mods'
-import { XCAGI_ACTIVE_EXTENSION_MOD_ID_KEY } from '@/utils/xcagiStorageKeys'
+import { scopedActiveExtensionModStorageKey, writeActiveExtensionModIdToStorage } from '@/utils/xcagiStorageKeys'
+import { setTenantStorageScopeCache } from '@/utils/tenantStorageScope'
 import { CLIENT_PRIMARY_ERP_MOD_ID } from '@/constants/genericModPack'
+
+const TEST_SCOPE = 'tenant:1'
+const activeModStorageKey = () => scopedActiveExtensionModStorageKey(TEST_SCOPE)
 
 describe('mods store smoke', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.stubGlobal('fetch', vi.fn())
-    localStorage.removeItem(XCAGI_ACTIVE_EXTENSION_MOD_ID_KEY)
+    setTenantStorageScopeCache(TEST_SCOPE)
+    localStorage.removeItem(activeModStorageKey())
   })
 
   it('initialize 成功后写入 mods 并标记 isLoaded', async () => {
@@ -77,7 +82,7 @@ describe('mods store smoke', () => {
   })
 
   it('登录权益覆盖 localStorage 中的旧 activeModId', async () => {
-    localStorage.setItem(XCAGI_ACTIVE_EXTENSION_MOD_ID_KEY, 'xcagi-erp-domain-bridge')
+    writeActiveExtensionModIdToStorage('xcagi-erp-domain-bridge', TEST_SCOPE)
     global.fetch
       .mockResolvedValueOnce({
         ok: true,
@@ -115,11 +120,11 @@ describe('mods store smoke', () => {
     })
 
     expect(store.activeModId).toBe('taiyangniao-pro')
-    expect(localStorage.getItem(XCAGI_ACTIVE_EXTENSION_MOD_ID_KEY)).toBe('taiyangniao-pro')
+    expect(localStorage.getItem(activeModStorageKey())).toBe('taiyangniao-pro')
   })
 
   it('SUNBIRD 账号无 entitled 时仍强制太阳鸟 Mod', async () => {
-    localStorage.setItem(XCAGI_ACTIVE_EXTENSION_MOD_ID_KEY, 'xcagi-erp-domain-bridge')
+    writeActiveExtensionModIdToStorage('xcagi-erp-domain-bridge', TEST_SCOPE)
     const modListPayload = {
       ok: true,
       json: async () => ({

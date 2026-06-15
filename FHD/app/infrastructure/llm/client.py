@@ -74,7 +74,7 @@ def set_mode(mode: str, model: str | None = None) -> None:
     if mode not in ("online", "offline"):
         raise ValueError("mode must be 'online' or 'offline'")
     with _mode_lock:
-        _mode = mode  # type: ignore[assignment]
+        _mode = mode
         if mode == "offline":
             if model is not None:
                 s = str(model).strip()

@@ -1,55 +1,46 @@
-        # Runbook：需求接入员 (`intake-dispatcher`)
+# Runbook — 需求接入员
 
-        ## 职责摘要
+| 字段 | 值 |
+|------|----|
+| 员工 ID | `intake-dispatcher` |
+| 负责区域 | `platform-core` |
+| 最后更新 | 2026-05-08 |
+| 应急联系 | admin |
 
-        把外部输入（admin 自然语言下达、邮件、微信、客服工单、`mianshi/` 候补包、外部 webhook）规整成结构化 task，写入「待派发」队列；本岗只做语义解析与归一化，不直接选员工、不直接改业务代码。
+## 日常巡检
 
-        ## 上游 Handoff 契约
+### 巡检 1：待派发队列长度
 
-        ### handoff: doc-knowledge-curator → 本岗
-- **触发条件**：`employee.task.done:doc-knowledge-curator`
-- **输入**：待补充（参见 `yuangon/**/doc-knowledge-curator/runbook.md`）
-- **门禁**：依赖完成前本岗不得继续
+```bash
+# 期望：< 50；持续 > 100 说明 task-router-officer 消费跟不上
+sqlite3 MODstore_deploy/var/modstore.db "SELECT COUNT(*) FROM intake_tasks WHERE status='pending';"
+```
 
-### handoff: task-router-officer → 本岗
-- **触发条件**：`employee.task.done:task-router-officer`
-- **输入**：待补充（参见 `yuangon/**/task-router-officer/runbook.md`）
-- **门禁**：依赖完成前本岗不得继续
+### 巡检 2：intent=unknown 比例
 
+```bash
+sqlite3 MODstore_deploy/var/modstore.db "SELECT intent, COUNT(*) FROM intake_tasks WHERE created_at > datetime('now','-1 day') GROUP BY intent;"
+```
 
-        ## Handlers
+### 巡检 3：mianshi/ 候补包是否被监听
 
-        | Handler | 说明 |
-        |---------|------|
-        | `llm_md` | 接收 Markdown 任务描述，调用 LLM 输出结构化结果 |
-| `echo` | 调试用：原样返回输入，用于 smoke 测试 |
-| `agent` | 启动多步 agent 执行链 |
+```bash
+ls -la mianshi/*.xcemp
+# 对照 intake_tasks 中 source='candidate_pack' 的最新一条时间戳，差异 > 10 分钟报警
+```
 
-        ## 核心 Scope
+## 异常处置
 
-        - `MODstore_deploy/modstore_server/eventing/intake/**`
-- `MODstore_deploy/modstore_server/api/intake_api.py`
-- `MODstore_deploy/modstore_server/webhook_events/intake/**`
-- `mianshi/**`
-- `yuangon/platform-core/intake-dispatcher/**`
-- `MODstore_deploy/docs/yuangon-process-loop.md`
+### 异常 1：归一化失败率高（unknown > 30%）
+- 升级到动态阶段，让 LLM 给出 `intent` 推断。
+- 同步把"无法识别"的样本推给 `doc-knowledge-curator` 完善知识库。
 
-        ## 故障处置
+### 异常 2：高风险任务被误判为 low
+- 立即升级给 admin。
+- 在 `skill-intake-normalize.md` 的"风险词典"追加触发词。
 
-        | 场景 | 处置 |
-        |------|------|
-        | LLM 调用失败 | retry 2 次 → 上报 `employee.task.failed:intake-dispatcher` |
-        | 上游依赖未完成 | 等待 `employee.task.done:<dep>` 事件，不自行推进 |
-        | scope 文件不存在 | 报告缺口，待确认后再执行，不编造路径 |
-        | 版本锚点不对齐 | 运行 `verify_version_anchors.py`，修复后继续 |
+## ESkill 动态阶段触发记录
 
-        ## 验收检查清单
-
-        - [ ] `employee.yaml.depends_on` 与 manifest 根级一致
-        - [ ] `actions.handlers` 三方一致（yaml / manifest / `_DISPATCH`）
-        - [ ] scope_globs 路径存在（或标注规划中）
-        - [ ] `employee_pack_consistency_warnings` 无 handler warning
-        - [ ] echo smoke 测试通过
-
-        ---
-        *本文件由 `bootstrap_yuangon.py` 生成，v10 线内迭代*
+| 日期 | 触发原因 | patch_id | 结果 | 是否固化 |
+|------|----------|----------|------|----------|
+| — | — | — | — | — |

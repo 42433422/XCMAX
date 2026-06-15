@@ -7,7 +7,7 @@ import logging
 import os
 import re
 from io import BytesIO
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from app.infrastructure.llm.client import (
     get_openai_compatible_client,
@@ -123,12 +123,12 @@ def draft_document_spec(user_prompt: str, output: Literal["docx", "xlsx"]) -> di
     raw = (resp.choices[0].message.content or "").strip()
     raw = _strip_json_fence(raw)
     try:
-        return json.loads(raw)
+        return cast("dict[str, Any]", json.loads(raw))
     except json.JSONDecodeError:
         blob = _extract_first_json_object(raw)
         if blob:
             try:
-                return json.loads(blob)
+                return cast("dict[str, Any]", json.loads(blob))
             except json.JSONDecodeError:
                 logger.warning("document spec JSON parse failed (extracted), head=%s", blob[:400])
         else:

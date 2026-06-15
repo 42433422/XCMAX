@@ -101,7 +101,7 @@ class TestGetById:
 
     def test_exception_returns_error(self) -> None:
         svc = CustomerApplicationService()
-        with patch.object(svc, "_get_session", side_effect=Exception("boom")):
+        with patch.object(svc, "_get_session", side_effect=RuntimeError("boom")):
             out = svc.get_by_id(1)
         assert out["success"] is False
         assert out["data"] is None
@@ -208,8 +208,6 @@ class TestResetEngine:
         from app.application.customer_app_service import reset_customers_engine
 
         registry = MagicMock()
-        with patch(
-            "app.application.customer_app_service.get_service_registry", return_value=registry
-        ):
+        with patch("app.di.registry.get_service_registry", return_value=registry):
             reset_customers_engine()
         registry.invalidate_customer_application_service.assert_called_once()

@@ -11,6 +11,7 @@
         expanded: isExpanded,
       }"
       :data-view="item.key"
+      :data-tour="`sidebar-${item.key}`"
       :aria-label="item.name"
       :aria-current="isActive && !hasActiveChild ? 'page' : undefined"
       :aria-expanded="hasChildren ? isExpanded : undefined"
@@ -24,6 +25,9 @@
         <i class="fa" :class="item.iconClass"></i>
       </span>
       <span>{{ item.name }}</span>
+      <span v-if="item.key === 'im' && imUnreadTotal > 0" class="menu-item-badge" aria-label="未读消息">
+        {{ imUnreadTotal > 99 ? '99+' : imUnreadTotal }}
+      </span>
       <span v-if="hasChildren" class="menu-item-expand-arrow" aria-hidden="true">
         <i class="fa fa-angle-down"></i>
       </span>
@@ -40,6 +44,7 @@
               type="button"
               :class="{ active: activeView === child.key }"
               :data-view="child.key"
+              :data-tour="`sidebar-${child.key}`"
               :aria-label="child.name"
               :aria-current="activeView === child.key ? 'page' : undefined"
               :title="child.name"
@@ -94,6 +99,10 @@ const props = defineProps({
     type: Number,
     default: 1000,
   },
+  imUnreadTotal: {
+    type: Number,
+    default: 0,
+  },
 })
 
 defineEmits(['parent-click', 'select-view', 'reorder-pointer-down', 'keydown'])
@@ -116,6 +125,19 @@ const hasChildren = computed(() => Boolean(props.item.children?.length))
   align-items: center;
   font-size: 12px;
   transition: transform 0.2s ease;
+}
+
+.menu-item-badge {
+  margin-left: auto;
+  min-width: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #ef4444;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
 }
 
 .menu-item.has-children.expanded .menu-item-expand-arrow {

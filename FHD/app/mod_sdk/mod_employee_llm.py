@@ -14,9 +14,9 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Any
+from typing import Any, cast
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -95,8 +95,8 @@ async def _call_openai_compatible_chat(
         async with httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=15.0)) as client:
             r = await client.post(chat_url, headers=headers, json=payload)
             r.raise_for_status()
-            return r.json()
-    except OPERATIONAL_ERRORS as e:  # noqa: BLE001
+            return cast("dict[str, Any] | None", r.json())
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001
         logger.exception("mod_employee_complete: OpenAI-compatible chat 请求失败: %s", e)
         return None
 
@@ -169,7 +169,7 @@ async def mod_employee_complete(
             max_tokens=int(max_tokens),
             **kwargs,
         )
-    except OPERATIONAL_ERRORS as e:  # noqa: BLE001
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001
         logger.exception("mod_employee_complete: call_deepseek_api 异常")
         return {"success": False, "content": "", "error": str(e)[:500]}
 

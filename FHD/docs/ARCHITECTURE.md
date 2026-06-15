@@ -25,6 +25,10 @@ v6.0: 商业模式明确 + Mod 生态
 v7.0: 桌面版 + Web 版并行交付
 ```
 
+### 1.1b 产品路线（路线 A）
+
+桌面 + 私有化为主的数据与部署边界见 [`architecture/ADR-route-a-desktop-private.md`](architecture/ADR-route-a-desktop-private.md)。
+
 ### 1.2 为什么选择 Neuro-DDD？
 
 **v2.0 架构的问题**:

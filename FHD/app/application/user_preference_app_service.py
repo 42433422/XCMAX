@@ -6,7 +6,7 @@
 
 from typing import Any
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
 class UserPreferenceApplicationService:
@@ -21,7 +21,7 @@ class UserPreferenceApplicationService:
 
             memory_service = get_user_memory_service()
             return memory_service.get_preference(user_id, key, default)
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             return default
 
     def set_preference(self, user_id: str, key: str, value: Any) -> bool:
@@ -31,7 +31,7 @@ class UserPreferenceApplicationService:
             memory_service = get_user_memory_service()
             memory_service.add_preference(user_id, key, value)
             return True
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             return False
 
     def get_all_preferences(self, user_id: str) -> dict[str, Any]:
@@ -40,7 +40,7 @@ class UserPreferenceApplicationService:
 
             memory_service = get_user_memory_service()
             return memory_service.get_all_preferences(user_id)
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             return {}
 
 

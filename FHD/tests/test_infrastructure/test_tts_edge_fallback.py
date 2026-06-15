@@ -317,7 +317,7 @@ class TestSynthesizeHappyPath:
 
 class TestNestedLoopFallback:
     def test_runtime_error_with_other_message_re_raises(self, monkeypatch) -> None:
-        async def _raise_other() -> bytes:
+        async def _raise_other(_req) -> bytes:  # noqa: ARG001
             raise RuntimeError("some other error")
 
         monkeypatch.setattr(tts, "_synthesize_mp3_bytes", _raise_other)
@@ -361,11 +361,16 @@ class TestNestedLoopFallback:
 class TestWarmup:
     def test_idempotent(self, monkeypatch) -> None:
         # Patch the synth function so the worker thread can call it cheaply
-        monkeypatch.setattr(
-            tts,
-            "synthesize_to_data_uri",
-            lambda **kw: {"audioBase64": "data:audio/x", "voice": "v", "lang": "zh"},
-        )
+        def _fake_synth(**kw):
+            text = (kw.get("text") or "").strip()
+            key = _normalize_cache_key(
+                text=text, voice=DEFAULT_EDGE_VOICE, lang="zh", rate=None, pitch=None
+            )
+            payload = {"audioBase64": "data:audio/x", "voice": "v", "lang": "zh"}
+            _set_cache(key, payload)
+            return payload
+
+        monkeypatch.setattr(tts, "synthesize_to_data_uri", _fake_synth)
 
         # Reset latch
         tts._WARMUP_STARTED = False

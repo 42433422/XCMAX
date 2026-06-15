@@ -1,0 +1,35 @@
+{
+  "brief": "Word全量读取员工：上传 .docx，direct_python 全量提取段落/表格/样式，输出 document_full.json，禁止 LLM 编造。",
+  "mode": "direct_python_file_transform",
+  "accepted_extensions": [
+    ".docx",
+    ".doc"
+  ],
+  "default_action": "convert",
+  "default_output_relpath": "outputs/document_full.json",
+  "default_text_output_relpath": "outputs/document_full.txt",
+  "default_images_dir": "outputs/images",
+  "runtime_kind": "word_full_extract",
+  "output_schema": [
+    "metadata",
+    "paragraphs",
+    "tables",
+    "headers_footers",
+    "styles",
+    "images",
+    "comments",
+    "core_properties",
+    "plain_text",
+    "outline",
+    "blocks",
+    "sections"
+  ],
+  "requirements": [
+    "Use direct_python only; handlers must be [\"direct_python\"].",
+    "Extract paragraphs (headings/lists/fonts), tables, outline, blocks, sections, images, styles, headers/footers, core properties, comments.",
+    "Write document_full.json and document_full.txt; export images to outputs/images/.",
+    "Never claim success unless output files are actually written.",
+    "Return {ok, summary, items, warnings, error, meta}."
+  ],
+  "pack_id": "word-full-read-employee"
+}

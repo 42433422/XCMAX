@@ -111,4 +111,4 @@ def install_openapi_enrichment(app: FastAPI) -> None:
         app.openapi_schema = schema
         return schema
 
-    app.openapi = enriched_openapi  # type: ignore[method-assign]
+    app.openapi = enriched_openapi

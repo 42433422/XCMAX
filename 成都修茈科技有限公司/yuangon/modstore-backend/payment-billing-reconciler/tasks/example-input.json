@@ -1,0 +1,18 @@
+{
+  "task": "monthly-reconcile",
+  "description": "生成月度账单对账报告",
+  "input": {
+    "period": "2026-04",
+    "sources": {
+      "local_orders": "MODstore_deploy/modstore_server/modstore.db",
+      "llm_billing": "MODstore_deploy/modstore_server/llm_billing.py",
+      "alipay_csv": "<待提供>"
+    }
+  },
+  "output": {
+    "format": "markdown",
+    "diff_threshold_cny": 0.01,
+    "alert_on_diff": true,
+    "include_secret_values": false
+  }
+}

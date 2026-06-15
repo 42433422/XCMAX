@@ -10,13 +10,17 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
 _FHD_ROOT = Path(__file__).resolve().parents[2]
 _CONFIG_PATH = _FHD_ROOT / "config" / "surface_audit_demo_account.json"
 _DEMO_TOKEN_PREFIX = "xcagi-local-surface-audit-demo"
+
+
+def is_local_demo_market_token(token: str) -> bool:
+    return (token or "").strip().startswith(_DEMO_TOKEN_PREFIX)
 
 
 @lru_cache(maxsize=1)
@@ -36,7 +40,7 @@ def demo_account_config() -> dict[str, Any]:
         raw = json.loads(_CONFIG_PATH.read_text(encoding="utf-8"))
         if isinstance(raw, dict):
             return {**defaults, **{k: v for k, v in raw.items() if not str(k).startswith("_")}}
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         logger.debug("surface audit demo config read failed", exc_info=True)
     return defaults
 
@@ -184,7 +188,7 @@ def seed_demo_user_row(*, session_factory) -> None:
                 if not tenant.trial_expires_at or tenant.trial_expires_at < now:
                     tenant.trial_expires_at = now + timedelta(days=3650)
                 changed = True
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             logger.debug("P-S 演示租户写入跳过（tenants 表未迁移）", exc_info=True)
 
         if changed:

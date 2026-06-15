@@ -41,7 +41,7 @@ class SafetyNeuroDomain(NeuroDomain):
             self._threat_count += 1
             threat_type = event.payload.get("threat_type")
             severity = event.payload.get("severity")
-            logger.critical(f"SECURITY THREAT: type={threat_type}, severity={severity}")
+            logger.critical("SECURITY THREAT: type=%s, severity=%s", threat_type, severity)
             bump_domain_handler_metric("security.threat.detected")
 
         @self.on("security.audit.log", priority=2, channel=DomainChannel.CRITICAL)
@@ -49,7 +49,7 @@ class SafetyNeuroDomain(NeuroDomain):
             self._audit_count += 1
             action = event.payload.get("action")
             user_id = event.payload.get("user_id")
-            logger.info(f"Audit: user={user_id}, action={action}")
+            logger.info("Audit: user=%s, action=%s", user_id, action)
             bump_domain_handler_metric("security.audit.log")
 
     async def initialize(self):

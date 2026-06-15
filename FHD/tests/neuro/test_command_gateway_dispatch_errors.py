@@ -109,7 +109,9 @@ async def test_resolve_sets_exception_on_error():
     ev = NeuroEvent("cmd", {}, priority=EventPriority.NORMAL)
     rid = gw.prepare_command_event(ev)
     err = ValueError("boom")
-    gw.resolve(ev, error=err)
+    # 真实 request-reply：先进入 wait_for_result（已持有 future），handler 再 resolve。
+    # 若先 resolve 会 pop 掉 pending，wait_for_result 反而 KeyError——非该用例意图。
+    asyncio.get_running_loop().call_soon(gw.resolve, ev, None, err)
     with pytest.raises(ValueError, match="boom"):
         await gw.wait_for_result(rid, timeout=0.5)
 

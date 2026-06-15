@@ -1,0 +1,28 @@
+[
+  {
+    "id": "default-1",
+    "title": "企业数字化解决方案交流会",
+    "description": "修茈科技联合多家合作伙伴举办数字化转型交流会，分享项目经验与行业实践。",
+    "image": "/uploads/activity_banner_1.svg",
+    "date": "2026-03-01"
+  },
+  {
+    "id": "default-2",
+    "title": "项目实施现场回访",
+    "description": "项目组走进客户现场，持续跟踪系统运行情况，听取一线反馈并优化方案。",
+    "image": "/uploads/activity_banner_2.svg",
+    "date": "2026-02-18"
+  },
+  {
+    "id": "default-3",
+    "title": "年度表彰与团队建设活动",
+    "description": "公司举办年度表彰活动，对优秀项目团队和个人进行表彰，并开展团队拓展。",
+    "image": "/uploads/activity_banner_3.svg",
+    "date": "2026-01-10"
+  }
+]
+
+
+
+
+

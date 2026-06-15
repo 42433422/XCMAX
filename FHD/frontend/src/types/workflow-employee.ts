@@ -11,6 +11,10 @@ export interface WorkflowEmployeeRegistryEntry {
   order: number
   labelI18nKey?: string
   source: 'json' | 'api' | 'mod_manifest'
+  /** 员工所属宿主 Mod / 企业 Mod 组件（manifest 或安装目录） */
+  hostModId?: string
+  /** 声明该员工的 workflow Mod id（上岗挂靠企业 Mod 后仍保留，用于栈隔离） */
+  carrierModId?: string
 }
 
 export interface WorkflowEmployeeRegistryV1 {

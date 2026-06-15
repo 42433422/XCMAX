@@ -9,7 +9,7 @@ import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +36,7 @@ class SkillRegistry:
                 - parameters: 参数定义
         """
         self._skills[skill_id] = skill_info
-        logger.info(f"技能注册成功: {skill_id} - {skill_info.get('name', '')}")
+        logger.info("技能注册成功: %s - %s", skill_id, skill_info.get('name', ''))
 
     def get(self, skill_id: str) -> dict[str, Any] | None:
         """获取技能信息"""
@@ -71,7 +71,7 @@ class SkillRegistry:
 
         skills_dir = Path(__file__).parent
         if not skills_dir.exists():
-            logger.warning(f"Skills目录不存在: {skills_dir}")
+            logger.warning("Skills目录不存在: %s", skills_dir)
             self._initialized = True
             return
 
@@ -93,9 +93,9 @@ class SkillRegistry:
                 if metadata:
                     metadata["module_path"] = str(skill_folder)
                     self.register(skill_id, metadata)
-                    logger.info(f"加载技能定义: {skill_id}")
-            except OPERATIONAL_ERRORS as e:
-                logger.error(f"加载技能失败 {skill_id}: {e}")
+                    logger.info("加载技能定义: %s", skill_id)
+            except RECOVERABLE_ERRORS as e:
+                logger.error("加载技能失败 %s: %s", skill_id, e)
 
         self._initialized = True
 
@@ -195,6 +195,6 @@ def execute_skill(skill_id: str, **params) -> dict[str, Any]:
             return skill.execute(**params)
         else:
             return {"success": False, "message": f"未知技能类型：{skill_id}"}
-    except OPERATIONAL_ERRORS as e:
-        logger.error(f"执行技能失败 {skill_id}: {e}")
+    except RECOVERABLE_ERRORS as e:
+        logger.error("执行技能失败 %s: %s", skill_id, e)
         return {"success": False, "message": str(e)}

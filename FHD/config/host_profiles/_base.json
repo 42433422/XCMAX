@@ -112,7 +112,13 @@
     "workflow_employee_id_prefixes": ["xcagi-workflow-employee-"],
     "exclude_id_suffixes": ["-bridge"],
     "exclude_artifact_types": ["employee_pack"],
-    "exclude_mod_ids": ["xcagi-host-foundation-employee"],
+    "exclude_mod_ids": [
+      "xcagi-host-foundation-employee",
+      "xcagi-core-workflow-employees",
+      "xcagi-office-employee-pack-bridge",
+      "wechat-contacts-ai-employee",
+      "lan-gate-ai-employee"
+    ],
     "non_workflow_desk_employee_patterns": [
       "^host_foundation$",
       "-(?:generate|full-read)-employee$"

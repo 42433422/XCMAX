@@ -18,6 +18,14 @@ def test_parse_daily_digest_recipient_emails() -> None:
     assert parse_daily_digest_recipient_emails("a@b.com; c@d.com") == ["a@b.com", "c@d.com"]
 
 
+def test_count_on_duty_employees_uses_duty_roster() -> None:
+    from modstore_server.daily_digest import count_on_duty_employees
+    from modstore_server.duty_roster import all_planned_employee_ids
+
+    assert count_on_duty_employees() == len(all_planned_employee_ids())
+    assert count_on_duty_employees() == 52
+
+
 def test_build_digest_html_contains_sections(tmp_path, monkeypatch):
     models._engine = None
     models._SessionFactory = None
@@ -42,7 +50,7 @@ def test_build_digest_html_contains_sections(tmp_path, monkeypatch):
     assert "MODstore" in html
     assert "系统状态" in html
     assert "每日运营摘要" in html
-    assert "在岗员工" in html or "catalog" in html.lower()
+    assert "编制在岗" in html or "在岗员工" in html
     assert "文档一致性" in html
 
     models._engine = None

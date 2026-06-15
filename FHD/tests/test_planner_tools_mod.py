@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 REPO = Path(__file__).resolve().parents[1]
-MOD_DIR = REPO / "mods" / "xcagi-planner-bridge"
+MOD_DIR = REPO / "mods-admin-runtime" / "xcagi-planner-bridge"
 
 
 def test_planner_mod_manifest_tools_execution_flag():
@@ -29,6 +29,7 @@ def test_planner_blueprints_tools_execute_route():
     text = (MOD_DIR / "backend" / "blueprints.py").read_text(encoding="utf-8")
     assert "/tools/execute" in text
     assert "execute_planner_tool" in text
+    assert 'data.get("success")' in text
 
 
 def test_list_planner_tools_registry_detail_host_path(monkeypatch):
@@ -65,6 +66,10 @@ def test_execute_planner_tool_from_body_missing_name():
     assert out.get("success") is False
 
 
+@pytest.mark.skipif(
+    not (REPO / "mods-admin-runtime" / "xcagi-planner-excel-tools" / "manifest.json").is_file(),
+    reason="xcagi-planner-excel-tools is a runtime-only mod (not in tracked source); mod_native path unavailable",
+)
 def test_execute_planner_tool_excel_chart_recommend(monkeypatch):
     from app.mod_sdk.planner_tools import execute_planner_tool_from_body
 

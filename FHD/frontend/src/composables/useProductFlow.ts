@@ -75,7 +75,11 @@ export function shouldRouteToProductOnboarding(
     name === 'login' ||
     name === 'lan-gate' ||
     name === 'settings' ||
-    name === 'mod-store'
+    name === 'mod-store' ||
+    name === 'im' ||
+    name === 'desktop-runtime' ||
+    name === 'workflow-employee-space' ||
+    name === 'workflow-employee-stitch-full'
   ) {
     return false
   }
@@ -84,5 +88,7 @@ export function shouldRouteToProductOnboarding(
 
 function needsProductFlowStatic(): boolean {
   if (!isShellEditionBuild()) return false
+  const sku = String(import.meta.env.VITE_XCAGI_PRODUCT_SKU || '').trim().toLowerCase()
+  if (sku === 'enterprise') return false
   return !readProductFlowCompleted()
 }

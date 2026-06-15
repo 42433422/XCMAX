@@ -6,8 +6,8 @@ export interface Industry {
   name: string;
   code: string;
   description?: string;
-  config?: Record<string, any>;
-  [key: string]: any;
+  config?: Record<string, unknown>;
+  [key: string]: unknown;
 }
 
 export const systemApi = {
@@ -27,24 +27,24 @@ export const systemApi = {
     return api.get<ApiResponse<Industry>>(`/api/system/industry/${industryId}`);
   },
 
-  getSystemConfig(): Promise<ApiResponse<any>> {
-    return api.get<ApiResponse<any>>('/api/system/config');
+  getSystemConfig(): Promise<ApiResponse<unknown>> {
+    return api.get<ApiResponse<unknown>>('/api/system/config');
   },
 
-  getHostProfile(): Promise<ApiResponse<any>> {
-    return api.get<ApiResponse<any>>('/api/system/host-profile');
+  getHostProfile(): Promise<ApiResponse<unknown>> {
+    return api.get<ApiResponse<unknown>>('/api/system/host-profile');
   },
 
-  getIndustryPresets(): Promise<ApiResponse<any>> {
-    return api.get<ApiResponse<any>>('/api/system/industry-presets');
+  getIndustryPresets(): Promise<ApiResponse<unknown>> {
+    return api.get<ApiResponse<unknown>>('/api/system/industry-presets');
   },
 
-  getWorkflowEmployeeCatalog(): Promise<ApiResponse<any>> {
-    return api.get<ApiResponse<any>>('/api/system/workflow-employee-catalog');
+  getWorkflowEmployeeCatalog(): Promise<ApiResponse<unknown>> {
+    return api.get<ApiResponse<unknown>>('/api/system/workflow-employee-catalog');
   },
 
-  getEmployeeRegistryRules(): Promise<ApiResponse<any>> {
-    return api.get<ApiResponse<any>>('/api/system/employee-registry-rules');
+  getEmployeeRegistryRules(): Promise<ApiResponse<unknown>> {
+    return api.get<ApiResponse<unknown>>('/api/system/employee-registry-rules');
   },
 };
 

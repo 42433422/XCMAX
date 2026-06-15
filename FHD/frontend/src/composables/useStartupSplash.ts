@@ -23,8 +23,8 @@ export function extractModNames(list: unknown[]) {
 }
 
 export function useStartupSplash() {
-  const startupVisible = ref(true)
-  const appReady = ref(false)
+  const startupVisible = ref(false)
+  const appReady = ref(true)
   const startupProgressPct = ref(0)
   const startupModPreview = ref<unknown[]>([])
   const modsLoading = ref(false)

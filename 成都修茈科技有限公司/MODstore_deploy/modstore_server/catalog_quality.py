@@ -24,7 +24,13 @@ PUBLIC_TABULAR_PKG_IDS: Tuple[str, ...] = (
     "word-full-read-employee",
 )
 
-OFFICE_AUX_PACK_1_PKG_IDS: Tuple[str, ...] = ("json-report-employee",)
+OFFICE_AUX_PACK_1_PKG_IDS: Tuple[str, ...] = (
+    "json-report-employee",
+    "chart-bar-employee",
+    "chart-line-employee",
+    "chart-pie-employee",
+    "chart-dashboard-employee",
+)
 
 PUBLIC_OFFICE_EMPLOYEE_PKG_IDS: Tuple[str, ...] = PUBLIC_TABULAR_PKG_IDS + OFFICE_AUX_PACK_1_PKG_IDS
 
@@ -40,6 +46,10 @@ STANDARD_DISPLAY_NAMES: Dict[str, str] = {
     "word-generate-employee": "Word 生成员",
     "word-full-read-employee": "Word 全量读取员",
     "json-report-employee": "JSON 量化报告员",
+    "chart-bar-employee": "柱状图可视化员",
+    "chart-line-employee": "趋势折线可视化员",
+    "chart-pie-employee": "占比饼图可视化员",
+    "chart-dashboard-employee": "综合看板可视化员",
 }
 
 VALID_COMPLIANCE_STATUSES = frozenset({"approved", "under_review", "restricted", "delisted"})

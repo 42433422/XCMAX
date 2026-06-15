@@ -4,12 +4,12 @@ import json
 import logging
 import uuid
 from collections.abc import Callable
-from typing import Any
+from typing import Any, cast
 
 import httpx
 
 from app.services import get_ai_conversation_service
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.path_utils import ensure_fhd_repo_on_syspath
 
 from .types import PlanGraph, WorkflowNode, validate_plan_graph
@@ -384,10 +384,13 @@ def _execute_customers_tool(params: dict[str, Any]) -> dict[str, Any]:
         per_page = int(params.get("per_page", 20))
 
         svc = get_customer_app_service()
-        return svc.get_all(
-            keyword=str(keyword).strip() or None,
-            page=page,
-            per_page=per_page,
+        return cast(
+            "dict[str, Any]",
+            svc.get_all(
+                keyword=str(keyword).strip() or None,
+                page=page,
+                per_page=per_page,
+            ),
         )
     except ImportError as e:
         logger.error("客户服务导入失败: %s", e)
@@ -487,13 +490,16 @@ def _execute_shipment_generate_tool(params: dict[str, Any]) -> dict[str, Any]:
             }
 
         svc = get_shipment_app_service()
-        return svc.generate_shipment_document(
-            unit_name=str(parsed.get("unit_name") or ""),
-            products=list(parsed.get("products") or []),
-            template_name=params.get("template_name"),
-            date=params.get("date"),
-            order_number=params.get("order_number"),
-            raw_text=order_text or str(params.get("raw_text") or ""),
+        return cast(
+            "dict[str, Any]",
+            svc.generate_shipment_document(
+                unit_name=str(parsed.get("unit_name") or ""),
+                products=list(parsed.get("products") or []),
+                template_name=params.get("template_name"),
+                date=params.get("date"),
+                order_number=params.get("order_number"),
+                raw_text=order_text or str(params.get("raw_text") or ""),
+            ),
         )
     except ImportError as e:
         logger.error("发货单服务导入失败: %s", e)
@@ -730,13 +736,16 @@ def _execute_excel_schema_tool(params: dict[str, Any]) -> dict[str, Any]:
         from app.bootstrap import get_excel_analysis_app_service
 
         service = get_excel_analysis_app_service()
-        return service.analyze_schema(
-            file_path=file_path,
-            sheet_name=params.get("sheet_name"),
+        return cast(
+            "dict[str, Any]",
+            service.analyze_schema(
+                file_path=file_path,
+                sheet_name=params.get("sheet_name"),
+            ),
         )
     except ImportError:
         pass
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.warning("excel_analysis_app_service 不可用，降级 openpyxl: %s", e)
 
     try:
@@ -812,15 +821,18 @@ def _execute_excel_analysis_tool(params: dict[str, Any]) -> dict[str, Any]:
         from app.bootstrap import get_excel_analysis_app_service
 
         service = get_excel_analysis_app_service()
-        return service.analyze_data(
-            file_path=file_path,
-            sheet_name=params.get("sheet_name"),
-            query=params.get("query"),
-            columns=params.get("columns"),
+        return cast(
+            "dict[str, Any]",
+            service.analyze_data(
+                file_path=file_path,
+                sheet_name=params.get("sheet_name"),
+                query=params.get("query"),
+                columns=params.get("columns"),
+            ),
         )
     except ImportError:
         pass
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.warning("excel_analysis_app_service 不可用，降级 openpyxl: %s", e)
 
     try:

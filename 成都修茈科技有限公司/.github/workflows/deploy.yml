@@ -1,0 +1,89 @@
+# 后端（MODstore FastAPI）生产部署：在 Backend Python CI 成功时通过 SSH 更新服务器。
+# 与 market-live-deploy.yml（前端 market/dist）、deploy-payment-java.yml（Java）对称。
+# 仅负责 Python 后端组件，不再触碰 market 构建与 Java 打包（由独立工作流负责）。
+#
+# Secrets（与 market-live-deploy 相同）：
+#   DEPLOY_HOST, DEPLOY_USER, DEPLOY_SSH_PRIVATE_KEY
+# Variables（可选覆盖路径/分支/健康地址）：
+#   DEPLOY_BACKEND_REMOTE_DIR（推荐，仅后端工作树，默认 /opt/modstore/backend）
+#   DEPLOY_REMOTE_REPO（兼容旧变量；若设置将回退到 monorepo 路径 + cd MODstore_deploy）
+#   DEPLOY_GIT_BRANCH（默认 main）
+#   DEPLOY_HEALTH_URL（默认 http://127.0.0.1:8000/api/health）
+
+name: Deploy backend (MODstore)
+
+on:
+  workflow_run:
+    workflows: ['CI - Backend Python']
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-backend-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy-backend-on-server:
+    runs-on: ubuntu-latest
+    if: >-
+      ${{
+        github.event_name == 'workflow_dispatch' ||
+        (
+          github.event.workflow_run.conclusion == 'success' &&
+          github.event.workflow_run.head_branch == 'main' &&
+          github.event.workflow_run.event == 'push'
+        )
+      }}
+    steps:
+      - name: SSH — git pull + venv pip + restart + health
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          script_stop: true
+          command_timeout: 25m
+          script: |
+            set -euo pipefail
+            BACKEND_DIR="${{ vars.DEPLOY_BACKEND_REMOTE_DIR }}"
+            LEGACY_REPO="${{ vars.DEPLOY_REMOTE_REPO }}"
+            BRANCH="${{ vars.DEPLOY_GIT_BRANCH }}"
+            HEALTH_URL="${{ vars.DEPLOY_HEALTH_URL }}"
+            if [ -z "${BRANCH}" ]; then BRANCH="main"; fi
+            if [ -z "${HEALTH_URL}" ]; then HEALTH_URL="http://127.0.0.1:8000/api/health"; fi
+            # 组件级路径优先；DEPLOY_REMOTE_REPO 仅为兼容未拆仓的服务器保留
+            if [ -n "${BACKEND_DIR}" ]; then
+              TARGET_DIR="${BACKEND_DIR}"
+            elif [ -n "${LEGACY_REPO}" ]; then
+              TARGET_DIR="${LEGACY_REPO}/MODstore_deploy"
+            else
+              echo "[err] 未设置 DEPLOY_BACKEND_REMOTE_DIR 或 DEPLOY_REMOTE_REPO；后端路径不再默认硬编码到 monorepo 根目录"
+              exit 1
+            fi
+            echo "[info] backend target=${TARGET_DIR} branch=${BRANCH}"
+            cd "${TARGET_DIR}"
+            git fetch origin "${BRANCH}"
+            git pull --ff-only "origin" "${BRANCH}" || git pull "origin" "${BRANCH}"
+            if [ -f scripts/python-release.sh ]; then
+              # 拆仓/独立部署目录会复用组件化脚本
+              bash scripts/python-release.sh
+            else
+              if [ ! -d .venv ]; then python3 -m venv .venv; fi
+              . .venv/bin/activate
+              pip install -U pip
+              pip install -e ".[web,knowledge]"
+              if systemctl is-active --quiet modstore-uvicorn.service 2>/dev/null; then
+                sudo systemctl restart modstore-uvicorn.service
+              elif systemctl is-active --quiet modstore.service 2>/dev/null; then
+                sudo systemctl restart modstore.service
+              elif command -v docker >/dev/null 2>&1 && [ -f docker-compose.yml ]; then
+                docker compose up -d --build api
+              else
+                echo "No modstore-uvicorn.service or docker compose; install one of them on the server."
+                exit 1
+              fi
+            fi
+            curl -fsS "${HEALTH_URL}" | head -c 500
+            echo ""
+            echo "[ok] MODstore backend deploy finished"

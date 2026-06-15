@@ -1,6 +1,6 @@
 """Structured error codes for the FHD platform.
 
-Replaces bare `except Exception` with domain-specific error types,
+Replaces bare ``except Exception`` with domain-specific error types,
 enabling precise frontend UI responses and alerting.
 """
 
@@ -21,6 +21,8 @@ class ErrorCode(str, Enum):
     DB_CONNECTION_FAILED = "DB_CONNECTION_FAILED"
     DB_QUERY_FAILED = "DB_QUERY_FAILED"
     DB_TABLE_NOT_FOUND = "DB_TABLE_NOT_FOUND"
+    DB_LOCK_ERROR = "DB_LOCK_ERROR"
+    DB_FOREIGN_KEY_VIOLATION = "DB_FOREIGN_KEY_VIOLATION"
     LLM_SERVICE_UNAVAILABLE = "LLM_SERVICE_UNAVAILABLE"
     LLM_RATE_LIMITED = "LLM_RATE_LIMITED"
     FILE_NOT_FOUND = "FILE_NOT_FOUND"
@@ -28,6 +30,10 @@ class ErrorCode(str, Enum):
     FILE_WRITE_ERROR = "FILE_WRITE_ERROR"
     MOD_NOT_FOUND = "MOD_NOT_FOUND"
     MOD_INSTALL_FAILED = "MOD_INSTALL_FAILED"
+    MOD_SIGNATURE_ERROR = "MOD_SIGNATURE_ERROR"
+    MOD_ACCESS_DENIED = "MOD_ACCESS_DENIED"
+    WORKFLOW_ERROR = "WORKFLOW_ERROR"
+    TOOL_EXECUTION_ERROR = "TOOL_EXECUTION_ERROR"
     CACHE_UNAVAILABLE = "CACHE_UNAVAILABLE"
     EXTERNAL_SERVICE_UNAVAILABLE = "EXTERNAL_SERVICE_UNAVAILABLE"
     VALIDATION_ERROR = "VALIDATION_ERROR"
@@ -70,7 +76,7 @@ class AuthError(AppError):
         super().__init__(code, message, status_code=401, detail=detail)
 
 
-class PermissionError(AppError):
+class AuthPermissionError(AppError):
     def __init__(
         self,
         code: ErrorCode = ErrorCode.AUTH_PERMISSION_DENIED,
@@ -78,6 +84,10 @@ class PermissionError(AppError):
         detail: dict | None = None,
     ):
         super().__init__(code, message, status_code=403, detail=detail)
+
+
+# Backward-compatible alias (avoid shadowing builtin when importing selectively).
+PermissionError = AuthPermissionError
 
 
 class PaymentError(AppError):
@@ -97,6 +107,20 @@ class DatabaseError(AppError):
         super().__init__(code, message, status_code=503, detail=detail)
 
 
+class DatabaseLockError(DatabaseError):
+    def __init__(self, message: str = "", detail: dict | None = None):
+        super().__init__(ErrorCode.DB_LOCK_ERROR, message or "Database is busy", detail=detail)
+
+
+class ForeignKeyViolationError(DatabaseError):
+    def __init__(self, message: str = "", detail: dict | None = None):
+        super().__init__(
+            ErrorCode.DB_FOREIGN_KEY_VIOLATION,
+            message or "Data integrity error",
+            detail=detail,
+        )
+
+
 class LLMError(AppError):
     def __init__(
         self,
@@ -105,3 +129,117 @@ class LLMError(AppError):
         detail: dict | None = None,
     ):
         super().__init__(code, message, status_code=503, detail=detail)
+
+
+class ModError(AppError):
+    def __init__(
+        self,
+        code: ErrorCode = ErrorCode.MOD_NOT_FOUND,
+        message: str = "",
+        status_code: int = 404,
+        detail: dict | None = None,
+    ):
+        super().__init__(code, message, status_code=status_code, detail=detail)
+
+
+class ModNotFoundError(ModError):
+    def __init__(self, message: str = "", detail: dict | None = None):
+        super().__init__(ErrorCode.MOD_NOT_FOUND, message or "Mod not found", detail=detail)
+
+
+class ModInstallFailedError(ModError):
+    def __init__(self, message: str = "", detail: dict | None = None):
+        super().__init__(
+            ErrorCode.MOD_INSTALL_FAILED,
+            message or "Mod install failed",
+            status_code=400,
+            detail=detail,
+        )
+
+
+class ModSignatureError(ModError):
+    def __init__(self, message: str = "", detail: dict | None = None):
+        super().__init__(
+            ErrorCode.MOD_SIGNATURE_ERROR,
+            message or "Mod signature invalid",
+            status_code=400,
+            detail=detail,
+        )
+
+
+class ModAccessDeniedError(ModError):
+    def __init__(self, message: str = "", detail: dict | None = None):
+        super().__init__(
+            ErrorCode.MOD_ACCESS_DENIED,
+            message or "Mod access denied",
+            status_code=403,
+            detail=detail,
+        )
+
+
+class WorkflowError(AppError):
+    def __init__(
+        self,
+        code: ErrorCode = ErrorCode.WORKFLOW_ERROR,
+        message: str = "",
+        status_code: int = 400,
+        detail: dict | None = None,
+    ):
+        super().__init__(code, message, status_code=status_code, detail=detail)
+
+
+class ToolExecutionError(WorkflowError):
+    def __init__(self, message: str = "", detail: dict | None = None):
+        super().__init__(
+            ErrorCode.TOOL_EXECUTION_ERROR,
+            message or "Tool execution failed",
+            detail=detail,
+        )
+
+
+class DataValidationError(WorkflowError):
+    def __init__(self, message: str = "", detail: dict | None = None):
+        super().__init__(
+            ErrorCode.VALIDATION_ERROR,
+            message or "Validation error",
+            detail=detail,
+        )
+
+
+class ServiceUnavailableError(AppError):
+    def __init__(
+        self,
+        code: ErrorCode = ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE,
+        message: str = "",
+        detail: dict | None = None,
+    ):
+        super().__init__(code, message, status_code=503, detail=detail)
+
+
+class ExternalServiceError(AppError):
+    def __init__(
+        self,
+        code: ErrorCode = ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE,
+        message: str = "",
+        status_code: int = 503,
+        detail: dict | None = None,
+    ):
+        super().__init__(code, message, status_code=status_code, detail=detail)
+
+
+class ValidationError(AppError):
+    def __init__(
+        self,
+        message: str = "",
+        detail: dict | None = None,
+    ):
+        super().__init__(ErrorCode.VALIDATION_ERROR, message, status_code=422, detail=detail)
+
+
+class CacheError(AppError):
+    def __init__(
+        self,
+        message: str = "",
+        detail: dict | None = None,
+    ):
+        super().__init__(ErrorCode.CACHE_UNAVAILABLE, message, status_code=503, detail=detail)

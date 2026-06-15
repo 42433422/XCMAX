@@ -9,7 +9,7 @@
 import logging
 import os
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 import httpx
 
@@ -148,8 +148,8 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
         self._stream_client: Optional[httpx.AsyncClient] = None
 
         logger.info(
-            f"初始化LLM适配器: {self.provider}/{self._model} "
-            f"@ {self._base_url} (Key长度: {len(self._api_key or '')})"
+            "初始化LLM适配器: %s/%s "
+            f"@ %s (Key长度: %s)", self.provider, self._model, self._base_url, len(self._api_key or '')
         )
 
     def _resolve_api_key(self, provider: str) -> Optional[str]:
@@ -159,10 +159,10 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
         for env_name in env_names:
             key = os.environ.get(env_name, "").strip()
             if key:
-                logger.debug(f"从环境变量 {env_name} 读取到API Key")
+                logger.debug("从环境变量 %s 读取到API Key", env_name)
                 return key
 
-        logger.warning(f"未找到 {provider} 的API Key (已检查: {env_names})")
+        logger.warning("未找到 %s 的API Key (已检查: %s)", provider, env_names)
         return None
 
     @property
@@ -245,8 +245,8 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
         headers = {"Authorization": f"Bearer {self._api_key}", "Content-Type": "application/json"}
 
         logger.debug(
-            f"调用 [{self.provider}/{self._model}] "
-            f"messages={len(messages)}, temp={temperature}, max_tokens={max_tokens}"
+            "调用 [%s/%s] "
+            f"messages=%s, temp=%s, max_tokens=%s", self.provider, self._model, len(messages), temperature, max_tokens
         )
 
         client = await self._get_client()
@@ -256,12 +256,12 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
         result = response.json()
 
         logger.debug(
-            f"[{self.provider}] 响应成功, "
-            f"choices={len(result.get('choices', []))}, "
-            f"usage={result.get('usage', {})}"
+            "[%s] 响应成功, "
+            f"choices=%s, "
+            f"usage=%s", self.provider, len(result.get('choices', [])), result.get('usage', {})
         )
 
-        return result
+        return cast("dict[str, Any]", result)
 
     async def stream_chat_completion(
         self,
@@ -294,7 +294,7 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
 
         headers = {"Authorization": f"Bearer {self._api_key}", "Content-Type": "application/json"}
 
-        logger.info(f"启动流式请求 [{self.provider}/{self._model}]")
+        logger.info("启动流式请求 [%s/%s]", self.provider, self._model)
 
         client = await self._get_stream_client()
         async with client.stream("POST", url, headers=headers, json=payload) as response:

@@ -13,7 +13,7 @@ from enum import Enum
 from threading import RLock
 from typing import Any
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +59,7 @@ class CircuitBreaker:
 
         self._lock = RLock()
 
-        logger.info(f"CircuitBreaker [{name}] initialized")
+        logger.info("CircuitBreaker [%s] initialized", name)
 
     @property
     def state(self) -> CircuitState:
@@ -84,7 +84,7 @@ class CircuitBreaker:
                 if self._last_failure_time:
                     elapsed = time.time() - self._last_failure_time
                     if elapsed > self._config.timeout_seconds:
-                        logger.info(f"Circuit [{self._name}] transitioning to HALF_OPEN")
+                        logger.info("Circuit [%s] transitioning to HALF_OPEN", self._name)
                         self._state = CircuitState.HALF_OPEN
                         self._half_open_calls = 0
                         return True
@@ -106,7 +106,7 @@ class CircuitBreaker:
                 self._success_count += 1
 
                 if self._success_count >= self._config.success_threshold:
-                    logger.info(f"Circuit [{self._name}] transitioning to CLOSED")
+                    logger.info("Circuit [%s] transitioning to CLOSED", self._name)
                     self._state = CircuitState.CLOSED
                     self._failure_count = 0
                     self._success_count = 0
@@ -125,14 +125,14 @@ class CircuitBreaker:
 
             if self._state == CircuitState.HALF_OPEN:
                 # 半开状态再次失败，重新熔断
-                logger.warning(f"Circuit [{self._name}] failed in HALF_OPEN, returning to OPEN")
+                logger.warning("Circuit [%s] failed in HALF_OPEN, returning to OPEN", self._name)
                 self._state = CircuitState.OPEN
                 self._half_open_calls = 0
 
             elif self._state == CircuitState.CLOSED:
                 if self._failure_count >= self._config.failure_threshold:
                     logger.warning(
-                        f"Circuit [{self._name}] OPEN due to {self._failure_count} failures"
+                        "Circuit [%s] OPEN due to %s failures", self._name, self._failure_count
                     )
                     self._state = CircuitState.OPEN
 
@@ -157,7 +157,7 @@ class CircuitBreaker:
             result = fn(*args, **kwargs)
             self.record_success()
             return result
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             self.record_failure()
             raise
 
@@ -170,7 +170,7 @@ class CircuitBreaker:
             result = await fn(*args, **kwargs)
             self.record_success()
             return result
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             self.record_failure()
             raise
 

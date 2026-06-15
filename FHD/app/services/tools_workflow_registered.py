@@ -5,8 +5,9 @@ from __future__ import annotations
 import logging
 import os
 from collections.abc import Callable
+from typing import Any, cast
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -129,7 +130,7 @@ def _registered_router_products(
         price = params.get("unit_price", params.get("price", 0.0))
         try:
             price = float(price)
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             price = 0.0
         create_result = svc.create_product(
             {
@@ -198,14 +199,18 @@ def _registered_router_shipment_records(
     if action == "update":
         record_id = int(params.get("id"))
         payload = {k: v for k, v in params.items() if k != "id"}
-        return svc.update_shipment_record(record_id=record_id, **payload)
+        return cast("dict[Any, Any]", svc.update_shipment_record(record_id=record_id, **payload))
     if action == "delete":
-        return svc.delete_shipment_record(int(params.get("id")))
+        return cast("dict[Any, Any]", svc.delete_shipment_record(int(params.get("id"))))
     if action == "export":
-        return svc.export_shipment_records(
-            unit_name=str(params.get("unit") or params.get("unit_name") or "").strip() or None,
-            template_id=params.get("template_id"),
-            status_filter=params.get("status"),
+        return cast(
+            "dict[Any, Any]",
+            svc.export_shipment_records(
+                unit_name=str(params.get("unit") or params.get("unit_name") or "").strip()
+                or None,
+                template_id=params.get("template_id"),
+                status_filter=params.get("status"),
+            ),
         )
 
 
@@ -312,7 +317,7 @@ def _registered_router_template_preview(
             if m:
                 try:
                     sheet_index = int(m.group(1))
-                except OPERATIONAL_ERRORS:
+                except RECOVERABLE_ERRORS:
                     sheet_index = None
 
         selected_sheet = None
@@ -400,6 +405,7 @@ def _registered_router_template_preview(
             result = db.execute(
                 text(
                     """
+from typing import cast
                     INSERT INTO templates (
                         template_key, template_name, template_type,
                         original_file_path, analyzed_data, editable_config,
@@ -745,7 +751,7 @@ def _registered_router_excel_import(
                     }
                 },
             }
-        except OPERATIONAL_ERRORS as err:
+        except RECOVERABLE_ERRORS as err:
             logger.error("Excel 导入执行失败: %s", err, exc_info=True)
             return {"success": False, "message": f"导入执行失败：{str(err)}"}
 

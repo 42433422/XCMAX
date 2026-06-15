@@ -1,0 +1,126 @@
+{
+  "id": "ppt-full-read-employee",
+  "name": "PPT 全量读取员",
+  "version": "1.0.0",
+  "author": "XCAGI",
+  "description": "PPT全量读取员工：上传 .pptx，输出 presentation_full.json 中介；解析大纲与每页正文；图片 VLM 识图；按「为这份PPT生成每页的演讲备注」生成演讲备注。direct_python，禁止编造幻灯片正文。",
+  "artifact": "employee_pack",
+  "scope": "global",
+  "dependencies": {
+    "xcagi": ">=1.0.0"
+  },
+  "employee": {
+    "id": "ppt-full-read-employee",
+    "label": "PPT 生成员",
+    "capabilities": [
+      "ppt.parse",
+      "ppt.notes_generate",
+      "vision.vlm"
+    ]
+  },
+  "workflow_employees": [
+    {
+      "id": "ppt-full-read-employee",
+      "label": "PPT 生成员",
+      "panel_title": "PPT 生成员",
+      "panel_summary": "上传 .pptx，全量解析并生成演讲备注；图片 VLM 识图。",
+      "capabilities": [
+        "ppt.parse",
+        "ppt.notes_generate",
+        "vision.vlm"
+      ],
+      "api_base_path": "employees/ppt-full-read-employee",
+      "entry_action": "run"
+    }
+  ],
+  "backend": {
+    "entry": "blueprints",
+    "init": "mod_init"
+  },
+  "employee_config_v2": {
+    "identity": {
+      "id": "ppt-full-read-employee",
+      "version": "1.0.0",
+      "artifact": "employee_pack",
+      "name": "PPT 生成员",
+      "description": "制作 PPT 全量读取员工包"
+    },
+    "perception": {
+      "type": "file_or_text",
+      "accepted_extensions": [
+        ".pptx"
+      ]
+    },
+    "memory": {
+      "type": "session"
+    },
+    "cognition": {
+      "agent": {
+        "system_prompt": "你是PPT 生成员。你负责全量解析 PPT：大纲、每页正文、导出图片并 VLM 描述；按「为这份PPT生成每页的演讲备注」生成 notes_generated。正文禁止 LLM 编造；必须真实执行 direct_python。",
+        "role": {
+          "name": "PPT 生成员",
+          "persona": "严谨的 PPT 全量读取员工",
+          "tone": "professional",
+          "expertise": [
+            "PPT 解析",
+            "演讲备注",
+            "VLM 识图"
+          ]
+        },
+        "behavior_rules": [
+          "幻灯片正文必须来自 pptx 真实解析，禁止 LLM 编造。",
+          "必须写出 presentation_full.json 与 speaker_notes.md。",
+          "图片尽量生成 VLM sidecar。"
+        ],
+        "few_shot_examples": [],
+        "model": {
+          "provider": "auto",
+          "model_name": "auto",
+          "temperature": 0.1,
+          "max_tokens": 2000,
+          "top_p": 0.9
+        }
+      },
+      "skills": [
+        {
+          "name": "ppt.full_read",
+          "brief": "上传 pptx → JSON 中介 + 演讲备注 + 图片 VLM。"
+        }
+      ]
+    },
+    "collaboration": {
+      "workflow": {
+        "workflow_id": 0,
+        "name": "PPT 生成员"
+      }
+    },
+    "actions": {
+      "handlers": [
+        "direct_python"
+      ],
+      "direct_python": {
+        "module": "ppt_full_read_employee",
+        "action": "convert",
+        "default_output_relpath": "outputs/presentation_full.json",
+        "default_template_relpath": "",
+        "default_use_personnel_roster": true
+      }
+    }
+  },
+  "metadata": {
+    "framework_version": "2.0.0",
+    "created_by": "asset_pipeline"
+  },
+  "actions": {
+    "handlers": [
+      "direct_python"
+    ],
+    "direct_python": {
+      "module": "ppt_full_read_employee",
+      "action": "convert",
+      "default_output_relpath": "outputs/presentation_full.json",
+      "default_template_relpath": "",
+      "default_use_personnel_roster": true
+    }
+  }
+}

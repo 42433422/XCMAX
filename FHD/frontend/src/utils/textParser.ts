@@ -43,7 +43,7 @@ export function normalizeProductToken(value: string): string {
   return String(value || '').trim().toUpperCase().replace(/\s+/g, '').replace(/-/g, '')
 }
 
-export function toNumber(val: any): number | null {
+export function toNumber(val: unknown): number | null {
   const n = Number(val)
   return Number.isFinite(n) ? n : null
 }

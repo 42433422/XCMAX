@@ -40,6 +40,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.xiuci.xcagi.mobile.core.model.ListItem
 import com.xiuci.xcagi.mobile.ui.AppViewModel
+import com.xiuci.xcagi.mobile.ui.components.mobile.MobileScaffold
+import com.xiuci.xcagi.mobile.ui.components.mobile.MobileTokens
+import com.xiuci.xcagi.mobile.ui.components.mobile.WeCell
+import com.xiuci.xcagi.mobile.ui.components.mobile.WeCellGroup
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -63,12 +67,61 @@ fun EnterpriseListScreen(
         isEmpty = items.isEmpty(),
         onRetry = load,
     ) {
-        LazyColumn(
-            contentPadding = PaddingValues(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            items(items) { item ->
-                EnterpriseListCard(item, onItemClick)
+        WeCellGroup {
+            items.forEachIndexed { idx, item ->
+                WeCell(
+                    title = item.title,
+                    subtitle = item.subtitle,
+                    showArrow = onItemClick != null,
+                    showDivider = idx < items.lastIndex,
+                    onClick = onItemClick?.let { cb -> { cb(item.id) } },
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ErpTabListScreen(
+    tabIndex: Int,
+    vm: AppViewModel,
+    onBack: () -> Unit,
+) {
+    val titles = listOf("客户", "发货", "库存")
+    val title = titles.getOrElse(tabIndex) { "业务" }
+
+    fun reload() {
+        when (tabIndex) {
+            0 -> vm.loadCustomers()
+            1 -> vm.loadShipments()
+            else -> vm.loadInventory()
+        }
+    }
+
+    LaunchedEffect(tabIndex) { reload() }
+
+    val items by vm.items.collectAsState()
+    val loading by vm.listLoading.collectAsState()
+    val error by vm.listError.collectAsState()
+
+    MobileScaffold(
+        title = title,
+        onBack = onBack,
+        onRefresh = ::reload,
+        loading = loading,
+        error = error,
+        empty = items.isEmpty(),
+        emptyMessage = "暂无${title}数据",
+        onRetry = ::reload,
+    ) { _ ->
+        WeCellGroup {
+            items.forEachIndexed { idx, item ->
+                WeCell(
+                    title = item.title,
+                    subtitle = item.subtitle,
+                    showDivider = idx < items.lastIndex,
+                )
             }
         }
     }

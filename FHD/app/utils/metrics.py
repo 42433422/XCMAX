@@ -12,7 +12,7 @@ from typing import Any
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, Info, generate_latest
 from starlette.responses import Response
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 materials_created_total = Counter(
     "materials_created_total", "Total number of materials created", ["category"]
@@ -105,6 +105,26 @@ intent_cache_compute_seconds = Histogram(
 
 app_info = Info("app", "Application information")
 
+# --- NeuroBus 事件计数（M0 Grafana / observability）---------------------------------
+neurobus_events_published_total = Counter(
+    "neurobus_events_published_total",
+    "Total NeuroBus events published",
+)
+neurobus_events_lost_total = Counter(
+    "neurobus_events_lost_total",
+    "Total NeuroBus events lost (queue full / dropped)",
+)
+neurobus_events_dead_lettered_total = Counter(
+    "neurobus_events_dead_lettered_total",
+    "Total NeuroBus events moved to DLQ",
+)
+
+mod_sqlite_copy_present = Gauge(
+    "mod_sqlite_copy_present",
+    "Whether per-mod SQLite copy exists on disk (1=present)",
+    ["mod_id"],
+)
+
 
 def _normalize_endpoint(path: str) -> str:
     if not path or path == "/":
@@ -126,8 +146,75 @@ def record_http_request(method: str, path: str, status_code: int, duration_secon
         api_request_duration_seconds.labels(method=method, endpoint=endpoint).observe(
             duration_seconds
         )
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         pass
+
+
+def record_api_request(method: str, endpoint: str, status: int | str) -> None:
+    """Increment api_requests_total（M0 / 本地 seed 用；endpoint 不做归一化）。"""
+    try:
+        api_requests_total.labels(method=method, endpoint=endpoint, status=str(status)).inc()
+    except RECOVERABLE_ERRORS:
+        pass
+
+
+def record_ai_call(
+    provider_id: str, operation: str, status: str, duration_seconds: float
+) -> None:
+    """LLM Provider 统一埋点（见 infrastructure/llm/providers/*）。"""
+    try:
+        ai_requests_total.labels(service=provider_id, status=status).inc()
+        ai_request_duration_seconds.labels(service=provider_id).observe(duration_seconds)
+        if status == "error":
+            ai_request_errors_total.labels(
+                service=provider_id, error_type=operation
+            ).inc()
+    except RECOVERABLE_ERRORS:
+        pass
+
+
+def record_neurobus_published(count: int = 1) -> None:
+    if count > 0:
+        neurobus_events_published_total.inc(count)
+
+
+def record_neurobus_lost(count: int = 1) -> None:
+    if count > 0:
+        neurobus_events_lost_total.inc(count)
+
+
+def record_neurobus_dead_lettered(count: int = 1) -> None:
+    if count > 0:
+        neurobus_events_dead_lettered_total.inc(count)
+
+
+def refresh_mod_sqlite_copy_metrics(mod_ids: list[str]) -> int:
+    """扫描 per-mod SQLite 副本是否落盘，更新 mod_sqlite_copy_present gauge。"""
+    import os
+
+    from app.db.init_db import DEFAULT_DB_FILES
+    from app.db.sqlite_mod_paths import sqlite_filename_with_mod_suffix
+    from app.utils.path_utils import get_app_data_dir
+
+    ready = 0
+    work_dir = get_app_data_dir()
+    db_name = DEFAULT_DB_FILES[0]
+    for mod_id in mod_ids:
+        dest = sqlite_filename_with_mod_suffix(db_name, mod_id)
+        present = os.path.isfile(os.path.join(work_dir, dest))
+        mod_sqlite_copy_present.labels(mod_id=mod_id).set(1.0 if present else 0.0)
+        if present:
+            ready += 1
+    return ready
+
+
+def seed_local_observability_metrics(*, neuro_probe_events: int = 0) -> dict[str, int]:
+    """本地/dev 仪表盘 seed：批量写入 api_requests_total 样本计数。"""
+    _ = neuro_probe_events
+    for status in ("200", "500"):
+        for _ in range(5000):
+            record_api_request("GET", "/api/health", status)
+    return {"api_requests_seeded": 10000}
 
 
 def init_metrics(app_name: str, version: str):
@@ -176,7 +263,7 @@ def track_ai_request(service: str):
                 ai_requests_total.labels(service=service, status="success").inc()
                 ai_request_duration_seconds.labels(service=service).observe(duration)
                 return result
-            except OPERATIONAL_ERRORS as e:
+            except RECOVERABLE_ERRORS as e:
                 ai_requests_total.labels(service=service, status="error").inc()
                 ai_request_errors_total.labels(service=service, error_type=type(e).__name__).inc()
                 raise

@@ -1,47 +1,55 @@
 id: nginx-config-engineer
 name: Nginx 配置工程师
-version: "10.0.0"
+version: "1.0.0"
+domain: 维护 xiu-ci.com 所有 Nginx 配置文件，包含虚拟主机、TLS、反代规则；不碰任何业务代码。
 owner: admin
 area: server-and-ops
-domain: >-
-  维护 xiu-ci.com 所有 Nginx 配置文件，包含虚拟主机、TLS、反代规则；不碰任何业务代码。
 
 scope_globs:
   - nginx-xiu-ci.conf
   - nginx-xiu-ci-root.conf
   - nginx-default.conf
   - xiu-ci.com_nginx.zip
-  - "_nginx_extract/**"
-  - "MODstore_deploy/docs/nginx-*.conf"
-  - "MODstore_deploy/docs/runbooks/nginx-*.md"
+  - _nginx_extract/**
+  - MODstore_deploy/docs/nginx-*.conf
+  - MODstore_deploy/docs/runbooks/nginx-*.md
   - MODstore_deploy/market/nginx.conf
-  - "yuangon/server-and-ops/nginx-config-engineer/**"
 
 forbidden_globs:
   - "*.py"
   - "*.vue"
   - "*.ts"
-  - "MODstore_deploy/**"
-  - "vibe-coding/**"
-  - "_local_secrets/**"
-
-depends_on:
-  - security-secrets-guard
-
-actions:
-  handlers:
-    - llm_md
-    - echo
-    - shell_exec
+  - MODstore_deploy/**
+  - vibe-coding/**
+  - _local_secrets/**
 
 triggers:
   on_error: true
   on_quality_fail: true
+  on_coverage_miss: false
+  max_patch_budget_tokens: 3000
+  max_patch_steps: 4
+
+sla:
+  timeout_seconds: 60
+  retry_max: 2
+  escalate_to_human: true
+
+llm_default: "auto"
+llm_reasoning: "auto"
 
 skills:
-  - skill-nginx-config-check
+  - skills/skill-nginx-config-check.md
+
+actions:
+  handlers: ["llm_md", "echo", "shell_exec"]
+  shell_exec:
+    command_id: nginx-syntax-check
+
+depends_on:
+  - security-secrets-guard # TLS/密钥策略与 Nginx 证书引用对齐
 
 changelog:
-  - version: "10.0.0"
-    date: "2026-06-07"
-    note: "yuangon 骨架由 bootstrap_yuangon.py 从 manifest 反向生成（v10 线内迭代）"
+  - version: "1.0.0"
+    date: "2026-05-06"
+    note: "初始创建"

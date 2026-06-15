@@ -48,7 +48,7 @@ export interface DeliverableStatus {
 export interface IndustryBaselineItem {
   mod_id: string
   label: string
-  tier: 'core' | 'host' | 'optional' | 'custom' | 'industry_mod'
+  tier: 'core' | 'host' | 'optional' | 'custom' | 'industry_package' | 'account_custom'
   required: boolean
   installed: boolean
   show_mod_id?: boolean
@@ -68,14 +68,22 @@ export interface IndustryPackageRef {
 
 export interface OnboardingIndustryPackage {
   industry_id: string
+  name?: string
+  scenario?: string
   product_name: string
   mod_id: string
+  selectable?: boolean
 }
 
 export interface OnboardingIndustryCatalog {
   schema_version?: number
   open_industry_ids: string[]
   open_packages: OnboardingIndustryPackage[]
+  preview_packages?: OnboardingIndustryPackage[]
+  /** 企业 entitlement 已裁剪开放列表 */
+  enterprise_filter_applied?: boolean
+  owner_id?: string | null
+  selected_industry_id?: string | null
 }
 
 export interface IndustryBaselinePlan {
@@ -91,6 +99,25 @@ export interface IndustryBaselinePlan {
   missing_required_mod_ids: string[]
   missing_optional_mod_ids: string[]
   missing_industry_mod_ids: string[]
+  account_custom_mod_ids?: string[]
+  missing_account_custom_mod_ids?: string[]
+  custom_employee_extension_mod_ids?: string[]
+  host_baseline_ready?: boolean
+  account_custom_ready?: boolean
   baseline_ready: boolean
+  full_stack_ready?: boolean
   industry_mod_ready: boolean
+}
+
+export interface EmployeePlannerStatus {
+  installed_employee_pack_count: number
+  registered_tool_count: number
+  registered_tool_names: string[]
+  office_catalog_count: number
+  office_installed_count: number
+  office_installed_ids: string[]
+  missing_office_pack_ids: string[]
+  office_ready: boolean
+  runtime_missing_pack_ids: string[]
+  routes_reloaded?: string[]
 }

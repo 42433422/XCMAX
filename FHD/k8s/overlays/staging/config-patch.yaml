@@ -1,0 +1,15 @@
+# Staging env overrides via the ConfigMap (NOT a Rollout container patch — strategic-merge on a
+# CRD's container list atomically replaces it and drops image/probes/envFrom). The Rollout reads
+# these through envFrom, so patching ConfigMap data (merged by key) is the CRD-safe way.
+#
+# - FHD_ENV=staging: bus.py treats staging specially (NeuroBus staging profile).
+# - 2 gunicorn workers + 30 chat streams/pod: smaller staging footprint.
+# (DATABASE_READ_URL was optional + unset in base — omitted; add the key here to enable a replica.)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: xcagi-config
+data:
+  FHD_ENV: "staging"
+  XCAGI_GUNICORN_WORKERS: "2"
+  XCAGI_CHAT_STREAM_MAX_PER_POD: "30"

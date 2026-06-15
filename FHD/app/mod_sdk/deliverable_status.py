@@ -18,7 +18,7 @@ from app.mod_sdk.product_skus import (
     bundled_mod_ids_for_sku,
     resolve_product_sku,
 )
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
 def _installed_mod_ids() -> list[str]:
@@ -26,11 +26,19 @@ def _installed_mod_ids() -> list[str]:
         from app.infrastructure.mods.mod_manager import get_mod_manager
 
         mm = get_mod_manager()
-        ids = [m.id for m in (mm.list_loaded_mods() or []) if getattr(m, "id", None)]
-        if ids:
-            return ids
-        return [m.id for m in mm.scan_mods() if getattr(m, "id", None)]
-    except OPERATIONAL_ERRORS:
+        loaded = [m.id for m in (mm.list_loaded_mods() or []) if getattr(m, "id", None)]
+        scanned = [m.id for m in mm.scan_mods() if getattr(m, "id", None)]
+        if scanned or loaded:
+            seen: set[str] = set()
+            out: list[str] = []
+            for mid in scanned + loaded:
+                s = str(mid or "").strip()
+                if s and s not in seen:
+                    seen.add(s)
+                    out.append(s)
+            return out
+        return []
+    except RECOVERABLE_ERRORS:
         return []
 
 
@@ -152,7 +160,7 @@ def build_deliverable_status(installed_mod_ids: list[str] | None = None) -> dict
 
         app = get_fastapi_app()
         mods_routes = bool(getattr(app.state, "mods_routes_loaded", False))
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         mods_routes = False
 
     if not mods_routes and expected:

@@ -2,9 +2,14 @@
  * 日更架构图节点点击 → 主责/协作员工弹层（Mermaid + 辐射图共用）
  */
 const EmpWfNodeStaff = (() => {
-  const MAP_URL = 'docs/xcagi-dashboard/daily_digest_node_employees.json?v=20260606a';
+  const MAP_URL = 'docs/xcagi-dashboard/daily_digest_node_employees.json?v=20260610a';
   const LABELS_ZH_URL = 'docs/xcagi-dashboard/employee_labels_zh.json?v=20260604b';
   const SIX_LINE_URL = 'six_line_employee_map.json?v=20260603u';
+  const MAP_URL_FALLBACKS = [
+    MAP_URL,
+    '/xcmax-dashboard/docs/xcagi-dashboard/daily_digest_node_employees.json?v=20260610a',
+  ];
+  const SIX_LINE_FALLBACKS = [SIX_LINE_URL, '/xcmax-dashboard/six_line_employee_map.json?v=20260603u'];
   const POPOVER_IDS = {
     workflow: 'emp-wf-node-popover',
     events: 'event-arch-node-popover',
@@ -62,30 +67,45 @@ const EmpWfNodeStaff = (() => {
     return { primary: uniq(primary), support: uniq(support) };
   }
 
+  function assetUrl(rel) {
+    if (window.XCAGIApi && typeof window.XCAGIApi.staticUrl === 'function') {
+      return window.XCAGIApi.staticUrl(rel);
+    }
+    return rel;
+  }
+
+  async function fetchJsonFirst(candidates) {
+    const fetchOne =
+      window.XCAGIApi && typeof window.XCAGIApi.fetchJson === 'function'
+        ? (u) => window.XCAGIApi.fetchJson(u, { cache: 'no-store' })
+        : async (u) => {
+            const r = await fetch(u, { cache: 'no-store' });
+            if (!r.ok) return null;
+            const ct = (r.headers.get('content-type') || '').toLowerCase();
+            if (ct.includes('text/html')) return null;
+            try {
+              return await r.json();
+            } catch {
+              return null;
+            }
+          };
+    for (const raw of candidates) {
+      const doc = await fetchOne(assetUrl(raw));
+      if (doc) return doc;
+    }
+    return null;
+  }
+
   async function ensureData() {
     if (nodeMapDoc) return nodeMapDoc;
     if (loadPromise) return loadPromise;
     loadPromise = (async () => {
-      const fetchJson =
-        window.XCAGIApi && typeof window.XCAGIApi.fetchJson === 'function'
-          ? (u) => window.XCAGIApi.fetchJson(u, { cache: 'no-store' })
-          : async (u) => {
-              const r = await fetch(u, { cache: 'no-store' });
-              if (!r.ok) return null;
-              const ct = (r.headers.get('content-type') || '').toLowerCase();
-              if (ct.includes('text/html')) return null;
-              try {
-                return await r.json();
-              } catch {
-                return null;
-              }
-            };
       const [mapDoc, zhDoc, sixDoc] = await Promise.all([
-        fetchJson(MAP_URL),
-        fetchJson(LABELS_ZH_URL),
-        fetchJson(SIX_LINE_URL),
+        fetchJsonFirst(MAP_URL_FALLBACKS),
+        fetchJsonFirst([LABELS_ZH_URL, '/xcmax-dashboard/docs/xcagi-dashboard/employee_labels_zh.json?v=20260604b']),
+        fetchJsonFirst(SIX_LINE_FALLBACKS),
       ]);
-      if (!mapDoc) throw new Error('员工映射表加载失败');
+      if (!mapDoc) throw new Error('员工映射表加载失败（请确认通过 HTTP 打开全景页，而非 file://）');
       nodeMapDoc = mapDoc;
       if (nodeMapDoc.employee_labels) Object.assign(labelById, nodeMapDoc.employee_labels);
       if (zhDoc && zhDoc.labels) Object.assign(labelById, zhDoc.labels);
@@ -324,31 +344,75 @@ const EmpWfNodeStaff = (() => {
     });
   }
 
+  function onRadialNodeActivate(nodeId, anchorEl, ev) {
+    const panHost =
+      document.getElementById('emp-wf-radial-root') ||
+      document.getElementById('event-arch-root') ||
+      document.getElementById('event-merged-arch-root');
+    if (panHost && panHost.dataset.panMoved === '1') return;
+    if (ev && typeof ev.stopPropagation === 'function') ev.stopPropagation();
+    show(nodeId, anchorEl).catch((err) => {
+      console.warn('[emp-wf-staff] 弹层打开失败 node=' + nodeId, err);
+      try {
+        const el = ensurePopover(anchorEl);
+        el.innerHTML =
+          '<div class="emp-wf-popover-head"><strong>' +
+          escapeHtml(nodeId) +
+          '</strong></div><p class="emp-wf-popover-miss">' +
+          escapeHtml(err && err.message ? err.message : '员工映射加载失败') +
+          '</p>';
+        positionPopover(anchorEl);
+      } catch (_e2) {
+        /* ignore */
+      }
+    });
+  }
+
   function bindRadial(layer) {
     if (!layer) return;
-    ensureData()
-      .then(() => {
-      layer.querySelectorAll('.emp-wf-radial-node').forEach((el) => {
-        const nodeId = (el.dataset.empWfNode || el.dataset.eventNode || '').trim();
-        if (!nodeId) return;
-        el.style.cursor = 'pointer';
-        if (el.getAttribute('data-emp-wf-bound') === '1') return;
-        el.setAttribute('data-emp-wf-bound', '1');
-        el.addEventListener('click', (ev) => {
-          const panHost =
-            document.getElementById('emp-wf-radial-root') || document.getElementById('event-arch-root');
-          if (panHost && panHost.dataset.panMoved === '1') return;
-          ev.stopPropagation();
-          show(nodeId, el);
-        });
-      });
-    })
-      .catch(() => {});
+    layer.querySelectorAll('.emp-wf-radial-node').forEach((el) => {
+      el.style.cursor = 'pointer';
+      const nodeId = (el.dataset.empWfNode || el.dataset.eventNode || '').trim();
+      if (nodeId) el.title = (el.title ? el.title + '\n' : '') + '点击查看主责/协作员工';
+    });
+  }
+
+  /** 事件委托：render 重建节点后仍有效（capture 阶段，早于平移 stopPropagation） */
+  function bindRadialDelegation() {
+    const hosts = ['emp-wf-radial-root', 'event-arch-root', 'event-merged-arch-root'];
+    hosts.forEach((hostId) => {
+      const host = document.getElementById(hostId);
+      if (!host || host.getAttribute('data-emp-wf-staff-delegate') === '1') return;
+      host.setAttribute('data-emp-wf-staff-delegate', '1');
+      host.addEventListener(
+        'click',
+        (ev) => {
+          const el = ev.target && ev.target.closest ? ev.target.closest('.emp-wf-radial-node') : null;
+          if (!el || !host.contains(el)) return;
+          const nodeId = (el.dataset.empWfNode || el.dataset.eventNode || '').trim();
+          if (!nodeId) return;
+          onRadialNodeActivate(nodeId, el, ev);
+        },
+        true,
+      );
+    });
+  }
+
+  function boot() {
+    bindDismissOnce();
+    bindRadialDelegation();
+    ensureData().catch((err) => console.warn('[emp-wf-staff] 预加载映射表失败', err));
   }
 
   window.__empWfShowNodeStaff = (nodeId, anchor) => show(nodeId, anchor);
 
-  return { ensureData, show, hidePopover, bindMermaid, bindRadial };
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    boot();
+  }
+
+  return { ensureData, show, hidePopover, bindMermaid, bindRadial, bindRadialDelegation };
 })();
 
 window.EmpWfNodeStaff = EmpWfNodeStaff;

@@ -1,0 +1,45 @@
+# CI SSOT: generated from FHD/.github/workflows/capacity-staging-monthly.yml — DO NOT edit here.
+# Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
+name: Capacity staging monthly
+
+on:
+  schedule:
+    - cron: "0 6 1 * *"
+  workflow_dispatch:
+
+concurrency:
+  group: capacity-staging-monthly
+  cancel-in-progress: false
+
+
+defaults:
+  run:
+    working-directory: FHD
+
+jobs:
+  k6-load:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run load.js against staging (optional)
+        env:
+          STAGING_BASE_URL: ${{ vars.STAGING_BASE_URL }}
+        run: |
+          if [ -z "${STAGING_BASE_URL}" ]; then
+            echo "STAGING_BASE_URL not set — skip remote k6 (set repo variable to enable)"
+            exit 0
+          fi
+          curl -sL https://github.com/grafana/k6/releases/download/v0.54.0/k6-v0.54.0-linux-amd64.tar.gz | tar xz
+          sudo mv k6-*/k6 /usr/local/bin/
+          k6 run -e BASE_URL="${STAGING_BASE_URL}" scripts/loadtest/load.js \
+            | tee k6-load-staging.log
+          grep -E "http_reqs|http_req_failed|http_req_duration" k6-load-staging.log | tail -5
+
+      - name: Upload log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: k6-load-staging
+          path: k6-load-staging.log
+          if-no-files-found: ignore

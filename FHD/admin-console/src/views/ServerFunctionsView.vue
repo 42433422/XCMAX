@@ -180,7 +180,9 @@
         <p v-if="allHandsError" class="error-hint">{{ allHandsError }}</p>
         <div v-if="allHandsBusy" class="progress-box">
           <div class="progress-head">
-            <span>员工完成 {{ allHandsProgress.completed }}/{{ allHandsProgress.total || allHandsMaxEmployees }}</span>
+            <span>
+              {{ allHandsStageLabel }} · {{ allHandsProgress.completed }}/{{ allHandsProgress.total || allHandsMaxEmployees }}
+            </span>
             <span>{{ allHandsProgress.percent }}%</span>
           </div>
           <div class="progress-track">
@@ -192,6 +194,7 @@
               · 最近完成 {{ allHandsProgress.current_employee_name }}
             </span>
           </p>
+          <p v-if="allHandsStallHint" class="stall-hint">{{ allHandsStallHint }}</p>
         </div>
 
         <div v-if="allHandsReport" class="allhands-result">
@@ -352,6 +355,23 @@ const allHandsProgress = ref({
 })
 
 let allHandsPollTimer = 0
+const allHandsStallHint = ref('')
+let allHandsStallSince = 0
+let allHandsStallSnapshot = ''
+
+const ALL_HANDS_STAGE_LABELS: Record<string, string> = {
+  prepare: '准备员工清单',
+  collect: '收集员工汇报',
+  employee_done: '收集员工汇报',
+  completed: '汇报汇总',
+  synthesize: '数字管家综合答复',
+  minutes: '生成会议摘要',
+}
+
+const allHandsStageLabel = computed(() => {
+  const stage = String(allHandsProgress.value.stage || 'collect').toLowerCase()
+  return ALL_HANDS_STAGE_LABELS[stage] || '员工大会进行中'
+})
 
 const selectedDigest = computed(() =>
   digestRecords.value.find((row) => Number(row.id) === Number(selectedDigestId.value)) || null,
@@ -521,6 +541,33 @@ function resetAllHandsProgress(total: number) {
   }
 }
 
+function touchAllHandsStallWatch() {
+  const snap = [
+    allHandsProgress.value.stage,
+    allHandsProgress.value.completed,
+    allHandsProgress.value.total,
+    allHandsProgress.value.current_employee_id,
+  ].join('|')
+  if (snap !== allHandsStallSnapshot) {
+    allHandsStallSnapshot = snap
+    allHandsStallSince = Date.now()
+    allHandsStallHint.value = ''
+    return
+  }
+  if (!allHandsBusy.value) return
+  const stalledMs = Date.now() - allHandsStallSince
+  if (stalledMs < 120_000) return
+  const stage = String(allHandsProgress.value.stage || '').toLowerCase()
+  if (stage === 'minutes' || stage === 'synthesize') {
+    allHandsStallHint.value = '会议摘要/综合答复生成较慢，请继续等待…'
+    return
+  }
+  const name = allHandsProgress.value.current_employee_name || allHandsProgress.value.current_employee_id
+  allHandsStallHint.value = name
+    ? `「${name}」汇报超过 2 分钟无进展，可能 LLM 较慢；单员工默认 300s 超时后会自动跳过`
+    : '进度超过 2 分钟无变化，请检查 MODstore :8788 日志或稍后重试'
+}
+
 function applyAllHandsProgress(raw: AnyRow | null | undefined) {
   if (!raw || typeof raw !== 'object') return
   const prev = allHandsProgress.value
@@ -541,6 +588,7 @@ function applyAllHandsProgress(raw: AnyRow | null | undefined) {
     current_employee_status: String(raw.current_employee_status ?? prev.current_employee_status ?? ''),
     updated_at: String(raw.updated_at ?? prev.updated_at ?? ''),
   }
+  touchAllHandsStallWatch()
 }
 
 function stopAllHandsPolling() {
@@ -605,6 +653,9 @@ async function startAllHands(withQuestion: boolean) {
   allHandsReport.value = null
   allHandsMeetingMinutes.value = null
   allHandsMeetingMinutesEmail.value = null
+  allHandsStallHint.value = ''
+  allHandsStallSince = Date.now()
+  allHandsStallSnapshot = ''
   const maxEmployees = Math.max(1, Math.min(Number(allHandsMaxEmployees.value) || 20, 20))
   resetAllHandsProgress(maxEmployees)
   try {
@@ -919,6 +970,13 @@ onBeforeUnmount(() => {
 .progress-fill {
   height: 100%;
   background: linear-gradient(90deg, #1890ff, #35c7ff);
+}
+
+.stall-hint {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: #b45309;
+  line-height: 1.5;
 }
 
 .allhands-result,

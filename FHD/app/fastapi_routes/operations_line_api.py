@@ -19,7 +19,7 @@ def operations_health():
 
 @router.post("/contracts/scan-expiry")
 def operations_scan_contract_expiry(days_ahead: int = 30, dry_run: bool = True):
-    from app.services.contract_expiry_scheduler import run_contract_expiry_scan
+    from app.services.contract_lifecycle import run_contract_expiry_scan
 
     return JSONResponse(
         {

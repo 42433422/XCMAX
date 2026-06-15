@@ -6,7 +6,7 @@ from typing import Any
 
 from openpyxl import load_workbook
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
 def _normalize_header(value: Any) -> str:
@@ -125,7 +125,7 @@ def fill_workbook_from_template(
         try:
             ws.delete_rows(1, header_row - 1)
             header_row = 1
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             for clear_r in range(1, header_row):
                 for col_idx in range(1, (ws.max_column or 1) + 1):
                     ws.cell(clear_r, col_idx).value = None

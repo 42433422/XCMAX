@@ -7,7 +7,7 @@ export interface Printer {
   model?: string;
   is_default: boolean;
   status: 'online' | 'offline' | 'error';
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 export const printApi = {
@@ -19,28 +19,28 @@ export const printApi = {
     return api.get<ApiResponse<Printer>>('/api/print/default');
   },
 
-  printDocument(data: any): Promise<ApiResponse<any>> {
-    return api.post<ApiResponse<any>>('/api/print/document', data);
+  printDocument(data: unknown): Promise<ApiResponse<unknown>> {
+    return api.post<ApiResponse<unknown>>('/api/print/document', data);
   },
 
-  printLabel(data: any): Promise<ApiResponse<any>> {
-    return api.post<ApiResponse<any>>('/api/print/label', data);
+  printLabel(data: unknown): Promise<ApiResponse<unknown>> {
+    return api.post<ApiResponse<unknown>>('/api/print/label', data);
   },
 
-  listLabels(): Promise<ApiResponse<any[]>> {
-    return api.get<ApiResponse<any[]>>('/api/print/list_labels');
+  listLabels(): Promise<ApiResponse<unknown[]>> {
+    return api.get<ApiResponse<unknown[]>>('/api/print/list_labels');
   },
 
-  printSingleLabel(data: any): Promise<ApiResponse<any>> {
-    return api.post<ApiResponse<any>>('/api/print/single_label', data);
+  printSingleLabel(data: unknown): Promise<ApiResponse<unknown>> {
+    return api.post<ApiResponse<unknown>>('/api/print/single_label', data);
   },
 
-  printByFilename(filename: string): Promise<ApiResponse<any>> {
-    return api.post<ApiResponse<any>>(`/api/print/${encodeURIComponent(filename)}`, {});
+  printByFilename(filename: string): Promise<ApiResponse<unknown>> {
+    return api.post<ApiResponse<unknown>>(`/api/print/${encodeURIComponent(filename)}`, {});
   },
 
-  validatePrinters(): Promise<ApiResponse<any>> {
-    return api.get<ApiResponse<any>>('/api/print/validate');
+  validatePrinters(): Promise<ApiResponse<unknown>> {
+    return api.get<ApiResponse<unknown>>('/api/print/validate');
   },
 
   getDocumentPrinter(): Promise<ApiResponse<Printer>> {
@@ -55,8 +55,8 @@ export const printApi = {
     return api.get<ApiResponse<{ document_printer?: string; label_printer?: string }>>('/api/print/printer-selection');
   },
 
-  savePrinterSelection(data: { document_printer?: string; label_printer?: string }): Promise<ApiResponse<any>> {
-    return api.put<ApiResponse<any>>('/api/print/printer-selection', data);
+  savePrinterSelection(data: { document_printer?: string; label_printer?: string }): Promise<ApiResponse<unknown>> {
+    return api.put<ApiResponse<unknown>>('/api/print/printer-selection', data);
   }
 };
 

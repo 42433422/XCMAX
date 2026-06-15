@@ -209,10 +209,11 @@ def test_get_stats_reports_counters():
 
 def test_get_reliability_status_no_circuit():
     bus = bus_mod.NeuroBus(worker_threads=1)
+    bus._rel_circuit = None
     out = bus.get_reliability_status()
     assert "fhd_env" in out
     assert "dedup" in out
-    assert "circuit_open" not in out  # 无 circuit 时不写
+    assert "circuit_open" not in out
 
 
 def test_get_reliability_status_with_circuit_open():
@@ -249,8 +250,8 @@ def test_summarize_subscriptions_flat_and_domain_and_global():
 
     bus.subscribe("alpha", h1)
     bus.subscribe("alpha", h2)
-    bus.subscribe_event("beta", h1, domain="sales")
-    bus.subscribe_global(h1)
+    bus.subscribe_to_domain("sales", "beta", h1)
+    bus.subscribe_all(h1)
 
     summary = bus.summarize_subscriptions()
     assert summary["flat_event_handlers"]["alpha"] == 2

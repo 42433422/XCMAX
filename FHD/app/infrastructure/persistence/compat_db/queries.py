@@ -19,7 +19,7 @@ from app.infrastructure.persistence.compat_db.base import (
     _sql_ident,
 )
 from app.shell.mod_row_scope import append_mod_scope_where
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -30,12 +30,12 @@ def _load_purchase_units_rows_pg() -> list[dict]:
 
         if not business_data_exposed():
             return []
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         logger.debug("suppressed exception", exc_info=True)
     try:
         eng = get_sync_engine()
         insp = inspect(eng)
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.warning("purchase_units pg: no engine (%s)", e)
         return []
     if not _insp_table_exists(insp, "purchase_units"):
@@ -50,19 +50,17 @@ def _load_purchase_units_rows_pg() -> list[dict]:
             rows = (
                 conn.execute(
                     text(
-                        f"""
-                    SELECT id, unit_name, contact_person, contact_phone, address, is_active
-                    FROM purchase_units
-                    {where_sql}
-                    ORDER BY unit_name
-                    """
+                        "SELECT id, unit_name, contact_person, contact_phone, address, is_active "
+                        "FROM purchase_units"
+                        + where_sql
+                        + " ORDER BY unit_name"
                     ),
                     bind,
                 )
                 .mappings()
                 .all()
             )
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         if _exc_chain_has_undefined_table(e):
             logger.debug("purchase_units pg: relation missing at query time (%s)", e)
         else:
@@ -71,7 +69,9 @@ def _load_purchase_units_rows_pg() -> list[dict]:
     out: list[dict] = []
     for r in rows:
         ia = r.get("is_active")
-        if ia in (0, False, "0", "false", "f", "F"):
+        if ia in (0, False, "0", "false") or (
+            isinstance(ia, str) and ia.lower() == chr(102)
+        ):
             continue
         out.append(dict(r))
     return out
@@ -87,11 +87,11 @@ def _distinct_units_from_products_db_pg() -> list[dict]:
 
         if not business_data_exposed():
             return []
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         logger.debug("suppressed exception", exc_info=True)
     try:
         eng = get_sync_engine()
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         return []
     try:
         insp = inspect(eng)
@@ -108,14 +108,14 @@ def _distinct_units_from_products_db_pg() -> list[dict]:
         where_sql = "WHERE " + " AND ".join(where_parts)
         with eng.connect() as conn:
             rows = conn.execute(
-                text(f"SELECT DISTINCT unit FROM products {where_sql} ORDER BY unit"),
+                text("SELECT DISTINCT unit FROM products " + where_sql + " ORDER BY unit"),
                 bind,
             ).fetchall()
         names = [str(row[0]).strip() for row in rows if row[0] is not None]
         return [{"id": i + 1, "name": u, "symbol": u} for i, u in enumerate(names)]
     except OperationalError:
         return []
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.warning("distinct product units pg: %s", e)
         return []
 
@@ -223,11 +223,19 @@ def _load_customers_pg_from_customers_table(eng, insp) -> list[dict]:
     append_mod_scope_where(where_parts, bind, cols)
     where_sql = (" WHERE " + " AND ".join(where_parts)) if where_parts else ""
     order = f"{_sql_ident(name_col)}, {_sql_ident(id_col)}"
-    sql = f"SELECT {', '.join(sel)} FROM {_sql_ident('customers')}{where_sql} ORDER BY {order}"
+    sql = (
+        "SELECT "
+        + ", ".join(sel)
+        + " FROM "
+        + _sql_ident("customers")
+        + where_sql
+        + " ORDER BY "
+        + order
+    )
     try:
         with eng.connect() as conn:
             rows = conn.execute(text(sql), bind).mappings().all()
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.warning("customers pg customers table: %s", e)
         return []
     out: list[dict] = []
@@ -251,26 +259,26 @@ def _load_customers_pg_from_purchase_units(eng) -> list[dict]:
             rows = (
                 conn.execute(
                     text(
-                        f"""
-                    SELECT id, unit_name, contact_person, contact_phone, address, is_active
-                    FROM purchase_units
-                    {where_sql}
-                    ORDER BY unit_name
-                    """
+                        "SELECT id, unit_name, contact_person, contact_phone, address, is_active "
+                        "FROM purchase_units"
+                        + where_sql
+                        + " ORDER BY unit_name"
                     ),
                     bind,
                 )
                 .mappings()
                 .all()
             )
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.warning("customers pg purchase_units: %s", e)
         return []
     out: list[dict] = []
     for r in rows:
         d = dict(r)
         ia = d.get("is_active")
-        if ia in (0, False, "0", "false", "f", "F"):
+        if ia in (0, False, "0", "false") or (
+            isinstance(ia, str) and ia.lower() == chr(102)
+        ):
             continue
         d["customer_name"] = (d.pop("unit_name", None) or "") or ""
         out.append(d)
@@ -281,7 +289,7 @@ def _load_customers_rows_pg() -> list[dict]:
     try:
         eng = get_sync_engine()
         insp = inspect(eng)
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.warning("customers pg: no engine (%s)", e)
         return []
     names = set(insp.get_table_names())
@@ -300,7 +308,7 @@ def _load_customers_rows() -> list[dict]:
 
         if not business_data_exposed():
             return []
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         logger.debug("suppressed exception", exc_info=True)
     rows = _load_customers_rows_pg()
     if rows:
@@ -358,7 +366,7 @@ def _customers_schema_hint_if_empty() -> str | None:
     try:
         eng = get_sync_engine()
         names = set(inspect(eng).get_table_names())
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         return f"无法连接 PostgreSQL：{e}。请检查 DATABASE_URL。"
 
     has_c = "customers" in names

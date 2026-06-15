@@ -17,12 +17,13 @@ from app.application.mod_store_catalog_app import (
     catalog_base_url,
     catalog_download_to,
     catalog_get_json,
+    fetch_market_catalog_page,
     iter_catalog_packages,
     normalize_package_zip_path,
     sync_modstore_library_to_local,
 )
 from app.shell.mods_catalog import list_mod_items
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +46,19 @@ class ModStoreCatalogResponse(BaseModel):
 class ModStoreListResponse(BaseModel):
     success: Literal[True] = True
     data: list[dict[str, Any]]
+
+
+class ModStoreMarketCatalogPayload(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    items: list[dict[str, Any]]
+    total: int
+    collection: str = ""
+
+
+class ModStoreMarketCatalogResponse(BaseModel):
+    success: Literal[True] = True
+    data: ModStoreMarketCatalogPayload
 
 
 class ModStoreDetailData(BaseModel):
@@ -142,7 +156,7 @@ def _all_rows() -> list[dict[str, Any]]:
     try:
         items = list_mod_items()
         return [_item_to_mod_info(x.model_dump()) for x in items]
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.warning("mod-store catalog: list_mod_items failed: %s", e)
         return []
 
@@ -209,6 +223,37 @@ async def _remote_rows() -> list[dict[str, Any]]:
             continue
         rows.append(info)
     return rows
+
+
+async def _map_market_catalog_page(
+    data: dict[str, Any],
+    *,
+    collection_hint: str = "",
+) -> tuple[list[dict[str, Any]], int]:
+    from app.application.mod_store_catalog_app import (
+        is_public_catalog_row,
+        market_item_to_package_row,
+    )
+
+    installed_ids = set(_installed_by_id())
+    items_raw = data.get("items") if isinstance(data.get("items"), list) else []
+    try:
+        total = int(data.get("total") or len(items_raw))
+    except (TypeError, ValueError):
+        total = len(items_raw)
+    out: list[dict[str, Any]] = []
+    for raw in items_raw:
+        if not isinstance(raw, dict):
+            continue
+        row = market_item_to_package_row(raw)
+        if not row or not is_public_catalog_row(row):
+            continue
+        info = _remote_to_mod_info(row, installed_ids)
+        hint = collection_hint or str((row.get("commerce") or {}).get("collection") or "").strip()
+        if hint:
+            info["store_collection"] = hint
+        out.append(info)
+    return out, total
 
 
 def _inject_host_foundation_row(available: list[dict[str, Any]], installed_ids: set[str]) -> None:
@@ -303,7 +348,7 @@ async def _body_value(request: Request, key: str, default: str = "") -> str:
             return default
         form = await request.form()
         return _safe_text(form.get(key) or default)
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         return default
 
 
@@ -317,7 +362,7 @@ async def _request_payload(request: Request) -> dict[str, str]:
             )
         form = await request.form()
         return {str(k): _safe_text(v) for k, v in form.items()}
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         return {}
 
 
@@ -415,6 +460,43 @@ async def mod_store_catalog() -> ModStoreCatalogResponse:
     )
 
 
+@router.get("/market-catalog", response_model=ModStoreMarketCatalogResponse)
+async def mod_store_market_catalog(
+    q: str | None = Query(None),
+    collection: str | None = Query(None),
+    artifact: str | None = Query(None),
+    material_category: str | None = Query(None),
+    license_scope: str | None = Query(None),
+    industry: str | None = Query(None),
+    security_level: str | None = Query(None),
+    limit: int = Query(80, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> ModStoreMarketCatalogResponse:
+    """代理修茈 AI 市场 /api/market/catalog，合并本机安装态。"""
+    data = await fetch_market_catalog_page(
+        q=q,
+        collection=collection,
+        artifact=artifact,
+        material_category=material_category,
+        license_scope=license_scope,
+        industry=industry,
+        security_level=security_level,
+        limit=limit,
+        offset=offset,
+    )
+    items, total = await _map_market_catalog_page(
+        data,
+        collection_hint=str(collection or "").strip(),
+    )
+    return ModStoreMarketCatalogResponse(
+        data=ModStoreMarketCatalogPayload(
+            items=items,
+            total=total,
+            collection=str(collection or "").strip(),
+        )
+    )
+
+
 @router.get("/search", response_model=ModStoreListResponse)
 async def mod_store_search(
     q: str | None = Query(None),
@@ -506,6 +588,40 @@ async def mod_store_install(request: Request) -> ModStoreInstallResult:
         version = version or parsed_version
     activate = str(payload.get("activate") or "true").lower() not in {"0", "false", "no"}
     return await _install_from_catalog(pkg_id, version, activate=activate)
+
+
+@router.post("/install-industry-seed", response_model=ModStoreInstallResult)
+async def mod_store_install_industry_seed(request: Request) -> ModStoreInstallResult:
+    """L2：从 industry-seeds 池安装所选行业中性 Mod；池缺失时 Catalog 兜底。"""
+    payload = await _request_payload(request)
+    raw = _safe_text(
+        payload.get("industry_id") or payload.get("mod_id") or payload.get("industryId")
+    )
+    if not raw:
+        raise HTTPException(status_code=400, detail="缺少 industry_id 或 mod_id")
+    from app.mod_sdk.industry_seed import install_industry_seed_with_fallback
+
+    data = await install_industry_seed_with_fallback(raw)
+    return ModStoreInstallResult(
+        success=bool(data.get("success")),
+        message=str(data.get("message") or ""),
+        data=data,
+    )
+
+
+@router.post("/reload-employees")
+async def mod_store_reload_employees(request: Request) -> ModStoreSimpleResponse:
+    """显式刷新 employee_pack HTTP 路由与 Planner 工具注册表（装包后双保险）。"""
+    payload = await _request_payload(request)
+    pack_id = _safe_text(payload.get("pack_id") or payload.get("pkg_id"))
+    from app.mod_sdk.employee_runtime import refresh_employee_pack_runtime
+
+    data = refresh_employee_pack_runtime(pack_id or None)
+    return ModStoreSimpleResponse(
+        success=True,
+        message="员工包 Planner 注册表已刷新",
+        data=data,
+    )
 
 
 @router.post("/uninstall", response_model=ModStoreSimpleResponse)
@@ -609,8 +725,8 @@ async def _install_host_foundation_internal(edition: str | None) -> ModStoreInst
     if ed not in ("minimal", "generic", "full"):
         ed = "generic"
     try:
-        data = materialize_host_foundation_bridges(ed)  # type: ignore[arg-type]
-    except OPERATIONAL_ERRORS as exc:
+        data = materialize_host_foundation_bridges(ed)
+    except RECOVERABLE_ERRORS as exc:
         logger.exception("materialize_host_foundation_bridges failed (edition=%s)", ed)
         return ModStoreInstallResult(
             success=False,
@@ -637,7 +753,7 @@ async def mod_store_install_host_foundation(
         return ModStoreSimpleResponse(
             success=result.success, message=result.message, data=result.data
         )
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.exception("install-host-foundation failed")
         return ModStoreSimpleResponse(
             success=False,
@@ -663,7 +779,7 @@ async def mod_store_bootstrap_edition_pack(
         assert_bootstrap_edition_allowed(edition)
     except PermissionError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    data = await bootstrap_edition_pack(ed)  # type: ignore[arg-type]
+    data = await bootstrap_edition_pack(ed)
     if data.get("ready"):
         msg = "通用宿主包已装齐"
     else:
@@ -700,7 +816,7 @@ async def mod_store_sync_modstore_library(request: Request) -> ModStoreSimpleRes
     """使用修茈 PAT（须含 ``mod:sync``）从线上 ``/v1/mod-sync`` 拉 zip 并安装到本机 ``mods/``。"""
     try:
         body = await request.json()
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         raise HTTPException(status_code=400, detail="需要 JSON 请求体") from None
     if not isinstance(body, dict):
         raise HTTPException(status_code=400, detail="JSON 须为对象")

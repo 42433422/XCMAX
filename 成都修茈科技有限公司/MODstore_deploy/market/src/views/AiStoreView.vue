@@ -42,7 +42,7 @@
 
         <div v-if="storeNav === 'office_aux'" class="office-spotlight office-aux-spotlight">
           <p class="office-spotlight__text">
-            {{ OFFICE_AUX_PACK_1_PKG_IDS.length }} 个附属扩展：JSON 量化报告员，将结构化数据生成为 HTML 报告（上架后显示）。
+            {{ OFFICE_AUX_PACK_1_PKG_IDS.length }} 个附属扩展：JSON 量化报告员 + 柱状/折线/饼图/看板可视化员，供报告与小猫分析图表（上架后显示）。
           </p>
         </div>
 
@@ -191,7 +191,7 @@
 
         <div v-if="loading" class="state-msg">加载中…</div>
         <div v-else-if="!items.length" class="state-msg muted">
-          <template v-if="storeNav === 'office_aux'">暂无商品。JSON 量化报告员（json-report-employee）上架后将显示在此。</template>
+          <template v-if="storeNav === 'office_aux'">暂无商品。JSON 量化报告员与 chart-* 可视化员上架后将显示在此。</template>
           <template v-else>暂无商品，可切换左侧分类或调整筛选。</template>
         </div>
 
@@ -1014,6 +1014,16 @@ watch(
 onMounted(async () => {
   await loadFacets()
   void refreshOfficeAuxNavBadge()
+  const navHint = String(route.query.nav || route.query.collection || '').trim()
+  if (
+    navHint === 'office_aux' ||
+    navHint === 'office_aux_2' ||
+    navHint === OFFICE_AUX_PACK_1_COLLECTION ||
+    navHint === 'office_employee_aux_pack_2'
+  ) {
+    setStoreNav('office_aux')
+    return
+  }
   await loadItems()
 })
 </script>

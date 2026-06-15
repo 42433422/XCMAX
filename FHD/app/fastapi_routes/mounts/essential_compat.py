@@ -6,7 +6,7 @@ import logging
 
 from fastapi import FastAPI
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +18,7 @@ def register_essential_compat_routes(app: FastAPI) -> None:
 
         app.include_router(legacy_auth_router)
         logger.info("Registered legacy_auth_router (essential compat, /api/auth/*)")
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.warning("essential auth routes skipped: %s", e)
 
     try:
@@ -26,7 +26,7 @@ def register_essential_compat_routes(app: FastAPI) -> None:
 
         app.include_router(system_router)
         logger.info("Registered system_router (essential compat, /api/system/*)")
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.warning("essential system routes skipped: %s", e)
 
     try:
@@ -34,5 +34,5 @@ def register_essential_compat_routes(app: FastAPI) -> None:
 
         app.include_router(product_compat_router, prefix="/api")
         logger.info("Registered product compat (essential, /api/products/*)")
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.warning("essential product compat skipped: %s", e)

@@ -12,12 +12,18 @@ MOD_DIR = REPO / "mods" / "xcagi-planner-bridge"
 
 
 def test_planner_mod_manifest_facade():
+    from tests.mod_presence import skip_if_bridge_mod_absent
+
+    skip_if_bridge_mod_absent("xcagi-planner-bridge")
     data = json.loads((MOD_DIR / "manifest.json").read_text(encoding="utf-8"))
     assert data["id"] == "xcagi-planner-bridge"
     assert data.get("config", {}).get("planner_facade") is True
 
 
 def test_planner_blueprints_exposes_chat_routes():
+    from tests.mod_presence import skip_if_bridge_mod_absent
+
+    skip_if_bridge_mod_absent("xcagi-planner-bridge")
     text = (MOD_DIR / "backend" / "blueprints.py").read_text(encoding="utf-8")
     assert "/chat/stream" in text
     assert "/intent/test" in text

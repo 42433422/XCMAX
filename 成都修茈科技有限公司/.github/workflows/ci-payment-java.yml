@@ -1,0 +1,47 @@
+# 组件级 CI：Java 支付子服务（MODstore_deploy/java_payment_service）
+#
+# 责任边界：仅负责 Spring Boot 支付子服务的编译与测试。
+# 下游：deploy-payment-java.yml 通过 workflow_run 监听本工作流。
+
+name: CI - Payment Java
+
+on:
+  pull_request:
+    paths:
+      - 'MODstore_deploy/java_payment_service/**'
+      - '.github/workflows/ci-payment-java.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'MODstore_deploy/java_payment_service/**'
+      - '.github/workflows/ci-payment-java.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ci-payment-java-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  payment-java-ci:
+    name: MODstore (Java payment service)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: MODstore_deploy/java_payment_service
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+
+      - name: Maven verify
+        run: mvn -B verify

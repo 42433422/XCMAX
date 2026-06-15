@@ -35,6 +35,14 @@ v7-reference/v7-server-extract/
 _scp_tmp/
 _personal_sync_bak/
 
+# XCMAX dev 栈运行时（scripts/start-xcmax.sh 生成，不入库）
+.xcmax-logs/
+.xcmax-pids/
+
+# macOS AppleDouble / 目录元数据（复制/压缩时产生）
+**/._*
+.DS_Store
+
 # XCMAX 工作区分析产物（由 scripts/build-xcmax-tree-data.py 等生成）
 .cache/
 xcmax-*.json
@@ -62,6 +70,15 @@ FHD/mobile-android/.toolchain/
 .cursor/settings.json
 .trae/
 .runtime/
+
+# 太阳鸟交付包大文件（目录结构与说明入库；exe 由打包脚本生成）
+太阳鸟/*.exe
+太阳鸟/manifest.json
+
+# 太阳鸟种子数据（纳入版本库，供定制安装包内嵌）
+!FHD/delivery/
+!FHD/delivery/sunbird-seed/
+!FHD/delivery/sunbird-seed/**
 
 # 根目录本地素材（非交付树）
 /*.jpg

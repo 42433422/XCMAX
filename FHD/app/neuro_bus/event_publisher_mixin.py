@@ -7,7 +7,7 @@ from typing import Any
 
 from app.neuro_bus.bus import get_neuro_bus
 from app.neuro_bus.events.base import EventPriority, NeuroEvent
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +33,6 @@ class NeuroEventPublisherMixin:
             )
             bus.publish(event)
             return event.metadata.event_id
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.warning("发布事件失败 %s: %s", event_type, e)
             return ""

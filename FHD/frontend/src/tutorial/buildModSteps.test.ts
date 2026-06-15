@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { collectModPageHighlights, collectModTutorialTracks, injectModSteps } from './buildModSteps'
 import { createTutorialBuildContext } from './buildContext'
-import type { ModInfo } from '@/stores/mods'
+import type { ModInfo } from '@/types/modInfo'
 
 describe('buildModSteps', () => {
   it('merges mod page highlights by route', () => {

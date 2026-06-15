@@ -19,9 +19,9 @@ def is_pro_source(source: str | None) -> bool:
 
 
 def is_qclaw_source(source: str | None) -> bool:
-    """判断是否为 Qclaw 生态来源。"""
+    """判断是否为 Qclaw/AIOPEN 生态来源（aiopen 为 Qclaw 升级后的 toA 名称）。"""
     normalized = str(source or "").strip().lower().replace("-", "_")
-    return normalized in {"qclaw", "qclaw_lobster", "lobster"}
+    return normalized in {"qclaw", "qclaw_lobster", "lobster", "aiopen", "ai_open"}
 
 
 def is_professional_mode(mode: str | None) -> bool:

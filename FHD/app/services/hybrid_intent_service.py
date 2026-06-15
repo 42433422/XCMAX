@@ -13,7 +13,7 @@ import logging
 from typing import Any
 
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 from .intent_service import recognize_intents as rule_recognize_intents
 from .rasa_nlu_service import RasaNLUService, get_rasa_nlu_service
@@ -147,9 +147,9 @@ class HybridIntentService(NeuroEventPublisherMixin):
                 confidence_threshold=self.bert_confidence_threshold,
                 use_fallback=self.bert_fallback_to_rule,
             )
-            logger.info(f"BERT 意图服务已初始化，模型路径: {self.bert_model_path}")
-        except OPERATIONAL_ERRORS as e:
-            logger.warning(f"无法初始化 BERT 服务: {e}")
+            logger.info("BERT 意图服务已初始化，模型路径: %s", self.bert_model_path)
+        except RECOVERABLE_ERRORS as e:
+            logger.warning("无法初始化 BERT 服务: %s", e)
             self.use_bert = False
 
     async def recognize(self, message: str) -> dict[str, Any]:
@@ -242,8 +242,8 @@ class HybridIntentService(NeuroEventPublisherMixin):
             return rule_recognize_intents(message)
         except RuntimeError:
             return asyncio.run(self.recognize(message))
-        except OPERATIONAL_ERRORS as e:
-            logger.error(f"混合意图识别失败: {e}")
+        except RECOVERABLE_ERRORS as e:
+            logger.error("混合意图识别失败: %s", e)
             return rule_recognize_intents(message)
 
 

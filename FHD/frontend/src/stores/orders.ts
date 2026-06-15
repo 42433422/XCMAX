@@ -3,10 +3,11 @@ import { ref, computed, type Ref } from 'vue'
 import ordersApi from '../api/orders'
 import type { Order } from '@/types/order'
 import type { ApiResponse } from '@/types/api'
+import { asRecord, asArray, asString } from '@/utils/typeGuards'
 
 interface OperationResult {
   success: boolean;
-  data?: any;
+  data?: unknown;
   message?: string;
 }
 
@@ -17,14 +18,15 @@ export const useOrdersStore = defineStore('orders', () => {
 
   const orderCount = computed(() => orders.value.length)
 
-  function normalizeOrders(data: any): Order[] {
-    if (Array.isArray(data?.data)) return data.data
-    if (Array.isArray(data?.orders)) return data.orders
-    if (Array.isArray(data)) return data
+  function normalizeOrders(data: unknown): Order[] {
+    const row = asRecord(data)
+    if (Array.isArray(row.data)) return row.data as Order[]
+    if (Array.isArray(row.orders)) return row.orders as Order[]
+    if (Array.isArray(data)) return data as Order[]
     return []
   }
 
-  async function fetchOrders(params: Record<string, any> = {}): Promise<OperationResult> {
+  async function fetchOrders(params: Record<string, unknown> = {}): Promise<OperationResult> {
     loading.value = true
     error.value = null
     try {

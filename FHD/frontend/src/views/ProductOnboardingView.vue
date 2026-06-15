@@ -44,8 +44,8 @@
           </div>
           <ul class="flow-list bullets">
             <li><strong>干净起步</strong>：侧栏默认只有智能对话、智能生态，不堆满菜单</li>
-            <li><strong>先定行业</strong>：选好方向后，再告诉您还要补哪些基础 Mod</li>
-            <li><strong>AI 员工</strong>：住在 Mod 里，按需唤醒，开口交代即可</li>
+            <li><strong>先定行业</strong>：选好方向后，再告诉您还要补哪些侧栏能力卡片</li>
+            <li><strong>AI 员工</strong>：从市场或定制 Mod 安装后上岗，不在本步基础线里批量装</li>
           </ul>
           <div class="actions">
             <button type="button" class="btn primary" @click="goStep('industry')">下一步：行业定型</button>
@@ -55,7 +55,11 @@
         <template v-else-if="currentStep === 'industry'">
           <h1>先定行业</h1>
           <p class="lead">
-            当前开放 <strong>涂料</strong> 与 <strong>考勤</strong> 两套行业方向；选好后下一步会列出要补的基础线。
+            当前开放
+            <template v-for="(name, idx) in openIndustryLeadNames" :key="name">
+              <strong>{{ name }}</strong><template v-if="idx < openIndustryLeadNames.length - 1"> 与 </template>
+            </template>
+            两套行业方向；选好后下一步会列出要补的基础线。
           </p>
           <p class="industry-open-hint">请选择您的行业方向</p>
           <div class="industry-pick industry-pick--open" role="listbox" aria-label="可选行业">
@@ -88,7 +92,7 @@
           </div>
           <div class="actions">
             <button type="button" class="btn primary" @click="confirmIndustryAndNext">
-              下一步：看要补哪些基础线
+              下一步：看要补哪些侧栏基础线
             </button>
             <button type="button" class="btn ghost" @click="openModStore">打开扩展市场</button>
             <button type="button" class="btn link" @click="finishToChat">先跳过，直接用对话</button>
@@ -96,10 +100,14 @@
         </template>
 
         <template v-else-if="currentStep === 'host-pack'">
-          <h1>补基础线（按需）</h1>
-          <p v-if="baselinePlan?.summary" class="lead">{{ baselinePlan.summary }}</p>
-          <p v-else class="lead">
-            您选了<strong>{{ pickedIndustryName }}</strong>。下面按行业列出建议补装项，可一键装齐，也可以先进入对话。
+          <h1>补侧栏基础线（按需）</h1>
+          <p class="lead baseline-scope-note">
+            本步安装的是<strong>侧栏菜单与宿主能力卡片</strong>（桥接 Mod），用于打开对话、生态、业务菜单等入口；
+            <strong>不是</strong>安装 AI 员工实体。AI 员工请在扩展市场或<strong>账号定制 Mod</strong>装齐后自动上岗。
+          </p>
+          <p v-if="baselinePlan?.summary" class="lead muted">{{ baselinePlan.summary }}</p>
+          <p v-else class="lead muted">
+            您选了<strong>{{ pickedIndustryName }}</strong>。下面列出建议补装的侧栏能力项，可一键装齐，也可以先进入对话。
           </p>
           <div
             class="status-card"
@@ -109,17 +117,89 @@
               <i class="fa fa-spinner fa-spin"></i> 正在检测…
             </template>
             <template v-else-if="baselineOk">
-              <i class="fa fa-check-circle"></i> 本行业推荐基础线已齐，可以开始使用了。
+              <i class="fa fa-check-circle"></i>
+              侧栏宿主桥接已齐，可以进入智能对话。
+              <span v-if="missingAccountCustomCount > 0">
+                （账号定制 Mod / AI 员工另 {{ missingAccountCustomCount }} 项，不阻塞本步）
+              </span>
             </template>
             <template v-else>
               <i class="fa fa-exclamation-circle"></i>
-              还缺 {{ missingRequiredCount }} 项必需基础线
-              <span v-if="missingIndustryCount > 0">
-                （另 {{ missingIndustryCount }} 项定制线可从扩展市场安装）
+              还缺 {{ missingSidebarBaselineCount || missingRequiredCount }} 项侧栏宿主桥接
+              <span v-if="missingAccountCustomCount > 0">
+                （另 {{ missingAccountCustomCount }} 项账号定制 Mod / 员工待安装）
+              </span>
+              <span v-else-if="missingIndustryPackageCount > 0">
+                （另 {{ missingIndustryPackageCount }} 项行业包可选安装）
               </span>
             </template>
           </div>
-          <div v-if="baselineGroups.length" class="baseline-groups">
+          <p
+            v-if="baselineOk && !loading"
+            class="sidebar-shell-note muted"
+          >
+            进入对话后，主导航会<strong>立刻长出本行业业务菜单</strong>（如产品/客户/出货单等，名称随<strong>{{ pickedIndustryName }}</strong>自动适配）。
+            部门/人员等业务改名与 AI 员工，仍由<strong>账号定制 Mod</strong>装齐后补充。
+          </p>
+          <p
+            v-if="showNoAccountCustomHint"
+            class="account-custom-empty-hint muted"
+          >
+            当前账号未绑定定制 Mod；定制能力与 AI 员工需在账号开通后从此处或扩展市场安装。
+          </p>
+          <div v-if="sidebarBaselineGroups.length" class="baseline-groups">
+            <p class="baseline-section-title">侧栏宿主桥接（本步重点）</p>
+            <section v-for="group in sidebarBaselineGroups" :key="group.id" class="baseline-group">
+              <h3>{{ group.title }}</h3>
+              <p class="baseline-group-hint">{{ group.hint }}</p>
+              <ul class="baseline-list">
+                <li
+                  v-for="item in group.items"
+                  :key="item.mod_id"
+                  :class="{
+                    ok: item.installed,
+                    warn: !item.installed && item.required,
+                    optional: !item.required && !item.installed,
+                  }"
+                >
+                  <i
+                    class="fa"
+                    :class="item.installed ? 'fa-check-circle' : item.required ? 'fa-exclamation-circle' : 'fa-circle-o'"
+                    aria-hidden="true"
+                  ></i>
+                  <span>{{ item.label }}</span>
+                  <span v-if="!item.installed && item.show_mod_id !== false" class="mono">{{ item.mod_id }}</span>
+                </li>
+              </ul>
+            </section>
+          </div>
+          <div v-if="supplementBaselineGroups.length" class="baseline-groups baseline-groups--supplement">
+            <p class="baseline-section-title">行业包与账号定制（不阻塞进入对话）</p>
+            <section v-for="group in supplementBaselineGroups" :key="group.id" class="baseline-group">
+              <h3>{{ group.title }}</h3>
+              <p class="baseline-group-hint">{{ group.hint }}</p>
+              <ul class="baseline-list">
+                <li
+                  v-for="item in group.items"
+                  :key="item.mod_id"
+                  :class="{
+                    ok: item.installed,
+                    warn: !item.installed && item.required,
+                    optional: !item.required && !item.installed,
+                  }"
+                >
+                  <i
+                    class="fa"
+                    :class="item.installed ? 'fa-check-circle' : item.required ? 'fa-exclamation-circle' : 'fa-circle-o'"
+                    aria-hidden="true"
+                  ></i>
+                  <span>{{ item.label }}</span>
+                  <span v-if="!item.installed && item.show_mod_id !== false" class="mono">{{ item.mod_id }}</span>
+                </li>
+              </ul>
+            </section>
+          </div>
+          <div v-if="!sidebarBaselineGroups.length && baselineGroups.length" class="baseline-groups">
             <section v-for="group in baselineGroups" :key="group.id" class="baseline-group">
               <h3>{{ group.title }}</h3>
               <p class="baseline-group-hint">{{ group.hint }}</p>
@@ -147,7 +227,7 @@
           <div class="actions">
             <button type="button" class="btn primary" :disabled="bootstrapBusy" @click="runBootstrap">
               <i class="fa" :class="bootstrapBusy ? 'fa-spinner fa-spin' : 'fa-download'"></i>
-              一键装齐本行业推荐项
+              一键装齐本行业侧栏推荐项
             </button>
             <button type="button" class="btn ghost" :disabled="loading" @click="refreshStatus">重新检测</button>
             <button v-if="baselineOk" type="button" class="btn primary" @click="finishToChat">
@@ -180,8 +260,11 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { installHostFoundation, installMod } from '@/api/modStore'
+import { installHostFoundation, installMod, installIndustrySeed } from '@/api/modStore'
+import { autoOnboardWorkflowEmployeesFromMods } from '@/utils/workflowEmployeeOnboard'
+import { useModsStore } from '@/stores/mods'
 import { readBuildEdition } from '@/constants/genericModPack'
+import { fetchProductSku, isEnterpriseEdition } from '@/utils/productSku'
 import { DEFAULT_INDUSTRY_ID } from '@/constants/industryDefaults'
 import { getIndustryPreset, listIndustryPresets } from '@/constants/industryPresets'
 import {
@@ -192,6 +275,7 @@ import {
   parseFlowStepQuery,
   readOnboardingReturnPath,
   readProductFlowCompleted,
+  setRuntimeOnboardingOpenIndustryIds,
 } from '@/constants/productFlow'
 import { useProductFlow } from '@/composables/useProductFlow'
 import { useIndustryStore } from '@/stores/industry'
@@ -201,26 +285,68 @@ import {
   fetchOnboardingIndustryCatalog,
 } from '@/utils/platformShellApi'
 import { appAlert } from '@/utils/appDialog'
+import {
+  promptAdvancedTutorialAfterInstall,
+  resolveRouteNameFromPath,
+} from '@/tutorial/promptAdvancedTutorial'
+import { useTutorialCatalog } from '@/composables/useTutorialCatalog'
+import {
+  invalidateHostPackCompletionCache,
+  markHostPackSkippedThisSession,
+} from '@/utils/hostPackOnboardingGate'
 
 const route = useRoute()
 const router = useRouter()
 const flow = useProductFlow()
 const industryStore = useIndustryStore()
+const { buildContext: tutorialBuildContext } = useTutorialCatalog()
 
 const industryOptions = listIndustryPresets()
 const onboardingCatalog = ref(null)
-const openIndustryOptions = computed(() =>
-  industryOptions.filter((p) => isOnboardingIndustryOpen(p.id)),
-)
-const previewIndustryOptions = computed(() =>
-  industryOptions.filter((p) => !isOnboardingIndustryOpen(p.id)),
-)
-const pickedIndustryId = ref(defaultOnboardingIndustryId())
+
+function catalogChipRow(pkg) {
+  const id = String(pkg?.industry_id || '').trim()
+  return {
+    id,
+    name: String(pkg?.name || getIndustryPreset(id)?.name || id).trim(),
+    scenario: String(pkg?.scenario || getIndustryPreset(id)?.scenario || '').trim(),
+    productName: String(pkg?.product_name || '').trim(),
+  }
+}
+
+const openIndustryOptions = computed(() => {
+  const catalog = onboardingCatalog.value
+  if (catalog) {
+    return (catalog.open_packages || []).map(catalogChipRow)
+  }
+  return industryOptions
+    .filter((p) => isOnboardingIndustryOpen(p.id))
+    .map((p) => ({ id: p.id, name: p.name, scenario: p.scenario, productName: '' }))
+})
+
+const previewIndustryOptions = computed(() => {
+  const previewPkgs = onboardingCatalog.value?.preview_packages
+  if (Array.isArray(previewPkgs) && previewPkgs.length) {
+    return previewPkgs.map(catalogChipRow)
+  }
+  return industryOptions
+    .filter((p) => !isOnboardingIndustryOpen(p.id))
+    .map((p) => ({ id: p.id, name: p.name, scenario: p.scenario, productName: '' }))
+})
+
+const openIndustryLeadNames = computed(() => {
+  const ids = onboardingCatalog.value?.open_industry_ids
+  if (Array.isArray(ids) && ids.length) return ids
+  return openIndustryOptions.value.map((p) => p.id)
+})
+const pickedIndustryId = ref(resolveDefaultPickedIndustryId())
 
 function industryPackageLabel(industryId) {
   const id = String(industryId || '').trim()
   const row = onboardingCatalog.value?.open_packages?.find((p) => p.industry_id === id)
   if (row?.product_name) return row.product_name
+  const chip = openIndustryOptions.value.find((p) => p.id === id)
+  if (chip?.productName) return chip.productName
   const preset = getIndustryPreset(id)
   return preset?.name ? `${preset.name}行业包` : ''
 }
@@ -230,10 +356,28 @@ function chipScenarioText(text) {
   return String(text || '').replace(/[。．]$/, '')
 }
 
+function isIndustrySelectable(id) {
+  const key = String(id || '').trim()
+  if (!key) return false
+  const openIds = onboardingCatalog.value?.open_industry_ids
+  if (Array.isArray(openIds)) {
+    return openIds.includes(key)
+  }
+  return isOnboardingIndustryOpen(key)
+}
+
+function resolveDefaultPickedIndustryId() {
+  const selected = String(onboardingCatalog.value?.selected_industry_id || '').trim()
+  if (selected && isIndustrySelectable(selected)) return selected
+  const openIds = onboardingCatalog.value?.open_industry_ids
+  if (Array.isArray(openIds) && openIds.length) return openIds[0]
+  return defaultOnboardingIndustryId()
+}
+
 function normalizePickedIndustryId(raw) {
   const id = String(raw || '').trim()
-  if (isOnboardingIndustryOpen(id)) return id
-  return defaultOnboardingIndustryId()
+  if (isIndustrySelectable(id)) return id
+  return resolveDefaultPickedIndustryId()
 }
 
 const steps = PRODUCT_FLOW_STEPS.filter((s) => s.id !== 'done')
@@ -263,13 +407,44 @@ function onWelcomeLogoError() {
   }
 }
 
+const productSku = ref('generic')
 const baselineOk = computed(() => baselinePlan.value?.baseline_ready === true)
 const baselineGroups = computed(() => baselinePlan.value?.groups || [])
+const SIDEBAR_BASELINE_GROUP_IDS = new Set(['core', 'host'])
+const sidebarBaselineGroups = computed(() =>
+  baselineGroups.value.filter((g) => SIDEBAR_BASELINE_GROUP_IDS.has(String(g?.id || ''))),
+)
+const supplementBaselineGroups = computed(() =>
+  baselineGroups.value.filter((g) => !SIDEBAR_BASELINE_GROUP_IDS.has(String(g?.id || ''))),
+)
+const missingSidebarBaselineCount = computed(() => {
+  const ids = new Set()
+  for (const g of sidebarBaselineGroups.value) {
+    for (const it of g.items || []) {
+      if (it?.required && !it?.installed && it?.mod_id) ids.add(String(it.mod_id))
+    }
+  }
+  return ids.size
+})
 const missingRequiredCount = computed(
   () => baselinePlan.value?.missing_required_mod_ids?.length || 0,
 )
-const missingIndustryCount = computed(
-  () => baselinePlan.value?.missing_industry_mod_ids?.length || 0,
+const missingAccountCustomCount = computed(
+  () => baselinePlan.value?.missing_account_custom_mod_ids?.length || 0,
+)
+const missingIndustryPackageCount = computed(() => {
+  const ids = new Set(baselinePlan.value?.industry_mod_ids || [])
+  return (baselinePlan.value?.missing_industry_mod_ids || []).filter((id) => ids.has(id)).length
+})
+const hasAccountCustomEntitlement = computed(
+  () => (baselinePlan.value?.account_custom_mod_ids?.length || 0) > 0,
+)
+const showNoAccountCustomHint = computed(
+  () =>
+    isEnterpriseEdition(productSku.value) &&
+    currentStep.value === 'host-pack' &&
+    !loading.value &&
+    !hasAccountCustomEntitlement.value,
 )
 const pickedIndustryName = computed(() => getIndustryPreset(pickedIndustryId.value).name)
 
@@ -340,24 +515,60 @@ async function runBootstrap() {
     await refreshBaseline(true)
 
     const industryMissing = [...(baselinePlan.value?.missing_industry_mod_ids || [])]
-    const industryErrors = []
-    for (const modId of industryMissing) {
+    const customMissing = [...(baselinePlan.value?.missing_account_custom_mod_ids || [])]
+    const installErrors = []
+    if (industryMissing.length) {
+      try {
+        const ir = await installIndustrySeed(pickedIndustryId.value)
+        if (!ir.success) {
+          installErrors.push(`行业包：${ir.message || '安装失败'}`)
+        }
+      } catch (err) {
+        installErrors.push(
+          `行业包：${err instanceof Error ? err.message : '安装失败'}`,
+        )
+      }
+    }
+    for (const modId of customMissing) {
       try {
         const ir = await installMod(modId)
         if (!ir.success) {
-          industryErrors.push(`${modId}：${ir.message || '安装失败'}`)
+          installErrors.push(`${modId}：${ir.message || '安装失败'}`)
         }
       } catch (err) {
-        industryErrors.push(
+        installErrors.push(
           `${modId}：${err instanceof Error ? err.message : '安装失败'}`,
         )
       }
     }
     await refreshBaseline(true)
 
+    if (customMissing.length) {
+      try {
+        const modsStore = useModsStore()
+        await modsStore.refresh()
+        await autoOnboardWorkflowEmployeesFromMods(modsStore.modsForUi)
+      } catch (err) {
+        console.warn('[ProductOnboarding] custom employee onboard failed:', err)
+      }
+    }
+
     if (baselineOk.value) {
+      invalidateHostPackCompletionCache()
       flow.markHostPackAcknowledged()
-      await appAlert('本行业推荐基础线已装齐，可以开始使用了。')
+      if (!readProductFlowCompleted()) {
+        flow.markProductFlowCompleted()
+      }
+      const promptResult = await promptAdvancedTutorialAfterInstall({
+        router,
+        buildContext: tutorialBuildContext.value,
+        message:
+          '本行业推荐侧栏基础线已装齐，可以开始使用了。\n\n是否现在观看进阶教程，快速熟悉菜单与智能对话？',
+        returnContext: { routeName: 'chat' },
+      })
+      if (promptResult === 'already_completed') {
+        await appAlert('本行业推荐侧栏基础线已装齐，可以开始使用了。')
+      }
       return
     }
 
@@ -369,8 +580,8 @@ async function runBootstrap() {
     if (requiredMissing.length) {
       detailParts.push(`仍缺必需项：${requiredMissing.join('、')}`)
     }
-    if (industryErrors.length) {
-      detailParts.push(industryErrors.join('；'))
+    if (installErrors.length) {
+      detailParts.push(installErrors.join('；'))
     }
     await appAlert(detailParts.join('\n') || '部分项目未装齐，可稍后在扩展市场继续安装。')
   } catch (err) {
@@ -381,7 +592,7 @@ async function runBootstrap() {
 }
 
 function pickIndustry(id) {
-  if (!isOnboardingIndustryOpen(id)) return
+  if (!isIndustrySelectable(id)) return
   pickedIndustryId.value = normalizePickedIndustryId(id)
 }
 
@@ -424,16 +635,30 @@ function openModStore() {
   })
 }
 
-function finishToChat() {
-  if (fromTutorial.value) {
+function finishHostPackFlow() {
+  invalidateHostPackCompletionCache()
+  if (baselineOk.value) {
     if (!readProductFlowCompleted()) {
       flow.markProductFlowCompleted()
       flow.markHostPackAcknowledged()
     }
+    if (fromTutorial.value) {
+      returnFromTutorial()
+      return
+    }
+    flow.completeFlowAndGoChat(router)
+    return
+  }
+  markHostPackSkippedThisSession()
+  if (fromTutorial.value) {
     returnFromTutorial()
     return
   }
-  flow.completeFlowAndGoChat(router)
+  void router.replace({ path: '/' })
+}
+
+function finishToChat() {
+  finishHostPackFlow()
 }
 
 function skipEntireFlow() {
@@ -441,14 +666,26 @@ function skipEntireFlow() {
     returnFromTutorial()
     return
   }
-  flow.markProductFlowCompleted()
-  flow.markHostPackAcknowledged()
+  if (baselineOk.value) {
+    flow.markProductFlowCompleted()
+    flow.markHostPackAcknowledged()
+  } else {
+    markHostPackSkippedThisSession()
+  }
   finishToChat()
 }
 
 onMounted(async () => {
   try {
+    productSku.value = await fetchProductSku()
+  } catch {
+    /* ignore */
+  }
+  try {
     onboardingCatalog.value = await fetchOnboardingIndustryCatalog()
+    if (onboardingCatalog.value?.open_industry_ids?.length) {
+      setRuntimeOnboardingOpenIndustryIds(onboardingCatalog.value.open_industry_ids)
+    }
   } catch {
     /* 离线兜底：仅展示 preset 名称 */
   }
@@ -461,7 +698,9 @@ onMounted(async () => {
     }
   }
   const cur = String(industryStore.currentIndustryId || DEFAULT_INDUSTRY_ID).trim()
-  pickedIndustryId.value = normalizePickedIndustryId(cur)
+  pickedIndustryId.value = normalizePickedIndustryId(
+    onboardingCatalog.value?.selected_industry_id || cur,
+  )
   const expectedQuery = { step: currentStep.value }
   if (fromTutorial.value) {
     expectedQuery.from = 'tutorial'
@@ -628,6 +867,16 @@ onMounted(async () => {
   font-size: 15px;
 }
 
+.baseline-scope-note {
+  margin-bottom: 4px;
+  color: #334155;
+}
+
+.lead.muted {
+  font-size: 14px;
+  color: #64748b;
+}
+
 .welcome-tagline {
   margin: 6px 0 0;
   font-size: 16px;
@@ -715,6 +964,7 @@ onMounted(async () => {
   border-style: dashed;
   padding: 10px;
   min-height: 88px;
+  pointer-events: none;
 }
 
 .industry-chip--locked:hover {
@@ -773,6 +1023,25 @@ onMounted(async () => {
   margin-bottom: 16px;
 }
 
+.baseline-groups--supplement {
+  padding-top: 4px;
+  border-top: 1px dashed #cbd5e1;
+}
+
+.baseline-section-title {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.sidebar-shell-note {
+  margin: 10px 0 12px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: #64748b;
+}
+
 .baseline-group h3 {
   margin: 0 0 4px;
   font-size: 15px;
@@ -782,6 +1051,12 @@ onMounted(async () => {
 .baseline-group-hint {
   margin: 0 0 8px;
   font-size: 12px;
+  color: #64748b;
+}
+
+.account-custom-empty-hint {
+  margin: 0 0 12px;
+  font-size: 13px;
   color: #64748b;
 }
 

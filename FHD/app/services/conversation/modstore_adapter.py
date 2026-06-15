@@ -32,11 +32,11 @@ import os
 import time
 from collections.abc import Iterator
 from types import SimpleNamespace
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 import httpx
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -159,9 +159,9 @@ class ModstorePlatformAdapter:
         self._client: Optional[httpx.AsyncClient] = None
 
         logger.info(
-            f"初始化修茈市场平台代理: {self.platform_url}, "
-            f"default={self.default_provider}/{self.default_model}, "
-            f"user_id={self.user_id}"
+            "初始化修茈市场平台代理: %s, "
+            f"default=%s/%s, "
+            f"user_id=%s", self.platform_url, self.default_provider, self.default_model, self.user_id
         )
 
     @staticmethod
@@ -216,7 +216,7 @@ class ModstorePlatformAdapter:
         if request is not None:
             try:
                 request_auth = str(request.headers.get("Authorization") or "").strip()
-            except OPERATIONAL_ERRORS:
+            except RECOVERABLE_ERRORS:
                 request_auth = ""
 
         auth_token = (
@@ -242,13 +242,13 @@ class ModstorePlatformAdapter:
                     if token_from_session:
                         auth_token = token_from_session
                         logger.debug(
-                            f"从FHD Session [{effective_session_id[:8]}...] "
-                            f"获取到平台Token (长度: {len(auth_token)})"
+                            "从FHD Session [%s...] "
+                            f"获取到平台Token (长度: %s)", effective_session_id[:8], len(auth_token)
                         )
                     else:
                         logger.warning(
-                            f"FHD Session [{effective_session_id[:8]}...] "
-                            f"未找到平台Token（用户可能未绑定市场账号）"
+                            "FHD Session [%s...] "
+                            f"未找到平台Token（用户可能未绑定市场账号）", effective_session_id[:8]
                         )
                 else:
                     logger.warning("无法获取有效的Session ID")
@@ -258,9 +258,9 @@ class ModstorePlatformAdapter:
                         auth_token = latest_token
                         logger.debug("使用最近一次持久化的修茈市场Token作为模型服务凭据")
             except ImportError as e:
-                logger.error(f"无法导入market_account模块: {e}")
-            except OPERATIONAL_ERRORS as e:
-                logger.error(f"从Session获取Token失败: {e}", exc_info=True)
+                logger.error("无法导入market_account模块: %s", e)
+            except RECOVERABLE_ERRORS as e:
+                logger.error("从Session获取Token失败: %s", e, exc_info=True)
 
         instance = cls(
             platform_url=platform_url,
@@ -325,16 +325,16 @@ class ModstorePlatformAdapter:
                 old_token_len = len(self.auth_token or "")
                 self.auth_token = new_token
                 logger.info(
-                    f"Token已刷新 [{old_token_len} → {len(new_token)} chars], "
-                    f"来源: session[{effective_session_id[:8]}...]"
+                    "Token已刷新 [%s → %s chars], "
+                    f"来源: session[%s...]", old_token_len, len(new_token), effective_session_id[:8]
                 )
                 return True
             else:
                 logger.warning("Session中未找到新Token")
                 return False
 
-        except OPERATIONAL_ERRORS as e:
-            logger.error(f"刷新Token失败: {e}", exc_info=True)
+        except RECOVERABLE_ERRORS as e:
+            logger.error("刷新Token失败: %s", e, exc_info=True)
             return False
 
     @property
@@ -433,8 +433,8 @@ class ModstorePlatformAdapter:
             payload["user_id"] = self.user_id
 
         logger.debug(
-            f"[Modstore] 调用平台: {effective_provider}/{effective_model}, "
-            f"messages={len(messages)}, user_id={self.user_id}"
+            "[Modstore] 调用平台: %s/%s, "
+            f"messages=%s, user_id=%s", effective_provider, effective_model, len(messages), self.user_id
         )
 
         t0 = time.perf_counter()
@@ -447,7 +447,7 @@ class ModstorePlatformAdapter:
 
             if response.status_code >= 400:
                 error_text = response.text[:500]
-                logger.error(f"[Modstore] 平台返回错误 {response.status_code}: {error_text}")
+                logger.error("[Modstore] 平台返回错误 %s: %s", response.status_code, error_text)
                 raise ValueError(f"平台错误({response.status_code}): {error_text}")
 
             result = response.json()
@@ -464,7 +464,7 @@ class ModstorePlatformAdapter:
                     token_count=0,
                     user_id=str(self.user_id or ""),
                 )
-            except OPERATIONAL_ERRORS:
+            except RECOVERABLE_ERRORS:
                 pass
 
             # 标准化响应格式为OpenAI兼容格式
@@ -479,10 +479,10 @@ class ModstorePlatformAdapter:
             return normalized
 
         except httpx.HTTPError as e:
-            logger.error(f"[Modstore] HTTP请求失败: {e}")
+            logger.error("[Modstore] HTTP请求失败: %s", e)
             raise
-        except OPERATIONAL_ERRORS as e:
-            logger.error(f"[Modstore] 调用异常: {e}", exc_info=True)
+        except RECOVERABLE_ERRORS as e:
+            logger.error("[Modstore] 调用异常: %s", e, exc_info=True)
             raise
 
     async def stream_chat_completion(
@@ -520,7 +520,7 @@ class ModstorePlatformAdapter:
         if self.user_id:
             payload["user_id"] = self.user_id
 
-        logger.info(f"[Modstream] 启动流式请求: {effective_provider}/{effective_model}")
+        logger.info("[Modstream] 启动流式请求: %s/%s", effective_provider, effective_model)
 
         client = await self._get_client()
         async with client.stream("POST", url, json=payload) as response:
@@ -541,6 +541,20 @@ class ModstorePlatformAdapter:
         """同步版平台补全，用于现有 Planner 的 OpenAI SDK 兼容调用栈。"""
         if not self.platform_url:
             raise ValueError("修茈市场平台URL未配置 (MODSTORE_PLATFORM_URL)")
+
+        try:
+            from app.application.surface_audit_demo_account import is_local_demo_market_token
+            from app.fastapi_routes.market_account import _is_local_market_base
+
+            if is_local_demo_market_token(self.auth_token or "") and not _is_local_market_base(
+                self.platform_url
+            ):
+                raise ValueError(
+                    "当前会话为本地演示令牌，无法调用官网 LLM。"
+                    "请设置 XCAGI_USE_REMOTE_MARKET=1 重启后端并重新登录。"
+                )
+        except ImportError:
+            pass
 
         effective_provider, effective_model = self._resolve_provider_model(provider, model)
         url = f"{self.platform_url}/api/llm/chat"
@@ -578,7 +592,7 @@ class ModstorePlatformAdapter:
                 token_count=0,
                 user_id=str(self.user_id or ""),
             )
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             pass
 
         return self._normalize_response(result, effective_provider, effective_model)
@@ -761,13 +775,13 @@ class ModstorePlatformAdapter:
             response = await client.get(url)
 
             if response.status_code == 200:
-                return response.json().get("providers", [])
+                return cast("list[dict[str, Any]]", response.json().get("providers", []))
             else:
-                logger.warning(f"[Modstore] 获取供应商列表失败: {response.status_code}")
+                logger.warning("[Modstore] 获取供应商列表失败: %s", response.status_code)
                 return []
 
-        except OPERATIONAL_ERRORS as e:
-            logger.error(f"[Modstore] 查询供应商异常: {e}")
+        except RECOVERABLE_ERRORS as e:
+            logger.error("[Modstore] 查询供应商异常: %s", e)
             return []
 
     async def get_credential_status(self, provider: str = None) -> Dict[str, Any]:
@@ -788,11 +802,11 @@ class ModstorePlatformAdapter:
             response = await client.get(url)
 
             if response.status_code == 200:
-                return response.json()
+                return cast("dict[str, Any]", response.json())
             else:
                 return {"error": f"HTTP {response.status_code}"}
 
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             return {"error": str(e)}
 
     async def close(self):

@@ -37,7 +37,7 @@ class WechatNeuroDomain(NeuroDomain):
         async def on_message(event):
             msg_type = event.payload.get("msg_type")
             from_user = event.payload.get("from_user")
-            logger.info(f"WeChat message: type={msg_type}, from={from_user}")
+            logger.info("WeChat message: type=%s sender=%s", msg_type, from_user)
             from app.neuro_bus.neuro_trace_config import bump_domain_handler_metric
 
             bump_domain_handler_metric("wechat.message.received")
@@ -46,7 +46,7 @@ class WechatNeuroDomain(NeuroDomain):
         async def on_payment(event):
             order_id = event.payload.get("order_id")
             status = event.payload.get("status")
-            logger.info(f"WeChat payment: order={order_id}, status={status}")
+            logger.info("WeChat payment: order=%s, status=%s", order_id, status)
             bump_domain_handler_metric("wechat.payment.callback")
 
     async def initialize(self):

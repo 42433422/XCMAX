@@ -1,39 +1,41 @@
 id: enterprise-adoption-officer
 name: 企业使用跟踪员
-version: "10.0.0"
+version: "1.0.0"
+domain: 跟踪 O6 企业使用阶段：租户激活、功能采纳、用量遥测与回访触发；与 user-customer-service-officer 分工（本岗偏数据与里程碑，客服偏交互）。
 owner: admin
 area: platform-core
-domain: >-
-  跟踪 O6 企业使用阶段：租户激活、功能采纳、用量遥测与回访触发；与 user-customer-service-officer 分工（本岗偏数据与里程碑，客服偏交互）。
+five_line_id: ops_acquisition
+subzone: delivery-feedback
+also_serves: []
 
 scope_globs:
-  - "FHD/app/**/telemetry/**"
-  - "FHD/app/**/crm/**"
-  - "MODstore_deploy/modstore_server/**/tenant**"
-  - "yuangon/platform-core/enterprise-adoption-officer/**"
+  - FHD/app/**/telemetry/**
+  - FHD/app/**/crm/**
+  - MODstore_deploy/modstore_server/**/tenant**
 
 forbidden_globs:
-  - "_local_secrets/**"
+  - _local_secrets/**
   - "*.env*"
+
+triggers:
+  on_error: true
+  schedule:
+    cron: "0 8 * * 1-5"
+    timezone: "Asia/Shanghai"
+
+sla:
+  timeout_seconds: 120
+  retry_max: 2
+  escalate_to_human: true
+
+llm_default: "auto"
+
+skills: []
 
 depends_on:
   - user-customer-service-officer
 
-actions:
-  handlers:
-    - llm_md
-    - echo
-
-triggers:
-  on_error: true
-  on_quality_fail: true
-
-skills:
-  - task.analyze
-  - llm.markdown
-  - workflow.assist
-
 changelog:
-  - version: "10.0.0"
-    date: "2026-06-07"
-    note: "yuangon 骨架由 bootstrap_yuangon.py 从 manifest 反向生成（v10 线内迭代）"
+  - version: "1.0.0"
+    date: "2026-06-03"
+    note: "六部门编制：O-A O6 企业使用专岗"

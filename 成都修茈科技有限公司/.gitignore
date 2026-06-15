@@ -1,0 +1,65 @@
+__pycache__/
+*.py[cod]
+.venv/
+*.mp4
+!new/hero-video.mp4
+!public/hero-video.mp4
+
+# 敏感配置文件
+.env
+MODstore_deploy/deploy-target.local.ps1
+.env.local
+.env.*.local
+*.key
+*.pem
+*.csr
+*.crt
+*_private_key*
+setup-alipay.sh
+_nginx_extract/
+
+# 构建产物
+MODstore_deploy.zip
+MODstore_deploy/market/node_modules/
+MODstore_deploy/market/dist/
+MODstore_deploy/java_payment_service/target/
+*.tar.gz
+*.zip
+MODstore_deploy/market/coverage/
+MODstore_deploy/market/playwright-report/
+MODstore_deploy/market/test-results/
+coverage/
+playwright-report/
+test-results/
+
+# 本地密钥试验目录（勿入库）
+MODstore_deploy/keys_staging/
+
+# 日志和数据库
+*.log
+*.db
+*.sqlite3
+
+# 仓库根误生成的依赖与构建目录（勿提交）
+/node_modules/
+/dist/
+
+# 本地工作台会话数据
+MODstore_deploy/modstore_server/data/workbench_sessions/
+
+# 运行期产物：outbox / webhook 投递落盘记录（属数据盘，禁止进入源码树）
+# 代码默认路径会落到 modstore_server/webhook_events/ 或 modstore_server/data/event_outbox.jsonl，
+# 生产部署应通过 MODSTORE_WEBHOOK_EVENTS_DIR / MODSTORE_EVENT_OUTBOX_PATH / MODSTORE_RUNTIME_DIR
+# 指向 /data 等持久化卷。下面的 ignore 规则保证这些运行期文件永远不会进入 git。
+MODstore_deploy/modstore_server/webhook_events/
+MODstore_deploy/modstore_server/data/event_outbox.jsonl
+MODstore_deploy/modstore_server/data/event_outbox_*.jsonl
+MODstore_deploy/modstore_server/data/payment_orders/
+MODstore_deploy/modstore_server/data/chroma/
+MODstore_deploy/modstore_server/data/
+
+# 组件化拆仓脚本生成目录（由 scripts/split/split-*.sh 生成）
+.split-out/
+
+# 本地嵌套克隆（若需入库请改为 submodule）
+eskill-prototype/

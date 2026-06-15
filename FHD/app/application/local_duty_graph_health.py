@@ -8,7 +8,7 @@ from typing import Any
 
 from app.application.ops_closure_status import _duty_employee_area_map, _installed_employee_pack_ids
 from app.mod_sdk.duty_roster import all_planned_duty_employee_ids, load_duty_roster_document
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
 def _local_registered_employee_pack_ids() -> set[str]:
@@ -16,28 +16,26 @@ def _local_registered_employee_pack_ids() -> set[str]:
     return _installed_employee_pack_ids()
 
 
-def build_local_duty_graph_health() -> dict[str, Any]:
-    """与 MODstore ``/api/admin/duty-graph/health`` staffing 字段对齐，数据源为本机。"""
-    planned = sorted(all_planned_duty_employee_ids())
-    registered = _local_registered_employee_pack_ids()
-    planned_set = set(planned)
-    missing = sorted(planned_set - registered)
-    area_map = _duty_employee_area_map()
-    doc = load_duty_roster_document()
+def _staffing_areas_from_doc(doc: dict[str, Any], registered: set[str]) -> list[dict[str, Any]]:
+    """从 duty_roster areas 或 departments 生成区段缺岗列表。"""
+    areas_out: list[dict[str, Any]] = []
     areas_doc = doc.get("areas") if isinstance(doc.get("areas"), dict) else {}
+    if not areas_doc:
+        departments = doc.get("departments") if isinstance(doc.get("departments"), dict) else {}
+        areas_doc = departments if isinstance(departments, dict) else {}
 
-    areas: list[dict[str, Any]] = []
-    if isinstance(areas_doc, dict):
-        for key, block in areas_doc.items():
-            if not isinstance(block, dict):
-                continue
-            raw_ids = block.get("ids")
-            ids = (
-                [str(x).strip() for x in raw_ids if str(x).strip()]
-                if isinstance(raw_ids, list)
-                else []
-            )
-            areas.append(
+    def _append_block(key: str, block: dict[str, Any]) -> None:
+        raw_ids = block.get("ids")
+        ids = (
+            [str(x).strip() for x in raw_ids if str(x).strip()] if isinstance(raw_ids, list) else []
+        )
+        subzones = block.get("subzones")
+        if isinstance(subzones, dict):
+            for sub_key, sub in subzones.items():
+                if isinstance(sub, dict):
+                    _append_block(f"{key}/{sub_key}", sub)
+        if ids:
+            areas_out.append(
                 {
                     "key": str(key),
                     "label": str(block.get("label") or key),
@@ -45,13 +43,31 @@ def build_local_duty_graph_health() -> dict[str, Any]:
                 }
             )
 
+    for key, block in areas_doc.items():
+        if isinstance(block, dict):
+            _append_block(str(key), block)
+    return areas_out
+
+
+def build_local_duty_graph_health() -> dict[str, Any]:
+    """与 MODstore ``/api/admin/duty-graph/health`` staffing 字段对齐，数据源为本机。"""
+    planned = sorted(all_planned_duty_employee_ids())
+    registered = _local_registered_employee_pack_ids()
+    planned_set = set(planned)
+    missing_local = sorted(planned_set - registered)
+    area_map = _duty_employee_area_map()
+    doc = load_duty_roster_document()
+    areas = _staffing_areas_from_doc(doc, registered)
+
     return {
         "success": True,
         "source": "local",
         "staffing": {
             "planned_count": len(planned),
             "registered_count": len(planned_set & registered),
-            "missing_employees": missing,
+            # 本地 health：编制内员工仍在 roster/catalog 语义下展示；勿把「未落盘」当成「未进 catalog」
+            "missing_employees": [],
+            "missing_local_employee_packs": missing_local,
             "extra_employees": sorted(registered - planned_set),
             "areas": areas,
             "area_map_size": len(area_map),
@@ -90,7 +106,7 @@ def read_local_employee_manifest(employee_id: str) -> dict[str, Any] | None:
                         "manifest": data,
                         **data,
                     }
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         pass
     return None
 

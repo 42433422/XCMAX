@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
-MOD_DIR = REPO / "mods" / "xcagi-neuro-bus-bridge"
+MOD_DIR = REPO / "mods-admin-runtime" / "xcagi-neuro-bus-bridge"
 
 
 def test_neuro_bus_manifest_facade_flag():

@@ -24,9 +24,12 @@ declare module '@dagrejs/dagre' {
 }
 
 declare module '@vue-flow/core' {
+  import type { Component } from 'vue'
   export interface Node {
     id: string
+    type?: string
     position?: { x: number; y: number }
+    data?: Record<string, unknown>
     [key: string]: unknown
   }
   export interface Edge {
@@ -34,5 +37,26 @@ declare module '@vue-flow/core' {
     source: string
     target: string
     [key: string]: unknown
+  }
+  export const VueFlow: Component
+  export function useVueFlow(...args: unknown[]): {
+    fitView: (opts?: Record<string, unknown>) => void
+    [key: string]: unknown
+  }
+}
+
+declare module 'xlsx' {
+  export interface WorkBook {
+    SheetNames: string[]
+    Sheets: Record<string, unknown>
+  }
+  export function read(data: ArrayBuffer | string, opts?: Record<string, unknown>): WorkBook
+  export function write(workbook: WorkBook, opts?: Record<string, unknown>): ArrayBuffer | Uint8Array | string
+  export const utils: {
+    sheet_to_json: (sheet: unknown, opts?: Record<string, unknown>) => unknown[][]
+    book_new: () => WorkBook
+    book_append_sheet: (workbook: WorkBook, sheet: unknown, name?: string) => void
+    aoa_to_sheet: (data: unknown[][]) => unknown
+    json_to_sheet: (data: Record<string, unknown>[]) => unknown
   }
 }

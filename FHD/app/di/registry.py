@@ -8,7 +8,7 @@ Tests: ``set_service_registry(CustomServiceContainer(...))`` or ``reset_service_
 from __future__ import annotations
 
 import threading
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Optional, cast
 
 if TYPE_CHECKING:
     from app.application.ai_chat_app_service import AIChatApplicationService
@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from app.application.shipment_app_service import ShipmentApplicationService
     from app.application.unit_products_import_app_service import UnitProductsImportService
     from app.application.wechat_contact_app_service import WechatContactApplicationService
+    from app.application.ports.wechat_contact_store import WechatContactStorePort
     from app.services.auth_service import AuthService
     from app.services.session_service import SessionService
     from app.services.user_preference_service import UserPreferenceService
@@ -56,96 +57,100 @@ class ServiceContainer:
         self._ai_chat_application_service = None
         self._unit_products_import_application_service = None
         self._file_analysis_application_service = None
-        self._wechat_contact_store = None
+        self._wechat_contact_store: WechatContactStorePort | None = None
         self._wechat_contact_application_service = None
         self._shipment_application_service_core = None
         self._shipment_event_primary_facade = None
+
+    def _lazy(self, attr: str, factory):
+        """线程安全懒加载：模块级 ``_lock``（RLock，可重入）下双重检查初始化。
+
+        避免多个请求并发首次访问同一懒加载属性时各自构造一个实例。
+        """
+        if getattr(self, attr) is None:
+            with _lock:
+                if getattr(self, attr) is None:
+                    setattr(self, attr, factory())
+        return getattr(self, attr)
 
     # --- core HTTP / session services ---
 
     @property
     def session_service(self) -> SessionService:
-        if self._session_service is None:
-            from app.services.session_service import SessionService
+        from app.services.session_service import SessionService
 
-            self._session_service = SessionService()
-        return self._session_service
+        return cast("SessionService", self._lazy("_session_service", SessionService))
 
     @property
     def auth_service(self) -> AuthService:
-        if self._auth_service is None:
-            from app.services.auth_service import AuthService
+        from app.services.auth_service import AuthService
 
-            self._auth_service = AuthService()
-        return self._auth_service
+        return cast("AuthService", self._lazy("_auth_service", AuthService))
 
     @property
     def user_service(self) -> UserService:
-        if self._user_service is None:
-            from app.services.user_service import UserService
+        from app.services.user_service import UserService
 
-            self._user_service = UserService()
-        return self._user_service
+        return cast("UserService", self._lazy("_user_service", UserService))
 
     @property
     def user_preference_service(self) -> UserPreferenceService:
-        if self._user_preference_service is None:
-            from app.services.user_preference_service import UserPreferenceService
+        from app.services.user_preference_service import UserPreferenceService
 
-            self._user_preference_service = UserPreferenceService()
-        return self._user_preference_service
+        return cast("UserPreferenceService", self._lazy("_user_preference_service", UserPreferenceService))
 
     # --- application services (formerly module-level singletons) ---
 
     @property
     def customer_application_service(self) -> CustomerApplicationService:
-        if self._customer_application_service is None:
-            from app.application.customer_app_service import CustomerApplicationService
+        from app.application.customer_app_service import CustomerApplicationService
 
-            self._customer_application_service = CustomerApplicationService()
-        return self._customer_application_service
+        return cast("CustomerApplicationService", self._lazy("_customer_application_service", CustomerApplicationService))
 
     def invalidate_customer_application_service(self) -> None:
         self._customer_application_service = None
 
     @property
     def ai_chat_application_service(self) -> AIChatApplicationService:
-        if self._ai_chat_application_service is None:
-            from app.application.ai_chat_app_service import AIChatApplicationService
+        from app.application.ai_chat_app_service import AIChatApplicationService
 
-            self._ai_chat_application_service = AIChatApplicationService()
-        return self._ai_chat_application_service
+        return cast("AIChatApplicationService", self._lazy("_ai_chat_application_service", AIChatApplicationService))
 
     @property
     def unit_products_import_application_service(self) -> UnitProductsImportService:
-        if self._unit_products_import_application_service is None:
-            from app.application.unit_products_import_app_service import UnitProductsImportService
+        from app.application.unit_products_import_app_service import UnitProductsImportService
 
-            self._unit_products_import_application_service = UnitProductsImportService()
-        return self._unit_products_import_application_service
+        return cast(
+            "UnitProductsImportService",
+            self._lazy(
+                "_unit_products_import_application_service",
+                UnitProductsImportService,
+            ),
+        )
 
     @property
     def file_analysis_application_service(self) -> FileAnalysisService:
-        if self._file_analysis_application_service is None:
-            from app.application.file_analysis_app_service import FileAnalysisService
+        from app.application.file_analysis_app_service import FileAnalysisService
 
-            self._file_analysis_application_service = FileAnalysisService()
-        return self._file_analysis_application_service
+        return cast("FileAnalysisService", self._lazy("_file_analysis_application_service", FileAnalysisService))
 
     @property
     def wechat_contact_application_service(self) -> WechatContactApplicationService:
-        if self._wechat_contact_application_service is None:
-            from app.application.wechat_contact_app_service import WechatContactApplicationService
+        def _factory() -> WechatContactApplicationService:
+            from app.application.wechat_contact_app_service import (
+                WechatContactApplicationService,
+            )
             from app.infrastructure.persistence.wechat_contact_store_impl import (
                 SQLAlchemyWechatContactStore,
             )
 
-            if self._wechat_contact_store is None:
-                self._wechat_contact_store = SQLAlchemyWechatContactStore()
-            self._wechat_contact_application_service = WechatContactApplicationService(
-                self._wechat_contact_store
-            )
-        return self._wechat_contact_application_service
+            store = self._wechat_contact_store
+            if store is None:
+                store = SQLAlchemyWechatContactStore()
+                self._wechat_contact_store = store
+            return WechatContactApplicationService(store)
+
+        return cast("WechatContactApplicationService", self._lazy("_wechat_contact_application_service", _factory))
 
     def invalidate_wechat_contact_application_service(self) -> None:
         self._wechat_contact_application_service = None
@@ -155,7 +160,7 @@ class ServiceContainer:
 
     @property
     def shipment_application_service_core(self) -> ShipmentApplicationService:
-        if self._shipment_application_service_core is None:
+        def _factory() -> ShipmentApplicationService:
             from app.application.shipment_app_service import ShipmentApplicationService
             from app.infrastructure.documents.shipment_document_generator_impl import (
                 LegacyShipmentDocumentGenerator,
@@ -175,8 +180,7 @@ class ServiceContainer:
             from app.mod_sdk.erp_repository_registry import resolve_shipment_repository
 
             shipment_repo, _provider = resolve_shipment_repository()
-
-            self._shipment_application_service_core = ShipmentApplicationService(
+            return ShipmentApplicationService(
                 repository=shipment_repo,
                 document_generator=LegacyShipmentDocumentGenerator(),
                 record_store=SQLAlchemyShipmentRecordStore(),
@@ -184,19 +188,21 @@ class ServiceContainer:
                 record_command=SQLAlchemyShipmentRecordCommand(),
                 purchase_unit_query=SQLAlchemyPurchaseUnitQuery(),
             )
-        return self._shipment_application_service_core
+
+        return cast("ShipmentApplicationService", self._lazy("_shipment_application_service_core", _factory))
 
     @property
     def shipment_event_primary_facade(self) -> ShipmentApplicationServiceEventPrimary:
-        if self._shipment_event_primary_facade is None:
+        def _factory() -> ShipmentApplicationServiceEventPrimary:
             from app.application.facades.shipment_event_primary import (
                 ShipmentApplicationServiceEventPrimary,
             )
 
-            self._shipment_event_primary_facade = ShipmentApplicationServiceEventPrimary(
+            return ShipmentApplicationServiceEventPrimary(
                 self.shipment_application_service_core
             )
-        return self._shipment_event_primary_facade
+
+        return cast("ShipmentApplicationServiceEventPrimary", self._lazy("_shipment_event_primary_facade", _factory))
 
     def invalidate_shipment_wiring(self) -> None:
         """Clear shipment singletons (tests / hot-reload hooks)."""

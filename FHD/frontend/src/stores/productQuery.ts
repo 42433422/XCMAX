@@ -1,21 +1,23 @@
 import { defineStore } from 'pinia'
 import { ref, computed, type Ref } from 'vue'
 import { productsApi } from '@/api/products'
+import type { ProductUpdateDTO } from '@/types/product'
+import { asRecord, asArray, asString } from '@/utils/typeGuards'
 
-interface Company {
+export interface Company {
   id: number | string;
   name: string;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
-interface LocalProduct {
+export interface LocalProduct {
   id: number | string;
   name: string;
   model?: string;
   code?: string;
   companyId: number | string;
   companyName?: string;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 interface ProductQueryState {
@@ -128,7 +130,7 @@ export const useProductQueryStore = defineStore('productQuery', () => {
     searchQuery.value = query
   }
 
-  async function updateProduct(productId: number | string, data: any) {
+  async function updateProduct(productId: number | string, data: ProductUpdateDTO) {
     loading.value = true
     error.value = null
     
@@ -150,7 +152,7 @@ export const useProductQueryStore = defineStore('productQuery', () => {
 
   async function exportProducts(companyId: number | string | null = null) {
     try {
-      const params: Record<string, any> = companyId ? { companyId } : {}
+      const params: Record<string, unknown> = companyId ? { companyId } : {}
       await productsApi.exportUnitProductsXlsx(params)
     } catch (err) {
       error.value = err instanceof Error ? err.message : '导出产品失败'

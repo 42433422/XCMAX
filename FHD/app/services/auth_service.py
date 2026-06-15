@@ -2,14 +2,14 @@
 
 import logging
 import uuid
-from typing import Any
+from typing import Any, cast
 
 from app.db.models import Permission, Role, User
 from app.db.session import get_db
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
 from app.services.session_service import get_session_service
 from app.utils import audit_logger
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.password_hash import check_password_hash, generate_password_hash
 from app.utils.time import utc_now_naive
 
@@ -78,7 +78,7 @@ class AuthService(NeuroEventPublisherMixin):
                     "session_id": session_result["session_id"],
                     "expires_at": session_result["expires_at"],
                 }
-            except OPERATIONAL_ERRORS:
+            except RECOVERABLE_ERRORS:
                 db.rollback()
                 err_id = uuid.uuid4().hex[:12]
                 logger.exception("authenticate failed (error_id=%s)", err_id)
@@ -91,10 +91,10 @@ class AuthService(NeuroEventPublisherMixin):
     def logout(self, session_id: str) -> bool:
         result = self.session_service.delete_session(session_id)
         audit_logger.audit_log("logout", None, "", {"session_id": session_id, "success": result})
-        return result
+        return cast("bool", result)
 
     def get_current_user(self, session_id: str) -> User | None:
-        return self.session_service.validate_session(session_id)
+        return cast("User | None", self.session_service.validate_session(session_id))
 
     def get_user_permissions(self, user: User) -> list:
         with get_db() as db:
@@ -135,7 +135,7 @@ class AuthService(NeuroEventPublisherMixin):
                 db.commit()
                 audit_logger.audit_log("change_password", user_id, "", {"username": user.username})
                 return {"success": True, "message": "密码修改成功"}
-            except OPERATIONAL_ERRORS:
+            except RECOVERABLE_ERRORS:
                 db.rollback()
                 err_id = uuid.uuid4().hex[:12]
                 logger.exception("change_password failed (error_id=%s user_id=%s)", err_id, user_id)
@@ -157,7 +157,7 @@ class AuthService(NeuroEventPublisherMixin):
                 self.session_service.delete_user_sessions(user_id)
                 audit_logger.audit_log("reset_password", user_id, "", {"username": user.username})
                 return {"success": True, "message": "密码已重置，请使用新密码登录"}
-            except OPERATIONAL_ERRORS:
+            except RECOVERABLE_ERRORS:
                 db.rollback()
                 err_id = uuid.uuid4().hex[:12]
                 logger.exception("reset_password failed (error_id=%s user_id=%s)", err_id, user_id)

@@ -2,20 +2,20 @@ import { api } from './core';
 import type { ApiResponse } from '@/types/api';
 
 export const ocrApi = {
-  recognizeText(data: any): Promise<ApiResponse<any>> {
-    return api.post<ApiResponse<any>>('/api/ocr/recognize', data);
+  recognizeText(data: unknown): Promise<ApiResponse<unknown>> {
+    return api.post<ApiResponse<unknown>>('/api/ocr/recognize', data);
   },
 
-  extractStructured(data: any): Promise<ApiResponse<any>> {
-    return api.post<ApiResponse<any>>('/api/ocr/extract', data);
+  extractStructured(data: unknown): Promise<ApiResponse<unknown>> {
+    return api.post<ApiResponse<unknown>>('/api/ocr/extract', data);
   },
 
-  analyzeText(data: any): Promise<ApiResponse<any>> {
-    return api.post<ApiResponse<any>>('/api/ocr/analyze', data);
+  analyzeText(data: unknown): Promise<ApiResponse<unknown>> {
+    return api.post<ApiResponse<unknown>>('/api/ocr/analyze', data);
   },
 
-  recognizeAndExtract(data: any): Promise<ApiResponse<any>> {
-    return api.post<ApiResponse<any>>('/api/ocr/recognize-and-extract', data);
+  recognizeAndExtract(data: unknown): Promise<ApiResponse<unknown>> {
+    return api.post<ApiResponse<unknown>>('/api/ocr/recognize-and-extract', data);
   }
 };
 

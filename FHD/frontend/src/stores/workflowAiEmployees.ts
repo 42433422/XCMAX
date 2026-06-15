@@ -24,7 +24,28 @@ function collectManifestWorkflowEmployeeIds(mods: ModWithWorkflowEmployees[] | u
   return ids
 }
 
+import {
+  buildTenantScopedStorageKey,
+  resolveTenantStorageScopeFromRuntime,
+} from '@/utils/tenantStorageScope'
+
 export const WORKFLOW_AI_EMPLOYEES_STORAGE_KEY = 'xcagi_workflow_ai_employees'
+
+let activeTenantScope = ''
+
+function ensureActiveTenantScope(): string {
+  if (!activeTenantScope) {
+    activeTenantScope = resolveTenantStorageScopeFromRuntime(true)
+  }
+  return activeTenantScope
+}
+
+export function workflowAiEmployeesStorageKey(scope?: string): string {
+  return buildTenantScopedStorageKey(
+    WORKFLOW_AI_EMPLOYEES_STORAGE_KEY,
+    scope ?? ensureActiveTenantScope(),
+  )
+}
 
 export function defaultWorkflowBuiltinEnabled(): Record<string, boolean> {
   return {}
@@ -34,10 +55,10 @@ export function coreWorkflowEmployeeIdSet(): Set<string> {
   return new Set()
 }
 
-function readWorkflowEnabledFromLocalStorage(): Record<string, boolean> {
+function readWorkflowEnabledFromLocalStorage(scope?: string): Record<string, boolean> {
   const base = defaultWorkflowBuiltinEnabled()
   try {
-    const raw = localStorage.getItem(WORKFLOW_AI_EMPLOYEES_STORAGE_KEY)
+    const raw = localStorage.getItem(workflowAiEmployeesStorageKey(scope))
     if (!raw) return base
     const p = JSON.parse(raw) as Record<string, unknown>
     if (!p || typeof p !== 'object') return base
@@ -69,7 +90,7 @@ function mergeModWorkflowIds(
 }
 
 export const useWorkflowAiEmployeesStore = defineStore('workflowAiEmployees', () => {
-  const enabled = ref<Record<string, boolean>>(readWorkflowEnabledFromLocalStorage())
+  const enabled = ref<Record<string, boolean>>(defaultWorkflowBuiltinEnabled())
   const registryEntries = ref<WorkflowEmployeeRegistryEntry[]>([])
   const registryLoaded = ref(false)
 
@@ -77,10 +98,16 @@ export const useWorkflowAiEmployeesStore = defineStore('workflowAiEmployees', ()
 
   function persistAndNotify() {
     try {
-      localStorage.setItem(WORKFLOW_AI_EMPLOYEES_STORAGE_KEY, JSON.stringify(enabled.value))
+      localStorage.setItem(
+        workflowAiEmployeesStorageKey(),
+        JSON.stringify(enabled.value),
+      )
     } catch {
       /* quota / private mode */
     }
+    void import('@/utils/workspacePrefsApi').then(({ queueWorkspacePrefsSync }) => {
+      queueWorkspacePrefsSync({ workflow_ai_employees: { ...enabled.value } })
+    }).catch(() => {})
     window.dispatchEvent(
       new CustomEvent('xcagi:workflow-ai-employees-changed', {
         detail: { enabled: { ...enabled.value } },
@@ -179,6 +206,14 @@ export const useWorkflowAiEmployeesStore = defineStore('workflowAiEmployees', ()
     enabled.value = readWorkflowEnabledFromLocalStorage()
   }
 
+  function reloadForTenantScope(scope?: string) {
+    activeTenantScope = scope || resolveTenantStorageScopeFromRuntime(true)
+    enabled.value = readWorkflowEnabledFromLocalStorage(activeTenantScope)
+    registryLoaded.value = false
+  }
+
+  reloadForTenantScope(resolveTenantStorageScopeFromRuntime(true))
+
   function setAll(next: Record<string, boolean>) {
     enabled.value = { ...next }
     persistAndNotify()
@@ -197,6 +232,43 @@ export const useWorkflowAiEmployeesStore = defineStore('workflowAiEmployees', ()
     const next = { ...enabled.value }
     for (const k of Object.keys(next)) next[k] = true
     setAll(next)
+  }
+
+  /**
+   * 上岗：将指定员工设为已托管（AI 市场安装员工包后自动调用）。
+   * @returns 实际从 false→true 的员工 id
+   */
+  function assignHostMod(employeeIds: string[], hostModId: string) {
+    const hid = String(hostModId || '').trim()
+    if (!hid) return
+    let changed = false
+    const next = registryEntries.value.map((entry) => {
+      if (!employeeIds.includes(entry.id)) return entry
+      if (entry.hostModId === hid) return entry
+      changed = true
+      return { ...entry, hostModId: hid }
+    })
+    if (changed) registryEntries.value = next
+  }
+
+  function enableEmployees(ids: string[], options?: { onlyNew?: boolean }) {
+    const onlyNew = Boolean(options?.onlyNew)
+    const next = { ...enabled.value }
+    const turnedOn: string[] = []
+    for (const raw of ids) {
+      const id = String(raw || '').trim()
+      if (!id || isNonWorkflowDeskEmployeeId(id)) continue
+      if (onlyNew && next[id] === true) continue
+      if (!next[id]) {
+        turnedOn.push(id)
+      }
+      next[id] = true
+    }
+    if (JSON.stringify(next) !== JSON.stringify(enabled.value)) {
+      enabled.value = next
+      persistAndNotify()
+    }
+    return turnedOn
   }
 
   function getEmployeeLabel(id: string, i18nResolver?: (key: string) => string): string {
@@ -224,9 +296,12 @@ export const useWorkflowAiEmployeesStore = defineStore('workflowAiEmployees', ()
     stripModWorkflowEmployeeKeys,
     pruneOrphanWorkflowEmployeeToggles,
     reloadFromLocalStorage,
+    reloadForTenantScope,
     setAll,
     toggle,
     enableAllOn,
+    enableEmployees,
+    assignHostMod,
     persistAndNotify,
     getEmployeeLabel,
     refreshRegistry,

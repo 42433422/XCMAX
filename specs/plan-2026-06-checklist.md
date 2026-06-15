@@ -93,7 +93,7 @@
 - [x] T48：`start-desktop.command` macOS 启动脚本（`FHD/start-desktop.command` → `XCAGI/start-desktop-sqlite.command`）
 - [x] T49：electron-builder notarize 配置（`desktop/electron-builder.yml` 注释骨架 + 既有 `build/notarize.cjs`）
 - [x] T50：`docs/DEPLOYMENT.md` 加"macOS 实验性"标识
-- [x] T51-mac：**macOS 升签约级（2026-06-06）**：arm64+x64 双架构 dmg · `electron-builder.yml` 移除 pkg · `build-installer.sh` 增 `XCAGI_MAC_ARCH` · `release-desktop.yml` 双架构矩阵 + `macos-merge` job · `desktop-macos-smoke.yml` 同步 · 本机 arm64 企业版冒烟验证 · 对外口径全面升为签约级四端
+- [x] T51-mac：**macOS 升签约级（2026-06-06）**：arm64+x64 双架构 dmg · `electron-builder.yml` 移除 pkg · `build-installer.sh` 增 `XCAGI_MAC_ARCH` · `release-desktop.yml` 双架构矩阵 + `macos-merge` job · `desktop-macos-smoke.yml` 同步 · 本机 arm64 企业版冒烟验证 · 桌面/Web **签约级**；**Android 仍为实验骨架**（见 P2-2 / [`VERSION.md`](../FHD/VERSION.md)）
 
 ### P2-2 Android 端诚实标注
 - [x] T51：`mobile-android/README.md` 改"规划中"

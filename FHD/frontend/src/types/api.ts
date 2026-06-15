@@ -1,11 +1,15 @@
-// API 响应基础结构
-export interface ApiResponse<T = any> {
+// API 响应基础结构（与后端 response_envelope / common_schema 对齐）
+export interface ApiResponse<T = unknown> {
   success: boolean;
   data?: T;
   message?: string;
   total?: number;
   code?: number;
+  error_code?: string;
 }
+
+/** 带扩展字段的错误响应（用于 error-handler 等边界解析） */
+export type ApiErrorResponse = ApiResponse & Record<string, unknown>;
 
 // 分页参数
 export interface PaginationParams {

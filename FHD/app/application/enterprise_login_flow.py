@@ -15,9 +15,20 @@ from app.application.session_account_meta import (
     persist_session_account_meta,
     validate_account_kind_for_market,
 )
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
+
+
+def _login_client_http_status(upstream_status: int) -> int:
+    """凭证/业务拒绝用 200，避免前端 fetch 在控制台刷 401/403；仅 5xx 保留 HTTP 错误态。"""
+    try:
+        code = int(upstream_status)
+    except (TypeError, ValueError):
+        code = 502
+    if code >= 500:
+        return code
+    return 200
 
 
 def market_auth_error_response(market_result: dict[str, Any]) -> JSONResponse:
@@ -40,7 +51,7 @@ def market_auth_error_response(market_result: dict[str, Any]) -> JSONResponse:
                 "message": message,
             },
         },
-        status_code=status_code,
+        status_code=_login_client_http_status(status_code),
     )
 
 
@@ -83,7 +94,7 @@ async def ensure_local_user_after_market(
         ensure_runtime_auth_bootstrap(swallow_errors=True)
         with get_db() as db:
             exists = db.query(User).filter(User.username == username).first()
-    except OPERATIONAL_ERRORS as db_exc:
+    except RECOVERABLE_ERRORS as db_exc:
         logger.exception("enterprise login user lookup failed")
         return None, JSONResponse(
             {
@@ -108,7 +119,7 @@ async def ensure_local_user_after_market(
                     ),
                 },
             },
-            status_code=401,
+            status_code=_login_client_http_status(401),
         )
 
     if not exists:
@@ -134,7 +145,7 @@ async def ensure_local_user_after_market(
     else:
         result = auth_app_service.create_session_for_username(username)
     if not result.get("success"):
-        return None, JSONResponse(result, status_code=401)
+        return None, JSONResponse(result, status_code=_login_client_http_status(401))
     return result, None
 
 
@@ -164,7 +175,7 @@ def bind_tenant_for_login(
             out["tenant_name"] = name
         elif company_brand:
             out["tenant_name"] = company_brand
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         logger.exception("bind_tenant_for_login failed user_id=%s", user_id)
     return out
 
@@ -297,7 +308,7 @@ async def finalize_enterprise_login(
                 "is_enterprise": bool(market_result.get("is_enterprise")),
                 "is_market_admin": bool(market_result.get("is_market_admin")),
             }
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         result["market_account"] = {
             "success": False,
             "message": f"市场账号自动同步失败：{exc}",
@@ -329,7 +340,7 @@ async def finalize_enterprise_login(
                 cached = get_cached_entitled_client_mod_ids()
                 if cached:
                     result["entitled_mod_ids"] = sorted(cached)
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             logger.exception("account_mod_binding fallback on login failed")
 
     return result
@@ -394,7 +405,7 @@ async def run_market_first_login(
                     "message": kind_err,
                     "error": {"code": "ACCOUNT_KIND_MISMATCH", "message": kind_err},
                 },
-                status_code=403,
+                status_code=_login_client_http_status(403),
             )
         login_username = username or resolve_market_username(market_result or {})
         if not login_username:
@@ -419,11 +430,11 @@ async def run_market_first_login(
         if not password:
             return None, JSONResponse(
                 {"success": False, "error": {"code": "INVALID_INPUT", "message": "密码不能为空"}},
-                status_code=400,
+                status_code=_login_client_http_status(400),
             )
         result = auth_app_service.login(username, password)
         if not result.get("success"):
-            return None, JSONResponse(result, status_code=401)
+            return None, JSONResponse(result, status_code=_login_client_http_status(401))
         if market_result is None and login_market_fn:
             market_result = await login_market_fn(username, password)
 

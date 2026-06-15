@@ -73,6 +73,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useChatView } from '@/composables/useChatView'
 import { sanitizeChatBubbleHtml } from '@/utils/sanitizeHtml'
+import { readAiSessionIdFromStorage, writeAiSessionIdToStorage } from '@/utils/xcagiStorageKeys'
 
 const props = defineProps({
   visible: {
@@ -85,10 +86,10 @@ function generateSessionId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2)
 }
 
-const storedSessionId = localStorage.getItem('ai_session_id')
+const storedSessionId = readAiSessionIdFromStorage()
 const currentSessionId = ref(storedSessionId || generateSessionId())
 if (!storedSessionId) {
-  localStorage.setItem('ai_session_id', currentSessionId.value)
+  writeAiSessionIdToStorage(currentSessionId.value)
 }
 
 const PRO_INTENT_EXPERIENCE_KEY = 'xcagi_pro_intent_experience'

@@ -346,14 +346,14 @@ const EmpWfRadialGraph = (() => {
    * `host.addEventListener('emp-wf:node-click', e => ...)` 即可。
    * 旧名 `emp-wf-node-click` 同时派发，避免老集成方漏接。
    */
-  function dispatchNodeClick(node, originalEvent) {
-    if (!node) return;
+  function dispatchNodeClick(domEl, originalEvent, nodeDef) {
+    if (!domEl) return;
     const detail = {
-      id: node.id,
-      label: node.label,
-      phase: node.phase || '',
-      desc: node.desc || '',
-      kind: node.kind || '',
+      id: (domEl.dataset && domEl.dataset.empWfNode) || (nodeDef && nodeDef.id) || '',
+      label: (nodeDef && nodeDef.label) || (domEl.textContent && domEl.textContent.trim()) || '',
+      phase: (nodeDef && nodeDef.phase) || (domEl.dataset && domEl.dataset.empWfPhase) || '',
+      desc: (nodeDef && nodeDef.desc) || '',
+      kind: (nodeDef && nodeDef.kind) || '',
       source: 'radial',
     };
     const ev = new CustomEvent('emp-wf:node-click', { detail, bubbles: true, cancelable: true });
@@ -361,8 +361,8 @@ const EmpWfRadialGraph = (() => {
     if (originalEvent && typeof originalEvent.stopPropagation === 'function') {
       originalEvent.stopPropagation();
     }
-    node.dispatchEvent(ev);
-    node.dispatchEvent(legacy);
+    domEl.dispatchEvent(ev);
+    domEl.dispatchEvent(legacy);
   }
 
   const DAGRE_URLS = [
@@ -693,7 +693,7 @@ const EmpWfRadialGraph = (() => {
           const panHost =
             document.getElementById('emp-wf-radial-root') || document.getElementById('event-arch-root');
           if (panHost && panHost.dataset.panMoved === '1') return;
-          dispatchNodeClick(el, ev);
+          dispatchNodeClick(el, ev, n);
         });
         const tabId = TAB_LINK_NODES[n.id];
         if (tabId) {
@@ -734,7 +734,7 @@ const EmpWfRadialGraph = (() => {
         hub.addEventListener('click', (ev) => {
           const panHost = document.getElementById('emp-wf-radial-root');
           if (panHost && panHost.dataset.panMoved === '1') return;
-          dispatchNodeClick(hub, ev);
+          dispatchNodeClick(hub, ev, centerDef);
         });
         layer.appendChild(hub);
       }

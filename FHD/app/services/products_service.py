@@ -11,11 +11,11 @@
 
 import logging
 import time
-from typing import Any
+from typing import Any, cast
 
 from app.application.ports.product_repository import ProductRepository
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -53,8 +53,8 @@ class ProductsService(NeuroEventPublisherMixin):
                 self._deduplicator = optimizer.request_deduplicator
             if optimizer.performance_monitor:
                 self._monitor = optimizer.performance_monitor
-        except OPERATIONAL_ERRORS as e:
-            logger.debug(f"性能优化组件加载失败: {e}")
+        except RECOVERABLE_ERRORS as e:
+            logger.debug("性能优化组件加载失败: %s", e)
 
     def set_repository(self, repository: ProductRepository):
         self._repository = repository
@@ -105,7 +105,7 @@ class ProductsService(NeuroEventPublisherMixin):
         if self._cache and use_cache:
             cached = self._cache.get(cache_key)
             if cached is not None:
-                return cached
+                return cast("dict[str, Any]", cached)
 
         repo_result = self._repository.find_all(
             unit_name=unit_name,
@@ -147,7 +147,7 @@ class ProductsService(NeuroEventPublisherMixin):
         if self._cache:
             cached = self._cache.get(cache_key)
             if cached is not None:
-                return cached
+                return cast("dict[str, Any]", cached)
 
         units = self._repository.find_product_units()
         result = {"success": True, "data": units, "count": len(units)}
@@ -167,7 +167,7 @@ class ProductsService(NeuroEventPublisherMixin):
         if self._cache:
             cached = self._cache.get(cache_key)
             if cached is not None:
-                return cached
+                return cast("dict[str, Any]", cached)
 
         result = self._repository.find_by_id(product_id)
         if result is None:
@@ -210,8 +210,8 @@ class ProductsService(NeuroEventPublisherMixin):
                 "success": True,
                 "data": result.to_dict() if hasattr(result, "to_dict") else result,
             }
-        except OPERATIONAL_ERRORS as e:
-            logger.error(f"创建产品失败: {e}")
+        except RECOVERABLE_ERRORS as e:
+            logger.error("创建产品失败: %s", e)
             return {"success": False, "message": str(e)}
 
     def update_product(self, product_id: int, data: dict[str, Any]) -> dict[str, Any]:
@@ -251,7 +251,7 @@ class ProductsService(NeuroEventPublisherMixin):
 
                 duration_ms = (time.perf_counter() - start_time) * 1000
                 logger.info(
-                    f"批量添加产品完成: {batch_result.success_count} 成功, {batch_result.failed_count} 失败, 耗时 {duration_ms:.2f}ms"
+                    f"批量添加产品完成: {batch_result.success_count} 成功, {batch_result.failed_count} 失败, 耗时 {duration_ms:.2f}ms"  # noqa: G004
                 )
 
                 self._invalidate_product_cache()
@@ -270,8 +270,8 @@ class ProductsService(NeuroEventPublisherMixin):
             self._invalidate_product_cache()
             return result
 
-        except OPERATIONAL_ERRORS as e:
-            logger.error(f"批量添加产品失败: {e}")
+        except RECOVERABLE_ERRORS as e:
+            logger.error("批量添加产品失败: %s", e)
             return {"success": False, "message": str(e)}
 
     def batch_delete_products(self, product_ids: list[int]) -> dict[str, Any]:
@@ -308,7 +308,7 @@ class ProductsService(NeuroEventPublisherMixin):
         if self._cache:
             cached = self._cache.get(cache_key)
             if cached is not None:
-                return cached
+                return cast("dict[str, Any]", cached)
 
         names = self._repository.find_names(keyword)
         result = {"success": True, "data": names, "count": len(names)}
@@ -363,8 +363,8 @@ class ProductsService(NeuroEventPublisherMixin):
 
             logger.debug("产品列表缓存已清除")
 
-        except OPERATIONAL_ERRORS as e:
-            logger.warning(f"清除产品缓存失败: {e}")
+        except RECOVERABLE_ERRORS as e:
+            logger.warning("清除产品缓存失败: %s", e)
 
     def _invalidate_single_product_cache(self, product_id: int):
         """清除单个产品的缓存"""
@@ -374,8 +374,8 @@ class ProductsService(NeuroEventPublisherMixin):
         try:
             cache_key = f"product:{product_id}"
             self._cache.delete(cache_key)
-        except OPERATIONAL_ERRORS as e:
-            logger.warning(f"清除单产品缓存失败 [{product_id}]: {e}")
+        except RECOVERABLE_ERRORS as e:
+            logger.warning("清除单产品缓存失败 [%s]: %s", product_id, e)
 
 
 from app.neuro_bus.neuro_service_instrumentation import instrument_service_layer_class

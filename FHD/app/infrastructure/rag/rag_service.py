@@ -8,7 +8,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 from .citation_tracker import CitationTracker
 from .hybrid_retriever import HybridRetriever, RetrievedChunk
@@ -116,11 +116,11 @@ def get_default_embedder() -> Callable[[str], list[float]] | None:
     返回 None 时调用方需自带 embedder。
     """
     try:
-        from app.infrastructure.llm import get_default_embedding_service  # type: ignore
+        from app.infrastructure.llm import get_default_embedding_service
 
         svc = get_default_embedding_service()
         return lambda text: svc.embed(text)
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.debug("默认 embedder 不可用: %s", e)
         return None
 

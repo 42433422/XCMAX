@@ -6,12 +6,12 @@ customer_app_service V2 - 事件驱动版本
 
 import logging
 from datetime import datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from app.neuro_bus.bus import get_neuro_bus
 from app.neuro_bus.events.base import EventPriority, NeuroEvent
 from app.neuro_bus.events.customer_events import *
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 if TYPE_CHECKING:
     pass
@@ -56,8 +56,8 @@ class CustomerAppServiceV2:
             )
             self._bus.publish(event)
             return event
-        except OPERATIONAL_ERRORS as e:
-            logger.error(f"[CustomerAppServiceV2] 发布事件失败: {e}")
+        except RECOVERABLE_ERRORS as e:
+            logger.error("[CustomerAppServiceV2] 发布事件失败: %s", e)
             return None
 
     # ========== Level 2: 事件驱动核心方法 ==========
@@ -97,7 +97,7 @@ class CustomerAppServiceV2:
 
             self._bus.publish(event)
 
-            logger.info(f"[CustomerAppServiceV2] 客户注册事件已发布: {customer_id}")
+            logger.info("[CustomerAppServiceV2] 客户注册事件已发布: %s", customer_id)
 
             return {
                 "success": True,
@@ -108,8 +108,8 @@ class CustomerAppServiceV2:
                 "mode": "event_driven",
             }
 
-        except OPERATIONAL_ERRORS as e:
-            logger.exception(f"[CustomerAppServiceV2] 注册客户失败: {e}")
+        except RECOVERABLE_ERRORS as e:
+            logger.exception("[CustomerAppServiceV2] 注册客户失败: %s", e)
             return {"success": False, "message": str(e), "error": str(e)}
 
     async def update_customer(self, customer_id: str, data: dict[str, Any]) -> dict[str, Any]:
@@ -131,7 +131,7 @@ class CustomerAppServiceV2:
 
             self._bus.publish(event)
 
-            logger.info(f"[CustomerAppServiceV2] 客户更新事件已发布: {customer_id}")
+            logger.info("[CustomerAppServiceV2] 客户更新事件已发布: %s", customer_id)
 
             return {
                 "success": True,
@@ -142,8 +142,8 @@ class CustomerAppServiceV2:
                 "mode": "event_driven",
             }
 
-        except OPERATIONAL_ERRORS as e:
-            logger.exception(f"[CustomerAppServiceV2] 更新客户失败: {e}")
+        except RECOVERABLE_ERRORS as e:
+            logger.exception("[CustomerAppServiceV2] 更新客户失败: %s", e)
             return {"success": False, "message": str(e), "error": str(e)}
 
     async def bind_purchase_unit(self, customer_id: str, purchase_unit: str) -> dict[str, Any]:
@@ -166,7 +166,7 @@ class CustomerAppServiceV2:
             self._bus.publish(event)
 
             logger.info(
-                f"[CustomerAppServiceV2] 客户绑定单位事件已发布: {customer_id} -> {purchase_unit}"
+                "[CustomerAppServiceV2] 客户绑定单位事件已发布: %s -> %s", customer_id, purchase_unit
             )
 
             return {
@@ -179,8 +179,8 @@ class CustomerAppServiceV2:
                 "mode": "event_driven",
             }
 
-        except OPERATIONAL_ERRORS as e:
-            logger.exception(f"[CustomerAppServiceV2] 绑定购买单位失败: {e}")
+        except RECOVERABLE_ERRORS as e:
+            logger.exception("[CustomerAppServiceV2] 绑定购买单位失败: %s", e)
             return {"success": False, "message": str(e), "error": str(e)}
 
     async def update_preference(
@@ -204,7 +204,7 @@ class CustomerAppServiceV2:
 
             self._bus.publish(event)
 
-            logger.info(f"[CustomerAppServiceV2] 客户偏好更新事件已发布: {customer_id}")
+            logger.info("[CustomerAppServiceV2] 客户偏好更新事件已发布: %s", customer_id)
 
             return {
                 "success": True,
@@ -215,8 +215,8 @@ class CustomerAppServiceV2:
                 "mode": "event_driven",
             }
 
-        except OPERATIONAL_ERRORS as e:
-            logger.exception(f"[CustomerAppServiceV2] 更新偏好失败: {e}")
+        except RECOVERABLE_ERRORS as e:
+            logger.exception("[CustomerAppServiceV2] 更新偏好失败: %s", e)
             return {"success": False, "message": str(e), "error": str(e)}
 
     async def deactivate_customer(
@@ -240,7 +240,7 @@ class CustomerAppServiceV2:
 
             self._bus.publish(event)
 
-            logger.info(f"[CustomerAppServiceV2] 客户停用事件已发布: {customer_id}")
+            logger.info("[CustomerAppServiceV2] 客户停用事件已发布: %s", customer_id)
 
             return {
                 "success": True,
@@ -251,8 +251,8 @@ class CustomerAppServiceV2:
                 "mode": "event_driven",
             }
 
-        except OPERATIONAL_ERRORS as e:
-            logger.exception(f"[CustomerAppServiceV2] 停用客户失败: {e}")
+        except RECOVERABLE_ERRORS as e:
+            logger.exception("[CustomerAppServiceV2] 停用客户失败: %s", e)
             return {"success": False, "message": str(e), "error": str(e)}
 
     # ========== 统一命令执行入口 ==========
@@ -276,10 +276,10 @@ class CustomerAppServiceV2:
             }
 
         try:
-            return await handler(**data)
+            return cast("dict[str, Any]", await handler(**data))
         except TypeError as e:
             return {"success": False, "message": f"命令参数错误: {e}", "command": command}
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             return {"success": False, "message": f"执行命令失败: {str(e)}", "command": command}
 
 
