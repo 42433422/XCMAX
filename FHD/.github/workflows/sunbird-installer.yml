@@ -8,6 +8,10 @@ on:
         description: "Release version"
         required: true
         default: "10.0.0"
+      source_ref:
+        description: "Git ref with sunbird build scripts"
+        required: true
+        default: "feat/enterprise-deploy-maturity"
 
 permissions:
   contents: read
@@ -21,6 +25,8 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.source_ref }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
