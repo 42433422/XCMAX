@@ -1,4 +1,4 @@
-# CI SSOT: edit FHD/.github/workflows/sunbird-installer.yml only.
+# CI SSOT: edit this file, then run: python scripts/dev/publish_ci_workflows_to_root.py
 name: Sunbird Installer
 
 on:
