@@ -1,0 +1,20 @@
+{
+  "id": "xcagi-host-foundation-employee",
+  "name": "宿主基础能力（预装员工）",
+  "version": "10.0.0",
+  "author": "成都修茈科技有限公司",
+  "description": "以员工包交付的通用宿主底座：安装后自动写入对话/ERP/审批/客服等 bridge Mod，无需在商店逐项安装基础设施 Mod。",
+  "artifact": "employee_pack",
+  "scope": "global",
+  "dependencies": {
+    "xcagi": ">=10.0.0"
+  },
+  "employee": {
+    "id": "host_foundation",
+    "label": "宿主基础能力"
+  },
+  "config": {
+    "host_foundation_pack": true,
+    "edition": "generic"
+  }
+}

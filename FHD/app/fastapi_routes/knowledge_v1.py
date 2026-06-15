@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import logging
 import threading
-from typing import Any
+from typing import Any, cast
 
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
@@ -112,7 +112,7 @@ class _KnowledgeIndex:
             if self._rebuild_needed:
                 self._retriever.index(self._chunks)
                 self._rebuild_needed = False
-            return self._retriever.retrieve(q)
+            return cast("list[Any]", self._retriever.retrieve(q))
 
     def status(self) -> dict[str, int]:
         with self._lock:

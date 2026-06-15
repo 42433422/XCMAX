@@ -100,8 +100,8 @@ class ChatContext:
         self._update_semantic_cache(user_id, turn)
 
         logger.debug(
-            f"[CHAT_CONTEXT] Added turn: user={user_id}, "
-            f"intent={turn.intent}, history_size={len(self._history[user_id])}"
+            "[CHAT_CONTEXT] Added turn: user=%s, "
+            f"intent=%s, history_size=%s", user_id, turn.intent, len(self._history[user_id])
         )
 
     def get_recent_turns(self, user_id: str, limit: int = 10) -> list[ChatTurn]:
@@ -136,7 +136,7 @@ class ChatContext:
         """清除用户的历史记录"""
         if user_id in self._history:
             del self._history[user_id]
-            logger.info(f"[CHAT_CONTEXT] Cleared history: user={user_id}")
+            logger.info("[CHAT_CONTEXT] Cleared history: user=%s", user_id)
 
     def _update_semantic_cache(self, user_id: str, turn: ChatTurn) -> None:
         """更新语义缓存"""
@@ -204,8 +204,8 @@ class ChatContext:
             cached_response, timestamp = self._exact_cache[exact_key]
             if time.time() - timestamp <= self.EXACT_DUPLICATE_TTL:
                 logger.info(
-                    f"[CHAT_CONTEXT] Exact duplicate detected: user={user_id}, "
-                    f"msg={message[:30]}..."
+                    "[CHAT_CONTEXT] Exact duplicate detected: user=%s, "
+                    f"msg=%s...", user_id, message[:30]
                 )
                 return True, cached_response, True
 
@@ -229,8 +229,8 @@ class ChatContext:
                 ):
                     if turn.response_text:
                         logger.info(
-                            f"[CHAT_CONTEXT] Semantic duplicate detected: user={user_id}, "
-                            f"intent={intent}"
+                            "[CHAT_CONTEXT] Semantic duplicate detected: user=%s, "
+                            f"intent=%s", user_id, intent
                         )
                         return True, turn.response_text, False
 
@@ -288,7 +288,7 @@ class ChatContext:
                 del self._history[user_id]
 
         if cleaned > 0:
-            logger.info(f"[CHAT_CONTEXT] Cleaned up {cleaned} old history entries")
+            logger.info("[CHAT_CONTEXT] Cleaned up %s old history entries", cleaned)
 
         return cleaned
 

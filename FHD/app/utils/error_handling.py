@@ -11,49 +11,34 @@ import time
 from collections.abc import Callable
 from typing import Any
 
+from app.errors import (
+    AppError,
+    DatabaseLockError,
+    DataValidationError,
+    ForeignKeyViolationError,
+    ModAccessDeniedError,
+    ServiceUnavailableError,
+    WorkflowError,
+)
+
 logger = logging.getLogger(__name__)
 
-
-# Specific Exception Types for Structured Error Handling
-
-
-class WorkflowError(Exception):
-    """Base class for workflow-related errors."""
-
-    pass
-
-
-class ServiceUnavailableError(WorkflowError):
-    """Raised when a required service is unavailable."""
-
-    pass
-
-
-class DataValidationError(WorkflowError):
-    """Raised when data validation fails."""
-
-    pass
-
-
-class ModAccessDeniedError(WorkflowError):
-    """Raised when Mod access is denied."""
-
-    pass
-
-
-class DatabaseLockError(WorkflowError):
-    """Raised when database is locked (SQLite concurrency issue)."""
-
-    pass
-
-
-class ForeignKeyViolationError(WorkflowError):
-    """Raised when a foreign key constraint is violated."""
-
-    pass
-
-
-# Retry Configuration for Database Operations
+# Re-export for backward compatibility
+__all__ = [
+    "WorkflowError",
+    "ServiceUnavailableError",
+    "DataValidationError",
+    "ModAccessDeniedError",
+    "DatabaseLockError",
+    "ForeignKeyViolationError",
+    "with_error_handling",
+    "with_sqlite_retry",
+    "is_database_locked_error",
+    "handle_database_error",
+    "DEFAULT_RETRY_ATTEMPTS",
+    "DEFAULT_RETRY_DELAY",
+    "DEFAULT_RETRY_BACKOFF",
+]
 
 DEFAULT_RETRY_ATTEMPTS = 3
 DEFAULT_RETRY_DELAY = 0.5  # seconds
@@ -70,17 +55,6 @@ def with_error_handling(
     Decorator for structured error handling.
 
     Replaces broad `except Exception:` with specific error handling and logging.
-
-    Args:
-        fallback: Optional fallback function to call on error
-        log_level: Logging level ("debug", "info", "warning", "error")
-        reraise: Tuple of exception types to re-raise without handling
-        error_code_prefix: Prefix for error codes in return values
-
-    Usage:
-        @with_error_handling(log_level="warning", reraise=(KeyboardInterrupt, SystemExit))
-        def my_function():
-            ...
     """
 
     def decorator(func: Callable) -> Callable:
@@ -91,7 +65,6 @@ def with_error_handling(
             except reraise:
                 raise
             except ImportError as e:
-                # Service unavailable due to missing dependency
                 log_func = getattr(logger, log_level)
                 log_func("Service unavailable [%s]: %s", func.__name__, e)
                 if fallback:
@@ -102,7 +75,6 @@ def with_error_handling(
                     "error_code": f"{error_code_prefix}service_unavailable",
                 }
             except (ValueError, TypeError) as e:
-                # Data validation error
                 log_func = getattr(logger, log_level if log_level != "error" else "warning")
                 log_func("Validation error [%s]: %s", func.__name__, e)
                 if fallback:
@@ -113,7 +85,6 @@ def with_error_handling(
                     "error_code": f"{error_code_prefix}validation_error",
                 }
             except DatabaseLockError as e:
-                # Database concurrency issue
                 logger.error("Database locked [%s]: %s", func.__name__, e)
                 if fallback:
                     return fallback(*args, **kwargs)
@@ -123,7 +94,6 @@ def with_error_handling(
                     "error_code": f"{error_code_prefix}database_busy",
                 }
             except ForeignKeyViolationError as e:
-                # Foreign key constraint violation
                 logger.error("Foreign key violation [%s]: %s", func.__name__, e)
                 if fallback:
                     return fallback(*args, **kwargs)
@@ -133,7 +103,6 @@ def with_error_handling(
                     "error_code": f"{error_code_prefix}fk_violation",
                 }
             except ModAccessDeniedError as e:
-                # Mod access control error
                 logger.warning("Mod access denied [%s]: %s", func.__name__, e)
                 if fallback:
                     return fallback(*args, **kwargs)
@@ -142,8 +111,17 @@ def with_error_handling(
                     "message": f"Access denied: {e}",
                     "error_code": f"{error_code_prefix}access_denied",
                 }
+            except AppError as e:
+                log_func = getattr(logger, log_level)
+                log_func("App error [%s]: %s", func.__name__, e)
+                if fallback:
+                    return fallback(*args, **kwargs)
+                return {
+                    "success": False,
+                    "message": str(e),
+                    "error_code": e.code.value,
+                }
             except WorkflowError as e:
-                # Generic workflow error
                 log_func = getattr(logger, log_level)
                 log_func("Workflow error [%s]: %s", func.__name__, e)
                 if fallback:
@@ -154,7 +132,6 @@ def with_error_handling(
                     "error_code": f"{error_code_prefix}workflow_error",
                 }
             except Exception as e:
-                # Unexpected error - this is the last resort
                 logger.exception("Unexpected error in %s: %s", func.__name__, e)
                 if fallback:
                     return fallback(*args, **kwargs)
@@ -175,22 +152,8 @@ def with_sqlite_retry(
     backoff: float = DEFAULT_RETRY_BACKOFF,
     retryable_errors: tuple[type[Exception], ...] = (),
 ) -> Callable:
-    """
-    Decorator for SQLite database operations with retry logic.
+    """Decorator for SQLite database operations with retry logic."""
 
-    Handles "database is locked" errors by retrying with exponential backoff.
-
-    Args:
-        max_attempts: Maximum number of retry attempts
-        base_delay: Initial delay between retries (seconds)
-        backoff: Exponential backoff multiplier
-        retryable_errors: Additional exception types to retry
-
-    Usage:
-        @with_sqlite_retry(max_attempts=3, base_delay=0.5)
-        def my_database_operation():
-            ...
-    """
     default_retryable = (DatabaseLockError,)
     all_retryable = default_retryable + retryable_errors
 
@@ -223,10 +186,8 @@ def with_sqlite_retry(
                             f"Database locked after {max_attempts} attempts: {e}"
                         ) from e
                 except Exception:
-                    # Non-retryable error
                     raise
 
-            # Should not reach here, but just in case
             if last_exception:
                 raise last_exception
 
@@ -236,11 +197,7 @@ def with_sqlite_retry(
 
 
 def is_database_locked_error(error: Exception) -> bool:
-    """
-    Check if an exception is a database locked error.
-
-    Handles various forms of SQLite database locked errors.
-    """
+    """Check if an exception is a database locked error."""
     error_str = str(error).lower()
     locked_indicators = [
         "database is locked",
@@ -254,16 +211,7 @@ def is_database_locked_error(error: Exception) -> bool:
 def handle_database_error(
     error: Exception, operation: str = "database operation"
 ) -> dict[str, Any]:
-    """
-    Handle database errors and return structured error response.
-
-    Args:
-        error: The exception that occurred
-        operation: Description of the operation being performed
-
-    Returns:
-        Structured error dictionary
-    """
+    """Handle database errors and return structured error response."""
     if is_database_locked_error(error):
         logger.error("Database locked during %s: %s", operation, error)
         return {

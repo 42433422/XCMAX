@@ -67,7 +67,9 @@ def test_xcmax_dashboard_path_relaxes_csp():
     r = client.get("/xcmax-dashboard/page")
     csp = r.headers["content-security-policy"]
     assert "unsafe-inline" in csp
-    assert "cdn.jsdelivr.net" in csp
+    # dashboard embed CSP 允许 Google Fonts（不再依赖 cdn.jsdelivr.net）
+    assert "fonts.googleapis.com" in csp
+    assert "frame-ancestors 'self'" in csp
 
 
 def test_https_scheme_adds_hsts():

@@ -9,13 +9,13 @@ from fastapi.responses import JSONResponse
 
 from app.application.im_app_service import ImApplicationService, ensure_im_tables
 from app.config import Config
-from app.db import SessionLocal, engine
+from app.db import HostSessionLocal, get_host_engine
 from app.infrastructure.auth.dependencies import (
     CurrentUser,
     require_identified_user,
 )
 from app.infrastructure.im.ws_hub import im_ws_hub
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +28,7 @@ def _ensure_schema() -> None:
     global _schema_ready
     if _schema_ready:
         return
-    ensure_im_tables(engine)
+    ensure_im_tables(get_host_engine())
     _schema_ready = True
 
 
@@ -39,6 +39,13 @@ def _uid(user: CurrentUser) -> int:
 
 
 def _resolve_ws_user_id(ws: WebSocket) -> int | None:
+    from app.infrastructure.auth.dependencies import _allow_x_user_id_header
+
+    if _allow_x_user_id_header():
+        q_uid = ws.query_params.get("user_id")
+        if q_uid and str(q_uid).strip().isdigit():
+            return int(str(q_uid).strip())
+
     cookie_name = getattr(Config, "SESSION_COOKIE_NAME", "session_id")
     sid = ws.cookies.get(cookie_name) or ws.query_params.get("session_id")
     if not sid:
@@ -67,7 +74,7 @@ async def _notify_offline_im_members(member_ids: list[int], sender_id: int, body
                 body=preview,
                 data={"channel": "xcagi_im", "type": "im_message"},
             )
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         logger.exception("im offline push failed")
 
 
@@ -75,11 +82,11 @@ async def _notify_offline_im_members(member_ids: list[int], sender_id: int, body
 def im_list_conversations(user: CurrentUser = Depends(require_identified_user)):
     _ensure_schema()
     uid = _uid(user)
-    db = SessionLocal()
+    db = HostSessionLocal()
     try:
         items = ImApplicationService(db).list_conversations(uid)
         return {"success": True, "user_id": uid, "conversations": items}
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.exception("im_list_conversations")
         return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
     finally:
@@ -93,7 +100,7 @@ def im_list_contacts(
 ):
     _ensure_schema()
     uid = _uid(user)
-    db = SessionLocal()
+    db = HostSessionLocal()
     try:
         contacts = ImApplicationService(db).list_contacts(uid)
         keyword = (q or "").strip().lower()
@@ -105,7 +112,7 @@ def im_list_contacts(
                 or keyword in str(c.get("username", "")).lower()
             ]
         return {"success": True, "contacts": contacts}
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.exception("im_list_contacts")
         return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
     finally:
@@ -116,12 +123,12 @@ def im_list_contacts(
 def im_unread_total(user: CurrentUser = Depends(require_identified_user)):
     _ensure_schema()
     uid = _uid(user)
-    db = SessionLocal()
+    db = HostSessionLocal()
     try:
         items = ImApplicationService(db).list_conversations(uid)
         total = sum(int(c.get("unread_count") or 0) for c in items)
         return {"success": True, "unread_total": total}
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.exception("im_unread_total")
         return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
     finally:
@@ -138,13 +145,13 @@ def im_create_direct(
     peer = int(body.get("peer_user_id") or 0)
     if peer <= 0:
         return JSONResponse({"success": False, "message": "peer_user_id 无效"}, status_code=400)
-    db = SessionLocal()
+    db = HostSessionLocal()
     try:
         conv = ImApplicationService(db).get_or_create_direct(uid, peer)
         return {"success": True, "conversation": conv}
     except ValueError as exc:
         return JSONResponse({"success": False, "message": str(exc)}, status_code=400)
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.exception("im_create_direct")
         return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
     finally:
@@ -160,7 +167,7 @@ def im_list_messages(
 ):
     _ensure_schema()
     uid = _uid(user)
-    db = SessionLocal()
+    db = HostSessionLocal()
     try:
         messages = ImApplicationService(db).list_messages(
             conversation_id, uid, limit=limit, before_id=before_id
@@ -168,7 +175,7 @@ def im_list_messages(
         return {"success": True, "messages": messages}
     except PermissionError as exc:
         return JSONResponse({"success": False, "message": str(exc)}, status_code=403)
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.exception("im_list_messages")
         return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
     finally:
@@ -183,27 +190,34 @@ async def im_send_message(
 ):
     _ensure_schema()
     uid = _uid(user)
-    db = SessionLocal()
+    db = HostSessionLocal()
     try:
         result = ImApplicationService(db).send_message(
             conversation_id, uid, str(body.get("body") or "")
         )
-        payload = {
+        legacy_payload = {
             "type": "message",
             "conversation_id": conversation_id,
             "message": result["message"],
         }
+        sync_payload = {
+            "type": "im.message",
+            "conversation_id": conversation_id,
+            "message": result["message"],
+            "updated_at_ms": result.get("updated_at_ms"),
+        }
         member_ids = [int(mid) for mid in (result.get("member_user_ids") or [])]
         for member_id in member_ids:
             if member_id != uid:
-                await im_ws_hub.send_to_user(member_id, payload)
+                await im_ws_hub.send_to_user(member_id, legacy_payload)
+                await im_ws_hub.send_to_user(member_id, sync_payload)
         await _notify_offline_im_members(member_ids, uid, str(body.get("body") or ""))
         return {"success": True, **result}
     except PermissionError as exc:
         return JSONResponse({"success": False, "message": str(exc)}, status_code=403)
     except ValueError as exc:
         return JSONResponse({"success": False, "message": str(exc)}, status_code=400)
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.exception("im_send_message")
         return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
     finally:
@@ -211,7 +225,7 @@ async def im_send_message(
 
 
 @router.post("/api/im/conversations/{conversation_id}/read")
-def im_mark_read(
+async def im_mark_read(
     conversation_id: int,
     body: dict = Body(default_factory=dict),
     user: CurrentUser = Depends(require_identified_user),
@@ -219,13 +233,23 @@ def im_mark_read(
     _ensure_schema()
     uid = _uid(user)
     last_id = int(body.get("last_message_id") or 0)
-    db = SessionLocal()
+    db = HostSessionLocal()
     try:
-        ImApplicationService(db).mark_read(conversation_id, uid, last_id)
-        return {"success": True}
+        result = ImApplicationService(db).mark_read(conversation_id, uid, last_id)
+        read_payload = {
+            "type": "im.read",
+            "conversation_id": conversation_id,
+            "user_id": uid,
+            "last_message_id": result["last_read_message_id"],
+            "updated_at_ms": result.get("updated_at_ms"),
+        }
+        for member_id in result.get("member_user_ids") or []:
+            if int(member_id) != uid:
+                await im_ws_hub.send_to_user(int(member_id), read_payload)
+        return {"success": True, **result}
     except PermissionError as exc:
         return JSONResponse({"success": False, "message": str(exc)}, status_code=403)
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.exception("im_mark_read")
         return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
     finally:

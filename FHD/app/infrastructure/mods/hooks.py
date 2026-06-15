@@ -5,7 +5,7 @@ Mod Hook System - Event subscription and trigger mechanism
 import logging
 from collections.abc import Callable
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -26,13 +26,13 @@ class HookManager:
         if event not in self._subscribers:
             self._subscribers[event] = []
         self._subscribers[event].append(handler)
-        logger.debug(f"Hook subscribed: {event} -> {handler.__name__}")
+        logger.debug("Hook subscribed: %s -> %s", event, handler.__name__)
 
     def unsubscribe(self, event: str, handler: Callable) -> None:
         if event in self._subscribers:
             try:
                 self._subscribers[event].remove(handler)
-                logger.debug(f"Hook unsubscribed: {event} -> {handler.__name__}")
+                logger.debug("Hook unsubscribed: %s -> %s", event, handler.__name__)
             except ValueError:
                 pass
 
@@ -43,8 +43,8 @@ class HookManager:
         for handler in self._subscribers[event]:
             try:
                 handler(*args, **kwargs)
-            except OPERATIONAL_ERRORS as e:
-                logger.error(f"Hook handler failed: {event} -> {handler.__name__}: {e}")
+            except RECOVERABLE_ERRORS as e:
+                logger.error("Hook handler failed: %s -> %s: %s", event, handler.__name__, e)
 
     def list_subscribers(self, event: str) -> list[str]:
         if event not in self._subscribers:
@@ -66,9 +66,9 @@ def trigger(event: str, *args, **kwargs) -> None:
         from app.routes.state import read_client_mods_off_state
 
         if read_client_mods_off_state():
-            logger.debug(f"Hook skipped (client_mods_off=True): {event}")
+            logger.debug("Hook skipped (client_mods_off=True): %s", event)
             return
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         pass
 
     get_hook_manager().trigger(event, *args, **kwargs)

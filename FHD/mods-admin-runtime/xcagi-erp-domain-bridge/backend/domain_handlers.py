@@ -50,7 +50,7 @@ def _products_list(**kw: Any) -> Any:
             )
         )
     from app.infrastructure.auth.db_token import verify_db_read_token_header
-    from app.fastapi_routes.xcagi_compat_db_product_queries import _load_products_list_impl_pg
+    from app.infrastructure.persistence.compat_db.product_queries import _load_products_list_impl_pg
 
     if request is not None:
         verify_db_read_token_header(request)
@@ -186,7 +186,7 @@ def _customers_list(**kw: Any) -> Any:
             svc_list(request, page=page, per_page=per_page, keyword=keyword)
         )
     from app.infrastructure.auth.db_token import verify_db_read_token_header
-    from app.fastapi_routes.xcagi_compat_db_queries import (
+    from app.infrastructure.persistence.compat_db.queries import (
         _customer_row_matches_keyword,
         _customers_schema_hint_if_empty,
         _load_customers_rows,

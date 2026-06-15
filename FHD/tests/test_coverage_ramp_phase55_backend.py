@@ -283,40 +283,26 @@ def test_db_session_local_callable_returns_session() -> None:
 
 
 def test_db_get_db_closes_session() -> None:
-    from contextlib import contextmanager
-
     mock_session = MagicMock()
+    mock_factory = MagicMock(return_value=mock_session)
 
-    @contextmanager
-    def fake_transaction(url, mod_id=None):
-        try:
-            yield mock_session
-            mock_session.commit()
-        except Exception:
-            mock_session.rollback()
-            raise
-        finally:
-            mock_session.close()
-
-    with patch("app.db.db_consistency.get_consistency_manager") as mgr:
-        mgr.return_value.transaction.side_effect = fake_transaction
+    with patch.object(db_mod, "_get_session_local", return_value=mock_factory):
         gen = db_mod.get_db()
         db = next(gen)
         assert db is mock_session
-        with pytest.raises(StopIteration):
+        try:
             gen.send(None)
+        except StopIteration:
+            pass
     mock_session.close.assert_called_once()
 
 
 def test_db_close_old_connections_clears_pool() -> None:
-    from app.db.db_consistency import get_consistency_manager
-
     url = "sqlite:///:memory:"
-    mgr = get_consistency_manager()
     db_mod._get_engine_for_url(url)
-    assert mgr._engines
+    assert db_mod._engine_cache
     db_mod.close_old_connections()
-    assert not mgr._engines
+    assert not db_mod._engine_cache
 
 
 def test_db_engine_proxy_delegates_dialect() -> None:

@@ -39,7 +39,7 @@ class ProductNeuroDomain(NeuroDomain):
             product_id = event.payload.get("product_id")
             old_price = event.payload.get("old_price")
             new_price = event.payload.get("new_price")
-            logger.info(f"Price changed: {product_id} {old_price} -> {new_price}")
+            logger.info("Price changed: %s %s -> %s", product_id, old_price, new_price)
             bump_domain_handler_metric("product.price_changed")
 
     async def initialize(self):

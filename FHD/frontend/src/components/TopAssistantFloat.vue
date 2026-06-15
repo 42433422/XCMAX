@@ -4,6 +4,7 @@
       ref="floatToggleRef"
       class="assistant-float-toggle"
       type="button"
+      data-tour="assistant-float-toggle"
       @click="toggleOpen"
       :title="isOpen ? '收起副窗' : '打开副窗'"
       :aria-expanded="isOpen ? 'true' : 'false'"
@@ -35,7 +36,7 @@
     >
       <div class="assistant-float-header">
         <div id="xcagi-assistant-float-title" class="assistant-title">助手副窗</div>
-        <button type="button" class="assistant-close" aria-label="关闭副窗" @click="closeAssistantPanelUi">
+        <button type="button" class="assistant-close" aria-label="关闭副窗" data-tour="assistant-float-close" @click="closeAssistantPanelUi">
           ×
         </button>
       </div>
@@ -130,6 +131,7 @@
           <div class="workflow-employee-section-head">
             <div class="workflow-employee-heading">工作流员工选择</div>
             <router-link
+              v-if="showWorkflowPanoramaNav"
               :to="workflowVisualizationLocation"
               class="workflow-employee-visual-link"
               :title="workflowPanoramaLinkTitle"
@@ -308,10 +310,12 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useRouter } from 'vue-router';
-import { ApiError } from '@/api';
+import api, { ApiError } from '@/api';
 import productsApi from '@/api/products';
 import { useTutorialStore } from '@/stores/tutorial';
+import { useOnboardingTutorialStore } from '@/stores/onboardingTutorial';
 import { useTutorialCatalog } from '@/composables/useTutorialCatalog';
+import { launchAdvancedDriverTour } from '@/tutorial/promptAdvancedTutorial';
 import { DEFAULT_TUTORIAL_TRACK_ID } from '@/constants/productFlow';
 import { useModsStore } from '@/stores/mods';
 import { useWorkflowAiEmployeesStore } from '@/stores/workflowAiEmployees';
@@ -327,16 +331,21 @@ import {
 import { shouldTryWechatShipmentPreview } from '@/utils/wechatShipmentDetect';
 import { resolveErpApiPath } from '@/utils/erpDomainPaths';
 import { resolveWorkflowVisualizationLocation } from '@/utils/workflowNav';
+import { useWorkflowPanoramaNavVisible } from '@/composables/useWorkflowPanoramaNavVisible';
+import { useEnterpriseScopedWorkflowRegistry } from '@/composables/useEnterpriseScopedWorkflowRegistry';
+import { syncEnterpriseWorkflowRegistry } from '@/utils/syncEnterpriseWorkflowRegistry';
 import ExcelPreview from '@/components/template/ExcelPreview.vue';
 
 const router = useRouter();
 const tutorialStore = useTutorialStore();
+const onboardingTutorialStore = useOnboardingTutorialStore();
 const { tutorialTracks, advancedTrackHint, buildContext: tutorialBuildContext } = useTutorialCatalog();
 const modsStore = useModsStore();
 const uiText = useIndustryUiText();
 const { modWorkflowEmployeesActive } = useWorkflowModsRuntimeContext();
 const workflowAiEmployeesStore = useWorkflowAiEmployeesStore();
-const { enabled: workflowEmployeesEnabled, registryEntries: workflowRegistryEntries, registryLoaded: workflowRegistryLoaded } = storeToRefs(workflowAiEmployeesStore);
+const { enabled: workflowEmployeesEnabled, registryLoaded: workflowRegistryLoaded } = storeToRefs(workflowAiEmployeesStore);
+const { scopedRegistryEntries } = useEnterpriseScopedWorkflowRegistry();
 
 const isOpen = ref(false);
 const activeTab = ref('push');
@@ -411,13 +420,14 @@ const workflowEmployeeDefs = computed(() => {
     if (key === 'shipmentOrderName') return `${uiText.shipmentOrderName.value}管理 AI 员工`;
     return key;
   };
-  return workflowRegistryEntries.value.map((entry) => ({
+  return scopedRegistryEntries.value.map((entry) => ({
     id: entry.id,
     label: resolveLabel(entry, i18nResolver),
   }));
 });
 
 const workflowVisualizationLocation = resolveWorkflowVisualizationLocation();
+const { showWorkflowPanoramaNav } = useWorkflowPanoramaNavVisible();
 
 const workflowPanoramaLinkTitle = computed(() =>
   modWorkflowEmployeesActive.value
@@ -726,6 +736,7 @@ const startTutorialGuide = async (track = DEFAULT_TUTORIAL_TRACK_ID) => {
     await startHostOnboardingGuide();
     return;
   }
+  const useDriverTour = t === 'advanced';
   const extractChatMessagesSnapshot = () => {
     const nodes = Array.from(document.querySelectorAll('#chatMessages .message'));
     return nodes.slice(-30).map((node) => {
@@ -736,14 +747,10 @@ const startTutorialGuide = async (track = DEFAULT_TUTORIAL_TRACK_ID) => {
   };
   const cacheTutorialGuidePack = async (pack) => {
     try {
-      await fetch('/api/preferences', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          user_id: 'default',
-          key: 'tutorial_guide_pack_cache',
-          value: JSON.stringify(pack),
-        }),
+      await api.post('/api/preferences', {
+        user_id: 'default',
+        key: 'tutorial_guide_pack_cache',
+        value: JSON.stringify(pack),
       });
     } catch (_e) {
       // 缓存失败不影响教程主流程
@@ -797,24 +804,39 @@ const startTutorialGuide = async (track = DEFAULT_TUTORIAL_TRACK_ID) => {
   lastProductSearchQuery.value = '';
   lastProductSearchTotal.value = null;
   operationHistory.value = [];
-  isOpen.value = true;
-  hasUnreadPush.value = false;
-  popupNotice.value = null;
-  activeTab.value = 'tutorial';
+  if (useDriverTour) {
+    isOpen.value = false;
+    await launchAdvancedDriverTour({
+      router,
+      buildContext: tutorialBuildContext.value,
+      skipNavigation: true,
+      returnContext: {
+        routeName: previousRouteName || 'chat',
+        assistantOpen: previousOpen,
+        assistantTab: previousTab || 'push',
+        assistantState: snapshotState,
+      },
+    });
+  } else {
+    isOpen.value = true;
+    hasUnreadPush.value = false;
+    popupNotice.value = null;
+    activeTab.value = 'tutorial';
+    tutorialStore.startTutorial({
+      isProMode: !!window.__XCAGI_IS_PRO_MODE,
+      track: t,
+      buildContext: tutorialBuildContext.value,
+      returnContext: {
+        routeName: previousRouteName || 'chat',
+        assistantOpen: previousOpen,
+        assistantTab: previousTab || 'push',
+        assistantState: snapshotState,
+      },
+    });
+  }
   // 若用户已在教程标签，startTutorial 前再触发一次预热（仅首次会真正请求）
   queueMicrotask(() => {
     window.dispatchEvent(new CustomEvent('xcagi:warmup-tutorial-tts'));
-  });
-  tutorialStore.startTutorial({
-    isProMode: !!window.__XCAGI_IS_PRO_MODE,
-    track: t,
-    buildContext: tutorialBuildContext.value,
-    returnContext: {
-      routeName: previousRouteName || 'chat',
-      assistantOpen: previousOpen,
-      assistantTab: previousTab || 'push',
-      assistantState: snapshotState,
-    },
   });
   const tutorialPack = {
     version: 1,
@@ -827,17 +849,28 @@ const startTutorialGuide = async (track = DEFAULT_TUTORIAL_TRACK_ID) => {
       chatMessages: extractChatMessagesSnapshot(),
     },
     tutorial: {
-      track: tutorialStore.currentTrack ?? t,
+      track: useDriverTour ? t : (tutorialStore.currentTrack ?? t),
       requestedTrack: t,
-      stepCount: tutorialStore.steps.length,
-      steps: tutorialStore.steps.map((step, idx) => ({
-        index: idx + 1,
-        id: step.id,
-        title: step.title,
-        description: step.description,
-        actionType: step.actionType,
-        targetSelector: step.targetSelector,
-      })),
+      stepCount: useDriverTour
+        ? onboardingTutorialStore.schedules.length
+        : tutorialStore.steps.length,
+      steps: useDriverTour
+        ? onboardingTutorialStore.schedules.map((step, idx) => ({
+            index: idx + 1,
+            id: step.id,
+            title: step.title,
+            description: step.description,
+            actionType: step.actionType,
+            targetSelector: step.waitFor,
+          }))
+        : tutorialStore.steps.map((step, idx) => ({
+            index: idx + 1,
+            id: step.id,
+            title: step.title,
+            description: step.description,
+            actionType: step.actionType,
+            targetSelector: step.targetSelector,
+          })),
     },
   };
   void cacheTutorialGuidePack(tutorialPack);
@@ -1288,22 +1321,15 @@ onMounted(() => {
   if (modsStore.clientModsUiOff) {
     workflowAiEmployeesStore.stripModWorkflowEmployeeKeys();
   } else {
-    workflowAiEmployeesStore.hydrateFromMods(modsStore.modsForWorkflowUi);
-    workflowAiEmployeesStore.pruneOrphanWorkflowEmployeeToggles(modsStore.modsForWorkflowUi);
-  }
-  if (!workflowRegistryLoaded.value) {
-    workflowAiEmployeesStore.loadRegistry(modsStore.modsForWorkflowUi);
+    void syncEnterpriseWorkflowRegistry(modsStore.modsForWorkflowUi);
   }
 });
 
 watch(
   () => modsStore.modsForWorkflowUi,
   (list) => {
-    workflowAiEmployeesStore.hydrateFromMods(list);
-    workflowAiEmployeesStore.pruneOrphanWorkflowEmployeeToggles(list);
-    if (workflowRegistryLoaded.value) {
-      workflowAiEmployeesStore.loadRegistry(list);
-    }
+    if (modsStore.clientModsUiOff) return;
+    void syncEnterpriseWorkflowRegistry(list);
   },
   { deep: true }
 );

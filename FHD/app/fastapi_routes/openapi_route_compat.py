@@ -20,7 +20,7 @@ def hide_trailing_slash_openapi_duplicates(app: FastAPI) -> int:
     try:
         from fastapi.routing import APIRoute
     except ImportError:  # pragma: no cover
-        from starlette.routing import Route as APIRoute  # type: ignore[misc, assignment]
+        from starlette.routing import Route as APIRoute
 
     from app.utils.openapi_path import normalize_path_template
 

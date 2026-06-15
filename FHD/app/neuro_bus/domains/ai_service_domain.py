@@ -41,7 +41,7 @@ class AIServiceNeuroDomain(NeuroDomain):
             self._request_count += 1
             model = event.payload.get("model")
             latency_ms = event.payload.get("latency_ms")
-            logger.debug(f"AI completed: model={model}, latency={latency_ms}ms")
+            logger.debug("AI completed: model=%s, latency=%sms", model, latency_ms)
             from app.neuro_bus.neuro_trace_config import bump_domain_handler_metric
 
             bump_domain_handler_metric("ai.completed")
@@ -51,7 +51,7 @@ class AIServiceNeuroDomain(NeuroDomain):
             self._error_count += 1
             model = event.payload.get("model")
             error = event.payload.get("error")
-            logger.error(f"AI failed: model={model}, error={error}")
+            logger.error("AI failed: model=%s, error=%s", model, error)
             bump_domain_handler_metric("ai.failed")
 
     async def initialize(self):

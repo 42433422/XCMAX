@@ -54,19 +54,10 @@ def _time_rail_graph() -> JSONResponse:
 
 
 async def _time_rail_status(node_id: str | None = None) -> JSONResponse:
-    from app.application.time_rail_app_service import (
-        TimeRailStatusUnavailableError,
-        get_time_rail_app_service,
-    )
+    from app.application.time_rail_app_service import get_time_rail_app_service
 
-    try:
-        data = await get_time_rail_app_service().runtime_status(node_id=node_id)
-        return JSONResponse({"success": True, "data": data})
-    except TimeRailStatusUnavailableError as exc:
-        return JSONResponse(
-            {"success": False, "error": str(exc), "data": None},
-            status_code=503,
-        )
+    data = await get_time_rail_app_service().runtime_status(node_id=node_id)
+    return JSONResponse({"success": True, "data": data})
 
 
 @admin_router.get("/time-rail/graph")

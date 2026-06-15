@@ -7,7 +7,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -50,10 +50,19 @@ class TimeRailAppService:
             "path": str(self.graph_path()),
         }
 
+    def _degraded_runtime_status(self, reason: str) -> dict[str, Any]:
+        """MODstore 不可达时返回空快照，避免 iframe 控制台刷 503。"""
+        return {
+            "nodes": {},
+            "degraded": True,
+            "reason": reason,
+            "source": "fhd-degraded",
+        }
+
     async def runtime_status(self, *, node_id: str | None = None) -> dict[str, Any]:
         query = f"node_id={node_id}" if node_id else ""
         try:
-            from app.application.modstore_local_client import modstore_get, modstore_digest_base_url
+            from app.application.modstore_local_client import modstore_digest_base_url, modstore_get
 
             payload = await modstore_get(
                 "/api/admin/production-line/time-rail/status",
@@ -64,15 +73,11 @@ class TimeRailAppService:
             data = payload.get("data") if isinstance(payload, dict) else None
             if isinstance(data, dict) and isinstance(data.get("nodes"), dict):
                 return data
-            raise TimeRailStatusUnavailableError(
-                f"MODstore time-rail status 响应无效: {payload!r}"
-            )
-        except TimeRailStatusUnavailableError:
-            raise
-        except OPERATIONAL_ERRORS as exc:
-            raise TimeRailStatusUnavailableError(
-                f"MODstore time-rail status 不可达: {exc}"
-            ) from exc
+            logger.warning("MODstore time-rail status 响应无效: %r", payload)
+            return self._degraded_runtime_status(f"MODstore time-rail status 响应无效: {payload!r}")
+        except RECOVERABLE_ERRORS as exc:
+            logger.warning("MODstore time-rail status 不可达，返回 degraded: %s", exc)
+            return self._degraded_runtime_status(f"MODstore time-rail status 不可达: {exc}")
 
 
 _service: TimeRailAppService | None = None

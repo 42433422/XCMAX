@@ -1,0 +1,124 @@
+{
+  "id": "excel-full-read-employee",
+  "name": "Excel 读取员",
+  "version": "1.0.0",
+  "author": "XCAGI",
+  "description": "Excel读取员工：上传 .xlsx/.xlsm，使用 direct_python 全量读取 sheet、表头、数据与单元格内容，输出 JSON 中介 outputs/workbook.json，禁止 LLM 编造单元格",
+  "artifact": "employee_pack",
+  "scope": "global",
+  "dependencies": {
+    "xcagi": ">=1.0.0"
+  },
+  "employee": {
+    "id": "excel-full-read-employee",
+    "label": "Excel 读取员",
+    "capabilities": [
+      "excel.full_read",
+      "data.json_export"
+    ]
+  },
+  "workflow_employees": [
+    {
+      "id": "excel-full-read-employee",
+      "label": "Excel 生成员",
+      "panel_title": "Excel 生成员",
+      "panel_summary": "上传 .xlsx，全量读取 sheet/表头/单元格并输出 workbook.json。",
+      "capabilities": [
+        "excel.full_read",
+        "data.json_export"
+      ],
+      "api_base_path": "employees/excel-full-read-employee",
+      "entry_action": "run"
+    }
+  ],
+  "backend": {
+    "entry": "blueprints",
+    "init": "mod_init"
+  },
+  "employee_config_v2": {
+    "identity": {
+      "id": "excel-full-read-employee",
+      "version": "1.0.0",
+      "artifact": "employee_pack",
+      "name": "Excel 生成员",
+      "description": "Excel读取员工：上传 .xlsx/.xlsm，使用 direct_python 全量读取 sheet、表头、数据与单元格内容，输出 JSON 中介 outputs/workbook.json，禁止 LLM 编造单元格"
+    },
+    "perception": {
+      "type": "excel",
+      "accepted_extensions": [
+        ".xlsx",
+        ".xlsm"
+      ]
+    },
+    "memory": {
+      "type": "session"
+    },
+    "cognition": {
+      "agent": {
+        "system_prompt": "你是Excel 生成员。你负责将用户上传的 xlsx 全量解析为 outputs/workbook.json（含 sheet、表头、单元格）。必须真实执行 direct_python，禁止 LLM 编造单元格数据。",
+        "role": {
+          "name": "Excel 生成员",
+          "persona": "严谨的 Excel 全量读取员工",
+          "tone": "professional",
+          "expertise": [
+            "Excel 解析",
+            "JSON 结构化",
+            "单元格全量"
+          ]
+        },
+        "behavior_rules": [
+          "必须真实解析 xlsx，禁止编造单元格。",
+          "成功必须以写出 workbook.json 为准。"
+        ],
+        "few_shot_examples": [],
+        "model": {
+          "provider": "auto",
+          "model_name": "auto",
+          "temperature": 0.1,
+          "max_tokens": 2000,
+          "top_p": 0.9
+        }
+      },
+      "skills": [
+        {
+          "name": "excel.full_read",
+          "brief": "上传 xlsx，输出 workbook.json 中介。"
+        }
+      ]
+    },
+    "collaboration": {
+      "workflow": {
+        "workflow_id": 0,
+        "name": "Excel 生成员"
+      }
+    },
+    "actions": {
+      "handlers": [
+        "direct_python"
+      ],
+      "direct_python": {
+        "module": "excel_full_read_employee",
+        "action": "convert",
+        "default_output_relpath": "outputs/workbook.json",
+        "default_template_relpath": "",
+        "default_use_personnel_roster": false
+      }
+    }
+  },
+  "metadata": {
+    "framework_version": "2.0.0",
+    "created_by": "asset_pipeline"
+  },
+  "actions": {
+    "handlers": [
+      "direct_python"
+    ],
+    "direct_python": {
+      "module": "excel_full_read_employee",
+      "action": "convert",
+      "default_output_relpath": "outputs/workbook.json",
+      "default_template_relpath": "",
+      "default_use_personnel_roster": false
+    }
+  }
+}

@@ -182,3 +182,11 @@ def test_me_returns_level_profile(client, auth_headers):
     assert profile["experience"] == 0
     assert profile["next_level_min_exp"] == 1_000
     assert profile["progress"] == 0.0
+
+
+def test_me_unauthenticated_returns_200_not_401(client):
+    r = client.get("/api/auth/me")
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data.get("ok") is False
+    assert data.get("success") is False

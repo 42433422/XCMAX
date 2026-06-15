@@ -227,7 +227,11 @@ def dispatch_backup_event(event_type: str, payload: Dict[str, Any]) -> Dict[str,
         if event_type == "backup.dr_guard.cleared":
             return {"ok": True, "handler": "dr_guard_cleared", **_handle_dr_guard_cleared(payload)}
         if event_type == "backup.dr_guard.escalated":
-            return {"ok": True, "handler": "dr_guard_escalated", **_handle_dr_guard_escalated(payload)}
+            return {
+                "ok": True,
+                "handler": "dr_guard_escalated",
+                **_handle_dr_guard_escalated(payload),
+            }
         return {"ok": False, "skipped": True, "reason": "unhandled"}
     except Exception as exc:  # noqa: BLE001
         logger.exception("dispatch_backup_event failed event_type=%s", event_type)

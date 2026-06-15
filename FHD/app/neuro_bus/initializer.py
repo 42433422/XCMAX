@@ -13,7 +13,7 @@ from app.neuro_bus.deduplicator import get_deduplicator
 from app.neuro_bus.event_store import EventStoreMode, get_event_store
 from app.neuro_bus.health_monitor import get_health_monitor
 from app.neuro_bus.retry_handler import get_retry_handler
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +63,7 @@ class NeuroBusInitializer:
             # 3. 初始化事件存储
             self._event_store = get_event_store(mode=event_store_mode)
             logger.info(
-                f"[NeuroBusInitializer] ✓ 事件存储已初始化 (模式: {event_store_mode.value})"
+                "[NeuroBusInitializer] ✓ 事件存储已初始化 (模式: %s)", event_store_mode.value
             )
 
             # 4. 初始化健康监控
@@ -103,8 +103,8 @@ class NeuroBusInitializer:
 
             return True
 
-        except OPERATIONAL_ERRORS as e:
-            logger.error(f"[NeuroBusInitializer] 初始化失败: {e}")
+        except RECOVERABLE_ERRORS as e:
+            logger.error("[NeuroBusInitializer] 初始化失败: %s", e)
             return False
 
     def shutdown(self) -> None:
@@ -112,18 +112,17 @@ class NeuroBusInitializer:
         if not self._initialized:
             return
 
+        logger.info("[NeuroBusInitializer] 正在关闭 NeuroBus 系统...")
         try:
-            logger.info("[NeuroBusInitializer] 正在关闭 NeuroBus 系统...")
-
             if self._health_monitor:
                 self._health_monitor.stop_monitoring()
                 logger.info("[NeuroBusInitializer] ✓ 健康监控已停止")
-
+        except RECOVERABLE_ERRORS as e:
+            # 健康监控停止失败不得阻断系统拆除——状态必须在 finally 中清理。
+            logger.error("[NeuroBusInitializer] 关闭健康监控时出错: %s", e)
+        finally:
             self._initialized = False
             logger.info("[NeuroBusInitializer] ✓ NeuroBus 系统已关闭")
-
-        except OPERATIONAL_ERRORS as e:
-            logger.error(f"[NeuroBusInitializer] 关闭时出错: {e}")
 
     def get_status(self) -> dict:
         """获取初始化状态"""

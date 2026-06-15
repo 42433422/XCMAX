@@ -159,3 +159,56 @@ def test_surface_audit_deps_auto_start_disabled(monkeypatch: pytest.MonkeyPatch)
     out = deps.ensure_surface_audit_deps()
     assert "services" in out
     assert out["services"].get("fhd_api", {}).get("reason") == "auto_start_disabled"
+
+
+def test_resolve_internal_api_base_defaults_8788(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("MODSTORE_INTERNAL_API_BASE", raising=False)
+    monkeypatch.delenv("MODSTORE_DEPLOY_HEALTH_URL", raising=False)
+    from modstore_server.surface_audit_deps import resolve_internal_api_base
+
+    assert resolve_internal_api_base() == "http://127.0.0.1:8788"
+
+
+def test_resolve_internal_api_base_from_health_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("MODSTORE_INTERNAL_API_BASE", raising=False)
+    monkeypatch.setenv("MODSTORE_DEPLOY_HEALTH_URL", "http://127.0.0.1:8788/api/health")
+    from modstore_server.surface_audit_deps import resolve_internal_api_base
+
+    assert resolve_internal_api_base() == "http://127.0.0.1:8788"
+
+
+def test_surface_audit_stop_after_local_mac_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("MODSTORE_SURFACE_AUDIT_STOP_AFTER", raising=False)
+    monkeypatch.setenv("MODSTORE_AUTOMATION_PRIMARY", "local_mac")
+    from modstore_server.surface_audit_deps import surface_audit_stop_after_enabled
+
+    assert surface_audit_stop_after_enabled() is True
+
+
+def test_stop_surface_audit_ephemeral_kills_pid_file(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import modstore_server.surface_audit_deps as deps
+
+    pid_file = tmp_path / "surface-audit-fhd-api.pid"
+    pid_file.write_text("999999", encoding="utf-8")
+    killed: list[int] = []
+
+    def _fake_kill(pid: int, sig: int) -> None:
+        if sig == 0:
+            return
+        killed.append(pid)
+
+    monkeypatch.setattr(deps, "_pids_dir", lambda: tmp_path)
+    monkeypatch.setattr(deps.os, "kill", _fake_kill)
+    monkeypatch.setattr(deps, "_fhd_root", lambda: tmp_path)
+
+    out = deps.stop_surface_audit_ephemeral()
+    assert out["ok"] is True
+    assert "surface-audit-fhd-api" in out["stopped"]
+    assert 999999 in killed
+    assert not pid_file.is_file()

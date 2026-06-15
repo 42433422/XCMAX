@@ -7,16 +7,25 @@ import { useModRoutes } from '@/composables/useModRoutes'
 import { DEFAULT_INDUSTRY_ID } from '@/constants/industryDefaults'
 import {
   ADMIN_MENU_ITEM,
+  ADMIN_EMPLOYEE_WORKFLOW_MENU_CHILDREN,
   CORE_MENU_ITEMS_BASE,
   CORE_MENU_ITEMS_TRAILING,
+  INDUSTRY_DELIVERY_CORE_ITEMS,
   SANDBOX_MENU_KEYS,
   SETTINGS_MENU_ITEM,
 } from '@/constants/coreMenuCatalog'
 import { useAccountProfileStore } from '@/stores/accountProfile'
-import { isPlatformShellModeEnabled, SHELL_CORE_MENU_KEYS } from '@/constants/platformShellMode'
+import {
+  isPlatformShellModeEnabled,
+  resolvePlatformShellMenuKeys,
+  shouldExposeIndustrySidebar,
+} from '@/constants/platformShellMode'
+import { hostPackAcknowledgedRef } from '@/constants/productFlow'
 import {
   isClientErpSidebarContext,
   keepHostNavKeyVisibleWhenModSidebarFacetSuppressed,
+  normalizeModSidebarNavKey,
+  shouldHideAttendanceModSidebarMenu,
 } from '@/constants/genericModPack'
 import { resolveNavRouteName } from '@/constants/navRouteAliases'
 import { resolveCoreNavLabel } from '@/utils/coreNavLabel'
@@ -84,8 +93,14 @@ export function useVisibleNavItems() {
   const { modsForUi, activeModId, mods } = storeToRefs(modsStore)
   const { modMenuItems } = useModRoutes()
 
+  const hostPackAck = hostPackAcknowledgedRef()
+
   const installedModIds = computed(() =>
     (mods.value || []).map((m) => String(m.id || '').trim()).filter(Boolean),
+  )
+
+  const exposeIndustrySidebar = computed(() =>
+    shouldExposeIndustrySidebar(installedModIds.value, hostPackAck.value),
   )
 
   const hasIndustryBusinessMod = computed(() =>
@@ -104,7 +119,7 @@ export function useVisibleNavItems() {
     ),
   )
 
-  const coreMenuOverrides = computed(() => buildCoreMenuOverrides(modsForUi.value || []))
+  const coreMenuOverrides = computed(() => buildCoreMenuOverrides(mods.value || []))
 
   const industryId = computed(() =>
     String(industryStore.currentIndustryId || DEFAULT_INDUSTRY_ID),
@@ -132,14 +147,31 @@ export function useVisibleNavItems() {
     const baseCore = CORE_MENU_ITEMS_BASE.map((item) => {
       const override = coreMenuOverrides.value.get(item.key)
       if (isCoreNavHidden(item.key)) return null
-      if (!canShowCoreMenuKey(roleMenuProfile.value, item.key)) return null
+      const childKeys = [
+        ...(item.children?.map((c) => c.key) || []),
+        ...(item.key === 'employee-workflow' &&
+        isAdminConsoleSpa() &&
+        accountProfileStore.isAdminAccount
+          ? ADMIN_EMPLOYEE_WORKFLOW_MENU_CHILDREN.map((c) => c.key)
+          : []),
+      ]
+      const parentAllowed =
+        canShowCoreMenuKey(roleMenuProfile.value, item.key) ||
+        childKeys.some((key) => canShowCoreMenuKey(roleMenuProfile.value, key))
+      if (!parentAllowed) return null
       const resolved: ResolvedSidebarMenuItem = {
         ...item,
-        name: resolveCoreNavLabel(item.key, id, modsForUi.value),
+        name: resolveCoreNavLabel(item.key, id, modsForUi.value) || item.name,
         iconClass: override?.iconClass || item.iconClass,
       }
       if (item.children?.length) {
-        resolved.children = item.children
+        const childSource = [
+          ...item.children,
+          ...(isAdminConsoleSpa() && accountProfileStore.isAdminAccount
+            ? ADMIN_EMPLOYEE_WORKFLOW_MENU_CHILDREN
+            : []),
+        ]
+        resolved.children = childSource
           .map((child) => {
             if (isCoreNavHidden(child.key)) return null
             if (!canShowCoreMenuKey(roleMenuProfile.value, child.key)) return null
@@ -151,15 +183,34 @@ export function useVisibleNavItems() {
             }
           })
           .filter(Boolean) as ResolvedSidebarMenuItem[]
+        if (!resolved.children.length) return null
       }
       return resolved
     }).filter((item) => {
       if (!item) return false
       if (isSandboxMode() && !SANDBOX_MENU_KEYS.has(item.key)) return false
-      if (isPlatformShellMode() && !SHELL_CORE_MENU_KEYS.has(item.key)) return false
+      if (isPlatformShellMode()) {
+        const shellKeys = resolvePlatformShellMenuKeys(installedModIds.value, hostPackAck.value)
+        if (!shellKeys.has(item.key)) return false
+      }
       return true
     }) as ResolvedSidebarMenuItem[]
-    return [...adminOperatorTop, ...baseCore]
+
+    // 引导第三步完成（或已装账号定制）后，平台壳主导航长出行业业务核心项。
+    // 这些项独立于 erp-domain-bridge 的 hidden override（壳模式改用宿主槽位承载），
+    // 仅取行业/定制 label 覆盖；其同名 mod 入口会在 merge 阶段因占用宿主槽位被去重。
+    const industryDelivery: ResolvedSidebarMenuItem[] = []
+    if (!adminShell && isPlatformShellMode() && exposeIndustrySidebar.value) {
+      for (const item of INDUSTRY_DELIVERY_CORE_ITEMS) {
+        const override = coreMenuOverrides.value.get(item.key)
+        industryDelivery.push({
+          ...item,
+          name: resolveCoreNavLabel(item.key, id, modsForUi.value) || item.name,
+          iconClass: override?.iconClass || item.iconClass,
+        })
+      }
+    }
+    return [...adminOperatorTop, ...baseCore, ...industryDelivery]
   })
 
   const trailingLocalized = computed((): ResolvedSidebarMenuItem[] => {
@@ -201,6 +252,14 @@ export function useVisibleNavItems() {
     const adminShell = isAdminConsoleSpa() && accountProfileStore.isAdminAccount
     return modMenuItems.value
       .filter((item) => {
+        const navKey = normalizeModSidebarNavKey(String(item.key || ''))
+        if (shouldHideAttendanceModSidebarMenu(navKey)) return false
+        if (
+          roleMenuProfile.value.role === 'enterprise-user' &&
+          (navKey === 'workflow-visualization' || navKey === 'mod-workflow-visualization')
+        ) {
+          return false
+        }
         if (!adminShell) return true
         const modId = String(item.modId || '').trim()
         if (modId && ADMIN_OPERATOR_HIDDEN_MOD_IDS.has(modId)) return false

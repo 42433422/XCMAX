@@ -1,0 +1,16 @@
+{
+  "task": "deploy-frontend",
+  "description": "构建 MODstore 前端并部署到腾讯云 Pages",
+  "input": {
+    "target": "market-frontend",
+    "steps": ["npm run build", "tcb hosting deploy dist/ -e <env-id>"],
+    "pre_flight": {
+      "tests_green": true,
+      "nginx_ready": true,
+      "secrets_valid": true
+    }
+  },
+  "validation": {
+    "smoke_urls": ["https://xiu-ci.com/market/"]
+  }
+}

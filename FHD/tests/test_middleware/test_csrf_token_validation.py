@@ -52,6 +52,10 @@ def client():
     def install():
         return {"success": True}
 
+    @app.post("/api/aiopen/mcp")
+    def aiopen_mcp():
+        return {"success": True}
+
     return TestClient(app, raise_server_exceptions=False)
 
 
@@ -149,6 +153,12 @@ def test_sandbox_other_endpoint_still_requires_csrf(monkeypatch: pytest.MonkeyPa
     client = TestClient(app, raise_server_exceptions=False)
     r = client.post("/api/mod-store/publish")
     assert r.status_code == 403
+
+
+def test_aiopen_mcp_exempt_without_csrf(client):
+    """AIOPEN MCP 供外部 Agent 调用，无 CSRF Cookie。"""
+    r = client.post("/api/aiopen/mcp", json={"jsonrpc": "2.0", "id": 1, "method": "ping"})
+    assert r.status_code == 200
 
 
 def test_non_http_scope_passthrough():

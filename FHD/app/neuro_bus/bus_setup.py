@@ -12,7 +12,7 @@ from fastapi import FastAPI
 
 from app.neuro_bus.bus import NeuroBus, get_neuro_bus
 from app.neuro_bus.events.base import EventPriority, NeuroEvent
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +57,7 @@ class NeuroBusManager:
 
         async def on_system_event(event: NeuroEvent):
             """系统事件日志"""
-            logger.debug(f"System event: {event.event_type} from {event.metadata.source}")
+            logger.debug("System event: %s source=%s", event.event_type, event.metadata.source)
 
         # 订阅所有系统事件
         self._bus.subscribe("system.*", on_system_event, priority=100)
@@ -123,7 +123,7 @@ def init_neuro_bus(app: FastAPI | None = None) -> NeuroBus | None:
         from app.neuro_bus.domains.intent_domain import get_intent_domain
 
         get_intent_domain()
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.warning("init_neuro_bus: intent domain setup: %s", e)
 
     return get_neuro_bus()

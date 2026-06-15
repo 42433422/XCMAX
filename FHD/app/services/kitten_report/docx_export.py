@@ -7,7 +7,7 @@ from datetime import datetime
 from io import BytesIO
 from typing import Any
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 from .service import KittenReportExportService
 
@@ -91,7 +91,7 @@ def build_kitten_docx(payload: dict[str, Any]) -> dict[str, Any]:
         if details:
             try:
                 detail_txt = json.dumps(details, ensure_ascii=False, default=str)
-            except OPERATIONAL_ERRORS:
+            except RECOVERABLE_ERRORS:
                 detail_txt = str(details)
             if len(detail_txt) > 6000:
                 detail_txt = detail_txt[:6000] + "…"

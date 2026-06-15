@@ -10,9 +10,9 @@ import logging
 import os
 import shutil
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +32,7 @@ class DatabaseService:
             db_path = SQLALCHEMY_DATABASE_URI.replace("sqlite:///", "")
             if not os.path.isabs(db_path):
                 db_path = os.path.join(os.getcwd(), db_path)
-            return db_path
+            return cast("str", db_path)
         return None
 
     def _get_backup_dir(self) -> str:
@@ -81,7 +81,7 @@ class DatabaseService:
 
             shutil.copy2(db_path, backup_path)
 
-            logger.info(f"数据库备份成功：{backup_path}")
+            logger.info("数据库备份成功：%s", backup_path)
 
             return {
                 "success": True,
@@ -90,8 +90,8 @@ class DatabaseService:
                 "filename": backup_filename,
             }
 
-        except OPERATIONAL_ERRORS as e:
-            logger.exception(f"数据库备份失败：{e}")
+        except RECOVERABLE_ERRORS as e:
+            logger.exception("数据库备份失败：%s", e)
             return {
                 "success": False,
                 "message": f"备份失败：{str(e)}",
@@ -130,12 +130,12 @@ class DatabaseService:
 
             shutil.copy2(backup_path, db_path)
 
-            logger.info(f"数据库恢复成功：从 {backup_path} 恢复到 {db_path}")
+            logger.info("数据库恢复成功：从 %s 恢复到 %s", backup_path, db_path)
 
             return {"success": True, "message": "数据库恢复成功"}
 
-        except OPERATIONAL_ERRORS as e:
-            logger.exception(f"数据库恢复失败：{e}")
+        except RECOVERABLE_ERRORS as e:
+            logger.exception("数据库恢复失败：%s", e)
             return {"success": False, "message": f"恢复失败：{str(e)}"}
 
     def list_backups(self) -> dict[str, Any]:
@@ -174,8 +174,8 @@ class DatabaseService:
 
             return {"success": True, "backups": backups, "count": len(backups)}
 
-        except OPERATIONAL_ERRORS as e:
-            logger.exception(f"列出备份失败：{e}")
+        except RECOVERABLE_ERRORS as e:
+            logger.exception("列出备份失败：%s", e)
             return {
                 "success": False,
                 "message": f"列出备份失败：{str(e)}",
@@ -205,12 +205,12 @@ class DatabaseService:
 
             os.remove(backup_path)
 
-            logger.info(f"备份文件删除成功：{backup_path}")
+            logger.info("备份文件删除成功：%s", backup_path)
 
             return {"success": True, "message": "备份文件删除成功"}
 
-        except OPERATIONAL_ERRORS as e:
-            logger.exception(f"删除备份失败：{e}")
+        except RECOVERABLE_ERRORS as e:
+            logger.exception("删除备份失败：%s", e)
             return {"success": False, "message": f"删除失败：{str(e)}"}
 
 

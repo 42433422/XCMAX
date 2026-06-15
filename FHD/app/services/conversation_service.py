@@ -12,7 +12,7 @@ from typing import Any
 from app.db.models import AIConversation, AIConversationSession
 from app.db.session import get_db
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -99,9 +99,9 @@ class ConversationService(NeuroEventPublisherMixin):
 
                 db.commit()
                 return conversation.id
-            except OPERATIONAL_ERRORS as e:
+            except RECOVERABLE_ERRORS as e:
                 db.rollback()
-                logger.error(f"保存对话消息失败: {e}")
+                logger.error("保存对话消息失败: %s", e)
                 raise
 
     def get_session_messages(self, session_id: str, limit: int = 50) -> list[tuple]:
@@ -140,8 +140,8 @@ class ConversationService(NeuroEventPublisherMixin):
                         )
                     )
                 return result
-            except OPERATIONAL_ERRORS as e:
-                logger.error(f"获取会话消息失败: {e}")
+            except RECOVERABLE_ERRORS as e:
+                logger.error("获取会话消息失败: %s", e)
                 raise
 
     def get_sessions(self, user_id: str | None = None, limit: int = 20) -> list[tuple]:
@@ -184,8 +184,8 @@ class ConversationService(NeuroEventPublisherMixin):
                         )
                     )
                 return result
-            except OPERATIONAL_ERRORS as e:
-                logger.error(f"获取会话列表失败: {e}")
+            except RECOVERABLE_ERRORS as e:
+                logger.error("获取会话列表失败: %s", e)
                 raise
 
     def update_session_title(self, session_id: str, title: str) -> bool:
@@ -212,9 +212,9 @@ class ConversationService(NeuroEventPublisherMixin):
                     db.commit()
                     return True
                 return False
-            except OPERATIONAL_ERRORS as e:
+            except RECOVERABLE_ERRORS as e:
                 db.rollback()
-                logger.error(f"更新会话标题失败: {e}")
+                logger.error("更新会话标题失败: %s", e)
                 raise
 
     def delete_session(self, session_id: str) -> bool:
@@ -241,9 +241,9 @@ class ConversationService(NeuroEventPublisherMixin):
 
                 db.commit()
                 return True
-            except OPERATIONAL_ERRORS as e:
+            except RECOVERABLE_ERRORS as e:
                 db.rollback()
-                logger.error(f"删除会话失败：{e}")
+                logger.error("删除会话失败：%s", e)
                 raise
 
     def create_session(self, user_id: str = "default", title: str = None) -> str:
@@ -271,9 +271,9 @@ class ConversationService(NeuroEventPublisherMixin):
                 db.add(session)
                 db.commit()
                 return session_id
-            except OPERATIONAL_ERRORS as e:
+            except RECOVERABLE_ERRORS as e:
                 db.rollback()
-                logger.error(f"创建会话失败：{e}")
+                logger.error("创建会话失败：%s", e)
                 raise
 
 

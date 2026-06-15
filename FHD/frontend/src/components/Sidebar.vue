@@ -19,6 +19,7 @@
     <nav
       ref="sidebarMenuRef"
       class="sidebar-menu"
+      data-tour="sidebar-menu"
       :class="{ 'reorder-enabled': sidebarLayoutStore.reorderEnabled, 'is-dragging': draggingKey }"
       aria-label="主导航"
     >
@@ -50,6 +51,7 @@
           :is-pressing="pressingKey === item.key"
           :is-dragging="draggingKey === item.key"
           :long-press-ms="LONG_PRESS_MS"
+          :im-unread-total="imUnreadTotal"
           @parent-click="onParentMenuClick(item)"
           @select-view="selectView"
           @reorder-pointer-down="onReorderPointerDown($event, item.key)"
@@ -65,6 +67,7 @@
           active: activeView === settingsMenuItem.key,
         }"
         :data-view="settingsMenuItem.key"
+        :data-tour="`sidebar-${settingsMenuItem.key}`"
         :aria-label="settingsMenuItem.name"
         :aria-current="activeView === settingsMenuItem.key ? 'page' : undefined"
         :title="settingsMenuItem.name"
@@ -141,7 +144,10 @@ import {
 } from '@/constants/platformShellMode'
 import { SETTINGS_MENU_ITEM, sidebarLayoutSeedKeys } from '@/constants/coreMenuCatalog'
 import { useVisibleNavItems } from '@/composables/useVisibleNavItems'
+import { useImUnreadBadge } from '@/composables/useImUnreadBadge'
 import SidebarMenuItem from '@/components/SidebarMenuItem.vue'
+
+const { imUnreadTotal } = useImUnreadBadge()
 
 const props = defineProps({
   activeView: {

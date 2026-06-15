@@ -1,0 +1,27 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Progressive-delivery stack via FHD/k8s/rollouts (Rollout canary + SLO AnalysisTemplate +
+# shared service/configmap/ingress/pdb/networkpolicy). Needs
+# `--load-restrictor LoadRestrictionsNone` (ArgoCD argocd-cm via bootstrap_argocd.sh; locally
+# pass the flag). For a plain Deployment (no canary) use ../../base instead.
+resources:
+  - ../../rollouts
+
+namespace: xcagi-staging
+
+labels:
+  - pairs:
+      environment: staging
+    includeSelectors: false
+
+patches:
+  - path: replicas-patch.yaml
+  - path: config-patch.yaml
+
+# Image pin — CI gitops-image-bump / scripts/gitops/bump_image.sh sets newTag to sha-<gitsha>.
+images:
+  - name: __DEPLOY_BACKEND_IMAGE__
+    # lowercase: GHCR repo paths must be lowercase (repo is 42433422/XCMAX).
+    newName: ghcr.io/42433422/xcmax/xcagi-fhd-api
+    newTag: staging

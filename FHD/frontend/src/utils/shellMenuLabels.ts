@@ -71,7 +71,7 @@ export const SHELL_VIEW_TITLE_BASE: Record<string, string> = {
   console: '模板库',
   settings: '系统设置',
   tools: '工具表',
-  'other-tools': '员工工作流',
+  'other-tools': '员工视图',
   'approval-hub': '审批中心',
   'enterprise-customer-service': '外部客服',
   'approval-workspace': '审批工作台',
@@ -141,7 +141,7 @@ export const SHELL_INDUSTRY_MENU_OVERRIDES: Record<string, Record<string, string
     customers: '协作关系',
     print: '标签打印',
     'business-docking': '人事对接',
-    'other-tools': '员工工作流',
+    'other-tools': '员工视图',
     'approval-rules': '审批流程规则'
   }
 }

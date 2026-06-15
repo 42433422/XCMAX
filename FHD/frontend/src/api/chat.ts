@@ -10,6 +10,7 @@ import {
   resolveChatStreamPath,
   type PlannerSseEvent,
 } from '@/utils/chatSseStream';
+import { asRecord, asString } from '@/utils/typeGuards'
 import {
   resolvePlannerChatBatchPath,
   resolvePlannerChatPath,
@@ -59,8 +60,8 @@ export async function parseChatStreamErrorResponse(res: Response): Promise<strin
   try {
     const ct = res.headers.get('content-type') || '';
     if (ct.includes('application/json')) {
-      const j = await res.json();
-      msg = String((j as any)?.message || (j as any)?.detail || msg);
+      const j = asRecord(await res.json());
+      msg = asString(j.message || j.detail) || msg;
     }
   } catch {
     /* ignore */
@@ -136,12 +137,12 @@ export const chatApi = {
     return api.post<ApiResponse<void>>('/api/ai/context/clear', data);
   },
 
-  getConfig(): Promise<ApiResponse<any>> {
-    return api.get<ApiResponse<any>>('/api/ai/config');
+  getConfig(): Promise<ApiResponse<unknown>> {
+    return api.get<ApiResponse<unknown>>('/api/ai/config');
   },
 
-  testIntent(data: any): Promise<ApiResponse<any>> {
-    return api.post<ApiResponse<any>>(resolvePlannerIntentTestPath(), data);
+  testIntent(data: unknown): Promise<ApiResponse<unknown>> {
+    return api.post<ApiResponse<unknown>>(resolvePlannerIntentTestPath(), data);
   },
 
   sendUnifiedChat(
@@ -171,11 +172,11 @@ export const chatApi = {
     return api.post(resolvePlannerUnifiedChatBatchPath(), payload, withMarketAuthorization(options));
   },
 
-  getConversations(params: Record<string, any> = {}): Promise<ApiResponse<ChatSession[]>> {
+  getConversations(params: Record<string, unknown> = {}): Promise<ApiResponse<ChatSession[]>> {
     return api.get<ApiResponse<ChatSession[]>>('/api/conversations/sessions', params);
   },
 
-  clearConversations(data: Record<string, any> = {}): Promise<ApiResponse<{ deleted: number }>> {
+  clearConversations(data: Record<string, unknown> = {}): Promise<ApiResponse<{ deleted: number }>> {
     return api.post<ApiResponse<{ deleted: number }>>('/api/conversations/sessions/clear', data);
   },
 
@@ -183,11 +184,11 @@ export const chatApi = {
     return api.get<ApiResponse<ChatSession>>(`/api/conversations/${sessionId}`);
   },
 
-  saveMessage(payload: any): Promise<ApiResponse<any>> {
-    return api.post<ApiResponse<any>>('/api/conversations/message', payload);
+  saveMessage(payload: unknown): Promise<ApiResponse<unknown>> {
+    return api.post<ApiResponse<unknown>>('/api/conversations/message', payload);
   },
 
-  newConversation(data: Record<string, any> = {}): Promise<ApiResponse<{ session_id: string }>> {
+  newConversation(data: Record<string, unknown> = {}): Promise<ApiResponse<{ session_id: string }>> {
     return api.post<ApiResponse<{ session_id: string }>>('/api/ai/conversation/new', data);
   },
 };

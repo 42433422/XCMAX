@@ -9,10 +9,15 @@ HOST_BASE_DB_API_PREFIXES: tuple[str, ...] = (
     "/api/service-bridge/",
     "/api/wechat/",
     "/api/auth/",
+    "/api/im/",
+    "/api/workspace/",
     "/api/inventory/",
     "/api/runtime/",
     "/api/mods",
     "/api/system/",
+    "/api/xcmax/",
+    "/api/conversations/",
+    "/api/enterprise/",
 )
 
 

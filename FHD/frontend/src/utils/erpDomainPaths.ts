@@ -7,7 +7,7 @@ import { CLIENT_PRIMARY_ERP_MOD_ID } from '@/constants/genericModPack'
 import { isProtectedClientModId } from '@/constants/protectedMods'
 import { clientModPolicies } from '@/stores/hostConfig'
 import { useModsStore } from '@/stores/mods'
-import { XCAGI_ACTIVE_EXTENSION_MOD_ID_KEY } from '@/utils/xcagiStorageKeys'
+import { readActiveExtensionModIdFromStorage } from '@/utils/xcagiStorageKeys'
 
 const MOD_FACADE_BASE = `/api/mod/${ERP_DOMAIN_BRIDGE_MOD_ID}`
 
@@ -101,7 +101,7 @@ function pathSuffix(path: string): string {
 
 export function readActiveExtensionModId(): string {
   try {
-    return String(localStorage.getItem(XCAGI_ACTIVE_EXTENSION_MOD_ID_KEY) || '').trim()
+    return readActiveExtensionModIdFromStorage()
   } catch {
     return ''
   }
@@ -172,6 +172,22 @@ export function resolveErpApiBase(installedModIds?: string[]): string {
   return '/api'
 }
 
+function resolveWechatContactsCompatPath(
+  pathOnly: string,
+  suffix: string,
+  installedModIds?: string[],
+): string | null {
+  if (!pathMatchesPrefixes(pathOnly, CLIENT_MOD_HOST_ONLY_API_PREFIXES)) {
+    return null
+  }
+  const ids = readInstalledModIds(installedModIds)
+  if (ids.includes(ERP_DOMAIN_BRIDGE_MOD_ID) || readErpDomainModFacadeEnabled()) {
+    return `${MOD_FACADE_BASE}${pathOnly.slice(4)}${suffix}`
+  }
+  const raw = `${pathOnly}${suffix}`
+  return raw.startsWith('/') ? raw : `/${raw}`
+}
+
 /** 将宿主路径 /api/... 映射到 Mod 门面或保持宿主（与 DOMAIN_SPECS + blueprints 一致） */
 export function resolveErpApiPath(hostPath: string, installedModIds?: string[]): string {
   const raw = hostPath.startsWith('/') ? hostPath : `/${hostPath}`
@@ -179,19 +195,17 @@ export function resolveErpApiPath(hostPath: string, installedModIds?: string[]):
   const suffix = pathSuffix(raw)
   const ids = readInstalledModIds(installedModIds)
 
+  const wechatCompat = resolveWechatContactsCompatPath(pathOnly, suffix, ids)
+  if (wechatCompat) {
+    return wechatCompat
+  }
+
   if (isHostOnlyApiPath(pathOnly)) {
     return raw
   }
 
   const activeClient = readActiveExtensionModId()
   if (activeClient && isProtectedClientModId(activeClient)) {
-    if (
-      CLIENT_MOD_HOST_ONLY_API_PREFIXES.some(
-        (prefix) => pathOnly === prefix || pathOnly.startsWith(`${prefix}/`),
-      )
-    ) {
-      return raw
-    }
     let erpBase = resolveErpBaseForClientMod(activeClient, ids)
     if (pathMatchesPrefixes(pathOnly, ERP_ON_BRIDGE_WHEN_CLIENT_ACTIVE)) {
       erpBase = ids.includes(ERP_DOMAIN_BRIDGE_MOD_ID) ? MOD_FACADE_BASE : '/api'

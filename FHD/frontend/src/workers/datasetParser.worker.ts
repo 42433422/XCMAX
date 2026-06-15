@@ -131,7 +131,7 @@ const parseExcel = async (file: File): Promise<ParsedDatasetFile> => {
   const XLSX = await loadXlsx()
   const workbook = XLSX.read(buffer, { type: 'array' })
   const firstSheet = workbook.Sheets[workbook.SheetNames[0]]
-  const rows = XLSX.utils.sheet_to_json(firstSheet) as Record<string, unknown>[]
+  const rows = XLSX.utils.sheet_to_json(firstSheet) as unknown as Record<string, unknown>[]
   const columns = rows.length > 0 ? Object.keys(rows[0]) : []
   return normalizeRows(rows, columns)
 }

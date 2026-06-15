@@ -1,0 +1,16 @@
+{
+  "task": "add-reverse-proxy-location",
+  "description": "在 nginx-xiu-ci.conf 中新增反代 location 块",
+  "input": {
+    "file": "nginx-xiu-ci.conf",
+    "action": "add_location",
+    "location": {
+      "path": "/modstore/",
+      "proxy_pass": "http://127.0.0.1:8000/",
+      "proxy_set_header": ["Host $host", "X-Real-IP $remote_addr"]
+    }
+  },
+  "validation": {
+    "nginx_t": true
+  }
+}

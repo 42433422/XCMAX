@@ -1,0 +1,61 @@
+# CI SSOT: generated from FHD/.github/workflows/sunbird-installer.yml — DO NOT edit here.
+# Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
+# CI SSOT: edit this file, then run: python scripts/dev/publish_ci_workflows_to_root.py
+name: Sunbird Installer
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version"
+        required: true
+        default: "10.0.0"
+      source_ref:
+        description: "Git ref with sunbird build scripts"
+        required: true
+        default: "feat/enterprise-deploy-maturity"
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: FHD
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    env:
+      PYTHONUTF8: "1"
+      PYTHONIOENCODING: utf-8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.source_ref }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: |
+            FHD/frontend/package-lock.json
+            FHD/desktop/package-lock.json
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - name: Install Python deps for seed build
+        run: python -m pip install "openpyxl>=3.1"
+      - name: Build Sunbird custom installer
+        shell: pwsh
+        run: |
+          $v = "${{ github.event.inputs.version }}".TrimStart('v','V')
+          scripts/package/build-sunbird-installer.ps1 -Version $v
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sunbird-installer
+          path: |
+            release/xcagi-v*/sunbird/**
+            ../太阳鸟/**

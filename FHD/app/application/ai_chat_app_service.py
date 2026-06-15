@@ -25,7 +25,7 @@ import os
 import re
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import httpx
 
@@ -36,7 +36,7 @@ from app.application.workflow import (
     get_approval_service,
 )
 from app.services import get_ai_conversation_service
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.path_utils import resolve_fhd_repo_root
 
 logger = logging.getLogger(__name__)
@@ -178,7 +178,7 @@ class AIChatApplicationService:
             from app.neuro_bus.application_neuro_bridge import neuro_notify_chat_received
 
             neuro_notify_chat_received(user_id, message, source)
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             logger.debug("neuro_notify_chat_received skipped", exc_info=True)
 
         ctx = context or {}
@@ -190,11 +190,11 @@ class AIChatApplicationService:
                 from app.neuro_bus.application_neuro_bridge import neuro_notify_chat_completed
 
                 neuro_notify_chat_completed(user_id, message, resp)
-            except OPERATIONAL_ERRORS:
+            except RECOVERABLE_ERRORS:
                 logger.debug("neuro_notify_chat_completed skipped", exc_info=True)
             try:
                 self._persist_chat_turn(user_id, message, ctx, resp)
-            except OPERATIONAL_ERRORS as persist_err:
+            except RECOVERABLE_ERRORS as persist_err:
                 logger.warning("会话落库失败（已返回对话结果）: %s", persist_err)
 
             return resp
@@ -234,7 +234,7 @@ class AIChatApplicationService:
                 self.ai_service.chat(user_id, message, prepared_context, source=source)
             )
         except ConnectionError as conn_err:
-            logger.error(f"AI 服务连接失败：{conn_err}")
+            logger.error("AI 服务连接失败：%s", conn_err)
             loop.close()
             return _finalize(
                 self._build_fallback_response(
@@ -242,11 +242,11 @@ class AIChatApplicationService:
                 )
             )
         except TimeoutError as timeout_err:
-            logger.error(f"AI 服务请求超时：{timeout_err}")
+            logger.error("AI 服务请求超时：%s", timeout_err)
             loop.close()
             return _finalize(self._build_fallback_response(message, "AI 服务响应超时，请稍后重试"))
-        except OPERATIONAL_ERRORS as e:
-            logger.error(f"AI 服务处理异常：{e}", exc_info=True)
+        except RECOVERABLE_ERRORS as e:
+            logger.error("AI 服务处理异常：%s", e, exc_info=True)
             loop.close()
             error_msg = str(e)
             if "api_key" in error_msg.lower() or "apikey" in error_msg.lower():
@@ -267,7 +267,7 @@ class AIChatApplicationService:
             loop.close()
 
         logger.info(
-            f"用户 {user_id} 消息：{message[:50]}... -> {ai_result.get('action', 'unknown')}"
+            "用户 %s 消息：%s... -> %s", user_id, message[:50], ai_result.get('action', 'unknown')
         )
 
         response_data = self._build_response(ai_result, source, message)
@@ -373,7 +373,7 @@ class AIChatApplicationService:
         top_k_raw = context.get("excel_top_k", 5)
         try:
             top_k = int(top_k_raw)
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             top_k = 5
 
         try:
@@ -393,7 +393,7 @@ class AIChatApplicationService:
                     "hits": result.get("hits", []),
                 }
                 return enriched
-        except OPERATIONAL_ERRORS as err:
+        except RECOVERABLE_ERRORS as err:
             logger.warning("注入 Excel 向量上下文失败: %s", err, exc_info=True)
 
         return context
@@ -441,7 +441,7 @@ class AIChatApplicationService:
         try:
             float(text.replace(",", ""))
             return True
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             return False
 
     _HEADER_HINT_RE = re.compile(
@@ -478,7 +478,7 @@ class AIChatApplicationService:
             return ""
         try:
             from app.routes.template_grid_core import _extract_inline_customer_hits_from_cell
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             return ""
         for row in grid_rows[:22]:
             if not isinstance(row, list):
@@ -557,7 +557,7 @@ class AIChatApplicationService:
                     ).strip()
                     if doc_unit:
                         return doc_unit
-                except OPERATIONAL_ERRORS as err:
+                except RECOVERABLE_ERRORS as err:
                     logger.debug("从工作簿读取客户提示失败: %s", err)
         return AIChatApplicationService._guess_default_purchase_unit(excel_analysis)
 
@@ -752,7 +752,7 @@ class AIChatApplicationService:
                         }
                     )
             return out or None
-        except OPERATIONAL_ERRORS as err:
+        except RECOVERABLE_ERRORS as err:
             logger.debug("结构化重读 Excel 跳过: %s", err)
             return None
 
@@ -821,8 +821,8 @@ class AIChatApplicationService:
         try:
             from app.services.ai_db_schema_index import match_excel_import_roles_from_field_index
 
-            return match_excel_import_roles_from_field_index(list(keys))
-        except OPERATIONAL_ERRORS as err:
+            return cast("dict[str, str]", match_excel_import_roles_from_field_index(list(keys)))
+        except RECOVERABLE_ERRORS as err:
             logger.debug("字段索引表头匹配失败，回退空映射: %s", err)
             return {
                 "unit_name": "",
@@ -1039,7 +1039,7 @@ class AIChatApplicationService:
                 key = str(parsed.get(role) or "").strip()
                 roles[role] = key if key in keys else ""
             return roles
-        except OPERATIONAL_ERRORS as err:
+        except RECOVERABLE_ERRORS as err:
             logger.debug("LLM 列角色推断失败: %s", err)
             return {}
 
@@ -1049,8 +1049,8 @@ class AIChatApplicationService:
         try:
             from app.services.ai_db_schema_index import price_column_buckets_for_keys
 
-            return price_column_buckets_for_keys(list(keys))
-        except OPERATIONAL_ERRORS as err:
+            return cast("tuple[list[str], list[str], list[str]]", price_column_buckets_for_keys(list(keys)))
+        except RECOVERABLE_ERRORS as err:
             logger.debug("价格列分桶失败，回退启发式: %s", err)
             before: list[str] = []
             after: list[str] = []
@@ -1383,7 +1383,7 @@ class AIChatApplicationService:
             price_text = str((row or {}).get(price_key) or "").strip() if price_key else ""
             try:
                 unit_price = float(price_text) if price_text else 0.0
-            except OPERATIONAL_ERRORS:
+            except RECOVERABLE_ERRORS:
                 unit_price = 0.0
             if not unit_name:
                 continue
@@ -1540,7 +1540,7 @@ class AIChatApplicationService:
                         },
                     },
                 }
-            except OPERATIONAL_ERRORS as err:
+            except RECOVERABLE_ERRORS as err:
                 logger.error("文件导入工作流执行失败: %s", err, exc_info=True)
                 return {
                     "success": False,
@@ -1652,7 +1652,7 @@ class AIChatApplicationService:
                     from app.bootstrap import get_customer_app_service
 
                     customer_service = get_customer_app_service()
-                except OPERATIONAL_ERRORS as customer_err:
+                except RECOVERABLE_ERRORS as customer_err:
                     customer_service_error = str(customer_err)
                     logger.warning("客户服务不可用，降级为仅产品入库: %s", customer_err)
 
@@ -1764,7 +1764,7 @@ class AIChatApplicationService:
                         },
                     },
                 }
-            except OPERATIONAL_ERRORS as err:
+            except RECOVERABLE_ERRORS as err:
                 logger.error("Excel 上下文入库执行失败: %s", err, exc_info=True)
                 return {
                     "success": False,
@@ -1829,7 +1829,7 @@ class AIChatApplicationService:
                     fhd_root = resolve_fhd_repo_root(anchor=Path(__file__).resolve())
                     from app.application.tools import handle_price_list_export
 
-                    logger.info(f"价格表生成 - FHD根目录: {fhd_root}")
+                    logger.info("价格表生成 - FHD根目录: %s", fhd_root)
 
                     result = handle_price_list_export(
                         {
@@ -1840,7 +1840,7 @@ class AIChatApplicationService:
                         workspace_root=str(fhd_root) if fhd_root else None,
                     )
 
-                    logger.info(f"价格表生成结果: {result}")
+                    logger.info("价格表生成结果: %s", result)
 
                     if result.get("success"):
                         product_count = len(result.get("products", []))
@@ -1869,8 +1869,8 @@ class AIChatApplicationService:
                             "message": result.get("error", "价格表生成失败"),
                             "response": f"抱歉，价格表生成失败：{result.get('error', '未知错误')}",
                         }
-                except OPERATIONAL_ERRORS as e:
-                    logger.error(f"价格表生成异常：{e}", exc_info=True)
+                except RECOVERABLE_ERRORS as e:
+                    logger.error("价格表生成异常：%s", e, exc_info=True)
                     return {
                         "success": False,
                         "message": f"价格表生成异常：{str(e)}",
@@ -1957,7 +1957,7 @@ class AIChatApplicationService:
                     from app.routes.tools import _parse_order_text
 
                     parsed_quick = _parse_order_text(text)
-                except OPERATIONAL_ERRORS:
+                except RECOVERABLE_ERRORS:
                     parsed_quick = {"success": False}
                 if parsed_quick.get("success"):
                     # 结构与 _build_tool_call_response 一致，避免把多余键摊进 toolCall.params
@@ -2261,7 +2261,7 @@ class AIChatApplicationService:
             from app.routes.tools import execute_registered_workflow_tool
 
             return execute_registered_workflow_tool(tool_id=tool_id, action=action, params=params)
-        except OPERATIONAL_ERRORS as err:
+        except RECOVERABLE_ERRORS as err:
             logger.error(
                 "workflow 工具调度失败 tool=%s action=%s err=%s",
                 tool_id,
@@ -2298,7 +2298,7 @@ class AIChatApplicationService:
                     "description": f"导入 {unit_name} 的产品",
                 },
             )
-            logger.info(f"用户 {user_id} 确认导入文件：{saved_name} -> {unit_name}")
+            logger.info("用户 %s 确认导入文件：%s -> %s", user_id, saved_name, unit_name)
 
     def _build_response(
         self, ai_result: dict[str, Any], source: str | None, original_message: str = ""
@@ -2399,7 +2399,7 @@ class AIChatApplicationService:
                 if parsed_order.get("success"):
                     parsed_products = parsed_order.get("products") or []
                     parsed_unit_name = parsed_order.get("unit_name") or ""
-            except OPERATIONAL_ERRORS as parse_err:
+            except RECOVERABLE_ERRORS as parse_err:
                 logger.debug("pro shipment_generate 解析原句失败，回退旧逻辑: %s", parse_err)
 
             if original_message and len(original_message) > 5:
@@ -2534,7 +2534,7 @@ class AIChatApplicationService:
                 "unit_name": unit_name,
                 "query": model_number or keyword or "",
             }
-        except OPERATIONAL_ERRORS as prod_err:
+        except RECOVERABLE_ERRORS as prod_err:
             logger.error("即时执行 products 查询失败: %s", prod_err, exc_info=True)
             response_data["response"] = f"查询产品失败：{str(prod_err)}"
 
@@ -2553,7 +2553,7 @@ class AIChatApplicationService:
             response_data["response"] = (
                 f"查询到 {len(customers)} 个客户" if customers else "未找到客户"
             )
-        except OPERATIONAL_ERRORS as cust_err:
+        except RECOVERABLE_ERRORS as cust_err:
             logger.error("即时执行 customers 查询失败: %s", cust_err, exc_info=True)
             response_data["response"] = f"查询客户失败：{str(cust_err)}"
 
@@ -2611,7 +2611,7 @@ class AIChatApplicationService:
                     return response_data
                 response_data["response"] = created.get("message", "处理单位失败")
                 return response_data
-            except OPERATIONAL_ERRORS as err:
+            except RECOVERABLE_ERRORS as err:
                 logger.error("customers 添加意图执行失败: %s", err, exc_info=True)
                 response_data["response"] = f"处理单位失败：{str(err)}"
                 return response_data
@@ -2739,7 +2739,7 @@ class AIChatApplicationService:
                     response_data["response"] = doc_result.get("message", "生成发货单失败")
             else:
                 response_data["response"] = parsed.get("message", "订单解析失败")
-        except OPERATIONAL_ERRORS as tool_err:
+        except RECOVERABLE_ERRORS as tool_err:
             logger.error("自动执行 shipment_generate 失败: %s", tool_err, exc_info=True)
             response_data["response"] = f"生成发货单失败：{str(tool_err)}"
 
@@ -2772,7 +2772,7 @@ class AIChatApplicationService:
             response_data["response"] = "\n".join(lines)
             response_data["data"]["data"] = {"orders": orders}
             response_data.pop("toolCall", None)
-        except OPERATIONAL_ERRORS as tool_err:
+        except RECOVERABLE_ERRORS as tool_err:
             logger.error("即时执行 shipments 失败：%s", tool_err, exc_info=True)
 
         return response_data

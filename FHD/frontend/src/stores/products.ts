@@ -6,7 +6,7 @@ import type { ApiResponse } from '@/types/api'
 
 interface OperationResult {
   success: boolean;
-  data?: any;
+  data?: unknown;
   message?: string;
   total?: number;
 }
@@ -15,7 +15,7 @@ export const useProductsStore = defineStore('products', () => {
   const products = ref<Product[]>([]) as Ref<Product[]>
   const loading = ref(false)
   const error = ref<string | null>(null)
-  const units = ref<any[]>([])
+  const units = ref<unknown[]>([])
 
   const productCount = computed(() => products.value.length)
 

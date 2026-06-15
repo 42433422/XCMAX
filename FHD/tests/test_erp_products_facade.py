@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 REPO = Path(__file__).resolve().parents[1]
-MOD_DIR = REPO / "mods" / "xcagi-erp-domain-bridge"
+MOD_DIR = REPO / "mods-admin-runtime" / "xcagi-erp-domain-bridge"
 
 
 def test_manifest_products_via_service():

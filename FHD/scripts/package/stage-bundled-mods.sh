@@ -16,13 +16,20 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 MODS_ROOT="${ROOT}/mods"
 STAGE_DIR="${ROOT}/build/staged-mods-${SKU}"
 READ_SCRIPT="${ROOT}/scripts/package/read-host-profile-stage-ids.py"
+PYTHON="${PYTHON:-python3}"
+if [[ -x "${ROOT}/.venv/bin/python" ]]; then
+  PYTHON="${ROOT}/.venv/bin/python"
+fi
 
 if [[ ! -f "${READ_SCRIPT}" ]]; then
   echo "Missing ${READ_SCRIPT}" >&2
   exit 1
 fi
 
-mapfile -t IDS < <(python3 "${READ_SCRIPT}" "${SKU}")
+IDS_JSON="$("${PYTHON}" "${READ_SCRIPT}" "${SKU}")"
+while IFS= read -r mod_id; do
+  [[ -n "${mod_id}" ]] && IDS+=("${mod_id}")
+done < <("${PYTHON}" -c "import json,sys; print('\n'.join(json.loads(sys.argv[1])))" "${IDS_JSON}")
 EXCLUDE_ALWAYS=(taiyangniao-pro sz-qsm-pro _employees industry-solutions)
 
 rm -rf "${STAGE_DIR}"

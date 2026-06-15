@@ -1,18 +1,27 @@
-import { describe, expect, it, afterEach } from 'vitest'
+import { describe, expect, it, afterEach, beforeEach } from 'vitest'
 import {
   erpDomainModStatusPath,
   resolveErpApiBase,
   resolveErpApiPath,
 } from './erpDomainPaths'
-import { XCAGI_ACTIVE_EXTENSION_MOD_ID_KEY } from '@/utils/xcagiStorageKeys'
+import {
+  scopedActiveExtensionModStorageKey,
+  writeActiveExtensionModIdToStorage,
+} from '@/utils/xcagiStorageKeys'
+import { setTenantStorageScopeCache } from '@/utils/tenantStorageScope'
 
 const LS = 'xcagi_erp_domain_mod_facade_enabled'
-const ACTIVE_LS = XCAGI_ACTIVE_EXTENSION_MOD_ID_KEY
+const TEST_SCOPE = 'tenant:1'
+const ACTIVE_LS = () => scopedActiveExtensionModStorageKey(TEST_SCOPE)
 
 describe('erpDomainPaths', () => {
   afterEach(() => {
     localStorage.removeItem(LS)
-    localStorage.removeItem(ACTIVE_LS)
+    localStorage.removeItem(ACTIVE_LS())
+  })
+
+  beforeEach(() => {
+    setTenantStorageScopeCache(TEST_SCOPE)
   })
 
   it('defaults to host /api when facade off', () => {
@@ -65,7 +74,7 @@ describe('erpDomainPaths', () => {
 
   it('prefers active protected client mod for products/customers/units; orders via erp bridge', () => {
     localStorage.setItem(LS, '1')
-    localStorage.setItem(ACTIVE_LS, 'taiyangniao-pro')
+    writeActiveExtensionModIdToStorage('taiyangniao-pro', TEST_SCOPE)
     const ids = ['taiyangniao-pro', 'xcagi-erp-domain-bridge']
     expect(resolveErpApiBase(ids)).toBe('/api/mod/taiyangniao-pro')
     expect(resolveErpApiPath('/api/products/list', ids)).toBe(
@@ -86,17 +95,53 @@ describe('erpDomainPaths', () => {
   })
 
   it('falls back to erp bridge when client mod not in installed list', () => {
-    localStorage.setItem(ACTIVE_LS, 'taiyangniao-pro')
+    writeActiveExtensionModIdToStorage('taiyangniao-pro', TEST_SCOPE)
     const ids = ['xcagi-erp-domain-bridge']
     expect(resolveErpApiPath('/api/customers/list', ids)).toBe(
       '/api/mod/xcagi-erp-domain-bridge/customers/list',
     )
   })
 
-  it('keeps wechat_contacts on host API when active client mod is taiyangniao-pro', () => {
-    localStorage.setItem(ACTIVE_LS, 'taiyangniao-pro')
-    expect(resolveErpApiPath('/api/wechat_contacts/work_mode_feed?per_contact=1')).toBe(
-      '/api/wechat_contacts/work_mode_feed?per_contact=1',
+  it('routes wechat_contacts compat via erp bridge when bridge is installed', () => {
+    writeActiveExtensionModIdToStorage('taiyangniao-pro', TEST_SCOPE)
+    const ids = ['taiyangniao-pro', 'xcagi-erp-domain-bridge']
+    expect(resolveErpApiPath('/api/wechat_contacts/work_mode_feed?per_contact=1', ids)).toBe(
+      '/api/mod/xcagi-erp-domain-bridge/wechat_contacts/work_mode_feed?per_contact=1',
+    )
+    expect(resolveErpApiPath('/api/wechat_contacts/decrypt_status', ids)).toBe(
+      '/api/mod/xcagi-erp-domain-bridge/wechat_contacts/decrypt_status',
+    )
+  })
+
+  it('routes ERP API via bridge when active mod is industry shell (attendance-industry)', () => {
+    writeActiveExtensionModIdToStorage('attendance-industry', TEST_SCOPE)
+    const ids = ['attendance-industry', 'xcagi-erp-domain-bridge']
+    expect(resolveErpApiBase(ids)).toBe('/api/mod/xcagi-erp-domain-bridge')
+    expect(resolveErpApiPath('/api/customers/list', ids)).toBe(
+      '/api/mod/xcagi-erp-domain-bridge/customers/list',
+    )
+    expect(resolveErpApiPath('/api/products/list', ids)).toBe(
+      '/api/mod/xcagi-erp-domain-bridge/products/list',
+    )
+    expect(resolveErpApiPath('/api/purchase_units', ids)).toBe(
+      '/api/mod/xcagi-erp-domain-bridge/purchase_units',
+    )
+  })
+
+  it('routes ERP API via bridge when primary is industry shell without facade flag', () => {
+    localStorage.removeItem(LS)
+    const ids = ['attendance-industry', 'xcagi-erp-domain-bridge']
+    expect(resolveErpApiBase(ids)).toBe('/api/mod/xcagi-erp-domain-bridge')
+    expect(resolveErpApiPath('/api/shipment/shipment-records/units', ids)).toBe(
+      '/api/mod/xcagi-erp-domain-bridge/shipment/shipment-records/units',
+    )
+  })
+
+  it('does not map wechat_contacts to attendance-industry client mod', () => {
+    localStorage.setItem(LS, '1')
+    const ids = ['attendance-industry', 'xcagi-erp-domain-bridge']
+    expect(resolveErpApiPath('/api/wechat_contacts/decrypt_status', ids)).toBe(
+      '/api/mod/xcagi-erp-domain-bridge/wechat_contacts/decrypt_status',
     )
   })
 })

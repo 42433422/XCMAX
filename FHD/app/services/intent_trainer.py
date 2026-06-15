@@ -127,7 +127,7 @@ def parse_nlu_yaml(yaml_path: str) -> list[IntentExample]:
                     if text:
                         examples.append(IntentExample(text=text, label=intent_name))
 
-    logger.info(f"从 {yaml_path} 解析了 {len(examples)} 条训练样本")
+    logger.info("从 %s 解析了 %s 条训练样本", yaml_path, len(examples))
     return examples
 
 
@@ -171,7 +171,7 @@ def split_data(
     test_data = shuffled[n_train + n_val :]
 
     logger.info(
-        f"数据划分: 训练集 {len(train_data)}, 验证集 {len(val_data)}, 测试集 {len(test_data)}"
+        "数据划分: 训练集 %s, 验证集 %s, 测试集 %s", len(train_data), len(val_data), len(test_data)
     )
     return train_data, val_data, test_data
 
@@ -222,10 +222,10 @@ def train_intent_model(
         early_stopping_patience: 早停耐心值
     """
     logger.info("开始训练意图识别模型...")
-    logger.info(f"  数据: {data_path}")
-    logger.info(f"  模型: {model_name}")
-    logger.info(f"  轮数: {num_epochs}")
-    logger.info(f"  批次大小: {batch_size}")
+    logger.info("  数据: %s", data_path)
+    logger.info("  模型: %s", model_name)
+    logger.info("  轮数: %s", num_epochs)
+    logger.info("  批次大小: %s", batch_size)
 
     examples = load_training_data(data_path)
     if len(examples) == 0:
@@ -293,7 +293,7 @@ def train_intent_model(
 
     logger.info("训练完成，在测试集上评估...")
     test_results = trainer.evaluate(test_dataset)
-    logger.info(f"测试集结果: {test_results}")
+    logger.info("测试集结果: %s", test_results)
 
     final_model_path = output_path / "final"
     trainer.save_model(str(final_model_path))
@@ -307,7 +307,7 @@ def train_intent_model(
             indent=2,
         )
 
-    logger.info(f"模型已保存到: {final_model_path}")
+    logger.info("模型已保存到: %s", final_model_path)
     return final_model_path
 
 
@@ -345,7 +345,7 @@ def export_to_onnx(model_path: str, output_path: str, max_length: int = 64):
         },
         opset_version=14,
     )
-    logger.info(f"ONNX 模型已导出到: {output_path}")
+    logger.info("ONNX 模型已导出到: %s", output_path)
 
 
 def main():

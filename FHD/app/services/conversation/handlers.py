@@ -160,7 +160,7 @@ class HandlersMixin:
             pending_intent = pending.get("intent")
             if pending_intent not in (current_tool_key, intent_result.get("primary_intent")):
                 logger.info(
-                    f"[DEBUG_PENDING] 检测到新意图 {current_tool_key} 与 pending 意图 {pending_intent} 不同，清除 pending"
+                    "[DEBUG_PENDING] 检测到新意图 %s 与 pending 意图 %s 不同，清除 pending", current_tool_key, pending_intent
                 )
                 self.confirmation_service.clear_pending_intent(user_id)
                 return None
@@ -173,9 +173,9 @@ class HandlersMixin:
         logger.info("[DEBUG_PENDING] 检测到 pending 意图存在，将使用本地规则提取槽位")
         local_result = self.intent_service(message)
         new_slots = local_result.get("slots", {})
-        logger.info(f"[DEBUG_PENDING] 本地提取的 slots: {new_slots}")
+        logger.info("[DEBUG_PENDING] 本地提取的 slots: %s", new_slots)
         merged_slots = self.confirmation_service.merge_slots(user_id, new_slots)
-        logger.info(f"[DEBUG_PENDING] 合并后的 slots: {merged_slots}")
+        logger.info("[DEBUG_PENDING] 合并后的 slots: %s", merged_slots)
 
         check_result = self.confirmation_service.check_and_build_prompt(
             {
@@ -184,7 +184,7 @@ class HandlersMixin:
             }
         )
         logger.info(
-            f"[DEBUG_PENDING] check_result status: {check_result.get('status')}, missing: {check_result.get('missing_slots')}"
+            "[DEBUG_PENDING] check_result status: %s, missing: %s", check_result.get('status'), check_result.get('missing_slots')
         )
 
         if check_result["status"] == "complete":

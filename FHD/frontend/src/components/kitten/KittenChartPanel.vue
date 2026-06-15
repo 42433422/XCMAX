@@ -2,7 +2,7 @@
   <section class="kitten-chart-panel">
     <div class="chart-panel-head">
       <div>
-        <div class="chart-title">图表分析</div>
+        <div class="chart-title">{{ employeeName || '图表分析' }}</div>
         <div class="chart-subtitle">{{ rows.length }} 条样本 · {{ fieldProfiles.length }} 个字段</div>
       </div>
       <div class="chart-type-tabs">
@@ -74,6 +74,15 @@
     <div v-if="!localConfig.xField" class="chart-empty">
       请选择一个 X / 分类字段，或点击上方推荐图表。
     </div>
+    <div v-else-if="dashboardMode" class="chart-dashboard">
+      <div class="chart-dashboard-kpi">
+        <div class="chart-dashboard-kpi__value">{{ rows.length }}</div>
+        <div class="chart-dashboard-kpi__label">样本行数</div>
+      </div>
+      <div ref="dashBarEl" class="chart-dashboard-cell" />
+      <div ref="dashLineEl" class="chart-dashboard-cell" />
+      <div ref="dashPieEl" class="chart-dashboard-cell chart-dashboard-cell--wide" />
+    </div>
     <div v-else ref="chartEl" class="chart-canvas" />
   </section>
 </template>
@@ -105,6 +114,9 @@ const props = defineProps<{
   fieldProfiles: KittenFieldProfile[]
   config: KittenChartConfig
   recommendations: KittenChartRecommendation[]
+  palette?: string[]
+  dashboardMode?: boolean
+  employeeName?: string
 }>()
 
 const emit = defineEmits<{
@@ -113,7 +125,17 @@ const emit = defineEmits<{
 }>()
 
 const chartEl = ref<HTMLDivElement | null>(null)
+const dashBarEl = ref<HTMLDivElement | null>(null)
+const dashLineEl = ref<HTMLDivElement | null>(null)
+const dashPieEl = ref<HTMLDivElement | null>(null)
 let chart: echarts.ECharts | null = null
+let dashBarChart: echarts.ECharts | null = null
+let dashLineChart: echarts.ECharts | null = null
+let dashPieChart: echarts.ECharts | null = null
+
+const resolvedPalette = computed(() =>
+  props.palette?.length ? props.palette : ['#2563eb', '#059669', '#d97706', '#7c3aed', '#dc2626'],
+)
 
 const chartTypes: Array<{ value: KittenChartType; label: string }> = [
   { value: 'bar', label: '柱状' },
@@ -190,11 +212,13 @@ function buildScatterData() {
     .slice(0, 500)
 }
 
-function buildOption(): EChartsCoreOption {
-  const cfg = props.config
+function buildOptionForType(type: KittenChartType): EChartsCoreOption {
+  const cfg = { ...props.config, type: type === 'area' ? 'line' : type }
   if (!cfg.xField) return {}
-  if (cfg.type === 'scatter') {
+  const colors = resolvedPalette.value
+  if (type === 'scatter') {
     return {
+      color: colors,
       tooltip: { trigger: 'item' },
       grid: { left: 40, right: 20, top: 28, bottom: 42 },
       xAxis: { type: 'value', name: cfg.xField },
@@ -206,8 +230,9 @@ function buildOption(): EChartsCoreOption {
   const rows = buildGroupedData()
   const labels = Array.from(new Set(rows.map((row) => row.label)))
   const groups = Array.from(new Set(rows.map((row) => row.group)))
-  if (cfg.type === 'pie') {
+  if (type === 'pie') {
     return {
+      color: colors,
       tooltip: { trigger: 'item' },
       legend: { top: 0, type: 'scroll' },
       series: [
@@ -224,7 +249,9 @@ function buildOption(): EChartsCoreOption {
     }
   }
 
+  const seriesType = type === 'bar' ? 'bar' : 'line'
   return {
+    color: colors,
     tooltip: { trigger: 'axis' },
     legend: { top: 0, type: 'scroll' },
     grid: { left: 42, right: 20, top: 42, bottom: 52 },
@@ -232,16 +259,39 @@ function buildOption(): EChartsCoreOption {
     yAxis: { type: 'value' },
     series: groups.map((group) => ({
       name: group,
-      type: cfg.type === 'bar' ? 'bar' : 'line',
-      areaStyle: cfg.type === 'area' ? {} : undefined,
-      smooth: cfg.type !== 'bar',
+      type: seriesType,
+      areaStyle: type === 'area' ? {} : undefined,
+      smooth: type !== 'bar',
       data: labels.map((label) => rows.find((row) => row.label === label && row.group === group)?.value ?? 0)
     }))
   }
 }
 
+function buildOption(): EChartsCoreOption {
+  return buildOptionForType(props.config.type)
+}
+
 function renderChart() {
-  if (!chartEl.value || !props.config.xField) return
+  if (!props.config.xField) return
+  if (props.dashboardMode) {
+    if (dashBarEl.value) {
+      if (!dashBarChart) dashBarChart = echarts.init(dashBarEl.value)
+      dashBarChart.setOption(buildOptionForType('bar'), true)
+      dashBarChart.resize()
+    }
+    if (dashLineEl.value) {
+      if (!dashLineChart) dashLineChart = echarts.init(dashLineEl.value)
+      dashLineChart.setOption(buildOptionForType('line'), true)
+      dashLineChart.resize()
+    }
+    if (dashPieEl.value) {
+      if (!dashPieChart) dashPieChart = echarts.init(dashPieEl.value)
+      dashPieChart.setOption(buildOptionForType('pie'), true)
+      dashPieChart.resize()
+    }
+    return
+  }
+  if (!chartEl.value) return
   if (!chart) chart = echarts.init(chartEl.value)
   chart.setOption(buildOption(), true)
   chart.resize()
@@ -249,10 +299,13 @@ function renderChart() {
 
 function onResize() {
   chart?.resize()
+  dashBarChart?.resize()
+  dashLineChart?.resize()
+  dashPieChart?.resize()
 }
 
 watch(
-  () => [props.rows, props.fieldProfiles, props.config],
+  () => [props.rows, props.fieldProfiles, props.config, props.palette, props.dashboardMode],
   () => nextTick(renderChart),
   { deep: true }
 )
@@ -265,7 +318,13 @@ onMounted(() => {
 onBeforeUnmount(() => {
   window.removeEventListener('resize', onResize)
   chart?.dispose()
+  dashBarChart?.dispose()
+  dashLineChart?.dispose()
+  dashPieChart?.dispose()
   chart = null
+  dashBarChart = null
+  dashLineChart = null
+  dashPieChart = null
 })
 </script>
 
@@ -356,5 +415,37 @@ onBeforeUnmount(() => {
   color: #64748b;
   text-align: center;
   font-size: 13px;
+}
+.chart-dashboard {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.chart-dashboard-kpi {
+  grid-column: span 2;
+  padding: 16px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #eef2ff 0%, #f8fafc 100%);
+  text-align: center;
+}
+.chart-dashboard-kpi__value {
+  font-size: 28px;
+  font-weight: 800;
+  color: #312e81;
+}
+.chart-dashboard-kpi__label {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #64748b;
+}
+.chart-dashboard-cell {
+  height: 220px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #fff;
+}
+.chart-dashboard-cell--wide {
+  grid-column: span 2;
+  height: 260px;
 }
 </style>

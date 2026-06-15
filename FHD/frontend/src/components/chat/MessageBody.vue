@@ -3,6 +3,7 @@
 </template>
 
 <script setup lang="ts">
+import { asRecord, asArray, asString } from '@/utils/typeGuards'
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { renderMarkdown } from '@/utils/lightMarkdown'
 import { sanitizeMermaidSource } from '@/utils/mermaidSanitize'
@@ -24,7 +25,10 @@ const rendered = computed(() => {
   return html
 })
 
-let mermaidApi: any = null
+let mermaidApi: {
+  initialize: (config?: Record<string, unknown>) => void
+  run: (options?: Record<string, unknown>) => Promise<void>
+} | null = null
 let mermaidInit = false
 
 async function getMermaid() {
@@ -100,7 +104,7 @@ async function flushMermaid() {
     if (!rendered) {
       const errMsg = (lastErr as Error)?.message || String(lastErr || '')
       const escapeText = (raw: string) =>
-        raw.replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' } as any)[c])
+        raw.replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' } as Record<string, string>)[c] || c)
       el.innerHTML =
         `<div class="md-mermaid-fail">` +
         `<div class="md-mermaid-fail__head">` +

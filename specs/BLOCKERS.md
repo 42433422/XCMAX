@@ -4,7 +4,7 @@
 
 | 任务 | 阻塞原因 | 建议继续方 | 最早可开工 |
 |------|----------|------------|------------|
-| **T36–T37** staging SLO 截图（合同级实跑） | 脚手架已就绪（`run_staging_7d_acceptance.sh` / `k6-7day-job.yaml`）；需 staging 7 天流量实跑 + PNG commit | SRE / 平台 | 2026-09 |
+| **T36–T37** staging SLO 截图（合同级实跑） | Round-1 已归档无效；**Round-2 k6 已启动**（2026-06-12）；满 168h 后 `run_staging_7d_acceptance.sh` + SRE 签字 | SRE / 平台 | Round-2 ETA +7d |
 | **T56** 生产 AI 月报 | SYNTHETIC/SEED 已填；需 staging/生产只读库复核 | 业务分析 + 后端 | 2026-11 |
 | **T59** split push | dry-run 清单已就绪；需 `git-filter-repo` + remote push 窗口 | 发布工程 / DevOps | 2026-10 |
 | ~~**T45**~~ | **2026-06 已迁**：归档至 `FHD/docs/_archive/FHD-个人/`，仓根 stub | — | — |

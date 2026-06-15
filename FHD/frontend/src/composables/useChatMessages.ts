@@ -9,6 +9,7 @@ import {
   buildChatMessagesKey,
   buildChatSessionMetaKey,
 } from '@/utils/chatStorageKeys'
+import { asRecord, asArray, asString, asBoolean, asDisposable } from '@/utils/typeGuards'
 
 const WELCOME_MESSAGE_PREFIX = '您好！我是您的'
 
@@ -63,20 +64,11 @@ export function clearVoiceQueue() {
   stopSpeaking()
 }
 
-export interface ChatMessage {
-  role: 'user' | 'ai' | 'task'
-  content: string
-  time: string
-  thinkingSteps?: string
-  todoSteps?: string[]
-  workflowAction?: string
-  nodeResults?: Array<{ node_id: string; success: boolean; tool_id: string; action: string; error?: string }>
-  contextSummary?: string
-  /** 发货单文档下载链接（与右侧任务卡一致，便于在对话内直接下载） */
-  shipmentDownloadUrl?: string
-}
+import type { UiChatMessage, UiChatMessageExtras } from '@/types/chat-ui'
 
-export type ChatMessageExtras = Partial<Pick<ChatMessage, 'shipmentDownloadUrl'>>
+/** UI 聊天消息（与 ApiChatMessage 不同：role 用 ai、时间字段为 time） */
+export type ChatMessage = UiChatMessage
+export type ChatMessageExtras = UiChatMessageExtras
 
 export function useChatMessages(sessionId: Ref<string>) {
   const modsStore = useModsStore()
@@ -205,14 +197,16 @@ export function useChatMessages(sessionId: Ref<string>) {
 
   function sanitizeMessagesList(rawList: unknown[]): ChatMessage[] {
     return (Array.isArray(rawList) ? rawList : [])
-      .map((msg: any) => {
-        const role = (msg?.role === 'user' || msg?.role === 'task') ? msg.role : 'ai'
-        const content = String(msg?.content || '')
+      .map((msg: unknown) => {
+        const row = asRecord(msg)
+        const roleRaw = asString(row.role)
+        const role = (roleRaw === 'user' || roleRaw === 'task') ? roleRaw : 'ai'
+        const content = asString(row.content)
         if (!hasMeaningfulContent(content)) return null
         return {
           role,
           content,
-          time: String(msg?.time || '').trim()
+          time: asString(row.time).trim()
             || new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
         } as ChatMessage
       })
@@ -310,14 +304,19 @@ export function useChatMessages(sessionId: Ref<string>) {
       const sid = String(sessionId.value || '').trim()
       if (!sid) return false
       const data = await chatApi.getConversation(sid)
-      const serverMessages = Array.isArray((data as any)?.messages) ? (data as any).messages : []
+      const dataRow = asRecord(data)
+      const serverMessages = asArray(dataRow.messages)
       if (!serverMessages.length) return false
 
-      const mapped: ChatMessage[] = serverMessages.map((msg: any) => ({
-        role: (msg?.role === 'user' || msg?.role === 'task') ? msg.role : 'ai',
-        content: normalizeServerContentToHtml(msg?.content),
-        time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-      }))
+      const mapped: ChatMessage[] = serverMessages.map((msg: unknown) => {
+        const row = asRecord(msg)
+        const roleRaw = asString(row.role)
+        return {
+          role: (roleRaw === 'user' || roleRaw === 'task') ? roleRaw : 'ai',
+          content: normalizeServerContentToHtml(row.content),
+          time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
+        }
+      })
       const sanitized = sanitizeMessagesList(mapped)
       if (!sanitized.length) return false
       loadMessages(sanitized)

@@ -120,7 +120,11 @@ SSOT 登记：[`app/application/app_service_pair_registry.py`](../../app/applica
 
 ---
 
-## 6. ①-B 建议顺序
+## 6. Wave 2 对齐（Tier C 规划）
+
+执行顺序见 [`WAVE2_ROUTE_SSOT.md`](WAVE2_ROUTE_SSOT.md)；P0 health → P1 auth/shipment/AI → P2 legacy_compat 余项。
+
+## 7. ①-B 建议顺序
 
 1. 保持 HTTP V1，V2 仅 Neuro 事件（当前策略）
 2. `purchase` 域文档化「仅 V2」策略

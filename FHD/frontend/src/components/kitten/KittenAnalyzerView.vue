@@ -3,10 +3,12 @@
     <header class="kitten-header">
       <button class="kitten-back" type="button" @click="emit('back')">返回</button>
       <div class="kitten-brand">
-        <span class="kitten-brand-icon" aria-hidden="true">🐱</span>
+        <span class="kitten-brand-icon" aria-hidden="true">
+          <KittenLauncherIcon size="sm" />
+        </span>
         <div class="kitten-brand-text">
-          <div class="kitten-title">小猫分析</div>
-          <div class="kitten-subtitle">智能对话</div>
+          <div class="kitten-title">智慧分析</div>
+          <div class="kitten-subtitle">可视化 AI 员工 · 对话洞察 · 图表导出</div>
         </div>
       </div>
       <button class="kitten-header-action" type="button" @click="resetSession">清空</button>
@@ -39,12 +41,24 @@
         </div>
       </div>
 
+      <KittenVizEmployeeStrip
+        v-if="datasetSummary"
+        :employees="vizEmployees"
+        :selected-pkg-id="selectedVizEmployee.pkgId"
+        :installed-count="vizInstalledCount"
+        :loading="vizLoading"
+        @select="onVizEmployeeSelect"
+      />
+
       <KittenChartPanel
         v-if="datasetSummary && datasetRows.length"
         :rows="datasetRows"
         :field-profiles="fieldProfiles"
         :config="chartConfig"
         :recommendations="recommendedCharts"
+        :palette="selectedVizEmployee.palette"
+        :dashboard-mode="!!selectedVizEmployee.dashboard"
+        :employee-name="selectedVizEmployee.name"
         @update-config="setChartConfig"
         @apply-recommendation="applyChartRecommendation"
       />
@@ -228,12 +242,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { buildFullApiUrl } from '@/api/core'
 import { sanitizeChatBubbleHtml } from '@/utils/sanitizeHtml'
 import { downloadBlob, getFilenameFromDisposition } from '@/utils'
 import { appAlert } from '@/utils/appDialog'
 import KittenChartPanel from '@/components/kitten/KittenChartPanel.vue'
+import KittenLauncherIcon from '@/components/kitten/KittenLauncherIcon.vue'
+import KittenVizEmployeeStrip from '@/components/kitten/KittenVizEmployeeStrip.vue'
+import { useKittenVizEmployees } from '@/composables/useKittenVizEmployees'
+import type { KittenChartType } from '@/composables/useKittenAnalyzer'
+import { asRecord, asArray, asString, asBoolean, asDisposable } from '@/utils/typeGuards'
 import {
   useKittenAnalyzer,
   kittenQuickActions,
@@ -287,6 +306,31 @@ const {
   handleInputKeydown
 } = useKittenAnalyzer()
 
+const {
+  employees: vizEmployees,
+  selected: selectedVizEmployee,
+  installedCount: vizInstalledCount,
+  loading: vizLoading,
+  selectEmployee: selectVizEmployee,
+} = useKittenVizEmployees()
+
+function onVizEmployeeSelect(pkgId: string) {
+  selectVizEmployee(pkgId)
+  applyVizEmployeeChartType()
+}
+
+function applyVizEmployeeChartType() {
+  const emp = selectedVizEmployee.value
+  if (!emp?.installed || !datasetSummary.value) return
+  const nextType: KittenChartType = emp.dashboard ? 'bar' : emp.chartType
+  setChartConfig({ type: nextType })
+}
+
+watch(
+  () => datasetSummary.value?.name,
+  () => applyVizEmployeeChartType(),
+)
+
 const runDocGen = () => {
   void generateAiOfficeDocument(docGenPrompt.value, docGenFormat.value)
 }
@@ -305,9 +349,28 @@ const runFinancialBriefAndClose = () => {
 }
 
 type VoiceState = 'idle' | 'recording' | 'transcribing' | 'error'
+type SpeechRecognitionLike = {
+  lang: string
+  continuous: boolean
+  interimResults: boolean
+  maxAlternatives: number
+  onstart: (() => void) | null
+  onresult: ((event: unknown) => void) | null
+  onerror: ((event: unknown) => void) | null
+  onend: (() => void) | null
+  start: () => void
+  stop: () => void
+  abort: () => void
+}
+
+type SpeechWindow = Window & {
+  SpeechRecognition?: new () => SpeechRecognitionLike
+  webkitSpeechRecognition?: new () => SpeechRecognitionLike
+}
+
 const voiceState = ref<VoiceState>('idle')
 const voiceErrorText = ref('')
-let voiceRecognition: any = null
+let voiceRecognition: SpeechRecognitionLike | null = null
 
 const voiceButtonDisabled = computed(() => voiceState.value === 'transcribing' || isChatLoading.value)
 const voiceButtonClass = computed(() => ({
@@ -319,8 +382,9 @@ const voiceButtonClass = computed(() => ({
 
 const startVoiceInput = () => {
   if (voiceState.value === 'recording' || voiceState.value === 'transcribing') return
-  const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
-  if (!SpeechRecognition) {
+  const win = window as SpeechWindow
+  const SpeechRecognitionCtor = win.SpeechRecognition || win.webkitSpeechRecognition
+  if (!SpeechRecognitionCtor) {
     voiceState.value = 'error'
     voiceErrorText.value = '当前浏览器不支持语音识别'
     return
@@ -328,7 +392,7 @@ const startVoiceInput = () => {
   if (voiceRecognition) {
     voiceRecognition.abort()
   }
-  voiceRecognition = new SpeechRecognition()
+  voiceRecognition = new SpeechRecognitionCtor()
   voiceRecognition.lang = 'zh-CN'
   voiceRecognition.continuous = false
   voiceRecognition.interimResults = false
@@ -338,17 +402,20 @@ const startVoiceInput = () => {
     voiceState.value = 'recording'
     voiceErrorText.value = ''
   }
-  voiceRecognition.onresult = (event: any) => {
-    const text = event.results[0][0].transcript
+  voiceRecognition.onresult = (event: unknown) => {
+    const row = asRecord(event)
+    const results = asArray(asArray(row.results)[0])
+    const text = asString(asRecord(results[0]).transcript)
     inputText.value = (inputText.value || '') + text
   }
-  voiceRecognition.onerror = (event: any) => {
-    if (event.error === 'no-speech') {
+  voiceRecognition.onerror = (event: unknown) => {
+    const err = asString(asRecord(event).error)
+    if (err === 'no-speech') {
       voiceState.value = 'idle'
       return
     }
     voiceState.value = 'error'
-    voiceErrorText.value = event.error || '语音识别失败'
+    voiceErrorText.value = err || '语音识别失败'
   }
   voiceRecognition.onend = () => {
     if (voiceState.value === 'recording') voiceState.value = 'idle'
@@ -445,8 +512,8 @@ const openDownloadLink = async (link: string) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 22px;
-  background: linear-gradient(135deg, #dbeafe, #bfdbfe);
+  background: linear-gradient(145deg, #0f766e 0%, #1e40af 100%);
+  box-shadow: 0 4px 12px rgba(15, 118, 110, 0.22);
   flex-shrink: 0;
 }
 .kitten-brand-text {

@@ -2,12 +2,12 @@
 
 import logging
 import uuid
-from typing import Any
+from typing import Any, cast
 
 from app.db.models import Permission, Role, User
 from app.db.session import get_db
 from app.infrastructure.session import get_session_manager
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.password_hash import check_password_hash, generate_password_hash
 from app.utils.time import utc_now_naive
 
@@ -66,7 +66,7 @@ class AuthApplicationService:
             from app.db.init_db import ensure_runtime_auth_bootstrap
 
             ensure_runtime_auth_bootstrap(swallow_errors=True)
-        except OPERATIONAL_ERRORS as bootstrap_exc:
+        except RECOVERABLE_ERRORS as bootstrap_exc:
             logger.warning("create_session_for_username bootstrap skip: %s", bootstrap_exc)
         try:
             with get_db() as db:
@@ -91,7 +91,7 @@ class AuthApplicationService:
                     "session_id": session_result["session_id"],
                     "expires_at": session_result["expires_at"],
                 }
-        except OPERATIONAL_ERRORS as exc:
+        except RECOVERABLE_ERRORS as exc:
             err_id = uuid.uuid4().hex[:12]
             logger.exception("create_session_for_username failed (error_id=%s)", err_id)
             return {
@@ -115,7 +115,7 @@ class AuthApplicationService:
             from app.db.init_db import ensure_runtime_auth_bootstrap
 
             ensure_runtime_auth_bootstrap(swallow_errors=True)
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             pass
         try:
             with get_db() as db:
@@ -155,7 +155,7 @@ class AuthApplicationService:
                     "session_id": session_result["session_id"],
                     "expires_at": session_result["expires_at"],
                 }
-        except OPERATIONAL_ERRORS as exc:
+        except RECOVERABLE_ERRORS as exc:
             err_id = uuid.uuid4().hex[:12]
             logger.exception("authenticate_oidc_user failed (error_id=%s)", err_id)
             return {
@@ -169,7 +169,7 @@ class AuthApplicationService:
             from app.db.init_db import ensure_runtime_auth_bootstrap
 
             ensure_runtime_auth_bootstrap(swallow_errors=True)
-        except OPERATIONAL_ERRORS as bootstrap_exc:
+        except RECOVERABLE_ERRORS as bootstrap_exc:
             logger.warning("登录前 auth 表自检跳过: %s", bootstrap_exc)
         try:
             with get_db() as db:
@@ -201,7 +201,7 @@ class AuthApplicationService:
                     "session_id": session_result["session_id"],
                     "expires_at": session_result["expires_at"],
                 }
-        except OPERATIONAL_ERRORS as exc:
+        except RECOVERABLE_ERRORS as exc:
             err_id = uuid.uuid4().hex[:12]
             logger.exception("authenticate failed (error_id=%s)", err_id)
             return {
@@ -211,17 +211,17 @@ class AuthApplicationService:
             }
 
     def logout(self, session_id: str) -> bool:
-        return self.session_manager.delete_session(session_id)
+        return cast("bool", self.session_manager.delete_session(session_id))
 
     def get_current_user(self, session_id: str) -> User | None:
-        return self.session_manager.validate_session(session_id)
+        return cast("User | None", self.session_manager.validate_session(session_id))
 
     def get_user_permissions(self, user: User) -> list:
         try:
             from app.db.init_db import ensure_runtime_auth_bootstrap
 
             ensure_runtime_auth_bootstrap(swallow_errors=True)
-        except OPERATIONAL_ERRORS as bootstrap_exc:
+        except RECOVERABLE_ERRORS as bootstrap_exc:
             logger.warning("权限表自检跳过: %s", bootstrap_exc)
         try:
             with get_db() as db:
@@ -233,7 +233,7 @@ class AuthApplicationService:
                 if not role:
                     return []
                 return [p.code for p in role.permissions]
-        except OPERATIONAL_ERRORS as exc:
+        except RECOVERABLE_ERRORS as exc:
             logger.warning("get_user_permissions 回退为空列表: %s", exc)
             if user.role == "admin":
                 from app.db.models.permission import DEFAULT_PERMISSIONS
@@ -260,7 +260,7 @@ class AuthApplicationService:
                 user.password = generate_password_hash(new_password)
                 db.commit()
                 return {"success": True, "message": "密码修改成功"}
-            except OPERATIONAL_ERRORS:
+            except RECOVERABLE_ERRORS:
                 db.rollback()
                 err_id = uuid.uuid4().hex[:12]
                 logger.exception("change_password failed (error_id=%s user_id=%s)", err_id, user_id)
@@ -281,7 +281,7 @@ class AuthApplicationService:
                 db.commit()
                 self.session_manager.delete_user_sessions(user_id)
                 return {"success": True, "message": "密码已重置，请使用新密码登录"}
-            except OPERATIONAL_ERRORS:
+            except RECOVERABLE_ERRORS:
                 db.rollback()
                 err_id = uuid.uuid4().hex[:12]
                 logger.exception("reset_password failed (error_id=%s user_id=%s)", err_id, user_id)

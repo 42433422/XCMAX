@@ -17,7 +17,7 @@ import re
 from collections.abc import Mapping
 from typing import Any
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -472,7 +472,7 @@ def format_excel_analysis_for_llm(runtime_context: Mapping[str, Any] | None) -> 
         if isinstance(rows, list) and rows:
             try:
                 lines.append(f"- 样例行: {json.dumps(rows[:3], ensure_ascii=False)}")
-            except OPERATIONAL_ERRORS:
+            except RECOVERABLE_ERRORS:
                 logger.debug("sample_rows json encode failed", exc_info=True)
     linked_preview = runtime_context.get("excel_linked_grid_preview")
     if isinstance(linked_preview, dict):

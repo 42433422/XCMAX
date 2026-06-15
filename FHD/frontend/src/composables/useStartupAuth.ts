@@ -5,6 +5,8 @@ import { fetchProductSku, isEnterpriseEdition } from '@/utils/productSku'
 import { readEntitledModIdsFromAuthPayload } from '@/stores/mods'
 import type { useModsStore } from '@/stores/mods'
 import { buildLoginLocation } from '@/utils/startupRedirect'
+import { clearHostPackSkippedSession } from '@/utils/hostPackOnboardingGate'
+import { asRecord, asArray, asString } from '@/utils/typeGuards'
 
 export type StartupAuthResult = {
   ok: boolean
@@ -34,7 +36,14 @@ export function useStartupAuth(options: {
   async function ensureStartupAuthenticated(): Promise<StartupAuthResult> {
     try {
       const res = await authApi.validateSession()
-      if (res?.success === true || (res as { valid?: boolean }).valid === true || res?.data?.valid === true) {
+      const resRow = asRecord(res)
+      const dataRow = asRecord(res?.data)
+      if (
+        res?.success === true
+        || resRow.valid === true
+        || dataRow.valid === true
+      ) {
+        clearHostPackSkippedSession()
         await syncMarketTokensFromSession()
         try {
           const { useAccountProfileStore } = await import('@/stores/accountProfile')
@@ -46,11 +55,11 @@ export function useStartupAuth(options: {
         let accountUsername = ''
         try {
           entitledModIds = readEntitledModIdsFromAuthPayload(res)
-          const data =
-            res?.data && typeof res.data === 'object' && !Array.isArray(res.data)
-              ? res.data
-              : res
-          accountUsername = String(data?.username || data?.user?.username || '').trim()
+          const data = res?.data && typeof res.data === 'object' && !Array.isArray(res.data)
+            ? asRecord(res.data)
+            : resRow
+          const user = asRecord(data.user)
+          accountUsername = asString(data.username || user.username).trim()
         } catch {
           /* ignore */
         }

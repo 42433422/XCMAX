@@ -4,13 +4,13 @@ import json
 import logging
 import sqlite3
 import time
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 
 from app.application.ports.vector_store import VectorStorePort
 from app.utils.external_sqlite import connect_sqlite
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -149,7 +149,7 @@ class SQLiteVectorStore(VectorStorePort):
                         "score": score,
                     }
                 )
-            except OPERATIONAL_ERRORS:
+            except RECOVERABLE_ERRORS:
                 continue
 
         scored.sort(key=lambda item: item["score"], reverse=True)
@@ -174,4 +174,4 @@ class SQLiteVectorStore(VectorStorePort):
                 "DELETE FROM excel_vector_indexes WHERE index_id = ?", (index_id,)
             )
             conn.commit()
-        return result.rowcount > 0
+        return cast("bool", result.rowcount > 0)

@@ -2,13 +2,13 @@
   <div class="page-view settings-page" id="view-settings">
     <div class="page-content settings-page__scroll">
       <div class="settings-layout">
-        <aside class="settings-profile" aria-label="账号">
+        <aside class="settings-profile" :aria-label="$t('settings.profileAria')">
           <button
             type="button"
             class="settings-profile__avatar"
             :class="{ 'is-guest': !isLoggedIn, 'is-loading': accountLoading || avatarUploading }"
             :disabled="!isLoggedIn || accountLoading || avatarUploading"
-            :title="isLoggedIn ? '点击更换头像' : '登录后可设置头像'"
+            :title="isLoggedIn ? $t('settings.changeAvatar') : $t('settings.avatarAfterLogin')"
             @click="onAvatarClick"
           >
             <img
@@ -19,7 +19,7 @@
             >
             <span v-else-if="avatarInitial" class="settings-profile__avatar-letter">{{ avatarInitial }}</span>
             <i v-else class="fa fa-user" aria-hidden="true"></i>
-            <span v-if="isLoggedIn" class="settings-profile__avatar-hint">更换</span>
+            <span v-if="isLoggedIn" class="settings-profile__avatar-hint">{{ $t('settings.changeAvatarShort') }}</span>
           </button>
           <input
             ref="avatarInputRef"
@@ -40,21 +40,21 @@
               :disabled="logoutLoading"
               @click="onLogout"
             >
-              {{ logoutLoading ? '退出中…' : '退出登录' }}
+              {{ logoutLoading ? $t('settings.loggingOut') : $t('settings.logout') }}
             </button>
             <router-link
               v-else
               class="settings-profile__btn settings-profile__btn--primary"
               :to="loginRoute"
             >
-              登录
+              {{ $t('settings.login') }}
             </router-link>
           </div>
         </aside>
 
         <div class="settings-layout__main">
         <header class="settings-page__hero">
-          <h1 class="settings-page__title">系统设置</h1>
+          <h1 class="settings-page__title">{{ $t('settings.pageTitle') }}</h1>
         </header>
 
         <div class="settings-list">
@@ -69,7 +69,7 @@
             <span class="settings-row__icon settings-row__icon--indigo" aria-hidden="true">
               <i class="fa fa-id-card"></i>
             </span>
-            <span class="settings-row__label">个人主页</span>
+            <span class="settings-row__label">{{ $t('settings.profileHome') }}</span>
             <span class="settings-row__meta">{{ profileHomeSummary }}</span>
             <span class="settings-row__arrow" aria-hidden="true"></span>
           </summary>
@@ -77,35 +77,35 @@
             <div class="settings-profile-form">
               <div class="settings-profile-form__editable">
                 <label class="settings-profile-form__field">
-                  <span class="settings-profile-form__label">展示名称</span>
+                  <span class="settings-profile-form__label">{{ $t('settings.displayName') }}</span>
                   <input
                     v-model="profileDisplayNameDraft"
                     class="settings-profile-form__input"
                     type="text"
                     maxlength="64"
-                    placeholder="在侧栏与协作中显示的名称"
+                    :placeholder="$t('settings.displayNamePlaceholder')"
                     autocomplete="name"
                   >
                 </label>
                 <label class="settings-profile-form__field">
-                  <span class="settings-profile-form__label">邮箱</span>
+                  <span class="settings-profile-form__label">{{ $t('settings.email') }}</span>
                   <input
                     v-model="profileEmailDraft"
                     class="settings-profile-form__input"
                     type="email"
                     maxlength="128"
-                    placeholder="可选，用于找回账号"
+                    :placeholder="$t('settings.emailPlaceholder')"
                     autocomplete="email"
                   >
                 </label>
               </div>
               <div class="settings-profile-form__readonly" aria-readonly="true">
-                <span class="settings-profile-form__label">登录名</span>
+                <span class="settings-profile-form__label">{{ $t('settings.loginName') }}</span>
                 <span class="settings-profile-form__readonly-value">{{
                   localUser?.username || '—'
                 }}</span>
                 <p class="settings-profile-form__hint muted">
-                  由修茈市场/本机账号绑定，此处不可修改。
+                  {{ $t('settings.loginNameHint') }}
                 </p>
               </div>
               <div class="settings-profile-form__actions">
@@ -115,7 +115,7 @@
                   :disabled="!profileFormDirty || profileSaving"
                   @click="saveProfile"
                 >
-                  {{ profileSaving ? '保存中…' : '保存资料' }}
+                  {{ profileSaving ? $t('settings.saving') : $t('settings.saveProfile') }}
                 </button>
               </div>
             </div>
@@ -132,8 +132,8 @@
             <span class="settings-row__icon settings-row__icon--blue" aria-hidden="true">
               <i class="fa fa-credit-card"></i>
             </span>
-            <span class="settings-row__label">模型服务</span>
-            <span class="settings-row__meta">钱包 · 套餐</span>
+            <span class="settings-row__label">{{ $t('settings.modelService') }}</span>
+            <span class="settings-row__meta">{{ $t('settings.modelServiceMeta') }}</span>
             <span class="settings-row__arrow" aria-hidden="true"></span>
           </summary>
           <div class="settings-card__body settings-card__body--flush">
@@ -145,8 +145,48 @@
               title="模型服务"
             />
             <p v-else class="muted" style="padding: 16px; margin: 0;">
-              模型支付 Mod（xcagi-model-payment-bridge）未安装。回装后可在此配置钱包与套餐。
+              {{ $t('settings.modelServiceMissing') }}
             </p>
+          </div>
+        </details>
+
+        <details
+          v-if="isLoggedIn && isLocalAdmin"
+          class="settings-card"
+          data-tutorial-id="settings-audit-logs"
+        >
+          <summary class="settings-row">
+            <span class="settings-row__icon settings-row__icon--amber" aria-hidden="true">
+              <i class="fa fa-shield"></i>
+            </span>
+            <span class="settings-row__label">安全审计</span>
+            <span class="settings-row__meta">{{ auditLogsTotal }} 条</span>
+            <span class="settings-row__arrow" aria-hidden="true"></span>
+          </summary>
+          <div class="settings-card__body settings-card__body--list">
+            <p v-if="auditLogsLoading" class="muted" style="padding: 12px 16px; margin: 0;">加载中…</p>
+            <p v-else-if="auditLogsError" class="settings-profile-form__hint" role="alert" style="padding: 12px 16px;">
+              {{ auditLogsError }}
+            </p>
+            <ul v-else-if="auditLogs.length" class="settings-audit-list">
+              <li v-for="(row, idx) in auditLogs" :key="idx" class="settings-audit-list__item">
+                <span class="settings-audit-list__action">{{ row.action || '—' }}</span>
+                <span class="settings-audit-list__meta">
+                  {{ row.timestamp || row.ts || '' }}
+                  · {{ row.user_id ?? '—' }}
+                  · {{ row.success === false ? '失败' : '成功' }}
+                </span>
+              </li>
+            </ul>
+            <p v-else class="muted" style="padding: 12px 16px; margin: 0;">暂无审计记录（可配置 AUDIT_LOG_PATH）</p>
+            <div class="settings-profile-form__actions" style="padding: 0 16px 16px;">
+              <button type="button" class="settings-profile-form__submit" @click="loadAuditLogs">
+                刷新
+              </button>
+              <button type="button" class="settings-profile-form__submit settings-profile-form__submit--ghost" @click="downloadAuditCsv">
+                导出 CSV
+              </button>
+            </div>
           </div>
         </details>
 
@@ -214,7 +254,7 @@
             <span class="settings-row__icon settings-row__icon--green" aria-hidden="true">
               <i class="fa fa-sliders"></i>
             </span>
-            <span class="settings-row__label">基本设置</span>
+            <span class="settings-row__label">{{ $t('settings.basicSettings') }}</span>
             <span class="settings-row__meta">{{ basicSettingsSummary }}</span>
             <span class="settings-row__arrow" aria-hidden="true"></span>
           </summary>
@@ -225,7 +265,7 @@
             <span class="settings-item__icon settings-row__icon--cyan" aria-hidden="true">
               <i class="fa fa-columns"></i>
             </span>
-            <label class="settings-item__label" for="settings-sidebar-theme">侧栏样式</label>
+            <label class="settings-item__label" for="settings-sidebar-theme">{{ $t('settings.sidebarTheme') }}</label>
             <select
               id="settings-sidebar-theme"
               v-model="sidebarThemePreset"
@@ -267,22 +307,38 @@
             <span class="settings-item__icon settings-row__icon--indigo" aria-hidden="true">
               <i class="fa fa-user-circle"></i>
             </span>
-            <label class="settings-item__label" for="settings-assistant-name">助手名称</label>
+            <label class="settings-item__label" for="settings-assistant-name">{{ $t('settings.assistantName') }}</label>
             <input
               id="settings-assistant-name"
               v-model="assistantName"
               class="settings-item__control settings-item__control--text"
               type="text"
               maxlength="24"
-              placeholder="修茈"
+              :placeholder="$t('settings.assistantNamePlaceholder')"
             >
+          </div>
+
+          <div class="settings-item">
+            <span class="settings-item__icon settings-row__icon--indigo" aria-hidden="true">
+              <i class="fa fa-language"></i>
+            </span>
+            <label class="settings-item__label" for="settings-locale">{{ $t('settings.language') }}</label>
+            <select
+              id="settings-locale"
+              v-model="appLocale"
+              class="settings-item__control settings-item__control--select"
+              @change="onLocaleChange"
+            >
+              <option value="zh-CN">{{ $t('settings.localeZhCN') }}</option>
+              <option value="en-US">{{ $t('settings.localeEnUS') }}</option>
+            </select>
           </div>
 
           <div class="settings-item settings-item--readonly">
             <span class="settings-item__icon settings-row__icon--slate" aria-hidden="true">
               <i class="fa fa-desktop"></i>
             </span>
-            <span class="settings-item__label">系统名称</span>
+            <span class="settings-item__label">{{ $t('settings.systemName') }}</span>
             <span class="settings-item__value">{{ systemDisplayName }}</span>
           </div>
 
@@ -306,17 +362,35 @@
             <span class="settings-item__icon settings-row__icon--violet" aria-hidden="true">
               <i class="fa fa-cloud"></i>
             </span>
-            <label class="settings-item__label" for="settings-ai-mode">AI 模式</label>
+            <label class="settings-item__label" for="settings-ai-mode">{{ $t('settings.aiMode') }}</label>
             <select
               id="settings-ai-mode"
               v-model="aiMode"
               class="settings-item__control settings-item__control--select"
             >
-              <option value="online">在线（DeepSeek）</option>
-              <option value="offline">离线（本地）</option>
+              <option value="online">{{ $t('settings.aiModeOnline') }}</option>
+              <option value="offline">{{ $t('settings.aiModeOffline') }}</option>
             </select>
           </div>
         </div>
+
+        <details
+          class="settings-card settings-card--nested"
+          data-tutorial-id="settings-mobile-pairing"
+          open
+        >
+          <summary class="settings-row settings-row--nested">
+            <span class="settings-row__icon settings-row__icon--cyan" aria-hidden="true">
+              <i class="fa fa-qrcode"></i>
+            </span>
+            <span class="settings-row__label">移动端连接</span>
+            <span class="settings-row__meta">App 扫码配对</span>
+            <span class="settings-row__arrow" aria-hidden="true"></span>
+          </summary>
+          <div class="settings-card__body settings-card__body--nested">
+            <MobilePairingQrCard />
+          </div>
+        </details>
 
         <details v-if="!clientModsUiOff" class="settings-card settings-card--nested">
           <summary class="settings-row settings-row--nested">
@@ -417,7 +491,7 @@
 
         <div class="settings-card__footer">
           <button class="settings-primary-btn" type="button" @click="saveSettings" :disabled="loading">
-            {{ loading ? '保存中…' : '保存设置' }}
+            {{ loading ? $t('settings.saving') : $t('settings.saveSettings') }}
           </button>
         </div>
           </div>
@@ -464,13 +538,13 @@
             <span class="settings-row__icon settings-row__icon--slate" aria-hidden="true">
               <i class="fa fa-info-circle"></i>
             </span>
-            <span class="settings-row__label">关于</span>
-            <span class="settings-row__meta">8.0.0</span>
+            <span class="settings-row__label">{{ $t('settings.about') }}</span>
+            <span class="settings-row__meta">{{ appVersionLabel }}</span>
             <span class="settings-row__arrow" aria-hidden="true"></span>
           </summary>
           <div class="settings-card__body settings-card__body--compact">
             <p class="settings-about-line">{{ systemDisplayName }}</p>
-            <p class="muted settings-about-hint">连点「关于」5 次可进入调试页面（仅本地流程模拟）</p>
+            <p class="muted settings-about-hint">{{ $t('settings.aboutDebugHint') }}</p>
           </div>
         </details>
         </div>
@@ -482,6 +556,7 @@
 
 <script setup lang="ts">
 import { onMounted, onActivated, onBeforeUnmount, ref, computed, watch, nextTick } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import { authApi, type User } from '../api/auth';
 import { LS_MARKET_USER_JSON } from '../api/marketAccount';
@@ -499,6 +574,7 @@ import {
 } from '@/utils/sidebarTheme';
 import { useModsStore } from '@/stores/mods';
 import { useAccountProfileStore } from '@/stores/accountProfile';
+import packageJson from '../../package.json';
 import { appAlert, appConfirm } from '@/utils/appDialog';
 import { DEFAULT_INDUSTRY_ID } from '@/constants/industryDefaults';
 import { getIndustryPreset } from '@/constants/industryPresets';
@@ -515,7 +591,18 @@ import {
   isWorkflowEmployeeModId,
 } from '@/constants/genericModPack';
 import HostModBridgeView from '@/components/HostModBridgeView.vue';
+import MobilePairingQrCard from '@/components/settings/MobilePairingQrCard.vue';
 import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl';
+import adminAuditApi, { type AuditLogEntry } from '@/api/adminAudit';
+import { setAppLocale } from '@/i18n';
+import { asRecord, asArray, asString, asBoolean, asDisposable } from '@/utils/typeGuards'
+
+const { t, locale } = useI18n();
+const appLocale = ref<'zh-CN' | 'en-US'>((locale.value === 'en-US' ? 'en-US' : 'zh-CN'));
+
+function onLocaleChange() {
+  setAppLocale(appLocale.value);
+}
 
 const isAdminConsole = isAdminConsoleSpa();
 const industryStore = useIndustryStore();
@@ -667,6 +754,35 @@ async function hydrateUserFromSessionValidate(): Promise<boolean> {
 
 const isLoggedIn = computed(() => Boolean(localUser.value) || sessionValid.value);
 
+const isLocalAdmin = computed(() => {
+  const role = String(localUser.value?.role || '').toLowerCase();
+  return role === 'admin' || role === 'superadmin';
+});
+
+const auditLogsLoading = ref(false);
+const auditLogs = ref<AuditLogEntry[]>([]);
+const auditLogsTotal = ref(0);
+const auditLogsError = ref('');
+
+async function loadAuditLogs() {
+  if (!isLocalAdmin.value) return;
+  auditLogsLoading.value = true;
+  auditLogsError.value = '';
+  try {
+    const res = await adminAuditApi.list(30, 0);
+    auditLogs.value = res?.data?.items || [];
+    auditLogsTotal.value = res?.data?.total || 0;
+  } catch (e: unknown) {
+    auditLogsError.value = errorMessage(e, '加载审计日志失败');
+  } finally {
+    auditLogsLoading.value = false;
+  }
+}
+
+function downloadAuditCsv() {
+  window.open(adminAuditApi.csvDownloadUrl(500), '_blank', 'noopener,noreferrer');
+}
+
 function syncProfileDraftsFromUser(u: User | null) {
   if (!u) {
     profileDisplayNameDraft.value = '';
@@ -707,14 +823,14 @@ const profileBrandTitle = computed(() => {
   const brand = String(accountProfileStore.displayBrand || '').trim();
   if (brand) return brand;
   const u = localUser.value;
-  if (!u) return '未登录';
+  if (!u) return t('settings.notLoggedIn');
   const name = String(u.display_name || u.username || '').trim();
-  return name || '用户';
+  return name || t('settings.user');
 });
 
 const profileSubline = computed(() => {
   const u = localUser.value;
-  if (!u) return '登录后同步修茈市场';
+  if (!u) return t('settings.loginSyncHint');
   const username = String(u.username || '').trim();
   if (isSunbirdAccountUsername(username)) {
     const mod = activeModMeta.value;
@@ -798,7 +914,7 @@ const profileAvatarUrl = computed(() => {
 
 const profileHomeSummary = computed(() => {
   const name = profileDisplayNameDraft.value.trim() || localUser.value?.username || '';
-  return name ? `${name} · 头像与资料` : '头像与资料';
+  return name ? `${name} · ${t('settings.profileHomeSummary')}` : t('settings.profileHomeSummary');
 });
 
 const profileFormDirty = computed(() => {
@@ -875,8 +991,7 @@ async function onLogout() {
     accountProfileStore.clear();
     localUser.value = null;
     sessionValid.value = false;
-    await appAlert('已退出登录');
-    window.location.reload();
+    await router.replace({ name: 'login', query: { redirect: '/' } });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     await appAlert(`退出失败：${msg}`);
@@ -970,7 +1085,7 @@ const modSettingsFoldMeta = computed(() => {
 });
 
 const basicSettingsSummary = computed(() => {
-  const mode = aiMode.value === 'offline' ? '离线' : '在线';
+  const mode = aiMode.value === 'offline' ? t('settings.offline') : t('settings.online');
   return `${normalizedAssistantName.value} · ${mode}`;
 });
 
@@ -1109,6 +1224,8 @@ const currentIndustry = ref(DEFAULT_INDUSTRY_ID);
 const currentIndustryUnit = ref('天');
 const sidebarThemePreset = ref('office-default');
 
+const appVersionLabel = computed(() => String(packageJson.version || '10.0.0'));
+
 const systemDisplayName = computed(() => {
   const id = String(currentIndustry.value || DEFAULT_INDUSTRY_ID).trim() || DEFAULT_INDUSTRY_ID;
   const name = getIndustryPreset(id).name;
@@ -1211,9 +1328,10 @@ async function loadCurrentIndustryDetail() {
       // 主单位优先采用 active mod 的 manifest.industry.units.primary —— 让"切 mod"
       // 在后端尚未对齐前也能立刻把主单位切对。
       const fromMod = activeModIndustry.value?.units?.primary;
+      const units = asRecord(response.data).units as Record<string, unknown> | undefined
       currentIndustryUnit.value =
         (typeof fromMod === 'string' && fromMod.trim()) ||
-        response.data?.units?.primary ||
+        asString(units?.primary) ||
         '天';
       updateIndustryKeywords();
     }
@@ -1233,7 +1351,7 @@ function updateIndustryKeywords() {
   // 没有 mod 或 mod 未声明 intent_keywords 时回到 industryStore.currentConfig。
   const modKw = activeModIndustry.value?.intent_keywords;
   const config = industryStore.currentConfig;
-  const kw = (modKw && typeof modKw === 'object' ? modKw : (config && config.intent_keywords)) as IntentKeywordMap | undefined;
+  const kw = (modKw && typeof modKw === 'object' ? modKw : asRecord(config).intent_keywords) as IntentKeywordMap | undefined;
   if (!kw || typeof kw !== 'object') return;
   const keywords: string[] = [];
   if (kw.create_order) {
@@ -1415,6 +1533,7 @@ watch(() => route.query.section, scrollToSettingsSection);
 onMounted(async () => {
   scrollToSettingsSection();
   await loadLocalUser();
+  void loadAuditLogs();
   void loadDesktopDatabaseStatus();
   const uname = String(localUser.value?.username || '').trim();
   const sunbird = isSunbirdAccountUsername(uname);
@@ -1716,6 +1835,41 @@ onBeforeUnmount(() => {
   opacity: 0.55;
   cursor: not-allowed;
   box-shadow: none;
+}
+
+.settings-profile-form__submit--ghost {
+  margin-left: 8px;
+  color: var(--settings-accent, #2d6df6);
+  background: #fff;
+  border: 1px solid rgba(45, 109, 246, 0.35);
+  box-shadow: none;
+}
+
+.settings-audit-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 16px 8px;
+  max-height: 280px;
+  overflow: auto;
+}
+
+.settings-audit-list__item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 0;
+  border-bottom: 1px solid #f0f0f0;
+  font-size: 13px;
+}
+
+.settings-audit-list__action {
+  font-weight: 600;
+  color: #111827;
+}
+
+.settings-audit-list__meta {
+  color: #6b7280;
+  font-size: 12px;
 }
 
 .settings-profile__name {

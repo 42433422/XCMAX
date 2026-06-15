@@ -131,7 +131,7 @@ class DistillationTrainer:
         else:
             self.device = device
 
-        logger.info(f"使用设备: {self.device}")
+        logger.info("使用设备: %s", self.device)
 
         os.makedirs(CHECKPOINT_DIR, exist_ok=True)
         os.makedirs(LOG_DIR, exist_ok=True)
@@ -167,7 +167,7 @@ class DistillationTrainer:
                         if label in LABEL_TO_ID:
                             labels.append(LABEL_TO_ID[label])
 
-        logger.info(f"加载数据: {len(texts)} 条")
+        logger.info("加载数据: %s 条", len(texts))
         return texts, labels
 
     def prepare_data(self, texts: list[str], labels: list[int], val_ratio: float = 0.2):
@@ -181,7 +181,7 @@ class DistillationTrainer:
                 texts, labels, test_size=val_ratio, random_state=42
             )
 
-        logger.info(f"训练集: {len(train_texts)} 条, 验证集: {len(val_texts)} 条")
+        logger.info("训练集: %s 条, 验证集: %s 条", len(train_texts), len(val_texts))
 
         self.tokenizer = BertTokenizer.from_pretrained(self.model_name)
 
@@ -287,7 +287,7 @@ class DistillationTrainer:
         with open(vocab_path, "w", encoding="utf-8") as f:
             json.dump({"id2label": ID_TO_LABEL, "label2id": LABEL_TO_ID}, f, ensure_ascii=False)
 
-        logger.info(f"保存检查点到: {path}")
+        logger.info("保存检查点到: %s", path)
 
     def train(self, data_path: str, output_dir: str = CHECKPOINT_DIR):
         """完整训练流程"""
@@ -312,14 +312,14 @@ class DistillationTrainer:
         best_epoch = 0
 
         for epoch in range(1, self.epochs + 1):
-            logger.info(f"\n=== Epoch {epoch}/{self.epochs} ===")
+            logger.info("\n=== Epoch %s/%s ===", epoch, self.epochs)
 
             train_loss, train_acc = self.train_epoch(optimizer, scheduler)
-            logger.info(f"训练损失: {train_loss:.4f}, 训练准确率: {train_acc:.4f}")
+            logger.info(f"训练损失: {train_loss:.4f}, 训练准确率: {train_acc:.4f}")  # noqa: G004
 
             eval_result = self.evaluate()
             logger.info(
-                f"验证损失: {eval_result['val_loss']:.4f}, 验证准确率: {eval_result['val_accuracy']:.4f}"
+                f"验证损失: {eval_result['val_loss']:.4f}, 验证准确率: {eval_result['val_accuracy']:.4f}"  # noqa: G004
             )
 
             last_checkpoint = os.path.join(output_dir, "last.pt")
@@ -340,9 +340,9 @@ class DistillationTrainer:
                 target_names=label_names,
                 zero_division=0,
             )
-            logger.info(f"\n分类报告:\n{report}")
+            logger.info("\n分类报告:\n%s", report)
 
-        logger.info(f"\n训练完成! 最佳验证准确率: {best_accuracy:.4f} (Epoch {best_epoch})")
+        logger.info(f"\n训练完成! 最佳验证准确率: {best_accuracy:.4f} (Epoch {best_epoch})")  # noqa: G004
 
         log_path = os.path.join(
             LOG_DIR, f"training_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
@@ -381,7 +381,7 @@ def main():
         data_path = get_distillation_training_data_path()
 
     if not os.path.exists(data_path):
-        logger.error(f"训练数据不存在: {data_path}")
+        logger.error("训练数据不存在: %s", data_path)
         logger.info(
             "请先运行数据采集脚本: python -m app.services.distillation_data_collector --generate --collect"
         )

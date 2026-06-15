@@ -1,6 +1,7 @@
 import { ref, reactive, type Ref } from 'vue';
 import { api } from '../api/index';
 import type { ApiResponse } from '@/types/api';
+import { asRecord, asArray, asString, asBoolean, asDisposable } from '@/utils/typeGuards'
 
 export const FILE_TYPES = {
   EXCEL: ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-excel'],
@@ -30,7 +31,7 @@ export interface UploadResult {
   file: string;
   type: FileType;
   success: boolean;
-  data: any;
+  data: unknown;
 }
 
 export interface UseFileImportReturn {
@@ -42,11 +43,11 @@ export interface UseFileImportReturn {
   error: Ref<Error | null>;
   detectFileType: (file: File) => FileType;
   resetState: () => void;
-  uploadFile: (file: File | null, purpose?: string, onProgress?: (percent: number, filename: string) => void) => Promise<ApiResponse<any> | null>;
-  uploadCustomersImport: (file: File | null, onProgress?: (percent: number, filename: string) => void) => Promise<ApiResponse<any> | null>;
-  uploadProductImport: (file: File | null, onProgress?: (percent: number, filename: string) => void) => Promise<ApiResponse<any> | null>;
-  uploadOrderParse: (file: File | null, onProgress?: (percent: number, filename: string) => void) => Promise<ApiResponse<any> | null>;
-  uploadMaterialsImport: (file: File | null, onProgress?: (percent: number, filename: string) => void) => Promise<ApiResponse<any> | null>;
+  uploadFile: (file: File | null, purpose?: string, onProgress?: (percent: number, filename: string) => void) => Promise<ApiResponse<unknown> | null>;
+  uploadCustomersImport: (file: File | null, onProgress?: (percent: number, filename: string) => void) => Promise<ApiResponse<unknown> | null>;
+  uploadProductImport: (file: File | null, onProgress?: (percent: number, filename: string) => void) => Promise<ApiResponse<unknown> | null>;
+  uploadOrderParse: (file: File | null, onProgress?: (percent: number, filename: string) => void) => Promise<ApiResponse<unknown> | null>;
+  uploadMaterialsImport: (file: File | null, onProgress?: (percent: number, filename: string) => void) => Promise<ApiResponse<unknown> | null>;
   uploadMultipleFiles: (files: File[] | null, purpose?: string, onFileComplete?: (result: UploadResult, current: number, total: number) => void) => Promise<UploadResult[]>;
 }
 
@@ -72,21 +73,21 @@ export function useFileImport(): UseFileImportReturn {
 
   function detectFileType(file: File): FileType {
     const fileName = file.name.toLowerCase();
-    const mimeType = file.type;
+    const mimeType = asString(file.type)
 
-    if (FILE_TYPES.EXCEL.includes(mimeType as any) || FILE_EXTENSIONS.EXCEL.some(ext => fileName.endsWith(ext))) {
+    if ((FILE_TYPES.EXCEL as readonly string[]).includes(mimeType) || FILE_EXTENSIONS.EXCEL.some(ext => fileName.endsWith(ext))) {
       return 'excel';
     }
-    if (FILE_TYPES.CSV.includes(mimeType as any) || FILE_EXTENSIONS.CSV.some(ext => fileName.endsWith(ext))) {
+    if ((FILE_TYPES.CSV as readonly string[]).includes(mimeType) || FILE_EXTENSIONS.CSV.some(ext => fileName.endsWith(ext))) {
       return 'csv';
     }
-    if (FILE_TYPES.IMAGE.includes(mimeType as any) || FILE_EXTENSIONS.IMAGE.some(ext => fileName.endsWith(ext))) {
+    if ((FILE_TYPES.IMAGE as readonly string[]).includes(mimeType) || FILE_EXTENSIONS.IMAGE.some(ext => fileName.endsWith(ext))) {
       return 'image';
     }
-    if (FILE_TYPES.PDF.includes(mimeType as any) || FILE_EXTENSIONS.PDF.some(ext => fileName.endsWith(ext))) {
+    if ((FILE_TYPES.PDF as readonly string[]).includes(mimeType) || FILE_EXTENSIONS.PDF.some(ext => fileName.endsWith(ext))) {
       return 'pdf';
     }
-    if (FILE_TYPES.WORD.includes(mimeType as any) || FILE_EXTENSIONS.WORD.some(ext => fileName.endsWith(ext))) {
+    if ((FILE_TYPES.WORD as readonly string[]).includes(mimeType) || FILE_EXTENSIONS.WORD.some(ext => fileName.endsWith(ext))) {
       return 'word';
     }
     return 'other';
@@ -118,7 +119,7 @@ export function useFileImport(): UseFileImportReturn {
     file: File | null, 
     purpose: string = 'general', 
     onProgress?: (percent: number, filename: string) => void
-  ): Promise<ApiResponse<any> | null> {
+  ): Promise<ApiResponse<unknown> | null> {
     if (!file) {
       setStatus('error', '请选择文件');
       return null;
@@ -137,7 +138,7 @@ export function useFileImport(): UseFileImportReturn {
       const endpoint = API_ENDPOINTS[purpose] || API_ENDPOINTS.general;
 
       // 勿手动设置 multipart Content-Type：必须带 boundary，由浏览器在 FormData 请求中自动补全
-      const response = await api.post<ApiResponse<any>>(endpoint, formData);
+      const response = await api.post<ApiResponse<unknown>>(endpoint, formData);
 
       updateProgress(100, '上传完成');
       
@@ -162,28 +163,28 @@ export function useFileImport(): UseFileImportReturn {
   async function uploadCustomersImport(
     file: File | null, 
     onProgress?: (percent: number, filename: string) => void
-  ): Promise<ApiResponse<any> | null> {
+  ): Promise<ApiResponse<unknown> | null> {
     return uploadFile(file, 'customers_import', onProgress);
   }
 
   async function uploadProductImport(
     file: File | null, 
     onProgress?: (percent: number, filename: string) => void
-  ): Promise<ApiResponse<any> | null> {
+  ): Promise<ApiResponse<unknown> | null> {
     return uploadFile(file, 'product_import', onProgress);
   }
 
   async function uploadOrderParse(
     file: File | null, 
     onProgress?: (percent: number, filename: string) => void
-  ): Promise<ApiResponse<any> | null> {
+  ): Promise<ApiResponse<unknown> | null> {
     return uploadFile(file, 'order_parse', onProgress);
   }
 
   async function uploadMaterialsImport(
     file: File | null, 
     onProgress?: (percent: number, filename: string) => void
-  ): Promise<ApiResponse<any> | null> {
+  ): Promise<ApiResponse<unknown> | null> {
     return uploadFile(file, 'materials_import', onProgress);
   }
 

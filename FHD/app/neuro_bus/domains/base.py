@@ -66,7 +66,7 @@ class NeuroDomain(ABC):
         self._handlers: list[DomainHandler] = []
         self._registered = False
 
-        logger.info(f"NeuroDomain [{self.domain_name}] initialized")
+        logger.info("NeuroDomain [%s] initialized", self.domain_name)
 
     @property
     def bus(self) -> NeuroBus:
@@ -80,7 +80,7 @@ class NeuroDomain(ABC):
         应在应用启动时调用一次
         """
         if self._registered:
-            logger.warning(f"Domain [{self.domain_name}] already registered")
+            logger.warning("Domain [%s] already registered", self.domain_name)
             return
 
         for handler_def in self._handlers:
@@ -90,16 +90,16 @@ class NeuroDomain(ABC):
                 handler=handler_def.handler,
                 priority=handler_def.priority,
             )
-            logger.debug(f"Registered handler for {self.domain_name}.{handler_def.event_type}")
+            logger.debug("Registered handler for %s.%s", self.domain_name, handler_def.event_type)
 
         self._registered = True
-        logger.info(f"Domain [{self.domain_name}] registered with {len(self._handlers)} handlers")
+        logger.info("Domain [%s] registered with %s handlers", self.domain_name, len(self._handlers))
 
     def unregister(self):
         """注销领域"""
         # 目前总线不支持单个注销，需重新初始化
         self._registered = False
-        logger.info(f"Domain [{self.domain_name}] unregistered")
+        logger.info("Domain [%s] unregistered", self.domain_name)
 
     def add_handler(
         self,

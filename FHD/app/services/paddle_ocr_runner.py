@@ -29,7 +29,7 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 _lock = threading.Lock()
-_paddle_ocr = None  # type: ignore
+_paddle_ocr = None
 
 
 def check_paddle_available() -> bool:

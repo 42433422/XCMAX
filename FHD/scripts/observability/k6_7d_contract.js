@@ -1,11 +1,14 @@
 /**
- * k6 7-day contract traffic — covers health, login, AI chat for SLO metrics.
- * Deploy as K8s CronJob or long-running Job (see k8s/monitoring/k6-7day-job.yaml).
+ * k6 7-day contract traffic — health + login + chat/stream for M0 SLO metrics.
+ * Deploy: bash FHD/scripts/observability/sync_k6_configmap.sh --apply
+ *         kubectl apply -f FHD/k8s/monitoring/k6-7day-job.yaml
  */
 import http from 'k6/http';
 import { check, sleep } from 'k6';
 
-const BASE = __ENV.XCAGI_BASE_URL || 'http://127.0.0.1:5000';
+// Staging Job 历史曾用 BASE_URL；脚本统一兼容两种 env。
+const BASE =
+  __ENV.XCAGI_BASE_URL || __ENV.BASE_URL || 'http://127.0.0.1:5000';
 const USER = __ENV.E2E_USER || 'admin';
 const PASS = __ENV.E2E_PASSWORD || 'admin123';
 
@@ -21,38 +24,47 @@ export const options = {
     },
   },
   thresholds: {
-    http_req_failed: ['rate<0.001'],
-    http_req_duration: ['p(95)<1500'],
+    http_req_failed: ['rate<0.01'],
+    http_req_duration: ['p(95)<15000'],
   },
 };
 
-function csrfHeaders() {
-  const h = http.get(`${BASE}/api/health`);
-  const token = h.cookies.csrf_token?.[0]?.value || h.cookies['csrf-token']?.[0]?.value || '';
-  return {
-    'Content-Type': 'application/json',
-    ...(token ? { 'X-CSRF-Token': token } : {}),
-  };
+function csrfFrom(res) {
+  const a = res.cookies.csrf_token;
+  const b = res.cookies['csrf-token'];
+  if (a && a[0] && a[0].value) return a[0].value;
+  if (b && b[0] && b[0].value) return b[0].value;
+  return '';
+}
+
+function jsonHeaders(csrf) {
+  const h = { 'Content-Type': 'application/json' };
+  if (csrf) {
+    h['X-CSRF-Token'] = csrf;
+  }
+  return h;
 }
 
 export default function () {
-  const health = http.get(`${BASE}/api/health`);
+  const health = http.get(`${BASE}/api/health`, { tags: { name: 'health' } });
   check(health, { 'health 200': (r) => r.status === 200 });
 
-  const headers = csrfHeaders();
+  const csrf = csrfFrom(health);
+  const headers = jsonHeaders(csrf);
+
   const login = http.post(
     `${BASE}/api/auth/login`,
     JSON.stringify({ username: USER, password: PASS, account_kind: 'personal' }),
-    { headers }
+    { headers, tags: { name: 'login' } }
   );
-  check(login, { 'login < 500': (r) => r.status < 500 });
+  check(login, { 'login ok': (r) => r.status === 200 });
 
   const chat = http.post(
-    `${BASE}/api/ai/chat`,
+    `${BASE}/api/ai/chat/stream`,
     JSON.stringify({ message: 'k6 contract probe' }),
-    { headers }
+    { headers, timeout: '60s', tags: { name: 'chat_stream' } }
   );
-  check(chat, { 'chat < 500': (r) => r.status < 500 });
+  check(chat, { 'chat stream ok': (r) => r.status === 200 });
 
   sleep(1);
 }

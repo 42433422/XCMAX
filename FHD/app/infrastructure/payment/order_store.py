@@ -10,6 +10,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
 logger = logging.getLogger(__name__)
 
 _lock = threading.Lock()
@@ -70,12 +72,13 @@ def record_checkout_pending(
     plan_id: str,
     amount_cents: int,
     amount_yuan: str,
+    local_user_id: int | None = None,
 ) -> None:
     """预下单成功后写入待支付订单。"""
     with _lock:
         data = _load()
         orders: dict[str, Any] = data["orders"]
-        orders[out_trade_no] = {
+        row: dict[str, Any] = {
             "out_trade_no": out_trade_no,
             "plan_id": plan_id,
             "amount_cents": int(amount_cents),
@@ -87,6 +90,9 @@ def record_checkout_pending(
             "notify_count": 0,
             "last_notify_at": None,
         }
+        if local_user_id is not None:
+            row["local_user_id"] = int(local_user_id)
+        orders[out_trade_no] = row
         _atomic_write(order_store_path(), data)
     logger.info("[model-payment] order pending out_trade_no=%s plan_id=%s", out_trade_no, plan_id)
 
@@ -148,6 +154,10 @@ def apply_notify_paid(
                 trade_no=trade_no,
                 paid_at=now,
             )
+            _apply_saas_subscription_if_needed(
+                plan_id=plan_id,
+                local_user_id=o.get("local_user_id"),
+            )
 
         snap = dict(o)
         if ent_snapshot is not None:
@@ -161,6 +171,35 @@ def apply_notify_paid(
             (ent_snapshot or {}).get("purchase_count"),
         )
         return "marked_paid", snap
+
+
+def _apply_saas_subscription_if_needed(*, plan_id: str, local_user_id: Any) -> None:
+    """SaaS 套餐支付成功后绑定 tenants.plan_id。"""
+    if not str(plan_id or "").startswith("saas-"):
+        return
+    try:
+        uid = int(local_user_id)
+    except (TypeError, ValueError):
+        logger.warning("[model-payment] saas plan paid but no local_user_id plan_id=%s", plan_id)
+        return
+    try:
+        from app.application.tenant_subscription_app_service import apply_paid_plan_for_user
+        from app.infrastructure.billing.saas_plans import is_saas_plan_id
+
+        if not is_saas_plan_id(plan_id):
+            return
+        if apply_paid_plan_for_user(user_id=uid, plan_id=plan_id):
+            logger.info(
+                "[model-payment] saas subscription applied user_id=%s plan_id=%s",
+                uid,
+                plan_id,
+            )
+    except RECOVERABLE_ERRORS:
+        logger.exception(
+            "[model-payment] saas subscription apply failed user_id=%s plan_id=%s",
+            local_user_id,
+            plan_id,
+        )
 
 
 def _grant_entitlement_inplace(
@@ -241,3 +280,26 @@ def update_order_status(
             o.update(extra)
         _atomic_write(order_store_path(), data)
         return dict(o)
+
+
+def count_orders() -> int:
+    """当前 JSON 订单存储中的订单总数（供诊断接口展示）。"""
+    with _lock:
+        data = _load()
+    orders = data.get("orders")
+    return len(orders) if isinstance(orders, dict) else 0
+
+
+def json_store_has_unmigrated_orders() -> bool:
+    """本地 JSON 订单文件是否仍存有订单。
+
+    在 PostgreSQL 后端下用于提示：JSON 文件里仍有遗留订单待迁移
+    （见 ``scripts/migrate_fhd_json_orders_to_postgres.py``）。
+    文件不存在或无订单时返回 ``False``。
+    """
+    if not order_store_path().is_file():
+        return False
+    with _lock:
+        data = _load()
+    orders = data.get("orders")
+    return bool(isinstance(orders, dict) and orders)

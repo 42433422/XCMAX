@@ -6,6 +6,7 @@ import { DEFAULT_INDUSTRY_ID } from '@/constants/industryDefaults'
 import { isSelectableExtensionModId } from '@/constants/genericModPack'
 import { resolveCoreNavLabel } from '@/utils/coreNavLabel'
 import { getIndustryPreset } from '@/constants/industryPresets'
+import { asRecord, asArray, asString, asBoolean, asDisposable } from '@/utils/typeGuards'
 
 type StarterPackItem = {
   label: string
@@ -47,21 +48,26 @@ function normalizeStarterPack(rows: unknown): StarterPackItem[] {
  *    或 industry 切换接口暂未受理），侧栏副标题/主单位/意图关键词仍能立刻按 mod 走，
  *    避免扩展模块与当前行业文案脱节。
  */
-function activeModForIndustry(mods: any[], activeModId: string, industryId: string) {
+function activeModForIndustry(
+  mods: unknown[],
+  activeModId: string,
+  industryId: string,
+): Record<string, unknown> | null {
   if (activeModId) {
-    const direct = mods.find((m) => str(m?.id) === activeModId)
+    const direct = mods.find((m) => str(asRecord(m).id) === activeModId)
     if (direct) {
-      if (isSelectableExtensionModId(activeModId)) return direct
-      const ext = mods.find((m) => isSelectableExtensionModId(str(m?.id)))
-      if (ext) return ext
+      if (isSelectableExtensionModId(activeModId)) return asRecord(direct)
+      const ext = mods.find((m) => isSelectableExtensionModId(str(asRecord(m).id)))
+      if (ext) return asRecord(ext)
     }
   }
-  let matched: any = null
+  let matched: Record<string, unknown> | null = null
   for (const mod of mods) {
-    const modIndustryId = str(mod?.industry?.id)
+    const modRow = asRecord(mod)
+    const modIndustryId = str(asRecord(modRow.industry).id)
     if (!modIndustryId || modIndustryId !== industryId) continue
-    if (!matched) matched = mod
-    if (activeModId && str(mod?.id) === activeModId) matched = mod
+    if (!matched) matched = modRow
+    if (activeModId && str(modRow.id) === activeModId) matched = modRow
   }
   return matched
 }
@@ -81,9 +87,9 @@ export function useIndustryUiText() {
    * 让"切 mod" 立刻全栈生效，不依赖后端 industry 切换是否被接受。
    */
   const industryConfig = computed(() => {
-    const fromMod = activeMod.value?.industry
-    if (fromMod && typeof fromMod === 'object') return fromMod
-    return industryStore.currentConfig || {}
+    const fromMod = asRecord(activeMod.value?.industry)
+    if (Object.keys(fromMod).length) return fromMod
+    return asRecord(industryStore.currentConfig)
   })
   /**
    * active mod 的"实际行业 id"——优先用 mod manifest 声明的 industry.id；
@@ -91,29 +97,25 @@ export function useIndustryUiText() {
    * industryStore.currentIndustryId，让侧栏副标题可立刻反映 mod 切换。
    */
   const effectiveIndustryId = computed(() => {
-    const fromMod = str(activeMod.value?.industry?.id)
+    const fromMod = str(asRecord(activeMod.value?.industry).id)
     return fromMod || industryId.value
   })
   const uiLabels = computed<Record<string, unknown>>(() => {
     const labels = activeMod.value?.ui_labels
-    return labels && typeof labels === 'object' ? labels : {}
+    return labels && typeof labels === 'object' ? asRecord(labels) : {}
   })
 
   const productFields = computed<Record<string, unknown>>(() => {
-    const fields = industryConfig.value?.product_fields
-    return fields && typeof fields === 'object' ? fields : {}
+    return asRecord(industryConfig.value.product_fields)
   })
   const quantityFields = computed<Record<string, unknown>>(() => {
-    const fields = industryConfig.value?.quantity_fields
-    return fields && typeof fields === 'object' ? fields : {}
+    return asRecord(industryConfig.value.quantity_fields)
   })
   const orderTypes = computed<Record<string, unknown>>(() => {
-    const rows = industryConfig.value?.order_types
-    return rows && typeof rows === 'object' ? rows : {}
+    return asRecord(industryConfig.value.order_types)
   })
   const units = computed<Record<string, unknown>>(() => {
-    const rows = industryConfig.value?.units
-    return rows && typeof rows === 'object' ? rows : {}
+    return asRecord(industryConfig.value.units)
   })
 
   const entityName = computed(() =>

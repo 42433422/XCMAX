@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import threading
 import time
 from collections import OrderedDict
@@ -29,6 +31,7 @@ class ThreadSafeLRUCache:
             ts, value = entry
             if time.time() - ts > self._ttl_seconds:
                 del self._data[key]
+                self._evictions += 1
                 self._misses += 1
                 return None
             self._data.move_to_end(key)
@@ -41,12 +44,25 @@ class ThreadSafeLRUCache:
             expired = [k for k, (ts, _) in self._data.items() if now - ts > self._ttl_seconds]
             for k in expired:
                 del self._data[k]
+                self._evictions += 1
             if key in self._data:
                 del self._data[key]
             while len(self._data) >= self._max_size:
                 self._data.popitem(last=False)
                 self._evictions += 1
             self._data[key] = (now, value)
+
+    def delete(self, key: str) -> bool:
+        with self._lock:
+            if key in self._data:
+                del self._data[key]
+                return True
+            return False
+
+    def make_key(self, prefix: str, *args: Any, **kwargs: Any) -> str:
+        payload = (prefix, args, tuple(sorted(kwargs.items())))
+        raw = json.dumps(payload, sort_keys=True, default=str)
+        return hashlib.sha256(raw.encode()).hexdigest()
 
     def clear(self) -> None:
         with self._lock:

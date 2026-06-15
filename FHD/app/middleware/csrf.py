@@ -40,6 +40,12 @@ def _csrf_exempt_public_auth(scope: Scope) -> bool:
     )
 
 
+def _csrf_exempt_aiopen(scope: Scope) -> bool:
+    """AIOPEN 对外 MCP/API 面：外部 Agent（Cursor/Claude）无 CSRF Cookie，安全由 X-AIOPEN-Key + LAN 承担。"""
+    path = (scope.get("path") or "").rstrip("/")
+    return path.startswith("/api/aiopen") or path.startswith("/api/ai/qclaw")
+
+
 class CSRFMiddleware:
     def __init__(self, app: ASGIApp) -> None:
         self.app = app
@@ -80,10 +86,11 @@ class CSRFMiddleware:
             if _csrf_exempt_public_auth(scope):
                 await self.app(scope, receive, send)
                 return
+            if _csrf_exempt_aiopen(scope):
+                await self.app(scope, receive, send)
+                return
             path = (scope.get("path") or "").rstrip("/")
-            if path.endswith("/api/mobile/v1/pairing/issue") or path.endswith(
-                "/api/mobile/v1/pairing/exchange"
-            ):
+            if path.startswith("/api/mobile/v1/pairing/"):
                 await self.app(scope, receive, send)
                 return
 

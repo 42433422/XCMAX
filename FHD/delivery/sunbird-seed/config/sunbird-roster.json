@@ -1,0 +1,784 @@
+{
+  "schema_version": 1,
+  "source_template": "424/考勤-2026-3月份考勤统计表.xlsx",
+  "sheet_kind": "mingxi",
+  "departments": [
+    {
+      "department": "计划生产部",
+      "main_department": "计划生产部",
+      "attendance_group": "计时"
+    },
+    {
+      "department": "综合部",
+      "main_department": "综合部",
+      "attendance_group": "计时"
+    },
+    {
+      "department": "木工部",
+      "main_department": "木工部",
+      "attendance_group": "计时"
+    },
+    {
+      "department": "油漆部",
+      "main_department": "油漆部",
+      "attendance_group": "计时"
+    },
+    {
+      "department": "开料部",
+      "main_department": "开料部",
+      "attendance_group": "计时"
+    },
+    {
+      "department": "物料组",
+      "main_department": "物料组",
+      "attendance_group": "计时"
+    },
+    {
+      "department": "组装部",
+      "main_department": "组装部",
+      "attendance_group": "计时"
+    },
+    {
+      "department": "客户包装部",
+      "main_department": "客户包装部",
+      "attendance_group": "计时"
+    },
+    {
+      "department": "包装部",
+      "main_department": "包装部",
+      "attendance_group": "计时"
+    },
+    {
+      "department": "后勤部",
+      "main_department": "后勤部",
+      "attendance_group": "计时"
+    },
+    {
+      "department": "厂部",
+      "main_department": "厂部",
+      "attendance_group": "计时"
+    }
+  ],
+  "employees": [
+    {
+      "name": "胡超",
+      "group": "计时",
+      "dept": "计划生产部",
+      "main_dept": "计划生产部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "樊琪麒",
+      "group": "计时",
+      "dept": "计划生产部",
+      "main_dept": "计划生产部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "陈银山",
+      "group": "计时",
+      "dept": "计划生产部",
+      "main_dept": "计划生产部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "彭韶华",
+      "group": "计时",
+      "dept": "计划生产部",
+      "main_dept": "计划生产部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "田大鹏",
+      "group": "计时",
+      "dept": "计划生产部",
+      "main_dept": "计划生产部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "李茂兰",
+      "group": "计时",
+      "dept": "计划生产部",
+      "main_dept": "计划生产部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "李伟毅",
+      "group": "计时",
+      "dept": "计划生产部",
+      "main_dept": "计划生产部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "王云明",
+      "group": "计时",
+      "dept": "计划生产部",
+      "main_dept": "计划生产部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "陈永泽",
+      "group": "计时",
+      "dept": "计划生产部",
+      "main_dept": "计划生产部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "彭韶峰",
+      "group": "计时",
+      "dept": "综合部",
+      "main_dept": "综合部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "李成",
+      "group": "计时",
+      "dept": "木工部",
+      "main_dept": "木工部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "吴晓波",
+      "group": "计时",
+      "dept": "木工部",
+      "main_dept": "木工部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "张官树",
+      "group": "计时",
+      "dept": "木工部",
+      "main_dept": "木工部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "龙家富",
+      "group": "计时",
+      "dept": "木工部",
+      "main_dept": "木工部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "赵丁潘",
+      "group": "计时",
+      "dept": "木工部",
+      "main_dept": "木工部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "曹保书",
+      "group": "计时",
+      "dept": "木工部",
+      "main_dept": "木工部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "梁金锐",
+      "group": "计时",
+      "dept": "木工部",
+      "main_dept": "木工部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "周席民",
+      "group": "计时",
+      "dept": "木工部",
+      "main_dept": "木工部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "毛先峰",
+      "group": "计时",
+      "dept": "木工部",
+      "main_dept": "木工部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "卢阳平",
+      "group": "计时",
+      "dept": "木工部",
+      "main_dept": "木工部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "陈浩",
+      "group": "计时",
+      "dept": "木工部",
+      "main_dept": "木工部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "韦国旗",
+      "group": "计时",
+      "dept": "木工部",
+      "main_dept": "木工部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "曹勇军",
+      "group": "计时",
+      "dept": "油漆部",
+      "main_dept": "油漆部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "湖北杨勇",
+      "group": "计时",
+      "dept": "油漆部",
+      "main_dept": "油漆部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "四川杨勇",
+      "group": "计时",
+      "dept": "油漆部",
+      "main_dept": "油漆部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "粟勇",
+      "group": "计时",
+      "dept": "油漆部",
+      "main_dept": "油漆部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "陶永福",
+      "group": "计时",
+      "dept": "油漆部",
+      "main_dept": "油漆部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "欧政才",
+      "group": "计时",
+      "dept": "油漆部",
+      "main_dept": "油漆部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "杨四明",
+      "group": "计时",
+      "dept": "油漆部",
+      "main_dept": "油漆部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "涂大坤",
+      "group": "计时",
+      "dept": "开料部",
+      "main_dept": "开料部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "吴生富",
+      "group": "计时",
+      "dept": "开料部",
+      "main_dept": "开料部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "杨辉",
+      "group": "计时",
+      "dept": "开料部",
+      "main_dept": "开料部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "杨合栓",
+      "group": "计时",
+      "dept": "开料部",
+      "main_dept": "开料部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "刘家林",
+      "group": "计时",
+      "dept": "开料部",
+      "main_dept": "开料部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "杨宁",
+      "group": "计时",
+      "dept": "开料部",
+      "main_dept": "开料部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "杨杰",
+      "group": "计时",
+      "dept": "开料部",
+      "main_dept": "开料部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "张石勇",
+      "group": "计时",
+      "dept": "开料部",
+      "main_dept": "开料部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "张林",
+      "group": "计时",
+      "dept": "开料部",
+      "main_dept": "开料部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "全孝华",
+      "group": "计时",
+      "dept": "开料部",
+      "main_dept": "开料部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "仲先林",
+      "group": "计时",
+      "dept": "开料部",
+      "main_dept": "开料部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "张昌盛",
+      "group": "计时",
+      "dept": "物料组",
+      "main_dept": "物料组",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "王波",
+      "group": "计时",
+      "dept": "物料组",
+      "main_dept": "物料组",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "龙金妹",
+      "group": "计时",
+      "dept": "组装部",
+      "main_dept": "组装部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "杨琴",
+      "group": "计时",
+      "dept": "组装部",
+      "main_dept": "组装部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "谢超英",
+      "group": "计时",
+      "dept": "组装部",
+      "main_dept": "组装部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "谢喜云",
+      "group": "计时",
+      "dept": "组装部",
+      "main_dept": "组装部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "杨菊珍",
+      "group": "计时",
+      "dept": "组装部",
+      "main_dept": "组装部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "龙金寸",
+      "group": "计时",
+      "dept": "组装部",
+      "main_dept": "组装部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "谢环英",
+      "group": "计时",
+      "dept": "组装部",
+      "main_dept": "组装部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "谭加秀",
+      "group": "计时",
+      "dept": "组装部",
+      "main_dept": "组装部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "邱梅",
+      "group": "计时",
+      "dept": "组装部",
+      "main_dept": "组装部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "陈玉容",
+      "group": "计时",
+      "dept": "组装部",
+      "main_dept": "组装部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "杨月英",
+      "group": "计时",
+      "dept": "组装部",
+      "main_dept": "组装部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "李敏",
+      "group": "计时",
+      "dept": "组装部",
+      "main_dept": "组装部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "张清泉",
+      "group": "计时",
+      "dept": "组装部",
+      "main_dept": "组装部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "徐昌菊",
+      "group": "计时",
+      "dept": "组装部",
+      "main_dept": "组装部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "蒋素琼",
+      "group": "计时",
+      "dept": "组装部",
+      "main_dept": "组装部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "周惠英",
+      "group": "计时",
+      "dept": "组装部",
+      "main_dept": "组装部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "诺顺芳",
+      "group": "计时",
+      "dept": "组装部",
+      "main_dept": "组装部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "奎凤英",
+      "group": "计时",
+      "dept": "组装部",
+      "main_dept": "组装部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "谭周香",
+      "group": "计时",
+      "dept": "组装部",
+      "main_dept": "组装部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "卢朝琴",
+      "group": "计时",
+      "dept": "组装部",
+      "main_dept": "组装部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "余润花",
+      "group": "计时",
+      "dept": "组装部",
+      "main_dept": "组装部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "王晓连",
+      "group": "计时",
+      "dept": "组装部",
+      "main_dept": "组装部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "贲贤",
+      "group": "计时",
+      "dept": "组装部",
+      "main_dept": "组装部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "杨进彬",
+      "group": "计时",
+      "dept": "组装部",
+      "main_dept": "组装部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "桂辉定",
+      "group": "计时",
+      "dept": "组装部",
+      "main_dept": "组装部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "桂艳芳",
+      "group": "计时",
+      "dept": "组装部",
+      "main_dept": "组装部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "桂秀花",
+      "group": "计时",
+      "dept": "组装部",
+      "main_dept": "组装部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "张学六",
+      "group": "计时",
+      "dept": "组装部",
+      "main_dept": "组装部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "陈梅",
+      "group": "计时",
+      "dept": "组装部",
+      "main_dept": "组装部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "席金鹏",
+      "group": "计时",
+      "dept": "客户包装部",
+      "main_dept": "客户包装部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "涂海清",
+      "group": "计时",
+      "dept": "包装部",
+      "main_dept": "包装部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "敬伟",
+      "group": "计时",
+      "dept": "包装部",
+      "main_dept": "包装部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "李建新",
+      "group": "计时",
+      "dept": "包装部",
+      "main_dept": "包装部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "丁章帅",
+      "group": "计时",
+      "dept": "包装部",
+      "main_dept": "包装部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "徐昌萍",
+      "group": "计时",
+      "dept": "包装部",
+      "main_dept": "包装部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "许进凤",
+      "group": "计时",
+      "dept": "后勤部",
+      "main_dept": "后勤部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "李文禄",
+      "group": "计时",
+      "dept": "后勤部",
+      "main_dept": "后勤部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    },
+    {
+      "name": "黄川平",
+      "group": "计时",
+      "dept": "厂部",
+      "main_dept": "厂部",
+      "emp_no": "",
+      "position": "计时",
+      "uid": ""
+    }
+  ]
+}

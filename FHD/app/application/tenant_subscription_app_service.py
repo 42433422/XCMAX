@@ -11,7 +11,7 @@ from app.db.models.tenant import Tenant
 from app.db.models.user import User
 from app.db.session import get_db
 from app.infrastructure.billing.saas_plans import is_saas_plan_id, trial_days
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.time import utc_now_naive
 
 logger = logging.getLogger(__name__)
@@ -101,7 +101,7 @@ def subscription_status_for_user(user_id: int) -> dict[str, Any]:
                     "reason": "surface_audit_demo",
                     "plan_id": "saas-enterprise",
                 }
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             logger.debug("surface audit demo subscription bypass skipped", exc_info=True)
 
         tenant: Tenant | None = None

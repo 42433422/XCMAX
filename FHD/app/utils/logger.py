@@ -15,7 +15,7 @@ from datetime import UTC, datetime
 from functools import wraps
 from typing import Any
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
 class StructuredLogFormatter(logging.Formatter):
@@ -142,23 +142,23 @@ def log_operation(operation_name: str):
 
             try:
                 logger.info(
-                    f"Operation started: {operation_name}",
+                    "Operation started: %s", operation_name,
                     operation=operation_name,
                     request_id=request_id,
                 )
                 result = func(*args, **kwargs)
                 duration = (time.time() - start_time) * 1000
                 logger.info(
-                    f"Operation completed: {operation_name}",
+                    "Operation completed: %s", operation_name,
                     operation=operation_name,
                     request_id=request_id,
                     duration=duration,
                 )
                 return result
-            except OPERATIONAL_ERRORS as e:
+            except RECOVERABLE_ERRORS as e:
                 duration = (time.time() - start_time) * 1000
                 logger.error(
-                    f"Operation failed: {operation_name}",
+                    "Operation failed: %s", operation_name,
                     operation=operation_name,
                     request_id=request_id,
                     duration=duration,
@@ -174,23 +174,23 @@ def log_operation(operation_name: str):
 
             try:
                 logger.info(
-                    f"Operation started: {operation_name}",
+                    "Operation started: %s", operation_name,
                     operation=operation_name,
                     request_id=request_id,
                 )
                 result = await func(*args, **kwargs)
                 duration = (time.time() - start_time) * 1000
                 logger.info(
-                    f"Operation completed: {operation_name}",
+                    "Operation completed: %s", operation_name,
                     operation=operation_name,
                     request_id=request_id,
                     duration=duration,
                 )
                 return result
-            except OPERATIONAL_ERRORS as e:
+            except RECOVERABLE_ERRORS as e:
                 duration = (time.time() - start_time) * 1000
                 logger.error(
-                    f"Operation failed: {operation_name}",
+                    "Operation failed: %s", operation_name,
                     operation=operation_name,
                     request_id=request_id,
                     duration=duration,

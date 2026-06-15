@@ -8,9 +8,9 @@ import logging
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.path_utils import resolve_fhd_repo_root
 
 logger = logging.getLogger(__name__)
@@ -25,7 +25,7 @@ class PriceListGenerator:
 
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
-        logger.info(f"[PriceListGenerator] 输出目录：{self.output_dir}")
+        logger.info("[PriceListGenerator] 输出目录：%s", self.output_dir)
 
     def generate(
         self, customer_name: str, products: list[dict[str, Any]], printer_name: str | None = None
@@ -42,7 +42,7 @@ class PriceListGenerator:
             生成结果，包含 success, filename, filepath, error 等字段
         """
         try:
-            logger.info(f"[PriceListGenerator] 开始生成价格表 - 客户：{customer_name}")
+            logger.info("[PriceListGenerator] 开始生成价格表 - 客户：%s", customer_name)
 
             # 生成文件名
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -53,17 +53,17 @@ class PriceListGenerator:
             # 生成 PDF 内容
             self._create_price_list_pdf(filepath, customer_name, products)
 
-            logger.info(f"[PriceListGenerator] PDF 生成成功：{filepath}")
+            logger.info("[PriceListGenerator] PDF 生成成功：%s", filepath)
 
             # 如果指定了打印机，执行打印
             if printer_name:
-                logger.info(f"[PriceListGenerator] 发送到打印机：{printer_name}")
+                logger.info("[PriceListGenerator] 发送到打印机：%s", printer_name)
                 self._print_file(str(filepath), printer_name)
             else:
                 # 自动选择打印机
                 auto_printer = self._get_default_printer()
                 if auto_printer:
-                    logger.info(f"[PriceListGenerator] 使用默认打印机：{auto_printer}")
+                    logger.info("[PriceListGenerator] 使用默认打印机：%s", auto_printer)
                     self._print_file(str(filepath), auto_printer)
                 else:
                     logger.warning("[PriceListGenerator] 未找到可用打印机，仅生成文件")
@@ -75,8 +75,8 @@ class PriceListGenerator:
                 "message": "价格表已生成",
             }
 
-        except OPERATIONAL_ERRORS as e:
-            logger.error(f"[PriceListGenerator] 生成失败：{e}", exc_info=True)
+        except RECOVERABLE_ERRORS as e:
+            logger.error("[PriceListGenerator] 生成失败：%s", e, exc_info=True)
             return {"success": False, "message": str(e)}
 
     def _create_price_list_pdf(
@@ -114,12 +114,12 @@ class PriceListGenerator:
                 with open(filepath, "wb") as f:
                     f.write(docx_bytes)
 
-                logger.info(f"[PriceListGenerator] 使用模板生成 Word 成功：{filepath}")
+                logger.info("[PriceListGenerator] 使用模板生成 Word 成功：%s", filepath)
                 return
 
             except ImportError as e:
                 logger.warning(
-                    f"[PriceListGenerator] 导入模板生成失败：{e}，使用 python-docx 直接生成"
+                    "[PriceListGenerator] 导入模板生成失败：%s，使用 python-docx 直接生成", e
                 )
                 from docx import Document
                 from docx.enum.text import WD_ALIGN_PARAGRAPH
@@ -241,10 +241,10 @@ class PriceListGenerator:
 
                     f.write("\n" + "=" * 80 + "\n")
 
-                logger.info(f"[PriceListGenerator] 文本文件生成成功：{txt_filepath}")
+                logger.info("[PriceListGenerator] 文本文件生成成功：%s", txt_filepath)
 
-        except OPERATIONAL_ERRORS as e:
-            logger.error(f"[PriceListGenerator] 创建 Word 失败：{e}", exc_info=True)
+        except RECOVERABLE_ERRORS as e:
+            logger.error("[PriceListGenerator] 创建 Word 失败：%s", e, exc_info=True)
             raise
 
     def _get_default_printer(self) -> str | None:
@@ -254,9 +254,9 @@ class PriceListGenerator:
                 import win32print
 
                 default_printer = win32print.GetDefaultPrinter()
-                return default_printer
-        except OPERATIONAL_ERRORS as e:
-            logger.warning(f"[PriceListGenerator] 获取默认打印机失败：{e}")
+                return cast("str | None", default_printer)
+        except RECOVERABLE_ERRORS as e:
+            logger.warning("[PriceListGenerator] 获取默认打印机失败：%s", e)
         return None
 
     def _print_file(self, filepath: str, printer_name: str):
@@ -282,7 +282,7 @@ class PriceListGenerator:
 
                 if printer_name not in printers:
                     logger.warning(
-                        f"[PriceListGenerator] 打印机 {printer_name} 不存在，使用默认打印机"
+                        "[PriceListGenerator] 打印机 %s 不存在，使用默认打印机", printer_name
                     )
                     printer_name = win32print.GetDefaultPrinter()
 
@@ -299,20 +299,20 @@ class PriceListGenerator:
                         doc.PrintOut()
                         doc.Close()
                         word.Quit()
-                        logger.info(f"[PriceListGenerator] 使用 Word COM 打印成功：{printer_name}")
+                        logger.info("[PriceListGenerator] 使用 Word COM 打印成功：%s", printer_name)
                         return
-                    except OPERATIONAL_ERRORS as e:
+                    except RECOVERABLE_ERRORS as e:
                         logger.warning(
-                            f"[PriceListGenerator] Word COM 打印失败：{e}，使用 Shell 打印"
+                            "[PriceListGenerator] Word COM 打印失败：%s，使用 Shell 打印", e
                         )
 
                 # 使用 Shell 打印（Windows 默认方式）
                 win32api.ShellExecute(0, "print", filepath, f'/d:"{printer_name}"', ".", 0)
 
-                logger.info(f"[PriceListGenerator] 文件已发送到打印机：{printer_name}")
+                logger.info("[PriceListGenerator] 文件已发送到打印机：%s", printer_name)
             else:
                 logger.warning("[PriceListGenerator] 非 Windows 系统，跳过打印")
 
-        except OPERATIONAL_ERRORS as e:
-            logger.error(f"[PriceListGenerator] 打印失败：{e}", exc_info=True)
+        except RECOVERABLE_ERRORS as e:
+            logger.error("[PriceListGenerator] 打印失败：%s", e, exc_info=True)
             raise

@@ -18,7 +18,7 @@ from app.security.mobile_jwt import (
     verify_mobile_jwt,
 )
 from app.utils.mobile_api import format_mobile_response
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -267,6 +267,7 @@ async def mobile_auth_refresh(body: MobileRefreshRequest):
 @router.get("/host/discover-hint")
 async def mobile_host_discover_hint(request: Request):
     from app.fastapi_routes.lan_routes import host_info
+    from app.utils.listen_port import resolve_listen_port
 
     info = await host_info(request)
     instance_name = os.environ.get("SERVICE_BRIDGE_INSTANCE_NAME", "XCAGI 宿主")
@@ -274,7 +275,7 @@ async def mobile_host_discover_hint(request: Request):
         data={
             "lan": info.model_dump(),
             "instance_name": instance_name,
-            "api_port": int(os.environ.get("PORT", "5000") or 5000),
+            "api_port": resolve_listen_port(),
             "company": "成都修茈科技有限公司",
             "brand_url": "https://xiu-ci.com",
         },
@@ -320,7 +321,7 @@ async def mobile_me(request: Request, user=Depends(get_mobile_user)):
             mid = str(entry.get("id") or entry.get("mod_id") or "")
             if mid:
                 mods_summary.append({"id": mid})
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.debug("mods list for mobile me: %s", exc)
 
     return format_mobile_response(

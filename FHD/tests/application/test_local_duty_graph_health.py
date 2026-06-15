@@ -34,7 +34,9 @@ def test_build_local_duty_graph_health_shape() -> None:
     staffing = out["staffing"]
     assert staffing["planned_count"] == 2
     assert staffing["registered_count"] == 1
-    assert staffing["missing_employees"] == ["emp-b"]
+    # 本地 health：缺岗走 missing_local_employee_packs；missing_employees 恒 []（与 MODstore 对齐）
+    assert staffing["missing_employees"] == []
+    assert staffing["missing_local_employee_packs"] == ["emp-b"]
 
 
 class TestLocalDutyGraphRoutes:
@@ -60,3 +62,36 @@ class TestLocalDutyGraphRoutes:
             resp = client.get("/api/xcmax/local/duty-graph/health")
         assert resp.status_code == 200
         assert resp.json()["source"] == "local"
+
+    def test_employee_status_ok(self, client: TestClient) -> None:
+        with (
+            patch(
+                "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
+                return_value="sess",
+            ),
+            patch(
+                "app.application.local_duty_graph_health.build_local_employee_status",
+                return_value={
+                    "employee_id": "seo-sitemap-curator",
+                    "deployed": True,
+                    "execution_stats": {"total_executions": 0, "success_count": 0, "success_rate": 0},
+                },
+            ),
+        ):
+            resp = client.get("/api/xcmax/local/employees/seo-sitemap-curator/status")
+        assert resp.status_code == 200
+        assert resp.json()["deployed"] is True
+
+    def test_employee_manifest_404_when_missing(self, client: TestClient) -> None:
+        with (
+            patch(
+                "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
+                return_value="sess",
+            ),
+            patch(
+                "app.application.local_duty_graph_health.read_local_employee_manifest",
+                return_value=None,
+            ),
+        ):
+            resp = client.get("/api/xcmax/local/employees/missing-emp/manifest")
+        assert resp.status_code == 404

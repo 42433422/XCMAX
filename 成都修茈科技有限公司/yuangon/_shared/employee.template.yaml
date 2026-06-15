@@ -1,0 +1,48 @@
+# AI 员工元数据模板 — 复制到各员工文件夹后改名为 employee.yaml
+# 参考 ESkill.md §5.1 Skill 元信息规范
+
+id: ""                        # 全局唯一，建议 kebab-case，如 nginx-config-engineer
+name: ""                      # 中文名，如"Nginx 配置工程师"
+version: "1.0.0"              # semver，固化后递增
+domain: ""                    # 业务边界一句话描述，是员工自治判断"我该不该接"的依据
+owner: "admin"                # string — 默认责任人（如 admin / team-ops）
+area: ""                      # string — 所属分区，如 server-and-ops / platform-core
+
+# 该员工拥有读写权限的文件 glob（绝对 glob，相对仓库根）
+scope_globs:
+  - ""                        # 例：nginx-xiu-ci.conf
+
+# 明确禁止该员工触碰的资产（比 scope_globs 优先级更高）
+forbidden_globs:
+  - ""                        # 例：MODstore_deploy/**
+
+# ESkill 动态触发策略（参见 ESkill.md §3.2）
+triggers:
+  on_error: true              # 执行报错时进入动态阶段
+  on_quality_fail: true       # 结果不达标时进入动态阶段
+  on_coverage_miss: false     # 覆盖率不足时进入动态阶段（默认关）
+  max_patch_budget_tokens: 4000
+  max_patch_steps: 5
+
+# SLA
+sla:
+  timeout_seconds: 120
+  retry_max: 2
+  escalate_to_human: true     # 动态阶段超预算后转人工
+
+# 调用 LLM 配置
+llm_default: "auto"           # auto = 平台账户默认；可填 gpt-4o / deepseek-v3 等
+llm_reasoning: "auto"        # 动态阶段专用推理模型
+
+# 关联 ESkill 文件（相对本 yaml 的路径）
+skills:
+  - skills/skill-example.md
+
+# 对外依赖（会调用哪些其他员工）
+depends_on: []
+
+# 变更历史
+changelog:
+  - version: "1.0.0"
+    date: ""
+    note: "初始创建"

@@ -10,9 +10,9 @@ import logging
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -82,7 +82,7 @@ class SemanticChunker:
         # 1) 计算相邻句相似度
         try:
             embeddings = [self._embedder(s["text"]) for s in sentences]
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.warning("embedder 调用失败，降级 fixed: %s", e)
             return self.split_by_fixed(text)
 
@@ -177,7 +177,7 @@ class SemanticChunker:
         nb = sum(x * x for x in b) ** 0.5
         if na == 0 or nb == 0:
             return 0.0
-        return dot / (na * nb)
+        return cast("float", dot / (na * nb))
 
     def _merge_chunks(self, chunks: list[Chunk], text: str) -> list[Chunk]:
         """过小合并 + 过大切分。"""

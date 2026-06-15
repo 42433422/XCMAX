@@ -148,3 +148,34 @@ data class MarketItem(
     val name: String = "",
     val description: String? = null,
 )
+
+data class ModInfo(
+    val id: String = "",
+    val name: String = "",
+    val version: String = "",
+    val description: String = "",
+    val author: String = "",
+    val primary: Boolean = false,
+    val industry: ModIndustry? = null,
+    val frontend_menu: List<ModMenuItem> = emptyList(),
+    val menu_overrides: List<ModMenuOverride> = emptyList(),
+)
+
+data class ModMenuItem(
+    val id: String = "",
+    val label: String = "",
+    val icon: String = "",
+    val path: String = "",
+)
+
+data class ModMenuOverride(
+    val key: String = "",
+    val label: String? = null,
+    val icon: String? = null,
+    val hidden: Boolean? = null,
+)
+
+data class ModIndustry(
+    val id: String = "",
+    val name: String = "",
+)

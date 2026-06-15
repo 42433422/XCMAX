@@ -4,10 +4,10 @@
 from __future__ import annotations
 
 from functools import lru_cache
-from typing import Any
+from typing import Any, cast
 
 from app.mod_sdk.host_profile import resolve_fhd_config_dir
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
 def _load_json(path):
@@ -15,7 +15,7 @@ def _load_json(path):
 
     try:
         return json.loads(path.read_text(encoding="utf-8"))
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         return None
 
 
@@ -25,7 +25,7 @@ def load_industry_baseline_document() -> dict[str, Any]:
     if cfg:
         doc = _load_json(cfg / "industry_baseline.json")
         if doc and isinstance(doc.get("industries"), dict):
-            return doc
+            return cast("dict[str, Any]", doc)
     return {
         "schema_version": 1,
         "core_mod_ids": ["xcagi-planner-bridge", "xcagi-neuro-bus-bridge"],
@@ -41,11 +41,12 @@ def _installed_mod_ids() -> list[str]:
         from app.infrastructure.mods.mod_manager import get_mod_manager
 
         mm = get_mod_manager()
-        ids = [m.id for m in (mm.list_loaded_mods() or []) if getattr(m, "id", None)]
-        if ids:
-            return ids
-        return [m.id for m in mm.scan_mods() if getattr(m, "id", None)]
-    except OPERATIONAL_ERRORS:
+        loaded = [m.id for m in (mm.list_loaded_mods() or []) if getattr(m, "id", None)]
+        scanned = [m.id for m in mm.scan_mods() if getattr(m, "id", None)]
+        if scanned or loaded:
+            return _dedupe(scanned + loaded)
+        return []
+    except RECOVERABLE_ERRORS:
         return []
 
 
@@ -111,7 +112,7 @@ def _read_mod_manifest_json(mod_id: str) -> dict[str, Any]:
             return {}
         data = json.loads(mf.read_text(encoding="utf-8"))
         return data if isinstance(data, dict) else {}
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         return {}
 
 
@@ -153,9 +154,24 @@ def _mod_installed(mod_id: str, installed: set[str]) -> bool:
         for leg in legacy_mod_ids_for(cid):
             if leg in installed:
                 return True
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         pass
     return False
+
+
+def _custom_employee_extension_ids(
+    industry_key: str,
+    row: dict[str, Any],
+    doc: dict[str, Any],
+) -> list[str]:
+    """账号定制阶段随定制 Mod 一并安装的 AI 员工桥接（非侧栏基准线）。"""
+    doc_level = _dedupe(
+        [str(x) for x in (doc.get("custom_employee_extension_mod_ids") or []) if x]
+    )
+    row_level = _dedupe(
+        [str(x) for x in (row.get("custom_employee_extension_mod_ids") or []) if x]
+    )
+    return _dedupe(doc_level + row_level)
 
 
 def _label_for_custom_mod(mod_id: str, industry_key: str, labels: dict[str, str]) -> str:
@@ -167,29 +183,191 @@ def _label_for_custom_mod(mod_id: str, industry_key: str, labels: dict[str, str]
     return name or mod_id
 
 
+def _onboarding_package_row(
+    industry_id: str,
+    *,
+    selectable: bool,
+    presets: dict[str, Any],
+) -> dict[str, Any]:
+    iid = str(industry_id or "").strip()
+    pkg = _industry_package(iid)
+    preset = presets.get(iid) if isinstance(presets.get(iid), dict) else {}
+    name = str(preset.get("name") or iid).strip()
+    scenario = str(preset.get("scenario") or "").strip()
+    return {
+        "industry_id": iid,
+        "name": name,
+        "scenario": scenario,
+        "product_name": str(pkg.get("product_name") or f"{iid}行业包").strip(),
+        "mod_id": str(pkg.get("mod_id") or "").strip(),
+        "selectable": selectable,
+    }
+
+
+def industry_entitled_for_client_mods(industry_id: str, entitled_mod_ids: set[str]) -> bool:
+    """企业 entitlement：行业是否对当前账号开放（含 legacy mod id 别名）。"""
+    from app.mod_sdk.industry_mod_aliases import (
+        canonical_mod_id,
+        canonical_mod_id_for_industry,
+        legacy_mod_ids_for,
+    )
+
+    iid = str(industry_id or "").strip()
+    if not iid:
+        return False
+    canonical = canonical_mod_id_for_industry(iid)
+    if not canonical:
+        return False
+    entitled = {str(x).strip() for x in entitled_mod_ids if str(x).strip()}
+    entitled_canonical = {canonical_mod_id(mid) for mid in entitled} | entitled
+    if canonical in entitled_canonical:
+        return True
+    for leg in legacy_mod_ids_for(canonical):
+        if leg in entitled:
+            return True
+    return False
+
+
+def filter_onboarding_catalog_for_entitlements(
+    catalog: dict[str, Any],
+    entitled_mod_ids: set[str],
+) -> dict[str, Any]:
+    """按企业客户 Mod 权益裁剪开放行业；未 entitlement 的开放项降级为 preview。"""
+    entitled = {str(x).strip() for x in entitled_mod_ids if str(x).strip()}
+    open_pkgs: list[dict[str, Any]] = []
+    demoted: list[dict[str, Any]] = []
+    for pkg in catalog.get("open_packages") or []:
+        if not isinstance(pkg, dict):
+            continue
+        iid = str(pkg.get("industry_id") or "").strip()
+        row = dict(pkg)
+        if industry_entitled_for_client_mods(iid, entitled):
+            row["selectable"] = True
+            open_pkgs.append(row)
+        else:
+            row["selectable"] = False
+            demoted.append(row)
+
+    preview_pkgs = [
+        dict(p) if isinstance(p, dict) else p for p in (catalog.get("preview_packages") or [])
+    ]
+    preview_ids = {
+        str(p.get("industry_id") or "").strip()
+        for p in preview_pkgs
+        if isinstance(p, dict) and str(p.get("industry_id") or "").strip()
+    }
+    for pkg in demoted:
+        iid = str(pkg.get("industry_id") or "").strip()
+        if iid and iid not in preview_ids:
+            preview_pkgs.append(pkg)
+            preview_ids.add(iid)
+
+    open_ids = [
+        str(p.get("industry_id") or "").strip()
+        for p in open_pkgs
+        if str(p.get("industry_id") or "").strip()
+    ]
+    return {
+        **catalog,
+        "open_industry_ids": open_ids,
+        "open_packages": open_pkgs,
+        "preview_packages": preview_pkgs,
+    }
+
+
+async def build_onboarding_industry_catalog_for_request(request) -> dict[str, Any]:
+    """按会话感知：企业 entitlement 二级筛选 + 租户已选行业。"""
+    import os
+
+    from app.application.tenant_workspace_prefs import (
+        get_workspace_prefs,
+        resolve_workspace_owner_id,
+    )
+    from app.enterprise.mod_entitlements import (
+        enterprise_mod_filter_active,
+        get_cached_entitled_client_mod_ids,
+        is_admin_account_session,
+        sync_entitlements_from_request,
+    )
+    from app.infrastructure.auth.dependencies import resolve_session_user
+
+    catalog = build_onboarding_industry_catalog()
+    meta: dict[str, Any] = {
+        "enterprise_filter_applied": False,
+        "owner_id": None,
+        "selected_industry_id": None,
+    }
+
+    user = resolve_session_user(request)
+    if user is not None:
+        owner_id = resolve_workspace_owner_id(request, user)
+        if owner_id:
+            meta["owner_id"] = owner_id
+            prefs = get_workspace_prefs(owner_id)
+            selected = str(prefs.get("selected_industry_id") or "").strip()
+            if selected:
+                meta["selected_industry_id"] = selected
+
+    if not enterprise_mod_filter_active():
+        return {**catalog, **meta}
+
+    cookie_name = os.environ.get("SESSION_COOKIE_NAME", "session_id")
+    sid = (request.cookies.get(cookie_name) or "").strip()
+    if not sid:
+        return {**catalog, **meta}
+
+    await sync_entitlements_from_request(request)
+    meta["enterprise_filter_applied"] = True
+
+    if is_admin_account_session():
+        return {**catalog, **meta}
+
+    entitled = get_cached_entitled_client_mod_ids() or set()
+    filtered = filter_onboarding_catalog_for_entitlements(catalog, entitled)
+    return {**filtered, **meta}
+
+
 def build_onboarding_industry_catalog() -> dict[str, Any]:
     doc = load_industry_baseline_document()
     open_ids = _dedupe([str(x) for x in (doc.get("onboarding_open_industry_ids") or []) if x])
-    open_packages: list[dict[str, Any]] = []
-    for iid in open_ids:
-        pkg = _industry_package(iid)
-        open_packages.append(
-            {
-                "industry_id": iid,
-                "product_name": str(pkg.get("product_name") or f"{iid}行业包").strip(),
-                "mod_id": str(pkg.get("mod_id") or "").strip(),
-            }
-        )
+
+    presets_doc: dict[str, Any] = {}
+    try:
+        from app.mod_sdk.host_profile import load_industry_presets_document
+
+        presets_doc = load_industry_presets_document()
+    except RECOVERABLE_ERRORS:
+        presets_doc = {}
+    presets = presets_doc.get("presets") if isinstance(presets_doc.get("presets"), dict) else {}
+
+    open_packages = [
+        _onboarding_package_row(iid, selectable=True, presets=presets) for iid in open_ids
+    ]
+
+    preset_ids = presets_doc.get("preset_ids")
+    if not isinstance(preset_ids, list):
+        preset_ids = list(presets.keys())
+    preview_ids = _dedupe(
+        [str(x) for x in preset_ids if str(x or "").strip() and str(x).strip() not in open_ids]
+    )
+    preview_packages = [
+        _onboarding_package_row(iid, selectable=False, presets=presets) for iid in preview_ids
+    ]
+
     return {
         "schema_version": doc.get("schema_version", 1),
         "open_industry_ids": open_ids,
         "open_packages": open_packages,
+        "preview_packages": preview_packages,
     }
 
 
 def build_industry_baseline_plan(
     industry_id: str,
     installed_mod_ids: list[str] | None = None,
+    *,
+    entitled_mod_ids: set[str] | None = None,
+    skip_account_custom_gate: bool = False,
 ) -> dict[str, Any]:
     doc = load_industry_baseline_document()
     labels: dict[str, str] = {str(k): str(v) for k, v in (doc.get("mod_labels") or {}).items() if k}
@@ -207,58 +385,90 @@ def build_industry_baseline_plan(
     )
     industry_mod_ids = _industry_mod_ids_for(industry_key, row)
 
-    installed = set(installed_mod_ids or _installed_mod_ids())
+    if installed_mod_ids is None:
+        installed = set(_installed_mod_ids())
+    else:
+        installed = set(installed_mod_ids)
 
     def _item(
-        mod_id: str, tier: str, required: bool, *, show_mod_id: bool | None = None
+        mod_id: str,
+        tier: str,
+        required: bool,
+        *,
+        show_mod_id: bool | None = None,
+        label: str | None = None,
     ) -> dict[str, Any]:
         if show_mod_id is None:
-            show_mod_id = tier in ("core", "host", "optional")
+            show_mod_id = tier in ("core", "host", "optional", "account_custom")
+        resolved_label = label
+        if not resolved_label:
+            if tier == "account_custom":
+                from app.mod_sdk.customer_delivery import label_for_account_custom_mod
+
+                resolved_label = label_for_account_custom_mod(mod_id, industry_key)
+            elif tier == "industry_package":
+                resolved_label = _label_for_mod(mod_id, industry_key, labels)
+            elif tier == "custom":
+                resolved_label = _label_for_custom_mod(mod_id, industry_key, labels)
+            else:
+                resolved_label = _label_for_mod(mod_id, industry_key, labels)
         return {
             "mod_id": mod_id,
-            "label": (
-                _label_for_mod(mod_id, industry_key, labels)
-                if tier != "custom"
-                else _label_for_custom_mod(mod_id, industry_key, labels)
-            ),
+            "label": resolved_label,
             "tier": tier,
             "required": required,
             "installed": _mod_installed(mod_id, installed),
             "show_mod_id": show_mod_id,
         }
 
-    custom_hint, custom_extra_ids = _custom_line_spec(
+    custom_hint, _custom_extra_ids = _custom_line_spec(
         industry_mod_ids[0] if industry_mod_ids else ""
     )
-    custom_mod_ids = _dedupe(industry_mod_ids + custom_extra_ids)
+
+    from app.mod_sdk.customer_delivery import account_custom_mod_ids_for_industry
+
+    account_custom_base = account_custom_mod_ids_for_industry(industry_key, entitled_mod_ids)
+    employee_extension_ids = (
+        _custom_employee_extension_ids(industry_key, row, doc) if account_custom_base else []
+    )
+    account_custom_ids = _dedupe(account_custom_base + employee_extension_ids)
+    custom_mod_ids = _dedupe(industry_mod_ids + account_custom_ids)
 
     groups: list[dict[str, Any]] = [
         {
             "id": "core",
-            "title": "对话底座",
-            "hint": "干净页面所需：智能对话与智能生态",
+            "title": "侧栏对话底座",
+            "hint": "干净起步：侧栏挂上智能对话与智能生态入口（宿主桥接，非员工数据）",
             "items": [_item(mid, "core", True) for mid in core_ids],
         },
         {
             "id": "host",
-            "title": "行业基础线",
-            "hint": "按所选行业建议安装的宿主 Mod",
+            "title": "行业侧栏基础线",
+            "hint": "按行业补侧栏业务菜单与表格工具等宿主能力卡片（不含 AI 员工）",
             "items": [_item(mid, "host", True) for mid in required_ids if mid not in core_ids],
         },
     ]
-    if custom_mod_ids:
+    if industry_mod_ids:
         groups.append(
             {
-                "id": "custom",
-                "title": "定制线",
-                "hint": custom_hint,
+                "id": "industry_package",
+                "title": "行业包",
+                "hint": custom_hint or "行业通用 Mod：侧栏与业务门面（不含账号定制员工）",
                 "items": [
-                    (
-                        _item(mid, "custom", False, show_mod_id=False)
-                        if mid in industry_mod_ids
-                        else _item(mid, "custom", False, show_mod_id=True)
-                    )
-                    for mid in custom_mod_ids
+                    _item(mid, "industry_package", False, show_mod_id=False)
+                    for mid in industry_mod_ids
+                ],
+            }
+        )
+    if account_custom_ids:
+        groups.append(
+            {
+                "id": "account_custom",
+                "title": "账号定制",
+                "hint": "账号定制 Mod：装齐后解锁定制能力与定制 AI 员工",
+                "items": [
+                    _item(mid, "account_custom", True, show_mod_id=True)
+                    for mid in account_custom_ids
                 ],
             }
         )
@@ -280,8 +490,19 @@ def build_industry_baseline_plan(
         it["mod_id"] for it in flat_items if not it["required"] and not it["installed"]
     ]
     missing_industry = [
-        it["mod_id"] for it in flat_items if it["tier"] == "custom" and not it["installed"]
+        it["mod_id"]
+        for it in flat_items
+        if it["tier"] in ("industry_package", "custom") and not it["installed"]
     ]
+    missing_account_custom = [
+        it["mod_id"]
+        for it in flat_items
+        if it["tier"] == "account_custom" and it["required"] and not it["installed"]
+    ]
+
+    host_baseline_ready = len(missing_required) == 0
+    industry_mod_ready = len(missing_industry) == 0
+    account_custom_ready = skip_account_custom_gate or len(missing_account_custom) == 0
 
     pkg = _industry_package(industry_key)
     industry_package = None
@@ -304,13 +525,55 @@ def build_industry_baseline_plan(
         "missing_required_mod_ids": missing_required,
         "missing_optional_mod_ids": missing_optional,
         "missing_industry_mod_ids": missing_industry,
-        "baseline_ready": len(missing_required) == 0,
-        "industry_mod_ready": len(missing_industry) == 0,
+        "account_custom_mod_ids": account_custom_ids,
+        "missing_account_custom_mod_ids": missing_account_custom,
+        "host_baseline_ready": host_baseline_ready,
+        "account_custom_ready": account_custom_ready,
+        "custom_employee_extension_mod_ids": employee_extension_ids,
+        "baseline_ready": host_baseline_ready,
+        "full_stack_ready": host_baseline_ready and account_custom_ready and industry_mod_ready,
+        "industry_mod_ready": industry_mod_ready,
     }
+
+
+async def build_industry_baseline_plan_for_request(
+    request, industry_id: str = "通用"
+) -> dict[str, Any]:
+    """会话感知：同步 market entitlement，管理员可跳过账号定制强制。"""
+    import os
+
+    from app.enterprise.mod_entitlements import (
+        enterprise_mod_filter_active,
+        get_cached_entitled_client_mod_ids,
+        is_admin_account_session,
+        sync_entitlements_from_request,
+    )
+
+    entitled: set[str] | None = None
+    skip_account_custom = False
+
+    if enterprise_mod_filter_active():
+        cookie_name = os.environ.get("SESSION_COOKIE_NAME", "session_id")
+        sid = (request.cookies.get(cookie_name) or "").strip()
+        if sid:
+            await sync_entitlements_from_request(request)
+            if is_admin_account_session():
+                skip_account_custom = True
+            entitled = get_cached_entitled_client_mod_ids() or set()
+
+    return build_industry_baseline_plan(
+        industry_id,
+        entitled_mod_ids=entitled,
+        skip_account_custom_gate=skip_account_custom,
+    )
 
 
 __all__ = [
     "build_industry_baseline_plan",
+    "build_industry_baseline_plan_for_request",
     "build_onboarding_industry_catalog",
+    "build_onboarding_industry_catalog_for_request",
+    "filter_onboarding_catalog_for_entitlements",
+    "industry_entitled_for_client_mods",
     "load_industry_baseline_document",
 ]

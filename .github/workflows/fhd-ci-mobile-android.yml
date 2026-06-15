@@ -1,4 +1,5 @@
-# CI SSOT: generated from FHD/.github/workflows/ci-mobile-android.yml — edit root copy only.
+# CI SSOT: generated from FHD/.github/workflows/ci-mobile-android.yml — DO NOT edit here.
+# Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
 name: ci-mobile-android
 
 on:
@@ -39,4 +40,3 @@ jobs:
         run: ./gradlew assemblePersonalDebug assembleEnterpriseDebug --no-daemon
       - name: Lint
         run: ./gradlew lintPersonalDebug --no-daemon
-        continue-on-error: true

@@ -1,58 +1,75 @@
 id: log-monitor-incident
 name: 日志监控与事故响应员
-version: "10.0.0"
+version: 1.2.1
+domain: 归并和分析 xiu-ci.com 所有运行日志、测试报告与覆盖率数据；生成告警摘要并推动事故处置；不修改源码。
 owner: admin
 area: server-and-ops
-domain: >-
-  归并和分析 xiu-ci.com 所有运行日志、测试报告与覆盖率数据；生成告警摘要并推动事故处置；不修改源码。
-
 scope_globs:
-  - "coverage/**"
-  - "playwright-report/**"
-  - "test-results/**"
-  - ".cursor_*_log.txt"
-  - .cursor/contracts/error-code-map.yaml
-  - "MODstore_deploy/.pytest_cache/**"
-  - MODstore_deploy/.coverage
-  - "vibe-coding/.pytest_cache/**"
-  - MODstore_deploy/docs/observability.md
-  - MODstore_deploy/docs/OPS_MONITORING.md
-  - MODstore_deploy/docs/runbooks/incident-response.md
-  - MODstore_deploy/docs/sre-operating-model.md
-  - MODstore_deploy/docs/runbooks/disaster-recovery.md
-  - MODstore_deploy/docs/runbooks/chaos-game-day.md
-  - "MODstore_deploy/chaos/**"
-  - "MODstore_deploy/monitoring/**"
-  - "MODstore_deploy/orchestration/**"
-  - "MODstore_deploy/perf/**"
-  - "MODstore_deploy/docs/runbooks/exercises/**"
-  - "yuangon/server-and-ops/log-monitor-incident/**"
-
+- coverage/**
+- playwright-report/**
+- test-results/**
+- .cursor_*_log.txt
+- .cursor/contracts/error-code-map.yaml
+- MODstore_deploy/.pytest_cache/**
+- MODstore_deploy/.coverage
+- vibe-coding/.pytest_cache/**
+- MODstore_deploy/docs/observability.md
+- MODstore_deploy/docs/OPS_MONITORING.md
+- MODstore_deploy/docs/runbooks/incident-response.md
+- MODstore_deploy/docs/sre-operating-model.md
+- MODstore_deploy/docs/runbooks/disaster-recovery.md
+- MODstore_deploy/docs/runbooks/chaos-game-day.md
+- MODstore_deploy/chaos/**
+- MODstore_deploy/monitoring/**
+- MODstore_deploy/orchestration/**
+- MODstore_deploy/perf/**
+- MODstore_deploy/docs/runbooks/exercises/**
 forbidden_globs:
-  - "MODstore_deploy/modstore_server/**/*.py"
-  - "*.vue"
-  - "*.ts"
-  - "nginx-*.conf"
-  - "_local_secrets/**"
-
-depends_on:
-  - test-qa-runner
-
-actions:
-  handlers:
-    - llm_md
-    - echo
-    - shell_exec
-
+- MODstore_deploy/modstore_server/**/*.py
+- '*.vue'
+- '*.ts'
+- nginx-*.conf
+- _local_secrets/**
 triggers:
   on_error: true
   on_quality_fail: false
-
+  on_coverage_miss: true
+  max_patch_budget_tokens: 4000
+  max_patch_steps: 5
+sla:
+  timeout_seconds: 60
+  retry_max: 2
+  escalate_to_human: true
+llm_default: auto
+llm_reasoning: auto
 skills:
-  - skill-log-triage
-  - skill-doc-ownership
-
+- skills/skill-log-triage.md
+- skills/skill-doc-ownership.md
+actions:
+  handlers:
+  - llm_md
+  - echo
+  - shell_exec
+  shell_exec:
+    command_id: read-pytest-lastfailed
+depends_on:
+- test-qa-runner
 changelog:
-  - version: "10.0.0"
-    date: "2026-06-07"
-    note: "yuangon 骨架由 bootstrap_yuangon.py 从 manifest 反向生成（v10 线内迭代）"
+- version: 1.2.1
+  date: '2026-05-08'
+  note: 全覆盖 Phase2：forbidden 收窄为 modstore_server/**/*.py，放行 chaos/perf 的 Python 演练脚本
+- version: 1.2.0
+  date: '2026-05-08'
+  note: 共享 error-code-map 契约、report_md 元数据头、skill-doc-ownership 告警规则校验输出 alert_rule_validation
+- version: 1.1.0
+  date: '2026-05-08'
+  note: 新增 skill-doc-ownership，全权负责监控/事故/SRE 域文档
+- version: 1.0.0
+  date: '2026-05-06'
+  note: 初始创建
+ci_coverage_artifacts:
+- coverage/**
+- playwright-report/**
+- test-results/**
+- MODstore_deploy/.coverage
+- MODstore_deploy/.pytest_cache/**

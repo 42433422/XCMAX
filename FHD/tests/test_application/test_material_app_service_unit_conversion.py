@@ -112,10 +112,12 @@ class TestCreateMaterial:
         repo = MagicMock()
         repo.create.return_value = {"success": True, "data": {"id": 1}}
         svc = _svc(repo)
-        svc.create_material({"a": 1}, b=2)
+        # data 位置参数与 kwargs 合并：名称来自位置 dict，unit 来自 kwargs；
+        # 服务按白名单字段装配后再交给 repo.create。
+        svc.create_material({"material_name": "X"}, unit="kg")
         call_data = repo.create.call_args[0][0]
-        assert call_data["a"] == 1
-        assert call_data["b"] == 2
+        assert call_data["name"] == "X"
+        assert call_data["unit"] == "kg"
 
 
 class TestUpdateMaterial:

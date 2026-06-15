@@ -6,8 +6,8 @@ import logging
 from typing import Any, Literal
 
 from app.db.models.user import Session as UserSession
-from app.db.session import get_db
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.db.session import get_host_db
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -18,8 +18,8 @@ VALID_ACCOUNT_KINDS: frozenset[str] = frozenset({"personal", "enterprise", "admi
 def normalize_account_kind(raw: Any, *, default: str = "enterprise") -> AccountKind:
     v = str(raw or default).strip().lower()
     if v in VALID_ACCOUNT_KINDS:
-        return v  # type: ignore[return-value]
-    return default  # type: ignore[return-value]
+        return v
+    return default
 
 
 def extract_market_user_blob(market_result: dict[str, Any] | None) -> dict[str, Any]:
@@ -93,7 +93,7 @@ def persist_session_account_meta(
     if not sid:
         return
     try:
-        with get_db() as db:
+        with get_host_db() as db:
             row = db.query(UserSession).filter(UserSession.session_id == sid).first()
             if row is None:
                 return
@@ -112,7 +112,7 @@ def persist_session_account_meta(
             if tenant_id is not None and hasattr(row, "tenant_id"):
                 row.tenant_id = int(tenant_id)
             db.commit()
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         logger.exception("persist_session_account_meta failed")
 
 
@@ -121,12 +121,12 @@ def load_session_account_meta(session_id: str) -> dict[str, Any] | None:
     if not sid:
         return None
     try:
-        with get_db() as db:
+        with get_host_db() as db:
             row = db.query(UserSession).filter(UserSession.session_id == sid).first()
             if row is None:
                 return None
             return session_row_to_meta_dict(row)
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         logger.exception("load_session_account_meta failed")
         return None
 
@@ -146,19 +146,85 @@ def session_row_to_meta_dict(row: UserSession) -> dict[str, Any]:
     }
 
 
+def enrich_session_meta_with_tenant(session_id: str, user: Any) -> dict[str, Any]:
+    """补全 tenant_id / tenant_name，并与 users.tenant_id、sessions.tenant_id 对齐。
+
+    企业用户若尚未绑定租户，登录后访问 /api/auth/me 时会自动 provision 试用租户。
+    """
+    sid = (session_id or "").strip()
+    meta = load_session_account_meta(sid) if sid else None
+    meta = dict(meta or {})
+
+    if user is not None:
+        uid = getattr(user, "id", None)
+        if uid is not None:
+            meta["local_user_id"] = int(uid)
+
+    account_kind = str(meta.get("account_kind") or "enterprise").strip() or "enterprise"
+    if account_kind == "admin":
+        return meta
+
+    tid = meta.get("tenant_id")
+    if tid is None and user is not None:
+        tid = getattr(user, "tenant_id", None)
+
+    company_brand = str(meta.get("company_brand") or "").strip()
+    username = str(getattr(user, "username", None) or "").strip() if user is not None else ""
+
+    if tid is None and meta.get("local_user_id"):
+        from app.application.enterprise_login_flow import bind_tenant_for_login
+
+        tenant_info = bind_tenant_for_login(
+            user_id=int(meta["local_user_id"]),
+            company_brand=company_brand,
+            username=username,
+        )
+        if tenant_info.get("tenant_id") is not None:
+            tid = int(tenant_info["tenant_id"])
+        if tenant_info.get("tenant_name"):
+            meta["tenant_name"] = str(tenant_info["tenant_name"])
+
+    if tid is not None:
+        meta["tenant_id"] = int(tid)
+        if not meta.get("tenant_name"):
+            try:
+                from app.db.models.tenant import Tenant
+
+                with get_host_db() as db:
+                    tenant = db.query(Tenant).filter(Tenant.id == int(tid)).first()
+                    if tenant and (tenant.name or "").strip():
+                        meta["tenant_name"] = str(tenant.name).strip()
+            except RECOVERABLE_ERRORS:
+                logger.exception("enrich_session_meta tenant name lookup failed")
+        if not meta.get("tenant_name") and company_brand:
+            meta["tenant_name"] = company_brand
+
+        if sid:
+            try:
+                with get_host_db() as db:
+                    row = db.query(UserSession).filter(UserSession.session_id == sid).first()
+                    if row is not None and getattr(row, "tenant_id", None) != int(tid):
+                        row.tenant_id = int(tid)
+                        db.commit()
+            except RECOVERABLE_ERRORS:
+                logger.exception("persist sessions.tenant_id failed session=%s", sid)
+
+    return meta
+
+
 def clear_impersonation(session_id: str) -> None:
     sid = (session_id or "").strip()
     if not sid:
         return
     try:
-        with get_db() as db:
+        with get_host_db() as db:
             row = db.query(UserSession).filter(UserSession.session_id == sid).first()
             if row is None:
                 return
             row.impersonating_market_user_id = None
             row.impersonating_username = ""
             db.commit()
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         logger.exception("clear_impersonation failed")
 
 
@@ -205,5 +271,5 @@ def audit_admin_action(
             mod_id,
             detail or operator,
         )
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         logger.exception("audit_admin_action failed")

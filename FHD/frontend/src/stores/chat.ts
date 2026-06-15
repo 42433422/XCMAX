@@ -5,6 +5,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { useJarvisChatStore } from './jarvisChat'
+import { asRecord, asArray, asString, asBoolean, asDisposable } from '@/utils/typeGuards'
 
 export const useChatStore = defineStore('chat', () => {
   const jarvis = useJarvisChatStore()
@@ -12,32 +13,32 @@ export const useChatStore = defineStore('chat', () => {
   const isLoading = ref(false)
   const isStreamingReply = ref(false)
 
-  const messages = computed(() => jarvis.messages as any[])
+  const messages = computed(() => jarvis.messages as unknown[])
   const currentTask = computed(() => jarvis.currentTask)
 
   async function sendMessage(message: string): Promise<void> {
     isLoading.value = true
     try {
-      await (jarvis as any).sendMessage?.(message)
+      await jarvis.sendMessage(message)
     } finally {
       isLoading.value = false
     }
   }
 
   function loadMoreMessages(): void {
-    ;(jarvis as any).loadMoreMessages?.()
+    // jarvisChat 暂无历史分页；保留 API 供 ChatViewOptimized 兼容
   }
 
-  async function executeTask(taskId: string): Promise<void> {
-    await (jarvis as any).executeTask?.(taskId)
+  async function executeTask(_taskId: string): Promise<void> {
+    // 任务执行由 useChatOrchestration 承担
   }
 
   function clearTask(): void {
-    ;(jarvis as any).clearTask?.()
+    jarvis.setCurrentTask(null)
   }
 
   function initChat(): void {
-    ;(jarvis as any).initChat?.()
+    jarvis.clearMessages()
   }
 
   return {

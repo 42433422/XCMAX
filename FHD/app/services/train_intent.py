@@ -21,7 +21,7 @@ from pathlib import Path
 
 import torch
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logging.basicConfig(
     level=logging.INFO,
@@ -49,20 +49,20 @@ def train_model(
             train_intent_model,
         )
     except ImportError as e:
-        logger.error(f"无法导入训练模块: {e}")
+        logger.error("无法导入训练模块: %s", e)
         logger.info("请先安装依赖: pip install torch transformers sklearn pandas")
         return None
 
     logger.info("=" * 60)
     logger.info("意图识别模型训练")
     logger.info("=" * 60)
-    logger.info(f"  数据路径: {data_path}")
-    logger.info(f"  模型: {model_name}")
-    logger.info(f"  输出目录: {output_dir}")
-    logger.info(f"  训练轮数: {epochs}")
-    logger.info(f"  批次大小: {batch_size}")
-    logger.info(f"  学习率: {learning_rate}")
-    logger.info(f"  设备: {'CUDA' if torch.cuda.is_available() else 'CPU'}")
+    logger.info("  数据路径: %s", data_path)
+    logger.info("  模型: %s", model_name)
+    logger.info("  输出目录: %s", output_dir)
+    logger.info("  训练轮数: %s", epochs)
+    logger.info("  批次大小: %s", batch_size)
+    logger.info("  学习率: %s", learning_rate)
+    logger.info("  设备: %s", 'CUDA' if torch.cuda.is_available() else 'CPU')
     logger.info("=" * 60)
 
     try:
@@ -82,12 +82,12 @@ def train_model(
 
         logger.info("=" * 60)
         logger.info("训练完成!")
-        logger.info(f"模型保存在: {model_path}")
+        logger.info("模型保存在: %s", model_path)
         logger.info("=" * 60)
         return str(model_path)
 
-    except OPERATIONAL_ERRORS as e:
-        logger.error(f"训练失败: {e}", exc_info=True)
+    except RECOVERABLE_ERRORS as e:
+        logger.error("训练失败: %s", e, exc_info=True)
         return None
 
 
@@ -100,7 +100,7 @@ def evaluate_model(model_path: str, data_path: str | None = None):
             get_bert_intent_service,  # noqa: F401
         )
     except ImportError as e:
-        logger.error(f"无法导入推理模块: {e}")
+        logger.error("无法导入推理模块: %s", e)
         return
 
     logger.info("=" * 60)
@@ -143,12 +143,12 @@ def evaluate_model(model_path: str, data_path: str | None = None):
             correct += 1
         status = "✓" if is_correct else "✗"
         logger.info(
-            f"  {status} '{text}' -> {predicted} (期望: {expected}, 置信度: {confidence:.4f})"
+            f"  {status} '{text}' -> {predicted} (期望: {expected}, 置信度: {confidence:.4f})"  # noqa: G004
         )
 
     accuracy = correct / total * 100
     logger.info("=" * 60)
-    logger.info(f"准确率: {accuracy:.2f}% ({correct}/{total})")
+    logger.info(f"准确率: {accuracy:.2f}% ({correct}/{total})")  # noqa: G004
     logger.info("=" * 60)
 
 
@@ -157,7 +157,7 @@ def test_model(model_path: str, texts: list[str]):
     try:
         from app.services.bert_intent_service import BertIntentClassifier
     except ImportError as e:
-        logger.error(f"无法导入推理模块: {e}")
+        logger.error("无法导入推理模块: %s", e)
         return
 
     logger.info("=" * 60)
@@ -171,12 +171,12 @@ def test_model(model_path: str, texts: list[str]):
 
     for text in texts:
         result = classifier.predict(text, return_probs=True)
-        logger.info(f"\n文本: {text}")
-        logger.info(f"  意图: {result['intent']}")
-        logger.info(f"  置信度: {result['confidence']:.4f}")
+        logger.info("\n文本: %s", text)
+        logger.info("  意图: %s", result['intent'])
+        logger.info(f"  置信度: {result['confidence']:.4f}")  # noqa: G004
         if "all_probs" in result and result["all_probs"]:
             top3 = sorted(result["all_probs"].items(), key=lambda x: x[1], reverse=True)[:3]
-            logger.info(f"  Top-3: {', '.join([f'{k}: {v:.4f}' for k, v in top3])}")
+            logger.info("  Top-3: %s", ', '.join([f'{k}: {v:.4f}' for k, v in top3]))
 
     logger.info("=" * 60)
 

@@ -2,6 +2,7 @@ import { ref, computed, type Ref } from 'vue'
 import { useBatchAnalyzeStore, type SheetInfo, type SheetGroup } from '../stores/batchAnalyze'
 import templatePreviewApi from '../api/templatePreview'
 import templateScopeRules from '../shared/templateScopeRules.json'
+import { asRecord, asArray, asString, asBoolean, asDisposable } from '@/utils/typeGuards'
 
 interface TemplateScopeRule {
   label: string
@@ -260,13 +261,16 @@ async function loadTemplates(): Promise<Array<{ id: string; name: string; templa
     }
     if (res?.success && Array.isArray(res.templates)) {
       return res.templates
-        .filter((t: any) => t?.category === 'excel')
-        .map((t: any) => ({
-          id: t.id,
-          name: t.name || t.template_name || '未命名模板',
-          templateType: t.template_type || '',
-          businessScope: t.business_scope || ''
-        }))
+        .filter((t: unknown) => asString(asRecord(t).category) === 'excel')
+        .map((t: unknown) => {
+          const row = asRecord(t)
+          return {
+            id: asString(row.id),
+            name: asString(row.name || row.template_name, '未命名模板'),
+            templateType: asString(row.template_type),
+            businessScope: asString(row.business_scope),
+          }
+        })
     }
   } catch (e) {
     console.error('加载模板列表失败:', e)
@@ -276,7 +280,7 @@ async function loadTemplates(): Promise<Array<{ id: string; name: string; templa
 
 export function useBatchAnalyze() {
   const store = useBatchAnalyzeStore()
-  const xlsxLibPromise = ref<Promise<any> | null>(null)
+  const xlsxLibPromise = ref<Promise<typeof import('xlsx')> | null>(null)
 
   const loadXlsx = async () => {
     if (!xlsxLibPromise.value) {
@@ -297,23 +301,24 @@ export function useBatchAnalyze() {
       const sheetName = sheetNames[i]
       const sheet = workbook.Sheets[sheetName]
 
-      if (!sheet || sheet['!ref'] == null) continue
+      if (!sheet || (sheet as Record<string, unknown>)['!ref'] == null) continue
 
-      const jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as any[][]
+      const jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as unknown[][]
       if (!jsonData || jsonData.length === 0) continue
 
       const headerRow = jsonData[0] || []
       const fields: string[] = headerRow
-        .map((cell: any) => String(cell ?? '').trim())
+        .map((cell: unknown) => String(cell ?? '').trim())
         .filter((cell: string) => cell.length > 0)
 
       const rowCount = Math.max(0, jsonData.length - 1)
 
-      const sampleRows: Record<string, any>[] = []
+      const sampleRows: Record<string, unknown>[] = []
       for (let r = 1; r < Math.min(jsonData.length, 4); r++) {
-        const row: Record<string, any> = {}
+        const row: Record<string, unknown> = {}
         for (let c = 0; c < headerRow.length; c++) {
-          row[headerRow[c]] = jsonData[r][c] ?? ''
+          const key = asString(headerRow[c])
+          row[key] = jsonData[r][c] ?? ''
         }
         sampleRows.push(row)
       }
@@ -405,7 +410,7 @@ export function useBatchAnalyze() {
     return groups
   }
 
-  async function extractGridForSheet(file: File, sheetName: string): Promise<any> {
+  async function extractGridForSheet(file: File, sheetName: string): Promise<unknown> {
     try {
       const formData = new FormData()
       formData.append('file', file)

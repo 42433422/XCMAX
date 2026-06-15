@@ -3,10 +3,10 @@ from __future__ import annotations
 import json
 import os
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = __import__("logging").getLogger(__name__)
 
@@ -47,7 +47,7 @@ class AnalysisSaveService(NeuroEventPublisherMixin):
                 "filepath": filepath,
                 "created_at": save_data["created_at"],
             }
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.exception("Failed to save analysis: %s", e)
             return {"success": False, "message": str(e)}
 
@@ -78,13 +78,13 @@ class AnalysisSaveService(NeuroEventPublisherMixin):
                             "filepath": filepath,
                         }
                     )
-                except OPERATIONAL_ERRORS:
+                except RECOVERABLE_ERRORS:
                     continue
 
             analyses.sort(key=lambda x: x.get("created_at", ""), reverse=True)
 
             return analyses
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.exception("Failed to list analyses: %s", e)
             return []
 
@@ -100,10 +100,10 @@ class AnalysisSaveService(NeuroEventPublisherMixin):
                     data = json.load(f)
 
                 if data.get("id") == analysis_id:
-                    return data
+                    return cast("dict[str, Any] | None", data)
 
             return None
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.exception("Failed to get analysis: %s", e)
             return None
 
@@ -121,7 +121,7 @@ class AnalysisSaveService(NeuroEventPublisherMixin):
                 return {"success": True, "message": "Analysis deleted"}
 
             return {"success": False, "message": "File not found"}
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.exception("Failed to delete analysis: %s", e)
             return {"success": False, "message": str(e)}
 
@@ -281,7 +281,7 @@ class AnalysisSaveService(NeuroEventPublisherMixin):
                 "file_name": file_name,
                 "content": output.read(),
             }
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.exception("Export to XLSX failed: %s", e)
             return {"success": False, "message": str(e)}
 
@@ -299,7 +299,7 @@ class AnalysisSaveService(NeuroEventPublisherMixin):
                 "by_type": type_counts,
                 "latest": analyses[:5] if analyses else [],
             }
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.exception("Statistics failed: %s", e)
             return {"total_analyses": 0, "by_type": {}, "latest": []}
 

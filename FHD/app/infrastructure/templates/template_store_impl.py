@@ -5,13 +5,13 @@ import logging
 import os
 import shutil
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import text
 
 from app.application.ports.template_store import TemplateStorePort
 from app.db.session import get_db
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -120,7 +120,7 @@ class FileSystemTemplateStore(TemplateStorePort):
                             "source": "fs_scan",
                         }
                     )
-            except OPERATIONAL_ERRORS:
+            except RECOVERABLE_ERRORS:
                 continue
         return templates
 
@@ -169,7 +169,7 @@ class FileSystemTemplateStore(TemplateStorePort):
                             "source": "fs_scan",
                         }
                     )
-            except OPERATIONAL_ERRORS:
+            except RECOVERABLE_ERRORS:
                 continue
         return templates
 
@@ -192,7 +192,7 @@ class FileSystemTemplateStore(TemplateStorePort):
                         "WHERE is_active IS NULL OR is_active = 1"
                     )
                 ).fetchall()
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             return []
 
         out: list[dict] = []
@@ -293,8 +293,8 @@ class FileSystemTemplateStore(TemplateStorePort):
                             {"id": db_id},
                         ).fetchone()
                     if row and row.original_file_path and os.path.exists(row.original_file_path):
-                        return row.original_file_path
-                except OPERATIONAL_ERRORS:
+                        return cast("str | None", row.original_file_path)
+                except RECOVERABLE_ERRORS:
                     pass
 
         # 1.5) 支持 "fs:<filename>" 形式（文件扫描来源）
@@ -390,7 +390,7 @@ class FileSystemTemplateStore(TemplateStorePort):
                     },
                 )
                 db.commit()
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             # 表不存在或结构不兼容时忽略，仍保持文件模式可用
             pass
 
@@ -449,6 +449,6 @@ class FileSystemTemplateStore(TemplateStorePort):
                 db.commit()
                 new_id = getattr(res, "lastrowid", None)
             return {"success": True, "message": "模板创建成功", "id": new_id}
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.error("save_template failed: %s", e, exc_info=True)
             return {"success": False, "message": str(e)}

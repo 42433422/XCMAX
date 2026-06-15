@@ -1,6 +1,66 @@
-type EmployeeConfigRecord = Record<string, any>
+interface EmployeeIdentity {
+  id?: string
+  version?: string
+  artifact?: string
+  name?: string
+  description?: string
+  [key: string]: unknown
+}
 
-const DEFAULT_IDENTITY = {
+interface EmployeeModelConfig {
+  provider?: string
+  model_name?: string
+  temperature?: number
+  max_tokens?: number
+  top_p?: number
+  [key: string]: unknown
+}
+
+interface EmployeeAgentConfig {
+  system_prompt?: string
+  role?: {
+    name?: string
+    persona?: string
+    tone?: string
+    expertise?: unknown[]
+    [key: string]: unknown
+  }
+  behavior_rules?: unknown[]
+  few_shot_examples?: unknown[]
+  model?: EmployeeModelConfig
+  [key: string]: unknown
+}
+
+interface EmployeeConfigRecord {
+  identity?: EmployeeIdentity
+  perception?: Record<string, unknown>
+  memory?: Record<string, unknown>
+  cognition?: {
+    agent?: EmployeeAgentConfig
+    skills?: unknown[]
+    [key: string]: unknown
+  }
+  actions?: Record<string, unknown>
+  collaboration?: {
+    workflow?: { workflow_id?: number; [key: string]: unknown }
+    permissions?: { access_level?: string; [key: string]: unknown }
+    [key: string]: unknown
+  }
+  management?: Record<string, unknown>
+  commerce?: { industry?: string; price?: number; [key: string]: unknown }
+  workflow_employees?: unknown[]
+  metadata?: Record<string, unknown>
+  industry?: string
+  panel_summary?: string
+  id?: string
+  version?: string
+  artifact?: string
+  name?: string
+  description?: string
+  [key: string]: unknown
+}
+
+const DEFAULT_IDENTITY: EmployeeIdentity = {
   id: '',
   version: '1.0.0',
   artifact: 'employee_pack',
@@ -144,15 +204,20 @@ export function upgradeLegacyToV2(inputManifest: unknown = {}): EmployeeConfigRe
   const legacy: EmployeeConfigRecord =
     inputManifest && typeof inputManifest === 'object' ? (inputManifest as EmployeeConfigRecord) : {}
   const c = createEmptyEmployeeConfigV2()
+  c.identity = c.identity || {}
   c.identity.id = String(legacy.id || '').trim()
   c.identity.version = String(legacy.version || '1.0.0').trim() || '1.0.0'
   c.identity.artifact = String(legacy.artifact || 'employee_pack').trim() || 'employee_pack'
   c.identity.name = String(legacy.name || '').trim()
   c.identity.description = String(legacy.description || '').trim()
+  c.cognition = c.cognition || { agent: {} }
+  c.cognition.agent = c.cognition.agent || {}
   c.cognition.agent.system_prompt = String(legacy.panel_summary || '').trim()
   const wf = Array.isArray(legacy.workflow_employees) ? legacy.workflow_employees : []
-  const first = wf[0] && typeof wf[0] === 'object' ? wf[0] : {}
+  const first = wf[0] && typeof wf[0] === 'object' ? (wf[0] as Record<string, unknown>) : {}
   const wid = Number.parseInt(String(first.workflow_id ?? first.workflowId ?? 0), 10)
+  c.collaboration = c.collaboration || { workflow: { workflow_id: 0 } }
+  c.collaboration.workflow = c.collaboration.workflow || { workflow_id: 0 }
   c.collaboration.workflow.workflow_id = Number.isFinite(wid) && wid > 0 ? wid : 0
   c.workflow_employees = wf
   const price = Number(legacy?.commerce?.price)
@@ -204,11 +269,16 @@ export function validateEmployeeConfigV2(config: unknown): { valid: boolean; err
   if (access && !['read_only', 'read_write', 'admin'].includes(access)) {
     errs.push('permissions.access_level 仅支持 read_only/read_write/admin')
   }
-  if (c?.perception?.audio?.asr?.enabled && !c?.actions?.voice_output) {
+  const audio = c?.perception?.audio as Record<string, unknown> | undefined
+  const asr = audio?.asr as Record<string, unknown> | undefined
+  if (asr?.enabled && !c?.actions?.voice_output) {
     errs.push('启用 ASR 需要配置 actions.voice_output')
   }
-  if (c?.memory?.long_term?.enabled && !c?.cognition?.agent) {
+  const longTerm = c?.memory?.long_term as Record<string, unknown> | undefined
+  if (longTerm?.enabled && !c?.cognition?.agent) {
     errs.push('启用知识库需要配置 cognition.agent')
   }
   return { valid: errs.length === 0, errors: errs }
 }
+
+export type { EmployeeConfigRecord }

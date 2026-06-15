@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 REPO = Path(__file__).resolve().parents[1]
-MOD_DIR = REPO / "mods" / "xcagi-erp-domain-bridge"
+MOD_DIR = REPO / "mods-admin-runtime" / "xcagi-erp-domain-bridge"
 
 
 def test_erp_domain_mod_manifest():
@@ -87,7 +87,7 @@ def test_domain_handlers_products_list(monkeypatch):
         lambda: False,
     )
     monkeypatch.setattr(
-        "app.fastapi_routes.xcagi_compat_db_product_queries._load_products_list_impl_pg",
+        "app.infrastructure.persistence.compat_db.product_queries._load_products_list_impl_pg",
         lambda page, per_page, keyword, unit: ([{"id": 1, "name": "A"}], 1, None),
     )
     monkeypatch.setattr(
@@ -130,7 +130,7 @@ def test_try_invoke_products_list(monkeypatch):
         lambda: ("xcagi-erp-domain-bridge", str(MOD_DIR)),
     )
     monkeypatch.setattr(
-        "app.fastapi_routes.xcagi_compat_db_product_queries._load_products_list_impl_pg",
+        "app.infrastructure.persistence.compat_db.product_queries._load_products_list_impl_pg",
         lambda page, per_page, keyword, unit: ([], 0, None),
     )
     monkeypatch.setattr(
@@ -167,7 +167,7 @@ def test_domain_handlers_customers_list(monkeypatch):
         lambda: False,
     )
     monkeypatch.setattr(
-        "app.fastapi_routes.xcagi_compat_db_queries._load_customers_rows",
+        "app.infrastructure.persistence.compat_db.queries._load_customers_rows",
         lambda: [{"id": 1, "customer_name": "测试"}],
     )
     monkeypatch.setattr(

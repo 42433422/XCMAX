@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Any
 
 from app.application.facades.inventory_facade import InventoryService
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
 class InventoryAppService:
@@ -36,7 +36,7 @@ class InventoryAppService:
                 threshold=threshold
             )
             mat_items = mat_result.get("data") or []
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             pass
         return {
             "success": True,

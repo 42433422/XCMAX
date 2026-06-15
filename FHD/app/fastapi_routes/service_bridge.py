@@ -5,14 +5,14 @@ import logging
 import os
 import uuid
 from datetime import UTC, datetime
-from typing import Optional
+from typing import Optional, cast
 
 import httpx
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from app.db.session import get_db
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +35,7 @@ def _get_or_create_instance_id() -> str:
         with open(_INSTANCE_ID_FILE, "w", encoding="utf-8") as f:
             f.write(instance_id)
         return instance_id
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         return f"xcagi-host-{uuid.uuid4().hex[:8]}"
 
 
@@ -49,7 +49,7 @@ def _get_config_value(key: str, default: str = "") -> str:
 
         cfg = db.query(ServiceBridgeConfig).filter(ServiceBridgeConfig.config_key == key).first()
         if cfg:
-            return cfg.config_value
+            return cast("str", cfg.config_value)
     env_key = f"SERVICE_BRIDGE_{key.upper()}"
     return os.environ.get(env_key, default)
 
@@ -365,7 +365,7 @@ async def send_outbox(body: OutboxCreate):
                 db.flush()
                 result = req.to_dict()
         return {"success": False, "data": result, "error": "无法连接到主服务器"}
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.error("outbox forward failed: %s", e)
         raise HTTPException(status_code=502, detail=f"转发到主服务器失败: {e}") from e
 
@@ -402,7 +402,7 @@ async def sync_outbox():
             extra = {}
             try:
                 extra = json.loads(req.extra_data) if req.extra_data else {}
-            except OPERATIONAL_ERRORS:
+            except RECOVERABLE_ERRORS:
                 pass
             remote_id = extra.get("remote_id")
             if not remote_id:
@@ -419,7 +419,7 @@ async def sync_outbox():
                             req.responded_by = remote_data.get("responded_by")
                             req.status = remote_data.get("status", req.status)
                             synced_count += 1
-            except OPERATIONAL_ERRORS:
+            except RECOVERABLE_ERRORS:
                 pass
         db.flush()
     return {"success": True, "synced_count": synced_count}
@@ -435,7 +435,7 @@ async def ping_main_server():
             resp = await client.get(f"{main_server_url}/api/ping")
             resp.raise_for_status()
             return {"success": True, "connected": True, "main_server": main_server_url}
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         return {
             "success": False,
             "connected": False,

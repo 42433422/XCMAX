@@ -4,7 +4,10 @@ param(
   [Parameter(Mandatory = $true)]
   [ValidateSet('personal', 'enterprise')]
   [string]$ProductSku,
-  [switch]$SkipUiInstaller
+  [switch]$SkipUiInstaller,
+  [string]$SunbirdSeedZipPath = '',
+  [string]$InstallerOutputSubdir = '',
+  [string]$InstallerFileName = ''
 )
 
 $ErrorActionPreference = "Stop"
@@ -27,8 +30,13 @@ $skuUpdateUrls = @{
 
 $label = $skuLabels[$ProductSku]
 $releaseRoot = Join-Path $Root "release\xcagi-v$Version"
-$outDir = Join-Path $releaseRoot $ProductSku
-$finalSetupName = "XCAGI-$label-Setup-$Version-x64.exe"
+$outSubdir = if ($InstallerOutputSubdir) { $InstallerOutputSubdir } else { $ProductSku }
+$outDir = Join-Path $releaseRoot $outSubdir
+if ($InstallerFileName) {
+  $finalSetupName = $InstallerFileName
+} else {
+  $finalSetupName = "XCAGI-$label-Setup-$Version-x64.exe"
+}
 $finalSetupPath = Join-Path $outDir $finalSetupName
 $licenseSrc = Join-Path $Root "tools\XcagiInstaller\Assets\LICENSE.zh-CN.txt"
 if (-not (Test-Path $licenseSrc)) {
@@ -62,7 +70,7 @@ $ebAppId = $skuAppIds[$ProductSku]
 $ebPublishUrl = $skuUpdateUrls[$ProductSku]
 $ebArtifact = "XCAGI-$label-Setup-`${version}-`${arch}.`${ext}"
 npx electron-builder --win nsis zip --x64 `
-  "--config.directories.output=../release/xcagi-v$Version/$ProductSku" `
+  "--config.directories.output=../release/xcagi-v$Version/$outSubdir" `
   "--config.appId=$ebAppId" `
   "--config.publish.url=$ebPublishUrl" `
   "--config.nsis.artifactName=$ebArtifact" `
@@ -105,6 +113,9 @@ if (-not $SkipUiInstaller) {
   if (Test-Path $licenseSrc) {
     $publishArgs += "-p:LicenseFilePath=$licenseSrc"
   }
+  if ($SunbirdSeedZipPath -and (Test-Path $SunbirdSeedZipPath)) {
+    $publishArgs += "-p:SunbirdSeedZipPath=$SunbirdSeedZipPath"
+  }
   & dotnet @publishArgs
 
   $uiExe = Get-ChildItem $uiOut -Filter "XcagiInstaller.exe" | Select-Object -First 1
@@ -145,4 +156,4 @@ dotnet publish $dlProj -c Release -r win-x64 --self-contained true `
   -o $dlOut
 
 Write-Host ""
-Write-Host "Done: release\xcagi-v$Version\$ProductSku\$finalSetupName"
+Write-Host "Done: release\xcagi-v$Version\$outSubdir\$finalSetupName"

@@ -9,9 +9,9 @@ import logging
 import os
 import sqlite3
 from contextlib import contextmanager
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.time import utc_now_naive
 
 logger = logging.getLogger(__name__)
@@ -39,7 +39,7 @@ class ModIndexDatabase:
         try:
             yield conn
             conn.commit()
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             conn.rollback()
             raise e
         finally:
@@ -129,7 +129,7 @@ class ModIndexDatabase:
             """
             )
 
-            logger.info(f"MOD index database initialized: {self.db_path}")
+            logger.info("MOD index database initialized: %s", self.db_path)
 
     def upsert_mod(self, metadata: dict[str, Any], package_file: str) -> bool:
         """插入或更新 MOD 元数据"""
@@ -174,11 +174,11 @@ class ModIndexDatabase:
                         (mod_id, dep_id, version_spec, dep_type),
                     )
 
-                logger.info(f"MOD metadata indexed: {mod_id}")
+                logger.info("MOD metadata indexed: %s", mod_id)
                 return True
 
-        except OPERATIONAL_ERRORS as e:
-            logger.error(f"Failed to index MOD metadata: {e}")
+        except RECOVERABLE_ERRORS as e:
+            logger.error("Failed to index MOD metadata: %s", e)
             return False
 
     def get_mod(self, mod_id: str) -> dict[str, Any] | None:
@@ -273,8 +273,8 @@ class ModIndexDatabase:
                 self._recalculate_statistics(conn, mod_id)
 
                 return True
-        except OPERATIONAL_ERRORS as e:
-            logger.error(f"Failed to add rating: {e}")
+        except RECOVERABLE_ERRORS as e:
+            logger.error("Failed to add rating: %s", e)
             return False
 
     def get_ratings(self, mod_id: str) -> list[dict[str, Any]]:
@@ -370,15 +370,15 @@ class ModIndexService:
             is_valid, msg, info = mm.validate_mod_package(package_path)
 
             if not is_valid:
-                logger.warning(f"Cannot index invalid MOD: {msg}")
+                logger.warning("Cannot index invalid MOD: %s", msg)
                 return False
 
             info["file_size"] = os.path.getsize(package_path)
 
-            return self.db.upsert_mod(info, package_file)
+            return cast("bool", self.db.upsert_mod(info, package_file))
 
-        except OPERATIONAL_ERRORS as e:
-            logger.error(f"Failed to index MOD package: {e}")
+        except RECOVERABLE_ERRORS as e:
+            logger.error("Failed to index MOD package: %s", e)
             return False
 
     def rebuild_index(self, store_dir: str | None = None) -> tuple[int, int]:
@@ -394,13 +394,13 @@ class ModIndexService:
                 store_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "mod_store")
 
         if not os.path.isdir(store_dir):
-            logger.warning(f"Store directory does not exist: {store_dir}")
+            logger.warning("Store directory does not exist: %s", store_dir)
             return 0, 0
 
         success_count = 0
         fail_count = 0
 
-        logger.info(f"Rebuilding MOD index from: {store_dir}")
+        logger.info("Rebuilding MOD index: %s", store_dir)
 
         for entry in os.listdir(store_dir):
             if entry.endswith(".xcmod") or entry.endswith(".xcemp"):
@@ -411,7 +411,7 @@ class ModIndexService:
                 else:
                     fail_count += 1
 
-        logger.info(f"MOD index rebuilt: {success_count} success, {fail_count} failed")
+        logger.info("MOD index rebuilt: %s success, %s failed", success_count, fail_count)
         return success_count, fail_count
 
     def search(
@@ -422,23 +422,23 @@ class ModIndexService:
         limit: int = 100,
     ) -> list[dict[str, Any]]:
         """搜索 MOD"""
-        return self.db.search_mods(query, author, installed_only, limit)
+        return cast("list[dict[str, Any]]", self.db.search_mods(query, author, installed_only, limit))
 
     def get_mod(self, mod_id: str) -> dict[str, Any] | None:
         """获取 MOD 详情"""
-        return self.db.get_mod(mod_id)
+        return cast("dict[str, Any] | None", self.db.get_mod(mod_id))
 
     def get_all_mods(self) -> list[dict[str, Any]]:
         """获取所有 MOD"""
-        return self.db.get_all_mods()
+        return cast("list[dict[str, Any]]", self.db.get_all_mods())
 
     def get_popular_mods(self, limit: int = 10) -> list[dict[str, Any]]:
         """获取热门 MOD"""
-        return self.db.get_popular_mods(limit)
+        return cast("list[dict[str, Any]]", self.db.get_popular_mods(limit))
 
     def get_recent_mods(self, limit: int = 10) -> list[dict[str, Any]]:
         """获取最新 MOD"""
-        return self.db.get_recent_mods(limit)
+        return cast("list[dict[str, Any]]", self.db.get_recent_mods(limit))
 
     def add_rating(
         self,
@@ -449,18 +449,18 @@ class ModIndexService:
     ) -> bool:
         """添加评分"""
         if rating < 1 or rating > 5:
-            logger.error(f"Invalid rating: {rating}")
+            logger.error("Invalid rating: %s", rating)
             return False
 
-        return self.db.add_rating(mod_id, user_id, rating, comment)
+        return cast("bool", self.db.add_rating(mod_id, user_id, rating, comment))
 
     def get_ratings(self, mod_id: str) -> list[dict[str, Any]]:
         """获取评分列表"""
-        return self.db.get_ratings(mod_id)
+        return cast("list[dict[str, Any]]", self.db.get_ratings(mod_id))
 
     def get_statistics(self, mod_id: str) -> dict[str, Any] | None:
         """获取统计信息"""
-        return self.db.get_statistics(mod_id)
+        return cast("dict[str, Any] | None", self.db.get_statistics(mod_id))
 
 
 def get_mod_index_service() -> ModIndexService:

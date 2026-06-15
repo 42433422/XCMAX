@@ -36,7 +36,7 @@ def register_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(StarletteHTTPException)
     async def http_exception_handler(request: Request, exc: StarletteHTTPException):
-        logger.warning(f"HTTP Exception {exc.status_code}: {exc.detail} - Path: {request.url.path}")
+        logger.warning("HTTP Exception %s: %s - Path: %s", exc.status_code, exc.detail, request.url.path)
         return JSONResponse(
             status_code=exc.status_code,
             content={
@@ -49,7 +49,7 @@ def register_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(RequestValidationError)
     async def validation_exception_handler(request: Request, exc: RequestValidationError):
-        logger.warning(f"Validation Error: {exc.errors()} - Path: {request.url.path}")
+        logger.warning("Validation Error: %s - Path: %s", exc.errors(), request.url.path)
         errors = []
         for error in exc.errors():
             errors.append(
@@ -72,7 +72,7 @@ def register_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(Exception)
     async def general_exception_handler(request: Request, exc: Exception):
-        logger.exception(f"Unhandled Exception: {exc} - Path: {request.url.path}")
+        logger.exception("Unhandled Exception: %s - Path: %s", exc, request.url.path)
         return JSONResponse(
             status_code=500,
             content={

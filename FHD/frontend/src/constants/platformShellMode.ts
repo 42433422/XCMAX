@@ -3,7 +3,9 @@ import {
   shouldAutoEnableEditionPlatformShell,
   shouldAutoEnableMinimalPlatformShell,
   shouldAutoEnablePlatformShell,
+  hasInstalledAccountCustomMod,
 } from '@/constants/genericModPack'
+import { removeTenantScopedStorageItem } from '@/utils/tenantStorageScope'
 import { XCAGI_ACTIVE_EXTENSION_MOD_ID_KEY } from '@/utils/xcagiStorageKeys'
 
 /**
@@ -23,10 +25,16 @@ export const LS_PLATFORM_SHELL_AUTO_GENERIC = 'xcagi_platform_shell_auto_generic
 
 export const LS_PLATFORM_SHELL_AUTO_MINIMAL = 'xcagi_platform_shell_auto_minimal'
 
-/** 壳模式保留的侧栏 key（与 router name 对齐） */
+/** 壳模式保留的侧栏 key（与 router name 对齐；含员工工作流分组及子项） */
 export const SHELL_CORE_MENU_KEYS = new Set([
   'chat',
+  'im',
   'ai-ecosystem',
+  'employee-workflow',
+  'workflow-employee-space',
+  'settings',
+  'mod-store',
+  'desktop-runtime',
   'login',
 ])
 
@@ -38,6 +46,72 @@ export const SHELL_CORE_ROUTE_NAMES = new Set([
   'lan-gate',
   'login',
 ])
+
+/** 账号定制 Mod 装齐后开放的宿主 ERP 侧栏（与 industry preset menuLabels 对齐） */
+export const INDUSTRY_DELIVERY_ERP_MENU_KEYS = [
+  'products',
+  'customers',
+  'orders',
+  'shipment-records',
+  'materials',
+  'traditional-mode',
+  'print',
+  'tools',
+  'approval-hub',
+  'enterprise-customer-service',
+  'internal-customer-service',
+  'wechat-contacts',
+] as const
+
+export const INDUSTRY_DELIVERY_ROUTE_NAMES = new Set<string>([
+  ...INDUSTRY_DELIVERY_ERP_MENU_KEYS,
+  'inventory',
+  'printer-list',
+  'template-preview',
+  'data-sources',
+  'kitten-finance',
+  'workflow-visualization',
+  'workflow-employee-space',
+  'other-tools',
+  'taiyangniao-pro-home',
+  'qsm-pro-home',
+  'sz-qsm-pro-home',
+])
+
+/**
+ * 平台壳模式下是否放开行业业务侧栏（主导航长出行业菜单）。
+ * 触发任一：
+ * - 引导第三步「补基础线」已确认（host_pack_acknowledged）—— 用户走完引导即长出；
+ * - 已安装账号定制 Mod（太阳鸟/奇士美等 entitlement 直发场景）。
+ * 未走引导且无定制时保持初始化的 4 项壳菜单。
+ */
+export function shouldExposeIndustrySidebar(
+  installedModIds: Iterable<string>,
+  hostPackAcknowledged = false,
+): boolean {
+  if (hostPackAcknowledged) return true
+  return hasInstalledAccountCustomMod(installedModIds)
+}
+
+export function resolvePlatformShellMenuKeys(
+  installedModIds: Iterable<string>,
+  hostPackAcknowledged = false,
+): Set<string> {
+  const keys = new Set(SHELL_CORE_MENU_KEYS)
+  if (!shouldExposeIndustrySidebar(installedModIds, hostPackAcknowledged)) return keys
+  for (const k of INDUSTRY_DELIVERY_ERP_MENU_KEYS) keys.add(k)
+  return keys
+}
+
+export function isIndustryDeliveryRouteName(
+  routeName: string,
+  installedModIds: Iterable<string>,
+  hostPackAcknowledged = false,
+): boolean {
+  const name = String(routeName || '').trim()
+  if (!name || !INDUSTRY_DELIVERY_ROUTE_NAMES.has(name)) return false
+  return shouldExposeIndustrySidebar(installedModIds, hostPackAcknowledged)
+}
 
 export function readPlatformShellModeFromStorage(): boolean {
   if (typeof localStorage === 'undefined') return false
@@ -100,7 +174,7 @@ export function bootstrapEditionDefaults(): void {
   bootstrapGenericEditionDefaults()
 }
 
-function isEnterpriseProductSkuBuild(): boolean {
+export function isEnterpriseProductSkuBuild(): boolean {
   const raw = String(import.meta.env.VITE_XCAGI_PRODUCT_SKU || '').trim().toLowerCase()
   return raw === 'enterprise'
 }
@@ -123,7 +197,7 @@ export function bootstrapAdminConsoleShellDefaults(): void {
   if (typeof localStorage === 'undefined') return
   try {
     localStorage.setItem(LS_PLATFORM_SHELL_MODE, '0')
-    localStorage.removeItem(XCAGI_ACTIVE_EXTENSION_MOD_ID_KEY)
+    removeTenantScopedStorageItem(XCAGI_ACTIVE_EXTENSION_MOD_ID_KEY)
     localStorage.setItem('xcagi_lan_mod_facade_enabled', '0')
     localStorage.setItem('xcagi_planner_mod_facade_enabled', '0')
     localStorage.setItem('xcagi_erp_domain_mod_facade_enabled', '0')
@@ -182,6 +256,7 @@ export function applyGenericPackPlatformShell(installedModIds: string[]): void {
 
 /** 按构建 edition 或已安装 Mod 集自动开壳 */
 export function applyEditionPackPlatformShell(installedModIds: string[]): void {
+  if (isEnterpriseProductSkuBuild()) return
   const edition = readBuildEdition()
   if (edition === 'minimal') {
     applyMinimalPackPlatformShell(installedModIds)

@@ -1,0 +1,57 @@
+# 拆仓后的 modstore-payment-java 独立部署工作流。
+# 变量：
+#   DEPLOY_HOST, DEPLOY_USER, DEPLOY_SSH_PRIVATE_KEY
+#   DEPLOY_PAYMENT_REMOTE_DIR（必填，独立工作树路径）
+#   DEPLOY_GIT_BRANCH（默认 main）
+#   DEPLOY_PAYMENT_HEALTH_URL（默认 http://127.0.0.1:8080/actuator/health）
+
+name: Deploy payment (Java)
+
+on:
+  workflow_run:
+    workflows: ['CI - Payment Java']
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-payment-java-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: >-
+      ${{
+        github.event_name == 'workflow_dispatch' ||
+        (
+          github.event.workflow_run.conclusion == 'success' &&
+          github.event.workflow_run.head_branch == 'main' &&
+          github.event.workflow_run.event == 'push'
+        )
+      }}
+    steps:
+      - name: SSH — git pull + mvn package + restart + health
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          script_stop: true
+          command_timeout: 25m
+          script: |
+            set -euo pipefail
+            PAYMENT_DIR="${{ vars.DEPLOY_PAYMENT_REMOTE_DIR }}"
+            BRANCH="${{ vars.DEPLOY_GIT_BRANCH }}"
+            HEALTH_URL="${{ vars.DEPLOY_PAYMENT_HEALTH_URL }}"
+            if [ -z "${BRANCH}" ]; then BRANCH="main"; fi
+            if [ -z "${HEALTH_URL}" ]; then HEALTH_URL="http://127.0.0.1:8080/actuator/health"; fi
+            if [ -z "${PAYMENT_DIR}" ]; then
+              echo "[err] 必须设置 DEPLOY_PAYMENT_REMOTE_DIR"
+              exit 1
+            fi
+            cd "${PAYMENT_DIR}"
+            git fetch origin "${BRANCH}"
+            git pull --ff-only origin "${BRANCH}" || git pull origin "${BRANCH}"
+            bash scripts/java-release.sh
+            echo "[ok] payment-java deploy finished"

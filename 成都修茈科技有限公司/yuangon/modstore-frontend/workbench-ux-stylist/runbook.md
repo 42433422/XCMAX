@@ -1,49 +1,44 @@
-        # Runbook：工作台 UX 设计员 (`workbench-ux-stylist`)
+# Runbook — 工作台 UX 设计员
 
-        ## 职责摘要
+| 字段 | 值 |
+|------|----|
+| 员工 ID | `workbench-ux-stylist` |
+| 最后更新 | 2026-05-06 |
+| 应急联系 | admin |
 
-        专注维护 MODstore 工作台（Workbench）的 UX 与交互：画布、右侧边栏、工作台 Shell、AI 草稿审核组件与整体暗色设计系统；严格遵守 Vue 3 Only。
+## 日常巡检
 
-        ## 上游 Handoff 契约
+```bash
+cd MODstore_deploy/market
 
-        ### handoff: market-frontend-dev → 本岗
-- **触发条件**：`employee.task.done:market-frontend-dev`
-- **输入**：待补充（参见 `yuangon/**/market-frontend-dev/runbook.md`）
-- **门禁**：依赖完成前本岗不得继续
+# TypeScript 编译
+npx vue-tsc --noEmit
 
+# React 违规检查
+grep -r "from 'react'" src/views/workbench/ && echo "ALERT!" || echo "Vue-only OK"
 
-        ## Handlers
+# 检查 CSS 变量是否有硬编码颜色
+grep -r "#[0-9a-fA-F]\{3,6\}" src/views/workbench/ | grep -v "//.*#" | wc -l
+```
 
-        | Handler | 说明 |
-        |---------|------|
-        | `llm_md` | 接收 Markdown 任务描述，调用 LLM 输出结构化结果 |
-| `echo` | 调试用：原样返回输入，用于 smoke 测试 |
+## 异常处置
 
-        ## 核心 Scope
+### 异常 1：CanvasStage Vue Flow 渲染异常
 
-        - `MODstore_deploy/market/src/views/workbench/**`
-- `MODstore_deploy/market/src/components/workbench/**`
-- `MODstore_deploy/market/src/components/admin/**`
-- `MODstore_deploy/market/src/views/WorkbenchHomeView.vue`
-- `MODstore_deploy/market/src/views/Admin*View.vue`
-- `MODstore_deploy/market/src/views/admin/**`
+**排查**：检查 `vueflow` 版本；检查节点/边数据格式。  
+**修复**：修正数据格式或降级 `vueflow` 版本。
 
-        ## 故障处置
+### 异常 2：RightRail 响应式布局错位
 
-        | 场景 | 处置 |
-        |------|------|
-        | LLM 调用失败 | retry 2 次 → 上报 `employee.task.failed:workbench-ux-stylist` |
-        | 上游依赖未完成 | 等待 `employee.task.done:<dep>` 事件，不自行推进 |
-        | scope 文件不存在 | 报告缺口，待确认后再执行，不编造路径 |
-        | 版本锚点不对齐 | 运行 `verify_version_anchors.py`，修复后继续 |
+**排查**：检查 CSS Grid/Flex 变量是否被全局样式覆盖。  
+**修复**：使用 CSS 变量修复，不硬编码像素值。
 
-        ## 验收检查清单
+### 异常 3：工作台整体空白/加载失败
 
-        - [ ] `employee.yaml.depends_on` 与 manifest 根级一致
-        - [ ] `actions.handlers` 三方一致（yaml / manifest / `_DISPATCH`）
-        - [ ] scope_globs 路径存在（或标注规划中）
-        - [ ] `employee_pack_consistency_warnings` 无 handler warning
-        - [ ] echo smoke 测试通过
+**排查**：检查 `WorkbenchShell.vue` 路由守卫逻辑；联系 `market-frontend-dev` 确认 store 状态。
 
-        ---
-        *本文件由 `bootstrap_yuangon.py` 生成，v10 线内迭代*
+## ESkill 动态阶段触发记录
+
+| 日期 | 触发原因 | patch_id | 结果 | 是否固化 |
+|------|----------|----------|------|----------|
+| — | — | — | — | — |

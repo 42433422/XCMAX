@@ -1,0 +1,44 @@
+# 拆仓后 xiuci-marketing-site 仓库的独立 CI。
+# 仅做 HTML 静态校验；无需 Node/Python/Java 工具链。
+name: CI - Marketing Site
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-marketing-site-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  marketing-site-ci:
+    name: Marketing site (static pages)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install HTML linter
+        run: npm install --global htmlhint@1
+
+      - name: HTMLHint all pages
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          files=( *.html site/*.html new/*.html )
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No static HTML files to validate."
+            exit 0
+          fi
+          htmlhint "${files[@]}"

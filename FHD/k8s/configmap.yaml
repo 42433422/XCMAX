@@ -24,3 +24,9 @@ data:
   XCAGI_AUTH_RATE_LIMIT_MAX: "10"
   XCAGI_AUTH_RATE_LIMIT_WINDOW: "60"
   CACHE_REDIS_URL: "redis://redis-service:6379"
+  # Tunables (production defaults). The Rollout (FHD/k8s/rollouts) sources these via envFrom so
+  # overlays can override them with a ConfigMap patch (CRD-safe; strategic-merge on a Rollout
+  # container list isn't). deployment.yaml still sets them explicitly to the same values.
+  XCAGI_GUNICORN_WORKERS: "4"
+  XCAGI_QUERY_CACHE_BACKEND: "redis"
+  XCAGI_CHAT_STREAM_MAX_PER_POD: "50"

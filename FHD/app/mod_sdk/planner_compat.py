@@ -16,7 +16,7 @@ from app.fastapi_routes.xcagi_compat_chat_helpers import (
     XcagiCompatChatBatchBody,
     XcagiCompatChatBody,
 )
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 PLANNER_FACADE_MOD_ID = "xcagi-planner-bridge"
 
@@ -57,7 +57,7 @@ def intent_test(body: dict[str, Any] | None) -> dict[str, Any]:
         return JSONResponse({"success": False, "message": "消息内容不能为空"}, status_code=400)
     try:
         return {"success": True, "data": recognize_intents(message)}
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         return JSONResponse(
             {"success": False, "message": f"意图识别失败：{str(e)}"},
             status_code=500,

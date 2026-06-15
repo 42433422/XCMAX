@@ -102,7 +102,7 @@ class TestGenerateShipmentOrderTask:
         from app.tasks.shipment_tasks import generate_shipment_order
 
         mock_app_service = MagicMock()
-        mock_app_service.generate_shipment_document.side_effect = Exception("生成失败")
+        mock_app_service.generate_shipment_document.side_effect = RuntimeError("生成失败")
         mock_get_app_service.return_value = mock_app_service
 
         with patch.object(
@@ -202,27 +202,33 @@ class TestPrintShipmentDocumentTask:
 class TestCleanupOldShipmentDocumentsTask:
     """测试 cleanup_old_shipment_documents 任务"""
 
-    @patch("os.listdir")
-    @patch("os.remove")
-    @patch("os.path.exists")
-    @patch("os.path.isfile")
-    @patch("os.path.getmtime")
+    @patch("app.tasks.shipment_tasks.os.listdir")
+    @patch("app.tasks.shipment_tasks.os.remove")
+    @patch("app.tasks.shipment_tasks.os.path.exists")
+    @patch("app.tasks.shipment_tasks.os.path.isfile")
+    @patch("app.tasks.shipment_tasks.os.path.getmtime")
+    @patch("app.utils.path_utils.get_app_data_dir")
     def test_cleanup_old_documents_success(
-        self, mock_getmtime, mock_isfile, mock_exists, mock_remove, mock_listdir
+        self, mock_data_dir, mock_getmtime, mock_isfile, mock_exists, mock_remove, mock_listdir
     ):
         """测试成功清理旧文档"""
         import datetime
+        import os
 
         from app.tasks.shipment_tasks import cleanup_old_shipment_documents
 
+        mock_data_dir.return_value = "/tmp/xcagi-test-shipment-data"
         mock_exists.return_value = True
+        mock_isfile.return_value = True
         mock_listdir.return_value = ["old_doc1.xlsx", "old_doc2.xlsx", "recent_doc.xlsx"]
 
         old_timestamp = (datetime.datetime.now() - timedelta(days=100)).timestamp()
         new_timestamp = (datetime.datetime.now() - timedelta(days=10)).timestamp()
 
         def mock_getmtime_side_effect(path):
-            if "old" in path:
+            # 仅按文件名判定，避免宿主路径含 "old" 子串导致 order-sensitive 误判。
+            name = os.path.basename(str(path))
+            if name.startswith("old_"):
                 return old_timestamp
             return new_timestamp
 
@@ -231,6 +237,7 @@ class TestCleanupOldShipmentDocumentsTask:
         result = cleanup_old_shipment_documents(days=90)
 
         assert result == 2
+        assert mock_remove.call_count == 2
 
 
 class TestShipmentTasksAttributes:

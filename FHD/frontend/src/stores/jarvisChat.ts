@@ -2,35 +2,46 @@ import { defineStore } from 'pinia'
 import { ref, type Ref } from 'vue'
 import { useProModeStore } from './proMode'
 import { speakText, stopSpeaking, cleanTextForSpeech } from '../utils/tts'
+import { asRecord, asArray, asString, asBoolean, asDisposable } from '@/utils/typeGuards'
 
-interface ChatMessage {
+type LegacyChatWindow = Window & {
+  setMonitorModeFromChat?: (enabled: boolean) => void
+  setWorkModeFromChat?: (enabled: boolean) => void
+  refreshWorkModeMonitorList?: () => void
+}
+
+function legacyChatWindow(): LegacyChatWindow {
+  return window as LegacyChatWindow
+}
+
+interface JarvisChatMessage {
   id: number;
   content: string;
   type: 'user' | 'ai' | 'task';
   timestamp: string;
-  taskData?: any;
+  taskData?: unknown;
 }
 
 interface JarvisChatState {
-  messages: ChatMessage[];
+  messages: JarvisChatMessage[];
   isRecording: boolean;
   isPlaying: boolean;
   voiceQueue: string[];
-  currentTask: any | null;
+  currentTask: unknown | null;
   statusText: string;
   isCoreSpeaking: boolean;
 }
 
 export const useJarvisChatStore = defineStore('jarvisChat', () => {
-  const messages = ref<ChatMessage[]>([]) as Ref<ChatMessage[]>
+  const messages = ref<JarvisChatMessage[]>([]) as Ref<JarvisChatMessage[]>
   const isRecording = ref(false)
   const isPlaying = ref(false)
   const voiceQueue = ref<string[]>([])
-  const currentTask = ref<any | null>(null)
+  const currentTask = ref<unknown | null>(null)
   const statusText = ref('准备就绪')
   const isCoreSpeaking = ref(false)
 
-  const lastMessage = ref<ChatMessage | undefined>(undefined)
+  const lastMessage = ref<JarvisChatMessage | undefined>(undefined)
   const hasPendingVoice = ref(false)
 
   function updateLastMessage() {
@@ -48,7 +59,7 @@ export const useJarvisChatStore = defineStore('jarvisChat', () => {
     updateLastMessage()
   }
 
-  function addTaskMessage(content: string, taskData: any) {
+  function addTaskMessage(content: string, taskData: unknown) {
     messages.value.push({
       id: Date.now(),
       content,
@@ -60,26 +71,21 @@ export const useJarvisChatStore = defineStore('jarvisChat', () => {
   }
 
   function syncLegacyMonitorMode(): boolean {
-    const monitorToggle = (window as any).setMonitorModeFromChat
+    const win = legacyChatWindow()
+    const monitorToggle = win.setMonitorModeFromChat
     if (typeof monitorToggle !== 'function') return false
 
-    // Keep legacy runtime as source of truth for overlay mode classes.
     monitorToggle(true)
-    if (typeof (window as any).refreshWorkModeMonitorList === 'function') {
-      ;(window as any).refreshWorkModeMonitorList()
-    }
+    win.refreshWorkModeMonitorList?.()
     return true
   }
 
   function syncLegacyWorkMode(): boolean {
-    const workToggle = (window as any).setWorkModeFromChat
+    const workToggle = legacyChatWindow().setWorkModeFromChat
     if (typeof workToggle !== 'function') return false
 
-    // Keep legacy runtime as source of truth for overlay mode classes.
     workToggle(true)
-    if (typeof (window as any).refreshWorkModeMonitorList === 'function') {
-      ;(window as any).refreshWorkModeMonitorList()
-    }
+    legacyChatWindow().refreshWorkModeMonitorList?.()
     return true
   }
 
@@ -197,7 +203,7 @@ export const useJarvisChatStore = defineStore('jarvisChat', () => {
     isCoreSpeaking.value = speaking
   }
 
-  function setCurrentTask(task: any) {
+  function setCurrentTask(task: unknown) {
     currentTask.value = task
   }
 

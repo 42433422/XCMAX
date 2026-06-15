@@ -19,7 +19,7 @@ from typing import Any
 
 from app.neuro_bus.bus import NeuroBus, get_neuro_bus
 from app.neuro_bus.events.base import NeuroEvent
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -141,7 +141,7 @@ class SubconsciousProcessor:
                 created_at=time.time(),
             )
 
-        logger.debug(f"Registered handler for {event_type}")
+        logger.debug("Registered handler for %s", event_type)
 
     async def process(self, event: NeuroEvent) -> bool:
         """
@@ -162,7 +162,7 @@ class SubconsciousProcessor:
             # 单事件处理
             handler = self._handlers.get(event_type)
             if not handler:
-                logger.debug(f"No handler for {event_type}")
+                logger.debug("No handler for %s", event_type)
                 return False
 
             # 执行处理（带超时）
@@ -186,20 +186,20 @@ class SubconsciousProcessor:
             if elapsed_ms > self.SLA_TARGET_MS:
                 if elapsed_ms > self.SLA_MAX_MS:
                     self._timeout_count += 1
-                    logger.warning(f"SubconsciousProcessor timeout: {elapsed_ms:.2f}ms")
+                    logger.warning(f"SubconsciousProcessor timeout: {elapsed_ms:.2f}ms")  # noqa: G004
                 else:
-                    logger.debug(f"SubconsciousProcessor SLA warning: {elapsed_ms:.2f}ms")
+                    logger.debug(f"SubconsciousProcessor SLA warning: {elapsed_ms:.2f}ms")  # noqa: G004
 
             return True
 
         except TimeoutError:
             self._timeout_count += 1
-            logger.warning(f"SubconsciousProcessor timeout for {event.event_type}")
+            logger.warning("SubconsciousProcessor timeout for %s", event.event_type)
             return False
 
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             self._error_count += 1
-            logger.exception(f"SubconsciousProcessor error: {e}")
+            logger.exception("SubconsciousProcessor error: %s", e)
             return False
 
     async def _batch_process(self, event: NeuroEvent) -> bool:
@@ -224,8 +224,8 @@ class SubconsciousProcessor:
                 await self._flush_expired_batches()
             except asyncio.CancelledError:
                 break
-            except OPERATIONAL_ERRORS as e:
-                logger.exception(f"Flush loop error: {e}")
+            except RECOVERABLE_ERRORS as e:
+                logger.exception("Flush loop error: %s", e)
 
     async def _flush_expired_batches(self):
         """刷新过期批次"""
@@ -269,11 +269,11 @@ class SubconsciousProcessor:
             # 平均延迟
             avg_latency = elapsed_ms / len(events)
             if avg_latency > self.SLA_TARGET_MS:
-                logger.debug(f"Batch processing SLA warning: {avg_latency:.2f}ms avg")
+                logger.debug(f"Batch processing SLA warning: {avg_latency:.2f}ms avg")  # noqa: G004
 
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             self._error_count += len(events)
-            logger.exception(f"Batch processing error: {e}")
+            logger.exception("Batch processing error: %s", e)
 
     async def _flush_all_batches(self):
         """刷新所有批次"""
@@ -306,7 +306,7 @@ class LoggingHandler:
 
     @staticmethod
     async def handle(event: NeuroEvent):
-        logger.info(f"Event: {event.event_type} from {event.metadata.source}")
+        logger.info("Event: %s source=%s", event.event_type, event.metadata.source)
 
 
 class MetricsHandler:

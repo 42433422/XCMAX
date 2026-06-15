@@ -12,7 +12,7 @@ from app.mod_sdk.edition_policy import (
     resolve_edition,
     seed_edition_mods_from_bundle,
 )
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +69,7 @@ async def bootstrap_edition_pack(edition: Edition | None = None) -> dict[str, An
                         {"mod_id": mod_id, "status": "loaded", "message": "loaded after seed"}
                     )
                     continue
-            except OPERATIONAL_ERRORS as exc:
+            except RECOVERABLE_ERRORS as exc:
                 logger.warning("load_mod after seed failed %s: %s", mod_id, exc)
 
         try:
@@ -83,7 +83,7 @@ async def bootstrap_edition_pack(edition: Edition | None = None) -> dict[str, An
                     "message": result.message,
                 }
             )
-        except OPERATIONAL_ERRORS as exc:
+        except RECOVERABLE_ERRORS as exc:
             catalog_results.append(
                 {"mod_id": mod_id, "status": "catalog_failed", "message": str(exc)}
             )

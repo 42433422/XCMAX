@@ -18,10 +18,10 @@ from collections import defaultdict
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from heapq import heappop, heappush
-from typing import Any
+from typing import Any, cast
 
 from app.neuro_bus.events.base import AsyncEventHandler, EventHandler, NeuroEvent
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -156,10 +156,10 @@ class PriorityEventQueue:
                     _, _, _, old_event = heappop(self._queue)
                     self._event_ids.discard(old_event.metadata.event_id)
                     self._dropped_count += 1
-                    logger.warning(f"Dropped low priority event due to queue full: {old_event}")
+                    logger.warning("Dropped low priority event due to queue full: %s", old_event)
                 else:
                     self._dropped_count += 1
-                    logger.warning(f"Queue full, dropping event: {event}")
+                    logger.warning("Queue full, dropping event: %s", event)
                     return False
 
             # 放入队列 (优先级数值小的在前)
@@ -177,14 +177,14 @@ class PriorityEventQueue:
                 return None
             _, _, event_id, event = heappop(self._queue)
             self._event_ids.discard(event_id)
-            return event
+            return cast("NeuroEvent | None", event)
 
     def peek(self) -> NeuroEvent | None:
         """查看最高优先级事件（不取出）"""
         with self._lock:
             if not self._queue:
                 return None
-            return self._queue[0][3]
+            return cast("NeuroEvent | None", self._queue[0][3])
 
     def size(self) -> int:
         """队列大小"""
@@ -342,7 +342,7 @@ class NeuroBus:
         if getattr(self, "_event_available", None):
             try:
                 self._event_available.set()
-            except OPERATIONAL_ERRORS:
+            except RECOVERABLE_ERRORS:
                 pass
 
         logger.info("NeuroBus stopped")
@@ -371,7 +371,7 @@ class NeuroBus:
 
                 # 检查超时
                 if event.is_expired():
-                    logger.warning(f"Event expired: {event}")
+                    logger.warning("Event expired: %s", event)
                     self._dropped_count += 1
                     continue
 
@@ -380,8 +380,8 @@ class NeuroBus:
 
             except asyncio.CancelledError:
                 break
-            except OPERATIONAL_ERRORS as e:
-                logger.exception(f"Error in processing loop: {e}")
+            except RECOVERABLE_ERRORS as e:
+                logger.exception("Error in processing loop: %s", e)
                 self._error_count += 1
 
     async def _dispatch_event(self, event: NeuroEvent):
@@ -420,7 +420,7 @@ class NeuroBus:
                     any_failed = True
 
         if handlers_called == 0:
-            logger.debug(f"No handlers for event: {event}")
+            logger.debug("No handlers for event: %s", event)
 
         self._processed_count += 1
 
@@ -454,8 +454,8 @@ class NeuroBus:
             if self._rel_circuit is not None:
                 self._rel_circuit.record_success()
 
-        except OPERATIONAL_ERRORS as e:
-            logger.exception(f"Handler error for event {event}: {e}")
+        except RECOVERABLE_ERRORS as e:
+            logger.exception("Handler error for event %s: %s", event, e)
             subscription.record_call(success=False)
             self._error_count += 1
             if self._rel_circuit is not None:
@@ -468,7 +468,7 @@ class NeuroBus:
                         retry_count=0,
                         handler_name=getattr(subscription.handler, "__name__", None),
                     )
-                except OPERATIONAL_ERRORS as dlq_exc:
+                except RECOVERABLE_ERRORS as dlq_exc:
                     logger.exception("NeuroBus DLQ enqueue failed: %s", dlq_exc)
             return False
         finally:
@@ -542,7 +542,7 @@ class NeuroBus:
             if ev is not None:
                 try:
                     ev.set()
-                except OPERATIONAL_ERRORS:
+                except RECOVERABLE_ERRORS:
                     # ignore any loop-related errors
                     pass
         else:
@@ -569,7 +569,7 @@ class NeuroBus:
             if ev is not None:
                 try:
                     ev.set()
-                except OPERATIONAL_ERRORS:
+                except RECOVERABLE_ERRORS:
                     pass
         return success
 
@@ -607,8 +607,32 @@ class NeuroBus:
         # 按优先级排序
         self._handlers[event_type].sort(key=lambda s: s.priority)
 
-        logger.debug(f"Subscribed to {event_type}: {handler.__name__}")
+        logger.debug("Subscribed to %s: %s", event_type, handler.__name__)
         return subscription
+
+    def subscribe_event(
+        self,
+        event_type: str,
+        handler: EventHandler | AsyncEventHandler,
+        priority: int = 0,
+        is_async: bool = True,
+        filter_fn: Callable[[NeuroEvent], bool] | None = None,
+        domain: str | None = None,
+    ) -> HandlerSubscription:
+        """订阅事件；指定 domain 时路由到领域处理器。"""
+        if domain:
+            return self.subscribe_to_domain(
+                domain, event_type, handler, priority, is_async
+            )
+        return self.subscribe(event_type, handler, priority, is_async, filter_fn)
+
+    def subscribe_global(
+        self,
+        handler: EventHandler | AsyncEventHandler,
+        filter_fn: Callable[[NeuroEvent], bool] | None = None,
+    ) -> HandlerSubscription:
+        """订阅所有事件（subscribe_all 别名）。"""
+        return self.subscribe_all(handler, filter_fn)
 
     def subscribe_to_domain(
         self,
@@ -629,7 +653,7 @@ class NeuroBus:
         self._domain_handlers[domain][event_type].append(subscription)
         self._domain_handlers[domain][event_type].sort(key=lambda s: s.priority)
 
-        logger.debug(f"Subscribed to {domain}.{event_type}: {handler.__name__}")
+        logger.debug("Subscribed to %s.%s: %s", domain, event_type, handler.__name__)
         return subscription
 
     def subscribe_all(
@@ -645,7 +669,7 @@ class NeuroBus:
         )
 
         self._global_handlers.append(subscription)
-        logger.debug(f"Global subscription: {handler.__name__}")
+        logger.debug("Global subscription: %s", handler.__name__)
         return subscription
 
     def unsubscribe(self, subscription: HandlerSubscription) -> bool:
@@ -689,7 +713,7 @@ class NeuroBus:
         if self._rel_circuit is not None:
             try:
                 out["circuit_open"] = not self._rel_circuit.can_execute()
-            except OPERATIONAL_ERRORS:
+            except RECOVERABLE_ERRORS:
                 out["circuit_open"] = None
         return out
 
@@ -712,7 +736,7 @@ class NeuroBus:
             from app.neuro_bus.domains.base import get_domain_registry
 
             return get_domain_registry().list_domains()
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             return []
 
 

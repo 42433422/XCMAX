@@ -7,7 +7,7 @@ export interface IntentPackage {
   description?: string;
   enabled: boolean;
   intents?: string[];
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 export const intentPackagesApi = {

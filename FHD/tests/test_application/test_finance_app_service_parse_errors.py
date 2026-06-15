@@ -45,14 +45,18 @@ class TestDashboard:
         svc = FinanceAppService()
         with patch("app.application.finance_app_service.get_db") as gdb:
             db = MagicMock()
-            # Each call chain: query(...).filter(...).scalar() -> MagicMock
-            db.query.return_value.filter.return_value.scalar.side_effect = [
+            # 生产里各聚合查询的 filter 层数不一（0/1/2 层），用「filter 返回自身、
+            # scalar 统一按调用序消费」的漏斗，使 5 个聚合值按顺序对号入座。
+            q = MagicMock()
+            q.filter.return_value = q
+            q.scalar.side_effect = [
                 Decimal("1000.00"),  # total_revenue
                 Decimal("600.00"),  # total_cost
                 Decimal("200.00"),  # total_payable
                 Decimal("50.00"),  # manual_receipt
                 Decimal("30.00"),  # manual_payment
             ]
+            db.query.return_value = q
             gdb.return_value.__enter__.return_value = db
             out = svc.get_dashboard()
         assert out["success"] is True

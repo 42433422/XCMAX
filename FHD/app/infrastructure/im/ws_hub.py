@@ -10,7 +10,7 @@ from typing import Any
 
 from fastapi import WebSocket
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +44,7 @@ class ImWsHub:
         for ws in targets:
             try:
                 await ws.send_text(text)
-            except OPERATIONAL_ERRORS:
+            except RECOVERABLE_ERRORS:
                 dead.append(ws)
         for ws in dead:
             await self.disconnect(user_id, ws)

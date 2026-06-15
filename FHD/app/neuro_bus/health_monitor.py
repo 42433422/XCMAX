@@ -18,10 +18,12 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any
+from typing import Any, cast
 
 from app.neuro_bus.bus import get_neuro_bus
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.neuro_bus.dead_letter_queue import get_dead_letter_queue
+from app.neuro_bus.event_store import get_event_store
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -95,7 +97,7 @@ class HealthMonitor:
         # 注册默认检查
         self._register_default_checks()
 
-        logger.info(f"[HealthMonitor] 初始化完成 (interval={check_interval_seconds}s)")
+        logger.info("[HealthMonitor] 初始化完成 (interval=%ss)", check_interval_seconds)
 
     def _register_default_checks(self):
         """注册默认健康检查"""
@@ -109,13 +111,13 @@ class HealthMonitor:
         """注册健康检查"""
         self._checks[name] = check_fn
         self._metrics_history[name] = deque(maxlen=100)
-        logger.info(f"[HealthMonitor] 注册检查: {name}")
+        logger.info("[HealthMonitor] 注册检查: %s", name)
 
     def unregister_check(self, name: str):
         """注销健康检查"""
         if name in self._checks:
             del self._checks[name]
-            del self._last_results[name]
+            self._last_results.pop(name, None)
             del self._metrics_history[name]
 
     # ========== 健康检查实现 ==========
@@ -152,7 +154,7 @@ class HealthMonitor:
                 details=stats,
             )
 
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             return HealthCheckResult(
                 component="neuro_bus",
                 status=HealthStatus.UNHEALTHY,
@@ -197,7 +199,7 @@ class HealthMonitor:
                 },
             )
 
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             return HealthCheckResult(
                 component="event_queue",
                 status=HealthStatus.UNHEALTHY,
@@ -239,7 +241,7 @@ class HealthMonitor:
                 message="无法检查（psutil 未安装）",
                 latency_ms=(time.perf_counter() - t0) * 1000,
             )
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             return HealthCheckResult(
                 component="memory",
                 status=HealthStatus.UNHEALTHY,
@@ -268,10 +270,10 @@ class HealthMonitor:
             # 检查是否需要告警
             self._evaluate_alert(result)
 
-            return result
+            return cast("HealthCheckResult | None", result)
 
-        except OPERATIONAL_ERRORS as e:
-            logger.error(f"[HealthMonitor] 检查失败 {name}: {e}")
+        except RECOVERABLE_ERRORS as e:
+            logger.error("[HealthMonitor] 检查失败 %s: %s", name, e)
             return None
 
     async def run_all_checks(self) -> dict[str, HealthCheckResult]:
@@ -318,11 +320,11 @@ class HealthMonitor:
         for callback in self._alert_callbacks:
             try:
                 callback(alert)
-            except OPERATIONAL_ERRORS as e:
-                logger.error(f"[HealthMonitor] 告警回调失败: {e}")
+            except RECOVERABLE_ERRORS as e:
+                logger.error("[HealthMonitor] 告警回调失败: %s", e)
 
         logger.warning(
-            f"[HealthMonitor] 告警: [{level.value}] {result.component} - {result.message}"
+            "[HealthMonitor] 告警: [%s] %s - %s", level.value, result.component, result.message
         )
 
     def _resolve_alert_if_exists(self, component: str):
@@ -332,7 +334,7 @@ class HealthMonitor:
             alert.resolved_at = datetime.now()
             del self._active_alerts[component]
 
-            logger.info(f"[HealthMonitor] 告警已解决: {component}")
+            logger.info("[HealthMonitor] 告警已解决: %s", component)
 
     # ========== 监控循环 ==========
 
@@ -348,8 +350,8 @@ class HealthMonitor:
             try:
                 await self.run_all_checks()
                 await asyncio.sleep(self._check_interval)
-            except OPERATIONAL_ERRORS as e:
-                logger.error(f"[HealthMonitor] 监控循环错误: {e}")
+            except RECOVERABLE_ERRORS as e:
+                logger.error("[HealthMonitor] 监控循环错误: %s", e)
                 await asyncio.sleep(5)
 
     def stop_monitoring(self):
@@ -423,9 +425,6 @@ class DashboardDataProvider:
 
     def get_dashboard_data(self) -> dict[str, Any]:
         """获取完整的仪表盘数据"""
-        from app.neuro_bus.dead_letter_queue import get_dead_letter_queue
-        from app.neuro_bus.event_store import get_event_store
-
         bus = get_neuro_bus()
         dlq = get_dead_letter_queue()
         store = get_event_store()
@@ -478,4 +477,4 @@ def check_component(component: str) -> HealthCheckResult | None:
 def get_system_status() -> str:
     """快捷函数：获取系统状态字符串"""
     summary = get_health()
-    return summary.get("overall_status", "unknown")
+    return cast("str", summary.get("overall_status", "unknown"))

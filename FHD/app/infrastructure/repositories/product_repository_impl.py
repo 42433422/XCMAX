@@ -1,7 +1,7 @@
 import logging
 import re
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import inspect
 
@@ -11,7 +11,7 @@ from app.domain.product.entities import Product
 from app.infrastructure.mappers.product_mapper import product_to_db, product_to_domain
 from app.infrastructure.persistence.product_repository_impl import TRIVIAL_MEASURE_UNITS
 from app.infrastructure.repositories.product_repository import ProductRepository
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -239,7 +239,7 @@ class SQLAlchemyProductRepository(ProductRepository):
 
     def count(self) -> int:
         with get_db() as db:
-            return db.query(ProductModel).count()
+            return cast("int", db.query(ProductModel).count())
 
     def find_product_units(self) -> list[str]:
         """与 persistence.SQLAlchemyProductRepository.find_product_units 行为对齐。"""
@@ -278,7 +278,7 @@ class SQLAlchemyProductRepository(ProductRepository):
                                 add_label(r[0], from_products=False)
             finally:
                 cs.close()
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             logger.debug("suppressed exception", exc_info=True)
 
         if purchase_units_authoritative:
@@ -291,7 +291,7 @@ class SQLAlchemyProductRepository(ProductRepository):
                     for u in db.query(ProductModel.unit).distinct().all():
                         if u and u[0] is not None:
                             add_label(u[0], from_products=True)
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             logger.debug("suppressed exception", exc_info=True)
 
         return ordered

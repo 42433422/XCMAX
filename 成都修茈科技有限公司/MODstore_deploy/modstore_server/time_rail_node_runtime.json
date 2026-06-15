@@ -1,0 +1,106 @@
+{
+  "version": 1,
+  "nodes": {
+    "R": {
+      "last_run": "2026-06-10T19:15:00.011720+00:00",
+      "ok": true,
+      "source": "file_retention_janitor",
+      "meta": {
+        "status": "success",
+        "dry_run": true,
+        "metric_id": 566
+      },
+      "updated_at": "2026-06-10T19:15:00.011720+00:00"
+    },
+    "BK": {
+      "last_run": "2026-06-10T19:05:00.043052+00:00",
+      "ok": true,
+      "source": "daily_backup_job",
+      "meta": {
+        "stamp": "20260610T190500Z",
+        "from_probe": false
+      },
+      "updated_at": "2026-06-10T19:05:00.043052+00:00"
+    },
+    "ASM": {
+      "last_run": "2026-06-13T10:41:18.710717+00:00",
+      "ok": false,
+      "source": "daily_digest",
+      "meta": {
+        "error": "job_failed"
+      },
+      "updated_at": "2026-06-13T10:41:18.710717+00:00"
+    },
+    "P": {
+      "last_run": "2026-06-10T16:19:05.471369+00:00",
+      "ok": true,
+      "source": "daily_digest",
+      "meta": {
+        "record_id": 29,
+        "day": "2026-06-11"
+      },
+      "updated_at": "2026-06-10T16:19:05.471369+00:00"
+    },
+    "M": {
+      "last_run": "2026-06-10T16:19:05.471763+00:00",
+      "ok": true,
+      "source": "daily_digest",
+      "meta": {
+        "record_id": 29,
+        "day": "2026-06-11"
+      },
+      "updated_at": "2026-06-10T16:19:05.471763+00:00"
+    },
+    "PPTX": {
+      "last_run": "2026-06-10T16:19:05.472392+00:00",
+      "ok": true,
+      "source": "daily_digest",
+      "meta": {
+        "record_id": 29,
+        "day": "2026-06-11"
+      },
+      "updated_at": "2026-06-10T16:19:05.472392+00:00"
+    },
+    "SW": {
+      "last_run": "2026-06-10T16:19:05.472908+00:00",
+      "ok": true,
+      "source": "daily_digest",
+      "meta": {
+        "record_id": 29,
+        "day": "2026-06-11"
+      },
+      "updated_at": "2026-06-10T16:19:05.472908+00:00"
+    },
+    "SS": {
+      "last_run": "2026-06-10T16:19:05.473440+00:00",
+      "ok": true,
+      "source": "daily_digest",
+      "meta": {
+        "record_id": 29,
+        "day": "2026-06-11"
+      },
+      "updated_at": "2026-06-10T16:19:05.473440+00:00"
+    },
+    "SA": {
+      "last_run": "2026-06-10T16:19:05.473891+00:00",
+      "ok": true,
+      "source": "daily_digest",
+      "meta": {
+        "record_id": 29,
+        "day": "2026-06-11"
+      },
+      "updated_at": "2026-06-10T16:19:05.473891+00:00"
+    },
+    "V": {
+      "last_run": "2026-06-10T16:19:05.474207+00:00",
+      "ok": true,
+      "source": "daily_digest",
+      "meta": {
+        "record_id": 29,
+        "day": "2026-06-11"
+      },
+      "updated_at": "2026-06-10T16:19:05.474207+00:00"
+    }
+  },
+  "updated_at": "2026-06-13T10:41:18.710717+00:00"
+}

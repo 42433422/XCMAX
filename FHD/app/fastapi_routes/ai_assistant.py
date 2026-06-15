@@ -16,7 +16,7 @@ from typing import Any
 from fastapi import APIRouter, Body, Query
 from fastapi.responses import JSONResponse
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -117,7 +117,7 @@ def compat_ai_generate(payload: dict[str, Any] = Body(default_factory=dict)):
             filename=doc_name,
             file_path=file_path,
         )
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.error("兼容 /api/generate 失败: %s", e, exc_info=True)
         return _fail(f"生成失败: {str(e)}", 500)
 
@@ -268,7 +268,7 @@ def compat_print_diagnose():
     try:
         base = _printer_svc().get_printers()
         return JSONResponse({"success": True, "diagnostic": base})
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.error("打印机诊断失败: %s", e, exc_info=True)
         return _fail(f"打印机诊断失败: {str(e)}", 500)
 
@@ -325,7 +325,7 @@ def compat_print_single_label(payload: dict[str, Any] = Body(default_factory=dic
                 product_name = str(p.get("name") or p.get("product_name") or model_number)
                 specification = str(p.get("specification") or p.get("spec") or "") or None
                 unit = str(p.get("unit") or "个")
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             logger.warning("single_label: 查询产品失败，使用型号作为名称: %s", e)
 
     try:
@@ -340,7 +340,7 @@ def compat_print_single_label(payload: dict[str, Any] = Body(default_factory=dic
         )
         status = 200 if result.get("success") else 400
         return JSONResponse(result, status_code=status)
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.error("single_label 打印失败: %s", e, exc_info=True)
         return JSONResponse({"success": False, "message": f"打印失败: {e}"}, status_code=500)
 
@@ -389,7 +389,7 @@ def compat_tts(payload: dict[str, Any] = Body(default_factory=dict)):
                 },
             }
         )
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         logger.warning("Edge TTS 不可用，回退浏览器语音: %s", e)
         return JSONResponse(
             {

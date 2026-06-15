@@ -40,7 +40,7 @@ class OCRNeuroDomain(NeuroDomain):
             self._success_count += 1
             request_id = event.payload.get("request_id")
             confidence = event.payload.get("confidence")
-            logger.debug(f"OCR completed: {request_id}, confidence={confidence}")
+            logger.debug("OCR completed: %s, confidence=%s", request_id, confidence)
             bump_domain_handler_metric("ocr.completed")
 
     async def initialize(self):

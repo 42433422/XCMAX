@@ -1,0 +1,30 @@
+{
+  "brief": "制作 PDF 全量读取员工包。上传 .pdf：只读原生文字层写入 outputs/document_full.txt；内嵌图片导出到 outputs/images/{figures,photos,diagrams,icons,uncategorized}/，并通过 VLM（ctx.call_llm vision）生成 .vlm.json 描述；元数据 outputs/document_meta.json。使用 direct_python，handlers 仅 direct_python。",
+  "mode": "direct_python_file_transform",
+  "accepted_extensions": [
+    ".pdf"
+  ],
+  "default_action": "convert",
+  "default_output_relpath": "outputs/document_full.txt",
+  "default_meta_relpath": "outputs/document_meta.json",
+  "default_images_dir": "outputs/images",
+  "runtime_kind": "pdf_full_read",
+  "output_schema": [
+    "plain_text",
+    "pages",
+    "page_count",
+    "char_count",
+    "images",
+    "image_categories",
+    "source"
+  ],
+  "requirements": [
+    "Use direct_python only; handlers must be [\"direct_python\"].",
+    "Extract native text with PyMuPDF/pypdf; never use LLM for body text.",
+    "Export images to outputs/images/{figures,photos,diagrams,icons,uncategorized}/.",
+    "When ctx.call_llm supports vision, describe each image to outputs/images/<cat>/<name>.vlm.json.",
+    "Write document_full.txt, document_meta.json, images_index.json.",
+    "Return {ok, summary, items, warnings, error, meta}."
+  ],
+  "pack_id": "pdf-full-read-employee"
+}

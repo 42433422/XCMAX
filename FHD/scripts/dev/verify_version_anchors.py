@@ -17,6 +17,7 @@ ANCHORS: list[tuple[str, str]] = [
     ("package.json", r'"version"\s*:\s*"([\d.]+)"'),
     ("app/fastapi_app/factory.py", r'version="([\d.]+)"'),
     ("app/infrastructure/mods/manifest.py", r'current_version\s*=\s*"([\d.]+)"'),
+    ("mobile-android/app/build.gradle.kts", r'versionName\s*=\s*"([\d.]+)"'),
 ]
 
 

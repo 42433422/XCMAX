@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
 def is_sqlite_url(database_url: str | None) -> bool:
@@ -17,7 +17,7 @@ def resolve_effective_database_url(config_url: str | None = None) -> str:
         from app.db import _get_database_url
 
         runtime = (_get_database_url() or "").strip()
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         runtime = ""
     cfg = str(config_url or "").strip()
     if runtime:

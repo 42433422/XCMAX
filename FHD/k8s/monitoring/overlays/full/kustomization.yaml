@@ -1,0 +1,32 @@
+# Full observability stack for GitOps (static Prometheus/Grafana/Loki — no Operator required).
+# Lightweight CR-only apply remains at FHD/k8s/monitoring/kustomization.yaml.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: monitoring
+
+resources:
+  - ../../prometheus/prometheus-deployment.yml
+  - ../../grafana/grafana-deployment.yml
+  - ../../loki/loki-deployment.yml
+  - ../../loki/loki-pvc.yml
+  - ../../loki/promtail-daemonset.yml
+  - ../../alertmanager/alertmanager-deployment.yml
+  - grafana-dashboard-provisioning.yaml
+
+patches:
+  - path: grafana-dashboards-patch.yaml
+
+# ServiceMonitor/PrometheusRule need Prometheus Operator — omit from full stack by default.
+# Enable when operator is installed:
+#  - ../../servicemonitor-xcagi-backend.yaml
+#  - ../../prometheusrule-xcagi-alerts.yaml
+
+configMapGenerator:
+  - name: grafana-dashboards
+    files:
+      - ../../grafana/dashboards/xcagi-slo.json
+      - ../../grafana/dashboards/xcagi-rollouts.json
+      - ../../grafana/dashboards/xcagi-dora.json
+    options:
+      disableNameSuffixHash: true

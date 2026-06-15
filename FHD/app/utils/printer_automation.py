@@ -2,7 +2,7 @@ import logging
 import subprocess
 import time
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 try:
     import win32api
@@ -13,10 +13,10 @@ try:
     _WIN32_AUTOMATION_AVAILABLE = True
     _WIN32_AUTOMATION_ERROR = ""
 except ImportError as _win32_import_error:
-    win32api = None  # type: ignore[assignment]
-    win32con = None  # type: ignore[assignment]
-    win32gui = None  # type: ignore[assignment]
-    win32print = None  # type: ignore[assignment]
+    win32api = None
+    win32con = None
+    win32gui = None
+    win32print = None
     _WIN32_AUTOMATION_AVAILABLE = False
     _WIN32_AUTOMATION_ERROR = str(_win32_import_error)
 
@@ -88,7 +88,7 @@ class PrinterAutomation:
             logger.warning(self._unavailable_result()["message"])
             return False
         try:
-            logger.info(f"设置Windows默认打印机为: {printer_name}")
+            logger.info("设置Windows默认打印机为: %s", printer_name)
 
             result = subprocess.run(
                 ["rundll32", "printui.dll,PrintUIEntry", "/y", "/n", printer_name],
@@ -98,15 +98,15 @@ class PrinterAutomation:
             )
 
             if result.returncode == 0:
-                logger.info(f"成功设置默认打印机为: {printer_name}")
+                logger.info("成功设置默认打印机为: %s", printer_name)
                 time.sleep(1)
                 return True
             else:
-                logger.error(f"设置默认打印机失败: {result.stderr}")
+                logger.error("设置默认打印机失败: %s", result.stderr)
                 return False
 
-        except OPERATIONAL_ERRORS as e:
-            logger.error(f"设置默认打印机异常: {e}")
+        except RECOVERABLE_ERRORS as e:
+            logger.error("设置默认打印机异常: %s", e)
             return False
 
     def handle_printer_dialog(self, target_printer: str, timeout: int = 10) -> bool:
@@ -118,10 +118,10 @@ class PrinterAutomation:
         while (time.time() - start_time) < timeout:
             hwnd = self.find_window("打印")
             if hwnd:
-                logger.info(f"找到打印机对话框，窗口句柄: {hwnd}")
+                logger.info("找到打印机对话框，窗口句柄: %s", hwnd)
 
                 rect = self.get_window_position(hwnd)
-                logger.info(f"对话框位置: {rect}")
+                logger.info("对话框位置: %s", rect)
 
                 center_x = (rect[0] + rect[2]) // 2
                 center_y = (rect[1] + rect[3]) // 2
@@ -132,7 +132,7 @@ class PrinterAutomation:
 
                 time.sleep(0.5)
 
-                logger.info(f"尝试选择打印机: {target_printer}")
+                logger.info("尝试选择打印机: %s", target_printer)
 
                 ok_button_x = center_x + 100
                 ok_button_y = center_y + 50
@@ -150,13 +150,13 @@ class PrinterAutomation:
         if not self._is_available():
             return self._unavailable_result()
         try:
-            logger.info(f"开始自动化打印: {file_path} 到 {target_printer}")
+            logger.info("开始自动化打印: %s 到 %s", file_path, target_printer)
 
             self.original_default = win32print.GetDefaultPrinter()
-            logger.info(f"原始默认打印机: {self.original_default}")
+            logger.info("原始默认打印机: %s", self.original_default)
 
             if self.original_default != target_printer:
-                logger.info(f"临时设置默认打印机为: {target_printer}")
+                logger.info("临时设置默认打印机为: %s", target_printer)
                 self.set_default_printer(target_printer)
 
             logger.info("使用ShellExecute打印文件")
@@ -165,7 +165,7 @@ class PrinterAutomation:
             if result <= 32:
                 raise Exception(f"ShellExecute失败，错误代码: {result}")
 
-            logger.info(f"ShellExecute调用成功，结果: {result}")
+            logger.info("ShellExecute调用成功，结果: %s", result)
 
             logger.info("检查是否需要处理打印机对话框...")
             self.handle_printer_dialog(target_printer)
@@ -174,7 +174,7 @@ class PrinterAutomation:
             time.sleep(5)
 
             if self.original_default and self.original_default != target_printer:
-                logger.info(f"恢复原始默认打印机: {self.original_default}")
+                logger.info("恢复原始默认打印机: %s", self.original_default)
                 self.set_default_printer(self.original_default)
 
             return {
@@ -184,8 +184,8 @@ class PrinterAutomation:
                 "file": file_path,
             }
 
-        except OPERATIONAL_ERRORS as e:
-            logger.error(f"自动化打印失败: {e}")
+        except RECOVERABLE_ERRORS as e:
+            logger.error("自动化打印失败: %s", e)
 
             if self.original_default and self.current_printer != self.original_default:
                 try:
@@ -220,6 +220,6 @@ class EnhancedPrinterUtils:
             else:
                 return self.automation.print_with_automation(file_path, printer_name)
 
-        except OPERATIONAL_ERRORS as e:
-            logger.error(f"增强打印失败: {e}")
+        except RECOVERABLE_ERRORS as e:
+            logger.error("增强打印失败: %s", e)
             return {"success": False, "message": f"增强打印失败: {str(e)}"}

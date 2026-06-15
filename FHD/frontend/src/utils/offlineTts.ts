@@ -1,4 +1,5 @@
 /**
+import { asRecord, asArray, asString, asBoolean, asDisposable } from '@/utils/typeGuards'
  * 离线 TTS 引擎：使用 transformers.js + Meta MMS-TTS 中文模型。
  *
  * - 首次调用时动态 import `@huggingface/transformers`（避免主包体积暴涨）
@@ -83,9 +84,28 @@ let progress = 0 // 0..1
 let audioCtx: AudioContext | null = null
 let currentSource: AudioBufferSourceNode | null = null
 
+interface TransformersModule {
+  env?: {
+    allowRemoteModels?: boolean
+    allowLocalModels?: boolean
+    remoteHost?: string
+    backends?: {
+      onnx?: {
+        wasm?: {
+          proxy?: boolean
+        }
+      }
+    }
+    [key: string]: unknown
+  }
+  pipeline?: (...args: unknown[]) => Promise<unknown>
+  [key: string]: unknown
+}
+
 function getAudioContext(): AudioContext {
   if (!audioCtx) {
-    audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)()
+    const w = window as Window & { webkitAudioContext?: typeof AudioContext }
+    audioCtx = new (window.AudioContext || w.webkitAudioContext!)()
   }
   return audioCtx
 }
@@ -118,7 +138,7 @@ export async function ensureOfflineReady(onProgress?: (p: number) => void): Prom
 
   try {
     // 动态加载，避免主 bundle 体积过大
-    const mod: any = await import('@huggingface/transformers')
+    const mod = await import('@huggingface/transformers') as TransformersModule
 
     if (mod.env) {
       mod.env.allowRemoteModels = true
@@ -140,11 +160,12 @@ export async function ensureOfflineReady(onProgress?: (p: number) => void): Prom
 
     const pipelineOpts: Record<string, unknown> = {
       dtype: 'q8',
-      progress_callback: (info: any) => {
-        if (info && typeof info.progress === 'number') {
-          progress = Math.max(progress, Math.min(1, info.progress / 100))
+      progress_callback: (info: unknown) => {
+        const progressInfo = info && typeof info === 'object' ? (info as Record<string, unknown>) : {}
+        if (typeof progressInfo.progress === 'number') {
+          progress = Math.max(progress, Math.min(1, progressInfo.progress / 100))
           onProgress?.(progress)
-        } else if (info?.status === 'done') {
+        } else if (progressInfo.status === 'done') {
           progress = 1
           onProgress?.(1)
         }

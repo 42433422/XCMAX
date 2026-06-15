@@ -1,5 +1,6 @@
 import { api } from './core';
 import type { ApiResponse } from '@/types/api';
+import { asRecord, asArray, asString } from '@/utils/typeGuards'
 
 export interface SalesContractProduct {
   model_number: string;
@@ -111,8 +112,8 @@ export const salesContractApi = {
     return api.post('/api/sales-contract/preview-update', body);
   },
 
-  print(data: SalesContractPrintRequest): Promise<ApiResponse<any>> {
-    return api.post<ApiResponse<any>>('/api/sales-contract/print', data);
+  print(data: SalesContractPrintRequest): Promise<ApiResponse<unknown>> {
+    return api.post<ApiResponse<unknown>>('/api/sales-contract/print', data);
   },
 
   download(filename: string): string {
@@ -123,11 +124,11 @@ export const salesContractApi = {
     return api.get<ApiResponse<{ files: Array<{ filename: string; size: number; modified: number }> }>>('/api/sales-contract/list');
   },
 
-  preview(filename?: string): Promise<ApiResponse<any>> {
+  preview(filename?: string): Promise<ApiResponse<unknown>> {
     if (filename) {
-      return api.get<ApiResponse<any>>(`/api/sales-contract/preview/${encodeURIComponent(filename)}`);
+      return api.get<ApiResponse<unknown>>(`/api/sales-contract/preview/${encodeURIComponent(filename)}`);
     }
-    return api.get<ApiResponse<any>>('/api/sales-contract/preview/default');
+    return api.get<ApiResponse<unknown>>('/api/sales-contract/preview/default');
   },
 
   previewDefault(): Promise<ApiResponse<{
@@ -140,7 +141,16 @@ export const salesContractApi = {
     return_buckets_actual: number;
     signatures: Record<string, string>;
   }>> {
-    return api.get<ApiResponse<any>>('/api/sales-contract/preview/default');
+    return api.get<ApiResponse<{
+      customer_name: string;
+      contract_date: string;
+      products: SalesContractProduct[];
+      total_quantity: number;
+      total_amount: number;
+      return_buckets_expected: number;
+      return_buckets_actual: number;
+      signatures: Record<string, string>;
+    }>>('/api/sales-contract/preview/default');
   }
 };
 

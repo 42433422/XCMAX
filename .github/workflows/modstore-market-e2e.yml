@@ -1,4 +1,5 @@
-# CI SSOT: generated from MODstore_deploy/.github/workflows/market-e2e.yml — edit root copy only.
+# CI SSOT: generated from MODstore_deploy/.github/workflows/market-e2e.yml — DO NOT edit here.
+# Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
 name: Market E2E (Playwright)
 
 # P1-4 · market 表层 Playwright E2E 接入 PR（日更 PR 表层冒烟）

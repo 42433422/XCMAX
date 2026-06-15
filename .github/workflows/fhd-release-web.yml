@@ -1,4 +1,5 @@
-# CI SSOT: generated from FHD/.github/workflows/release-web.yml — edit root copy only.
+# CI SSOT: generated from FHD/.github/workflows/release-web.yml — DO NOT edit here.
+# Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
 name: Release Web Images
 
 on:
@@ -8,10 +9,8 @@ on:
         description: "Release version"
         required: true
         default: "10.0.0"
-  push:
-    tags:
-      - "FHD/v10.*"
-      - "FHD/v*"
+  # Tag (FHD/v*) entry is centralized in fhd-release-orchestrator.yml (gated on
+  # verify-version-anchors, then dispatches this workflow) — avoids the double-run.
 
 permissions:
   contents: read

@@ -1,59 +1,46 @@
-        # Runbook：变更评审员 (`change-request-auditor`)
+# Runbook — 变更评审员
 
-        ## 职责摘要
+| 字段 | 值 |
+|------|----|
+| 员工 ID | `change-request-auditor` |
+| 负责区域 | `platform-core` |
+| 最后更新 | 2026-05-08 |
+| 应急联系 | admin |
 
-        对员工提交到「待邮件审批」队列的补丁/PR 做自动评审：跑测试 → 静态规则审 → 自动放行低风险 / 升级高风险给 admin；不直接改业务源码、不直接合并到主干。
+## 日常巡检
 
-        ## 上游 Handoff 契约
+### 巡检 1：待审队列长度
+```bash
+sqlite3 MODstore_deploy/var/modstore.db "SELECT status, COUNT(*) FROM change_requests GROUP BY status;"
+# 期望：pending < 20；escalated < 10
+```
 
-        ### handoff: test-qa-runner → 本岗
-- **触发条件**：`employee.task.done:test-qa-runner`（pytest 全绿 + coverage gate 通过）
-- **输入**：CI 测试报告路径、覆盖率摘要
-- **门禁**：测试红灯时本岗不得继续；回滚上游修复后重触发
+### 巡检 2：放行后回滚率
+```bash
+sqlite3 MODstore_deploy/var/modstore.db "SELECT COUNT(*) FROM change_requests WHERE auto_approved=1 AND rolled_back=1 AND created_at > datetime('now','-7 day');"
+# 期望：0；> 0 表示 risk-gate 阈值过松
+```
 
-### handoff: employee-pack-quality-interviewer → 本岗
-- **触发条件**：`employee.task.done:employee-pack-quality-interviewer`
-- **输入**：待补充（参见 `yuangon/**/employee-pack-quality-interviewer/runbook.md`）
-- **门禁**：依赖完成前本岗不得继续
+### 巡检 3：误升级率
+```bash
+sqlite3 MODstore_deploy/var/modstore.db "SELECT COUNT(*) FROM change_requests WHERE escalated=1 AND admin_decision='approve_low' AND created_at > datetime('now','-7 day');"
+```
 
-### handoff: security-secrets-guard → 本岗
-- **触发条件**：secrets 扫描通过（gitleaks clean）
-- **输入**：扫描报告、豁免列表更新
-- **门禁**：新增 secret 泄露阻断本岗所有操作
+## 异常处置
 
+### 异常 1：测试基础设施不可用
+- pytest / playwright 启动失败 → 立即 escalate 当前 task → 通知 `test-qa-runner` 与 admin。
+- 不能"跳过测试就放行"。
 
-        ## Handlers
+### 异常 2：连续 ≥ 3 个 low 被回滚
+- 立即把 risk-gate 阈值收紧（行数 / 覆盖率下降）。
+- 在 `skill-risk-gate.md` 追加规则。
 
-        | Handler | 说明 |
-        |---------|------|
-        | `llm_md` | 接收 Markdown 任务描述，调用 LLM 输出结构化结果 |
-| `echo` | 调试用：原样返回输入，用于 smoke 测试 |
-| `agent` | 启动多步 agent 执行链 |
+### 异常 3：评审超时（> 30min）
+- 检查 test-qa-runner 队列；若拥堵则升级。
 
-        ## 核心 Scope
+## ESkill 动态阶段触发记录
 
-        - `MODstore_deploy/modstore_server/api/change_request_api.py`
-- `MODstore_deploy/modstore_server/eventing/audit/**`
-- `MODstore_deploy/scripts/audit_*.py`
-- `MODstore_deploy/docs/runbooks/change-request-audit.md`
-- `yuangon/platform-core/change-request-auditor/**`
-
-        ## 故障处置
-
-        | 场景 | 处置 |
-        |------|------|
-        | LLM 调用失败 | retry 2 次 → 上报 `employee.task.failed:change-request-auditor` |
-        | 上游依赖未完成 | 等待 `employee.task.done:<dep>` 事件，不自行推进 |
-        | scope 文件不存在 | 报告缺口，待确认后再执行，不编造路径 |
-        | 版本锚点不对齐 | 运行 `verify_version_anchors.py`，修复后继续 |
-
-        ## 验收检查清单
-
-        - [ ] `employee.yaml.depends_on` 与 manifest 根级一致
-        - [ ] `actions.handlers` 三方一致（yaml / manifest / `_DISPATCH`）
-        - [ ] scope_globs 路径存在（或标注规划中）
-        - [ ] `employee_pack_consistency_warnings` 无 handler warning
-        - [ ] echo smoke 测试通过
-
-        ---
-        *本文件由 `bootstrap_yuangon.py` 生成，v10 线内迭代*
+| 日期 | 触发原因 | patch_id | 结果 | 是否固化 |
+|------|----------|----------|------|----------|
+| — | — | — | — | — |

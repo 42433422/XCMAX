@@ -33,8 +33,8 @@ def test_snapshot_with_handlers(caplog):
 
     bus.subscribe("alpha", h1)
     bus.subscribe("alpha", h2)
-    bus.subscribe_event("beta", h1, domain="sales")
-    bus.subscribe_global(h1)
+    bus.subscribe_to_domain("sales", "beta", h1)
+    bus.subscribe_all(h1)
 
     with caplog.at_level("INFO", logger="app.neuro_bus.runtime_diagnostics"):
         out = log_subscription_snapshot(bus)

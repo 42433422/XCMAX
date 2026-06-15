@@ -1,0 +1,18 @@
+{
+  "task": "add-url-to-sitemap",
+  "description": "新增一个页面到 sitemap.xml",
+  "input": {
+    "file": "sitemap.xml",
+    "action": "add_url",
+    "url": {
+      "loc": "https://xiu-ci.com/solutions.html",
+      "lastmod": "2026-05-06",
+      "changefreq": "monthly",
+      "priority": "0.8"
+    }
+  },
+  "validation": {
+    "xml_valid": true,
+    "no_duplicate_loc": true
+  }
+}

@@ -9,7 +9,7 @@ from sqlalchemy import text
 
 from app.application.ports.extract_log_store import ExtractLogStorePort
 from app.db.session import get_db
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -64,8 +64,8 @@ class SQLAlchemyExtractLogStore(ExtractLogStorePort):
                     "page": page,
                     "per_page": per_page,
                 }
-        except OPERATIONAL_ERRORS as e:
-            logger.error(f"获取提取日志列表失败：{e}")
+        except RECOVERABLE_ERRORS as e:
+            logger.error("获取提取日志列表失败：%s", e)
             return {"success": False, "message": f"获取失败：{str(e)}", "data": [], "total": 0}
 
     def find_by_id(self, log_id: int) -> dict[str, Any] | None:
@@ -80,8 +80,8 @@ class SQLAlchemyExtractLogStore(ExtractLogStorePort):
                     return None
 
                 return self._row_to_dict(row)
-        except OPERATIONAL_ERRORS as e:
-            logger.error(f"获取提取日志失败：{e}")
+        except RECOVERABLE_ERRORS as e:
+            logger.error("获取提取日志失败：%s", e)
             return None
 
     def create(self, log_data: dict[str, Any]) -> dict[str, Any]:
@@ -112,8 +112,8 @@ class SQLAlchemyExtractLogStore(ExtractLogStorePort):
                 db.commit()
 
                 return {"success": True, "message": "提取日志创建成功", "log_id": log_id}
-        except OPERATIONAL_ERRORS as e:
-            logger.error(f"创建提取日志失败：{e}")
+        except RECOVERABLE_ERRORS as e:
+            logger.error("创建提取日志失败：%s", e)
             return {"success": False, "message": f"创建失败：{str(e)}"}
 
     def delete(self, log_id: int) -> dict[str, Any]:
@@ -122,8 +122,8 @@ class SQLAlchemyExtractLogStore(ExtractLogStorePort):
                 db.execute(text("DELETE FROM extract_logs WHERE id = :id"), {"id": log_id})
                 db.commit()
                 return {"success": True, "message": "提取日志删除成功"}
-        except OPERATIONAL_ERRORS as e:
-            logger.error(f"删除提取日志失败：{e}")
+        except RECOVERABLE_ERRORS as e:
+            logger.error("删除提取日志失败：%s", e)
             return {"success": False, "message": f"删除失败：{str(e)}"}
 
     def clear_old(self, days: int = 30) -> dict[str, Any]:
@@ -145,6 +145,6 @@ class SQLAlchemyExtractLogStore(ExtractLogStorePort):
                     "message": f"已清理 {deleted_count} 条旧日志",
                     "deleted_count": deleted_count,
                 }
-        except OPERATIONAL_ERRORS as e:
-            logger.error(f"清理旧日志失败：{e}")
+        except RECOVERABLE_ERRORS as e:
+            logger.error("清理旧日志失败：%s", e)
             return {"success": False, "message": f"清理失败：{str(e)}"}

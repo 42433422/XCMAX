@@ -49,8 +49,9 @@ def test_inmemory_limiter_window_expiry(monkeypatch: pytest.MonkeyPatch):
     limiter = rl._InMemoryRateLimiter(max_requests=1, window_seconds=1)
     assert limiter.is_allowed("u1") is True
     assert limiter.is_allowed("u1") is False
-    # 模拟时间前进到下一个窗口
-    monkeypatch.setattr(rl.time, "time", lambda: time.time() + 2)
+    # 模拟时间前进到下一个窗口（捕获原始 time.time，避免 lambda 自递归）
+    _orig_time = time.time
+    monkeypatch.setattr(rl.time, "time", lambda: _orig_time() + 2)
     assert limiter.is_allowed("u1") is True
 
 
@@ -101,18 +102,19 @@ def test_circuit_breaker_opens_after_threshold_failures():
         cb.call(boom)
 
 
-def test_circuit_breaker_recovery_open_to_halfopen_to_closed():
-    cb = rl._CircuitBreaker(failure_threshold=1, recovery_timeout=0, expected_exception=ValueError)
-    cb._last_failure_time = 0.0  # 让 recovery 立即触发
+def test_circuit_breaker_recovery_open_to_halfopen_to_closed(monkeypatch: pytest.MonkeyPatch):
+    # 用可控时钟，避免 recovery_timeout=0 + 真实时钟导致的瞬时 half-open 抖动
+    clock = {"t": 1000.0}
+    monkeypatch.setattr(rl.time, "time", lambda: clock["t"])
+    cb = rl._CircuitBreaker(failure_threshold=1, recovery_timeout=5, expected_exception=ValueError)
     with pytest.raises(ValueError):
         cb.call(lambda: (_ for _ in ()).throw(ValueError("x")))
-    # state property 触发转换
+    # 刚失败、未过 recovery_timeout → open
     assert cb.state == "open"
 
-    # 模拟时间已过 recovery_timeout
-    with patch.object(rl.time, "time", return_value=time.time() + 1):
-        s = cb.state
-    assert s == "half-open"
+    # 时间越过 recovery_timeout → half-open
+    clock["t"] = 1010.0
+    assert cb.state == "half-open"
 
     def good():
         return "ok"

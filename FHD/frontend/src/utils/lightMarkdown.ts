@@ -149,10 +149,19 @@ function isTableHeaderSep(line: string): boolean {
   return /^\s*\|?(\s*:?-{2,}:?\s*\|)+\s*:?-{2,}:?\s*\|?\s*$/.test(line)
 }
 
+/** 模型常输出字面量 `<br>` 作换行；Markdown 解析前转为 `\n`（解析器会 escape 原始 HTML）。 */
+export function normalizeModelLineBreaks(src: string): string {
+  return String(src ?? '')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/&lt;br\s*\/?&gt;/gi, '\n')
+}
+
 /** 主入口：把 markdown 字符串渲染为安全 HTML 字符串。*/
 export function renderMarkdown(src: string): string {
   const ph = new PlaceholderTable()
-  const text = normalizePackedMarkdownTables(String(src ?? '').replace(/\r\n?/g, '\n'))
+  const text = normalizePackedMarkdownTables(
+    normalizeModelLineBreaks(String(src ?? '').replace(/\r\n?/g, '\n')),
+  )
 
   const fenceMatcher = /(^|\n)```([\w+-]*)\s*\n([\s\S]*?)\n?```(?=\n|$)/g
   const tokenized = text.replace(fenceMatcher, (_m, lead, lang, code) => {

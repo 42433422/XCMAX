@@ -212,10 +212,15 @@ def _resolve_line_mode(
 ) -> tuple[str, bool, Dict[str, Any]]:
     """按产线灰度策略解析执行 mode 与 dry_run。"""
     global_mode = (
-        os.environ.get("MODSTORE_DAILY_ORCHESTRATOR_DIGEST_MODE", "shadow") or "shadow"
-    ).strip().lower()
+        (os.environ.get("MODSTORE_DAILY_ORCHESTRATOR_DIGEST_MODE", "shadow") or "shadow")
+        .strip()
+        .lower()
+    )
     try:
-        from modstore_server.line_rollout_policy import resolve_line_execution_mode, should_allow_line_primary
+        from modstore_server.line_rollout_policy import (
+            resolve_line_execution_mode,
+            should_allow_line_primary,
+        )
 
         policy = should_allow_line_primary(dispatch_line)
         line_mode = resolve_line_execution_mode(

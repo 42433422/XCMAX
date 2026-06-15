@@ -1,19 +1,20 @@
 import { ref, computed, onUnmounted } from 'vue';
 import { useJarvisChatStore } from '@/stores/jarvisChat';
+import { asRecord, asArray, asString, asBoolean, asDisposable } from '@/utils/typeGuards'
 
 type SpeechRecognitionLike = {
   lang: string;
   continuous: boolean;
   interimResults: boolean;
   onstart: (() => void) | null;
-  onresult: ((event: any) => void) | null;
-  onerror: ((event: any) => void) | null;
+  onresult: ((event: unknown) => void) | null;
+  onerror: ((event: unknown) => void) | null;
   onend: (() => void) | null;
   start: () => void;
   stop: () => void;
 };
 
-export function useJarvisChat(): any {
+export function useJarvisChat(): unknown {
   const store = useJarvisChatStore();
 
   const isListening = ref(false);
@@ -33,7 +34,7 @@ export function useJarvisChat(): any {
     store.addMessage(content, type);
   };
 
-  const addTaskMessage = (content: string, taskData: any) => {
+  const addTaskMessage = (content: string, taskData: unknown) => {
     store.addTaskMessage(content, taskData);
   };
 
@@ -44,9 +45,13 @@ export function useJarvisChat(): any {
       return;
     }
 
-    const SpeechRecognitionCtor =
-      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    recognition.value = new SpeechRecognitionCtor() as SpeechRecognitionLike;
+    const win = window as Window & {
+      SpeechRecognition?: new () => SpeechRecognitionLike
+      webkitSpeechRecognition?: new () => SpeechRecognitionLike
+    }
+    const SpeechRecognitionCtor = win.SpeechRecognition || win.webkitSpeechRecognition
+    if (!SpeechRecognitionCtor) return
+    recognition.value = new SpeechRecognitionCtor()
     recognition.value.lang = 'zh-CN';
     recognition.value.continuous = false;
     recognition.value.interimResults = false;
@@ -56,16 +61,18 @@ export function useJarvisChat(): any {
       store.startRecording();
     };
 
-    recognition.value.onresult = (event: any) => {
-      const transcript = event?.results?.[0]?.[0]?.transcript || '';
+    recognition.value.onresult = (event: unknown) => {
+      const row = asRecord(event)
+      const results = asArray(asRecord(asArray(row.results)[0])[0])
+      const transcript = asString(results[0])
       store.stopRecording();
       if (transcript) {
         void sendMessage(transcript);
       }
     };
 
-    recognition.value.onerror = (event: any) => {
-      console.error('Speech recognition error:', event?.error);
+    recognition.value.onerror = (event: unknown) => {
+      console.error('Speech recognition error:', asString(asRecord(event).error));
       store.stopRecording();
       isListening.value = false;
     };

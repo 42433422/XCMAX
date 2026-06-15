@@ -1,5 +1,6 @@
 import api, { ApiError } from './core';
 import type { RequestOptions } from './core';
+import { asRecord, asArray, asString } from '@/utils/typeGuards'
 
 /**
  * 开发环境下若把 VITE_TEMPLATE_* 配成 http://127.0.0.1:5000/api/... 绝对地址，
@@ -7,7 +8,7 @@ import type { RequestOptions } from './core';
  * 故在 DEV 且 host 为 localhost/127.0.0.1 时强制改为相对路径，走 Vite 同源代理。
  */
 function getConfiguredEndpoint(envKey: string, fallbackPath: string): string {
-  const configured = String((import.meta as any)?.env?.[envKey] || '').trim();
+  const configured = String(import.meta.env[envKey] || '').trim();
   if (!configured) return fallbackPath;
   if (
     import.meta.env.DEV &&
@@ -61,7 +62,7 @@ export const templatePreviewApi = {
     return api.get(joinPath(TEMPLATE_ENDPOINTS.detail, templateId));
   },
 
-  decomposeTemplate(payload: Record<string, any>) {
+  decomposeTemplate(payload: Record<string, unknown>) {
     return api.post(TEMPLATE_ENDPOINTS.excelDecompose, payload);
   },
 
@@ -73,7 +74,7 @@ export const templatePreviewApi = {
     return api.get(joinPath(TEMPLATE_ENDPOINTS.progress, taskId));
   },
 
-  async createTemplate(payload: Record<string, any>) {
+  async createTemplate(payload: Record<string, unknown>) {
     try {
       return await api.post(TEMPLATE_ENDPOINTS.create, payload);
     } catch (error) {
@@ -81,7 +82,7 @@ export const templatePreviewApi = {
     }
   },
 
-  async updateTemplate(payload: Record<string, any>) {
+  async updateTemplate(payload: Record<string, unknown>) {
     try {
       return await api.post(TEMPLATE_ENDPOINTS.update, payload);
     } catch (error) {
@@ -89,7 +90,7 @@ export const templatePreviewApi = {
     }
   },
 
-  async createTemplateFromGrid(payload: Record<string, any>) {
+  async createTemplateFromGrid(payload: Record<string, unknown>) {
     try {
       return await api.post(TEMPLATE_ENDPOINTS.create, payload);
     } catch (error) {
@@ -97,7 +98,7 @@ export const templatePreviewApi = {
     }
   },
 
-  async replaceTemplateById(payload: Record<string, any>) {
+  async replaceTemplateById(payload: Record<string, unknown>) {
     try {
       return await api.post(TEMPLATE_ENDPOINTS.update, payload);
     } catch (error) {
@@ -105,7 +106,7 @@ export const templatePreviewApi = {
     }
   },
 
-  deleteTemplate(payload: Record<string, any>) {
+  deleteTemplate(payload: Record<string, unknown>) {
     return api.post(TEMPLATE_ENDPOINTS.remove, payload);
   },
 

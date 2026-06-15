@@ -11,7 +11,7 @@ from sqlalchemy.orm import joinedload, make_transient
 
 from app.db.models.user import Session as UserSession
 from app.db.models.user import User
-from app.db.session import get_db
+from app.db.session import get_host_db
 from app.utils.time import utc_now_naive
 
 
@@ -45,7 +45,7 @@ class SessionManager:
         }
 
     def create_session(self, user_id: int):
-        with get_db() as db:
+        with get_host_db() as db:
             return self.create_session_with_db(db, user_id)
 
     @staticmethod
@@ -65,7 +65,7 @@ class SessionManager:
         return user
 
     def validate_session(self, session_id: str):
-        with get_db() as db:
+        with get_host_db() as db:
             user_session = (
                 db.query(UserSession)
                 .options(joinedload(UserSession.user))
@@ -84,7 +84,7 @@ class SessionManager:
             return self._detach_user_for_response(user_session.user)
 
     def get_session_info(self, session_id: str):
-        with get_db() as db:
+        with get_host_db() as db:
             user_session = (
                 db.query(UserSession).filter(UserSession.session_id == session_id).first()
             )
@@ -104,7 +104,7 @@ class SessionManager:
             }
 
     def delete_session(self, session_id: str) -> bool:
-        with get_db() as db:
+        with get_host_db() as db:
             user_session = (
                 db.query(UserSession).filter(UserSession.session_id == session_id).first()
             )
@@ -117,13 +117,13 @@ class SessionManager:
             return True
 
     def delete_user_sessions(self, user_id: int) -> int:
-        with get_db() as db:
+        with get_host_db() as db:
             count = db.query(UserSession).filter(UserSession.user_id == user_id).delete()
             db.commit()
             return count
 
     def cleanup_expired_sessions(self) -> int:
-        with get_db() as db:
+        with get_host_db() as db:
             count = db.query(UserSession).filter(UserSession.expires_at < utc_now_naive()).delete()
             db.commit()
             return count

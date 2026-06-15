@@ -100,6 +100,21 @@ open htmlcov/index.html   # macOS
 
 **声称 vs 实测**：[CLAIMED_VS_ACTUAL.md](CLAIMED_VS_ACTUAL.md) · **测试索引**：[`tests/INDEX.md`](../tests/INDEX.md)
 
+### 技术债全量门禁（Phase 12 · 发版前）
+
+在 `FHD/` 根目录执行（Python ≥3.11；前端需 `npm ci`）：
+
+```bash
+python3 scripts/dev/verify_version_anchors.py
+python3 scripts/dev/count_raw_sql.py --max-fstring-sql 0 --max-text-f 0
+python3 scripts/dev/count_type_debt.py --max-any 0 --max-type-ignore 0 --max-ts-nocheck 0
+ruff check app/ && python3 -m mypy app/ --no-error-summary
+python3 -m pytest tests/ --cov=app --cov-fail-under=35 -q
+cd frontend && npm run lint && npm run type-check && npm run type-check:build && npm run test:unit
+```
+
+**CD RC 实测**：打 tag `FHD/v10.0.0-rc.1` 后按 [`docs/deploy/RELEASE_CHECKLIST.md`](deploy/RELEASE_CHECKLIST.md) 验证 orchestrator（需 GitHub Secrets：`FHD_PUSH_*`、`KUBE_CONFIG_B64`）。
+
 ---
 
 ## 4. 生产服务器部署（FHD API · 双模：tarball + compose）
@@ -138,6 +153,8 @@ FHD_API_IMAGE_DIGEST=sha256:... \
 ## 相关链接
 
 - 仓根地图：[`README.md`](../../README.md)
+- **发版检查清单**：[`docs/deploy/RELEASE_CHECKLIST.md`](deploy/RELEASE_CHECKLIST.md)（tag `FHD/v*` → CVM + K8s + 客户端）
+- **国际化**：[`docs/I18N_ROLLOUT.md`](I18N_ROLLOUT.md) · 前端 `src/i18n/`（zh-CN / en-US）；`localStorage.xcagi_locale` 切换
 - CI SSOT：[`docs/CI_SSOT.md`](../../docs/CI_SSOT.md)
 - OpenAPI：启动后 `http://127.0.0.1:5000/docs`
-- Android 签约级移动：`guides/MOBILE_ANDROID.md`
+- Android 实验骨架（非签约级）：`guides/MOBILE_ANDROID.md`

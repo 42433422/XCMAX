@@ -1,0 +1,18 @@
+# Progressive-delivery base: the Rollout (canary + SLO analysis) replaces the Deployment.
+# Shares service / configmap / ingress / pdb / networkpolicy with the Deployment base (../).
+# Excludes deployment.yaml (Rollout supersedes) and hpa.yaml (HPA targets a Deployment; with a
+# Rollout, scaling is canary-driven — add a Rollout-aware HPA later if needed).
+#
+# Parent-file refs need `--load-restrictor LoadRestrictionsNone` (ArgoCD argocd-cm via
+# bootstrap_argocd.sh; locally pass the flag). Requires the Argo Rollouts CRDs/controller
+# (FHD/gitops/apps/rollouts.yaml, or scripts/gitops/bootstrap_rollouts.sh).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../service.yaml
+  - ../configmap.yaml
+  - ../ingress.yaml
+  - ../pdb.yaml
+  - ../networkpolicy.yaml
+  - rollout.yaml
+  - analysis-template.yaml

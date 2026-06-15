@@ -1,10 +1,9 @@
 id: employee-pack-curator
 name: 员工包策展员
-version: "10.0.0"
+version: "1.0.0"
+domain: 管理 MODstore 员工包的完整生命周期：AI scaffold、Skill 注册、executor 维护、.xcemp 导入导出与 ESkill 演化固化；不得修改支付模块。
 owner: admin
 area: modstore-backend
-domain: >-
-  管理 MODstore 员工包的完整生命周期：AI scaffold、Skill 注册、executor 维护、.xcemp 导入导出与 ESkill 演化固化；不得修改支付模块。
 
 scope_globs:
   - MODstore_deploy/modstore_server/employee_ai_scaffold.py
@@ -25,39 +24,48 @@ scope_globs:
   - MODstore_deploy/modstore_server/mod_employee_agent_runner.py
   - MODstore_deploy/modstore_server/services/employee.py
   - MODstore_deploy/modstore_server/integrations/vibe_eskill_adapter.py
-  - "MODstore_deploy/modstore_server/market_files/*.xcemp"
-  - "yuangon/**/*.xcemp"
+  - MODstore_deploy/modstore_server/market_files/*.xcemp
+  - yuangon/**/*.xcemp
   - MODstore_deploy/docs/employee_publish_wizard.md
   - MODstore_deploy/docs/fhd-employee-composition.md
   - docs/modstore/员工制作增强设计方案.md
   - docs/modstore/ddd.md
   - docs/adr/0003-artifacts-bundles-employee-packs.md
-  - "yuangon/modstore-backend/employee-pack-curator/**"
+  - yuangon/modstore-backend/employee-pack-curator/**
 
 forbidden_globs:
-  - "MODstore_deploy/modstore_server/payment_*.py"
-  - "MODstore_deploy/market/src/**"
-  - "_local_secrets/**"
+  - MODstore_deploy/modstore_server/payment_*.py
+  - MODstore_deploy/market/src/**
+  - _local_secrets/**
+
+triggers:
+  on_error: true
+  on_quality_fail: true
+  on_coverage_miss: false
+  subscribes:
+    # vibe 适配变更后跟进员工包管线（避免与 mods-and-eskill-curator 循环触发）
+    - "employee.task.done:vibe-coding-maintainer"
+  max_patch_budget_tokens: 5000
+  max_patch_steps: 6
+
+sla:
+  timeout_seconds: 180
+  retry_max: 2
+  escalate_to_human: true
+
+llm_default: "auto"
+llm_reasoning: "auto"
+
+skills:
+  - skills/skill-employee-pack-export.md
+  - skills/skill-eskill-solidify.md
+  - skills/skill-doc-ownership.md
 
 depends_on:
   - mods-and-eskill-curator
   - vibe-coding-maintainer
 
-actions:
-  handlers:
-    - llm_md
-    - echo
-
-triggers:
-  on_error: true
-  on_quality_fail: true
-
-skills:
-  - skill-employee-pack-export
-  - skill-eskill-solidify
-  - skill-doc-ownership
-
 changelog:
-  - version: "10.0.0"
-    date: "2026-06-07"
-    note: "yuangon 骨架由 bootstrap_yuangon.py 从 manifest 反向生成（v10 线内迭代）"
+  - version: "1.0.0"
+    date: "2026-05-06"
+    note: "初始创建"

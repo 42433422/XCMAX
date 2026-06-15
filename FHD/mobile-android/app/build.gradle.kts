@@ -18,8 +18,8 @@ android {
         applicationId = "com.xiuci.xcagi.mobile"
         minSdk = 26
         targetSdk = 35
-        versionCode = 9
-        versionName = "1.4.0"
+        versionCode = 10
+        versionName = "10.0.0"
         manifestPlaceholders["JPUSH_PKGNAME"] = "com.xiuci.xcagi.mobile"
         manifestPlaceholders["JPUSH_CHANNEL"] = "developer-default"
         manifestPlaceholders["JPUSH_APPKEY"] = "placeholder_replace_in_local_properties"
@@ -127,6 +127,12 @@ android {
     }
 }
 
+afterEvaluate {
+    tasks.matching { it.name.contains("uploadCrashlyticsMappingFile") }.configureEach {
+        enabled = project.findProperty("uploadCrashlyticsMapping")?.toString() == "true"
+    }
+}
+
 tasks.matching { it.name.startsWith("assemble") && it.name.contains("Release") }.configureEach {
     doFirst {
         val releaseSigning = android.signingConfigs.getByName("release")
@@ -194,6 +200,14 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.9.0")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
+
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
+    androidTestImplementation(composeBom)
+    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
 
 val localProps = Properties().apply {

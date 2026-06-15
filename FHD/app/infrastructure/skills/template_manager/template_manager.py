@@ -3,7 +3,7 @@ Template Manager Skill Module
 """
 
 import os
-from typing import Any
+from typing import Any, cast
 
 
 def get_base_dir():
@@ -20,42 +20,42 @@ def get_template_app_service():
 
 def list_all_templates() -> list[dict]:
     svc = get_template_app_service()
-    return svc.list_templates()
+    return cast("list[dict[Any, Any]]", svc.list_templates())
 
 
 def list_templates_by_type(template_type: str, active_only: bool = True) -> list[dict]:
     svc = get_template_app_service()
-    return svc.list_by_type(template_type, active_only)
+    return cast("list[dict[Any, Any]]", svc.list_by_type(template_type, active_only))
 
 
 def get_template_file_path(template_id: str) -> str | None:
     svc = get_template_app_service()
-    return svc.resolve_template_file(template_id)
+    return cast("str | None", svc.resolve_template_file(template_id))
 
 
 def get_default_template(template_type: str = "发货单") -> dict | None:
     svc = get_template_app_service()
-    return svc.get_default_for_type(template_type)
+    return cast("dict[Any, Any] | None", svc.get_default_for_type(template_type))
 
 
 def decompose_template_file(
     file_path: str, sheet_name: str = None, sample_rows: int = 5
 ) -> dict[str, Any]:
-    from app.routes.excel_templates import _decompose_template
+    from app.application.excel_template_http_app_service import _decompose_template
 
     result, status = _decompose_template(file_path, sheet_name, sample_rows)
     return result
 
 
 def resolve_template_path(filename: str) -> str | None:
-    from app.routes.excel_templates import _resolve_template_path
+    from app.application.excel_template_http_app_service import _resolve_template_path
 
     return _resolve_template_path(filename)
 
 
 def save_template_file(source_name: str, target_name: str, overwrite: bool = False) -> dict:
     svc = get_template_app_service()
-    return svc.save_template_file(source_name, target_name, overwrite)
+    return cast("dict[Any, Any]", svc.save_template_file(source_name, target_name, overwrite))
 
 
 def get_template_info(template_id: int) -> dict | None:
@@ -185,7 +185,7 @@ def update_template(template_id: int, **updates) -> dict:
             db_updates.append("updated_at = :updated_at")
             params["updated_at"] = datetime.now()
 
-            sql = f"UPDATE templates SET {', '.join(db_updates)} WHERE id = :id"
+            sql = "UPDATE templates SET " + ", ".join(db_updates) + " WHERE id = :id"
             db.execute(text(sql), params)
             db.commit()
 

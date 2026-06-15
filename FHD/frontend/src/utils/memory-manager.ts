@@ -1,5 +1,7 @@
+import { asRecord, asArray, asString, asBoolean, asDisposable } from '@/utils/typeGuards'
+
 export interface ResourceEntry {
-  resource: any;
+  resource: unknown;
   type: string;
   createdAt: number;
   lastAccessed: number;
@@ -37,7 +39,7 @@ export class ResourceManager {
     this.isDisposed = false;
   }
 
-  register(id: string, resource: any, type: string = 'generic'): boolean {
+  register(id: string, resource: unknown, type: string = 'generic'): boolean {
     if (this.isDisposed) {
       console.warn(`ResourceManager: Cannot register resource "${id}" - manager is disposed`);
       return false;
@@ -58,7 +60,7 @@ export class ResourceManager {
     return true;
   }
 
-  get(id: string): any {
+  get(id: string): unknown {
     const entry = this.resources.get(id);
     if (entry) {
       entry.lastAccessed = Date.now();
@@ -75,19 +77,20 @@ export class ResourceManager {
     const entry = this.resources.get(id);
     if (!entry) return false;
 
-    const { resource, type } = entry;
+    const { resource, type } = entry
 
     try {
-      if (resource && typeof resource.dispose === 'function') {
-        resource.dispose();
-      } else if (resource && typeof resource.destroy === 'function') {
-        resource.destroy();
-      } else if (resource && typeof resource.cleanup === 'function') {
-        resource.cleanup();
-      } else if (resource instanceof HTMLElement && resource.remove) {
-        resource.remove();
-      } else if (resource && (resource as any) instanceof EventTarget && (resource as any).removeEventListener) {
-        this.removeAllListeners(resource as EventTarget);
+      const disposable = asDisposable(resource)
+      if (disposable?.dispose) {
+        disposable.dispose()
+      } else if (disposable?.destroy) {
+        disposable.destroy()
+      } else if (disposable?.cleanup) {
+        disposable.cleanup()
+      } else if (resource instanceof HTMLElement) {
+        resource.remove()
+      } else if (resource instanceof EventTarget) {
+        this.removeAllListeners(resource)
       }
     } catch (error) {
       console.error(`ResourceManager: Error releasing resource "${id}":`, error);
@@ -269,12 +272,12 @@ export function cleanupEventListener(
   }
 }
 
-export function cleanupObject(obj: Record<string, any>): void {
+export function cleanupObject(obj: Record<string, unknown>): void {
   if (!obj) return;
 
   for (const key in obj) {
     if (obj[key] && typeof obj[key] === 'object') {
-      cleanupObject(obj[key]);
+      cleanupObject(asRecord(obj[key]));
     }
     obj[key] = null;
   }

@@ -19,7 +19,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any, TypeVar
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -87,7 +87,7 @@ class QueryOptimizer:
         if stats.is_slow:
             self._slow_queries.append(stats)
             logger.warning(
-                f"慢查询检测 [{stats.query_id}]: {duration_ms:.2f}ms > {SLOW_QUERY_THRESHOLD * 1000:.0f}ms | SQL: {sql[:200]}"
+                f"慢查询检测 [{stats.query_id}]: {duration_ms:.2f}ms > {SLOW_QUERY_THRESHOLD * 1000:.0f}ms | SQL: {sql[:200]}"  # noqa: G004
             )
 
         if len(self._query_stats) > self._max_stats:
@@ -131,7 +131,7 @@ class QueryOptimizer:
                         from app.utils.redis_cache import get_redis_cache
 
                         cache = get_redis_cache()
-                    except OPERATIONAL_ERRORS:
+                    except RECOVERABLE_ERRORS:
                         pass
 
                 key = (
@@ -156,8 +156,8 @@ class QueryOptimizer:
                     self.record_query(f"CACHED:{func.__name__}", duration_ms)
                     return result
 
-                except OPERATIONAL_ERRORS as e:
-                    logger.error(f"缓存查询执行失败 [{func.__name__}]: {e}")
+                except RECOVERABLE_ERRORS as e:
+                    logger.error("缓存查询执行失败 [%s]: %s", func.__name__, e)
                     raise
 
             wrapper.invalidate_cache = lambda *a, **kw: (
@@ -205,7 +205,7 @@ class QueryOptimizer:
                 try:
                     execute_func(item)
                     result.success_count += 1
-                except OPERATIONAL_ERRORS as e:
+                except RECOVERABLE_ERRORS as e:
                     result.failed_count += 1
                     error_msg = (
                         f"项目 {i + result.success_count + result.failed_count} 处理失败: {str(e)}"
@@ -243,9 +243,9 @@ class QueryOptimizer:
             result = self.batch_execute(items, insert_item, batch_size)
             session.commit()
             return result
-        except OPERATIONAL_ERRORS as e:
+        except RECOVERABLE_ERRORS as e:
             session.rollback()
-            logger.error(f"批量插入失败: {e}")
+            logger.error("批量插入失败: %s", e)
             raise
 
     def optimized_pagination(
@@ -293,8 +293,8 @@ class QueryOptimizer:
 
             return items, total, metadata
 
-        except OPERATIONAL_ERRORS as e:
-            logger.error(f"分页查询失败: {e}")
+        except RECOVERABLE_ERRORS as e:
+            logger.error("分页查询失败: %s", e)
             raise
 
     def eager_load(self, query, relationships: list[str]):

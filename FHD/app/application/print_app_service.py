@@ -4,7 +4,7 @@
 负责标签打印相关的用例编排
 """
 
-from typing import Any
+from typing import Any, cast
 
 from app.services.printer_service import PrinterService
 
@@ -38,7 +38,7 @@ class PrintApplicationService:
         if not label_data:
             return {"success": False, "message": "没有要打印的标签"}
 
-        return self._printer_service.print_labels(label_data)
+        return cast("dict[str, Any]", self._printer_service.print_labels(label_data))
 
     def print_single_label(
         self,
@@ -80,7 +80,7 @@ class PrintApplicationService:
         Returns:
             打印机状态
         """
-        return self._printer_service.get_printer_status()
+        return cast("dict[str, Any]", self._printer_service.get_printer_status())
 
     def test_print(self) -> dict[str, Any]:
         """
@@ -99,7 +99,7 @@ class PrintApplicationService:
             }
         ]
 
-        return self._printer_service.print_labels(test_label)
+        return cast("dict[str, Any]", self._printer_service.print_labels(test_label))
 
 
 from app.neuro_bus.neuro_application_instrumentation import instrument_application_service_class

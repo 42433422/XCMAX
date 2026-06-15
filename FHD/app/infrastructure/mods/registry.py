@@ -25,22 +25,22 @@ class ModRegistry:
 
     def register_mod(self, metadata: ModMetadata) -> bool:
         if metadata.id in self._mods:
-            logger.warning(f"Mod {metadata.id} is already registered")
+            logger.warning("Mod %s is already registered", metadata.id)
             return False
 
         self._mods[metadata.id] = metadata
-        logger.info(f"Mod registered: {metadata.id} v{metadata.version}")
+        logger.info("Mod registered: %s v%s", metadata.id, metadata.version)
         return True
 
     def unregister_mod(self, mod_id: str) -> bool:
         if mod_id not in self._mods:
-            logger.warning(f"Mod {mod_id} is not registered")
+            logger.warning("Mod %s is not registered", mod_id)
             return False
 
         del self._mods[mod_id]
         if mod_id in self._mod_instances:
             del self._mod_instances[mod_id]
-        logger.info(f"Mod unregistered: {mod_id}")
+        logger.info("Mod unregistered: %s", mod_id)
         return True
 
     def get_mod_metadata(self, mod_id: str) -> ModMetadata | None:

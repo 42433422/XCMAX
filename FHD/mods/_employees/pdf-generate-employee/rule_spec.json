@@ -1,0 +1,28 @@
+{
+  "brief": "制作 PDF 生成员工包。上传 .pdf → 读取原生文字/分页结构 → 输出结构化 JSON（document_parsed.json）作为中介 → 写入 outputs/generated_document.pdf；可选用 agent 润色。handlers 含 direct_python 与 agent。",
+  "mode": "direct_python_file_transform",
+  "accepted_extensions": [
+    ".pdf",
+    ".json",
+    ".txt"
+  ],
+  "default_action": "convert",
+  "default_output_relpath": "outputs/document_parsed.json",
+  "default_pdf_output_relpath": "outputs/generated_document.pdf",
+  "runtime_kind": "pdf_generate",
+  "optional_llm_polish": true,
+  "output_schema": [
+    "pages",
+    "blocks",
+    "plain_text",
+    "stats",
+    "metadata"
+  ],
+  "requirements": [
+    "handlers must include \"direct_python\"; may include \"agent\" for optional polish.",
+    "Parse PDF into JSON or build from user_query/.txt; write generated_document.pdf from JSON.",
+    "Never fabricate content when inputs/ is empty.",
+    "Return {ok, summary, items, warnings, error, meta}."
+  ],
+  "pack_id": "pdf-generate-employee"
+}

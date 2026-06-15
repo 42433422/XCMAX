@@ -25,7 +25,7 @@
 - ``MODSTORE_DAILY_VIBE_EXECUTE_PRIORITIES``：逗号分隔优先级过滤（默认 ``P0,P1,P2``）。
 - ``MODSTORE_DAILY_VIBE_EXECUTE_MAX_UNITS``：单次最多派发条目数（默认 ``32``）。
 - ``MODSTORE_DAILY_MEETING_USER_ID``（默认 ``MODSTORE_DAILY_BRIEF_USER_ID`` 或 ``0``）。
-- ``MODSTORE_DAILY_SURFACE_AUDIT_ENABLED``（默认 ``1``）：08:00 摘要内 P-W 网站 / P-S 软件 / P-App 移动面 Playwright 截图与 console 分析（见 ``daily_digest_surface_audit.py``）。
+- ``MODSTORE_DAILY_SURFACE_AUDIT_ENABLED``（默认 ``1``）：08:00 摘要内 P-W/P-S/P-App 全量截图（P-W 公开商品详情 1–3 张；P-App adb 全屏）。
 - ``MODSTORE_DAILY_SURFACE_ANALYSIS_ENABLED``（默认 ``1``）：三端每条产线由「对应员工」bench LLM 生成现状 / 异常 / 改进建议分析；未配置 bench LLM 时回退规则化摘要。
 - ``MODSTORE_DAILY_SURFACE_PPT_ENABLED``（默认 ``1``）：把三端截图 + 分析拼成 PowerPoint 作为邮件附件（见 ``daily_digest_surface_ppt.py``）。
 - ``MODSTORE_DAILY_SURFACE_AUDIT_BASE_URL``：巡检根 URL（默认 ``https://xiu-ci.com``）。
@@ -161,6 +161,23 @@ def _html_to_text_excerpt(body_html: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
+def count_on_duty_employees() -> int:
+    """编制矩阵 duty_roster 内在岗岗位数（与 AdminDutyEmployeeGraph / yuangon 同源）。"""
+    from modstore_server.duty_roster import all_planned_employee_ids
+
+    return len(all_planned_employee_ids())
+
+
+def count_catalog_employee_packs(session) -> int:
+    """Catalog 库内 employee_pack 条目总数（含市场/工作流包，可大于编制数）。"""
+    return int(
+        session.query(func.count(CatalogItem.id))
+        .filter(CatalogItem.artifact == "employee_pack")
+        .scalar()
+        or 0
+    )
+
+
 # ---------------------------------------------------------------------------
 # 邮件视觉基元（presentation primitives）
 # 纯函数 · 无 DB / 无副作用，邮件安全（全内联样式），便于本地预览与复用。
@@ -230,7 +247,7 @@ def _hero_overview_html(
         tone, verdict, dot = "ok", "系统健康", "#16a34a"
     fg, bg, bd = _DIGEST_TONES[tone]
 
-    notes = [f"任务成功率 {rate}", f"系统事件 {inc_n} 条", f"{emp_n} 名 AI 员工在岗"]
+    notes = [f"任务成功率 {rate}", f"系统事件 {inc_n} 条", f"{emp_n} 名编制在岗"]
     if ops_n:
         notes.append(f"运维操作 {ops_n} 条")
     if cursor_hits > 0:
@@ -485,9 +502,14 @@ def _run_scheduled_digest_vibe_prep(
 
 
 def _repo_root() -> Path:
+    mono = os.environ.get("XCMAX_MONOREPO_ROOT", "").strip()
+    if mono:
+        return Path(mono).resolve()
     env = os.environ.get("MODSTORE_REPO_ROOT", "").strip()
     if env:
-        return Path(env).resolve()
+        p = Path(env).resolve()
+        if (p / "FHD").is_dir():
+            return p
     try:
         from modstore_server.integrations.ops_action_handlers import repo_root as _ops_rr
 
@@ -875,6 +897,7 @@ def _digest_system_work_summary_html(
     git_head: str,
     repo_root: Path,
     emp_n: int,
+    catalog_pack_n: int = 0,
     met_ok: int,
     met_fail: int,
     ops_n: int,
@@ -909,12 +932,25 @@ def _digest_system_work_summary_html(
     )
 
     rows2 = [
-        _kv_row("在岗员工", f"{emp_n} 人"),
-        _kv_row("今日任务执行", f"{total} 次"),
-        _kv_row("成功率", rate, extra_style="" if met_fail == 0 else "background:#fef2f2"),
-        _kv_row("运维操作记录", f"{ops_n} 条"),
-        _kv_row("系统事件", f"{inc_n} 条", extra_style="" if inc_n == 0 else "background:#fffbeb"),
+        _kv_row("编制在岗", f"{emp_n} 人"),
     ]
+    if catalog_pack_n and catalog_pack_n != emp_n:
+        rows2.append(
+            _kv_row(
+                "Catalog 员工包",
+                f"{catalog_pack_n} 个",
+            )
+        )
+    rows2.extend(
+        [
+            _kv_row("今日任务执行", f"{total} 次"),
+            _kv_row("成功率", rate, extra_style="" if met_fail == 0 else "background:#fef2f2"),
+            _kv_row("运维操作记录", f"{ops_n} 条"),
+            _kv_row(
+                "系统事件", f"{inc_n} 条", extra_style="" if inc_n == 0 else "background:#fffbeb"
+            ),
+        ]
+    )
 
     team_table = (
         '<table style="width:100%;border-collapse:collapse;margin:0">' + "".join(rows2) + "</table>"
@@ -985,54 +1021,93 @@ def _digest_kpi_cards_html(
 
     cards.append(
         _card(
-            str(emp_n), "在岗员工", icon="&#x1F465;", accent="#2563eb",
-            color="#1d4ed8", bg="#eff6ff", border="#bfdbfe",
+            str(emp_n),
+            "编制在岗",
+            icon="&#x1F465;",
+            accent="#2563eb",
+            color="#1d4ed8",
+            bg="#eff6ff",
+            border="#bfdbfe",
         )
     )
     if met_fail == 0:
         cards.append(
             _card(
-                str(met_ok), "任务成功", icon="&#x2705;", accent="#16a34a",
-                color="#047857", bg="#ecfdf5", border="#a7f3d0",
-                sub="全部成功", sub_color="#16a34a",
+                str(met_ok),
+                "任务成功",
+                icon="&#x2705;",
+                accent="#16a34a",
+                color="#047857",
+                bg="#ecfdf5",
+                border="#a7f3d0",
+                sub="全部成功",
+                sub_color="#16a34a",
             )
         )
     else:
         cards.append(
             _card(
-                str(met_ok), "任务成功", icon="&#x26A0;&#xFE0F;", accent="#ea580c",
-                color="#c2410c", bg="#fff7ed", border="#fed7aa",
-                sub=f"失败 {met_fail} 次", sub_color="#ea580c",
+                str(met_ok),
+                "任务成功",
+                icon="&#x26A0;&#xFE0F;",
+                accent="#ea580c",
+                color="#c2410c",
+                bg="#fff7ed",
+                border="#fed7aa",
+                sub=f"失败 {met_fail} 次",
+                sub_color="#ea580c",
             )
         )
     if ops_n == 0:
         cards.append(
             _card(
-                "0", "运维操作", icon="&#x1F6E0;&#xFE0F;", accent="#94a3b8",
-                color="#64748b", bg="#f8fafc", border="#e2e8f0",
+                "0",
+                "运维操作",
+                icon="&#x1F6E0;&#xFE0F;",
+                accent="#94a3b8",
+                color="#64748b",
+                bg="#f8fafc",
+                border="#e2e8f0",
             )
         )
     else:
         cards.append(
             _card(
-                str(ops_n), "运维操作", icon="&#x1F6E0;&#xFE0F;", accent="#2563eb",
-                color="#1d4ed8", bg="#eff6ff", border="#bfdbfe",
+                str(ops_n),
+                "运维操作",
+                icon="&#x1F6E0;&#xFE0F;",
+                accent="#2563eb",
+                color="#1d4ed8",
+                bg="#eff6ff",
+                border="#bfdbfe",
             )
         )
     if inc_n == 0:
         cards.append(
             _card(
-                "0", "系统事件", icon="&#x1F514;", accent="#16a34a",
-                color="#047857", bg="#ecfdf5", border="#a7f3d0",
-                sub="无异常", sub_color="#16a34a",
+                "0",
+                "系统事件",
+                icon="&#x1F514;",
+                accent="#16a34a",
+                color="#047857",
+                bg="#ecfdf5",
+                border="#a7f3d0",
+                sub="无异常",
+                sub_color="#16a34a",
             )
         )
     else:
         cards.append(
             _card(
-                str(inc_n), "系统事件", icon="&#x1F514;", accent="#ea580c",
-                color="#c2410c", bg="#fff7ed", border="#fed7aa",
-                sub="待处理", sub_color="#ea580c",
+                str(inc_n),
+                "系统事件",
+                icon="&#x1F514;",
+                accent="#ea580c",
+                color="#c2410c",
+                bg="#fff7ed",
+                border="#fed7aa",
+                sub="待处理",
+                sub_color="#ea580c",
             )
         )
 
@@ -1147,7 +1222,7 @@ def _surface_meeting_topic(surface_audit_report: Dict[str, Any] | None) -> Tuple
 
     excerpt = surface_audit_excerpt_markdown(surface_audit_report)
     question = (
-        "今天的三端页面巡检（P-W 网站 xiu-ci.com / P-S 软件 market / P-App 移动 WebView）"
+        "今天的三端页面巡检（P-W 网站 xiu-ci.com / P-S 软件 market / P-App adb 模拟器原生屏）"
         "结果与 AI 分析如下，请各产线对应员工从自己岗位视角讨论：哪些是真问题、谁来修、下一步动作。\n\n"
         f"{excerpt}"
     )
@@ -1313,12 +1388,8 @@ def build_digest_html(
     since = datetime.now(timezone.utc) - timedelta(hours=24)
 
     with sf() as session:
-        emp_n = (
-            session.query(func.count(CatalogItem.id))
-            .filter(CatalogItem.artifact == "employee_pack")
-            .scalar()
-            or 0
-        )
+        catalog_pack_n = count_catalog_employee_packs(session)
+        emp_n = count_on_duty_employees()
         ops_n = (
             session.query(func.count(OpsActionAuditLog.id))
             .filter(OpsActionAuditLog.created_at >= since)
@@ -1370,6 +1441,7 @@ def build_digest_html(
         git_head=git_head,
         repo_root=root,
         emp_n=int(emp_n),
+        catalog_pack_n=int(catalog_pack_n),
         met_ok=int(met_ok),
         met_fail=int(met_fail),
         ops_n=int(ops_n),
@@ -1551,6 +1623,14 @@ def run_daily_digest_email() -> None:
     if skip_daily_automation_result(job="daily_digest_email"):
         return
 
+    stop_ephemeral_after = False
+    try:
+        from modstore_server.surface_audit_deps import surface_audit_stop_after_enabled
+
+        stop_ephemeral_after = surface_audit_stop_after_enabled()
+    except Exception:
+        stop_ephemeral_after = False
+
     recipients = parse_daily_digest_recipient_emails(
         os.environ.get("MODSTORE_DAILY_DIGEST_EMAIL", DEFAULT_DIGEST_EMAIL).strip()
     )
@@ -1598,6 +1678,24 @@ def run_daily_digest_email() -> None:
                 expires_at=expires_at,
                 existing_token_hashes=existing_token_hashes,
             )
+
+        from modstore_server.digest_identity import extract_digest_identity_plain_from_html
+
+        pre_identity_code = extract_digest_identity_plain_from_html(staged_section_html)
+        identity_tokens_pre = [
+            t for t in (token_batch or []) if getattr(t, "kind", None) == "digest_identity"
+        ]
+        if identity_tokens_pre:
+            with sf() as session:
+                for t in identity_tokens_pre:
+                    session.add(t)
+                session.commit()
+            logger.info(
+                "daily digest: pre-persisted %d digest_identity token(s) for surface audit",
+                len(identity_tokens_pre),
+            )
+        if pre_identity_code:
+            os.environ["MODSTORE_SURFACE_AUDIT_DIGEST_CODE"] = pre_identity_code
 
         employee_briefs_html = ""
         if os.environ.get("MODSTORE_DAILY_BRIEF_ENABLED", "0").strip().lower() in (
@@ -1763,10 +1861,21 @@ def run_daily_digest_email() -> None:
         ]
         if identity_tokens:
             with sf() as session:
+                existing = {
+                    str(row[0])
+                    for row in session.query(OpsApprovalToken.token_hash).all()
+                    if row[0]
+                }
+                added = 0
                 for t in identity_tokens:
+                    th = str(getattr(t, "token_hash", "") or "")
+                    if th and th in existing:
+                        continue
                     session.add(t)
+                    added += 1
                 session.commit()
-            logger.info("daily digest: persisted %d digest_identity token(s)", len(identity_tokens))
+            if added:
+                logger.info("daily digest: persisted %d digest_identity token(s)", added)
         if deploy_tokens and any_delivered:
             with sf() as session:
                 for t in deploy_tokens:
@@ -1781,6 +1890,17 @@ def run_daily_digest_email() -> None:
             record_node_run("ASM", ok=False, source="daily_digest", meta={"error": "job_failed"})
         except Exception:
             logger.exception("daily digest: time_rail failure record failed")
+    finally:
+        if stop_ephemeral_after:
+            try:
+                from modstore_server.surface_audit_deps import stop_surface_audit_ephemeral
+
+                stopped = stop_surface_audit_ephemeral()
+                logger.info(
+                    "daily digest: surface audit ephemeral stopped %s", stopped.get("stopped")
+                )
+            except Exception:
+                logger.exception("daily digest: stop surface audit ephemeral failed")
 
 
 def cron_trigger_for_digest():

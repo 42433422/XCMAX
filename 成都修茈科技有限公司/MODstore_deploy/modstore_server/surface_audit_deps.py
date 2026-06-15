@@ -36,24 +36,33 @@ def _auto_start_enabled() -> bool:
 
 
 def _repo_root() -> Path:
+    mono = (os.environ.get("XCMAX_MONOREPO_ROOT") or "").strip()
+    if mono:
+        return Path(mono).expanduser().resolve()
+    repo = (os.environ.get("MODSTORE_REPO_ROOT") or "").strip()
+    if repo:
+        p = Path(repo).expanduser().resolve()
+        if (p / "FHD").is_dir():
+            return p
     try:
         from modstore_server.daily_digest import _repo_root as root_fn
 
         return Path(root_fn())
     except Exception:
-        mono = (os.environ.get("XCMAX_MONOREPO_ROOT") or os.environ.get("MODSTORE_REPO_ROOT") or "").strip()
-        if mono:
-            return Path(mono).expanduser().resolve()
         return Path(__file__).resolve().parents[3]
 
 
 def _fhd_root() -> Path:
+    candidates: List[Path] = []
+    mono = (os.environ.get("XCMAX_MONOREPO_ROOT") or "").strip()
+    if mono:
+        candidates.append(Path(mono).expanduser().resolve() / "FHD")
     root = _repo_root()
-    fhd = root / "FHD"
-    if fhd.is_dir():
-        return fhd
-    alt = root.parent / "FHD"
-    return alt if alt.is_dir() else fhd
+    candidates.extend((root / "FHD", root.parent / "FHD"))
+    for fhd in candidates:
+        if fhd.is_dir():
+            return fhd
+    return candidates[0] if candidates else root / "FHD"
 
 
 def _modstore_deploy_root() -> Path:
@@ -94,9 +103,32 @@ def _http_ok(url: str, *, timeout: float = 2.0) -> bool:
         return False
 
 
+def _fhd_api_health_ok(url: str, *, timeout: float = 2.0) -> bool:
+    """FHD /api/health 须 200 且 JSON 含 healthy/xcagi；避免 macOS AirPlay 占 :5000 误判。"""
+    try:
+        req = urllib.request.Request(url, method="GET", headers={"Accept": "application/json"})
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            if int(getattr(resp, "status", 200) or 200) != 200:
+                return False
+            body = resp.read(1024).decode("utf-8", errors="replace").lower()
+            return '"status"' in body and ("healthy" in body or "xcagi" in body)
+    except Exception:
+        return False
+
+
 def _wait_http(url: str, *, label: str, tries: int = 45) -> bool:
     for _ in range(max(1, tries)):
         if _http_ok(url):
+            logger.info("surface audit deps: %s ready %s", label, url)
+            return True
+        time.sleep(1)
+    logger.warning("surface audit deps: %s not ready after %ds (%s)", label, tries, url)
+    return False
+
+
+def _wait_fhd_api_health(url: str, *, label: str, tries: int = 45) -> bool:
+    for _ in range(max(1, tries)):
+        if _fhd_api_health_ok(url):
             logger.info("surface audit deps: %s ready %s", label, url)
             return True
         time.sleep(1)
@@ -143,7 +175,7 @@ def _spawn(
 
 def _ensure_fhd_api(api_port: int) -> Dict[str, Any]:
     health = f"http://127.0.0.1:{api_port}/api/health"
-    if _http_ok(health):
+    if _fhd_api_health_ok(health):
         return {"ok": True, "skipped": True, "url": health}
     if not _auto_start_enabled():
         return {"ok": False, "skipped": True, "reason": "auto_start_disabled", "url": health}
@@ -186,12 +218,21 @@ def _ensure_fhd_api(api_port: int) -> Dict[str, Any]:
         str(run_py),
     ]
     if run_py.name == "run_fastapi.py":
-        cmd += ["--desktop", "--headless", "--host", "127.0.0.1", "--port", str(api_port), "--data-dir", data_dir]
+        cmd += [
+            "--desktop",
+            "--headless",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            str(api_port),
+            "--data-dir",
+            data_dir,
+        ]
     else:
         env["FASTAPI_PORT"] = str(api_port)
 
     out = _spawn("fhd-api", cmd, cwd=xcagi if run_py.parent == xcagi else fhd, env=env)
-    out["ready"] = _wait_http(health, label="FHD API")
+    out["ready"] = _wait_fhd_api_health(health, label="FHD API")
     out["url"] = health
     return out
 
@@ -233,7 +274,16 @@ def _ensure_modstore_api(port: int) -> Dict[str, Any]:
     py = _python_bin()
     out = _spawn(
         "modstore",
-        [py, "-m", "uvicorn", "modstore_server.app:app", "--host", "127.0.0.1", "--port", str(port)],
+        [
+            py,
+            "-m",
+            "uvicorn",
+            "modstore_server.app:app",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            str(port),
+        ],
         cwd=deploy,
     )
     out["ready"] = _wait_http(health, label="MODstore API")
@@ -290,7 +340,7 @@ def _ensure_playwright() -> Dict[str, Any]:
         return {"ok": False, "error": str(exc)[:300]}
 
 
-def _resolve_internal_api_base() -> str:
+def resolve_internal_api_base() -> str:
     """MODstore 内部 API 根：显式 env → DEPLOY_HEALTH_URL 去后缀 → 默认 :8788。"""
     explicit = (os.environ.get("MODSTORE_INTERNAL_API_BASE") or "").strip().rstrip("/")
     if explicit:
@@ -312,11 +362,49 @@ def _parse_port(url: str, default: int) -> int:
         return default
 
 
+def _ensure_android_emulator() -> Dict[str, Any]:
+    """P-App adb 截图：无设备时尝试 ``start_android_emulator.sh``（需 MODSTORE_SURFACE_AUDIT_AUTO_START=1）。"""
+    enabled = (os.environ.get("MODSTORE_SURFACE_AUDIT_ANDROID", "1") or "").strip().lower() not in (
+        "0",
+        "false",
+        "no",
+        "off",
+    )
+    if not enabled:
+        return {"ok": True, "skipped": True, "reason": "android_disabled"}
+    try:
+        from modstore_server.daily_digest_surface_audit_android import (
+            _adb_bin,
+            _adb_has_device,
+            _ensure_fhd_for_emulator,
+            _try_start_emulator,
+        )
+    except ImportError as exc:
+        return {"ok": False, "error": f"android audit module: {exc}"}
+
+    adb = _adb_bin()
+    if _adb_has_device(adb):
+        _ensure_fhd_for_emulator()
+        return {"ok": True, "skipped": True, "device": True, "adb": adb}
+    if not _auto_start_enabled():
+        return {
+            "ok": False,
+            "error": "no adb device (bash FHD/scripts/dev/start_android_emulator.sh)",
+            "adb": adb,
+        }
+    started = _try_start_emulator()
+    if started:
+        _ensure_fhd_for_emulator()
+    return {"ok": started, "started": started, "adb": adb}
+
+
 def ensure_surface_audit_deps() -> Dict[str, Any]:
     """截图前确保本地依赖就绪；返回各服务探活/拉起结果。"""
     out: Dict[str, Any] = {"ok": True, "services": {}}
 
-    ps_enabled = (os.environ.get("MODSTORE_SURFACE_AUDIT_PS_ENABLED", "1") or "").strip().lower() not in (
+    ps_enabled = (
+        os.environ.get("MODSTORE_SURFACE_AUDIT_PS_ENABLED", "1") or ""
+    ).strip().lower() not in (
         "0",
         "false",
         "no",
@@ -330,14 +418,14 @@ def ensure_surface_audit_deps() -> Dict[str, Any]:
     api_url = (
         os.environ.get("SURFACE_AUDIT_API_URL")
         or os.environ.get("MODSTORE_SURFACE_AUDIT_API_URL")
-        or "http://127.0.0.1:5000"
+        or "http://127.0.0.1:5102"
     ).rstrip("/")
     digest_base = (
         os.environ.get("MODSTORE_DAILY_SURFACE_AUDIT_BASE_URL") or "https://xiu-ci.com"
     ).rstrip("/")
-    internal_api = _resolve_internal_api_base()
+    internal_api = resolve_internal_api_base()
 
-    api_port = _parse_port(api_url, 5000)
+    api_port = _parse_port(api_url, 5102)
     web_port = _parse_port(ps_base, 5001)
     modstore_port = _parse_port(internal_api, 8788)
 
@@ -357,12 +445,20 @@ def ensure_surface_audit_deps() -> Dict[str, Any]:
     if _is_local_url(internal_api):
         out["services"]["modstore_api"] = _ensure_modstore_api(modstore_port)
 
+    out["services"]["android_emulator"] = _ensure_android_emulator()
+
     failures: List[str] = []
     for name, svc in out["services"].items():
         if not isinstance(svc, dict):
             continue
         if svc.get("error"):
             failures.append(f"{name}:{svc.get('error')}")
+        elif name == "android_emulator":
+            android_on = (
+                os.environ.get("MODSTORE_SURFACE_AUDIT_ANDROID", "1") or ""
+            ).strip().lower() not in ("0", "false", "no", "off")
+            if android_on and not (svc.get("skipped") or svc.get("ok")):
+                failures.append(f"{name}:not_ready")
         elif name in ("fhd_api", "vite_ps", "modstore_api", "marketing") and not (
             svc.get("skipped") or svc.get("ready")
         ):
@@ -375,3 +471,60 @@ def ensure_surface_audit_deps() -> Dict[str, Any]:
     else:
         logger.info("surface audit deps ready")
     return out
+
+
+def surface_audit_stop_after_enabled() -> bool:
+    """digest 结束后是否关闭 FHD/Vite/模拟器等临时进程（MODstore :8788 不关）。"""
+    raw = os.environ.get("MODSTORE_SURFACE_AUDIT_STOP_AFTER")
+    if raw is not None and str(raw).strip() != "":
+        return str(raw).strip().lower() not in ("0", "false", "no", "off")
+    if (os.environ.get("MODSTORE_LOCAL_AUTOMATION") or "").strip() in ("1", "true", "yes"):
+        return True
+    if (os.environ.get("MODSTORE_AUTOMATION_PRIMARY") or "").strip().lower() == "local_mac":
+        return True
+    return False
+
+
+def _kill_pid_file(label: str, pid_file: Path) -> None:
+    if not pid_file.is_file():
+        return
+    try:
+        pid = int(pid_file.read_text(encoding="utf-8").strip())
+    except (OSError, ValueError):
+        pid_file.unlink(missing_ok=True)
+        return
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        pid_file.unlink(missing_ok=True)
+        return
+    try:
+        os.kill(pid, 15)
+        time.sleep(0.5)
+        try:
+            os.kill(pid, 0)
+            os.kill(pid, 9)
+        except OSError:
+            pass
+        logger.info("surface audit deps: stopped %s pid=%s", label, pid)
+    except OSError as exc:
+        logger.warning("surface audit deps: stop %s pid=%s failed: %s", label, pid, exc)
+    pid_file.unlink(missing_ok=True)
+
+
+def stop_surface_audit_ephemeral() -> Dict[str, Any]:
+    """关闭 ``ensure_surface_audit_deps`` 拉起的临时服务（不含 MODstore 日更栈）。"""
+    stopped: List[str] = []
+    pids_dir = _pids_dir()
+    if pids_dir.is_dir():
+        for pid_file in sorted(pids_dir.glob("surface-audit-*.pid")):
+            _kill_pid_file(pid_file.stem, pid_file)
+            stopped.append(pid_file.stem)
+
+    fhd = _fhd_root()
+    emu_pid = fhd / "data" / "surface_audit" / ".android-emulator.pid"
+    if emu_pid.is_file():
+        _kill_pid_file("android-emulator", emu_pid)
+        stopped.append("android-emulator")
+
+    return {"ok": True, "stopped": stopped}

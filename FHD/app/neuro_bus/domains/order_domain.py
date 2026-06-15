@@ -41,14 +41,14 @@ class OrderNeuroDomain(NeuroDomain):
         @self.on("order.created", priority=1, channel=DomainChannel.RELIABLE)
         async def on_order_created(event):
             order_id = event.payload.get("order_id")
-            logger.info(f"Order created: {order_id}")
+            logger.info("Order created: %s", order_id)
             bump_domain_handler_metric("order.created")
 
         @self.on("order.paid", priority=0, channel=DomainChannel.RELIABLE)
         async def on_order_paid(event):
             order_id = event.payload.get("order_id")
             amount = event.payload.get("amount")
-            logger.info(f"Order paid: {order_id}, amount={amount}")
+            logger.info("Order paid: %s, amount=%s", order_id, amount)
             from app.neuro_bus.neuro_trace_config import bump_domain_handler_metric
 
             bump_domain_handler_metric("order.paid")
@@ -57,7 +57,7 @@ class OrderNeuroDomain(NeuroDomain):
         async def on_order_shipped(event):
             order_id = event.payload.get("order_id")
             shipment_id = event.payload.get("shipment_id")
-            logger.info(f"Order shipped: {order_id}, shipment={shipment_id}")
+            logger.info("Order shipped: %s, shipment=%s", order_id, shipment_id)
             bump_domain_handler_metric("order.shipped")
 
     async def initialize(self):

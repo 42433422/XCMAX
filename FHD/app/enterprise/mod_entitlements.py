@@ -14,7 +14,7 @@ from typing import Any
 
 from app.mod_sdk.platform_shell import PROTECTED_CLIENT_MOD_IDS
 from app.mod_sdk.product_skus import bundled_mod_ids_for_sku, resolve_product_sku
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -105,7 +105,7 @@ def is_mod_visible_for_enterprise(mod_id: str) -> bool:
 
         if client_primary_mod_on_disk_visible(mid):
             return True
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         logger.debug("client_primary_mod_on_disk_visible skipped", exc_info=True)
     entitled = get_cached_entitled_client_mod_ids()
     if entitled is None:
@@ -221,7 +221,7 @@ async def refresh_session_entitlements_from_market(
             imp = meta.get("impersonating_market_user_id")
             if imp is not None:
                 imp_uid = int(imp)
-        except OPERATIONAL_ERRORS:
+        except RECOVERABLE_ERRORS:
             pass
 
     if account_kind == "admin" and market_is_admin and imp_uid is not None:
@@ -230,6 +230,8 @@ async def refresh_session_entitlements_from_market(
         client_ids = set(PROTECTED_CLIENT_MOD_IDS)
     else:
         client_ids = await fetch_entitled_client_mod_ids_from_market(market_token)
+
+    client_ids = _augment_entitled_for_username(market_username, client_ids)
 
     set_session_entitlements(
         market_user_id=market_user_id,
@@ -257,7 +259,7 @@ def persist_entitlements_to_session_row(session_id: str, client_ids: set[str]) -
             row.market_user_id = _cached_market_user_id
             row.entitled_mod_ids_json = json.dumps(sorted(client_ids), ensure_ascii=False)
             db.commit()
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         logger.exception("persist_entitlements_to_session_row failed")
 
 
@@ -286,7 +288,7 @@ def restore_entitlements_from_session_row(session_id: str) -> bool:
                 market_is_admin=market_is_admin,
             )
             return True
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         logger.exception("restore_entitlements_from_session_row failed")
         return False
 
@@ -302,15 +304,21 @@ def _session_username_for_entitlements(session_id: str) -> str:
         imp = str(meta.get("impersonating_username") or "").strip()
         if imp:
             return imp
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         pass
     try:
         from app.services.session_service import SessionService
 
         info = SessionService().validate_session(sid)
-        if info and info.get("username"):
-            return str(info["username"]).strip()
-    except OPERATIONAL_ERRORS:
+        if info is None:
+            pass
+        elif isinstance(info, dict):
+            username = info.get("username")
+        else:
+            username = getattr(info, "username", None)
+        if username:
+            return str(username).strip()
+    except RECOVERABLE_ERRORS:
         pass
     return ""
 
@@ -363,7 +371,7 @@ async def sync_entitlements_for_session(session_id: str) -> set[str]:
                 market_is_admin=_cached_market_is_admin,
             )
         return cached
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         logger.exception("sync_entitlements_for_session failed")
         restore_entitlements_from_session_row(sid)
         local_username = _session_username_for_entitlements(sid)
@@ -392,5 +400,20 @@ async def reload_enterprise_mods_after_login() -> None:
         load_mod_routes(app, mm)
         if SUNBIRD_CLIENT_MOD_ID in loaded or is_mod_visible_for_enterprise(SUNBIRD_CLIENT_MOD_ID):
             ensure_mod_api_ready(SUNBIRD_CLIENT_MOD_ID)
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         logger.exception("reload_enterprise_mods_after_login failed")
+
+
+async def sync_entitlements_from_request(request) -> None:
+    """已登录会话在拉 Mod/引导 catalog 前同步市场权益。"""
+    if not enterprise_mod_filter_active():
+        return
+    try:
+        import os
+
+        cookie_name = os.environ.get("SESSION_COOKIE_NAME", "session_id")
+        sid = (request.cookies.get(cookie_name) or "").strip()
+        if sid:
+            await sync_entitlements_for_session(sid)
+    except RECOVERABLE_ERRORS:
+        logger.exception("sync_entitlements_from_request failed")

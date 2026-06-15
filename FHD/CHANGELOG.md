@@ -6,6 +6,219 @@
 
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
+### Phase 4 覆盖率长尾与变异测试（v10 线内迭代 · 2026-06-14）
+
+- **test(contexts/di)**：补 `manifest` / `flags` / `registry` / `fastapi_deps` 纯函数单测
+- **chore(coverage)**：`health_k8s` 移除 2 处可测 `pragma: no cover`（诊断分支已有探针单测）
+- **chore(mutmut)**：`pyproject.toml` 新增 `[tool.mutmut]`，首轮 `app/http` · `app/contexts` · `app/di`
+- **chore(stryker)**：`frontend/stryker.conf.json` + `docs/reports/MUTATION_TESTING.md`（需 `npm i -D @stryker-mutator/*`）
+
+### 企业引导 Mod 种子（v10 线内迭代 · 2026-06-14）
+
+- **chore(mods)**：`scripts/dev/sync-enterprise-mod-seeds.sh` 从 desktop-dev / admin-runtime 补全 `FHD/mods/` bridge、core-workflow、planner-excel 等种子
+- **feat(mods)**：新增 `mods/_employees/xcagi-host-foundation-employee` 宿主基础预装员工包 manifest
+- **fix(onboarding)**：`industry_baseline` / `deliverable_status` 以磁盘 scan + 已加载 Mod 并集判定「已安装」
+
+### 真正员工运行时（EmployeeAgent · v10 线内迭代 · 2026-06-14）
+
+- **feat(employee_runtime)**：`EmployeeAgent` 编排对象接管 `execute_employee_task_local`；P0 多轮 `agent_loop` + `EmployeeMemoryManager`（短期 ConversationService / 长期 `emp:{id}` 向量索引）；P1 `tool_scope` 作用域工具 + `workspace_guard` 运行时强制 `scope_globs/forbidden_globs`；P2 `PerceptionPipeline`（document/vision/audio/text）；P3 `orchestrator` 本地 `depends_on` DAG + `triggers` NeuroBus 动态订阅；P4 写操作 `write_approval` 接 ApprovalGatedEngine 语义 + `metrics` 可观测
+- **feat(domain/employee)**：值对象 `MemoryScope` / `PerceptionSpec` / `CollaborationGraph` / `TriggerBinding` / 标准事件类型
+- **compat**：保留 echo/llm_md/direct_python handler；capabilities 已声明包无需改 manifest 即可派生工具子集；单轮 `_chat_completion` 仅保留给认知层
+
+### L3 CI/CD 全自动端到端（v10 线内迭代 · 2026-06-13）
+- **GitOps**：ArgoCD App-of-Apps、`bump_image.sh`、`gitops-image-bump`（opt-in）
+- **Rollouts**：金丝雀 20→50→100 + `xcagi-slo-gate` Prometheus 分析门
+- **可观测性**：`monitoring/overlays/full`、`bringup_stack.sh`、`local_stack_up.sh`、DORA 采集
+- **预览**：`fhd-preview-env.yml` + `k8s/overlays/preview`（无 `KUBE_CONFIG` 时跳过构建并 PR 评论说明）
+- **日更闭环**：`post_merge_promote.sh` + `MODSTORE_POST_MERGE_GITOPS_SCRIPT`
+- **CI 阻断说明**：PR #20 全量红因 GitHub Actions **账单/spending limit**（非 workflow 缺陷）；修复付款后重跑；branch protection 需 Team/Enterprise（见 `docs/CI_SSOT.md`）
+
+### 术债收口 + Tier C 高并发（Wave 0–10 · v10 线内迭代）
+- **docs**：`SLO.md` Tier C 压测 SLO；`docs/evidence/arch/` 路由/OpenAPI 基线；`services_import_matrix.md`；`WAVE2_ROUTE_SSOT.md`
+- **loadtest**：`tier_c_smoke.js` / `tier_c_sustained.js` / `tier_c_chat_streams.js`；k6 7d `tier_c_ramp` 阶梯场景
+- **infra**：`DATABASE_READ_URL` + `get_read_session`；`pool_sizing.py`；staging/prod Redis 查询缓存与连接池文档
+- **k8s**：`celery-worker-deployment.yaml` + HPA；API `deployment`/`hpa` Tier C 资源；chat 流式 Redis 信号量
+- **migrate**：`catalog_client`/`catalog_visibility` → `infrastructure/mods/`（services shim）；`mod_store_routes` 走 application 门面
+- **tasks**：`inference` Celery 队列（OCR/intent）；`workflow_excel_paths` 拆分巨型 `workflow.py`
+- **registry**：`app_service_pair_registry` 增加 `resolve_http_getter` / `resolve_neuro_getter`
+
+### 五项技术债全量修复（2026-06-13 · v10 线内迭代）
+
+- **ci/cd**：`fhd-release-orchestrator.yml` tag 编排 CVM+K8s+桌面/Web/Android；`fhd-ci-cd` 监听 `FHD/v*`；production K8s 无 kubeconfig 则 fail；Android release 统一 tag
+- **types**：mypy 解禁 `mod_sdk`/`neuro_bus`/`routes`/`legacy`；`count_type_debt.py` 棘轮；ESLint `no-explicit-any` error（Chat 债务文件 warn）
+- **sql**：`sql_identifiers.py` + P0 标识符拼接修复；`count_raw_sql.py` 棘轮；`test_sql_identifiers.py`
+- **frontend**：ChatView 拆至 `components/chat/*`；`useChatPersistence`/`useChatTaskList`；vue-i18n zh-CN/en-US；`resolveApiError.ts`
+- **docs**：`MYPY_BATCH_STATUS.md`、`SQL_RAW_INVENTORY.md`、`I18N_ROLLOUT.md`、`deploy/RELEASE_CHECKLIST.md`
+
+### 技术债计划目标收尾 Phase 7–12（2026-06-13 · v10 线内迭代）
+
+- **Phase 7**：`useChatView.ts` facade + `useChatOrchestration`/`useChatWorkflowPanel` 等子 composable；`ChatView.vue` <400 行；去 `@ts-nocheck`
+- **Phase 8**：`compat_db` SQL 拼接 SSOT + `products_pg_*` 写路径；`count_raw_sql` 棘轮 **0**；`test_compat_products_sqli.py`
+- **Phase 9**：mypy 严格岛 + 宽口径分批（`tests.*` ignore）；middleware/di 类型修复；Ruff `ANN` 启用
+- **Phase 10**：Chat/Login/Settings `$t()`；auth `error_envelope`；`resolveApiError` 接线
+- **Phase 11**：`count_type_debt` 棘轮 **0**（any / type-ignore / nocheck）；`tsconfig.build` 全 strict
+- **Phase 12**：全量门禁见 `START_HERE.md` §技术债门禁；CD RC 需仓外 `FHD_PUSH_*` / `KUBE_CONFIG_B64`
+
+### 三项技术债清偿（2026-06-13 · v10 线内迭代）
+
+- **refactor(errors)**：`app/errors.py` 扩展 Mod/Workflow/ExternalService/Validation 等业务异常 SSOT；`operational_errors.py` 拆为 `INFRA_TRANSIENT`/`DATA_SHAPE`/`RECOVERABLE_ERRORS`；全仓迁移、`app/` 下旧符号 `OPERATIONAL_ERRORS` 清零；payment/auth 域窄 catch + `PaymentError`；新增防回归门禁 `scripts/ci/check_operational_errors_gate.py`
+- **refactor(frontend-types)**：`ApiResponse` SSOT 于 `types/api.ts`；`ModManifest`/`ModCatalogItem` 拆分；`ApiChatMessage`/`UiChatMessage` 拆分；消除组件内重复 interface
+- **test(coverage)**：取消 `CI_STABLE_ONLY`；`source=[app]` 全量口径；清空 `collect_ignore`；修复 routing/coverage_ramp 运行时 skip
+- **test(rotten-fix)**：移除 stable-only 跳过后暴露的腐烂测试**全量修复**，后端 `tests/` **1780 passed / 101 skipped / 0 failed / 0 error**（`source=[app]`）。生产侧最小回归修复：`retry_handler` 纳入 `sqlite3.OperationalError`、`session_cache` 补 `delete()`/`make_key()`、`product_app_service.get_products` 接受 `unit_name`/`model_number` 并归一、`init_db.init_im_tables`、IM WS 测试模式 `X-User-ID` 回退、`metrics.record_ai_call`、`mobile_api` `per_page=0` 防除零、neuro `bus`/`health_monitor`/`sla_controller` 行为对齐
+- **test(coverage-baseline)**：`fail_under` 由失真的 `58`（旧窄 include 口径）按全量诚实基线**下调为 `35`**（实测 36.13%，~1pt 余量）；提升覆盖率单独立项，禁止再用窄 include 凑数
+
+### v10 交付前全量修复（2026-06-12 · v10 线内迭代）
+
+- **feat(android)**：AuthScreen 密码/手机号 OTP 双模式；NavHost 注册 `CONNECT`/`WORKBENCH`；发现/我的入口工作台
+- **test(android)**：`RoutesTest` + `NavRoutesInstrumentedTest`；gradle 单测/instrumented 依赖；lint 门禁启用
+- **docs(android)**：`VERSION.md` Android 签约级；`MOBILE_ANDROID.md` / `CLAIMED_VS_ACTUAL` 对齐
+- **test(backend)**：time_rail / production_line_event / business mount / shipment_parser / mod_store_catalog 单测；CI 稳定子集扩面
+- **test(frontend)**：修复 `plannerPagePaths` 租户隔离 mock；Vitest gate ≥50% 绿
+- **docs(v2)**：`*_v2` 24 模块为受控双入口 SSOT（非 tech debt）；allowlist guard 零漂移
+- **fix(except)**：`chat_stream_limit` / `agent_runner` / `inference_tasks` / 流式 bridge 缩窄为 `OPERATIONAL_ERRORS`
+- **deps**：生产 lock SSOT 为 `deploy/requirements-server-api.lock.txt`（见 `scripts/dev/check_requirements_lock.py`）
+- **release 制品核对（2026-06-12）**：Win Enterprise `XCAGI-Enterprise-Setup-10.0.0-x64.exe`（CDN）；macOS dmg 见 `config/download_release.json`；Docker `docker/Dockerfile.fhd-api`；Android `./gradlew assemble*Release` + CI `fhd-release-android.yml`
+
+### 四阶段架构与可靠性闭环（2026-06-12 · v10 线内迭代）
+- **evidence**：Round-1 归档 `acceptance-round1-invalid-20260612.yaml`；Round-2 k6 已启动（ES5 兼容 `k6_7d_contract.js` · 镜像 `0.50.0`）
+- **obs**：`export_m0_panels.sh`、`check_round2_metrics_gate.sh`、`xcagi-slo.json` 五域面板、`staging_rollout_metrics.sh`
+- **capacity**：`capacity-planning.md` §6 staging k6 + probe 实测
+- **deploy**：`Dockerfile.fhd-api` Gunicorn；`deploy_k8s_staging.sh` 2 副本；`k8s/overlays/staging/`
+- **adr**：`ADR-route-a-desktop-private.md`；`M0-remaining-gaps.md` 更新
+- **ci**：`capacity-staging-monthly.yml`、`legacy-usage-weekly.yml`
+- **fix(metrics)**：登录/手机验证码 `auth_login_duration_seconds`、流式 `chat_stream_first_byte_seconds`
+- **fix(admin-console)**：挂载 `im_routes`；时间轨 MODstore 不可达时 degraded 200 替代 503；全景 HTML 字体改 `fonts.googleapis.cn`；管理端跳过 IM 未读轮询
+- **fix(all-hands)**：MODstore 单员工汇报 300s 超时，避免 19/20 卡 95%；收集阶段进度封顶 88%；ServerFunctions 阶段文案与停滞提示
+- **fix(admin-console)**：本地 duty-graph health 不再把「未安装 employee_pack」误标为 catalog 缺岗，编制图谱恢复展示；`missing_local_employee_packs` 区分本机未落盘
+- **test**：`test_slo_metrics_histogram.py`
+
+### 行业种子分层隔离 L2（2026-06-12 · v10 线内迭代）
+- **feat(backend)**：`industry_seed.py` + `POST /api/mod-store/install-industry-seed`（池内 copy → Catalog 兜底；换行业卸载其它 open 中性 Mod）
+- **feat(package)**：`industry-seeds/` 只读池（`onboarding_open` 行业）；`stage-industry-seeds.ps1` + `verify-industry-seeds.ps1`
+- **feat(web)**：引导 `runBootstrap` 优先 `installIndustrySeed`；L3 定制仍 `installMod`
+
+### 办公 employee_pack Planner 桥接（2026-06-12 · v10 线内迭代）
+- **feat(backend)**：`employee_runtime` 包（loader / executor / risk_gate / agent_runner）对齐 MODstore `execute_employee_task`；`employee_tool_registry` 合并进 `get_workflow_tool_registry`
+- **feat(backend)**：工具名 = pack_id；装包/卸载/启动 warm scan + `invalidate_workflow_tool_registry`；bridge `POST .../execute`、`GET /api/platform-shell/employee-tools`
+- **feat(web)**：`useOfficeEmployeePackReady`；runBootstrap / Mod Store 装齐后刷新 registry；Mod Store `?tab=office` + driver 教程验收
+
+### 人工试用阻断修复（2026-06-12 · v10 线内迭代）
+- **feat(web)**：注册 `/im` 路由与侧栏「消息」入口；未读角标 + `useImUnreadBadge`
+- **fix(web)**：企业版不再被平台壳拦截设置/Mod 商店/IM；跳过首次引导拦截员工工作台
+- **fix(web)**：设置页「关于」版本读取 `package.json`（10.0.0）；商标导出副窗默认文案
+- **fix(chat)**：流式桥接线程异常转为 SSE error 事件；修茈平台连接失败返回明确 503 而非空流
+- **fix(market)**：`XCAGI_USE_REMOTE_MARKET=1` 优先于本地 `.env.local-market`，避免演示 shim 误挡官网 LLM
+- **fix(backend)**：`httpx` 传输错误纳入 `OPERATIONAL_ERRORS`；流式桥接线程异常转为 SSE error 事件
+
+### 桌面/移动上线阻断项修复（2026-06-12 · v10 线内迭代）
+- **fix(desktop)**：`update-available` 后自动 `downloadUpdate`；`installUpdate` 校验已下载；preload 暴露 `setBadge` / `showNotification` IPC
+- **fix(android)**：Release 允许局域网 HTTP/ws（`network_security_config`）；LAN WebView 注入 `session_id` cookie；推送注册失败可见提示
+- **fix(android)**：Crashlytics mapping 上传默认关闭（`-PuploadCrashlyticsMapping=true` 显式开启）；新增 `fhd-release-android.yml`
+- **fix(backend)**：审批操作人优先 session 鉴权，生产不信任 `X-User-ID`（测试 `FHD_ALLOW_X_USER_ID_HEADER=1`）
+- **chore**：Android `versionName` 纳入 `verify_version_anchors.py`
+
+### 发版制品与构建链收口（2026-06-12 · v10 线内迭代）
+- **fix(release)**：Enterprise Windows `XCAGI-Enterprise-Setup-10.0.0-x64.exe`（Electron 薄壳）已上传 `update.xcagi.com`；完整内嵌 PyInstaller 后端仍需 Windows 或 GitHub Actions
+- **feat(scripts)**：新增 `build-windows-electron-only.sh`（Mac/Linux 交叉编译 Windows NSIS 薄壳）；Wine Docker 默认 DaoCloud 镜像
+- **fix(modstore)**：`orcaterm-deploy-commands.sh` 使用 `npm ci --ignore-scripts` 跳过 onnxruntime-node 原生下载失败
+- **fix(ci)**：`fhd-ci-cd.yml` docker save 路径对齐 `FHD/dist/deploy/`
+
+### 多租户隔离锚定服务器会话（2026-06-11 · v10 线内迭代）
+- **fix(backend)**：`/api/auth/me` 与 session validate 通过 `enrich_session_meta_with_tenant` 补全/自动 provision `tenant_id`；下发 `market_user_id`、`local_user_id`、`tenant_id`
+- **fix(backend)**：桌面 SQLite 启动时幂等创建 `user_preferences` 表；`GET /api/workspace/prefs` 缺表时降级空数据，不再 500
+- **fix(frontend)**：客户端持久化 scope 优先服务器会话（tenant → 市场用户 → FHD `session:{user.id}`），不再把未绑定租户的用户都打进 `local` 共享域
+
+### 企业级行业二级筛选与跨设备工作区同步（2026-06-11 · v10 线内迭代）
+- **feat(backend)**：`build_onboarding_industry_catalog` 合并 `industry_presets.json`，返回 `name` / `scenario` / `product_name` 二级结构及 `preview_packages`
+- **feat(api)**：`GET /api/platform-shell/onboarding-industries` 企业版按 session entitlement 裁剪开放行业（legacy `taiyangniao-pro` / `sz-qsm-pro` 与中性 mod 对齐）；返回 `selected_industry_id` / `enterprise_filter_applied`
+- **feat(api)**：`GET/PATCH /api/workspace/prefs` 按租户/会话持久化行业选择、员工开关、引导完成态；`GET/POST /api/system/industry` 登录用户读写租户 prefs，未 entitlement 行业返回 403
+- **fix(frontend)**：`ProductOnboardingView` 行业 chip 以服务器 catalog 为准；登录后 hydrate 工作区 prefs，员工开关与引导状态跨设备一致
+
+### 企业端工作流员工多租户隔离（2026-06-11 · v10 线内迭代）
+- **fix(frontend)**：员工开关、工位快照/工时、当前扩展 Mod、聊天 sessionId、聊天记录、能力库 catalog 缓存、Kitten 可视化员工选择均按 `tenant_id` 分域持久化；登录/切换账号后自动重载对应租户数据，避免同浏览器串租户
+
+### 企业端移除「员工视图」侧栏入口（2026-06-11 · v10 线内迭代）
+- **fix(frontend)**：取消「员工工作台 → 员工视图」；企业端仅保留「员工空间」；旧 `/other-tools` 重定向至员工空间；管理端 `:5011` 改为「编制图谱」子项
+- **fix(frontend)**：企业账号侧栏/沙箱/壳模式不再展示「流程全景」；路由与副窗链接隐藏；管理端 `:5011/admin/` 保留
+
+### 管理端 other-tools 改为编制图谱（2026-06-11 · v10 线内迭代）
+- **fix(admin-console)**：`/other-tools` 管理端直接渲染 `DutyRosterGraphPanel`（编制图谱）；侧栏管理端显示「编制图谱」；企业端仍为「员工视图」开关页
+
+### 侧栏「员工可视化」命名对齐（2026-06-11 · v10 线内迭代）
+- **revert**：撤销仅改文案的「员工可视化」命名；编制图谱与员工视图分轨
+
+### 管理端侧栏恢复「员工工作台」分组（2026-06-11 · v10 线内迭代）
+- **fix(admin-console)**：从 aux 尾部菜单移除平铺的「员工视图/员工空间」，改由 `CORE_MENU_ITEMS_BASE` 的「员工工作台」子菜单承载；放开管理端 `workflow-visualization` 路由
+
+### 员工视图独立页（2026-06-11 · v10 线内迭代）
+- **feat(frontend)**：`/other-tools` 改为独立「员工视图」页（`WorkflowEmployeeInspector` + 状态/进度），移除与侧栏重复的「员工空间」「流程全景」卡片
+
+### 员工视图内嵌工作流员工开关（2026-06-11 · v10 线内迭代）
+- **feat(frontend)**：`OtherToolsView` 首卡改为「员工视图」，内嵌 `WorkflowEmployeeSelectPanel`（与副窗「一键托管」开关同步）；侧栏/路由标签由「流程与员工」改为「员工视图」
+
+### 设置页恢复 App 扫码配对二维码（2026-06-11 · v10 线内迭代）
+- **feat(frontend)**：`SettingsView`「移动端连接」展示配对 QR（`/api/mobile/v1/pairing/issue`），App「扫码连电脑」可绑定本机宿主
+- **fix(mobile+frontend)**：QR 改为 JSON（含 host/port/nonce）；App 向电脑 exchange 而非本机 127.0.0.1，并保存 `host:port`（修复 :5100 误连 :5000）
+- **fix(backend)**：`discover-hint.api_port` 与 `FASTAPI_PORT`/`XCAGI_API_PORT` 对齐
+
+### MOD 扩展内嵌 AI 市场目录（2026-06-11 · v10 线内迭代）
+- **feat(backend)**：`GET /api/mod-store/market-catalog` 代理修茈 `/api/market/catalog`，按 `collection` / `artifact` / `material_category` 分页拉取并合并本机安装态
+- **feat(frontend)**：`ModStore.vue` 侧栏对齐网页 AI 市场（办公员工包 / 附属包1 / 工作流 / AI 员工），分类数据直载无需外链跳转
+
+### 小猫分析 · 可视化 AI 员工（2026-06-11 · v10 线内迭代）
+- **feat(frontend)**：小猫分析接入办公员工附属包1（柱状/折线/饼图/看板可视化员 + JSON 量化报告员同栏），员工选择条 + 主题色 ECharts；综合看板多图联动
+- **feat(modstore)**：`bootstrap_kitten_chart_employees.py` / `publish_kitten_chart_employees.py`；chart-* 员工与报告员一并归入「办公员工附属包1」
+
+### AIOPEN 生态入口图标重设计（2026-06-11 · v10 线内迭代）
+- **ui**：AI生态应用卡片替换 🤖 emoji 为品牌 SVG（开放弧 + 虚拟光标 + MCP 节点），与 AIOPEN 面板视觉统一
+
+### AIOPEN 发给 AI 助手一键配置 + MCP 403 修复（2026-06-11 · v10 线内迭代）
+- **fix**：MCP 健康检查改 manifest GET；MCP 配置 URL 固定指向后端 :5100 非 Vite :5001
+- **feat**：「复制发给 AI 助手 · 一键配置」— 含说明链接 + MCP JSON + 验证步骤，可粘贴 ChatGPT/Claude/Kimi
+
+### AIOPEN MCP CSRF 豁免（2026-06-11 · v10 线内迭代）
+- **fix(csrf)**：`/api/aiopen/*` 与旧 `/api/ai/qclaw/*` 变更 POST 不再要求 CSRF（外部 Agent 无 Cookie）；面板 MCP 自检改 GET 探测
+
+### AIOPEN 多 AI 客户端 MCP 配置（2026-06-11 · v10 线内迭代）
+- **feat(frontend)**：面板支持 Cursor / Claude / VS Code / Windsurf / Trae / 其他 六种 AI 软件分别安装或复制配置，可同时配置多个
+- **feat(backend)**：`/api/aiopen/install` 返回 `clients[]` 多客户端安装包
+
+### AIOPEN MCP 对齐业界接入（2026-06-11 · v10 线内迭代）
+- **feat(mcp)**：`GET /api/aiopen/install` 安装包（Cursor deep link / npx mcp-remote / Python stdio 桥）；`GET /api/aiopen/mcp` 探测；响应头 `MCP-Protocol-Version` + `Mcp-Session-Id`；`tools/call` 人类可读输出
+- **feat(frontend)**：面板「在 Cursor 中安装」一键 MCP、MCP 自检、工具列表预览
+- **feat(scripts)**：`scripts/dev/aiopen_mcp_stdio.py` stdio→HTTP 桥接
+
+### AIOPEN 面板小白化 + 接入说明链接（2026-06-11 · v10 线内迭代）
+- **feat(aiopen)**：`GET /api/aiopen/guide` 公开接入说明（JSON 或 `?format=markdown`），供其他 AI 阅读后自行配置 MCP
+- **feat(frontend)**：面板「发给其他 AI」— 一键复制说明链接 / 复制给 AI 的提示语
+
+### AIOPEN 开放智控 — Qclaw龙虾生态 toA 升级（2026-06-11 · v10 线内迭代）
+- **feat(aiopen)**：「Qclaw龙虾生态」更名升级为「AIOPEN 开放智控」（我是 AI 的工具）：面向外部 AI Agent 的 MCP + REST 开放平台与虚拟光标操控
+- **feat(backend)**：`app/application/aiopen/`（`AIOPEN_STATE` SSOT、工具注册表、API Key 鉴权）+ `app/fastapi_routes/ai_open.py`（`/api/aiopen/manifest|invoke|mcp|keys|panel|whitelist|config|control`）；MCP 端点为手写轻量 JSON-RPC 2.0（initialize / tools/list / tools/call / ping），零新增依赖
+- **feat(backend)**：`app/infrastructure/aiopen/cursor_hub.py` + `WS /api/aiopen/ws`：虚拟光标 screen 会话池，ui_snapshot / ui_navigate / ui_click / ui_type / ui_scroll 经 hub 下发并按 id 等待前端回执（10s 超时）
+- **feat(frontend)**：`AIOpenPanel.vue` 控制台（接入信息 + Key 管理 + 工具目录/白名单 + 虚拟光标会话 + OpenClaw 联调原样迁入）；`VirtualCursorOverlay.vue` + `useAiOpenCursor.ts` 全局虚拟光标（动画移动 / 点击波纹 /「AI 操控中」徽标，真实派发 DOM 事件）
+- **compat**：旧 `/api/ai/qclaw/*` URL 全部保留并共享新状态（`_QCLOW_RUNTIME_STATE` 即 `AIOPEN_STATE` 别名）；`is_qclaw_source` 增加 `aiopen` 别名；LAN/订阅门禁放行对外端点（安全由 `X-AIOPEN-Key` 承担）
+- **docs**：`docs/aiopen.md` 接入指南（Cursor/Claude mcp.json、curl、虚拟光标指令协议）
+
+### 移动端体验 P1（Android + Web · 2026-06-11 · v10 线内迭代）
+- **fix(mobile-android,frontend)**：移除微信/抖音第三方登录占位入口（保留手机/企业账号/密码/扫码）
+- **feat(frontend)**：`LoginView` 6 格 OTP 分格（`OtpCells`）
+- **feat(mobile-android)**：`MarketListScreen` 简化 Mod 市场卡片（图标 + 名称 + 简介 +「使用」）
+- **feat(frontend)**：`ModStore` 窄屏紧凑卡片；`DiscoverView` + `MobileBottomNav`（对话/发现/市场/我的）
+- **feat(motion)**：Android `WeFadeTransition` / `WeMotion`；Web 路由 250ms fade + 按钮 active scale 0.98；`ChatView` 加载 spinner
+- **fix(mobile-android)**：`HOME_HUB` / 未知深链重定向至 `CHAT`
+### Android 移动端体验 P0（对标豆包/Kimi · 2026-06-11 · v10 线内迭代）
+- **feat(mobile-android)**：登录手机号 Tab 默认 + 6 格 OTP 分格输入（`WeOtpCells`）；登录/发码加载态
+- **feat(mobile-android)**：对话页 Kimi 风空态（欢迎语 + 3 推荐问题单列 chips）；工具栏收纳为「模式 + 联网 + 更多」BottomSheet
+- **feat(mobile-android)**：4 Tab 切换 250ms 淡入淡出；流式回复 `CircularProgressIndicator`；统一 12dp 圆角 / 16dp 间距 tokens
+- **note**：冷启动/登录后首屏已为 `Routes.CHAT`（无营销 Hero）；Web SPA 默认 `/` → `ChatView`
+
+### Android 企业版微信风重构（2026-06-10 · v10 线内迭代）
+- **feat(mobile-android)**：4 Tab 架构（对话 · 工作 · 发现 · 我的）；对话页 DeepSeek 式空态 + 模式胶囊 + 底部输入条
+- **feat(mobile-android)**：浅色微信风主题（白底 + 灰分组 + GPT 灰点缀），跟随系统深色
+- **feat(mobile-android)**：`WorkScreen` / `DiscoverScreen` 分组列表；`WeUi` 补充底栏、角标、输入条组件
+- **feat(audit)**：`surface_audit_pages.json` 增加 `work` / `discover` 路由
+
 ### Mac 主跑 / 服务器跟 git（混合日更 · 2026-06-10 · v10 线内迭代）
 - **feat(automation)**：`automation_primary.py` — `MODSTORE_AUTOMATION_PRIMARY` + `ROLE` 门禁，服务器跳过 digest/08:15–08:25 编排
 - **fix(digest)**：`digest_action_items.ensure_table` 按方言选用 Postgres SERIAL / SQLite AUTOINCREMENT

@@ -13,7 +13,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from app.domain.ai.tier import assert_p2_elevated_claim_or_raise, resolve_ai_tier
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 router = APIRouter(prefix="/api/code-editor", tags=["code-editor"])
 
@@ -228,7 +228,7 @@ def code_editor_draft(request: Request, body: DraftBody) -> dict:
     ]
     try:
         out = chat_completion_no_tools(messages)
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         return {"success": False, "message": str(e), "is_new_file": False}
 
     if isinstance(out, str) and out.strip().upper().startswith("ERROR:"):

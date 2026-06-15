@@ -19,7 +19,7 @@ from app.fastapi_routes.domains.product.routes import router as product_legacy_r
 from app.fastapi_routes.domains.template.routes import router as template_router
 from app.fastapi_routes.domains.wechat.compat_routes import router as wechat_compat_router
 from app.fastapi_routes.domains.wechat.routes import router as wechat_legacy_router
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.neuro_bus.bus import get_neuro_bus
 
 logger = logging.getLogger(__name__)
 
@@ -43,15 +43,15 @@ router.include_router(misc_router)
 
 
 def _register_router_events():
+    # Startup diagnostics only — must never crash route registration, so this
+    # boundary intentionally swallows any error from the bus probe.
     try:
-        from app.neuro_bus.bus import get_neuro_bus
-
         bus = get_neuro_bus()
         logger.info(
             "[XCAGICompat] 路由已注册到 NeuroBus，当前订阅者: %s",
-            len(bus.subscribers),
+            bus.get_stats().get("handlers", 0),
         )
-    except OPERATIONAL_ERRORS as e:
+    except Exception as e:  # noqa: broad-except-boundary
         logger.debug("[XCAGICompat] NeuroBus 注册跳过: %s", e)
 
 

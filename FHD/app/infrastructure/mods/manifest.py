@@ -8,7 +8,7 @@ import os
 from dataclasses import dataclass, field
 from typing import Any
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 from .artifact_constants import ARTIFACT_MOD, normalize_artifact
 
@@ -128,9 +128,9 @@ class ModMetadata:
 
 def parse_manifest(mod_path: str) -> ModMetadata | None:
     manifest_path = os.path.join(mod_path, "manifest.json")
-    logger.info(f"[parse_manifest] Checking manifest at: {manifest_path}")
+    logger.info("[parse_manifest] Checking manifest at: %s", manifest_path)
     if not os.path.isfile(manifest_path):
-        logger.warning(f"[parse_manifest] Mod manifest not found: {manifest_path}")
+        logger.warning("[parse_manifest] Mod manifest not found: %s", manifest_path)
         return None
 
     try:
@@ -138,19 +138,19 @@ def parse_manifest(mod_path: str) -> ModMetadata | None:
             data = json.load(f)
 
         if not data.get("id"):
-            logger.error(f"[parse_manifest] Mod manifest missing 'id' field: {manifest_path}")
+            logger.error("[parse_manifest] Mod manifest missing 'id' field: %s", manifest_path)
             return None
 
         metadata = ModMetadata.from_dict(data, mod_path)
         logger.info(
-            f"[parse_manifest] Successfully parsed manifest for mod: {metadata.id}, name: {metadata.name}"
+            "[parse_manifest] Successfully parsed manifest for mod: %s, name: %s", metadata.id, metadata.name
         )
         return metadata
     except json.JSONDecodeError as e:
-        logger.error(f"[parse_manifest] Failed to parse manifest JSON: {e}")
+        logger.error("[parse_manifest] Failed to parse manifest JSON: %s", e)
         return None
-    except OPERATIONAL_ERRORS as e:
-        logger.error(f"[parse_manifest] Failed to read manifest: {e}")
+    except RECOVERABLE_ERRORS as e:
+        logger.error("[parse_manifest] Failed to read manifest: %s", e)
         return None
 
 
@@ -158,11 +158,16 @@ def validate_dependencies(metadata: ModMetadata, loaded_mods: list[str]) -> bool
     for dep_id, version_spec in metadata.dependencies.items():
         if dep_id == "xcagi":
             if not _check_xcagi_version(version_spec):
+                logger.warning(
+                    "Mod %s requires xcagi %s but host version is 10.0.0",
+                    metadata.id,
+                    version_spec,
+                )
                 return False
         elif dep_id not in loaded_mods:
             logger.warning(
-                f"Mod {metadata.id} depends on {dep_id} which is not loaded. "
-                f"Required version: {version_spec}"
+                "Mod %s depends on %s which is not loaded. "
+                f"Required version: %s", metadata.id, dep_id, version_spec
             )
             return False
     return True

@@ -30,6 +30,29 @@ def test_admin_audit_logs_requires_auth(client: TestClient) -> None:
     assert resp.status_code == 401
 
 
+def test_admin_audit_logs_csv_export(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    log_file = tmp_path / "audit.jsonl"
+    log_file.write_text(
+        json.dumps({"action": "auth_login", "success": True, "user_id": "u1"}) + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("AUDIT_LOG_PATH", str(log_file))
+
+    def _fake_admin(_request=None):
+        return SimpleNamespace(id=1, username="admin", role="admin")
+
+    client.app.dependency_overrides[get_logged_in_user] = _fake_admin
+    try:
+        resp = client.get("/api/admin/audit-logs?format=csv&limit=10")
+        assert resp.status_code == 200, resp.text
+        assert "text/csv" in resp.headers.get("content-type", "")
+        assert "auth_login" in resp.text
+    finally:
+        client.app.dependency_overrides.pop(get_logged_in_user, None)
+
+
 def test_admin_audit_logs_returns_items(
     client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

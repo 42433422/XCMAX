@@ -72,6 +72,12 @@ public partial class MainWindow : Window
         }
 
         ApplyStepUi();
+        if (SunbirdSeedExtractor.HasEmbeddedSeed())
+        {
+            FetchSunbirdDataCheck.Visibility = Visibility.Visible;
+            Title = "太阳鸟 PRO";
+            WelcomeSubtitleText.Text = "10.0 · 太阳鸟考勤定制安装";
+        }
     }
 
     private void SyncAgreeFromWelcome(object sender, RoutedEventArgs e)
@@ -352,6 +358,22 @@ public partial class MainWindow : Window
         }
 
         PostInstallTasks.TryCreateStartMenuShortcut(_installedAppExe);
+
+        if (FetchSunbirdDataCheck.IsChecked == true && SunbirdSeedExtractor.HasEmbeddedSeed())
+        {
+            try
+            {
+                var deployed = SunbirdSeedExtractor.DeployToUserDataAsync().GetAwaiter().GetResult();
+                if (deployed)
+                    notes.Add("已获取太阳鸟业务数据");
+                else
+                    notes.Add("太阳鸟业务数据未写入");
+            }
+            catch (Exception ex)
+            {
+                notes.Add($"业务数据获取失败：{ex.Message}");
+            }
+        }
 
         if (RunAfterInstallCheck.IsChecked == true)
         {

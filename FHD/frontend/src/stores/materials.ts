@@ -3,10 +3,11 @@ import { ref, computed, type Ref } from 'vue'
 import materialsApi from '../api/materials'
 import type { Material, MaterialCreateDTO, MaterialUpdateDTO } from '@/types/material'
 import type { ApiResponse } from '@/types/api'
+import { asRecord, asArray, asString } from '@/utils/typeGuards'
 
 interface OperationResult {
   success: boolean;
-  data?: any;
+  data?: unknown;
   message?: string;
   total?: number;
 }
@@ -19,17 +20,25 @@ export const useMaterialsStore = defineStore('materials', () => {
   const materialCount = computed(() => materials.value.length)
 
   const lowStockMaterials = computed(() => {
-    return materials.value.filter(m =>
-      m.quantity !== null && (m as any).min_stock !== null && m.quantity < (m as any).min_stock
-    )
+    return materials.value.filter((m) => {
+      const row = asRecord(m)
+      const minStock = row.min_stock
+      return (
+        m.quantity != null
+        && typeof minStock === 'number'
+        && m.quantity < minStock
+      )
+    })
   })
 
   const categories = computed(() => {
-    const cats = new Set(materials.value.map((m: any) => m.category).filter(Boolean))
+    const cats = new Set(
+      materials.value.map((m) => asRecord(m).category).filter(Boolean),
+    )
     return Array.from(cats)
   })
 
-  async function fetchMaterials(params: Record<string, any> = {}): Promise<OperationResult> {
+  async function fetchMaterials(params: Record<string, unknown> = {}): Promise<OperationResult> {
     loading.value = true
     error.value = null
     try {
@@ -130,7 +139,7 @@ export const useMaterialsStore = defineStore('materials', () => {
     }
   }
 
-  async function exportMaterials(params: Record<string, any> = {}): Promise<Response> {
+  async function exportMaterials(params: Record<string, unknown> = {}): Promise<Response> {
     return materialsApi.exportMaterialsXlsx(params)
   }
 

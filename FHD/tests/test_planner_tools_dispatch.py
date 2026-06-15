@@ -9,7 +9,12 @@ from pathlib import Path
 import pytest
 
 REPO = Path(__file__).resolve().parents[1]
-EXCEL_MOD = REPO / "mods" / "xcagi-planner-excel-tools"
+EXCEL_MOD = REPO / "mods-admin-runtime" / "xcagi-planner-excel-tools"
+if not (EXCEL_MOD / "manifest.json").is_file():
+    pytest.skip(
+        "xcagi-planner-excel-tools is a runtime-only mod (not in tracked source roots)",
+        allow_module_level=True,
+    )
 
 
 def test_planner_excel_tools_manifest_execution_owner():

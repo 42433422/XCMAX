@@ -8,7 +8,8 @@ import os
 
 bind = "0.0.0.0:5000"
 
-workers = multiprocessing.cpu_count() * 2 + 1
+_default_workers = max(2, multiprocessing.cpu_count() * 2 + 1)
+workers = int(os.environ.get("XCAGI_GUNICORN_WORKERS", str(_default_workers)))
 
 # FastAPI ASGI — SSOT；勿在 Dockerfile/compose 再用 CLI -k 覆盖
 worker_class = "uvicorn.workers.UvicornWorker"

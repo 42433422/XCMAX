@@ -8,6 +8,7 @@ import {
 } from './stepFactory'
 import { HOST_PAGE_HIGHLIGHTS, mergePageHighlights } from './pageHighlights'
 import { collectModPageHighlights } from './buildModSteps'
+import { buildOfficeEmployeePackSteps } from './buildOfficePackTour'
 
 const NAV_ENTRY_INTRO: Partial<Record<string, string>> = {
   chat: '主工作台：查价、发货单、任务与打印等多从这里开始；右侧常有「当前任务」，顶栏可开副窗。',
@@ -61,6 +62,7 @@ export function buildAdvancedNavSteps(
     appendPageSteps(steps, item.routeName, item.name, pageMap)
   }
 
+  steps.push(...buildOfficeEmployeePackSteps())
   return steps
 }
 

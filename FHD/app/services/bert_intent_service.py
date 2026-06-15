@@ -10,7 +10,7 @@ import os
 from typing import TYPE_CHECKING, Any
 
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 if TYPE_CHECKING:
     pass
@@ -141,15 +141,15 @@ class BertIntentClassifier:
             logger.info("local_files_only=True 且未提供有效模型路径，使用虚拟模型")
             self._setup_dummy_model()
         else:
-            logger.info(f"本地模型未找到，将尝试加载在线模型 {model_name}")
+            logger.info("本地模型未找到，将尝试加载在线模型 %s", model_name)
             if model_name in self.DEFAULT_MODELS:
                 actual_name = self.DEFAULT_MODELS[model_name]
             else:
                 actual_name = model_name
             try:
                 self._load_model(actual_name, local_files_only=False)
-            except OPERATIONAL_ERRORS as e:
-                logger.warning(f"无法加载模型 {actual_name}: {e}")
+            except RECOVERABLE_ERRORS as e:
+                logger.warning("无法加载模型 %s: %s", actual_name, e)
                 self._setup_dummy_model()
 
     def _load_model(self, model_path: str, local_files_only: bool = False):
@@ -204,7 +204,7 @@ class BertIntentClassifier:
             self.model = self.model.half()
 
         logger.info(
-            f"模型已加载：{model_path}, 设备：{self.device}, local_files_only={local_files_only}"
+            "模型已加载：%s, 设备：%s, local_files_only=%s", model_path, self.device, local_files_only
         )
 
     def _setup_dummy_model(self):

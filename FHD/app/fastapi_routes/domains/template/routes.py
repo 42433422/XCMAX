@@ -13,7 +13,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 router = APIRouter(tags=["xcagi-compat"])
 logger = logging.getLogger(__name__)
@@ -162,7 +162,7 @@ def _serialize_cell_style(cell) -> dict:
                 bd[side] = {"style": st, "color": str(rgb3) if rgb3 else None}
             if bd:
                 d["border"] = bd
-    except OPERATIONAL_ERRORS:
+    except RECOVERABLE_ERRORS:
         return {}
     return d
 
@@ -276,7 +276,7 @@ def _extract_single_sheet_bundle(
         "max_col": 0,
         "header_row_index": 1,
     }
-    empty_cache = {"styles": {}, "cell_style_refs": {}}
+    empty_cache: object = {"styles": {}, "cell_style_refs": {}}
 
     if not matrix:
         return {
@@ -377,6 +377,7 @@ async def templates_extract_grid(
         raw = await file.read()
         logger.info("extract-grid: read upload %d bytes, persisting + load_workbook", len(raw))
         workspace_root = Path(os.environ.get("WORKSPACE_ROOT", os.getcwd())).resolve()
+        workspace_root_str = str(workspace_root)
         upload_dir = workspace_root / "uploads"
         upload_dir.mkdir(parents=True, exist_ok=True)
         persisted_path = upload_dir / f"{uuid.uuid4().hex}{suffix}"
@@ -387,7 +388,7 @@ async def templates_extract_grid(
             persisted_rel = str(persisted_path)
 
         wb = load_workbook(filename=BytesIO(raw), data_only=True)
-    except OPERATIONAL_ERRORS as e:
+    except RECOVERABLE_ERRORS as e:
         raise HTTPException(status_code=400, detail=f"Excel 读取失败: {e}") from e
 
     sheet_names = list(wb.sheetnames or [])
@@ -397,6 +398,7 @@ async def templates_extract_grid(
             "success": True,
             "template_name": name,
             "file_path": persisted_rel,
+            "workspace_root": workspace_root_str,
             "fields": [],
             "sheets": [],
             "preview_data": {
@@ -428,6 +430,7 @@ async def templates_extract_grid(
             "success": True,
             "template_name": name,
             "file_path": persisted_rel,
+            "workspace_root": workspace_root_str,
             "fields": first["fields"],
             "sheets": sheets_top,
             "preview_data": {
@@ -450,6 +453,7 @@ async def templates_extract_grid(
         "success": True,
         "template_name": name,
         "file_path": persisted_rel,
+        "workspace_root": workspace_root_str,
         "fields": bundle["fields"],
         "sheets": [one],
         "preview_data": {

@@ -1,0 +1,18 @@
+{
+  "task": "fix-right-rail-layout",
+  "description": "修复 RightRail.vue 在小屏幕下的布局溢出问题",
+  "input": {
+    "file": "MODstore_deploy/market/src/views/workbench/panels/RightRail.vue",
+    "issue": "右侧边栏在 viewport < 1280px 时内容溢出边界",
+    "constraints": {
+      "use_css_variables": true,
+      "no_hardcoded_colors": true,
+      "no_react": true
+    }
+  },
+  "validation": {
+    "ts_check": true,
+    "react_check": true,
+    "color_hardcode_check": true
+  }
+}

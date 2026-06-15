@@ -14,7 +14,7 @@ import os
 from typing import Any
 
 from app.utils.distillation_paths import get_distillation_checkpoints_dir
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -80,7 +80,7 @@ class DistilledIntentRecognizer:
     def _load_model(self):
         """加载蒸馏模型"""
         if not os.path.exists(self.model_path):
-            logger.warning(f"蒸馏模型不存在：{self.model_path}，将使用 fallback")
+            logger.warning("蒸馏模型不存在：%s，将使用 fallback", self.model_path)
             self._initialized = True
             return
 
@@ -137,11 +137,11 @@ class DistilledIntentRecognizer:
 
             self.model.eval()
 
-            logger.info(f"蒸馏模型加载成功：{self.model_path}")
+            logger.info("蒸馏模型加载成功：%s", self.model_path)
             self._initialized = True
 
-        except OPERATIONAL_ERRORS as e:
-            logger.error(f"加载蒸馏模型失败：{e}")
+        except RECOVERABLE_ERRORS as e:
+            logger.error("加载蒸馏模型失败：%s", e)
             self._initialized = True
 
     def is_available(self) -> bool:
@@ -193,8 +193,8 @@ class DistilledIntentRecognizer:
                 "source": "distilled",
             }
 
-        except OPERATIONAL_ERRORS as e:
-            logger.error(f"蒸馏模型推理失败：{e}")
+        except RECOVERABLE_ERRORS as e:
+            logger.error("蒸馏模型推理失败：%s", e)
             return {
                 "intent": None,
                 "confidence": 0.0,

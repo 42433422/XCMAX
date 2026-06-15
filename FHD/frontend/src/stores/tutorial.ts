@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import { createTutorialBuildContext } from '@/tutorial/buildContext'
@@ -114,7 +113,7 @@ export const useTutorialStore = defineStore('tutorial', () => {
     blockedTip.value = ''
   }
 
-  let stepTargetPollTimer: ReturnType<typeof setTimeout> | null = null
+  let stepTargetPollTimer: number | null = null
   const clearStepTargetPoll = () => {
     if (stepTargetPollTimer !== null) {
       clearTimeout(stepTargetPollTimer)

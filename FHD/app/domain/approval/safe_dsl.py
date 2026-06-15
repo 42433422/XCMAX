@@ -19,7 +19,7 @@ import logging
 import operator
 from typing import Any
 
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -141,14 +141,14 @@ class SafeExpressionEvaluator:
 
             # Evaluate the AST safely
             result = self._eval_node(tree.body)
-            self.logger.debug(f"Evaluated condition '{expression}' -> {result}")
+            self.logger.debug("Evaluated condition '%s' -> %s", expression, result)
             return bool(result)
 
         except SafeEvaluationError as e:
-            self.logger.warning(f"Unsafe condition expression: {expression} - {e}")
+            self.logger.warning("Unsafe condition expression: %s - %s", expression, e)
             raise
-        except OPERATIONAL_ERRORS as e:
-            self.logger.error(f"Failed to evaluate condition '{expression}': {e}")
+        except RECOVERABLE_ERRORS as e:
+            self.logger.error("Failed to evaluate condition '%s': %s", expression, e)
             raise SafeEvaluationError(f"Invalid condition expression: {expression}") from e
 
     def _validate_ast(self, node: ast.AST) -> None:
@@ -252,9 +252,9 @@ def should_trigger_condition(node, context: dict[str, Any]) -> bool:
         return evaluate_condition(node.condition_expression, context)
     except SafeEvaluationError as e:
         logger.warning(
-            f"Condition evaluation failed for node {getattr(node, 'id', 'unknown')}: {e}"
+            "Condition evaluation failed for node %s: %s", getattr(node, 'id', 'unknown'), e
         )
         return False  # Fail closed for safety
-    except OPERATIONAL_ERRORS as e:
-        logger.error(f"Unexpected error evaluating condition: {e}")
+    except RECOVERABLE_ERRORS as e:
+        logger.error("Unexpected error evaluating condition: %s", e)
         return False
