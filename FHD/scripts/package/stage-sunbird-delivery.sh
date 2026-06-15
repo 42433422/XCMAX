@@ -79,9 +79,14 @@ if [[ "${USE_CI}" == "1" ]]; then
   echo "==> Trigger GitHub Actions (windows-latest 云端打包) ..."
   cd "${REPO_ROOT}"
   WF="fhd-sunbird-installer.yml"
-  if ! gh workflow run "${WF}" -f "version=${VERSION}" 2>/dev/null; then
-    gh workflow run "Sunbird Installer" -f "version=${VERSION}" || \
-      gh workflow run sunbird-installer.yml -f "version=${VERSION}"
+  SOURCE_REF="${SUNBIRD_SOURCE_REF:-feat/enterprise-deploy-maturity}"
+  if ! gh workflow run "${WF}" --ref main \
+      -f "version=${VERSION}" \
+      -f "source_ref=${SOURCE_REF}" 2>/dev/null; then
+    gh workflow run "Sunbird Installer" --ref main \
+      -f "version=${VERSION}" \
+      -f "source_ref=${SOURCE_REF}" || \
+      gh workflow run "${WF}" -f "version=${VERSION}" -f "source_ref=${SOURCE_REF}"
   fi
   echo "==> Waiting for workflow run ..."
   sleep 8
