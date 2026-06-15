@@ -44,8 +44,8 @@ Write-Host "  seed zip: $SeedZip"
 if (-not $SkipBuild) {
   Write-Host "==> Install Python runtime deps (mod staging + PyInstaller) ..."
   python -m pip install --upgrade pip -q
-  python -m pip install -e $FhdRoot -q
-  if ($LASTEXITCODE -ne 0) { throw "pip install -e FHD failed" }
+  python -m pip install -e "${FhdRoot}[server-api]" -q
+  if ($LASTEXITCODE -ne 0) { throw "pip install -e FHD[server-api] failed" }
   python -m pip install "pyinstaller>=6.0" appdirs -q
   if ($LASTEXITCODE -ne 0) { throw "pip install pyinstaller/appdirs failed" }
 
