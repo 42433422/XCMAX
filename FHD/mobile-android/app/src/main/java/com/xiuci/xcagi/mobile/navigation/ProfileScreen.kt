@@ -33,6 +33,7 @@ import com.xiuci.xcagi.mobile.BuildConfig
 import com.xiuci.xcagi.mobile.R
 import com.xiuci.xcagi.mobile.core.ProductSkuConfig
 import com.xiuci.xcagi.mobile.ui.AppViewModel
+import com.xiuci.xcagi.mobile.ui.components.mobile.ComplianceFooter
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeAvatar
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeCell
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeCellGroup
@@ -55,6 +56,7 @@ fun ProfileScreen(
     val autoProbe by vm.autoLanProbe.collectAsState()
     val autoSync by vm.autoSync.collectAsState()
     val hub by vm.homeHub.collectAsState()
+    val appConfig by vm.appConfig.collectAsState()
     var showDelete by remember { mutableStateOf(false) }
     var deletePassword by remember { mutableStateOf("") }
 
@@ -158,6 +160,8 @@ fun ProfileScreen(
         )
 
         WeSpacer(16.dp)
+        ComplianceFooter(appConfig)
+        WeSpacer(8.dp)
         WeRedActionCell(text = "退出登录", onClick = onLogout)
         WeSpacer(8.dp)
         WeRedActionCell(text = "注销账号", onClick = { showDelete = true })
