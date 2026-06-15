@@ -25,11 +25,7 @@ fi
 PYTHON="${PYTHON:-python3}"
 
 "${PYTHON}" -m pip install --upgrade pip
-RUNTIME_REQUIREMENTS="$(mktemp)"
-grep -Ev '^[[:space:]]*(#|-e|pytest($|[-=<>]))' XCAGI/requirements.txt | grep -Ev '^[[:space:]]*$' > "${RUNTIME_REQUIREMENTS}" || true
-if [ -s "${RUNTIME_REQUIREMENTS}" ]; then
-  "${PYTHON}" -m pip install -r "${RUNTIME_REQUIREMENTS}"
-fi
+"${PYTHON}" -m pip install -e ".[server-api]"
 "${PYTHON}" -m pip install "pyinstaller>=6.0" appdirs
 
 export XCAGI_VERSION="${VERSION}"
