@@ -49,12 +49,10 @@ if (-not $SkipFrontend) {
 }
 
 python -m pip install --upgrade pip
-$RuntimeRequirements = Join-Path $env:TEMP "xcagi-runtime-requirements.txt"
-Get-Content "XCAGI\requirements.txt" |
-  Where-Object { $_ -notmatch '^\s*pytest($|[-=<>])' } |
-  Set-Content -Path $RuntimeRequirements -Encoding UTF8
-python -m pip install -r $RuntimeRequirements
+python -m pip install -e ".[server-api]"
+if ($LASTEXITCODE -ne 0) { throw "pip install -e FHD[server-api] failed" }
 python -m pip install "pyinstaller>=6.0" appdirs
+if ($LASTEXITCODE -ne 0) { throw "pip install pyinstaller/appdirs failed" }
 
 $env:XCAGI_VERSION = $Version
 if ($ProductSku) {
