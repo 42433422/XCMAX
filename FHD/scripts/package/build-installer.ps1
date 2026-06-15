@@ -65,6 +65,8 @@ Push-Location (Join-Path $Root "desktop")
 if (-not (Test-Path "node_modules")) {
   npm install
 }
+npm run build
+if ($LASTEXITCODE -ne 0) { throw "desktop npm run build failed" }
 npm version $Version --no-git-tag-version --allow-same-version
 $ebAppId = $skuAppIds[$ProductSku]
 $ebPublishUrl = $skuUpdateUrls[$ProductSku]
