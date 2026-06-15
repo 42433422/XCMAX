@@ -29,6 +29,7 @@ def test_session_factories_are_cached_per_resolved_database_url(monkeypatch, tmp
     db.dispose_and_recreate_engine()
     base_path = tmp_path / "xcagi.db"
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{base_path}")
+    monkeypatch.setenv("XCAGI_MOD_ISOLATED_DATABASES", "1")
     monkeypatch.delenv("XCAGI_MOD_DATABASE_URLS", raising=False)
 
     base_factory = db._get_session_local()

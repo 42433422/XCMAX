@@ -7,40 +7,25 @@
         :class="['message', msg.role]"
         :style="{ minHeight: messageHeights.get(idx) ? messageHeights.get(idx) + 'px' : 'auto' }"
       >
-        <template v-if="msg.role === 'ai' && isMessageCollapsed(msg, idx)">
-          <div class="collapsed-message">
-            <div class="collapsed-message-text">{{ getCollapsedPreview(msg.content) }}</div>
-            <button class="btn btn-secondary btn-sm" @click="$emit('expand-message', idx)">{{ $t('chat.expand') }}</button>
-          </div>
-        </template>
-        <template v-else>
-          <div
-            class="message-html"
-            v-html="
-              msg.role === 'ai' ? sanitizeChatBubbleMarkdown(msg.content) : sanitizeChatBubbleHtml(msg.content)
-            "
-          ></div>
-          <div
-            v-if="msg.role === 'ai' && msg.shipmentDownloadUrl"
-            class="message-shipment-actions"
+        <div
+          class="message-html"
+          v-html="
+            msg.role === 'ai' ? sanitizeChatBubbleMarkdown(msg.content) : sanitizeChatBubbleHtml(msg.content)
+          "
+        ></div>
+        <div
+          v-if="msg.role === 'ai' && msg.shipmentDownloadUrl"
+          class="message-shipment-actions"
+        >
+          <a
+            class="btn btn-primary btn-sm"
+            :href="msg.shipmentDownloadUrl"
+            download
+            @click="$emit('shipment-download-click')"
           >
-            <a
-              class="btn btn-primary btn-sm"
-              :href="msg.shipmentDownloadUrl"
-              download
-              @click="$emit('shipment-download-click')"
-            >
-              {{ $t('chat.downloadShipment') }}
-            </a>
-          </div>
-          <button
-            v-if="msg.role === 'ai' && idx < latestAiMessageIndex"
-            class="btn btn-secondary btn-sm collapse-toggle"
-            @click="$emit('collapse-message', idx)"
-          >
-            {{ $t('chat.collapse') }}
-          </button>
-        </template>
+            {{ $t('chat.downloadShipment') }}
+          </a>
+        </div>
         <div v-if="msg.role === 'ai' && msg.contextSummary" class="context-summary">
           {{ msg.contextSummary }}
         </div>
@@ -138,27 +123,6 @@ watch(messagesHostRef, (el) => {
 </script>
 
 <style scoped>
-.collapsed-message {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  border: 1px dashed #d1d5db;
-  border-radius: 8px;
-  padding: 8px;
-  background: #f9fafb;
-}
-
-.collapsed-message-text {
-  font-size: 13px;
-  color: #4b5563;
-  line-height: 1.4;
-}
-
-.collapse-toggle {
-  margin-top: 8px;
-}
-
 .message-shipment-actions {
   margin-top: 10px;
   display: flex;

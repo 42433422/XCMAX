@@ -39,6 +39,14 @@ describe('sanitizeChatBubbleMarkdown', () => {
     expect(sanitizeChatBubbleMarkdown('')).toBe('');
     expect(sanitizeChatBubbleMarkdown(null)).toBe('');
   });
+
+  it('converts model literal br tags into line breaks', () => {
+    const out = sanitizeChatBubbleMarkdown('第一行<br><br>- 列表项');
+    expect(out).not.toContain('&lt;br');
+    expect(out).not.toContain('<br>');
+    expect(out).toContain('列表项');
+    expect(out).toMatch(/<li[^>]*>/);
+  });
 });
 
 describe('sanitizeTaskSummaryHtml', () => {

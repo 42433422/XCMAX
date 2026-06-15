@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { renderMarkdown, stripInternalMarkers } from './lightMarkdown';
+import { normalizeModelLineBreaks, renderMarkdown, stripInternalMarkers } from './lightMarkdown';
 
 describe('lightMarkdown', () => {
   it('escapes raw html and renders bold', () => {
@@ -17,5 +17,9 @@ describe('lightMarkdown', () => {
   it('stripInternalMarkers removes plan blocks', () => {
     const src = 'hello <<<PLAN_DETAILS>>>secret<<<END_PLAN_DETAILS>>> world';
     expect(stripInternalMarkers(src)).toBe('hello  world');
+  });
+
+  it('normalizeModelLineBreaks converts br tags to newlines', () => {
+    expect(normalizeModelLineBreaks('a<br>b<br/>c')).toBe('a\nb\nc');
   });
 });

@@ -29,6 +29,7 @@ def test_planner_blueprints_tools_execute_route():
     text = (MOD_DIR / "backend" / "blueprints.py").read_text(encoding="utf-8")
     assert "/tools/execute" in text
     assert "execute_planner_tool" in text
+    assert 'data.get("success")' in text
 
 
 def test_list_planner_tools_registry_detail_host_path(monkeypatch):
