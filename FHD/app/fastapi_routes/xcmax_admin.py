@@ -1333,8 +1333,8 @@ async def resolve_conflict(inbox_id: int, body: dict):
 
         db = SyncDb()
         if action == "apply":
-            from app.application.admin_sync_app_service import fetch_admin_inbox_row
             from app.application.xcmax_sync_app import entity_appliers
+            from app.application.admin_sync_app_service import fetch_admin_inbox_row
 
             row = fetch_admin_inbox_row(inbox_id)
             if row:
