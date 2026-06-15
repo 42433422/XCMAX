@@ -7,6 +7,8 @@ __pycache__/
 *.so
 .Python
 build/
+!desktop/build/
+!desktop/build/**
 develop-eggs/
 dist/
 downloads/
@@ -211,6 +213,7 @@ git-change-inventory.txt
 arch_violations.txt
 test_reports/intent_benchmark_latest.json
 *.spec
+!scripts/package/xcagi_backend.spec
 current_page.html
 custom_mode_test.html
 .accelerate/
