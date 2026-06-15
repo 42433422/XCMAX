@@ -16,10 +16,11 @@
     <template v-else>
       <!-- 折叠消息 -->
       <template v-if="isCollapsed">
-        <div class="collapsed-message">
-          <div class="collapsed-message-text">{{ collapsedPreview }}</div>
-          <button class="btn btn-secondary btn-sm" @click="expand">展开详情</button>
-        </div>
+        <CollapsedMessagePreview
+          :preview="collapsedPreview"
+          expand-label="展开详情"
+          @expand="expand"
+        />
       </template>
       
       <!-- 完整消息 -->
@@ -41,13 +42,11 @@
         </div>
         
         <!-- 收起按钮 -->
-        <button
+        <MessageCollapseLink
           v-if="message.role === 'ai' && canCollapse"
-          class="btn btn-secondary btn-sm collapse-toggle"
-          @click="collapse"
-        >
-          收起
-        </button>
+          label="收起"
+          @collapse="collapse"
+        />
       </template>
       
       <!-- 上下文摘要 -->
@@ -115,6 +114,8 @@ import { computed, ref, watch, onMounted } from 'vue';
 import DOMPurify from 'dompurify';
 import { measureText, type MeasureResult } from '@/utils/pretext';
 import type { UiChatMessage } from '@/types/chat-ui';
+import CollapsedMessagePreview from '@/components/chat/CollapsedMessagePreview.vue';
+import MessageCollapseLink from '@/components/chat/MessageCollapseLink.vue';
 
 interface Props {
   message: UiChatMessage;
@@ -267,24 +268,8 @@ onMounted(() => {
   }
 }
 
-/* 折叠消息样式 */
-.collapsed-message {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 8px 0;
-}
+/* 折叠消息样式 — 见 CollapsedMessagePreview.vue */
 
-.collapsed-message-text {
-  flex: 1;
-  color: #666;
-  font-size: 14px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* 消息内容样式 */
 .message-html {
   font-size: 14px;
   line-height: 1.5;
@@ -323,11 +308,6 @@ onMounted(() => {
 /* 操作按钮 */
 .message-shipment-actions {
   margin-top: 12px;
-}
-
-.collapse-toggle {
-  margin-top: 8px;
-  font-size: 12px;
 }
 
 /* 元信息样式 */

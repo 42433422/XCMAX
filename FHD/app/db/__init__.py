@@ -126,7 +126,7 @@ def _database_url_for_active_mod(base_url: str) -> str:
         u = make_url(base_url)
     except RECOVERABLE_ERRORS:
         u = None
-    if u is not None and u.get_dialect().name == "sqlite":
+    if u is not None and u.get_dialect().name == "sqlite" and _mod_isolated_databases_enabled():
         return _sqlite_url_with_mod_suffix(base_url, active_mod_id)
     if u is not None and u.get_dialect().name == "postgresql" and _mod_isolated_databases_enabled():
         return _postgres_url_with_mod_db(base_url, active_mod_id)

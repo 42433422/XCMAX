@@ -1025,26 +1025,7 @@
   color: #dc2626;
 }
 
-.collapsed-message {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  border: 1px dashed #d1d5db;
-  border-radius: 8px;
-  padding: 8px;
-  background: #f9fafb;
-}
-
-.collapsed-message-text {
-  font-size: 13px;
-  color: #4b5563;
-  line-height: 1.4;
-}
-
-.collapse-toggle {
-  margin-top: 8px;
-}
+/* 折叠/展开控件见 CollapsedMessagePreview.vue、MessageCollapseLink.vue */
 
 .message-shipment-actions {
   margin-top: 10px;

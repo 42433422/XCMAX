@@ -100,8 +100,9 @@ def register_fastapi_routes(app, mod_id: str) -> None:
         from app.mod_sdk.planner_compat import execute_planner_tool
 
         data = execute_planner_tool(body)
-        code = 400 if not data.get("ok") else 200
-        return JSONResponse({"success": data.get("ok", False), "data": data}, status_code=code)
+        ok = bool(data.get("success"))
+        code = 200 if ok else 400
+        return JSONResponse({"success": ok, "data": data}, status_code=code)
 
     @router.get("/host-capabilities")
     async def host_capabilities():

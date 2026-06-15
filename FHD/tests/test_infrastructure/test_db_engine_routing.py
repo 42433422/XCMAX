@@ -237,12 +237,13 @@ def test_host_session_local_uses_base_sqlite_file():
 
     with patch.object(db_mod, "get_request_active_mod_id", return_value="M"):
         with patch.object(db_mod, "_mod_db_url_from_env", return_value=""):
-            with patch.object(
-                db_mod,
-                "_sqlite_url_with_mod_suffix",
-                return_value="sqlite:///mod.db",
-            ) as mock_sqlite:
-                out = db_mod._database_url_for_active_mod("sqlite:///base.db")
+            with patch.object(db_mod, "_mod_isolated_databases_enabled", return_value=True):
+                with patch.object(
+                    db_mod,
+                    "_sqlite_url_with_mod_suffix",
+                    return_value="sqlite:///mod.db",
+                ) as mock_sqlite:
+                    out = db_mod._database_url_for_active_mod("sqlite:///base.db")
     assert out == "sqlite:///mod.db"
     mock_sqlite.assert_called_once()
 
