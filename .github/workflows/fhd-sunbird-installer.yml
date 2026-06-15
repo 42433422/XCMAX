@@ -64,5 +64,4 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: sunbird-installer
-          path: build/ci-sunbird-artifact/**
-ENDOFFILE; __tr_native_ec=$?; pwd -P >| '/var/folders/__/b1ssv8dx68l6rnzfp0drs8j40000gn/T/agent-toolhost/jobs/job-0f5f6c9ef878498480a68b7c6581e450/cwd.txt'; exit "$__tr_native_ec"
+          path: FHD/build/ci-sunbird-artifact/**
