@@ -235,7 +235,11 @@ class AppViewModel @Inject constructor(
     fun checkForUpdate(manual: Boolean) = viewModelScope.launch {
         val cfg = _appConfig.value ?: repo.fetchAppConfig().getOrNull().also { _appConfig.value = it } ?: return@launch
         val cur = BuildConfig.VERSION_CODE
-        if (cur < cfg.min_android_version || (cfg.force_update && cur < cfg.latest_android_version)) {
+        val devOrLan = BuildConfig.DEBUG || sessionStore.serverModeFlow.first() != "cloud"
+        val forceRequired =
+            cur < cfg.min_android_version || (cfg.force_update && cur < cfg.latest_android_version)
+        if (forceRequired && devOrLan && !manual) return@launch
+        if (forceRequired) {
             _updatePrompt.value = UpdatePrompt(
                 force = true,
                 versionName = cfg.latest_android_version_name,
