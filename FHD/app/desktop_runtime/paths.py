@@ -80,6 +80,9 @@ def configure_desktop_environment(data_dir: str | os.PathLike[str] | None = None
     (root / "config").mkdir(parents=True, exist_ok=True)
     apply_database_profile_to_env(root, local_sqlite_url=sqlite_database_url(root))
     os.environ.setdefault("DATABASE_PATH", str(dirs["data"]))
+    # 考勤模板 424/… 与上传输出均相对工作区根；桌面默认=userData
+    os.environ.setdefault("WORKSPACE_ROOT", str(root))
+    os.environ.setdefault("XCAGI_WORKSPACE_ROOT", str(root))
     os.environ.setdefault("UPLOAD_FOLDER", str(dirs["uploads"]))
     os.environ.setdefault("EXCEL_VECTOR_DB_PATH", str(dirs["data"] / "excel_vectors.db"))
     os.environ.setdefault("XCAGI_MODS_ROOT", str(dirs["mods"]))
@@ -121,5 +124,14 @@ def configure_desktop_environment(data_dir: str | os.PathLike[str] | None = None
         import logging
 
         logging.getLogger(__name__).warning("Desktop mod seed skipped: %s", exc)
+
+    try:
+        from app.desktop_runtime.sunbird_delivery_seed import apply_sunbird_roster_seed_if_needed
+
+        apply_sunbird_roster_seed_if_needed(root)
+    except RECOVERABLE_ERRORS as exc:
+        import logging
+
+        logging.getLogger(__name__).warning("Sunbird roster seed skipped: %s", exc)
 
     return root

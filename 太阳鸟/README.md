@@ -1,72 +1,51 @@
-# 太阳鸟 PRO · Windows 交付包
+# 太阳鸟 PRO · Windows 定制安装包
 
-修茈科技 · XCAGI v10 企业版 + 太阳鸟考勤定制（`taiyangniao-pro`）
-
----
-
-## 文件夹内容
-
-| 文件 / 目录 | 说明 |
-|-------------|------|
-| `XCAGI-Enterprise-Setup-10.0.0-x64.exe` | **主交付物**：Windows 64 位安装程序（企业 SKU） |
-| `数据/424/` | 可选：考勤固定模板（安装后复制到工作区，见下方） |
-| `安装说明.txt` | 客户快速安装步骤 |
-| `manifest.json` | 打包元数据（版本、SHA256、生成时间） |
-
-> 安装包内**不含**太阳鸟定制 Mod；客户使用修茈市场账号登录后，由账号权益自动下发 `attendance-industry` + `taiyangniao-pro`。
+修茈科技 · 基于 XCAGI v10 **企业版** 的太阳鸟客户专用安装程序（与通用 `XCAGI-Enterprise-Setup` **不是同一个包**）。
 
 ---
 
-## 客户安装（3 步）
+## 交付物
 
-1. 双击 **`XCAGI-Enterprise-Setup-10.0.0-x64.exe`**，按向导完成安装。
-2. 首次启动 → 使用修茈市场分配的**企业账号**登录（生产认证：`https://xiu-ci.com`）。
-3. 登录后进入太阳鸟界面：**考勤表转换**、**人员管理**、**部门管理**。
+| 文件 | 说明 |
+|------|------|
+| `太阳鸟-Setup-10.0.0-x64.exe` | **定制安装包**（内嵌太阳鸟业务数据包，可选「获取数据」） |
 
-登录成功后浏览器/桌面壳地址示例：`/sunbird/#/taiyangniao-pro`
-
----
-
-## 考勤模板（若本包含 `数据/424/`）
-
-转换功能依赖固定模板，路径必须为：
-
-```text
-<工作区根>/424/考勤-2026-3月份考勤统计表.xlsx
-```
-
-**桌面版**：安装完成后，将 `数据/424/` 下全部文件复制到：
-
-```text
-%APPDATA%\XCAGI\424\
-```
-
-若该目录不存在，可先运行一次软件并完成登录，或在「考勤表转换」页面上传一次钉钉表后按提示创建工作区。
-
-**首次使用建议**：在侧栏「人员管理」用「考勤统计表·明细导入人员」从模板导入花名册，再上传钉钉导出表转换。
+通用企业客户仍使用 `release/xcagi-v10.0.0/enterprise/XCAGI-Enterprise-Setup-10.0.0-x64.exe`，**不含**太阳鸟数据。
 
 ---
 
-## 供应商重新打包（Windows 开发机）
+## 客户安装
 
-在 **XCMAX 仓库根目录** 打开 PowerShell：
+1. 双击 **`太阳鸟-Setup-10.0.0-x64.exe`**
+2. 安装向导 → 勾选 **「获取太阳鸟业务数据（考勤模板与人员花名册）」**（默认已勾选）
+3. 完成安装后启动 XCAGI，使用修茈企业账号登录
+4. 直接进入 **考勤表转换**；模板位于 `%APPDATA%\XCAGI\424\`，人员已预置
+
+勾选「获取数据」后自动写入：
+
+- `424/考勤-2026-3月份考勤统计表.xlsx` — 固定考勤模板
+- `data/mod_dbs/taiyangniao_pro.db` — Mod 侧库
+- `config/sunbird-roster.json` — 人员花名册（首次启动写入主库）
+- `mods/taiyangniao-pro`、`mods/attendance-industry` — 客户 Mod
+
+---
+
+## 供应商打包（Windows 开发机）
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File FHD\scripts\package\stage-sunbird-delivery.ps1
+powershell -ExecutionPolicy Bypass -File FHD\scripts\package\build-sunbird-installer.ps1
 ```
 
-仅复制已有安装包、不重新编译：
+产物：
 
-```powershell
-powershell -ExecutionPolicy Bypass -File FHD\scripts\package\stage-sunbird-delivery.ps1 -SkipBuild
-```
+- `FHD/release/xcagi-v10.0.0/sunbird/太阳鸟-Setup-10.0.0-x64.exe`
+- 复制到本目录 `太阳鸟/`
 
-产物输出到本目录 `太阳鸟/`。
+种子数据 SSOT：`FHD/delivery/sunbird-seed/`（由 `build-sunbird-seed.py` 维护）
 
 ---
 
 ## 技术支持
 
-- 版本：**10.0.0**（v10 线内迭代，全产品线同锚点）
+- 版本：**10.0.0**
 - 日志：`%APPDATA%\XCAGI\logs\`
-- 可交付自检：安装后访问 `http://127.0.0.1:5000/api/platform-shell/deliverable-status`，`deliverable` 应为 `true`

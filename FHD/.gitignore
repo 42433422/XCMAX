@@ -221,6 +221,10 @@ custom_mode_test.html
 release/
 update-server/
 424/
+# Sunbird custom installer seed (tracked)
+!delivery/
+!delivery/sunbird-seed/
+!delivery/sunbird-seed/**
 ces/
 10.2.0
 sz-qsm-pro-1.0.0.xcmod
