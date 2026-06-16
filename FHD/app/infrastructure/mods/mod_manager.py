@@ -194,6 +194,47 @@ def _short_exc_message(exc: BaseException, max_len: int = 480) -> str:
     return s if len(s) <= max_len else s[: max_len - 3] + "..."
 
 
+def _invoke_mod_init_hook(init_fn: Any, *, mod_id: str | None = None) -> None:
+    """调用 manifest backend.init；兼容无参与 legacy (app, mod_id) 签名。"""
+    import inspect
+
+    try:
+        sig = inspect.signature(init_fn)
+    except (TypeError, ValueError):
+        init_fn()
+        return
+
+    params = [
+        p
+        for p in sig.parameters.values()
+        if p.kind not in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)
+    ]
+    if not params:
+        init_fn()
+        return
+
+    kwargs: dict[str, Any] = {}
+    for p in params:
+        if p.name == "app":
+            kwargs["app"] = None
+        elif p.name == "mod_id":
+            kwargs["mod_id"] = mod_id
+        elif p.default is inspect.Parameter.empty:
+            logger.warning(
+                "Skip mod init %s: cannot satisfy required parameter %r",
+                getattr(init_fn, "__qualname__", init_fn),
+                p.name,
+            )
+            return
+
+    try:
+        sig.bind(**kwargs)
+    except TypeError:
+        init_fn()
+        return
+    init_fn(**kwargs)
+
+
 class ModManager:
     def __init__(self, mods_root: str | None = None):
         if mods_root is None:
@@ -566,7 +607,15 @@ class ModManager:
                 if hasattr(module, metadata.backend_init):
                     init_fn = getattr(module, metadata.backend_init)
                     if callable(init_fn):
-                        init_fn()
+                        try:
+                            _invoke_mod_init_hook(init_fn, mod_id=mod_id)
+                        except TypeError as exc:
+                            logger.warning(
+                                "mod init hook %s for %s failed: %s",
+                                metadata.backend_init,
+                                mod_id,
+                                exc,
+                            )
             except RECOVERABLE_ERRORS as e:
                 logger.error(
                     "Failed to load backend entry for %s: %s", mod_id, e,
