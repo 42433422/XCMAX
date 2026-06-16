@@ -1276,5 +1276,9 @@ def register_fastapi_routes(app, mod_id: str) -> None:
     logger.info("xcagi-customer-service-bridge registered: %s", mod_id)
 
 
-def mod_init() -> None:
-    logger.info("xcagi-customer-service-bridge mod_init (K)")
+def mod_init(app=None, mod_id: str | None = None) -> None:
+    """与 ModManager 约定一致：可无参调用；勿在此注册路由（由 register_fastapi_routes 挂载）。"""
+    logger.info(
+        "xcagi-customer-service-bridge mod_init (K)%s",
+        f" mod_id={mod_id}" if mod_id else "",
+    )
