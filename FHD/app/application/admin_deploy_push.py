@@ -34,7 +34,7 @@ PUSH_USER = os.environ.get("FHD_PUSH_USER", "root")
 CHANNEL_DEFAULT = os.environ.get("FHD_RELEASE_CHANNEL", "stable")
 MANIFEST_URL = (
     os.environ.get("XCMAX_UPDATE_MANIFEST_URL", "").strip()
-    or f"https://update.xcagi.com/releases/{CHANNEL_DEFAULT}/server/fhd-manifest.json"
+    or "https://update.xcagi.com/releases/" + CHANNEL_DEFAULT + "/server/fhd-manifest.json"
 )
 ENTERPRISE_HEALTH_HOST = os.environ.get("XCMAX_REMOTE_HOST", PUSH_HOST)
 ENTERPRISE_HEALTH_PORT = int(os.environ.get("XCMAX_REMOTE_PORT", "5100"))
@@ -48,7 +48,7 @@ def _hub_remote_dir(channel: str) -> str:
     custom = os.environ.get("FHD_PUSH_REMOTE_DIR", "").strip()
     if custom:
         return custom
-    return f"/var/www/update/releases/{channel}/server"
+    return "/var/www/update/releases/" + channel + "/server"
 
 
 def _local_git_sha(root: Path) -> str:
@@ -345,7 +345,7 @@ async def _execute_deploy_job(job: DeployJob) -> None:
                 hub = snap2.get("update_hub") or {}
                 local_sha = snap2["admin_local"]["git_sha"]
                 hub_sha = hub.get("git_sha") or ""
-                step.detail = f"update 站 {hub_sha or '?'}"
+                step.detail = "update 站 {}".format(hub_sha or "?")
                 step.status = "done" if hub_sha == local_sha or not local_sha else "error"
                 step.finished_at = time.time()
                 if step.status == "error":

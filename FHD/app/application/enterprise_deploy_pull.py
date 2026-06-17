@@ -238,7 +238,7 @@ async def _execute_pull_job(job: PullJob) -> None:
             for s in job.steps[1:]:
                 s.status = "skipped"
             return
-        check.detail = f"update 站 {snap['update_hub'].get('git_sha') or '?'}"
+        check.detail = "update 站 {}".format(snap["update_hub"].get("git_sha") or "?")
         check.status = "done"
         check.finished_at = time.time()
 

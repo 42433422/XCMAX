@@ -35,6 +35,13 @@ def test_apply_sorts_by_priority():
     from fastapi import FastAPI
 
     app = FastAPI()
+    included_paths: list[list[str]] = []
+    original_include_router = app.include_router
+
+    def record_include_router(router: APIRouter, **kwargs):
+        included_paths.append([getattr(route, "path", "") for route in router.routes])
+        return original_include_router(router, **kwargs)
+
+    app.include_router = record_include_router
     registry.apply(app)
-    paths = [getattr(r, "path", "") for r in app.routes]
-    assert paths.index("/high") < paths.index("/low")
+    assert included_paths == [["/high"], ["/low"]]
