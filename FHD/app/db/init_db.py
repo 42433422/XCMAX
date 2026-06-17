@@ -13,8 +13,10 @@ import json
 import logging
 import os
 import shutil
+import sqlite3
 import sys
 from collections.abc import Iterable, Sequence
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from app.utils.external_sqlite import sqlite_conn
@@ -34,6 +36,95 @@ DEFAULT_DB_FILES: tuple[str, ...] = (
     "voice_learning.db",
     "error_collection.db",
 )
+
+_TRUTHY_ENV_VALUES = {"1", "true", "yes", "on"}
+
+
+def _is_desktop_mode_env() -> bool:
+    return (os.environ.get("XCAGI_DESKTOP_MODE") or "").strip().lower() in _TRUTHY_ENV_VALUES
+
+
+def refresh_config_database_urls(config: Any | None = None) -> None:
+    """Refresh database URL fields on a Config-like object from current environment."""
+    if config is None:
+        return
+    for attr, env_name in (
+        ("DATABASE_URL", "DATABASE_URL"),
+        ("VECTOR_DB_URL", "VECTOR_DB_URL"),
+        ("DATABASE_PATH", "DATABASE_PATH"),
+    ):
+        value = os.environ.get(env_name)
+        if value:
+            setattr(config, attr, value)
+
+
+def _desktop_data_root(data_dir: str | None = None) -> Path:
+    raw = data_dir or os.environ.get("XCAGI_DATA_DIR") or get_app_data_dir()
+    return Path(raw).expanduser()
+
+
+def _ensure_sqlite_business_tables(db_path: Path) -> None:
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS purchase_units (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                unit_name TEXT NOT NULL DEFAULT '',
+                unit_code TEXT NOT NULL DEFAULT '',
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS products (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL DEFAULT '',
+                model_number TEXT NOT NULL DEFAULT '',
+                unit TEXT NOT NULL DEFAULT '',
+                purchase_unit_id INTEGER,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        conn.commit()
+
+
+def ensure_desktop_sqlite_business_tables_all_files(data_dir: str | None = None) -> None:
+    """Ensure desktop SQLite databases have the business tables needed at startup."""
+    root = _desktop_data_root(data_dir)
+    data_root = root / "data"
+    data_root.mkdir(parents=True, exist_ok=True)
+    candidates = {path for path in data_root.glob("*.db") if path.is_file()}
+    candidates.update(path for path in root.glob("*.db") if path.is_file())
+    if not candidates:
+        candidates.add(data_root / "xcagi.db")
+    for db_path in sorted(candidates):
+        _ensure_sqlite_business_tables(db_path)
+
+
+def ensure_runtime_database_environment() -> str:
+    """Select the runtime database URL, forcing desktop mode onto local SQLite."""
+    if _is_desktop_mode_env():
+        root = _desktop_data_root()
+        data_root = root / "data"
+        db_path = data_root / "xcagi.db"
+        url = f"sqlite:///{db_path}"
+        data_root.mkdir(parents=True, exist_ok=True)
+        os.environ["DATABASE_URL"] = url
+        os.environ["DATABASE_PATH"] = str(data_root)
+        ensure_desktop_sqlite_business_tables_all_files(str(root))
+        try:
+            from app.config import Config
+
+            refresh_config_database_urls(Config)
+        except RECOVERABLE_ERRORS:
+            pass
+        return url
+    return os.environ.get("DATABASE_URL", "")
 
 
 def _iter_seed_dirs() -> Iterable[str]:
@@ -1190,8 +1281,18 @@ def ensure_sessions_account_meta_columns(
         logger.warning("sessions 账号元数据列兼容补列失败: %s", exc)
 
 
-def init_im_tables(engine: Engine) -> None:
+def init_im_tables(engine: Engine | None = None, *, database_url: str | None = None) -> None:
     """在主库上创建企业内部 IM V0 表（im_conversations / members / messages）。"""
+    if engine is None:
+        if database_url:
+            from app.db import _create_engine_for_url
+
+            engine = _create_engine_for_url(database_url)
+        else:
+            from app.db import _get_engine
+
+            engine = _get_engine()
+
     from app.db.base import Base
     from app.db.models.im import (  # noqa: F401
         ImConversation,

@@ -9,7 +9,6 @@ import pytest
 
 from app.services.conversation.intent import IntentMixin
 
-
 # ========================= _is_pro_source ================================
 
 
@@ -142,19 +141,21 @@ class TestShouldUseRuleOnlyIntent:
 class TestIntentRuleOnlyFast:
     def test_basic(self):
         m = IntentMixin()
-        m.intent_service = MagicMock(return_value={
-            "primary_intent": "shipment_generate",
-            "tool_key": "shipment_generate",
-            "intent_hints": ["hint1"],
-            "is_negated": False,
-            "is_greeting": False,
-            "is_goodbye": False,
-            "is_help": False,
-            "is_confirmation": False,
-            "is_negation_intent": False,
-            "is_likely_unclear": False,
-            "all_matched_tools": ["tool1"],
-        })
+        m.intent_service = MagicMock(
+            return_value={
+                "primary_intent": "shipment_generate",
+                "tool_key": "shipment_generate",
+                "intent_hints": ["hint1"],
+                "is_negated": False,
+                "is_greeting": False,
+                "is_goodbye": False,
+                "is_help": False,
+                "is_confirmation": False,
+                "is_negation_intent": False,
+                "is_likely_unclear": False,
+                "all_matched_tools": ["tool1"],
+            }
+        )
         result = m._intent_rule_only_fast("生成发货单")
         assert result["primary_intent"] == "shipment_generate"
         assert result["final_intent"] == "shipment_generate"
@@ -247,7 +248,12 @@ class TestEnhanceWithTaskAgent:
             "task_type": "products",
             "slots": {"keyword": "test"},
         }
-        intent = {"slots": {}, "tool_key": "existing", "final_intent": "existing", "primary_intent": "existing"}
+        intent = {
+            "slots": {},
+            "tool_key": "existing",
+            "final_intent": "existing",
+            "primary_intent": "existing",
+        }
         result = m._enhance_with_task_agent("查询产品", intent, "user1")
         assert result["tool_key"] == "existing"
 
@@ -259,21 +265,27 @@ class TestResolveAiMode:
     def test_preference_offline(self):
         m = IntentMixin()
         m.user_preference_service = MagicMock()
-        m.user_preference_service.get_preference.side_effect = lambda uid, key: "offline" if key == "aiMode" else None
+        m.user_preference_service.get_preference.side_effect = lambda uid, key: (
+            "offline" if key == "aiMode" else None
+        )
         result = m._resolve_ai_mode("user1")
         assert result == "offline"
 
     def test_preference_online(self):
         m = IntentMixin()
         m.user_preference_service = MagicMock()
-        m.user_preference_service.get_preference.side_effect = lambda uid, key: "online" if key == "aiMode" else None
+        m.user_preference_service.get_preference.side_effect = lambda uid, key: (
+            "online" if key == "aiMode" else None
+        )
         result = m._resolve_ai_mode("user1")
         assert result == "online"
 
     def test_legacy_model_migration(self):
         m = IntentMixin()
         m.user_preference_service = MagicMock()
-        m.user_preference_service.get_preference.side_effect = lambda uid, key: None if key == "aiMode" else "offline"
+        m.user_preference_service.get_preference.side_effect = lambda uid, key: (
+            None if key == "aiMode" else "offline"
+        )
         result = m._resolve_ai_mode("user1")
         assert result == "offline"
         m.user_preference_service.set_preference.assert_called_once()

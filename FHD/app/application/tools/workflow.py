@@ -18,7 +18,7 @@ import logging
 import os
 import re
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 import pandas as pd
 
@@ -427,6 +427,34 @@ def _base_registry() -> list[dict[str, Any]]:
         {
             "type": "function",
             "function": {
+                "name": "template_preview",
+                "description": (
+                    "查看、查询或保存 Excel/单据模板。用户要求“保存到模板库”“加入模板”"
+                    "或基于当前 Excel 生成模板时使用 action=create，并传入 file_path/sheet_name/header_row。"
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "action": {
+                            "type": "string",
+                            "enum": ["view", "list", "query", "create"],
+                            "description": "view=打开模板预览；list/query=查询模板；create=保存当前结构到模板库",
+                        },
+                        "template_name": {"type": "string", "description": "模板名称"},
+                        "name": {"type": "string", "description": "模板名称别名"},
+                        "file_path": {"type": "string", "description": "当前 Excel 文件路径"},
+                        "sheet_name": {"type": "string", "description": "工作表名称"},
+                        "header_row": {"type": "integer", "description": "表头行号，1-based"},
+                        "template_type": {"type": "string", "description": "模板类型，默认 Excel"},
+                        "business_scope": {"type": "string", "description": "业务范围"},
+                    },
+                    "required": ["action"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
                 "name": "generate_office_document",
                 "description": (
                     "根据用户自然语言需求**直接生成可下载的 Word（.docx）或 Excel（.xlsx）文件**。"
@@ -542,6 +570,14 @@ def execute_workflow_tool(
             return native_raw
     except RECOVERABLE_ERRORS:
         logger.debug("planner native tool dispatch skipped", exc_info=True)
+    if name == "template_preview":
+        from app.services.tools_workflow_registered import execute_registered_workflow_tool
+
+        action = str(args.get("action") or "view").strip() or "view"
+        return json.dumps(
+            execute_registered_workflow_tool(name, action, args),
+            ensure_ascii=False,
+        )
     try:
         from app.application.employee_pack_runner import try_execute_employee_planner_tool
 

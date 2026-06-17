@@ -36,7 +36,14 @@ def client() -> TestClient:
 class TestStarredRowForFrontend:
     def test_basic_contact(self):
         row = compat_routes._starred_row_for_frontend(
-            {"id": 1, "nickname": "张三", "remark": "备注", "wxid": "wx_zhang", "type": "contact", "starred": True}
+            {
+                "id": 1,
+                "nickname": "张三",
+                "remark": "备注",
+                "wxid": "wx_zhang",
+                "type": "contact",
+                "starred": True,
+            }
         )
         assert row["id"] == 1
         assert row["contact_name"] == "张三"
@@ -113,10 +120,18 @@ class TestWechatContactsListCompat:
 
     def test_filter_by_type(self, client: TestClient):
         compat_routes._STARRED_CONTACTS_DB["wx1"] = {
-            "id": 1, "type": "contact", "nickname": "A", "wxid": "wx1", "starred": True
+            "id": 1,
+            "type": "contact",
+            "nickname": "A",
+            "wxid": "wx1",
+            "starred": True,
         }
         compat_routes._STARRED_CONTACTS_DB["wx2"] = {
-            "id": 2, "type": "group", "nickname": "G", "wxid": "wx2", "starred": True
+            "id": 2,
+            "type": "group",
+            "nickname": "G",
+            "wxid": "wx2",
+            "starred": True,
         }
         r = client.get("/wechat_contacts", params={"type": "group"})
         data = r.json()["data"]
@@ -125,10 +140,18 @@ class TestWechatContactsListCompat:
 
     def test_filter_by_keyword(self, client: TestClient):
         compat_routes._STARRED_CONTACTS_DB["wx1"] = {
-            "id": 1, "type": "contact", "nickname": "张三", "wxid": "wx1", "starred": True
+            "id": 1,
+            "type": "contact",
+            "nickname": "张三",
+            "wxid": "wx1",
+            "starred": True,
         }
         compat_routes._STARRED_CONTACTS_DB["wx2"] = {
-            "id": 2, "type": "contact", "nickname": "李四", "wxid": "wx2", "starred": True
+            "id": 2,
+            "type": "contact",
+            "nickname": "李四",
+            "wxid": "wx2",
+            "starred": True,
         }
         r = client.get("/wechat_contacts", params={"keyword": "张"})
         data = r.json()["data"]
@@ -143,21 +166,33 @@ class TestWechatContactsSearchCompat:
 
     def test_search_by_nickname(self, client: TestClient):
         compat_routes._STARRED_CONTACTS_DB["wx1"] = {
-            "id": 1, "nickname": "王五", "wxid": "wx_wang", "type": "contact", "starred": True
+            "id": 1,
+            "nickname": "王五",
+            "wxid": "wx_wang",
+            "type": "contact",
+            "starred": True,
         }
         r = client.get("/wechat_contacts/search", params={"q": "王"})
         assert len(r.json()["results"]) == 1
 
     def test_search_by_keyword_param(self, client: TestClient):
         compat_routes._STARRED_CONTACTS_DB["wx1"] = {
-            "id": 1, "nickname": "赵六", "wxid": "wx_zhao", "type": "contact", "starred": True
+            "id": 1,
+            "nickname": "赵六",
+            "wxid": "wx_zhao",
+            "type": "contact",
+            "starred": True,
         }
         r = client.get("/wechat_contacts/search", params={"keyword": "赵"})
         assert len(r.json()["results"]) == 1
 
     def test_search_no_match(self, client: TestClient):
         compat_routes._STARRED_CONTACTS_DB["wx1"] = {
-            "id": 1, "nickname": "A", "wxid": "wx1", "type": "contact", "starred": True
+            "id": 1,
+            "nickname": "A",
+            "wxid": "wx1",
+            "type": "contact",
+            "starred": True,
         }
         r = client.get("/wechat_contacts/search", params={"q": "zzz"})
         assert r.json()["results"] == []
@@ -165,7 +200,9 @@ class TestWechatContactsSearchCompat:
 
 class TestWechatContactsCreateCompat:
     def test_create_success(self, client: TestClient):
-        r = client.post("/wechat_contacts", json={"wechat_id": "wx_new", "contact_name": "新联系人"})
+        r = client.post(
+            "/wechat_contacts", json={"wechat_id": "wx_new", "contact_name": "新联系人"}
+        )
         assert r.status_code == 200
         assert r.json()["success"] is True
         assert "id" in r.json()["data"]
@@ -177,7 +214,12 @@ class TestWechatContactsCreateCompat:
     def test_create_with_alias_fields(self, client: TestClient):
         r = client.post(
             "/wechat_contacts",
-            json={"wxid": "wx_alias", "nickname": "别名", "remark": "备注", "contact_type": "group"},
+            json={
+                "wxid": "wx_alias",
+                "nickname": "别名",
+                "remark": "备注",
+                "contact_type": "group",
+            },
         )
         assert r.status_code == 200
         assert r.json()["success"] is True
@@ -190,17 +232,29 @@ class TestWechatStarredList:
 
     def test_with_data(self, client: TestClient):
         compat_routes._STARRED_CONTACTS_DB["wx1"] = {
-            "id": 1, "type": "contact", "nickname": "A", "wxid": "wx1", "starred": True
+            "id": 1,
+            "type": "contact",
+            "nickname": "A",
+            "wxid": "wx1",
+            "starred": True,
         }
         r = client.get("/wechat_contacts/starred")
         assert r.json()["total"] == 1
 
     def test_filter_type(self, client: TestClient):
         compat_routes._STARRED_CONTACTS_DB["wx1"] = {
-            "id": 1, "type": "contact", "nickname": "A", "wxid": "wx1", "starred": True
+            "id": 1,
+            "type": "contact",
+            "nickname": "A",
+            "wxid": "wx1",
+            "starred": True,
         }
         compat_routes._STARRED_CONTACTS_DB["wx2"] = {
-            "id": 2, "type": "group", "nickname": "G", "wxid": "wx2", "starred": True
+            "id": 2,
+            "type": "group",
+            "nickname": "G",
+            "wxid": "wx2",
+            "starred": True,
         }
         r = client.get("/wechat_contacts/starred", params={"type": "group"})
         assert r.json()["total"] == 1
@@ -221,7 +275,10 @@ class TestWechatStarredAdd:
 class TestWechatStarredDelete:
     def test_delete_existing(self, client: TestClient):
         compat_routes._STARRED_CONTACTS_DB["wx_del"] = {
-            "id": 1, "wxid": "wx_del", "nickname": "Del", "starred": True
+            "id": 1,
+            "wxid": "wx_del",
+            "nickname": "Del",
+            "starred": True,
         }
         r = client.delete("/wechat_contacts/starred/wx_del")
         assert r.json()["success"] is True
@@ -261,7 +318,10 @@ class TestWechatContactsUnstarAll:
 class TestWechatContactsDeleteCompat:
     def test_delete_by_id(self, client: TestClient):
         compat_routes._STARRED_CONTACTS_DB["wx1"] = {
-            "id": 10, "wxid": "wx1", "nickname": "A", "starred": True
+            "id": 10,
+            "wxid": "wx1",
+            "nickname": "A",
+            "starred": True,
         }
         r = client.delete("/wechat_contacts/10")
         assert r.json()["success"] is True
@@ -274,7 +334,12 @@ class TestWechatContactsDeleteCompat:
 class TestWechatContactsUpdateCompat:
     def test_update_success(self, client: TestClient):
         compat_routes._STARRED_CONTACTS_DB["wx1"] = {
-            "id": 10, "wxid": "wx1", "nickname": "旧名", "remark": "", "type": "contact", "starred": True
+            "id": 10,
+            "wxid": "wx1",
+            "nickname": "旧名",
+            "remark": "",
+            "type": "contact",
+            "starred": True,
         }
         r = client.put("/wechat_contacts/10", json={"contact_name": "新名", "remark": "新备注"})
         assert r.json()["success"] is True

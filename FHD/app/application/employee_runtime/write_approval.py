@@ -70,7 +70,9 @@ def build_write_approval_gate(
                     "approval_request_ids": list(decision.approval_request_ids or []),
                 }
         except RECOVERABLE_ERRORS:
-            logger.debug("write approval gate fallback emp=%s tool=%s", employee_id, name, exc_info=True)
+            logger.debug(
+                "write approval gate fallback emp=%s tool=%s", employee_id, name, exc_info=True
+            )
 
         try:
             from app.application.employee_runtime.metrics import record_write_block

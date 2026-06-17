@@ -8,7 +8,6 @@ import pytest
 
 from app.services.conversation.api import _make_ai_response_cache_key
 
-
 # ========================= _make_ai_response_cache_key ===================
 
 
@@ -58,6 +57,7 @@ class TestCallAiOffline:
         intent_result = {"final_intent": "shipment_generate", "primary_intent": "shipment_generate"}
 
         import asyncio
+
         result = asyncio.get_event_loop().run_until_complete(
             m._call_ai_offline("生成发货单", ctx, intent_result)
         )
@@ -75,6 +75,7 @@ class TestCallAiOffline:
         intent_result = {"final_intent": "unk", "primary_intent": "unk"}
 
         import asyncio
+
         result = asyncio.get_event_loop().run_until_complete(
             m._call_ai_offline("hello", ctx, intent_result)
         )

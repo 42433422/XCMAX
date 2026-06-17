@@ -54,7 +54,7 @@ export function useChatMessageUi(deps: UseChatMessageUiDeps) {
   }
 
   function canSpeakMessage(msg: { content?: string }): boolean {
-    return !!extractSpeakableText(msg?.content)
+    return !!cleanTextForSpeech(extractSpeakableText(msg?.content))
   }
 
   async function toggleMessageTts(idx: number, rawContent: string | undefined | null) {
@@ -68,18 +68,16 @@ export function useChatMessageUi(deps: UseChatMessageUiDeps) {
     if (!text) return
     const myIdx = idx
     playingMsgIdx.value = myIdx
-    try {
-      await speakText(text, {
-        onEnd: () => {
-          if (playingMsgIdx.value === myIdx) playingMsgIdx.value = -1
-        },
-        onError: () => {
-          if (playingMsgIdx.value === myIdx) playingMsgIdx.value = -1
-        },
-      })
-    } finally {
+    void speakText(text, {
+      onEnd: () => {
+        if (playingMsgIdx.value === myIdx) playingMsgIdx.value = -1
+      },
+      onError: () => {
+        if (playingMsgIdx.value === myIdx) playingMsgIdx.value = -1
+      },
+    }).catch(() => {
       if (playingMsgIdx.value === myIdx) playingMsgIdx.value = -1
-    }
+    })
   }
 
   const latestAiMessageIndex = computed(() => {

@@ -396,10 +396,7 @@ def test_thinking_steps_empty() -> None:
 
 
 def test_thinking_steps_with_markers() -> None:
-    merged = (
-        "前言 [正在调用工具: products.query] 中段 [工具已返回 3 条] "
-        "[需要授权: db_read] 收尾"
-    )
+    merged = "前言 [正在调用工具: products.query] 中段 [工具已返回 3 条] [需要授权: db_read] 收尾"
     out = _thinking_steps_from_planner_stream_text(merged)
     assert out is not None
     assert "正在调用工具" in out

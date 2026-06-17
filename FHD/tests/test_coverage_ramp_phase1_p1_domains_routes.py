@@ -10,7 +10,6 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-
 # ---------------------------------------------------------------------------
 # System routes
 # ---------------------------------------------------------------------------
@@ -247,9 +246,7 @@ def test_ai_message_save_ok(mock_get: MagicMock, conversation_client: TestClient
 def test_ai_message_save_bot_role_normalized(
     conversation_client: TestClient,
 ) -> None:
-    with patch(
-        "app.application.facades.conversation_facade.get_conversation_service"
-    ) as mock_get:
+    with patch("app.application.facades.conversation_facade.get_conversation_service") as mock_get:
         mock_get.return_value.save_message.return_value = 1
         r = conversation_client.post(
             "/api/ai/message/save",

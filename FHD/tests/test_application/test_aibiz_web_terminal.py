@@ -11,14 +11,13 @@ from app.application.aibiz_web_terminal_service import (
     _compact_surface_pages,
     _crop_png_top,
     _resize_png_thumb,
+    _sanitize_pw_admin_pages,
+    _strip_b64_attach_image_urls,
     _surface_cache_token,
     _surface_image_url,
     _transform_png_view,
     _unwrap,
-    _strip_b64_attach_image_urls,
-    _sanitize_pw_admin_pages,
 )
-
 
 # ========================= _LANE_BY_TERMINAL =============================
 
@@ -39,25 +38,21 @@ class TestLaneByTerminal:
 
 class TestUnwrap:
     def test_dict_passthrough(self):
-        from app.application.aibiz_web_terminal_service import _unwrap
 
         assert _unwrap({"key": "val"}) == {"key": "val"}
 
     def test_json_response(self):
         from fastapi.responses import JSONResponse
-        from app.application.aibiz_web_terminal_service import _unwrap
 
         resp = JSONResponse({"a": 1})
         result = _unwrap(resp)
         assert "_error_response" in result
 
     def test_other_type(self):
-        from app.application.aibiz_web_terminal_service import _unwrap
 
         assert _unwrap("string") == {}
 
     def test_none(self):
-        from app.application.aibiz_web_terminal_service import _unwrap
 
         assert _unwrap(None) == {}
 

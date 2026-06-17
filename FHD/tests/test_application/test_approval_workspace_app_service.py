@@ -13,7 +13,6 @@ from app.application.approval_workspace_app_service import (
     _node_query_for_user,
 )
 
-
 # ========================= _allow_x_user_id_header =======================
 
 

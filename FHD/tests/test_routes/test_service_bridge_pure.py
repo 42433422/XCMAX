@@ -9,7 +9,6 @@ import pytest
 
 from app.fastapi_routes.service_bridge import _get_instance_name
 
-
 # ========================= _get_instance_name ============================
 
 
@@ -36,15 +35,14 @@ class TestGetInstanceName:
 
 class TestGetOrCreateInstanceId:
     def test_format(self):
-        with patch("os.path.exists", return_value=False), \
-             patch("os.makedirs"):
+        with patch("os.path.exists", return_value=False), patch("os.makedirs"):
             from app.fastapi_routes.service_bridge import _get_or_create_instance_id
+
             result = _get_or_create_instance_id()
             assert result.startswith("xcagi-host-")
 
     def test_reads_cached(self):
-        with patch("os.path.exists", return_value=True), \
-             patch("builtins.open", MagicMock()):
+        with patch("os.path.exists", return_value=True), patch("builtins.open", MagicMock()):
             # Mock the file read
             mock_file = MagicMock()
             mock_file.__enter__ = MagicMock(return_value=mock_file)
@@ -52,5 +50,6 @@ class TestGetOrCreateInstanceId:
             mock_file.read.return_value = "xcagi-host-cached123"
             with patch("builtins.open", return_value=mock_file):
                 from app.fastapi_routes.service_bridge import _get_or_create_instance_id
+
                 result = _get_or_create_instance_id()
                 assert result == "xcagi-host-cached123"

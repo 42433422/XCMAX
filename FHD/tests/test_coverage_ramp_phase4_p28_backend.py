@@ -21,7 +21,9 @@ def _chat_svc() -> tuple[AIChatApplicationService, MagicMock]:
         return_value={"success": True, "text": "回复", "action": "followup", "data": {}}
     )
     with (
-        patch("app.application.ai_chat_app_service.get_ai_conversation_service", return_value=mock_ai),
+        patch(
+            "app.application.ai_chat_app_service.get_ai_conversation_service", return_value=mock_ai
+        ),
         patch("app.application.ai_chat_app_service.LLMWorkflowPlanner"),
         patch("app.application.ai_chat_app_service.HybridRiskGate"),
         patch("app.application.ai_chat_app_service.WorkflowEngine"),
@@ -61,9 +63,7 @@ def test_wechat_starred_messages_group_with_market_user(
     from app.fastapi_routes.domains.wechat import routes as wechat_routes
 
     mock_feed.return_value = []
-    out = wechat_routes.wechat_starred_messages(
-        type="group", sync=True, market_user_id=99, limit=3
-    )
+    out = wechat_routes.wechat_starred_messages(type="group", sync=True, market_user_id=99, limit=3)
     assert out["success"] is True
     mock_live.assert_called_once_with(99, message_limit=80, mode="feed")
 
@@ -78,11 +78,11 @@ def test_wechat_starred_messages_contact_feed(mock_latest: MagicMock) -> None:
         {"id": 1, "contact_name": "甲公司", "contact_type": "contact"},
         {"id": 2, "contact_name": "无消息"},
     ]
-    mock_svc.get_contact_context.side_effect = lambda cid: (
-        [{"content": "你好"}] if cid == 1 else []
-    )
+    mock_svc.get_contact_context.side_effect = lambda cid: [{"content": "你好"}] if cid == 1 else []
     with patch("app.application.get_wechat_contact_app_service", return_value=mock_svc):
-        out = wechat_routes.wechat_starred_messages(limit=10, type="all", market_user_id=None, sync=False)
+        out = wechat_routes.wechat_starred_messages(
+            limit=10, type="all", market_user_id=None, sync=False
+        )
     assert out["success"] is True
     assert out["total"] == 1
     assert out["data"][0]["contact_name"] == "甲公司"

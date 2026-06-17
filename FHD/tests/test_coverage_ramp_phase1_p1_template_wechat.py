@@ -11,7 +11,6 @@ from fastapi.testclient import TestClient
 
 from app.fastapi_routes.domains.template import routes as template_routes
 
-
 # ---------------------------------------------------------------------------
 # Template pure helpers
 # ---------------------------------------------------------------------------
@@ -116,9 +115,7 @@ def test_customers_get_by_id(
 
 
 @patch("app.mod_sdk.erp_customers_facade.is_erp_customers_via_service_enabled")
-def test_customers_post_validation(
-    mock_enabled: MagicMock, customer_client: TestClient
-) -> None:
+def test_customers_post_validation(mock_enabled: MagicMock, customer_client: TestClient) -> None:
     mock_enabled.return_value = False
     with patch("app.fastapi_routes.domains.customer.routes._customers_write_raise"):
         r = customer_client.post("/customers", json={})
@@ -158,9 +155,7 @@ def test_wechat_tasks(mock_get: MagicMock, wechat_client: TestClient) -> None:
 
 @patch("app.desktop_automation.service.get_desktop_automation_service")
 @patch("app.services.wechat_passive_group_monitor.assert_safe_outbound_group_reply")
-def test_send_wechat_via_automation_success(
-    mock_safe: MagicMock, mock_auto: MagicMock
-) -> None:
+def test_send_wechat_via_automation_success(mock_safe: MagicMock, mock_auto: MagicMock) -> None:
     from app.fastapi_routes.domains.wechat import routes as wechat_routes
 
     mock_safe.return_value = "hello"

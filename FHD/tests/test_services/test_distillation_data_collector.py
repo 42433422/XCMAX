@@ -172,9 +172,7 @@ class TestGenerateSamplesFromQueries:
 
     def test_generate_samples_empty_queries(self):
         with patch("app.services.distillation_data_collector.ENGINE", MagicMock()):
-            with patch(
-                "app.services.distillation_data_collector.save_distillation_sample"
-            ):
+            with patch("app.services.distillation_data_collector.save_distillation_sample"):
                 count = generate_samples_from_queries({})
         assert count == 0
 
@@ -314,9 +312,7 @@ class TestExportTrainingData:
         mock_engine.begin.return_value.__exit__ = MagicMock(return_value=False)
 
         with patch("app.services.distillation_data_collector.ENGINE", mock_engine):
-            with patch(
-                "app.services.distillation_data_collector.DISTILL_DIR", str(tmp_path)
-            ):
+            with patch("app.services.distillation_data_collector.DISTILL_DIR", str(tmp_path)):
                 result = export_training_data(format="jsonl")
         assert result.endswith("training_data.jsonl")
 
@@ -357,15 +353,7 @@ class TestCallDeepseekIntent:
         from app.services.distillation_data_collector import call_deepseek_intent
 
         mock_result = {
-            "choices": [
-                {
-                    "message": {
-                        "content": json.dumps(
-                            {"intent": "greet", "slots": {}}
-                        )
-                    }
-                }
-            ]
+            "choices": [{"message": {"content": json.dumps({"intent": "greet", "slots": {}})}}]
         }
         mock_chat = AsyncMock(return_value=mock_result)
         with patch(
@@ -395,9 +383,7 @@ class TestCallDeepseekIntent:
     async def test_call_deepseek_intent_invalid_json(self):
         from app.services.distillation_data_collector import call_deepseek_intent
 
-        mock_result = {
-            "choices": [{"message": {"content": "not valid json"}}]
-        }
+        mock_result = {"choices": [{"message": {"content": "not valid json"}}]}
         with patch(
             "app.infrastructure.llm.invoke.chat_completion_openai_format",
             new_callable=AsyncMock,

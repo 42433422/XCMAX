@@ -54,7 +54,8 @@ def _execute_tool_from_payload_inner(data):
         )
         if "order_text" in params:
             logger.info(
-                "[DEBUG] order_text=%s", params.get('order_text')[:200] if params.get('order_text') else None
+                "[DEBUG] order_text=%s",
+                params.get("order_text")[:200] if params.get("order_text") else None,
             )
 
         return dispatch_legacy_tool_payload(

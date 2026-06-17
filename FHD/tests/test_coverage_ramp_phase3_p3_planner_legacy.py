@@ -21,9 +21,7 @@ from app.application.workflow.types import PlanGraph
 
 def test_tool_key_and_labels() -> None:
     assert _tool_key("excel_analysis", '{"a":1}') == _tool_key("excel_analysis", '{"a":1}')
-    assert "Word" in _tool_stream_call_label(
-        "generate_office_document", '{"output_format":"docx"}'
-    )
+    assert "Word" in _tool_stream_call_label("generate_office_document", '{"output_format":"docx"}')
     assert _slow_tool_wait_message("import_excel_to_database", "{}") is not None
 
 
@@ -86,9 +84,7 @@ def test_legacy_chat_adapter_chat_minimal(
     msg.tool_calls = None
     choice = MagicMock()
     choice.message = msg
-    mock_client.return_value.chat.completions.create.return_value = MagicMock(
-        choices=[choice]
-    )
+    mock_client.return_value.chat.completions.create.return_value = MagicMock(choices=[choice])
     from app.application.workflow.legacy_chat_adapter import chat
 
     out = chat("你好", workspace_root="/tmp", model="deepseek-chat")

@@ -12,7 +12,6 @@ from app.fastapi_routes.domains.wechat.routes import (
     _wechat_message_timestamp_seconds,
 )
 
-
 # ========================= _secret_key ===================================
 
 
@@ -24,6 +23,7 @@ class TestSecretKey:
     def test_without_env(self):
         with patch.dict("os.environ", {}, clear=True):
             import os
+
             os.environ.pop("SECRET_KEY", None)
             assert _secret_key() == ""
 

@@ -17,7 +17,6 @@ from app.services.document_templates.variables import (
     _validate_required_terms,
 )
 
-
 # ========================= _normalize_term ===============================
 
 

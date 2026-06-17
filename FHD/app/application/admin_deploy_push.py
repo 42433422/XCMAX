@@ -93,7 +93,9 @@ def _read_local_manifest(root: Path) -> dict[str, Any] | None:
 
 def _fetch_json_url(url: str, timeout: float = 8.0) -> dict[str, Any] | None:
     try:
-        req = urllib.request.Request(url, method="GET", headers={"User-Agent": "xcmax-admin-deploy/1.0"})
+        req = urllib.request.Request(
+            url, method="GET", headers={"User-Agent": "xcmax-admin-deploy/1.0"}
+        )
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             raw = json.loads(resp.read(65536).decode("utf-8", errors="replace"))
         return raw if isinstance(raw, dict) else None
@@ -136,7 +138,9 @@ def check_deploy_updates(channel: str = CHANNEL_DEFAULT) -> dict[str, Any]:
     local_sha = _local_git_sha(root)
     local_version = _local_version(root)
     local_manifest = _read_local_manifest(root)
-    manifest_url = MANIFEST_URL.replace("/stable/", f"/{channel}/") if channel != "stable" else MANIFEST_URL
+    manifest_url = (
+        MANIFEST_URL.replace("/stable/", f"/{channel}/") if channel != "stable" else MANIFEST_URL
+    )
     hub = _fetch_json_url(manifest_url)
     enterprise = _probe_enterprise_runtime()
 
@@ -304,7 +308,9 @@ async def _execute_deploy_job(job: DeployJob) -> None:
     if ssh_key:
         deploy_env["FHD_PUSH_SSH_KEY"] = ssh_key
 
-    async def run_step(step: DeployStep, cmd: list[str], *, cwd: Path | None = None, env: dict | None = None):
+    async def run_step(
+        step: DeployStep, cmd: list[str], *, cwd: Path | None = None, env: dict | None = None
+    ):
         await _run_shell_step(job, step, cmd, cwd=cwd or root, env=env)
 
     try:
@@ -328,7 +334,9 @@ async def _execute_deploy_job(job: DeployJob) -> None:
             elif step.id == "frontend_build":
                 await run_step(step, ["npm", "run", "build"], cwd=root / "frontend")
             elif step.id == "frontend_push":
-                await run_step(step, ["bash", "scripts/deploy/fhd-push-frontend-dist.sh"], env=deploy_env)
+                await run_step(
+                    step, ["bash", "scripts/deploy/fhd-push-frontend-dist.sh"], env=deploy_env
+                )
             elif step.id == "verify":
                 step.status = "running"
                 step.started_at = time.time()

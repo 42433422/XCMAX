@@ -100,8 +100,10 @@ class ChatContext:
         self._update_semantic_cache(user_id, turn)
 
         logger.debug(
-            "[CHAT_CONTEXT] Added turn: user=%s, "
-            f"intent=%s, history_size=%s", user_id, turn.intent, len(self._history[user_id])
+            "[CHAT_CONTEXT] Added turn: user=%s, intent=%s, history_size=%s",
+            user_id,
+            turn.intent,
+            len(self._history[user_id]),
         )
 
     def get_recent_turns(self, user_id: str, limit: int = 10) -> list[ChatTurn]:
@@ -204,8 +206,9 @@ class ChatContext:
             cached_response, timestamp = self._exact_cache[exact_key]
             if time.time() - timestamp <= self.EXACT_DUPLICATE_TTL:
                 logger.info(
-                    "[CHAT_CONTEXT] Exact duplicate detected: user=%s, "
-                    f"msg=%s...", user_id, message[:30]
+                    "[CHAT_CONTEXT] Exact duplicate detected: user=%s, msg=%s...",
+                    user_id,
+                    message[:30],
                 )
                 return True, cached_response, True
 
@@ -229,8 +232,9 @@ class ChatContext:
                 ):
                     if turn.response_text:
                         logger.info(
-                            "[CHAT_CONTEXT] Semantic duplicate detected: user=%s, "
-                            f"intent=%s", user_id, intent
+                            "[CHAT_CONTEXT] Semantic duplicate detected: user=%s, intent=%s",
+                            user_id,
+                            intent,
                         )
                         return True, turn.response_text, False
 

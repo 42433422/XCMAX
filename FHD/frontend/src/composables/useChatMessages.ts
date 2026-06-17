@@ -9,7 +9,7 @@ import {
   buildChatMessagesKey,
   buildChatSessionMetaKey,
 } from '@/utils/chatStorageKeys'
-import { asRecord, asArray, asString, asBoolean, asDisposable } from '@/utils/typeGuards'
+import { asRecord, asArray, asString, asBoolean } from '@/utils/typeGuards'
 
 const WELCOME_MESSAGE_PREFIX = '您好！我是您的'
 
@@ -153,6 +153,75 @@ export function useChatMessages(sessionId: Ref<string>) {
     return text.length > 0
   }
 
+  function hasRenderableSidecar(row: Record<string, unknown>): boolean {
+    if (asBoolean(row.streamingShell)) return true
+    if (asString(row.toolProgressLabel).trim()) return true
+    if (asString(row.downloadUrl).trim()) return true
+    if (asString(row.shipmentDownloadUrl).trim()) return true
+    if (asString(row.thinkingSteps).trim()) return true
+    if (asString(row.workflowAction).trim()) return true
+    if (asArray(row.todoSteps).length) return true
+    if (asArray(row.nodeResults).length) return true
+    if (row.contextSummary != null && String(row.contextSummary).trim()) return true
+    return false
+  }
+
+  function sanitizeMessageExtras(row: Record<string, unknown>): ChatMessageExtras {
+    const extras: ChatMessageExtras = {}
+    if (asBoolean(row.streamingShell)) extras.streamingShell = true
+
+    const toolProgressLabel = asString(row.toolProgressLabel).trim()
+    if (toolProgressLabel) extras.toolProgressLabel = toolProgressLabel
+
+    const downloadUrl = asString(row.downloadUrl).trim()
+    if (downloadUrl) extras.downloadUrl = downloadUrl
+
+    const shipmentDownloadUrl = asString(row.shipmentDownloadUrl).trim()
+    if (shipmentDownloadUrl) extras.shipmentDownloadUrl = shipmentDownloadUrl
+
+    const thinkingSteps = asString(row.thinkingSteps).trim()
+    if (thinkingSteps) extras.thinkingSteps = thinkingSteps
+
+    const workflowAction = asString(row.workflowAction).trim()
+    if (workflowAction) extras.workflowAction = workflowAction
+
+    const todoSteps = asArray(row.todoSteps)
+      .map((step) => asString(step).trim())
+      .filter(Boolean)
+    if (todoSteps.length) extras.todoSteps = todoSteps
+
+    const nodeResults = asArray(row.nodeResults)
+      .map((raw) => {
+        const node = asRecord(raw)
+        const nodeId = asString(node.node_id).trim()
+        const toolId = asString(node.tool_id).trim()
+        const action = asString(node.action).trim()
+        if (!nodeId && !toolId && !action) return null
+        const result: NonNullable<ChatMessageExtras['nodeResults']>[number] = {
+          node_id: nodeId,
+          tool_id: toolId,
+          action,
+          success: asBoolean(node.success),
+        }
+        const error = asString(node.error).trim()
+        if (error) result.error = error
+        return result
+      })
+      .filter((node): node is NonNullable<ChatMessageExtras['nodeResults']>[number] => !!node)
+    if (nodeResults.length) extras.nodeResults = nodeResults
+
+    const attachments = asArray(row.attachments)
+      .map((item) => asRecord(item))
+      .filter((item) => Object.keys(item).length > 0)
+    if (attachments.length) extras.attachments = attachments
+
+    if (row.contextSummary != null && String(row.contextSummary).trim()) {
+      extras.contextSummary = row.contextSummary
+    }
+
+    return extras
+  }
+
   function toPlainText(raw: unknown): string {
     return String(raw || '')
       .replace(/<br\s*\/?>/gi, '\n')
@@ -202,12 +271,13 @@ export function useChatMessages(sessionId: Ref<string>) {
         const roleRaw = asString(row.role)
         const role = (roleRaw === 'user' || roleRaw === 'task') ? roleRaw : 'ai'
         const content = asString(row.content)
-        if (!hasMeaningfulContent(content)) return null
+        if (!hasMeaningfulContent(content) && !hasRenderableSidecar(row)) return null
         return {
           role,
           content,
           time: asString(row.time).trim()
-            || new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+            || new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
+          ...sanitizeMessageExtras(row),
         } as ChatMessage
       })
       .filter((m): m is ChatMessage => !!m)
@@ -273,8 +343,9 @@ export function useChatMessages(sessionId: Ref<string>) {
     const time = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
     messages.value.push({
       role: 'ai',
-      content: '...',
-      time
+      content: '',
+      time,
+      streamingShell: true
     })
     persistMessagesCache()
     return messages.value.length - 1
@@ -285,7 +356,12 @@ export function useChatMessages(sessionId: Ref<string>) {
     const safe = escapeHtml(plain).replace(/\n/g, '<br>')
     const row = messages.value[index]
     if (!row) return
-    row.content = safe || '...'
+    row.content = safe
+    if (safe) {
+      row.streamingShell = undefined
+    } else {
+      row.streamingShell = true
+    }
     persistMessagesCache()
   }
 

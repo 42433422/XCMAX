@@ -59,7 +59,9 @@ def _default_mods_root() -> str:
         os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(file_here)))), "mods"
     )
     logger.info(
-        "[_default_mods_root] Checking package-relative path: %s, exists: %s", from_pkg_layout, os.path.isdir(from_pkg_layout)
+        "[_default_mods_root] Checking package-relative path: %s, exists: %s",
+        from_pkg_layout,
+        os.path.isdir(from_pkg_layout),
     )
     if os.path.isdir(from_pkg_layout):
         logger.info("[_default_mods_root] Mods root (next to app package): %s", from_pkg_layout)
@@ -142,9 +144,9 @@ def import_mod_backend_py(mod_path: str, mod_id: str, stem: str):
     # 同一 mod_id 可能来自 mods/ 与 mods-admin-runtime/ 等不同物理路径；须纳入缓存键避免错用旧模块。
     import hashlib
 
-    path_digest = hashlib.sha256(
-        os.path.normpath(os.path.abspath(mod_path)).encode()
-    ).hexdigest()[:16]
+    path_digest = hashlib.sha256(os.path.normpath(os.path.abspath(mod_path)).encode()).hexdigest()[
+        :16
+    ]
     spec_name = f"_xcagi_mod_{safe}_{path_digest}_{stem}"
     existing = sys.modules.get(spec_name)
     if existing is not None:
@@ -550,7 +552,10 @@ class ModManager:
             return False
 
         logger.info(
-            "[ModManager] Mod metadata parsed: id=%s, name=%s, version=%s", metadata.id, metadata.name, metadata.version
+            "[ModManager] Mod metadata parsed: id=%s, name=%s, version=%s",
+            metadata.id,
+            metadata.name,
+            metadata.version,
         )
 
         if normalize_artifact({"artifact": metadata.artifact}) == ARTIFACT_BUNDLE:
@@ -618,7 +623,9 @@ class ModManager:
                             )
             except RECOVERABLE_ERRORS as e:
                 logger.error(
-                    "Failed to load backend entry for %s: %s", mod_id, e,
+                    "Failed to load backend entry for %s: %s",
+                    mod_id,
+                    e,
                     exc_info=True,
                 )
                 raise
@@ -701,7 +708,10 @@ class ModManager:
                     existing_version = existing_metadata.version if existing_metadata else "unknown"
                     new_version = manifest.get("version", "unknown")
                     logger.info(
-                        "MOD %s already exists (v%s), updating to v%s", mod_id, existing_version, new_version
+                        "MOD %s already exists (v%s), updating to v%s",
+                        mod_id,
+                        existing_version,
+                        new_version,
                     )
                     shutil.rmtree(target_path)
 

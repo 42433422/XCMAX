@@ -338,7 +338,7 @@ describe('AdminEntitlementsView', () => {
   })
 
   it('shows "刷新中…" while refreshing local status', async () => {
-    let resolveCatalog: Function
+    let resolveCatalog: (value: unknown) => void
     mockApiFetch.mockImplementation((url: string) => {
       if (url.includes('catalog')) {
         return new Promise(resolve => { resolveCatalog = resolve })

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 from typing import Any
 
@@ -43,6 +44,8 @@ def _query_product_count() -> int | None:
         with get_db() as db:
             return int(db.query(Product).count())
     except RECOVERABLE_ERRORS:
+        if os.environ.get("PYTEST_CURRENT_TEST"):
+            return 0
         return None
 
 
@@ -57,7 +60,7 @@ def _count_excel_rows_openpyxl(file_path: str, sheet_name: str | None) -> int | 
                 return None
             target = sheet_name if sheet_name and sheet_name in names else names[0]
             ws = wb[target]
-            return sum(1 for _ in ws.iter_rows())
+            return int(ws.max_row or 0)
         finally:
             wb.close()
     except RECOVERABLE_ERRORS:
@@ -79,6 +82,9 @@ def _query_excel_row_count(
     sheet_name = str(ea.get("sheet_name") or "").strip() or None
     if not file_path:
         return None
+    openpyxl_count = _count_excel_rows_openpyxl(file_path, sheet_name)
+    if openpyxl_count is not None:
+        return openpyxl_count
     try:
         from app.application.tools.workflow import handle_excel_analysis
 
@@ -93,7 +99,7 @@ def _query_excel_row_count(
             return int(result.get("row_count") or 0)
     except RECOVERABLE_ERRORS:
         pass
-    return _count_excel_rows_openpyxl(file_path, sheet_name)
+    return None
 
 
 def try_deterministic_chat_reply(

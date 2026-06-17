@@ -165,15 +165,11 @@ class TestCreateChangeRequest:
         assert "created_at" in result
 
     def test_create_generates_ticket_no(self):
-        result = create_change_request(
-            100, change_type="bug_fix", title="修复问题"
-        )
+        result = create_change_request(100, change_type="bug_fix", title="修复问题")
         assert result["ticket_no"].startswith("CR-100-")
 
     def test_create_truncates_long_title(self):
-        result = create_change_request(
-            100, change_type="bug_fix", title="x" * 300
-        )
+        result = create_change_request(100, change_type="bug_fix", title="x" * 300)
         assert len(result["title"]) <= 256
 
     def test_create_truncates_long_description(self):
@@ -280,17 +276,13 @@ class TestMarkOpsDispatched:
 
     def test_mark_dispatched_with_job_id(self):
         created = create_change_request(600, change_type="ops_support", title="t")
-        result = mark_change_request_ops_dispatched(
-            600, created["id"], job_id="JOB-001"
-        )
+        result = mark_change_request_ops_dispatched(600, created["id"], job_id="JOB-001")
         assert result["ops_dispatch_job_id"] == "JOB-001"
         assert "ops_dispatched_at" in result
 
     def test_mark_dispatched_with_error(self):
         created = create_change_request(600, change_type="ops_support", title="t")
-        result = mark_change_request_ops_dispatched(
-            600, created["id"], error="派单失败"
-        )
+        result = mark_change_request_ops_dispatched(600, created["id"], error="派单失败")
         assert result["ops_dispatch_error"] == "派单失败"
         assert "ops_dispatch_job_id" not in result
 
@@ -322,9 +314,7 @@ class TestBuildOpsDispatchTaskDescription:
             "change_type_label": "产品变更",
             "ticket_no": "CR-100-0001",
         }
-        desc = build_ops_dispatch_task_description(
-            row, market_user_id=100, client_name="张三"
-        )
+        desc = build_ops_dispatch_task_description(row, market_user_id=100, client_name="张三")
         assert "修改产品" in desc
         assert "张三" in desc
         assert "100" in desc

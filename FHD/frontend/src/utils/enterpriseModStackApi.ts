@@ -8,6 +8,22 @@ import { fetchWorkspacePrefs } from '@/utils/workspacePrefsApi'
 
 let cachedStack: EnterpriseModStack | null = null
 
+function buildOfflineEnterpriseModStack(industryId: string): EnterpriseModStack {
+  return buildEnterpriseModStack({
+    industry_id: industryId || '通用',
+    industry_package: null,
+    groups: [],
+    required_mod_ids: [],
+    optional_mod_ids: [],
+    industry_mod_ids: [],
+    missing_required_mod_ids: [],
+    missing_optional_mod_ids: [],
+    missing_industry_mod_ids: [],
+    baseline_ready: false,
+    industry_mod_ready: false,
+  })
+}
+
 export async function resolveEnterpriseModStack(force = false): Promise<EnterpriseModStack> {
   if (cachedStack && !force) return cachedStack
 
@@ -29,8 +45,12 @@ export async function resolveEnterpriseModStack(force = false): Promise<Enterpri
     }
   }
 
-  const plan = await fetchIndustryBaseline(industryId, force)
-  cachedStack = buildEnterpriseModStack(plan)
+  try {
+    const plan = await fetchIndustryBaseline(industryId, force)
+    cachedStack = buildEnterpriseModStack(plan)
+  } catch {
+    cachedStack = buildOfflineEnterpriseModStack(industryId)
+  }
   return cachedStack
 }
 

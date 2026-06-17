@@ -247,7 +247,10 @@ class EventStore:
         self._snapshots[stream_id] = snapshot
 
         logger.debug(
-            "[EventStore] 快照保存: %s (seq=%s, snap_id=%s)", stream_id, sequence_number, snapshot_id
+            "[EventStore] 快照保存: %s (seq=%s, snap_id=%s)",
+            stream_id,
+            sequence_number,
+            snapshot_id,
         )
 
         return snapshot_id
@@ -479,9 +482,6 @@ def get_event_store() -> EventStore:
     if _event_store_instance is None:
         _event_store_instance = EventStore()
     return _event_store_instance
-
-
-# 快捷函数
 
 
 def store_event(event: NeuroEvent, stream_id: str | None = None) -> str:

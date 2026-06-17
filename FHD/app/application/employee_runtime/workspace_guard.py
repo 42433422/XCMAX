@@ -24,7 +24,15 @@ logger = logging.getLogger(__name__)
 
 # 触碰文件的参数键
 _INPUT_PATH_KEYS = ("file_path", "path", "filepath", "input_path", "src", "source")
-_OUTPUT_PATH_KEYS = ("output_path", "out_path", "dest", "destination", "save_path", "output", "target")
+_OUTPUT_PATH_KEYS = (
+    "output_path",
+    "out_path",
+    "dest",
+    "destination",
+    "save_path",
+    "output",
+    "target",
+)
 _LIST_PATH_KEYS = ("file_paths", "paths", "files", "inputs", "targets")
 
 # 输出类工具：scope_globs 对其强制
@@ -82,10 +90,16 @@ def _matches_any(rel_path: str, patterns: list[tuple[re.Pattern[str], bool]]) ->
 
 
 def _workspace_policy(manifest: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
-    wp = config.get("workspace_policy") if isinstance(config.get("workspace_policy"), dict) else None
+    wp = (
+        config.get("workspace_policy") if isinstance(config.get("workspace_policy"), dict) else None
+    )
     if wp:
         return wp
-    v2 = manifest.get("employee_config_v2") if isinstance(manifest.get("employee_config_v2"), dict) else {}
+    v2 = (
+        manifest.get("employee_config_v2")
+        if isinstance(manifest.get("employee_config_v2"), dict)
+        else {}
+    )
     wp2 = v2.get("workspace_policy") if isinstance(v2.get("workspace_policy"), dict) else {}
     return wp2 or {}
 

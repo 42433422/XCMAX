@@ -68,8 +68,8 @@ def _http_request(**headers: str) -> Request:
 
 
 def test_sql_ident_and_order_validation() -> None:
-    assert '"products"' == _sql_ident("products")
-    assert '"name" ASC' == _validate_order_clause("name ASC")
+    assert _sql_ident("products") == '"products"'
+    assert _validate_order_clause("name ASC") == '"name" ASC'
     with pytest.raises(ValueError, match="invalid ORDER BY"):
         _validate_order_clause("DROP TABLE users")
 
@@ -98,14 +98,14 @@ def test_sql_builder_helpers() -> None:
 
 
 def test_exc_chain_has_undefined_table() -> None:
-  class UndefinedTable(Exception):
-      pass
+    class UndefinedTable(Exception):
+        pass
 
-  inner = UndefinedTable("missing")
-  outer = RuntimeError("wrap")
-  outer.__cause__ = inner
-  assert _exc_chain_has_undefined_table(outer) is True
-  assert _exc_chain_has_undefined_table(RuntimeError("x")) is False
+    inner = UndefinedTable("missing")
+    outer = RuntimeError("wrap")
+    outer.__cause__ = inner
+    assert _exc_chain_has_undefined_table(outer) is True
+    assert _exc_chain_has_undefined_table(RuntimeError("x")) is False
 
 
 # ---------------------------------------------------------------------------
@@ -202,7 +202,10 @@ def test_extract_log_db_error_returns_failure() -> None:
 
 def test_skip_pro_excel_deterministic_import_flags(monkeypatch: pytest.MonkeyPatch) -> None:
     assert _skip_pro_excel_deterministic_import({"excel_import_ai_decides": True}) is True
-    assert _skip_pro_excel_deterministic_import({"excel_import_use_deterministic_shortcut": True}) is False
+    assert (
+        _skip_pro_excel_deterministic_import({"excel_import_use_deterministic_shortcut": True})
+        is False
+    )
     monkeypatch.setenv("XCAGI_EXCEL_IMPORT_AI_DECIDES", "1")
     assert _skip_pro_excel_deterministic_import({}) is True
 

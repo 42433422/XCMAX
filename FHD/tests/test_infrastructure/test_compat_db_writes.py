@@ -9,37 +9,38 @@ import pytest
 from fastapi import HTTPException
 
 from app.infrastructure.persistence.compat_db.writes import (
-    _customer_pg_insert,
-    _customer_pg_update,
-    _customer_pg_delete_anywhere,
     _customer_delete_unified,
-    _products_delete_by_unit_pg,
-    _purchase_units_delete_by_norm_unit_pg,
-    _customers_delete_by_norm_name_pg,
-    _purchase_units_delete_by_id_pg,
-    _customers_delete_by_id_pg,
-    _products_unit_replace_pg,
-    _customer_pg_row_select_sql,
+    _customer_pg_delete_anywhere,
     _customer_pg_fetch_by_id,
+    _customer_pg_insert,
+    _customer_pg_row_select_sql,
     _customer_pg_select_customers_name_by_id,
-    products_pg_update_row,
-    products_pg_insert_row,
-    products_pg_delete_row,
+    _customer_pg_update,
+    _customers_delete_by_id_pg,
+    _customers_delete_by_norm_name_pg,
+    _products_delete_by_unit_pg,
+    _products_unit_replace_pg,
+    _purchase_units_delete_by_id_pg,
+    _purchase_units_delete_by_norm_unit_pg,
     products_pg_batch_delete_rows,
+    products_pg_delete_row,
+    products_pg_insert_row,
+    products_pg_update_row,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helper: patch _norm_model which is a "lost legacy symbol" that raises
 # ImportError via __getattr__, so normal patch(..., create=True) fails.
 # ---------------------------------------------------------------------------
 
+
 @contextmanager
 def _patch_norm_model(return_value="M1"):
     """Temporarily inject _norm_model into app.application.excel_imports."""
     import app.application.excel_imports as _ei
+
     mock_fn = MagicMock(return_value=return_value)
-    setattr(_ei, "_norm_model", mock_fn)
+    _ei._norm_model = mock_fn
     try:
         yield mock_fn
     finally:
@@ -50,6 +51,7 @@ def _patch_norm_model(return_value="M1"):
 # ---------------------------------------------------------------------------
 # _products_delete_by_unit_pg
 # ---------------------------------------------------------------------------
+
 
 class TestProductsDeleteByUnitPg:
     def test_empty_unit_name_returns_zero(self):
@@ -74,7 +76,9 @@ class TestProductsDeleteByUnitPg:
         mock_has_unit.return_value = True
         mock_insp_obj = MagicMock()
         mock_insp_obj.get_columns.return_value = [
-            {"name": "id"}, {"name": "unit"}, {"name": "name"}
+            {"name": "id"},
+            {"name": "unit"},
+            {"name": "name"},
         ]
         mock_insp.return_value = mock_insp_obj
 
@@ -93,6 +97,7 @@ class TestProductsDeleteByUnitPg:
 # ---------------------------------------------------------------------------
 # _purchase_units_delete_by_norm_unit_pg
 # ---------------------------------------------------------------------------
+
 
 class TestPurchaseUnitsDeleteByNormUnitPg:
     def test_empty_name_returns_zero(self):
@@ -123,6 +128,7 @@ class TestPurchaseUnitsDeleteByNormUnitPg:
 # _customers_delete_by_norm_name_pg
 # ---------------------------------------------------------------------------
 
+
 class TestCustomersDeleteByNormNamePg:
     def test_empty_name_returns_zero(self):
         eng = MagicMock()
@@ -149,6 +155,7 @@ class TestCustomersDeleteByNormNamePg:
 # _purchase_units_delete_by_id_pg
 # ---------------------------------------------------------------------------
 
+
 class TestPurchaseUnitsDeleteByIdPg:
     @patch("app.infrastructure.persistence.compat_db.writes.inspect")
     def test_no_purchase_units_table(self, mock_insp):
@@ -174,6 +181,7 @@ class TestPurchaseUnitsDeleteByIdPg:
 # _customers_delete_by_id_pg
 # ---------------------------------------------------------------------------
 
+
 class TestCustomersDeleteByIdPg:
     def test_no_customers_table(self):
         eng = MagicMock()
@@ -194,6 +202,7 @@ class TestCustomersDeleteByIdPg:
 # ---------------------------------------------------------------------------
 # _products_unit_replace_pg
 # ---------------------------------------------------------------------------
+
 
 class TestProductsUnitReplacePg:
     def test_empty_old_name_returns(self):
@@ -219,6 +228,7 @@ class TestProductsUnitReplacePg:
 # ---------------------------------------------------------------------------
 # _customer_pg_row_select_sql
 # ---------------------------------------------------------------------------
+
 
 class TestCustomerPgRowSelectSql:
     def test_full_columns(self):
@@ -261,13 +271,12 @@ class TestCustomerPgRowSelectSql:
 # _customer_pg_fetch_by_id
 # ---------------------------------------------------------------------------
 
+
 class TestCustomerPgFetchById:
     def test_not_found_raises_404(self):
         eng = MagicMock()
         insp = MagicMock()
-        insp.get_columns.return_value = [
-            {"name": "id"}, {"name": "unit_name"}
-        ]
+        insp.get_columns.return_value = [{"name": "id"}, {"name": "unit_name"}]
         mock_conn = MagicMock()
         mock_conn.execute.return_value.mappings.return_value.first.return_value = None
         eng.connect.return_value.__enter__ = MagicMock(return_value=mock_conn)
@@ -281,6 +290,7 @@ class TestCustomerPgFetchById:
 # ---------------------------------------------------------------------------
 # _customer_pg_select_customers_name_by_id
 # ---------------------------------------------------------------------------
+
 
 class TestCustomerPgSelectCustomersNameById:
     def test_no_customers_table(self):
@@ -303,19 +313,28 @@ class TestCustomerPgSelectCustomersNameById:
 # _customer_pg_delete_anywhere
 # ---------------------------------------------------------------------------
 
+
 class TestCustomerPgDeleteAnywhere:
     @patch("app.infrastructure.persistence.compat_db.writes._customers_delete_by_id_pg")
     @patch("app.infrastructure.persistence.compat_db.writes._customers_delete_by_norm_name_pg")
     @patch("app.infrastructure.persistence.compat_db.writes._purchase_units_delete_by_norm_unit_pg")
     @patch("app.infrastructure.persistence.compat_db.writes._products_delete_by_unit_pg")
     @patch("app.infrastructure.persistence.compat_db.writes._purchase_units_delete_by_id_pg")
-    @patch("app.infrastructure.persistence.compat_db.writes._customer_pg_select_customers_name_by_id")
+    @patch(
+        "app.infrastructure.persistence.compat_db.writes._customer_pg_select_customers_name_by_id"
+    )
     @patch("app.infrastructure.persistence.compat_db.writes.inspect")
     @patch("app.infrastructure.persistence.compat_db.writes._customer_pg_engine_insp")
     def test_not_found_raises_404(
-        self, mock_eng_insp, mock_insp, mock_select_name,
-        mock_pu_del_id, mock_prod_del, mock_pu_del_norm,
-        mock_cu_del_norm, mock_cu_del_id
+        self,
+        mock_eng_insp,
+        mock_insp,
+        mock_select_name,
+        mock_pu_del_id,
+        mock_prod_del,
+        mock_pu_del_norm,
+        mock_cu_del_norm,
+        mock_cu_del_id,
     ):
         mock_eng = MagicMock()
         mock_insp_obj = MagicMock()
@@ -345,6 +364,7 @@ class TestCustomerPgDeleteAnywhere:
 # _customer_delete_unified
 # ---------------------------------------------------------------------------
 
+
 class TestCustomerDeleteUnified:
     @patch("app.infrastructure.persistence.compat_db.writes._customer_pg_delete_anywhere")
     def test_delegates_to_pg_delete(self, mock_delete):
@@ -356,6 +376,7 @@ class TestCustomerDeleteUnified:
 # products_pg_update_row
 # ---------------------------------------------------------------------------
 
+
 class TestProductsPgUpdateRow:
     @patch("app.infrastructure.persistence.compat_db.writes._products_pg_col_names")
     @patch("app.infrastructure.persistence.compat_db.writes.get_sync_engine")
@@ -363,7 +384,8 @@ class TestProductsPgUpdateRow:
         mock_col_names.return_value = {"id"}  # missing model_number and name
         with pytest.raises(HTTPException) as exc_info:
             products_pg_update_row(
-                1, {"name": "产品"},
+                1,
+                {"name": "产品"},
                 parse_price=lambda x: 0,
                 parse_quantity=lambda x: 0,
                 parse_is_active=lambda x: None,
@@ -376,7 +398,8 @@ class TestProductsPgUpdateRow:
         mock_col_names.return_value = {"id", "model_number", "name"}
         with pytest.raises(HTTPException) as exc_info:
             products_pg_update_row(
-                1, {"name": ""},
+                1,
+                {"name": ""},
                 parse_price=lambda x: 0,
                 parse_quantity=lambda x: 0,
                 parse_is_active=lambda x: None,
@@ -400,7 +423,8 @@ class TestProductsPgUpdateRow:
 
         with pytest.raises(HTTPException) as exc_info:
             products_pg_update_row(
-                999, {"name": "产品"},
+                999,
+                {"name": "产品"},
                 parse_price=lambda x: 0,
                 parse_quantity=lambda x: 0,
                 parse_is_active=lambda x: None,
@@ -412,8 +436,16 @@ class TestProductsPgUpdateRow:
     @patch("app.infrastructure.persistence.compat_db.writes.get_sync_engine")
     def test_update_success(self, mock_engine, mock_col_names, mock_mod_and):
         mock_col_names.return_value = {
-            "id", "model_number", "name", "price", "quantity",
-            "unit", "description", "category", "brand", "is_active",
+            "id",
+            "model_number",
+            "name",
+            "price",
+            "quantity",
+            "unit",
+            "description",
+            "category",
+            "brand",
+            "is_active",
             "updated_at",
         }
         mock_mod_and.return_value = ""
@@ -428,7 +460,8 @@ class TestProductsPgUpdateRow:
 
         # Should not raise
         products_pg_update_row(
-            1, {"name": "更新产品", "price": "99.9"},
+            1,
+            {"name": "更新产品", "price": "99.9"},
             parse_price=lambda x: float(x or 0),
             parse_quantity=lambda x: int(x or 0),
             parse_is_active=lambda x: 1,
@@ -438,6 +471,7 @@ class TestProductsPgUpdateRow:
 # ---------------------------------------------------------------------------
 # products_pg_insert_row
 # ---------------------------------------------------------------------------
+
 
 class TestProductsPgInsertRow:
     @patch("app.infrastructure.persistence.compat_db.writes._products_pg_col_names")
@@ -473,8 +507,14 @@ class TestProductsPgInsertRow:
     @patch("app.infrastructure.persistence.compat_db.writes.get_sync_engine")
     def test_insert_success(self, mock_engine, mock_col_names, mock_mod_id):
         mock_col_names.return_value = {
-            "model_number", "name", "specification", "price",
-            "quantity", "unit", "description", "is_active",
+            "model_number",
+            "name",
+            "specification",
+            "price",
+            "quantity",
+            "unit",
+            "description",
+            "is_active",
         }
         mock_mod_id.return_value = None
         mock_eng = MagicMock()
@@ -499,6 +539,7 @@ class TestProductsPgInsertRow:
 # ---------------------------------------------------------------------------
 # products_pg_delete_row
 # ---------------------------------------------------------------------------
+
 
 class TestProductsPgDeleteRow:
     @patch("app.infrastructure.persistence.compat_db.writes.products_update_or_delete_mod_and")
@@ -542,6 +583,7 @@ class TestProductsPgDeleteRow:
 # ---------------------------------------------------------------------------
 # products_pg_batch_delete_rows
 # ---------------------------------------------------------------------------
+
 
 class TestProductsPgBatchDeleteRows:
     @patch("app.infrastructure.persistence.compat_db.writes.products_update_or_delete_mod_and")

@@ -37,7 +37,9 @@ def _chat_svc() -> AIChatApplicationService:
 
     mock_ai.chat = _chat
     with (
-        patch("app.application.ai_chat_app_service.get_ai_conversation_service", return_value=mock_ai),
+        patch(
+            "app.application.ai_chat_app_service.get_ai_conversation_service", return_value=mock_ai
+        ),
         patch("app.application.ai_chat_app_service.LLMWorkflowPlanner"),
         patch("app.application.ai_chat_app_service.HybridRiskGate"),
         patch("app.application.ai_chat_app_service.WorkflowEngine"),

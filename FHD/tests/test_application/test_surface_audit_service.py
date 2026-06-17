@@ -16,7 +16,6 @@ from app.application.surface_audit_service import (
     _today_key,
 )
 
-
 # ========================= _today_key ====================================
 
 

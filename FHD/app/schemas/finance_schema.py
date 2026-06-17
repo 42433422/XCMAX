@@ -6,7 +6,9 @@ from pydantic import BaseModel, Field
 
 
 class FinanceTransactionCreate(BaseModel):
-    transaction_type: str = Field(..., description="revenue|expense|receivable|payable|receipt|payment|adjustment")
+    transaction_type: str = Field(
+        ..., description="revenue|expense|receivable|payable|receipt|payment|adjustment"
+    )
     amount: float = Field(..., description="金额")
     description: str | None = None
     reference_id: str | None = None

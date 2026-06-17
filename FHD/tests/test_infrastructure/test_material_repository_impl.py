@@ -17,24 +17,24 @@ def repo():
 
 def _make_material(**overrides):
     m = MagicMock()
-    defaults = dict(
-        id=1,
-        material_code="MAT-001",
-        name="测试原材料",
-        category="化工",
-        specification="25kg/桶",
-        unit="kg",
-        quantity=100.0,
-        unit_price=50.0,
-        supplier="供应商A",
-        warehouse_location="A-01",
-        min_stock=10.0,
-        max_stock=500.0,
-        description="测试描述",
-        is_active=1,
-        created_at=datetime(2026, 1, 1),
-        updated_at=datetime(2026, 6, 1),
-    )
+    defaults = {
+        "id": 1,
+        "material_code": "MAT-001",
+        "name": "测试原材料",
+        "category": "化工",
+        "specification": "25kg/桶",
+        "unit": "kg",
+        "quantity": 100.0,
+        "unit_price": 50.0,
+        "supplier": "供应商A",
+        "warehouse_location": "A-01",
+        "min_stock": 10.0,
+        "max_stock": 500.0,
+        "description": "测试描述",
+        "is_active": 1,
+        "created_at": datetime(2026, 1, 1),
+        "updated_at": datetime(2026, 6, 1),
+    }
     defaults.update(overrides)
     for k, v in defaults.items():
         setattr(m, k, v)
@@ -155,12 +155,15 @@ class TestCreate:
         mock_db.add = MagicMock()
         mock_db.commit = MagicMock()
         mock_db.refresh = MagicMock()
-        with patch(
-            "app.infrastructure.persistence.material_repository_impl.get_db",
-            return_value=_mock_db_ctx(mock_db),
-        ), patch(
-            "app.infrastructure.persistence.material_repository_impl.Material",
-            return_value=mat,
+        with (
+            patch(
+                "app.infrastructure.persistence.material_repository_impl.get_db",
+                return_value=_mock_db_ctx(mock_db),
+            ),
+            patch(
+                "app.infrastructure.persistence.material_repository_impl.Material",
+                return_value=mat,
+            ),
         ):
             result = repo.create({"name": "新原材料", "category": "化工"})
         assert result["success"] is True

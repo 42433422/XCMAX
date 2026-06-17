@@ -116,7 +116,10 @@ class DeepSeekIntentRecognizer:
         cached = _intent_recognition_cache.get(cache_key)
         if cached:
             logger.info(
-                "[INTENT_CACHE] 命中缓存: %s... -> %s, slots=%s", message[:30], cached.get('intent'), cached.get('slots')
+                "[INTENT_CACHE] 命中缓存: %s... -> %s, slots=%s",
+                message[:30],
+                cached.get("intent"),
+                cached.get("slots"),
             )
             return cast("dict[str, Any]", cached)
 
@@ -366,7 +369,11 @@ class HybridIntentWithDeepSeek:
         rule_result = rule_recognize(message)
         rule_result["sources_used"] = ["rule"]
         logger.info(
-            "[HYBRID] 规则识别结果: intent=%s, tool_key=%s, is_greeting=%s, slots=%s", rule_result.get('primary_intent'), rule_result.get('tool_key'), rule_result.get('is_greeting'), rule_result.get('slots')
+            "[HYBRID] 规则识别结果: intent=%s, tool_key=%s, is_greeting=%s, slots=%s",
+            rule_result.get("primary_intent"),
+            rule_result.get("tool_key"),
+            rule_result.get("is_greeting"),
+            rule_result.get("slots"),
         )
 
         if (
@@ -379,14 +386,14 @@ class HybridIntentWithDeepSeek:
             )
             rule_result["intent_source"] = "rule"
             rule_result["slots"] = self._extract_slots_from_rule(message, rule_result)
-            logger.info("[HYBRID] 简单意图，直接返回: %s", rule_result.get('primary_intent'))
+            logger.info("[HYBRID] 简单意图，直接返回: %s", rule_result.get("primary_intent"))
             return rule_result
 
         if rule_result.get("primary_intent") and rule_result.get("primary_intent") != "unk":
             rule_result["final_intent"] = rule_result["primary_intent"]
             rule_result["intent_source"] = "rule"
             rule_result["slots"] = self._extract_slots_from_rule(message, rule_result)
-            logger.info("[HYBRID] 规则已命中，跳过 DeepSeek: %s", rule_result.get('primary_intent'))
+            logger.info("[HYBRID] 规则已命中，跳过 DeepSeek: %s", rule_result.get("primary_intent"))
             return rule_result
 
         if (

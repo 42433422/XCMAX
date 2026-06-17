@@ -26,8 +26,8 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["xcagi-compat"])
 
 _wechat = APIRouter()
-_wechat.include_router(wechat_legacy_router)
 _wechat.include_router(wechat_compat_router)
+_wechat.include_router(wechat_legacy_router)
 router.include_router(_wechat)
 
 _product = APIRouter()

@@ -1,21 +1,21 @@
 {
-  "generated_at": "2026-06-14T05:00:32Z",
+  "generated_at": "2026-06-17T22:25:58Z",
   "source": "tests/test_sla_health_probe.py + docs/SLO.md",
   "probe": {
     "endpoint": "/api/health",
     "budget_ms_env": "XCAGI_SLA_HEALTH_MS",
     "default_budget_ms": 500,
-    "measured_at": "2026-06-14T05:00:32.321200+00:00",
+    "measured_at": "2026-06-17T22:25:58.159910+00:00",
     "probe_result": {
       "health": {
         "status_code": 200,
-        "elapsed_ms": 4.66,
+        "elapsed_ms": 2.53,
         "within_budget": true,
         "budget_ms": 500
       },
       "login": {
         "status_code": 200,
-        "elapsed_ms": 17.77
+        "elapsed_ms": 57.8
       }
     }
   }

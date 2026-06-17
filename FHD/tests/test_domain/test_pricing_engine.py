@@ -41,13 +41,23 @@ class TestCalculatePrice:
         assert bd.discount == pytest.approx(50.0)
 
     def test_distributor_tiers(self, engine: PricingEngine):
-        assert engine.calculate_price(100.0, 250, CustomerType.DISTRIBUTOR).discount == pytest.approx(5000.0)
-        assert engine.calculate_price(100.0, 120, CustomerType.DISTRIBUTOR).discount == pytest.approx(1800.0)
-        assert engine.calculate_price(100.0, 10, CustomerType.DISTRIBUTOR).discount == pytest.approx(100.0)
+        assert engine.calculate_price(
+            100.0, 250, CustomerType.DISTRIBUTOR
+        ).discount == pytest.approx(5000.0)
+        assert engine.calculate_price(
+            100.0, 120, CustomerType.DISTRIBUTOR
+        ).discount == pytest.approx(1800.0)
+        assert engine.calculate_price(
+            100.0, 10, CustomerType.DISTRIBUTOR
+        ).discount == pytest.approx(100.0)
 
     def test_wholesale_tiers(self, engine: PricingEngine):
-        assert engine.calculate_price(100.0, 60, CustomerType.WHOLESALE).discount == pytest.approx(480.0)
-        assert engine.calculate_price(100.0, 10, CustomerType.WHOLESALE).discount == pytest.approx(30.0)
+        assert engine.calculate_price(100.0, 60, CustomerType.WHOLESALE).discount == pytest.approx(
+            480.0
+        )
+        assert engine.calculate_price(100.0, 10, CustomerType.WHOLESALE).discount == pytest.approx(
+            30.0
+        )
 
     def test_default_customer_type_is_retail(self, engine: PricingEngine):
         bd = engine.calculate_price(50.0, 1)

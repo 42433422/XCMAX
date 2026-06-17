@@ -21,10 +21,10 @@ from app.infrastructure.persistence.compat_db.queries import (
     _units_select_data_unified,
 )
 
-
 # ---------------------------------------------------------------------------
 # _customer_row_for_api
 # ---------------------------------------------------------------------------
+
 
 class TestCustomerRowForApi:
     def test_basic_conversion(self):
@@ -110,6 +110,7 @@ class TestCustomerRowForApi:
 # _customer_row_matches_keyword
 # ---------------------------------------------------------------------------
 
+
 class TestCustomerRowMatchesKeyword:
     def test_empty_keyword_matches(self):
         row = {"customer_name": "客户A"}
@@ -160,6 +161,7 @@ class TestCustomerRowMatchesKeyword:
 # _load_purchase_units_rows
 # ---------------------------------------------------------------------------
 
+
 class TestLoadPurchaseUnitsRows:
     @patch("app.infrastructure.persistence.compat_db.queries._load_purchase_units_rows_pg")
     def test_delegates_to_pg(self, mock_pg):
@@ -177,6 +179,7 @@ class TestLoadPurchaseUnitsRows:
 # ---------------------------------------------------------------------------
 # _distinct_units_from_products_db
 # ---------------------------------------------------------------------------
+
 
 class TestDistinctUnitsFromProductsDb:
     @patch("app.infrastructure.persistence.compat_db.queries.get_sync_engine")
@@ -204,6 +207,7 @@ class TestDistinctUnitsFromProductsDb:
 # ---------------------------------------------------------------------------
 # _merged_purchase_unit_entries
 # ---------------------------------------------------------------------------
+
 
 class TestMergedPurchaseUnitEntries:
     @patch("app.infrastructure.persistence.compat_db.queries._distinct_units_from_products_db")
@@ -259,12 +263,19 @@ class TestMergedPurchaseUnitEntries:
 # _customer_rows_from_merged_unit_entries
 # ---------------------------------------------------------------------------
 
+
 class TestCustomerRowsFromMergedUnitEntries:
     @patch("app.infrastructure.persistence.compat_db.queries._merged_purchase_unit_entries")
     def test_converts_unit_entries_to_customer_rows(self, mock_merged):
         mock_merged.return_value = [
-            {"id": 1, "unit_name": "客户A", "contact_person": "张三",
-             "contact_phone": "138", "address": "北京", "is_active": 1},
+            {
+                "id": 1,
+                "unit_name": "客户A",
+                "contact_person": "张三",
+                "contact_phone": "138",
+                "address": "北京",
+                "is_active": 1,
+            },
         ]
         result = _customer_rows_from_merged_unit_entries()
         assert len(result) == 1
@@ -291,6 +302,7 @@ class TestCustomerRowsFromMergedUnitEntries:
 # ---------------------------------------------------------------------------
 # _customer_find_by_id
 # ---------------------------------------------------------------------------
+
 
 class TestCustomerFindById:
     @patch("app.infrastructure.persistence.compat_db.queries._load_customers_rows")
@@ -322,16 +334,17 @@ class TestCustomerFindById:
 # _customers_schema_hint_if_empty
 # ---------------------------------------------------------------------------
 
+
 class TestCustomersSchemaHintIfEmpty:
     @patch("app.infrastructure.persistence.compat_db.queries.get_sync_engine")
     def test_all_tables_exist_returns_none(self, mock_engine):
         mock_eng = MagicMock()
         mock_engine.return_value = mock_eng
-        with patch(
-            "app.infrastructure.persistence.compat_db.queries.inspect"
-        ) as mock_insp:
+        with patch("app.infrastructure.persistence.compat_db.queries.inspect") as mock_insp:
             mock_insp.return_value.get_table_names.return_value = [
-                "customers", "purchase_units", "products"
+                "customers",
+                "purchase_units",
+                "products",
             ]
             result = _customers_schema_hint_if_empty()
 
@@ -341,9 +354,7 @@ class TestCustomersSchemaHintIfEmpty:
     def test_missing_customers_and_purchase_units(self, mock_engine):
         mock_eng = MagicMock()
         mock_engine.return_value = mock_eng
-        with patch(
-            "app.infrastructure.persistence.compat_db.queries.inspect"
-        ) as mock_insp:
+        with patch("app.infrastructure.persistence.compat_db.queries.inspect") as mock_insp:
             mock_insp.return_value.get_table_names.return_value = ["products"]
             result = _customers_schema_hint_if_empty()
 
@@ -361,9 +372,7 @@ class TestCustomersSchemaHintIfEmpty:
     def test_missing_purchase_units_with_products(self, mock_engine):
         mock_eng = MagicMock()
         mock_engine.return_value = mock_eng
-        with patch(
-            "app.infrastructure.persistence.compat_db.queries.inspect"
-        ) as mock_insp:
+        with patch("app.infrastructure.persistence.compat_db.queries.inspect") as mock_insp:
             mock_insp.return_value.get_table_names.return_value = ["customers", "products"]
             result = _customers_schema_hint_if_empty()
 
@@ -378,6 +387,7 @@ class TestCustomersSchemaHintIfEmpty:
 # ---------------------------------------------------------------------------
 # _units_select_data_unified
 # ---------------------------------------------------------------------------
+
 
 class TestUnitsSelectDataUnified:
     @patch("app.infrastructure.persistence.compat_db.queries._distinct_units_from_products_db")
@@ -435,6 +445,7 @@ class TestUnitsSelectDataUnified:
 # _products_units_for_select
 # ---------------------------------------------------------------------------
 
+
 class TestProductsUnitsForSelect:
     @patch("app.infrastructure.persistence.compat_db.queries._units_select_data_unified")
     @patch("app.infrastructure.persistence.compat_db.queries._distinct_units_from_products_db")
@@ -471,6 +482,7 @@ class TestProductsUnitsForSelect:
 # _load_customers_rows_pg
 # ---------------------------------------------------------------------------
 
+
 class TestLoadCustomersRowsPg:
     @patch("app.infrastructure.persistence.compat_db.queries.get_sync_engine")
     def test_engine_error_returns_empty(self, mock_engine):
@@ -482,9 +494,7 @@ class TestLoadCustomersRowsPg:
     def test_no_relevant_tables(self, mock_engine):
         mock_eng = MagicMock()
         mock_engine.return_value = mock_eng
-        with patch(
-            "app.infrastructure.persistence.compat_db.queries.inspect"
-        ) as mock_insp:
+        with patch("app.infrastructure.persistence.compat_db.queries.inspect") as mock_insp:
             mock_insp.return_value.get_table_names.return_value = ["other_table"]
             result = _load_customers_rows_pg()
 
@@ -495,8 +505,11 @@ class TestLoadCustomersRowsPg:
 # _load_customers_rows
 # ---------------------------------------------------------------------------
 
+
 class TestLoadCustomersRows:
-    @patch("app.infrastructure.persistence.compat_db.queries._customer_rows_from_merged_unit_entries")
+    @patch(
+        "app.infrastructure.persistence.compat_db.queries._customer_rows_from_merged_unit_entries"
+    )
     @patch("app.infrastructure.persistence.compat_db.queries._load_customers_rows_pg")
     def test_prefers_pg_rows(self, mock_pg, mock_merged):
         mock_pg.return_value = [{"id": 1, "customer_name": "PG客户"}]
@@ -511,7 +524,9 @@ class TestLoadCustomersRows:
 
         assert result == [{"id": 1, "customer_name": "PG客户"}]
 
-    @patch("app.infrastructure.persistence.compat_db.queries._customer_rows_from_merged_unit_entries")
+    @patch(
+        "app.infrastructure.persistence.compat_db.queries._customer_rows_from_merged_unit_entries"
+    )
     @patch("app.infrastructure.persistence.compat_db.queries._load_customers_rows_pg")
     def test_fallback_to_merged(self, mock_pg, mock_merged):
         mock_pg.return_value = []

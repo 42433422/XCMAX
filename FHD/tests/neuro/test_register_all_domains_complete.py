@@ -23,11 +23,14 @@ class TestRegisterDomainHandlersOnly:
         mock_bus = MagicMock()
         mock_register = MagicMock()
 
-        with patch.dict("sys.modules", {
-            "app.neuro_bus.domains.product_domain_handlers": MagicMock(
-                register_product_domain_handlers=mock_register
-            ),
-        }):
+        with patch.dict(
+            "sys.modules",
+            {
+                "app.neuro_bus.domains.product_domain_handlers": MagicMock(
+                    register_product_domain_handlers=mock_register
+                ),
+            },
+        ):
             await register_domain_handlers_only(mock_bus)
 
         mock_register.assert_called_once_with(mock_bus)
@@ -56,11 +59,14 @@ class TestRegisterDomainHandlersOnly:
 
         # Product succeeds, shipment fails
         product_register = MagicMock()
-        with patch.dict("sys.modules", {
-            "app.neuro_bus.domains.product_domain_handlers": MagicMock(
-                register_product_domain_handlers=product_register
-            ),
-        }):
+        with patch.dict(
+            "sys.modules",
+            {
+                "app.neuro_bus.domains.product_domain_handlers": MagicMock(
+                    register_product_domain_handlers=product_register
+                ),
+            },
+        ):
             await register_domain_handlers_only(mock_bus)
             # Product should still be registered
             product_register.assert_called_once()
@@ -78,11 +84,14 @@ class TestRegisterAllDomainsComplete:
             "app.neuro_bus.register_all_domains_complete.register_domain_handlers_only",
             new_callable=AsyncMock,
         ):
-            with patch.dict("sys.modules", {
-                "app.neuro_bus.register_all_neuro_domains": MagicMock(
-                    register_all_neuro_domains=mock_register_all
-                ),
-            }):
+            with patch.dict(
+                "sys.modules",
+                {
+                    "app.neuro_bus.register_all_neuro_domains": MagicMock(
+                        register_all_neuro_domains=mock_register_all
+                    ),
+                },
+            ):
                 await register_all_domains_complete(mock_bus)
 
         mock_register_all.assert_called_once()
@@ -98,11 +107,14 @@ class TestRegisterAllDomainsComplete:
                 "app.neuro_bus.register_all_domains_complete.register_domain_handlers_only",
                 new_callable=AsyncMock,
             ):
-                with patch.dict("sys.modules", {
-                    "app.neuro_bus.register_all_neuro_domains": MagicMock(
-                        register_all_neuro_domains=MagicMock()
-                    ),
-                }):
+                with patch.dict(
+                    "sys.modules",
+                    {
+                        "app.neuro_bus.register_all_neuro_domains": MagicMock(
+                            register_all_neuro_domains=MagicMock()
+                        ),
+                    },
+                ):
                     await register_all_domains_complete(None)
 
 
@@ -115,7 +127,9 @@ class TestInitNeuroBusComplete:
             "app.neuro_bus.register_all_domains_complete.get_neuro_bus",
             return_value=mock_bus,
         ):
-            with patch("app.neuro_bus.register_runtime.register_neuro_runtime", new_callable=AsyncMock):
+            with patch(
+                "app.neuro_bus.register_runtime.register_neuro_runtime", new_callable=AsyncMock
+            ):
                 result = init_neuro_bus_complete()
                 assert result is mock_bus
 

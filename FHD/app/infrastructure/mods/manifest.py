@@ -143,7 +143,9 @@ def parse_manifest(mod_path: str) -> ModMetadata | None:
 
         metadata = ModMetadata.from_dict(data, mod_path)
         logger.info(
-            "[parse_manifest] Successfully parsed manifest for mod: %s, name: %s", metadata.id, metadata.name
+            "[parse_manifest] Successfully parsed manifest for mod: %s, name: %s",
+            metadata.id,
+            metadata.name,
         )
         return metadata
     except json.JSONDecodeError as e:
@@ -166,8 +168,10 @@ def validate_dependencies(metadata: ModMetadata, loaded_mods: list[str]) -> bool
                 return False
         elif dep_id not in loaded_mods:
             logger.warning(
-                "Mod %s depends on %s which is not loaded. "
-                f"Required version: %s", metadata.id, dep_id, version_spec
+                "Mod %s depends on %s which is not loaded. Required version: %s",
+                metadata.id,
+                dep_id,
+                version_spec,
             )
             return False
     return True

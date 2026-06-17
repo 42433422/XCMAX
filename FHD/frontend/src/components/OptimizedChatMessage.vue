@@ -44,15 +44,17 @@
         <!-- 收起按钮 -->
         <MessageCollapseLink
           v-if="message.role === 'ai' && canCollapse"
+          class="message-fold-action"
           label="收起"
           @collapse="collapse"
         />
       </template>
       
       <!-- 上下文摘要 -->
-      <div v-if="message.contextSummary" class="context-summary">
-        {{ message.contextSummary }}
-      </div>
+      <ContextSummaryPills
+        v-if="contextSummaryText"
+        :summary="contextSummaryText"
+      />
       
       <!-- 思考步骤 -->
       <details v-if="message.thinkingSteps" class="thinking-panel">
@@ -116,6 +118,7 @@ import { measureText, type MeasureResult } from '@/utils/pretext';
 import type { UiChatMessage } from '@/types/chat-ui';
 import CollapsedMessagePreview from '@/components/chat/CollapsedMessagePreview.vue';
 import MessageCollapseLink from '@/components/chat/MessageCollapseLink.vue';
+import ContextSummaryPills from '@/components/chat/ContextSummaryPills.vue';
 
 interface Props {
   message: UiChatMessage;
@@ -153,6 +156,19 @@ const sanitizedContent = computed(() => {
 const collapsedPreview = computed(() => {
   const text = props.message.content.replace(/<[^>]*>/g, '');
   return text.slice(0, 100) + (text.length > 100 ? '...' : '');
+});
+
+const contextSummaryText = computed(() => {
+  const summary = props.message.contextSummary;
+  if (summary == null) return '';
+  if (typeof summary === 'string') return summary.trim();
+  if (typeof summary === 'object' && !Array.isArray(summary)) {
+    const items = (summary as { items?: unknown }).items;
+    if (Array.isArray(items)) {
+      return items.map((item) => String(item).trim()).filter(Boolean).join(' + ');
+    }
+  }
+  return String(summary).trim();
 });
 
 // 消息样式（用于虚拟列表定位）

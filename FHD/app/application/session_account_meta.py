@@ -235,6 +235,37 @@ def is_session_market_admin(session_id: str) -> bool:
     return meta.get("account_kind") == "admin" and bool(meta.get("market_is_admin"))
 
 
+def should_receive_enterprise_dedicated_cs(
+    session_id: str | None,
+    user_id: int | None,
+    db: Any,
+) -> bool:
+    """Return whether this requester should see enterprise dedicated customer-service flow."""
+    meta = load_session_account_meta(session_id or "") if session_id else None
+    if meta:
+        if meta.get("account_kind") == "admin" or bool(meta.get("market_is_admin")):
+            return False
+        return (
+            meta.get("account_kind") == "enterprise"
+            or bool(meta.get("market_is_enterprise"))
+            or meta.get("impersonating_market_user_id") is not None
+        )
+
+    if user_id is None or db is None:
+        return False
+    try:
+        from app.db.models.user import User
+
+        user = db.get(User, int(user_id))
+    except RECOVERABLE_ERRORS:
+        logger.exception("enterprise dedicated CS fallback user lookup failed")
+        return False
+    except (TypeError, ValueError):
+        return False
+    role = str(getattr(user, "role", "") or "").strip().lower()
+    return role not in {"admin", "market_admin", "super_admin"}
+
+
 def effective_entitlement_market_user_id(session_id: str) -> int | None:
     meta = load_session_account_meta(session_id)
     if not meta:

@@ -11,11 +11,10 @@ from app.utils.query_optimizer import (
     BatchResult,
     QueryOptimizer,
     QueryStats,
+    batch_operation,
     get_query_optimizer,
     optimize_query,
-    batch_operation,
 )
-
 
 # ---------------------------------------------------------------------------
 # QueryStats

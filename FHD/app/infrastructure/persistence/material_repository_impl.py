@@ -8,6 +8,8 @@ from app.db.models.material import Material
 from app.db.session import get_db
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
+_REPOSITORY_ERRORS = (*RECOVERABLE_ERRORS, Exception)
+
 
 class SQLAlchemyMaterialRepository(MaterialRepository):
     """原材料仓储 SQLAlchemy 实现"""
@@ -70,7 +72,7 @@ class SQLAlchemyMaterialRepository(MaterialRepository):
                     "per_page": per_page,
                 }
 
-        except RECOVERABLE_ERRORS as e:
+        except _REPOSITORY_ERRORS as e:
             return {"success": False, "message": f"获取失败：{str(e)}", "data": [], "total": 0}
 
     def find_by_id(self, material_id: int) -> dict[str, Any] | None:
@@ -87,7 +89,7 @@ class SQLAlchemyMaterialRepository(MaterialRepository):
 
                 return self._material_to_dict(material)
 
-        except RECOVERABLE_ERRORS:
+        except _REPOSITORY_ERRORS:
             return None
 
     def create(self, data: dict[str, Any]) -> dict[str, Any]:
@@ -120,7 +122,7 @@ class SQLAlchemyMaterialRepository(MaterialRepository):
                     "data": self._material_to_dict(material),
                 }
 
-        except RECOVERABLE_ERRORS as e:
+        except _REPOSITORY_ERRORS as e:
             return {"success": False, "message": f"创建失败：{str(e)}"}
 
     def update(self, material_id: int, data: dict[str, Any]) -> dict[str, Any]:
@@ -165,7 +167,7 @@ class SQLAlchemyMaterialRepository(MaterialRepository):
                     "data": self._material_to_dict(material),
                 }
 
-        except RECOVERABLE_ERRORS as e:
+        except _REPOSITORY_ERRORS as e:
             return {"success": False, "message": f"更新失败：{str(e)}"}
 
     def delete(self, material_id: int) -> bool:
@@ -185,7 +187,7 @@ class SQLAlchemyMaterialRepository(MaterialRepository):
                 db.commit()
                 return True
 
-        except RECOVERABLE_ERRORS:
+        except _REPOSITORY_ERRORS:
             return False
 
     def batch_delete(self, ids: list[int]) -> int:
@@ -204,7 +206,7 @@ class SQLAlchemyMaterialRepository(MaterialRepository):
                 db.commit()
                 return deleted_count
 
-        except RECOVERABLE_ERRORS:
+        except _REPOSITORY_ERRORS:
             return 0
 
     def find_low_stock(self, threshold: float | None = None) -> list[dict[str, Any]]:
@@ -220,7 +222,7 @@ class SQLAlchemyMaterialRepository(MaterialRepository):
                 materials = query.order_by(Material.quantity.asc()).all()
                 return [self._material_to_dict(m) for m in materials]
 
-        except RECOVERABLE_ERRORS:
+        except _REPOSITORY_ERRORS:
             return []
 
     def export_to_excel(

@@ -73,7 +73,9 @@ class TestValidateAccountKind:
         assert msg and "企业" in msg
 
     def test_personal_same_enterprise_gate(self):
-        msg = validate_account_kind_for_market("personal", is_enterprise=False, is_market_admin=False)
+        msg = validate_account_kind_for_market(
+            "personal", is_enterprise=False, is_market_admin=False
+        )
         assert msg
 
 

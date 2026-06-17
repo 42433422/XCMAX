@@ -14,9 +14,11 @@ from app.services.purchase_service import PurchaseService
 
 def _mock_get_db(mock_db):
     """Create a contextmanager mock for get_db generator."""
+
     @contextlib.contextmanager
     def _get_db():
         yield mock_db
+
     return _get_db
 
 
@@ -202,7 +204,9 @@ class TestGetPurchaseOrders:
         mock_order.supplier.name = "供应商A"
         mock_order.items = []
         mock_db = MagicMock()
-        mock_db.query.return_value.join.return_value.order_by.return_value.offset.return_value.limit.return_value.all.return_value = [mock_order]
+        mock_db.query.return_value.join.return_value.order_by.return_value.offset.return_value.limit.return_value.all.return_value = [
+            mock_order
+        ]
         mock_db.query.return_value.join.return_value.count.return_value = 1
         with patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)):
             result = svc.get_purchase_orders(page=1, per_page=10)
@@ -271,14 +275,16 @@ class TestCreatePurchaseOrder:
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = mock_product
         with patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)):
-            result = svc.create_purchase_order({
-                "supplier_id": 1,
-                "warehouse_id": 1,
-                "items": [
-                    {"product_id": 1, "quantity": 10, "unit_price": 100},
-                    {"product_id": 2, "quantity": 5, "unit_price": 200},
-                ],
-            })
+            result = svc.create_purchase_order(
+                {
+                    "supplier_id": 1,
+                    "warehouse_id": 1,
+                    "items": [
+                        {"product_id": 1, "quantity": 10, "unit_price": 100},
+                        {"product_id": 2, "quantity": 5, "unit_price": 200},
+                    ],
+                }
+            )
         assert result["success"] is True
         assert "创建成功" in result["message"]
 
@@ -346,14 +352,21 @@ class TestUpdatePurchaseOrder:
         mock_db = MagicMock()
         # First query returns order, second returns product
         mock_db.query.side_effect = [
-            MagicMock(filter=MagicMock(return_value=MagicMock(first=MagicMock(return_value=mock_order)))),
+            MagicMock(
+                filter=MagicMock(return_value=MagicMock(first=MagicMock(return_value=mock_order)))
+            ),
             MagicMock(filter=MagicMock(return_value=MagicMock(delete=MagicMock(return_value=0)))),
-            MagicMock(filter=MagicMock(return_value=MagicMock(first=MagicMock(return_value=mock_product)))),
+            MagicMock(
+                filter=MagicMock(return_value=MagicMock(first=MagicMock(return_value=mock_product)))
+            ),
         ]
         with patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)):
-            result = svc.update_purchase_order(1, {
-                "items": [{"product_id": 1, "quantity": 5, "unit_price": 50}],
-            })
+            result = svc.update_purchase_order(
+                1,
+                {
+                    "items": [{"product_id": 1, "quantity": 5, "unit_price": 50}],
+                },
+            )
         assert result["success"] is True
 
 
@@ -446,11 +459,13 @@ class TestCreatePurchaseInbound:
             patch("app.services.purchase_service.InventoryService") as MockInvSvc,
         ):
             MockInvSvc.return_value.inventory_in.return_value = {"success": True}
-            result = svc.create_purchase_inbound({
-                "supplier_id": 1,
-                "warehouse_id": 1,
-                "items": [{"product_id": 1, "quantity": 10, "unit_price": 100}],
-            })
+            result = svc.create_purchase_inbound(
+                {
+                    "supplier_id": 1,
+                    "warehouse_id": 1,
+                    "items": [{"product_id": 1, "quantity": 10, "unit_price": 100}],
+                }
+            )
         assert result["success"] is True
         assert "入库成功" in result["message"]
 
@@ -482,12 +497,17 @@ class TestCreatePurchaseInbound:
             patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)),
             patch("app.services.purchase_service.InventoryService") as MockInvSvc,
         ):
-            MockInvSvc.return_value.inventory_in.return_value = {"success": False, "message": "库存不足"}
-            result = svc.create_purchase_inbound({
-                "supplier_id": 1,
-                "warehouse_id": 1,
-                "items": [{"product_id": 1, "quantity": 10, "unit_price": 100}],
-            })
+            MockInvSvc.return_value.inventory_in.return_value = {
+                "success": False,
+                "message": "库存不足",
+            }
+            result = svc.create_purchase_inbound(
+                {
+                    "supplier_id": 1,
+                    "warehouse_id": 1,
+                    "items": [{"product_id": 1, "quantity": 10, "unit_price": 100}],
+                }
+            )
         assert result["success"] is True
 
     def test_updates_order_received_quantity(self, svc):
@@ -500,12 +520,14 @@ class TestCreatePurchaseInbound:
             patch("app.services.purchase_service.InventoryService") as MockInvSvc,
         ):
             MockInvSvc.return_value.inventory_in.return_value = {"success": True}
-            result = svc.create_purchase_inbound({
-                "supplier_id": 1,
-                "warehouse_id": 1,
-                "order_id": 1,
-                "items": [{"product_id": 1, "quantity": 10, "unit_price": 100}],
-            })
+            result = svc.create_purchase_inbound(
+                {
+                    "supplier_id": 1,
+                    "warehouse_id": 1,
+                    "order_id": 1,
+                    "items": [{"product_id": 1, "quantity": 10, "unit_price": 100}],
+                }
+            )
         assert result["success"] is True
 
 
@@ -557,7 +579,9 @@ class TestGetPurchaseInbounds:
         mock_inbound.warehouse.name = "仓库1"
         mock_inbound.items = []
         mock_db = MagicMock()
-        mock_db.query.return_value.order_by.return_value.offset.return_value.limit.return_value.all.return_value = [mock_inbound]
+        mock_db.query.return_value.order_by.return_value.offset.return_value.limit.return_value.all.return_value = [
+            mock_inbound
+        ]
         mock_db.query.return_value.count.return_value = 1
         with patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)):
             result = svc.get_purchase_inbounds(page=1, per_page=10)

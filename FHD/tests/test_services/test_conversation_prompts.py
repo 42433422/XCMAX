@@ -91,7 +91,9 @@ class TestSanitizeWebSearchResults:
         assert mixin._sanitize_web_search_results("not a list") == []
 
     def test_max_8_items(self, mixin):
-        hits = [{"title": f"t{i}", "url": f"http://u{i}.com", "snippet": f"s{i}"} for i in range(15)]
+        hits = [
+            {"title": f"t{i}", "url": f"http://u{i}.com", "snippet": f"s{i}"} for i in range(15)
+        ]
         result = mixin._sanitize_web_search_results(hits)
         assert len(result) == 8
 
@@ -180,9 +182,7 @@ class TestFormatKittenDatasetBlock:
         assert "字段" in result
 
     def test_fields_truncated_at_80(self, mixin):
-        result = mixin._format_kitten_dataset_block(
-            {"fields": [f"f{i}" for i in range(90)]}
-        )
+        result = mixin._format_kitten_dataset_block({"fields": [f"f{i}" for i in range(90)]})
         assert "省略" in result
 
     def test_with_preview_text(self, mixin):
@@ -217,9 +217,7 @@ class TestFormatWebSearchBlock:
         assert "严禁编造" in result
 
     def test_with_meta(self, mixin):
-        result = mixin._format_web_search_block(
-            [], None, {"provider": "google", "query": "test"}
-        )
+        result = mixin._format_web_search_block([], None, {"provider": "google", "query": "test"})
         assert "google" in result
         assert "test" in result
 
@@ -235,8 +233,7 @@ class TestFormatWebSearchBlock:
 
     def test_max_8_hits(self, mixin):
         hits = [
-            {"title": f"T{i}", "url": f"http://u{i}.com", "snippet": f"S{i}"}
-            for i in range(15)
+            {"title": f"T{i}", "url": f"http://u{i}.com", "snippet": f"S{i}"} for i in range(15)
         ]
         result = mixin._format_web_search_block(hits, None, {})
         # Only 8 items should be listed (numbered 1-8)
@@ -272,9 +269,7 @@ class TestFormatRequestContextForSystem:
         req = {
             "kitten_analyzer": True,
             "kitten_web_search": True,
-            "web_search_results": [
-                {"title": "T", "url": "http://u.com", "snippet": "S"}
-            ],
+            "web_search_results": [{"title": "T", "url": "http://u.com", "snippet": "S"}],
             "web_search_meta": {"provider": "google", "query": "test"},
         }
         result = mixin._format_request_context_for_system(req)
@@ -293,9 +288,7 @@ class TestFormatRequestContextForSystem:
             "excel_vector_context": {
                 "index_id": "idx1",
                 "query": "search term",
-                "hits": [
-                    {"score": 0.95, "content": "cell data", "metadata": {"sheet": "Sheet1"}}
-                ],
+                "hits": [{"score": 0.95, "content": "cell data", "metadata": {"sheet": "Sheet1"}}],
             }
         }
         result = mixin._format_request_context_for_system(req)
@@ -337,11 +330,7 @@ class TestFormatExcelVectorBlock:
         assert "0.9500" in result
 
     def test_hit_without_row_index(self, mixin):
-        payload = {
-            "hits": [
-                {"score": 0.8, "content": "data", "metadata": {"sheet": "S1"}}
-            ]
-        }
+        payload = {"hits": [{"score": 0.8, "content": "data", "metadata": {"sheet": "S1"}}]}
         result = mixin._format_excel_vector_block(payload)
         assert "S1" in result
         assert "row" not in result
@@ -412,6 +401,7 @@ class TestBuildContextPrompt:
             intent_hints = None
             pending_confirmation = None
             last_action = None
+
         ctx = FakeContext()
         assert mixin._build_context_prompt(ctx) == ""
 
@@ -423,6 +413,7 @@ class TestBuildContextPrompt:
             intent_hints = None
             pending_confirmation = None
             last_action = None
+
         ctx = FakeContext()
         result = mixin._build_context_prompt(ctx)
         assert "当前会话意图" in result
@@ -436,6 +427,7 @@ class TestBuildContextPrompt:
             intent_hints = None
             pending_confirmation = None
             last_action = None
+
         ctx = FakeContext()
         result = mixin._build_context_prompt(ctx)
         assert "当前工具" in result
@@ -448,6 +440,7 @@ class TestBuildContextPrompt:
             intent_hints = None
             pending_confirmation = {"action": "delete", "description": "删除记录"}
             last_action = None
+
         ctx = FakeContext()
         result = mixin._build_context_prompt(ctx)
         assert "待确认操作" in result
@@ -460,6 +453,7 @@ class TestBuildContextPrompt:
             intent_hints = None
             pending_confirmation = None
             last_action = None
+
         ctx = FakeContext()
         result = mixin._build_context_prompt(ctx)
         assert "附加上下文" in result

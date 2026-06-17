@@ -78,9 +78,14 @@ class TestLanCompat:
     def test_lan_mod_installed_disk_fallback(self, tmp_path: Path) -> None:
         mod_dir = tmp_path / lan_compat.LAN_BRIDGE_MOD_ID
         mod_dir.mkdir()
-        (mod_dir / "manifest.json").write_text('{"id":"xcagi-lan-license-bridge"}', encoding="utf-8")
+        (mod_dir / "manifest.json").write_text(
+            '{"id":"xcagi-lan-license-bridge"}', encoding="utf-8"
+        )
         with (
-            patch("app.infrastructure.mods.mod_manager.get_mod_manager", side_effect=RuntimeError("no mgr")),
+            patch(
+                "app.infrastructure.mods.mod_manager.get_mod_manager",
+                side_effect=RuntimeError("no mgr"),
+            ),
             patch.object(lan_compat, "_resolve_mod_dir", return_value=mod_dir),
         ):
             assert lan_compat.is_lan_mod_installed() is True

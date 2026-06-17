@@ -29,7 +29,10 @@ def client() -> TestClient:
 
 class TestIndex:
     def test_no_templates(self, client: TestClient):
-        with patch("app.fastapi_routes.domains.static.routes.get_base_dir", return_value="/nonexistent_xcmax_test"):
+        with patch(
+            "app.fastapi_routes.domains.static.routes.get_base_dir",
+            return_value="/nonexistent_xcmax_test",
+        ):
             r = client.get("/")
             assert r.status_code == 404
 
@@ -44,77 +47,110 @@ class TestFavicon:
 
 class TestServeStatic:
     def test_not_found(self, client: TestClient):
-        with patch("app.fastapi_routes.domains.static.routes.get_base_dir", return_value="/nonexistent_xcmax_test"):
+        with patch(
+            "app.fastapi_routes.domains.static.routes.get_base_dir",
+            return_value="/nonexistent_xcmax_test",
+        ):
             r = client.get("/static/css/app.css")
             assert r.status_code == 404
 
 
 class TestViteSvg:
     def test_not_found(self, client: TestClient):
-        with patch("app.fastapi_routes.domains.static.routes.get_base_dir", return_value="/nonexistent_xcmax_test"):
+        with patch(
+            "app.fastapi_routes.domains.static.routes.get_base_dir",
+            return_value="/nonexistent_xcmax_test",
+        ):
             r = client.get("/vite.svg")
             assert r.status_code == 404
 
 
 class TestBrandXcLogoJpg:
     def test_not_found(self, client: TestClient):
-        with patch("app.fastapi_routes.domains.static.routes.get_base_dir", return_value="/nonexistent_xcmax_test"):
+        with patch(
+            "app.fastapi_routes.domains.static.routes.get_base_dir",
+            return_value="/nonexistent_xcmax_test",
+        ):
             r = client.get("/brand-xc-logo.jpg")
             assert r.status_code == 404
 
 
 class TestBrandXcLogoPng:
     def test_not_found(self, client: TestClient):
-        with patch("app.fastapi_routes.domains.static.routes.get_base_dir", return_value="/nonexistent_xcmax_test"):
+        with patch(
+            "app.fastapi_routes.domains.static.routes.get_base_dir",
+            return_value="/nonexistent_xcmax_test",
+        ):
             r = client.get("/brand-xc-logo.png")
             assert r.status_code == 404
 
 
 class TestWorkflowEmployeeDocsJson:
     def test_not_found(self, client: TestClient):
-        with patch("app.fastapi_routes.domains.static.routes.get_base_dir", return_value="/nonexistent_xcmax_test"):
+        with patch(
+            "app.fastapi_routes.domains.static.routes.get_base_dir",
+            return_value="/nonexistent_xcmax_test",
+        ):
             r = client.get("/workflow-employee-docs.json")
             assert r.status_code == 404
 
 
 class TestSwJs:
     def test_not_found(self, client: TestClient):
-        with patch("app.fastapi_routes.domains.static.routes.get_base_dir", return_value="/nonexistent_xcmax_test"):
+        with patch(
+            "app.fastapi_routes.domains.static.routes.get_base_dir",
+            return_value="/nonexistent_xcmax_test",
+        ):
             r = client.get("/sw.js")
             assert r.status_code == 404
 
 
 class TestWorkflowEmployeesJson:
     def test_not_found(self, client: TestClient):
-        with patch("app.fastapi_routes.domains.static.routes.get_base_dir", return_value="/nonexistent_xcmax_test"):
+        with patch(
+            "app.fastapi_routes.domains.static.routes.get_base_dir",
+            return_value="/nonexistent_xcmax_test",
+        ):
             r = client.get("/workflow-employees.json")
             assert r.status_code == 404
 
 
 class TestTestButtons:
     def test_not_found(self, client: TestClient):
-        with patch("app.fastapi_routes.domains.static.routes.get_base_dir", return_value="/nonexistent_xcmax_test"):
+        with patch(
+            "app.fastapi_routes.domains.static.routes.get_base_dir",
+            return_value="/nonexistent_xcmax_test",
+        ):
             r = client.get("/test-buttons")
             assert r.status_code == 404
 
 
 class TestProductsTest:
     def test_not_found(self, client: TestClient):
-        with patch("app.fastapi_routes.domains.static.routes.get_base_dir", return_value="/nonexistent_xcmax_test"):
+        with patch(
+            "app.fastapi_routes.domains.static.routes.get_base_dir",
+            return_value="/nonexistent_xcmax_test",
+        ):
             r = client.get("/products-test")
             assert r.status_code == 404
 
 
 class TestConsole:
     def test_not_found(self, client: TestClient):
-        with patch("app.fastapi_routes.domains.static.routes.get_base_dir", return_value="/nonexistent_xcmax_test"):
+        with patch(
+            "app.fastapi_routes.domains.static.routes.get_base_dir",
+            return_value="/nonexistent_xcmax_test",
+        ):
             r = client.get("/console")
             assert r.status_code == 404
 
 
 class TestOutputs:
     def test_not_found(self, client: TestClient):
-        with patch("app.fastapi_routes.domains.static.routes.get_base_dir", return_value="/nonexistent_xcmax_test"):
+        with patch(
+            "app.fastapi_routes.domains.static.routes.get_base_dir",
+            return_value="/nonexistent_xcmax_test",
+        ):
             r = client.get("/outputs/test.txt")
             assert r.status_code in (404, 500)
 
@@ -130,7 +166,10 @@ class TestTraditionalModeWrite:
         assert r.status_code in (400, 403)
 
     def test_unsupported_type(self, client: TestClient, tmp_path):
-        with patch("app.fastapi_routes.domains.static.routes.resolve_safe_path", return_value=str(tmp_path / "test.txt")):
+        with patch(
+            "app.fastapi_routes.domains.static.routes.resolve_safe_path",
+            return_value=str(tmp_path / "test.txt"),
+        ):
             r = client.post(
                 "/api/traditional-mode/write",
                 json={"file": "test.txt", "type": "text", "data": {}},
@@ -152,12 +191,16 @@ class TestTraditionalModeMkdir:
         assert r.status_code == 400
 
     def test_empty_name(self, client: TestClient, tmp_path):
-        with patch("app.fastapi_routes.domains.static.routes.resolve_safe_path", return_value=str(tmp_path)):
+        with patch(
+            "app.fastapi_routes.domains.static.routes.resolve_safe_path", return_value=str(tmp_path)
+        ):
             r = client.post("/api/traditional-mode/mkdir", json={"path": "", "name": ""})
             assert r.status_code == 400
 
     def test_illegal_chars_in_name(self, client: TestClient, tmp_path):
-        with patch("app.fastapi_routes.domains.static.routes.resolve_safe_path", return_value=str(tmp_path)):
+        with patch(
+            "app.fastapi_routes.domains.static.routes.resolve_safe_path", return_value=str(tmp_path)
+        ):
             r = client.post("/api/traditional-mode/mkdir", json={"path": "", "name": "a/b"})
             assert r.status_code == 400
 
@@ -173,13 +216,22 @@ class TestTraditionalModeRename:
         assert r.status_code == 400
 
     def test_empty_names(self, client: TestClient, tmp_path):
-        with patch("app.fastapi_routes.domains.static.routes.resolve_safe_path", return_value=str(tmp_path)):
-            r = client.post("/api/traditional-mode/rename", json={"path": "", "old_name": "", "new_name": ""})
+        with patch(
+            "app.fastapi_routes.domains.static.routes.resolve_safe_path", return_value=str(tmp_path)
+        ):
+            r = client.post(
+                "/api/traditional-mode/rename", json={"path": "", "old_name": "", "new_name": ""}
+            )
             assert r.status_code == 400
 
     def test_illegal_new_name(self, client: TestClient, tmp_path):
-        with patch("app.fastapi_routes.domains.static.routes.resolve_safe_path", return_value=str(tmp_path)):
-            r = client.post("/api/traditional-mode/rename", json={"path": "", "old_name": "a", "new_name": "b/c"})
+        with patch(
+            "app.fastapi_routes.domains.static.routes.resolve_safe_path", return_value=str(tmp_path)
+        ):
+            r = client.post(
+                "/api/traditional-mode/rename",
+                json={"path": "", "old_name": "a", "new_name": "b/c"},
+            )
             assert r.status_code == 400
 
 
@@ -189,7 +241,9 @@ class TestTraditionalModeDelete:
         assert r.status_code == 400
 
     def test_empty_name(self, client: TestClient, tmp_path):
-        with patch("app.fastapi_routes.domains.static.routes.resolve_safe_path", return_value=str(tmp_path)):
+        with patch(
+            "app.fastapi_routes.domains.static.routes.resolve_safe_path", return_value=str(tmp_path)
+        ):
             r = client.post("/api/traditional-mode/delete", json={"path": "", "name": ""})
             assert r.status_code == 400
 
@@ -215,7 +269,9 @@ class TestCustomersBatchDelete:
     def test_with_body_ids(self, client: TestClient):
         with patch("app.application.get_customer_app_service") as mock_svc:
             mock_svc.return_value.batch_delete.return_value = {"success": True, "deleted": [1]}
-            r = client.request("DELETE", "/api/customers/batch-delete", json={"ids": [1], "force": False})
+            r = client.request(
+                "DELETE", "/api/customers/batch-delete", json={"ids": [1], "force": False}
+            )
             assert r.status_code == 200
 
     def test_invalid_id_format(self, client: TestClient):
@@ -225,19 +281,25 @@ class TestCustomersBatchDelete:
 
 class TestPreferencesDeleteKey:
     def test_success(self, client: TestClient):
-        with patch("app.application.facades.conversation_facade.get_user_preference_service") as mock_svc:
+        with patch(
+            "app.application.facades.conversation_facade.get_user_preference_service"
+        ) as mock_svc:
             mock_svc.return_value.delete_preference.return_value = True
             r = client.delete("/api/preferences/test_key")
             assert r.json()["success"] is True
 
     def test_failure(self, client: TestClient):
-        with patch("app.application.facades.conversation_facade.get_user_preference_service") as mock_svc:
+        with patch(
+            "app.application.facades.conversation_facade.get_user_preference_service"
+        ) as mock_svc:
             mock_svc.return_value.delete_preference.return_value = False
             r = client.delete("/api/preferences/test_key")
             assert r.json()["success"] is False
 
     def test_exception(self, client: TestClient):
-        with patch("app.application.facades.conversation_facade.get_user_preference_service") as mock_svc:
+        with patch(
+            "app.application.facades.conversation_facade.get_user_preference_service"
+        ) as mock_svc:
             mock_svc.return_value.delete_preference.side_effect = Exception("DB error")
             r = client.delete("/api/preferences/test_key")
             assert r.status_code == 500
