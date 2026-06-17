@@ -59,7 +59,7 @@ else
   log "启动 FastAPI ${API_URL} …"
   (
     cd "${FHD_ROOT}/XCAGI"
-    exec "${PY}" run.py
+    exec "${PY}" run.py --port "${API_PORT}" --host 127.0.0.1
   ) &
   BACKEND_PID=$!
   wait_http "${API_URL}/api/health" "FastAPI"

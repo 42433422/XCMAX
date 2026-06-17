@@ -595,6 +595,7 @@ async def admin_start_impersonate(
     from app.application.session_account_meta import (
         audit_admin_action,
         load_session_account_meta,
+        normalize_account_kind,
         persist_session_account_meta,
     )
     from app.enterprise.mod_entitlements import (
@@ -622,7 +623,7 @@ async def admin_start_impersonate(
     meta = load_session_account_meta(sid) or {}
     persist_session_account_meta(
         sid,
-        account_kind=str(meta.get("account_kind") or "admin"),
+        account_kind=normalize_account_kind(meta.get("account_kind"), default="admin"),
         company_brand=target_company or str(meta.get("company_brand") or ""),
         market_user_id=meta.get("market_user_id"),
         market_is_admin=True,
@@ -1058,7 +1059,7 @@ async def ops_closure_status(request: Request):
 @router.post("/ops/staffing/onboard", response_model=None)
 async def ops_staffing_onboard(request: Request, body: dict[str, Any] = Body(default_factory=dict)):
     """将编制缺岗员工登记到 MODstore Catalog（代理 yuangon-onboard/run）。"""
-    payload = {
+    payload: dict[str, Any] = {
         "dry_run": bool(body.get("dry_run", False)),
         "force": bool(body.get("force", False)),
     }
@@ -1243,8 +1244,9 @@ async def sync_receive(body: dict | list):
             from app.mod_sdk.audit import write_audit_event
 
             write_audit_event(
+                actor=None,
                 action="xcmax.sync.receive",
-                details={"received": written, "apply": result},
+                payload={"received": written, "apply": result},
             )
         except RECOVERABLE_ERRORS:
             pass
@@ -1314,9 +1316,9 @@ async def _sync_sse_generator(request: Request, since_cursor: int):
 async def list_conflicts(limit: int = Query(50, ge=1, le=500)):
     """列出 inbox 中待处理的冲突条目。"""
     try:
-        from app.services.admin_sync_service import list_sync_conflicts
+        from app.application.admin_sync_app_service import list_admin_sync_conflicts
 
-        data = list_sync_conflicts(limit=limit)
+        data = list_admin_sync_conflicts(limit=limit)
         return {"success": True, "data": data, "count": len(data)}
     except RECOVERABLE_ERRORS as exc:
         return {"success": True, "data": [], "count": 0, "note": str(exc)}
@@ -1332,18 +1334,18 @@ async def resolve_conflict(inbox_id: int, body: dict):
         db = SyncDb()
         if action == "apply":
             from app.application.xcmax_sync_app import entity_appliers
-            from app.services.admin_sync_service import fetch_inbox_row
+            from app.application.admin_sync_app_service import fetch_admin_inbox_row
 
-            row = fetch_inbox_row(inbox_id)
+            row = fetch_admin_inbox_row(inbox_id)
             if row:
                 applier = entity_appliers().get(row["entity_type"])
                 if applier:
                     applier(row)
             db.mark_inbox_applied(inbox_id)
         else:
-            from app.services.admin_sync_service import mark_inbox_skipped
+            from app.application.admin_sync_app_service import mark_admin_inbox_skipped
 
-            mark_inbox_skipped(inbox_id)
+            mark_admin_inbox_skipped(inbox_id)
         return {"success": True, "inbox_id": inbox_id, "action": action}
     except RECOVERABLE_ERRORS as exc:
         return JSONResponse({"success": False, "message": str(exc)}, status_code=500)

@@ -49,7 +49,7 @@
         @confirm-task="confirmTask"
         @cancel-task="cancelTask"
         @refetch-order-number="refetchTaskOrderNumber"
-        @set-custom-order-number="setTaskCustomOrderNumber"
+        @set-custom-order-number="setCustomOrderNumber"
         @shipment-download-click="handleShipmentDownloadClick"
         @start-print="startPrintFromTaskCard"
         @switch-view="emitSwitchView"
@@ -72,7 +72,7 @@
         :pro-intent-experience-enabled="proIntentExperienceEnabled"
         :auto-refresh-starred-wechat="autoRefreshStarredWechat"
         :tts-enabled="ttsEnabled"
-        @register-excel-input="onRegisterExcelInput"
+        :excel-analyze-input-ref="chatRefBag.excelAnalyzeInputRef"
         @new-conversation="newConversation"
         @show-history="showHistoryPanel"
         @trigger-upload="triggerUpload"
@@ -192,10 +192,7 @@ if (!_storedSessionId) writeAiSessionIdToStorage(currentSessionId.value)
 const chatViewApi = useChatView({ sessionId: currentSessionId, proIntentExperienceEnabled })
 const chatRefBag = {
   chatMessagesRef: chatViewApi.chatMessagesRef,
-}
-
-function onRegisterExcelInput(el: HTMLInputElement | null) {
-  chatViewApi.excelAnalyzeInputRef.value = el
+  excelAnalyzeInputRef: chatViewApi.excelAnalyzeInputRef,
 }
 
 const {
@@ -229,6 +226,7 @@ const {
   sendMessage: chatSendMessage,
   confirmTask,
   refetchTaskOrderNumber,
+  setCustomOrderNumber,
   cancelTask,
   showTaskConfirm,
   triggerUpload,
@@ -255,12 +253,6 @@ const {
   ttsEnabled,
   setTtsEnabled,
 } = chatViewApi
-
-function setTaskCustomOrderNumber(value: string) {
-  if (currentTask.value) {
-    currentTask.value.customOrderNumber = value
-  }
-}
 
 const messageInput = ref('')
 

@@ -8,10 +8,6 @@ import type {
   ExcelTableSlice,
 } from '@/types/excel'
 import { asArray, asRecord, asString } from '@/utils/typeGuards'
-import { primeCsrfCookie } from '@/api/core'
-import { apiFetch } from '@/utils/apiBase'
-import { readCsrfTokenFromCookie } from '@/utils/csrfCookie'
-import { isOfficeExcelReadInstalled, readExcelViaOfficePack } from '@/utils/officeEmployeeReadApi'
 
 export type { ExcelAnalysisResult } from '@/types/excel'
 
@@ -25,20 +21,6 @@ const EXTRACT_GRID_SINGLE_SHEET_TIMEOUT_MS = 90_000
  * 打开页面时，浏览器会按跨域拦截，后端日志里完全看不到请求。
  */
 const EXTRACT_GRID_PATH = '/api/templates/extract-grid'
-
-async function ensureCsrfForExtractGrid(): Promise<void> {
-  if (readCsrfTokenFromCookie()) return
-  await primeCsrfCookie()
-}
-
-async function postExtractGrid(formData: FormData, signal: AbortSignal): Promise<Response> {
-  await ensureCsrfForExtractGrid()
-  return apiFetch(EXTRACT_GRID_PATH, {
-    method: 'POST',
-    body: formData,
-    signal,
-  })
-}
 
 /** 读取响应体（含大 JSON）；若仅对 fetch 设 Abort，部分环境下 body 读取仍可能挂死，导致「分析中…」永不解除 */
 async function readResponseJsonWithTimeout(response: Response, ms: number): Promise<ExcelExtractGridResponse> {
@@ -94,7 +76,11 @@ async function extractSingleSheetDetail(file: File, sheetName: string): Promise<
     const controller = new AbortController()
     const timeoutId = window.setTimeout(() => controller.abort(), EXTRACT_GRID_SINGLE_SHEET_TIMEOUT_MS)
     try {
-      const response = await postExtractGrid(formData, controller.signal)
+      const response = await fetch(EXTRACT_GRID_PATH, {
+        method: 'POST',
+        body: formData,
+        signal: controller.signal
+      })
       const data = await readResponseJsonWithTimeout(response, 60_000)
       if (!response.ok || !data?.success) return null
       const preview = data.preview_data
@@ -254,7 +240,7 @@ export function useExcelAnalysis(messages: UseChatMessagesReturn, options: UseEx
     ;(e.target as HTMLInputElement).value = ''
     if (!file) return
 
-    if (/\.(xlsx|xlsm|xls)$/i.test(file.name)) {
+    if (/\.(xlsx|xlsm)$/i.test(file.name)) {
       excelAnalyzeUploading.value = true
       try {
         appendChatLine(`开始分析 Excel：${file.name}`, 'user')
@@ -266,37 +252,6 @@ export function useExcelAnalysis(messages: UseChatMessagesReturn, options: UseEx
         })
 
         try {
-          const canUseOfficeRead =
-            /\.(xlsx|xlsm)$/i.test(file.name) && (await isOfficeExcelReadInstalled(true))
-          if (canUseOfficeRead) {
-            options.onAnalyzeProgress?.({
-              fileName: file.name,
-              step: '办公包 Excel 读取员正在解析…',
-              progress: 24,
-            })
-            try {
-              const office = await readExcelViaOfficePack(file)
-              options.onAnalyzeProgress?.({
-                fileName: file.name,
-                step: '正在生成对话摘要…',
-                progress: 82,
-              })
-              appendChatLine(office.summary, 'ai')
-              options.onAnalyzed?.({
-                fileName: file.name,
-                summary: office.summary,
-                result: office.result,
-              })
-              options.onAnalyzeDone?.({ fileName: file.name, success: true })
-              return
-            } catch (officeErr: unknown) {
-              const hint = String((officeErr as Error)?.message || officeErr || '').trim()
-              if (import.meta.env.DEV) {
-                console.warn('[excel-analysis] office read failed, fallback extract-grid:', hint)
-              }
-            }
-          }
-
           const formData = new FormData()
           formData.append('file', file)
           formData.append('analyze_all_sheets', 'true')
@@ -316,7 +271,11 @@ export function useExcelAnalysis(messages: UseChatMessagesReturn, options: UseEx
             )
           }
           try {
-            const response = await postExtractGrid(formData, controller.signal)
+            const response = await fetch(EXTRACT_GRID_PATH, {
+              method: 'POST',
+              body: formData,
+              signal: controller.signal
+            })
             const data: ExcelExtractGridResponse = await readResponseJsonWithTimeout(response, 120_000)
 
             if (!response.ok || !data?.success) {

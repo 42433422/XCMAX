@@ -51,7 +51,7 @@ def _register_router_events():
             "[XCAGICompat] 路由已注册到 NeuroBus，当前订阅者: %s",
             bus.get_stats().get("handlers", 0),
         )
-    except Exception as e:  # noqa: broad-except-boundary
+    except Exception as e:  # noqa: BLE001
         logger.debug("[XCAGICompat] NeuroBus 注册跳过: %s", e)
 
 
