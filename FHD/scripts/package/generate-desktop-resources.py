@@ -294,9 +294,9 @@ def write_icns_darwin() -> None:
 def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     if BRAND_SOURCE.is_file():
-        print(f"[generate-desktop-resources] 使用品牌图源: {BRAND_SOURCE}")
+        print(f"[generate-desktop-resources] using brand source: {BRAND_SOURCE}")
     else:
-        print(f"[generate-desktop-resources] 未找到 {BRAND_SOURCE}，使用占位图标")
+        print(f"[generate-desktop-resources] brand source not found: {BRAND_SOURCE}; using placeholder icon")
     write_installer_sidebar()
     write_installer_header()
     write_installer_hero()
