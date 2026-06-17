@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 安装本机 MODstore 日更自启（macOS）
-# - 项目在 Desktop/Documents 时：用「登录项」（GUI 会话，可访问 Desktop）
-# - 其他路径：同时注册 launchd KeepAlive
+# - 将 MODstore 运行时镜像同步到非受保护目录 ~/XCMAX-runtime/modstore-daily
+# - launchd 直接执行 Library Support wrapper，不再依赖 Desktop 路径/GUI 登录项
 # 用法：bash FHD/scripts/dev/install_modstore_daily_launchd.sh
 set -euo pipefail
 
@@ -12,7 +12,7 @@ LABEL="com.xcmax.modstore-daily"
 LOGIN_ITEM_NAME="XCMAX MODstore Daily"
 PLIST_SRC="${SCRIPT_DIR}/com.xcmax.modstore-daily.plist"
 PLIST_DST="${HOME}/Library/LaunchAgents/${LABEL}.plist"
-LOG_DIR="${FHD_ROOT}/logs"
+LOG_DIR="${HOME}/Library/Logs/XCMAX"
 RUN_SCRIPT="${SCRIPT_DIR}/run_modstore_daily_local.sh"
 SUPPORT_DIR="${HOME}/Library/Application Support/XCMAX"
 WRAPPER="${SUPPORT_DIR}/run-modstore-daily.sh"
@@ -21,6 +21,8 @@ COMMAND_FILE="${SUPPORT_DIR}/run-modstore-daily.command"
 ENV_SNAPSHOT="${SUPPORT_DIR}/modstore-daily.env"
 LAUNCHER_OSA="${SUPPORT_DIR}/launch-modstore-daily.applescript"
 LOGIN_APP="${SUPPORT_DIR}/${LOGIN_ITEM_NAME}.app"
+RUNTIME_ROOT="${HOME}/XCMAX-runtime/modstore-daily"
+RUNTIME_DEPLOY_ROOT="${RUNTIME_ROOT}/MODstore_deploy"
 
 log() { printf '[daily-autostart] %s\n' "$*"; }
 
@@ -34,6 +36,9 @@ MODSTORE_DEPLOY_ROOT="${XCMAX_ROOT}/成都修茈科技有限公司/MODstore_depl
 if [[ ! -d "${MODSTORE_DEPLOY_ROOT}/modstore_server" ]]; then
   MODSTORE_DEPLOY_ROOT="${XCMAX_ARCHIVE_ROOT:-$HOME/XCMAX-archives}/m0-fhd-bulk-20260605/成都修茈科技有限公司/MODstore_deploy"
 fi
+mkdir -p "${RUNTIME_ROOT}"
+log "同步运行时镜像 → ${RUNTIME_DEPLOY_ROOT}"
+rsync -a --delete "${MODSTORE_DEPLOY_ROOT}/" "${RUNTIME_DEPLOY_ROOT}/"
 : > "${ENV_SNAPSHOT}"
 for f in \
   "${MODSTORE_DEPLOY_ROOT}/.env" \
@@ -59,18 +64,20 @@ export MODSTORE_DAILY_XCMAX_ROOT="${XCMAX_ROOT}"
 export MODSTORE_DAILY_SCRIPT_DIR_OVERRIDE="${SCRIPT_DIR}"
 export MODSTORE_DAILY_ENV_SNAPSHOT="${ENV_SNAPSHOT}"
 export MODSTORE_DAILY_SKIP_ENV_FILES=1
+export MODSTORE_RUNTIME_ROOT="${RUNTIME_ROOT}"
+export MODSTORE_DAILY_DAEMON_LOG_DIR="${LOG_DIR}"
 exec /bin/bash "${RUNNER_COPY}"
 EOF
 chmod +x "${WRAPPER}"
 cat > "${COMMAND_FILE}" <<EOF
 #!/bin/bash
-exec /bin/bash "${RUN_SCRIPT}"
+exec /bin/bash "${WRAPPER}"
 EOF
 chmod +x "${COMMAND_FILE}"
 cat > "${LAUNCHER_OSA}" <<EOF
 tell application "Terminal"
   activate
-  do script "export MODSTORE_DAILY_FOREGROUND=1; /bin/bash " & quoted form of "${RUN_SCRIPT}"
+  do script "/bin/bash " & quoted form of "${WRAPPER}"
   delay 1
   try
     set miniaturized of front window to true
@@ -112,39 +119,11 @@ APPLESCRIPT
 }
 
 _install_launchd() {
-  if _on_desktop_or_documents; then
-    cat > "${PLIST_DST}" <<EOF
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>Label</key>
-  <string>${LABEL}</string>
-  <key>ProgramArguments</key>
-  <array>
-    <string>/usr/bin/open</string>
-    <string>-a</string>
-    <string>Terminal</string>
-    <string>${COMMAND_FILE}</string>
-  </array>
-  <key>RunAtLoad</key>
-  <true/>
-  <key>StandardOutPath</key>
-  <string>${LOG_DIR}/modstore-daily.launchd.log</string>
-  <key>StandardErrorPath</key>
-  <string>${LOG_DIR}/modstore-daily.launchd.err.log</string>
-  <key>WorkingDirectory</key>
-  <string>${HOME}</string>
-</dict>
-</plist>
-EOF
-  else
-    sed \
-      -e "s|__XCMAX_RUN_MODSTORE_DAILY__|${WRAPPER}|g" \
-      -e "s|__XCMAX_LOG_DIR__|${LOG_DIR}|g" \
-      -e "s|__XCMAX_ROOT__|${HOME}|g" \
-      "${PLIST_SRC}" > "${PLIST_DST}"
-  fi
+  sed \
+    -e "s|__XCMAX_RUN_MODSTORE_DAILY__|${WRAPPER}|g" \
+    -e "s|__XCMAX_LOG_DIR__|${LOG_DIR}|g" \
+    -e "s|__XCMAX_ROOT__|${HOME}|g" \
+    "${PLIST_SRC}" > "${PLIST_DST}"
   UID_NUM="$(id -u)"
   launchctl bootout "gui/${UID_NUM}/${LABEL}" 2>/dev/null || true
   launchctl bootstrap "gui/${UID_NUM}" "${PLIST_DST}"
@@ -160,7 +139,7 @@ _remove_launchd() {
 }
 
 if _on_desktop_or_documents; then
-  log "项目在 Desktop/Documents — 使用 Library Support env 快照 + launchd 后台自启"
+  log "项目在 Desktop/Documents — 运行时已迁出到 ${RUNTIME_ROOT}"
 else
   log "使用 launchd 自启"
 fi
@@ -181,6 +160,6 @@ fi
 
 log "MODstore :8788 scheduler_running=${sched}"
 log "08:00 自动 digest：全开 FHD/Vite/模拟器 → 跑完自动关（MODSTORE_SURFACE_AUDIT_STOP_AFTER=1）"
-log "日志: ${LOG_DIR}/modstore-daily.launchd.{log,err.log}  ·  .xcmax-logs/surface-audit-*.log"
+log "日志: ${LOG_DIR}/modstore-daily.launchd.{log,err.log}"
 log "手动触发: bash FHD/scripts/dev/trigger_digest_now_local.sh"
 log "一键验证: bash FHD/scripts/dev/run_digest_full_stack.sh"
