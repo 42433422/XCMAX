@@ -5,6 +5,7 @@ pytest 配置与 fixtures（FastAPI 版）
 
 from __future__ import annotations
 
+import asyncio
 import os
 import shutil
 import sys
@@ -17,6 +18,21 @@ import pytest
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
+
+
+class _AutoCreatingEventLoopPolicy(asyncio.DefaultEventLoopPolicy):
+    """Keep legacy ``asyncio.get_event_loop()`` behavior for sync tests."""
+
+    def get_event_loop(self):
+        try:
+            return super().get_event_loop()
+        except RuntimeError:
+            loop = self.new_event_loop()
+            self.set_event_loop(loop)
+            return loop
+
+
+asyncio.set_event_loop_policy(_AutoCreatingEventLoopPolicy())
 
 # pytest-cov 采集时会多次触达 ORM；先一次性加载全部 model，避免 Table 重复注册。
 try:

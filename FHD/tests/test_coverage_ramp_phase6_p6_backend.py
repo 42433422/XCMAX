@@ -1286,6 +1286,8 @@ def test_private_db_send_message_with_none_values() -> None:
 
 
 def test_register_private_db_read_assistant_routes_attaches_router() -> None:
+    from app.fastapi_routes.openapi_route_compat import iter_effective_routes
+
     app = FastAPI()
     register = __import__(
         "app.fastapi_routes.private_db_read_assistant_compat",
@@ -1293,6 +1295,6 @@ def test_register_private_db_read_assistant_routes_attaches_router() -> None:
     ).register_private_db_read_assistant_routes
     register(app)
     # 路由应已挂载
-    paths = [r.path for r in app.routes]
+    paths = [r.path for r in iter_effective_routes(app.routes)]
     assert any(f"/api/mod/{MOD_ID}/status" in p for p in paths)
     assert any(f"/api/mod/{MOD_ID}/sources" in p for p in paths)

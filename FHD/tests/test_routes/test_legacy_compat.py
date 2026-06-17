@@ -10,6 +10,7 @@ import pytest
 from fastapi import FastAPI
 
 from app.fastapi_routes.mounts.legacy_compat import register_legacy_compat_routes
+from app.fastapi_routes.openapi_route_compat import iter_effective_routes
 
 
 @pytest.fixture
@@ -30,7 +31,7 @@ class TestRegisterLegacyCompatRoutes:
             ),
         ):
             register_legacy_compat_routes(fresh_app)
-        routes = [r.path for r in fresh_app.routes]
+        routes = [r.path for r in iter_effective_routes(fresh_app.routes)]
         assert len(routes) > 0
 
     def test_registers_without_legacy_gap_by_default(self, fresh_app):
@@ -203,6 +204,6 @@ class TestRegisterLegacyCompatRoutes:
         ):
             os.environ.pop("XCAGI_REGISTER_LEGACY_ROUTES", None)
             register_legacy_compat_routes(fresh_app)
-        route_paths = [getattr(r, "path", "") for r in fresh_app.routes]
+        route_paths = [r.path for r in iter_effective_routes(fresh_app.routes)]
         non_empty = [p for p in route_paths if p]
         assert len(non_empty) > 10

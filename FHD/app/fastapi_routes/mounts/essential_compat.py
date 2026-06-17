@@ -7,13 +7,14 @@ import logging
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
+from app.fastapi_routes.openapi_route_compat import iter_effective_routes
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
 
 def _has_route(app: FastAPI, path: str) -> bool:
-    return any(getattr(route, "path", None) == path for route in app.routes)
+    return any(route.path == path for route in iter_effective_routes(app.routes))
 
 
 def _ensure_auth_session_validate_route(app: FastAPI) -> None:

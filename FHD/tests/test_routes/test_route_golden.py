@@ -10,6 +10,7 @@ import pytest
 from fastapi import FastAPI
 
 from app.fastapi_routes import register_all_routes
+from app.fastapi_routes.openapi_route_compat import iter_effective_routes
 
 GOLDEN_PATH = Path(__file__).parent / "route_golden_essential.json"
 
@@ -30,8 +31,8 @@ def essential_app() -> FastAPI:
 
 def _collect_paths(app: FastAPI) -> list[str]:
     paths: set[str] = set()
-    for route in app.routes:
-        path = getattr(route, "path", None)
+    for route in iter_effective_routes(app.routes):
+        path = route.path
         if path:
             paths.add(path)
     return sorted(paths)
