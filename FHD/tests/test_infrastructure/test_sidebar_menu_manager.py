@@ -3,18 +3,20 @@
 from __future__ import annotations
 
 import importlib
-import os
-import tempfile
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
 # The module uses a hyphen in directory name, so we need importlib
+FHD_ROOT = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location(
     "sidebar_menu_manager",
-    "/Users/a4243342/Desktop/XCMAX/FHD/app/infrastructure/skills/sidebar-menu-manager/sidebar_menu_manager.py",
+    FHD_ROOT / "app/infrastructure/skills/sidebar-menu-manager/sidebar_menu_manager.py",
 )
+assert spec is not None
 _mod = importlib.util.module_from_spec(spec)
+assert spec.loader is not None
 spec.loader.exec_module(_mod)
 
 add_menu_item = _mod.add_menu_item
