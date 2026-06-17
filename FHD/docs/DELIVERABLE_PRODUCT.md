@@ -10,6 +10,8 @@
 |--------|-------------|------|
 | Windows 安装包（双 SKU，推荐） | `scripts/package/build-all-skus.ps1 -Version 10.0.0` | `release/xcagi-v10.0.0/{personal,enterprise}/` 各一 exe |
 | Windows 安装包（单 SKU） | `build-installer.ps1 -Version 10.0.0 -ProductSku personal\|enterprise` | 仅写入对应子目录，见下表 |
+| Windows 安装包（macOS/Linux 交叉构建） | `bash scripts/package/build-windows-installer.sh 10.0.0 enterprise` | Docker/Wine 构建，必须包含 `resources/backend/xcagi-backend.exe` |
+| macOS 安装包（单 SKU） | `bash scripts/package/build-installer.sh 10.0.0 enterprise` | 与 Windows 共用 SKU 资源契约，后端二进制按平台生成 |
 | 通用壳前端 | 默认 `npm run build`（generic） | 侧栏仅壳菜单 + Mod |
 | 内置 Mod 种子（L1 平台 bridge） | 安装包 `mods/` | 首启自动复制到 userData/mods |
 | 行业中性种子池（L2） | 安装包 `industry-seeds/`（仅 enterprise + open 行业） | 引导选行业后单拷，不全量激活 |
@@ -29,11 +31,12 @@
 | **personal** | `-ProductSku personal` | `XCAGI-Personal-Setup-{ver}-x64.exe` | `MINIMAL_HOST_MOD_IDS`（3 个 bridge） | 否 |
 | **enterprise** | `-ProductSku enterprise` | `XCAGI-Enterprise-Setup-{ver}-x64.exe` | `GENERIC_HOST_MOD_IDS` + 辅助 Mod | **是**（`xcagi-erp-domain-bridge`） |
 
-- 打包过滤：`scripts/package/stage-bundled-mods.ps1` → PyInstaller 打入 L1 `mods/` 白名单；**不含** `*-industry`。
-- 行业池：`scripts/package/stage-industry-seeds.ps1` → `industry-seeds/`（`onboarding_open_industry_ids` 对应 mod）。
+- 打包过滤：`scripts/package/stage-bundled-mods.ps1` / `.sh` → PyInstaller 打入 L1 `mods/` 白名单；**不含** `*-industry`。
+- 行业池：`scripts/package/stage-industry-seeds.ps1` / `.sh` → `industry-seeds/`（`onboarding_open_industry_ids` 对应 mod）。
 - 运行时：`XCAGI_PRODUCT_SKU` / `product-sku.json`；个人版**禁止**加载 ERP Mod（`mod_manager`）。
 - 更新站路径：`https://update.xcagi.com/releases/stable/{personal|enterprise}/`
-- 打包后验收：`verify-bundled-mods.ps1` + `verify-industry-seeds.ps1`
+- 打包后验收：`pre-release-security.ps1 -Phase post` 硬性检查 Windows 后端 exe、`product-sku.json`、`verify-bundled-mods.ps1`、`verify-industry-seeds.ps1`
+- 禁止发布 Electron-only Windows 空壳包：正式 Windows 包必须带内嵌 PyInstaller 后端。
 
 官网下载页（MODstore）环境变量：`VITE_XCAGI_DOWNLOAD_BASE_URL`、`VITE_XCAGI_DOWNLOAD_VERSION`。
 

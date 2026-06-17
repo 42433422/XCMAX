@@ -53,9 +53,13 @@ mkdir -p "${OUT_DIR}"
 echo "========== Windows SKU (docker/wine): ${SKU} =========="
 
 bash scripts/package/stage-bundled-mods.sh "${SKU}"
+bash scripts/package/stage-industry-seeds.sh "${SKU}"
+mkdir -p build
+printf '{"sku":"%s","schema_version":1}\n' "${SKU}" > build/product-sku.json
 export XCAGI_PRODUCT_SKU="${SKU}"
 export XCAGI_STAGED_MODS_DIR="${ROOT}/build/staged-mods-${SKU}"
 export XCAGI_MODS_ROOT="${XCAGI_STAGED_MODS_DIR}"
+export XCAGI_STAGED_INDUSTRY_SEEDS_DIR="${ROOT}/build/staged-industry-seeds-${SKU}"
 
 # 前端
 (cd frontend && [ -d node_modules ] || npm install)
@@ -81,6 +85,7 @@ docker run --rm --platform linux/amd64 \
   -e XCAGI_PRODUCT_SKU="${SKU}" \
   -e XCAGI_STAGED_MODS_DIR="/project/build/staged-mods-${SKU}" \
   -e XCAGI_MODS_ROOT="/project/build/staged-mods-${SKU}" \
+  -e XCAGI_STAGED_INDUSTRY_SEEDS_DIR="/project/build/staged-industry-seeds-${SKU}" \
   "${WINE_IMAGE}" \
   /bin/bash -lc '
     set -euo pipefail
