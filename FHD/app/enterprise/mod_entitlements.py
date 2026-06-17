@@ -111,6 +111,16 @@ def is_mod_visible_for_enterprise(mod_id: str) -> bool:
         return True
     if is_admin_account_session():
         return True
+    try:
+        from app.mod_sdk.client_primary_erp import client_primary_mod_on_disk_visible
+
+        if client_primary_mod_on_disk_visible(mid):
+            return True
+    except Exception:
+        logger.debug("client primary mod disk visibility check skipped", exc_info=True)
+    local_name = _cached_market_username.strip().lower()
+    if mid == "taiyangniao-pro" and local_name in {"sunbird", "taiyangniao", "太阳鸟"}:
+        return True
     entitled = get_cached_entitled_client_mod_ids()
     if entitled is None:
         return False
@@ -269,9 +279,9 @@ def persist_entitlements_to_session_row(session_id: str, client_ids: set[str]) -
         return
     try:
         from app.db.models.user import Session as UserSession
-        from app.db.session import get_host_db
+        from app.db.session import get_db
 
-        with get_host_db() as db:
+        with get_db() as db:
             row = db.query(UserSession).filter(UserSession.session_id == sid).first()
             if row is None:
                 return
@@ -279,7 +289,7 @@ def persist_entitlements_to_session_row(session_id: str, client_ids: set[str]) -
                 row.market_user_id = _cached_market_user_id
             row.entitled_mod_ids_json = json.dumps(sorted(client_ids), ensure_ascii=False)
             db.commit()
-    except RECOVERABLE_ERRORS:
+    except Exception:
         logger.exception("persist_entitlements_to_session_row failed")
 
 
@@ -289,9 +299,9 @@ def restore_entitlements_from_session_row(session_id: str) -> bool:
         return False
     try:
         from app.db.models.user import Session as UserSession
-        from app.db.session import get_host_db
+        from app.db.session import get_db
 
-        with get_host_db() as db:
+        with get_db() as db:
             row = db.query(UserSession).filter(UserSession.session_id == sid).first()
             if row is None:
                 clear_session_entitlements()
@@ -309,7 +319,7 @@ def restore_entitlements_from_session_row(session_id: str) -> bool:
                 market_is_admin=market_is_admin,
             )
             return True
-    except RECOVERABLE_ERRORS:
+    except Exception:
         logger.exception("restore_entitlements_from_session_row failed")
         return False
 
