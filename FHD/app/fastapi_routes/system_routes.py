@@ -67,8 +67,25 @@ def _build_industry_response(industry_id: str, profile: Any) -> dict[str, Any]:
     }
 
 
+async def _allowed_industry_ids_for_request(request: Request) -> tuple[set[str] | None, str | None]:
+    """Return enterprise-filtered industry ids, or None when no account filter applies."""
+    try:
+        from app.enterprise.mod_entitlements import is_admin_account_session
+        from app.mod_sdk.industry_baseline import build_onboarding_industry_catalog_for_request
+
+        catalog = await build_onboarding_industry_catalog_for_request(request)
+        if not catalog.get("enterprise_filter_applied") or is_admin_account_session():
+            return None, None
+        ids = [str(x).strip() for x in (catalog.get("open_industry_ids") or []) if str(x).strip()]
+        first = ids[0] if ids else None
+        return set(ids), first
+    except RECOVERABLE_ERRORS:
+        logger.debug("industry entitlement filter lookup skipped", exc_info=True)
+        return None, None
+
+
 @router.get("/industries")
-async def get_industries():
+async def get_industries(request: Request):
     """Get list of all available industries"""
     try:
         from resources.config.industry_config import (
@@ -79,11 +96,17 @@ async def get_industries():
 
         industries = get_available_industries()
         current = get_current_industry()
+        allowed_ids, fallback_current = await _allowed_industry_ids_for_request(request)
 
         result_industries = []
         for ind in industries:
-            profile = get_industry_profile(ind["id"])
-            result_industries.append(_build_industry_response(ind["id"], profile))
+            industry_id = str(ind["id"])
+            if allowed_ids is not None and industry_id not in allowed_ids:
+                continue
+            profile = get_industry_profile(industry_id)
+            result_industries.append(_build_industry_response(industry_id, profile))
+        if allowed_ids is not None and current not in allowed_ids and fallback_current:
+            current = fallback_current
 
         return {
             "success": True,
@@ -123,6 +146,9 @@ async def get_current_industry_endpoint(request: Request):
         except RECOVERABLE_ERRORS:
             logger.debug("workspace industry prefs lookup skipped", exc_info=True)
 
+        allowed_ids, fallback_current = await _allowed_industry_ids_for_request(request)
+        if allowed_ids is not None and current_id not in allowed_ids and fallback_current:
+            current_id = fallback_current
         profile = get_industry_profile(current_id)
 
         return {"success": True, "data": _build_industry_response(current_id, profile)}

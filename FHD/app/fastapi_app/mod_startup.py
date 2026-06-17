@@ -80,7 +80,7 @@ def schedule_background_mod_load(app: Any) -> None:
 
 def bootstrap_mod_extensions_sync(app: Any) -> None:
     """
-    同步阶段：主客户 Mod（太阳鸟等）+ 当前 SKU 宿主 bridge；完整扫描放后台。
+    同步阶段：仅加载当前 SKU 宿主 bridge；客户定制 Mod 登录后按 entitlement 按需加载。
     """
     from app.infrastructure.mods.mod_manager import (
         get_mod_manager,

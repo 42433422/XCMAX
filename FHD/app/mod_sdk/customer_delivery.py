@@ -62,27 +62,39 @@ def delivery_for_industry_mod(industry_mod_id: str) -> dict[str, Any] | None:
     return None
 
 
+def delivery_for_account_custom_mod(
+    mod_id: str,
+    industry_id: str | None = None,
+) -> dict[str, Any] | None:
+    """按账号定制 ``legacy_mod_id`` 查客户交付清单。"""
+    mid = str(mod_id or "").strip()
+    iid = str(industry_id or "").strip()
+    if not mid:
+        return None
+    rows = deliveries_for_industry(iid) if iid else list_customer_deliveries()
+    for row in rows:
+        if str(row.get("legacy_mod_id") or "").strip() == mid:
+            return row
+    return None
+
+
+def delivery_seed_package_for_mod(
+    mod_id: str,
+    industry_id: str | None = None,
+) -> dict[str, Any] | None:
+    """返回账号定制 Mod 绑定的客户交付种子包元数据。"""
+    row = delivery_for_account_custom_mod(mod_id, industry_id)
+    if not row:
+        return None
+    pkg = row.get("delivery_seed_package")
+    return dict(pkg) if isinstance(pkg, dict) and str(pkg.get("pkg_id") or "").strip() else None
+
+
 def _entitled_matches_mod(mod_id: str, entitled: set[str]) -> bool:
     mid = str(mod_id or "").strip()
     if not mid or not entitled:
         return False
-    if mid in entitled:
-        return True
-    try:
-        from app.mod_sdk.industry_mod_aliases import canonical_mod_id, legacy_mod_ids_for
-
-        cid = canonical_mod_id(mid)
-        if cid in entitled:
-            return True
-        for leg in legacy_mod_ids_for(cid):
-            if leg in entitled:
-                return True
-        for raw in entitled:
-            if canonical_mod_id(raw) == cid:
-                return True
-    except RECOVERABLE_ERRORS:
-        pass
-    return False
+    return mid in entitled
 
 
 def account_custom_mod_ids_for_industry(
@@ -120,8 +132,10 @@ def label_for_account_custom_mod(mod_id: str, industry_id: str) -> str:
 
 __all__ = [
     "account_custom_mod_ids_for_industry",
+    "delivery_for_account_custom_mod",
     "deliveries_for_industry",
     "delivery_for_industry_mod",
+    "delivery_seed_package_for_mod",
     "label_for_account_custom_mod",
     "list_customer_deliveries",
     "load_customer_delivery_document",

@@ -777,6 +777,41 @@ def ensure_sqlite_inventory_bootstrap(
         raise
 
 
+def ensure_sqlite_enterprise_business_bootstrap(
+    engine: Engine | None = None,
+    *,
+    database_url: str | None = None,
+    swallow_errors: bool = True,
+) -> None:
+    """桌面 SQLite 旧库：补齐企业登录/太阳鸟交付依赖的基础业务表。"""
+    from sqlalchemy import inspect
+
+    from app.db.base import Base
+    from app.db.models.customer import Customer
+    from app.db.models.product import Product
+    from app.db.models.tenant import Tenant
+
+    real_engine = _resolve_auth_bootstrap_engine(engine, database_url=database_url)
+    if real_engine is None or real_engine.dialect.name != "sqlite":
+        return
+    try:
+        insp = inspect(real_engine)
+        tables = set(insp.get_table_names() or [])
+        needed = {"tenants", "customers", "products"}
+        if not needed.issubset(tables):
+            logger.info("SQLite 缺少企业业务基础表，正在通过 ORM 创建 …")
+            Base.metadata.create_all(
+                real_engine,
+                tables=[Tenant.__table__, Product.__table__, Customer.__table__],
+                checkfirst=True,
+            )
+    except RECOVERABLE_ERRORS as exc:
+        if swallow_errors:
+            logger.warning("ensure_sqlite_enterprise_business_bootstrap 失败: %s", exc, exc_info=True)
+            return
+        raise
+
+
 def ensure_user_preferences_bootstrap(
     engine: Engine | None = None,
     *,
@@ -833,6 +868,11 @@ def ensure_runtime_auth_bootstrap(
             swallow_errors=swallow_errors,
         )
         ensure_sqlite_inventory_bootstrap(
+            engine,
+            database_url=url,
+            swallow_errors=swallow_errors,
+        )
+        ensure_sqlite_enterprise_business_bootstrap(
             engine,
             database_url=url,
             swallow_errors=swallow_errors,

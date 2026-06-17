@@ -9,6 +9,13 @@
       "legacy_mod_id": "taiyangniao-pro",
       "customer_brand": "太阳鸟 PRO",
       "customer_name": "太阳鸟",
+      "delivery_seed_package": {
+        "pkg_id": "sunbird-delivery-seed",
+        "version": "1.0.0",
+        "artifact": "customer_delivery_seed",
+        "apply": "sunbird_roster",
+        "description": "太阳鸟交付种子：花名册、定制 Mod 侧库、考勤模板"
+      },
       "notes": "首家考勤客户定制实现；产品引导仅展示「考勤行业包」"
     },
     {

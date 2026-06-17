@@ -8,6 +8,7 @@ import { fetchOnboardingIndustryCatalog } from '@/utils/platformShellApi'
 vi.mock('@/api/modStore', () => ({
   installHostFoundation: vi.fn().mockResolvedValue({ success: true }),
   installMod: vi.fn().mockResolvedValue({ success: true }),
+  installCustomerDeliverySeed: vi.fn().mockResolvedValue({ success: true }),
   installOfficeEmployeePack: vi.fn().mockResolvedValue({ success: true }),
   installIndustrySeed: vi.fn().mockResolvedValue({ success: true }),
 }))
