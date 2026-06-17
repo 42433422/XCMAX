@@ -10,6 +10,7 @@
 
 - **fix(desktop)**：Electron 后端启动改为统一候选路径 + `electron-backend.log`；迁移流程复用 SKU Edition 环境；Windows 退出使用 `taskkill /T /F` 清理后端子进程
 - **fix(package)**：`build-backend.sh` 默认 v10.0.0，并与 PowerShell 构建链一样 staging SKU mods、industry-seeds、`product-sku.json`
+- **fix(package)**：`read-host-profile-stage-ids.py` / `read-open-industry-seed-ids.py` 改为纯 JSON 配置读取，避免 CI 打包阶段在 pip install 前导入完整 app 依赖
 - **fix(package)**：`generate_mods_index.py` 构建阶段只索引 staged mods 根，避免 personal 包索引混入根 `mods/`、`mods-admin-runtime` 或 `XCAGI/mods`
 - **fix(package)**：Docker/Wine Windows 构建链写入 `product-sku.json` 并带入 `XCAGI_STAGED_INDUSTRY_SEEDS_DIR`
 - **guard(package)**：`build-windows-electron-only.sh` 默认禁止作为发布链路，避免产出缺少 `resources/backend/xcagi-backend.exe` 的不可用 Windows 安装包
