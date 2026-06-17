@@ -22,7 +22,7 @@ from app.services.xcmax_sync_service import (
 def im_db(tmp_path, monkeypatch: pytest.MonkeyPatch):
     sync_db = tmp_path / "xcmax_sync.db"
     monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
-    monkeypatch.setattr("app.db.xcmax_sync._db_path", sync_db)
+    monkeypatch.setattr("app.db.xcmax_sync._db_path", None)
 
     db_file = tmp_path / "im_sync_test.db"
     engine = create_engine(f"sqlite:///{db_file}")
@@ -49,10 +49,8 @@ def im_db(tmp_path, monkeypatch: pytest.MonkeyPatch):
 
 @pytest.fixture(autouse=True)
 def _reset_sync_path(monkeypatch: pytest.MonkeyPatch, tmp_path):
-    sync_db = tmp_path / "xcmax_sync.db"
     monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
-    # 全量 pytest 时其它用例可能已解析 mod 私有路径；固定 sidecar 到本用例 tmp。
-    monkeypatch.setattr("app.db.xcmax_sync._db_path", sync_db)
+    monkeypatch.setattr("app.db.xcmax_sync._db_path", None)
 
 
 def test_record_change_on_send_message(im_db, monkeypatch: pytest.MonkeyPatch):

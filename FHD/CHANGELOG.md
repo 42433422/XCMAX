@@ -225,6 +225,12 @@
 - **fix(audit)**：`surface_audit_deps` 从 `MODSTORE_DEPLOY_HEALTH_URL` 推断内部 API（生产 :9999）
 - **ops(closure)**：`patch_prod_daily_closure.sh` follower 块 + `trigger_server_git_sync.sh`；Mac `MODSTORE_SYNC_DEPLOY_BASH`
 
+### Android 企业版微信风重构（2026-06-10 · v10 线内迭代）
+- **feat(mobile-android)**：4 Tab 架构（对话 · 工作 · 发现 · 我的）；对话页 DeepSeek 式空态 + 模式胶囊 + 底部输入条
+- **feat(mobile-android)**：浅色微信风主题（白底 + 灰分组 + GPT 灰点缀），跟随系统深色
+- **feat(mobile-android)**：`WorkScreen` / `DiscoverScreen` 分组列表；`WeUi` 补充底栏、角标、输入条组件
+- **feat(audit)**：`surface_audit_pages.json` 增加 `work` / `discover` 路由
+
 ### 日更闭环断点修复（BK→R / DRPROBE / 截图依赖 · 2026-06-10 · v10 线内迭代）
 - **feat(backup)**：`daily_backup_job` 成功/失败派发 `backup.completed` / `backup.failed`；启动时 `register_backup_event_subscribers`
 - **feat(dr)**：`dr_recovery_probe_job` 守卫生效时每 30min 重试（默认 ×8），成功 `backup.dr_guard.cleared`、超限 `backup.dr_guard.escalated`

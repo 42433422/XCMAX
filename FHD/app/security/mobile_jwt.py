@@ -43,9 +43,7 @@ def _secret_key() -> str:
         return secret
     global _warned_missing_secret
     if not _warned_missing_secret:
-        logger.warning(
-            "SECRET_KEY 未配置，移动端 JWT 使用进程级随机密钥（重启后历史 token 失效）"
-        )
+        logger.warning("SECRET_KEY 未配置，移动端 JWT 使用进程级随机密钥（重启后历史 token 失效）")
         _warned_missing_secret = True
     return _FALLBACK_SECRET
 

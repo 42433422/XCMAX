@@ -16,6 +16,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 import pytest
+
 from app.application.auth_app_service import (
     AuthApplicationService,
     _authenticate_failure_message,
@@ -138,7 +139,9 @@ class TestAuthenticateHappyPath:
         assert out["success"] is False
         assert "用户名或密码错误" in out["message"]
 
-    @pytest.mark.skip(reason="MFA/TOTP gate removed from authenticate(); covered by domains/auth routes if reintroduced")
+    @pytest.mark.skip(
+        reason="MFA/TOTP gate removed from authenticate(); covered by domains/auth routes if reintroduced"
+    )
     def test_mfa_required_when_enabled(self) -> None:
         svc = AuthApplicationService()
         user = MagicMock(is_active=True, password="h", mfa_enabled=True, totp_secret="secret")

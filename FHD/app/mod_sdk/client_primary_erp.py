@@ -47,9 +47,7 @@ def _sqlite_customers_list(
     offset = (page - 1) * per_page
     cur.execute(
         "SELECT id, customer_name, contact_person, contact_phone, address, purchase_unit "
-        "FROM customers WHERE "
-        + where
-        + " ORDER BY id LIMIT ? OFFSET ?",
+        "FROM customers WHERE " + where + " ORDER BY id LIMIT ? OFFSET ?",
         [*args, per_page, offset],
     )
     items = [dict(r) for r in cur.fetchall()]

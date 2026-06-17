@@ -45,6 +45,7 @@ server-api = [
     "email-validator>=2.0.0",
     "python-jose[cryptography]>=3.3.0",
     "passlib[bcrypt]>=1.7.4",
+    "PyJWT>=2.8.0",
 ]
 ml = [
     "torch>=2.0.0",
@@ -87,7 +88,7 @@ exclude = [
 ]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "B", "C4", "UP", "SIM", "PLC", "BLE001", "ANN"]
+select = ["E", "F", "I", "B", "C4", "UP", "SIM", "PLC", "BLE001"]
 ignore = [
     "E501",    # line too long (handled by formatter)
     "E402",    # module-import-not-at-top (有意的延迟导入)

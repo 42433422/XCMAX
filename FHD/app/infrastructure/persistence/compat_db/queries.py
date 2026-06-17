@@ -51,9 +51,7 @@ def _load_purchase_units_rows_pg() -> list[dict]:
                 conn.execute(
                     text(
                         "SELECT id, unit_name, contact_person, contact_phone, address, is_active "
-                        "FROM purchase_units"
-                        + where_sql
-                        + " ORDER BY unit_name"
+                        "FROM purchase_units" + where_sql + " ORDER BY unit_name"
                     ),
                     bind,
                 )
@@ -69,9 +67,7 @@ def _load_purchase_units_rows_pg() -> list[dict]:
     out: list[dict] = []
     for r in rows:
         ia = r.get("is_active")
-        if ia in (0, False, "0", "false") or (
-            isinstance(ia, str) and ia.lower() == chr(102)
-        ):
+        if ia in (0, False, "0", "false") or (isinstance(ia, str) and ia.lower() == chr(102)):
             continue
         out.append(dict(r))
     return out
@@ -260,9 +256,7 @@ def _load_customers_pg_from_purchase_units(eng) -> list[dict]:
                 conn.execute(
                     text(
                         "SELECT id, unit_name, contact_person, contact_phone, address, is_active "
-                        "FROM purchase_units"
-                        + where_sql
-                        + " ORDER BY unit_name"
+                        "FROM purchase_units" + where_sql + " ORDER BY unit_name"
                     ),
                     bind,
                 )
@@ -276,9 +270,7 @@ def _load_customers_pg_from_purchase_units(eng) -> list[dict]:
     for r in rows:
         d = dict(r)
         ia = d.get("is_active")
-        if ia in (0, False, "0", "false") or (
-            isinstance(ia, str) and ia.lower() == chr(102)
-        ):
+        if ia in (0, False, "0", "false") or (isinstance(ia, str) and ia.lower() == chr(102)):
             continue
         d["customer_name"] = (d.pop("unit_name", None) or "") or ""
         out.append(d)

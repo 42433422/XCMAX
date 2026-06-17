@@ -97,7 +97,9 @@ class ServiceContainer:
     def user_preference_service(self) -> UserPreferenceService:
         from app.services.user_preference_service import UserPreferenceService
 
-        return cast("UserPreferenceService", self._lazy("_user_preference_service", UserPreferenceService))
+        return cast(
+            "UserPreferenceService", self._lazy("_user_preference_service", UserPreferenceService)
+        )
 
     # --- application services (formerly module-level singletons) ---
 
@@ -105,7 +107,10 @@ class ServiceContainer:
     def customer_application_service(self) -> CustomerApplicationService:
         from app.application.customer_app_service import CustomerApplicationService
 
-        return cast("CustomerApplicationService", self._lazy("_customer_application_service", CustomerApplicationService))
+        return cast(
+            "CustomerApplicationService",
+            self._lazy("_customer_application_service", CustomerApplicationService),
+        )
 
     def invalidate_customer_application_service(self) -> None:
         self._customer_application_service = None
@@ -114,7 +119,10 @@ class ServiceContainer:
     def ai_chat_application_service(self) -> AIChatApplicationService:
         from app.application.ai_chat_app_service import AIChatApplicationService
 
-        return cast("AIChatApplicationService", self._lazy("_ai_chat_application_service", AIChatApplicationService))
+        return cast(
+            "AIChatApplicationService",
+            self._lazy("_ai_chat_application_service", AIChatApplicationService),
+        )
 
     @property
     def unit_products_import_application_service(self) -> UnitProductsImportService:
@@ -132,7 +140,10 @@ class ServiceContainer:
     def file_analysis_application_service(self) -> FileAnalysisService:
         from app.application.file_analysis_app_service import FileAnalysisService
 
-        return cast("FileAnalysisService", self._lazy("_file_analysis_application_service", FileAnalysisService))
+        return cast(
+            "FileAnalysisService",
+            self._lazy("_file_analysis_application_service", FileAnalysisService),
+        )
 
     @property
     def wechat_contact_application_service(self) -> WechatContactApplicationService:
@@ -150,7 +161,10 @@ class ServiceContainer:
                 self._wechat_contact_store = store
             return WechatContactApplicationService(store)
 
-        return cast("WechatContactApplicationService", self._lazy("_wechat_contact_application_service", _factory))
+        return cast(
+            "WechatContactApplicationService",
+            self._lazy("_wechat_contact_application_service", _factory),
+        )
 
     def invalidate_wechat_contact_application_service(self) -> None:
         self._wechat_contact_application_service = None
@@ -189,7 +203,9 @@ class ServiceContainer:
                 purchase_unit_query=SQLAlchemyPurchaseUnitQuery(),
             )
 
-        return cast("ShipmentApplicationService", self._lazy("_shipment_application_service_core", _factory))
+        return cast(
+            "ShipmentApplicationService", self._lazy("_shipment_application_service_core", _factory)
+        )
 
     @property
     def shipment_event_primary_facade(self) -> ShipmentApplicationServiceEventPrimary:
@@ -198,11 +214,12 @@ class ServiceContainer:
                 ShipmentApplicationServiceEventPrimary,
             )
 
-            return ShipmentApplicationServiceEventPrimary(
-                self.shipment_application_service_core
-            )
+            return ShipmentApplicationServiceEventPrimary(self.shipment_application_service_core)
 
-        return cast("ShipmentApplicationServiceEventPrimary", self._lazy("_shipment_event_primary_facade", _factory))
+        return cast(
+            "ShipmentApplicationServiceEventPrimary",
+            self._lazy("_shipment_event_primary_facade", _factory),
+        )
 
     def invalidate_shipment_wiring(self) -> None:
         """Clear shipment singletons (tests / hot-reload hooks)."""

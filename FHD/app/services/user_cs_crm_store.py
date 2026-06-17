@@ -231,9 +231,7 @@ def list_crm_invoices(
             params,
         ).fetchone()["c"]
         rows = conn.execute(
-            "SELECT * FROM cs_crm_invoices "
-            + where
-            + " ORDER BY id DESC LIMIT ? OFFSET ?",
+            "SELECT * FROM cs_crm_invoices " + where + " ORDER BY id DESC LIMIT ? OFFSET ?",
             [*params, int(limit), int(offset)],
         ).fetchall()
     items = [dict(r) for r in rows]
