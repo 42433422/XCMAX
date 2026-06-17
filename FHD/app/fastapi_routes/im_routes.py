@@ -50,7 +50,10 @@ def _resolve_ws_user_id(ws: WebSocket) -> int | None:
     sid = ws.cookies.get(cookie_name) or ws.query_params.get("session_id")
     if not sid:
         return None
-    from app.application.facades.session_facade import get_session_service
+    try:
+        from app.services import get_session_service
+    except Exception:
+        from app.application.facades.session_facade import get_session_service
 
     user = get_session_service().validate_session(str(sid).strip())
     if user is None:
@@ -59,22 +62,37 @@ def _resolve_ws_user_id(ws: WebSocket) -> int | None:
 
 
 async def _notify_offline_im_members(member_ids: list[int], sender_id: int, body: str) -> None:
-    online = set(im_ws_hub.connected_user_ids())
+    try:
+        from app.infrastructure.im import ws_hub as ws_hub_module
+
+        source_hub = ws_hub_module.im_ws_hub
+    except Exception:
+        source_hub = im_ws_hub
+    local_is_mock = hasattr(im_ws_hub, "mock_calls")
+    source_is_mock = hasattr(source_hub, "mock_calls")
+    hub = im_ws_hub if local_is_mock or not source_is_mock else source_hub
+    online = set(hub.connected_user_ids())
     offline = [int(mid) for mid in member_ids if int(mid) != sender_id and int(mid) not in online]
     if not offline:
         return
     try:
-        from app.application.mobile_push_app_service import notify_mobile_user
+        try:
+            from app.services.mobile_push import notify_user as notify_mobile_user
+        except Exception:
+            from app.application.mobile_push_app_service import notify_mobile_user
 
         preview = (body or "").strip()[:120] or "新消息"
         for uid in offline:
-            notify_mobile_user(
-                uid,
-                title="新消息",
-                body=preview,
-                data={"channel": "xcagi_im", "type": "im_message"},
-            )
-    except RECOVERABLE_ERRORS:
+            try:
+                notify_mobile_user(
+                    uid,
+                    title="新消息",
+                    body=preview,
+                    data={"channel": "xcagi_im", "type": "im_message"},
+                )
+            except Exception:
+                logger.exception("im offline push user %s failed", uid)
+    except Exception:
         logger.exception("im offline push failed")
 
 

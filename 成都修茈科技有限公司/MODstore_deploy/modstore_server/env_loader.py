@@ -6,6 +6,14 @@ import os
 from pathlib import Path
 from typing import Iterable
 
+_PROCESS_RUNTIME_ENV_KEYS = (
+    "DATABASE_URL",
+    "MODSTORE_DB_PATH",
+    "MODSTORE_RUNTIME_DIR",
+    "MODSTORE_EVENT_OUTBOX_PATH",
+    "MODSTORE_WEBHOOK_EVENTS_DIR",
+)
+
 
 def _load_plain_env(path: Path, *, override: bool) -> bool:
     if not path.is_file():
@@ -56,7 +64,8 @@ def load_modstore_env(
         include_synced = not pytest_mode
     if include_local is None:
         include_local = not pytest_mode
-    preserved = {key: os.environ.get(key) for key in preserve_existing if os.environ.get(key)}
+    protected = tuple(dict.fromkeys((*_PROCESS_RUNTIME_ENV_KEYS, *preserve_existing)))
+    preserved = {key: os.environ.get(key) for key in protected if os.environ.get(key)}
     loaded: list[str] = []
     candidates = [(".env", False)]
     if include_synced:

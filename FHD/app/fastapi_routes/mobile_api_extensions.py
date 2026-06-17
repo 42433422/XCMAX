@@ -13,9 +13,16 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from app.fastapi_routes.mobile_api import get_mobile_user
-from app.security.mobile_pairing import consume_by_shortcode, consume_pairing_nonce, issue_pairing_nonce
+from app.security.mobile_pairing import (
+    consume_by_shortcode,
+    consume_pairing_nonce,
+    issue_pairing_nonce,
+    lookup_by_shortcode,
+)
 from app.utils.mobile_api import format_mobile_response, paginate_list
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
+OPERATIONAL_ERRORS = RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +57,10 @@ class DeviceRegisterBody(BaseModel):
 class PairingExchangeBody(BaseModel):
     nonce: str = Field(default="", max_length=128)
     code: str = Field(default="", max_length=16)
+
+
+class PairingLookupBody(BaseModel):
+    code: str = Field(..., min_length=6, max_length=6)
 
 
 class PairingIssueBody(BaseModel):
@@ -253,6 +264,25 @@ async def mobile_pairing_issue(body: PairingIssueBody):
     port = int(body.port)
     payload = issue_pairing_nonce(host, port)
     return format_mobile_response(data=payload)
+
+
+@extension_router.post("/pairing/lookup")
+async def mobile_pairing_lookup(body: PairingLookupBody):
+    code = body.code.strip()
+    rec = lookup_by_shortcode(code)
+    if not rec:
+        return JSONResponse(
+            format_mobile_response(None, "配对码不存在或已过期", success=False, code=404),
+            status_code=404,
+        )
+    return format_mobile_response(
+        data={
+            "host": rec.get("host"),
+            "port": rec.get("port"),
+            "nonce": rec.get("nonce"),
+            "exp": rec.get("exp") or 0,
+        },
+    )
 
 
 @extension_router.post("/pairing/exchange")
