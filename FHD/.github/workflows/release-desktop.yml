@@ -49,7 +49,6 @@ jobs:
             FHD/release/xcagi-v*/enterprise/*.zip
             FHD/release/xcagi-v*/enterprise/*.zip.blockmap
             FHD/release/xcagi-v*/enterprise/latest*.yml
-            FHD/release/xcagi-v*/enterprise/builder-debug.yml
 
   deploy-windows:
     needs: [windows]
@@ -62,6 +61,7 @@ jobs:
           path: artifacts
       - name: Upload installers to update server
         continue-on-error: true
+        timeout-minutes: 10
         working-directory: .
         env:
           # Unified desktop-upload key: SERVER_SSH_KEY (preferred) with FHD_PUSH_SSH_KEY
@@ -78,6 +78,7 @@ jobs:
           printf '%s\n' "${DESKTOP_SSH_KEY}" > ~/.ssh/id_ci
           chmod 600 ~/.ssh/id_ci
           ssh-keyscan -H "${HOST}" >> ~/.ssh/known_hosts 2>/dev/null || true
+          SSH_OPTS=(-i "$HOME/.ssh/id_ci" -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=4)
           BASE="${GITHUB_WORKSPACE}/artifacts"
           raw="${{ github.event.inputs.version || github.ref_name }}"
           raw="${raw#FHD/}"
@@ -89,7 +90,7 @@ jobs:
             if [ ! -d "$dir" ]; then dir="${BASE}/$sku"; fi
             if [ ! -d "$dir" ]; then echo "[skip] no $sku dir"; continue; fi
             dest="/var/www/update/releases/stable/$sku"
-            rsync -avz -e "ssh -i ~/.ssh/id_ci -o StrictHostKeyChecking=no" "$dir/" "root@${HOST}:$dest/"
+            timeout 540 rsync -avz --timeout=60 -e "ssh ${SSH_OPTS[*]}" "$dir/" "root@${HOST}:$dest/"
           done
 
   macos:
@@ -128,7 +129,6 @@ jobs:
             FHD/release/xcagi-v*/enterprise/*.zip
             FHD/release/xcagi-v*/enterprise/*.zip.blockmap
             FHD/release/xcagi-v*/enterprise/latest*.yml
-            FHD/release/xcagi-v*/enterprise/builder-debug.yml
 
   deploy-macos:
     needs: [macos]
@@ -141,6 +141,7 @@ jobs:
           path: artifacts
       - name: Upload macOS installers to update server
         continue-on-error: true
+        timeout-minutes: 10
         working-directory: .
         env:
           DESKTOP_SSH_KEY: ${{ secrets.SERVER_SSH_KEY || secrets.FHD_PUSH_SSH_KEY }}
@@ -155,6 +156,7 @@ jobs:
           printf '%s\n' "${DESKTOP_SSH_KEY}" > ~/.ssh/id_ci
           chmod 600 ~/.ssh/id_ci
           ssh-keyscan -H "${HOST}" >> ~/.ssh/known_hosts 2>/dev/null || true
+          SSH_OPTS=(-i "$HOME/.ssh/id_ci" -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=4)
           BASE="${GITHUB_WORKSPACE}/artifacts"
           raw="${{ github.event.inputs.version || github.ref_name }}"
           raw="${raw#FHD/}"
@@ -166,7 +168,7 @@ jobs:
             if [ ! -d "$dir" ]; then dir="${BASE}/$sku"; fi
             if [ ! -d "$dir" ]; then echo "[skip] no $sku dir"; continue; fi
             dest="/var/www/update/releases/stable/$sku"
-            rsync -avz -e "ssh -i ~/.ssh/id_ci -o StrictHostKeyChecking=no" "$dir/" "root@${HOST}:$dest/"
+            timeout 540 rsync -avz --timeout=60 -e "ssh ${SSH_OPTS[*]}" "$dir/" "root@${HOST}:$dest/"
           done
 
   github-release:
@@ -187,4 +189,3 @@ jobs:
             artifacts/**/*.zip
             artifacts/**/*.zip.blockmap
             artifacts/**/latest*.yml
-            artifacts/**/builder-debug.yml
