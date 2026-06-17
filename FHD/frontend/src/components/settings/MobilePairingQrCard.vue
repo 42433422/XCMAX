@@ -1,7 +1,7 @@
 <template>
   <div class="mobile-pairing">
     <p class="mobile-pairing__lead">
-      使用 XCAGI App「发现 → 扫码连电脑」扫描下方二维码，手机将与本机宿主绑定并互通。
+      使用 XCAGI App「探索 → 识别」扫描下方二维码，手机将与本机宿主绑定并互通。
     </p>
 
     <div class="mobile-pairing__panel">

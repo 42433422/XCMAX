@@ -277,8 +277,6 @@ def filter_onboarding_catalog_for_entitlements(
 
 async def build_onboarding_industry_catalog_for_request(request) -> dict[str, Any]:
     """按会话感知：企业 entitlement 二级筛选 + 租户已选行业。"""
-    import os
-
     from app.application.tenant_workspace_prefs import (
         get_workspace_prefs,
         resolve_workspace_owner_id,
@@ -289,7 +287,7 @@ async def build_onboarding_industry_catalog_for_request(request) -> dict[str, An
         is_admin_account_session,
         sync_entitlements_from_request,
     )
-    from app.infrastructure.auth.dependencies import resolve_session_user
+    from app.infrastructure.auth.dependencies import resolve_session_user, session_id_from_request
 
     catalog = build_onboarding_industry_catalog()
     meta: dict[str, Any] = {
@@ -311,8 +309,7 @@ async def build_onboarding_industry_catalog_for_request(request) -> dict[str, An
     if not enterprise_mod_filter_active():
         return {**catalog, **meta}
 
-    cookie_name = os.environ.get("SESSION_COOKIE_NAME", "session_id")
-    sid = (request.cookies.get(cookie_name) or "").strip()
+    sid = session_id_from_request(request)
     if not sid:
         return {**catalog, **meta}
 
@@ -540,21 +537,19 @@ async def build_industry_baseline_plan_for_request(
     request, industry_id: str = "通用"
 ) -> dict[str, Any]:
     """会话感知：同步 market entitlement，管理员可跳过账号定制强制。"""
-    import os
-
     from app.enterprise.mod_entitlements import (
         enterprise_mod_filter_active,
         get_cached_entitled_client_mod_ids,
         is_admin_account_session,
         sync_entitlements_from_request,
     )
+    from app.infrastructure.auth.dependencies import session_id_from_request
 
     entitled: set[str] | None = None
     skip_account_custom = False
 
     if enterprise_mod_filter_active():
-        cookie_name = os.environ.get("SESSION_COOKIE_NAME", "session_id")
-        sid = (request.cookies.get(cookie_name) or "").strip()
+        sid = session_id_from_request(request)
         if sid:
             await sync_entitlements_from_request(request)
             if is_admin_account_session():

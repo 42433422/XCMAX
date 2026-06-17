@@ -13,6 +13,18 @@ case "${SKU}" in
   *) echo "[err] SKU 须为 personal 或 enterprise" >&2; exit 1 ;;
 esac
 
+if [[ "${XCAGI_ALLOW_WINDOWS_THIN_SHELL:-0}" != "1" ]]; then
+  cat >&2 <<'EOF'
+[err] Windows Electron-only thin shell is disabled for release builds.
+      It produces an installer without resources/backend/xcagi-backend.exe,
+      so the installed Windows app cannot start the embedded backend.
+      Use scripts/package/build-windows-installer.sh on macOS/Linux,
+      or scripts/package/build-installer.ps1 on Windows.
+      For a diagnostic shell-only build, set XCAGI_ALLOW_WINDOWS_THIN_SHELL=1.
+EOF
+  exit 2
+fi
+
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "${ROOT}"
 

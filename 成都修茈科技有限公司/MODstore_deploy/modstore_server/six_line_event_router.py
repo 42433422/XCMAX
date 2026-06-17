@@ -54,7 +54,11 @@ def _backlog_path() -> Path:
     if runtime:
         base = Path(runtime).expanduser()
     else:
-        base = _repo_root() / "成都修茈科技有限公司" / "MODstore_deploy" / "var" / "runtime"
+        root = _repo_root()
+        if (root / "MODstore_deploy").is_dir():
+            base = root / "MODstore_deploy" / "var" / "runtime"
+        else:
+            base = root / "成都修茈科技有限公司" / "MODstore_deploy" / "var" / "runtime"
     base.mkdir(parents=True, exist_ok=True)
     return base / _BACKLOG_NAME
 

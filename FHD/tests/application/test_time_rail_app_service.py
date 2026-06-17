@@ -54,6 +54,19 @@ async def test_runtime_status_ok_when_modstore_returns_nodes() -> None:
     assert data["nodes"]["P1"]["status"] == "idle"
 
 
+@pytest.mark.asyncio
+async def test_maintenance_sync_forwards_limit() -> None:
+    svc = TimeRailAppService()
+    with patch(
+        "app.application.modstore_local_client.modstore_post",
+        new_callable=AsyncMock,
+        return_value={"ok": True, "data": {"ok": True, "added": 5}},
+    ):
+        data = await svc.maintenance_sync(limit=7)
+    assert data["ok"] is True
+    assert data["added"] == 5
+
+
 def test_get_time_rail_app_service_singleton() -> None:
     a = get_time_rail_app_service()
     b = get_time_rail_app_service()

@@ -50,6 +50,35 @@ function readVanillaNoModUi(): boolean {
   }
 }
 
+function browserFullPath(): string {
+  if (typeof window === 'undefined' || !window.location) return '/';
+  return `${window.location.pathname || '/'}${window.location.search || ''}${window.location.hash || ''}`;
+}
+
+function scheduleRouterAddressSync(reason: string): void {
+  if (typeof window === 'undefined') return;
+  const syncOnce = async () => {
+    const target = browserFullPath();
+    if (!target || target === router.currentRoute.value.fullPath) return;
+    const resolved = router.resolve(target);
+    if (!resolved.matched.length) return;
+    try {
+      await router.replace(target);
+    } catch (e) {
+      if (import.meta.env.DEV) {
+        console.warn(`[bootstrap] route address sync failed (${reason}):`, e);
+      }
+    }
+  };
+  void syncOnce();
+  window.setTimeout(() => {
+    void syncOnce();
+  }, 500);
+  window.setTimeout(() => {
+    void syncOnce();
+  }, 1500);
+}
+
 /**
  * 与 mount 并行预取 Mod 路由，避免在 bootstrap 里 await 网络导致整页长时间不挂载（用户感觉「卡死」）。
  * 深链直达 Mod 页时若此请求晚于首跳，仍可由 modsStore.initialize 内 registerModRoutes 补齐。
@@ -122,6 +151,7 @@ async function bootstrap() {
     void (async () => {
       try {
         await registerAllModRoutesFromGlob(router);
+        scheduleRouterAddressSync('glob');
       } catch (e) {
         console.warn('[bootstrap] mod routes (glob) after mount failed:', e);
       }
@@ -134,6 +164,7 @@ async function bootstrap() {
       const entries = await fetchModRoutesPayloadShared();
       if (entries?.length) {
         await registerModRoutes(router, entries);
+        scheduleRouterAddressSync('api');
       }
     } catch (e) {
       console.warn('[bootstrap] Mod routes (API) register failed:', e);

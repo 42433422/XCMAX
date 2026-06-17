@@ -24,7 +24,7 @@ class XcagiMessagingService : FirebaseMessagingService() {
         NotificationChannels.ensure(this)
         val title = message.notification?.title ?: message.data["title"] ?: "XCAGI"
         val body = message.notification?.body ?: message.data["body"] ?: ""
-        val route = message.data["route"] ?: "xcagi://workbench"
+        val route = message.data["route"] ?: "xcagi://chat"
         val intent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             putExtra("deep_link_route", route)

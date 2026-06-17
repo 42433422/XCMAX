@@ -59,12 +59,18 @@ p = pathlib.Path("${DELIVERY}") / "manifest.json"
 p.write_text(json.dumps({
     "product": "太阳鸟 PRO",
     "delivery_id": "customer-taiyangniao",
+    "market_username": "SUNBIRD",
     "variant": "sunbird-custom-installer",
     "version": "${VERSION}",
     "installer": "${SETUP}",
     "sha256": "${sha}",
     "built_at": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
     "mod_ids": ["attendance-industry", "taiyangniao-pro"],
+    "server_delivery": {
+        "service": "MODstore_deploy",
+        "provision_script": "scripts/provision_enterprise_delivery.py",
+        "provision_args": ["--delivery", "sunbird"]
+    },
     "notes": "定制安装包；向导内勾选「获取太阳鸟业务数据」",
 }, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 print(f"Wrote {p}")

@@ -88,7 +88,5 @@ export function shouldRouteToProductOnboarding(
 
 function needsProductFlowStatic(): boolean {
   if (!isShellEditionBuild()) return false
-  const sku = String(import.meta.env.VITE_XCAGI_PRODUCT_SKU || '').trim().toLowerCase()
-  if (sku === 'enterprise') return false
   return !readProductFlowCompleted()
 }

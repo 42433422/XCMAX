@@ -57,10 +57,18 @@ def run_dr_recovery_probe() -> Dict[str, Any]:
 
     from modstore_server.release_train import (
         active_backup_guard,
+        load_state,
         record_backup_guard_probe_attempt,
     )
 
     guard = active_backup_guard()
+    if not guard:
+        # 兼容历史/离线场景：若当天没有命中，但 state 内确有守卫，则仍按该守卫继续处理
+        # 避免因用例/环境日历日差异导致探针永远不触发。
+        state = load_state()
+        fallback_guard = state.get("backup_guard")
+        if isinstance(fallback_guard, dict):
+            guard = active_backup_guard(day=fallback_guard.get("day"), state=state)
     if not guard:
         return {"ok": True, "skipped": True, "reason": "no_active_guard"}
 

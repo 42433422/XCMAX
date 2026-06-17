@@ -1,5 +1,6 @@
 package com.xiuci.xcagi.mobile.ui.components.mobile
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,34 +17,37 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
+import com.xiuci.xcagi.mobile.ui.theme.Spacing
 
 @Composable
 fun MobileListSkeleton(count: Int = 6, modifier: Modifier = Modifier) {
     LazyColumn(
         modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(MobileTokens.horizontalPagePadding),
-        verticalArrangement = Arrangement.spacedBy(MobileTokens.itemSpacing),
+        contentPadding = PaddingValues(Spacing.lg),
+        verticalArrangement = Arrangement.spacedBy(Spacing.md),
     ) {
         items(count) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = MobileTokens.cornerCard,
+                shape = MaterialTheme.shapes.medium,
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
                 ),
             ) {
-                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
                     Box(
                         Modifier
                             .fillMaxWidth(0.55f)
                             .height(14.dp)
-                            .clip(MobileTokens.cornerChip)
-                            .padding(0.dp),
+                            .clip(MaterialTheme.shapes.extraSmall)
+                            .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)),
                     )
                     Box(
                         Modifier
                             .fillMaxWidth(0.35f)
-                            .height(12.dp),
+                            .height(12.dp)
+                            .clip(MaterialTheme.shapes.extraSmall)
+                            .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)),
                     )
                 }
             }
@@ -54,13 +58,13 @@ fun MobileListSkeleton(count: Int = 6, modifier: Modifier = Modifier) {
 @Composable
 fun MobileStatSkeleton(modifier: Modifier = Modifier) {
     Column(
-        modifier.padding(horizontal = MobileTokens.horizontalPagePadding),
-        verticalArrangement = Arrangement.spacedBy(MobileTokens.itemSpacing),
+        modifier.padding(horizontal = Spacing.lg),
+        verticalArrangement = Arrangement.spacedBy(Spacing.md),
     ) {
         repeat(3) {
             Card(
                 modifier = Modifier.fillMaxWidth().height(88.dp),
-                shape = MobileTokens.cornerCard,
+                shape = MaterialTheme.shapes.medium,
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
                 ),

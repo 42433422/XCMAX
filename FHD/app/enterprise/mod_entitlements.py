@@ -310,6 +310,7 @@ def _session_username_for_entitlements(session_id: str) -> str:
         from app.services.session_service import SessionService
 
         info = SessionService().validate_session(sid)
+        username: str | None = None
         if info is None:
             pass
         elif isinstance(info, dict):
@@ -409,10 +410,9 @@ async def sync_entitlements_from_request(request) -> None:
     if not enterprise_mod_filter_active():
         return
     try:
-        import os
+        from app.infrastructure.auth.dependencies import session_id_from_request
 
-        cookie_name = os.environ.get("SESSION_COOKIE_NAME", "session_id")
-        sid = (request.cookies.get(cookie_name) or "").strip()
+        sid = session_id_from_request(request)
         if sid:
             await sync_entitlements_for_session(sid)
     except RECOVERABLE_ERRORS:

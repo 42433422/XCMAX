@@ -1,106 +1,122 @@
-"""Tests for app.services.conversation.api — ApiMixin pure/static methods."""
-
+"""Tests for app.services.conversation.api (ApiMixin)."""
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.services.conversation.api import _make_ai_response_cache_key
+from app.services.conversation.api import (
+    ApiMixin,
+    _make_ai_response_cache_key,
+)
+from app.services.conversation.context import ConversationContext
 
 
-# ========================= _make_ai_response_cache_key ===================
+# ---------------------------------------------------------------------------
+# Helper: concrete subclass since ApiMixin is abstract-ish
+# ---------------------------------------------------------------------------
+class _ConcreteApi(ApiMixin):
+    def __init__(self):
+        self._deepseek_async_client = None
+        self._deepseek_async_loop = None
+        self.api_key = "test-key"
+        self.api_url = "https://api.example.com/v1/chat/completions"
+        self.model = "test-model"
+        self.confirmation_service = MagicMock()
+        self.confirmation_service.get_pending_intent.return_value = None
+        self.confirmation_service.check_and_build_prompt.return_value = {
+            "status": "ok",
+            "missing_slots": [],
+        }
 
 
+# ---------------------------------------------------------------------------
+# _make_ai_response_cache_key
+# ---------------------------------------------------------------------------
 class TestMakeAiResponseCacheKey:
-    def test_deterministic(self):
+    def test_deterministic_key(self):
         key1 = _make_ai_response_cache_key("hello", "ctx1")
         key2 = _make_ai_response_cache_key("hello", "ctx1")
         assert key1 == key2
 
-    def test_different_message(self):
+    def test_different_messages_different_keys(self):
         key1 = _make_ai_response_cache_key("hello", "ctx1")
         key2 = _make_ai_response_cache_key("world", "ctx1")
         assert key1 != key2
 
-    def test_different_context(self):
+    def test_different_contexts_different_keys(self):
         key1 = _make_ai_response_cache_key("hello", "ctx1")
         key2 = _make_ai_response_cache_key("hello", "ctx2")
         assert key1 != key2
 
-    def test_empty_context_hash(self):
-        key1 = _make_ai_response_cache_key("hello", "")
-        assert isinstance(key1, str)
-        assert len(key1) == 64  # SHA-256 hex digest
-
-    def test_case_insensitive_message(self):
-        key1 = _make_ai_response_cache_key("Hello", "ctx1")
-        key2 = _make_ai_response_cache_key("hello", "ctx1")
+    def test_case_insensitive(self):
+        key1 = _make_ai_response_cache_key("Hello", "")
+        key2 = _make_ai_response_cache_key("hello", "")
         assert key1 == key2
 
     def test_whitespace_stripped(self):
-        key1 = _make_ai_response_cache_key("  hello  ", "ctx1")
-        key2 = _make_ai_response_cache_key("hello", "ctx1")
+        key1 = _make_ai_response_cache_key("  hello  ", "")
+        key2 = _make_ai_response_cache_key("hello", "")
         assert key1 == key2
 
 
-# ========================= _call_ai_offline ==============================
-
-
+# ---------------------------------------------------------------------------
+# _call_ai_offline
+# ---------------------------------------------------------------------------
 class TestCallAiOffline:
-    def test_with_known_intent(self):
-        from app.services.conversation.api import ApiMixin
-        from app.services.conversation.context import ConversationContext
+    @pytest.mark.asyncio
+    async def test_with_known_intent(self):
+        svc = _ConcreteApi()
+        svc.add_to_history = MagicMock()
+        ctx = ConversationContext(user_id="u1", metadata={})
 
-        m = ApiMixin()
-        m.add_to_history = MagicMock()
-        ctx = ConversationContext(user_id="user1")
-        intent_result = {"final_intent": "shipment_generate", "primary_intent": "shipment_generate"}
-
-        import asyncio
-        result = asyncio.get_event_loop().run_until_complete(
-            m._call_ai_offline("生成发货单", ctx, intent_result)
+        result = await svc._call_ai_offline(
+            "hello", ctx, {"final_intent": "create_order"}
         )
         assert result["action"] == "offline_response"
-        assert "shipment_generate" in result["text"]
-        assert result["data"]["mode"] == "offline"
+        assert "create_order" in result["text"]
 
-    def test_with_unknown_intent(self):
-        from app.services.conversation.api import ApiMixin
-        from app.services.conversation.context import ConversationContext
+    @pytest.mark.asyncio
+    async def test_with_unknown_intent(self):
+        svc = _ConcreteApi()
+        svc.add_to_history = MagicMock()
+        ctx = ConversationContext(user_id="u1", metadata={})
 
-        m = ApiMixin()
-        m.add_to_history = MagicMock()
-        ctx = ConversationContext(user_id="user1")
-        intent_result = {"final_intent": "unk", "primary_intent": "unk"}
-
-        import asyncio
-        result = asyncio.get_event_loop().run_until_complete(
-            m._call_ai_offline("hello", ctx, intent_result)
+        result = await svc._call_ai_offline(
+            "hello", ctx, {"final_intent": "unk"}
         )
         assert result["action"] == "offline_response"
         assert "离线模式" in result["text"]
 
-
-# ========================= _maybe_attach_kitten_web ======================
-
-
-class TestMaybeAttachKittenWeb:
-    def test_no_kitten(self):
-        from app.services.conversation.api import ApiMixin
-        from app.services.conversation.context import ConversationContext
-
-        m = ApiMixin()
+    @pytest.mark.asyncio
+    async def test_with_primary_intent_fallback(self):
+        svc = _ConcreteApi()
+        svc.add_to_history = MagicMock()
         ctx = ConversationContext(user_id="u1", metadata={})
+
+        result = await svc._call_ai_offline(
+            "hello", ctx, {"primary_intent": "query_products"}
+        )
+        assert result["action"] == "offline_response"
+        assert "query_products" in result["text"]
+
+
+# ---------------------------------------------------------------------------
+# _maybe_attach_kitten_web
+# ---------------------------------------------------------------------------
+class TestMaybeAttachKittenWeb:
+    def test_no_kitten_analyzer_returns_unchanged(self):
+        svc = _ConcreteApi()
+        ctx = ConversationContext(
+            user_id="u1",
+            metadata={"request_context": {}},
+        )
         result = {"text": "hello", "data": {}}
-        out = m._maybe_attach_kitten_web(ctx, result)
+        out = svc._maybe_attach_kitten_web(ctx, result)
         assert "web_search_results" not in out.get("data", {})
 
-    def test_with_kitten(self):
-        from app.services.conversation.api import ApiMixin
-        from app.services.conversation.context import ConversationContext
-
-        m = ApiMixin()
+    def test_attaches_web_search_results(self):
+        svc = _ConcreteApi()
         ctx = ConversationContext(
             user_id="u1",
             metadata={
@@ -108,21 +124,18 @@ class TestMaybeAttachKittenWeb:
                     "kitten_analyzer": True,
                     "kitten_web_search": True,
                     "web_search_results": [{"title": "test"}],
-                    "web_search_meta": {"source": "bing"},
+                    "web_search_meta": {"count": 1},
                     "web_search_error": None,
                 }
             },
         )
         result = {"text": "hello", "data": {}}
-        out = m._maybe_attach_kitten_web(ctx, result)
+        out = svc._maybe_attach_kitten_web(ctx, result)
         assert out["data"]["web_search_results"] == [{"title": "test"}]
-        assert out["data"]["web_search_meta"] == {"source": "bing"}
+        assert out["data"]["web_search_meta"] == {"count": 1}
 
-    def test_with_error(self):
-        from app.services.conversation.api import ApiMixin
-        from app.services.conversation.context import ConversationContext
-
-        m = ApiMixin()
+    def test_attaches_web_search_error(self):
+        svc = _ConcreteApi()
         ctx = ConversationContext(
             user_id="u1",
             metadata={
@@ -135,14 +148,11 @@ class TestMaybeAttachKittenWeb:
             },
         )
         result = {"text": "hello", "data": {}}
-        out = m._maybe_attach_kitten_web(ctx, result)
+        out = svc._maybe_attach_kitten_web(ctx, result)
         assert out["data"]["web_search_error"] == "timeout"
 
-    def test_no_data_key(self):
-        from app.services.conversation.api import ApiMixin
-        from app.services.conversation.context import ConversationContext
-
-        m = ApiMixin()
+    def test_creates_data_dict_if_missing(self):
+        svc = _ConcreteApi()
         ctx = ConversationContext(
             user_id="u1",
             metadata={
@@ -154,5 +164,303 @@ class TestMaybeAttachKittenWeb:
             },
         )
         result = {"text": "hello"}
-        out = m._maybe_attach_kitten_web(ctx, result)
+        out = svc._maybe_attach_kitten_web(ctx, result)
+        assert "data" in out
         assert out["data"]["web_search_results"] == [{"title": "test"}]
+
+
+# ---------------------------------------------------------------------------
+# _execute_or_generate_response
+# ---------------------------------------------------------------------------
+class TestExecuteOrGenerateResponse:
+    @pytest.mark.asyncio
+    async def test_missing_slots_returns_slot_fill(self):
+        svc = _ConcreteApi()
+        svc.confirmation_service.get_pending_intent.return_value = None
+        svc.confirmation_service.check_and_build_prompt.return_value = {
+            "status": "missing_slots",
+            "question": "请提供客户名称",
+            "missing_slots": ["customer_name"],
+            "pending_data": {"intent": "create_order"},
+        }
+
+        ctx = ConversationContext(user_id="u1", metadata={})
+        result = await svc._execute_or_generate_response(
+            "下单", {"final_intent": "create_order", "slots": {}}, ctx, "u1"
+        )
+        assert result["action"] == "slot_fill"
+        assert "missing_slots" in result["data"]
+
+    @pytest.mark.asyncio
+    async def test_tool_key_returns_tool_call(self):
+        svc = _ConcreteApi()
+        svc.confirmation_service.get_pending_intent.return_value = None
+        svc.confirmation_service.check_and_build_prompt.return_value = {
+            "status": "ok",
+            "missing_slots": [],
+        }
+        svc._check_habit_suggestion = MagicMock(return_value=None)
+
+        ctx = ConversationContext(user_id="u1", metadata={})
+        result = await svc._execute_or_generate_response(
+            "查询产品",
+            {"final_intent": "query_products", "slots": {}, "tool_key": "products"},
+            ctx,
+            "u1",
+        )
+        assert result["action"] == "tool_call"
+        assert result["data"]["tool_key"] == "products"
+
+    @pytest.mark.asyncio
+    async def test_offline_mode_calls_offline(self):
+        svc = _ConcreteApi()
+        svc.confirmation_service.get_pending_intent.return_value = None
+        svc.confirmation_service.check_and_build_prompt.return_value = {
+            "status": "ok",
+            "missing_slots": [],
+        }
+        svc.add_to_history = MagicMock()
+
+        ctx = ConversationContext(user_id="u1", metadata={})
+        result = await svc._execute_or_generate_response(
+            "你好",
+            {"final_intent": "greeting", "slots": {}, "ai_mode": "offline"},
+            ctx,
+            "u1",
+        )
+        assert result["action"] == "offline_response"
+
+    @pytest.mark.asyncio
+    async def test_online_mode_calls_ai(self):
+        svc = _ConcreteApi()
+        svc.confirmation_service.get_pending_intent.return_value = None
+        svc.confirmation_service.check_and_build_prompt.return_value = {
+            "status": "ok",
+            "missing_slots": [],
+        }
+        svc.add_to_history = MagicMock()
+        svc._metadata_cache_hash = MagicMock(return_value="hash")
+        svc._build_context_prompt = MagicMock(return_value="")
+
+        with patch.object(svc, "call_llm_api", new_callable=AsyncMock) as mock_llm:
+            mock_llm.return_value = {
+                "choices": [{"message": {"content": "AI reply"}}],
+                "usage": {"total_tokens": 10},
+            }
+            ctx = ConversationContext(user_id="u1", metadata={}, conversation_history=[])
+            result = await svc._execute_or_generate_response(
+                "你好",
+                {"final_intent": "greeting", "slots": {}},
+                ctx,
+                "u1",
+            )
+        assert result["action"] == "ai_response"
+        assert result["text"] == "AI reply"
+
+    @pytest.mark.asyncio
+    async def test_online_mode_fallback_on_empty_response(self):
+        svc = _ConcreteApi()
+        svc.confirmation_service.get_pending_intent.return_value = None
+        svc.confirmation_service.check_and_build_prompt.return_value = {
+            "status": "ok",
+            "missing_slots": [],
+        }
+        svc.add_to_history = MagicMock()
+        svc._metadata_cache_hash = MagicMock(return_value="hash")
+        svc._build_context_prompt = MagicMock(return_value="")
+
+        with (
+            patch(
+                "app.services.conversation.api._ai_response_cache"
+            ) as mock_cache,
+            patch.object(svc, "call_llm_api", new_callable=AsyncMock, return_value={"choices": []}),
+        ):
+            mock_cache.get.return_value = None
+            ctx = ConversationContext(user_id="u1", metadata={}, conversation_history=[])
+            result = await svc._execute_or_generate_response(
+                "你好",
+                {"final_intent": "greeting", "slots": {}},
+                ctx,
+                "u1",
+            )
+        assert result["action"] == "fallback"
+
+
+# ---------------------------------------------------------------------------
+# _build_tool_call_response
+# ---------------------------------------------------------------------------
+class TestBuildToolCallResponse:
+    def test_known_tool_key(self):
+        svc = _ConcreteApi()
+        svc._check_habit_suggestion = MagicMock(return_value=None)
+        result = svc._build_tool_call_response(
+            "products",
+            {"unit_name": "TestCo"},
+            {"final_intent": "query_products"},
+            "u1",
+            {"status": "ok", "missing_slots": []},
+        )
+        assert result["action"] == "tool_call"
+        assert "查询" in result["text"]
+
+    def test_unknown_tool_key(self):
+        svc = _ConcreteApi()
+        svc._check_habit_suggestion = MagicMock(return_value=None)
+        result = svc._build_tool_call_response(
+            "custom_tool",
+            {},
+            {"final_intent": "custom"},
+            "u1",
+            {"status": "ok", "missing_slots": []},
+        )
+        assert result["action"] == "tool_call"
+        assert "custom_tool" in result["text"]
+
+    def test_habit_suggestion_appended(self):
+        svc = _ConcreteApi()
+        svc._check_habit_suggestion = MagicMock(return_value="建议：上次您查询了产品A")
+        result = svc._build_tool_call_response(
+            "products",
+            {},
+            {"final_intent": "query_products"},
+            "u1",
+            {"status": "ok", "missing_slots": []},
+        )
+        assert "建议" in result["text"]
+
+
+# ---------------------------------------------------------------------------
+# call_llm_api
+# ---------------------------------------------------------------------------
+class TestCallLlmApi:
+    @pytest.mark.asyncio
+    async def test_returns_none_when_no_provider(self):
+        svc = _ConcreteApi()
+        with patch(
+            "app.infrastructure.llm.providers.registry.get_active_provider",
+            return_value=None,
+        ):
+            result = await svc.call_llm_api([{"role": "user", "content": "hi"}])
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_returns_result_from_provider(self):
+        svc = _ConcreteApi()
+        mock_provider = MagicMock()
+        mock_provider.provider_id = "test-provider"
+        mock_provider.chat_completion = AsyncMock(
+            return_value={"choices": [{"message": {"content": "hi"}}], "usage": {"total_tokens": 5}}
+        )
+
+        with (
+            patch(
+                "app.infrastructure.llm.providers.registry.get_active_provider",
+                return_value=mock_provider,
+            ),
+            patch("app.neuro_bus.application_neuro_bridge.neuro_notify_ai_model_roundtrip"),
+        ):
+            result = await svc.call_llm_api([{"role": "user", "content": "hi"}])
+        assert result is not None
+        assert result["choices"][0]["message"]["content"] == "hi"
+
+    @pytest.mark.asyncio
+    async def test_handles_exception(self):
+        svc = _ConcreteApi()
+        with patch(
+            "app.infrastructure.llm.providers.registry.get_active_provider",
+            side_effect=RuntimeError("provider error"),
+        ):
+            result = await svc.call_llm_api([{"role": "user", "content": "hi"}])
+        assert result is None
+
+
+# ---------------------------------------------------------------------------
+# _call_deepseek_legacy
+# ---------------------------------------------------------------------------
+class TestCallDeepseekLegacy:
+    @pytest.mark.asyncio
+    async def test_returns_none_without_api_key(self):
+        svc = _ConcreteApi()
+        svc.api_key = ""
+        result = await svc._call_deepseek_legacy(
+            [{"role": "user", "content": "hi"}]
+        )
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_returns_result_on_success(self):
+        svc = _ConcreteApi()
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "choices": [{"message": {"content": "hello"}}],
+        }
+        mock_response.raise_for_status = MagicMock()
+
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(return_value=mock_response)
+        mock_client.aclose = AsyncMock()
+
+        with patch.object(svc, "_get_deepseek_async_client", new_callable=AsyncMock, return_value=mock_client):
+            result = await svc._call_deepseek_legacy(
+                [{"role": "user", "content": "hi"}]
+            )
+        assert result is not None
+        assert result["choices"][0]["message"]["content"] == "hello"
+
+    @pytest.mark.asyncio
+    async def test_returns_none_on_empty_choices(self):
+        svc = _ConcreteApi()
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"choices": []}
+        mock_response.raise_for_status = MagicMock()
+
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(return_value=mock_response)
+        mock_client.aclose = AsyncMock()
+
+        with patch.object(svc, "_get_deepseek_async_client", new_callable=AsyncMock, return_value=mock_client):
+            result = await svc._call_deepseek_legacy(
+                [{"role": "user", "content": "hi"}]
+            )
+        assert result is None
+
+
+# ---------------------------------------------------------------------------
+# _call_ai (cached + LLM integration)
+# ---------------------------------------------------------------------------
+class TestCallAi:
+    @pytest.mark.asyncio
+    async def test_returns_cached_response(self):
+        svc = _ConcreteApi()
+        svc.add_to_history = MagicMock()
+        svc._metadata_cache_hash = MagicMock(return_value="hash")
+        svc.model = "test-model"
+
+        with patch(
+            "app.services.conversation.api._ai_response_cache"
+        ) as mock_cache:
+            mock_cache.get.return_value = "cached reply"
+            ctx = ConversationContext(user_id="u1", metadata={})
+            result = await svc._call_ai("hello", ctx, {"final_intent": "greeting"})
+        assert result["action"] == "ai_response"
+        assert result["text"] == "cached reply"
+        assert result["data"]["cached"] is True
+
+    @pytest.mark.asyncio
+    async def test_returns_fallback_on_no_choices(self):
+        svc = _ConcreteApi()
+        svc.add_to_history = MagicMock()
+        svc._metadata_cache_hash = MagicMock(return_value="hash")
+        svc._build_context_prompt = MagicMock(return_value="")
+        svc.model = "test-model"
+
+        with (
+            patch(
+                "app.services.conversation.api._ai_response_cache"
+            ) as mock_cache,
+            patch.object(svc, "call_llm_api", new_callable=AsyncMock, return_value=None),
+        ):
+            mock_cache.get.return_value = None
+            ctx = ConversationContext(user_id="u1", metadata={}, conversation_history=[])
+            result = await svc._call_ai("hello", ctx, {"final_intent": "greeting"})
+        assert result["action"] == "fallback"

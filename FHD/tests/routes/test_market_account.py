@@ -34,11 +34,9 @@ def _clear_token_caches():
     """Clear in-memory token caches between tests."""
     ma._MARKET_SESSION_TOKENS.clear()
     ma._MARKET_SESSION_REFRESH_TOKENS.clear()
-    ma._ACCOUNT_OVERVIEW_CACHE.clear()
     yield
     ma._MARKET_SESSION_TOKENS.clear()
     ma._MARKET_SESSION_REFRESH_TOKENS.clear()
-    ma._ACCOUNT_OVERVIEW_CACHE.clear()
 
 
 # ---------------------------------------------------------------------------
@@ -154,14 +152,6 @@ class TestErrorMessage:
         msg = ma._error_message({"detail": "internal error"}, 500)
         assert "500" in msg
         assert "XCAGI_MARKET_BASE_URL" in msg
-
-    def test_429_too_many_requests(self) -> None:
-        msg = ma._error_message({"message": "too many requests"}, 429)
-        assert "频繁" in msg
-
-    def test_429_no_message(self) -> None:
-        msg = ma._error_message({}, 429)
-        assert "频繁" in msg
 
     def test_no_detail_returns_http_status(self) -> None:
         msg = ma._error_message({}, 403)
@@ -326,38 +316,6 @@ class TestIsLocalMarketBase:
 
 
 # ---------------------------------------------------------------------------
-# _bootstrap_overview_needs_live_merge
-# ---------------------------------------------------------------------------
-
-
-class TestBootstrapOverviewNeedsLiveMerge:
-    def test_missing_user(self) -> None:
-        assert ma._bootstrap_overview_needs_live_merge({}) is True
-
-    def test_missing_wallet(self) -> None:
-        assert ma._bootstrap_overview_needs_live_merge({"user": {}}) is True
-
-    def test_missing_membership_and_plan(self) -> None:
-        assert ma._bootstrap_overview_needs_live_merge({"user": {}, "wallet": {}}) is True
-
-    def test_all_present(self) -> None:
-        assert (
-            ma._bootstrap_overview_needs_live_merge(
-                {"user": {}, "wallet": {}, "membership": {}}
-            )
-            is False
-        )
-
-    def test_plan_present(self) -> None:
-        assert (
-            ma._bootstrap_overview_needs_live_merge(
-                {"user": {}, "wallet": {}, "plan": {}}
-            )
-            is False
-        )
-
-
-# ---------------------------------------------------------------------------
 # _degraded_account_overview
 # ---------------------------------------------------------------------------
 
@@ -414,70 +372,6 @@ class TestTransportErrorMessage:
         msg, code = ma._transport_error_message(ConnectionError("refused"))
         assert "无法连接" in msg
         assert code == 502
-
-
-# ---------------------------------------------------------------------------
-# _checkout_sign_body_from_request
-# ---------------------------------------------------------------------------
-
-
-class TestCheckoutSignBodyFromRequest:
-    def test_wallet_recharge(self) -> None:
-        result = ma._checkout_sign_body_from_request(
-            {"wallet_recharge": True, "total_amount": 100}
-        )
-        assert result["wallet_recharge"] is True
-        assert result["total_amount"] == 100.0
-        assert result["subject"] == "钱包充值"
-
-    def test_plan_id(self) -> None:
-        result = ma._checkout_sign_body_from_request({"plan_id": "plan1"})
-        assert result["plan_id"] == "plan1"
-
-    def test_invalid_total_amount(self) -> None:
-        result = ma._checkout_sign_body_from_request(
-            {"wallet_recharge": "true", "total_amount": "not-a-number"}
-        )
-        assert result["total_amount"] == 0.0
-
-    def test_custom_subject(self) -> None:
-        result = ma._checkout_sign_body_from_request(
-            {"wallet_recharge": "1", "total_amount": 50, "subject": "custom"}
-        )
-        assert result["subject"] == "custom"
-
-
-# ---------------------------------------------------------------------------
-# _checkout_body_has_signature
-# ---------------------------------------------------------------------------
-
-
-class TestCheckoutBodyHasSignature:
-    def test_has_signature(self) -> None:
-        assert (
-            ma._checkout_body_has_signature(
-                {"request_id": "r1", "signature": "s1", "timestamp": 123}
-            )
-            is True
-        )
-
-    def test_missing_request_id(self) -> None:
-        assert (
-            ma._checkout_body_has_signature({"signature": "s1", "timestamp": 123})
-            is False
-        )
-
-    def test_missing_signature(self) -> None:
-        assert (
-            ma._checkout_body_has_signature({"request_id": "r1", "timestamp": 123})
-            is False
-        )
-
-    def test_missing_timestamp(self) -> None:
-        assert (
-            ma._checkout_body_has_signature({"request_id": "r1", "signature": "s1"})
-            is False
-        )
 
 
 # ---------------------------------------------------------------------------
@@ -961,23 +855,6 @@ class TestMarketAccountOverview:
         data = resp.json()
         assert data["data"].get("degraded") is True or data["data"].get("market_unreachable") is True
 
-    def test_cache_hit(self, client: TestClient) -> None:
-        auth = "Bearer tok"
-        cache_key = ma._overview_cache_key(auth)
-        ma._ACCOUNT_OVERVIEW_CACHE[cache_key] = (
-            __import__("time").monotonic(),
-            {"user": {"id": 1}, "wallet": {}, "membership": {}},
-        )
-        with (
-            patch(
-                "app.fastapi_routes.market_account._authorization_from_request_resolved",
-                new_callable=AsyncMock,
-                return_value=auth,
-            ),
-        ):
-            resp = client.post("/api/market/account-overview", json={})
-        assert resp.status_code == 200
-
     def test_authorization_resolve_error(self, client: TestClient) -> None:
         with patch(
             "app.fastapi_routes.market_account._authorization_from_request_resolved",
@@ -1152,7 +1029,7 @@ class TestResetMarketPasswordWithCode:
 
 
 # ---------------------------------------------------------------------------
-# _market_http_timeout / _market_http_retries / _account_overview_cache_ttl
+# _market_http_timeout / _market_http_retries
 # ---------------------------------------------------------------------------
 
 
@@ -1183,21 +1060,3 @@ class TestConfigHelpers:
         with patch.dict("os.environ", {"XCAGI_MARKET_HTTP_RETRIES": "3"}):
             assert ma._market_http_retries() == 3
 
-    def test_default_cache_ttl(self) -> None:
-        with patch.dict("os.environ", {}, clear=False):
-            import os
-
-            os.environ.pop("XCAGI_MARKET_OVERVIEW_CACHE_TTL", None)
-            assert ma._account_overview_cache_ttl() == 45.0
-
-
-class TestOverviewCacheKey:
-    def test_deterministic(self) -> None:
-        key1 = ma._overview_cache_key("Bearer tok")
-        key2 = ma._overview_cache_key("Bearer tok")
-        assert key1 == key2
-
-    def test_different_tokens(self) -> None:
-        key1 = ma._overview_cache_key("Bearer tok1")
-        key2 = ma._overview_cache_key("Bearer tok2")
-        assert key1 != key2

@@ -18,6 +18,7 @@ from app.db.init_db import (
     ensure_sessions_enterprise_entitlement_columns,
     ensure_sessions_market_access_token_column,
     ensure_sessions_market_refresh_token_column,
+    ensure_users_tenant_id_column,
     init_approval_tables,
     init_distillation_tables,
     init_extract_logs_tables,
@@ -150,6 +151,7 @@ def _initialize_databases_sync(app: FastAPI):
         ensure_sessions_market_refresh_token_column(engine, database_url=cfg_db_url or None)
         ensure_sessions_enterprise_entitlement_columns(engine, database_url=cfg_db_url or None)
         ensure_sessions_account_meta_columns(engine, database_url=cfg_db_url or None)
+        ensure_users_tenant_id_column(engine, database_url=cfg_db_url or None)
         try:
             init_approval_tables(engine)
         except RECOVERABLE_ERRORS as approval_err:

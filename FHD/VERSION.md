@@ -20,6 +20,12 @@
 
 > 独立子工程保留自己的版本号：`MODstore/pyproject.toml`（`0.2.0`）、`MODstore/web/package.json`（`0.2.0`）、`MODstore/market/package.json`（`1.0.0`）。
 
+## 🔒 v10 锁定规则
+
+产品大版本锁死在 **v10**，全产品线版本锚点恒为 **`10.0.0`**。企业桌面端、AI 员工商店、移动 AI 协同 App 的后续交付只使用阶段名、channel、Git tag、`git_sha`、`sha256` 和制品 manifest 区分，不使用 `v10.1`、`v10.2`、`v10.3` 或 `v11` 作为路线承诺。
+
+任何主版本解锁或锚点变更都必须先修改本文件，并同步 README、CHANGELOG、CI 发布约定和 `specs/product-lines-3-plus-2.md`；未完成同步前不得发布。
+
 ## 🎯 当前定位（v10.0）
 
 **跨平台企业 AI 员工桌面平台** — Windows/macOS 桌面版 + Web 版并行交付，保留 Neuro-DDD + FastAPI + Mod 生态 + Token 认证钱包。
@@ -57,4 +63,4 @@ rg -n 'version\s*=\s*"[0-9]' app/fastapi_app/factory.py app/infrastructure/mods/
 
 ---
 
-*最后更新：2026-06-12（Android 签约级 · 4 Tab + OTP/工作台）*
+*最后更新：2026-06-17（v10 锁定 · 版本锚点恒 10.0.0）*

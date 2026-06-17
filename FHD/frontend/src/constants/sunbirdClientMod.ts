@@ -1,5 +1,6 @@
 import { CLIENT_PRIMARY_ERP_MOD_ID } from '@/constants/genericModPack';
 import type { ModInfo } from '@/types/modInfo';
+import { SUNBIRD_CLIENT_MOD_ID } from './accountModBinding';
 
 /** 与 mods/attendance-industry/manifest.json frontend.menu 保持一致 */
 export const ATTENDANCE_INDUSTRY_MOD_FALLBACK_MENU: NonNullable<ModInfo['menu']> = [
@@ -46,6 +47,35 @@ export function buildAttendanceIndustryModStub(): ModInfo {
   };
 }
 
+/** SUNBIRD 账号专属 fallback：真实定制页是 taiyangniao-pro。 */
+export function buildSunbirdClientModStub(): ModInfo {
+  return {
+    id: SUNBIRD_CLIENT_MOD_ID,
+    name: '太阳鸟 PRO',
+    version: '1.0.0',
+    author: 'XCAGI',
+    description: '太阳鸟客户定制：部门/人员管理、考勤表转换、排班数据处理与考勤 AI 员工。',
+    primary: true,
+    frontend: { pro_entry_path: '/taiyangniao-pro' },
+    menu: [
+      {
+        id: 'taiyangniao-pro-home',
+        label: '考勤表转换',
+        icon: 'fa-file-excel-o',
+        path: '/taiyangniao-pro',
+      },
+    ],
+    menu_overrides: [
+      { key: 'products', label: '人员管理' },
+      { key: 'customers', label: '部门管理' },
+    ],
+    industry: {
+      id: '考勤',
+      name: '考勤/人事行业',
+    },
+  };
+}
+
 /** API 尚未返回奇士美定制 Mod 时，侧栏仍可展示涂料业务菜单覆盖 */
 export function buildCoatingCustomModStub(): ModInfo {
   return {
@@ -71,6 +101,3 @@ export function buildCoatingCustomModStub(): ModInfo {
     },
   };
 }
-
-/** @deprecated 使用 buildAttendanceIndustryModStub */
-export const buildSunbirdClientModStub = buildAttendanceIndustryModStub;

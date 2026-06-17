@@ -5,6 +5,7 @@ data class AppConfigResponse(
     val privacy_url: String = "",
     val terms_url: String = "",
     val legal_version: String = "1",
+    val sku: String = "",
     val icp_number: String = "",
     val app_filing_approved: Boolean = false,
     val app_filing_beian_url: String = "https://beian.miit.gov.cn/",

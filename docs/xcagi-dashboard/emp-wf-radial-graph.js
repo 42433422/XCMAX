@@ -59,6 +59,127 @@ const EmpWfRadialGraph = (() => {
     evt: '#f778ba',
   };
 
+  const AUTO_MAINTENANCE_POLICY = {
+    enabled: true,
+    missingEvidenceThreshold: 3,
+    syncLimit: 32,
+    cooldownMs: 10 * 60 * 1000,
+    minQueueGap: 1,
+  };
+
+  function _toPositiveInt(raw, fallback, min = 1) {
+    const n = Number.parseInt(String(raw), 10);
+    if (Number.isNaN(n)) return fallback;
+    return Math.max(min, n);
+  }
+
+  function _readBoolean(raw, fallback = true) {
+    if (raw === undefined || raw === null || raw === '') return fallback;
+    const normalized = String(raw).trim().toLowerCase();
+    if (['1', 'true', 'yes', 'on', 'enabled'].includes(normalized)) return true;
+    if (['0', 'false', 'no', 'off', 'disabled'].includes(normalized)) return false;
+    return fallback;
+  }
+
+  function getAutoMaintenancePolicy(root) {
+    const p = { ...AUTO_MAINTENANCE_POLICY };
+    const rootDataset = (root && root.dataset) ? root.dataset : null;
+    if (rootDataset) {
+      const flag = rootDataset.empWfAutoMaintenance;
+      if (flag != null && flag !== '') {
+        p.enabled = _readBoolean(flag, p.enabled);
+      }
+      p.missingEvidenceThreshold = _toPositiveInt(rootDataset.empWfAutoMaintenanceThreshold, p.missingEvidenceThreshold, 1);
+      p.syncLimit = _toPositiveInt(rootDataset.empWfAutoMaintenanceLimit, p.syncLimit);
+      p.cooldownMs = Math.max(
+        30 * 1000,
+        _toPositiveInt(rootDataset.empWfAutoMaintenanceCooldownMs, Math.floor(p.cooldownMs / 1000), 30) * 1000,
+      );
+      p.minQueueGap = _toPositiveInt(rootDataset.empWfAutoMaintenanceMinQueueGap, p.minQueueGap, 1);
+    }
+    try {
+      const query = new URLSearchParams((typeof location !== 'undefined' && location.search) || '');
+      const urlEnabled = query.get('auto_maintenance_enabled');
+      if (urlEnabled !== null) {
+        p.enabled = _readBoolean(urlEnabled, p.enabled);
+      }
+      p.missingEvidenceThreshold = _toPositiveInt(
+        query.get('auto_maintenance_threshold'),
+        p.missingEvidenceThreshold,
+        1,
+      );
+      p.syncLimit = _toPositiveInt(query.get('auto_maintenance_limit'), p.syncLimit);
+      p.cooldownMs = Math.max(
+        30 * 1000,
+        _toPositiveInt(query.get('auto_maintenance_cooldown_ms'), Math.floor(p.cooldownMs / 1000), 30) * 1000,
+      );
+      p.minQueueGap = _toPositiveInt(query.get('auto_maintenance_min_queue_gap'), p.minQueueGap, 1);
+    } catch (_err) {
+      /* ignore */
+    }
+    return p;
+  }
+
+  function shouldAutoMaintenanceSync(root, coverage) {
+    if (!root || !coverage) return null;
+    const policy = getAutoMaintenancePolicy(root);
+    if (!policy.enabled) return null;
+    const missing = Number(coverage.missing_evidence_nodes || 0);
+    const queued = Number(coverage.maintenance_queued_nodes || 0);
+    if (!Number.isFinite(missing) || missing < policy.missingEvidenceThreshold) return null;
+    const remaining = missing - queued;
+    if (remaining < policy.minQueueGap) return null;
+
+    const now = Date.now();
+    const lastAt = Number(root.__empWfAutoMaintenanceLastRunAt || 0);
+    const lastMissing = Number(root.__empWfAutoMaintenanceLastMissing || -1);
+
+    if (missing > lastMissing) {
+      return { policy, missing, queued, remaining };
+    }
+    if (lastAt > 0 && now - lastAt < policy.cooldownMs) {
+      return null;
+    }
+    return { policy, missing, queued, remaining };
+  }
+
+  async function autoTriggerMaintenanceSync(root, coverage) {
+    if (!root) return;
+    if (root.__empWfAutoMaintenanceInFlight) return;
+    const rootControls = getMaintenanceSyncControls();
+    const suggestion = shouldAutoMaintenanceSync(root, coverage);
+    if (!suggestion) return;
+
+    const limit = Math.min(suggestion.policy.syncLimit, Math.max(1, suggestion.missing));
+    root.__empWfAutoMaintenanceInFlight = true;
+    root.__empWfAutoMaintenanceLastRunAt = Date.now();
+    root.__empWfAutoMaintenanceLastMissing = suggestion.missing;
+    if (rootControls.syncBtn) rootControls.syncBtn.disabled = true;
+    setMaintenanceSyncStatus(
+      `缺证 ${suggestion.missing} >= 阈值 ${suggestion.policy.missingEvidenceThreshold}，自动补齐中（limit=${limit}）`,
+      'running',
+    );
+    try {
+      const result = await syncMissingEvidenceBacklog(limit);
+      const added = Number(result && result.added ? result.added : 0);
+      const skipped = Number(result && result.skipped ? result.skipped : 0);
+      const total = Number(result && result.total_missing ? result.total_missing : suggestion.missing);
+      const msgChunks = [];
+      if (!Number.isNaN(added)) msgChunks.push(`已入队 ${added}`);
+      if (!Number.isNaN(skipped)) msgChunks.push(`已存在 ${skipped}`);
+      if (!Number.isNaN(total)) msgChunks.push(`缺证 ${total}`);
+      setMaintenanceSyncStatus(`自维护已自动触发：${msgChunks.length ? msgChunks.join('，') : '任务已提交'}`, 'ok');
+    } catch (err) {
+      setMaintenanceSyncStatus(`自维护自动触发失败：${err && err.message ? err.message : String(err || 'unknown')}`, 'error');
+    } finally {
+      root.__empWfAutoMaintenanceInFlight = false;
+      if (rootControls.syncBtn) {
+        const stillAvailable = !root.classList.contains('is-runtime-status-error');
+        rootControls.syncBtn.disabled = !stillAvailable;
+      }
+    }
+  }
+
   const NODES = [
     { id: CENTER_ID, label: '日更闭环', kind: 'center' },
     { id: 'BK', label: '03:05 容灾备份', kind: 'step', phase: 't0', desc: 'SQLite 全量备份（VACUUM INTO + wal_checkpoint TRUNCATE）+ release_train 快照 → backups/ · v2.2: 真实 WAL 增量（拷贝 .db-wal/.db-shm）+ 全量轮转' },
@@ -752,23 +873,7 @@ const EmpWfRadialGraph = (() => {
       if (window.EmpWfSurfaceAudit && typeof window.EmpWfSurfaceAudit.bindRadialDoubleOpen === 'function') {
         window.EmpWfSurfaceAudit.bindRadialDoubleOpen(layer);
       }
-      fetchRuntimeStatus()
-        .then((wrap) => {
-          if (!wrap || wrap.error) {
-            root.classList.add('is-runtime-status-error');
-            const msg = (wrap && wrap.error) || 'time-rail status 不可用（MODstore 未启动或 API 503）';
-            root.setAttribute('data-runtime-status-error', msg);
-            return;
-          }
-          if (wrap.nodes) applyRuntimeStatusToLayer(layer, wrap.nodes);
-        })
-        .catch((err) => {
-          root.classList.add('is-runtime-status-error');
-          root.setAttribute(
-            'data-runtime-status-error',
-            err && err.message ? err.message : 'time-rail status fetch failed',
-          );
-        });
+      startRuntimeStatusPolling(root, layer);
       scrollDiagramToTop();
     } catch (err) {
       root.classList.add('is-error');
@@ -797,7 +902,7 @@ const EmpWfRadialGraph = (() => {
             continue;
           }
           const j = await r.json();
-          if (!r.ok || j.success === false) {
+          if (!r.ok || j.success === false || j.ok === false) {
             lastError = String(j.error || j.message || `HTTP ${r.status}`);
             continue;
           }
@@ -812,6 +917,153 @@ const EmpWfRadialGraph = (() => {
     return { error: lastError || 'time-rail status unavailable' };
   }
 
+  function proofShort(row) {
+    if (!row) return 'miss';
+    if (row.guard_active) return 'guard';
+    const ps = String(row.proof_status || '');
+    if (ps === 'missing_evidence') return 'miss';
+    if (ps === 'maintenance_queued') return 'todo';
+    if (row.ok === false) return 'fail';
+    if (row.ok === true) return 'ok';
+    if (ps.indexOf('decision_') === 0) return ps === 'decision_true' ? 'yes' : 'no';
+    if (row.observed) return 'seen';
+    return 'miss';
+  }
+
+  function getMaintenanceSyncControls() {
+    return {
+      statusEl: document.getElementById('emp-wf-maintenance-sync-status'),
+      syncBtn: document.getElementById('btn-time-rail-maintenance-sync'),
+    };
+  }
+
+  function setMaintenanceSyncStatus(message, level) {
+    const { statusEl } = getMaintenanceSyncControls();
+    if (!statusEl) return;
+    statusEl.textContent = message || '';
+    statusEl.dataset.empWfMaintenanceSyncStatus = level || 'ready';
+    statusEl.classList.remove(
+      'emp-wf-maintenance-sync-status--ok',
+      'emp-wf-maintenance-sync-status--running',
+      'emp-wf-maintenance-sync-status--error',
+    );
+    if (level === 'ok' || level === 'success') {
+      statusEl.classList.add('emp-wf-maintenance-sync-status--ok');
+    }
+    if (level === 'running') {
+      statusEl.classList.add('emp-wf-maintenance-sync-status--running');
+    }
+    if (level === 'error') {
+      statusEl.classList.add('emp-wf-maintenance-sync-status--error');
+    }
+  }
+
+  function setMaintenanceSyncReady(enabled) {
+    const { syncBtn } = getMaintenanceSyncControls();
+    if (!syncBtn) return;
+    syncBtn.disabled = !enabled;
+  }
+
+  function timeRailApiBases() {
+    const bases = [''];
+    if (location.protocol === 'file:') {
+      bases.push('http://127.0.0.1:5000', 'http://127.0.0.1:8788');
+    }
+    return bases;
+  }
+
+  async function syncMissingEvidenceBacklog(limit = 32) {
+    const paths = [
+      '/api/xcmax/production-line/time-rail/maintenance/sync',
+      '/api/admin/production-line/time-rail/maintenance/sync',
+    ];
+    let lastError = '';
+    for (const base of timeRailApiBases()) {
+      for (const path of paths) {
+        try {
+          const url = base ? base + path : path;
+          const r = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ limit }),
+            signal: AbortSignal.timeout(2500),
+          });
+          const ct = (r.headers.get('content-type') || '').toLowerCase();
+          if (ct.includes('text/html')) {
+            lastError = `non-JSON response ${r.status} ${path}`;
+            continue;
+          }
+          const j = await r.json();
+          if (!r.ok || j.success === false || j.ok === false) {
+            lastError = String(j.error || j.message || `HTTP ${r.status}`);
+            continue;
+          }
+          return (j && j.data) || j;
+        } catch (err) {
+          lastError = err && err.message ? err.message : String(err);
+        }
+      }
+    }
+    throw new Error(lastError || 'time-rail maintenance sync unavailable');
+  }
+
+  function startRuntimeStatusPolling(root, layer) {
+    if (!root || !layer) return;
+    if (root.__empWfRuntimeTimer) {
+      clearInterval(root.__empWfRuntimeTimer);
+      root.__empWfRuntimeTimer = null;
+    }
+    const run = () => {
+      setMaintenanceSyncStatus('运行时状态拉取中…', 'running');
+      fetchRuntimeStatus()
+        .then((wrap) => {
+          if (!wrap || wrap.error) {
+            root.classList.add('is-runtime-status-error');
+            const msg = (wrap && wrap.error) || 'time-rail status 不可用（MODstore 未启动或 API 503）';
+            root.setAttribute('data-runtime-status-error', msg);
+            setMaintenanceSyncReady(false);
+            setMaintenanceSyncStatus(msg, 'error');
+            return;
+          }
+          root.classList.remove('is-runtime-status-error');
+          root.removeAttribute('data-runtime-status-error');
+          if (wrap.coverage) {
+            root.dataset.empWfStatusCoverage = String(wrap.coverage.status_coverage_pct ?? '');
+            root.dataset.empWfObservedCoverage = String(wrap.coverage.observed_coverage_pct ?? '');
+            root.dataset.empWfMissingEvidence = String(wrap.coverage.missing_evidence_nodes ?? '');
+            const total = Number(wrap.coverage.total_nodes || Object.keys(wrap.nodes || {}).length || 0);
+            const missing = Number(wrap.coverage.missing_evidence_nodes || 0);
+            const queued = Number(wrap.coverage.maintenance_queued_nodes || 0);
+            const autoPolicy = shouldAutoMaintenanceSync(root, wrap.coverage);
+            if (autoPolicy) {
+              void autoTriggerMaintenanceSync(root, wrap.coverage);
+            }
+            setMaintenanceSyncStatus(`已连接状态服务（覆盖 ${total}；缺证 ${missing}；待自维护 ${queued}）`, 'ok');
+            setMaintenanceSyncReady(true);
+          }
+          if (wrap.nodes) applyRuntimeStatusToLayer(layer, wrap.nodes);
+          const seconds = Number(wrap.refresh_after_seconds || 15);
+          const nextMs = Math.max(5000, Math.min(seconds * 1000, 60000));
+          if (root.__empWfRuntimeIntervalMs !== nextMs) {
+            if (root.__empWfRuntimeTimer) clearInterval(root.__empWfRuntimeTimer);
+            root.__empWfRuntimeIntervalMs = nextMs;
+            root.__empWfRuntimeTimer = setInterval(run, nextMs);
+          }
+        })
+        .catch((err) => {
+          root.classList.add('is-runtime-status-error');
+          root.setAttribute(
+            'data-runtime-status-error',
+            err && err.message ? err.message : 'time-rail status fetch failed',
+          );
+          setMaintenanceSyncReady(false);
+          setMaintenanceSyncStatus(err && err.message ? err.message : 'time-rail status fetch failed', 'error');
+        });
+    };
+    root.__empWfRuntimeRefreshStatus = run;
+    run();
+  }
+
   function applyRuntimeStatusToLayer(layer, nodesById) {
     if (!layer || !nodesById) return;
     layer.querySelectorAll('.emp-wf-radial-node[data-emp-wf-node]').forEach((el) => {
@@ -822,24 +1074,41 @@ const EmpWfRadialGraph = (() => {
         'emp-wf-radial-node--runtime-fail',
         'emp-wf-radial-node--runtime-guard',
         'emp-wf-radial-node--runtime-unknown',
+        'emp-wf-radial-node--runtime-missing',
+        'emp-wf-radial-node--runtime-seen',
+        'emp-wf-radial-node--runtime-todo',
       );
       if (!row) {
-        el.classList.add('emp-wf-radial-node--runtime-unknown');
+        el.classList.add('emp-wf-radial-node--runtime-missing');
+        el.dataset.empWfProofShort = 'miss';
         return;
       }
       if (row.guard_active) el.classList.add('emp-wf-radial-node--runtime-guard');
       else if (row.ok === true) el.classList.add('emp-wf-radial-node--runtime-ok');
       else if (row.ok === false) el.classList.add('emp-wf-radial-node--runtime-fail');
+      else if (row.observed) el.classList.add('emp-wf-radial-node--runtime-seen');
+      else if (row.proof_status === 'maintenance_queued') el.classList.add('emp-wf-radial-node--runtime-todo');
+      else if (row.proof_status === 'missing_evidence') el.classList.add('emp-wf-radial-node--runtime-missing');
       else el.classList.add('emp-wf-radial-node--runtime-unknown');
+      const missing = Array.isArray(row.missing_evidence) ? row.missing_evidence.join('; ') : '';
       const hint = [
         row.last_run ? 'last_run: ' + row.last_run : '',
         row.ok === true ? 'ok' : row.ok === false ? 'fail' : 'unknown',
         row.guard_active ? 'guard_active' : '',
+        row.proof_status ? 'proof: ' + row.proof_status : '',
+        row.evidence_count != null ? 'evidence: ' + row.evidence_count : '',
         row.source ? 'src: ' + row.source : '',
+        missing ? 'missing: ' + missing : '',
       ].filter(Boolean).join(' · ');
-      if (hint) el.title = (el.title ? el.title + '\n' : '') + hint;
+      const baseTitle = el.dataset.empWfBaseTitle || el.title || '';
+      el.dataset.empWfBaseTitle = baseTitle;
+      if (hint) el.title = baseTitle + '\n' + hint;
       el.dataset.empWfRuntimeOk = row.ok === true ? '1' : row.ok === false ? '0' : '';
       el.dataset.empWfGuardActive = row.guard_active ? '1' : '0';
+      el.dataset.empWfObserved = row.observed ? '1' : '0';
+      el.dataset.empWfProofStatus = row.proof_status || '';
+      el.dataset.empWfEvidenceCount = String(row.evidence_count || 0);
+      el.dataset.empWfProofShort = proofShort(row);
     });
   }
 
@@ -987,6 +1256,41 @@ const EmpWfRadialGraph = (() => {
     const toolbar = document.querySelector('.emp-wf-diagram-toolbar');
     if (!toolbar || toolbar.getAttribute('data-bound') === '1') return;
     toolbar.setAttribute('data-bound', '1');
+    const controls = getMaintenanceSyncControls();
+    setMaintenanceSyncStatus('等待运行时状态加载…');
+    if (controls.syncBtn) {
+      controls.syncBtn.disabled = true;
+      if (!controls.syncBtn.__empWfBound) {
+        controls.syncBtn.__empWfBound = true;
+        controls.syncBtn.addEventListener('click', async () => {
+          const root = document.getElementById('emp-wf-radial-root');
+          const refresh = root && root.__empWfRuntimeRefreshStatus;
+          controls.syncBtn.disabled = true;
+          controls.syncBtn.textContent = '补齐中…';
+          setMaintenanceSyncStatus('自维护任务提交中…', 'running');
+          try {
+            const r = await syncMissingEvidenceBacklog(32);
+            const added = Number(r && r.added ? r.added : 0);
+            const skipped = Number(r && r.skipped ? r.skipped : 0);
+            const total = Number(r && r.total_missing ? r.total_missing : 0);
+            const chunks = [];
+            if (!Number.isNaN(added)) chunks.push(`已入队 ${added}`);
+            if (!Number.isNaN(skipped)) chunks.push(`已存在 ${skipped}`);
+            if (!Number.isNaN(total)) chunks.push(`缺证 ${total}`);
+            setMaintenanceSyncStatus(`补齐完成：${chunks.length ? chunks.join('，') : '任务已触发'}`, 'ok');
+            if (typeof refresh === 'function') {
+              setMaintenanceSyncStatus('自维护完成，刷新状态…', 'running');
+              await refresh();
+            }
+          } catch (err) {
+            setMaintenanceSyncStatus(`补齐失败：${err && err.message ? err.message : String(err || 'unknown')}`, 'error');
+          } finally {
+            controls.syncBtn.textContent = '自维护：补齐缺证';
+            controls.syncBtn.disabled = false;
+          }
+        });
+      }
+    }
   }
 
   function resolveInitialView() {

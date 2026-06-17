@@ -58,12 +58,14 @@ export function resolvePairingHost(): string {
   return '127.0.0.1';
 }
 
-/** QR 内嵌 shortCode（6位数字），App 通过云端查询获取 host/port（不暴露内网 IP）。 */
+/** QR 内嵌短码，同时保留 host/port 作为首次绑定的局域网直连兜底。 */
 export function buildPairingQrText(payload: PairingPayload): string {
-  // v2: QR 只包含配对码，手机端通过 /pairing/lookup 查询实际连接信息
   return JSON.stringify({
     v: 2,
-    t: payload.shortCode || payload.nonce, // 优先用短码
+    t: payload.shortCode || payload.nonce,
+    host: payload.host,
+    port: payload.port,
+    nonce: payload.nonce,
   });
 }
 

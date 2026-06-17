@@ -1,9 +1,11 @@
-"""太阳鸟交付：首次启动将预置花名册写入主库 products/customers。"""
+"""太阳鸟交付：首次启动同步业务文件并写入主库 products/customers。"""
 
 from __future__ import annotations
 
 import json
 import logging
+import os
+import shutil
 from pathlib import Path
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -12,18 +14,100 @@ logger = logging.getLogger(__name__)
 
 ROSTER_FILENAME = "sunbird-roster.json"
 APPLIED_MARKER = "sunbird-roster.applied"
+SEED_ROOT_ENV = "XCAGI_SUNBIRD_SEED_ROOT"
+SEED_DIRS = ("424", "data/mod_dbs")
+SEED_FILES = (f"config/{ROSTER_FILENAME}",)
+
+
+def _repo_seed_root() -> Path:
+    return Path(__file__).resolve().parents[2] / "delivery" / "sunbird-seed"
+
+
+def _seed_root_candidates(data_root: Path) -> list[Path]:
+    root = data_root.resolve()
+    raw_env = (os.environ.get(SEED_ROOT_ENV) or "").strip()
+    candidates: list[Path] = []
+    if raw_env:
+        candidates.append(Path(raw_env).expanduser())
+    candidates.extend(
+        [
+            root,
+            root.parent,
+            _repo_seed_root(),
+        ]
+    )
+
+    out: list[Path] = []
+    seen: set[Path] = set()
+    for candidate in candidates:
+        try:
+            resolved = candidate.resolve()
+        except RECOVERABLE_ERRORS:
+            continue
+        if resolved in seen or not resolved.exists():
+            continue
+        seen.add(resolved)
+        out.append(resolved)
+    return out
+
+
+def _has_seed_payload(path: Path) -> bool:
+    return any((path / rel).exists() for rel in (*SEED_DIRS, *SEED_FILES))
 
 
 def _roster_candidates(data_root: Path) -> list[Path]:
-    root = data_root.resolve()
-    return [
-        root / "config" / ROSTER_FILENAME,
-        root.parent / "config" / ROSTER_FILENAME,
-    ]
+    return [root / "config" / ROSTER_FILENAME for root in _seed_root_candidates(data_root)]
 
 
 def _marker_path(data_root: Path) -> Path:
     return data_root.resolve() / "config" / APPLIED_MARKER
+
+
+def _copy_missing_file(src: Path, dst: Path) -> bool:
+    if dst.exists():
+        return False
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(src, dst)
+    return True
+
+
+def _copy_missing_tree(src: Path, dst: Path) -> int:
+    if not src.is_dir():
+        return 0
+    copied = 0
+    for item in src.rglob("*"):
+        if not item.is_file():
+            continue
+        rel = item.relative_to(src)
+        if _copy_missing_file(item, dst / rel):
+            copied += 1
+    return copied
+
+
+def sync_sunbird_delivery_files(data_root: Path | None = None) -> int:
+    """把太阳鸟交付种子文件补齐到桌面工作区；只复制缺失文件。"""
+    if data_root is None:
+        try:
+            from app.desktop_runtime.paths import get_desktop_data_dir
+
+            data_root = get_desktop_data_dir()
+        except RECOVERABLE_ERRORS:
+            return 0
+
+    root = Path(data_root).resolve()
+    copied = 0
+    for seed_root in _seed_root_candidates(root):
+        if seed_root == root or not _has_seed_payload(seed_root):
+            continue
+        for rel in SEED_DIRS:
+            copied += _copy_missing_tree(seed_root / rel, root / rel)
+        for rel in SEED_FILES:
+            src = seed_root / rel
+            if src.is_file() and _copy_missing_file(src, root / rel):
+                copied += 1
+    if copied:
+        logger.info("太阳鸟交付文件已补齐到桌面工作区：%s 个文件", copied)
+    return copied
 
 
 def apply_sunbird_roster_seed_if_needed(data_root: Path | None = None) -> bool:
@@ -37,6 +121,7 @@ def apply_sunbird_roster_seed_if_needed(data_root: Path | None = None) -> bool:
             return False
 
     root = Path(data_root).resolve()
+    sync_sunbird_delivery_files(root)
     marker = _marker_path(root)
     if marker.is_file():
         return False
@@ -136,4 +221,4 @@ def apply_sunbird_roster_seed_if_needed(data_root: Path | None = None) -> bool:
     return True
 
 
-__all__ = ["apply_sunbird_roster_seed_if_needed"]
+__all__ = ["apply_sunbird_roster_seed_if_needed", "sync_sunbird_delivery_files"]

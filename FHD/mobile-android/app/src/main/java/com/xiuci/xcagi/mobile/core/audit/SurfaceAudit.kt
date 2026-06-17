@@ -69,7 +69,6 @@ object SurfaceAudit {
         Routes.CHAT,
         Routes.WORK,
         Routes.DISCOVER,
-        Routes.WORKBENCH,
         Routes.PROFILE,
         Routes.IM,
         Routes.APPROVAL,
@@ -85,6 +84,11 @@ object SurfaceAudit {
         Routes.SETTINGS,
         Routes.ABOUT,
         Routes.SCAN_QR,
+        Routes.AI_CIRCLE,
+        Routes.AI_EMPLOYEE_PROFILE
+                .replace("{modId}", "{mod_id}")
+                .replace("{employeeId}", "{employee_id}"),
+        Routes.AI_EMPLOYEES,
     )
 
     fun parseIntent(intent: Intent?): SurfaceAuditLaunch {

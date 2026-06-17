@@ -54,13 +54,14 @@
 
         <template v-else-if="currentStep === 'industry'">
           <h1>先定行业</h1>
-          <p class="lead">
+          <p v-if="openIndustryLeadNames.length" class="lead">
             当前开放
             <template v-for="(name, idx) in openIndustryLeadNames" :key="name">
               <strong>{{ name }}</strong><template v-if="idx < openIndustryLeadNames.length - 1"> 与 </template>
             </template>
-            两套行业方向；选好后下一步会列出要补的基础线。
+            {{ industryLeadKindText }}；选好后下一步会列出要补的基础线。
           </p>
+          <p v-else class="lead">正在读取当前账号可选行业，读取完成后再继续下一步。</p>
           <p class="industry-open-hint">请选择您的行业方向</p>
           <div class="industry-pick industry-pick--open" role="listbox" aria-label="可选行业">
             <button
@@ -78,6 +79,9 @@
               <span class="industry-chip-scenario">{{ chipScenarioText(preset.scenario) }}</span>
             </button>
           </div>
+          <p v-if="!openIndustryOptions.length" class="industry-loading-hint">
+            正在加载行业权限…
+          </p>
           <p v-if="previewIndustryOptions.length" class="industry-preview-hint">更多行业（即将开放，暂不可选）</p>
           <div v-if="previewIndustryOptions.length" class="industry-pick industry-pick--preview" aria-hidden="true">
             <div
@@ -91,7 +95,7 @@
             </div>
           </div>
           <div class="actions">
-            <button type="button" class="btn primary" @click="confirmIndustryAndNext">
+            <button type="button" class="btn primary" :disabled="!canConfirmIndustry" @click="confirmIndustryAndNext">
               下一步：看要补哪些侧栏基础线
             </button>
             <button type="button" class="btn ghost" @click="openModStore">打开扩展市场</button>
@@ -138,9 +142,25 @@
             v-if="baselineOk && !loading"
             class="sidebar-shell-note muted"
           >
-            进入对话后，主导航会<strong>立刻长出本行业业务菜单</strong>（如产品/客户/出货单等，名称随<strong>{{ pickedIndustryName }}</strong>自动适配）。
+            进入对话后，主导航会<strong>立刻长出本行业业务菜单</strong>，名称随<strong>{{ pickedIndustryName }}</strong>自动适配。
             部门/人员等业务改名与 AI 员工，仍由<strong>账号定制 Mod</strong>装齐后补充。
           </p>
+          <div
+            v-if="industrySidebarPreviewLabels.length"
+            class="sidebar-preview"
+            aria-label="进入后补齐的侧栏菜单"
+          >
+            <p class="sidebar-preview-title">进入后侧栏将补齐</p>
+            <div class="sidebar-preview-list">
+              <span
+                v-for="label in industrySidebarPreviewLabels"
+                :key="label"
+                class="sidebar-preview-chip"
+              >
+                {{ label }}
+              </span>
+            </div>
+          </div>
           <p
             v-if="showNoAccountCustomHint"
             class="account-custom-empty-hint muted"
@@ -294,6 +314,7 @@ import {
   invalidateHostPackCompletionCache,
   markHostPackSkippedThisSession,
 } from '@/utils/hostPackOnboardingGate'
+import { resolveCoreNavLabel } from '@/utils/coreNavLabel'
 
 const route = useRoute()
 const router = useRouter()
@@ -303,6 +324,7 @@ const { buildContext: tutorialBuildContext } = useTutorialCatalog()
 
 const industryOptions = listIndustryPresets()
 const onboardingCatalog = ref(null)
+const onboardingCatalogLoaded = ref(false)
 
 function catalogChipRow(pkg) {
   const id = String(pkg?.industry_id || '').trim()
@@ -319,6 +341,7 @@ const openIndustryOptions = computed(() => {
   if (catalog) {
     return (catalog.open_packages || []).map(catalogChipRow)
   }
+  if (isEnterpriseEdition(productSku.value)) return []
   return industryOptions
     .filter((p) => isOnboardingIndustryOpen(p.id))
     .map((p) => ({ id: p.id, name: p.name, scenario: p.scenario, productName: '' }))
@@ -329,6 +352,7 @@ const previewIndustryOptions = computed(() => {
   if (Array.isArray(previewPkgs) && previewPkgs.length) {
     return previewPkgs.map(catalogChipRow)
   }
+  if (isEnterpriseEdition(productSku.value) && !onboardingCatalogLoaded.value) return []
   return industryOptions
     .filter((p) => !isOnboardingIndustryOpen(p.id))
     .map((p) => ({ id: p.id, name: p.name, scenario: p.scenario, productName: '' }))
@@ -339,7 +363,14 @@ const openIndustryLeadNames = computed(() => {
   if (Array.isArray(ids) && ids.length) return ids
   return openIndustryOptions.value.map((p) => p.id)
 })
+const industryLeadKindText = computed(() => {
+  const count = openIndustryLeadNames.value.length
+  return count > 1 ? `${count} 套行业方向` : '行业方向'
+})
 const pickedIndustryId = ref(resolveDefaultPickedIndustryId())
+const canConfirmIndustry = computed(
+  () => openIndustryOptions.value.length > 0 && isIndustrySelectable(pickedIndustryId.value),
+)
 
 function industryPackageLabel(industryId) {
   const id = String(industryId || '').trim()
@@ -407,8 +438,33 @@ function onWelcomeLogoError() {
   }
 }
 
-const productSku = ref('generic')
+function initialProductSku() {
+  return String(import.meta.env.VITE_XCAGI_PRODUCT_SKU || 'generic').trim().toLowerCase() || 'generic'
+}
+
+const productSku = ref(initialProductSku())
 const baselineOk = computed(() => baselinePlan.value?.baseline_ready === true)
+const SIDEBAR_PREVIEW_MENU_KEYS = [
+  'products',
+  'customers',
+  'orders',
+  'shipment-records',
+  'materials',
+  'data-sources',
+  'print',
+  'printer-list',
+  'template-preview',
+]
+const industrySidebarPreviewLabels = computed(() => {
+  const id = String(pickedIndustryId.value || '').trim()
+  const labels = SIDEBAR_PREVIEW_MENU_KEYS
+    .map((key) => resolveCoreNavLabel(key, id, null))
+    .filter(Boolean)
+  if (id === '考勤') {
+    labels.unshift('考勤表转换')
+  }
+  return [...new Set(labels)]
+})
 const baselineGroups = computed(() => baselinePlan.value?.groups || [])
 const SIDEBAR_BASELINE_GROUP_IDS = new Set(['core', 'host'])
 const sidebarBaselineGroups = computed(() =>
@@ -456,6 +512,9 @@ const currentIndex = computed(() => {
 const currentStepMeta = computed(() => steps.find((s) => s.id === currentStep.value) || null)
 
 const editionLabel = computed(() => {
+  const sku = String(productSku.value || '').trim().toLowerCase()
+  if (sku === 'enterprise') return '企业版 enterprise'
+  if (sku === 'personal') return '个人版 personal'
   const e = readBuildEdition()
   if (e === 'minimal') return '空壳 minimal'
   if (e === 'generic') return '通用 generic'
@@ -688,6 +747,8 @@ onMounted(async () => {
     }
   } catch {
     /* 离线兜底：仅展示 preset 名称 */
+  } finally {
+    onboardingCatalogLoaded.value = true
   }
   currentStep.value = flow.resolveEntryStep(route.query.step)
   if (!industryStore.isLoaded) {
@@ -930,6 +991,16 @@ onMounted(async () => {
   color: #94a3b8;
 }
 
+.industry-loading-hint {
+  margin: 12px 0 4px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  color: #64748b;
+  font-size: 13px;
+}
+
 .industry-chip-product {
   font-size: 12px;
   font-weight: 600;
@@ -1040,6 +1111,37 @@ onMounted(async () => {
   font-size: 13px;
   line-height: 1.55;
   color: #64748b;
+}
+
+.sidebar-preview {
+  margin: 0 0 14px;
+  padding: 10px 0 2px;
+}
+
+.sidebar-preview-title {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.sidebar-preview-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.sidebar-preview-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .baseline-group h3 {

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   GENERIC_HOST_MOD_IDS,
   isHostMountedModMenuPath,
@@ -7,9 +7,15 @@ import {
   shouldAutoEnableMinimalPlatformShell,
   shouldAutoEnablePlatformShell,
   shouldHideAttendanceModSidebarMenu,
+  shouldSuppressRedundantModMenuInFullHostSidebar,
 } from './genericModPack'
 
 describe('genericModPack', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs()
+    localStorage.clear()
+  })
+
   it('minimal pack is subset of generic', () => {
     for (const mid of MINIMAL_HOST_MOD_IDS) {
       expect(GENERIC_HOST_MOD_IDS).toContain(mid)
@@ -71,6 +77,17 @@ describe('genericModPack', () => {
     vi.stubEnv('VITE_XCMAX_ADMIN_CONSOLE', '')
     vi.stubEnv('VITE_XCMAX_SUNBIRD_CONSOLE', '1')
     expect(shouldHideAttendanceModSidebarMenu('mod-attendance-industry-home')).toBe(false)
+  })
+
+  it('does not apply full-sidebar suppression to enterprise generic host builds', () => {
+    vi.stubEnv('VITE_XCAGI_PRODUCT_SKU', 'enterprise')
+    vi.stubEnv('VITE_XCAGI_EDITION', 'generic')
+    vi.stubEnv('VITE_XCAGI_DEFAULT_PLATFORM_SHELL', '1')
+    expect(shouldSuppressRedundantModMenuInFullHostSidebar('mod-planner-chat')).toBe(false)
+
+    vi.stubEnv('VITE_XCAGI_EDITION', 'full')
+    vi.stubEnv('VITE_XCAGI_DEFAULT_PLATFORM_SHELL', '')
+    expect(shouldSuppressRedundantModMenuInFullHostSidebar('mod-planner-chat')).toBe(true)
   })
 
   it('readBuildEdition from env', async () => {

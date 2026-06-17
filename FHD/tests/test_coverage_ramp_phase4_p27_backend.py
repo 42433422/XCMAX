@@ -127,7 +127,6 @@ def im_client():
         patch.object(im_routes, "_ensure_schema"),
         patch.object(im_routes, "HostSessionLocal", return_value=mock_db),
         patch.object(im_routes, "ImApplicationService", return_value=mock_svc),
-        patch.object(im_routes, "session_id_from_request", return_value="sess"),
         patch.object(im_routes.im_ws_hub, "send_to_user", new_callable=AsyncMock),
         patch.object(im_routes, "_notify_offline_im_members", new_callable=AsyncMock),
     ):
@@ -141,7 +140,7 @@ def test_im_list_conversations(im_client) -> None:
     body = resp.json()
     assert body["success"] is True
     assert body["user_id"] == 1
-    mock_svc.list_conversations.assert_called_once_with(1, "sess")
+    mock_svc.list_conversations.assert_called_once_with(1)
 
 
 def test_im_list_contacts_filters_keyword(im_client) -> None:

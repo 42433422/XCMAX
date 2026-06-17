@@ -10,7 +10,7 @@ import {
   screen,
   shell
 } from 'electron'
-import { ChildProcessWithoutNullStreams, spawn } from 'node:child_process'
+import { ChildProcessWithoutNullStreams, execFile, spawn } from 'node:child_process'
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import { networkInterfaces } from 'node:os'
@@ -101,6 +101,7 @@ function backendEditionEnv(): Record<string, string> {
 
 let mainWindow: BrowserWindow | null = null
 let backendProcess: ChildProcessWithoutNullStreams | null = null
+let backendLogStream: fs.WriteStream | null = null
 let tray: Tray | null = null
 let restartCount = 0
 
@@ -112,6 +113,26 @@ function repoRoot(): string {
 function shellIconPath(): string {
   const name = process.platform === 'win32' ? 'icon.ico' : 'icon.png'
   return path.join(__dirname, '..', 'resources', name)
+}
+
+function packagedBackendCandidates(): string[] {
+  const backendDir = path.join(process.resourcesPath, 'backend')
+  const exe = process.platform === 'win32' ? 'xcagi-backend.exe' : 'xcagi-backend'
+  return [
+    path.join(backendDir, exe),
+    path.join(backendDir, 'xcagi-backend', exe),
+    path.join(backendDir, '_internal', exe)
+  ]
+}
+
+function findPackagedBackendExecutable(): string {
+  const candidates = packagedBackendCandidates()
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      return candidate
+    }
+  }
+  return candidates[0]
 }
 
 function backendExecutable(): { command: string; args: string[]; cwd: string } {
@@ -135,11 +156,7 @@ function backendExecutable(): { command: string; args: string[]; cwd: string } {
     }
   }
 
-  const backendDir = path.join(process.resourcesPath, 'backend')
-  const command =
-    process.platform === 'win32'
-      ? path.join(backendDir, 'xcagi-backend.exe')
-      : path.join(backendDir, 'xcagi-backend')
+  const command = findPackagedBackendExecutable()
 
   return {
     command,
@@ -154,6 +171,45 @@ function backendExecutable(): { command: string; args: string[]; cwd: string } {
       dataDir
     ],
     cwd: path.dirname(command)
+  }
+}
+
+function ensureBackendLogStream(): fs.WriteStream | null {
+  if (backendLogStream) {
+    return backendLogStream
+  }
+  try {
+    const logDir = path.join(app.getPath('userData'), 'logs')
+    fs.mkdirSync(logDir, { recursive: true })
+    backendLogStream = fs.createWriteStream(path.join(logDir, 'electron-backend.log'), {
+      flags: 'a'
+    })
+    backendLogStream.write(`\n[${new Date().toISOString()}] XCAGI desktop backend bootstrap\n`)
+    backendLogStream.write(
+      JSON.stringify(
+        {
+          platform: process.platform,
+          arch: process.arch,
+          packaged: app.isPackaged,
+          resourcesPath: app.isPackaged ? process.resourcesPath : null,
+          userData: app.getPath('userData'),
+          sku: readPackagedProductSku() || 'generic'
+        },
+        null,
+        2
+      ) + '\n'
+    )
+    return backendLogStream
+  } catch {
+    return null
+  }
+}
+
+function writeBackendLog(line: string): void {
+  try {
+    ensureBackendLogStream()?.write(line)
+  } catch {
+    /* ignore logging failures */
   }
 }
 
@@ -290,11 +346,19 @@ function startBackend(): void {
 
   const executable = backendExecutable()
   if (app.isPackaged && !fs.existsSync(executable.command)) {
-    void dialog.showErrorBox(APP_NAME, `找不到后端程序：${executable.command}`)
+    const candidates = packagedBackendCandidates().map(candidate => `- ${candidate}`).join('\n')
+    const detail =
+      `找不到后端程序：${executable.command}\n\n` +
+      `已检查：\n${candidates}\n\n` +
+      `请确认安装包包含 resources/backend/${process.platform === 'win32' ? 'xcagi-backend.exe' : 'xcagi-backend'}。`
+    writeBackendLog(`[error] ${detail}\n`)
+    void dialog.showErrorBox(APP_NAME, detail)
     return
   }
 
   startupMarks.backendSpawnMs = Date.now()
+  writeBackendLog(`[spawn] ${executable.command} ${executable.args.join(' ')}\n`)
+  writeBackendLog(`[cwd] ${executable.cwd}\n`)
   backendProcess = spawn(executable.command, executable.args, {
     cwd: executable.cwd,
     env: {
@@ -308,9 +372,23 @@ function startBackend(): void {
     windowsHide: true
   })
 
-  backendProcess.stdout.on('data', data => process.stdout.write(`[xcagi-backend] ${data}`))
-  backendProcess.stderr.on('data', data => process.stderr.write(`[xcagi-backend] ${data}`))
+  backendProcess.stdout.on('data', data => {
+    process.stdout.write(`[xcagi-backend] ${data}`)
+    writeBackendLog(`[stdout] ${data}`)
+  })
+  backendProcess.stderr.on('data', data => {
+    process.stderr.write(`[xcagi-backend] ${data}`)
+    writeBackendLog(`[stderr] ${data}`)
+  })
+  backendProcess.on('error', error => {
+    backendProcess = null
+    writeBackendLog(`[error] backend spawn failed: ${error.message}\n`)
+    if (!app.isQuitting) {
+      void dialog.showErrorBox(APP_NAME, `后端服务启动失败：${error.message}`)
+    }
+  })
   backendProcess.on('exit', code => {
+    writeBackendLog(`[exit] backend process exited code=${code}\n`)
     backendProcess = null
     if (app.isQuitting) {
       return
@@ -333,8 +411,8 @@ function runBackendMigration(): Promise<void> {
         ...process.env,
         XCAGI_DESKTOP_MODE: '1',
         XCAGI_DATA_DIR: app.getPath('userData'),
-        XCAGI_GENERIC_EDITION: '1',
-        XCAGI_PLATFORM_SHELL: '1',
+        XCAGI_UVICORN_RELOAD: '0',
+        ...backendEditionEnv(),
         PYTHONUTF8: '1'
       },
       windowsHide: true
@@ -439,7 +517,18 @@ function stopBackend(): void {
   if (!child || child.killed) {
     return
   }
-  child.kill(process.platform === 'win32' ? undefined : 'SIGTERM')
+  writeBackendLog(`[${new Date().toISOString()}] backend stop requested\n`)
+  if (process.platform === 'win32' && child.pid) {
+    execFile('taskkill', ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true }, error => {
+      if (error && !child.killed) {
+        child.kill()
+      }
+    })
+  } else {
+    child.kill('SIGTERM')
+  }
+  backendLogStream?.end(`[${new Date().toISOString()}] backend log closed\n`)
+  backendLogStream = null
 }
 
 async function createWindow(): Promise<void> {

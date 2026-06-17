@@ -52,7 +52,8 @@ build_one_sku() {
 
   (cd desktop && [ -d node_modules ] || npm install)
   (cd desktop && npm version "${VERSION}" --no-git-tag-version --allow-same-version)
-  (cd desktop && npx electron-builder --mac dmg zip \
+  (cd desktop && npm run build)
+  (cd desktop && npx electron-builder --mac dmg zip --publish never \
     "--config.directories.output=../release/xcagi-v${VERSION}/${sku}" \
     "--config.appId=$(sku_app_id "$sku")" \
     "--config.publish.url=$(sku_update_url "$sku")" \

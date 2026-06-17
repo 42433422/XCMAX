@@ -54,6 +54,24 @@ def test_time_rail_graph(client: TestClient) -> None:
 
 
 @pytest.mark.asyncio
+async def test_time_rail_maintenance_sync_route_reads_body_limit(client: TestClient) -> None:
+    fake = MagicMock()
+    fake.maintenance_sync = AsyncMock(return_value={"ok": True, "added": 2})
+    with patch(
+        "app.application.time_rail_app_service.get_time_rail_app_service",
+        return_value=fake,
+    ):
+        r = client.post(
+            "/api/admin/production-line/time-rail/maintenance/sync",
+            json={"limit": 7},
+        )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["success"] is True
+    fake.maintenance_sync.assert_awaited_once_with(limit=7)
+
+
+@pytest.mark.asyncio
 async def test_time_rail_status_route(client: TestClient) -> None:
     fake = MagicMock()
     fake.runtime_status = AsyncMock(return_value={"nodes": {}, "degraded": False})
