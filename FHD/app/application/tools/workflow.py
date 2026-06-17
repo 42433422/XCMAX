@@ -24,7 +24,7 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
-from app.infrastructure.auth.db_token import configured_db_write_token
+from app.infrastructure.auth.db_token import configured_db_write_token  # noqa: F401
 from app.infrastructure.excel.schema_service import ExcelSchemaUnderstandingService
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -374,7 +374,7 @@ def _base_registry() -> list[dict[str, Any]]:
             "function": {
                 "name": "import_excel_to_database",
                 "description": (
-                    "将 Excel 数据导入到数据库。系统会分析 Excel 内容并自动匹配字段进行导入。报价单等多行标题表必须传 header_row（与 extract-grid / excel_analysis 一致），否则列名会变成 Unnamed、映射错乱。可选 last_data_row_1based 截断表尾说明文字；未传时仍会对典型合同/报价表尾条款行做启发式过滤。如果系统需要授权令牌，会提示用户输入 DB_WRITE_TOKEN。"
+                    "将 Excel 数据导入到数据库。系统会分析 Excel 内容并自动匹配字段进行导入。报价单等多行标题表必须传 header_row（与 extract-grid / excel_analysis 一致），否则列名会变成 Unnamed、映射错乱。可选 last_data_row_1based 截断表尾说明文字；未传时仍会对典型合同/报价表尾条款行做启发式过滤。"
                     "【重要】参数 unit_name 在本系统中表示「客户公司全称」（与主库 purchase_units / 产品上 unit 字段一致），用于把产品挂到该客户下；不是 SKU 计量单位（件、桶、箱等）。缺省时可从运行时上下文 customer_hint / excel_customer_hint 或 Excel「客户/购买单位」列推断。"
                     "若上下文已含 excel_customer_hint 或已解析的文档客户名，不要在对话中再向用户索要公司名称，直接调用本工具即可（unit_name 可填该名或留空）。"
                 ),
@@ -472,7 +472,7 @@ def get_workflow_tool_registry() -> list[dict[str, Any]]:
         _workflow_tool_registry_cache, \
         _workflow_tool_registry_bulk_token_present, \
         _workflow_registry_cache_ver
-    bulk_on = bool((os.environ.get("FHD_DB_WRITE_TOKEN") or "").strip())
+    bulk_on = True
     if (
         _workflow_tool_registry_cache is not None
         and _workflow_tool_registry_bulk_token_present == bulk_on
@@ -494,7 +494,7 @@ def get_workflow_tool_registry() -> list[dict[str, Any]]:
                 "type": "function",
                 "function": {
                     "name": "products_bulk_import",
-                    "description": "批量导入产品数据到数据库。需要 DB_WRITE_TOKEN 环境变量授权。",
+                    "description": "批量导入产品数据到数据库。",
                     "parameters": {
                         "type": "object",
                         "properties": {
@@ -732,9 +732,6 @@ def execute_workflow_tool(
                 ensure_ascii=False,
             )
     if name == "products_bulk_import":
-        env_token = (os.environ.get("FHD_DB_WRITE_TOKEN") or "").strip()
-        if env_token and (db_write_token or "") != env_token:
-            return json.dumps({"error": "unauthorized"}, ensure_ascii=False)
         from app.application.excel_imports import run_bulk_import
 
         out = run_bulk_import(args)
@@ -819,25 +816,7 @@ def _handle_import_excel_to_database(
     db_write_token: str | None = None,
 ) -> str:
     """处理 Excel 导入数据库请求。"""
-    expected_write_token = str(configured_db_write_token() or "").strip()
-    if expected_write_token:
-        provided_token = str(args.get("db_write_token") or db_write_token or "").strip()
-        if not provided_token:
-            return json.dumps(
-                {
-                    "success": False,
-                    "requires_token": True,
-                    "token_name": "DB_WRITE_TOKEN",
-                    "token_description": "数据库写入授权令牌",
-                    "message": "导入数据需要数据库写入授权令牌。请输入令牌继续。",
-                },
-                ensure_ascii=False,
-            )
-        if provided_token != expected_write_token:
-            return json.dumps(
-                {"success": False, "error": "invalid_token", "message": "令牌无效，请重新输入"},
-                ensure_ascii=False,
-            )
+    _ = db_write_token
 
     try:
         import_type = str(args.get("import_type") or "products")
@@ -931,8 +910,6 @@ def _handle_import_excel_to_database(
         confirm = bool(args.get("confirm", True))
         if preview_only:
             confirm = False
-        if expected_write_token and not confirm:
-            confirm = True
 
         header_1b = _parse_excel_header_row_1based(args)
         if header_1b is None and excel_analysis_ctx:

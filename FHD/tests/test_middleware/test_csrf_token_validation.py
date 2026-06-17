@@ -48,6 +48,14 @@ def client():
     def logout():
         return {"success": True}
 
+    @app.post("/api/mobile/v1/auth/login")
+    def mobile_login():
+        return {"success": True}
+
+    @app.post("/api/mobile/v1/auth/refresh")
+    def mobile_refresh():
+        return {"success": True}
+
     @app.post("/api/mod-store/install")
     def install():
         return {"success": True}
@@ -99,6 +107,18 @@ def test_logout_exempt_by_default(client):
     assert r.status_code == 200
 
 
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/api/mobile/v1/auth/login",
+        "/api/mobile/v1/auth/refresh",
+    ],
+)
+def test_mobile_auth_endpoints_exempt_by_default(client, path):
+    r = client.post(path)
+    assert r.status_code == 200
+
+
 def test_login_not_exempt_when_env_disables(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("XCAGI_CSRF_EXEMPT_AUTH", "0")
     app = FastAPI()
@@ -110,6 +130,20 @@ def test_login_not_exempt_when_env_disables(monkeypatch: pytest.MonkeyPatch):
 
     client = TestClient(app, raise_server_exceptions=False)
     r = client.post("/api/auth/login")
+    assert r.status_code == 403
+
+
+def test_mobile_login_not_exempt_when_env_disables(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("XCAGI_CSRF_EXEMPT_AUTH", "0")
+    app = FastAPI()
+    app.add_middleware(CSRFMiddleware)
+
+    @app.post("/api/mobile/v1/auth/login")
+    def mobile_login():
+        return {"success": True}
+
+    client = TestClient(app, raise_server_exceptions=False)
+    r = client.post("/api/mobile/v1/auth/login")
     assert r.status_code == 403
 
 

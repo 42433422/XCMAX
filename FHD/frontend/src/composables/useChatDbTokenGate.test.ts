@@ -2,22 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
 import { ref } from 'vue';
 
-const armNext = vi.fn();
-const consumeArm = vi.fn();
-const isArmed = vi.fn();
-const isGrace = vi.fn();
-const readTokens = vi.fn();
 const executeRemote = vi.fn();
-
-vi.mock('@/fhd/dbTokenHeaders', () => ({
-  XCAGI_PROMPT_DB_READ_TOKEN_EVENT: 'xcagi:prompt-db-read',
-  XCAGI_PROMPT_DB_WRITE_TOKEN_EVENT: 'xcagi:prompt-db-write',
-  armNextPlannerChatDbWriteToken: () => armNext(),
-  consumePlannerChatDbWriteTokenArm: () => consumeArm(),
-  isPlannerChatDbWriteTokenArmed: () => isArmed(),
-  isProductsReadGateGraceActive: () => isGrace(),
-  readStoredDbTokens: () => readTokens(),
-}));
 
 import { useChatDbTokenGate } from './useChatDbTokenGate';
 
@@ -35,15 +20,7 @@ beforeEach(() => {
   setActivePinia(createPinia());
   document.body.className = '';
   delete (window as Window & { __XCAGI_IS_PRO_MODE?: boolean }).__XCAGI_IS_PRO_MODE;
-  armNext.mockReset();
-  consumeArm.mockReset();
-  isArmed.mockReset();
-  isGrace.mockReset();
-  readTokens.mockReset();
   executeRemote.mockReset();
-  readTokens.mockReturnValue({ read: 'r1', write: 'w1' });
-  isGrace.mockReturnValue(true);
-  isArmed.mockReturnValue(true);
 });
 
 describe('useChatDbTokenGate', () => {
@@ -54,25 +31,24 @@ describe('useChatDbTokenGate', () => {
     expect(gate.getModeScopedUserId(true)).toBe('web_pro_sess-1');
   });
 
-  it('resolveChatDbTokensForPayload attaches tokens when armed', () => {
+  it('resolveChatDbTokensForPayload never attaches database password tokens', () => {
     const deps = makeDeps();
     const gate = useChatDbTokenGate(deps);
-    expect(gate.resolveChatDbTokensForPayload()).toEqual({
-      db_read_token: 'r1',
-      db_write_token: 'w1',
-    });
-    expect(consumeArm).toHaveBeenCalled();
+    expect(gate.resolveChatDbTokensForPayload()).toEqual({});
   });
 
-  it('handleChatRequiresToken dispatches read prompt', () => {
+  it('handleChatRequiresToken ignores legacy database token requests', () => {
     const deps = makeDeps();
     const gate = useChatDbTokenGate(deps);
     const handler = vi.fn();
     window.addEventListener('xcagi:prompt-db-read', handler);
+    window.addEventListener('xcagi:prompt-db-write', handler);
     gate.handleChatRequiresToken('DB_READ_TOKEN', '只读密钥');
+    gate.handleChatRequiresToken('DB_WRITE_TOKEN', '写入');
     expect(deps.pendingDbWriteChatRetryMessages.value).toBeNull();
-    expect(handler).toHaveBeenCalled();
+    expect(handler).not.toHaveBeenCalled();
     window.removeEventListener('xcagi:prompt-db-read', handler);
+    window.removeEventListener('xcagi:prompt-db-write', handler);
   });
 
   it('onDbWriteUnlockedForChatRetry resumes pending messages', async () => {
@@ -81,7 +57,6 @@ describe('useChatDbTokenGate', () => {
     executeRemote.mockResolvedValue(undefined);
     const gate = useChatDbTokenGate(deps);
     gate.onDbWriteUnlockedForChatRetry();
-    expect(armNext).toHaveBeenCalled();
     expect(executeRemote).toHaveBeenCalledWith(['hello'], { fromWriteUnlock: true });
     expect(deps.pendingDbWriteChatRetryMessages.value).toBeNull();
   });

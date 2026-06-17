@@ -1,30 +1,27 @@
-import { describe, expect, it, beforeEach } from 'vitest'
+import { describe, expect, it } from 'vitest'
+
 import {
+  dbReadHeaders,
+  dbWriteHeaders,
+  getProductsReadLockState,
   isProductsReadGateGraceActive,
-  touchProductsReadGateGrace,
-  LS_DB_READ_TOKEN,
-  LS_DB_WRITE_TOKEN,
-  FHD_STORED_DB_TOKENS_CHANGED_EVENT,
-} from './dbTokenHeaders'
+  probeProductsReadAccess,
+  readStoredDbTokens,
+  shouldAttachDbReadToken,
+  urlNeedsDbReadToken,
+  urlNeedsDbWriteToken,
+} from '@/fhd/dbTokenHeaders'
 
 describe('dbTokenHeaders', () => {
-  beforeEach(() => {
-    sessionStorage.clear()
-    localStorage.clear()
-  })
-
-  it('exports storage keys and event names', () => {
-    expect(LS_DB_READ_TOKEN).toBe('xcagi_db_read_token')
-    expect(LS_DB_WRITE_TOKEN).toBe('xcagi_db_write_token')
-    expect(FHD_STORED_DB_TOKENS_CHANGED_EVENT).toContain('db-tokens')
-  })
-
-  it('grace inactive by default', () => {
+  it('keeps database password gates disabled', async () => {
+    expect(readStoredDbTokens()).toEqual({ read: '', write: '' })
+    expect(dbReadHeaders()).toEqual({})
+    expect(dbWriteHeaders()).toEqual({})
     expect(isProductsReadGateGraceActive()).toBe(false)
-  })
-
-  it('activates grace after touch', () => {
-    touchProductsReadGateGrace()
-    expect(isProductsReadGateGraceActive()).toBe(true)
+    expect(urlNeedsDbReadToken('/api/products/list')).toBe(false)
+    expect(shouldAttachDbReadToken('/api/products/list', 'GET')).toBe(false)
+    expect(urlNeedsDbWriteToken('/api/products/update', 'POST')).toBe(false)
+    await expect(getProductsReadLockState()).resolves.toBe('open')
+    await expect(probeProductsReadAccess()).resolves.toBe(true)
   })
 })
