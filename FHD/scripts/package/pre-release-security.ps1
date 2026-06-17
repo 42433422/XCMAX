@@ -91,12 +91,16 @@ foreach ($sku in @('personal', 'enterprise')) {
   if (-not (Test-Path $skuDir)) {
     Fail "missing SKU dir: $skuDir"
   }
+  $backendExe = Join-Path $skuDir 'win-unpacked\resources\backend\xcagi-backend.exe'
+  if (-not (Test-Path $backendExe)) {
+    Fail "$sku missing packaged backend executable: $backendExe"
+  }
   $modsDir = Join-Path $skuDir 'win-unpacked\resources\backend\_internal\mods'
   if (Test-Path $modsDir) {
     & "$PSScriptRoot\verify-bundled-mods.ps1" -ProductSku $sku -UnpackedDir $modsDir
     Scan-SecretsInTree $modsDir "built-mods-$sku"
   } else {
-    Write-Warning "win-unpacked mods dir not found: $modsDir"
+    Fail "$sku missing bundled mods dir: $modsDir"
   }
   $skuJson = Join-Path $skuDir 'win-unpacked\resources\product-sku.json'
   if (Test-Path $skuJson) {
@@ -104,6 +108,8 @@ foreach ($sku in @('personal', 'enterprise')) {
     if ($meta.sku -ne $sku) {
       Fail "product-sku.json sku=$($meta.sku) != folder $sku"
     }
+  } else {
+    Fail "$sku missing product-sku.json: $skuJson"
   }
   $setup = Get-ChildItem $skuDir -Filter 'XCAGI-*-Setup-*-x64.exe' -File -ErrorAction SilentlyContinue |
     Select-Object -First 1

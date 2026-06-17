@@ -36,7 +36,7 @@
 
 ## 发布 tag 约定（v10 线内）
 
-- **产品版本锚点**：恒 `10.0.0`（见 `FHD/VERSION.md`），**不因功能发版 bump 主版本**。
+- **产品版本锚点**：锁死 v10，恒 `10.0.0`（见 `FHD/VERSION.md`），**不因功能发版 bump 主版本**；路线阶段使用 v10-A/B/C/D，不使用 `v10.1`、`v10.2`、`v10.3` 或 `v11` 作为承诺。
 - **Git tag（发版触发）**：`FHD/v10.0.0` 或 `FHD/v10.*`；**制品身份**用 tarball 内 `git_sha` + `sha256`，非 tag 名。
 - **串联（单一编排入口）**：`FHD/v*` tag 仅触发两个 workflow —— `fhd-ci-cd.yml`（测试+镜像+CVM）与 `fhd-release-orchestrator.yml`。后者先跑 `verify-version-anchors`，再 **dispatch** `fhd-deploy.yml`（K8s，`-rc`→staging / 否则 production）与客户端 `fhd-release-desktop/web/android.yml`。这些被编排的 workflow **已移除自身 `FHD/v*` tag 触发**，避免 tag 推送时双重运行。详见 [FHD/docs/deploy/RELEASE_CHECKLIST.md](FHD/docs/deploy/RELEASE_CHECKLIST.md)。
 

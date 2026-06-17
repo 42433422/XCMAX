@@ -3,7 +3,22 @@
 > 范围：`e:\XCMAX\FHD`（含 **admin** 运营实例 host profile）+ `e:\XCMAX\成都修茈科技有限公司`  
 > 注：历史目录 `FHD-个人/` 为企业版**管理员**并行实例（非商业个人版 SKU），已对齐迁入 `FHD/`；见 [FHD/docs/guides/ADMIN_OPERATOR_INSTANCE.md](../FHD/docs/guides/ADMIN_OPERATOR_INSTANCE.md)。
 > 日期：2026-05-13
-> 状态：待确认
+> 状态：执行中（产品线口径已确认）
+
+---
+
+## 0. 产品线执行边界（3+2）
+
+本技术债规范服务于当前产品线策略：**三条主线 + 个人版冻结**。产品线 SSOT 见 [`product-lines-3-plus-2.md`](product-lines-3-plus-2.md)。
+
+| 线 | 当前状态 | 工程含义 |
+|----|----------|----------|
+| 企业桌面 ERP + AI | P0 主交付 | `FHD/` 的桌面宿主、ERP、AI 员工、行业 Mod、交付验收优先 |
+| AI 员工商店 | P1 商业化线 | `成都修茈科技有限公司/`、`MODstore_deploy/` 的目录、授权、支付、下载、更新优先 |
+| 移动 AI 协同 App | P2 配套线 | `FHD/mobile-android/` 只做桌面端协同，不复刻完整 ERP |
+| 个人版 | Frozen | 暂停新增投入；仅保留兼容、归档和未来恢复入口 |
+
+因此，后续技术债清偿必须能支撑三条主线之一；不能归入三条主线的工作默认进入 backlog。个人版相关新增功能不纳入当前规范。
 
 ---
 
@@ -15,7 +30,7 @@
 
 | 指标 | FHD（含 admin）现状 | FHD 目标 | 成都修茈 现状 | 成都修茈 目标 |
 |------|---------------------|----------|-------------|-------------|
-| Python 测试覆盖率 | 窄包 CI **60%**；全量 `app` ~30% | 窄包 **70%**；全量 **≥50%** | 全局 floor **42%**；关键模块 **80%** | 全局 **≥55%** |
+| Python 测试覆盖率 | 全量 `app` **HEAD 52.74% 行**；WIP **74.56%**（196 红灯） | 全量 **≥90% 行 / ≥85% 分支** | 全局 floor **42%** | 全局 **≥55%** |
 | mypy ignore_errors 模块数 | ~20 | ≤10 | ~50 | ≤30 |
 | 前端测试文件数 | 1 (smoke) | ≥5 | ~8 | ≥12 |
 | 临时脚本 (fix_/check_/final_) | ~15 | 0 (归档或删除) | 0 | 0 |
@@ -88,29 +103,21 @@ create_app()
 
 ## 3. P1 — 应尽快修复（影响代码质量和可维护性）
 
-### P1-1: FHD 测试覆盖率提升至 70%
+### P1-1: FHD 测试覆盖率提升至 Phase 4 定版
 
-**现状**：**窄包** CI 门禁 60%（`test.yml` / `ci-cd.yml` 统计 `neuro_bus`、`middleware`、`fastapi_routes` 等子集）；**全量** `--cov=app` 约 30%（见 `FHD/docs/reports/COVERAGE_RAMP.md` 双轨表）。前端 API 单测不足。
+**现状**（2026-06-17）：**全量** `source=[app]` + branch；HEAD **52.74% 行 / 37.17% 分支**（`1569dfa4` 全绿 bump）；WIP **74.56% 行** 但有 **196 failed + 7 errors**。棘轮 floor：行 **51%**、分支 **36%**。前端 HEAD **55.82% 行**；vitest **1,143+** 测例。详见 `FHD/docs/reports/COVERAGE_RAMP.md`。
 
 **目标**：
-- Python **窄包** CI `cov-fail-under` ≥70%（阶段 C）
-- Python **全量** `app` ≥50%（阶段 C2，里程碑 C1 先达 40%）
-- 前端新增 ≥5 个 API 层测试文件（覆盖核心 API 层和 Store 层）
-
-**重点补测模块**：
-1. `app/db/session.py` — 查询缓存和数据库会话管理
-2. `app/services/rule_engine.py` — 规则引擎
-3. `app/services/train_intent.py` — 意图训练
-4. `app/utils/cache_manager.py` — 缓存管理
-5. `app/utils/rate_limiter.py` — 限流器
-6. `frontend/src/api/` — 前端 API 层
-7. `frontend/src/stores/` — Pinia Store
+- Python 全量行 **≥90%**、分支 **≥85%**（Phase 4 定版）
+- 前端全量 `src/**` 行 **≥80%**
+- pytest / vitest **全绿** 后方可 `coverage_ratchet.py --bump`
 
 **验收标准**：
-- [ ] 窄包 CI `--cov-fail-under=70` 通过（与 `pyproject.toml` `fail_under` 同步）
-- [ ] 全量 `pytest tests/ --cov=app` ≥50%（`backend-coverage-report` 连续绿）
-- [ ] 前端 `vitest run` 有 ≥5 个 `src/api/**/*.test.ts` 文件
-- [ ] `tests/integration/` 覆盖 auth、ERP、rbac 核心路径
+- [x] 全量 `source=[app]` 棘轮接入 CI（`coverage_ratchet.py --check`）
+- [x] HEAD 行覆盖 ≥50%（2026-06-14 已达 52.74%）
+- [ ] pytest 全绿（WIP：**196 failed + 7 errors** 待清）
+- [ ] 后端行 ≥90%、分支 ≥85%
+- [ ] 前端 lines ≥80%
 
 ### P1-2: 成都修茈 Python 测试覆盖率提升至 55%
 
@@ -131,21 +138,21 @@ create_app()
 
 ### P1-3: mypy ignore_errors 清理（两项目各减半）
 
-**FHD-个人 现状**：`pyproject.toml` 中约 20 个第三方模块 `ignore_missing_imports = true`（合理），但 `tests.*` 整体 `ignore_errors = true`（不合理）。
+**FHD 现状**：`pyproject.toml` 中约 20 个第三方模块 `ignore_missing_imports = true`（合理），但 `tests.*` 整体 `ignore_errors = true`（不合理）。
 
 **成都修茈 现状**：`pyproject.toml` 中约 50 个自有模块 `ignore_errors = true`，意味着大量业务代码无类型检查。
 
 **目标**：
-- FHD-个人：`tests.*` 的 `ignore_errors` 改为仅忽略特定错误码
+- FHD：`tests.*` 的 `ignore_errors` 改为仅忽略特定错误码
 - 成都修茈：50 个 ignore 模块减少到 ≤30 个（优先恢复 `db.*`、`models_*`、`eventing.*`）
 
 **验收标准**：
-- [ ] FHD-个人：`mypy app/` 零错误
+- [ ] FHD：`mypy app/` 零错误
 - [ ] 成都修茈：`mypy` ignore 列表 ≤30 个模块
 - [ ] `mypy modstore_server/db/` 零错误
 - [ ] `mypy modstore_server/eventing/` 零错误
 
-### P1-4: FHD-个人 临时脚本归档
+### P1-4: FHD 临时脚本归档
 
 **现状**：`scripts/` 下存在 `fix_bcrypt.py`、`fix_pg.py`、`check_docker_pg.py`、`check_payment_db.py`、`diagnose_db.py`、`deep_probe.py`、`probe_api.py`、`probe_server.py`、`find_users.py`、`restore_pwd.py`、`scan_all_dbs.py`、`set_admin_pwd.py`、`set_bcrypt_pwd.py`、`set_pbkdf2_pwd.py`、`ssh_diagnose.py`、`ssh_fix_db.py`、`test_db_connection.py`、`test_remote_api.py` 等临时脚本。
 
@@ -178,7 +185,7 @@ create_app()
 - [ ] `modstore_server/domain/` 存在且包含 ≥2 个领域模型文件
 - [ ] 新增代码通过 mypy 严格检查（不在 ignore 列表中）
 
-### P2-2: FHD-个人 前端 TypeScript 严格化
+### P2-2: FHD 前端 TypeScript 严格化
 
 **现状**：前端 `tsconfig.json` 未启用严格模式，API 层类型定义薄弱。
 
@@ -197,6 +204,7 @@ create_app()
 ## 5. 不纳入本规范的内容
 
 - 功能新增（Mod 商店、支付等）
+- 个人版新增功能或个人版商业化
 - 性能优化（OpenTelemetry、混沌工程）
 - 国际化
 - 文档补充

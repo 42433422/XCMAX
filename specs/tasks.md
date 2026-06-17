@@ -6,7 +6,25 @@
 
 ---
 
-## P0-1: FHD-个人 session.py 查询缓存重构
+## 产品线执行任务（3+2）
+
+> 产品线 SSOT：[`product-lines-3-plus-2.md`](product-lines-3-plus-2.md)。所有新增任务必须归入 AI 员工商店、企业桌面 ERP + AI、移动 AI 协同 App 三条主线之一；个人版保持冻结。
+
+- [x] PL0: 建立三条主线 + 个人版冻结的产品线 SSOT
+- [x] PL0-1: 产品版本锁死 v10，锚点恒 `10.0.0`
+  - 不使用 `v10.1` / `v10.2` / `v10.3` / `v11` 表达路线；改用 v10-A/B/C/D 阶段、channel、git tag、`git_sha`、`sha256` 和 manifest
+- [ ] PL1: 企业桌面 ERP + AI — 固化 v10-A 可交付验收清单
+  - 安装包、首次启动、引导、`deliverable-status`、行业样板流程、日志、升级 / 回滚说明
+- [ ] PL2: AI 员工商店 — 固化 v10-B 桌面端联动闭环
+  - Catalog、企业授权、下载源、桌面端安装、启用、禁用、回滚
+- [ ] PL3: 移动 AI 协同 App — 固化 v10-C 协同闭环
+  - 企业登录、扫码连接、AI 对话、通知、审批、任务 / 订单简表
+- [x] PL4: 个人版冻结
+  - 暂停新增功能；仅允许兼容、归档、未来恢复入口文档维护
+
+---
+
+## P0-1: FHD session.py 查询缓存重构
 
 - [x] T1: 创建 `app/db/session_cache.py`，实现 `ThreadSafeLRUCache` 类 — **已完成（更早）**
 - [x] T2: 重构 `app/db/session.py`，替换 `_query_cache` 为 `ThreadSafeLRUCache`
@@ -33,7 +51,7 @@
   - 测试 `AppConfig(profile="llm-only")` 路径
   - 测试可选路由加载失败不崩溃
 
-## P0-3: FHD-个人 requirements.txt 依赖分类
+## P0-3: FHD requirements.txt 依赖分类
 
 - [ ] T12: 从 `requirements.txt` 移除测试依赖
   - 移除：pytest、pytest-cov、pytest-mock、pytest-asyncio
@@ -43,7 +61,7 @@
   - 确认 `requirements-ml.txt` 已包含这些依赖
 - [ ] T14: 验证 `pip install -r requirements.txt` 后服务可正常启动
 
-## P1-1: FHD-个人 测试覆盖率提升至 70%
+## P1-1: FHD 测试覆盖率提升至 70%
 
 - [ ] T15: 补充 `app/db/session.py` 测试（依赖 P0-1 完成后的新缓存实现）
 - [ ] T16: 补充 `app/services/rule_engine.py` 测试
@@ -69,14 +87,14 @@
 
 ## P1-3: mypy ignore_errors 清理
 
-- [ ] T29: FHD-个人 — 将 `tests.*` 的 `ignore_errors = true` 改为逐文件或逐错误码忽略
+- [ ] T29: FHD — 将 `tests.*` 的 `ignore_errors = true` 改为逐文件或逐错误码忽略
 - [ ] T30: 成都修茈 — 从 ignore 列表移除 `modstore_server.db.*`（5 个模块）
 - [ ] T31: 成都修茈 — 从 ignore 列表移除 `modstore_server.eventing.*`（2 个模块）
 - [ ] T32: 成都修茈 — 从 ignore 列表移除 `modstore_server.models_*` 中优先级最高的 5 个
 - [ ] T33: 成都修茈 — 修复上述模块的 mypy 错误
 - [ ] T34: 两项目分别运行 `mypy` 验证零新增错误
 
-## P1-4: FHD-个人 临时脚本归档
+## P1-4: FHD 临时脚本归档
 
 - [ ] T35: 创建 `scripts/db_ops/` 目录，迁移数据库运维脚本
   - `check_docker_pg.py`、`check_payment_db.py`、`diagnose_db.py`、`scan_all_dbs.py`、`check_db_connection.py`
@@ -101,7 +119,7 @@
   - `employee.py` — 员工领域模型
 - [ ] T42: 确保新文件不在 mypy ignore 列表中
 
-## P2-2: FHD-个人 前端 TypeScript 严格化
+## P2-2: FHD 前端 TypeScript 严格化
 
 - [ ] T43: `frontend/tsconfig.json` 启用 `strict: true`
 - [ ] T44: 修复 `vue-tsc --noEmit` 所有报错
@@ -119,4 +137,4 @@
 - [x] G5: 前端 `src/api` 补 auth、orders、materials、modStore、core 单测；Vitest lines 50 / statements 30
 - [x] G6: MODstore `docs/coverage-gates.md` + `tests/integration/test_payment_webhook_flow.py`
 - [x] G7: `specs/checklist.md` PR 测试纪律 + `.trae/specs/_template/checklist.md`
-- [x] G8: 全量 `app` 覆盖率 ≥40% 后更新 `COVERAGE_RAMP.md` 周报表并勾选 checklist（FHD full_app 基线见 `metrics/coverage-dual-summary.json` / `pyproject.toml` fail_under=77）
+- [x] G8: 全量 `app` 覆盖率 HEAD **52.74%** 行（2026-06-14 bump）；WIP **74.56%**（待清红灯）— 见 `metrics/coverage-dual-summary.json` / `COVERAGE_RAMP.md`
