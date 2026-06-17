@@ -1,21 +1,23 @@
 """测试 auth_decorators 模块的登录、角色、权限装饰器。"""
-import pytest
+
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from app.auth_decorators import (
-    get_current_user,
-    get_current_session_id,
-    login_required,
-    role_required,
-    permission_required,
     _current_user_ctx,
     _session_id_ctx,
+    get_current_session_id,
+    get_current_user,
+    login_required,
+    permission_required,
+    role_required,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 class _FakeUser:
     def __init__(self, role="user", is_active=True):
@@ -27,14 +29,17 @@ class _FakeUser:
 
 def _make_view_func(return_value="ok"):
     """创建一个简单的视图函数用于装饰器测试。"""
+
     def view_func(*args, **kwargs):
         return return_value
+
     return view_func
 
 
 # ---------------------------------------------------------------------------
 # get_current_user / get_current_session_id
 # ---------------------------------------------------------------------------
+
 
 class TestContextVars:
     def test_get_current_user_default_none(self):
@@ -61,15 +66,18 @@ class TestContextVars:
 # _extract_session_id
 # ---------------------------------------------------------------------------
 
+
 class TestExtractSessionId:
     @patch("app.http.request_context.get_current_http_request", return_value=None)
     def test_no_request_returns_none(self, _mock_req):
         from app.auth_decorators import _extract_session_id
+
         assert _extract_session_id() is None
 
     @patch("app.http.request_context.get_current_http_request")
     def test_bearer_token(self, mock_get_req):
         from app.auth_decorators import _extract_session_id
+
         req = MagicMock()
         req.headers = {"Authorization": "Bearer mytoken123"}
         req.cookies = {}
@@ -79,6 +87,7 @@ class TestExtractSessionId:
     @patch("app.http.request_context.get_current_http_request")
     def test_cookie_session(self, mock_get_req):
         from app.auth_decorators import _extract_session_id
+
         req = MagicMock()
         req.headers = {}
         req.cookies = {"session_id": "cookie_sid"}
@@ -88,6 +97,7 @@ class TestExtractSessionId:
     @patch("app.http.request_context.get_current_http_request")
     def test_no_auth_header_no_cookie(self, mock_get_req):
         from app.auth_decorators import _extract_session_id
+
         req = MagicMock()
         req.headers = {}
         req.cookies = {}
@@ -97,6 +107,7 @@ class TestExtractSessionId:
     @patch("app.http.request_context.get_current_http_request")
     def test_non_bearer_auth_header(self, mock_get_req):
         from app.auth_decorators import _extract_session_id
+
         req = MagicMock()
         req.headers = {"Authorization": "Basic abc"}
         req.cookies = {}
@@ -108,6 +119,7 @@ class TestExtractSessionId:
 # ---------------------------------------------------------------------------
 # login_required
 # ---------------------------------------------------------------------------
+
 
 class TestLoginRequired:
     @patch("app.auth_decorators._extract_session_id", return_value=None)
@@ -199,6 +211,7 @@ class TestLoginRequired:
 # role_required
 # ---------------------------------------------------------------------------
 
+
 class TestRoleRequired:
     def test_no_user_returns_401(self):
         _current_user_ctx.set(None)
@@ -244,6 +257,7 @@ class TestRoleRequired:
 # ---------------------------------------------------------------------------
 # permission_required
 # ---------------------------------------------------------------------------
+
 
 class TestPermissionRequired:
     def test_no_user_returns_401(self):

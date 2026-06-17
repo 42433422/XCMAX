@@ -14,7 +14,6 @@ from app.fastapi_routes.excel_extract import (
     _generate_excel,
 )
 
-
 # ========================= _extract_from_excel ===========================
 
 

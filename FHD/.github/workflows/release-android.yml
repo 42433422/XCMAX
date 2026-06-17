@@ -27,6 +27,47 @@ jobs:
           distribution: temurin
           java-version: "17"
       - uses: android-actions/setup-android@v3
+      - name: Prepare Google Services config
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.XCAGI_ANDROID_GOOGLE_SERVICES_JSON }}
+        run: |
+          if [ -n "${GOOGLE_SERVICES_JSON:-}" ]; then
+            printf '%s' "$GOOGLE_SERVICES_JSON" > app/google-services.json
+          else
+            cat > app/google-services.json <<'JSON'
+          {
+            "project_info": {
+              "project_number": "100000000000",
+              "project_id": "xcagi-ci-placeholder",
+              "storage_bucket": "xcagi-ci-placeholder.appspot.com"
+            },
+            "client": [
+              {
+                "client_info": {
+                  "mobilesdk_app_id": "1:100000000000:android:0000000000000000personal",
+                  "android_client_info": { "package_name": "com.xiuci.xcagi.mobile.personal" }
+                },
+                "api_key": [{ "current_key": "ci-placeholder-api-key" }]
+              },
+              {
+                "client_info": {
+                  "mobilesdk_app_id": "1:100000000000:android:000000000000000enterprise",
+                  "android_client_info": { "package_name": "com.xiuci.xcagi.mobile.enterprise" }
+                },
+                "api_key": [{ "current_key": "ci-placeholder-api-key" }]
+              },
+              {
+                "client_info": {
+                  "mobilesdk_app_id": "1:100000000000:android:0000000000000000",
+                  "android_client_info": { "package_name": "com.xiuci.xcagi.mobile" }
+                },
+                "api_key": [{ "current_key": "ci-placeholder-api-key" }]
+              }
+            ],
+            "configuration_version": "1"
+          }
+          JSON
+          fi
       - name: Ensure gradlew executable
         run: chmod +x ./gradlew
       - name: Assemble Release (personal + enterprise)

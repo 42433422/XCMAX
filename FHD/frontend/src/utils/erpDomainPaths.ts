@@ -121,6 +121,11 @@ function pathMatchesPrefixes(pathOnly: string, prefixes: readonly string[]): boo
   return prefixes.some((prefix) => pathOnly === prefix || pathOnly.startsWith(`${prefix}/`))
 }
 
+function isRoutableClientErpModId(modId: string): boolean {
+  const id = String(modId || '').trim()
+  return isProtectedClientModId(id) && !id.endsWith('-industry')
+}
+
 function resolveErpBaseForClientMod(activeClient: string, installedModIds: string[]): string {
   const ids = installedModIds
   if (ids.includes(activeClient)) {
@@ -151,14 +156,14 @@ function readHostClientPrimaryErpModId(): string {
 export function resolveErpApiBase(installedModIds?: string[]): string {
   const ids = readInstalledModIds(installedModIds)
   const activeClient = readActiveExtensionModId()
-  if (activeClient && isProtectedClientModId(activeClient)) {
+  if (activeClient && isRoutableClientErpModId(activeClient)) {
     return resolveErpBaseForClientMod(activeClient, ids)
   }
   const primary = readHostClientPrimaryErpModId()
   if (
     !activeClient &&
     primary &&
-    isProtectedClientModId(primary) &&
+    isRoutableClientErpModId(primary) &&
     ids.includes(primary)
   ) {
     return resolveErpBaseForClientMod(primary, ids)
@@ -168,6 +173,9 @@ export function resolveErpApiBase(installedModIds?: string[]): string {
   }
   if (ids.includes(LEGACY_CLIENT_ERP_MOD_ID)) {
     return `/api/mod/${LEGACY_CLIENT_ERP_MOD_ID}`
+  }
+  if (ids.includes(ERP_DOMAIN_BRIDGE_MOD_ID)) {
+    return MOD_FACADE_BASE
   }
   return '/api'
 }
@@ -205,7 +213,7 @@ export function resolveErpApiPath(hostPath: string, installedModIds?: string[]):
   }
 
   const activeClient = readActiveExtensionModId()
-  if (activeClient && isProtectedClientModId(activeClient)) {
+  if (activeClient && isRoutableClientErpModId(activeClient)) {
     let erpBase = resolveErpBaseForClientMod(activeClient, ids)
     if (pathMatchesPrefixes(pathOnly, ERP_ON_BRIDGE_WHEN_CLIENT_ACTIVE)) {
       erpBase = ids.includes(ERP_DOMAIN_BRIDGE_MOD_ID) ? MOD_FACADE_BASE : '/api'

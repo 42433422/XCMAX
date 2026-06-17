@@ -30,6 +30,7 @@ logger = logging.getLogger(__name__)
 class PurchaseService(NeuroEventPublisherMixin):
     """采购管理服务类"""
 
+    @staticmethod
     def _decimal_to_float(value: Any) -> Any:
         if isinstance(value, Decimal):
             return float(value)
@@ -429,7 +430,7 @@ class PurchaseService(NeuroEventPublisherMixin):
                         remark=f"采购入库单: {inbound_no}",
                     )
                     if not result.get("success"):
-                        logger.warning("库存入库失败: %s", result.get('message'))
+                        logger.warning("库存入库失败: %s", result.get("message"))
 
                 inbound.total_amount = total_amount
                 inbound.status = "completed"

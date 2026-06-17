@@ -234,7 +234,6 @@ def test_host_session_local_uses_base_sqlite_file():
         factory = db_mod._get_host_session_local()
         assert factory is db_mod._get_host_session_local()
 
-
     with patch.object(db_mod, "get_request_active_mod_id", return_value="M"):
         with patch.object(db_mod, "_mod_db_url_from_env", return_value=""):
             with patch.object(db_mod, "_mod_isolated_databases_enabled", return_value=True):

@@ -35,7 +35,6 @@ from app.infrastructure.persistence.sqlite_vector_store import SQLiteVectorStore
 from app.infrastructure.rag.rag_service import RagService, is_rag_enabled
 from app.services.deepseek_intent_service import _make_intent_cache_key, cn_to_number
 
-
 # ---------------------------------------------------------------------------
 # price_list_export helpers
 # ---------------------------------------------------------------------------
@@ -64,9 +63,7 @@ def test_format_price_cell_variants() -> None:
 
 
 def test_product_row_cell_values_cn_keys() -> None:
-    vals = _product_row_cell_values(
-        {"型号": "M1", "产品名称": "漆", "规格": "5L", "单价": 99}
-    )
+    vals = _product_row_cell_values({"型号": "M1", "产品名称": "漆", "规格": "5L", "单价": 99})
     assert vals == ["M1", "漆", "5L", "99"]
 
 
@@ -91,7 +88,13 @@ def test_detect_header_row_count_two_rows() -> None:
 
 
 def test_parse_header_serial_and_column_map() -> None:
-    cells = [_MockCell("序号"), _MockCell("型号"), _MockCell("名称"), _MockCell("规格"), _MockCell("单价")]
+    cells = [
+        _MockCell("序号"),
+        _MockCell("型号"),
+        _MockCell("名称"),
+        _MockCell("规格"),
+        _MockCell("单价"),
+    ]
     with_serial, col_map = _parse_header_serial_and_column_map(cells)
     assert with_serial is True
     assert col_map["price"] == 4

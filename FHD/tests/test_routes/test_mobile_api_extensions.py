@@ -31,6 +31,7 @@ def client(monkeypatch):
     monkeypatch.setenv("LAN_GUARD_ENABLED", "0")
     monkeypatch.setenv("LAN_CIDR_GUARD_ENABLED", "0")
     from app.fastapi_app.factory import create_fastapi_app
+
     return TestClient(create_fastapi_app(enable_cors=False), raise_server_exceptions=False)
 
 
@@ -151,7 +152,9 @@ class TestMobileModItems:
 
     def test_exception_returns_empty(self, ext_mod):
         # RECOVERABLE_ERRORS 包含 RuntimeError/ImportError，不包含通用 Exception
-        with patch("app.infrastructure.mods.mod_manager.get_mod_manager", side_effect=RuntimeError("fail")):
+        with patch(
+            "app.infrastructure.mods.mod_manager.get_mod_manager", side_effect=RuntimeError("fail")
+        ):
             items = ext_mod._mobile_mod_items()
             assert items == []
 

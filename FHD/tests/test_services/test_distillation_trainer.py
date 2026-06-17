@@ -171,7 +171,10 @@ class TestDistillationTrainerLoadData:
         data_path = str(tmp_path / "test.jsonl")
         with open(data_path, "w", encoding="utf-8") as f:
             f.write(json.dumps({"text": "你好", "label": "greet"}, ensure_ascii=False) + "\n")
-            f.write(json.dumps({"text": "开单", "label": "shipment_generate"}, ensure_ascii=False) + "\n")
+            f.write(
+                json.dumps({"text": "开单", "label": "shipment_generate"}, ensure_ascii=False)
+                + "\n"
+            )
 
         texts, labels = trainer.load_data(data_path)
         assert len(texts) == 2
@@ -184,7 +187,10 @@ class TestDistillationTrainerLoadData:
         data_path = str(tmp_path / "test.jsonl")
         with open(data_path, "w", encoding="utf-8") as f:
             f.write(json.dumps({"text": "你好", "label": "greet"}, ensure_ascii=False) + "\n")
-            f.write(json.dumps({"text": "unknown", "label": "nonexistent_label"}, ensure_ascii=False) + "\n")
+            f.write(
+                json.dumps({"text": "unknown", "label": "nonexistent_label"}, ensure_ascii=False)
+                + "\n"
+            )
 
         texts, labels = trainer.load_data(data_path)
         assert len(texts) == 1
@@ -263,7 +269,9 @@ class TestDistillationTrainerSaveCheckpoint:
         checkpoint_path = str(tmp_path / "ckpt")
         os.makedirs(checkpoint_path, exist_ok=True)
 
-        with patch("app.services.distillation_trainer.CHECKPOINT_DIR", str(tmp_path / "checkpoints")):
+        with patch(
+            "app.services.distillation_trainer.CHECKPOINT_DIR", str(tmp_path / "checkpoints")
+        ):
             os.makedirs(str(tmp_path / "checkpoints"), exist_ok=True)
             trainer.save_checkpoint(checkpoint_path, epoch=1, best=True)
 
@@ -284,7 +292,9 @@ class TestDistillationTrainerSaveCheckpoint:
         checkpoint_path = str(tmp_path / "ckpt")
         os.makedirs(checkpoint_path, exist_ok=True)
 
-        with patch("app.services.distillation_trainer.CHECKPOINT_DIR", str(tmp_path / "checkpoints")):
+        with patch(
+            "app.services.distillation_trainer.CHECKPOINT_DIR", str(tmp_path / "checkpoints")
+        ):
             os.makedirs(str(tmp_path / "checkpoints"), exist_ok=True)
             trainer.save_checkpoint(checkpoint_path, epoch=2, best=False)
 
@@ -320,7 +330,9 @@ class TestDistillationTrainerTrain:
         data_path = str(tmp_path / "small.jsonl")
         with open(data_path, "w", encoding="utf-8") as f:
             for i in range(5):
-                f.write(json.dumps({"text": f"text{i}", "label": "greet"}, ensure_ascii=False) + "\n")
+                f.write(
+                    json.dumps({"text": f"text{i}", "label": "greet"}, ensure_ascii=False) + "\n"
+                )
 
         with patch("app.services.distillation_trainer.CHECKPOINT_DIR", str(tmp_path / "ckpt")):
             with patch("app.services.distillation_trainer.LOG_DIR", str(tmp_path / "logs")):

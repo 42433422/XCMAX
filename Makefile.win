@@ -40,7 +40,7 @@ lint:
 	cd $(FHD) && $(PY) -m ruff check app/
 
 openapi-check:
-	cd $(FHD) && PYTHONPATH=. $(PY) scripts/ci/check_openapi_consistency.py
+	cd $(FHD) && PYTHONPATH=. $(PY) scripts/check_openapi_consistency.py
 
 e2e:
 	cd $(FHD)/frontend && npm run test:e2e

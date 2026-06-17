@@ -158,6 +158,70 @@ def enrich_excel_tool_arguments(
     return out
 
 
+def _excel_analysis_from_runtime(
+    runtime_context: Mapping[str, Any] | None,
+) -> dict[str, Any] | None:
+    """Return the active Excel analysis payload from runtime context, if present."""
+    if not runtime_context:
+        return None
+    ea = runtime_context.get("excel_analysis")
+    if isinstance(ea, dict):
+        return ea
+    last = runtime_context.get("last_excel_analysis_context")
+    if isinstance(last, dict):
+        nested = last.get("excel_analysis")
+        if isinstance(nested, dict):
+            return nested
+        return last
+    return None
+
+
+def enrich_template_preview_arguments(
+    args: dict[str, Any],
+    runtime_context: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    """Fill template_preview arguments from the same Excel runtime context used by planner tools."""
+    out = dict(args or {})
+    ea = _excel_analysis_from_runtime(runtime_context)
+    if not ea:
+        return out
+
+    ctx_fp = (
+        str(ea.get("file_path") or "").strip()
+        or str((ea.get("preview_data") or {}).get("file_path") or "").strip()
+    )
+    if ctx_fp and not str(out.get("file_path") or "").strip():
+        out["file_path"] = ctx_fp
+
+    if not str(out.get("sheet_name") or "").strip() and runtime_context:
+        selected = runtime_context.get("excel_analysis_selected_sheet")
+        if isinstance(selected, dict) and str(selected.get("sheet_name") or "").strip():
+            out["sheet_name"] = str(selected.get("sheet_name")).strip()
+        elif str(runtime_context.get("preferred_sheet_name") or "").strip():
+            out["sheet_name"] = str(runtime_context.get("preferred_sheet_name")).strip()
+    if not str(out.get("sheet_name") or "").strip():
+        sheets = ea.get("sheets")
+        if isinstance(sheets, list) and sheets:
+            first = sheets[0]
+            if isinstance(first, dict) and str(first.get("sheet_name") or "").strip():
+                out["sheet_name"] = str(first.get("sheet_name")).strip()
+
+    sheet = str(out.get("sheet_name") or "").strip() or None
+    hdr = detected_excel_header_row_1based(ea, preferred_sheet_name=sheet)
+    if hdr is not None and out.get("header_row") in (None, ""):
+        out["header_row"] = hdr
+    if sheet and not str(out.get("template_name") or "").strip():
+        out["template_name"] = f"{sheet}-模板"
+
+    customer = str(ea.get("customer_hint") or "").strip()
+    preview = ea.get("preview_data")
+    if not customer and isinstance(preview, dict):
+        customer = str(preview.get("customer_hint") or "").strip()
+    if customer and not str(out.get("unit_name") or "").strip():
+        out["unit_name"] = customer
+    return out
+
+
 def _sanitize_untrusted_context_line(text: str, max_len: int) -> str:
     """削弱通过「伪造对话行/多换行」对 system 块的注入面：压平异常换行并截断。"""
     t = str(text or "").replace("\r\n", "\n").replace("\r", "\n")
@@ -283,6 +347,10 @@ def format_runtime_context_for_llm(runtime_context: Mapping[str, Any] | None) ->
             "不是计量单位（件、桶、箱等）。"
             "优先使用 excel_analysis / 运行时里的 customer_hint、excel_customer_hint 或表内「客户/购买单位」列；"
             "不要引导用户把 unit_name 填成「件」「桶」。"
+        )
+        lines.append(
+            "- 如用户要求保存当前 Excel 结构为模板、加入模板库或生成模板预览，请调用 template_preview 工具；"
+            "保存到模板库时 action=create，并复用当前 file_path、sheet_name、header_row。"
         )
         lines.append(
             "- 若 excel_customer_hint、Excel 摘要中的「文档客户」或抬头区已出现完整客户公司名，"
@@ -542,6 +610,8 @@ def runtime_context_after_workflow_interrupt(
 __all__ = [
     "detected_excel_header_row_1based",
     "enrich_excel_tool_arguments",
+    "_excel_analysis_from_runtime",
+    "enrich_template_preview_arguments",
     "format_recent_messages_excerpt_for_llm",
     "format_runtime_context_for_llm",
     "format_excel_analysis_for_llm",

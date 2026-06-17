@@ -70,8 +70,14 @@ class TestOrdersNextNumber:
 
 class TestShipmentGenerate:
     def test_success(self, client: TestClient, _mock_svc: MagicMock):
-        _mock_svc.generate_shipment_document.return_value = {"success": True, "file_path": "/tmp/out.xlsx"}
-        r = client.post("/api/shipment/generate", json={"unit_name": "测试单位", "products": [{"name": "A", "qty": 1}]})
+        _mock_svc.generate_shipment_document.return_value = {
+            "success": True,
+            "file_path": "/tmp/out.xlsx",
+        }
+        r = client.post(
+            "/api/shipment/generate",
+            json={"unit_name": "测试单位", "products": [{"name": "A", "qty": 1}]},
+        )
         assert r.status_code == 200
 
     def test_empty_unit_name(self, client: TestClient, _mock_svc: MagicMock):
@@ -84,16 +90,19 @@ class TestShipmentGenerate:
 
     def test_service_error(self, client: TestClient, _mock_svc: MagicMock):
         _mock_svc.generate_shipment_document.side_effect = Exception("DB error")
-        r = client.post("/api/shipment/generate", json={"unit_name": "单位", "products": [{"name": "A"}]})
+        r = client.post(
+            "/api/shipment/generate", json={"unit_name": "单位", "products": [{"name": "A"}]}
+        )
         assert r.status_code == 500
 
 
 class TestShipmentGenerateBatch:
     def test_success(self, client: TestClient, _mock_svc: MagicMock):
         _mock_svc.generate_shipment_document.return_value = {"success": True}
-        r = client.post("/api/shipment/generate-batch", json={
-            "shipments": [{"unit_name": "A", "products": [{"name": "X"}]}]
-        })
+        r = client.post(
+            "/api/shipment/generate-batch",
+            json={"shipments": [{"unit_name": "A", "products": [{"name": "X"}]}]},
+        )
         assert r.status_code == 200
         assert r.json()["data"]["processed"] == 1
 
@@ -107,7 +116,9 @@ class TestShipmentGenerateBatch:
         assert len(r.json()["data"]["errors"]) > 0
 
     def test_missing_unit_name(self, client: TestClient, _mock_svc: MagicMock):
-        r = client.post("/api/shipment/generate-batch", json={"shipments": [{"products": [{"name": "X"}]}]})
+        r = client.post(
+            "/api/shipment/generate-batch", json={"shipments": [{"products": [{"name": "X"}]}]}
+        )
         assert r.status_code == 200
         assert len(r.json()["data"]["errors"]) > 0
 
@@ -148,7 +159,9 @@ class TestShipmentPrint:
     def test_invalid_order_id(self, client: TestClient, _mock_svc: MagicMock, tmp_path):
         test_file = tmp_path / "test.xlsx"
         test_file.write_bytes(b"fake")
-        r = client.post("/api/shipment/print", json={"file_path": str(test_file), "order_id": "abc"})
+        r = client.post(
+            "/api/shipment/print", json={"file_path": str(test_file), "order_id": "abc"}
+        )
         assert r.status_code == 400
 
 
@@ -331,9 +344,10 @@ class TestShipmentRecordsCreate:
 
     def test_success(self, client: TestClient, _mock_svc: MagicMock):
         _mock_svc.create_shipment.return_value = {"success": True}
-        r = client.post("/api/shipment/shipment-records/record", json={
-            "unit_name": "A", "products": [{"name": "X"}]
-        })
+        r = client.post(
+            "/api/shipment/shipment-records/record",
+            json={"unit_name": "A", "products": [{"name": "X"}]},
+        )
         assert r.status_code == 200
 
 

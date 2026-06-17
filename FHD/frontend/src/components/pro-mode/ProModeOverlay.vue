@@ -133,7 +133,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useProMode } from '@/composables/useProMode'
 import { useJarvisChat } from '@/composables/useJarvisChat'
 import FallingTextContainer from './FallingTextContainer.vue'

@@ -157,8 +157,13 @@ class TestRecordSession:
         _, key = license_store.issue_key()
         now = int(time.time())
         sess = license_store.record_session(
-            jti="jti-1", key_id=key.id, kid="kid-1", ip="10.0.0.1",
-            user_agent="test", issued_at=now, expires_at=now + 3600,
+            jti="jti-1",
+            key_id=key.id,
+            kid="kid-1",
+            ip="10.0.0.1",
+            user_agent="test",
+            issued_at=now,
+            expires_at=now + 3600,
         )
         assert sess.jti == "jti-1"
         assert sess.key_id == key.id
@@ -166,8 +171,13 @@ class TestRecordSession:
     def test_get_active_session(self):
         now = int(time.time())
         license_store.record_session(
-            jti="jti-active", key_id=None, kid="k", ip="",
-            user_agent="", issued_at=now, expires_at=now + 3600,
+            jti="jti-active",
+            key_id=None,
+            kid="k",
+            ip="",
+            user_agent="",
+            issued_at=now,
+            expires_at=now + 3600,
         )
         sess = license_store.get_active_session_by_jti("jti-active")
         assert sess is not None
@@ -176,8 +186,13 @@ class TestRecordSession:
     def test_get_revoked_session_returns_none(self):
         now = int(time.time())
         license_store.record_session(
-            jti="jti-rev", key_id=None, kid="k", ip="",
-            user_agent="", issued_at=now, expires_at=now + 3600,
+            jti="jti-rev",
+            key_id=None,
+            kid="k",
+            ip="",
+            user_agent="",
+            issued_at=now,
+            expires_at=now + 3600,
         )
         license_store.revoke_session("jti-rev")
         assert license_store.get_active_session_by_jti("jti-rev") is None
@@ -187,8 +202,13 @@ class TestListSessions:
     def test_active_only(self):
         now = int(time.time())
         license_store.record_session(
-            jti="jti-a", key_id=None, kid="k", ip="",
-            user_agent="", issued_at=now, expires_at=now + 3600,
+            jti="jti-a",
+            key_id=None,
+            kid="k",
+            ip="",
+            user_agent="",
+            issued_at=now,
+            expires_at=now + 3600,
         )
         sessions = license_store.list_sessions(active_only=True)
         assert len(sessions) >= 1
@@ -196,8 +216,13 @@ class TestListSessions:
     def test_all_includes_revoked(self):
         now = int(time.time())
         license_store.record_session(
-            jti="jti-b", key_id=None, kid="k", ip="",
-            user_agent="", issued_at=now, expires_at=now + 3600,
+            jti="jti-b",
+            key_id=None,
+            kid="k",
+            ip="",
+            user_agent="",
+            issued_at=now,
+            expires_at=now + 3600,
         )
         license_store.revoke_session("jti-b")
         sessions = license_store.list_sessions(active_only=False)
@@ -208,8 +233,13 @@ class TestRevokeSession:
     def test_revoke_active(self):
         now = int(time.time())
         license_store.record_session(
-            jti="jti-r", key_id=None, kid="k", ip="",
-            user_agent="", issued_at=now, expires_at=now + 3600,
+            jti="jti-r",
+            key_id=None,
+            kid="k",
+            ip="",
+            user_agent="",
+            issued_at=now,
+            expires_at=now + 3600,
         )
         ok = license_store.revoke_session("jti-r", actor="admin")
         assert ok is True
@@ -223,8 +253,13 @@ class TestTouchSession:
     def test_touch(self):
         now = int(time.time())
         license_store.record_session(
-            jti="jti-t", key_id=None, kid="k", ip="",
-            user_agent="", issued_at=now, expires_at=now + 3600,
+            jti="jti-t",
+            key_id=None,
+            kid="k",
+            ip="",
+            user_agent="",
+            issued_at=now,
+            expires_at=now + 3600,
         )
         license_store.touch_session("jti-t")
         sess = license_store.get_active_session_by_jti("jti-t")
@@ -408,8 +443,13 @@ class TestToDict:
     def test_session(self):
         now = int(time.time())
         sess = license_store.record_session(
-            jti="jti-dict", key_id=None, kid="k", ip="",
-            user_agent="", issued_at=now, expires_at=now + 3600,
+            jti="jti-dict",
+            key_id=None,
+            kid="k",
+            ip="",
+            user_agent="",
+            issued_at=now,
+            expires_at=now + 3600,
         )
         d = license_store.to_dict_session(sess)
         assert d["jti"] == "jti-dict"

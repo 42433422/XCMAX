@@ -27,7 +27,9 @@ def _chat_svc() -> AIChatApplicationService:
 
     mock_ai.chat = _chat
     with (
-        patch("app.application.ai_chat_app_service.get_ai_conversation_service", return_value=mock_ai),
+        patch(
+            "app.application.ai_chat_app_service.get_ai_conversation_service", return_value=mock_ai
+        ),
         patch("app.application.ai_chat_app_service.LLMWorkflowPlanner"),
         patch("app.application.ai_chat_app_service.HybridRiskGate"),
         patch("app.application.ai_chat_app_service.WorkflowEngine"),
@@ -47,11 +49,15 @@ def test_wechat_message_timestamp_seconds_variants() -> None:
     from app.fastapi_routes.domains.wechat import routes as wechat_routes
 
     assert wechat_routes._wechat_message_timestamp_seconds({}) == 0.0
-    assert wechat_routes._wechat_message_timestamp_seconds({"timestamp": 1_700_000_000}) == 1_700_000_000
-    assert wechat_routes._wechat_message_timestamp_seconds({"timestamp": 1_700_000_000_000}) == 1_700_000_000.0
-    iso = wechat_routes._wechat_message_timestamp_seconds(
-        {"created_at": "2024-06-01T12:00:00Z"}
+    assert (
+        wechat_routes._wechat_message_timestamp_seconds({"timestamp": 1_700_000_000})
+        == 1_700_000_000
     )
+    assert (
+        wechat_routes._wechat_message_timestamp_seconds({"timestamp": 1_700_000_000_000})
+        == 1_700_000_000.0
+    )
+    iso = wechat_routes._wechat_message_timestamp_seconds({"created_at": "2024-06-01T12:00:00Z"})
     assert iso > 0
 
 
@@ -81,7 +87,9 @@ def test_wechat_tasks_success_and_error() -> None:
     assert err.status_code == 500
 
 
-@patch("app.services.wechat_passive_group_monitor.assert_safe_outbound_group_reply", return_value=None)
+@patch(
+    "app.services.wechat_passive_group_monitor.assert_safe_outbound_group_reply", return_value=None
+)
 def test_send_wechat_blocked_by_safety(_mock_safe: MagicMock) -> None:
     from app.fastapi_routes.domains.wechat import routes as wechat_routes
 
@@ -287,8 +295,12 @@ def _tool_call(name: str, args: str = "{}") -> SimpleNamespace:
 
 
 def test_slow_tool_wait_message_office_formats() -> None:
-    assert "Word" in (_slow_tool_wait_message("generate_office_document", '{"output_format":"docx"}') or "")
-    assert "Excel" in (_slow_tool_wait_message("generate_office_document", '{"output_format":"xlsx"}') or "")
+    assert "Word" in (
+        _slow_tool_wait_message("generate_office_document", '{"output_format":"docx"}') or ""
+    )
+    assert "Excel" in (
+        _slow_tool_wait_message("generate_office_document", '{"output_format":"xlsx"}') or ""
+    )
     assert _slow_tool_wait_message("unknown_tool", "{}") is None
 
 

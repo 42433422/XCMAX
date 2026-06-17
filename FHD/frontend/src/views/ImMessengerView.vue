@@ -20,12 +20,19 @@
           {{ wsConnected ? '实时已连接' : '正在连接…' }}
         </div>
 
-        <ul v-if="conversations.length" class="im-conv-list">
+        <ul v-if="sidebarRows.length" class="im-conv-list">
+          <li v-if="enterpriseDedicatedRows.length" class="im-section-label">固定联系人</li>
           <li
-            v-for="c in conversations"
-            :key="c.id"
-            :class="['im-conv-item', { active: c.id === activeConversationId }]"
-            @click="selectConversation(c.id)"
+            v-for="c in sidebarRows"
+            :key="c.kind === 'conversation' ? `c-${c.id}` : `contact-${c.contact.id}`"
+            :class="[
+              'im-conv-item',
+              {
+                active: c.kind === 'conversation' && c.id === activeConversationId,
+                'im-conv-item--pinned': c.isPinned,
+              },
+            ]"
+            @click="c.kind === 'conversation' ? selectConversation(c.id) : startChatWith(c.contact)"
           >
             <span class="im-avatar" aria-hidden="true">{{ avatarText(c.title) }}</span>
             <div class="im-conv-main">
@@ -161,6 +168,7 @@ const scrollEl = ref<HTMLElement | null>(null);
 
 const contactPickerOpen = ref(false);
 const contacts = ref<ImContact[]>([]);
+const enterpriseDedicatedContacts = ref<ImContact[]>([]);
 const contactKeyword = ref('');
 const contactsLoading = ref(false);
 
@@ -176,6 +184,47 @@ let reconnectAttempt = 0;
 const activeTitle = computed(() => {
   const conv = conversations.value.find((c) => c.id === activeConversationId.value);
   return conv?.title || '会话';
+});
+
+type SidebarConversationRow = ImConversationSummary & {
+  kind: 'conversation';
+  isPinned: boolean;
+  contact?: never;
+};
+
+type SidebarContactRow = {
+  kind: 'contact';
+  id: number;
+  title: string;
+  last_message_preview: string;
+  unread_count: number;
+  isPinned: boolean;
+  contact: ImContact;
+};
+
+const enterpriseDedicatedRows = computed<SidebarConversationRow[]>(() =>
+  conversations.value
+    .filter((c) => c.is_enterprise_dedicated_cs)
+    .map((c) => ({ ...c, kind: 'conversation', isPinned: true })),
+);
+
+const sidebarRows = computed<Array<SidebarConversationRow | SidebarContactRow>>(() => {
+  const pinnedIds = new Set(enterpriseDedicatedRows.value.map((c) => c.title))
+  const pinnedContacts: SidebarContactRow[] = enterpriseDedicatedContacts.value
+    .filter((ct) => !pinnedIds.has(ct.display_name))
+    .map((ct) => ({
+      kind: 'contact',
+      id: -ct.id,
+      title: ct.display_name,
+      last_message_preview: '固定联系人',
+      unread_count: 0,
+      isPinned: true,
+      contact: ct,
+    }))
+  const otherRows: SidebarConversationRow[] = conversations.value
+    .filter((c) => !c.is_enterprise_dedicated_cs)
+    .map((c) => ({ ...c, kind: 'conversation', isPinned: false }))
+  return [...enterpriseDedicatedRows.value, ...pinnedContacts, ...otherRows]
 });
 
 const filteredContacts = computed(() => {
@@ -260,6 +309,15 @@ async function loadConversations(): Promise<void> {
     showAppToast(error instanceof Error ? error.message : '加载会话失败', 'error');
   } finally {
     busy.value = false;
+  }
+}
+
+async function loadEnterpriseDedicatedContacts(): Promise<void> {
+  try {
+    const rows = await fetchImContacts();
+    enterpriseDedicatedContacts.value = rows.filter((c) => c.is_enterprise_dedicated_cs);
+  } catch {
+    enterpriseDedicatedContacts.value = [];
   }
 }
 
@@ -440,7 +498,7 @@ onMounted(async () => {
     applyReadState(conversation_id, user_id, last_message_id);
   });
   connectWs();
-  await loadConversations();
+  await Promise.all([loadEnterpriseDedicatedContacts(), loadConversations()]);
 });
 
 onUnmounted(() => {

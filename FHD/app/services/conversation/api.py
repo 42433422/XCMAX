@@ -380,8 +380,10 @@ XCAGI 系统主要功能：
         response = await self.call_llm_api(messages)  # 使用三级路由方法
 
         logger.info(
-            "LLM API 响应 [%s %s]: "
-            f"%s...", mode_tag, provider_info, str(response)[:150] if response else 'None'
+            "LLM API 响应 [%s %s]: %s...",
+            mode_tag,
+            provider_info,
+            str(response)[:150] if response else "None",
         )
 
         if response and response.get("choices"):

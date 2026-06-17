@@ -15,7 +15,6 @@ from app.application.ai_chat_app_service import (
     _skip_pro_excel_deterministic_import,
 )
 
-
 # ---------------------------------------------------------------------------
 # ai_chat helpers
 # ---------------------------------------------------------------------------

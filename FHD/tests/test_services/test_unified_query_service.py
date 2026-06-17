@@ -8,7 +8,6 @@ import pytest
 
 from app.services.unified_query_service import UnifiedQueryService
 
-
 # ========================= _parse_filter =================================
 
 
@@ -84,6 +83,7 @@ class TestParseFilter:
 
     def test_unknown_field_returns_none(self):
         """Test that unknown fields return None using a real class."""
+
         class RealModel:
             name = "column"
 
@@ -92,6 +92,7 @@ class TestParseFilter:
 
     def test_unknown_field_with_suffix_returns_none(self):
         """Test that unknown fields with suffixes return None using a real class."""
+
         class RealModel:
             name = "column"
 

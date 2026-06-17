@@ -28,7 +28,21 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
-_TEXT_EXT = {".txt", ".md", ".markdown", ".csv", ".tsv", ".json", ".log", ".yaml", ".yml", ".py", ".html", ".xml", ".rst"}
+_TEXT_EXT = {
+    ".txt",
+    ".md",
+    ".markdown",
+    ".csv",
+    ".tsv",
+    ".json",
+    ".log",
+    ".yaml",
+    ".yml",
+    ".py",
+    ".html",
+    ".xml",
+    ".rst",
+}
 _IMAGE_EXT = {".png", ".jpg", ".jpeg", ".bmp", ".gif", ".tiff", ".tif", ".webp"}
 _AUDIO_EXT = {".wav", ".mp3", ".m4a", ".flac", ".ogg", ".aac"}
 
@@ -147,7 +161,11 @@ class PerceptionPipeline:
                 text = get_ocr_service().recognize(img) or ""
             text = text.strip()
             if not text:
-                return {"status": "degraded", "reason": "OCR 未识别到文字或引擎未就绪", "file": file_path}
+                return {
+                    "status": "degraded",
+                    "reason": "OCR 未识别到文字或引擎未就绪",
+                    "file": file_path,
+                }
             return {"status": "ok", "ocr_text": text[:4000], "file": file_path}
         except ImportError:
             return {"status": "unavailable", "reason": "OCR/PIL 依赖未安装", "file": file_path}

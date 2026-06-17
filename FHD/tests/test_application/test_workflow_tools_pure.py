@@ -276,8 +276,8 @@ class TestGetWorkflowToolRegistry:
 class TestInvalidateWorkflowToolRegistry:
     def test_invalidate(self):
         from app.application.tools.workflow import (
-            invalidate_workflow_tool_registry,
             get_workflow_tool_registry,
+            invalidate_workflow_tool_registry,
         )
 
         get_workflow_tool_registry()

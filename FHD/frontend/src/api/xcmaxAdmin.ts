@@ -39,7 +39,21 @@ export const xcmaxAdminApi = {
       username,
     });
   },
+  activateEnterpriseImpersonation(bridgeToken: string) {
+    return api.post('/api/xcmax/admin/impersonate/activate-enterprise', {
+      bridge_token: bridgeToken,
+    });
+  },
   endImpersonate() {
     return api.post('/api/xcmax/admin/impersonate/end', {});
+  },
+  checkDeployUpdates() {
+    return api.get('/api/xcmax/admin/deploy/check');
+  },
+  startDeployPush(body: Record<string, unknown>) {
+    return api.post('/api/xcmax/admin/deploy/push', body);
+  },
+  getDeployJob(jobId: string) {
+    return api.get(`/api/xcmax/admin/deploy/jobs/${encodeURIComponent(jobId)}`);
   },
 };

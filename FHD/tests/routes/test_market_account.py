@@ -301,9 +301,7 @@ class TestMarketIdentityFromPayloads:
         assert is_admin is False
 
     def test_no_valid_payloads(self) -> None:
-        is_ent, is_admin, blob = ma._market_identity_from_payloads(
-            {"__proxy_error__": True}, {}
-        )
+        is_ent, is_admin, blob = ma._market_identity_from_payloads({"__proxy_error__": True}, {})
         assert is_ent is False
         assert is_admin is False
         assert blob == {}
@@ -342,18 +340,13 @@ class TestBootstrapOverviewNeedsLiveMerge:
 
     def test_all_present(self) -> None:
         assert (
-            ma._bootstrap_overview_needs_live_merge(
-                {"user": {}, "wallet": {}, "membership": {}}
-            )
+            ma._bootstrap_overview_needs_live_merge({"user": {}, "wallet": {}, "membership": {}})
             is False
         )
 
     def test_plan_present(self) -> None:
         assert (
-            ma._bootstrap_overview_needs_live_merge(
-                {"user": {}, "wallet": {}, "plan": {}}
-            )
-            is False
+            ma._bootstrap_overview_needs_live_merge({"user": {}, "wallet": {}, "plan": {}}) is False
         )
 
 
@@ -423,9 +416,7 @@ class TestTransportErrorMessage:
 
 class TestCheckoutSignBodyFromRequest:
     def test_wallet_recharge(self) -> None:
-        result = ma._checkout_sign_body_from_request(
-            {"wallet_recharge": True, "total_amount": 100}
-        )
+        result = ma._checkout_sign_body_from_request({"wallet_recharge": True, "total_amount": 100})
         assert result["wallet_recharge"] is True
         assert result["total_amount"] == 100.0
         assert result["subject"] == "钱包充值"
@@ -462,22 +453,13 @@ class TestCheckoutBodyHasSignature:
         )
 
     def test_missing_request_id(self) -> None:
-        assert (
-            ma._checkout_body_has_signature({"signature": "s1", "timestamp": 123})
-            is False
-        )
+        assert ma._checkout_body_has_signature({"signature": "s1", "timestamp": 123}) is False
 
     def test_missing_signature(self) -> None:
-        assert (
-            ma._checkout_body_has_signature({"request_id": "r1", "timestamp": 123})
-            is False
-        )
+        assert ma._checkout_body_has_signature({"request_id": "r1", "timestamp": 123}) is False
 
     def test_missing_timestamp(self) -> None:
-        assert (
-            ma._checkout_body_has_signature({"request_id": "r1", "signature": "s1"})
-            is False
-        )
+        assert ma._checkout_body_has_signature({"request_id": "r1", "signature": "s1"}) is False
 
 
 # ---------------------------------------------------------------------------
@@ -487,7 +469,9 @@ class TestCheckoutBodyHasSignature:
 
 class TestLooksLikeVerificationRequired:
     def test_verification_code(self) -> None:
-        assert ma._looks_like_verification_required({"detail": "verification code required"}) is True
+        assert (
+            ma._looks_like_verification_required({"detail": "verification code required"}) is True
+        )
 
     def test_chinese_verification(self) -> None:
         assert ma._looks_like_verification_required({"detail": "需要验证码"}) is True
@@ -590,9 +574,7 @@ class TestMarketRegister:
         assert resp.status_code == 400
 
     def test_missing_password_returns_400(self, client: TestClient) -> None:
-        resp = client.post(
-            "/api/market/register", json={"username": "u", "email": "e@e.com"}
-        )
+        resp = client.post("/api/market/register", json={"username": "u", "email": "e@e.com"})
         assert resp.status_code == 400
 
     def test_registration_failure(self, client: TestClient) -> None:
@@ -688,9 +670,7 @@ class TestMarketSendPhoneCode:
             new_callable=AsyncMock,
             return_value={"success": True, "message": "验证码已发送"},
         ):
-            resp = client.post(
-                "/api/market/send-phone-code", json={"phone": "13800138000"}
-            )
+            resp = client.post("/api/market/send-phone-code", json={"phone": "13800138000"})
         assert resp.status_code == 200
 
     def test_send_failure(self, client: TestClient) -> None:
@@ -699,9 +679,7 @@ class TestMarketSendPhoneCode:
             new_callable=AsyncMock,
             return_value={"success": False, "status_code": 502, "message": "服务不可用"},
         ):
-            resp = client.post(
-                "/api/market/send-phone-code", json={"phone": "13800138000"}
-            )
+            resp = client.post("/api/market/send-phone-code", json={"phone": "13800138000"})
         assert resp.status_code == 502
 
 
@@ -959,7 +937,9 @@ class TestMarketAccountOverview:
             resp = client.post("/api/market/account-overview", json={})
         assert resp.status_code == 200
         data = resp.json()
-        assert data["data"].get("degraded") is True or data["data"].get("market_unreachable") is True
+        assert (
+            data["data"].get("degraded") is True or data["data"].get("market_unreachable") is True
+        )
 
     def test_cache_hit(self, client: TestClient) -> None:
         auth = "Bearer tok"
@@ -1037,9 +1017,7 @@ class TestMarketLlmCatalog:
 
 class TestMarketDevCreateAccount:
     def test_short_password_returns_400(self, client: TestClient) -> None:
-        resp = client.post(
-            "/api/market/dev-create-account", json={"password": "12345"}
-        )
+        resp = client.post("/api/market/dev-create-account", json={"password": "12345"})
         assert resp.status_code == 400
 
     def test_registration_proxy_error(self, client: TestClient) -> None:
@@ -1071,12 +1049,15 @@ class TestMarketDevCreateAccount:
                 return {"data": {"user": {"id": 1}}}
             return {}
 
-        with patch(
-            "app.fastapi_routes.market_account._proxy_json",
-            side_effect=mock_proxy,
-        ), patch(
-            "app.fastapi_routes.market_account._error_message",
-            return_value="用户名已存在",
+        with (
+            patch(
+                "app.fastapi_routes.market_account._proxy_json",
+                side_effect=mock_proxy,
+            ),
+            patch(
+                "app.fastapi_routes.market_account._error_message",
+                return_value="用户名已存在",
+            ),
         ):
             resp = client.post("/api/market/dev-create-account", json={})
         assert resp.status_code == 200
@@ -1111,9 +1092,7 @@ class TestSendMarketResetPasswordCode:
     def test_invalid_email(self) -> None:
         import asyncio
 
-        result = asyncio.get_event_loop().run_until_complete(
-            ma.send_market_reset_password_code("")
-        )
+        result = asyncio.get_event_loop().run_until_complete(ma.send_market_reset_password_code(""))
         assert result["success"] is False
 
     def test_no_at_sign(self) -> None:

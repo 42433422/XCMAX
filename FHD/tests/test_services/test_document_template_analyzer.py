@@ -21,8 +21,8 @@ from app.services.document_templates.analyzer import (
     _mark_progress_completed,
     _safe_remove,
     _update_progress,
-    analyze_template_with_upload,
     analysis_progress,
+    analyze_template_with_upload,
     progress_lock,
 )
 
@@ -76,7 +76,12 @@ class TestProgressTracking:
     def test_update_progress(self):
         task_id = "test-task-1"
         with progress_lock:
-            analysis_progress[task_id] = {"percent": 0, "step": 1, "message": "start", "completed": False}
+            analysis_progress[task_id] = {
+                "percent": 0,
+                "step": 1,
+                "message": "start",
+                "completed": False,
+            }
 
         _update_progress(task_id, 50, 2, "halfway")
 
@@ -92,7 +97,12 @@ class TestProgressTracking:
     def test_mark_progress_completed(self):
         task_id = "test-task-2"
         with progress_lock:
-            analysis_progress[task_id] = {"percent": 0, "step": 1, "message": "", "completed": False}
+            analysis_progress[task_id] = {
+                "percent": 0,
+                "step": 1,
+                "message": "",
+                "completed": False,
+            }
 
         _mark_progress_completed(task_id, 100, 3, "done")
 
@@ -129,8 +139,8 @@ class TestCollectDocxPartText:
         ns = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
         xml = (
             f'<w:document xmlns:w="{ns}">'
-            f'<w:p><w:r><w:t>Hello</w:t></w:r></w:p>'
-            f'<w:p><w:r><w:t>World</w:t></w:r></w:p>'
+            f"<w:p><w:r><w:t>Hello</w:t></w:r></w:p>"
+            f"<w:p><w:r><w:t>World</w:t></w:r></w:p>"
             f"</w:document>"
         )
         result = _collect_docx_part_text(xml.encode("utf-8"))
@@ -407,10 +417,13 @@ class TestAnalyzeExcelTemplate:
         mock_skill_module = MagicMock()
         mock_skill_module.get_excel_analyzer_skill.return_value = mock_skill_instance
 
-        with patch.dict("sys.modules", {
-            "app.infrastructure.skills.excel_analyzer": mock_skill_module,
-            "app.infrastructure.skills.excel_analyzer.excel_template_analyzer": mock_skill_module,
-        }):
+        with patch.dict(
+            "sys.modules",
+            {
+                "app.infrastructure.skills.excel_analyzer": mock_skill_module,
+                "app.infrastructure.skills.excel_analyzer.excel_template_analyzer": mock_skill_module,
+            },
+        ):
             result = _analyze_excel_template(
                 str(tmp_path / "fake.xlsx"), "test", "fake.xlsx", "task-excel"
             )
@@ -431,13 +444,20 @@ class TestAnalyzeExcelTemplate:
         mock_skill_module = MagicMock()
         mock_skill_module.get_excel_analyzer_skill.return_value = mock_skill_instance
 
-        with patch.dict("sys.modules", {
-            "app.infrastructure.skills.excel_analyzer": mock_skill_module,
-            "app.infrastructure.skills.excel_analyzer.excel_template_analyzer": mock_skill_module,
-        }):
+        with patch.dict(
+            "sys.modules",
+            {
+                "app.infrastructure.skills.excel_analyzer": mock_skill_module,
+                "app.infrastructure.skills.excel_analyzer.excel_template_analyzer": mock_skill_module,
+            },
+        ):
             with patch(
                 "app.services.document_templates.analyzer._extract_structured_excel_preview",
-                return_value={"fields": [{"label": "产品名称", "value": "", "type": "dynamic"}], "sample_rows": [], "sheet_name": "出货"},
+                return_value={
+                    "fields": [{"label": "产品名称", "value": "", "type": "dynamic"}],
+                    "sample_rows": [],
+                    "sheet_name": "出货",
+                },
             ):
                 with patch(
                     "app.services.document_templates.analyzer._extract_excel_grid_preview",
@@ -467,11 +487,14 @@ class TestAnalyzeLabelTemplate:
         mock_skill_module = MagicMock()
         mock_skill_module.LabelTemplateGeneratorSkill.return_value = mock_skill_instance
 
-        with patch.dict("sys.modules", {
-            "app.services.skills": mock_skill_module,
-            "app.services.skills.label_template_generator": mock_skill_module,
-            "app.services.skills.label_template_generator.label_template_generator": mock_skill_module,
-        }):
+        with patch.dict(
+            "sys.modules",
+            {
+                "app.services.skills": mock_skill_module,
+                "app.services.skills.label_template_generator": mock_skill_module,
+                "app.services.skills.label_template_generator.label_template_generator": mock_skill_module,
+            },
+        ):
             result = _analyze_label_template(
                 str(tmp_path / "fake.png"), "test", "fake.png", "task-label"
             )
@@ -487,7 +510,13 @@ class TestAnalyzeLabelTemplate:
             "analysis": {"size": {"width": 100, "height": 50}, "colors": {}},
             "ocr_result": {
                 "fields": [
-                    {"label": "品名", "value": "示例", "type": "fixed_label", "position": {}, "confidence": 0.9}
+                    {
+                        "label": "品名",
+                        "value": "示例",
+                        "type": "fixed_label",
+                        "position": {},
+                        "confidence": 0.9,
+                    }
                 ],
                 "grid": {"rows": 2, "cols": 3},
             },
@@ -496,11 +525,14 @@ class TestAnalyzeLabelTemplate:
         mock_skill_module = MagicMock()
         mock_skill_module.LabelTemplateGeneratorSkill.return_value = mock_skill_instance
 
-        with patch.dict("sys.modules", {
-            "app.services.skills": mock_skill_module,
-            "app.services.skills.label_template_generator": mock_skill_module,
-            "app.services.skills.label_template_generator.label_template_generator": mock_skill_module,
-        }):
+        with patch.dict(
+            "sys.modules",
+            {
+                "app.services.skills": mock_skill_module,
+                "app.services.skills.label_template_generator": mock_skill_module,
+                "app.services.skills.label_template_generator.label_template_generator": mock_skill_module,
+            },
+        ):
             result = _analyze_label_template(
                 str(tmp_path / "fake.png"), "test", "fake.png", "task-label2"
             )
@@ -523,11 +555,14 @@ class TestAnalyzeLabelTemplate:
         mock_skill_module = MagicMock()
         mock_skill_module.LabelTemplateGeneratorSkill.return_value = mock_skill_instance
 
-        with patch.dict("sys.modules", {
-            "app.services.skills": mock_skill_module,
-            "app.services.skills.label_template_generator": mock_skill_module,
-            "app.services.skills.label_template_generator.label_template_generator": mock_skill_module,
-        }):
+        with patch.dict(
+            "sys.modules",
+            {
+                "app.services.skills": mock_skill_module,
+                "app.services.skills.label_template_generator": mock_skill_module,
+                "app.services.skills.label_template_generator.label_template_generator": mock_skill_module,
+            },
+        ):
             result = _analyze_label_template(
                 str(tmp_path / "fake.png"), "", "fake.png", "task-label3"
             )

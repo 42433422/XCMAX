@@ -15,7 +15,6 @@ from app.services.wechat_contact_cache_import import (
     wechat_message_source_size_payload,
 )
 
-
 # ---------------------------------------------------------------------------
 # _resolve_wechat_decrypt_dir
 # ---------------------------------------------------------------------------
@@ -77,10 +76,13 @@ class TestEnsureDecryptedWechatDbs:
             "db_dir": "",
         }
 
-        with patch(
-            "app.services.wechat_contact_cache_import._resolve_wechat_decrypt_dir",
-            return_value=str(wechat_dir),
-        ), patch.dict("sys.modules", {}):
+        with (
+            patch(
+                "app.services.wechat_contact_cache_import._resolve_wechat_decrypt_dir",
+                return_value=str(wechat_dir),
+            ),
+            patch.dict("sys.modules", {}),
+        ):
             # Mock the config and key_utils modules
             mock_config_mod = MagicMock()
             mock_config_mod.load_config.return_value = mock_config
@@ -91,10 +93,13 @@ class TestEnsureDecryptedWechatDbs:
                 assert result["success"] is False
 
     def test_module_not_found_error(self, monkeypatch):
-        with patch(
-            "app.services.wechat_contact_cache_import._resolve_wechat_decrypt_dir",
-            return_value="/fake/path",
-        ), patch.dict("sys.modules", {"config": None, "key_utils": None}):
+        with (
+            patch(
+                "app.services.wechat_contact_cache_import._resolve_wechat_decrypt_dir",
+                return_value="/fake/path",
+            ),
+            patch.dict("sys.modules", {"config": None, "key_utils": None}),
+        ):
             result = ensure_decrypted_wechat_dbs()
             assert result["success"] is False
             assert result["reason"] == "not_configured"
@@ -129,15 +134,17 @@ class TestRefreshWechatContactsFromDecrypt:
         decrypted_dir = wechat_dir / "decrypted"
         decrypted_dir.mkdir(parents=True)
 
-        with patch(
-            "app.services.wechat_contact_cache_import.ensure_decrypted_wechat_dbs",
-            return_value={"success": True, "message": "ok"},
-        ), patch(
-            "app.services.wechat_contact_cache_import._resolve_wechat_decrypt_dir",
-            return_value=str(wechat_dir),
-        ), patch(
-            "app.services.wechat_contact_cache_import.get_db"
-        ) as mock_get_db:
+        with (
+            patch(
+                "app.services.wechat_contact_cache_import.ensure_decrypted_wechat_dbs",
+                return_value={"success": True, "message": "ok"},
+            ),
+            patch(
+                "app.services.wechat_contact_cache_import._resolve_wechat_decrypt_dir",
+                return_value=str(wechat_dir),
+            ),
+            patch("app.services.wechat_contact_cache_import.get_db") as mock_get_db,
+        ):
             mock_db = MagicMock()
             mock_get_db.return_value.__enter__ = MagicMock(return_value=mock_db)
             mock_get_db.return_value.__exit__ = MagicMock(return_value=False)
@@ -170,7 +177,9 @@ class TestWechatMessageSourceSizePayload:
         mock_row2.message_count = 50
         mock_qs.get_all.return_value = [mock_row1, mock_row2]
 
-        with patch.dict("sys.modules", {"app.services.unified_query_service": MagicMock(query_service=mock_qs)}):
+        with patch.dict(
+            "sys.modules", {"app.services.unified_query_service": MagicMock(query_service=mock_qs)}
+        ):
             with patch("app.db.models.WechatContactContext", mock_ctx):
                 # Directly test with mock
                 pass

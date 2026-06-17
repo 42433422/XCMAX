@@ -12,7 +12,6 @@ from typing import Any
 from app.db.models.user import Session as UserSession
 from app.db.session import get_host_db
 from app.infrastructure.session.session_manager import SessionManager
-from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.time import utc_now_naive
 
 logger = logging.getLogger(__name__)
@@ -23,7 +22,9 @@ _BRIDGE: dict[str, dict[str, Any]] = {}
 
 def _purge_expired_bridge_tokens() -> None:
     now = time.time()
-    expired = [k for k, v in _BRIDGE.items() if now - float(v.get("created_at") or 0) > _BRIDGE_TTL_SEC]
+    expired = [
+        k for k, v in _BRIDGE.items() if now - float(v.get("created_at") or 0) > _BRIDGE_TTL_SEC
+    ]
     for key in expired:
         _BRIDGE.pop(key, None)
 

@@ -71,9 +71,7 @@ def _employee_dispatcher(
         or f"协作步骤：{tool_id}"
     )
     input_data = {
-        k: v
-        for k, v in params.items()
-        if k not in ("_runtime_context", "task", "user_request")
+        k: v for k, v in params.items() if k not in ("_runtime_context", "task", "user_request")
     }
     input_data["upstream_outputs"] = node_outputs
     input_data["skip_collaboration"] = True
@@ -105,18 +103,20 @@ class EmployeeOrchestrator:
 
     def __init__(self, graph: CollaborationGraph | None = None) -> None:
         self.graph = graph or build_global_collaboration_graph()
-        self._engine = WorkflowEngine(
-            tool_dispatcher=lambda **kw: _employee_dispatcher(**kw)
-        )
+        self._engine = WorkflowEngine(tool_dispatcher=lambda **kw: _employee_dispatcher(**kw))
 
-    def depends_on(self, employee_id: str, manifest: dict[str, Any], config: dict[str, Any]) -> list[str]:
+    def depends_on(
+        self, employee_id: str, manifest: dict[str, Any], config: dict[str, Any]
+    ) -> list[str]:
         eid = str(employee_id or "").strip()
         local = _resolve_depends_on(manifest, config)
         if local:
             self.graph.add(eid, local)
         return self.graph.edges.get(eid, local)
 
-    def build_plan(self, employee_id: str, task: str, *, include_root: bool = True) -> PlanGraph | None:
+    def build_plan(
+        self, employee_id: str, task: str, *, include_root: bool = True
+    ) -> PlanGraph | None:
         eid = str(employee_id or "").strip()
         order = self.graph.execution_order(eid)
         if len(order) <= 1:
@@ -141,9 +141,7 @@ class EmployeeOrchestrator:
                     action="run",
                     params={
                         "task": (
-                            task
-                            if include_root and node_eid == eid
-                            else f"上游协作：{node_eid}"
+                            task if include_root and node_eid == eid else f"上游协作：{node_eid}"
                         )
                     },
                     depends_on=direct_deps,

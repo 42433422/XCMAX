@@ -12,17 +12,17 @@ from app.utils.async_tasks import (
     AsyncTaskManager,
     TaskResult,
     TaskStatus,
+    _register_default_tasks,
     async_task,
     background_task,
     get_async_task_manager,
     retry_on_failure,
-    _register_default_tasks,
 )
-
 
 # ---------------------------------------------------------------------------
 # TaskStatus
 # ---------------------------------------------------------------------------
+
 
 class TestTaskStatus:
     def test_all_values(self):
@@ -41,6 +41,7 @@ class TestTaskStatus:
 # ---------------------------------------------------------------------------
 # TaskResult
 # ---------------------------------------------------------------------------
+
 
 class TestTaskResult:
     def test_default_values(self):
@@ -92,6 +93,7 @@ class TestTaskResult:
 # AsyncTaskConfig
 # ---------------------------------------------------------------------------
 
+
 class TestAsyncTaskConfig:
     def test_default_values(self):
         config = AsyncTaskConfig(name="test_task")
@@ -116,6 +118,7 @@ class TestAsyncTaskConfig:
 # ---------------------------------------------------------------------------
 # AsyncTaskManager
 # ---------------------------------------------------------------------------
+
 
 class TestAsyncTaskManager:
     @pytest.fixture
@@ -332,6 +335,7 @@ class TestAsyncTaskManager:
 # async_task decorator
 # ---------------------------------------------------------------------------
 
+
 class TestAsyncTaskDecorator:
     @patch("app.utils.async_tasks.get_async_task_manager")
     def test_sync_mode(self, mock_get_manager):
@@ -390,6 +394,7 @@ class TestAsyncTaskDecorator:
 # background_task decorator
 # ---------------------------------------------------------------------------
 
+
 class TestBackgroundTaskDecorator:
     def test_default_name(self):
         @background_task()
@@ -409,6 +414,7 @@ class TestBackgroundTaskDecorator:
 # ---------------------------------------------------------------------------
 # retry_on_failure decorator
 # ---------------------------------------------------------------------------
+
 
 class TestRetryOnFailure:
     def test_success_no_retry(self):
@@ -474,9 +480,11 @@ class TestRetryOnFailure:
 # get_async_task_manager
 # ---------------------------------------------------------------------------
 
+
 class TestGetAsyncTaskManager:
     def test_returns_singleton(self):
         import app.utils.async_tasks as mod
+
         mod._async_task_manager = None
 
         m1 = get_async_task_manager()
@@ -487,6 +495,7 @@ class TestGetAsyncTaskManager:
 
     def test_registers_default_tasks(self):
         import app.utils.async_tasks as mod
+
         mod._async_task_manager = None
 
         manager = get_async_task_manager()
@@ -499,6 +508,7 @@ class TestGetAsyncTaskManager:
 # ---------------------------------------------------------------------------
 # _register_default_tasks
 # ---------------------------------------------------------------------------
+
 
 class TestRegisterDefaultTasks:
     def test_registers_expected_tasks(self):

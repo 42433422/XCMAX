@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import math
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from app.infrastructure.persistence.product_repository_impl import (
-    SQLAlchemyProductRepository,
     TRIVIAL_MEASURE_UNITS,
+    SQLAlchemyProductRepository,
 )
 
 
@@ -21,27 +22,23 @@ def _mock_db_ctx(mock_db):
 
 
 def _make_product(**overrides):
-    m = MagicMock()
-    defaults = dict(
-        id=1,
-        name="测试产品",
-        model_number="M-001",
-        specification="25kg",
-        price=100.0,
-        quantity=50,
-        unit="测试客户",
-        category="化工",
-        brand="品牌A",
-        description="描述",
-        is_active=1,
-        created_at="2026-01-01",
-        updated_at="2026-06-01",
-    )
+    defaults = {
+        "id": 1,
+        "name": "测试产品",
+        "model_number": "M-001",
+        "specification": "25kg",
+        "price": 100.0,
+        "quantity": 50,
+        "unit": "测试客户",
+        "category": "化工",
+        "brand": "品牌A",
+        "description": "描述",
+        "is_active": 1,
+        "created_at": "2026-01-01",
+        "updated_at": "2026-06-01",
+    }
     defaults.update(overrides)
-    for k, v in defaults.items():
-        setattr(m, k, v)
-    m.__dict__ = dict(defaults)
-    return m
+    return SimpleNamespace(**defaults)
 
 
 @pytest.fixture
@@ -135,12 +132,15 @@ class TestFindById:
         mock_db.query.return_value = mock_query
         mock_query.filter.return_value = mock_query
         mock_query.first.return_value = _make_product()
-        with patch(
-            "app.infrastructure.persistence.product_repository_impl.get_db",
-            return_value=_mock_db_ctx(mock_db),
-        ), patch(
-            "app.infrastructure.persistence.product_repository_impl.inspect",
-        ) as mock_inspect:
+        with (
+            patch(
+                "app.infrastructure.persistence.product_repository_impl.get_db",
+                return_value=_mock_db_ctx(mock_db),
+            ),
+            patch(
+                "app.infrastructure.persistence.product_repository_impl.inspect",
+            ) as mock_inspect,
+        ):
             mock_col = MagicMock()
             mock_col.name = "id"
             mock_inspect.return_value.columns = [mock_col]
@@ -176,12 +176,15 @@ class TestCreate:
         mock_db.add = MagicMock()
         mock_db.commit = MagicMock()
         mock_db.refresh = MagicMock()
-        with patch(
-            "app.infrastructure.persistence.product_repository_impl.get_db",
-            return_value=_mock_db_ctx(mock_db),
-        ), patch(
-            "app.infrastructure.persistence.product_repository_impl.Product",
-            return_value=_make_product(),
+        with (
+            patch(
+                "app.infrastructure.persistence.product_repository_impl.get_db",
+                return_value=_mock_db_ctx(mock_db),
+            ),
+            patch(
+                "app.infrastructure.persistence.product_repository_impl.Product",
+                return_value=_make_product(),
+            ),
         ):
             result = repo.create({"name": "新产品", "price": 10.0})
         assert result["success"] is True

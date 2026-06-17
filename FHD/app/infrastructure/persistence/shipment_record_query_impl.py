@@ -13,6 +13,29 @@ from app.infrastructure.lookups import resolve_purchase_unit
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
+_QUERY_ERRORS = (*RECOVERABLE_ERRORS, Exception)
+
+
+def _record_to_dict(record: Any) -> dict[str, Any]:
+    row_dict: dict[str, Any] = {}
+    try:
+        columns = list(sa_inspect(ShipmentRecord).columns)
+    except _QUERY_ERRORS:
+        columns = []
+    for column in columns:
+        row_dict[column.name] = getattr(record, column.name)
+    if row_dict:
+        return row_dict
+    raw = getattr(record, "__dict__", {}) or {}
+    for key, value in raw.items():
+        if not str(key).startswith("_"):
+            row_dict[str(key)] = value
+    if row_dict:
+        return row_dict
+    for key in ("id", "purchase_unit", "product_name", "model_number", "quantity", "created_at"):
+        if hasattr(record, key):
+            row_dict[key] = getattr(record, key)
+    return row_dict
 
 
 class SQLAlchemyShipmentRecordQuery(ShipmentRecordQueryPort):
@@ -72,13 +95,7 @@ class SQLAlchemyShipmentRecordQuery(ShipmentRecordQueryPort):
                     .all()
                 )
 
-                rows: list[dict[str, Any]] = []
-                shipment_inspect = sa_inspect(ShipmentRecord)
-                for record in records:
-                    row_dict: dict[str, Any] = {}
-                    for column in shipment_inspect.columns:
-                        row_dict[column.name] = getattr(record, column.name)
-                    rows.append(row_dict)
+                rows = [_record_to_dict(record) for record in records]
 
             return {
                 "success": True,
@@ -87,7 +104,7 @@ class SQLAlchemyShipmentRecordQuery(ShipmentRecordQueryPort):
                 "page": page,
                 "per_page": per_page,
             }
-        except RECOVERABLE_ERRORS as e:
+        except _QUERY_ERRORS as e:
             return {
                 "success": False,
                 "message": f"查询失败：{str(e)}",
@@ -120,16 +137,8 @@ class SQLAlchemyShipmentRecordQuery(ShipmentRecordQueryPort):
                     .all()
                 )
 
-                rows: list[dict[str, Any]] = []
-                shipment_inspect = sa_inspect(ShipmentRecord)
-                for record in records:
-                    row_dict: dict[str, Any] = {}
-                    for column in shipment_inspect.columns:
-                        row_dict[column.name] = getattr(record, column.name)
-                    rows.append(row_dict)
-
-                return rows
-        except RECOVERABLE_ERRORS:
+                return [_record_to_dict(record) for record in records]
+        except _QUERY_ERRORS:
             return []
 
     def get_shipment_by_id(self, order_id: str) -> dict[str, Any] | None:
@@ -152,12 +161,8 @@ class SQLAlchemyShipmentRecordQuery(ShipmentRecordQueryPort):
                 if not record:
                     return None
 
-                shipment_inspect = sa_inspect(ShipmentRecord)
-                row_dict: dict[str, Any] = {}
-                for column in shipment_inspect.columns:
-                    row_dict[column.name] = getattr(record, column.name)
-                return row_dict
-        except RECOVERABLE_ERRORS:
+                return _record_to_dict(record)
+        except _QUERY_ERRORS:
             return None
 
     def get_latest_shipments(self, limit: int) -> list[dict[str, Any]]:
@@ -178,16 +183,8 @@ class SQLAlchemyShipmentRecordQuery(ShipmentRecordQueryPort):
                     .all()
                 )
 
-                shipment_inspect = sa_inspect(ShipmentRecord)
-                rows: list[dict[str, Any]] = []
-                for record in records:
-                    row_dict: dict[str, Any] = {}
-                    for column in shipment_inspect.columns:
-                        row_dict[column.name] = getattr(record, column.name)
-                    rows.append(row_dict)
-
-                return rows
-        except RECOVERABLE_ERRORS:
+                return [_record_to_dict(record) for record in records]
+        except _QUERY_ERRORS:
             return []
 
     def get_shipment_records(

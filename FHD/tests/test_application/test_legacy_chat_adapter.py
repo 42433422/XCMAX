@@ -7,12 +7,11 @@ from unittest.mock import MagicMock, Mock, patch
 import pytest
 
 from app.application.workflow.legacy_chat_adapter import (
-    _should_replace_tool_result,
-    _record_tool_result,
-    reset_last_tool_result,
     _LAST_TOOL_RESULT,
+    _record_tool_result,
+    _should_replace_tool_result,
+    reset_last_tool_result,
 )
-
 
 # ========================= _should_replace_tool_result ===================
 
@@ -40,7 +39,9 @@ class TestShouldReplaceToolResult:
 
     def test_both_success_no_download(self):
         assert (
-            _should_replace_tool_result({"success": True, "data": "a"}, {"success": True, "data": "b"})
+            _should_replace_tool_result(
+                {"success": True, "data": "a"}, {"success": True, "data": "b"}
+            )
             is False
         )
 

@@ -20,9 +20,11 @@ from app.services.shipment_number_mode_service import ShipmentNumberModeService
 
 def _mock_get_db(mock_db):
     """Create a contextmanager mock for get_db generator."""
+
     @contextlib.contextmanager
     def _get_db():
         yield mock_db
+
     return _get_db
 
 
@@ -503,7 +505,12 @@ class TestExecute:
                 custom_order_number="",
                 direct_unit_name="七彩乐园",
                 direct_products=[
-                    {"model_number": "", "product_name": "产品A", "tin_spec": "28", "quantity_tins": 5}
+                    {
+                        "model_number": "",
+                        "product_name": "产品A",
+                        "tin_spec": "28",
+                        "quantity_tins": 5,
+                    }
                 ],
                 parse_order_text=lambda x: {"success": False},
             )
@@ -524,7 +531,12 @@ class TestExecute:
                 custom_order_number="",
                 direct_unit_name="七彩乐园",
                 direct_products=[
-                    {"model_number": "9803", "product_name": "产品A", "tin_spec": "", "quantity_tins": 5}
+                    {
+                        "model_number": "9803",
+                        "product_name": "产品A",
+                        "tin_spec": "",
+                        "quantity_tins": 5,
+                    }
                 ],
                 parse_order_text=lambda x: {"success": False},
             )
@@ -545,7 +557,12 @@ class TestExecute:
                 custom_order_number="",
                 direct_unit_name="七彩乐园",
                 direct_products=[
-                    {"model_number": "9803", "product_name": "产品A", "tin_spec": "28", "quantity_tins": 0}
+                    {
+                        "model_number": "9803",
+                        "product_name": "产品A",
+                        "tin_spec": "28",
+                        "quantity_tins": 0,
+                    }
                 ],
                 parse_order_text=lambda x: {"success": False},
             )
@@ -568,7 +585,12 @@ class TestExecute:
                 custom_order_number="",
                 direct_unit_name="七彩乐园",
                 direct_products=[
-                    {"model_number": "9803", "product_name": "产品A", "tin_spec": "28", "quantity_tins": 5}
+                    {
+                        "model_number": "9803",
+                        "product_name": "产品A",
+                        "tin_spec": "28",
+                        "quantity_tins": 5,
+                    }
                 ],
                 parse_order_text=lambda x: {"success": False},
             )
@@ -598,7 +620,12 @@ class TestExecute:
                 custom_order_number="",
                 direct_unit_name="七彩乐园",
                 direct_products=[
-                    {"model_number": "9803", "product_name": "产品A", "tin_spec": "28", "quantity_tins": 5}
+                    {
+                        "model_number": "9803",
+                        "product_name": "产品A",
+                        "tin_spec": "28",
+                        "quantity_tins": 5,
+                    }
                 ],
                 parse_order_text=lambda x: {"success": False},
             )
@@ -630,7 +657,12 @@ class TestExecute:
                 custom_order_number="CUSTOM001",
                 direct_unit_name="七彩乐园",
                 direct_products=[
-                    {"model_number": "9803", "product_name": "产品A", "tin_spec": "28", "quantity_tins": 5}
+                    {
+                        "model_number": "9803",
+                        "product_name": "产品A",
+                        "tin_spec": "28",
+                        "quantity_tins": 5,
+                    }
                 ],
                 parse_order_text=lambda x: {"success": False},
             )

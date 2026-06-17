@@ -166,7 +166,9 @@ class CustomerAppServiceV2:
             self._bus.publish(event)
 
             logger.info(
-                "[CustomerAppServiceV2] 客户绑定单位事件已发布: %s -> %s", customer_id, purchase_unit
+                "[CustomerAppServiceV2] 客户绑定单位事件已发布: %s -> %s",
+                customer_id,
+                purchase_unit,
             )
 
             return {

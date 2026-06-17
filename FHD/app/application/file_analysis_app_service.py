@@ -63,7 +63,10 @@ class FileAnalysisService:
             return self._analyze_sqlite_db(saved_path, saved_name, raw_filename, filename)
 
         if ext in (".xlsx", ".xls"):
-            return cast("dict[str, Any]", self._analyze_excel_file(saved_path, saved_name, raw_filename, filename))
+            return cast(
+                "dict[str, Any]",
+                self._analyze_excel_file(saved_path, saved_name, raw_filename, filename),
+            )
 
         return {
             "success": False,

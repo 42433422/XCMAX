@@ -48,7 +48,9 @@ class TestSemanticChunker:
                 return [0.9, 0.1]
             return [0.0, 1.0]
 
-        chunker = SemanticChunker(embedder=embed, threshold=0.5, min_chunk_chars=1, max_chunk_chars=200)
+        chunker = SemanticChunker(
+            embedder=embed, threshold=0.5, min_chunk_chars=1, max_chunk_chars=200
+        )
         text = "A。B。C。"
         chunks = chunker.split_by_semantic(text)
         assert len(chunks) >= 1

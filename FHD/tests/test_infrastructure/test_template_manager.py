@@ -9,11 +9,10 @@ import pytest
 
 from app.infrastructure.skills.template_manager.template_manager import (
     get_base_dir,
+    get_template_file,
     get_template_manager_skill,
     list_physical_template_files,
-    get_template_file,
 )
-
 
 # ========================= get_base_dir ==================================
 
@@ -67,10 +66,12 @@ class TestListPhysicalTemplateFiles:
             assert result == []
 
     def test_with_xlsx_files(self):
-        with patch("os.path.exists", return_value=True), \
-             patch("os.listdir", return_value=["test.xlsx", "readme.txt"]), \
-             patch("os.path.getsize", return_value=1024), \
-             patch("os.path.join", side_effect=lambda *args: "/".join(args)):
+        with (
+            patch("os.path.exists", return_value=True),
+            patch("os.listdir", return_value=["test.xlsx", "readme.txt"]),
+            patch("os.path.getsize", return_value=1024),
+            patch("os.path.join", side_effect=lambda *args: "/".join(args)),
+        ):
             result = list_physical_template_files()
             # Should only include .xlsx/.xls files
             assert len(result) == 2  # one from templates dir, one from temp_excel dir
@@ -78,8 +79,10 @@ class TestListPhysicalTemplateFiles:
                 assert item["filename"] == "test.xlsx"
 
     def test_no_excel_files(self):
-        with patch("os.path.exists", return_value=True), \
-             patch("os.listdir", return_value=["readme.txt", "image.png"]):
+        with (
+            patch("os.path.exists", return_value=True),
+            patch("os.listdir", return_value=["readme.txt", "image.png"]),
+        ):
             result = list_physical_template_files()
             assert result == []
 
@@ -98,9 +101,11 @@ class TestGetTemplateFile:
             # The directory check and file check both need to return True
             return "templates" in p
 
-        with patch("os.path.exists", side_effect=exists_side_effect), \
-             patch("os.path.getsize", return_value=2048), \
-             patch("os.path.join", side_effect=lambda *args: "/".join(args)):
+        with (
+            patch("os.path.exists", side_effect=exists_side_effect),
+            patch("os.path.getsize", return_value=2048),
+            patch("os.path.join", side_effect=lambda *args: "/".join(args)),
+        ):
             result = get_template_file("test.xlsx")
             assert result is not None
             assert result["filename"] == "test.xlsx"

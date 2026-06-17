@@ -40,10 +40,14 @@ class AIConversationService(
                 llm_init_mode = "platform"
                 logger.info(
                     "🌐 [优先级1] 启用修茈市场平台代理模式\n"
-                    f"   平台地址: %s\n"
-                    f"   默认模型: %s/%s\n"
-                    f"   用户ID: %s\n"
-                    f"   ✅ 所有LLM请求将通过平台统一路由", modstore.platform_url, modstore.default_provider, modstore.default_model, modstore.user_id
+                    "   平台地址: %s\n"
+                    "   默认模型: %s/%s\n"
+                    "   用户ID: %s\n"
+                    "   ✅ 所有LLM请求将通过平台统一路由",
+                    modstore.platform_url,
+                    modstore.default_provider,
+                    modstore.default_model,
+                    modstore.user_id,
                 )
             else:
                 logger.debug("未检测到修茈市场平台配置，尝试直连模式...")
@@ -67,8 +71,9 @@ class AIConversationService(
                 if self.llm_adapter.is_configured:
                     llm_init_mode = "direct"
                     logger.info(
-                        "⚡ [优先级2] 启用直连模式: %s/"
-                        f"%s (Key已配置)", self.llm_adapter.provider_name, self.llm_adapter.model_name
+                        "⚡ [优先级2] 启用直连模式: %s/%s (Key已配置)",
+                        self.llm_adapter.provider_name,
+                        self.llm_adapter.model_name,
                     )
                 else:
                     logger.warning("⚠️ 直连适配器已创建但 [%s] API Key未配置", llm_provider)
@@ -206,7 +211,9 @@ class AIConversationService(
         self, user_id: str, intent: str, slots: dict[str, Any]
     ) -> dict[str, Any]:
         try:
-            return cast("dict[str, Any]", self.user_memory.apply_preference_to_slots(user_id, intent, slots))
+            return cast(
+                "dict[str, Any]", self.user_memory.apply_preference_to_slots(user_id, intent, slots)
+            )
         except RECOVERABLE_ERRORS as e:
             logger.error("应用用户偏好失败: %s", e)
             return slots
@@ -215,7 +222,10 @@ class AIConversationService(
         self, user_id: str, intent: str, slots: dict[str, Any]
     ) -> dict[str, Any] | None:
         try:
-            return cast("dict[str, Any] | None", self.user_memory.get_similar_pattern(user_id, intent, slots))
+            return cast(
+                "dict[str, Any] | None",
+                self.user_memory.get_similar_pattern(user_id, intent, slots),
+            )
         except RECOVERABLE_ERRORS as e:
             logger.error("获取相似操作失败: %s", e)
             return None
@@ -289,7 +299,12 @@ class AIConversationService(
             intent_result = self._enhance_intent_slots(message, intent_result, user_id)
 
             logger.info(
-                "[INTENT_RESULT] final_intent=%s, primary_intent=%s, tool_key=%s, slots=%s, intent_source=%s", intent_result.get('final_intent'), intent_result.get('primary_intent'), intent_result.get('tool_key'), intent_result.get('slots'), intent_result.get('intent_source')
+                "[INTENT_RESULT] final_intent=%s, primary_intent=%s, tool_key=%s, slots=%s, intent_source=%s",
+                intent_result.get("final_intent"),
+                intent_result.get("primary_intent"),
+                intent_result.get("tool_key"),
+                intent_result.get("slots"),
+                intent_result.get("intent_source"),
             )
             self._update_context_from_intent(conv_context, intent_result)
 

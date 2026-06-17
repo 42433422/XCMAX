@@ -230,8 +230,10 @@ class ProductImportService(NeuroEventPublisherMixin):
                 logger.warning("Hook trigger failed: %s", hook_err)
 
             logger.info(
-                "产品导入完成：成功%s, "
-                f"跳过%s, 失败%s", result['imported'], result['skipped'], result['failed']
+                "产品导入完成：成功%s, 跳过%s, 失败%s",
+                result["imported"],
+                result["skipped"],
+                result["failed"],
             )
 
         except RECOVERABLE_ERRORS as e:

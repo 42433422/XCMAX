@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from app.domain.services.product_import_validator import ProductImportValidator, get_product_import_validator
+from app.domain.services.product_import_validator import (
+    ProductImportValidator,
+    get_product_import_validator,
+)
 
 
 class TestProductImportValidator:

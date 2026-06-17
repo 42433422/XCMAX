@@ -377,7 +377,9 @@ class OrderAppServiceV2:
             if not event:
                 return {"success": False, "message": "发布事件失败"}
 
-            logger.info("[OrderAppServiceV2] 订单退款事件已发布: %s, 退款金额: %s", order_id, amount)
+            logger.info(
+                "[OrderAppServiceV2] 订单退款事件已发布: %s, 退款金额: %s", order_id, amount
+            )
 
             return {
                 "success": True,

@@ -11,20 +11,19 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from starlette.requests import Request
 
+import app.fastapi_routes.mobile_api_extensions as mobile_ext
+from app.application import aibiz_web_terminal_service as aibiz_mod
 from app.application.approval_workspace_app_service import (
     _generate_request_no,
     _next_node,
     _node_query_for_user,
     _normalize_statuses,
 )
-from app.application import aibiz_web_terminal_service as aibiz_mod
 from app.application.file_analysis_app_service import FileAnalysisService
 from app.application.product_app_service import ProductApplicationService
 from app.fastapi_routes import market_account as market_mod
 from app.fastapi_routes import mobile_api as mobile_api_mod
-import app.fastapi_routes.mobile_api_extensions as mobile_ext
 from app.fastapi_routes import xcagi_compat_chat_helpers as chat_helpers
-
 
 # ---------------------------------------------------------------------------
 # market_account pure helpers
@@ -70,9 +69,12 @@ def test_bootstrap_overview_needs_live_merge() -> None:
     }
     assert market_mod._bootstrap_overview_needs_live_merge(complete) is False
     assert market_mod._bootstrap_overview_needs_live_merge({"user": {"id": 1}}) is True
-    assert market_mod._bootstrap_overview_needs_live_merge(
-        {"user": {"id": 1}, "wallet": {"balance": 0}}
-    ) is True
+    assert (
+        market_mod._bootstrap_overview_needs_live_merge(
+            {"user": {"id": 1}, "wallet": {"balance": 0}}
+        )
+        is True
+    )
 
 
 @pytest.mark.asyncio
@@ -147,7 +149,9 @@ def market_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
 
 
 @pytest.mark.asyncio
-async def test_market_status_route_reachable(market_client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_market_status_route_reachable(
+    market_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
     async def _ok(method, path, **k):
         return {"status": "ok"}
 
@@ -158,7 +162,9 @@ async def test_market_status_route_reachable(market_client: TestClient, monkeypa
 
 
 @pytest.mark.asyncio
-async def test_market_llm_catalog_get(market_client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_market_llm_catalog_get(
+    market_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
     async def _catalog(method, path, **k):
         return {"models": []}
 
@@ -168,7 +174,9 @@ async def test_market_llm_catalog_get(market_client: TestClient, monkeypatch: py
 
 
 @pytest.mark.asyncio
-async def test_market_payment_plans(market_client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_market_payment_plans(
+    market_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
     async def _plans(method, path, **k):
         return {"plans": []}
 

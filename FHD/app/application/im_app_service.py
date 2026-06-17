@@ -52,7 +52,10 @@ class ImApplicationService:
         ).first()
         return int(row[0]) if row else None
 
-    def list_conversations(self, user_id: int) -> list[dict[str, Any]]:
+    def list_conversations(
+        self, user_id: int, session_id: str | None = None
+    ) -> list[dict[str, Any]]:
+        _ = session_id
         rows = (
             self._db.execute(
                 select(ImConversation)
@@ -221,9 +224,7 @@ class ImApplicationService:
             "updated_at_ms": updated_at_ms,
         }
 
-    def mark_read(
-        self, conversation_id: int, user_id: int, last_message_id: int
-    ) -> dict[str, Any]:
+    def mark_read(self, conversation_id: int, user_id: int, last_message_id: int) -> dict[str, Any]:
         member = self._get_member(conversation_id, user_id)
         if not member:
             raise PermissionError("非会话成员")

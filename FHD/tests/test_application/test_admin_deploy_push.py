@@ -22,7 +22,6 @@ from app.application.admin_deploy_push import (
     get_deploy_job,
 )
 
-
 # ========================= _fhd_root ====================================
 
 
@@ -249,13 +248,15 @@ class TestCheckDeployUpdates:
     @patch("app.application.admin_deploy_push._read_local_manifest")
     @patch("app.application.admin_deploy_push._local_version")
     @patch("app.application.admin_deploy_push._local_git_sha")
-    def test_basic_structure(
-        self, mock_sha, mock_ver, mock_manifest, mock_fetch, mock_enterprise
-    ):
+    def test_basic_structure(self, mock_sha, mock_ver, mock_manifest, mock_fetch, mock_enterprise):
         mock_sha.return_value = "abc123def456"
         mock_ver.return_value = "10.0.0"
         mock_manifest.return_value = {"git_sha": "abc123def456"}
-        mock_fetch.return_value = {"git_sha": "abc123def456", "version": "10.0.0", "sha256": "hash123"}
+        mock_fetch.return_value = {
+            "git_sha": "abc123def456",
+            "version": "10.0.0",
+            "sha256": "hash123",
+        }
         mock_enterprise.return_value = {"reachable": True, "deploy_sha256": "hash123"}
 
         result = check_deploy_updates()
@@ -275,7 +276,11 @@ class TestCheckDeployUpdates:
         mock_sha.return_value = "new_sha_12345"
         mock_ver.return_value = "10.0.0"
         mock_manifest.return_value = None
-        mock_fetch.return_value = {"git_sha": "old_sha_67890", "version": "9.0.0", "sha256": "old_hash"}
+        mock_fetch.return_value = {
+            "git_sha": "old_sha_67890",
+            "version": "9.0.0",
+            "sha256": "old_hash",
+        }
         mock_enterprise.return_value = {"reachable": True, "deploy_sha256": "old_hash"}
 
         result = check_deploy_updates()
@@ -290,7 +295,11 @@ class TestCheckDeployUpdates:
         mock_sha.return_value = "abc123def456"
         mock_ver.return_value = "10.0.0"
         mock_manifest.return_value = {"git_sha": "abc123def456"}
-        mock_fetch.return_value = {"git_sha": "abc123def456", "version": "10.0.0", "sha256": "hash123"}
+        mock_fetch.return_value = {
+            "git_sha": "abc123def456",
+            "version": "10.0.0",
+            "sha256": "hash123",
+        }
         mock_enterprise.return_value = {"reachable": True, "deploy_sha256": "hash123"}
 
         result = check_deploy_updates()
@@ -325,7 +334,11 @@ class TestCheckDeployUpdates:
         mock_sha.return_value = "abc123def456"
         mock_ver.return_value = "10.0.0"
         mock_manifest.return_value = {"git_sha": "old_sha"}
-        mock_fetch.return_value = {"git_sha": "abc123def456", "version": "10.0.0", "sha256": "hash123"}
+        mock_fetch.return_value = {
+            "git_sha": "abc123def456",
+            "version": "10.0.0",
+            "sha256": "hash123",
+        }
         mock_enterprise.return_value = {"reachable": True, "deploy_sha256": "hash123"}
 
         result = check_deploy_updates()
@@ -336,9 +349,7 @@ class TestCheckDeployUpdates:
     @patch("app.application.admin_deploy_push._read_local_manifest")
     @patch("app.application.admin_deploy_push._local_version")
     @patch("app.application.admin_deploy_push._local_git_sha")
-    def test_hub_unreachable(
-        self, mock_sha, mock_ver, mock_manifest, mock_fetch, mock_enterprise
-    ):
+    def test_hub_unreachable(self, mock_sha, mock_ver, mock_manifest, mock_fetch, mock_enterprise):
         mock_sha.return_value = "abc123def456"
         mock_ver.return_value = "10.0.0"
         mock_manifest.return_value = None

@@ -20,7 +20,6 @@ from app.application.enterprise_deploy_pull import (
     get_pull_job,
 )
 
-
 # ========================= PullStep ======================================
 
 
@@ -108,7 +107,9 @@ class TestReadDeployedSha256:
 
 class TestReadLocalManifestFile:
     def test_no_file(self):
-        with patch("app.application.enterprise_deploy_pull.MANIFEST_PATH", "/nonexistent/manifest.json"):
+        with patch(
+            "app.application.enterprise_deploy_pull.MANIFEST_PATH", "/nonexistent/manifest.json"
+        ):
             result = _read_local_manifest_file()
             assert result is None
 
@@ -150,8 +151,10 @@ class TestGetPullJob:
 
 class TestCheckEnterpriseUpdates:
     def test_structure(self):
-        with patch("app.application.enterprise_deploy_pull._fetch_hub_manifest", return_value=None), \
-             patch("app.application.enterprise_deploy_pull._read_deployed_sha256", return_value=""):
+        with (
+            patch("app.application.enterprise_deploy_pull._fetch_hub_manifest", return_value=None),
+            patch("app.application.enterprise_deploy_pull._read_deployed_sha256", return_value=""),
+        ):
             result = check_enterprise_updates()
             assert "role" in result
             assert result["role"] == "enterprise"
@@ -160,21 +163,39 @@ class TestCheckEnterpriseUpdates:
             assert "flags" in result
 
     def test_needs_update(self):
-        with patch("app.application.enterprise_deploy_pull._fetch_hub_manifest", return_value={"sha256": "newsha"}), \
-             patch("app.application.enterprise_deploy_pull._read_deployed_sha256", return_value="oldsha"):
+        with (
+            patch(
+                "app.application.enterprise_deploy_pull._fetch_hub_manifest",
+                return_value={"sha256": "newsha"},
+            ),
+            patch(
+                "app.application.enterprise_deploy_pull._read_deployed_sha256",
+                return_value="oldsha",
+            ),
+        ):
             result = check_enterprise_updates()
             assert result["flags"]["needs_update"] is True
 
     def test_up_to_date(self):
-        with patch("app.application.enterprise_deploy_pull._fetch_hub_manifest", return_value={"sha256": "samesha"}), \
-             patch("app.application.enterprise_deploy_pull._read_deployed_sha256", return_value="samesha"):
+        with (
+            patch(
+                "app.application.enterprise_deploy_pull._fetch_hub_manifest",
+                return_value={"sha256": "samesha"},
+            ),
+            patch(
+                "app.application.enterprise_deploy_pull._read_deployed_sha256",
+                return_value="samesha",
+            ),
+        ):
             result = check_enterprise_updates()
             assert result["flags"]["needs_update"] is False
             assert result["flags"]["up_to_date"] is True
 
     def test_no_hub_manifest(self):
-        with patch("app.application.enterprise_deploy_pull._fetch_hub_manifest", return_value=None), \
-             patch("app.application.enterprise_deploy_pull._read_deployed_sha256", return_value=""):
+        with (
+            patch("app.application.enterprise_deploy_pull._fetch_hub_manifest", return_value=None),
+            patch("app.application.enterprise_deploy_pull._read_deployed_sha256", return_value=""),
+        ):
             result = check_enterprise_updates()
             assert result["flags"]["needs_update"] is False
             assert result["update_hub"]["reachable"] is False

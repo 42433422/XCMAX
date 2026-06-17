@@ -159,9 +159,11 @@ class ModstorePlatformAdapter:
         self._client: Optional[httpx.AsyncClient] = None
 
         logger.info(
-            "初始化修茈市场平台代理: %s, "
-            f"default=%s/%s, "
-            f"user_id=%s", self.platform_url, self.default_provider, self.default_model, self.user_id
+            "初始化修茈市场平台代理: %s, default=%s/%s, user_id=%s",
+            self.platform_url,
+            self.default_provider,
+            self.default_model,
+            self.user_id,
         )
 
     @staticmethod
@@ -242,13 +244,14 @@ class ModstorePlatformAdapter:
                     if token_from_session:
                         auth_token = token_from_session
                         logger.debug(
-                            "从FHD Session [%s...] "
-                            f"获取到平台Token (长度: %s)", effective_session_id[:8], len(auth_token)
+                            "从FHD Session [%s...] 获取到平台Token (长度: %s)",
+                            effective_session_id[:8],
+                            len(auth_token),
                         )
                     else:
                         logger.warning(
-                            "FHD Session [%s...] "
-                            f"未找到平台Token（用户可能未绑定市场账号）", effective_session_id[:8]
+                            "FHD Session [%s...] 未找到平台Token（用户可能未绑定市场账号）",
+                            effective_session_id[:8],
                         )
                 else:
                     logger.warning("无法获取有效的Session ID")
@@ -325,8 +328,10 @@ class ModstorePlatformAdapter:
                 old_token_len = len(self.auth_token or "")
                 self.auth_token = new_token
                 logger.info(
-                    "Token已刷新 [%s → %s chars], "
-                    f"来源: session[%s...]", old_token_len, len(new_token), effective_session_id[:8]
+                    "Token已刷新 [%s → %s chars], 来源: session[%s...]",
+                    old_token_len,
+                    len(new_token),
+                    effective_session_id[:8],
                 )
                 return True
             else:
@@ -433,8 +438,11 @@ class ModstorePlatformAdapter:
             payload["user_id"] = self.user_id
 
         logger.debug(
-            "[Modstore] 调用平台: %s/%s, "
-            f"messages=%s, user_id=%s", effective_provider, effective_model, len(messages), self.user_id
+            "[Modstore] 调用平台: %s/%s, messages=%s, user_id=%s",
+            effective_provider,
+            effective_model,
+            len(messages),
+            self.user_id,
         )
 
         t0 = time.perf_counter()

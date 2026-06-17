@@ -69,6 +69,13 @@ export type MarketLlmCatalogData = {
   market_base_url?: string;
 };
 
+export type MarketCheckoutData = Record<string, unknown> & {
+  ok?: boolean;
+  type?: string;
+  redirect_url?: string;
+  order_id?: string;
+};
+
 /** 将用户粘贴的整行 ``Authorization: Bearer …`` 规范为可提交的 authorization 字段。 */
 export function normalizePastedAuthorization(raw: string): string {
   let t = (raw || '').trim();
@@ -128,6 +135,11 @@ export function formatMarketServiceError(
   }
   if (status === 401 || /凭证无效|未授权|unauthorized/i.test(msg)) {
     return '尚未绑定修茈市场账号；请重新登录本软件以自动同步市场会话。';
+  }
+  if (status === 429 || /too many requests|rate limit|请求过于频繁|频繁/i.test(msg)) {
+    return msg && !/^too many requests$/i.test(msg)
+      ? `市场请求过于频繁：${msg}`
+      : '市场请求过于频繁，请稍后再试。';
   }
   return msg || `市场请求失败（HTTP ${status}）`;
 }
@@ -356,6 +368,24 @@ export async function registerMarketAccount(
   };
   if (!j.success || !j.data?.token) {
     throw new Error(j.detail || j.message || '市场注册失败');
+  }
+  return j.data;
+}
+
+export async function directMarketCheckout(body: Record<string, unknown>): Promise<MarketCheckoutData> {
+  const res = await apiFetch('/api/market/payment/direct-checkout', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body || {}),
+  });
+  const j = (await res.json()) as {
+    success?: boolean;
+    detail?: string;
+    message?: string;
+    data?: MarketCheckoutData;
+  };
+  if (!j.success || !j.data) {
+    throw new Error(j.detail || j.message || '市场支付发起失败');
   }
   return j.data;
 }

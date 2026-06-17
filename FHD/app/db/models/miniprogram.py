@@ -73,7 +73,7 @@ class MpOrder(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
-    user: Mapped[User] = relationship("User", back_populates="mp_orders")
+    user: Mapped[User] = relationship("User", backref="mp_orders")
     items: Mapped[list[MpOrderItem]] = relationship(
         "MpOrderItem", back_populates="order", cascade="all, delete-orphan"
     )
@@ -189,7 +189,7 @@ class MpFeedback(Base):
     user: Mapped[User] = relationship(
         "User",
         foreign_keys=[user_id],
-        back_populates="mp_feedbacks",
+        backref="mp_feedbacks",
         overlaps="user",
     )
 

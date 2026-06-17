@@ -165,12 +165,8 @@ def _custom_employee_extension_ids(
     doc: dict[str, Any],
 ) -> list[str]:
     """账号定制阶段随定制 Mod 一并安装的 AI 员工桥接（非侧栏基准线）。"""
-    doc_level = _dedupe(
-        [str(x) for x in (doc.get("custom_employee_extension_mod_ids") or []) if x]
-    )
-    row_level = _dedupe(
-        [str(x) for x in (row.get("custom_employee_extension_mod_ids") or []) if x]
-    )
+    doc_level = _dedupe([str(x) for x in (doc.get("custom_employee_extension_mod_ids") or []) if x])
+    row_level = _dedupe([str(x) for x in (row.get("custom_employee_extension_mod_ids") or []) if x])
     return _dedupe(doc_level + row_level)
 
 

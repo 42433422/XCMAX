@@ -128,14 +128,18 @@ class TestKittenWebSearch:
 
     @pytest.mark.asyncio
     async def test_tavily_missing_key(self):
-        with patch.dict(os.environ, {"WEB_SEARCH_PROVIDER": "tavily", "TAVILY_API_KEY": ""}, clear=False):
+        with patch.dict(
+            os.environ, {"WEB_SEARCH_PROVIDER": "tavily", "TAVILY_API_KEY": ""}, clear=False
+        ):
             result = await kitten_web_search("test")
             assert result["success"] is False
             assert "TAVILY_API_KEY" in result["message"]
 
     @pytest.mark.asyncio
     async def test_serpapi_missing_key(self):
-        with patch.dict(os.environ, {"WEB_SEARCH_PROVIDER": "serpapi", "SERPAPI_API_KEY": ""}, clear=False):
+        with patch.dict(
+            os.environ, {"WEB_SEARCH_PROVIDER": "serpapi", "SERPAPI_API_KEY": ""}, clear=False
+        ):
             result = await kitten_web_search("test")
             assert result["success"] is False
             assert "SERPAPI_API_KEY" in result["message"]

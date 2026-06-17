@@ -100,6 +100,7 @@ class AnalysisSaveService(NeuroEventPublisherMixin):
                     data = json.load(f)
 
                 if data.get("id") == analysis_id:
+                    data["filepath"] = filepath
                     return cast("dict[str, Any] | None", data)
 
             return None
@@ -107,23 +108,23 @@ class AnalysisSaveService(NeuroEventPublisherMixin):
             logger.exception("Failed to get analysis: %s", e)
             return None
 
-    def delete_analysis(self, analysis_id: str) -> dict[str, Any]:
+    def delete_analysis(self, analysis_id: str) -> bool:
         try:
             analysis = self.get_analysis(analysis_id)
 
             if not analysis:
-                return {"success": False, "message": "Analysis not found"}
+                return False
 
             filepath = analysis.get("filepath")
 
             if filepath and os.path.exists(filepath):
                 os.remove(filepath)
-                return {"success": True, "message": "Analysis deleted"}
+                return True
 
-            return {"success": False, "message": "File not found"}
+            return False
         except RECOVERABLE_ERRORS as e:
             logger.exception("Failed to delete analysis: %s", e)
-            return {"success": False, "message": str(e)}
+            return False
 
     def export_analysis_to_xlsx(self, analysis_id: str) -> dict[str, Any]:
         try:

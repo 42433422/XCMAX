@@ -77,7 +77,9 @@ class TestEmployeeCapability:
         assert [c.label for c in caps] == ["a", "b"]
 
     def test_parse_capabilities_dedup_by_key(self):
-        caps = parse_capabilities({"employee": {"capabilities": ["Data Sync", "data sync", "DATA SYNC"]}})
+        caps = parse_capabilities(
+            {"employee": {"capabilities": ["Data Sync", "data sync", "DATA SYNC"]}}
+        )
         assert len(caps) == 1
 
     def test_parse_capabilities_merges_v2_cognition_skills(self):
@@ -191,7 +193,9 @@ class TestEmployeeEvents:
         assert out == [EVENT_COVERAGE_MISSED]
 
     def test_event_types_falsey_excluded(self):
-        out = event_types_for_triggers({"on_error": False, "on_quality_fail": "no", "on_coverage_miss": 0})
+        out = event_types_for_triggers(
+            {"on_error": False, "on_quality_fail": "no", "on_coverage_miss": 0}
+        )
         assert out == []
 
     def test_all_event_types_constant(self):

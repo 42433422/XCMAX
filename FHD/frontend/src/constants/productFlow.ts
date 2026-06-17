@@ -159,6 +159,17 @@ export function markHostPackAcknowledged(): void {
   }).catch(() => {})
 }
 
+export function resetProductFlowState(): void {
+  hostPackAckRef.value = false
+  if (typeof localStorage === 'undefined') return
+  try {
+    localStorage.removeItem(LS_PRODUCT_FLOW_COMPLETED)
+    localStorage.removeItem(LS_PRODUCT_FLOW_HOST_ACK)
+  } catch {
+    /* ignore */
+  }
+}
+
 export function parseFlowStepQuery(raw: unknown): ProductFlowStepId {
   const s = String(raw || '').trim().toLowerCase()
   if (s === 'host-pack' || s === 'host') return 'host-pack'

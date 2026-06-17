@@ -25,11 +25,40 @@ CHART_TOOLS = ("excel_chart_recommend",)
 DOC_TOOLS = ("generate_office_document",)
 WRITE_TOOLS = frozenset({"import_excel_to_database", "products_bulk_import"})
 
-_EXCEL_KW = ("excel", "表格", "spreadsheet", "数据", "data", "sheet", "csv", "汇总", "统计", "analy", "分析", "报表")
+_EXCEL_KW = (
+    "excel",
+    "表格",
+    "spreadsheet",
+    "数据",
+    "data",
+    "sheet",
+    "csv",
+    "汇总",
+    "统计",
+    "analy",
+    "分析",
+    "报表",
+)
 _CHART_KW = ("chart", "图表", "可视", "viz", "plot", "看板", "dashboard")
 _DOC_KW = (
-    "文档", "报告", "报表", "document", "word", "报价", "单据", "receipt", "deliver",
-    "交付", "generate", "合同", "contract", "letter", "函", "ppt", "幻灯", "pdf",
+    "文档",
+    "报告",
+    "报表",
+    "document",
+    "word",
+    "报价",
+    "单据",
+    "receipt",
+    "deliver",
+    "交付",
+    "generate",
+    "合同",
+    "contract",
+    "letter",
+    "函",
+    "ppt",
+    "幻灯",
+    "pdf",
 )
 _IMPORT_KW = ("导入", "入库", "import", "批量", "bulk", "录入", "ingest", "写库")
 
@@ -56,7 +85,11 @@ def _base_tool_specs() -> dict[str, dict[str, Any]]:
 def _explicit_allowlist(config: dict[str, Any], manifest: dict[str, Any]) -> list[str] | None:
     actions = config.get("actions") if isinstance(config.get("actions"), dict) else {}
     agent = actions.get("agent") if isinstance(actions.get("agent"), dict) else {}
-    v2 = manifest.get("employee_config_v2") if isinstance(manifest.get("employee_config_v2"), dict) else {}
+    v2 = (
+        manifest.get("employee_config_v2")
+        if isinstance(manifest.get("employee_config_v2"), dict)
+        else {}
+    )
     for candidate in (
         config.get("tools"),
         actions.get("tools"),
@@ -104,7 +137,11 @@ def is_read_only(manifest: dict[str, Any], config: dict[str, Any]) -> bool:
     ws = agent.get("workspace") if isinstance(agent.get("workspace"), dict) else {}
     if bool(ws.get("read_only")):
         return True
-    v2 = manifest.get("employee_config_v2") if isinstance(manifest.get("employee_config_v2"), dict) else {}
+    v2 = (
+        manifest.get("employee_config_v2")
+        if isinstance(manifest.get("employee_config_v2"), dict)
+        else {}
+    )
     wp = v2.get("workspace_policy") if isinstance(v2.get("workspace_policy"), dict) else {}
     return bool(wp.get("read_only"))
 

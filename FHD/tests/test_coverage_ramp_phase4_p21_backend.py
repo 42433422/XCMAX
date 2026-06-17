@@ -10,7 +10,6 @@ import pytest
 from app.application.workflow import v1_builtin_nodes as vb
 from app.application.workflow.types import PlanGraph, WorkflowNode
 
-
 # ---------------------------------------------------------------------------
 # template resolution + runtime ctx
 # ---------------------------------------------------------------------------
@@ -183,9 +182,7 @@ def test_loop_for_each_invalid_items() -> None:
 
 
 def test_loop_for_each_success() -> None:
-    out = vb.execute_loop_node(
-        {"mode": "for_each", "items": [1, 2], "body_plan": _body_plan()}
-    )
+    out = vb.execute_loop_node({"mode": "for_each", "items": [1, 2], "body_plan": _body_plan()})
     assert out["success"] is True
     assert out["iterations"] == 2
 

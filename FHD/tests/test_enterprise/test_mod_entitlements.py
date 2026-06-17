@@ -33,6 +33,7 @@ def _reset_cache():
 class TestIsClientModId:
     def test_known_client_mod(self):
         from app.mod_sdk.platform_shell import PROTECTED_CLIENT_MOD_IDS
+
         if PROTECTED_CLIENT_MOD_IDS:
             mid = next(iter(PROTECTED_CLIENT_MOD_IDS))
             assert mod_entitlements.is_client_mod_id(mid) is True
@@ -65,7 +66,9 @@ class TestHostModIdsForEnterprise:
 
 class TestEnterpriseModFilterActive:
     def test_enterprise_sku(self, monkeypatch):
-        with patch("app.enterprise.mod_entitlements.resolve_product_sku", return_value="enterprise"):
+        with patch(
+            "app.enterprise.mod_entitlements.resolve_product_sku", return_value="enterprise"
+        ):
             assert mod_entitlements.enterprise_mod_filter_active() is True
 
     def test_personal_sku(self, monkeypatch):
@@ -80,17 +83,23 @@ class TestEnterpriseModFilterActive:
 
 class TestGetCachedEntitledClientModIds:
     def test_non_enterprise_returns_none(self):
-        with patch("app.enterprise.mod_entitlements.enterprise_mod_filter_active", return_value=False):
+        with patch(
+            "app.enterprise.mod_entitlements.enterprise_mod_filter_active", return_value=False
+        ):
             assert mod_entitlements.get_cached_entitled_client_mod_ids() is None
 
     def test_enterprise_returns_set(self):
-        with patch("app.enterprise.mod_entitlements.enterprise_mod_filter_active", return_value=True):
+        with patch(
+            "app.enterprise.mod_entitlements.enterprise_mod_filter_active", return_value=True
+        ):
             mod_entitlements._cached_entitled_client_mod_ids = {"mod-a", "mod-b"}
             result = mod_entitlements.get_cached_entitled_client_mod_ids()
             assert result == {"mod-a", "mod-b"}
 
     def test_enterprise_no_cache_returns_empty_set(self):
-        with patch("app.enterprise.mod_entitlements.enterprise_mod_filter_active", return_value=True):
+        with patch(
+            "app.enterprise.mod_entitlements.enterprise_mod_filter_active", return_value=True
+        ):
             mod_entitlements._cached_entitled_client_mod_ids = None
             result = mod_entitlements.get_cached_entitled_client_mod_ids()
             assert result == set()
@@ -205,42 +214,73 @@ class TestIsModVisibleForEnterprise:
         assert mod_entitlements.is_mod_visible_for_enterprise("") is False
 
     def test_non_enterprise_always_visible(self):
-        with patch("app.enterprise.mod_entitlements.enterprise_mod_filter_active", return_value=False):
+        with patch(
+            "app.enterprise.mod_entitlements.enterprise_mod_filter_active", return_value=False
+        ):
             assert mod_entitlements.is_mod_visible_for_enterprise("any-mod") is True
 
     def test_non_client_mod_visible(self):
-        with patch("app.enterprise.mod_entitlements.enterprise_mod_filter_active", return_value=True), \
-             patch("app.enterprise.mod_entitlements.is_client_mod_id", return_value=False):
+        with (
+            patch(
+                "app.enterprise.mod_entitlements.enterprise_mod_filter_active", return_value=True
+            ),
+            patch("app.enterprise.mod_entitlements.is_client_mod_id", return_value=False),
+        ):
             assert mod_entitlements.is_mod_visible_for_enterprise("host-mod") is True
 
     def test_admin_sees_all(self):
         mod_entitlements._cached_account_kind = "admin"
         mod_entitlements._cached_market_is_admin = True
-        with patch("app.enterprise.mod_entitlements.enterprise_mod_filter_active", return_value=True), \
-             patch("app.enterprise.mod_entitlements.is_client_mod_id", return_value=True):
+        with (
+            patch(
+                "app.enterprise.mod_entitlements.enterprise_mod_filter_active", return_value=True
+            ),
+            patch("app.enterprise.mod_entitlements.is_client_mod_id", return_value=True),
+        ):
             assert mod_entitlements.is_mod_visible_for_enterprise("client-mod") is True
 
     def test_client_mod_in_entitled_set(self):
         mod_entitlements._cached_entitled_client_mod_ids = {"client-mod-a"}
-        with patch("app.enterprise.mod_entitlements.enterprise_mod_filter_active", return_value=True), \
-             patch("app.enterprise.mod_entitlements.is_client_mod_id", return_value=True), \
-             patch("app.enterprise.mod_entitlements.is_admin_account_session", return_value=False), \
-             patch("app.enterprise.mod_entitlements.get_cached_entitled_client_mod_ids", return_value={"client-mod-a"}):
+        with (
+            patch(
+                "app.enterprise.mod_entitlements.enterprise_mod_filter_active", return_value=True
+            ),
+            patch("app.enterprise.mod_entitlements.is_client_mod_id", return_value=True),
+            patch("app.enterprise.mod_entitlements.is_admin_account_session", return_value=False),
+            patch(
+                "app.enterprise.mod_entitlements.get_cached_entitled_client_mod_ids",
+                return_value={"client-mod-a"},
+            ),
+        ):
             assert mod_entitlements.is_mod_visible_for_enterprise("client-mod-a") is True
 
     def test_client_mod_not_in_entitled_set(self):
         mod_entitlements._cached_entitled_client_mod_ids = set()
-        with patch("app.enterprise.mod_entitlements.enterprise_mod_filter_active", return_value=True), \
-             patch("app.enterprise.mod_entitlements.is_client_mod_id", return_value=True), \
-             patch("app.enterprise.mod_entitlements.is_admin_account_session", return_value=False), \
-             patch("app.enterprise.mod_entitlements.get_cached_entitled_client_mod_ids", return_value=set()):
+        with (
+            patch(
+                "app.enterprise.mod_entitlements.enterprise_mod_filter_active", return_value=True
+            ),
+            patch("app.enterprise.mod_entitlements.is_client_mod_id", return_value=True),
+            patch("app.enterprise.mod_entitlements.is_admin_account_session", return_value=False),
+            patch(
+                "app.enterprise.mod_entitlements.get_cached_entitled_client_mod_ids",
+                return_value=set(),
+            ),
+        ):
             assert mod_entitlements.is_mod_visible_for_enterprise("client-mod-b") is False
 
     def test_client_mod_none_entitled_returns_false(self):
-        with patch("app.enterprise.mod_entitlements.enterprise_mod_filter_active", return_value=True), \
-             patch("app.enterprise.mod_entitlements.is_client_mod_id", return_value=True), \
-             patch("app.enterprise.mod_entitlements.is_admin_account_session", return_value=False), \
-             patch("app.enterprise.mod_entitlements.get_cached_entitled_client_mod_ids", return_value=None):
+        with (
+            patch(
+                "app.enterprise.mod_entitlements.enterprise_mod_filter_active", return_value=True
+            ),
+            patch("app.enterprise.mod_entitlements.is_client_mod_id", return_value=True),
+            patch("app.enterprise.mod_entitlements.is_admin_account_session", return_value=False),
+            patch(
+                "app.enterprise.mod_entitlements.get_cached_entitled_client_mod_ids",
+                return_value=None,
+            ),
+        ):
             assert mod_entitlements.is_mod_visible_for_enterprise("client-mod-c") is False
 
 
@@ -251,13 +291,22 @@ class TestIsModVisibleForEnterprise:
 
 class TestFilterModRowsForEnterprise:
     def test_non_enterprise_passes_through(self):
-        with patch("app.enterprise.mod_entitlements.enterprise_mod_filter_active", return_value=False):
+        with patch(
+            "app.enterprise.mod_entitlements.enterprise_mod_filter_active", return_value=False
+        ):
             rows = [{"id": "a"}, {"id": "b"}]
             assert mod_entitlements.filter_mod_rows_for_enterprise(rows) == rows
 
     def test_enterprise_filters(self):
-        with patch("app.enterprise.mod_entitlements.enterprise_mod_filter_active", return_value=True), \
-             patch("app.enterprise.mod_entitlements.is_mod_visible_for_enterprise", side_effect=lambda m: m == "visible"):
+        with (
+            patch(
+                "app.enterprise.mod_entitlements.enterprise_mod_filter_active", return_value=True
+            ),
+            patch(
+                "app.enterprise.mod_entitlements.is_mod_visible_for_enterprise",
+                side_effect=lambda m: m == "visible",
+            ),
+        ):
             rows = [{"id": "visible"}, {"id": "hidden"}]
             result = mod_entitlements.filter_mod_rows_for_enterprise(rows)
             assert len(result) == 1
@@ -266,13 +315,22 @@ class TestFilterModRowsForEnterprise:
 
 class TestFilterModIdListForEnterprise:
     def test_non_enterprise_passes_through(self):
-        with patch("app.enterprise.mod_entitlements.enterprise_mod_filter_active", return_value=False):
+        with patch(
+            "app.enterprise.mod_entitlements.enterprise_mod_filter_active", return_value=False
+        ):
             ids = ["a", "b"]
             assert mod_entitlements.filter_mod_id_list_for_enterprise(ids) == ids
 
     def test_enterprise_filters(self):
-        with patch("app.enterprise.mod_entitlements.enterprise_mod_filter_active", return_value=True), \
-             patch("app.enterprise.mod_entitlements.is_mod_visible_for_enterprise", side_effect=lambda m: m == "visible"):
+        with (
+            patch(
+                "app.enterprise.mod_entitlements.enterprise_mod_filter_active", return_value=True
+            ),
+            patch(
+                "app.enterprise.mod_entitlements.is_mod_visible_for_enterprise",
+                side_effect=lambda m: m == "visible",
+            ),
+        ):
             ids = ["visible", "hidden"]
             result = mod_entitlements.filter_mod_id_list_for_enterprise(ids)
             assert result == ["visible"]
@@ -293,16 +351,22 @@ class TestParseModIdsFromMarketPayload:
             assert result == {"a", "b"}
 
     def test_data_list(self):
-        result = mod_entitlements._parse_mod_ids_from_market_payload({"data": [{"id": "x"}, {"id": "y"}]})
+        result = mod_entitlements._parse_mod_ids_from_market_payload(
+            {"data": [{"id": "x"}, {"id": "y"}]}
+        )
         assert result == {"x", "y"}
 
     def test_data_mods_list(self):
-        result = mod_entitlements._parse_mod_ids_from_market_payload({"data": {"mods": [{"id": "m1"}]}})
+        result = mod_entitlements._parse_mod_ids_from_market_payload(
+            {"data": {"mods": [{"id": "m1"}]}}
+        )
         assert result == {"m1"}
 
     def test_empty_mod_ids_falls_back(self):
         with patch("app.enterprise.mod_entitlements.is_client_mod_id", return_value=True):
-            result = mod_entitlements._parse_mod_ids_from_market_payload({"mod_ids": [], "data": [{"id": "z"}]})
+            result = mod_entitlements._parse_mod_ids_from_market_payload(
+                {"mod_ids": [], "data": [{"id": "z"}]}
+            )
             assert "z" in result
 
     def test_non_dict_rows_skipped(self):
@@ -323,15 +387,21 @@ class TestFetchEntitledClientModIdsFromMarket:
 
     @pytest.mark.asyncio
     async def test_proxy_error(self):
-        with patch("app.fastapi_routes.market_account._proxy_json", new_callable=AsyncMock) as mock_proxy:
+        with patch(
+            "app.fastapi_routes.market_account._proxy_json", new_callable=AsyncMock
+        ) as mock_proxy:
             mock_proxy.return_value = {"__proxy_error__": True, "detail": "fail"}
             result = await mod_entitlements.fetch_entitled_client_mod_ids_from_market("tok")
             assert result == set()
 
     @pytest.mark.asyncio
     async def test_success_with_mod_ids(self):
-        with patch("app.fastapi_routes.market_account._proxy_json", new_callable=AsyncMock) as mock_proxy, \
-             patch("app.enterprise.mod_entitlements.is_client_mod_id", return_value=True):
+        with (
+            patch(
+                "app.fastapi_routes.market_account._proxy_json", new_callable=AsyncMock
+            ) as mock_proxy,
+            patch("app.enterprise.mod_entitlements.is_client_mod_id", return_value=True),
+        ):
             mock_proxy.return_value = {"mod_ids": ["a", "b"]}
             result = await mod_entitlements.fetch_entitled_client_mod_ids_from_market("tok")
             assert "a" in result
@@ -346,12 +416,24 @@ class TestFetchEntitledClientModIdsFromMarket:
 class TestRefreshSessionEntitlementsFromMarket:
     @pytest.mark.asyncio
     async def test_admin_with_impersonation(self):
-        with patch("app.application.session_account_meta.load_session_account_meta", return_value={
-                 "account_kind": "admin", "market_is_admin": True, "impersonating_market_user_id": 5
-             }), \
-             patch("app.fastapi_routes.market_account._proxy_json", new_callable=AsyncMock) as mock_proxy, \
-             patch("app.enterprise.mod_entitlements.is_client_mod_id", return_value=True), \
-             patch("app.enterprise.mod_entitlements._augment_entitled_for_username", side_effect=lambda u, s: s):
+        with (
+            patch(
+                "app.application.session_account_meta.load_session_account_meta",
+                return_value={
+                    "account_kind": "admin",
+                    "market_is_admin": True,
+                    "impersonating_market_user_id": 5,
+                },
+            ),
+            patch(
+                "app.fastapi_routes.market_account._proxy_json", new_callable=AsyncMock
+            ) as mock_proxy,
+            patch("app.enterprise.mod_entitlements.is_client_mod_id", return_value=True),
+            patch(
+                "app.enterprise.mod_entitlements._augment_entitled_for_username",
+                side_effect=lambda u, s: s,
+            ),
+        ):
             mock_proxy.return_value = {"mod_ids": ["mod-imp"]}
             result = await mod_entitlements.refresh_session_entitlements_from_market(
                 market_token="tok", session_id="sid"
@@ -360,10 +442,16 @@ class TestRefreshSessionEntitlementsFromMarket:
 
     @pytest.mark.asyncio
     async def test_admin_without_impersonation(self):
-        with patch("app.application.session_account_meta.load_session_account_meta", return_value={
-                 "account_kind": "admin", "market_is_admin": True
-             }), \
-             patch("app.enterprise.mod_entitlements._augment_entitled_for_username", side_effect=lambda u, s: s):
+        with (
+            patch(
+                "app.application.session_account_meta.load_session_account_meta",
+                return_value={"account_kind": "admin", "market_is_admin": True},
+            ),
+            patch(
+                "app.enterprise.mod_entitlements._augment_entitled_for_username",
+                side_effect=lambda u, s: s,
+            ),
+        ):
             result = await mod_entitlements.refresh_session_entitlements_from_market(
                 market_token="tok", session_id="sid"
             )
@@ -372,12 +460,20 @@ class TestRefreshSessionEntitlementsFromMarket:
 
     @pytest.mark.asyncio
     async def test_regular_user(self):
-        with patch("app.application.session_account_meta.load_session_account_meta", return_value={
-                 "account_kind": "enterprise"
-             }), \
-             patch("app.fastapi_routes.market_account._proxy_json", new_callable=AsyncMock) as mock_proxy, \
-             patch("app.enterprise.mod_entitlements.is_client_mod_id", return_value=True), \
-             patch("app.enterprise.mod_entitlements._augment_entitled_for_username", side_effect=lambda u, s: s):
+        with (
+            patch(
+                "app.application.session_account_meta.load_session_account_meta",
+                return_value={"account_kind": "enterprise"},
+            ),
+            patch(
+                "app.fastapi_routes.market_account._proxy_json", new_callable=AsyncMock
+            ) as mock_proxy,
+            patch("app.enterprise.mod_entitlements.is_client_mod_id", return_value=True),
+            patch(
+                "app.enterprise.mod_entitlements._augment_entitled_for_username",
+                side_effect=lambda u, s: s,
+            ),
+        ):
             mock_proxy.return_value = {"mod_ids": ["mod-1"]}
             result = await mod_entitlements.refresh_session_entitlements_from_market(
                 market_token="tok", session_id="sid"
@@ -410,12 +506,18 @@ class TestRestoreEntitlementsFromSessionRow:
         assert mod_entitlements.restore_entitlements_from_session_row("") is False
 
     def test_non_enterprise(self):
-        with patch("app.enterprise.mod_entitlements.enterprise_mod_filter_active", return_value=False):
+        with patch(
+            "app.enterprise.mod_entitlements.enterprise_mod_filter_active", return_value=False
+        ):
             assert mod_entitlements.restore_entitlements_from_session_row("sid") is False
 
     def test_session_not_found(self):
-        with patch("app.enterprise.mod_entitlements.enterprise_mod_filter_active", return_value=True), \
-             patch("app.db.session.get_db") as mock_get_db:
+        with (
+            patch(
+                "app.enterprise.mod_entitlements.enterprise_mod_filter_active", return_value=True
+            ),
+            patch("app.db.session.get_db") as mock_get_db,
+        ):
             mock_db = MagicMock()
             mock_get_db.return_value.__enter__ = MagicMock(return_value=mock_db)
             mock_get_db.return_value.__exit__ = MagicMock(return_value=False)

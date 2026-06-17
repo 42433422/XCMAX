@@ -69,7 +69,10 @@ def test_refresh_employee_triggers_registers(monkeypatch: pytest.MonkeyPatch):
     }
     with (
         patch("app.neuro_bus.bus.get_neuro_bus", return_value=bus),
-        patch("app.application.employee_runtime.triggers.list_installed_pack_records", return_value=[pack]),
+        patch(
+            "app.application.employee_runtime.triggers.list_installed_pack_records",
+            return_value=[pack],
+        ),
     ):
         out = trig.refresh_employee_triggers()
     assert out["active_employees"] == ["test-emp"]

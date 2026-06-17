@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Body, Depends, Query, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Body, Depends, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 
 from app.application.im_app_service import ImApplicationService, ensure_im_tables
@@ -13,6 +13,7 @@ from app.db import HostSessionLocal, get_host_engine
 from app.infrastructure.auth.dependencies import (
     CurrentUser,
     require_identified_user,
+    session_id_from_request,
 )
 from app.infrastructure.im.ws_hub import im_ws_hub
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -79,12 +80,12 @@ async def _notify_offline_im_members(member_ids: list[int], sender_id: int, body
 
 
 @router.get("/api/im/conversations")
-def im_list_conversations(user: CurrentUser = Depends(require_identified_user)):
+def im_list_conversations(request: Request, user: CurrentUser = Depends(require_identified_user)):
     _ensure_schema()
     uid = _uid(user)
     db = HostSessionLocal()
     try:
-        items = ImApplicationService(db).list_conversations(uid)
+        items = ImApplicationService(db).list_conversations(uid, session_id_from_request(request))
         return {"success": True, "user_id": uid, "conversations": items}
     except RECOVERABLE_ERRORS as exc:
         logger.exception("im_list_conversations")

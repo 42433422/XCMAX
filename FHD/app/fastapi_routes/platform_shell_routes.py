@@ -5,8 +5,7 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, File, Request, UploadFile
-from fastapi import Body
+from fastapi import APIRouter, Body, File, Request, UploadFile
 from pydantic import BaseModel, Field
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -127,7 +126,10 @@ async def platform_shell_office_sample_upload(file: UploadFile = File(...)):
         rel = dest.relative_to(workspace_root).as_posix()
     except ValueError:
         rel = str(dest)
-    return {"success": True, "data": {"file_path": rel, "filename": name, "workspace_root": str(workspace_root)}}
+    return {
+        "success": True,
+        "data": {"file_path": rel, "filename": name, "workspace_root": str(workspace_root)},
+    }
 
 
 @router.get("/workspace-root")
@@ -174,7 +176,9 @@ async def platform_shell_chat_office_file_upload(file: UploadFile = File(...)):
 
 
 @router.post("/office-sample-cleanup")
-async def platform_shell_office_sample_cleanup(body: OfficeSampleCleanupBody | None = Body(default=None)):
+async def platform_shell_office_sample_cleanup(
+    body: OfficeSampleCleanupBody | None = Body(default=None),
+):
     """删除教程上传的临时办公样本（仅 uploads/tutorial 下路径）。"""
     import os
     from pathlib import Path
@@ -187,7 +191,10 @@ async def platform_shell_office_sample_cleanup(body: OfficeSampleCleanupBody | N
         if not rel:
             continue
         candidate = (workspace_root / rel).resolve()
-        if not str(candidate).startswith(str(tutorial_root) + os.sep) and candidate != tutorial_root:
+        if (
+            not str(candidate).startswith(str(tutorial_root) + os.sep)
+            and candidate != tutorial_root
+        ):
             continue
         if candidate.is_file():
             try:

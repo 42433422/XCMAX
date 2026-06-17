@@ -1,20 +1,22 @@
 """测试 kitten_ai_document/generate 模块的文档生成功能。"""
+
 import json
-import pytest
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from app.services.kitten_ai_document.generate import (
-    _strip_json_fence,
-    _extract_first_json_object,
     _document_spec_timeout_sec,
+    _extract_first_json_object,
+    _strip_json_fence,
     build_docx_bytes,
     build_xlsx_bytes,
 )
 
-
 # ---------------------------------------------------------------------------
 # _strip_json_fence
 # ---------------------------------------------------------------------------
+
 
 class TestStripJsonFence:
     def test_no_fence(self):
@@ -44,6 +46,7 @@ class TestStripJsonFence:
 # ---------------------------------------------------------------------------
 # _extract_first_json_object
 # ---------------------------------------------------------------------------
+
 
 class TestExtractFirstJsonObject:
     def test_simple_object(self):
@@ -81,7 +84,7 @@ class TestExtractFirstJsonObject:
         assert result == '{"a": 1}'
 
     def test_array_not_matched(self):
-        text = '[1, 2, 3]'
+        text = "[1, 2, 3]"
         assert _extract_first_json_object(text) is None
 
     def test_deeply_nested(self):
@@ -99,11 +102,13 @@ class TestExtractFirstJsonObject:
 # _document_spec_timeout_sec
 # ---------------------------------------------------------------------------
 
+
 class TestDocumentSpecTimeout:
     def test_default_timeout(self):
         with patch.dict("os.environ", {}, clear=True):
             # Remove the env var if it exists
             import os
+
             os.environ.pop("FHD_DOCUMENT_SPEC_TIMEOUT_SEC", None)
             result = _document_spec_timeout_sec()
             assert result == 180.0
@@ -132,6 +137,7 @@ class TestDocumentSpecTimeout:
 # ---------------------------------------------------------------------------
 # build_docx_bytes
 # ---------------------------------------------------------------------------
+
 
 class TestBuildDocxBytes:
     @pytest.fixture
@@ -182,7 +188,10 @@ class TestBuildDocxBytes:
         assert isinstance(data, bytes)
 
     def test_spec_with_non_dict_section_skipped(self):
-        spec = {"title": "测试", "sections": ["not a dict", {"heading": "有效", "paragraphs": ["ok"]}]}
+        spec = {
+            "title": "测试",
+            "sections": ["not a dict", {"heading": "有效", "paragraphs": ["ok"]}],
+        }
         data, filename = build_docx_bytes(spec)
         assert isinstance(data, bytes)
 
@@ -211,6 +220,7 @@ class TestBuildDocxBytes:
 # ---------------------------------------------------------------------------
 # build_xlsx_bytes
 # ---------------------------------------------------------------------------
+
 
 class TestBuildXlsxBytes:
     @pytest.fixture
@@ -246,7 +256,10 @@ class TestBuildXlsxBytes:
         assert isinstance(data, bytes)
 
     def test_non_dict_sheet_skipped(self):
-        spec = {"title": "测试", "sheets": ["not a dict", {"name": "Sheet1", "headers": ["A"], "rows": [["1"]]}]}
+        spec = {
+            "title": "测试",
+            "sheets": ["not a dict", {"name": "Sheet1", "headers": ["A"], "rows": [["1"]]}],
+        }
         data, filename = build_xlsx_bytes(spec)
         assert isinstance(data, bytes)
 

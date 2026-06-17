@@ -68,7 +68,9 @@ class ConversationAppServiceV2:
             self._bus.publish(event)
 
             logger.info(
-                "[ConversationAppServiceV2] 命令已发布: %s (event_id=%s)", command_type, event.metadata.event_id
+                "[ConversationAppServiceV2] 命令已发布: %s (event_id=%s)",
+                command_type,
+                event.metadata.event_id,
             )
 
             return {

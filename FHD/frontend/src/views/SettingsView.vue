@@ -138,13 +138,13 @@
           </summary>
           <div class="settings-card__body settings-card__body--flush">
             <HostModBridgeView
-              v-if="isAdminConsole"
+              v-if="showModelPaymentBridge"
               embedded
               mod-id="xcagi-model-payment-bridge"
               view="ModelPaymentView"
               title="模型服务"
             />
-            <p v-else class="muted" style="padding: 16px; margin: 0;">
+            <p v-else class="settings-model-service-empty muted" style="padding: 16px; margin: 0;">
               {{ $t('settings.modelServiceMissing') }}
             </p>
           </div>
@@ -392,7 +392,11 @@
           </div>
         </details>
 
-        <details v-if="!clientModsUiOff" class="settings-card settings-card--nested">
+        <details
+          v-if="!clientModsUiOff"
+          class="settings-card settings-card--nested"
+          data-tutorial-id="settings-extensions"
+        >
           <summary class="settings-row settings-row--nested">
             <span class="settings-row__icon settings-row__icon--orange" aria-hidden="true">
               <i class="fa fa-puzzle-piece"></i>
@@ -1034,6 +1038,11 @@ const selectableExtensionMods = computed(() =>
 const workflowEmployeeMods = computed(() =>
   mods.value.filter((m) => isWorkflowEmployeeModId(String(m.id || ''))),
 );
+
+const showModelPaymentBridge = computed(() => {
+  if (isAdminConsole) return true;
+  return mods.value.some((m) => String(m.id || '').trim() === 'xcagi-model-payment-bridge');
+});
 
 function goHostPackOnboarding() {
   router.push({ path: '/onboarding', query: { step: 'host-pack' } });

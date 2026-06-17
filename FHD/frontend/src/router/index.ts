@@ -619,7 +619,7 @@ router.beforeEach(async (to, _from, next) => {
         await profile.refreshFromServer();
       }
       if (customerServiceSide === 'admin' && !profile.isAdminAccount) {
-        next({ name: 'enterprise-customer-service' });
+        next({ name: 'im' });
         return;
       }
       if (customerServiceSide === 'enterprise' && profile.isAdminAccount) {

@@ -11,7 +11,7 @@
       type="button"
       data-tutorial-id="toolbar-excel-analyze"
       :title="$t('chat.uploadTitle')"
-      @click="$emit('trigger-upload')"
+      @click="handleUploadClick"
       :disabled="excelAnalyzeUploading"
     >
       <i class="fa fa-upload" aria-hidden="true"></i>
@@ -84,6 +84,7 @@ const emit = defineEmits<{
   'new-conversation': []
   'show-history': []
   'trigger-upload': []
+  'register-excel-input': [input: HTMLInputElement | null]
   'excel-file-change': [event: Event]
   'pro-intent-change': [enabled: boolean]
   'auto-refresh-change': [enabled: boolean]
@@ -98,7 +99,13 @@ watch(fileInputRef, (el) => {
     // eslint-disable-next-line vue/no-mutating-props -- intentional ref forwarding
     props.excelAnalyzeInputRef.value = el
   }
+  emit('register-excel-input', el)
 }, { immediate: true })
+
+function handleUploadClick() {
+  fileInputRef.value?.click()
+  emit('trigger-upload')
+}
 
 function onFileChange(event: Event) {
   emit('excel-file-change', event)

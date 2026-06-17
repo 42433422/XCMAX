@@ -13,7 +13,6 @@ from app.fastapi_routes.model_payment import (
     _plan_by_id,
 )
 
-
 # ========================= _DEMO_PLANS ===================================
 
 
@@ -63,7 +62,10 @@ class TestAllPlans:
 
 class TestPlanById:
     def test_found(self):
-        with patch("app.fastapi_routes.model_payment.plan_by_id", return_value={"id": "demo-starter", "title": "体验档"}):
+        with patch(
+            "app.fastapi_routes.model_payment.plan_by_id",
+            return_value={"id": "demo-starter", "title": "体验档"},
+        ):
             plan = _plan_by_id("demo-starter")
             assert plan is not None
             assert plan["id"] == "demo-starter"
@@ -79,10 +81,14 @@ class TestPlanById:
 
 class TestIntegrationFlags:
     def test_structure(self):
-        with patch("app.fastapi_routes.model_payment.mp_ali") as mock_ali, \
-             patch("app.fastapi_routes.model_payment.is_modstore_payment_sot", return_value=False), \
-             patch("app.fastapi_routes.model_payment.is_fhd_postgres_payment_sot", return_value=False), \
-             patch("app.fastapi_routes.model_payment.model_payment_backend", return_value="json"):
+        with (
+            patch("app.fastapi_routes.model_payment.mp_ali") as mock_ali,
+            patch("app.fastapi_routes.model_payment.is_modstore_payment_sot", return_value=False),
+            patch(
+                "app.fastapi_routes.model_payment.is_fhd_postgres_payment_sot", return_value=False
+            ),
+            patch("app.fastapi_routes.model_payment.model_payment_backend", return_value="json"),
+        ):
             mock_ali.alipay_ui_ready.return_value = False
             flags = _integration_flags()
             assert "alipay_configured" in flags
@@ -91,10 +97,14 @@ class TestIntegrationFlags:
             assert "backend" in flags
 
     def test_alipay_not_configured(self):
-        with patch("app.fastapi_routes.model_payment.mp_ali") as mock_ali, \
-             patch("app.fastapi_routes.model_payment.is_modstore_payment_sot", return_value=False), \
-             patch("app.fastapi_routes.model_payment.is_fhd_postgres_payment_sot", return_value=False), \
-             patch("app.fastapi_routes.model_payment.model_payment_backend", return_value="json"):
+        with (
+            patch("app.fastapi_routes.model_payment.mp_ali") as mock_ali,
+            patch("app.fastapi_routes.model_payment.is_modstore_payment_sot", return_value=False),
+            patch(
+                "app.fastapi_routes.model_payment.is_fhd_postgres_payment_sot", return_value=False
+            ),
+            patch("app.fastapi_routes.model_payment.model_payment_backend", return_value="json"),
+        ):
             mock_ali.alipay_ui_ready.return_value = False
             flags = _integration_flags()
             assert flags["alipay_configured"] is False

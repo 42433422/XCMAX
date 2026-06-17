@@ -9,7 +9,6 @@ import pytest
 
 from app.services.document_templates.crud import _normalize_db_template_id
 
-
 # ========================= _normalize_db_template_id =====================
 
 

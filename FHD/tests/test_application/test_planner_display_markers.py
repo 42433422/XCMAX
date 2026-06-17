@@ -5,7 +5,9 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 
-_mod_path = Path(__file__).resolve().parents[2] / "app" / "application" / "planner_display_markers.py"
+_mod_path = (
+    Path(__file__).resolve().parents[2] / "app" / "application" / "planner_display_markers.py"
+)
 _spec = importlib.util.spec_from_file_location("planner_display_markers", _mod_path)
 assert _spec and _spec.loader
 _mod = importlib.util.module_from_spec(_spec)

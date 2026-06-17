@@ -12,11 +12,10 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 
-from app.fastapi_routes import mobile_api as mobile_api_mod  # noqa: F401 — break circular import
 import app.fastapi_routes.mobile_api_extensions as mobile_ext  # noqa: E402
 from app.db import init_db as init_db_mod
+from app.fastapi_routes import mobile_api as mobile_api_mod  # noqa: F401 — break circular import
 from app.utils.print_utils import PrinterUtils
-
 
 # ---------------------------------------------------------------------------
 # init_db
@@ -75,7 +74,9 @@ def test_ensure_sqlite_per_mod_database_copies(tmp_path, monkeypatch: pytest.Mon
     assert mod_db.is_file()
 
 
-def test_ensure_sqlite_per_mod_skips_duplicate_mod_id(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_ensure_sqlite_per_mod_skips_duplicate_mod_id(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     work_dir = tmp_path / "appdata"
     work_dir.mkdir()
     mother = work_dir / "products.db"
@@ -108,21 +109,19 @@ def test_ensure_sqlite_product_business_bootstrap_creates_purchase_units(
         conn.commit()
 
     monkeypatch.setattr(init_db_mod, "get_app_data_dir", lambda: str(tmp_path / "appdata"))
-    init_db_mod.ensure_desktop_sqlite_business_tables_all_files(
-        data_dir=str(tmp_path / "appdata")
-    )
+    init_db_mod.ensure_desktop_sqlite_business_tables_all_files(data_dir=str(tmp_path / "appdata"))
     with sqlite3.connect(db_file) as conn:
         tables = {
             row[0]
-            for row in conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            ).fetchall()
+            for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
         }
     assert "purchase_units" in tables
     assert "products" in tables
 
 
-def test_build_mod_database_seed_plan_with_manifest(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_build_mod_database_seed_plan_with_manifest(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     mod_path = tmp_path / "demo_mod"
     mod_path.mkdir()
     (mod_path / "manifest.json").write_text(

@@ -142,7 +142,9 @@ class TestPriceListGeneratorCreatePdf:
             with pytest.raises(RuntimeError, match="未解析到 FHD 仓库根目录"):
                 generator._create_price_list_pdf(filepath, "测试客户", sample_products)
 
-    def test_create_price_list_with_valid_root_no_template(self, generator, sample_products, tmp_path):
+    def test_create_price_list_with_valid_root_no_template(
+        self, generator, sample_products, tmp_path
+    ):
         """有 root 但模板文件不存在时，走 python-docx 或 txt 回退。"""
         filepath = tmp_path / "test_output.docx"
         fake_root = tmp_path / "fhd_root"

@@ -74,7 +74,7 @@ class PerformanceOptimizer:
 
             status["redis_cache"] = self._redis_cache is not None and self._redis_cache.is_available
             logger.info(
-                "✅ Redis 缓存: %s", '已连接' if status['redis_cache'] else '不可用 (使用本地缓存)'
+                "✅ Redis 缓存: %s", "已连接" if status["redis_cache"] else "不可用 (使用本地缓存)"
             )
         except RECOVERABLE_ERRORS as e:
             status["redis_cache"] = False

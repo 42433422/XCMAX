@@ -1,5 +1,6 @@
 import {
   CUSTOMER_SERVICE_BRIDGE_MOD_ID,
+  customerServiceModFrontendRoutesAvailable,
   readCustomerServiceModPagesEnabled,
 } from '@/constants/customerServiceMod'
 
@@ -16,7 +17,7 @@ const HOST_ROUTE_NAME_TO_MOD: Record<string, string> = {
 }
 
 export function useCustomerServiceModPages(): boolean {
-  return readCustomerServiceModPagesEnabled()
+  return readCustomerServiceModPagesEnabled() && customerServiceModFrontendRoutesAvailable()
 }
 
 export function resolveCustomerServicePagePath(hostPath: string): string {
