@@ -65,8 +65,10 @@ router = APIRouter(prefix="/api", tags=["market"])
 _get_current_user = get_current_user
 _require_admin = require_admin
 
-# 企业版桌面：管理员可分配给用户的客户 Mod（与 FHD platform_shell.PROTECTED_CLIENT_MOD_IDS 对齐）
+# 企业版桌面：管理员可分配给用户的行业/客户 Mod（与 FHD protected_client_mod_ids 对齐）
 ENTERPRISE_ASSIGNABLE_MODS: dict[str, str] = {
+    "attendance-industry": "考勤行业包",
+    "coating-industry": "涂料行业包",
     "taiyangniao-pro": "太阳鸟 PRO",
     "sz-qsm-pro": "深圳国商茂 PRO",
 }

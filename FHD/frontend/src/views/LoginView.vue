@@ -11,7 +11,6 @@ import {
   loginPageTitle,
   loginPasswordInputPlaceholder,
 } from '@/constants/loginBranding';
-import { isSunbirdAccountUsername } from '@/constants/accountModBinding';
 import { fetchProductSku } from '@/utils/productSku';
 import { useAccountProfileStore } from '@/stores/accountProfile';
 import {
@@ -188,14 +187,13 @@ async function completeLoginSuccess(raw: Record<string, unknown>) {
       ? (raw.data as Record<string, unknown>)
       : raw;
   const accountUsername = String(loginUser?.username || username.value || phone.value || '').trim();
-  const sunbirdAccount = isSunbirdAccountUsername(accountUsername);
-  if (isEnterpriseEdition.value || sunbirdAccount) {
+  if (isEnterpriseEdition.value) {
     try {
       const { readEntitledModIdsFromAuthPayload, useModsStore } = await import('@/stores/mods');
       const entitled = readEntitledModIdsFromAuthPayload(raw);
       await useModsStore().initialize(true, {
         entitledModIds: entitled,
-        forceFromEntitlements: sunbirdAccount || entitled.length > 0,
+        forceFromEntitlements: entitled.length > 0,
         accountUsername,
       });
     } catch (modErr) {

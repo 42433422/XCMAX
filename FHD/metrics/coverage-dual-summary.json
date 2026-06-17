@@ -1,19 +1,59 @@
 {
-  "_status": "RETIRED 2026-06-14",
-  "_reason": "此前的 full_app 60.63% / ci_gate 58 来自装了 ml extra（torch/cv2/sklearn 等）的富依赖环境，与 CI 不可比，导致与 pyproject 诚实基线 36% 互相矛盾。已退役，禁止再引用。",
-  "_ssot": "唯一可复现口径见 docs/reports/COVERAGE_RAMP.md 与 docs/reports/COVERAGE_GAP.md；门禁见 pyproject.toml fail_under + metrics/coverage_ratchet_baseline.json + scripts/dev/coverage_ratchet.py；趋势见 metrics/coverage-history.jsonl。",
-  "_retired_values": {
-    "full_app_pct": 60.63,
-    "ci_gate_pct": 58,
-    "captured_at": "2026-06-13T08:00:00Z",
-    "note": "富依赖环境，非 CI 等价；勿对外混报"
+  "_ssot": "FHD 覆盖率唯一对外口径。全量 source=[app] + branch，.venv = CI 等价依赖（不含 ml extra）。棘轮见 pyproject.toml fail_under + coverage_ratchet_baseline.json；趋势见 coverage-history.jsonl。",
+  "_updated": "2026-06-17",
+  "committed_head": {
+    "captured_at": "2026-06-14T08:33:13Z",
+    "commit": "1569dfa4",
+    "status": "last_green_bump",
+    "backend_line_pct": 52.74,
+    "backend_branch_pct": 37.17,
+    "backend_statements": 75357,
+    "frontend_line_pct": 55.82,
+    "frontend_branch_pct": 62.8,
+    "frontend_function_pct": 51.15,
+    "pytest_passed": 3785,
+    "pytest_failed": 0,
+    "pytest_skipped": 51,
+    "vitest_passed": 1143,
+    "vitest_failed": 0
   },
-  "current_reproducible_baseline_2026_06_14": {
-    "backend_line_pct": 36.35,
-    "backend_branch_pct": 18.42,
-    "frontend_line_pct": 21.52,
-    "frontend_branch_pct": 49.07,
-    "frontend_function_pct": 26.08,
-    "scope": "source=[app] + branch, no ml extra (.venv = CI equivalent)"
+  "wip_local": {
+    "captured_at": "2026-06-17T03:09:31Z",
+    "branch": "feat/enterprise-deploy-maturity",
+    "status": "uncommitted_red",
+    "backend_line_pct": 74.56,
+    "backend_branch_pct": 61.8,
+    "backend_statements": 76237,
+    "frontend_line_pct": 74.15,
+    "frontend_branch_pct": 69.54,
+    "frontend_function_pct": 65.06,
+    "pytest_passed": 12675,
+    "pytest_failed": 196,
+    "pytest_errors": 7,
+    "pytest_skipped": 39,
+    "note": "工作区实测；有待修红灯，不可对外宣称已达标或 bump 棘轮"
+  },
+  "ratchet_floors": {
+    "backend_line": 51,
+    "backend_branch": 36,
+    "frontend_lines": 54,
+    "frontend_branches": 62,
+    "frontend_functions": 50,
+    "frontend_statements": 54,
+    "source": "pyproject.toml fail_under + metrics/coverage_ratchet_baseline.json"
+  },
+  "targets": {
+    "backend_line_pct": 90,
+    "backend_branch_pct": 85,
+    "frontend_line_pct": 80,
+    "frontend_branch_pct": 75
+  },
+  "_retired": {
+    "reason": "以下口径已退役，禁止再引用为当前值",
+    "values": {
+      "full_app_60_63": "富依赖环境 + 历史窄 include 混报（2026-06-04）",
+      "ci_narrow_70": "窄包 include/omit 门禁（2026-06-08 前）；已改为全量 source=[app] + coverage_ratchet.py",
+      "claimed_77_4_or_88": "周报误报，2026-06-08 已撤回"
+    }
   }
 }

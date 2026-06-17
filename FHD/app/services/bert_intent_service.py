@@ -178,7 +178,7 @@ class BertIntentClassifier:
                         else:
                             self.id2label = loaded_id2label
                             self.label2id = {
-                                v: int(k) for k, v in config.get("label2id", {}).items()
+                                k: int(v) for k, v in config.get("label2id", {}).items()
                             }
                     if "label2id" in config and not is_local_distillation_model:
                         self.label2id = {k: int(v) for k, v in config["label2id"].items()}

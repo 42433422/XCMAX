@@ -104,6 +104,7 @@ vi.mock('@/constants/platformShellMode', () => ({
 }));
 
 vi.mock('@/constants/genericModPack', () => ({
+  ACCOUNT_CUSTOM_MOD_IDS: ['taiyangniao-pro', 'sz-qsm-pro'],
   CLIENT_PRIMARY_ERP_MOD_ID: 'attendance-industry',
   hasInstalledClientPrimaryErpMod: () => false,
   isAuxEmployeePackModId: (id: string) => id.startsWith('xcagi-aux-'),
@@ -116,6 +117,7 @@ vi.mock('@/constants/genericModPack', () => ({
 }));
 
 vi.mock('@/constants/accountModBinding', () => ({
+  SUNBIRD_CLIENT_MOD_ID: 'taiyangniao-pro',
   augmentEntitledModIdsForAccount: (_u: unknown, ids: string[] | undefined) => ids || [],
   isSunbirdAccountUsername: (u: string | null | undefined) =>
     String(u || '').trim().toUpperCase() === 'SUNBIRD',
@@ -123,9 +125,16 @@ vi.mock('@/constants/accountModBinding', () => ({
 }));
 
 vi.mock('@/constants/sunbirdClientMod', () => ({
-  buildSunbirdClientModStub: () => ({
+  buildAttendanceIndustryModStub: () => ({
     id: 'attendance-industry',
-    name: '太阳鸟行业包',
+    name: '考勤行业包',
+    version: '1.0.0',
+    author: 'xcagi',
+    description: 'attendance stub',
+  }),
+  buildSunbirdClientModStub: () => ({
+    id: 'taiyangniao-pro',
+    name: '太阳鸟 PRO',
     version: '1.0.0',
     author: 'sunbird',
     description: 'stub',
@@ -420,7 +429,7 @@ describe('mods store – modsForUi', () => {
     expect(store.modsForUi).toHaveLength(sampleMods.length);
   });
 
-  it('returns sunbird stub when activeModId is CLIENT_PRIMARY_ERP_MOD_ID and not in list', () => {
+  it('returns attendance stub when activeModId is CLIENT_PRIMARY_ERP_MOD_ID and not in list', () => {
     const store = useModsStore();
     const modsNoAttendance = sampleMods.filter((m) => m.id !== 'attendance-industry');
     store.mods = modsNoAttendance as never[];
@@ -863,7 +872,7 @@ describe('mods store – applyEntitledActiveMod', () => {
     expect(store.activeModId).toBe('');
   });
 
-  it('does nothing when entitledModIds is empty and not sunbird', async () => {
+  it('does nothing when entitledModIds is empty', async () => {
     const store = useModsStore();
     store.mods = sampleMods as never[];
     await store.applyEntitledActiveMod([]);
@@ -876,6 +885,32 @@ describe('mods store – applyEntitledActiveMod', () => {
     mockApiFetch.mockResolvedValue(makeModsResponse(sampleMods));
     await store.applyEntitledActiveMod(['attendance-industry'], { force: true });
     expect(store.activeModId).toBe('attendance-industry');
+  });
+
+  it('does not infer account custom mod from canonical industry entitlement', async () => {
+    const store = useModsStore();
+    store.mods = sampleMods as never[];
+    mockApiFetch.mockResolvedValue(makeModsResponse(sampleMods));
+
+    await store.applyEntitledActiveMod(['attendance-industry'], {
+      force: true,
+      accountUsername: 'SUNBIRD',
+    });
+
+    expect(store.activeModId).toBe('attendance-industry');
+  });
+
+  it('prefers account custom mod when its explicit entitlement is present', async () => {
+    const store = useModsStore();
+    store.mods = sampleMods as never[];
+    mockApiFetch.mockResolvedValue(makeModsResponse(sampleMods));
+
+    await store.applyEntitledActiveMod(
+      ['attendance-industry', 'taiyangniao-pro'],
+      { force: true, accountUsername: 'SUNBIRD' },
+    );
+
+    expect(store.activeModId).toBe('taiyangniao-pro');
   });
 });
 

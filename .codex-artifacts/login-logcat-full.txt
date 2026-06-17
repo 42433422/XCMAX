@@ -1,0 +1,242 @@
+--------- beginning of main
+06-18 05:10:10.557  1412  1412 I GoogleInputMethodService: GoogleInputMethodService.onKeyDown():2444 Received KEYCODE_BACK. isAllViewsInvisible=false
+--------- beginning of system
+06-18 05:10:10.560   549   567 D AutofillManagerService: onBackKeyPressed()
+06-18 05:10:10.562   549  1967 I ImeTracker: com.xiuci.xcagi.mobile.enterprise:5c0b3fc3: onRequestHide at ORIGIN_SERVER_HIDE_INPUT reason HIDE_SOFT_INPUT_BY_BACK_KEY
+06-18 05:10:10.567  1412  1412 I GoogleInputMethodService: GoogleInputMethodService.onFinishInputView():2241
+06-18 05:10:10.569  1412  1412 I AndroidIME: AbstractIme.onDeactivate():207 PasswordIme.onDeactivate()
+06-18 05:10:10.603 16489 16489 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=falsecallback=ImeCallback=ImeOnBackInvokedCallback@144231657 Callback=android.window.IOnBackInvokedCallback$Stub$Proxy@7863542
+06-18 05:10:10.604   549  1964 D CoreBackPreview: Window{3053f53 u0 com.xiuci.xcagi.mobile.enterprise/com.xiuci.xcagi.mobile.MainActivity}: Setting back callback OnBackInvokedCallbackInfo{mCallback=android.window.IOnBackInvokedCallback$Stub$Proxy@29fb1ff, mPriority=0, mIsAnimationCallback=false}
+06-18 05:10:10.771 16489 16499 W bile.enterprise: Cleared Reference was only reachable from finalizer (only reported once)
+06-18 05:10:10.777 16489 16501 W System  : A resource failed to call release.
+06-18 05:10:10.928 16489 16489 I ImeTracker: com.xiuci.xcagi.mobile.enterprise:253755dc: onRequestHide at ORIGIN_CLIENT_HIDE_SOFT_INPUT reason HIDE_SOFT_INPUT_BY_INSETS_API
+06-18 05:10:10.934   549   563 I ImeTracker: com.xiuci.xcagi.mobile.enterprise:253755dc: onCancelled at PHASE_SERVER_SHOULD_HIDE
+06-18 05:10:10.935 16489 16489 I ImeTracker: com.xiuci.xcagi.mobile.enterprise:5c0b3fc3: onHidden
+06-18 05:10:11.344   760   760 D StatusBarIconController: ignoring old pipeline callbacks, because the new mobile icons are enabled
+06-18 05:10:11.612  1057  1057 D TaplEvents: TIS / TouchInteractionService.onInputEvent: MotionEvent { action=ACTION_DOWN, actionButton=0, id[0]=0, x[0]=540.0, y[0]=1570.0, toolType[0]=TOOL_TYPE_FINGER, buttonState=0, classification=NONE, metaState=0, flags=0x0, edgeFlags=0x0, pointerCount=1, historySize=0, eventTime=2757152, downTime=2757152, deviceId=-1, source=0x1002, displayId=0, eventId=-849798189 }
+06-18 05:10:11.618  1057  1057 D TaplEvents: TIS / TouchInteractionService.onInputEvent: MotionEvent { action=ACTION_UP, actionButton=0, id[0]=0, x[0]=540.0, y[0]=1570.0, toolType[0]=TOOL_TYPE_FINGER, buttonState=0, classification=NONE, metaState=0, flags=0x0, edgeFlags=0x0, pointerCount=1, historySize=0, eventTime=2757152, downTime=2757152, deviceId=-1, source=0x1002, displayId=0, eventId=-689691036 }
+06-18 05:10:11.627 16489 16489 I ImeTracker: com.xiuci.xcagi.mobile.enterprise:684d555: onRequestShow at ORIGIN_CLIENT_SHOW_SOFT_INPUT reason SHOW_SOFT_INPUT_BY_INSETS_API
+06-18 05:10:11.627 16489 16489 D InsetsController: show(ime(), fromIme=false)
+06-18 05:10:11.628 16489 16489 D InputMethodManager: showSoftInput() view=androidx.compose.ui.platform.AndroidComposeView{51a3fbe VFED..... .F....ID 0,0-1080,2400 aid=1073741824} flags=0 reason=SHOW_SOFT_INPUT_BY_INSETS_API
+06-18 05:10:11.629   549   563 W ProcessStats: Tracking association SourceState{e1cd73e system/1000 BFgs #5134} whose proc state 4 is better than process ProcessState{df0d5c6 com.google.android.inputmethod.latin/10150 pkg=com.google.android.inputmethod.latin} proc state 6 (1 skipped)
+06-18 05:10:11.630  1412  1412 I GoogleInputMethodService: GoogleInputMethodService.onStartInputView():1995 onStartInputView(EditorInfo{inputType=0x8081(Password) imeOptions=0x2000006 privateImeOptions=null actionName=DONE actionLabel=null actionId=0 initialSelStart=0 initialSelEnd=0 initialCapsMode=0x0 hintText=null label=null packageName=com.xiuci.xcagi.mobile.enterprise fieldId=-1 fieldName=null extras=Bundle[{android.support.text.emoji.emojiCompat_metadataVersion=9, androidx.core.view.inputmethod.EditorInfoCompat.STYLUS_HANDWRITING_ENABLED=false, android.support.text.emoji.emojiCompat_replaceAll=false}]}, false)
+06-18 05:10:11.631  1412  1412 I GoogleInputMethodService: GoogleInputMethodService.updateDeviceLockedStatus():2087 repeatCheckTimes = 2, unlocked = true
+06-18 05:10:11.631  1412  1412 W ModuleManager: ModuleManager.loadModule():450 Module erj is not available
+06-18 05:10:11.632  1412  1686 I DeviceModeUtil: DeviceModeUtil.getDeviceMode():122 Get device mode phone by ui mode:1 and smallestScreenWidthDp:411
+06-18 05:10:11.637 16489 16489 I ImeTracker: com.xiuci.xcagi.mobile.enterprise:81fea844: onRequestShow at ORIGIN_CLIENT_SHOW_SOFT_INPUT reason SHOW_SOFT_INPUT
+06-18 05:10:11.637 16489 16489 D InputMethodManager: showSoftInput() view=androidx.compose.ui.platform.AndroidComposeView{51a3fbe VFED..... .F...... 0,0-1080,2400 aid=1073741824} flags=0 reason=SHOW_SOFT_INPUT
+06-18 05:10:11.638 16489 16549 D EGL_emulation: app_time_stats: avg=57.37ms min=2.44ms max=378.51ms count=21
+06-18 05:10:11.641  1412  1412 I KeyboardViewUtil: KeyboardViewUtil.getKeyboardHeightRatio():189 systemKeyboardHeightRatio:1.000000; userKeyboardHeightRatio:1.000000.
+06-18 05:10:11.641  1412  1412 I AndroidIME: AbstractIme.onActivate():86 PasswordIme.onActivate() : EditorInfo = inputType=0x8081(Password) imeOptions=0x2000006 privateImeOptions=null actionName=DONE actionLabel=null actionId=0 initialSelStart=0 initialSelEnd=0 initialCapsMode=0x0 hintText=null label=null packageName=com.xiuci.xcagi.mobile.enterprise fieldId=-1 fieldName=null extras=Bundle[{android.support.text.emoji.emojiCompat_metadataVersion=9, androidx.core.view.inputmethod.EditorInfoCompat.STYLUS_HANDWRITING_ENABLED=false, android.support.text.emoji.emojiCompat_replaceAll=false}], IncognitoMode = false, DeviceLocked = false
+06-18 05:10:11.643  1412  1412 I KeyboardViewUtil: KeyboardViewUtil.calculateMaxKeyboardBodyHeight():40 leave 354 height for app when screen height:2274, header height:116 and isFullscreenMode:false, so the max keyboard body height is:1804
+06-18 05:10:11.643  1412  1412 I GoogleInputMethodService: GoogleInputMethodService.setKeyboardViewShown():3483 setKeyboardViewShown() : type = HEADER, shownType = SHOW_MANDATORY
+06-18 05:10:11.643  1412  1412 I GoogleInputMethodService: GoogleInputMethodService.setKeyboardViewShown():3530 setKeyboardViewShown() : shouldShow = true
+06-18 05:10:11.643  1412  1412 I GoogleInputMethodService: GoogleInputMethodService.setKeyboardViewShown():3483 setKeyboardViewShown() : type = BODY, shownType = SHOW_MANDATORY
+06-18 05:10:11.643  1412  1412 I GoogleInputMethodService: GoogleInputMethodService.setKeyboardViewShown():3530 setKeyboardViewShown() : shouldShow = true
+06-18 05:10:11.643  1412  1412 I GoogleInputMethodService: GoogleInputMethodService.setKeyboardViewShown():3483 setKeyboardViewShown() : type = FLOATING_CANDIDATES, shownType = HIDE
+06-18 05:10:11.643  1412  1412 I GoogleInputMethodService: GoogleInputMethodService.setKeyboardViewShown():3530 setKeyboardViewShown() : shouldShow = false
+06-18 05:10:11.643  1412  1412 I KeyboardViewUtil: KeyboardViewUtil.calculateMaxKeyboardBodyHeight():40 leave 354 height for app when screen height:2274, header height:116 and isFullscreenMode:false, so the max keyboard body height is:1804
+06-18 05:10:11.644  1412  1412 I DeviceModeUtil: DeviceModeUtil.getDeviceMode():122 Get device mode phone by ui mode:1 and smallestScreenWidthDp:411
+06-18 05:10:11.644  1412  1412 I DeviceModeUtil: DeviceModeUtil.getDeviceMode():122 Get device mode phone by ui mode:1 and smallestScreenWidthDp:411
+06-18 05:10:11.644  1412  1412 I KeyboardModeManager: KeyboardModeManager.setInputView():364 setInputView() : supportsOneHandedMode=true
+06-18 05:10:11.644  1412  1412 I NormalModeController: NormalModeController.getKeyboardBodyViewHolderPaddingBottom():116 currentPrimeKeyboardType:SOFT systemPaddingBottom:-1
+06-18 05:10:11.644  1412  1412 I AndroidIME: KeyboardViewManager.updateKeyboardBodyViewHolderPaddingBottom():604 Set finalPaddingBottom = 0 while keyboardBottomGapFromScreen = 0; navigationHeight = 126
+06-18 05:10:11.645  1412  1412 I NormalModeController: NormalModeController.getKeyboardBodyViewHolderPaddingBottom():116 currentPrimeKeyboardType:SOFT systemPaddingBottom:-1
+06-18 05:10:11.645  1412  1412 I AndroidIME: KeyboardViewManager.updateKeyboardBodyViewHolderPaddingBottom():604 Set finalPaddingBottom = 0 while keyboardBottomGapFromScreen = 0; navigationHeight = 126
+06-18 05:10:11.645  1412  1412 I KeyboardModeManager: KeyboardModeManager.setInputView():356 setInputView() : entry=hwn{languageTag=en-US, variant=qwerty, hasLocalizedResources=true, conditionCacheKey=_device=phone_device_size=default_enable_adaptive_text_editing=false_enable_inline_suggestions_on_client_side=false_enable_large_tablet_batch_1=false_enable_large_tablet_batch_2=false_enable_more_candidates_view_for_multilingual=false_enable_nav_redesign=false_enable_number_row=false_enable_preemptive_decode=true_enable_secondary_symbols=false_expressions=normal_four_or_more_letter_rows=false_keyboard_mode=normal_language=en-US_orientation=portrait_physical_keyboard=nokeys_show_secondary_digits=true_show_suggestions=true_split_with_duplicate_keys=true_variant=qwerty, imeDef.stringId=ime_english_united_states, imeDef.className=com.google.android.apps.inputmethod.libs.latin5.LatinIme, imeDef.languageTag=en-US}
+06-18 05:10:11.646  1412  1412 I CurrentMicStatusHolder: CurrentMicStatusHolder.onStartInputView():79 Current Mic status = {MicIconHidden-SettingOff,MicIconHidden-PasswordOrNumberOrDateInputType,}
+06-18 05:10:11.646  1412  1412 I VoiceImeExtension: VoiceImeExtension.shouldStartVoiceInputAutomatically():383 No private IME option set to start voice input.
+06-18 05:10:11.648   549  1965 D CoreBackPreview: Window{3053f53 u0 com.xiuci.xcagi.mobile.enterprise/com.xiuci.xcagi.mobile.MainActivity}: Setting back callback OnBackInvokedCallbackInfo{mCallback=android.window.IOnBackInvokedCallback$Stub$Proxy@4905acd, mPriority=0, mIsAnimationCallback=false}
+06-18 05:10:11.651   549  1964 I ImeTracker: com.xiuci.xcagi.mobile.enterprise:684d555: onFailed at PHASE_WM_SHOW_IME_RUNNER
+06-18 05:10:11.653  1412  1899 E OpenGLRenderer: Unable to match the desired swap behavior.
+06-18 05:10:11.666 16489 16489 D InsetsController: show(ime(), fromIme=true)
+06-18 05:10:11.845 16489 16489 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=falsecallback=android.view.ViewRootImpl$$ExternalSyntheticLambda17@76459f4
+06-18 05:10:11.845   549   563 D CoreBackPreview: Window{da6c346 u0 Pop-Up Window}: Setting back callback null
+06-18 05:10:11.846   549   563 W InputManager-JNI: Input channel object 'da6c346 Pop-Up Window (client)' was disposed without first being removed with the input manager!
+06-18 05:10:11.994 16489 16489 I ImeTracker: com.xiuci.xcagi.mobile.enterprise:81fea844: onShown
+06-18 05:10:12.148 16489 16489 W WindowOnBackDispatcher: OnBackInvokedCallback is not enabled for the application.
+06-18 05:10:12.148 16489 16489 W WindowOnBackDispatcher: Set 'android:enableOnBackInvokedCallback="true"' in the application manifest.
+06-18 05:10:12.154   549   563 D CoreBackPreview: Window{8f18ef u0 Pop-Up Window}: Setting back callback OnBackInvokedCallbackInfo{mCallback=android.window.IOnBackInvokedCallback$Stub$Proxy@8cb1685, mPriority=0, mIsAnimationCallback=false}
+06-18 05:10:12.163 16489 16549 E OpenGLRenderer: Unable to match the desired swap behavior.
+06-18 05:10:12.777 16489 16549 D EGL_emulation: app_time_stats: avg=31.92ms min=1.43ms max=496.77ms count=31
+06-18 05:10:13.786 16489 16549 D EGL_emulation: app_time_stats: avg=504.34ms min=502.38ms max=506.29ms count=2
+06-18 05:10:14.818 16489 16549 D EGL_emulation: app_time_stats: avg=516.16ms min=509.77ms max=522.55ms count=2
+06-18 05:10:16.296 16489 16549 D EGL_emulation: app_time_stats: avg=492.53ms min=478.59ms max=501.50ms count=3
+--------- beginning of kernel
+06-18 05:10:16.717   155   155 I logd    : logdr: UID=0 GID=0 PID=16714 n tail=0 logMask=99 pid=0 start=0ns deadline=0ns
+06-18 05:10:17.297 16489 16549 D EGL_emulation: app_time_stats: avg=500.07ms min=497.44ms max=502.71ms count=2
+06-18 05:10:18.311 16489 16549 D EGL_emulation: app_time_stats: avg=507.31ms min=493.65ms max=520.96ms count=2
+06-18 05:10:19.313 16489 16549 D EGL_emulation: app_time_stats: avg=500.80ms min=499.59ms max=502.01ms count=2
+06-18 05:10:20.811 16489 16549 D EGL_emulation: app_time_stats: avg=499.35ms min=498.00ms max=500.48ms count=3
+06-18 05:10:21.165 16489 16489 E FrameTracker: force finish cuj, time out: J<IME_INSETS_ANIMATION::1@1@com.xiuci.xcagi.mobile.enterprise>
+06-18 05:10:21.344   760   760 D StatusBarIconController: ignoring old pipeline callbacks, because the new mobile icons are enabled
+06-18 05:10:21.668   549   728 D androidtc: Initializing SystemTextClassifier, type = System
+06-18 05:10:21.677  1525  1525 I AiAiTextClassifier: onCreateTextClassificationSession = TextClassificationSessionId {58f6ddbd-190f-4f92-9c7e-3635295cec5c}
+06-18 05:10:21.680   760   760 I ClipboardListener: Clipboard overlay suppressed.
+06-18 05:10:21.680  1525  2074 I AiAiTranslate: C2T - not in a conversation
+06-18 05:10:21.681  1412  1412 I ProactiveSuggestionsHolderManager: ProactiveSuggestionsHolderManager$3.display():216 Requesting to show proactive suggestions: CLIPBOARD PREEMPTIVE_WITH_SUPPRESSION
+06-18 05:10:21.748  1525  2380 I AiAiTextClassifier: GenerateLinks did not find valid links, returning empty result
+06-18 05:10:21.760   760   760 I ClipboardListener: Clipboard overlay suppressed.
+06-18 05:10:21.815 16489 16549 D EGL_emulation: app_time_stats: avg=501.70ms min=501.65ms max=501.74ms count=2
+06-18 05:10:22.306 16489 16489 E FrameTracker: force finish cuj, time out: J<IME_INSETS_ANIMATION::0@1@com.xiuci.xcagi.mobile.enterprise>
+06-18 05:10:22.828 16489 16549 D EGL_emulation: app_time_stats: avg=506.27ms min=500.64ms max=511.91ms count=2
+06-18 05:10:22.943  1057  1057 D TaplEvents: TIS / TouchInteractionService.onInputEvent: MotionEvent { action=ACTION_DOWN, actionButton=0, id[0]=0, x[0]=1031.9463, y[0]=2176.9043, toolType[0]=TOOL_TYPE_FINGER, buttonState=0, classification=NONE, metaState=0, flags=0x0, edgeFlags=0x0, pointerCount=1, historySize=0, eventTime=2768483, downTime=2768483, deviceId=3, source=0x5002, displayId=0, eventId=60433972 }
+06-18 05:10:22.959  1412  1899 D EGL_emulation: app_time_stats: avg=859.57ms min=2.00ms max=10056.22ms count=13
+06-18 05:10:23.041  1412  1412 I ProactiveSuggestionsHolderManager: ProactiveSuggestionsHolderManager$3.display():216 Requesting to show proactive suggestions: CLIPBOARD PREEMPTIVE
+06-18 05:10:23.042  1057  1057 D TaplEvents: TIS / TouchInteractionService.onInputEvent: MotionEvent { action=ACTION_UP, actionButton=0, id[0]=0, x[0]=1031.9463, y[0]=2176.9043, toolType[0]=TOOL_TYPE_FINGER, buttonState=0, classification=NONE, metaState=0, flags=0x0, edgeFlags=0x0, pointerCount=1, historySize=0, eventTime=2768581, downTime=2768483, deviceId=3, source=0x5002, displayId=0, eventId=931031231 }
+06-18 05:10:23.058 16489 16489 I ImeTracker: com.xiuci.xcagi.mobile.enterprise:71e4c9f: onRequestHide at ORIGIN_CLIENT_HIDE_SOFT_INPUT reason HIDE_SOFT_INPUT_BY_INSETS_API
+06-18 05:10:23.060 16489 16489 I ImeTracker: com.xiuci.xcagi.mobile.enterprise:29f54d45: onRequestHide at ORIGIN_CLIENT_HIDE_SOFT_INPUT reason HIDE_SOFT_INPUT_BY_INSETS_API
+06-18 05:10:23.062  1412  1412 I GoogleInputMethodService: GoogleInputMethodService.onFinishInputView():2241
+06-18 05:10:23.063  1412  1412 I AndroidIME: AbstractIme.onDeactivate():207 PasswordIme.onDeactivate()
+06-18 05:10:23.072 16489 16489 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=falsecallback=ImeCallback=ImeOnBackInvokedCallback@144231657 Callback=android.window.IOnBackInvokedCallback$Stub$Proxy@6e3b113
+06-18 05:10:23.073   549   563 D CoreBackPreview: Window{3053f53 u0 com.xiuci.xcagi.mobile.enterprise/com.xiuci.xcagi.mobile.MainActivity}: Setting back callback OnBackInvokedCallbackInfo{mCallback=android.window.IOnBackInvokedCallback$Stub$Proxy@92b9601, mPriority=0, mIsAnimationCallback=false}
+06-18 05:10:23.073 16489 16489 I ImeTracker: com.xiuci.xcagi.mobile.enterprise:29f54d45: onCancelled at PHASE_CLIENT_APPLY_ANIMATION
+06-18 05:10:23.374 16489 16489 I ImeTracker: com.xiuci.xcagi.mobile.enterprise:16caeacf: onRequestHide at ORIGIN_CLIENT_HIDE_SOFT_INPUT reason HIDE_SOFT_INPUT_BY_INSETS_API
+06-18 05:10:23.375   549  1965 I ImeTracker: com.xiuci.xcagi.mobile.enterprise:16caeacf: onCancelled at PHASE_SERVER_SHOULD_HIDE
+06-18 05:10:23.375 16489 16489 I ImeTracker: com.xiuci.xcagi.mobile.enterprise:71e4c9f: onHidden
+06-18 05:10:23.680  1057  1057 D TaplEvents: TIS / TouchInteractionService.onInputEvent: MotionEvent { action=ACTION_DOWN, actionButton=0, id[0]=0, x[0]=811.94434, y[0]=1851.9287, toolType[0]=TOOL_TYPE_FINGER, buttonState=0, classification=NONE, metaState=0, flags=0x0, edgeFlags=0x0, pointerCount=1, historySize=0, eventTime=2769221, downTime=2769221, deviceId=3, source=0x5002, displayId=0, eventId=191803656 }
+06-18 05:10:23.781  1057  1057 D TaplEvents: TIS / TouchInteractionService.onInputEvent: MotionEvent { action=ACTION_UP, actionButton=0, id[0]=0, x[0]=811.94434, y[0]=1851.9287, toolType[0]=TOOL_TYPE_FINGER, buttonState=0, classification=NONE, metaState=0, flags=0x0, edgeFlags=0x0, pointerCount=1, historySize=0, eventTime=2769321, downTime=2769221, deviceId=3, source=0x5002, displayId=0, eventId=160645629 }
+06-18 05:10:23.817 16489 16720 I okhttp.OkHttpClient: --> POST https://xiu-ci.com/fhd-api/api/mobile/v1/auth/login (73-byte body)
+06-18 05:10:23.820   358 16721 I resolv  : GetAddrInfoHandler::run: {100 100 100 983140 10194 0}
+06-18 05:10:23.822   358 16723 I resolv  : res_nmkquery: (QUERY, IN, A)
+06-18 05:10:23.822   358 16722 I resolv  : res_nmkquery: (QUERY, IN, AAAA)
+06-18 05:10:23.838   358 16723 I resolv  : res_nsend: used send_dg 44 terrno: 0
+06-18 05:10:23.838   358 16723 I resolv  : doQuery: rcode=0, ancount=1, return value=44
+06-18 05:10:23.839   358 16722 I resolv  : res_nsend: used send_dg 101 terrno: 0
+06-18 05:10:23.841   358 16722 I resolv  : doQuery: rcode=0, ancount=0, return value=101
+06-18 05:10:23.843 16489 16720 D TrafficStats: tagSocket(127) with statsTag=0xffffffff, statsUid=-1
+06-18 05:10:23.844 16489 16549 D EGL_emulation: app_time_stats: avg=33.63ms min=1.50ms max=413.93ms count=22
+06-18 05:10:24.691   760   760 D StatusBarIconController: ignoring old pipeline callbacks, because the new mobile icons are enabled
+06-18 05:10:24.844 16489 16549 D EGL_emulation: app_time_stats: avg=18.52ms min=1.85ms max=183.27ms count=49
+06-18 05:10:25.691   760   760 D StatusBarIconController: ignoring old pipeline callbacks, because the new mobile icons are enabled
+06-18 05:10:26.344 16489 16549 D EGL_emulation: app_time_stats: avg=499.85ms min=496.30ms max=502.63ms count=3
+06-18 05:10:26.628 16724 16724 D AndroidRuntime: >>>>>> START com.android.internal.os.RuntimeInit uid 0 <<<<<<
+06-18 05:10:26.632 16724 16724 I AndroidRuntime: Using default boot image
+06-18 05:10:26.632 16724 16724 I AndroidRuntime: Leaving lock profiling enabled
+06-18 05:10:26.635 16724 16724 I app_process: Core platform API reporting enabled, enforcing=false
+06-18 05:10:26.635 16724 16724 I app_process: Using CollectorTypeCC GC.
+06-18 05:10:26.694 16724 16724 D nativeloader: InitDefaultPublicLibraries for_preload=1: libandroid.so:libaaudio.so:libamidi.so:libbinder_ndk.so:libc.so:libcamera2ndk.so:libdl.so:libEGL.so:libGLESv1_CM.so:libGLESv2.so:libGLESv3.so:libicu.so:libicui18n.so:libicuuc.so:libjnigraphics.so:liblog.so:libmediandk.so:libm.so:libnativehelper.so:libnativewindow.so:libOpenMAXAL.so:libOpenSLES.so:libRS.so:libstdc++.so:libsync.so:libvulkan.so:libwebviewchromium_plat_support.so:libz.so
+06-18 05:10:26.708 16724 16724 D app_process: Time zone APEX ICU file found: /apex/com.android.tzdata/etc/icu/icu_tzdata.dat
+06-18 05:10:26.708 16724 16724 D app_process: I18n APEX ICU file found: /apex/com.android.i18n/etc/icu/icudt72l.dat
+06-18 05:10:26.717 16724 16724 W app_process: ClassLoaderContext shared library size mismatch. Expected=2, found=0 (PCL[]{PCL[/system/framework/android.test.base.jar*836642756]#PCL[/system/framework/android.test.mock.jar*3186112116]} | PCL[])
+06-18 05:10:26.718 16724 16724 W app_process: ClassLoaderContext classpath size mismatch. expected=0, found=1 (PCL[]{PCL[/system/framework/android.test.runner.jar*4168958247]{PCL[/system/framework/android.test.base.jar*836642756]#PCL[/system/framework/android.test.mock.jar*3186112116]}#PCL[/system/framework/android.test.base.jar*836642756]} | PCL[/system/framework/android.test.runner.jar*4168958247])
+06-18 05:10:26.745 16724 16724 D AndroidRuntime: Calling main entry com.android.commands.uiautomator.Launcher
+06-18 05:10:26.751 16724 16724 D UiAutomationConnection: Created on user UserHandle{0}
+06-18 05:10:26.751 16724 16724 I UiAutomation: Initialized for user 0 on display 0
+06-18 05:10:26.751 16724 16724 W UiAutomation: Created with deprecatead constructor, assumes DEFAULT_DISPLAY
+06-18 05:10:26.754   549  1965 D AccessibilityManagerService: changeCurrentUserForTestAutomationIfNeededLocked(0): ignoring because device doesn't support visible background users
+06-18 05:10:26.755   549  1965 I UiAutomationManager: Registering UiTestAutomationService (id=com.android.server.accessibility/UiAutomation) when called by user 0
+06-18 05:10:26.757   549  1965 W WindowMagnificationMgr: requestConnection duplicated request: connect=false, mConnectionState=DISCONNECTED
+06-18 05:10:26.759  1525  2357 I AiAiEcho: Settings changed for uri: content://settings/secure/accessibility_enabled
+06-18 05:10:26.759   549   549 D BatterySaverPolicy: accessibility changed to true, updating policy.
+06-18 05:10:26.760  1525  1858 I AiAiEcho: Predicting[0]:
+06-18 05:10:26.760  1525  1858 I AiAiEcho: EchoTargets:
+06-18 05:10:26.760  1525  1858 I AiAiEcho: Filtered by AiAi flag check:
+06-18 05:10:26.760  1525  1858 I AiAiEcho: Ranked targets strategy: SORT, count: 0, ranking metadata:
+06-18 05:10:26.761  1525  1858 I AiAiEcho: Predicting[0]:
+06-18 05:10:26.761  1525  1858 I AiAiEcho: EchoTargets:
+06-18 05:10:26.761  1525  1858 I AiAiEcho: Filtered by AiAi flag check:
+06-18 05:10:26.761  1525  1858 I AiAiEcho: Ranked targets strategy: SORT, count: 0, ranking metadata:
+06-18 05:10:26.762  1525  1858 I AiAiEcho: Predicting[0]:
+06-18 05:10:26.762  1525  1858 I AiAiEcho: EchoTargets:
+06-18 05:10:26.762  1525  1858 I AiAiEcho: Filtered by AiAi flag check:
+06-18 05:10:26.762  1525  1858 I AiAiEcho: Ranked targets strategy: SORT, count: 0, ranking metadata:
+06-18 05:10:26.762  1525  1858 I AiAiEcho: #postPredictionTargets: Sending updates to UISurface media_data_manager with targets# 0 (types=[])
+06-18 05:10:26.762  1525  1858 I AiAiEcho: #postPredictionTargets: Sending updates to UISurface lockscreen with targets# 0 (types=[])
+06-18 05:10:26.762  1641  2015 I A       : NGA disabled due to not being eligible.
+06-18 05:10:26.762  1525  1858 I AiAiEcho: #postPredictionTargets: Sending updates to UISurface home with targets# 0 (types=[])
+06-18 05:10:26.764 16724 16740 V UiAutomation: Init UiAutomation@2bfa529[id=9, displayId=0, flags=0]
+06-18 05:10:26.766   549  1965 W WindowMagnificationMgr: requestConnection duplicated request: connect=false, mConnectionState=DISCONNECTED
+06-18 05:10:26.770  1525  2357 I AiAiEcho: Settings changed for uri: content://settings/secure/accessibility_enabled
+06-18 05:10:26.770  1525  1858 I AiAiEcho: Predicting[0]:
+06-18 05:10:26.770  1525  1858 I AiAiEcho: EchoTargets:
+06-18 05:10:26.770  1525  1858 I AiAiEcho: Filtered by AiAi flag check:
+06-18 05:10:26.770  1525  1858 I AiAiEcho: Ranked targets strategy: SORT, count: 0, ranking metadata:
+06-18 05:10:26.770  1525  1858 I AiAiEcho: Predicting[0]:
+06-18 05:10:26.770  1525  1858 I AiAiEcho: EchoTargets:
+06-18 05:10:26.770  1525  1858 I AiAiEcho: Filtered by AiAi flag check:
+06-18 05:10:26.770  1525  1858 I AiAiEcho: Ranked targets strategy: SORT, count: 0, ranking metadata:
+06-18 05:10:26.770  1525  1858 I AiAiEcho: Predicting[0]:
+06-18 05:10:26.770  1525  1858 I AiAiEcho: EchoTargets:
+06-18 05:10:26.770  1525  1858 I AiAiEcho: Filtered by AiAi flag check:
+06-18 05:10:26.770  1525  1858 I AiAiEcho: Ranked targets strategy: SORT, count: 0, ranking metadata:
+06-18 05:10:26.771  1525  1858 I AiAiEcho: #postPredictionTargets: Sending updates to UISurface media_data_manager with targets# 0 (types=[])
+06-18 05:10:26.771  1525  1858 I AiAiEcho: #postPredictionTargets: Sending updates to UISurface lockscreen with targets# 0 (types=[])
+06-18 05:10:26.771  1525  1858 I AiAiEcho: #postPredictionTargets: Sending updates to UISurface home with targets# 0 (types=[])
+06-18 05:10:26.778   760   760 D SsMediaDataProvider: Forwarding Smartspace updates []
+06-18 05:10:26.778   760   760 W PageIndicator: Total number of pages invalid: 0. Assuming 1 page.
+06-18 05:10:26.779   760   760 D SsMediaDataProvider: Forwarding Smartspace updates []
+06-18 05:10:26.779   760   760 W PageIndicator: Total number of pages invalid: 0. Assuming 1 page.
+06-18 05:10:27.347 16489 16549 D EGL_emulation: app_time_stats: avg=501.25ms min=499.74ms max=502.76ms count=2
+06-18 05:10:27.617 16743 16743 W BpBinder: Linking to death on android.gui.ISurfaceComposer but there are no threads (yet?) listening to incoming transactions. See ProcessState::startThreadPool and ProcessState::setThreadPoolMaxThreadCount. Generally you should setup the binder threadpool before other initialization steps.
+06-18 05:10:27.617 16743 16743 W ProcessState: Extra binder thread started, but 0 threads requested. Do not use *startThreadPool when zero threads are requested.
+06-18 05:10:27.626   162   162 I hwservicemanager: getTransport: Cannot find entry android.hardware.graphics.mapper@4.0::IMapper/default in either framework or device VINTF manifest.
+06-18 05:10:27.626 16743 16744 I Gralloc4: mapper 4.x is not supported
+06-18 05:10:27.629   161   161 I servicemanager: Could not find android.hardware.graphics.allocator.IAllocator/default in the VINTF manifest.
+06-18 05:10:27.848 16724 16724 W AccessibilityNodeInfoDumper: Fetch time: 75ms
+06-18 05:10:27.850   549  1965 W WindowMagnificationMgr: requestConnection duplicated request: connect=false, mConnectionState=DISCONNECTED
+06-18 05:10:27.850   549  1965 D AccessibilityManagerService: restoreCurrentUserForTestAutomationIfNeededLocked(): ignoring because device doesn't support visible background users
+06-18 05:10:27.850  1525  1567 I AiAiEcho: Settings changed for uri: content://settings/secure/accessibility_enabled
+06-18 05:10:27.850  1525  1858 I AiAiEcho: Predicting[0]:
+06-18 05:10:27.850   549   549 D BatterySaverPolicy: accessibility changed to false, updating policy.
+06-18 05:10:27.850  1525  1858 I AiAiEcho: EchoTargets:
+06-18 05:10:27.850  1525  1858 I AiAiEcho: Filtered by AiAi flag check:
+06-18 05:10:27.850  1525  1858 I AiAiEcho: Ranked targets strategy: SORT, count: 0, ranking metadata:
+06-18 05:10:27.851 16724 16724 D AndroidRuntime: Shutting down VM
+06-18 05:10:27.851  1525  1858 I AiAiEcho: Predicting[0]:
+06-18 05:10:27.851  1525  1858 I AiAiEcho: EchoTargets:
+06-18 05:10:27.851  1525  1858 I AiAiEcho: Filtered by AiAi flag check:
+06-18 05:10:27.851  1525  1858 I AiAiEcho: Ranked targets strategy: SORT, count: 0, ranking metadata:
+06-18 05:10:27.851  1525  1858 I AiAiEcho: Predicting[0]:
+06-18 05:10:27.851  1525  1858 I AiAiEcho: EchoTargets:
+06-18 05:10:27.851  1525  1858 I AiAiEcho: Filtered by AiAi flag check:
+06-18 05:10:27.851  1525  1858 I AiAiEcho: Ranked targets strategy: SORT, count: 0, ranking metadata:
+06-18 05:10:27.851  1525  1858 I AiAiEcho: #postPredictionTargets: Sending updates to UISurface media_data_manager with targets# 0 (types=[])
+06-18 05:10:27.853  1525  1858 I AiAiEcho: #postPredictionTargets: Sending updates to UISurface lockscreen with targets# 0 (types=[])
+06-18 05:10:27.853  1641  2011 I A       : NGA disabled due to not being eligible.
+06-18 05:10:27.853  1525  1858 I AiAiEcho: #postPredictionTargets: Sending updates to UISurface home with targets# 0 (types=[])
+06-18 05:10:27.864   760   760 D SsMediaDataProvider: Forwarding Smartspace updates []
+06-18 05:10:27.864   760   760 W PageIndicator: Total number of pages invalid: 0. Assuming 1 page.
+06-18 05:10:28.226   549   576 D IntervalStats: Unable to parse usage stats packages: [213, 225]
+06-18 05:10:28.300   549   576 D IntervalStats: Unable to parse usage stats packages: [213, 225]
+06-18 05:10:28.323   549   576 D IntervalStats: Unable to parse usage stats packages: [213, 225]
+06-18 05:10:28.846 16489 16549 D EGL_emulation: app_time_stats: avg=374.88ms min=50.79ms max=501.90ms count=4
+06-18 05:10:29.848 16489 16549 D EGL_emulation: app_time_stats: avg=500.42ms min=498.49ms max=502.35ms count=2
+06-18 05:10:30.709   760   760 D StatusBarIconController: ignoring old pipeline callbacks, because the new mobile icons are enabled
+06-18 05:10:31.344   760   760 D StatusBarIconController: ignoring old pipeline callbacks, because the new mobile icons are enabled
+06-18 05:10:31.360 16489 16549 D EGL_emulation: app_time_stats: avg=504.25ms min=498.50ms max=515.09ms count=3
+06-18 05:10:31.708   760   760 D StatusBarIconController: ignoring old pipeline callbacks, because the new mobile icons are enabled
+06-18 05:10:32.364 16489 16549 D EGL_emulation: app_time_stats: avg=501.63ms min=501.04ms max=502.21ms count=2
+06-18 05:10:33.617 16489 16489 E FrameTracker: force finish cuj, time out: J<IME_INSETS_ANIMATION::1@1@com.xiuci.xcagi.mobile.enterprise>
+06-18 05:10:33.861 16489 16549 D EGL_emulation: app_time_stats: avg=498.93ms min=495.77ms max=502.61ms count=3
+06-18 05:10:34.965 16489 16549 D EGL_emulation: app_time_stats: avg=552.34ms min=502.29ms max=602.40ms count=2
+06-18 05:10:35.034   760   771 I ndroid.systemui: Background concurrent copying GC freed 265694(13MB) AllocSpace objects, 0(0B) LOS objects, 49% free, 12MB/25MB, paused 75us,4.343ms total 276.450ms
+06-18 05:10:35.859 16489 16720 I okhttp.OkHttpClient: <-- HTTP FAILED: java.net.SocketTimeoutException: failed to connect to xiu-ci.com/119.27.178.147 (port 443) from /10.0.2.15 (port 52710) after 12000ms
+06-18 05:10:35.866 16489 16749 E FA      : Invalid google_app_id. Firebase Analytics disabled. See https://goo.gl/NAOOOI. provided id: 1:000000000002:android:enterprise000000000002
+06-18 05:10:35.904   399  1435 D audioserver: FGS Logger Transaction failed
+06-18 05:10:35.904   399  1435 D audioserver: -129
+06-18 05:10:35.973 16489 16549 D EGL_emulation: app_time_stats: avg=251.89ms min=9.88ms max=482.39ms count=4
+06-18 05:10:36.020   399   513 D AudioFlinger: mixer(0xb400007a9ef83930) throttle end: throttle time(29)
+06-18 05:10:36.156   399   513 D audioserver: FGS Logger Transaction failed
+06-18 05:10:36.156   399   513 D audioserver: -129
+06-18 05:10:37.377 16489 16549 D EGL_emulation: app_time_stats: avg=43.95ms min=0.96ms max=501.05ms count=25
+06-18 05:10:38.431 16489 16549 D EGL_emulation: app_time_stats: avg=351.08ms min=54.80ms max=501.33ms count=3
+06-18 05:10:39.025   361  3626 D android.hardware.audio@7.1-impl.ranchu: threadLoop: entering standby, frames: 1492736
+06-18 05:10:39.898 16489 16549 D EGL_emulation: app_time_stats: avg=69.75ms min=13.41ms max=518.62ms count=21
+06-18 05:10:41.343   760   760 D StatusBarIconController: ignoring old pipeline callbacks, because the new mobile icons are enabled
+06-18 05:10:41.397 16489 16549 D EGL_emulation: app_time_stats: avg=499.44ms min=495.75ms max=501.83ms count=3
+06-18 05:10:41.744   760   760 D StatusBarIconController: ignoring old pipeline callbacks, because the new mobile icons are enabled
+06-18 05:10:42.400 16489 16549 D EGL_emulation: app_time_stats: avg=501.41ms min=499.58ms max=503.24ms count=2
+06-18 05:10:42.743   760   760 D StatusBarIconController: ignoring old pipeline callbacks, because the new mobile icons are enabled
+06-18 05:10:43.894 16489 16549 D EGL_emulation: app_time_stats: avg=498.00ms min=496.41ms max=498.90ms count=3
+06-18 05:10:44.896 16489 16549 D EGL_emulation: app_time_stats: avg=500.95ms min=500.78ms max=501.13ms count=2
+06-18 05:10:45.915 16489 16549 D EGL_emulation: app_time_stats: avg=509.33ms min=499.37ms max=519.29ms count=2
+06-18 05:10:46.915 16489 16549 D EGL_emulation: app_time_stats: avg=500.10ms min=496.91ms max=503.29ms count=2
+06-18 05:10:48.416 16489 16549 D EGL_emulation: app_time_stats: avg=500.37ms min=493.43ms max=507.51ms count=3
+06-18 05:10:49.913 16489 16549 D EGL_emulation: app_time_stats: avg=498.83ms min=497.19ms max=500.18ms count=3
+06-18 05:10:50.924 16489 16549 D EGL_emulation: app_time_stats: avg=505.30ms min=503.50ms max=507.10ms count=2
+06-18 05:10:51.363   760   760 D StatusBarIconController: ignoring old pipeline callbacks, because the new mobile icons are enabled
+06-18 05:10:51.368   760   864 D EGL_emulation: app_time_stats: avg=51334.70ms min=51334.70ms max=51334.70ms count=1
+06-18 05:10:51.930 16489 16549 D EGL_emulation: app_time_stats: avg=502.98ms min=490.02ms max=515.94ms count=2
+06-18 05:10:52.944 16489 16549 D EGL_emulation: app_time_stats: avg=506.97ms min=502.16ms max=511.79ms count=2
+06-18 05:10:53.203   155   155 I logd    : logdr: UID=0 GID=0 PID=16752 n tail=0 logMask=99 pid=0 start=0ns deadline=0ns

@@ -231,6 +231,28 @@ export async function installMod(mod: string | Pick<ModCatalogItemUi, 'id' | 'pk
   return data;
 }
 
+export async function installCustomerDeliverySeed(
+  modId: string,
+  industryId = '',
+): Promise<InstallResult> {
+  const response = await apiFetch('/api/mod-store/install-customer-delivery-seed', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      mod_id: modId,
+      industry_id: industryId,
+    }),
+  });
+
+  const data = await response.json();
+
+  if (!data.success) {
+    throw new Error(data.detail || data.error || data.message || '客户交付种子安装失败');
+  }
+
+  return data;
+}
+
 /**
  * 卸载 MOD
  */

@@ -175,13 +175,10 @@ export function useAppBoot() {
         }
 
         try {
-          const { isSunbirdAccountUsername } = await import('@/constants/accountModBinding')
           await modsStore.initialize(true, {
             entitledModIds: authResult.entitledModIds,
             forceFromEntitlements:
-              authResult.ok &&
-              (isSunbirdAccountUsername(authResult.accountUsername) ||
-                authResult.entitledModIds.length > 0),
+              authResult.ok && authResult.entitledModIds.length > 0,
             accountUsername: authResult.accountUsername,
           })
           if (modsStore.clientModsUiOff) {

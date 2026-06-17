@@ -144,9 +144,23 @@
               view="ModelPaymentView"
               title="模型服务"
             />
-            <p v-else class="settings-model-service-empty muted" style="padding: 16px; margin: 0;">
-              {{ $t('settings.modelServiceMissing') }}
-            </p>
+            <div v-else class="settings-model-service-empty">
+              <p class="settings-model-service-empty__title">{{ $t('settings.modelServiceMissingTitle') }}</p>
+              <p class="muted settings-model-service-empty__lead">{{ $t('settings.modelServiceMissingLead') }}</p>
+              <ul class="settings-model-service-empty__list muted">
+                <li>{{ $t('settings.modelServiceMissingWhy') }}</li>
+                <li>{{ $t('settings.modelServiceMissingHow') }}</li>
+                <li>{{ $t('settings.modelServiceMissingNote') }}</li>
+              </ul>
+              <div class="settings-model-service-empty__actions">
+                <router-link class="btn btn-sm btn-primary" :to="{ name: 'mod-store' }">
+                  {{ $t('settings.modelServiceOpenModStore') }}
+                </router-link>
+                <button type="button" class="btn btn-sm btn-secondary" @click="openSettingsExtensions">
+                  {{ $t('settings.modelServiceOpenExtensions') }}
+                </button>
+              </div>
+            </div>
           </div>
         </details>
 
@@ -535,10 +549,7 @@
         </details>
 
         <details class="settings-card settings-card--about">
-          <summary
-            class="settings-row about-debug-entry"
-            @click="handleAboutHeaderClick"
-          >
+          <summary class="settings-row">
             <span class="settings-row__icon settings-row__icon--slate" aria-hidden="true">
               <i class="fa fa-info-circle"></i>
             </span>
@@ -547,8 +558,29 @@
             <span class="settings-row__arrow" aria-hidden="true"></span>
           </summary>
           <div class="settings-card__body settings-card__body--compact">
-            <p class="settings-about-line">{{ systemDisplayName }}</p>
-            <p class="muted settings-about-hint">{{ $t('settings.aboutDebugHint') }}</p>
+            <p class="settings-about-line">{{ aboutDisplayLine }}</p>
+            <p class="muted settings-about-version">
+              {{ $t('settings.currentVersion', { version: appVersionLabel }) }}
+            </p>
+            <div class="settings-about-actions">
+              <button
+                v-if="isDesktopShell"
+                type="button"
+                class="btn btn-sm btn-secondary"
+                :disabled="aboutUpdateBusy"
+                @click="onCheckForUpdates"
+              >
+                {{ aboutUpdateBusy ? $t('settings.checkingUpdates') : $t('settings.checkForUpdates') }}
+              </button>
+              <p v-else class="muted settings-about-web-hint">{{ $t('settings.updateWebHint') }}</p>
+            </div>
+            <p
+              v-if="aboutUpdateMessage"
+              class="settings-about-update-msg"
+              :class="{ 'is-error': aboutUpdateError }"
+            >
+              {{ aboutUpdateMessage }}
+            </p>
           </div>
         </details>
         </div>
@@ -559,7 +591,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onActivated, onBeforeUnmount, ref, computed, watch, nextTick } from 'vue';
+import { onMounted, onActivated, ref, computed, watch, nextTick } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import { authApi, type User } from '../api/auth';
@@ -584,11 +616,7 @@ import { DEFAULT_INDUSTRY_ID } from '@/constants/industryDefaults';
 import { getIndustryPreset } from '@/constants/industryPresets';
 import { isProtectedClientModId } from '@/constants/protectedMods';
 import {
-  isSunbirdAccountUsername,
-  SUNBIRD_CLIENT_MOD_ID,
-  augmentEntitledModIdsForAccount,
-} from '@/constants/accountModBinding';
-import {
+  ACCOUNT_CUSTOM_MOD_IDS,
   expectedHostBridgeModIds,
   isHostBridgeModId,
   isSelectableExtensionModId,
@@ -836,20 +864,6 @@ const profileSubline = computed(() => {
   const u = localUser.value;
   if (!u) return t('settings.loginSyncHint');
   const username = String(u.username || '').trim();
-  if (isSunbirdAccountUsername(username)) {
-    const mod = activeModMeta.value;
-    const modLabel = String(mod?.name || mod?.id || '太阳鸟pro').trim();
-    const listed = (mods.value || []).some(
-      (m) => String(m.id || '').trim() === SUNBIRD_CLIENT_MOD_ID,
-    );
-    if (!listed) {
-      return '太阳鸟企业账号 · 正在同步太阳鸟pro Mod，请稍候或刷新页面';
-    }
-    if (String(activeModId.value || '').trim() === SUNBIRD_CLIENT_MOD_ID) {
-      return `已绑定 ${modLabel} · 侧栏「考勤表转换」`;
-    }
-    return '太阳鸟企业账号 · 正在启用太阳鸟pro…';
-  }
   const brand = String(accountProfileStore.displayBrand || '').trim();
   if (brand) {
     const display = String(u.display_name || '').trim();
@@ -1007,6 +1021,22 @@ async function onLogout() {
 const modsStore = useModsStore();
 const { clientModsUiOff, loadError, isLoaded, mods, modRoutes, activeModId } = storeToRefs(modsStore);
 
+const MODEL_PAYMENT_BRIDGE_ID = 'xcagi-model-payment-bridge';
+
+const modelPaymentBridgeInstalled = computed(() =>
+  mods.value.some((m) => String(m.id || '').trim() === MODEL_PAYMENT_BRIDGE_ID),
+);
+
+function openSettingsExtensions() {
+  const el = document.querySelector('[data-tutorial-id="settings-extensions"]');
+  if (el instanceof HTMLDetailsElement) {
+    el.open = true;
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    return;
+  }
+  void router.push({ name: 'mod-store' });
+}
+
 const uninstallingModId = ref('');
 const hostPackExpanded = ref(false);
 
@@ -1041,7 +1071,7 @@ const workflowEmployeeMods = computed(() =>
 
 const showModelPaymentBridge = computed(() => {
   if (isAdminConsole) return true;
-  return mods.value.some((m) => String(m.id || '').trim() === 'xcagi-model-payment-bridge');
+  return modelPaymentBridgeInstalled.value;
 });
 
 function goHostPackOnboarding() {
@@ -1094,7 +1124,7 @@ const modSettingsFoldMeta = computed(() => {
 });
 
 const basicSettingsSummary = computed(() => {
-  const mode = aiMode.value === 'offline' ? t('settings.offline') : t('settings.online');
+  const mode = aiMode.value === 'offline' ? t('settings.offline') : t('settings.aiModeOnline');
   return `${normalizedAssistantName.value} · ${mode}`;
 });
 
@@ -1192,7 +1222,9 @@ const versions = ref<DistillationVersion[]>([]);
 const sampleCount = ref(0);
 const versionsError = ref('');
 const sampleCountWarning = ref('');
-const aboutClickCount = ref(0);
+const aboutUpdateBusy = ref(false);
+const aboutUpdateMessage = ref('');
+const aboutUpdateError = ref(false);
 const currentDbPath = ref('');
 const databaseStorageLabel = ref('');
 const desktopDatabaseVisible = ref(false);
@@ -1224,8 +1256,6 @@ async function loadDesktopDatabaseStatus() {
     currentDbPath.value = '';
   }
 }
-const ABOUT_CLICK_TARGET = 5;
-let aboutClickTimer: number | null = null;
 const ASSISTANT_NAME_KEY = 'assistantName';
 const DEFAULT_ASSISTANT_NAME = '修茈';
 const industries = ref<ApiIndustry[]>([]);
@@ -1234,11 +1264,42 @@ const currentIndustryUnit = ref('天');
 const sidebarThemePreset = ref('office-default');
 
 const appVersionLabel = computed(() => String(packageJson.version || '10.0.0'));
+const isDesktopShell = computed(() => Boolean(window.xcagiDesktop));
+
+const accountCustomModIds = new Set<string>(ACCOUNT_CUSTOM_MOD_IDS);
+
+const installedAccountCustomMod = computed(() =>
+  mods.value.find((m) => accountCustomModIds.has(String(m.id || '').trim())) || null,
+);
+
+const deliveryBrandName = computed(() => {
+  const customName = String(installedAccountCustomMod.value?.name || '').trim();
+  if (customName) return customName;
+  const brand = String(accountProfileStore.displayBrand || '').trim();
+  return brand;
+});
+
+const currentIndustryLabel = computed(() => {
+  const fromMod = String(activeModIndustry.value?.name || '').trim();
+  if (fromMod) return fromMod;
+  const id = String(currentIndustry.value || DEFAULT_INDUSTRY_ID).trim() || DEFAULT_INDUSTRY_ID;
+  return String(getIndustryPreset(id).name || id || '通用').trim();
+});
 
 const systemDisplayName = computed(() => {
-  const id = String(currentIndustry.value || DEFAULT_INDUSTRY_ID).trim() || DEFAULT_INDUSTRY_ID;
-  const name = getIndustryPreset(id).name;
-  return `${name}管理系统`;
+  const brand = deliveryBrandName.value;
+  if (brand) return `${brand} 交付工作台`;
+  return 'XCAGI 通用宿主';
+});
+
+const aboutDisplayLine = computed(() => {
+  const brand = deliveryBrandName.value;
+  const industry = currentIndustryLabel.value;
+  if (brand) {
+    const industryPart = industry ? `${industry}基础线` : '账号定制基础线';
+    return `XCAGI 通用宿主 · ${brand} 交付 · ${industryPart}`;
+  }
+  return 'XCAGI 通用宿主 · 能力由 Mod 提供';
 });
 
 const selectedSidebarAccent = computed(() => {
@@ -1496,27 +1557,23 @@ async function loadDistillationVersions() {
   }
 }
 
-function resetAboutClickCount() {
-  aboutClickCount.value = 0;
-  if (aboutClickTimer) {
-    window.clearTimeout(aboutClickTimer);
-    aboutClickTimer = null;
+async function onCheckForUpdates() {
+  if (!window.xcagiDesktop?.checkForUpdates) {
+    aboutUpdateMessage.value = t('settings.updateUnavailable');
+    aboutUpdateError.value = true;
+    return;
   }
-}
-
-function handleAboutHeaderClick() {
-  aboutClickCount.value += 1;
-
-  if (aboutClickTimer) {
-    window.clearTimeout(aboutClickTimer);
-  }
-  aboutClickTimer = window.setTimeout(() => {
-    resetAboutClickCount();
-  }, 1800);
-
-  if (aboutClickCount.value >= ABOUT_CLICK_TARGET) {
-    resetAboutClickCount();
-    router.push({ name: 'chat-debug' });
+  aboutUpdateBusy.value = true;
+  aboutUpdateMessage.value = '';
+  aboutUpdateError.value = false;
+  try {
+    await window.xcagiDesktop.checkForUpdates();
+    aboutUpdateMessage.value = t('settings.updateCheckStarted');
+  } catch (e: unknown) {
+    aboutUpdateMessage.value = `${t('settings.updateCheckFailed')}：${errorMessage(e)}`;
+    aboutUpdateError.value = true;
+  } finally {
+    aboutUpdateBusy.value = false;
   }
 }
 
@@ -1545,16 +1602,8 @@ onMounted(async () => {
   void loadAuditLogs();
   void loadDesktopDatabaseStatus();
   const uname = String(localUser.value?.username || '').trim();
-  const sunbird = isSunbirdAccountUsername(uname);
   if (!modsStore.isLoaded) {
     await modsStore.initialize(true, {
-      entitledModIds: augmentEntitledModIdsForAccount(uname, []),
-      forceFromEntitlements: sunbird,
-      accountUsername: uname,
-    });
-  } else if (sunbird) {
-    await modsStore.applyEntitledActiveMod(augmentEntitledModIdsForAccount(uname, []), {
-      force: true,
       accountUsername: uname,
     });
   }
@@ -1584,9 +1633,6 @@ watch(
   { deep: true },
 );
 
-onBeforeUnmount(() => {
-  resetAboutClickCount();
-});
 </script>
 
 <style scoped>
@@ -2332,10 +2378,62 @@ select.settings-item__control,
   color: #374151;
 }
 
-.settings-about-hint {
+.settings-about-version {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.settings-about-actions {
+  margin-top: 12px;
+}
+
+.settings-about-web-hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.settings-about-update-msg {
   margin: 10px 0 0;
   font-size: 12px;
   line-height: 1.45;
+  color: #64748b;
+}
+
+.settings-about-update-msg.is-error {
+  color: #dc2626;
+}
+
+.settings-model-service-empty {
+  padding: 16px;
+}
+
+.settings-model-service-empty__title {
+  margin: 0 0 8px;
+  font-size: 15px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.settings-model-service-empty__lead {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.settings-model-service-empty__list {
+  margin: 10px 0 0;
+  padding-left: 18px;
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.settings-model-service-empty__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
 }
 
 /* 嵌入：模型服务 Mod */

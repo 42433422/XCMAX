@@ -102,6 +102,7 @@ data class MarketLoginBody(
 data class MarketPasswordLoginBody(
     val username: String,
     val password: String,
+    val account_kind: String = "enterprise",
 )
 
 data class MarketSendCodeBody(val phone: String)
@@ -122,10 +123,13 @@ data class MarketUserInfo(
 data class MarketAuthResponse(
     val success: Boolean = false,
     val ok: Boolean = false,
+    val account_kind: String? = null,
     val token: String? = null,
     val access_token: String? = null,
     val refresh_token: String? = null,
     val message: String? = null,
+    val market_is_admin: Boolean = false,
+    val is_enterprise: Boolean = false,
     val user: MarketUserInfo? = null,
 ) {
     fun isAuthenticated(): Boolean = success || ok
@@ -159,6 +163,17 @@ data class ModInfo(
     val industry: ModIndustry? = null,
     val frontend_menu: List<ModMenuItem> = emptyList(),
     val menu_overrides: List<ModMenuOverride> = emptyList(),
+    val workflow_employees: List<WorkflowEmployeeInfo> = emptyList(),
+)
+
+data class WorkflowEmployeeInfo(
+    val id: String = "",
+    val label: String = "",
+    val panel_title: String = "",
+    val panel_summary: String = "",
+    val api_base_path: String = "",
+    val phone_channel: String = "",
+    val workflow_placeholder: Boolean = false,
 )
 
 data class ModMenuItem(

@@ -35,6 +35,7 @@ constructor(
     private val marketToken = stringPreferencesKey("market_token")
     private val marketRefresh = stringPreferencesKey("market_refresh_token")
     private val serverMode = stringPreferencesKey("server_mode")
+    private val accountKind = stringPreferencesKey("account_kind")
     private val userIdKey = intPreferencesKey("user_id")
     private val fcmTokenKey = stringPreferencesKey("fcm_token")
     private val setupCompleteKey = booleanPreferencesKey("setup_complete")
@@ -49,11 +50,13 @@ constructor(
     private val savedPasswordKey = stringPreferencesKey("saved_password")
     private val rememberPassKey = booleanPreferencesKey("remember_password")
     private val autoLoginKey = booleanPreferencesKey("auto_login")
+    private val avatarUriKey = stringPreferencesKey("avatar_uri")
 
     val fhdHostFlow: Flow<String> = context.dataStore.data.map { it[fhdHost] ?: "" }
     val userIdFlow: Flow<Int> = context.dataStore.data.map { it[userIdKey] ?: 0 }
     val fhdAccessFlow: Flow<String> = context.dataStore.data.map { it[fhdAccess] ?: "" }
     val serverModeFlow: Flow<String> = context.dataStore.data.map { it[serverMode] ?: "cloud" }
+    val accountKindFlow: Flow<String> = context.dataStore.data.map { it[accountKind] ?: "" }
     val marketTokenFlow: Flow<String> = context.dataStore.data.map { it[marketToken] ?: "" }
     val marketRefreshFlow: Flow<String> = context.dataStore.data.map { it[marketRefresh] ?: "" }
     val fhdUsernameFlow: Flow<String> = context.dataStore.data.map { it[fhdUsername] ?: "" }
@@ -91,6 +94,7 @@ constructor(
             context.dataStore.data.map { CredentialCipher.decrypt(it[savedPasswordKey] ?: "") }
     val rememberPassFlow: Flow<Boolean> = context.dataStore.data.map { it[rememberPassKey] == true }
     val autoLoginFlow: Flow<Boolean> = context.dataStore.data.map { it[autoLoginKey] == true }
+    val avatarUriFlow: Flow<String> = context.dataStore.data.map { it[avatarUriKey] ?: "" }
 
     suspend fun isSetupComplete(): Boolean = isSetupCompleteFlow.first()
 
@@ -165,12 +169,33 @@ constructor(
         context.dataStore.edit { it[serverMode] = mode }
     }
 
+    suspend fun setAccountKind(kind: String) {
+        val normalized = kind.trim().lowercase()
+        context.dataStore.edit { prefs ->
+            if (normalized.isBlank()) {
+                prefs.remove(accountKind)
+            } else {
+                prefs[accountKind] = normalized
+            }
+        }
+    }
+
+    suspend fun accountKind(): String = accountKindFlow.first()
+
     suspend fun setUserId(id: Int) {
         context.dataStore.edit { it[userIdKey] = id }
     }
 
     suspend fun setDisplayName(name: String) {
         context.dataStore.edit { it[fhdUsername] = name.trim() }
+    }
+
+    suspend fun setAvatarUri(uri: String) {
+        context.dataStore.edit { prefs ->
+            val value = uri.trim()
+            if (value.isBlank()) prefs.remove(avatarUriKey)
+            else prefs[avatarUriKey] = value
+        }
     }
 
     suspend fun legalAcceptedVersion(): String = legalAcceptedVersionFlow.first()

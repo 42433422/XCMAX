@@ -11,97 +11,12 @@ from unittest.mock import MagicMock, Mock, patch
 import pytest
 
 from app.db.init_db import (
-    _is_desktop_mode_env,
     build_mod_database_seed_plan,
     ensure_sqlite_per_mod_database_copies,
     get_db_path,
     get_distillation_db_path,
     initialize_databases,
-    refresh_config_database_urls,
 )
-
-# ========================= _is_desktop_mode_env ==========================
-
-
-class TestIsDesktopModeEnv:
-    def test_default_false(self, monkeypatch):
-        monkeypatch.delenv("XCAGI_DESKTOP_MODE", raising=False)
-        assert _is_desktop_mode_env() is False
-
-    def test_1(self, monkeypatch):
-        monkeypatch.setenv("XCAGI_DESKTOP_MODE", "1")
-        assert _is_desktop_mode_env() is True
-
-    def test_true(self, monkeypatch):
-        monkeypatch.setenv("XCAGI_DESKTOP_MODE", "true")
-        assert _is_desktop_mode_env() is True
-
-    def test_yes(self, monkeypatch):
-        monkeypatch.setenv("XCAGI_DESKTOP_MODE", "yes")
-        assert _is_desktop_mode_env() is True
-
-    def test_on(self, monkeypatch):
-        monkeypatch.setenv("XCAGI_DESKTOP_MODE", "on")
-        assert _is_desktop_mode_env() is True
-
-    def test_false(self, monkeypatch):
-        monkeypatch.setenv("XCAGI_DESKTOP_MODE", "false")
-        assert _is_desktop_mode_env() is False
-
-    def test_empty(self, monkeypatch):
-        monkeypatch.setenv("XCAGI_DESKTOP_MODE", "")
-        assert _is_desktop_mode_env() is False
-
-
-# ========================= refresh_config_database_urls ==================
-
-
-class TestRefreshConfigDatabaseUrls:
-    def test_none_config(self):
-        refresh_config_database_urls(None)
-
-    def test_sets_env_vars(self, monkeypatch):
-        monkeypatch.setenv("DATABASE_URL", "postgresql://test")
-        monkeypatch.setenv("VECTOR_DB_URL", "pgvector://test")
-        monkeypatch.setenv("DATABASE_PATH", "/tmp/test.db")
-
-        class MockConfig:
-            DATABASE_URL = ""
-            VECTOR_DB_URL = ""
-            DATABASE_PATH = ""
-
-        refresh_config_database_urls(MockConfig)
-        assert MockConfig.DATABASE_URL == "postgresql://test"
-        assert MockConfig.VECTOR_DB_URL == "pgvector://test"
-        assert MockConfig.DATABASE_PATH == "/tmp/test.db"
-
-    def test_no_env_vars(self, monkeypatch):
-        monkeypatch.delenv("DATABASE_URL", raising=False)
-        monkeypatch.delenv("VECTOR_DB_URL", raising=False)
-        monkeypatch.delenv("DATABASE_PATH", raising=False)
-
-        class MockConfig:
-            DATABASE_URL = "original"
-            VECTOR_DB_URL = "original"
-            DATABASE_PATH = "original"
-
-        refresh_config_database_urls(MockConfig)
-        assert MockConfig.DATABASE_URL == "original"
-
-    def test_partial_env_vars(self, monkeypatch):
-        monkeypatch.setenv("DATABASE_URL", "postgresql://test")
-        monkeypatch.delenv("VECTOR_DB_URL", raising=False)
-        monkeypatch.delenv("DATABASE_PATH", raising=False)
-
-        class MockConfig:
-            DATABASE_URL = ""
-            VECTOR_DB_URL = "keep"
-            DATABASE_PATH = "keep"
-
-        refresh_config_database_urls(MockConfig)
-        assert MockConfig.DATABASE_URL == "postgresql://test"
-        assert MockConfig.VECTOR_DB_URL == "keep"
-
 
 # ========================= initialize_databases ==========================
 
@@ -240,6 +155,40 @@ class TestGetDistillationDbPath:
         ):
             result = get_distillation_db_path()
             assert "distillation.db" in result
+
+
+def test_ensure_users_tenant_id_column_adds_missing_sqlite_column():
+    from sqlalchemy import create_engine, text
+    from sqlalchemy.pool import StaticPool
+
+    from app.db.init_db import ensure_users_tenant_id_column
+
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    try:
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    """
+                    CREATE TABLE users (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        username VARCHAR NOT NULL,
+                        password VARCHAR NOT NULL
+                    )
+                    """
+                )
+            )
+
+        ensure_users_tenant_id_column(engine=engine)
+
+        with engine.connect() as conn:
+            rows = conn.execute(text("PRAGMA table_info(users)")).fetchall()
+        assert "tenant_id" in {row[1] for row in rows}
+    finally:
+        engine.dispose()
 
 
 # ========================= build_mod_database_seed_plan ==================

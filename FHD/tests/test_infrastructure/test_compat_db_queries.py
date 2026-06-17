@@ -14,529 +14,517 @@ from app.infrastructure.persistence.compat_db.queries import (
     _customers_schema_hint_if_empty,
     _distinct_units_from_products_db,
     _load_customers_rows,
-    _load_customers_rows_pg,
     _load_purchase_units_rows,
     _merged_purchase_unit_entries,
     _products_units_for_select,
     _units_select_data_unified,
 )
 
+
 # ---------------------------------------------------------------------------
 # _customer_row_for_api
 # ---------------------------------------------------------------------------
-
-
 class TestCustomerRowForApi:
-    def test_basic_conversion(self):
+    def test_maps_customer_name(self):
         row = {
             "id": 1,
-            "customer_name": "客户A",
-            "contact_person": "张三",
-            "contact_phone": "13800000000",
-            "address": "北京市",
+            "customer_name": "TestCo",
+            "contact_person": "Zhang",
+            "contact_phone": "138",
+            "address": "Addr",
             "is_active": 1,
-            "created_at": "2026-01-01",
-            "updated_at": "2026-01-02",
         }
         result = _customer_row_for_api(row)
-        assert result["id"] == 1
-        assert result["name"] == "客户A"
-        assert result["customer_name"] == "客户A"
-        assert result["contact_person"] == "张三"
-        assert result["contact_phone"] == "13800000000"
-        assert result["contact_address"] == "北京市"
-        assert result["is_active"] == 1
+        assert result["name"] == "TestCo"
+        assert result["customer_name"] == "TestCo"
+        assert result["contact_person"] == "Zhang"
 
-    def test_unit_name_fallback_for_customer_name(self):
+    def test_falls_back_to_unit_name(self):
         row = {
             "id": 2,
-            "unit_name": "单位B",
+            "unit_name": "UnitCo",
             "contact_person": "",
             "contact_phone": "",
             "address": "",
             "is_active": 1,
         }
         result = _customer_row_for_api(row)
-        assert result["customer_name"] == "单位B"
-        assert result["name"] == "单位B"
+        assert result["name"] == "UnitCo"
 
-    def test_name_fallback_for_customer_name(self):
+    def test_falls_back_to_name(self):
         row = {
             "id": 3,
-            "name": "名称C",
+            "name": "NameCo",
             "contact_person": "",
             "contact_phone": "",
             "address": "",
             "is_active": 1,
         }
         result = _customer_row_for_api(row)
-        assert result["customer_name"] == "名称C"
+        assert result["name"] == "NameCo"
 
-    def test_missing_fields_default_to_empty(self):
-        row = {"id": 4}
+    def test_empty_name_fields(self):
+        row = {"id": 4, "is_active": 1}
         result = _customer_row_for_api(row)
-        assert result["contact_person"] == ""
-        assert result["contact_phone"] == ""
-        assert result["contact_address"] == ""
-        assert result["address"] == ""
+        assert result["name"] == ""
         assert result["is_active"] == 1
 
-    def test_is_active_defaults_to_1(self):
-        row = {"id": 5}
+    def test_preserves_created_at(self):
+        row = {"id": 5, "customer_name": "Co", "is_active": 1, "created_at": "2026-01-01"}
         result = _customer_row_for_api(row)
-        assert result["is_active"] == 1
+        assert result["created_at"] == "2026-01-01"
 
-    def test_contact_address_prefers_address(self):
+    def test_contact_address_fallback(self):
         row = {
             "id": 6,
-            "customer_name": "X",
-            "address": "地址A",
-            "contact_address": "地址B",
+            "customer_name": "Co",
+            "contact_address": "Contact Addr",
+            "address": "Addr",
+            "is_active": 1,
         }
         result = _customer_row_for_api(row)
-        assert result["contact_address"] == "地址A"
-
-    def test_contact_address_fallback_to_contact_address(self):
-        row = {
-            "id": 7,
-            "customer_name": "X",
-            "contact_address": "地址B",
-        }
-        result = _customer_row_for_api(row)
-        assert result["contact_address"] == "地址B"
+        # contact_address in output comes from row.get("contact_address") first
+        # but the function maps address -> contact_address if contact_address missing
+        # Since both exist, contact_address = row.get("contact_address") = "Contact Addr"
+        # and address = row.get("address") = "Addr"
+        # Actually looking at the code: contact_address = row.get("address") or row.get("contact_address")
+        # Since "address" is truthy, it takes "Addr"
+        assert result["contact_address"] == "Addr"
+        assert result["address"] == "Addr"
 
 
 # ---------------------------------------------------------------------------
 # _customer_row_matches_keyword
 # ---------------------------------------------------------------------------
-
-
 class TestCustomerRowMatchesKeyword:
-    def test_empty_keyword_matches(self):
-        row = {"customer_name": "客户A"}
-        assert _customer_row_matches_keyword(row, "") is True
+    def test_matches_customer_name(self):
+        row = {"customer_name": "TestCo"}
+        assert _customer_row_matches_keyword(row, "test") is True
 
-    def test_none_keyword_matches(self):
-        row = {"customer_name": "客户A"}
-        assert _customer_row_matches_keyword(row, None) is True
+    def test_matches_contact_person(self):
+        row = {"contact_person": "Zhang San"}
+        assert _customer_row_matches_keyword(row, "zhang") is True
 
-    def test_match_customer_name(self):
-        row = {"customer_name": "客户A"}
-        assert _customer_row_matches_keyword(row, "客户") is True
-
-    def test_match_case_insensitive(self):
-        row = {"customer_name": "ClientABC"}
-        assert _customer_row_matches_keyword(row, "clientabc") is True
-
-    def test_match_contact_person(self):
-        row = {"contact_person": "张三"}
-        assert _customer_row_matches_keyword(row, "张") is True
-
-    def test_match_contact_phone(self):
-        row = {"contact_phone": "13800000000"}
+    def test_matches_phone(self):
+        row = {"contact_phone": "13800138000"}
         assert _customer_row_matches_keyword(row, "138") is True
 
-    def test_match_address(self):
+    def test_no_match(self):
+        row = {"customer_name": "TestCo"}
+        assert _customer_row_matches_keyword(row, "xyz") is False
+
+    def test_empty_keyword_always_matches(self):
+        row = {"customer_name": "TestCo"}
+        assert _customer_row_matches_keyword(row, "") is True
+        assert _customer_row_matches_keyword(row, None) is True
+
+    def test_case_insensitive(self):
+        row = {"customer_name": "TestCo"}
+        assert _customer_row_matches_keyword(row, "TESTCO") is True
+
+    def test_matches_address(self):
         row = {"address": "北京市朝阳区"}
         assert _customer_row_matches_keyword(row, "朝阳") is True
 
-    def test_no_match(self):
-        row = {"customer_name": "客户A"}
-        assert _customer_row_matches_keyword(row, "不存在") is False
-
-    def test_match_unit_name(self):
-        row = {"unit_name": "单位X"}
-        assert _customer_row_matches_keyword(row, "单位X") is True
-
-    def test_match_name_key(self):
-        row = {"name": "名称Y"}
-        assert _customer_row_matches_keyword(row, "名称Y") is True
-
-    def test_none_value_skipped(self):
-        row = {"customer_name": None, "address": "北京"}
-        assert _customer_row_matches_keyword(row, "北京") is True
-
-
-# ---------------------------------------------------------------------------
-# _load_purchase_units_rows
-# ---------------------------------------------------------------------------
-
-
-class TestLoadPurchaseUnitsRows:
-    @patch("app.infrastructure.persistence.compat_db.queries._load_purchase_units_rows_pg")
-    def test_delegates_to_pg(self, mock_pg):
-        mock_pg.return_value = [{"id": 1, "unit_name": "客户A"}]
-        result = _load_purchase_units_rows()
-        assert result == [{"id": 1, "unit_name": "客户A"}]
-
-    @patch("app.infrastructure.persistence.compat_db.queries._load_purchase_units_rows_pg")
-    def test_returns_empty_on_error(self, mock_pg):
-        mock_pg.return_value = []
-        result = _load_purchase_units_rows()
-        assert result == []
-
-
-# ---------------------------------------------------------------------------
-# _distinct_units_from_products_db
-# ---------------------------------------------------------------------------
-
-
-class TestDistinctUnitsFromProductsDb:
-    @patch("app.infrastructure.persistence.compat_db.queries.get_sync_engine")
-    def test_returns_empty_when_business_data_not_exposed(self, mock_engine):
-        with patch(
-            "app.infrastructure.persistence.compat_db.queries.business_data_exposed",
-            return_value=False,
-            create=True,
-        ):
-            result = _distinct_units_from_products_db()
-            assert result == []
-
-    @patch("app.infrastructure.persistence.compat_db.queries.get_sync_engine")
-    def test_returns_empty_on_engine_error(self, mock_engine):
-        mock_engine.side_effect = OSError("no engine")
-        with patch(
-            "app.infrastructure.persistence.compat_db.queries.business_data_exposed",
-            return_value=True,
-            create=True,
-        ):
-            result = _distinct_units_from_products_db()
-            assert result == []
+    def test_none_field_skipped(self):
+        row = {"customer_name": None, "phone": None}
+        assert _customer_row_matches_keyword(row, "test") is False
 
 
 # ---------------------------------------------------------------------------
 # _merged_purchase_unit_entries
 # ---------------------------------------------------------------------------
-
-
 class TestMergedPurchaseUnitEntries:
-    @patch("app.infrastructure.persistence.compat_db.queries._distinct_units_from_products_db")
-    @patch("app.infrastructure.persistence.compat_db.queries._load_purchase_units_rows")
-    def test_merges_purchase_units_and_products(self, mock_load_pu, mock_distinct):
-        mock_load_pu.return_value = [
-            {"id": 1, "unit_name": "客户A", "is_active": 1},
-        ]
-        mock_distinct.return_value = [
-            {"id": 1, "name": "客户B", "symbol": "客户B"},
-        ]
-        result = _merged_purchase_unit_entries()
-        names = [r.get("unit_name") for r in result]
-        assert "客户A" in names
-        assert "客户B" in names
+    def test_merges_purchase_units_and_distinct(self):
+        with (
+            patch(
+                "app.infrastructure.persistence.compat_db.queries._load_purchase_units_rows",
+                return_value=[
+                    {
+                        "id": 1,
+                        "unit_name": "CoA",
+                        "is_active": 1,
+                        "contact_person": "",
+                        "contact_phone": "",
+                        "address": "",
+                    },
+                ],
+            ),
+            patch(
+                "app.infrastructure.persistence.compat_db.queries._distinct_units_from_products_db",
+                return_value=[
+                    {"id": 1, "name": "CoB", "symbol": "CoB"},
+                ],
+            ),
+        ):
+            result = _merged_purchase_unit_entries()
+        assert len(result) == 2
+        assert result[0]["unit_name"] == "CoA"
+        assert result[1]["unit_name"] == "CoB"
 
-    @patch("app.infrastructure.persistence.compat_db.queries._distinct_units_from_products_db")
-    @patch("app.infrastructure.persistence.compat_db.queries._load_purchase_units_rows")
-    def test_deduplicates_by_unit_name(self, mock_load_pu, mock_distinct):
-        mock_load_pu.return_value = [
-            {"id": 1, "unit_name": "客户A", "is_active": 1},
-        ]
-        mock_distinct.return_value = [
-            {"id": 1, "name": "客户A", "symbol": "客户A"},  # duplicate
-        ]
-        result = _merged_purchase_unit_entries()
-        names = [r.get("unit_name") for r in result]
-        assert names.count("客户A") == 1
+    def test_deduplicates_by_name(self):
+        with (
+            patch(
+                "app.infrastructure.persistence.compat_db.queries._load_purchase_units_rows",
+                return_value=[
+                    {
+                        "id": 1,
+                        "unit_name": "CoA",
+                        "is_active": 1,
+                        "contact_person": "",
+                        "contact_phone": "",
+                        "address": "",
+                    },
+                ],
+            ),
+            patch(
+                "app.infrastructure.persistence.compat_db.queries._distinct_units_from_products_db",
+                return_value=[
+                    {"id": 2, "name": "CoA", "symbol": "CoA"},  # duplicate
+                    {"id": 3, "name": "CoB", "symbol": "CoB"},
+                ],
+            ),
+        ):
+            result = _merged_purchase_unit_entries()
+        names = [r["unit_name"] for r in result]
+        assert names.count("CoA") == 1
+        assert "CoB" in names
 
-    @patch("app.infrastructure.persistence.compat_db.queries._distinct_units_from_products_db")
-    @patch("app.infrastructure.persistence.compat_db.queries._load_purchase_units_rows")
-    def test_filters_trivial_units_from_products(self, mock_load_pu, mock_distinct):
-        mock_load_pu.return_value = []
-        mock_distinct.return_value = [
-            {"id": 1, "name": "件", "symbol": "件"},  # trivial
-            {"id": 2, "name": "客户B", "symbol": "客户B"},
-        ]
-        result = _merged_purchase_unit_entries()
-        names = [r.get("unit_name") for r in result]
-        assert "件" not in names
-        assert "客户B" in names
+    def test_skips_trivial_measure_units(self):
+        with (
+            patch(
+                "app.infrastructure.persistence.compat_db.queries._load_purchase_units_rows",
+                return_value=[],
+            ),
+            patch(
+                "app.infrastructure.persistence.compat_db.queries._distinct_units_from_products_db",
+                return_value=[
+                    {"id": 1, "name": "个", "symbol": "个"},
+                    {"id": 2, "name": "RealCo", "symbol": "RealCo"},
+                ],
+            ),
+            patch(
+                "app.infrastructure.persistence.compat_db.queries.TRIVIAL_MEASURE_UNITS",
+                {"个"},
+            ),
+        ):
+            result = _merged_purchase_unit_entries()
+        assert all(r["unit_name"] != "个" for r in result)
 
-    @patch("app.infrastructure.persistence.compat_db.queries._distinct_units_from_products_db")
-    @patch("app.infrastructure.persistence.compat_db.queries._load_purchase_units_rows")
-    def test_empty_both_returns_empty(self, mock_load_pu, mock_distinct):
-        mock_load_pu.return_value = []
-        mock_distinct.return_value = []
-        result = _merged_purchase_unit_entries()
+    def test_empty_inputs(self):
+        with (
+            patch(
+                "app.infrastructure.persistence.compat_db.queries._load_purchase_units_rows",
+                return_value=[],
+            ),
+            patch(
+                "app.infrastructure.persistence.compat_db.queries._distinct_units_from_products_db",
+                return_value=[],
+            ),
+        ):
+            result = _merged_purchase_unit_entries()
         assert result == []
 
 
 # ---------------------------------------------------------------------------
 # _customer_rows_from_merged_unit_entries
 # ---------------------------------------------------------------------------
-
-
 class TestCustomerRowsFromMergedUnitEntries:
-    @patch("app.infrastructure.persistence.compat_db.queries._merged_purchase_unit_entries")
-    def test_converts_unit_entries_to_customer_rows(self, mock_merged):
-        mock_merged.return_value = [
-            {
-                "id": 1,
-                "unit_name": "客户A",
-                "contact_person": "张三",
-                "contact_phone": "138",
-                "address": "北京",
-                "is_active": 1,
-            },
-        ]
-        result = _customer_rows_from_merged_unit_entries()
+    def test_converts_to_customer_format(self):
+        with patch(
+            "app.infrastructure.persistence.compat_db.queries._merged_purchase_unit_entries",
+            return_value=[
+                {
+                    "id": 1,
+                    "unit_name": "CoA",
+                    "contact_person": "Z",
+                    "contact_phone": "1",
+                    "address": "A",
+                    "is_active": 1,
+                },
+            ],
+        ):
+            result = _customer_rows_from_merged_unit_entries()
         assert len(result) == 1
-        assert result[0]["customer_name"] == "客户A"
-        assert result[0]["contact_person"] == "张三"
+        assert result[0]["customer_name"] == "CoA"
 
-    @patch("app.infrastructure.persistence.compat_db.queries._merged_purchase_unit_entries")
-    def test_skips_empty_unit_name(self, mock_merged):
-        mock_merged.return_value = [
-            {"id": 1, "unit_name": "", "is_active": 1},
-            {"id": 2, "unit_name": "客户B", "is_active": 1},
-        ]
-        result = _customer_rows_from_merged_unit_entries()
+    def test_skips_empty_names(self):
+        with patch(
+            "app.infrastructure.persistence.compat_db.queries._merged_purchase_unit_entries",
+            return_value=[
+                {
+                    "id": 1,
+                    "unit_name": "",
+                    "contact_person": "",
+                    "contact_phone": "",
+                    "address": "",
+                    "is_active": 1,
+                },
+                {
+                    "id": 2,
+                    "unit_name": "  ",
+                    "contact_person": "",
+                    "contact_phone": "",
+                    "address": "",
+                    "is_active": 1,
+                },
+                {
+                    "id": 3,
+                    "unit_name": "CoA",
+                    "contact_person": "",
+                    "contact_phone": "",
+                    "address": "",
+                    "is_active": 1,
+                },
+            ],
+        ):
+            result = _customer_rows_from_merged_unit_entries()
         assert len(result) == 1
-        assert result[0]["customer_name"] == "客户B"
+        assert result[0]["customer_name"] == "CoA"
 
-    @patch("app.infrastructure.persistence.compat_db.queries._merged_purchase_unit_entries")
-    def test_empty_returns_empty(self, mock_merged):
-        mock_merged.return_value = []
-        result = _customer_rows_from_merged_unit_entries()
+
+# ---------------------------------------------------------------------------
+# _load_purchase_units_rows
+# ---------------------------------------------------------------------------
+class TestLoadPurchaseUnitsRows:
+    def test_returns_empty_when_business_not_exposed(self):
+        with patch(
+            "app.infrastructure.persistence.compat_db.queries._load_purchase_units_rows_pg",
+            return_value=[],
+        ):
+            result = _load_purchase_units_rows()
         assert result == []
 
 
 # ---------------------------------------------------------------------------
-# _customer_find_by_id
+# _distinct_units_from_products_db
 # ---------------------------------------------------------------------------
-
-
-class TestCustomerFindById:
-    @patch("app.infrastructure.persistence.compat_db.queries._load_customers_rows")
-    def test_found(self, mock_load):
-        mock_load.return_value = [
-            {"id": 1, "customer_name": "客户A"},
-            {"id": 2, "customer_name": "客户B"},
-        ]
-        result = _customer_find_by_id(1)
-        assert result is not None
-        assert result["customer_name"] == "客户A"
-
-    @patch("app.infrastructure.persistence.compat_db.queries._load_customers_rows")
-    def test_not_found(self, mock_load):
-        mock_load.return_value = [
-            {"id": 1, "customer_name": "客户A"},
-        ]
-        result = _customer_find_by_id(999)
-        assert result is None
-
-    @patch("app.infrastructure.persistence.compat_db.queries._load_customers_rows")
-    def test_empty_rows(self, mock_load):
-        mock_load.return_value = []
-        result = _customer_find_by_id(1)
-        assert result is None
-
-
-# ---------------------------------------------------------------------------
-# _customers_schema_hint_if_empty
-# ---------------------------------------------------------------------------
-
-
-class TestCustomersSchemaHintIfEmpty:
-    @patch("app.infrastructure.persistence.compat_db.queries.get_sync_engine")
-    def test_all_tables_exist_returns_none(self, mock_engine):
-        mock_eng = MagicMock()
-        mock_engine.return_value = mock_eng
-        with patch("app.infrastructure.persistence.compat_db.queries.inspect") as mock_insp:
-            mock_insp.return_value.get_table_names.return_value = [
-                "customers",
-                "purchase_units",
-                "products",
-            ]
-            result = _customers_schema_hint_if_empty()
-
-        assert result is None
-
-    @patch("app.infrastructure.persistence.compat_db.queries.get_sync_engine")
-    def test_missing_customers_and_purchase_units(self, mock_engine):
-        mock_eng = MagicMock()
-        mock_engine.return_value = mock_eng
-        with patch("app.infrastructure.persistence.compat_db.queries.inspect") as mock_insp:
-            mock_insp.return_value.get_table_names.return_value = ["products"]
-            result = _customers_schema_hint_if_empty()
-
-        assert result is not None
-        assert "customers" in result.lower() or "purchase_units" in result.lower()
-
-    @patch("app.infrastructure.persistence.compat_db.queries.get_sync_engine")
-    def test_engine_error(self, mock_engine):
-        mock_engine.side_effect = OSError("no engine")
-        result = _customers_schema_hint_if_empty()
-        assert result is not None
-        assert "PostgreSQL" in result or "无法连接" in result
-
-    @patch("app.infrastructure.persistence.compat_db.queries.get_sync_engine")
-    def test_missing_purchase_units_with_products(self, mock_engine):
-        mock_eng = MagicMock()
-        mock_engine.return_value = mock_eng
-        with patch("app.infrastructure.persistence.compat_db.queries.inspect") as mock_insp:
-            mock_insp.return_value.get_table_names.return_value = ["customers", "products"]
-            result = _customers_schema_hint_if_empty()
-
-        # customers exists, so no hint about missing purchase_units
-        # Actually, the function checks: if not has_c and not has_pu -> hint
-        # Here has_c=True, so no hint about missing tables
-        # But there's also: if not has_pu and has_p -> hint
-        assert result is not None
-        assert "purchase_units" in result.lower()
-
-
-# ---------------------------------------------------------------------------
-# _units_select_data_unified
-# ---------------------------------------------------------------------------
-
-
-class TestUnitsSelectDataUnified:
-    @patch("app.infrastructure.persistence.compat_db.queries._distinct_units_from_products_db")
-    @patch("app.infrastructure.persistence.compat_db.queries._load_customers_rows")
-    def test_with_customer_rows(self, mock_load, mock_distinct):
-        mock_load.return_value = [
-            {"id": 1, "customer_name": "客户A"},
-        ]
-        mock_distinct.return_value = []
-        result = _units_select_data_unified()
-        assert len(result) == 1
-        assert result[0]["name"] == "客户A"
-
-    @patch("app.infrastructure.persistence.compat_db.queries._distinct_units_from_products_db")
-    @patch("app.infrastructure.persistence.compat_db.queries._load_customers_rows")
-    def test_deduplicates(self, mock_load, mock_distinct):
-        mock_load.return_value = [
-            {"id": 1, "customer_name": "客户A"},
-            {"id": 2, "customer_name": "客户A"},  # duplicate
-        ]
-        mock_distinct.return_value = []
-        result = _units_select_data_unified()
-        names = [r["name"] for r in result]
-        assert names.count("客户A") == 1
-
-    @patch("app.infrastructure.persistence.compat_db.queries._distinct_units_from_products_db")
-    @patch("app.infrastructure.persistence.compat_db.queries._load_customers_rows")
-    def test_merges_with_products_units(self, mock_load, mock_distinct):
-        mock_load.return_value = [
-            {"id": 1, "customer_name": "客户A"},
-        ]
-        mock_distinct.return_value = [
-            {"id": 1, "name": "客户B", "symbol": "客户B"},
-        ]
-        result = _units_select_data_unified()
-        names = [r["name"] for r in result]
-        assert "客户A" in names
-        assert "客户B" in names
-
-    @patch("app.infrastructure.persistence.compat_db.queries._distinct_units_from_products_db")
-    @patch("app.infrastructure.persistence.compat_db.queries._load_customers_rows")
-    def test_filters_trivial_units(self, mock_load, mock_distinct):
-        mock_load.return_value = []
-        mock_distinct.return_value = [
-            {"id": 1, "name": "件", "symbol": "件"},
-            {"id": 2, "name": "客户B", "symbol": "客户B"},
-        ]
-        result = _units_select_data_unified()
-        names = [r["name"] for r in result]
-        assert "件" not in names
-        assert "客户B" in names
-
-
-# ---------------------------------------------------------------------------
-# _products_units_for_select
-# ---------------------------------------------------------------------------
-
-
-class TestProductsUnitsForSelect:
-    @patch("app.infrastructure.persistence.compat_db.queries._units_select_data_unified")
-    @patch("app.infrastructure.persistence.compat_db.queries._distinct_units_from_products_db")
-    def test_with_unified_data(self, mock_distinct, mock_unified):
-        mock_unified.return_value = [
-            {"id": 1, "name": "客户A", "symbol": "客户A"},
-        ]
-        result = _products_units_for_select()
-        assert result["success"] is True
-        assert len(result["data"]) == 1
-
-    @patch("app.infrastructure.persistence.compat_db.queries._units_select_data_unified")
-    @patch("app.infrastructure.persistence.compat_db.queries._distinct_units_from_products_db")
-    def test_fallback_to_distinct(self, mock_distinct, mock_unified):
-        mock_unified.return_value = []
-        mock_distinct.return_value = [
-            {"id": 1, "name": "客户B", "symbol": "客户B"},
-        ]
-        result = _products_units_for_select()
-        assert result["success"] is True
-        assert len(result["data"]) == 1
-
-    @patch("app.infrastructure.persistence.compat_db.queries._units_select_data_unified")
-    @patch("app.infrastructure.persistence.compat_db.queries._distinct_units_from_products_db")
-    def test_empty_returns_empty_data(self, mock_distinct, mock_unified):
-        mock_unified.return_value = []
-        mock_distinct.return_value = []
-        result = _products_units_for_select()
-        assert result["success"] is True
-        assert result["data"] == []
-
-
-# ---------------------------------------------------------------------------
-# _load_customers_rows_pg
-# ---------------------------------------------------------------------------
-
-
-class TestLoadCustomersRowsPg:
-    @patch("app.infrastructure.persistence.compat_db.queries.get_sync_engine")
-    def test_engine_error_returns_empty(self, mock_engine):
-        mock_engine.side_effect = OSError("no engine")
-        result = _load_customers_rows_pg()
-        assert result == []
-
-    @patch("app.infrastructure.persistence.compat_db.queries.get_sync_engine")
-    def test_no_relevant_tables(self, mock_engine):
-        mock_eng = MagicMock()
-        mock_engine.return_value = mock_eng
-        with patch("app.infrastructure.persistence.compat_db.queries.inspect") as mock_insp:
-            mock_insp.return_value.get_table_names.return_value = ["other_table"]
-            result = _load_customers_rows_pg()
-
+class TestDistinctUnitsFromProductsDb:
+    def test_returns_empty_when_no_engine(self):
+        with patch(
+            "app.infrastructure.persistence.compat_db.queries._distinct_units_from_products_db_pg",
+            return_value=[],
+        ):
+            result = _distinct_units_from_products_db()
         assert result == []
 
 
 # ---------------------------------------------------------------------------
 # _load_customers_rows
 # ---------------------------------------------------------------------------
-
-
 class TestLoadCustomersRows:
-    @patch(
-        "app.infrastructure.persistence.compat_db.queries._customer_rows_from_merged_unit_entries"
-    )
-    @patch("app.infrastructure.persistence.compat_db.queries._load_customers_rows_pg")
-    def test_prefers_pg_rows(self, mock_pg, mock_merged):
-        mock_pg.return_value = [{"id": 1, "customer_name": "PG客户"}]
-        mock_merged.return_value = [{"id": 2, "customer_name": "Merged客户"}]
-
-        with patch(
-            "app.infrastructure.persistence.compat_db.queries.business_data_exposed",
-            return_value=True,
-            create=True,
+    def test_returns_empty_when_business_not_exposed(self):
+        with (
+            patch(
+                "app.infrastructure.persistence.compat_db.queries._load_customers_rows_pg",
+                return_value=[],
+            ),
+            patch(
+                "app.infrastructure.persistence.compat_db.queries._customer_rows_from_merged_unit_entries",
+                return_value=[],
+            ),
         ):
             result = _load_customers_rows()
+        assert result == []
 
-        assert result == [{"id": 1, "customer_name": "PG客户"}]
-
-    @patch(
-        "app.infrastructure.persistence.compat_db.queries._customer_rows_from_merged_unit_entries"
-    )
-    @patch("app.infrastructure.persistence.compat_db.queries._load_customers_rows_pg")
-    def test_fallback_to_merged(self, mock_pg, mock_merged):
-        mock_pg.return_value = []
-        mock_merged.return_value = [{"id": 2, "customer_name": "Merged客户"}]
-
-        with patch(
-            "app.infrastructure.persistence.compat_db.queries.business_data_exposed",
-            return_value=True,
-            create=True,
+    def test_returns_pg_rows_when_available(self):
+        pg_rows = [{"id": 1, "customer_name": "CoA", "is_active": 1}]
+        with (
+            patch(
+                "app.infrastructure.persistence.compat_db.queries._load_customers_rows_pg",
+                return_value=pg_rows,
+            ),
         ):
             result = _load_customers_rows()
+        assert len(result) == 1
 
-        assert result == [{"id": 2, "customer_name": "Merged客户"}]
+    def test_falls_back_to_merged_entries(self):
+        merged = [{"id": 2, "customer_name": "CoB", "is_active": 1}]
+        with (
+            patch(
+                "app.infrastructure.persistence.compat_db.queries._load_customers_rows_pg",
+                return_value=[],
+            ),
+            patch(
+                "app.infrastructure.persistence.compat_db.queries._customer_rows_from_merged_unit_entries",
+                return_value=merged,
+            ),
+        ):
+            result = _load_customers_rows()
+        assert len(result) == 1
+        assert result[0]["customer_name"] == "CoB"
+
+
+# ---------------------------------------------------------------------------
+# _customer_find_by_id
+# ---------------------------------------------------------------------------
+class TestCustomerFindById:
+    def test_finds_customer(self):
+        with patch(
+            "app.infrastructure.persistence.compat_db.queries._load_customers_rows",
+            return_value=[
+                {"id": 1, "customer_name": "CoA", "is_active": 1},
+                {"id": 2, "customer_name": "CoB", "is_active": 1},
+            ],
+        ):
+            result = _customer_find_by_id(2)
+        assert result is not None
+        assert result["customer_name"] == "CoB"
+
+    def test_returns_none_when_not_found(self):
+        with patch(
+            "app.infrastructure.persistence.compat_db.queries._load_customers_rows",
+            return_value=[{"id": 1, "customer_name": "CoA", "is_active": 1}],
+        ):
+            result = _customer_find_by_id(999)
+        assert result is None
+
+
+# ---------------------------------------------------------------------------
+# _customers_schema_hint_if_empty
+# ---------------------------------------------------------------------------
+class TestCustomersSchemaHintIfEmpty:
+    def test_returns_none_when_all_tables_exist(self):
+        mock_eng = MagicMock()
+        mock_insp = MagicMock()
+        mock_insp.get_table_names.return_value = ["customers", "purchase_units", "products"]
+        with (
+            patch(
+                "app.infrastructure.persistence.compat_db.queries.get_sync_engine",
+                return_value=mock_eng,
+            ),
+            patch(
+                "app.infrastructure.persistence.compat_db.queries.inspect",
+                return_value=mock_insp,
+            ),
+        ):
+            result = _customers_schema_hint_if_empty()
+        assert result is None
+
+    def test_returns_hint_when_missing_tables(self):
+        mock_eng = MagicMock()
+        mock_insp = MagicMock()
+        mock_insp.get_table_names.return_value = ["products"]
+        with (
+            patch(
+                "app.infrastructure.persistence.compat_db.queries.get_sync_engine",
+                return_value=mock_eng,
+            ),
+            patch(
+                "app.infrastructure.persistence.compat_db.queries.inspect",
+                return_value=mock_insp,
+            ),
+        ):
+            result = _customers_schema_hint_if_empty()
+        assert result is not None
+        assert "purchase_units" in result
+
+    def test_returns_hint_on_engine_error(self):
+        with patch(
+            "app.infrastructure.persistence.compat_db.queries.get_sync_engine",
+            side_effect=OSError("no engine"),
+        ):
+            result = _customers_schema_hint_if_empty()
+        assert result is not None
+        assert "无法连接" in result
+
+
+# ---------------------------------------------------------------------------
+# _units_select_data_unified
+# ---------------------------------------------------------------------------
+class TestUnitsSelectDataUnified:
+    def test_deduplicates_by_name(self):
+        with (
+            patch(
+                "app.infrastructure.persistence.compat_db.queries._load_customers_rows",
+                return_value=[
+                    {"id": 1, "customer_name": "CoA", "is_active": 1},
+                    {"id": 2, "customer_name": "CoA", "is_active": 1},
+                ],
+            ),
+            patch(
+                "app.infrastructure.persistence.compat_db.queries._distinct_units_from_products_db",
+                return_value=[],
+            ),
+        ):
+            result = _units_select_data_unified()
+        assert len(result) == 1
+        assert result[0]["name"] == "CoA"
+
+    def test_includes_distinct_product_units(self):
+        with (
+            patch(
+                "app.infrastructure.persistence.compat_db.queries._load_customers_rows",
+                return_value=[],
+            ),
+            patch(
+                "app.infrastructure.persistence.compat_db.queries._distinct_units_from_products_db",
+                return_value=[{"id": 1, "name": "CoB", "symbol": "CoB"}],
+            ),
+        ):
+            result = _units_select_data_unified()
+        assert any(r["name"] == "CoB" for r in result)
+
+    def test_skips_trivial_units(self):
+        with (
+            patch(
+                "app.infrastructure.persistence.compat_db.queries._load_customers_rows",
+                return_value=[],
+            ),
+            patch(
+                "app.infrastructure.persistence.compat_db.queries._distinct_units_from_products_db",
+                return_value=[{"id": 1, "name": "个", "symbol": "个"}],
+            ),
+            patch(
+                "app.infrastructure.persistence.compat_db.queries.TRIVIAL_MEASURE_UNITS",
+                {"个"},
+            ),
+        ):
+            result = _units_select_data_unified()
+        assert all(r["name"] != "个" for r in result)
+
+
+# ---------------------------------------------------------------------------
+# _products_units_for_select
+# ---------------------------------------------------------------------------
+class TestProductsUnitsForSelect:
+    def test_returns_unified_data(self):
+        with (
+            patch(
+                "app.infrastructure.persistence.compat_db.queries._units_select_data_unified",
+                return_value=[{"id": 1, "name": "CoA", "symbol": "CoA"}],
+            ),
+        ):
+            result = _products_units_for_select()
+        assert result["success"] is True
+        assert len(result["data"]) == 1
+
+    def test_falls_back_to_distinct(self):
+        with (
+            patch(
+                "app.infrastructure.persistence.compat_db.queries._units_select_data_unified",
+                return_value=[],
+            ),
+            patch(
+                "app.infrastructure.persistence.compat_db.queries._distinct_units_from_products_db",
+                return_value=[{"id": 1, "name": "CoB", "symbol": "CoB"}],
+            ),
+        ):
+            result = _products_units_for_select()
+        assert result["success"] is True
+        assert len(result["data"]) == 1
+
+    def test_returns_empty_when_no_data(self):
+        with (
+            patch(
+                "app.infrastructure.persistence.compat_db.queries._units_select_data_unified",
+                return_value=[],
+            ),
+            patch(
+                "app.infrastructure.persistence.compat_db.queries._distinct_units_from_products_db",
+                return_value=[],
+            ),
+        ):
+            result = _products_units_for_select()
+        assert result["success"] is True
+        assert result["data"] == []

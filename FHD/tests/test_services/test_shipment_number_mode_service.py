@@ -566,9 +566,8 @@ class TestExecute:
                 ],
                 parse_order_text=lambda x: {"success": False},
             )
-        # quantity_tins=0 is a valid value but zero quantity should be rejected
         assert status == 400
-        assert "数量" in result["message"]
+        assert "数量缺失或无效" in result["message"]
 
     def test_model_not_in_db_returns_400(self, svc):
         mock_db = MagicMock()

@@ -41,10 +41,15 @@ export const SHELL_CORE_MENU_KEYS = new Set([
 /** 壳模式允许注册的路由 name */
 export const SHELL_CORE_ROUTE_NAMES = new Set([
   ...SHELL_CORE_MENU_KEYS,
+  'product-onboarding',
   'mod-landing',
   'workflow-employee-stitch-full',
   'lan-gate',
   'login',
+  'login-help',
+  'login-register',
+  'login-forgot-account',
+  'login-forgot-password',
 ])
 
 /** 账号定制 Mod 装齐后开放的宿主 ERP 侧栏（与 industry preset menuLabels 对齐） */
@@ -54,8 +59,11 @@ export const INDUSTRY_DELIVERY_ERP_MENU_KEYS = [
   'orders',
   'shipment-records',
   'materials',
+  'data-sources',
   'traditional-mode',
   'print',
+  'printer-list',
+  'template-preview',
   'tools',
   'approval-hub',
   'enterprise-customer-service',
@@ -182,6 +190,7 @@ export function isEnterpriseProductSkuBuild(): boolean {
 /** 企业版默认完整侧栏与路由，不进入通用平台壳 */
 export function bootstrapEnterpriseShellDefaults(): void {
   if (!isEnterpriseProductSkuBuild()) return
+  if (isShellEditionBuild()) return
   if (typeof localStorage === 'undefined') return
   try {
     localStorage.setItem(LS_PLATFORM_SHELL_MODE, '0')
@@ -208,7 +217,7 @@ export function bootstrapAdminConsoleShellDefaults(): void {
 }
 
 export function isPlatformShellModeEnabled(): boolean {
-  if (isEnterpriseProductSkuBuild()) return false
+  if (isEnterpriseProductSkuBuild() && !isShellEditionBuild()) return false
   if (typeof window !== 'undefined') {
     if (new URLSearchParams(window.location.search).has('shell')) return true
     if (new URLSearchParams(window.location.search).has('full')) return false

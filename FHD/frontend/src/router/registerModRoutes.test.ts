@@ -16,12 +16,31 @@ vi.mock('@/constants/modRouteGlob', () => ({
     '/mods/empty-mod/frontend/routes.js': vi.fn().mockResolvedValue({
       default: [],
     }),
+    '/mods/refresh-mod/frontend/routes.js': vi.fn().mockResolvedValue({
+      default: [
+        {
+          path: '/mod/refresh-mod/hello',
+          name: 'refresh-mod-hello',
+          component: () => import('@/views/LoginView.vue'),
+        },
+      ],
+    }),
+    '/mods/refresh-home-mod/frontend/routes.js': vi.fn().mockResolvedValue({
+      default: [
+        {
+          path: '/refresh-home-mod',
+          name: 'refresh-home-mod-home',
+          component: () => import('@/views/LoginView.vue'),
+        },
+      ],
+    }),
   },
 }))
 
 describe('registerModRoutes', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    window.history.replaceState(null, '', '/')
   })
 
   it('no-ops for empty entries', async () => {
@@ -71,5 +90,49 @@ describe('registerModRoutes', () => {
     ])
     const { modRouteGlob } = await import('@/constants/modRouteGlob')
     expect(modRouteGlob['/mods/empty-mod/frontend/routes.js']).toHaveBeenCalledTimes(1)
+  })
+
+  it('refreshes the actual browser path when router is still at start location', async () => {
+    window.history.replaceState(null, '', '/onboarding?step=welcome&redirect=/')
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [
+        {
+          path: '/onboarding',
+          name: 'product-onboarding',
+          component: () => import('@/views/LoginView.vue'),
+        },
+      ],
+    })
+    const replaceSpy = vi.spyOn(router, 'replace')
+
+    await registerModRoutes(router, [
+      { mod_id: 'refresh-mod', routes_path: '/mods/refresh-mod/frontend/routes.js' },
+    ])
+
+    expect(replaceSpy).toHaveBeenCalledWith('/onboarding?step=welcome&redirect=/')
+  })
+
+  it('prefers the browser mod path when current route has already fallen back to home', async () => {
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [
+        {
+          path: '/',
+          name: 'chat',
+          component: () => import('@/views/LoginView.vue'),
+        },
+      ],
+    })
+    await router.push('/')
+    await router.isReady()
+    window.history.replaceState(null, '', '/refresh-home-mod')
+    const replaceSpy = vi.spyOn(router, 'replace')
+
+    await registerModRoutes(router, [
+      { mod_id: 'refresh-home-mod', routes_path: '/mods/refresh-home-mod/frontend/routes.js' },
+    ])
+
+    expect(replaceSpy).toHaveBeenCalledWith('/refresh-home-mod')
   })
 })

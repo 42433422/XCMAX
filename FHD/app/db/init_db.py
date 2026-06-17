@@ -868,6 +868,43 @@ def ensure_sqlite_inventory_bootstrap(
         raise
 
 
+def ensure_sqlite_enterprise_business_bootstrap(
+    engine: Engine | None = None,
+    *,
+    database_url: str | None = None,
+    swallow_errors: bool = True,
+) -> None:
+    """桌面 SQLite 旧库：补齐企业登录/太阳鸟交付依赖的基础业务表。"""
+    from sqlalchemy import inspect
+
+    from app.db.base import Base
+    from app.db.models.customer import Customer
+    from app.db.models.product import Product
+    from app.db.models.tenant import Tenant
+
+    real_engine = _resolve_auth_bootstrap_engine(engine, database_url=database_url)
+    if real_engine is None or real_engine.dialect.name != "sqlite":
+        return
+    try:
+        insp = inspect(real_engine)
+        tables = set(insp.get_table_names() or [])
+        needed = {"tenants", "customers", "products"}
+        if not needed.issubset(tables):
+            logger.info("SQLite 缺少企业业务基础表，正在通过 ORM 创建 …")
+            Base.metadata.create_all(
+                real_engine,
+                tables=[Tenant.__table__, Product.__table__, Customer.__table__],
+                checkfirst=True,
+            )
+    except RECOVERABLE_ERRORS as exc:
+        if swallow_errors:
+            logger.warning(
+                "ensure_sqlite_enterprise_business_bootstrap 失败: %s", exc, exc_info=True
+            )
+            return
+        raise
+
+
 def ensure_user_preferences_bootstrap(
     engine: Engine | None = None,
     *,
@@ -924,6 +961,11 @@ def ensure_runtime_auth_bootstrap(
             swallow_errors=swallow_errors,
         )
         ensure_sqlite_inventory_bootstrap(
+            engine,
+            database_url=url,
+            swallow_errors=swallow_errors,
+        )
+        ensure_sqlite_enterprise_business_bootstrap(
             engine,
             database_url=url,
             swallow_errors=swallow_errors,
@@ -1279,6 +1321,52 @@ def ensure_sessions_account_meta_columns(
                     )
     except RECOVERABLE_ERRORS as exc:
         logger.warning("sessions 账号元数据列兼容补列失败: %s", exc)
+
+
+def ensure_users_tenant_id_column(
+    engine: Engine | None = None,
+    *,
+    database_url: str | None = None,
+) -> None:
+    """补齐 ``users.tenant_id``，避免旧桌面 SQLite 企业登录时查询 User 失败。"""
+    from sqlalchemy import inspect, text
+
+    real_engine: Engine | None = None
+    url = (database_url or "").strip()
+    if url:
+        try:
+            from app.db import _create_engine_for_url
+
+            real_engine = _create_engine_for_url(url)
+        except RECOVERABLE_ERRORS as exc:
+            logger.warning("无法创建引擎以补齐 users.tenant_id: %s", exc)
+    if real_engine is None and engine is not None:
+        real_engine = engine
+    if real_engine is None:
+        try:
+            from app.db import _get_engine as _get_real_engine
+
+            real_engine = _get_real_engine()
+        except RECOVERABLE_ERRORS:
+            return
+
+    try:
+        insp = inspect(real_engine)
+        tables = set(insp.get_table_names() or [])
+        if "users" not in tables:
+            return
+        cols = {c["name"] for c in insp.get_columns("users")}
+        if "tenant_id" in cols:
+            return
+        logger.info("users 缺少 tenant_id 列，正在补齐 …")
+        with real_engine.begin() as conn:
+            if real_engine.dialect.name == "postgresql":
+                conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS tenant_id INTEGER"))
+            else:
+                conn.execute(text("ALTER TABLE users ADD COLUMN tenant_id INTEGER"))
+        logger.info("users.tenant_id 已补齐")
+    except RECOVERABLE_ERRORS as exc:
+        logger.warning("users.tenant_id 兼容补列失败: %s", exc)
 
 
 def init_im_tables(engine: Engine | None = None, *, database_url: str | None = None) -> None:

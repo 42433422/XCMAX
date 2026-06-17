@@ -32,6 +32,11 @@ import { useChatResponseAttach } from './useChatResponseAttach'
 import { useChatSessionHistory } from './useChatSessionHistory'
 import type { UseChatViewOptions } from './useChatView'
 
+function isDatabaseTokenRequirement(tokenName?: unknown, tokenDescription?: unknown): boolean {
+  const raw = `${String(tokenName || '')} ${String(tokenDescription || '')}`.toUpperCase()
+  return /DB_(READ|WRITE)_TOKEN|DATABASE TOKEN|数据库.*令牌|一级|二级|写入令牌|查看令牌/.test(raw)
+}
+
 export function useChatOrchestration(options: UseChatViewOptions) {
   const tutorialStore = useTutorialStore()
   const modsStore = useModsStore()
@@ -819,6 +824,9 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       const data = await result.json().catch(() => ({}))
 
       if (data?.requires_token) {
+        if (isDatabaseTokenRequirement(data?.token_name, data?.token_description || data?.message)) {
+          return
+        }
         handleChatRequiresToken(data?.token_name, data?.token_description || data?.message, null)
         const tokenMsg = String(data?.message || data?.token_description || '当前操作需要二级数据库写入令牌').trim()
         await addAndSaveMessage('[提示] ' + tokenMsg, 'ai')
@@ -1134,11 +1142,9 @@ export function useChatOrchestration(options: UseChatViewOptions) {
           } else if (ev.type === 'requires_token') {
             const tokenName = ev.token_name || ''
             const tokenDesc = ev.token_description || ''
+            if (isDatabaseTokenRequirement(tokenName, tokenDesc)) return
             handleChatRequiresToken(tokenName, tokenDesc, remoteMessages)
-            const humanLabel = String(tokenName || '').toUpperCase().includes('READ')
-              ? '一级数据库查看令牌'
-              : '二级数据库写入令牌'
-            streamPlain += `\n[需要${humanLabel}：${tokenDesc || tokenName || 'DB_WRITE_TOKEN'}]\n`
+            streamPlain += `\n[需要授权：${tokenDesc || tokenName || '授权信息'}]\n`
             applyPlainTextToMessageIndex(msgIndex, streamPlain)
             flushTtsFromStream(streamPlain, false)
             const upTok = String(tokenName || '').toUpperCase()
@@ -1261,7 +1267,9 @@ export function useChatOrchestration(options: UseChatViewOptions) {
         for (const part of data.results) {
           if (part && part.success) {
             if (part?.requires_token) {
-              handleChatRequiresToken(part?.token_name, part?.token_description, remoteMessages)
+              if (!isDatabaseTokenRequirement(part?.token_name, part?.token_description)) {
+                handleChatRequiresToken(part?.token_name, part?.token_description, remoteMessages)
+              }
             }
             await addAndSaveMessage(part.response, 'ai')
             syncTaskFromChatResponse(part, primaryText)
@@ -1306,7 +1314,9 @@ export function useChatOrchestration(options: UseChatViewOptions) {
 
     if (data.success) {
       if (data?.requires_token) {
-        handleChatRequiresToken(data?.token_name, data?.token_description, remoteMessages)
+        if (!isDatabaseTokenRequirement(data?.token_name, data?.token_description)) {
+          handleChatRequiresToken(data?.token_name, data?.token_description, remoteMessages)
+        }
       }
       await addAndSaveMessage(data.response, 'ai')
       syncTaskFromChatResponse(data, primaryText)

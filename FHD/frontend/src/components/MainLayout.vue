@@ -546,8 +546,10 @@ const ensureSidebarExpandedForTutorial = () => {
 }
 
 const scheduleSidebarAutoCollapse = () => {
-  if (isAnyTutorialActive.value) return
-  if (!isSidebarFeatureEnabled.value || sidebarCollapsed.value) return
+  if (isAnyTutorialActive.value || !isSidebarFeatureEnabled.value || sidebarCollapsed.value) {
+    clearSidebarCollapseTimer()
+    return
+  }
   clearSidebarCollapseTimer()
   sidebarCollapseTimer = window.setTimeout(() => {
     if (isAnyTutorialActive.value) return
@@ -622,27 +624,6 @@ onMounted(async () => {
     } catch {
       /* ignore */
     }
-  }
-  try {
-    const {
-      augmentEntitledModIdsForAccount,
-      isSunbirdAccountUsername,
-      SUNBIRD_CLIENT_MOD_ID,
-    } = await import('@/constants/accountModBinding')
-    const uname = accountUsername.value.trim()
-    if (
-      uname &&
-      isSunbirdAccountUsername(uname) &&
-      String(modsStore.activeModId || '').trim() !== SUNBIRD_CLIENT_MOD_ID
-    ) {
-      await modsStore.initialize(true, {
-        entitledModIds: augmentEntitledModIdsForAccount(uname, []),
-        forceFromEntitlements: true,
-        accountUsername: uname,
-      })
-    }
-  } catch {
-    /* ignore */
   }
   if (!industryStore.isLoaded) {
     try {

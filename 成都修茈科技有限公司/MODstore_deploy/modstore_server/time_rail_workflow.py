@@ -11,6 +11,8 @@ from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
+STATUS_CONTRACT_VERSION = "time_rail_runtime_status/v2"
+
 
 def _repo_root() -> Path:
     mono = (os.environ.get("XCMAX_MONOREPO_ROOT") or "").strip()
@@ -68,7 +70,36 @@ def _node_status_shell(
     guard_active: bool = False,
     source: str = "",
     detail: Optional[Dict[str, Any]] = None,
+    observed: Optional[bool] = None,
+    proof_status: Optional[str] = None,
+    evidence: Optional[List[Dict[str, Any]]] = None,
+    missing_evidence: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
+    ev = list(evidence or [])
+    if source:
+        ev.append(
+            {
+                "source": source,
+                "last_run": last_run,
+                "ok": ok,
+                "detail": dict(detail or {}),
+            }
+        )
+    is_observed = bool(observed) if observed is not None else bool(ev or last_run or source or ok is not None)
+    if proof_status is None:
+        if guard_active:
+            proof_status = "guard_active"
+        elif ok is True:
+            proof_status = "proved_ok"
+        elif ok is False:
+            proof_status = "proved_failed"
+        elif is_observed:
+            proof_status = "observed"
+        else:
+            proof_status = "missing_evidence"
+    missing = list(missing_evidence or [])
+    if not is_observed and not missing:
+        missing.append("no runtime evidence recorded for this workflow node")
     return {
         "node_id": node_id,
         "last_run": last_run,
@@ -76,7 +107,154 @@ def _node_status_shell(
         "guard_active": bool(guard_active),
         "source": source or "",
         "detail": dict(detail or {}),
+        "observed": is_observed,
+        "proof_status": proof_status,
+        "evidence": ev,
+        "evidence_count": len(ev),
+        "missing_evidence": missing,
     }
+
+
+def _json_obj(raw: Any) -> Dict[str, Any]:
+    if isinstance(raw, dict):
+        return raw
+    if isinstance(raw, str) and raw.strip().startswith("{"):
+        try:
+            value = json.loads(raw)
+            return value if isinstance(value, dict) else {}
+        except Exception:
+            return {}
+    return {}
+
+
+def _json_list(raw: Any) -> List[Any]:
+    if isinstance(raw, list):
+        return raw
+    if isinstance(raw, str) and raw.strip().startswith("["):
+        try:
+            value = json.loads(raw)
+            return value if isinstance(value, list) else []
+        except Exception:
+            return []
+    return []
+
+
+def _status_from_block(
+    node_id: str,
+    block: Dict[str, Any],
+    *,
+    source: str,
+    detail: Optional[Dict[str, Any]] = None,
+    ok: Optional[bool] = None,
+) -> Dict[str, Any]:
+    detail_out: Dict[str, Any] = dict(detail or {})
+    for key in (
+        "record_id",
+        "phase",
+        "release_train",
+        "release_kind",
+        "shadow",
+        "skipped",
+        "unit_count",
+        "lines",
+        "employee_chain",
+        "planned_steps",
+        "step_ids",
+        "executed_steps",
+        "error",
+        "reason",
+    ):
+        if key in block and key not in detail_out:
+            detail_out[key] = block.get(key)
+    block_ok = ok if ok is not None else block.get("ok")
+    if block.get("skipped") and block_ok is None:
+        block_ok = True
+    return _node_status_shell(
+        node_id,
+        last_run=_iso_or_none(block.get("completed_at") or block.get("ran_at") or block.get("started_at")),
+        ok=bool(block_ok) if block_ok is not None else None,
+        source=source,
+        detail=detail_out,
+        observed=True,
+        proof_status="shadow_observed" if block.get("shadow") else None,
+    )
+
+
+def _latest_ops_staged_change() -> Optional[Any]:
+    try:
+        from modstore_server.models import OpsStagedChange, get_session_factory
+
+        session_factory = get_session_factory()
+        with session_factory() as session:
+            return (
+                session.query(OpsStagedChange)
+                .order_by(OpsStagedChange.id.desc())
+                .limit(1)
+                .first()
+            )
+    except Exception:
+        logger.debug("time_rail: ops staged change unavailable", exc_info=True)
+        return None
+
+
+def _latest_change_request() -> Optional[Any]:
+    try:
+        from modstore_server.models import EmployeeChangeRequest, get_session_factory
+
+        session_factory = get_session_factory()
+        with session_factory() as session:
+            return (
+                session.query(EmployeeChangeRequest)
+                .order_by(EmployeeChangeRequest.id.desc())
+                .limit(1)
+                .first()
+            )
+    except Exception:
+        logger.debug("time_rail: change request unavailable", exc_info=True)
+        return None
+
+
+def _action_item_stats(*, day: str = "", record_id: Optional[int] = None) -> Dict[str, Any]:
+    try:
+        from modstore_server.digest_action_items import list_action_items
+
+        items = list_action_items(day=day or None, limit=2000)
+        if record_id:
+            items = [it for it in items if int(it.get("record_id") or 0) == int(record_id)]
+        by_kind: Dict[str, int] = {}
+        by_status: Dict[str, int] = {}
+        for it in items:
+            by_kind[str(it.get("kind") or "")] = by_kind.get(str(it.get("kind") or ""), 0) + 1
+            by_status[str(it.get("status") or "")] = by_status.get(str(it.get("status") or ""), 0) + 1
+        return {"ok": True, "total": len(items), "by_kind": by_kind, "by_status": by_status}
+    except Exception:
+        logger.debug("time_rail: action item stats unavailable", exc_info=True)
+        return {"ok": False, "total": 0, "by_kind": {}, "by_status": {}}
+
+
+def _maintenance_backlog_by_node() -> Dict[str, Dict[str, Any]]:
+    """读取已排队的时间轨自维护任务，作为缺证节点的可证明状态。"""
+    try:
+        from modstore_server.six_line_event_router import read_digest_backlog_entries
+
+        rows = read_digest_backlog_entries()
+    except Exception:
+        logger.debug("time_rail: maintenance backlog unavailable", exc_info=True)
+        return {}
+    out: Dict[str, Dict[str, Any]] = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        if str(row.get("source") or "") != "time-rail-observability":
+            continue
+        nid = str(row.get("node_id") or "").strip()
+        if not nid:
+            continue
+        prev = out.get(nid)
+        if prev and str(prev.get("at") or "") >= str(row.get("at") or ""):
+            continue
+        out[nid] = dict(row)
+    return out
 
 
 def _latest_digest_row() -> Optional[Any]:
@@ -131,7 +309,7 @@ def _derive_from_sources() -> Dict[str, Dict[str, Any]]:
     if guard:
         derived["DRFAIL"] = _node_status_shell(
             "DRFAIL",
-            last_run=_iso_or_none(guard.get("set_at")),
+            last_run=_iso_or_none(guard.get("last_probe_at") or guard.get("at") or guard.get("set_at")),
             ok=False,
             guard_active=True,
             source="release_train.backup_guard",
@@ -147,6 +325,15 @@ def _derive_from_sources() -> Dict[str, Dict[str, Any]]:
                 "probe_retry_count": guard.get("probe_retry_count"),
                 "probe_escalated": guard.get("probe_escalated"),
             },
+        )
+    else:
+        derived["DRFAIL"] = _node_status_shell(
+            "DRFAIL",
+            ok=True,
+            source="release_train.backup_guard",
+            detail={"active": False},
+            observed=True,
+            proof_status="proved_ok",
         )
 
     try:
@@ -165,19 +352,79 @@ def _derive_from_sources() -> Dict[str, Dict[str, Any]]:
     except Exception:
         logger.debug("time_rail: backup list unavailable", exc_info=True)
 
-    if rt_state.get("last_bump_at"):
+    try:
+        from modstore_server.release_train import history_dir
+
+        hdir = history_dir()
+        ondemand = sorted(hdir.glob("*ondemand*.json"), key=lambda p: p.name, reverse=True)
+        if ondemand:
+            latest_ondemand = ondemand[0]
+            derived["BKOND"] = _node_status_shell(
+                "BKOND",
+                last_run=datetime.fromtimestamp(latest_ondemand.stat().st_mtime, timezone.utc).isoformat(),
+                ok=True,
+                source="release_train_history.ondemand",
+                detail={"name": latest_ondemand.name, "path": str(latest_ondemand)},
+            )
+    except Exception:
+        logger.debug("time_rail: ondemand backup history unavailable", exc_info=True)
+
+    if rt_state:
+        current = str(rt_state.get("current") or "1.0.0.0")
+        day_index = int(rt_state.get("day_index") or 0)
         bump_ok = guard is None
+        rt_detail = {
+            "current": current,
+            "last_bump_day": rt_state.get("last_bump_day"),
+            "day_index": day_index,
+        }
         derived["RT"] = _node_status_shell(
             "RT",
             last_run=_iso_or_none(rt_state.get("last_bump_at")),
             ok=bump_ok,
             guard_active=guard is not None,
             source="release_train.json",
-            detail={
-                "current": rt_state.get("current"),
-                "last_bump_day": rt_state.get("last_bump_day"),
-                "day_index": rt_state.get("day_index"),
-            },
+            detail=rt_detail,
+            observed=True,
+        )
+        major_today = day_index > 0 and day_index % 100 == 0
+        installer_today = current.split(".")[-1:] == ["0"] and day_index > 0
+        every_30 = day_index > 0 and day_index % 30 == 0
+        derived["CENT"] = _node_status_shell(
+            "CENT",
+            last_run=_iso_or_none(rt_state.get("last_bump_at")),
+            ok=None,
+            source="release_train.json",
+            detail={**rt_detail, "decision": major_today},
+            observed=True,
+            proof_status="decision_true" if major_today else "decision_false",
+        )
+        derived["MAJ"] = _node_status_shell(
+            "MAJ",
+            last_run=_iso_or_none(rt_state.get("last_major_push_at") or rt_state.get("last_bump_at")),
+            ok=True if major_today else None,
+            source="release_train.json",
+            detail={**rt_detail, "is_major_day": major_today},
+            observed=True,
+            proof_status="planned" if major_today else "decision_not_taken",
+        )
+        derived["GATE"] = _node_status_shell(
+            "GATE",
+            last_run=_iso_or_none(rt_state.get("last_bump_at")),
+            ok=None,
+            source="release_train.json",
+            detail={**rt_detail, "decision": installer_today},
+            observed=True,
+            proof_status="decision_true" if installer_today else "decision_false",
+        )
+        derived["P6G"] = _node_status_shell(
+            "P6G",
+            last_run=_iso_or_none(rt_state.get("last_bump_at")),
+            ok=None,
+            source="release_train.json",
+            detail={**rt_detail, "decision": every_30},
+            observed=True,
+            proof_status="decision_true" if every_30 else "decision_false",
         )
 
     metric = _retention_metric()
@@ -195,26 +442,43 @@ def _derive_from_sources() -> Dict[str, Dict[str, Any]]:
     if digest is not None:
         created = _iso_or_none(getattr(digest, "created_at", None))
         day = str(getattr(digest, "day", "") or "")
+        record_id = int(getattr(digest, "id", 0) or 0)
+        release_kind = str(getattr(digest, "release_kind", "") or "daily")
+        derived["daily-hub"] = _node_status_shell(
+            "daily-hub",
+            last_run=created,
+            ok=True,
+            source="daily_digest_records",
+            detail={"digest_id": record_id, "day": day, "release_kind": release_kind},
+            observed=True,
+        )
+        derived["K"] = _node_status_shell(
+            "K",
+            last_run=created,
+            ok=bool(getattr(digest, "body_html", "") or getattr(digest, "body_text", "")),
+            source="daily_digest_records",
+            detail={"digest_id": record_id, "day": day, "scope": "KPI/TLS/IMAP section"},
+        )
         derived["P"] = _node_status_shell(
             "P",
             last_run=created,
             ok=bool(getattr(digest, "delivered", False)),
             source="daily_digest_records",
-            detail={"digest_id": getattr(digest, "id", None), "day": day},
+            detail={"digest_id": record_id, "day": day},
         )
         derived["ASM"] = _node_status_shell(
             "ASM",
             last_run=created,
             ok=bool(getattr(digest, "body_html", "") or getattr(digest, "body_text", "")),
             source="daily_digest_records",
-            detail={"digest_id": getattr(digest, "id", None), "day": day},
+            detail={"digest_id": record_id, "day": day},
         )
         derived["M"] = _node_status_shell(
             "M",
             last_run=created,
             ok=bool(getattr(digest, "meeting_minutes_html", "")),
             source="daily_digest_records",
-            detail={"digest_id": getattr(digest, "id", None), "day": day},
+            detail={"digest_id": record_id, "day": day},
         )
         derived["V"] = _node_status_shell(
             "V",
@@ -224,7 +488,78 @@ def _derive_from_sources() -> Dict[str, Dict[str, Any]]:
                 or getattr(digest, "vibe_prep_patches_md", "")
             ),
             source="daily_digest_records",
-            detail={"release_kind": getattr(digest, "release_kind", "")},
+            detail={"release_kind": release_kind, "digest_id": record_id},
+        )
+        derived["KIND"] = _node_status_shell(
+            "KIND",
+            last_run=created,
+            ok=None,
+            source="daily_digest_records",
+            detail={"release_kind": release_kind, "digest_id": record_id},
+            observed=True,
+            proof_status="decision_true" if release_kind in ("installer", "major") else "decision_false",
+        )
+
+        action_stats = _action_item_stats(day=day, record_id=record_id)
+        if action_stats.get("ok"):
+            derived["ACT"] = _node_status_shell(
+                "ACT",
+                last_run=created,
+                ok=True,
+                source="daily_action_items",
+                detail=action_stats,
+                observed=True,
+            )
+            patch_count = int((action_stats.get("by_kind") or {}).get("patch", 0))
+            update_count = int((action_stats.get("by_kind") or {}).get("update", 0))
+            derived["GAPS"] = _node_status_shell(
+                "GAPS",
+                last_run=created,
+                ok=True,
+                source="daily_action_items",
+                detail={"patch_items": patch_count, "digest_id": record_id},
+                observed=True,
+            )
+            derived["ROAD"] = _node_status_shell(
+                "ROAD",
+                last_run=created,
+                ok=True,
+                source="daily_action_items",
+                detail={"update_items": update_count, "digest_id": record_id},
+                observed=True,
+            )
+            merged = int((action_stats.get("by_status") or {}).get("merged", 0))
+            if merged:
+                derived["WB_M"] = _node_status_shell(
+                    "WB_M",
+                    last_run=created,
+                    ok=True,
+                    source="daily_action_items",
+                    detail={"merged_items": merged, "digest_id": record_id},
+                    observed=True,
+                )
+
+        line_dispatch = _json_obj(getattr(digest, "vibe_prep_line_dispatch_json", "") or "")
+        if line_dispatch:
+            derived["L"] = _node_status_shell(
+                "L",
+                last_run=created,
+                ok=line_dispatch.get("ok") is not False,
+                source="daily_digest.vibe_prep_line_dispatch",
+                detail={
+                    "digest_id": record_id,
+                    "line_meta": line_dispatch.get("line_meta"),
+                    "total_sections": line_dispatch.get("total_sections"),
+                },
+                observed=True,
+            )
+        derived["ART"] = _node_status_shell(
+            "ART",
+            last_run=created,
+            ok=True,
+            source="daily_digest_records",
+            detail={"digest_id": record_id, "has_meta": bool(getattr(digest, "vibe_prep_meta_json", ""))},
+            observed=True,
         )
         meta_raw = getattr(digest, "vibe_prep_meta_json", "") or ""
         if meta_raw:
@@ -251,6 +586,17 @@ def _derive_from_sources() -> Dict[str, Dict[str, Any]]:
                             source="daily_digest.surface_audit",
                             detail=ppt,
                         )
+                orch = (meta or {}).get("orchestrator_audit") if isinstance(meta, dict) else None
+                if isinstance(orch, dict):
+                    derived["ORCH"] = _status_from_block("ORCH", orch, source="daily_digest.orchestrator_audit")
+                    derived["BR"] = _node_status_shell(
+                        "BR",
+                        last_run=_iso_or_none(orch.get("ran_at")),
+                        ok=orch.get("orchestrator_mode") in ("primary", "digest"),
+                        source="daily_digest.orchestrator_audit",
+                        detail=orch,
+                        observed=True,
+                    )
             except Exception:
                 logger.debug("time_rail: surface_audit meta parse failed", exc_info=True)
 
@@ -264,10 +610,124 @@ def _derive_from_sources() -> Dict[str, Dict[str, Any]]:
                         last_run=created,
                         ok=ex.get("ok") is not False,
                         source="daily_digest.vibe_line_execute",
-                        detail={"mode": ex.get("mode")},
+                        detail={"mode": ex.get("mode"), "digest_id": record_id},
                     )
+                    runs = ex.get("runs") if isinstance(ex.get("runs"), dict) else {}
+                    phase_a = ex.get("phase_a") if isinstance(ex.get("phase_a"), dict) else {}
+                    phase_b = ex.get("phase_b") if isinstance(ex.get("phase_b"), dict) else {}
+                    phase_c = ex.get("phase_c") if isinstance(ex.get("phase_c"), dict) else {}
+                    phase_c_pipeline = (
+                        ex.get("phase_c_pipeline") if isinstance(ex.get("phase_c_pipeline"), dict) else {}
+                    )
+
+                    ps_run = ((phase_a.get("line_results") or {}).get("P-S") or runs.get("P-S") or {})
+                    app_run = ((phase_a.get("line_results") or {}).get("P-App") or runs.get("P-App") or {})
+                    if ps_run:
+                        derived["PSA"] = _status_from_block("PSA", ps_run, source="daily_digest.phase_a.P-S")
+                    if app_run:
+                        derived["APPA"] = _status_from_block("APPA", app_run, source="daily_digest.phase_a.P-App")
+                    if phase_a:
+                        derived["WB_D"] = _status_from_block("WB_D", phase_a, source="daily_digest.phase_a")
+
+                    for line_key, nid in (("P-W", "PW"), ("P-App", "APPB"), ("S-R", "SR")):
+                        line_block = (phase_b.get("line_results") or {}).get(line_key) or {}
+                        if line_block:
+                            derived[nid] = _status_from_block(nid, line_block, source=f"daily_digest.phase_b.{line_key}")
+                    if phase_b:
+                        derived["ORCH"] = derived.get("ORCH") or _status_from_block(
+                            "ORCH", phase_b, source="daily_digest.phase_b"
+                        )
+
+                    if phase_c_pipeline:
+                        step_ids = list(
+                            phase_c_pipeline.get("executed_steps")
+                            or phase_c_pipeline.get("step_ids")
+                            or phase_c_pipeline.get("planned_steps")
+                            or []
+                        )
+                        for step in ("P3", "P4", "P5", "P6", "P7", "P8", "P9"):
+                            if step in step_ids:
+                                derived[step] = _status_from_block(
+                                    step,
+                                    phase_c_pipeline,
+                                    source="daily_digest.phase_c_pipeline",
+                                    detail={"step": step, "step_ids": step_ids},
+                                )
+                        if any(step in step_ids for step in ("P5", "P6")):
+                            derived["CANARY"] = _status_from_block(
+                                "CANARY",
+                                phase_c_pipeline,
+                                source="daily_digest.phase_c_pipeline",
+                                detail={"step_ids": step_ids, "strategy": "staging-canary-production"},
+                            )
+                        if phase_c_pipeline.get("rollback"):
+                            derived["ROLLBACK"] = _status_from_block(
+                                "ROLLBACK",
+                                phase_c_pipeline.get("rollback") or {},
+                                source="daily_digest.phase_c_pipeline.rollback",
+                            )
+
+                    if phase_c:
+                        step_results = phase_c.get("steps") if isinstance(phase_c.get("steps"), list) else []
+                        step_map = {str(s.get("step") or ""): s for s in step_results if isinstance(s, dict)}
+                        for source_step, nid in (("P9", "P9I"), ("P5", "P5I"), ("P6", "P6I")):
+                            if source_step in step_map:
+                                derived[nid] = _status_from_block(
+                                    nid,
+                                    step_map[source_step],
+                                    source="daily_digest.phase_c.installer_chain",
+                                )
+                        if phase_c.get("fastgate"):
+                            derived["FASTGATE"] = _status_from_block(
+                                "FASTGATE",
+                                phase_c.get("fastgate") or {},
+                                source="daily_digest.phase_c.fastgate",
+                            )
+                        if phase_c.get("download_release"):
+                            derived["DLSSOT"] = _status_from_block(
+                                "DLSSOT",
+                                phase_c.get("download_release") or {},
+                                source="daily_digest.phase_c.download_release",
+                            )
+                        if phase_c.get("rollback"):
+                            derived["ROLLBACK"] = _status_from_block(
+                                "ROLLBACK",
+                                phase_c.get("rollback") or {},
+                                source="daily_digest.phase_c.rollback",
+                            )
             except Exception:
                 pass
+
+    staged = _latest_ops_staged_change()
+    if staged is not None:
+        staged_detail = {
+            "id": getattr(staged, "id", None),
+            "branch": getattr(staged, "branch", ""),
+            "status": getattr(staged, "status", ""),
+            "files_changed_count": getattr(staged, "files_changed_count", None),
+        }
+        created = _iso_or_none(getattr(staged, "created_at", None))
+        approved = _iso_or_none(getattr(staged, "approved_at", None))
+        deployed = _iso_or_none(getattr(staged, "deployed_at", None))
+        derived["STG"] = _node_status_shell("STG", last_run=created, ok=True, source="ops_staged_changes", detail=staged_detail)
+        if approved:
+            derived["APPR"] = _node_status_shell("APPR", last_run=approved, ok=True, source="ops_staged_changes", detail=staged_detail)
+        if deployed:
+            derived["V10SYNC"] = _node_status_shell("V10SYNC", last_run=deployed, ok=True, source="ops_staged_changes", detail=staged_detail)
+            derived["MERGE"] = _node_status_shell("MERGE", last_run=deployed, ok=True, source="ops_staged_changes", detail=staged_detail)
+
+    cr = _latest_change_request()
+    if cr is not None:
+        cr_detail = {
+            "id": getattr(cr, "id", None),
+            "source_employee_id": getattr(cr, "source_employee_id", ""),
+            "status": getattr(cr, "status", ""),
+            "change_kind": getattr(cr, "change_kind", ""),
+        }
+        created = _iso_or_none(getattr(cr, "created_at", None) or getattr(cr, "submitted_at", None))
+        derived["CS_CHG"] = _node_status_shell("CS_CHG", last_run=created, ok=True, source="employee_change_requests", detail=cr_detail)
+        derived["O7"] = _node_status_shell("O7", last_run=created, ok=True, source="employee_change_requests", detail={"bridge": "feedback-to-change-request", **cr_detail})
+        derived["Vibe08"] = _node_status_shell("Vibe08", last_run=created, ok=True, source="employee_change_requests", detail={"bridge": "change-request-to-next-digest", **cr_detail})
 
     return derived
 
@@ -280,7 +740,16 @@ def collect_node_runtime_status(
     from modstore_server.time_rail_runtime import all_node_records
 
     graph = load_workflow_graph()
-    all_ids = [str(n.get("id")) for n in (graph.get("nodes") or []) if n.get("id")]
+    graph_nodes = {
+        str(n.get("id")): {
+            "label": str(n.get("label") or ""),
+            "kind": str(n.get("kind") or ""),
+            "phase": str(n.get("phase") or ""),
+        }
+        for n in (graph.get("nodes") or [])
+        if n.get("id")
+    }
+    all_ids = list(graph_nodes.keys())
     if node_ids:
         wanted = {str(x).strip() for x in node_ids if str(x).strip()}
         ids = list(wanted)
@@ -289,31 +758,215 @@ def collect_node_runtime_status(
 
     persisted = all_node_records()
     derived = _derive_from_sources()
+    maintenance_by_node = _maintenance_backlog_by_node()
 
     guard_global = bool(derived.get("DRFAIL", {}).get("guard_active"))
     nodes: Dict[str, Dict[str, Any]] = {}
     for nid in ids:
         row = persisted.get(nid) or derived.get(nid)
+        graph_meta = graph_nodes.get(nid) or {}
         if row:
+            detail = row.get("detail") if isinstance(row.get("detail"), dict) else {}
+            if not detail and isinstance(row.get("meta"), dict):
+                detail = row.get("meta") or {}
+            evidence = row.get("evidence") if isinstance(row.get("evidence"), list) else []
             nodes[nid] = {
                 "node_id": nid,
+                "label": graph_meta.get("label", ""),
+                "kind": graph_meta.get("kind", ""),
+                "phase": graph_meta.get("phase", ""),
                 "last_run": row.get("last_run"),
                 "ok": row.get("ok"),
                 "guard_active": bool(row.get("guard_active"))
                 or (guard_global and nid in ("RT", "DRFAIL", "DRPROBE")),
                 "source": row.get("source") or "",
-                "detail": row.get("detail") if isinstance(row.get("detail"), dict) else {},
+                "detail": detail,
+                "observed": bool(row.get("observed")) or bool(row.get("last_run") or row.get("source") or row.get("ok") is not None),
+                "proof_status": row.get("proof_status") or (
+                    "proved_ok" if row.get("ok") is True else "proved_failed" if row.get("ok") is False else "observed"
+                ),
+                "evidence": evidence
+                or [
+                    {
+                        "source": row.get("source") or "time_rail_runtime",
+                        "last_run": row.get("last_run"),
+                        "ok": row.get("ok"),
+                        "detail": detail,
+                    }
+                ],
+                "evidence_count": int(row.get("evidence_count") or (len(evidence) if evidence else 1)),
+                "missing_evidence": row.get("missing_evidence") if isinstance(row.get("missing_evidence"), list) else [],
+                "observable": True,
             }
         else:
-            nodes[nid] = _node_status_shell(nid)
+            queued = maintenance_by_node.get(nid)
+            if queued:
+                nodes[nid] = {
+                    **_node_status_shell(
+                        nid,
+                        last_run=_iso_or_none(queued.get("at")),
+                        ok=None,
+                        source="six_line_digest_backlog",
+                        detail={
+                            "route_id": queued.get("route_id"),
+                            "priority": queued.get("priority"),
+                            "dispatch_line": queued.get("dispatch_line"),
+                            "employee_id": queued.get("employee_id"),
+                            "task_brief": queued.get("task_brief"),
+                        },
+                        observed=True,
+                        proof_status="maintenance_queued",
+                    ),
+                    "label": graph_meta.get("label", ""),
+                    "kind": graph_meta.get("kind", ""),
+                    "phase": graph_meta.get("phase", ""),
+                    "observable": True,
+                }
+            else:
+                nodes[nid] = {
+                    **_node_status_shell(nid),
+                    "label": graph_meta.get("label", ""),
+                    "kind": graph_meta.get("kind", ""),
+                    "phase": graph_meta.get("phase", ""),
+                    "observable": True,
+                }
+
+    observed_ids = [nid for nid, row in nodes.items() if row.get("observed")]
+    runtime_evidence_ids = [nid for nid, row in nodes.items() if int(row.get("evidence_count") or 0) > 0]
+    maintenance_queued_ids = [
+        nid for nid, row in nodes.items() if str(row.get("proof_status") or "") == "maintenance_queued"
+    ]
+    proved_ids = [
+        nid
+        for nid, row in nodes.items()
+        if str(row.get("proof_status") or "") in (
+            "proved_ok",
+            "proved_failed",
+            "guard_active",
+            "decision_true",
+            "decision_false",
+            "shadow_observed",
+            "planned",
+            "decision_not_taken",
+            "maintenance_queued",
+        )
+    ]
+    missing_nodes = [
+        {
+            "node_id": nid,
+            "label": row.get("label") or "",
+            "phase": row.get("phase") or "",
+            "kind": row.get("kind") or "",
+            "reason": "; ".join(row.get("missing_evidence") or []) or "missing runtime evidence",
+        }
+        for nid, row in nodes.items()
+        if not row.get("observed")
+    ]
+    maintenance_items = [
+        {
+            "kind": "time_rail_missing_evidence",
+            "priority": "P1" if row.get("phase") in ("t1", "t2", "t2b", "t3") else "P2",
+            "node_id": row["node_id"],
+            "title": f"补齐时间轨节点证据: {row.get('label') or row['node_id']}",
+            "suggested_owner": "daily-orchestrator",
+            "status": "open",
+            "reason": row.get("reason"),
+        }
+        for row in missing_nodes
+    ]
+    coverage = {
+        "total_nodes": len(ids),
+        "status_nodes": len(nodes),
+        "observable_nodes": len(nodes),
+        "observed_nodes": len(observed_ids),
+        "proved_nodes": len(proved_ids),
+        "runtime_evidence_nodes": len(runtime_evidence_ids),
+        "maintenance_queued_nodes": len(maintenance_queued_ids),
+        "state_classified_nodes": len(nodes),
+        "missing_evidence_nodes": len(missing_nodes),
+        "status_coverage_pct": round((len(nodes) / len(ids) * 100.0), 1) if ids else 100.0,
+        "observable_coverage_pct": round((len(nodes) / len(ids) * 100.0), 1) if ids else 100.0,
+        "observed_coverage_pct": round((len(observed_ids) / len(ids) * 100.0), 1) if ids else 100.0,
+        "proved_coverage_pct": round((len(proved_ids) / len(ids) * 100.0), 1) if ids else 100.0,
+        "runtime_evidence_coverage_pct": round((len(runtime_evidence_ids) / len(ids) * 100.0), 1) if ids else 100.0,
+        "maintenance_queued_coverage_pct": round((len(maintenance_queued_ids) / len(ids) * 100.0), 1) if ids else 0.0,
+        "state_classified_coverage_pct": round((len(nodes) / len(ids) * 100.0), 1) if ids else 100.0,
+    }
 
     return {
+        "contract_version": STATUS_CONTRACT_VERSION,
         "version": graph.get("version"),
         "graph_schema": graph.get("schema"),
         "graph_path": str(graph_json_path()),
         "checked_at": datetime.now(timezone.utc).isoformat(),
         "backup_guard_active": guard_global,
+        "refresh_after_seconds": 15,
+        "coverage": coverage,
+        "missing_evidence": missing_nodes,
+        "maintenance_backlog": maintenance_items,
         "nodes": nodes,
+    }
+
+
+def sync_missing_evidence_backlog(*, limit: int = 32) -> Dict[str, Any]:
+    """把缺证节点写入事件轨 digest backlog，让次日 Vibe 自动生成维护任务。"""
+    status = collect_node_runtime_status()
+    missing = list(status.get("missing_evidence") or [])[: max(1, int(limit))]
+    if not missing:
+        return {"ok": True, "added": 0, "skipped": 0, "reason": "no_missing_evidence"}
+
+    try:
+        from modstore_server.six_line_event_router import (
+            append_digest_backlog,
+            read_digest_backlog_entries,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("time_rail: event backlog unavailable")
+        return {"ok": False, "error": str(exc)}
+
+    existing = {
+        str(row.get("node_id") or "")
+        for row in read_digest_backlog_entries()
+        if str(row.get("source") or "") == "time-rail-observability"
+    }
+    added: List[Dict[str, Any]] = []
+    skipped = 0
+    for row in missing:
+        nid = str(row.get("node_id") or "").strip()
+        if not nid or nid in existing:
+            skipped += 1
+            continue
+        phase = str(row.get("phase") or "")
+        priority = "P1" if phase in ("t1", "t2", "t2b", "t3") else "P2"
+        entry = {
+            "source": "time-rail-observability",
+            "route_id": "time_rail_missing_evidence",
+            "trigger": "time_rail_maintenance",
+            "six_line": "prod_software",
+            "line_step": "P8",
+            "dispatch_line": "P-S",
+            "list_kind": "patches",
+            "priority": priority,
+            "employee_id": "daily-orchestrator",
+            "node_id": nid,
+            "summary": f"补齐时间轨节点证据: {row.get('label') or nid}",
+            "task_brief": (
+                f"时间轨节点 `{nid}` 当前缺少 runtime 证据。"
+                f" 节点: {row.get('label') or nid}；phase={phase or 'unknown'}；"
+                f"原因: {row.get('reason') or 'missing runtime evidence'}。"
+                " 请补充 record_node_run 或可验证的派生证据，使该节点进入 observed/proved 状态。"
+            ),
+        }
+        path = append_digest_backlog(entry)
+        added.append({"node_id": nid, "path": path})
+        existing.add(nid)
+
+    return {
+        "ok": True,
+        "added": len(added),
+        "skipped": skipped,
+        "total_missing": len(status.get("missing_evidence") or []),
+        "added_items": added,
     }
 
 
@@ -339,4 +992,5 @@ __all__ = [
     "load_workflow_graph",
     "collect_node_runtime_status",
     "graph_api_payload",
+    "sync_missing_evidence_backlog",
 ]

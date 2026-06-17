@@ -228,7 +228,8 @@ def _find_local_users_by_email(email: str) -> list:
         return cast(
             "list[Any]",
             db.query(User)
-            .filter(func.lower(User.email) == norm, User.is_active.is_(True))
+            .filter(func.lower(User.email) == norm)
+            .filter(User.is_active.is_(True))
             .order_by(User.id.asc())
             .all(),
         )
@@ -408,7 +409,7 @@ async def auth_forgot_password_send_code(body: dict = Body(default_factory=dict)
             hint = f"{hint}（本机库中有该邮箱用户，请确认修茈市场服务与邮件配置正常）"
         return JSONResponse(
             error_envelope(SEND_CODE_FAILED, hint),
-            status_code=502 if local_users else 400,
+            status_code=502,
         )
     return {
         "success": True,

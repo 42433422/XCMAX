@@ -14,3 +14,13 @@
 ```bash
 cd FHD && python3 scripts/package/build-sunbird-seed.py
 ```
+
+服务器交付授权：
+
+```bash
+cd /root/XCMAX/成都修茈科技有限公司/MODstore_deploy
+export DATABASE_URL="$(grep '^DATABASE_URL=' .env | tail -1 | cut -d= -f2-)"
+.venv/bin/python scripts/provision_enterprise_delivery.py --delivery sunbird
+```
+
+该授权会把市场账号 `SUNBIRD` 标记为企业账号，并绑定 `attendance-industry` 与 `taiyangniao-pro`。

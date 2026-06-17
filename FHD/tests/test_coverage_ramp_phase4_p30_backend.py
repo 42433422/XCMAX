@@ -103,7 +103,6 @@ def im_client_error():
         patch.object(im_routes, "_ensure_schema"),
         patch.object(im_routes, "HostSessionLocal", return_value=mock_db),
         patch.object(im_routes, "ImApplicationService", return_value=mock_svc),
-        patch.object(im_routes, "session_id_from_request", return_value="sess"),
     ):
         yield TestClient(app)
 

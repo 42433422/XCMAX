@@ -609,6 +609,45 @@ async def mod_store_install_industry_seed(request: Request) -> ModStoreInstallRe
     )
 
 
+@router.post("/install-customer-delivery-seed", response_model=ModStoreInstallResult)
+async def mod_store_install_customer_delivery_seed(request: Request) -> ModStoreInstallResult:
+    """账号定制交付：从服务器下载客户种子包并导入本地业务数据。"""
+    payload = await _request_payload(request)
+    mod_id = _safe_text(payload.get("mod_id") or payload.get("pkg_id"))
+    industry_id = _safe_text(payload.get("industry_id") or payload.get("industryId"))
+    if not mod_id:
+        raise HTTPException(status_code=400, detail="缺少 mod_id")
+
+    try:
+        from app.enterprise.mod_entitlements import (
+            enterprise_mod_filter_active,
+            get_cached_entitled_client_mod_ids,
+            sync_entitlements_from_request,
+        )
+
+        if enterprise_mod_filter_active():
+            await sync_entitlements_from_request(request)
+            entitled = get_cached_entitled_client_mod_ids() or set()
+            if mod_id not in entitled:
+                raise HTTPException(status_code=403, detail="当前账号未授权该客户交付包")
+    except HTTPException:
+        raise
+    except RECOVERABLE_ERRORS:
+        logger.warning("customer delivery seed entitlement check skipped", exc_info=True)
+
+    from app.mod_sdk.customer_delivery_seed import install_customer_delivery_seed_package
+
+    data = await install_customer_delivery_seed_package(
+        mod_id=mod_id,
+        industry_id=industry_id,
+    )
+    return ModStoreInstallResult(
+        success=bool(data.get("success")),
+        message=str(data.get("message") or ""),
+        data=data,
+    )
+
+
 @router.post("/reload-employees")
 async def mod_store_reload_employees(request: Request) -> ModStoreSimpleResponse:
     """显式刷新 employee_pack HTTP 路由与 Planner 工具注册表（装包后双保险）。"""

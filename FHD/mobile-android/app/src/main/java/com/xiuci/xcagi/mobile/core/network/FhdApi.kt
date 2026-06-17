@@ -8,6 +8,9 @@ import com.xiuci.xcagi.mobile.core.model.DiscoverHintData
 import com.xiuci.xcagi.mobile.core.model.MobileEnvelope
 import com.xiuci.xcagi.mobile.core.model.MobileLoginData
 import com.xiuci.xcagi.mobile.core.model.MeData
+import com.xiuci.xcagi.mobile.model.CsInfoDto
+import com.xiuci.xcagi.mobile.model.CsMessageResponseDto
+import com.xiuci.xcagi.mobile.model.CsMessagesListDto
 import okhttp3.ResponseBody
 import retrofit2.http.Body
 import retrofit2.http.DELETE
@@ -211,4 +214,14 @@ interface FhdApi {
         @Path("id") conversationId: Int,
         @Body body: ImSendBody,
     ): Map<String, Any?>
+
+    // ── 专属客服接口 ──
+    @GET("api/mobile/v1/cs/info")
+    suspend fun getCsInfo(): retrofit2.Response<CsInfoDto>
+
+    @POST("api/mobile/v1/cs/messages")
+    suspend fun sendCsMessage(@Body body: Map<String, String>): retrofit2.Response<CsMessageResponseDto>
+
+    @GET("api/mobile/v1/cs/messages")
+    suspend fun getCsMessages(@Query("since") since: String? = null): retrofit2.Response<CsMessagesListDto>
 }

@@ -198,6 +198,7 @@ vi.mock('@/constants/accountModBinding', () => ({
 }))
 
 vi.mock('@/constants/genericModPack', () => ({
+  ACCOUNT_CUSTOM_MOD_IDS: ['taiyangniao-pro', 'sz-qsm-pro'],
   expectedHostBridgeModIds: () => [],
   isHostBridgeModId: () => false,
   isSelectableExtensionModId: () => true,
@@ -684,10 +685,23 @@ describe('SettingsView.vue – computed properties', () => {
     mockAccountProfileStore.accountKind = 'personal'
   })
 
-  it('systemDisplayName uses industry preset name', async () => {
+  it('systemDisplayName defaults to generic host shell', async () => {
     const wrapper = await mountSettings()
     const vm = wrapper.vm as Record<string, unknown>
-    expect(vm.systemDisplayName).toContain('管理系统')
+    expect(vm.systemDisplayName).toBe('XCAGI 通用宿主')
+    expect(vm.aboutDisplayLine).toBe('XCAGI 通用宿主 · 能力由 Mod 提供')
+    wrapper.unmount()
+  })
+
+  it('systemDisplayName uses account custom delivery name', async () => {
+    mockModsStore.mods = [
+      { id: 'taiyangniao-pro', name: '太阳鸟 PRO', industry: { id: '考勤', name: '考勤/人事行业' } },
+    ]
+    mockModsStore.activeModId = 'taiyangniao-pro'
+    const wrapper = await mountSettings()
+    const vm = wrapper.vm as Record<string, unknown>
+    expect(vm.systemDisplayName).toBe('太阳鸟 PRO 交付工作台')
+    expect(vm.aboutDisplayLine).toBe('XCAGI 通用宿主 · 太阳鸟 PRO 交付 · 考勤/人事行业基础线')
     wrapper.unmount()
   })
 

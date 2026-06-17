@@ -46,8 +46,10 @@
 |----|------|------|------|--------|------|
 | `*_app_service_v2.py` 数量 | 历史 CHANGELOG / 验收材料曾写「0 / 已清零」 | **23** 个应用服务模块（见下表）；决策为**保留**作应用层 SSOT 后缀 | 一致（历史曾夸大） | 后端架构 | 本表 + [`MIGRATION_v2_DROP_PLAN.md`](MIGRATION_v2_DROP_PLAN.md) |
 | mypy `ignore_errors` 目录数 | ≤ 6（[`plan-2026-06.md`](../../specs/plan-2026-06.md) M0） | **6**（`pyproject.toml` 宽口径 `module` 条，2026-06-05；自 **12→6**） | 一致 | 后端架构 | 自 plan 基线 **18** 分批收口；`app.routes.*` / `ai_chat` 移出宽口径；[`MYPY_BATCH_STATUS.md`](MYPY_BATCH_STATUS.md) |
-| 全量覆盖率（`full_app`，`--cov=app`） | plan 长期目标 ≥88%（**非实测**） | **60.63%**（`metrics/coverage-dual-summary.json`，2026-06-04） | 一致（周报曾误报 ≥88%，已撤回） | QA | 权威 SSOT：`coverage-dual-summary.json` → `full_app.pct` |
-| CI 窄包门禁（`pyproject.toml` include/omit） | M3 目标 70% | **70%**（`fail_under` + `ci-cd.yml` `--cov-fail-under=70`） | 一致 | QA | [`docs/reports/COVERAGE_RAMP.md`](reports/COVERAGE_RAMP.md) |
+| 全量覆盖率（`source=[app]`，`--cov=app` + branch） | plan 长期目标 ≥90% 行 / ≥85% 分支 | **HEAD 52.74% 行 / 37.17% 分支**（2026-06-14 全绿 bump，`1569dfa4`）；**工作区 WIP 74.56% 行 / 61.8% 分支**（2026-06-17，**196 failed + 7 errors**，未提交） | 一致（HEAD）；WIP 待收口 | QA | SSOT：`metrics/coverage-dual-summary.json` · 趋势 `metrics/coverage-history.jsonl` |
+| CI 覆盖率棘轮（全量 `app/`，非窄包） | 行 floor **51%**；分支 floor **36%** | **51% / 36%**（`pyproject.toml fail_under` + `coverage_ratchet_baseline.json`）；`coverage_ratchet.py --check` 守护 | 一致 | QA | [`docs/reports/COVERAGE_RAMP.md`](reports/COVERAGE_RAMP.md) · `ci-cd.yml` `--cov-fail-under=0` + ratchet |
+| 前端覆盖率（全量 `src/**`） | 目标 ≥80% 行 | **HEAD 55.82% 行**；**WIP 74.15% 行**（同上，待修红灯） | 一致（HEAD）；WIP 待收口 | QA | `frontend/vitest.config.js` thresholds + ratchet |
+| pytest 规模 | — | **HEAD 3,785 passed / 0 failed**；**WIP 12,675 passed / 196 failed / 7 errors** | WIP 滞后 | QA | 同上 |
 | 工作区体积（`du -sh .`） | ≤ 8 GB（[`plan-2026-06.md`](../../specs/plan-2026-06.md) M0） | **8.6 GB**（2026-06-05 外置后 `du -sh` 仓根；FHD 含 `.git` ~7.5 GB；**未删 `.git` 历史**） | 接近目标（+0.6 GB） | 发布工程 | 迁出前 **20 GB**；外置 `~/XCMAX-archives/m0-fhd-bulk-20260605/`（models 2.7G、installer 1.8G、XcagiInstaller 1.9G 等）；工作区 `ARCHIVE_POINTER.md` + 子目录 `ARCHIVE_POINTER.md` |
 | 仓根/FHD 散落脚本 | 无 `fix_*`/`check_*`/`probe_*` 于仓根或 `scripts/` 根 | **已收敛（2026-06-05）**：`maxdepth 2` 无散落；一次性脚本在 [`scripts/_archived/`](../scripts/_archived/)、探针在 [`scripts/dev/diagnostics/`](../scripts/dev/diagnostics/)、CI 在 [`scripts/ci/`](../scripts/ci/) | 一致 | 发布工程 | [`scripts/README.md`](../scripts/README.md) |
 | Android 原生 | 根 README / 部分材料曾写「签约级」 | Kotlin Compose **签约级**（双 SKU · 密码/OTP/扫码登录 · SSE 对话 · 4 Tab · 工作台 WebView）；商店推送/签名需运维配置 | 一致（2026-06-12 对齐） | 移动端 | [`VERSION.md`](../VERSION.md) · [`mobile-android/README.md`](../mobile-android/README.md) |
@@ -134,6 +136,7 @@
 | 2026-06-05 | M0 脚本/env worker | `fix_*`/`check_*` 迁入 `scripts/*`；`.env*` maxdepth2=5；[`ENV_FILES.md`](ENV_FILES.md) |
 | 2026-06-05 | observability worker | SLO 行区分「本地 compose 可复现」vs「staging 未验证」；证据链 `docs/evidence/` |
 | 2026-06-05 | observability subagent | `--check-only` 通过；Docker 不可用→无 PNG；CLAIMED 可观测行区分 local/staging，禁止伪造 7 天 |
-| 2026-06-08 | 尽调治理 worker | 许可证 Apache-2.0 对齐；payment_orders 出索引；覆盖率双口径（full_app 60.63% / CI 窄包 70%）修正周报误报 |
+| 2026-06-17 | 文档 SSOT 同步 | 覆盖率口径全面更新：退役 60.63%/窄包 70%/77.4%；HEAD 52.74%/55.82%；WIP 74.56%/74.15%（196 红灯）；见 `coverage-dual-summary.json` |
+| 2026-06-08 | 尽调治理 worker | 许可证 Apache-2.0 对齐；payment_orders 出索引；覆盖率双口径修正周报误报（**后续 2026-06-14 已迁至全量棘轮，60.63%/70% 已退役**） |
 | 2026-06-07 | 技术债清偿 worker | **全量技术债清偿**（v10 线内迭代）：FHD ruff/mypy/bare-except 全绿；前端 eslint/build；成都修茈 black/isort/flake8/mypy 全绿；`verify_arch_doc` / `verify_version_anchors` 通过 |
 | 2026-06-10 | 口径对齐 | Android 实验骨架 / 覆盖率双口径 / _v2 保留（23）— README·VERSION·周报撤回误报；Android Kotlin 编译修复 |

@@ -12,7 +12,7 @@
 > - `FHD/docs/architecture/target-structure.md`（依赖方向铁律，仍有效）
 > - `FHD/app/application/README.md`（应用层规范，仍有效）
 
-最后更新：2026-06-13 · 维护：XCAGI 工程团队
+最后更新：2026-06-17 · 维护：XCAGI 工程团队
 
 ---
 
@@ -24,8 +24,8 @@
    Android `assembleDebug` 通过。
 3. **行为零变化优先**：先做「等价重构」（移动/抽取/改依赖方向），**不**在同一步混入逻辑修改。
 4. **棘轮护栏（ratchet）**：对每类债设「只减不增」CI 校验，防止边修边长。
-5. **覆盖率不退**：后端 gate 现 ~60.63%（`FHD/metrics/coverage-dual-summary.json`），
-   拆分时**同步补特征测试**，新抽出的纯函数/UseCase 必须带测试。
+5. **覆盖率不退**：后端棘轮 floor 现 **51% 行 / 36% 分支**（HEAD 实测 **52.74% / 37.17%**；WIP **74.56% / 61.8%** 但有 196 红灯），
+   见 `FHD/metrics/coverage-dual-summary.json`。拆分时**同步补特征测试**，新抽出的纯函数/UseCase 必须带测试。
 
 ---
 

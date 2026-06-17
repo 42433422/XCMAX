@@ -46,6 +46,16 @@ export interface RegisterRequest {
   display_name?: string;
 }
 
+async function invalidateSessionScopedUiCaches(): Promise<void> {
+  invalidateEnterpriseSessionCache();
+  try {
+    const { clearDeliverableStatusCache } = await import('@/utils/platformShellApi');
+    clearDeliverableStatusCache();
+  } catch {
+    /* ignore */
+  }
+}
+
 export const authApi = {
   async login(
     username: string,
@@ -59,7 +69,7 @@ export const authApi = {
       password,
       account_kind: accountKind,
     });
-    invalidateEnterpriseSessionCache();
+    await invalidateSessionScopedUiCaches();
     return res;
   },
 
@@ -75,7 +85,7 @@ export const authApi = {
       code,
       account_kind: accountKind,
     });
-    invalidateEnterpriseSessionCache();
+    await invalidateSessionScopedUiCaches();
     return res;
   },
 
@@ -117,13 +127,13 @@ export const authApi = {
     await primeCsrfCookie();
     invalidateEnterpriseSessionCache();
     const res = await api.post<ApiResponse<LoginResponse>>('/api/auth/register', payload);
-    invalidateEnterpriseSessionCache();
+    await invalidateSessionScopedUiCaches();
     return res;
   },
 
   async logout(): Promise<ApiResponse<void>> {
     clearAutoLoginPreference();
-    invalidateEnterpriseSessionCache();
+    await invalidateSessionScopedUiCaches();
     try {
       const { useAccountProfileStore } = await import('@/stores/accountProfile');
       useAccountProfileStore().clear();

@@ -1,6 +1,6 @@
 """桌面 QR 配对短期 nonce 存储（进程内 + 可选文件）。
 
-v2: 新增 6 位数字配对码(shortCode)支持，QR 中只暴露 token 不暴露 IP。
+v2: 新增 6 位数字配对码(shortCode)支持，QR 可携带 host/port 作为首次绑定直连兜底。
 """
 
 from __future__ import annotations

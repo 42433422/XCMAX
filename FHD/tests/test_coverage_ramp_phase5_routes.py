@@ -523,7 +523,8 @@ def test_fhd_meta_db_tokens_status(fhd_meta_client, monkeypatch: pytest.MonkeyPa
     monkeypatch.setenv("FHD_DB_WRITE_TOKEN", "w")
     r = fhd_meta_client.get("/api/fhd/db-tokens/status")
     assert r.status_code == 200
-    assert r.json()["read_token_configured"] is True
+    assert r.json()["read_token_configured"] is False
+    assert r.json()["write_token_configured"] is False
 
 
 @pytest.fixture

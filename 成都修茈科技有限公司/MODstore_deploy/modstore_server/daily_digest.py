@@ -1565,17 +1565,115 @@ def build_digest_approval_bundle(
     return token_batch, staged_section_html
 
 
-def run_daily_digest_email() -> None:
+def _surface_audit_failed_bundle(
+    *, error_code: str, message: str, timed_out: bool = False
+) -> Dict[str, Any]:
+    return {
+        "ok": False,
+        "error": error_code,
+        "timed_out": bool(timed_out),
+        "html": (
+            '<div style="padding:0 24px 8px">'
+            '<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:12px;'
+            'padding:14px 16px;color:#991b1b;font-size:13px;line-height:1.7">'
+            "<strong>三端巡检未完成。</strong> "
+            f"{message}"
+            " 已降级为继续发送日报，稍后可单独补跑巡检。"
+            "</div></div>"
+        ),
+        "report": {
+            "ok": False,
+            "error": error_code,
+            "timed_out": bool(timed_out),
+            "surfaces": [],
+        },
+        "excerpt_markdown": f"- 三端巡检未完成：{message}",
+    }
+
+
+def _build_surface_audit_bundle() -> Dict[str, Any]:
+    timeout_raw = (os.environ.get("MODSTORE_DAILY_SURFACE_AUDIT_TIMEOUT_SEC") or "").strip()
+    try:
+        timeout_sec = int(timeout_raw or "180")
+    except Exception:
+        timeout_sec = 180
+
+    try:
+        from modstore_server.daily_digest_surface_audit import (
+            build_surface_audit_html_sync,
+            surface_audit_excerpt_markdown,
+        )
+    except Exception:
+        logger.exception("daily digest: surface audit import failed")
+        return _surface_audit_failed_bundle(
+            error_code="surface_audit_import_failed",
+            message="巡检模块加载失败（见服务器日志）",
+        )
+
+    def _ok_bundle(html: str, report: Any) -> Dict[str, Any]:
+        safe_report = report or {}
+        try:
+            excerpt = surface_audit_excerpt_markdown(safe_report)
+        except Exception:
+            logger.exception("daily digest: surface audit excerpt failed")
+            excerpt = ""
+        return {
+            "ok": True,
+            "error": "",
+            "timed_out": False,
+            "html": html,
+            "report": safe_report,
+            "excerpt_markdown": excerpt,
+        }
+
+    if timeout_sec <= 0:
+        try:
+            html, report = build_surface_audit_html_sync()
+            return _ok_bundle(html, report)
+        except Exception:
+            logger.exception("daily digest: surface audit failed")
+            return _surface_audit_failed_bundle(
+                error_code="surface_audit_failed",
+                message="巡检执行失败（见服务器日志）",
+            )
+
+    from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
+
+    executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="digest-surface-audit")
+    future = executor.submit(build_surface_audit_html_sync)
+    try:
+        html, report = future.result(timeout=timeout_sec)
+        return _ok_bundle(html, report)
+    except FuturesTimeoutError:
+        logger.error("daily digest: surface audit timed out after %ss", timeout_sec)
+        future.cancel()
+        return _surface_audit_failed_bundle(
+            error_code="surface_audit_timeout",
+            message=f"巡检超时（>{timeout_sec}s）",
+            timed_out=True,
+        )
+    except Exception:
+        logger.exception("daily digest: surface audit failed")
+        return _surface_audit_failed_bundle(
+            error_code="surface_audit_failed",
+            message="巡检执行失败（见服务器日志）",
+        )
+    finally:
+        executor.shutdown(wait=False, cancel_futures=True)
+
+
+def run_daily_digest_email() -> Dict[str, Any]:
     """由调度器每日调用。"""
     raw = os.environ.get("MODSTORE_DAILY_DIGEST_ENABLED", "1").strip().lower()
     if raw in ("0", "false", "no", "off"):
         logger.info("daily digest disabled by MODSTORE_DAILY_DIGEST_ENABLED")
-        return
+        return {"ok": True, "skipped": True, "reason": "MODSTORE_DAILY_DIGEST_ENABLED=0"}
 
     from modstore_server.automation_primary import skip_daily_automation_result
 
-    if skip_daily_automation_result(job="daily_digest_email"):
-        return
+    delegated = skip_daily_automation_result(job="daily_digest_email")
+    if delegated:
+        return delegated
 
     stop_ephemeral_after = False
     try:
@@ -1590,7 +1688,7 @@ def run_daily_digest_email() -> None:
     )
     if not recipients:
         logger.warning("daily digest: no valid recipient emails")
-        return
+        return {"ok": False, "delivered": False, "reason": "no_valid_recipient_emails"}
 
     try:
         try:
@@ -1661,32 +1759,36 @@ def run_daily_digest_email() -> None:
         tls_cert_section_html = _tls_cert_digest_html(cert_results)
 
         # 先跑三端巡检（截图 + 对应员工 AI 分析），员工大会再围绕巡检结果讨论。
-        # 任一步失败即抛错，中断当日 digest（不发送带占位 HTML 的邮件）。
-        from modstore_server.daily_digest_surface_audit import (
-            build_surface_audit_html_sync,
-            surface_audit_excerpt_markdown,
-        )
-
-        surface_audit_html, surface_audit_report = build_surface_audit_html_sync()
+        # 若巡检失败或超时，则降级保留失败说明，日报继续发出，避免整条 08:00 链路被单点阻断。
+        surface_audit_bundle = _build_surface_audit_bundle()
+        surface_audit_html = str(surface_audit_bundle.get("html") or "")
+        surface_audit_report = surface_audit_bundle.get("report") or {}
+        surface_audit_excerpt = str(surface_audit_bundle.get("excerpt_markdown") or "")
 
         # 三端截图 → PowerPoint（每日邮件附件）。
         surface_ppt_path = ""
         surface_ppt_meta: Dict[str, Any] = {}
-        try:
-            from modstore_server.daily_digest_surface_ppt import build_surface_audit_pptx
+        if surface_audit_bundle.get("ok"):
+            try:
+                from modstore_server.daily_digest_surface_ppt import build_surface_audit_pptx
 
-            surface_ppt_meta = build_surface_audit_pptx(surface_audit_report)
-            if surface_ppt_meta.get("ok") and not surface_ppt_meta.get("skipped"):
-                surface_ppt_path = str(surface_ppt_meta.get("path") or "")
-                logger.info(
-                    "daily digest: surface ppt built slides=%s path=%s",
-                    surface_ppt_meta.get("slides"),
-                    surface_ppt_path,
-                )
-            elif surface_ppt_meta.get("error"):
-                logger.warning("daily digest: surface ppt error=%s", surface_ppt_meta.get("error"))
-        except Exception:
-            logger.exception("daily digest: surface ppt failed")
+                surface_ppt_meta = build_surface_audit_pptx(surface_audit_report)
+                if surface_ppt_meta.get("ok") and not surface_ppt_meta.get("skipped"):
+                    surface_ppt_path = str(surface_ppt_meta.get("path") or "")
+                    logger.info(
+                        "daily digest: surface ppt built slides=%s path=%s",
+                        surface_ppt_meta.get("slides"),
+                        surface_ppt_path,
+                    )
+                elif surface_ppt_meta.get("error"):
+                    logger.warning("daily digest: surface ppt error=%s", surface_ppt_meta.get("error"))
+            except Exception:
+                logger.exception("daily digest: surface ppt failed")
+        else:
+            logger.warning(
+                "daily digest: surface ppt skipped because surface audit failed err=%s",
+                surface_audit_bundle.get("error"),
+            )
 
         if surface_ppt_path:
             slides = int(surface_ppt_meta.get("slides") or 0)
@@ -1699,15 +1801,22 @@ def run_daily_digest_email() -> None:
             )
 
         meeting_minutes_html = ""
-        try:
-            meeting_minutes_html = build_meeting_minutes_html_sync(
-                surface_audit_report=surface_audit_report
-            )
-        except Exception:
-            logger.exception("daily digest: meeting minutes failed")
+        if surface_audit_bundle.get("ok"):
+            try:
+                meeting_minutes_html = build_meeting_minutes_html_sync(
+                    surface_audit_report=surface_audit_report
+                )
+            except Exception:
+                logger.exception("daily digest: meeting minutes failed")
+                meeting_minutes_html = (
+                    '<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:14px 16px">'
+                    '<p style="margin:0;font-size:13px;color:#b91c1c">员工大会段落生成失败（见服务器日志）。</p>'
+                    "</div>"
+                )
+        else:
             meeting_minutes_html = (
-                '<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:14px 16px">'
-                '<p style="margin:0;font-size:13px;color:#b91c1c">员工大会段落生成失败（见服务器日志）。</p>'
+                '<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:14px 16px">'
+                '<p style="margin:0;font-size:13px;color:#9a3412">三端巡检未完成，员工大会摘要已跳过；日报先按降级模式发出。</p>'
                 "</div>"
             )
 
@@ -1742,6 +1851,8 @@ def run_daily_digest_email() -> None:
                 }
             )
             logger.info("daily digest sent to=%s result=%s", to_email, result)
+        if not any_delivered:
+            logger.error("daily digest: no email delivered delivery_rows=%s", delivery_rows)
 
         record_id = _persist_daily_digest_record(
             subject=subject,
@@ -1767,7 +1878,7 @@ def run_daily_digest_email() -> None:
                 body_html=body,
                 body_text=_html_to_text_excerpt(body),
                 meeting_minutes_html=meeting_minutes_html,
-                surface_audit_excerpt=surface_audit_excerpt_markdown(surface_audit_report),
+                surface_audit_excerpt=surface_audit_excerpt,
             )
         _notify_daily_digest_in_app(subject, any_delivered)
 
@@ -1807,6 +1918,16 @@ def run_daily_digest_email() -> None:
                     session.add(t)
                 session.commit()
             logger.info("daily digest: persisted %d deploy approval token(s)", len(deploy_tokens))
+        return {
+            "ok": bool(any_delivered),
+            "delivered": bool(any_delivered),
+            "record_id": int(record_id) if record_id else None,
+            "subject": subject,
+            "day": day,
+            "recipients": recipients,
+            "delivery_rows": delivery_rows,
+            "reason": "" if any_delivered else "no_email_delivered",
+        }
     except Exception:
         logger.exception("daily digest failed")
         try:
@@ -1815,6 +1936,7 @@ def run_daily_digest_email() -> None:
             record_node_run("ASM", ok=False, source="daily_digest", meta={"error": "job_failed"})
         except Exception:
             logger.exception("daily digest: time_rail failure record failed")
+        return {"ok": False, "delivered": False, "reason": "job_failed"}
     finally:
         if stop_ephemeral_after:
             try:

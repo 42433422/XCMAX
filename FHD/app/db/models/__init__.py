@@ -21,6 +21,16 @@ from app.db.models.inventory import (
     Warehouse,
 )
 from app.db.models.material import Material
+from app.db.models.miniprogram import (
+    MpAddress,
+    MpBrowseHistory,
+    MpCart,
+    MpFavorite,
+    MpFeedback,
+    MpNotification,
+    MpOrder,
+    MpOrderItem,
+)
 from app.db.models.mobile_device import MobileDeviceToken
 from app.db.models.permission import Permission, Role, role_permissions
 from app.db.models.product import Product
@@ -73,4 +83,12 @@ __all__ = [
     "ApprovalDelegation",
     "ServiceRequest",
     "ServiceBridgeConfig",
+    "MpAddress",
+    "MpBrowseHistory",
+    "MpCart",
+    "MpFavorite",
+    "MpFeedback",
+    "MpNotification",
+    "MpOrder",
+    "MpOrderItem",
 ]

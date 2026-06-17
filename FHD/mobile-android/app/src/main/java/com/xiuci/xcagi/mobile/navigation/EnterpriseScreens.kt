@@ -1,6 +1,7 @@
 package com.xiuci.xcagi.mobile.navigation
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,7 +12,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
@@ -40,9 +40,14 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.xiuci.xcagi.mobile.core.model.ListItem
 import com.xiuci.xcagi.mobile.ui.AppViewModel
+import com.xiuci.xcagi.mobile.ui.components.mobile.MobileListSkeleton
 import com.xiuci.xcagi.mobile.ui.components.mobile.MobileScaffold
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeCell
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeCellGroup
+import com.xiuci.xcagi.mobile.ui.components.mobile.WeModeCapsule
+import com.xiuci.xcagi.mobile.ui.components.mobile.WeModeOption
+import com.xiuci.xcagi.mobile.ui.components.mobile.WeSectionCaption
+import com.xiuci.xcagi.mobile.ui.theme.Spacing
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -132,6 +137,13 @@ fun ErpScreen(vm: AppViewModel) {
     var tab by remember { mutableIntStateOf(0) }
     val titles = listOf("客户", "发货", "库存")
     val title = titles[tab]
+    val modes = remember {
+        listOf(
+            WeModeOption("0", "客户"),
+            WeModeOption("1", "发货"),
+            WeModeOption("2", "库存"),
+        )
+    }
 
     fun reload() {
         when (tab) {
@@ -147,53 +159,59 @@ fun ErpScreen(vm: AppViewModel) {
     val loading by vm.listLoading.collectAsState()
     val error by vm.listError.collectAsState()
 
-    Scaffold(
-        topBar = {
-            Column {
-                TopAppBar(
-                    title = { Text("业务") },
-                    actions = {
-                        IconButton(onClick = { reload() }) {
-                            Icon(Icons.Default.Refresh, contentDescription = "刷新")
+    MobileScaffold(
+        title = "业务",
+        onRefresh = ::reload,
+        loading = loading && items.isNotEmpty(),
+        empty = false,
+        onRetry = ::reload,
+    ) {
+        Column(Modifier.fillMaxSize()) {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.background)
+                    .padding(horizontal = Spacing.lg, vertical = Spacing.sm),
+                contentAlignment = Alignment.Center,
+            ) {
+                WeModeCapsule(
+                    options = modes,
+                    selectedId = tab.toString(),
+                    onSelect = { tab = it.toIntOrNull() ?: 0 },
+                )
+            }
+            Box(Modifier.fillMaxSize()) {
+                when {
+                    loading && items.isEmpty() -> MobileListSkeleton()
+                    error != null && items.isEmpty() -> ListErrorState(error!!, ::reload)
+                    items.isEmpty() && !loading -> ListEmptyState(title, ::reload)
+                    else -> LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(vertical = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(0.dp),
+                    ) {
+                        item { WeSectionCaption("${title}记录") }
+                        item {
+                            WeCellGroup {
+                                items.forEachIndexed { idx, item ->
+                                    WeCell(
+                                        title = item.title,
+                                        subtitle = item.subtitle,
+                                        showArrow = false,
+                                        showDivider = idx < items.lastIndex,
+                                    )
+                                }
+                            }
                         }
-                    },
-                )
-                TabRow(selectedTabIndex = tab) {
-                    titles.forEachIndexed { index, label ->
-                        Tab(
-                            selected = tab == index,
-                            onClick = { tab = index },
-                            text = { Text(label) },
-                        )
                     }
                 }
-            }
-        },
-    ) { padding ->
-        Box(
-            Modifier
-                .fillMaxSize()
-                .padding(padding),
-        ) {
-            when {
-                loading && items.isEmpty() -> ListSkeleton()
-                error != null && items.isEmpty() -> ListErrorState(error!!, ::reload)
-                items.isEmpty() && !loading -> ListEmptyState(title, ::reload)
-                else -> LazyColumn(
-                    contentPadding = PaddingValues(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    items(items) { item ->
-                        EnterpriseListCard(item, null)
-                    }
+                if (loading && items.isNotEmpty()) {
+                    CircularProgressIndicator(
+                        Modifier
+                            .align(Alignment.TopCenter)
+                            .padding(8.dp),
+                    )
                 }
-            }
-            if (loading && items.isNotEmpty()) {
-                CircularProgressIndicator(
-                    Modifier
-                        .align(Alignment.TopCenter)
-                        .padding(8.dp),
-                )
             }
         }
     }
@@ -210,37 +228,16 @@ private fun EnterpriseScaffold(
     onRetry: () -> Unit,
     content: @Composable () -> Unit,
 ) {
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(title) },
-                actions = {
-                    IconButton(onClick = onRefresh) {
-                        Icon(Icons.Default.Refresh, contentDescription = "刷新")
-                    }
-                },
-            )
-        },
-    ) { padding ->
-        Box(
-            Modifier
-                .fillMaxSize()
-                .padding(padding),
-        ) {
-            when {
-                loading && isEmpty -> ListSkeleton()
-                error != null && isEmpty -> ListErrorState(error, onRetry)
-                isEmpty && !loading -> ListEmptyState(title, onRetry)
-                else -> content()
-            }
-            if (loading && !isEmpty) {
-                CircularProgressIndicator(
-                    Modifier
-                        .align(Alignment.TopCenter)
-                        .padding(8.dp),
-                )
-            }
-        }
+    MobileScaffold(
+        title = title,
+        onRefresh = onRefresh,
+        loading = loading,
+        error = error,
+        empty = isEmpty,
+        emptyMessage = "暂无${title}数据",
+        onRetry = onRetry,
+    ) {
+        content()
     }
 }
 
@@ -278,7 +275,7 @@ private fun ListSkeleton() {
         items(6) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
+                shape = MaterialTheme.shapes.medium,
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
                 ),

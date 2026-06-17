@@ -118,11 +118,16 @@ def reload_intent_service() -> None:
 def _reflex_basic_intents(message: str) -> dict[str, bool]:
     """通过 NeuroDDD 反射弧检测基础意图（问候/否定/确认/帮助/告别）"""
     rr = _reflex_arc.process(message)
+    msg_lower = (message or "").strip().lower()
     result = {
-        "is_greeting": rr.reflex_type == ReflexType.GREETING and rr.triggered,
-        "is_goodbye": rr.reflex_type == ReflexType.EMERGENCY_STOP and rr.triggered,
-        "is_help": rr.reflex_type == ReflexType.HELP and rr.triggered,
-        "is_confirmation": rr.reflex_type == ReflexType.CONFIRMATION and rr.triggered,
+        "is_greeting": (rr.reflex_type == ReflexType.GREETING and rr.triggered)
+        or any(w in msg_lower for w in ("你好", "您好", "hello", "hi", "嗨")),
+        "is_goodbye": (rr.reflex_type == ReflexType.EMERGENCY_STOP and rr.triggered)
+        or any(w in msg_lower for w in ("再见", "拜拜", "bye", "先这样")),
+        "is_help": (rr.reflex_type == ReflexType.HELP and rr.triggered)
+        or any(w in msg_lower for w in ("你能做什么", "怎么用", "帮助", "help")),
+        "is_confirmation": (rr.reflex_type == ReflexType.CONFIRMATION and rr.triggered)
+        or any(w in msg_lower for w in ("好的", "可以", "确认", "是的", "ok", "yes")),
         "is_negation_intent": rr.reflex_type == ReflexType.DENIAL and rr.triggered,
         "is_negated": rr.reflex_type == ReflexType.DENIAL and rr.triggered,
     }
@@ -150,7 +155,10 @@ def is_negation(message: str, action_keywords: list[str] | None = None) -> bool:
 def is_greeting(message: str) -> bool:
     """判断是否为问候语"""
     rr = _reflex_arc.process(message)
-    return rr.reflex_type == ReflexType.GREETING and rr.triggered
+    if rr.reflex_type == ReflexType.GREETING and rr.triggered:
+        return True
+    msg_lower = (message or "").lower()
+    return any(w in msg_lower for w in ("你好", "您好", "hello", "hi", "嗨"))
 
 
 def is_goodbye(message: str) -> bool:
@@ -174,7 +182,10 @@ def is_help_request(message: str) -> bool:
 def is_confirmation(message: str) -> bool:
     """判断是否为确认意图"""
     rr = _reflex_arc.process(message)
-    return rr.reflex_type == ReflexType.CONFIRMATION and rr.triggered
+    if rr.reflex_type == ReflexType.CONFIRMATION and rr.triggered:
+        return True
+    msg_lower = (message or "").lower()
+    return any(w in msg_lower for w in ("好的", "可以", "确认", "是的", "ok", "yes"))
 
 
 def is_negation_intent(message: str) -> bool:

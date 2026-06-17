@@ -35,6 +35,19 @@ def _make_record(**overrides):
     return m
 
 
+def _make_column_mocks(field_names):
+    """Create column mocks for sa_inspect(ShipmentRecord).columns iteration."""
+    cols = []
+    for name in field_names:
+        col = MagicMock()
+        col.name = name
+        cols.append(col)
+    return cols
+
+
+_SHIPMENT_FIELDS = ["id", "purchase_unit", "product_name", "model_number", "quantity", "created_at"]
+
+
 @pytest.fixture
 def query():
     return SQLAlchemyShipmentRecordQuery()
@@ -90,6 +103,7 @@ class TestQueryShipments:
         mock_db = MagicMock()
         mock_inspector = MagicMock()
         mock_inspector.get_table_names.return_value = ["shipment_records"]
+        mock_inspector.columns = _make_column_mocks(_SHIPMENT_FIELDS)
         mock_query = MagicMock()
         mock_db.query.return_value = mock_query
         mock_query.filter.return_value = mock_query
@@ -120,7 +134,7 @@ class TestQueryShipments:
         with (
             patch(
                 "app.infrastructure.persistence.shipment_record_query_impl.get_db",
-                side_effect=Exception("DB fail"),
+                side_effect=RuntimeError("DB fail"),
             ),
             patch(
                 "app.infrastructure.persistence.shipment_record_query_impl.resolve_purchase_unit",
@@ -145,6 +159,7 @@ class TestSearchShipments:
         mock_db = MagicMock()
         mock_inspector = MagicMock()
         mock_inspector.get_table_names.return_value = ["shipment_records"]
+        mock_inspector.columns = _make_column_mocks(_SHIPMENT_FIELDS)
         mock_query = MagicMock()
         mock_db.query.return_value = mock_query
         mock_query.filter.return_value = mock_query
@@ -165,7 +180,7 @@ class TestSearchShipments:
     def test_search_db_error(self, query):
         with patch(
             "app.infrastructure.persistence.shipment_record_query_impl.get_db",
-            side_effect=Exception("err"),
+            side_effect=RuntimeError("err"),
         ):
             result = query.search_shipments("test")
         assert result == []
@@ -184,6 +199,7 @@ class TestGetShipmentById:
         mock_db = MagicMock()
         mock_inspector = MagicMock()
         mock_inspector.get_table_names.return_value = ["shipment_records"]
+        mock_inspector.columns = _make_column_mocks(_SHIPMENT_FIELDS)
         mock_query = MagicMock()
         mock_db.query.return_value = mock_query
         mock_query.filter.return_value = mock_query
@@ -226,7 +242,7 @@ class TestGetShipmentById:
     def test_db_error(self, query):
         with patch(
             "app.infrastructure.persistence.shipment_record_query_impl.get_db",
-            side_effect=Exception("err"),
+            side_effect=RuntimeError("err"),
         ):
             result = query.get_shipment_by_id("1")
         assert result is None
@@ -245,6 +261,7 @@ class TestGetLatestShipments:
         mock_db = MagicMock()
         mock_inspector = MagicMock()
         mock_inspector.get_table_names.return_value = ["shipment_records"]
+        mock_inspector.columns = _make_column_mocks(_SHIPMENT_FIELDS)
         mock_query = MagicMock()
         mock_db.query.return_value = mock_query
         mock_query.order_by.return_value.limit.return_value.all.return_value = [_make_record()]
@@ -264,7 +281,7 @@ class TestGetLatestShipments:
     def test_db_error(self, query):
         with patch(
             "app.infrastructure.persistence.shipment_record_query_impl.get_db",
-            side_effect=Exception("err"),
+            side_effect=RuntimeError("err"),
         ):
             result = query.get_latest_shipments(5)
         assert result == []

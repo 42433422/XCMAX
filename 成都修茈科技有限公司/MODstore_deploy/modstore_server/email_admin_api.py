@@ -113,8 +113,23 @@ async def post_digest_now(_: User = Depends(_require_admin)):
     try:
         from modstore_server.daily_digest import run_daily_digest_email
 
-        run_daily_digest_email()
+        result = run_daily_digest_email()
     except Exception as e:  # noqa: BLE001
         logger.exception("digest-now failed")
         raise HTTPException(500, str(e)) from e
-    return {"ok": True, "message": "摘要邮件已触发（若 SMTP 未配置则可能静默跳过）"}
+    if not result.get("ok"):
+        raise HTTPException(
+            502,
+            {
+                "message": "摘要邮件已生成但未成功投递",
+                "reason": result.get("reason"),
+                "delivery_rows": result.get("delivery_rows") or [],
+            },
+        )
+    return {
+        "ok": True,
+        "message": "摘要邮件已触发并至少成功投递 1 封",
+        "record_id": result.get("record_id"),
+        "delivered": result.get("delivered"),
+        "delivery_rows": result.get("delivery_rows") or [],
+    }

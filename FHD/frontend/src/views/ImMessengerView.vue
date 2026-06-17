@@ -20,11 +20,33 @@
           {{ wsConnected ? '实时已连接' : '正在连接…' }}
         </div>
 
+        <div v-if="pinnedContacts.length" class="im-pinned">
+          <div class="im-section-label">固定联系人</div>
+          <ul class="im-conv-list im-conv-list--pinned">
+            <li
+              v-for="ct in pinnedContacts"
+              :key="`pinned-${ct.id}`"
+              :class="[
+                'im-conv-item',
+                'im-conv-item--pinned',
+                { active: isPinnedContactActive(ct) },
+              ]"
+              @click="startChatWith(ct)"
+            >
+              <span class="im-avatar" aria-hidden="true">{{ avatarText(ct.display_name) }}</span>
+              <div class="im-conv-main">
+                <div class="im-conv-title">{{ ct.display_name }}</div>
+                <div class="im-conv-preview">@{{ ct.username }}</div>
+              </div>
+              <i class="fa fa-thumb-tack im-pin" aria-hidden="true"></i>
+            </li>
+          </ul>
+        </div>
+
         <ul v-if="sidebarRows.length" class="im-conv-list">
-          <li v-if="enterpriseDedicatedRows.length" class="im-section-label">固定联系人</li>
           <li
             v-for="c in sidebarRows"
-            :key="c.kind === 'conversation' ? `c-${c.id}` : `contact-${c.contact.id}`"
+            :key="`c-${c.id}`"
             :class="[
               'im-conv-item',
               {
@@ -32,7 +54,7 @@
                 'im-conv-item--pinned': c.isPinned,
               },
             ]"
-            @click="c.kind === 'conversation' ? selectConversation(c.id) : startChatWith(c.contact)"
+            @click="selectConversation(c.id)"
           >
             <span class="im-avatar" aria-hidden="true">{{ avatarText(c.title) }}</span>
             <div class="im-conv-main">
@@ -42,7 +64,7 @@
             <span v-if="c.unread_count > 0" class="im-badge">{{ c.unread_count }}</span>
           </li>
         </ul>
-        <div v-else class="im-empty im-empty--list">
+        <div v-else-if="!pinnedContacts.length" class="im-empty im-empty--list">
           <i class="fa fa-comments-o" aria-hidden="true"></i>
           <p>还没有会话</p>
           <button type="button" class="im-btn im-btn--primary" :disabled="busy" @click="openContactPicker">
@@ -168,7 +190,6 @@ const scrollEl = ref<HTMLElement | null>(null);
 
 const contactPickerOpen = ref(false);
 const contacts = ref<ImContact[]>([]);
-const enterpriseDedicatedContacts = ref<ImContact[]>([]);
 const contactKeyword = ref('');
 const contactsLoading = ref(false);
 
@@ -192,49 +213,27 @@ type SidebarConversationRow = ImConversationSummary & {
   contact?: never;
 };
 
-type SidebarContactRow = {
-  kind: 'contact';
-  id: number;
-  title: string;
-  last_message_preview: string;
-  unread_count: number;
-  isPinned: boolean;
-  contact: ImContact;
-};
-
-const enterpriseDedicatedRows = computed<SidebarConversationRow[]>(() =>
-  conversations.value
-    .filter((c) => c.is_enterprise_dedicated_cs)
-    .map((c) => ({ ...c, kind: 'conversation', isPinned: true })),
+const sidebarRows = computed<SidebarConversationRow[]>(() =>
+  conversations.value.map((c) => ({
+    ...c,
+    kind: 'conversation',
+    isPinned: Boolean(c.is_enterprise_dedicated_cs),
+  })),
 );
-
-const sidebarRows = computed<Array<SidebarConversationRow | SidebarContactRow>>(() => {
-  const pinnedIds = new Set(enterpriseDedicatedRows.value.map((c) => c.title))
-  const pinnedContacts: SidebarContactRow[] = enterpriseDedicatedContacts.value
-    .filter((ct) => !pinnedIds.has(ct.display_name))
-    .map((ct) => ({
-      kind: 'contact',
-      id: -ct.id,
-      title: ct.display_name,
-      last_message_preview: '固定联系人',
-      unread_count: 0,
-      isPinned: true,
-      contact: ct,
-    }))
-  const otherRows: SidebarConversationRow[] = conversations.value
-    .filter((c) => !c.is_enterprise_dedicated_cs)
-    .map((c) => ({ ...c, kind: 'conversation', isPinned: false }))
-  return [...enterpriseDedicatedRows.value, ...pinnedContacts, ...otherRows]
-});
 
 const filteredContacts = computed(() => {
   const kw = contactKeyword.value.trim().toLowerCase();
-  if (!kw) return contacts.value;
-  return contacts.value.filter(
+  const pool = contacts.value.filter((c) => !c.is_enterprise_dedicated_cs);
+  if (!kw) return pool;
+  return pool.filter(
     (c) =>
       c.display_name.toLowerCase().includes(kw) || c.username.toLowerCase().includes(kw),
   );
 });
+
+const pinnedContacts = computed(() =>
+  contacts.value.filter((c) => c.is_enterprise_dedicated_cs),
+);
 
 function avatarText(name: string): string {
   const s = String(name || '').trim();
@@ -253,14 +252,7 @@ function formatTime(iso: string | null): string {
 async function openContactPicker(): Promise<void> {
   contactPickerOpen.value = true;
   contactKeyword.value = '';
-  contactsLoading.value = true;
-  try {
-    contacts.value = await fetchImContacts();
-  } catch (error) {
-    showAppToast(error instanceof Error ? error.message : '加载联系人失败', 'error');
-  } finally {
-    contactsLoading.value = false;
-  }
+  await loadContacts();
 }
 
 function closeContactPicker(): void {
@@ -271,7 +263,26 @@ function onContactSearch(): void {
   /* 本地过滤，filteredContacts 已响应式处理 */
 }
 
+function existingDedicatedConversation(contact: ImContact): ImConversationSummary | undefined {
+  const username = contact.username.trim().toLowerCase();
+  return conversations.value.find((c) => {
+    if (c.is_enterprise_dedicated_cs) return true;
+    return username && c.title.trim().toLowerCase() === contact.display_name.trim().toLowerCase();
+  });
+}
+
+function isPinnedContactActive(contact: ImContact): boolean {
+  const conv = existingDedicatedConversation(contact);
+  return !!conv && conv.id === activeConversationId.value;
+}
+
 async function startChatWith(contact: ImContact): Promise<void> {
+  const existing = contact.is_enterprise_dedicated_cs ? existingDedicatedConversation(contact) : undefined;
+  if (existing) {
+    await selectConversation(existing.id);
+    closeContactPicker();
+    return;
+  }
   busy.value = true;
   try {
     const conv = await createDirectConversation(contact.id);
@@ -296,6 +307,17 @@ async function resolveLocalUserId(): Promise<number | null> {
   }
 }
 
+async function loadContacts(): Promise<void> {
+  contactsLoading.value = true;
+  try {
+    contacts.value = await fetchImContacts();
+  } catch (error) {
+    showAppToast(error instanceof Error ? error.message : '加载联系人失败', 'error');
+  } finally {
+    contactsLoading.value = false;
+  }
+}
+
 async function loadConversations(): Promise<void> {
   if (!localUserId.value) return;
   busy.value = true;
@@ -309,15 +331,6 @@ async function loadConversations(): Promise<void> {
     showAppToast(error instanceof Error ? error.message : '加载会话失败', 'error');
   } finally {
     busy.value = false;
-  }
-}
-
-async function loadEnterpriseDedicatedContacts(): Promise<void> {
-  try {
-    const rows = await fetchImContacts();
-    enterpriseDedicatedContacts.value = rows.filter((c) => c.is_enterprise_dedicated_cs);
-  } catch {
-    enterpriseDedicatedContacts.value = [];
   }
 }
 
@@ -498,7 +511,7 @@ onMounted(async () => {
     applyReadState(conversation_id, user_id, last_message_id);
   });
   connectWs();
-  await Promise.all([loadEnterpriseDedicatedContacts(), loadConversations()]);
+  await Promise.all([loadContacts(), loadConversations()]);
 });
 
 onUnmounted(() => {
@@ -588,12 +601,30 @@ onUnmounted(() => {
   background: #ff7d00;
 }
 
+.im-pinned {
+  border-top: 1px solid rgba(31, 35, 41, 0.04);
+  border-bottom: 1px solid rgba(31, 35, 41, 0.06);
+  padding: 2px 0 6px;
+}
+.im-section-label {
+  padding: 6px 16px 2px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--xc-color-muted, #86909c);
+}
+
 .im-conv-list {
   list-style: none;
   margin: 0;
   padding: 4px 8px;
   overflow-y: auto;
   flex: 1;
+}
+.im-conv-list--pinned {
+  overflow: visible;
+  flex: none;
+  padding-top: 2px;
+  padding-bottom: 0;
 }
 .im-conv-item {
   display: flex;
@@ -610,6 +641,14 @@ onUnmounted(() => {
 }
 .im-conv-item.active {
   background: rgba(0, 82, 217, 0.08);
+}
+.im-conv-item--pinned {
+  background: rgba(0, 82, 217, 0.05);
+}
+.im-pin {
+  flex: none;
+  color: var(--xc-color-primary, #0052d9);
+  font-size: 12px;
 }
 .im-conv-main {
   min-width: 0;

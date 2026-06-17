@@ -4,12 +4,23 @@
 # 另开终端：export $(grep -v '^#' FHD/XCAGI/.env.local-market | xargs) && 启动 FHD API
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-FHD_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-XCMAX_ROOT="$(cd "${FHD_ROOT}/.." && pwd)"
+SCRIPT_DIR="${MODSTORE_DAILY_SCRIPT_DIR_OVERRIDE:-$(cd "$(dirname "$0")" && pwd)}"
+FHD_ROOT="${MODSTORE_DAILY_FHD_ROOT:-$(cd "${SCRIPT_DIR}/../.." && pwd)}"
+XCMAX_ROOT="${MODSTORE_DAILY_XCMAX_ROOT:-$(cd "${FHD_ROOT}/.." && pwd)}"
+MODSTORE_RUNTIME_ROOT="${MODSTORE_RUNTIME_ROOT:-$HOME/XCMAX-runtime/modstore-daily}"
 _WS_MODSTORE="${XCMAX_ROOT}/成都修茈科技有限公司/MODstore_deploy"
 _ARCHIVE_MODSTORE="${XCMAX_ARCHIVE_ROOT:-$HOME/XCMAX-archives}/m0-fhd-bulk-20260605/成都修茈科技有限公司/MODstore_deploy"
-if [[ -d "${_WS_MODSTORE}/modstore_server" ]]; then
+_RUNTIME_MODSTORE="${MODSTORE_RUNTIME_ROOT}/MODstore_deploy"
+_RUNTIME_PACKAGES="${MODSTORE_RUNTIME_ROOT}/packages"
+_RUNTIME_STATE_ROOT_DEFAULT="${HOME}/Library/Application Support/XCMAX/modstore-daily"
+MODSTORE_RUNTIME_STATE_ROOT="${MODSTORE_RUNTIME_STATE_ROOT:-${_RUNTIME_STATE_ROOT_DEFAULT}}"
+MODSTORE_RUNTIME_DB_PATH="${MODSTORE_RUNTIME_DB_PATH:-${MODSTORE_RUNTIME_STATE_ROOT}/modstore.db}"
+MODSTORE_RUNTIME_DIR="${MODSTORE_RUNTIME_DIR:-${MODSTORE_RUNTIME_STATE_ROOT}/runtime}"
+MODSTORE_EVENT_OUTBOX_PATH="${MODSTORE_EVENT_OUTBOX_PATH:-${MODSTORE_RUNTIME_STATE_ROOT}/event_outbox.jsonl}"
+MODSTORE_WEBHOOK_EVENTS_DIR="${MODSTORE_WEBHOOK_EVENTS_DIR:-${MODSTORE_RUNTIME_STATE_ROOT}/webhook_events}"
+if [[ -d "${_RUNTIME_MODSTORE}/modstore_server" ]]; then
+  MODSTORE_DEPLOY_ROOT="${MODSTORE_DEPLOY_ROOT:-${_RUNTIME_MODSTORE}}"
+elif [[ -d "${_WS_MODSTORE}/modstore_server" ]]; then
   MODSTORE_DEPLOY_ROOT="${MODSTORE_DEPLOY_ROOT:-${_WS_MODSTORE}}"
 else
   MODSTORE_DEPLOY_ROOT="${MODSTORE_DEPLOY_ROOT:-${_ARCHIVE_MODSTORE}}"
@@ -69,16 +80,33 @@ _load_modstore_env_file() {
     [[ -n "$k" ]] && export "$k=$v"
   done < "$f"
 }
-_load_modstore_env_file "${MODSTORE_DEPLOY_ROOT}/.env"
-_load_modstore_env_file "${MODSTORE_DEPLOY_ROOT}/.env.production"
-_load_modstore_env_file "${MODSTORE_DEPLOY_ROOT}/.env.production.synced"
-_load_modstore_env_file "${MODSTORE_DEPLOY_ROOT}/.env.daily-closure"
-_load_modstore_env_file "${MODSTORE_DEPLOY_ROOT}/.env.local"
+SNAPSHOT_LOADED=0
+if [[ -n "${MODSTORE_DAILY_ENV_SNAPSHOT:-}" && -f "${MODSTORE_DAILY_ENV_SNAPSHOT}" ]]; then
+  _load_modstore_env_file "${MODSTORE_DAILY_ENV_SNAPSHOT}"
+  SNAPSHOT_LOADED=1
+fi
+if [[ "${SNAPSHOT_LOADED}" != "1" && "${MODSTORE_DAILY_SKIP_ENV_FILES:-0}" != "1" ]]; then
+  _load_modstore_env_file "${MODSTORE_DEPLOY_ROOT}/.env"
+  _load_modstore_env_file "${MODSTORE_DEPLOY_ROOT}/.env.production"
+  _load_modstore_env_file "${MODSTORE_DEPLOY_ROOT}/.env.production.synced"
+  _load_modstore_env_file "${MODSTORE_DEPLOY_ROOT}/.env.daily-closure"
+  _load_modstore_env_file "${MODSTORE_DEPLOY_ROOT}/.env.local"
+fi
+if [[ "${MODSTORE_DEPLOY_ROOT}" == "${_RUNTIME_MODSTORE}" ]]; then
+  case "${MODSTORE_DB_PATH:-}" in
+    ""|*"/Desktop/"*|*"/XCMAX/"*|"${_RUNTIME_MODSTORE}/modstore_server/modstore.db")
+      export MODSTORE_DB_PATH="${MODSTORE_RUNTIME_DB_PATH}"
+      ;;
+  esac
+fi
 # 本地 Mac 日更必须用 SQLite；生产同步 env 里的 DATABASE_URL 仅服务器有效
 if [[ -n "${MODSTORE_DB_PATH:-}" ]]; then
+  mkdir -p "${MODSTORE_RUNTIME_STATE_ROOT}" "${MODSTORE_RUNTIME_DIR}" "${MODSTORE_WEBHOOK_EVENTS_DIR}" "$(dirname "${MODSTORE_DB_PATH}")"
   export MODSTORE_DB_PATH
-  unset DATABASE_URL DATABASE_USER DATABASE_PASSWORD DATABASE_HOST DATABASE_PORT DATABASE_NAME
+  export DATABASE_URL="sqlite:////${MODSTORE_DB_PATH#/}"
+  unset DATABASE_USER DATABASE_PASSWORD DATABASE_HOST DATABASE_PORT DATABASE_NAME
 fi
+export MODSTORE_RUNTIME_STATE_ROOT MODSTORE_RUNTIME_DB_PATH MODSTORE_RUNTIME_DIR MODSTORE_EVENT_OUTBOX_PATH MODSTORE_WEBHOOK_EVENTS_DIR
 # 本地无 Redis 时关闭 Streams 双写，避免 incident_bus 刷 Connection refused
 export MODSTORE_EVENT_STREAM_ENABLED="${MODSTORE_EVENT_STREAM_ENABLED:-0}"
 if [[ "${MODSTORE_EVENT_STREAM_ENABLED}" == "0" ]]; then
@@ -89,9 +117,11 @@ export XCAGI_MARKET_BASE_URL="${XCAGI_MARKET_BASE_URL:-http://127.0.0.1:${MODSTO
 export MODSTORE_LOCAL_BASE_URL="${MODSTORE_LOCAL_BASE_URL:-http://127.0.0.1:${MODSTORE_PORT}}"
 export MODSTORE_DIGEST_BASE_URL="${MODSTORE_DIGEST_BASE_URL:-http://127.0.0.1:${MODSTORE_PORT}}"
 # 真 SMTP 授权码（覆盖 .env.production 里的 your-* 占位符）；勿提交 git
-_load_modstore_env_file "${MODSTORE_DEPLOY_ROOT}/.env.smtp.local"
-_load_modstore_env_file "${FHD_ROOT}/XCAGI/.env.smtp.local"
-_load_modstore_env_file "${FHD_ROOT}/XCAGI/.env.cursor.local"
+if [[ "${SNAPSHOT_LOADED}" != "1" && "${MODSTORE_DAILY_SKIP_ENV_FILES:-0}" != "1" ]]; then
+  _load_modstore_env_file "${MODSTORE_DEPLOY_ROOT}/.env.smtp.local"
+  _load_modstore_env_file "${FHD_ROOT}/XCAGI/.env.smtp.local"
+  _load_modstore_env_file "${FHD_ROOT}/XCAGI/.env.cursor.local"
+fi
 export MODSTORE_EMAIL_DEBUG="${MODSTORE_EMAIL_DEBUG:-0}"
 if [[ "${MODSTORE_EMAIL_DEBUG}" == "0" && -z "${MODSTORE_SMTP_PASSWORD:-}" ]]; then
   log "WARN: MODSTORE_SMTP_PASSWORD 未设 → 运行: bash ${MODSTORE_DEPLOY_ROOT}/scripts/pull_prod_env_for_local.sh"
@@ -152,14 +182,37 @@ export SURFACE_AUDIT_API_URL="http://127.0.0.1:5102"
 export SURFACE_AUDIT_ANDROID_FHD_HOST="10.0.2.2:5102"
 ADB_BIN="${FHD_ROOT}/mobile-android/.toolchain/android-sdk/platform-tools/adb"
 [[ -x "${ADB_BIN}" ]] || ADB_BIN="adb"
+_adb_devices_has_online_target() {
+  "${PY}" - "$1" <<'PY'
+import re
+import subprocess
+import sys
+
+adb = sys.argv[1]
+try:
+    out = subprocess.run(
+        [adb, "devices"],
+        capture_output=True,
+        text=True,
+        timeout=8,
+        check=False,
+    ).stdout
+except Exception:
+    sys.exit(2)
+for line in out.splitlines():
+    if re.search(r"\sdevice$", line):
+        sys.exit(0)
+sys.exit(1)
+PY
+}
 if [[ "${MODSTORE_SURFACE_AUDIT_ANDROID}" != "0" ]]; then
-  if ! "${ADB_BIN}" devices 2>/dev/null | grep -qE '[[:space:]]device$'; then
+  if ! _adb_devices_has_online_target "${ADB_BIN}"; then
     if [[ "${XCAGI_AUTO_START_EMULATOR:-1}" == "1" && -x "${FHD_ROOT}/mobile-android/.toolchain/android-sdk/emulator/emulator" ]]; then
       log "P-App 截图：无在线模拟器，尝试启动 …"
       bash "${FHD_ROOT}/scripts/dev/start_android_emulator.sh" || log "WARN: 模拟器启动失败，digest P-App 可能失败"
     fi
   fi
-  if "${ADB_BIN}" devices 2>/dev/null | grep -qE '[[:space:]]device$'; then
+  if _adb_devices_has_online_target "${ADB_BIN}"; then
     export SURFACE_AUDIT_ANDROID_ADB="${ADB_BIN}"
     log "P-App 截图：adb 模拟器/真机已就绪"
   else
@@ -183,7 +236,14 @@ export MODSTORE_TLS_CERT_PATHS="${MODSTORE_TLS_CERT_PATHS:-}"
 # vibe_edit / Cursor SDK 工作区：MODstore_deploy 上级目录（含 vibe-coding/）
 export MODSTORE_TENANT_WORKSPACE_ROOT="${MODSTORE_TENANT_WORKSPACE_ROOT:-$(cd "${MODSTORE_DEPLOY_ROOT}/.." && pwd)}"
 export VIBE_CODING_ROOT="${VIBE_CODING_ROOT:-${MODSTORE_TENANT_WORKSPACE_ROOT}/vibe-coding}"
-export PYTHONPATH="${MODSTORE_DEPLOY_ROOT}${PYTHONPATH:+:${PYTHONPATH}}"
+EXTRA_PYTHONPATH="${MODSTORE_DEPLOY_ROOT}"
+if [[ -d "${_RUNTIME_PACKAGES}" ]]; then
+  for pkg_dir in "${_RUNTIME_PACKAGES}"/*; do
+    [[ -d "${pkg_dir}" ]] || continue
+    EXTRA_PYTHONPATH="${EXTRA_PYTHONPATH}:${pkg_dir}"
+  done
+fi
+export PYTHONPATH="${EXTRA_PYTHONPATH}${PYTHONPATH:+:${PYTHONPATH}}"
 # 强制 UTF-8 运行时：否则非 UTF-8 locale 下读取 CJK 文件名（截图/PPT）会 UnicodeEncodeError
 export PYTHONUTF8=1
 export LANG="${LANG:-en_US.UTF-8}"
@@ -197,13 +257,62 @@ fi
 
 log "MODstore 全量日更栈 → http://127.0.0.1:${MODSTORE_PORT}"
 log "部署根 ${MODSTORE_DEPLOY_ROOT}"
+log "运行时根 ${MODSTORE_RUNTIME_ROOT}"
+log "状态根 ${MODSTORE_RUNTIME_STATE_ROOT}"
+log "数据库 ${MODSTORE_DB_PATH:-<unset>}"
 log "Monorepo ${XCMAX_MONOREPO_ROOT}"
 log "后台任务 MODSTORE_RUN_BACKGROUND_JOBS=${MODSTORE_RUN_BACKGROUND_JOBS}"
 
+if [[ "${MODSTORE_DAILY_PREFLIGHT:-0}" == "1" ]]; then
+  cd "${MODSTORE_DEPLOY_ROOT}"
+  "${PY}" - <<'PY'
+import os
+import sqlite3
+import tempfile
+from pathlib import Path
+
+from sqlalchemy import create_engine
+
+db = Path(os.environ["MODSTORE_DB_PATH"]).expanduser()
+url = os.environ.get("DATABASE_URL") or f"sqlite:///{db}"
+print(f"[daily-local] preflight cwd={Path.cwd()}")
+print(f"[daily-local] preflight uid={os.getuid()} gid={os.getgid()} home={os.environ.get('HOME')}")
+print(f"[daily-local] preflight tmp={tempfile.gettempdir()} env_tmp={os.environ.get('TMPDIR')}")
+print(f"[daily-local] preflight db={db}")
+print(f"[daily-local] preflight db_parent={db.parent} parent_exists={db.parent.exists()} parent_w={os.access(db.parent, os.W_OK)}")
+print(f"[daily-local] preflight db_exists={db.exists()} db_w={os.access(db, os.W_OK) if db.exists() else 'missing'}")
+try:
+    db.parent.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(str(db)) as conn:
+        conn.execute("select 1").fetchone()
+    print("[daily-local] preflight sqlite3=ok")
+except Exception as exc:
+    print(f"[daily-local] preflight sqlite3=FAIL {type(exc).__name__}: {exc}")
+    raise
+try:
+    engine = create_engine(url, echo=False)
+    with engine.connect() as conn:
+        conn.exec_driver_sql("select 1").scalar()
+    print(f"[daily-local] preflight sqlalchemy=ok url={url}")
+except Exception as exc:
+    print(f"[daily-local] preflight sqlalchemy=FAIL {type(exc).__name__}: {exc} url={url}")
+    raise
+try:
+    from modstore_server.db.base import database_url, default_db_path, init_db
+    print(f"[daily-local] preflight base.default_db_path={default_db_path()}")
+    print(f"[daily-local] preflight base.database_url={database_url()}")
+    init_db()
+    print("[daily-local] preflight init_db=ok")
+except Exception as exc:
+    print(f"[daily-local] preflight init_db=FAIL {type(exc).__name__}: {exc}")
+    raise
+PY
+fi
+
 if curl -sf "http://127.0.0.1:${MODSTORE_PORT}/api/health" >/dev/null 2>&1; then
   sched="$(curl -sf "http://127.0.0.1:${MODSTORE_PORT}/api/health" | "${PY}" -c "import sys,json; print(json.load(sys.stdin).get('scheduler_running'))" 2>/dev/null || echo '?')"
-  if [[ "${MODSTORE_DAILY_FOREGROUND:-0}" != "1" && "${MODSTORE_DAILY_FORCE_RESTART:-0}" != "1" && ( "${sched}" == "True" || "${sched}" == "true" ) ]]; then
-    log "MODstore 已在 :${MODSTORE_PORT} 运行且调度器已开 — 跳过重启（改配置后设 MODSTORE_DAILY_FORCE_RESTART=1）"
+  if [[ "${MODSTORE_DAILY_FORCE_RESTART:-0}" != "1" && ( "${sched}" == "True" || "${sched}" == "true" ) ]]; then
+    log "MODstore 已在 :${MODSTORE_PORT} 运行且调度器已开 — 跳过重启（foreground=${MODSTORE_DAILY_FOREGROUND:-0}；改配置后设 MODSTORE_DAILY_FORCE_RESTART=1）"
     exit 0
   fi
   log "检测到 :${MODSTORE_PORT} 需重启为全量日更实例（scheduler=${sched} foreground=${MODSTORE_DAILY_FOREGROUND:-0}）"
@@ -220,16 +329,21 @@ if [[ "${MODSTORE_DAILY_FOREGROUND:-0}" == "1" ]]; then
   exec "${PY}" -m uvicorn modstore_server.app:app --host 127.0.0.1 --port "${MODSTORE_PORT}"
 fi
 
+DAEMON_LOG_DIR="${MODSTORE_DAILY_DAEMON_LOG_DIR:-${HOME}/Library/Logs/XCMAX}"
+mkdir -p "${DAEMON_LOG_DIR}"
+DAEMON_LOG_PATH="${DAEMON_LOG_DIR}/modstore-daily.daemon.log"
 (
   cd "${MODSTORE_DEPLOY_ROOT}"
-  exec "${PY}" -m uvicorn modstore_server.app:app --host 127.0.0.1 --port "${MODSTORE_PORT}"
+  exec nohup "${PY}" -m uvicorn modstore_server.app:app --host 127.0.0.1 --port "${MODSTORE_PORT}" >>"${DAEMON_LOG_PATH}" 2>&1 < /dev/null
 ) &
 UV_PID=$!
+disown "${UV_PID}" 2>/dev/null || true
 
 for _ in $(seq 1 45); do
   if curl -sf "http://127.0.0.1:${MODSTORE_PORT}/api/health" >/dev/null 2>&1; then
     sched="$(curl -sf "http://127.0.0.1:${MODSTORE_PORT}/api/health" | "${PY}" -c "import sys,json; print(json.load(sys.stdin).get('scheduler_running'))" 2>/dev/null || echo '')"
     log "MODstore 就绪 pid=${UV_PID} scheduler_running=${sched}"
+    log "守护日志 ${DAEMON_LOG_PATH}"
     log "手动触发摘要: curl -X POST http://127.0.0.1:5000/api/xcmax/admin/email/digest-now （需 FHD 管理员会话）"
     log "或直接 MODstore: 登录 admin 后 POST /api/admin/email/digest-now"
     exit 0

@@ -894,10 +894,11 @@ export function useKittenAnalyzer() {
               sseError = String(ev.message || '流式接口错误')
             } else if (ev.type === 'requires_token') {
               const tokenName = ev.token_name || ''
-              const humanLabel = String(tokenName || '').toUpperCase().includes('READ')
-                ? '一级数据库查看令牌'
-                : '二级数据库写入令牌'
-              streamPlain += `\n[需要${humanLabel}：${ev.token_description || tokenName || 'DB_TOKEN'}]\n`
+              const tokenRaw = `${String(tokenName || '')} ${String(ev.token_description || '')}`.toUpperCase()
+              if (/DB_(READ|WRITE)_TOKEN|数据库.*令牌|一级|二级|写入令牌|查看令牌/.test(tokenRaw)) {
+                return
+              }
+              streamPlain += `\n[需要授权：${ev.token_description || tokenName || '授权信息'}]\n`
               messages.value[aiIdx].content = textToHtml(streamPlain)
               scrollChatToBottom()
             }

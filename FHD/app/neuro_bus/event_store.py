@@ -383,7 +383,7 @@ class EventStore:
                 "event_type": e.event.event_type,
                 "event_id": e.event.metadata.event_id,
                 "source": e.event.metadata.source,
-                "correlation_id": e.event.metadata.correlation_id,
+                "correlation_id": e.event.metadata.trace_id,
                 "payload_keys": list(e.event.payload.keys()),
             }
             for e in events
