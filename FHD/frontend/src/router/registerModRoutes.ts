@@ -46,7 +46,13 @@ const modRouteLoaders = modRouteGlob;
 
 function browserFullPath(): string | null {
   if (typeof window === 'undefined' || !window.location) return null;
-  const path = window.location.pathname || '/';
+  const base = String(import.meta.env.BASE_URL || '/').replace(/\/$/, '');
+  let path = window.location.pathname || '/';
+  if (base && base !== '/' && path.startsWith(`${base}/`)) {
+    path = path.slice(base.length) || '/';
+  } else if (base && base !== '/' && path === base) {
+    path = '/';
+  }
   return `${path}${window.location.search || ''}${window.location.hash || ''}`;
 }
 
