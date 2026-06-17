@@ -7,9 +7,13 @@ set -euo pipefail
 SCRIPT_DIR="${MODSTORE_DAILY_SCRIPT_DIR_OVERRIDE:-$(cd "$(dirname "$0")" && pwd)}"
 FHD_ROOT="${MODSTORE_DAILY_FHD_ROOT:-$(cd "${SCRIPT_DIR}/../.." && pwd)}"
 XCMAX_ROOT="${MODSTORE_DAILY_XCMAX_ROOT:-$(cd "${FHD_ROOT}/.." && pwd)}"
+MODSTORE_RUNTIME_ROOT="${MODSTORE_RUNTIME_ROOT:-$HOME/XCMAX-runtime/modstore-daily}"
 _WS_MODSTORE="${XCMAX_ROOT}/成都修茈科技有限公司/MODstore_deploy"
 _ARCHIVE_MODSTORE="${XCMAX_ARCHIVE_ROOT:-$HOME/XCMAX-archives}/m0-fhd-bulk-20260605/成都修茈科技有限公司/MODstore_deploy"
-if [[ -d "${_WS_MODSTORE}/modstore_server" ]]; then
+_RUNTIME_MODSTORE="${MODSTORE_RUNTIME_ROOT}/MODstore_deploy"
+if [[ -d "${_RUNTIME_MODSTORE}/modstore_server" ]]; then
+  MODSTORE_DEPLOY_ROOT="${MODSTORE_DEPLOY_ROOT:-${_RUNTIME_MODSTORE}}"
+elif [[ -d "${_WS_MODSTORE}/modstore_server" ]]; then
   MODSTORE_DEPLOY_ROOT="${MODSTORE_DEPLOY_ROOT:-${_WS_MODSTORE}}"
 else
   MODSTORE_DEPLOY_ROOT="${MODSTORE_DEPLOY_ROOT:-${_ARCHIVE_MODSTORE}}"
@@ -229,6 +233,7 @@ fi
 
 log "MODstore 全量日更栈 → http://127.0.0.1:${MODSTORE_PORT}"
 log "部署根 ${MODSTORE_DEPLOY_ROOT}"
+log "运行时根 ${MODSTORE_RUNTIME_ROOT}"
 log "Monorepo ${XCMAX_MONOREPO_ROOT}"
 log "后台任务 MODSTORE_RUN_BACKGROUND_JOBS=${MODSTORE_RUN_BACKGROUND_JOBS}"
 
@@ -252,7 +257,7 @@ if [[ "${MODSTORE_DAILY_FOREGROUND:-0}" == "1" ]]; then
   exec "${PY}" -m uvicorn modstore_server.app:app --host 127.0.0.1 --port "${MODSTORE_PORT}"
 fi
 
-DAEMON_LOG_DIR="${MODSTORE_DAILY_DAEMON_LOG_DIR:-${FHD_ROOT}/logs}"
+DAEMON_LOG_DIR="${MODSTORE_DAILY_DAEMON_LOG_DIR:-${HOME}/Library/Logs/XCMAX}"
 mkdir -p "${DAEMON_LOG_DIR}"
 DAEMON_LOG_PATH="${DAEMON_LOG_DIR}/modstore-daily.daemon.log"
 (
