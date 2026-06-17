@@ -104,6 +104,7 @@ vi.mock('@/constants/platformShellMode', () => ({
 }));
 
 vi.mock('@/constants/genericModPack', () => ({
+  ACCOUNT_CUSTOM_MOD_IDS: ['taiyangniao-pro', 'sz-qsm-pro'],
   CLIENT_PRIMARY_ERP_MOD_ID: 'attendance-industry',
   hasInstalledClientPrimaryErpMod: () => false,
   isAuxEmployeePackModId: (id: string) => id.startsWith('xcagi-aux-'),
@@ -871,7 +872,7 @@ describe('mods store – applyEntitledActiveMod', () => {
     expect(store.activeModId).toBe('');
   });
 
-  it('does nothing when entitledModIds is empty and not sunbird', async () => {
+  it('does nothing when entitledModIds is empty', async () => {
     const store = useModsStore();
     store.mods = sampleMods as never[];
     await store.applyEntitledActiveMod([]);
@@ -886,7 +887,20 @@ describe('mods store – applyEntitledActiveMod', () => {
     expect(store.activeModId).toBe('attendance-industry');
   });
 
-  it('selects taiyangniao-pro for SUNBIRD even when attendance entitlement is also present', async () => {
+  it('does not infer account custom mod from canonical industry entitlement', async () => {
+    const store = useModsStore();
+    store.mods = sampleMods as never[];
+    mockApiFetch.mockResolvedValue(makeModsResponse(sampleMods));
+
+    await store.applyEntitledActiveMod(['attendance-industry'], {
+      force: true,
+      accountUsername: 'SUNBIRD',
+    });
+
+    expect(store.activeModId).toBe('attendance-industry');
+  });
+
+  it('prefers account custom mod when its explicit entitlement is present', async () => {
     const store = useModsStore();
     store.mods = sampleMods as never[];
     mockApiFetch.mockResolvedValue(makeModsResponse(sampleMods));

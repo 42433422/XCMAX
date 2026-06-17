@@ -623,27 +623,6 @@ onMounted(async () => {
       /* ignore */
     }
   }
-  try {
-    const {
-      augmentEntitledModIdsForAccount,
-      isSunbirdAccountUsername,
-      SUNBIRD_CLIENT_MOD_ID,
-    } = await import('@/constants/accountModBinding')
-    const uname = accountUsername.value.trim()
-    if (
-      uname &&
-      isSunbirdAccountUsername(uname) &&
-      String(modsStore.activeModId || '').trim() !== SUNBIRD_CLIENT_MOD_ID
-    ) {
-      await modsStore.initialize(true, {
-        entitledModIds: augmentEntitledModIdsForAccount(uname, []),
-        forceFromEntitlements: true,
-        accountUsername: uname,
-      })
-    }
-  } catch {
-    /* ignore */
-  }
   if (!industryStore.isLoaded) {
     try {
       await industryStore.initialize()

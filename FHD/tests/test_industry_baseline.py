@@ -105,9 +105,8 @@ def test_industry_baseline_coating_with_entitled_custom():
 
 def test_onboarding_industry_catalog_neutral_names():
     cat = build_onboarding_industry_catalog()
-    assert cat["open_industry_ids"] == ["涂料", "考勤"]
+    assert cat["open_industry_ids"] == ["涂料"]
     names = {p["industry_id"]: p["product_name"] for p in cat["open_packages"]}
-    assert names["考勤"] == "考勤行业包"
     assert names["涂料"] == "涂料行业包"
     assert "太阳鸟" not in str(cat)
     assert "奇士美" not in str(cat)
@@ -116,6 +115,8 @@ def test_onboarding_industry_catalog_neutral_names():
     assert "批发" in paint["scenario"]
     assert paint["selectable"] is True
     assert cat["preview_packages"]
+    preview_names = {p["industry_id"]: p["product_name"] for p in cat["preview_packages"]}
+    assert preview_names["考勤"] == "考勤行业包"
     locked = next(p for p in cat["preview_packages"] if p["industry_id"] == "通用")
     assert locked["selectable"] is False
     assert locked["name"] == "通用"
@@ -142,6 +143,28 @@ def test_industry_baseline_industry_package_installed():
     assert "考勤" in pkg["hint"] or "排班" in pkg["hint"]
     assert data["custom_mod_ids"] == ["attendance-industry"]
     assert data["industry_mod_ready"] is True
+
+
+def test_industry_baseline_canonical_industry_does_not_grant_account_custom():
+    data = build_industry_baseline_plan(
+        "考勤",
+        installed_mod_ids=["attendance-industry"],
+        entitled_mod_ids={"attendance-industry"},
+    )
+
+    assert data["account_custom_mod_ids"] == []
+    assert all(g["id"] != "account_custom" for g in data["groups"])
+
+
+def test_industry_baseline_legacy_custom_entitlement_adds_account_custom():
+    data = build_industry_baseline_plan(
+        "考勤",
+        installed_mod_ids=["attendance-industry"],
+        entitled_mod_ids={"taiyangniao-pro"},
+    )
+
+    assert "taiyangniao-pro" in data["account_custom_mod_ids"]
+    assert any(g["id"] == "account_custom" for g in data["groups"])
 
 
 def test_onboarding_catalog_filtered_attendance_only():

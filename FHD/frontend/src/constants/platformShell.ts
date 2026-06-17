@@ -52,6 +52,7 @@ export interface IndustryBaselineItem {
   required: boolean
   installed: boolean
   show_mod_id?: boolean
+  delivery_seed_package?: AccountDeliverySeedPackage
 }
 
 export interface IndustryBaselineGroup {
@@ -64,6 +65,15 @@ export interface IndustryBaselineGroup {
 export interface IndustryPackageRef {
   mod_id: string
   product_name: string
+}
+
+export interface AccountDeliverySeedPackage {
+  mod_id?: string
+  pkg_id: string
+  version?: string
+  artifact?: string
+  apply?: string
+  description?: string
 }
 
 export interface OnboardingIndustryPackage {
@@ -101,6 +111,7 @@ export interface IndustryBaselinePlan {
   missing_industry_mod_ids: string[]
   account_custom_mod_ids?: string[]
   missing_account_custom_mod_ids?: string[]
+  account_delivery_seed_packages?: AccountDeliverySeedPackage[]
   custom_employee_extension_mod_ids?: string[]
   host_baseline_ready?: boolean
   account_custom_ready?: boolean

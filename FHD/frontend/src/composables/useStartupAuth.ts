@@ -91,18 +91,11 @@ export function useStartupAuth(options: {
     }
     const authResult = await ensureStartupAuthenticated()
     if (!authResult.ok) return false
-    let sunbirdAccount = false
-    try {
-      const { isSunbirdAccountUsername } = await import('@/constants/accountModBinding')
-      sunbirdAccount = isSunbirdAccountUsername(authResult.accountUsername)
-    } catch {
-      /* ignore */
-    }
-    if (!isEnterpriseEdition(sku) && !sunbirdAccount) return true
+    if (!isEnterpriseEdition(sku)) return true
     try {
       await modsStore.initialize(true, {
         entitledModIds: authResult.entitledModIds,
-        forceFromEntitlements: sunbirdAccount || authResult.entitledModIds.length > 0,
+        forceFromEntitlements: authResult.entitledModIds.length > 0,
         accountUsername: authResult.accountUsername,
       })
     } catch (e) {

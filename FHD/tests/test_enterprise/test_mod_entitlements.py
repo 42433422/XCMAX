@@ -384,6 +384,21 @@ class TestRefreshSessionEntitlementsFromMarket:
             )
             assert "mod-1" in result
 
+    @pytest.mark.asyncio
+    async def test_preserves_market_user_id_from_session_meta(self):
+        with patch("app.application.session_account_meta.load_session_account_meta", return_value={
+                 "account_kind": "enterprise", "market_user_id": 29
+             }), \
+             patch("app.fastapi_routes.market_account._proxy_json", new_callable=AsyncMock) as mock_proxy, \
+             patch("app.enterprise.mod_entitlements.is_client_mod_id", return_value=True), \
+             patch("app.enterprise.mod_entitlements._augment_entitled_for_username", side_effect=lambda u, s: s):
+            mock_proxy.return_value = {"mod_ids": ["attendance-industry"]}
+            result = await mod_entitlements.refresh_session_entitlements_from_market(
+                market_token="tok", session_id="sid", market_username="SUNBIRD"
+            )
+            assert result == {"attendance-industry"}
+            assert mod_entitlements.get_cached_market_identity() == (29, "SUNBIRD")
+
 
 # ---------------------------------------------------------------------------
 # persist / restore entitlements
@@ -396,12 +411,24 @@ class TestPersistEntitlementsToSessionRow:
         mod_entitlements.persist_entitlements_to_session_row("", set())
 
     def test_persist_calls_db(self):
-        with patch("app.db.session.get_db") as mock_get_db:
+        with patch("app.db.session.get_host_db") as mock_get_db:
             mock_db = MagicMock()
             mock_get_db.return_value.__enter__ = MagicMock(return_value=mock_db)
             mock_get_db.return_value.__exit__ = MagicMock(return_value=False)
             mock_db.query.return_value.filter.return_value.first.return_value = MagicMock()
             mod_entitlements.persist_entitlements_to_session_row("sid-1", {"mod-a"})
+            assert mock_db.commit.called
+
+    def test_persist_does_not_clear_existing_market_user_id_when_cache_empty(self):
+        row = MagicMock()
+        row.market_user_id = 29
+        with patch("app.db.session.get_host_db") as mock_get_db:
+            mock_db = MagicMock()
+            mock_get_db.return_value.__enter__ = MagicMock(return_value=mock_db)
+            mock_get_db.return_value.__exit__ = MagicMock(return_value=False)
+            mock_db.query.return_value.filter.return_value.first.return_value = row
+            mod_entitlements.persist_entitlements_to_session_row("sid-1", {"attendance-industry"})
+            assert row.market_user_id == 29
             assert mock_db.commit.called
 
 
@@ -415,7 +442,7 @@ class TestRestoreEntitlementsFromSessionRow:
 
     def test_session_not_found(self):
         with patch("app.enterprise.mod_entitlements.enterprise_mod_filter_active", return_value=True), \
-             patch("app.db.session.get_db") as mock_get_db:
+             patch("app.db.session.get_host_db") as mock_get_db:
             mock_db = MagicMock()
             mock_get_db.return_value.__enter__ = MagicMock(return_value=mock_db)
             mock_get_db.return_value.__exit__ = MagicMock(return_value=False)

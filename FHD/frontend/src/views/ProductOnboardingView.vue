@@ -280,7 +280,7 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { installHostFoundation, installMod, installIndustrySeed } from '@/api/modStore'
+import { installHostFoundation, installMod, installIndustrySeed, installCustomerDeliverySeed } from '@/api/modStore'
 import { autoOnboardWorkflowEmployeesFromMods } from '@/utils/workflowEmployeeOnboard'
 import { useModsStore } from '@/stores/mods'
 import { readBuildEdition } from '@/constants/genericModPack'
@@ -597,6 +597,19 @@ async function runBootstrap() {
       } catch (err) {
         installErrors.push(
           `${modId}：${err instanceof Error ? err.message : '安装失败'}`,
+        )
+      }
+    }
+    const customSeedIds = [...(baselinePlan.value?.account_custom_mod_ids || [])]
+    for (const modId of customSeedIds) {
+      try {
+        const ir = await installCustomerDeliverySeed(modId, pickedIndustryId.value)
+        if (!ir.success) {
+          installErrors.push(`${modId} 交付数据：${ir.message || '安装失败'}`)
+        }
+      } catch (err) {
+        installErrors.push(
+          `${modId} 交付数据：${err instanceof Error ? err.message : '安装失败'}`,
         )
       }
     }

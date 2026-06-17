@@ -146,6 +146,16 @@ def apply_sunbird_roster_seed_if_needed(data_root: Path | None = None) -> bool:
         return False
 
     try:
+        from app.db.init_db import ensure_sqlite_enterprise_business_bootstrap
+
+        ensure_sqlite_enterprise_business_bootstrap(
+            database_url=os.environ.get("DATABASE_URL") or None,
+            swallow_errors=True,
+        )
+    except RECOVERABLE_ERRORS as exc:
+        logger.warning("太阳鸟花名册导入前补表跳过: %s", exc)
+
+    try:
         from app.db.models.customer import Customer
         from app.db.models.product import Product
         from app.db.session import get_db

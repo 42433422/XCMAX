@@ -1,4 +1,4 @@
-/** 太阳鸟演示/交付账号 → 客户主 ERP Mod（与 host_profiles client_primary_erp_mod_id 一致） */
+/** 历史太阳鸟客户 Mod id；仅供旧数据/文案兼容，权限以服务端 entitlement 为准。 */
 export const SUNBIRD_CLIENT_MOD_ID = 'taiyangniao-pro';
 
 const SUNBIRD_USERNAMES = new Set(['sunbird', 'SUNBIRD']);
@@ -14,6 +14,7 @@ export function augmentEntitledModIdsForAccount(
   username: string | null | undefined,
   entitledModIds: string[] | undefined,
 ): string[] {
+  void username;
   const seen = new Set<string>();
   const out: string[] = [];
   for (const id of entitledModIds || []) {
@@ -22,25 +23,22 @@ export function augmentEntitledModIdsForAccount(
     seen.add(s);
     out.push(s);
   }
-  if (isSunbirdAccountUsername(username) && !seen.has(SUNBIRD_CLIENT_MOD_ID)) {
-    out.unshift(SUNBIRD_CLIENT_MOD_ID);
-    seen.add(SUNBIRD_CLIENT_MOD_ID);
-  }
   return out;
 }
 
 export function preferredClientModIdForAccount(
   username: string | null | undefined,
 ): string {
-  if (isSunbirdAccountUsername(username)) return SUNBIRD_CLIENT_MOD_ID;
+  void username;
   return '';
 }
 
-/** 仅太阳鸟交付账号自动绑定客户主 ERP；管理员/普通企业账号须靠 entitled 显式授权 */
+/** 客户主 ERP 不再按用户名自动绑定，统一由服务端 entitlement 显式授权。 */
 export function shouldBindClientPrimaryErpMod(
   username: string | null | undefined,
   options?: { isAdminAccount?: boolean },
 ): boolean {
-  if (options?.isAdminAccount) return false;
-  return isSunbirdAccountUsername(username);
+  void username;
+  void options;
+  return false;
 }
