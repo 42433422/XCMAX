@@ -44,7 +44,12 @@ jobs:
         with:
           name: xcagi-desktop-windows
           path: |
-            FHD/release/xcagi-v*/enterprise/**
+            FHD/release/xcagi-v*/enterprise/*.exe
+            FHD/release/xcagi-v*/enterprise/*.exe.blockmap
+            FHD/release/xcagi-v*/enterprise/*.zip
+            FHD/release/xcagi-v*/enterprise/*.zip.blockmap
+            FHD/release/xcagi-v*/enterprise/latest*.yml
+            FHD/release/xcagi-v*/enterprise/builder-debug.yml
 
   deploy-windows:
     needs: [windows]
@@ -56,6 +61,8 @@ jobs:
           name: xcagi-desktop-windows
           path: artifacts
       - name: Upload installers to update server
+        continue-on-error: true
+        working-directory: .
         env:
           # Unified desktop-upload key: SERVER_SSH_KEY (preferred) with FHD_PUSH_SSH_KEY
           # fallback so a single SSH secret covers both desktop + CVM tarball pushes.
@@ -116,7 +123,12 @@ jobs:
         with:
           name: xcagi-desktop-macos
           path: |
-            FHD/release/xcagi-v*/enterprise/**
+            FHD/release/xcagi-v*/enterprise/*.dmg
+            FHD/release/xcagi-v*/enterprise/*.dmg.blockmap
+            FHD/release/xcagi-v*/enterprise/*.zip
+            FHD/release/xcagi-v*/enterprise/*.zip.blockmap
+            FHD/release/xcagi-v*/enterprise/latest*.yml
+            FHD/release/xcagi-v*/enterprise/builder-debug.yml
 
   deploy-macos:
     needs: [macos]
@@ -128,6 +140,8 @@ jobs:
           name: xcagi-desktop-macos
           path: artifacts
       - name: Upload macOS installers to update server
+        continue-on-error: true
+        working-directory: .
         env:
           DESKTOP_SSH_KEY: ${{ secrets.SERVER_SSH_KEY || secrets.FHD_PUSH_SSH_KEY }}
         run: |
@@ -165,4 +179,12 @@ jobs:
           path: artifacts
       - uses: softprops/action-gh-release@v2
         with:
-          files: artifacts/**/*
+          files: |
+            artifacts/**/*.exe
+            artifacts/**/*.exe.blockmap
+            artifacts/**/*.dmg
+            artifacts/**/*.dmg.blockmap
+            artifacts/**/*.zip
+            artifacts/**/*.zip.blockmap
+            artifacts/**/latest*.yml
+            artifacts/**/builder-debug.yml
