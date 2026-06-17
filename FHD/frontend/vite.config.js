@@ -35,11 +35,13 @@ export default defineConfig(({ mode }) => {
     : { overlay: false }
 
   const productSku = String(env.VITE_XCAGI_PRODUCT_SKU || '').trim().toLowerCase()
-  // 企业干净宿主：:5001 即使 npm run dev（mode=development）也不 glob mods-admin-runtime/
+  // 企业宿主需要预打包桥接路由与账号定制路由；通用版保持干净空 glob。
   const editionSuffix =
     mode === 'minimal'
       ? 'minimal'
-      : mode === 'generic' || productSku === 'enterprise'
+      : productSku === 'enterprise'
+        ? 'enterprise'
+        : mode === 'generic'
         ? 'generic'
         : 'full'
   const constantsDir = path.resolve(__dirname, './src/constants')

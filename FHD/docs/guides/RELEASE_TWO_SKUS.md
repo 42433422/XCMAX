@@ -1,4 +1,6 @@
-# XCAGI 双 SKU 发版指南（8.0+）
+# XCAGI 双 SKU 发版指南（v10 锁定）
+
+> 版本锚点固定为 `10.0.0`。macOS 与 Windows 共用同一套 SKU 资源契约（`product-sku.json`、staged `mods/`、enterprise `industry-seeds/`、统一 Electron 后端启动协议），但最终安装包必须按平台分别产出，不能共用同一个后端二进制。
 
 ## 1. 发版前安全自检
 
@@ -9,8 +11,22 @@ powershell -ExecutionPolicy Bypass -File scripts/package/pre-release-security.ps
 
 ## 2. 构建两个安装包
 
+Windows 正式包必须包含 `win-unpacked/resources/backend/xcagi-backend.exe`。不要用 `build-windows-electron-only.sh` 作为发布链路；该脚本默认已禁止，避免生成安装后无法启动后端的空壳包。
+
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/package/build-all-skus.ps1 -Version 10.0.0
+```
+
+macOS/Linux 上交叉构建 Windows 包时使用 Docker/Wine 链路：
+
+```bash
+bash scripts/package/build-windows-installer.sh 10.0.0 enterprise
+```
+
+macOS 安装包使用：
+
+```bash
+bash scripts/package/build-installer.sh 10.0.0 enterprise
 ```
 
 可选：构建时为 `latest.yml` 增加 Ed25519 签名：
@@ -29,6 +45,8 @@ foreach ($sku in @("personal","enterprise")) {
 }
 powershell -File scripts/package/pre-release-security.ps1 -Phase post -Version $v
 ```
+
+post 验收会硬性检查 Windows 后端 exe、`product-sku.json`、staged mods 和 enterprise `industry-seeds/`，任何缺项都不得发布。
 
 ## 4. 上传到 update.xcagi.com（rsync）
 

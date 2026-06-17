@@ -104,7 +104,7 @@ class TestFindAll:
     def test_db_error_returns_failure(self, repo):
         with patch(
             "app.infrastructure.persistence.material_repository_impl.get_db",
-            side_effect=Exception("DB error"),
+            side_effect=RuntimeError("DB error"),
         ):
             result = repo.find_all()
         assert result["success"] is False
@@ -142,7 +142,7 @@ class TestFindById:
     def test_db_error(self, repo):
         with patch(
             "app.infrastructure.persistence.material_repository_impl.get_db",
-            side_effect=Exception("err"),
+            side_effect=RuntimeError("err"),
         ):
             result = repo.find_by_id(1)
         assert result is None
@@ -168,7 +168,7 @@ class TestCreate:
     def test_db_error(self, repo):
         with patch(
             "app.infrastructure.persistence.material_repository_impl.get_db",
-            side_effect=Exception("fail"),
+            side_effect=RuntimeError("fail"),
         ):
             result = repo.create({"name": "x"})
         assert result["success"] is False
@@ -207,7 +207,7 @@ class TestUpdate:
     def test_db_error(self, repo):
         with patch(
             "app.infrastructure.persistence.material_repository_impl.get_db",
-            side_effect=Exception("fail"),
+            side_effect=RuntimeError("fail"),
         ):
             result = repo.update(1, {"name": "x"})
         assert result["success"] is False
@@ -262,7 +262,7 @@ class TestBatchDelete:
     def test_db_error(self, repo):
         with patch(
             "app.infrastructure.persistence.material_repository_impl.get_db",
-            side_effect=Exception("fail"),
+            side_effect=RuntimeError("fail"),
         ):
             result = repo.batch_delete([1])
         assert result == 0
@@ -298,7 +298,7 @@ class TestFindLowStock:
     def test_db_error(self, repo):
         with patch(
             "app.infrastructure.persistence.material_repository_impl.get_db",
-            side_effect=Exception("fail"),
+            side_effect=RuntimeError("fail"),
         ):
             result = repo.find_low_stock()
         assert result == []

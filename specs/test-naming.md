@@ -59,4 +59,4 @@
 - [ ] `tests/routes/` 新文件未合并多路由域
 - [ ] 未新增 `FHD/app/**/*_vN.py`
 - [ ] 改动路由/应用服务时有对应 `routes/` 或 `unit/` 用例
-- [ ] 覆盖率 PR 描述使用 full_app 口径（[FHD/docs/PR_COVERAGE_CHECKLIST.md](../FHD/docs/PR_COVERAGE_CHECKLIST.md)）
+- [ ] 覆盖率 PR 描述使用全量 `source=[app]` 口径（[`FHD/docs/reports/COVERAGE_RAMP.md`](../FHD/docs/reports/COVERAGE_RAMP.md) · `metrics/coverage-dual-summary.json`）

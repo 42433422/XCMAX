@@ -10,6 +10,7 @@ from app.db.base import Base
 
 if TYPE_CHECKING:
     from app.db.models.ai import AIConversationSession
+    from app.db.models.miniprogram import MpFeedback, MpOrder
 
 
 class User(Base):
@@ -47,6 +48,15 @@ class User(Base):
     )
     ai_conversation_sessions: Mapped[list[AIConversationSession]] = relationship(
         "AIConversationSession", back_populates="user", cascade="all, delete-orphan"
+    )
+    mp_orders: Mapped[list[MpOrder]] = relationship(
+        "MpOrder", back_populates="user", cascade="all, delete-orphan"
+    )
+    mp_feedbacks: Mapped[list[MpFeedback]] = relationship(
+        "MpFeedback",
+        foreign_keys="MpFeedback.user_id",
+        back_populates="user",
+        cascade="all, delete-orphan",
     )
 
 

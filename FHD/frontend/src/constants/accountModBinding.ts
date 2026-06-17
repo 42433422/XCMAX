@@ -1,7 +1,5 @@
-import { CLIENT_PRIMARY_ERP_MOD_ID } from '@/constants/genericModPack';
-
 /** 太阳鸟演示/交付账号 → 客户主 ERP Mod（与 host_profiles client_primary_erp_mod_id 一致） */
-export const SUNBIRD_CLIENT_MOD_ID = CLIENT_PRIMARY_ERP_MOD_ID;
+export const SUNBIRD_CLIENT_MOD_ID = 'taiyangniao-pro';
 
 const SUNBIRD_USERNAMES = new Set(['sunbird', 'SUNBIRD']);
 

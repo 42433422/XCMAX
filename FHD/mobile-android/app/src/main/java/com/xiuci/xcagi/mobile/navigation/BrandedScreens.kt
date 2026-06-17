@@ -54,10 +54,10 @@ import androidx.compose.ui.unit.sp
 import com.xiuci.xcagi.mobile.R
 import com.xiuci.xcagi.mobile.core.ProductSkuConfig
 import com.xiuci.xcagi.mobile.ui.AppViewModel
-import com.xiuci.xcagi.mobile.ui.components.mobile.MobileTokens
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeAuthOtpField
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeAvatar
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeTopBar
+import com.xiuci.xcagi.mobile.ui.theme.XcagiTheme
 import kotlinx.coroutines.delay
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -94,14 +94,14 @@ fun ConnectScreen(
                         )
                         Text(
                                 "Agent 远程控制",
-                                fontSize = 20.sp,
+                                fontSize = MaterialTheme.typography.headlineSmall.fontSize,
                                 fontWeight = FontWeight.SemiBold,
-                                color = MobileTokens.textPrimary,
+                                color = MaterialTheme.colorScheme.onSurface,
                         )
                         Text(
                                 "绑定电脑后，手机可远程操控电脑执行任务、运行命令，如同你的 AI Agent 助手。",
-                                fontSize = 14.sp,
-                                color = MobileTokens.textTertiary,
+                                fontSize = MaterialTheme.typography.bodySmall.fontSize,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 textAlign = TextAlign.Center,
                                 modifier = Modifier.padding(horizontal = 40.dp),
                         )
@@ -157,7 +157,7 @@ fun AuthScreen(vm: AppViewModel, onRegister: () -> Unit, onDone: () -> Unit) {
                 if (isEnterprise) {
                         "智能协同，助力企业经营"
                 } else {
-                        "与官网 MODstore 同一账号，登录后工作台与云端能力直接可用。"
+                        "与官网 MODstore 同一账号，登录后可同步能力。"
                 }
 
         Column(
@@ -185,14 +185,14 @@ fun AuthScreen(vm: AppViewModel, onRegister: () -> Unit, onDone: () -> Unit) {
                         title,
                         fontSize = 22.sp,
                         fontWeight = FontWeight.SemiBold,
-                        color = MobileTokens.textPrimary,
+                        color = MaterialTheme.colorScheme.onSurface,
                         textAlign = TextAlign.Center,
                 )
                 Spacer(Modifier.height(6.dp))
                 Text(
                         subtitle,
-                        fontSize = 13.sp,
-                        color = MobileTokens.textTertiary,
+                        fontSize = MaterialTheme.typography.labelMedium.fontSize,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center,
                 )
                 Spacer(Modifier.height(24.dp))
@@ -226,9 +226,9 @@ fun AuthScreen(vm: AppViewModel, onRegister: () -> Unit, onDone: () -> Unit) {
                 if (isEnterprise && loginMode == AuthLoginMode.PASSWORD) {
                         Text(
                                 if (adminMode) "切换为市场账号" else "管理员账号登录",
-                                fontSize = 13.sp,
+                                fontSize = MaterialTheme.typography.labelMedium.fontSize,
                                 fontWeight = FontWeight.Medium,
-                                color = MobileTokens.brandBlue,
+                                color = XcagiTheme.extra.brandBlue,
                                 textAlign = TextAlign.Center,
                                 modifier = Modifier.clickable { adminMode = !adminMode },
                         )
@@ -289,8 +289,8 @@ fun AuthScreen(vm: AppViewModel, onRegister: () -> Unit, onDone: () -> Unit) {
                 if (loginError != null) {
                         Text(
                                 loginError!!,
-                                fontSize = 13.sp,
-                                color = Color.Red,
+                                fontSize = MaterialTheme.typography.labelMedium.fontSize,
+                                color = MaterialTheme.colorScheme.error,
                                 modifier = Modifier.padding(horizontal = 24.dp),
                         )
                         Spacer(Modifier.height(8.dp))
@@ -310,8 +310,8 @@ fun AuthScreen(vm: AppViewModel, onRegister: () -> Unit, onDone: () -> Unit) {
                                 .height(48.dp)
                                 .clip(RoundedCornerShape(24.dp))
                                 .background(
-                                        if (canLogin) MobileTokens.brandBlue
-                                        else MobileTokens.divider
+                                        if (canLogin) XcagiTheme.extra.brandBlue
+                                        else MaterialTheme.colorScheme.outlineVariant
                                 )
                                 .clickable(enabled = canLogin) {
                                         loggingIn = true
@@ -341,9 +341,9 @@ fun AuthScreen(vm: AppViewModel, onRegister: () -> Unit, onDone: () -> Unit) {
                 ) {
                         Text(
                                 if (loggingIn) "登录中…" else "登录",
-                                fontSize = 16.sp,
+                                fontSize = MaterialTheme.typography.bodyLarge.fontSize,
                                 fontWeight = FontWeight.Medium,
-                                color = if (canLogin) Color.White else MobileTokens.textDisabled,
+                                color = if (canLogin) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                 }
 
@@ -373,9 +373,9 @@ fun AuthScreen(vm: AppViewModel, onRegister: () -> Unit, onDone: () -> Unit) {
                         Spacer(Modifier.height(12.dp))
                         Text(
                                 "个人版注册",
-                                fontSize = 14.sp,
+                                fontSize = MaterialTheme.typography.bodySmall.fontSize,
                                 fontWeight = FontWeight.Medium,
-                                color = MobileTokens.brandBlue,
+                                color = XcagiTheme.extra.brandBlue,
                                 modifier = Modifier.clickable(onClick = onRegister),
                         )
                 }
@@ -389,15 +389,15 @@ fun AuthScreen(vm: AppViewModel, onRegister: () -> Unit, onDone: () -> Unit) {
                 ) {
                         Box(
                                 Modifier.size(20.dp)
-                                        .clip(RoundedCornerShape(4.dp))
+                                        .clip(MaterialTheme.shapes.extraSmall)
                                         .background(
-                                                if (agreed) MobileTokens.brandBlue
-                                                else MobileTokens.divider
+                                                if (agreed) XcagiTheme.extra.brandBlue
+                                                else MaterialTheme.colorScheme.outlineVariant
                                         )
                                         .border(
                                                 if (!agreed) 0.5.dp else 0.dp,
-                                                MobileTokens.divider,
-                                                RoundedCornerShape(4.dp),
+                                                MaterialTheme.colorScheme.outlineVariant,
+                                                MaterialTheme.shapes.extraSmall,
                                         )
                                         .clickable { agreed = !agreed },
                                 contentAlignment = Alignment.Center,
@@ -414,14 +414,14 @@ fun AuthScreen(vm: AppViewModel, onRegister: () -> Unit, onDone: () -> Unit) {
                         Spacer(Modifier.width(8.dp))
                         Text(
                                 "已阅读并同意 ",
-                                fontSize = 12.sp,
-                                color = MobileTokens.textSecondary,
+                                fontSize = MaterialTheme.typography.labelSmall.fontSize,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         Text(
                                 "服务协议",
-                                fontSize = 12.sp,
+                                fontSize = MaterialTheme.typography.labelSmall.fontSize,
                                 fontWeight = FontWeight.Medium,
-                                color = MobileTokens.brandBlue,
+                                color = XcagiTheme.extra.brandBlue,
                                 modifier =
                                         Modifier.clickable {
                                                 val url =
@@ -439,14 +439,14 @@ fun AuthScreen(vm: AppViewModel, onRegister: () -> Unit, onDone: () -> Unit) {
                         )
                         Text(
                                 " 和 ",
-                                fontSize = 12.sp,
-                                color = MobileTokens.textSecondary,
+                                fontSize = MaterialTheme.typography.labelSmall.fontSize,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         Text(
                                 "隐私政策",
-                                fontSize = 12.sp,
+                                fontSize = MaterialTheme.typography.labelSmall.fontSize,
                                 fontWeight = FontWeight.Medium,
-                                color = MobileTokens.brandBlue,
+                                color = XcagiTheme.extra.brandBlue,
                                 modifier =
                                         Modifier.clickable {
                                                 val url =
@@ -484,21 +484,21 @@ private fun LoginInputBox(
                 Modifier.fillMaxWidth()
                         .padding(horizontal = 24.dp)
                         .height(48.dp)
-                        .clip(RoundedCornerShape(10.dp))
+                        .clip(MaterialTheme.shapes.small)
                         .background(Color.White)
                         .border(
                                 BorderStroke(
                                         1.dp,
-                                        if (isFocused) MobileTokens.brandBlue
-                                        else MobileTokens.divider
+                                        if (isFocused) XcagiTheme.extra.brandBlue
+                                        else MaterialTheme.colorScheme.outlineVariant
                                 ),
-                                RoundedCornerShape(10.dp)
+                                MaterialTheme.shapes.small
                         )
                         .padding(horizontal = 16.dp),
                 contentAlignment = Alignment.CenterStart,
         ) {
                 if (value.isEmpty()) {
-                        Text(placeholder, fontSize = 15.sp, color = MobileTokens.textDisabled)
+                        Text(placeholder, fontSize = MaterialTheme.typography.bodyMedium.fontSize, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 BasicTextField(
                         value = value,
@@ -510,8 +510,8 @@ private fun LoginInputBox(
                         singleLine = true,
                         textStyle =
                                 MaterialTheme.typography.bodyLarge.copy(
-                                        color = MobileTokens.textPrimary,
-                                        fontSize = 15.sp,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                                 ),
                 )
         }
@@ -533,21 +533,21 @@ private fun LoginPasswordBox(
                 Box(
                         Modifier.fillMaxWidth()
                                 .height(48.dp)
-                                .clip(RoundedCornerShape(10.dp))
+                                .clip(MaterialTheme.shapes.small)
                                 .background(Color.White)
                                 .border(
                                         BorderStroke(
                                                 1.dp,
-                                                if (isFocused) MobileTokens.brandBlue
-                                                else MobileTokens.divider
+                                                if (isFocused) XcagiTheme.extra.brandBlue
+                                                else MaterialTheme.colorScheme.outlineVariant
                                         ),
-                                        RoundedCornerShape(10.dp)
+                                        MaterialTheme.shapes.small
                                 )
                                 .padding(start = 16.dp, end = 44.dp),
                         contentAlignment = Alignment.CenterStart,
                 ) {
                         if (value.isEmpty()) {
-                                Text("密码", fontSize = 15.sp, color = MobileTokens.textDisabled)
+                                Text("密码", fontSize = MaterialTheme.typography.bodyMedium.fontSize, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         BasicTextField(
                                 value = value,
@@ -564,8 +564,8 @@ private fun LoginPasswordBox(
                                         KeyboardOptions(keyboardType = KeyboardType.Password),
                                 textStyle =
                                         MaterialTheme.typography.bodyLarge.copy(
-                                                color = MobileTokens.textPrimary,
-                                                fontSize = 15.sp,
+                                                color = MaterialTheme.colorScheme.onSurface,
+                                                fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                                         ),
                         )
                 }
@@ -578,7 +578,7 @@ private fun LoginPasswordBox(
                                         .align(Alignment.CenterEnd)
                                         .padding(end = 12.dp)
                                         .clickable(onClick = onToggleVisibility),
-                        tint = MobileTokens.textDisabled,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
         }
 }
@@ -600,11 +600,11 @@ private fun LoginTab(
         ) {
                 Text(
                         label,
-                        fontSize = 16.sp,
+                        fontSize = MaterialTheme.typography.bodyLarge.fontSize,
                         fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
                         color =
-                                if (selected) MobileTokens.textPrimary
-                                else MobileTokens.textTertiary,
+                                if (selected) MaterialTheme.colorScheme.onSurface
+                                else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.height(8.dp))
                 Box(
@@ -612,7 +612,7 @@ private fun LoginTab(
                                 .height(2.5.dp)
                                 .clip(RoundedCornerShape(1.25.dp))
                                 .background(
-                                        if (selected) MobileTokens.brandBlue else Color.Transparent
+                                        if (selected) XcagiTheme.extra.brandBlue else Color.Transparent
                                 ),
                 )
         }
@@ -631,25 +631,25 @@ private fun LoginInputField(
         Column(modifier.padding(horizontal = 24.dp)) {
                 Text(
                         label,
-                        fontSize = 13.sp,
+                        fontSize = MaterialTheme.typography.labelMedium.fontSize,
                         fontWeight = FontWeight.Medium,
-                        color = MobileTokens.textSecondary,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(bottom = 6.dp),
                 )
                 Box(
                         Modifier.fillMaxWidth()
                                 .height(48.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(MobileTokens.surfaceBg)
-                                .border(0.5.dp, MobileTokens.divider, RoundedCornerShape(8.dp))
+                                .clip(MaterialTheme.shapes.small)
+                                .background(MaterialTheme.colorScheme.surfaceVariant)
+                                .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant, MaterialTheme.shapes.small)
                                 .padding(horizontal = 14.dp),
                         contentAlignment = Alignment.CenterStart,
                 ) {
                         if (value.isEmpty() && placeholder.isNotBlank()) {
                                 Text(
                                         placeholder,
-                                        fontSize = 15.sp,
-                                        color = MobileTokens.textDisabled
+                                        fontSize = MaterialTheme.typography.bodyMedium.fontSize,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                         }
                         BasicTextField(
@@ -661,7 +661,7 @@ private fun LoginInputField(
                                 keyboardOptions = keyboardOptions,
                                 textStyle =
                                         MaterialTheme.typography.bodyLarge.copy(
-                                                color = MobileTokens.textPrimary
+                                                color = MaterialTheme.colorScheme.onSurface
                                         ),
                         )
                 }
@@ -679,17 +679,17 @@ private fun LoginPrimaryButton(
                 modifier.fillMaxWidth()
                         .padding(horizontal = 24.dp)
                         .height(48.dp)
-                        .clip(RoundedCornerShape(8.dp))
+                        .clip(MaterialTheme.shapes.small)
                         .background(
-                                if (enabled) MobileTokens.brandBlue
-                                else MobileTokens.brandBlue.copy(alpha = 0.4f)
+                                if (enabled) XcagiTheme.extra.brandBlue
+                                else XcagiTheme.extra.brandBlue.copy(alpha = 0.4f)
                         )
                         .clickable(enabled = enabled, onClick = onClick),
                 contentAlignment = Alignment.Center,
         ) {
                 Text(
                         text,
-                        fontSize = 16.sp,
+                        fontSize = MaterialTheme.typography.bodyLarge.fontSize,
                         fontWeight = FontWeight.Medium,
                         color = Color.White,
                 )
@@ -706,16 +706,16 @@ private fun LoginSecondaryButton(
                 modifier.fillMaxWidth()
                         .padding(horizontal = 24.dp)
                         .height(48.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .border(0.5.dp, MobileTokens.divider, RoundedCornerShape(8.dp))
+                        .clip(MaterialTheme.shapes.small)
+                        .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant, MaterialTheme.shapes.small)
                         .background(Color.White)
                         .clickable(onClick = onClick),
                 contentAlignment = Alignment.Center,
         ) {
                 Text(
                         text,
-                        fontSize = 15.sp,
-                        color = MobileTokens.textSecondary,
+                        fontSize = MaterialTheme.typography.bodyMedium.fontSize,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
         }
 }
@@ -727,7 +727,7 @@ private fun LoginCard(
 ) {
         androidx.compose.material3.Surface(
                 modifier = modifier.fillMaxWidth().padding(horizontal = 24.dp),
-                shape = RoundedCornerShape(12.dp),
+                shape = MaterialTheme.shapes.medium,
                 color = Color.White,
                 tonalElevation = 0.dp,
                 shadowElevation = 0.dp,
@@ -748,12 +748,12 @@ private fun LoginCheckbox(
                         Modifier.size(18.dp)
                                 .clip(RoundedCornerShape(3.dp))
                                 .background(
-                                        if (checked) MobileTokens.brandBlue
-                                        else MobileTokens.divider
+                                        if (checked) XcagiTheme.extra.brandBlue
+                                        else MaterialTheme.colorScheme.outlineVariant
                                 )
                                 .border(
                                         if (!checked) 0.5.dp else 0.dp,
-                                        MobileTokens.divider,
+                                        MaterialTheme.colorScheme.outlineVariant,
                                         RoundedCornerShape(3.dp),
                                 ),
                         contentAlignment = Alignment.Center,
@@ -770,8 +770,8 @@ private fun LoginCheckbox(
                 Spacer(Modifier.width(6.dp))
                 Text(
                         label,
-                        fontSize = 13.sp,
-                        color = MobileTokens.textSecondary,
+                        fontSize = MaterialTheme.typography.labelMedium.fontSize,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
         }
 }

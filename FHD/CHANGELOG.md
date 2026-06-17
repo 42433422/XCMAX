@@ -6,6 +6,23 @@
 
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
+### Windows/macOS 桌面打包统一（2026-06-17 · v10 线内迭代）
+
+- **fix(desktop)**：Electron 后端启动改为统一候选路径 + `electron-backend.log`；迁移流程复用 SKU Edition 环境；Windows 退出使用 `taskkill /T /F` 清理后端子进程
+- **fix(package)**：`build-backend.sh` 默认 v10.0.0，并与 PowerShell 构建链一样 staging SKU mods、industry-seeds、`product-sku.json`
+- **fix(package)**：`read-host-profile-stage-ids.py` / `read-open-industry-seed-ids.py` 改为纯 JSON 配置读取，避免 CI 打包阶段在 pip install 前导入完整 app 依赖
+- **fix(package)**：`generate_mods_index.py` 构建阶段只索引 staged mods 根，避免 personal 包索引混入根 `mods/`、`mods-admin-runtime` 或 `XCAGI/mods`
+- **fix(package)**：Docker/Wine Windows 构建链写入 `product-sku.json` 并带入 `XCAGI_STAGED_INDUSTRY_SEEDS_DIR`
+- **guard(package)**：`build-windows-electron-only.sh` 默认禁止作为发布链路，避免产出缺少 `resources/backend/xcagi-backend.exe` 的不可用 Windows 安装包
+- **guard(release)**：post-release 安全验收硬性检查 Windows 后端 exe、mods、industry-seeds 与 `product-sku.json`
+
+### 文档 SSOT 全量同步（2026-06-17 · v10 线内迭代）
+
+- **docs(coverage)**：退役 `60.63%` / 窄包 `70%` / `77.4%` 误报；`coverage-dual-summary.json` 重写为 HEAD（52.74% 行）+ WIP（74.56% 行，196 红灯）双轨
+- **docs(claimed)**：`CLAIMED_VS_ACTUAL.md` 工程节对齐全量棘轮口径；`COVERAGE_RAMP.md` / `COVERAGE_GAP.md` 全面更新
+- **docs(repo)**：`README.md` Android 签约级对齐 `VERSION.md`；`spec.md` / `checklist.md` / `对标头部SaaS` 覆盖率行更新
+- **chore(metrics)**：`coverage-history.jsonl` 追加 WIP 快照；`xcmax-pytest-coverage.json` 标记退役
+
 ### Phase 4 覆盖率长尾与变异测试（v10 线内迭代 · 2026-06-14）
 
 - **test(contexts/di)**：补 `manifest` / `flags` / `registry` / `fastapi_deps` 纯函数单测

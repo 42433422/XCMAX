@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
+import pytest
+
 from app.mod_sdk.industry_baseline import (
     build_industry_baseline_plan,
     build_onboarding_industry_catalog,
@@ -174,6 +178,79 @@ def test_onboarding_catalog_both_entitled():
         cat, {"taiyangniao-pro", "sz-qsm-pro", "attendance-industry"}
     )
     assert set(filtered["open_industry_ids"]) == {"涂料", "考勤"}
+
+
+@pytest.mark.asyncio
+async def test_onboarding_catalog_request_uses_authorization_session(monkeypatch):
+    import app.enterprise.mod_entitlements as entitlements
+    import app.infrastructure.auth.dependencies as auth_deps
+    import app.mod_sdk.industry_baseline as industry_baseline
+
+    called = {"sync": False}
+
+    async def fake_sync(_request):
+        called["sync"] = True
+
+    monkeypatch.setattr(auth_deps, "resolve_session_user", lambda _request: None)
+    monkeypatch.setattr(entitlements, "enterprise_mod_filter_active", lambda: True)
+    monkeypatch.setattr(entitlements, "sync_entitlements_from_request", fake_sync)
+    monkeypatch.setattr(entitlements, "is_admin_account_session", lambda: False)
+    monkeypatch.setattr(
+        entitlements,
+        "get_cached_entitled_client_mod_ids",
+        lambda: {"taiyangniao-pro"},
+    )
+    monkeypatch.setattr(
+        industry_baseline,
+        "build_onboarding_industry_catalog",
+        lambda: {
+            "open_industry_ids": ["涂料", "考勤"],
+            "open_packages": [
+                {"industry_id": "涂料", "mod_id": "coating-industry"},
+                {"industry_id": "考勤", "mod_id": "attendance-industry"},
+            ],
+            "preview_packages": [],
+        },
+    )
+
+    request = SimpleNamespace(headers={"Authorization": "Bearer sid-1"}, cookies={})
+    catalog = await industry_baseline.build_onboarding_industry_catalog_for_request(request)
+
+    assert called["sync"] is True
+    assert catalog["enterprise_filter_applied"] is True
+    assert catalog["open_industry_ids"] == ["考勤"]
+
+
+@pytest.mark.asyncio
+async def test_industry_baseline_request_uses_authorization_session(monkeypatch):
+    import app.enterprise.mod_entitlements as entitlements
+    import app.mod_sdk.industry_baseline as industry_baseline
+
+    called = {"sync": False, "kwargs": None}
+
+    async def fake_sync(_request):
+        called["sync"] = True
+
+    def fake_plan(_industry_id, **kwargs):
+        called["kwargs"] = kwargs
+        return {"industry_id": "考勤"}
+
+    monkeypatch.setattr(entitlements, "enterprise_mod_filter_active", lambda: True)
+    monkeypatch.setattr(entitlements, "sync_entitlements_from_request", fake_sync)
+    monkeypatch.setattr(entitlements, "is_admin_account_session", lambda: False)
+    monkeypatch.setattr(
+        entitlements,
+        "get_cached_entitled_client_mod_ids",
+        lambda: {"taiyangniao-pro"},
+    )
+    monkeypatch.setattr(industry_baseline, "build_industry_baseline_plan", fake_plan)
+
+    request = SimpleNamespace(headers={"Authorization": "Bearer sid-1"}, cookies={})
+    result = await industry_baseline.build_industry_baseline_plan_for_request(request, "考勤")
+
+    assert result == {"industry_id": "考勤"}
+    assert called["sync"] is True
+    assert called["kwargs"]["entitled_mod_ids"] == {"taiyangniao-pro"}
 
 
 def test_industry_baseline_unknown_falls_back_to_generic():

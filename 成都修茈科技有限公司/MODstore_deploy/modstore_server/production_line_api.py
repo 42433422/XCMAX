@@ -145,6 +145,14 @@ async def api_time_rail_status(node_id: Optional[str] = None):
     return {"ok": True, "data": data}
 
 
+@router.post("/time-rail/maintenance/sync")
+async def api_time_rail_maintenance_sync(limit: int = 32):
+    """把缺证时间轨节点同步进事件轨 backlog，供下一次 Vibe 自维护。"""
+    from modstore_server.time_rail_workflow import sync_missing_evidence_backlog
+
+    return {"ok": True, "data": sync_missing_evidence_backlog(limit=limit)}
+
+
 @router.post("/webhook-outbox/process")
 async def api_webhook_outbox_process(limit: int = 20):
     from modstore_server.cs_webhook_outbox import process_pending_outbox

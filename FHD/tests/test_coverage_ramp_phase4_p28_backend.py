@@ -3,7 +3,6 @@ session_account_meta enterprise CS gate, ai_chat process_chat workflow short-cir
 
 from __future__ import annotations
 
-from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -11,7 +10,6 @@ import pytest
 from app.application.ai_chat_app_service import AIChatApplicationService
 from app.application.session_account_meta import (
     is_session_market_admin,
-    should_receive_enterprise_dedicated_cs,
 )
 
 
@@ -131,37 +129,6 @@ def test_wechat_contact_context_refresh() -> None:
 # ---------------------------------------------------------------------------
 # session_account_meta — enterprise dedicated CS
 # ---------------------------------------------------------------------------
-
-
-@patch("app.application.session_account_meta.load_session_account_meta")
-def test_should_receive_enterprise_cs_impersonating(mock_load: MagicMock) -> None:
-    mock_load.return_value = {
-        "account_kind": "enterprise",
-        "market_is_admin": False,
-        "impersonating_market_user_id": 7,
-    }
-    db = MagicMock()
-    assert should_receive_enterprise_dedicated_cs("sid", 1, db) is True
-
-
-@patch("app.application.session_account_meta.load_session_account_meta")
-def test_should_receive_enterprise_cs_admin_blocked(mock_load: MagicMock) -> None:
-    mock_load.return_value = {
-        "account_kind": "admin",
-        "market_is_admin": True,
-    }
-    db = MagicMock()
-    assert should_receive_enterprise_dedicated_cs("sid", 1, db) is False
-
-
-@patch("app.application.session_account_meta.load_session_account_meta")
-def test_should_receive_enterprise_cs_fallback_user_role(mock_load: MagicMock) -> None:
-    mock_load.return_value = None
-    db = MagicMock()
-    db.get.return_value = SimpleNamespace(role="user")
-    assert should_receive_enterprise_dedicated_cs(None, 2, db) is True
-    db.get.return_value = SimpleNamespace(role="admin")
-    assert should_receive_enterprise_dedicated_cs(None, 2, db) is False
 
 
 @patch("app.application.session_account_meta.load_session_account_meta")

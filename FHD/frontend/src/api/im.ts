@@ -7,6 +7,7 @@ export type ImConversationSummary = {
   last_message_at: string | null;
   last_message_preview: string;
   unread_count: number;
+  is_enterprise_dedicated_cs?: boolean;
 };
 
 export type ImMessage = {
@@ -22,6 +23,7 @@ export type ImContact = {
   id: number;
   display_name: string;
   username: string;
+  is_enterprise_dedicated_cs?: boolean;
 };
 
 const jsonHeaders: HeadersInit = { 'Content-Type': 'application/json' };

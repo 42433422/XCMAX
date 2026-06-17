@@ -28,22 +28,27 @@ jobs:
           node-version: "20"
           cache: "npm"
           cache-dependency-path: |
-            frontend/package-lock.json
+            FHD/frontend/package-lock.json
             desktop/package-lock.json
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "8.0.x"
-      - name: Build Windows installers (2 SKUs)
+      - name: Build Windows enterprise installer
         shell: pwsh
         run: |
-          $v = "${{ github.event.inputs.version || github.ref_name }}".TrimStart('v','V')
-          scripts/package/build-all-skus.ps1 -Version $v
+          $raw = "${{ github.event.inputs.version || github.ref_name }}"
+          $raw = $raw -replace '^FHD/', ''
+          $v = $raw.TrimStart('v','V')
+          scripts/package/build-installer.ps1 -Version $v -ProductSku enterprise
       - uses: actions/upload-artifact@v4
         with:
           name: xcagi-desktop-windows
           path: |
-            release/xcagi-v*/personal/**
-            release/xcagi-v*/enterprise/**
+            FHD/release/xcagi-v*/enterprise/*.exe
+            FHD/release/xcagi-v*/enterprise/*.exe.blockmap
+            FHD/release/xcagi-v*/enterprise/*.zip
+            FHD/release/xcagi-v*/enterprise/*.zip.blockmap
+            FHD/release/xcagi-v*/enterprise/latest*.yml
 
   deploy-windows:
     needs: [windows]
@@ -55,6 +60,9 @@ jobs:
           name: xcagi-desktop-windows
           path: artifacts
       - name: Upload installers to update server
+        continue-on-error: true
+        timeout-minutes: 10
+        working-directory: .
         env:
           # Unified desktop-upload key: SERVER_SSH_KEY (preferred) with FHD_PUSH_SSH_KEY
           # fallback so a single SSH secret covers both desktop + CVM tarball pushes.
@@ -70,13 +78,19 @@ jobs:
           printf '%s\n' "${DESKTOP_SSH_KEY}" > ~/.ssh/id_ci
           chmod 600 ~/.ssh/id_ci
           ssh-keyscan -H "${HOST}" >> ~/.ssh/known_hosts 2>/dev/null || true
+          SSH_OPTS=(-i "$HOME/.ssh/id_ci" -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=4)
           BASE="${GITHUB_WORKSPACE}/artifacts"
-          for sku in personal enterprise; do
-            dir="${BASE}/release/xcagi-v${{ github.event.inputs.version || '10.0.0' }}/$sku"
+          raw="${{ github.event.inputs.version || github.ref_name }}"
+          raw="${raw#FHD/}"
+          raw="${raw#v}"
+          raw="${raw#V}"
+          version="${raw:-10.0.0}"
+          for sku in enterprise; do
+            dir="$(find "$BASE" -type d -path "*/xcagi-v${version}/$sku" -print -quit)"
             if [ ! -d "$dir" ]; then dir="${BASE}/$sku"; fi
             if [ ! -d "$dir" ]; then echo "[skip] no $sku dir"; continue; fi
             dest="/var/www/update/releases/stable/$sku"
-            rsync -avz -e "ssh -i ~/.ssh/id_ci -o StrictHostKeyChecking=no" "$dir/" "root@${HOST}:$dest/"
+            timeout 540 rsync -avz --timeout=60 -e "ssh ${SSH_OPTS[*]}" "$dir/" "root@${HOST}:$dest/"
           done
 
   macos:
@@ -96,20 +110,25 @@ jobs:
           node-version: "20"
           cache: "npm"
           cache-dependency-path: |
-            frontend/package-lock.json
+            FHD/frontend/package-lock.json
             desktop/package-lock.json
-      - name: Build macOS installers (2 SKUs)
+      - name: Build macOS enterprise installer
         shell: bash
         run: |
           v="${{ github.event.inputs.version || github.ref_name }}"
+          v="${v#FHD/}"
           v="${v#v}"
-          scripts/package/build-installer.sh "$v" all
+          v="${v#V}"
+          scripts/package/build-installer.sh "$v" enterprise
       - uses: actions/upload-artifact@v4
         with:
           name: xcagi-desktop-macos
           path: |
-            release/xcagi-v*/personal/**
-            release/xcagi-v*/enterprise/**
+            FHD/release/xcagi-v*/enterprise/*.dmg
+            FHD/release/xcagi-v*/enterprise/*.dmg.blockmap
+            FHD/release/xcagi-v*/enterprise/*.zip
+            FHD/release/xcagi-v*/enterprise/*.zip.blockmap
+            FHD/release/xcagi-v*/enterprise/latest*.yml
 
   deploy-macos:
     needs: [macos]
@@ -121,6 +140,9 @@ jobs:
           name: xcagi-desktop-macos
           path: artifacts
       - name: Upload macOS installers to update server
+        continue-on-error: true
+        timeout-minutes: 10
+        working-directory: .
         env:
           DESKTOP_SSH_KEY: ${{ secrets.SERVER_SSH_KEY || secrets.FHD_PUSH_SSH_KEY }}
         run: |
@@ -134,13 +156,19 @@ jobs:
           printf '%s\n' "${DESKTOP_SSH_KEY}" > ~/.ssh/id_ci
           chmod 600 ~/.ssh/id_ci
           ssh-keyscan -H "${HOST}" >> ~/.ssh/known_hosts 2>/dev/null || true
+          SSH_OPTS=(-i "$HOME/.ssh/id_ci" -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=4)
           BASE="${GITHUB_WORKSPACE}/artifacts"
-          for sku in personal enterprise; do
-            dir="${BASE}/release/xcagi-v${{ github.event.inputs.version || '10.0.0' }}/$sku"
+          raw="${{ github.event.inputs.version || github.ref_name }}"
+          raw="${raw#FHD/}"
+          raw="${raw#v}"
+          raw="${raw#V}"
+          version="${raw:-10.0.0}"
+          for sku in enterprise; do
+            dir="$(find "$BASE" -type d -path "*/xcagi-v${version}/$sku" -print -quit)"
             if [ ! -d "$dir" ]; then dir="${BASE}/$sku"; fi
             if [ ! -d "$dir" ]; then echo "[skip] no $sku dir"; continue; fi
             dest="/var/www/update/releases/stable/$sku"
-            rsync -avz -e "ssh -i ~/.ssh/id_ci -o StrictHostKeyChecking=no" "$dir/" "root@${HOST}:$dest/"
+            timeout 540 rsync -avz --timeout=60 -e "ssh ${SSH_OPTS[*]}" "$dir/" "root@${HOST}:$dest/"
           done
 
   github-release:
@@ -153,4 +181,11 @@ jobs:
           path: artifacts
       - uses: softprops/action-gh-release@v2
         with:
-          files: artifacts/**/*
+          files: |
+            artifacts/**/*.exe
+            artifacts/**/*.exe.blockmap
+            artifacts/**/*.dmg
+            artifacts/**/*.dmg.blockmap
+            artifacts/**/*.zip
+            artifacts/**/*.zip.blockmap
+            artifacts/**/latest*.yml

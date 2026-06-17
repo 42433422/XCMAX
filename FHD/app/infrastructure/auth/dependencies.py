@@ -85,11 +85,13 @@ def require_identified_user(
 
 
 def session_id_from_request(request: Request) -> str:
-    auth = request.headers.get("Authorization") or ""
+    auth_raw = request.headers.get("Authorization") or ""
+    auth = auth_raw if isinstance(auth_raw, str) else ""
     if auth.startswith("Bearer "):
         return auth[7:].strip()
     cookie_name = (os.environ.get("SESSION_COOKIE_NAME") or "session_id").strip()
-    return (request.cookies.get(cookie_name) or "").strip()
+    cookie_raw = request.cookies.get(cookie_name) or ""
+    return cookie_raw.strip() if isinstance(cookie_raw, str) else ""
 
 
 def resolve_session_user(request: Request) -> Any | None:

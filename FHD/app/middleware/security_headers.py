@@ -1,3 +1,5 @@
+import os
+
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from app.security.lan_config import normalize_lan_guard_path
@@ -23,6 +25,7 @@ class SecurityHeadersMiddleware:
                 )
                 is_sandbox = qs.get(b"sandbox") in (b"1", b"true")
                 is_dashboard_embed = path.startswith("/xcmax-dashboard/")
+                is_desktop_mode = os.environ.get("XCAGI_DESKTOP_MODE") == "1"
                 if is_sandbox:
                     security_headers = {
                         b"x-content-type-options": b"nosniff",
@@ -41,7 +44,18 @@ class SecurityHeadersMiddleware:
                         b"x-content-type-options": b"nosniff",
                         b"x-frame-options": b"DENY",
                         b"referrer-policy": b"strict-origin-when-cross-origin",
-                        b"content-security-policy": b"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' ws: wss:",
+                        b"content-security-policy": (
+                            b"default-src 'self'; "
+                            + (
+                                b"script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+                                if is_desktop_mode
+                                else b"script-src 'self' 'unsafe-inline'; "
+                            )
+                            + b"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+                            + b"img-src 'self' data: blob:; "
+                            + b"font-src 'self' data: https://fonts.gstatic.com; "
+                            + b"connect-src 'self' ws: wss:"
+                        ),
                     }
                 scheme = scope.get("scheme", "http")
                 if scheme == "https":

@@ -30,6 +30,8 @@ def _isolate_edition_and_product_sku_env(monkeypatch):
     """
     全量后端测试顺序敏感：其它用例或桌面 product-sku.json 会留下
     XCAGI_PRODUCT_SKU / XCAGI_EDITION，导致 edition/generic/minimal 与 deliverable 断言失败。
+    同时清理桌面 runtime bootstrap（configure_desktop_environment）通过 os.environ.setdefault
+    设置的 XCAGI_MODS_ROOT / XCAGI_MODS_DIR 等环境变量，避免污染 ModManager 测试。
     """
     for key in (
         "XCAGI_PRODUCT_SKU",
@@ -40,6 +42,11 @@ def _isolate_edition_and_product_sku_env(monkeypatch):
         "XCAGI_RESOURCES_DIR",
         "XCAGI_DESKTOP_RESOURCES",
         "XCAGI_STAGED_MODS_DIR",
+        "XCAGI_MODS_ROOT",
+        "XCAGI_MODS_DIR",
+        "XCAGI_DESKTOP_MODE",
+        "XCAGI_DATA_DIR",
+        "XCAGI_DESKTOP_DATA_DIR",
     ):
         monkeypatch.delenv(key, raising=False)
     monkeypatch.setenv("FHD_ALLOW_X_USER_ID_HEADER", "1")

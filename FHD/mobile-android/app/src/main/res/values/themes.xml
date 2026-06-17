@@ -1,10 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.XCAGI" parent="android:Theme.Material.NoActionBar">
-        <item name="android:statusBarColor">@color/xiuci_brand_blue</item>
-        <item name="android:navigationBarColor">@color/xiuci_brand_blue</item>
-        <item name="android:windowBackground">@color/xiuci_brand_blue</item>
+    <!-- 主主题：继承 Material3，透明状态栏配合 EdgeToEdge -->
+    <style name="Theme.XCAGI" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowBackground">@color/xiuci_bg_white</item>
+        <item name="android:windowLightStatusBar">true</item>
     </style>
+    <!-- 启动屏 -->
     <style name="Theme.XCAGI.Splash" parent="Theme.SplashScreen">
         <item name="windowSplashScreenBackground">@color/xiuci_brand_blue</item>
         <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher_foreground</item>

@@ -60,6 +60,40 @@ async def _time_rail_status(node_id: str | None = None) -> JSONResponse:
     return JSONResponse({"success": True, "data": data})
 
 
+def _coerce_limit(value: Any, default: int = 32) -> int:
+    if isinstance(value, bool):
+        return default
+    try:
+        n = int(value)
+    except (TypeError, ValueError):
+        return default
+    return max(1, n)
+
+
+@admin_router.post("/time-rail/maintenance/sync")
+@xcmax_router.post("/time-rail/maintenance/sync")
+async def production_line_time_rail_maintenance_sync(
+    limit: int = 32,
+    payload: dict[str, Any] | None = Body(default=None),
+) -> JSONResponse:
+    from app.application.time_rail_app_service import get_time_rail_app_service
+
+    req_limit = _coerce_limit(payload.get("limit") if isinstance(payload, dict) else limit, default=limit)
+    data = await get_time_rail_app_service().maintenance_sync(limit=req_limit)
+    if not isinstance(data, dict) or data.get("ok") is False:
+        return JSONResponse(
+            {
+                "success": False,
+                "error": str(
+                    data.get("error") if isinstance(data, dict) else "time-rail maintenance sync failed",
+                ),
+                "data": data,
+            },
+            status_code=200,
+        )
+    return JSONResponse({"success": True, "data": data})
+
+
 @admin_router.get("/time-rail/graph")
 @xcmax_router.get("/time-rail/graph")
 async def production_line_time_rail_graph():

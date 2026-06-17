@@ -8,7 +8,7 @@
     "xcagi-core-workflow-employees",
     "xcagi-office-employee-pack-bridge"
   ],
-  "onboarding_open_industry_ids": ["涂料", "考勤"],
+  "onboarding_open_industry_ids": ["涂料"],
   "industry_packages": {
     "考勤": {
       "mod_id": "attendance-industry",

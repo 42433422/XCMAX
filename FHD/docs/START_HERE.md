@@ -1,10 +1,12 @@
 # XCAGI 日常入口（START HERE）
 
-> **版本线**：v10.0.0（全产品线锚点见 [`VERSION.md`](../VERSION.md)）  
+> **版本线**：v10 锁定，锚点恒 `10.0.0`（全产品线锚点见 [`VERSION.md`](../VERSION.md)）
 > **公开文档站**：<https://docs.xiu-ci.com/>  
 > **仓根一键启动**：`make setup && make dev`（Windows：`make -f Makefile.win setup`）
 
 本页是 **18 份可直接执行** 的文档索引；更全的分层见 [`DOCUMENTATION_MAP.md`](DOCUMENTATION_MAP.md)。
+
+> **当前产品线口径**：`FHD/` 是 **企业桌面 ERP + AI 主交付线**。网站侧 AI 员工商店在仓根 `成都修茈科技有限公司/`，移动 AI 协同 App 在 `mobile-android/`，个人版暂停新增投入。跨线 SSOT 见仓根 [`specs/product-lines-3-plus-2.md`](../../specs/product-lines-3-plus-2.md)。阶段推进使用 v10-A/B/C/D，不 bump 产品版本。
 
 ---
 
@@ -33,7 +35,7 @@
 | 2 | [`guides/快速启动说明.md`](guides/快速启动说明.md) | 桌面 / Docker 命令速查 |
 | 3 | [`guides/PRODUCT_USER_FLOW.md`](guides/PRODUCT_USER_FLOW.md) | 安装 → 首启 → 行业 MOD → 日常使用 |
 | 4 | [`DELIVERABLE_PRODUCT.md`](DELIVERABLE_PRODUCT.md) | 交付物清单与验收 API |
-| 5 | [`guides/RELEASE_TWO_SKUS.md`](guides/RELEASE_TWO_SKUS.md) | personal / enterprise 双 SKU 发版 |
+| 5 | [`guides/RELEASE_TWO_SKUS.md`](guides/RELEASE_TWO_SKUS.md) | enterprise 为当前主发版；personal 仅兼容 / 冻结 |
 | 6 | [`guides/DESKTOP_DATABASE_DELIVERY.md`](guides/DESKTOP_DATABASE_DELIVERY.md) | 桌面 SQLite 交付 |
 | 7 | [`guides/DEPLOYMENT_GUIDE.md`](guides/DEPLOYMENT_GUIDE.md) | 生产部署 |
 | 8 | [`customer/CUSTOMER_SUPPORT.md`](customer/CUSTOMER_SUPPORT.md) | 客户升级 / 日志 / 回滚 |
@@ -120,6 +122,7 @@ cd frontend && npm run lint && npm run type-check && npm run type-check:build &&
 ## 4. 生产服务器部署（FHD API · 双模：tarball + compose）
 
 > v10 线内迭代；详见仓根 [`docs/CI_SSOT.md`](../../docs/CI_SSOT.md)（Phase 1 tarball + Phase 2 compose runbook）。
+> 当前发布优先级：先保证企业桌面端可交付，再打通 AI 员工商店授权 / 下载，最后收口移动 AI 协同 App。
 
 | 步骤 | 命令（`FHD/` 根目录） |
 |------|------------------------|
@@ -157,4 +160,4 @@ FHD_API_IMAGE_DIGEST=sha256:... \
 - **国际化**：[`docs/I18N_ROLLOUT.md`](I18N_ROLLOUT.md) · 前端 `src/i18n/`（zh-CN / en-US）；`localStorage.xcagi_locale` 切换
 - CI SSOT：[`docs/CI_SSOT.md`](../../docs/CI_SSOT.md)
 - OpenAPI：启动后 `http://127.0.0.1:5000/docs`
-- Android 实验骨架（非签约级）：`guides/MOBILE_ANDROID.md`
+- Android **签约级**（双 SKU）：`guides/MOBILE_ANDROID.md` · 与 [`VERSION.md`](VERSION.md) 对齐

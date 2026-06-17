@@ -28,9 +28,14 @@ PHASE_A_LINES: Tuple[Tuple[str, Sequence[str]], ...] = (
 )
 
 # P-S / P-App 补丁在 08:15 Phase A 已派发；Phase B 仅消费更新类清单（P-App 补丁不再重复）。
-PHASE_B_LINES: Tuple[Tuple[str, Sequence[str]], ...] = (
+PHASE_B_LINES_WITH_APP: Tuple[Tuple[str, Sequence[str]], ...] = (
     (DISPATCH_PW, ("updates",)),
     (DISPATCH_APP, ("updates",)),
+    (DISPATCH_SR, ("updates", "patches")),
+)
+
+PHASE_B_LINES_NO_APP: Tuple[Tuple[str, Sequence[str]], ...] = (
+    (DISPATCH_PW, ("updates",)),
     (DISPATCH_SR, ("updates", "patches")),
 )
 
@@ -233,8 +238,12 @@ def execute_phase_b_line_chain(
     *,
     shadow: bool = False,
     force: bool = False,
+    include_app: bool = True,
 ) -> Dict[str, Any]:
-    """08:25 Phase B：P-W 更新 + P-App 更新 + S-R（P-S/P-App 补丁已在 08:15 Phase A 完成）。"""
+    """08:25 Phase B：P-W 更新 + （可选）P-App 更新 + S-R。
+
+    默认包含 P-App，用于独立链路联调；release orchestrator 可按需禁用。
+    """
     if not _env_bool("MODSTORE_RELEASE_TRAIN_PHASE_B_ENABLED", "1"):
         return {"ok": True, "skipped": True, "reason": "MODSTORE_RELEASE_TRAIN_PHASE_B_ENABLED=0"}
 
@@ -250,7 +259,8 @@ def execute_phase_b_line_chain(
     line_results: Dict[str, Any] = {}
     all_ok = True
 
-    for line, kinds in PHASE_B_LINES:
+    phase_b_lines = PHASE_B_LINES_WITH_APP if include_app else PHASE_B_LINES_NO_APP
+    for line, kinds in phase_b_lines:
         out = execute_digest_line_work_units(
             int(record_id),
             dispatch_line=line,

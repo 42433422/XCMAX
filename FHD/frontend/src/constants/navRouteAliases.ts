@@ -5,8 +5,8 @@ export const SIDEBAR_ROUTE_ALIASES: Record<string, string> = {
   'mod-approval-hub': 'approval-workspace',
   'mod-attendance-industry-home': 'attendance-industry-home',
   'mod-attendance-industry-settings': 'attendance-industry-settings',
-  'mod-taiyangniao-pro-home': 'attendance-industry-home',
-  'mod-taiyangniao-pro-settings': 'attendance-industry-settings',
+  'mod-taiyangniao-pro-home': 'taiyangniao-pro-home',
+  'mod-taiyangniao-pro-settings': 'taiyangniao-pro-settings',
 }
 
 export function resolveNavRouteName(viewKey: string, modPath?: string): string {

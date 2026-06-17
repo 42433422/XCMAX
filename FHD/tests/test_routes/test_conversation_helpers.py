@@ -494,8 +494,10 @@ class TestThinkingStepsFromPlannerStreamText:
 
 class TestStripPlannerStreamMarkers:
     def test_splits_user_text_and_thinking(self):
+        from app.application.planner_display_markers import strip_planner_stream_markers
+
         merged = "你好 [正在调用工具:excel.read] 已读完。"
-        user_text, thinking = helpers.strip_planner_stream_markers(merged)
+        user_text, thinking = strip_planner_stream_markers(merged)
         assert "[正在调用工具" not in user_text
         assert "你好" in user_text
         assert "已读完" in user_text
@@ -503,7 +505,9 @@ class TestStripPlannerStreamMarkers:
         assert "正在调用工具:excel.read" in thinking
 
     def test_empty_merged(self):
-        user_text, thinking = helpers.strip_planner_stream_markers("")
+        from app.application.planner_display_markers import strip_planner_stream_markers
+
+        user_text, thinking = strip_planner_stream_markers("")
         assert user_text == ""
         assert thinking is None
 

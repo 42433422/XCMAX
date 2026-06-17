@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import logging
 import socket
+import uuid
+from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query, Request
@@ -11,7 +13,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from app.fastapi_routes.mobile_api import get_mobile_user
-from app.security.mobile_pairing import consume_pairing_nonce, issue_pairing_nonce
+from app.security.mobile_pairing import consume_by_shortcode, consume_pairing_nonce, issue_pairing_nonce
 from app.utils.mobile_api import format_mobile_response, paginate_list
 from app.utils.operational_errors import OPERATIONAL_ERRORS
 
@@ -46,7 +48,8 @@ class DeviceRegisterBody(BaseModel):
 
 
 class PairingExchangeBody(BaseModel):
-    nonce: str = Field(..., min_length=8)
+    nonce: str = Field(default="", max_length=128)
+    code: str = Field(default="", max_length=16)
 
 
 class PairingIssueBody(BaseModel):
@@ -254,10 +257,17 @@ async def mobile_pairing_issue(body: PairingIssueBody):
 
 @extension_router.post("/pairing/exchange")
 async def mobile_pairing_exchange(body: PairingExchangeBody):
-    rec = consume_pairing_nonce(body.nonce.strip())
+    nonce = body.nonce.strip()
+    code = body.code.strip()
+    if not nonce and not code:
+        return JSONResponse(
+            format_mobile_response(None, "缺少配对码", success=False, code=400),
+            status_code=400,
+        )
+    rec = consume_by_shortcode(code) if code else consume_pairing_nonce(nonce)
     if not rec:
         return JSONResponse(
-            format_mobile_response(None, "nonce 无效或已过期", success=False, code=400),
+            format_mobile_response(None, "配对码无效或已过期，请刷新二维码", success=False, code=400),
             status_code=400,
         )
     return format_mobile_response(
@@ -269,20 +279,54 @@ async def mobile_pairing_exchange(body: PairingExchangeBody):
     )
 
 
-def _mobile_mod_items() -> list[dict[str, str]]:
+def _mobile_mod_items() -> list[dict[str, Any]]:
     try:
         from app.infrastructure.mods.mod_manager import get_mod_manager
 
-        items: list[dict[str, str]] = []
+        items: list[dict[str, Any]] = []
         for m in get_mod_manager().list_all_mods() or []:
             if isinstance(m, dict):
                 mid = str(m.get("id") or m.get("mod_id") or "").strip()
                 name = str(m.get("name") or m.get("title") or mid).strip()
+                employees = m.get("workflow_employees") if isinstance(m.get("workflow_employees"), list) else []
+                menu = m.get("frontend_menu") or m.get("menu") or m.get("menus")
+                menu_overrides = m.get("menu_overrides")
+                item = {
+                    "id": mid,
+                    "name": name,
+                    "version": m.get("version") or "",
+                    "author": m.get("author") or "",
+                    "description": m.get("description") or "",
+                    "primary": bool(m.get("primary")),
+                    "industry": m.get("industry") if isinstance(m.get("industry"), dict) else {},
+                    "frontend_menu": menu if isinstance(menu, list) else [],
+                    "menu": menu if isinstance(menu, list) else [],
+                    "menu_overrides": menu_overrides if isinstance(menu_overrides, list) else [],
+                    "workflow_employees": employees,
+                }
             else:
                 mid = str(getattr(m, "id", None) or getattr(m, "mod_id", "") or "").strip()
                 name = str(getattr(m, "name", None) or getattr(m, "title", None) or mid).strip()
+                employees = getattr(m, "workflow_employees", [])
+                if not isinstance(employees, list):
+                    employees = []
+                menu = getattr(m, "frontend_menu", [])
+                menu_overrides = getattr(m, "frontend_menu_overrides", [])
+                item = {
+                    "id": mid,
+                    "name": name,
+                    "version": str(getattr(m, "version", "") or ""),
+                    "author": str(getattr(m, "author", "") or ""),
+                    "description": str(getattr(m, "description", "") or ""),
+                    "primary": bool(getattr(m, "primary", False)),
+                    "industry": getattr(m, "industry", {}) if isinstance(getattr(m, "industry", {}), dict) else {},
+                    "frontend_menu": menu if isinstance(menu, list) else [],
+                    "menu": menu if isinstance(menu, list) else [],
+                    "menu_overrides": menu_overrides if isinstance(menu_overrides, list) else [],
+                    "workflow_employees": employees,
+                }
             if mid:
-                items.append({"id": mid, "name": name})
+                items.append(item)
         return items[:100]
     except OPERATIONAL_ERRORS as exc:
         logger.warning("mobile mods list: %s", exc)
@@ -856,3 +900,52 @@ async def mobile_auth_oidc_exchange(body: OidcExchangeBody):
             **tokens,
         },
     )
+
+
+# ── 专属客服接口（企业版手机端） ──
+
+@extension_router.get("/cs/info")
+async def get_cs_info(request: Request, user=Depends(get_mobile_user)):
+    """返回当前用户的专属客服信息。"""
+    if user is None:
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
+        )
+    # TODO: Phase 2 从数据库/配置读取真实的客服信息
+    # Phase 1 返回演示数据
+    return format_mobile_response(
+        data={
+            "cs_available": True,
+            "cs_name": "修茈客服",
+            "cs_avatar": None,
+            "cs_online": True,
+        }
+    )
+
+
+@extension_router.post("/cs/messages")
+async def post_cs_message(request: Request, body: dict, user=Depends(get_mobile_user)):
+    """发送消息到客服通道。"""
+    if user is None:
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
+        )
+    msg_body = body.get("body", "")
+    message_id = f"cs_{uuid.uuid4().hex[:12]}"
+    # TODO: Phase 2 存储到客服消息表并推送给客服人员
+    # Phase 1 返回模拟确认
+    return format_mobile_response(
+        data={"message_id": message_id, "timestamp": datetime.utcnow().isoformat()}
+    )
+
+
+@extension_router.get("/cs/messages")
+async def get_cs_messages(request: Request, since: str | None = None, user=Depends(get_mobile_user)):
+    """拉取客服消息。"""
+    if user is None:
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
+        )
+    # TODO: Phase 2 从客服消息表查询
+    # Phase 1 返回空列表
+    return format_mobile_response(data={"messages": []})

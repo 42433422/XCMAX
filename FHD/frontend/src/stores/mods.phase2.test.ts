@@ -116,6 +116,7 @@ vi.mock('@/constants/genericModPack', () => ({
 }));
 
 vi.mock('@/constants/accountModBinding', () => ({
+  SUNBIRD_CLIENT_MOD_ID: 'taiyangniao-pro',
   augmentEntitledModIdsForAccount: (_u: unknown, ids: string[] | undefined) => ids || [],
   isSunbirdAccountUsername: (u: string | null | undefined) =>
     String(u || '').trim().toUpperCase() === 'SUNBIRD',
@@ -123,9 +124,16 @@ vi.mock('@/constants/accountModBinding', () => ({
 }));
 
 vi.mock('@/constants/sunbirdClientMod', () => ({
-  buildSunbirdClientModStub: () => ({
+  buildAttendanceIndustryModStub: () => ({
     id: 'attendance-industry',
-    name: '太阳鸟行业包',
+    name: '考勤行业包',
+    version: '1.0.0',
+    author: 'xcagi',
+    description: 'attendance stub',
+  }),
+  buildSunbirdClientModStub: () => ({
+    id: 'taiyangniao-pro',
+    name: '太阳鸟 PRO',
     version: '1.0.0',
     author: 'sunbird',
     description: 'stub',
@@ -420,7 +428,7 @@ describe('mods store – modsForUi', () => {
     expect(store.modsForUi).toHaveLength(sampleMods.length);
   });
 
-  it('returns sunbird stub when activeModId is CLIENT_PRIMARY_ERP_MOD_ID and not in list', () => {
+  it('returns attendance stub when activeModId is CLIENT_PRIMARY_ERP_MOD_ID and not in list', () => {
     const store = useModsStore();
     const modsNoAttendance = sampleMods.filter((m) => m.id !== 'attendance-industry');
     store.mods = modsNoAttendance as never[];
@@ -876,6 +884,19 @@ describe('mods store – applyEntitledActiveMod', () => {
     mockApiFetch.mockResolvedValue(makeModsResponse(sampleMods));
     await store.applyEntitledActiveMod(['attendance-industry'], { force: true });
     expect(store.activeModId).toBe('attendance-industry');
+  });
+
+  it('selects taiyangniao-pro for SUNBIRD even when attendance entitlement is also present', async () => {
+    const store = useModsStore();
+    store.mods = sampleMods as never[];
+    mockApiFetch.mockResolvedValue(makeModsResponse(sampleMods));
+
+    await store.applyEntitledActiveMod(
+      ['attendance-industry', 'taiyangniao-pro'],
+      { force: true, accountUsername: 'SUNBIRD' },
+    );
+
+    expect(store.activeModId).toBe('taiyangniao-pro');
   });
 });
 

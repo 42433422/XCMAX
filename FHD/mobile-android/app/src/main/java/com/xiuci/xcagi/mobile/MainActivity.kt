@@ -63,7 +63,7 @@ class MainActivity : FragmentActivity() {
                 data.scheme == "xcagi" -> data.host.orEmpty().let { h ->
                     data.path?.let { p -> "$h$p" } ?: h
                 }
-                data.host?.contains("xiu-ci.com") == true -> data.path ?: "/app/workbench"
+                data.host?.contains("xiu-ci.com") == true -> data.path ?: "chat"
                 else -> null
             }
         }

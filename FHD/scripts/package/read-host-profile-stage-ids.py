@@ -7,15 +7,24 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
 
-from app.mod_sdk.host_profile import package_stage_mod_ids_for_sku  # noqa: E402
+
+def _load_json(path: Path) -> dict:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError as exc:
+        raise SystemExit(f"host profile not found: {path}") from exc
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"invalid host profile JSON: {path}: {exc}") from exc
 
 
 def main() -> None:
     sku = (sys.argv[1] if len(sys.argv) > 1 else "enterprise").strip().lower()
-    ids = list(package_stage_mod_ids_for_sku(sku))  # type: ignore[arg-type]
+    if sku not in {"personal", "enterprise"}:
+        raise SystemExit(f"invalid SKU: {sku}")
+    profile = _load_json(ROOT / "config" / "host_profiles" / f"{sku}.json")
+    raw = profile.get("package_stage_ids") or profile.get("sku_bundled_mod_ids") or []
+    ids = [str(item).strip() for item in raw if str(item).strip()]
     print(json.dumps(ids, ensure_ascii=False))
 
 

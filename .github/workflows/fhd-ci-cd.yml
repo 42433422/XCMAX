@@ -177,12 +177,19 @@ jobs:
           INTENT_BENCHMARK_RUN: "1"
         run: |
           mkdir -p coverage
-          # Coverage gate SSOT = FHD/pyproject.toml [tool.coverage.report] fail_under
-          # (honest full-app source=[app] baseline). Do NOT hardcode a threshold here;
-          # the old 58 came from a deprecated narrow include scope and conflicted with it.
+          # 行 floor SSOT = pyproject.toml [tool.coverage.report] fail_under（铁律1 全量 source=[app]）。
+          # 开启 branch=true 后 coverage 自带门禁按"行+分支合并"指标拦截，故 --cov-fail-under=0，
+          # 把行/分支门禁交给 coverage_ratchet.py --check（分支/前端 floor 见
+          # metrics/coverage_ratchet_baseline.json）。禁止再硬编码窄包阈值。
           python -m pytest tests/ -v \
-            --cov \
-            --cov-report=xml --cov-report=html --cov-report=term-missing
+            --cov --cov-branch --cov-fail-under=0 \
+            --cov-report=xml --cov-report=json:coverage.json \
+            --cov-report=html --cov-report=term-missing
+
+      - name: Coverage ratchet check (行/分支只升不降)
+        env:
+          XCAGI_SKIP_LEGACY_COMPAT_ROUTES: "1"
+        run: python scripts/dev/coverage_ratchet.py --check --require-backend
 
       # Codecov policy: optional until CODECOV_TOKEN is in repo secrets
       # (Settings → Secrets and variables → Actions). Without token this step is

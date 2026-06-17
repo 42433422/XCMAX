@@ -52,8 +52,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Trigger K8s deploy workflow
+        working-directory: .
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
           ENV="${{ github.event.inputs.environment || 'production' }}"
@@ -80,7 +82,22 @@ jobs:
           - fhd-release-android.yml
     steps:
       - name: Trigger ${{ matrix.workflow }}
+        working-directory: .
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
-          gh workflow run "${{ matrix.workflow }}" --ref "${{ github.ref_name }}"
+          set -euo pipefail
+          raw="${{ github.ref_name }}"
+          raw="${raw#FHD/}"
+          raw="${raw#v}"
+          raw="${raw#V}"
+          version="${raw:-10.0.0}"
+          case "${{ matrix.workflow }}" in
+            fhd-release-desktop.yml|fhd-release-web.yml)
+              gh workflow run "${{ matrix.workflow }}" --ref "${{ github.ref_name }}" -f "version=${version}"
+              ;;
+            *)
+              gh workflow run "${{ matrix.workflow }}" --ref "${{ github.ref_name }}"
+              ;;
+          esac

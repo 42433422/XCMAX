@@ -13,6 +13,11 @@ import com.xiuci.xcagi.mobile.core.model.MarketLoginBody
 import com.xiuci.xcagi.mobile.core.model.MarketPasswordLoginBody
 import com.xiuci.xcagi.mobile.core.model.MarketRegisterBody
 import com.xiuci.xcagi.mobile.core.model.MarketSendCodeBody
+import com.xiuci.xcagi.mobile.core.model.ModIndustry
+import com.xiuci.xcagi.mobile.core.model.ModInfo
+import com.xiuci.xcagi.mobile.core.model.ModMenuItem
+import com.xiuci.xcagi.mobile.core.model.ModMenuOverride
+import com.xiuci.xcagi.mobile.core.model.WorkflowEmployeeInfo
 import com.xiuci.xcagi.mobile.core.network.ApproveBody
 import com.xiuci.xcagi.mobile.core.network.AuthQrConfirmBody
 import com.xiuci.xcagi.mobile.core.network.BridgeRespondBody
@@ -163,20 +168,57 @@ class XcagiRepository @Inject constructor(
 
     suspend fun scanLan(prefix: String): List<String> = lanScanner.scanSubnet(prefix)
 
-    suspend fun loginFhd(username: String, password: String): Result<String> = try {
+    private fun normalizeAccountKind(raw: String): String =
+            raw.trim().lowercase().ifBlank { ProductSkuConfig.accountKind }
+
+    private fun isEnterpriseAccountKind(kind: String): Boolean = when (normalizeAccountKind(kind)) {
+        "enterprise", "admin", "admin_portal" -> true
+        else -> false
+    }
+
+    private fun isAdminRole(raw: String): Boolean = normalizeAccountKind(raw).contains("admin")
+
+    private fun resolveAccountKindFromSignals(
+            accountKind: String?,
+            role: String? = null,
+            defaultKind: String = ProductSkuConfig.accountKind,
+    ): String {
+        val normalized = normalizeAccountKind(accountKind.orEmpty())
+        val normalizedDefault = normalizeAccountKind(defaultKind)
+        return when {
+            isEnterpriseAccountKind(normalized) -> if (normalized == "admin_portal") "admin" else normalized
+            isAdminRole(role.orEmpty()) -> "admin"
+            normalized == "enterprise" -> "enterprise"
+            normalized == "personal" -> if (isAdminRole(normalizedDefault)) "admin" else "personal"
+            else -> normalizedDefault
+        }
+    }
+
+    suspend fun loginFhd(
+            username: String,
+            password: String,
+            accountKind: String = ProductSkuConfig.accountKind,
+    ): Result<String> = try {
         syncRouterFromStore()
+        val normalizedKind = normalizeAccountKind(accountKind)
         val res = fhd().mobileLogin(
-            MobileLoginRequest(username, password, ProductSkuConfig.accountKind),
+            MobileLoginRequest(username, password, normalizedKind),
         )
         if (!res.success || res.data?.access_token.isNullOrBlank()) {
             Result.failure(Exception(res.message.ifBlank { "登录失败" }))
         } else {
             val d = res.data!!
+            val resolvedKind = resolveAccountKindFromSignals(
+                d.account_kind,
+                d.user?.role,
+                normalizedKind,
+            )
+            sessionStore.setAccountKind(resolvedKind)
             sessionStore.saveFhdAuth(
                 d.access_token!!, d.refresh_token ?: "", d.session_id ?: "", d.user?.username ?: username,
                 userId = d.user?.id ?: 0,
             )
-            refreshMe()
+            refreshMe(resolvedKind)
             registerDeviceToken()
             syncMarketSessionHandoff()
             Result.success(d.user?.display_name ?: username)
@@ -205,12 +247,6 @@ class XcagiRepository @Inject constructor(
         Result.failure(e)
     }
 
-    fun workbenchHomeUrl(): String {
-        val base = BuildConfig.MODSTORE_BASE_URL.trimEnd('/')
-        val sku = BuildConfig.PRODUCT_SKU
-        return "$base/workbench/home?client=android&sku=$sku"
-    }
-
     suspend fun marketTokensForWeb(): Pair<String, String> {
         val access = sessionStore.marketAccessToken().ifBlank {
             sessionStore.fhdAccessFlow.first()
@@ -234,7 +270,7 @@ class XcagiRepository @Inject constructor(
 
     private suspend fun registerOnCloud(username: String, password: String, email: String): Result<Unit> {
         if (email.isBlank() || !email.contains("@")) {
-            return Result.failure(Exception("云端注册需填写有效邮箱；也可直接使用手机号登录"))
+            return Result.failure(Exception("远程注册需填写有效邮箱；也可直接使用手机号登录"))
         }
         return try {
             val res = modstore().register(MarketRegisterBody(username, password, email.trim()))
@@ -251,11 +287,19 @@ class XcagiRepository @Inject constructor(
         }
     }
 
-    suspend fun refreshMe() {
+    suspend fun refreshMe(preferredKind: String = ProductSkuConfig.accountKind) {
         try {
             val me = fhd().me()
             val uid = me.data?.user?.id ?: 0
             if (uid > 0) sessionStore.setUserId(uid)
+            val currentKind = sessionStore.accountKindFlow.first()
+            if (currentKind.isNotBlank()) return
+            val resolvedKind = resolveAccountKindFromSignals(
+                me.data?.account_kind,
+                me.data?.user?.role,
+                preferredKind,
+            )
+            sessionStore.setAccountKind(resolvedKind)
         } catch (_: Exception) {
         }
     }
@@ -316,17 +360,40 @@ class XcagiRepository @Inject constructor(
         }
     }
 
-    suspend fun pairingExchange(nonce: String): Result<Pair<String, Int>> = try {
-        syncRouterFromStore()
-        val r = fhd().pairingExchange(PairingExchangeBody(nonce))
-        val d = r.data ?: return Result.failure(Exception(r.message))
-        val host = d["host"]?.toString() ?: return Result.failure(Exception("无 host"))
-        val port = (d["port"] as? Number)?.toInt() ?: 5000
-        sessionStore.setFhdHost(host)
-        serverRouter.fhdHost = host
-        Result.success(host to port)
-    } catch (e: Exception) {
-        Result.failure(e)
+    suspend fun pairingExchange(
+        nonce: String = "",
+        code: String = "",
+        exchangeHost: String = "",
+        exchangePort: Int = 0,
+    ): Result<Pair<String, Int>> {
+        return try {
+            val targetHost = exchangeHost.trim()
+            if (targetHost.isBlank() && code.isNotBlank() && sessionStore.fhdHostFlow.first().isBlank()) {
+                return Result.failure(Exception("请扫描电脑端二维码完成首次绑定"))
+            }
+            if (targetHost.isNotBlank()) {
+                val hostWithPort = if (exchangePort > 0 && ":" !in targetHost) {
+                    "$targetHost:$exchangePort"
+                } else {
+                    targetHost
+                }
+                sessionStore.setFhdHost(hostWithPort)
+                sessionStore.setServerMode("lan")
+                serverRouter.fhdHost = hostWithPort
+                serverRouter.mode = ServerMode.LAN
+            }
+            syncRouterFromStore()
+            val r = fhd().pairingExchange(PairingExchangeBody(nonce = nonce, code = code))
+            val d = r.data ?: return Result.failure(Exception(r.message))
+            val host = d["host"]?.toString() ?: return Result.failure(Exception("无 host"))
+            val port = (d["port"] as? Number)?.toInt() ?: 5000
+            val hostWithPort = if (":" in host) host else "$host:$port"
+            sessionStore.setFhdHost(hostWithPort)
+            serverRouter.fhdHost = hostWithPort
+            Result.success(host to port)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 
     suspend fun confirmAuthQr(qrId: String, username: String, password: String): Result<Unit> {
@@ -360,8 +427,13 @@ class XcagiRepository @Inject constructor(
         Result.failure(e)
     }
 
-    private suspend fun resolveMarketUserIsEnterprise(res: MarketAuthResponse): Boolean {
-        res.userIsEnterprise()?.let { return it }
+    private suspend fun resolveMarketUserIsEnterprise(
+        accountKind: String,
+        userIsEnterprise: Boolean? = null,
+    ): Boolean {
+        val normalized = normalizeAccountKind(accountKind)
+        if (normalized == "admin" || normalized == "admin_portal") return true
+        userIsEnterprise?.let { return it }
         return try {
             modstore().authMe().is_enterprise
         } catch (_: Exception) {
@@ -385,7 +457,27 @@ class XcagiRepository @Inject constructor(
             return Result.failure(Exception(res.message ?: "登录失败"))
         }
         sessionStore.setMarketTokens(token, res.refresh_token?.trim().orEmpty())
-        val isEnterprise = resolveMarketUserIsEnterprise(res)
+        val resolvedKind = normalizeAccountKind(res.account_kind.orEmpty())
+        val marketKind = if (resolvedKind.isBlank()) {
+            when {
+                res.market_is_admin -> "admin"
+                res.is_enterprise -> "enterprise"
+                else -> ProductSkuConfig.accountKind
+            }
+        } else {
+            resolvedKind
+        }
+        val isEnterprise = resolveMarketUserIsEnterprise(
+            accountKind = marketKind,
+            userIsEnterprise = res.userIsEnterprise(),
+        ) || isEnterpriseAccountKind(marketKind) || res.market_is_admin
+        sessionStore.setAccountKind(
+            when {
+                res.market_is_admin -> "admin"
+                isEnterprise -> "enterprise"
+                else -> "personal"
+            },
+        )
         validateSkuAccount(isEnterprise).getOrElse { return Result.failure(it) }
         sessionStore.setDisplayName(displayName)
         sessionStore.setSetupComplete(true)
@@ -412,12 +504,22 @@ class XcagiRepository @Inject constructor(
         return try {
             if (isPcReachable()) {
                 val res = fhd().mobileLoginWithPhone(
-                    MobilePhoneLoginRequest(phone = phone, code = code, account_kind = ProductSkuConfig.accountKind),
+                    MobilePhoneLoginRequest(
+                        phone = phone,
+                        code = code,
+                        account_kind = ProductSkuConfig.accountKind,
+                    ),
                 )
                 if (!res.success || res.data?.access_token.isNullOrBlank()) {
                     Result.failure(Exception(res.message.ifBlank { "手机验证码登录失败" }))
                 } else {
                     val d = res.data!!
+                    val resolvedKind = resolveAccountKindFromSignals(
+                        d.account_kind,
+                        d.user?.role,
+                        ProductSkuConfig.accountKind,
+                    )
+                    sessionStore.setAccountKind(resolvedKind)
                     sessionStore.saveFhdAuth(
                         d.access_token!!,
                         d.refresh_token ?: "",
@@ -425,7 +527,7 @@ class XcagiRepository @Inject constructor(
                         d.user?.username ?: phone,
                         userId = d.user?.id ?: 0,
                     )
-                    refreshMe()
+                    refreshMe(resolvedKind)
                     syncMarketSessionHandoff()
                     Result.success(d.user?.display_name ?: phone)
                 }
@@ -438,8 +540,19 @@ class XcagiRepository @Inject constructor(
         }
     }
 
-    suspend fun loginMarketPassword(username: String, password: String): Result<String> = try {
-        val res = modstore().loginWithPassword(MarketPasswordLoginBody(username, password))
+    suspend fun loginMarketPassword(
+        username: String,
+        password: String,
+        accountKind: String = ProductSkuConfig.accountKind,
+    ): Result<String> = try {
+        val normalizedKind = normalizeAccountKind(accountKind)
+        val res = modstore().loginWithPassword(
+            MarketPasswordLoginBody(
+                username = username,
+                password = password,
+                account_kind = normalizedKind,
+            ),
+        )
         applyMarketAuth(res, username)
     } catch (e: Exception) {
         Result.failure(e)
@@ -450,8 +563,25 @@ class XcagiRepository @Inject constructor(
      * 纯云端走 MODstore 同一套用户名密码。
      */
     suspend fun loginUnified(username: String, password: String): Result<String> {
+        return loginUnified(username, password, ProductSkuConfig.accountKind)
+    }
+
+    suspend fun loginUnified(
+        username: String,
+        password: String,
+        accountKind: String,
+    ): Result<String> {
         syncRouterFromStore()
-        return if (isPcReachable()) loginFhd(username, password) else loginMarketPassword(username, password)
+        return if (isPcReachable()) {
+            loginFhd(username, password, accountKind)
+        } else {
+            loginMarketPassword(username, password, accountKind)
+        }
+    }
+
+    suspend fun loginUnified(username: String, password: String, isAdmin: Boolean): Result<String> {
+        val targetKind = if (isAdmin) "admin" else ProductSkuConfig.accountKind
+        return loginUnified(username, password, targetKind)
     }
 
     suspend fun streamChat(
@@ -483,6 +613,15 @@ class XcagiRepository @Inject constructor(
         if (finalText.isNotBlank()) {
             db.chatDao().insert(ChatCacheEntity(role = "assistant", text = finalText))
         }
+    }
+
+    suspend fun streamChatCloud(
+        message: String,
+        onToken: (String) -> Unit,
+        onDone: (String) -> Unit,
+        onError: (String) -> Unit,
+    ) {
+        streamChat(message, onToken, onDone, onError)
     }
 
     suspend fun loadCachedChat(): List<Pair<String, String>> =
@@ -564,6 +703,24 @@ class XcagiRepository @Inject constructor(
 
     suspend fun mods(): Result<List<ListItem>> = parseMobileList {
         fhd().mobileMods().data
+    }
+
+    suspend fun loadModInfos(): Result<List<ModInfo>> = try {
+        syncRouterFromStore()
+        val body = if (isPcReachable()) {
+            fhd().modsList()
+        } else {
+            val token = sessionStore.marketAccessToken().ifBlank { sessionStore.fhdAccessFlow.first() }
+            val auth = if (token.isNotBlank()) "Bearer $token" else null
+            modstore().installedMods(auth)
+        }
+        val raw = (body["data"] as? Map<*, *>)?.let { data ->
+            data["items"] ?: data["mods"] ?: data["installed"]
+        } ?: body["items"] ?: body["mods"] ?: body["installed"]
+        val rows = raw as? List<*> ?: emptyList<Any?>()
+        Result.success(rows.mapNotNull { (it as? Map<*, *>)?.toModInfo() })
+    } catch (e: Exception) {
+        Result.failure(e)
     }
 
     suspend fun fetchHome(): Result<Map<String, Any?>> = try {
@@ -704,4 +861,70 @@ class XcagiRepository @Inject constructor(
     } catch (e: Exception) {
         Result.failure(e)
     }
+
+    private fun Map<*, *>.toModInfo(): ModInfo {
+        val industryMap = this["industry"] as? Map<*, *>
+        val menus = ((this["frontend_menu"] ?: this["menu"] ?: this["menus"]) as? List<*>)
+            ?.mapNotNull { row -> (row as? Map<*, *>)?.toModMenuItem() }
+            ?: emptyList()
+        val overrides = (this["menu_overrides"] as? List<*>)
+            ?.mapNotNull { row -> (row as? Map<*, *>)?.toModMenuOverride() }
+            ?: emptyList()
+        val manifest = this["manifest"] as? Map<*, *>
+        val workflowEmployees = ((this["workflow_employees"] ?: manifest?.get("workflow_employees")) as? List<*>)
+            ?.mapNotNull { row -> (row as? Map<*, *>)?.toWorkflowEmployeeInfo() }
+            ?: emptyList()
+        return ModInfo(
+            id = textValue("id"),
+            name = textValue("name").ifBlank { textValue("title") },
+            version = textValue("version"),
+            description = textValue("description"),
+            author = textValue("author"),
+            primary = this["primary"] as? Boolean ?: false,
+            industry = industryMap?.let {
+                ModIndustry(
+                    id = it.textValue("id"),
+                    name = it.textValue("name").ifBlank { it.textValue("label") },
+                )
+            },
+            frontend_menu = menus,
+            menu_overrides = overrides,
+            workflow_employees = workflowEmployees,
+        )
+    }
+
+    private fun Map<*, *>.toWorkflowEmployeeInfo(): WorkflowEmployeeInfo {
+        return WorkflowEmployeeInfo(
+            id = textValue("id"),
+            label = textValue("label").ifBlank { textValue("name") },
+            panel_title = textValue("panel_title"),
+            panel_summary = textValue("panel_summary"),
+            api_base_path = textValue("api_base_path"),
+            phone_channel = textValue("phone_channel"),
+            workflow_placeholder = this["workflow_placeholder"] as? Boolean ?: false,
+        )
+    }
+
+    private fun Map<*, *>.toModMenuItem(): ModMenuItem {
+        return ModMenuItem(
+            id = textValue("id").ifBlank { textValue("key") },
+            label = textValue("label").ifBlank { textValue("name") },
+            icon = textValue("icon"),
+            path = textValue("path").ifBlank { textValue("route") },
+        )
+    }
+
+    private fun Map<*, *>.toModMenuOverride(): ModMenuOverride {
+        return ModMenuOverride(
+            key = textValue("key").ifBlank { textValue("id") },
+            label = optionalTextValue("label"),
+            icon = optionalTextValue("icon"),
+            hidden = this["hidden"] as? Boolean,
+        )
+    }
+
+    private fun Map<*, *>.textValue(key: String): String = this[key]?.toString()?.trim().orEmpty()
+
+    private fun Map<*, *>.optionalTextValue(key: String): String? =
+        this[key]?.toString()?.trim()?.takeIf { it.isNotBlank() }
 }

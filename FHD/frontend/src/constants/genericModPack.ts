@@ -126,7 +126,8 @@ function isSandboxSidebarMode(): boolean {
 
 function isPlatformShellSidebarMode(): boolean {
   const sku = String(import.meta.env.VITE_XCAGI_PRODUCT_SKU || '').trim().toLowerCase()
-  if (sku === 'enterprise') return false
+  const edition = readBuildEdition()
+  if (sku === 'enterprise' && edition === 'full') return false
   if (typeof window !== 'undefined') {
     try {
       const q = new URLSearchParams(window.location.search)
@@ -147,7 +148,6 @@ function isPlatformShellSidebarMode(): boolean {
   }
   const env = String(import.meta.env.VITE_XCAGI_PLATFORM_SHELL || '').trim().toLowerCase()
   if (env === '1' || env === 'true' || env === 'yes') return true
-  const edition = readBuildEdition()
   if (edition === 'minimal' || edition === 'generic') return true
   const def = String(import.meta.env.VITE_XCAGI_DEFAULT_PLATFORM_SHELL || '').trim().toLowerCase()
   return def === '1' || def === 'true' || def === 'yes'

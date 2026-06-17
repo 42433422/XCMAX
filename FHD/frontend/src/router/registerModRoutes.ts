@@ -44,6 +44,65 @@ import { modRouteGlob } from '@/constants/modRouteGlob';
 
 const modRouteLoaders = modRouteGlob;
 
+function browserFullPath(): string | null {
+  if (typeof window === 'undefined' || !window.location) return null;
+  const path = window.location.pathname || '/';
+  return `${path}${window.location.search || ''}${window.location.hash || ''}`;
+}
+
+function isRouterStartLocation(route: Router['currentRoute']['value']): boolean {
+  return route.fullPath === '/' && route.matched.length === 0 && !route.name;
+}
+
+function currentRefreshFullPath(router: Router): string {
+  const current = router.currentRoute.value;
+  const browserPath = browserFullPath();
+  if (browserPath && browserPath !== current.fullPath) {
+    const resolvedBrowserPath = router.resolve(browserPath);
+    if (resolvedBrowserPath.matched.length > 0) {
+      return browserPath;
+    }
+  }
+  if (isRouterStartLocation(current) && browserPath && browserPath !== current.fullPath) {
+    return browserPath;
+  }
+  return current.fullPath || browserPath || '/';
+}
+
+function shouldReplaceWithRefreshTarget(router: Router, targetFullPath: string): boolean {
+  const resolved = router.resolve(targetFullPath);
+  if (resolved.matched.length === 0) return false;
+  const current = router.currentRoute.value;
+  if (current.fullPath !== targetFullPath) return true;
+  if (current.matched.length === 0) return true;
+  return String(resolved.name || '') !== String(current.name || '');
+}
+
+async function waitForRouterReadyOrTimeout(router: Router): Promise<void> {
+  await Promise.race([
+    router.isReady().catch(() => undefined),
+    new Promise<void>((resolve) => window.setTimeout(resolve, 500)),
+  ]);
+}
+
+async function replaceWithRefreshTarget(router: Router): Promise<void> {
+  await waitForRouterReadyOrTimeout(router);
+  const targetFullPath = currentRefreshFullPath(router);
+  if (shouldReplaceWithRefreshTarget(router, targetFullPath)) {
+    await router.replace(targetFullPath);
+  }
+
+  window.setTimeout(() => {
+    const delayedTargetFullPath = currentRefreshFullPath(router);
+    if (!shouldReplaceWithRefreshTarget(router, delayedTargetFullPath)) return;
+    router.replace(delayedTargetFullPath).catch((e) => {
+      if (import.meta.env.DEV) {
+        console.warn('[mods] delayed route refresh failed:', e);
+      }
+    });
+  }, 500);
+}
+
 function findGlobKeyForMod(modId: string): string | undefined {
   const suffixes = [
     `/mods/${modId}/frontend/routes.js`,
@@ -105,9 +164,22 @@ export async function registerModRoutes(
       const mod = await modRouteLoaders[key]();
       const routes = extractRoutesFromModule(mod);
       for (const r of routes) {
+        const currentBefore = router.currentRoute.value;
+        const beforeNames = new Set(
+          currentBefore.matched.map((m) => String(m.name || '')).filter(Boolean),
+        );
         router.addRoute(r);
-        const current = router.currentRoute.value;
-        if (current.matched.length === 0 && router.resolve(current.fullPath).matched.length > 0) {
+        const currentAfter = router.currentRoute.value;
+        const resolvedAfter = router.resolve(currentRefreshFullPath(router));
+        const resolvedNames = resolvedAfter.matched
+          .map((m) => String(m.name || ''))
+          .filter(Boolean);
+        if (
+          resolvedAfter.matched.length > 0 &&
+          (currentAfter.matched.length === 0 ||
+            String(resolvedAfter.name || '') !== String(currentAfter.name || '') ||
+            resolvedNames.some((name) => !beforeNames.has(name)))
+        ) {
           shouldRefreshCurrentRoute = true;
         }
       }
@@ -137,7 +209,11 @@ export async function registerModRoutes(
     await new Promise<void>((r) => window.setTimeout(r, 0));
   }
 
-  if (shouldRefreshCurrentRoute) {
-    await router.replace(router.currentRoute.value.fullPath);
+  const finalTargetFullPath = currentRefreshFullPath(router);
+  if (
+    shouldRefreshCurrentRoute ||
+    shouldReplaceWithRefreshTarget(router, finalTargetFullPath)
+  ) {
+    await replaceWithRefreshTarget(router);
   }
 }
