@@ -52,7 +52,14 @@ function readVanillaNoModUi(): boolean {
 
 function browserFullPath(): string {
   if (typeof window === 'undefined' || !window.location) return '/';
-  return `${window.location.pathname || '/'}${window.location.search || ''}${window.location.hash || ''}`;
+  const base = String(import.meta.env.BASE_URL || '/').replace(/\/$/, '');
+  let pathname = window.location.pathname || '/';
+  if (base && base !== '/' && pathname.startsWith(`${base}/`)) {
+    pathname = pathname.slice(base.length) || '/';
+  } else if (base && base !== '/' && pathname === base) {
+    pathname = '/';
+  }
+  return `${pathname}${window.location.search || ''}${window.location.hash || ''}`;
 }
 
 function scheduleRouterAddressSync(reason: string): void {

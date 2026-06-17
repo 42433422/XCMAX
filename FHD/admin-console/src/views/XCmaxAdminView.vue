@@ -231,7 +231,7 @@ export default { name: 'XCmaxAdminView' }
 </script>
 
 <script setup>
-import { onActivated, onDeactivated, ref } from 'vue'
+import { onActivated, onBeforeUnmount, onDeactivated, onMounted, ref } from 'vue'
 import XCmaxAdminInfraTab from '@/components/admin/XCmaxAdminInfraTab.vue'
 import XCmaxAdminDutyTab from '@/components/admin/XCmaxAdminDutyTab.vue'
 import XcmaxDashboardEmbed from '@/components/admin/XcmaxDashboardEmbed.vue'
@@ -525,15 +525,28 @@ function stopSyncStream() {
   }
 }
 
-onActivated(async () => {
+async function bootstrapOverview() {
   if (!overviewBootstrapped.value) {
     await refreshAll()
     overviewBootstrapped.value = true
   }
+}
+
+onMounted(async () => {
+  await bootstrapOverview()
+  startSyncStream()
+})
+
+onActivated(async () => {
+  await bootstrapOverview()
   startSyncStream()
 })
 
 onDeactivated(() => {
+  stopSyncStream()
+})
+
+onBeforeUnmount(() => {
   stopSyncStream()
 })
 </script>
