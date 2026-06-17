@@ -55,6 +55,18 @@ import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
+internal object AuthRoutingPolicy {
+    fun shouldUseEnterpriseAuthHost(isEnterprise: Boolean, configuredHost: String): Boolean =
+        isEnterprise && configuredHost.isNotBlank()
+
+    fun preferredServerModeAfterLogin(isEnterprise: Boolean, configuredHost: String): ServerMode =
+        if (shouldUseEnterpriseAuthHost(isEnterprise, configuredHost)) {
+            ServerMode.LAN
+        } else {
+            ServerMode.CLOUD
+        }
+}
+
 @Singleton
 class XcagiRepository @Inject constructor(
     private val sessionStore: SessionStore,
@@ -162,6 +174,13 @@ class XcagiRepository @Inject constructor(
 
     suspend fun checkHealth(host: String? = null): Boolean {
         syncRouterFromStore()
+        if (host.isNullOrBlank() && ProductSkuConfig.isEnterprise && serverRouter.mode == ServerMode.CLOUD) {
+            return try {
+                fhd().mobileHealth().success
+            } catch (_: Exception) {
+                false
+            }
+        }
         val h = host ?: serverRouter.fhdHost
         return lanScanner.probeHealth(h.substringBefore(':').trim())
     }
@@ -502,7 +521,7 @@ class XcagiRepository @Inject constructor(
 
     suspend fun loginMarketPhone(phone: String, code: String): Result<String> {
         return try {
-            if (isPcReachable()) {
+            if (ProductSkuConfig.isEnterprise || isPcReachable()) {
                 val res = fhd().mobileLoginWithPhone(
                     MobilePhoneLoginRequest(
                         phone = phone,
@@ -572,7 +591,7 @@ class XcagiRepository @Inject constructor(
         accountKind: String,
     ): Result<String> {
         syncRouterFromStore()
-        return if (isPcReachable()) {
+        return if (ProductSkuConfig.isEnterprise || isPcReachable()) {
             loginFhd(username, password, accountKind)
         } else {
             loginMarketPassword(username, password, accountKind)
@@ -583,6 +602,12 @@ class XcagiRepository @Inject constructor(
         val targetKind = if (isAdmin) "admin" else ProductSkuConfig.accountKind
         return loginUnified(username, password, targetKind)
     }
+
+    suspend fun preferredServerModeAfterLogin(): ServerMode =
+        AuthRoutingPolicy.preferredServerModeAfterLogin(
+            ProductSkuConfig.isEnterprise,
+            sessionStore.fhdHostFlow.first(),
+        )
 
     suspend fun streamChat(
         message: String,

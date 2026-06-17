@@ -4,9 +4,9 @@
 # 另开终端：export $(grep -v '^#' FHD/XCAGI/.env.local-market | xargs) && 启动 FHD API
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-FHD_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-XCMAX_ROOT="$(cd "${FHD_ROOT}/.." && pwd)"
+SCRIPT_DIR="${MODSTORE_DAILY_SCRIPT_DIR_OVERRIDE:-$(cd "$(dirname "$0")" && pwd)}"
+FHD_ROOT="${MODSTORE_DAILY_FHD_ROOT:-$(cd "${SCRIPT_DIR}/../.." && pwd)}"
+XCMAX_ROOT="${MODSTORE_DAILY_XCMAX_ROOT:-$(cd "${FHD_ROOT}/.." && pwd)}"
 _WS_MODSTORE="${XCMAX_ROOT}/成都修茈科技有限公司/MODstore_deploy"
 _ARCHIVE_MODSTORE="${XCMAX_ARCHIVE_ROOT:-$HOME/XCMAX-archives}/m0-fhd-bulk-20260605/成都修茈科技有限公司/MODstore_deploy"
 if [[ -d "${_WS_MODSTORE}/modstore_server" ]]; then
@@ -69,11 +69,18 @@ _load_modstore_env_file() {
     [[ -n "$k" ]] && export "$k=$v"
   done < "$f"
 }
-_load_modstore_env_file "${MODSTORE_DEPLOY_ROOT}/.env"
-_load_modstore_env_file "${MODSTORE_DEPLOY_ROOT}/.env.production"
-_load_modstore_env_file "${MODSTORE_DEPLOY_ROOT}/.env.production.synced"
-_load_modstore_env_file "${MODSTORE_DEPLOY_ROOT}/.env.daily-closure"
-_load_modstore_env_file "${MODSTORE_DEPLOY_ROOT}/.env.local"
+SNAPSHOT_LOADED=0
+if [[ -n "${MODSTORE_DAILY_ENV_SNAPSHOT:-}" && -f "${MODSTORE_DAILY_ENV_SNAPSHOT}" ]]; then
+  _load_modstore_env_file "${MODSTORE_DAILY_ENV_SNAPSHOT}"
+  SNAPSHOT_LOADED=1
+fi
+if [[ "${SNAPSHOT_LOADED}" != "1" && "${MODSTORE_DAILY_SKIP_ENV_FILES:-0}" != "1" ]]; then
+  _load_modstore_env_file "${MODSTORE_DEPLOY_ROOT}/.env"
+  _load_modstore_env_file "${MODSTORE_DEPLOY_ROOT}/.env.production"
+  _load_modstore_env_file "${MODSTORE_DEPLOY_ROOT}/.env.production.synced"
+  _load_modstore_env_file "${MODSTORE_DEPLOY_ROOT}/.env.daily-closure"
+  _load_modstore_env_file "${MODSTORE_DEPLOY_ROOT}/.env.local"
+fi
 # 本地 Mac 日更必须用 SQLite；生产同步 env 里的 DATABASE_URL 仅服务器有效
 if [[ -n "${MODSTORE_DB_PATH:-}" ]]; then
   export MODSTORE_DB_PATH
@@ -89,9 +96,11 @@ export XCAGI_MARKET_BASE_URL="${XCAGI_MARKET_BASE_URL:-http://127.0.0.1:${MODSTO
 export MODSTORE_LOCAL_BASE_URL="${MODSTORE_LOCAL_BASE_URL:-http://127.0.0.1:${MODSTORE_PORT}}"
 export MODSTORE_DIGEST_BASE_URL="${MODSTORE_DIGEST_BASE_URL:-http://127.0.0.1:${MODSTORE_PORT}}"
 # 真 SMTP 授权码（覆盖 .env.production 里的 your-* 占位符）；勿提交 git
-_load_modstore_env_file "${MODSTORE_DEPLOY_ROOT}/.env.smtp.local"
-_load_modstore_env_file "${FHD_ROOT}/XCAGI/.env.smtp.local"
-_load_modstore_env_file "${FHD_ROOT}/XCAGI/.env.cursor.local"
+if [[ "${SNAPSHOT_LOADED}" != "1" && "${MODSTORE_DAILY_SKIP_ENV_FILES:-0}" != "1" ]]; then
+  _load_modstore_env_file "${MODSTORE_DEPLOY_ROOT}/.env.smtp.local"
+  _load_modstore_env_file "${FHD_ROOT}/XCAGI/.env.smtp.local"
+  _load_modstore_env_file "${FHD_ROOT}/XCAGI/.env.cursor.local"
+fi
 export MODSTORE_EMAIL_DEBUG="${MODSTORE_EMAIL_DEBUG:-0}"
 if [[ "${MODSTORE_EMAIL_DEBUG}" == "0" && -z "${MODSTORE_SMTP_PASSWORD:-}" ]]; then
   log "WARN: MODSTORE_SMTP_PASSWORD 未设 → 运行: bash ${MODSTORE_DEPLOY_ROOT}/scripts/pull_prod_env_for_local.sh"
@@ -152,14 +161,37 @@ export SURFACE_AUDIT_API_URL="http://127.0.0.1:5102"
 export SURFACE_AUDIT_ANDROID_FHD_HOST="10.0.2.2:5102"
 ADB_BIN="${FHD_ROOT}/mobile-android/.toolchain/android-sdk/platform-tools/adb"
 [[ -x "${ADB_BIN}" ]] || ADB_BIN="adb"
+_adb_devices_has_online_target() {
+  "${PY}" - "$1" <<'PY'
+import re
+import subprocess
+import sys
+
+adb = sys.argv[1]
+try:
+    out = subprocess.run(
+        [adb, "devices"],
+        capture_output=True,
+        text=True,
+        timeout=8,
+        check=False,
+    ).stdout
+except Exception:
+    sys.exit(2)
+for line in out.splitlines():
+    if re.search(r"\sdevice$", line):
+        sys.exit(0)
+sys.exit(1)
+PY
+}
 if [[ "${MODSTORE_SURFACE_AUDIT_ANDROID}" != "0" ]]; then
-  if ! "${ADB_BIN}" devices 2>/dev/null | grep -qE '[[:space:]]device$'; then
+  if ! _adb_devices_has_online_target "${ADB_BIN}"; then
     if [[ "${XCAGI_AUTO_START_EMULATOR:-1}" == "1" && -x "${FHD_ROOT}/mobile-android/.toolchain/android-sdk/emulator/emulator" ]]; then
       log "P-App 截图：无在线模拟器，尝试启动 …"
       bash "${FHD_ROOT}/scripts/dev/start_android_emulator.sh" || log "WARN: 模拟器启动失败，digest P-App 可能失败"
     fi
   fi
-  if "${ADB_BIN}" devices 2>/dev/null | grep -qE '[[:space:]]device$'; then
+  if _adb_devices_has_online_target "${ADB_BIN}"; then
     export SURFACE_AUDIT_ANDROID_ADB="${ADB_BIN}"
     log "P-App 截图：adb 模拟器/真机已就绪"
   else
@@ -220,16 +252,21 @@ if [[ "${MODSTORE_DAILY_FOREGROUND:-0}" == "1" ]]; then
   exec "${PY}" -m uvicorn modstore_server.app:app --host 127.0.0.1 --port "${MODSTORE_PORT}"
 fi
 
+DAEMON_LOG_DIR="${MODSTORE_DAILY_DAEMON_LOG_DIR:-${FHD_ROOT}/logs}"
+mkdir -p "${DAEMON_LOG_DIR}"
+DAEMON_LOG_PATH="${DAEMON_LOG_DIR}/modstore-daily.daemon.log"
 (
   cd "${MODSTORE_DEPLOY_ROOT}"
-  exec "${PY}" -m uvicorn modstore_server.app:app --host 127.0.0.1 --port "${MODSTORE_PORT}"
+  exec nohup "${PY}" -m uvicorn modstore_server.app:app --host 127.0.0.1 --port "${MODSTORE_PORT}" >>"${DAEMON_LOG_PATH}" 2>&1 < /dev/null
 ) &
 UV_PID=$!
+disown "${UV_PID}" 2>/dev/null || true
 
 for _ in $(seq 1 45); do
   if curl -sf "http://127.0.0.1:${MODSTORE_PORT}/api/health" >/dev/null 2>&1; then
     sched="$(curl -sf "http://127.0.0.1:${MODSTORE_PORT}/api/health" | "${PY}" -c "import sys,json; print(json.load(sys.stdin).get('scheduler_running'))" 2>/dev/null || echo '')"
     log "MODstore 就绪 pid=${UV_PID} scheduler_running=${sched}"
+    log "守护日志 ${DAEMON_LOG_PATH}"
     log "手动触发摘要: curl -X POST http://127.0.0.1:5000/api/xcmax/admin/email/digest-now （需 FHD 管理员会话）"
     log "或直接 MODstore: 登录 admin 后 POST /api/admin/email/digest-now"
     exit 0

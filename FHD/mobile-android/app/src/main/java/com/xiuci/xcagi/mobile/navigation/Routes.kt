@@ -23,8 +23,10 @@ object Routes {
     const val CONVERSATION_CHAT = "conversation_chat"
     /** 专属客服对话 */
     const val CS_CHAT = "cs_chat"
+    const val FIXED_PARTNER_PROFILE = "fixed_partner/{partnerKind}"
 
     fun conversationChat(conversationId: String): String = "$CONVERSATION_CHAT/$conversationId"
+    fun fixedPartnerProfile(partnerKind: String): String = "fixed_partner/$partnerKind"
 
     /** IM V0 原生会话（SurfaceAudit / 高级入口） */
     const val IM = "im"

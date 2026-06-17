@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -120,6 +121,31 @@ fun WeTopBarCircleAction(
     }
 }
 
+@Composable
+fun WeTopBarAvatarAction(
+    text: String,
+    onClick: () -> Unit,
+    containerColor: Color,
+    modifier: Modifier = Modifier,
+    contentColor: Color = Color.White,
+) {
+    Box(
+        modifier
+            .size(32.dp)
+            .clip(CircleShape)
+            .background(containerColor)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = text.take(2),
+            style = MaterialTheme.typography.labelMedium,
+            color = contentColor,
+            fontWeight = FontWeight.SemiBold,
+        )
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WeTopBar(
@@ -133,6 +159,7 @@ fun WeTopBar(
     onRightAdd: (() -> Unit)? = null,
     rightLabel: String? = null,
     rightLabelIsAgent: Boolean = false,
+    customActions: (@Composable RowScope.() -> Unit)? = null,
 ) {
     TopAppBar(
         title = {
@@ -225,6 +252,7 @@ fun WeTopBar(
                         onClick = { onRightAdd?.invoke() },
                     )
                 }
+                customActions?.invoke(this)
             }
         },
         colors = TopAppBarDefaults.topAppBarColors(
