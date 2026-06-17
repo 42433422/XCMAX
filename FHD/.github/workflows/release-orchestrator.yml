@@ -55,6 +55,7 @@ jobs:
         working-directory: .
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
           ENV="${{ github.event.inputs.environment || 'production' }}"
@@ -84,6 +85,7 @@ jobs:
         working-directory: .
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
           raw="${{ github.ref_name }}"
