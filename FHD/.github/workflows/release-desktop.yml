@@ -33,18 +33,17 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "8.0.x"
-      - name: Build Windows installers (2 SKUs)
+      - name: Build Windows enterprise installer
         shell: pwsh
         run: |
           $raw = "${{ github.event.inputs.version || github.ref_name }}"
           $raw = $raw -replace '^FHD/', ''
           $v = $raw.TrimStart('v','V')
-          scripts/package/build-all-skus.ps1 -Version $v
+          scripts/package/build-installer.ps1 -Version $v -ProductSku enterprise
       - uses: actions/upload-artifact@v4
         with:
           name: xcagi-desktop-windows
           path: |
-            FHD/release/xcagi-v*/personal/**
             FHD/release/xcagi-v*/enterprise/**
 
   deploy-windows:
@@ -78,7 +77,7 @@ jobs:
           raw="${raw#v}"
           raw="${raw#V}"
           version="${raw:-10.0.0}"
-          for sku in personal enterprise; do
+          for sku in enterprise; do
             dir="$(find "$BASE" -type d -path "*/xcagi-v${version}/$sku" -print -quit)"
             if [ ! -d "$dir" ]; then dir="${BASE}/$sku"; fi
             if [ ! -d "$dir" ]; then echo "[skip] no $sku dir"; continue; fi
@@ -105,19 +104,18 @@ jobs:
           cache-dependency-path: |
             FHD/frontend/package-lock.json
             desktop/package-lock.json
-      - name: Build macOS installers (2 SKUs)
+      - name: Build macOS enterprise installer
         shell: bash
         run: |
           v="${{ github.event.inputs.version || github.ref_name }}"
           v="${v#FHD/}"
           v="${v#v}"
           v="${v#V}"
-          scripts/package/build-installer.sh "$v" all
+          scripts/package/build-installer.sh "$v" enterprise
       - uses: actions/upload-artifact@v4
         with:
           name: xcagi-desktop-macos
           path: |
-            FHD/release/xcagi-v*/personal/**
             FHD/release/xcagi-v*/enterprise/**
 
   deploy-macos:
@@ -149,7 +147,7 @@ jobs:
           raw="${raw#v}"
           raw="${raw#V}"
           version="${raw:-10.0.0}"
-          for sku in personal enterprise; do
+          for sku in enterprise; do
             dir="$(find "$BASE" -type d -path "*/xcagi-v${version}/$sku" -print -quit)"
             if [ ! -d "$dir" ]; then dir="${BASE}/$sku"; fi
             if [ ! -d "$dir" ]; then echo "[skip] no $sku dir"; continue; fi

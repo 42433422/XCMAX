@@ -71,7 +71,7 @@ npm version $Version --no-git-tag-version --allow-same-version
 $ebAppId = $skuAppIds[$ProductSku]
 $ebPublishUrl = $skuUpdateUrls[$ProductSku]
 $ebArtifact = "XCAGI-$label-Setup-`${version}-`${arch}.`${ext}"
-npx electron-builder --win nsis zip --x64 `
+npx electron-builder --win nsis zip --x64 --publish never `
   "--config.directories.output=../release/xcagi-v$Version/$outSubdir" `
   "--config.appId=$ebAppId" `
   "--config.publish.url=$ebPublishUrl" `
