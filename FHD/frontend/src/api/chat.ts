@@ -4,7 +4,6 @@ import { readCsrfTokenFromCookie, shouldAttachCsrfHeader } from '@/utils/csrfCoo
 import type { RequestOptions } from './core';
 import type { ApiResponse } from '@/types/api';
 import type { ChatRequest, ChatResponse, ChatSession } from '@/types/chat';
-import { isProductsReadGateGraceActive, readStoredDbTokens } from '@/fhd/dbTokenHeaders';
 import {
   readPlannerSseResponse,
   resolveChatStreamPath,
@@ -83,19 +82,12 @@ export const chatApi = {
 
   /**
    * 真实 Planner SSE：``POST`` + ``text/event-stream``，返回原生 ``Response``（``body`` 为流）。
-   * 与 ``api.post`` 不同，不能用 JSON/blob 封装。自动合并数据库令牌：
-   * - 一级：仅在 5 分钟读授权窗口内注入 ``db_read_token``
-   * - 二级：须由调用方在 payload 中传入 ``db_write_token``（经弹窗确认后单次附带，见 ``armNextPlannerChatDbWriteToken``）
+   * 与 ``api.post`` 不同，不能用 JSON/blob 封装。
    */
   sendChatStream(payload: ChatRequest & Record<string, unknown>, init: ChatStreamRequestInit = {}): Promise<Response> {
     const { streamPath, headers: hdr, ...rest } = init;
     const url = buildFullApiUrl((streamPath || '').trim() || resolveChatStreamPath());
-    const { read: readTok } = readStoredDbTokens();
-    const readAllowed = isProductsReadGateGraceActive();
-    const body = JSON.stringify({
-      ...payload,
-      ...(readAllowed && readTok ? { db_read_token: readTok } : {}),
-    });
+    const body = JSON.stringify(payload);
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       ...readMarketBearerHeader(),

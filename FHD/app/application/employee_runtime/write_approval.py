@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import logging
-import os
 import uuid
 from typing import Any
 
@@ -22,22 +21,15 @@ def build_write_approval_gate(
 
     写库类工具（``import_excel_to_database`` / ``products_bulk_import``）需满足其一：
     - 输入 ``approved_write=True`` / ``allow_write=True``
-    - 环境变量 ``FHD_DB_WRITE_TOKEN`` 已配置（与 workflow 工具一致）
     - ApprovalGatedEngine 评估为 auto-approve（strategy=auto，演示/CLI）
     """
     payload = dict(input_data or {})
-    env_token = (os.environ.get("FHD_DB_WRITE_TOKEN") or "").strip()
 
     def gate(tool_name: str, args: dict[str, Any]) -> dict[str, Any]:
         name = str(tool_name or "").strip()
         if name not in WRITE_TOOLS:
             return {"ok": True}
         if payload.get("approved_write") or payload.get("allow_write"):
-            return {"ok": True}
-        if env_token:
-            return {"ok": True}
-        token = str(args.get("db_write_token") or payload.get("db_write_token") or "").strip()
-        if token and token == env_token:
             return {"ok": True}
         try:
             from app.application.workflow.approval_gated_engine import ApprovalGatedEngine
@@ -82,7 +74,7 @@ def build_write_approval_gate(
             "ok": False,
             "reason": (
                 f"写库工具 {name} 被审批门拦截：需 approved_write=True、"
-                "FHD_DB_WRITE_TOKEN 或审批通过"
+                "allow_write=True 或审批通过"
             ),
         }
 

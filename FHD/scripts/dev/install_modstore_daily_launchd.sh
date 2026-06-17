@@ -23,13 +23,19 @@ LAUNCHER_OSA="${SUPPORT_DIR}/launch-modstore-daily.applescript"
 LOGIN_APP="${SUPPORT_DIR}/${LOGIN_ITEM_NAME}.app"
 RUNTIME_ROOT="${HOME}/XCMAX-runtime/modstore-daily"
 RUNTIME_DEPLOY_ROOT="${RUNTIME_ROOT}/MODstore_deploy"
+RUNTIME_PACKAGES_ROOT="${RUNTIME_ROOT}/packages"
+STATE_ROOT="${SUPPORT_DIR}/modstore-daily"
+RUNTIME_DB_PATH="${STATE_ROOT}/modstore.db"
+RUNTIME_VAR_ROOT="${STATE_ROOT}/runtime"
+RUNTIME_EVENT_OUTBOX_PATH="${STATE_ROOT}/event_outbox.jsonl"
+RUNTIME_WEBHOOK_EVENTS_DIR="${STATE_ROOT}/webhook_events"
 
 log() { printf '[daily-autostart] %s\n' "$*"; }
 
 [[ -f "${PLIST_SRC}" ]] || { log "缺少 ${PLIST_SRC}"; exit 1; }
 [[ -x "${FHD_ROOT}/.venv/bin/python" ]] || { log "缺少 FHD venv"; exit 1; }
 
-mkdir -p "${LOG_DIR}" "${SUPPORT_DIR}" "${HOME}/Library/LaunchAgents"
+mkdir -p "${LOG_DIR}" "${SUPPORT_DIR}" "${HOME}/Library/LaunchAgents" "${STATE_ROOT}" "${RUNTIME_VAR_ROOT}" "${RUNTIME_WEBHOOK_EVENTS_DIR}"
 cp "${RUN_SCRIPT}" "${RUNNER_COPY}"
 chmod +x "${RUNNER_COPY}"
 MODSTORE_DEPLOY_ROOT="${XCMAX_ROOT}/成都修茈科技有限公司/MODstore_deploy"
@@ -39,6 +45,17 @@ fi
 mkdir -p "${RUNTIME_ROOT}"
 log "同步运行时镜像 → ${RUNTIME_DEPLOY_ROOT}"
 rsync -a --delete "${MODSTORE_DEPLOY_ROOT}/" "${RUNTIME_DEPLOY_ROOT}/"
+log "同步共享 packages → ${RUNTIME_PACKAGES_ROOT}"
+mkdir -p "${RUNTIME_PACKAGES_ROOT}"
+rsync -a --delete "${XCMAX_ROOT}/packages/" "${RUNTIME_PACKAGES_ROOT}/"
+if [[ ! -f "${RUNTIME_DB_PATH}" ]]; then
+  if [[ -f "${MODSTORE_DEPLOY_ROOT}/modstore_server/modstore.db" ]]; then
+    cp "${MODSTORE_DEPLOY_ROOT}/modstore_server/modstore.db" "${RUNTIME_DB_PATH}"
+  elif [[ -f "${RUNTIME_DEPLOY_ROOT}/modstore_server/modstore.db" ]]; then
+    cp "${RUNTIME_DEPLOY_ROOT}/modstore_server/modstore.db" "${RUNTIME_DB_PATH}"
+  fi
+fi
+chmod 600 "${RUNTIME_DB_PATH}" 2>/dev/null || true
 : > "${ENV_SNAPSHOT}"
 for f in \
   "${MODSTORE_DEPLOY_ROOT}/.env" \
@@ -51,13 +68,31 @@ for f in \
   "${FHD_ROOT}/XCAGI/.env.cursor.local"
 do
   if [[ -f "${f}" ]]; then
-    cat "${f}" >> "${ENV_SNAPSHOT}"
+    tr -d '\r' < "${f}" >> "${ENV_SNAPSHOT}"
     printf '\n' >> "${ENV_SNAPSHOT}"
   fi
 done
+cat >> "${ENV_SNAPSHOT}" <<EOF
+MODSTORE_RUNTIME_STATE_ROOT=${STATE_ROOT}
+MODSTORE_RUNTIME_DB_PATH=${RUNTIME_DB_PATH}
+MODSTORE_RUNTIME_DIR=${RUNTIME_VAR_ROOT}
+MODSTORE_EVENT_OUTBOX_PATH=${RUNTIME_EVENT_OUTBOX_PATH}
+MODSTORE_WEBHOOK_EVENTS_DIR=${RUNTIME_WEBHOOK_EVENTS_DIR}
+MODSTORE_DEPLOY_ROOT=${RUNTIME_DEPLOY_ROOT}
+MODSTORE_REPO_ROOT=${RUNTIME_DEPLOY_ROOT}
+MODSTORE_DB_PATH=${RUNTIME_DB_PATH}
+DATABASE_URL=sqlite:////${RUNTIME_DB_PATH#/}
+EOF
 cat > "${WRAPPER}" <<EOF
 #!/usr/bin/env bash
 # 由 install_modstore_daily_launchd.sh 生成 — 勿手改
+if [[ "\${MODSTORE_DAILY_ENV_CLEANROOM:-0}" != "1" ]]; then
+  exec /usr/bin/env -i \
+    HOME="${HOME}" \
+    PATH="/usr/bin:/bin:/usr/sbin:/sbin" \
+    MODSTORE_DAILY_ENV_CLEANROOM=1 \
+    /bin/bash "\$0"
+fi
 export MODSTORE_DAILY_FOREGROUND=1
 export MODSTORE_DAILY_FHD_ROOT="${FHD_ROOT}"
 export MODSTORE_DAILY_XCMAX_ROOT="${XCMAX_ROOT}"
@@ -65,6 +100,16 @@ export MODSTORE_DAILY_SCRIPT_DIR_OVERRIDE="${SCRIPT_DIR}"
 export MODSTORE_DAILY_ENV_SNAPSHOT="${ENV_SNAPSHOT}"
 export MODSTORE_DAILY_SKIP_ENV_FILES=1
 export MODSTORE_RUNTIME_ROOT="${RUNTIME_ROOT}"
+export MODSTORE_RUNTIME_STATE_ROOT="${STATE_ROOT}"
+export MODSTORE_RUNTIME_DB_PATH="${RUNTIME_DB_PATH}"
+export MODSTORE_RUNTIME_DIR="${RUNTIME_VAR_ROOT}"
+export MODSTORE_EVENT_OUTBOX_PATH="${RUNTIME_EVENT_OUTBOX_PATH}"
+export MODSTORE_WEBHOOK_EVENTS_DIR="${RUNTIME_WEBHOOK_EVENTS_DIR}"
+export MODSTORE_DEPLOY_ROOT="${RUNTIME_DEPLOY_ROOT}"
+export MODSTORE_REPO_ROOT="${RUNTIME_DEPLOY_ROOT}"
+export MODSTORE_DB_PATH="${RUNTIME_DB_PATH}"
+export DATABASE_URL="sqlite:////${RUNTIME_DB_PATH#/}"
+export PYTHONPATH="${RUNTIME_DEPLOY_ROOT}:${RUNTIME_PACKAGES_ROOT}/xcagi_common"
 export MODSTORE_DAILY_DAEMON_LOG_DIR="${LOG_DIR}"
 exec /bin/bash "${RUNNER_COPY}"
 EOF
@@ -126,9 +171,19 @@ _install_launchd() {
     "${PLIST_SRC}" > "${PLIST_DST}"
   UID_NUM="$(id -u)"
   launchctl bootout "gui/${UID_NUM}/${LABEL}" 2>/dev/null || true
-  launchctl bootstrap "gui/${UID_NUM}" "${PLIST_DST}"
+  for _ in $(seq 1 20); do
+    if ! launchctl print "gui/${UID_NUM}/${LABEL}" >/dev/null 2>&1; then
+      break
+    fi
+    sleep 0.5
+  done
+  if ! launchctl bootstrap "gui/${UID_NUM}" "${PLIST_DST}"; then
+    sleep 2
+    launchctl bootout "gui/${UID_NUM}/${LABEL}" 2>/dev/null || true
+    sleep 1
+    launchctl bootstrap "gui/${UID_NUM}" "${PLIST_DST}"
+  fi
   launchctl enable "gui/${UID_NUM}/${LABEL}" 2>/dev/null || true
-  launchctl kickstart -k "gui/${UID_NUM}/${LABEL}" 2>/dev/null || true
   log "已注册 launchd ${PLIST_DST}"
 }
 
@@ -147,18 +202,32 @@ _install_launchd
 
 # 若当前无调度器实例，立即拉起
 sched="false"
-if curl -sf "http://127.0.0.1:8788/api/health" >/dev/null 2>&1; then
-  sched="$("${FHD_ROOT}/.venv/bin/python" -c "import json,urllib.request; print(json.load(urllib.request.urlopen('http://127.0.0.1:8788/api/health')).get('scheduler_running'))" 2>/dev/null || echo 'false')"
-fi
+for _ in $(seq 1 75); do
+  if curl -sf "http://127.0.0.1:8788/api/health" >/dev/null 2>&1; then
+    sched="$("${FHD_ROOT}/.venv/bin/python" -c "import json,urllib.request; print(json.load(urllib.request.urlopen('http://127.0.0.1:8788/api/health')).get('scheduler_running'))" 2>/dev/null || echo 'false')"
+    if [[ "${sched}" == "True" || "${sched}" == "true" ]]; then
+      break
+    fi
+  fi
+  sleep 1
+done
 if [[ "${sched}" != "True" && "${sched}" != "true" ]]; then
-  log "当前无日更调度器 — 立即启动…"
+  log "当前无日更调度器 — 重启 launchd job…"
   UID_NUM="$(id -u)"
-  launchctl kickstart -k "gui/${UID_NUM}/${LABEL}" 2>/dev/null || launchctl bootstrap "gui/${UID_NUM}" "${PLIST_DST}" 2>/dev/null || true
-  sleep 3
-  sched="$("${FHD_ROOT}/.venv/bin/python" -c "import json,urllib.request; print(json.load(urllib.request.urlopen('http://127.0.0.1:8788/api/health')).get('scheduler_running'))" 2>/dev/null || echo '?')"
+  launchctl kickstart -k "gui/${UID_NUM}/${LABEL}" 2>/dev/null || true
+  for _ in $(seq 1 75); do
+    if curl -sf "http://127.0.0.1:8788/api/health" >/dev/null 2>&1; then
+      sched="$("${FHD_ROOT}/.venv/bin/python" -c "import json,urllib.request; print(json.load(urllib.request.urlopen('http://127.0.0.1:8788/api/health')).get('scheduler_running'))" 2>/dev/null || echo '?')"
+      if [[ "${sched}" == "True" || "${sched}" == "true" ]]; then
+        break
+      fi
+    fi
+    sleep 1
+  done
 fi
 
 log "MODstore :8788 scheduler_running=${sched}"
+log "状态目录: ${STATE_ROOT}"
 log "08:00 自动 digest：全开 FHD/Vite/模拟器 → 跑完自动关（MODSTORE_SURFACE_AUDIT_STOP_AFTER=1）"
 log "日志: ${LOG_DIR}/modstore-daily.launchd.{log,err.log}"
 log "手动触发: bash FHD/scripts/dev/trigger_digest_now_local.sh"

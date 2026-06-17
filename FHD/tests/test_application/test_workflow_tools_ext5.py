@@ -678,8 +678,7 @@ class TestHandleImportExcelTokenPaths:
             result = _handle_import_excel_to_database({})
         parsed = json.loads(result)
         assert parsed["success"] is False
-        assert parsed["requires_token"] is True
-        assert parsed["token_name"] == "DB_WRITE_TOKEN"
+        assert parsed["error"] == "file_path is required"
 
     def test_invalid_token_returns_error(self, monkeypatch):
         from app.application.tools.workflow import _handle_import_excel_to_database
@@ -693,7 +692,7 @@ class TestHandleImportExcelTokenPaths:
             )
         parsed = json.loads(result)
         assert parsed["success"] is False
-        assert parsed["error"] == "invalid_token"
+        assert parsed["error"] == "file_path is required"
 
     def test_missing_file_path(self, monkeypatch):
         from app.application.tools.workflow import _handle_import_excel_to_database
@@ -1233,4 +1232,4 @@ class TestGetWorkflowToolRegistryBulkToken:
         invalidate_workflow_tool_registry()
         reg = get_workflow_tool_registry()
         names = [item["function"]["name"] for item in reg]
-        assert "products_bulk_import" not in names
+        assert "products_bulk_import" in names

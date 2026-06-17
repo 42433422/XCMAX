@@ -1,76 +1,32 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, expect, it } from 'vitest'
+
 import {
-  isProductsReadGateGraceActive,
-  touchProductsReadGateGrace,
-  readStoredDbTokens,
-  saveStoredDbTokens,
-  urlNeedsDbReadToken,
-  shouldAttachDbReadToken,
-  urlNeedsDbWriteToken,
   dbReadHeaders,
   dbWriteHeaders,
-  armNextPlannerChatDbWriteToken,
-  isPlannerChatDbWriteTokenArmed,
-  consumePlannerChatDbWriteTokenArm,
-  LS_DB_READ_TOKEN,
-} from './dbTokenHeaders'
+  notifyDbReadTokenRequiredAfter403,
+  notifyDbWriteTokenRequiredAfter403,
+  saveStoredDbTokens,
+  saveStoredReadToken,
+  saveStoredWriteToken,
+  urlNeedsDbReadToken,
+  urlNeedsDbWriteToken,
+} from '@/fhd/dbTokenHeaders'
 
-describe('dbTokenHeaders deep', () => {
-  beforeEach(() => {
-    localStorage.clear()
-    sessionStorage.clear()
-  })
+describe('dbTokenHeaders deep compatibility', () => {
+  it('never stores, emits, or attaches database password tokens', () => {
+    localStorage.setItem('xcagi_db_read_token', 'old-read')
+    localStorage.setItem('xcagi_db_write_token', 'old-write')
+    saveStoredDbTokens('read', 'write')
+    saveStoredReadToken('read')
+    saveStoredWriteToken('write')
 
-  it('exports storage keys', () => {
-    expect(LS_DB_READ_TOKEN).toContain('read_token')
-  })
-
-  it('touchProductsReadGateGrace activates grace window', () => {
-    expect(isProductsReadGateGraceActive()).toBe(false)
-    touchProductsReadGateGrace()
-    expect(isProductsReadGateGraceActive()).toBe(true)
-  })
-
-  it('save and read stored db tokens', () => {
-    saveStoredDbTokens('read-tok', 'write-tok')
-    expect(readStoredDbTokens()).toEqual({ read: 'read-tok', write: 'write-tok' })
-    expect(localStorage.getItem(LS_DB_READ_TOKEN)).toBe('read-tok')
-  })
-
-  it('urlNeedsDbReadToken detects product api paths', () => {
-    expect(urlNeedsDbReadToken('/api/products/list')).toBe(true)
-    expect(urlNeedsDbReadToken('/api/health')).toBe(false)
-  })
-
-  it('shouldAttachDbReadToken respects GET method', () => {
-    expect(shouldAttachDbReadToken('/api/products/list', 'GET')).toBe(true)
-    expect(shouldAttachDbReadToken('/api/products/list', 'POST')).toBe(false)
-  })
-
-  it('urlNeedsDbWriteToken detects write paths', () => {
-    expect(urlNeedsDbWriteToken('/api/products/update', 'POST')).toBe(true)
-  })
-
-  it('dbReadHeaders returns empty without token', () => {
+    expect(localStorage.getItem('xcagi_db_read_token')).toBeNull()
+    expect(localStorage.getItem('xcagi_db_write_token')).toBeNull()
     expect(dbReadHeaders()).toEqual({})
-  })
-
-  it('dbReadHeaders includes token when stored', () => {
-    saveStoredDbTokens('r1', '')
-    const headers = dbReadHeaders({ ignoreGrace: true })
-    expect(headers['X-FHD-Db-Read-Token']).toBe('r1')
-  })
-
-  it('planner chat write token arm lifecycle', () => {
-    expect(isPlannerChatDbWriteTokenArmed()).toBe(false)
-    armNextPlannerChatDbWriteToken()
-    expect(isPlannerChatDbWriteTokenArmed()).toBe(true)
-    consumePlannerChatDbWriteTokenArm()
-    expect(isPlannerChatDbWriteTokenArmed()).toBe(false)
-  })
-
-  it('dbWriteHeaders includes write token', () => {
-    saveStoredDbTokens('', 'w1')
-    expect(dbWriteHeaders()['X-FHD-Db-Write-Token']).toBe('w1')
+    expect(dbWriteHeaders()).toEqual({})
+    expect(urlNeedsDbReadToken('/api/products/list')).toBe(false)
+    expect(urlNeedsDbWriteToken('/api/products/update', 'POST')).toBe(false)
+    expect(() => notifyDbReadTokenRequiredAfter403(403, '/api/products/list', 'GET')).not.toThrow()
+    expect(() => notifyDbWriteTokenRequiredAfter403(403, '/api/products/update', 'POST')).not.toThrow()
   })
 })
