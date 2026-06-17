@@ -78,6 +78,7 @@ import com.xiuci.xcagi.mobile.ui.components.mobile.WeCell
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeCellGroup
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeModeCapsule
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeModeOption
+import com.xiuci.xcagi.mobile.ui.components.mobile.WeTopBarAvatarAction
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeTopBar
 import com.xiuci.xcagi.mobile.ui.theme.Elevation
 import com.xiuci.xcagi.mobile.ui.theme.Spacing
@@ -86,6 +87,25 @@ import com.xiuci.xcagi.mobile.ui.theme.XcagiTheme
 // ── 微信风格色值（保留作为装饰性常量，未在新设计系统中使用） ──
 // 已迁移至 XcagiTheme.extra.weChatGreen / MaterialTheme.colorScheme
 private val WeChatBubbleBg = Color(0xFFF5F5F5)    // AI 气泡灰底（保留兼容）
+
+data class ChatTopProfileAvatar(
+    val text: String,
+    val containerColor: Color,
+    val contentColor: Color = Color.White,
+)
+
+private data class EmployeeConversationRef(
+    val modId: String,
+    val employeeId: String,
+)
+
+private fun parseEmployeeConversationRef(conversationId: String?): EmployeeConversationRef? {
+    val raw = conversationId?.trim().orEmpty()
+    if (!raw.startsWith("employee:")) return null
+    val parts = raw.split(":")
+    if (parts.size != 3) return null
+    return EmployeeConversationRef(modId = parts[1], employeeId = parts[2])
+}
 
 private val chatModes = listOf(
     WeModeOption("fast", "快速", Icons.Default.Bolt, "即时响应"),
@@ -102,7 +122,9 @@ fun ChatScreen(
     onBack: (() -> Unit)? = null,
     onOpenMod: (String) -> Unit = {},
     onOpenOcr: () -> Unit = {},
-    onNavigateToEmployees: () -> Unit = {},
+    profileAvatar: ChatTopProfileAvatar? = null,
+    onOpenProfile: (() -> Unit)? = null,
+    onOpenEmployeeProfile: (String, String) -> Unit = { _, _ -> },
 ) {
     val messages by vm.chatMessages.collectAsState()
     val streaming by vm.streaming.collectAsState()
@@ -120,12 +142,32 @@ fun ChatScreen(
     val listState = rememberLazyListState()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val modInfos by vm.modInfos.collectAsState()
+    val employees = remember(modInfos) { modInfos.aiEmployeeProfiles() }
+    val employeeRef = remember(conversationId) { parseEmployeeConversationRef(conversationId) }
+    val employeeProfile =
+        remember(employeeRef, employees) {
+            employeeRef?.let { employees.findEmployee(it.modId, it.employeeId) }
+        }
+    val resolvedTitle = employeeProfile?.name ?: conversationTitle
+    val resolvedProfileAvatar =
+        employeeProfile?.let {
+            ChatTopProfileAvatar(
+                text = it.avatarText,
+                containerColor = aiEmployeeAvatarColor(it.key),
+            )
+        } ?: profileAvatar
 
     LaunchedEffect(chatMode) { deepThinking = chatMode == "expert" }
 
     LaunchedEffect(Unit) {
         vm.loadChatCache()
         if (suggestions.isEmpty()) vm.loadHomeHub()
+    }
+
+    LaunchedEffect(employeeRef?.modId, employeeRef?.employeeId) {
+        if (employeeRef != null) {
+            vm.refreshModInfos()
+        }
     }
 
     LaunchedEffect(messages.size, streaming) {
@@ -194,10 +236,25 @@ fun ChatScreen(
         containerColor = MaterialTheme.colorScheme.surface,
         topBar = {
             WeTopBar(
-                title = conversationTitle,
+                title = resolvedTitle,
                 onBack = onBack,
-                showRightAdd = true,
-                onRightAdd = onNavigateToEmployees,
+                customActions = {
+                    val clickAction = when {
+                        employeeProfile != null -> {
+                            { onOpenEmployeeProfile(employeeProfile.modId, employeeProfile.employeeId) }
+                        }
+                        resolvedProfileAvatar != null && onOpenProfile != null -> onOpenProfile
+                        else -> null
+                    }
+                    if (resolvedProfileAvatar != null && clickAction != null) {
+                        WeTopBarAvatarAction(
+                            text = resolvedProfileAvatar.text,
+                            onClick = clickAction,
+                            containerColor = resolvedProfileAvatar.containerColor,
+                            contentColor = resolvedProfileAvatar.contentColor,
+                        )
+                    }
+                },
             )
         },
         bottomBar = {

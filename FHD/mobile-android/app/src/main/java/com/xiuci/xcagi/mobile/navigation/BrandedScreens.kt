@@ -225,7 +225,7 @@ fun AuthScreen(vm: AppViewModel, onRegister: () -> Unit, onDone: () -> Unit) {
                 // ── 管理员切换（企业版） ──
                 if (isEnterprise && loginMode == AuthLoginMode.PASSWORD) {
                         Text(
-                                if (adminMode) "切换为市场账号" else "管理员账号登录",
+                                if (adminMode) "切换为普通账号" else "管理员账号登录",
                                 fontSize = MaterialTheme.typography.labelMedium.fontSize,
                                 fontWeight = FontWeight.Medium,
                                 color = XcagiTheme.extra.brandBlue,
@@ -243,7 +243,7 @@ fun AuthScreen(vm: AppViewModel, onRegister: () -> Unit, onDone: () -> Unit) {
                                 placeholder =
                                         when {
                                                 adminMode -> "管理员账号"
-                                                isEnterprise -> "市场账号或邮箱"
+                                                isEnterprise -> "账号或邮箱"
                                                 else -> "请输入用户名"
                                         },
                         )

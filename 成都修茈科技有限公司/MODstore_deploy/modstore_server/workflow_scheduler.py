@@ -135,7 +135,20 @@ def start_scheduler() -> None:
         try:
             from modstore_server.daily_digest import run_daily_digest_email
 
-            run_daily_digest_email()
+            result = run_daily_digest_email()
+            if result and not result.get("ok"):
+                logger.error(
+                    "daily digest email job completed without delivery: reason=%s rows=%s",
+                    result.get("reason"),
+                    result.get("delivery_rows"),
+                )
+            else:
+                logger.info(
+                    "daily digest email job done: delivered=%s skipped=%s record_id=%s",
+                    result.get("delivered") if isinstance(result, dict) else None,
+                    result.get("skipped") if isinstance(result, dict) else None,
+                    result.get("record_id") if isinstance(result, dict) else None,
+                )
         except Exception:
             logger.exception("daily digest email job failed")
 

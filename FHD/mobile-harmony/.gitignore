@@ -1,0 +1,4 @@
+artifacts/
+*.hap
+*.hsp
+build/

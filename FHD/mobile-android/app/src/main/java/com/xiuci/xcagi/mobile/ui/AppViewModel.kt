@@ -336,8 +336,9 @@ constructor(
                 repo.loginUnified(u, p)
                         .onSuccess {
                             sessionStore.setSetupComplete(true)
-                            sessionStore.setServerMode("cloud")
-                            serverRouter.mode = ServerMode.CLOUD
+                            val mode = repo.preferredServerModeAfterLogin()
+                            sessionStore.setServerMode(if (mode == ServerMode.LAN) "lan" else "cloud")
+                            serverRouter.mode = mode
                             snack("欢迎回来，$it")
                             refreshMarketTokens()
                             registerPushWithHint()
@@ -741,10 +742,11 @@ constructor(
             viewModelScope.launch {
                 repo.loginUnified(u, p, isAdmin)
                         .onSuccess {
-                            // 登录成功后自动完成设置 + 切换云端模式
+                            // 登录成功后自动完成设置，并回到与账号源一致的后端模式
                             sessionStore.setSetupComplete(true)
-                            sessionStore.setServerMode("cloud")
-                            serverRouter.mode = ServerMode.CLOUD
+                            val mode = repo.preferredServerModeAfterLogin()
+                            sessionStore.setServerMode(if (mode == ServerMode.LAN) "lan" else "cloud")
+                            serverRouter.mode = mode
                             if (rememberPass) sessionStore.saveCredentials(u, p)
                             else sessionStore.clearSavedCredentials()
                             sessionStore.setAutoLogin(autoLogin)
@@ -786,6 +788,10 @@ constructor(
             viewModelScope.launch {
                 repo.loginMarketPhone(phone, code)
                         .onSuccess {
+                            sessionStore.setSetupComplete(true)
+                            val mode = repo.preferredServerModeAfterLogin()
+                            sessionStore.setServerMode(if (mode == ServerMode.LAN) "lan" else "cloud")
+                            serverRouter.mode = mode
                             snack(it)
                             analytics.log("login_success", mapOf("method" to "phone"))
                             refreshMarketTokens()

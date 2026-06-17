@@ -120,6 +120,7 @@ interface NetworkEntryPoint {
 @Composable
 fun XcagiNavHost(vm: AppViewModel, pendingDeepLink: String? = null) {
     val nav = rememberNavController()
+    val backStack by nav.currentBackStackEntryAsState()
     var currentSnack by remember { mutableStateOf<SnackData?>(null) }
     val msg by vm.message.collectAsState()
     val loggedIn by vm.isLoggedIn.collectAsState()
@@ -139,8 +140,8 @@ fun XcagiNavHost(vm: AppViewModel, pendingDeepLink: String? = null) {
             }
     val online by networkMonitor.online.collectAsState(initial = true)
 
-    LaunchedEffect(pendingDeepLink, loggedIn) {
-        if (loggedIn && !pendingDeepLink.isNullOrBlank()) {
+    LaunchedEffect(pendingDeepLink, loggedIn, backStack != null) {
+        if (loggedIn && backStack != null && !pendingDeepLink.isNullOrBlank()) {
             vm.handleDeepLink(pendingDeepLink) { route ->
                 nav.navigate(route) { launchSingleTop = true }
             }
@@ -208,7 +209,6 @@ fun XcagiNavHost(vm: AppViewModel, pendingDeepLink: String? = null) {
 
     val approvalCount by vm.approvalPendingCount.collectAsState()
 
-    val backStack by nav.currentBackStackEntryAsState()
     val current = backStack?.destination?.route?.substringBefore("?")
     val bottomNavRoutes = setOf(Routes.CHAT, Routes.WORK, Routes.DISCOVER, Routes.PROFILE)
     val showBar = loggedIn && current in bottomNavRoutes
@@ -442,6 +442,16 @@ fun XcagiNavHost(vm: AppViewModel, pendingDeepLink: String? = null) {
                     ChatScreen(
                             vm,
                             onBack = { nav.popBackStack() },
+                            profileAvatar =
+                                    ChatTopProfileAvatar(
+                                            text = "C",
+                                            containerColor = XcagiTheme.extra.brandBlue,
+                                    ),
+                            onOpenProfile = {
+                                nav.navigate(
+                                        Routes.fixedPartnerProfile(FixedPartnerKinds.ASSISTANT)
+                                )
+                            },
                             onOpenMod = { id ->
                                 vm.requestModOpen(
                                         id,
@@ -450,7 +460,6 @@ fun XcagiNavHost(vm: AppViewModel, pendingDeepLink: String? = null) {
                                 )
                             },
                             onOpenOcr = { nav.navigate(Routes.OCR) },
-                            onNavigateToEmployees = { nav.navigate(Routes.AI_EMPLOYEES) },
                     )
                 }
                 // 普通会话对话 — 复用 ChatScreen（带 conversationId）
@@ -471,7 +480,9 @@ fun XcagiNavHost(vm: AppViewModel, pendingDeepLink: String? = null) {
                                 )
                             },
                             onOpenOcr = { nav.navigate(Routes.OCR) },
-                            onNavigateToEmployees = { nav.navigate(Routes.AI_EMPLOYEES) },
+                            onOpenEmployeeProfile = { modId, employeeId ->
+                                nav.navigate(Routes.aiEmployeeProfile(modId, employeeId))
+                            },
                     )
                 }
                 // 专属客服对话
@@ -479,6 +490,13 @@ fun XcagiNavHost(vm: AppViewModel, pendingDeepLink: String? = null) {
                     CsChatScreen(
                             vm = vm,
                             onBack = { nav.popBackStack() },
+                            onOpenProfile = {
+                                nav.navigate(
+                                        Routes.fixedPartnerProfile(
+                                                FixedPartnerKinds.CUSTOMER_SERVICE
+                                        )
+                                )
+                            },
                     )
                 }
                 composable(Routes.AI_EMPLOYEES) {
@@ -517,6 +535,28 @@ fun XcagiNavHost(vm: AppViewModel, pendingDeepLink: String? = null) {
                             onOpenCircle = { nav.navigate(Routes.AI_CIRCLE) },
                             onOpenChat = { conversationId ->
                                 nav.navigate(Routes.conversationChat(conversationId))
+                            },
+                    )
+                }
+                composable(
+                        route = Routes.FIXED_PARTNER_PROFILE,
+                        arguments =
+                                listOf(
+                                        navArgument("partnerKind") { type = NavType.StringType }
+                                ),
+                ) { backStackEntry ->
+                    val partnerKind = backStackEntry.arguments?.getString("partnerKind").orEmpty()
+                    FixedPartnerProfileScreen(
+                            vm = vm,
+                            partnerKind = partnerKind,
+                            onBack = { nav.popBackStack() },
+                            onOpenChat = {
+                                val target =
+                                        when (partnerKind) {
+                                            FixedPartnerKinds.CUSTOMER_SERVICE -> Routes.CS_CHAT
+                                            else -> Routes.AI_CHAT
+                                        }
+                                nav.navigate(target) { launchSingleTop = true }
                             },
                     )
                 }
