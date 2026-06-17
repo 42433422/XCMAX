@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import logging
 import socket
+import uuid
+from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, Header, Query, Request
@@ -17,7 +19,9 @@ from app.security.mobile_pairing import (
     lookup_by_shortcode,
 )
 from app.utils.mobile_api import format_mobile_response, paginate_list
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
+OPERATIONAL_ERRORS = RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +70,11 @@ class DeviceRegisterBody(BaseModel):
 
 class PairingExchangeBody(BaseModel):
     nonce: str = Field(default="", max_length=256)
-    code: str = Field(default="", max_length=6)
+    code: str = Field(default="", max_length=16)
+
+
+class PairingLookupBody(BaseModel):
+    code: str = Field(..., min_length=6, max_length=6)
 
 
 class PairingIssueBody(BaseModel):
@@ -272,16 +280,40 @@ async def mobile_pairing_issue(body: PairingIssueBody):
     return format_mobile_response(data=payload)
 
 
+@extension_router.post("/pairing/lookup")
+async def mobile_pairing_lookup(body: PairingLookupBody):
+    code = body.code.strip()
+    rec = lookup_by_shortcode(code)
+    if not rec:
+        return JSONResponse(
+            format_mobile_response(None, "配对码不存在或已过期", success=False, code=404),
+            status_code=404,
+        )
+    return format_mobile_response(
+        data={
+            "host": rec.get("host"),
+            "port": rec.get("port"),
+            "nonce": rec.get("nonce"),
+            "exp": rec.get("exp") or 0,
+        },
+    )
+
+
 @extension_router.post("/pairing/exchange")
 async def mobile_pairing_exchange(body: PairingExchangeBody):
     nonce = body.nonce.strip()
     code = body.code.strip()
-    rec = consume_pairing_nonce(nonce) if nonce else None
-    if not rec and code:
-        rec = consume_by_shortcode(code)
+    if not nonce and not code:
+        return JSONResponse(
+            format_mobile_response(None, "缺少配对码", success=False, code=400),
+            status_code=400,
+        )
+    rec = consume_by_shortcode(code) if code else consume_pairing_nonce(nonce)
     if not rec:
         return JSONResponse(
-            format_mobile_response(None, "nonce 无效或已过期", success=False, code=400),
+            format_mobile_response(
+                None, "配对码无效或已过期，请刷新二维码", success=False, code=400
+            ),
             status_code=400,
         )
     return format_mobile_response(
@@ -293,31 +325,60 @@ async def mobile_pairing_exchange(body: PairingExchangeBody):
     )
 
 
-@extension_router.post("/pairing/lookup")
-async def mobile_pairing_lookup(body: PairingExchangeBody):
-    rec = lookup_by_shortcode(body.code.strip())
-    if not rec:
-        return JSONResponse(
-            format_mobile_response(None, "配对码无效或已过期", success=False, code=404),
-            status_code=404,
-        )
-    return format_mobile_response(data=rec)
-
-
-def _mobile_mod_items() -> list[dict[str, str]]:
+def _mobile_mod_items() -> list[dict[str, Any]]:
     try:
         from app.infrastructure.mods.mod_manager import get_mod_manager
 
-        items: list[dict[str, str]] = []
+        items: list[dict[str, Any]] = []
         for m in get_mod_manager().list_all_mods() or []:
             if isinstance(m, dict):
                 mid = str(m.get("id") or m.get("mod_id") or "").strip()
                 name = str(m.get("name") or m.get("title") or mid).strip()
+                employees = (
+                    m.get("workflow_employees")
+                    if isinstance(m.get("workflow_employees"), list)
+                    else []
+                )
+                menu = m.get("frontend_menu") or m.get("menu") or m.get("menus")
+                menu_overrides = m.get("menu_overrides")
+                item = {
+                    "id": mid,
+                    "name": name,
+                    "version": m.get("version") or "",
+                    "author": m.get("author") or "",
+                    "description": m.get("description") or "",
+                    "primary": bool(m.get("primary")),
+                    "industry": m.get("industry") if isinstance(m.get("industry"), dict) else {},
+                    "frontend_menu": menu if isinstance(menu, list) else [],
+                    "menu": menu if isinstance(menu, list) else [],
+                    "menu_overrides": menu_overrides if isinstance(menu_overrides, list) else [],
+                    "workflow_employees": employees,
+                }
             else:
                 mid = str(getattr(m, "id", None) or getattr(m, "mod_id", "") or "").strip()
                 name = str(getattr(m, "name", None) or getattr(m, "title", None) or mid).strip()
+                employees = getattr(m, "workflow_employees", [])
+                if not isinstance(employees, list):
+                    employees = []
+                menu = getattr(m, "frontend_menu", [])
+                menu_overrides = getattr(m, "frontend_menu_overrides", [])
+                item = {
+                    "id": mid,
+                    "name": name,
+                    "version": str(getattr(m, "version", "") or ""),
+                    "author": str(getattr(m, "author", "") or ""),
+                    "description": str(getattr(m, "description", "") or ""),
+                    "primary": bool(getattr(m, "primary", False)),
+                    "industry": getattr(m, "industry", {})
+                    if isinstance(getattr(m, "industry", {}), dict)
+                    else {},
+                    "frontend_menu": menu if isinstance(menu, list) else [],
+                    "menu": menu if isinstance(menu, list) else [],
+                    "menu_overrides": menu_overrides if isinstance(menu_overrides, list) else [],
+                    "workflow_employees": employees,
+                }
             if mid:
-                items.append({"id": mid, "name": name})
+                items.append(item)
         return items[:100]
     except OPERATIONAL_ERRORS as exc:
         logger.warning("mobile mods list: %s", exc)
@@ -630,174 +691,6 @@ async def mobile_auth_qr_confirm(body: AuthQrConfirmBody, request: Request):
         login_market_fn=login_market_with_password,
     )
     if err:
-        msg = "登录失败"
-        if hasattr(err, "body") and err.body:
-            try:
-                import json
-
-                msg = json.loads(err.body.decode("utf-8")).get("message") or msg
-            except OPERATIONAL_ERRORS:
-                pass
-        return JSONResponse(
-            format_mobile_response(None, msg, success=False, code=401),
-            status_code=401,
-        )
-    session_id = str((result or {}).get("session_id") or "")
-    if not session_id:
-        return JSONResponse(
-            format_mobile_response(None, "会话创建失败", success=False, code=500),
-            status_code=500,
-        )
-    ok = confirm_auth_qr(body.qr_id.strip(), session_id=session_id, login_payload=result or {})
-    if not ok:
-        return JSONResponse(
-            format_mobile_response(None, "二维码无效", success=False, code=400),
-            status_code=400,
-        )
-    return format_mobile_response(data={"confirmed": True, "qr_id": body.qr_id.strip()})
-
-
-class OidcExchangeBody(BaseModel):
-    code: str = Field(..., min_length=4)
-    state: str = Field(..., min_length=8)
-
-
-@extension_router.post("/auth/oidc/exchange")
-async def mobile_auth_oidc_exchange(body: OidcExchangeBody):
-    """Android Custom Tabs OIDC 回调换 mobile JWT。"""
-    from app.application.auth_app_service import get_auth_app_service
-    from app.application.enterprise_login_flow import finalize_enterprise_login
-    from app.application.session_account_meta import normalize_account_kind
-    from app.infrastructure.auth.oidc_provider import exchange_code_for_userinfo, verify_oidc_state
-    from app.mod_sdk.product_skus import resolve_product_sku
-    from app.security.mobile_jwt import issue_mobile_tokens
-
-    ok, _rt = verify_oidc_state(body.state)
-    if not ok:
-        return JSONResponse(
-            format_mobile_response(None, "OIDC state 无效", success=False, code=400),
-            status_code=400,
-        )
-    try:
-        profile = await exchange_code_for_userinfo(body.code)
-    except OPERATIONAL_ERRORS as exc:
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=502),
-            status_code=502,
-        )
-    auth_app_service = get_auth_app_service()
-    auth_result = auth_app_service.authenticate_oidc_user(profile)
-    if not auth_result.get("success"):
-        return JSONResponse(
-            format_mobile_response(
-                None,
-                str(auth_result.get("message") or "OIDC 登录失败"),
-                success=False,
-                code=401,
-            ),
-            status_code=401,
-        )
-    sku = resolve_product_sku()
-    account_kind = normalize_account_kind(
-        None, default="enterprise" if sku == "enterprise" else "personal"
-    )
-    username = str((auth_result.get("user") or {}).get("username") or "")
-    session_id = auth_result.get("session_id")
-    payload = await finalize_enterprise_login(
-        result=auth_result,
-        session_id=str(session_id) if session_id else None,
-        market_result={"success": False},
-        account_kind=account_kind,
-        username=username,
-        sku=sku,
-        skip_market_sync=True,
-    )
-    user_raw = payload.get("user") or {}
-    tokens = issue_mobile_tokens(
-        user_id=int(user_raw["id"]),
-        session_id=str(session_id),
-        account_kind=str(payload.get("account_kind") or account_kind),
-        username=username,
-    )
-    return format_mobile_response(
-        data={
-            "user": user_raw,
-            "session_id": session_id,
-            "account_kind": payload.get("account_kind") or account_kind,
-            **tokens,
-        },
-    )
-
-
-class AuthQrConfirmBody(BaseModel):
-    qr_id: str = Field(..., min_length=8)
-    username: str = Field(default="", max_length=128)
-    password: str = Field(default="", max_length=256)
-    account_kind: str = Field(default="enterprise", max_length=32)
-
-
-@extension_router.post("/auth/qr/confirm")
-async def mobile_auth_qr_confirm(body: AuthQrConfirmBody, request: Request):
-    """手机确认 PC 扫码登录。"""
-    from app.application.auth_app_service import get_auth_app_service
-    from app.application.enterprise_login_flow import run_market_first_login
-    from app.application.session_account_meta import normalize_account_kind
-    from app.fastapi_routes.domains.auth.routes import (
-        _jit_create_local_user_for_enterprise,
-        _market_user_email_from_raw,
-    )
-    from app.fastapi_routes.market_account import login_market_with_password
-    from app.mod_sdk.product_skus import resolve_product_sku
-    from app.security.auth_qr_login import confirm_auth_qr, get_auth_qr
-
-    rec = get_auth_qr(body.qr_id)
-    if not rec or rec.get("status") == "expired":
-        return JSONResponse(
-            format_mobile_response(None, "二维码已过期", success=False, code=400),
-            status_code=400,
-        )
-
-    username = (body.username or "").strip()
-    password = body.password or ""
-    auth_app_service = get_auth_app_service()
-    sku = resolve_product_sku()
-    account_kind = normalize_account_kind(
-        body.account_kind,
-        default="enterprise" if sku == "enterprise" else "personal",
-    )
-
-    authorization = request.headers.get("Authorization") or ""
-    if authorization.startswith("Bearer ") and not username:
-        from app.security.mobile_jwt import user_id_from_mobile_bearer
-
-        uid = user_id_from_mobile_bearer(authorization)
-        if uid:
-            from app.db.models.user import User
-            from app.db.session import get_db
-
-            with get_db() as db:
-                row = db.query(User).filter(User.id == int(uid)).first()
-                if row:
-                    username = str(row.username or "")
-
-    if not username or not password:
-        return JSONResponse(
-            format_mobile_response(None, "请提供账号与密码确认登录", success=False, code=400),
-            status_code=400,
-        )
-
-    result, err = await run_market_first_login(
-        username=username,
-        password=password,
-        account_kind=account_kind,
-        market_result=None,
-        auth_app_service=auth_app_service,
-        sku=sku,
-        jit_create_fn=_jit_create_local_user_for_enterprise,
-        market_user_email_from_raw=_market_user_email_from_raw,
-        login_market_fn=login_market_with_password,
-    )
-    if err:
         try:
             payload = err.body.decode("utf-8") if hasattr(err, "body") else str(err)
         except OPERATIONAL_ERRORS:
@@ -891,3 +784,54 @@ async def mobile_auth_oidc_exchange(body: OidcExchangeBody):
             **tokens,
         },
     )
+
+
+# ── 专属客服接口（企业版手机端） ──
+
+
+@extension_router.get("/cs/info")
+async def get_cs_info(request: Request, user=Depends(get_mobile_user)):
+    """返回当前用户的专属客服信息。"""
+    if user is None:
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
+        )
+    # TODO: Phase 2 从数据库/配置读取真实的客服信息
+    # Phase 1 返回演示数据
+    return format_mobile_response(
+        data={
+            "cs_available": True,
+            "cs_name": "修茈客服",
+            "cs_avatar": None,
+            "cs_online": True,
+        }
+    )
+
+
+@extension_router.post("/cs/messages")
+async def post_cs_message(request: Request, body: dict, user=Depends(get_mobile_user)):
+    """发送消息到客服通道。"""
+    if user is None:
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
+        )
+    message_id = f"cs_{uuid.uuid4().hex[:12]}"
+    # TODO: Phase 2 存储到客服消息表并推送给客服人员
+    # Phase 1 返回模拟确认
+    return format_mobile_response(
+        data={"message_id": message_id, "timestamp": datetime.utcnow().isoformat()}
+    )
+
+
+@extension_router.get("/cs/messages")
+async def get_cs_messages(
+    request: Request, since: str | None = None, user=Depends(get_mobile_user)
+):
+    """拉取客服消息。"""
+    if user is None:
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
+        )
+    # TODO: Phase 2 从客服消息表查询
+    # Phase 1 返回空列表
+    return format_mobile_response(data={"messages": []})

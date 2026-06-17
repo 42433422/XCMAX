@@ -1,6 +1,7 @@
 package com.xiuci.xcagi.mobile.core.network
 
 import com.xiuci.xcagi.mobile.BuildConfig
+import com.xiuci.xcagi.mobile.core.ProductSkuConfig
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -12,10 +13,22 @@ class ServerRouter @Inject constructor() {
     var mode: ServerMode = ServerMode.CLOUD
 
     fun fhdBaseUrl(): String {
+        if (mode == ServerMode.CLOUD && ProductSkuConfig.isEnterprise) {
+            return enterpriseFhdBaseUrl()
+        }
+        return lanFhdBaseUrl()
+    }
+
+    private fun lanFhdBaseUrl(): String {
         val host = fhdHost.trim().removePrefix("http://").removePrefix("https://").trimEnd('/')
         val bare = host.substringBefore(':')
         val port = host.substringAfter(':', "").ifBlank { BuildConfig.FHD_DEFAULT_PORT.toString() }
         return "http://$bare:$port/"
+    }
+
+    fun enterpriseFhdBaseUrl(): String {
+        val base = BuildConfig.ENTERPRISE_FHD_BASE_URL.trimEnd('/')
+        return "$base/"
     }
 
     fun modstoreBaseUrl(): String {

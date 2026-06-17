@@ -14,6 +14,10 @@ from app.desktop_runtime.paths import (
     ensure_desktop_dirs,
     sqlite_database_url,
 )
+from app.desktop_runtime.sunbird_delivery_seed import (
+    apply_sunbird_roster_seed_if_needed,
+    sync_sunbird_delivery_files,
+)
 
 
 def test_configure_desktop_environment_sets_local_defaults(tmp_path, monkeypatch):
@@ -93,3 +97,66 @@ def test_model_manifest_loads_assets(tmp_path):
 
     assert assets[0].name == "demo"
     assert assets[0].version == "1.0.0"
+
+
+def test_sunbird_delivery_files_sync_missing_payload(tmp_path, monkeypatch):
+    seed = tmp_path / "seed"
+    runtime = tmp_path / "runtime"
+    (seed / "424").mkdir(parents=True)
+    (seed / "config").mkdir()
+    (seed / "data" / "mod_dbs").mkdir(parents=True)
+    (seed / "424" / "考勤-2026-3月份考勤统计表.xlsx").write_bytes(b"template")
+    (seed / "config" / "sunbird-roster.json").write_text(
+        '{"employees":[]}\n',
+        encoding="utf-8",
+    )
+    (seed / "data" / "mod_dbs" / "taiyangniao_pro.db").write_bytes(b"db")
+    monkeypatch.setenv("XCAGI_SUNBIRD_SEED_ROOT", str(seed))
+
+    copied = sync_sunbird_delivery_files(runtime)
+
+    assert copied == 3
+    assert (runtime / "424" / "考勤-2026-3月份考勤统计表.xlsx").read_bytes() == b"template"
+    assert (runtime / "config" / "sunbird-roster.json").is_file()
+    assert (runtime / "data" / "mod_dbs" / "taiyangniao_pro.db").read_bytes() == b"db"
+
+
+def test_sunbird_delivery_files_do_not_overwrite_existing_payload(tmp_path, monkeypatch):
+    seed = tmp_path / "seed"
+    runtime = tmp_path / "runtime"
+    (seed / "424").mkdir(parents=True)
+    (runtime / "424").mkdir(parents=True)
+    (runtime / "config").mkdir()
+    (runtime / "data" / "mod_dbs").mkdir(parents=True)
+    template_name = "考勤-2026-3月份考勤统计表.xlsx"
+    (seed / "424" / template_name).write_bytes(b"seed")
+    (runtime / "424" / template_name).write_bytes(b"customer")
+    (runtime / "config" / "sunbird-roster.json").write_text(
+        '{"employees":[]}\n',
+        encoding="utf-8",
+    )
+    (runtime / "data" / "mod_dbs" / "taiyangniao_pro.db").write_bytes(b"customer-db")
+    monkeypatch.setenv("XCAGI_SUNBIRD_SEED_ROOT", str(seed))
+
+    copied = sync_sunbird_delivery_files(runtime)
+
+    assert copied == 0
+    assert (runtime / "424" / template_name).read_bytes() == b"customer"
+
+
+def test_sunbird_roster_seed_syncs_files_before_marker_check(tmp_path, monkeypatch):
+    seed = tmp_path / "seed"
+    runtime = tmp_path / "runtime"
+    (seed / "424").mkdir(parents=True)
+    (runtime / "config").mkdir(parents=True)
+    (seed / "424" / "考勤-2026-3月份考勤统计表.xlsx").write_bytes(b"template")
+    (runtime / "config" / "sunbird-roster.applied").write_text(
+        "already-applied\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("XCAGI_SUNBIRD_SEED_ROOT", str(seed))
+
+    applied = apply_sunbird_roster_seed_if_needed(runtime)
+
+    assert applied is False
+    assert (runtime / "424" / "考勤-2026-3月份考勤统计表.xlsx").is_file()

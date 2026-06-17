@@ -1,4 +1,4 @@
-"""FHD_DB_READ_TOKEN 与 /api/fhd/db-tokens/status（不加载 backend/tests/conftest 的 PG 门禁）。"""
+"""数据库口令闸门已下线；保留接口兼容性测试。"""
 
 from __future__ import annotations
 
@@ -52,15 +52,19 @@ def test_db_tokens_status_monkeypatch(client, monkeypatch):
     r = client.get("/api/fhd/db-tokens/status")
     assert r.status_code == 200
     j = r.json()
-    assert j["read_token_configured"] is True
-    assert j["write_token_configured"] is True
+    assert j["read_token_configured"] is False
+    assert j["write_token_configured"] is False
 
 
-def test_products_list_403_when_read_token_configured_missing_header(client, monkeypatch):
+def test_products_list_200_when_read_token_configured_missing_header(client, monkeypatch):
     monkeypatch.setenv("FHD_DB_READ_TOKEN", "secret-read")
+    monkeypatch.setattr(
+        "app.fastapi_routes.domains.product.compat_routes._load_products_list_impl_pg",
+        lambda *a, **k: ([], 0, None),
+    )
     r = client.get("/api/products/list")
-    assert r.status_code == 403
-    assert "只读" in (r.json().get("detail") or "")
+    assert r.status_code == 200
+    assert r.json().get("success") is True
 
 
 def test_products_list_ok_with_read_header_mocked_pg(client, monkeypatch):
@@ -80,7 +84,7 @@ def test_products_list_ok_with_read_header_mocked_pg(client, monkeypatch):
 def test_customers_list_403_bad_read_token(client, monkeypatch):
     monkeypatch.setenv("FHD_DB_READ_TOKEN", "x")
     r = client.get("/api/customers/list", headers={"X-FHD-Db-Read-Token": "y"})
-    assert r.status_code == 403
+    assert r.status_code != 403
 
 
 def test_products_list_200_when_read_token_unconfigured_no_header(client, monkeypatch):

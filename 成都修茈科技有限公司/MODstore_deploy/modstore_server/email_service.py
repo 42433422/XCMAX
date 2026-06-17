@@ -27,6 +27,7 @@ from typing import Dict, List, Optional, Sequence
 
 from sqlalchemy import func
 
+from modstore_server.env_loader import load_modstore_env
 from modstore_server.models import User, get_session_factory
 
 _MODSTORE_ROOT = Path(__file__).resolve().parent.parent
@@ -62,28 +63,8 @@ def _looks_like_placeholder(value: str) -> bool:
 
 
 def _load_modstore_env() -> None:
-    """加载 ``MODstore_deploy/.env``。优先 ``python-dotenv``；未安装时做简单 KEY=VALUE 解析。"""
-    path = _MODSTORE_ROOT / ".env"
-    if not path.is_file():
-        return
-    try:
-        from dotenv import load_dotenv
-
-        load_dotenv(path, override=False)
-    except ImportError:
-        try:
-            text = path.read_text(encoding="utf-8")
-        except OSError:
-            return
-        for line in text.splitlines():
-            s = line.strip()
-            if not s or s.startswith("#") or "=" not in s:
-                continue
-            key, _, val = s.partition("=")
-            key = key.strip()
-            val = val.strip().strip('"').strip("'")
-            if key and key not in os.environ:
-                os.environ[key] = val
+    """加载 MODstore 环境文件：.env -> .env.production.synced -> .env.local。"""
+    load_modstore_env(_MODSTORE_ROOT)
 
 
 _load_modstore_env()
@@ -138,7 +119,7 @@ _NOT_CONFIGURED_MESSAGE = (
     "未配置邮件服务：请在 MODstore_deploy/.env 或环境变量中设置真实的 "
     "MODSTORE_SMTP_USER 与 MODSTORE_SMTP_PASSWORD（注意 .env.production 模板里的 "
     "your-qq-smtp-auth-code / CHANGE_ME 等占位符不算已配置）；"
-    "也可安装 python-dotenv 后使用 .env。"
+    "也可安装 python-dotenv 后使用 .env / .env.production.synced / .env.local。"
     "本地调试可设 MODSTORE_EMAIL_DEBUG=1 跳过发信并在控制台打印验证码。"
     "管理员可调 GET /api/admin/email/status 看当前生效配置，"
     "或 POST /api/admin/email/test 验证 SMTP。"

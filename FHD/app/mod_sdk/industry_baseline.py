@@ -232,6 +232,7 @@ def filter_onboarding_catalog_for_entitlements(
     entitled = {str(x).strip() for x in entitled_mod_ids if str(x).strip()}
     open_pkgs: list[dict[str, Any]] = []
     demoted: list[dict[str, Any]] = []
+    open_by_id: set[str] = set()
     for pkg in catalog.get("open_packages") or []:
         if not isinstance(pkg, dict):
             continue
@@ -240,6 +241,8 @@ def filter_onboarding_catalog_for_entitlements(
         if industry_entitled_for_client_mods(iid, entitled):
             row["selectable"] = True
             open_pkgs.append(row)
+            if iid:
+                open_by_id.add(iid)
         else:
             row["selectable"] = False
             demoted.append(row)
@@ -247,6 +250,41 @@ def filter_onboarding_catalog_for_entitlements(
     preview_pkgs = [
         dict(p) if isinstance(p, dict) else p for p in (catalog.get("preview_packages") or [])
     ]
+    try:
+        from app.mod_sdk.host_profile import load_industry_presets_document
+
+        presets_doc = load_industry_presets_document()
+    except RECOVERABLE_ERRORS:
+        presets_doc = {}
+    presets = presets_doc.get("presets") if isinstance(presets_doc.get("presets"), dict) else {}
+
+    doc = load_industry_baseline_document()
+    package_ids = [
+        str(iid or "").strip()
+        for iid in (doc.get("industry_packages") or {}).keys()
+        if str(iid or "").strip()
+    ]
+    for iid in _dedupe(package_ids):
+        if iid in open_by_id:
+            continue
+        if not industry_entitled_for_client_mods(iid, entitled):
+            continue
+        moved = False
+        next_preview: list[dict[str, Any]] = []
+        for pkg in preview_pkgs:
+            if isinstance(pkg, dict) and str(pkg.get("industry_id") or "").strip() == iid:
+                row = dict(pkg)
+                row["selectable"] = True
+                open_pkgs.append(row)
+                open_by_id.add(iid)
+                moved = True
+            else:
+                next_preview.append(pkg)
+        preview_pkgs = next_preview
+        if not moved:
+            open_pkgs.append(_onboarding_package_row(iid, selectable=True, presets=presets))
+            open_by_id.add(iid)
+
     preview_ids = {
         str(p.get("industry_id") or "").strip()
         for p in preview_pkgs
@@ -273,8 +311,6 @@ def filter_onboarding_catalog_for_entitlements(
 
 async def build_onboarding_industry_catalog_for_request(request) -> dict[str, Any]:
     """按会话感知：企业 entitlement 二级筛选 + 租户已选行业。"""
-    import os
-
     from app.application.tenant_workspace_prefs import (
         get_workspace_prefs,
         resolve_workspace_owner_id,
@@ -285,7 +321,7 @@ async def build_onboarding_industry_catalog_for_request(request) -> dict[str, An
         is_admin_account_session,
         sync_entitlements_from_request,
     )
-    from app.infrastructure.auth.dependencies import resolve_session_user
+    from app.infrastructure.auth.dependencies import resolve_session_user, session_id_from_request
 
     catalog = build_onboarding_industry_catalog()
     meta: dict[str, Any] = {
@@ -307,8 +343,7 @@ async def build_onboarding_industry_catalog_for_request(request) -> dict[str, An
     if not enterprise_mod_filter_active():
         return {**catalog, **meta}
 
-    cookie_name = os.environ.get("SESSION_COOKIE_NAME", "session_id")
-    sid = (request.cookies.get(cookie_name) or "").strip()
+    sid = session_id_from_request(request)
     if not sid:
         return {**catalog, **meta}
 
@@ -495,6 +530,18 @@ def build_industry_baseline_plan(
         for it in flat_items
         if it["tier"] == "account_custom" and it["required"] and not it["installed"]
     ]
+    account_delivery_seed_packages: list[dict[str, Any]] = []
+    if account_custom_ids:
+        from app.mod_sdk.customer_delivery import delivery_seed_package_for_mod
+
+        for mid in account_custom_ids:
+            pkg_meta = delivery_seed_package_for_mod(mid, industry_key)
+            if not pkg_meta:
+                continue
+            account_delivery_seed_packages.append({"mod_id": mid, **pkg_meta})
+            for item in flat_items:
+                if item.get("mod_id") == mid:
+                    item["delivery_seed_package"] = dict(pkg_meta)
 
     host_baseline_ready = len(missing_required) == 0
     industry_mod_ready = len(missing_industry) == 0
@@ -523,6 +570,7 @@ def build_industry_baseline_plan(
         "missing_industry_mod_ids": missing_industry,
         "account_custom_mod_ids": account_custom_ids,
         "missing_account_custom_mod_ids": missing_account_custom,
+        "account_delivery_seed_packages": account_delivery_seed_packages,
         "host_baseline_ready": host_baseline_ready,
         "account_custom_ready": account_custom_ready,
         "custom_employee_extension_mod_ids": employee_extension_ids,
@@ -536,21 +584,19 @@ async def build_industry_baseline_plan_for_request(
     request, industry_id: str = "通用"
 ) -> dict[str, Any]:
     """会话感知：同步 market entitlement，管理员可跳过账号定制强制。"""
-    import os
-
     from app.enterprise.mod_entitlements import (
         enterprise_mod_filter_active,
         get_cached_entitled_client_mod_ids,
         is_admin_account_session,
         sync_entitlements_from_request,
     )
+    from app.infrastructure.auth.dependencies import session_id_from_request
 
     entitled: set[str] | None = None
     skip_account_custom = False
 
     if enterprise_mod_filter_active():
-        cookie_name = os.environ.get("SESSION_COOKIE_NAME", "session_id")
-        sid = (request.cookies.get(cookie_name) or "").strip()
+        sid = session_id_from_request(request)
         if sid:
             await sync_entitlements_from_request(request)
             if is_admin_account_session():

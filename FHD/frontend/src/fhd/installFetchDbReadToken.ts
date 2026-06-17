@@ -1,9 +1,7 @@
 /**
- * 为裸 fetch('/api/products/...') 等补上只读令牌头（与 api/core、utils/apiBase 一致）；
- * 并合并「原版模式」头，使未走 api 封装的请求仍与业务读隐藏策略一致。
- * 须在应用其它代码之前 import 一次。
+ * 为裸 fetch('/api/...') 合并「原版模式」头，使未走 api 封装的请求仍与业务显示策略一致。
+ * 数据库读写口令已下线，本补丁不再附带任何 DB token。
  */
-import { dbReadHeaders, dbWriteHeaders, shouldAttachDbReadToken, urlNeedsDbWriteToken } from './dbTokenHeaders';
 import { getActiveExtensionModHeaders, getApiBase, getClientModsUiOffHeader } from '@/utils/apiBase';
 
 declare global {
@@ -66,11 +64,9 @@ export function installFetchDbReadToken(): void {
     if (!url) return native(input, init);
     if (!shouldPatchRequestHeaders(url)) return native(input, init);
 
-    const readExtra = shouldAttachDbReadToken(url, method) ? dbReadHeaders() : {};
-    const writeExtra = urlNeedsDbWriteToken(url, method) ? dbWriteHeaders() : {};
     const modsOff = getClientModsUiOffHeader();
     const activeMod = getActiveExtensionModHeaders(url);
-    const merged = { ...readExtra, ...writeExtra, ...modsOff, ...activeMod };
+    const merged = { ...modsOff, ...activeMod };
     if (!Object.keys(merged).length) return native(input, init);
 
     if (typeof input === 'string' || input instanceof URL) {

@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+import os
 import types
 import uuid
 
@@ -104,6 +105,42 @@ def test_email_status_smtp_mode(monkeypatch):
     s = svc.email_status()
     assert s["mode"] == "smtp"
     assert s["configured"] is True
+
+
+def test_load_modstore_env_reads_synced_then_local(tmp_path, monkeypatch):
+    from modstore_server.env_loader import load_modstore_env
+
+    (tmp_path / ".env").write_text(
+        "MODSTORE_SMTP_USER=placeholder@example.com\n"
+        "MODSTORE_SMTP_PASSWORD=your-qq-smtp-auth-code\n",
+        encoding="utf-8",
+    )
+    (tmp_path / ".env.production.synced").write_text(
+        "MODSTORE_SMTP_USER=real@qq.com\n"
+        "MODSTORE_SMTP_PASSWORD=real-secret-123456\n"
+        "MODSTORE_RUN_BACKGROUND_JOBS=1\n",
+        encoding="utf-8",
+    )
+    (tmp_path / ".env.local").write_text(
+        "MODSTORE_DAILY_DIGEST_ENABLED=1\n"
+        "MODSTORE_RUN_BACKGROUND_JOBS=0\n",
+        encoding="utf-8",
+    )
+    for key in (
+        "MODSTORE_SMTP_USER",
+        "MODSTORE_SMTP_PASSWORD",
+        "MODSTORE_RUN_BACKGROUND_JOBS",
+        "MODSTORE_DAILY_DIGEST_ENABLED",
+    ):
+        monkeypatch.delenv(key, raising=False)
+
+    loaded = load_modstore_env(tmp_path, include_synced=True, include_local=True)
+
+    assert len(loaded) == 3
+    assert os.environ["MODSTORE_SMTP_USER"] == "real@qq.com"
+    assert os.environ["MODSTORE_SMTP_PASSWORD"] == "real-secret-123456"
+    assert os.environ["MODSTORE_RUN_BACKGROUND_JOBS"] == "0"
+    assert os.environ["MODSTORE_DAILY_DIGEST_ENABLED"] == "1"
 
 
 def test_assert_email_outbound_configured_passes_in_debug(monkeypatch):
@@ -320,6 +357,31 @@ def test_test_endpoint_returns_400_when_unconfigured(client, monkeypatch):
     finally:
         app.dependency_overrides.pop(ea._require_admin, None)
         app.dependency_overrides.pop(ea._get_current_user, None)
+
+
+def test_digest_now_returns_502_when_digest_not_delivered(client, monkeypatch):
+    from modstore_server import email_admin_api as ea
+    from modstore_server.app import app
+
+    admin = _make_user(is_admin=True)
+    app.dependency_overrides[ea._require_admin] = lambda: admin
+    monkeypatch.setattr(
+        "modstore_server.daily_digest.run_daily_digest_email",
+        lambda: {
+            "ok": False,
+            "delivered": False,
+            "reason": "no_email_delivered",
+            "delivery_rows": [{"to": "ops@example.com", "mode": "unconfigured"}],
+        },
+    )
+    try:
+        r = client.post("/api/admin/email/digest-now")
+        assert r.status_code == 502
+        body = r.json()
+        assert body["detail"]["reason"] == "no_email_delivered"
+        assert body["detail"]["delivery_rows"]
+    finally:
+        app.dependency_overrides.pop(ea._require_admin, None)
 
 
 def test_mask_user_helper():

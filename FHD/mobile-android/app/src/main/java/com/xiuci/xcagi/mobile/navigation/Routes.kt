@@ -11,13 +11,23 @@ object Routes {
     const val HOME_HUB = "home_hub"
     /** 4 Tab：工作（审批 + 业务聚合入口） */
     const val WORK = "work"
-    /** 4 Tab：发现（工作台 / Mod / 市场 / 扫一扫） */
+    /** 4 Tab：发现（扫码 / OCR / 连接能力） */
     const val DISCOVER = "discover"
-    const val WORKBENCH = "workbench"
     const val PROFILE = "profile"
     /** @deprecated 仅高级入口保留，不再作为底栏 Tab */
     const val HOME = "home"
     const val CHAT = "chat"
+    /** AI 对话（从会话列表进入的 AI 助手聊天） */
+    const val AI_CHAT = "ai_chat"
+    /** 普通会话对话（带 conversationId 参数） */
+    const val CONVERSATION_CHAT = "conversation_chat"
+    /** 专属客服对话 */
+    const val CS_CHAT = "cs_chat"
+    const val FIXED_PARTNER_PROFILE = "fixed_partner/{partnerKind}"
+
+    fun conversationChat(conversationId: String): String = "$CONVERSATION_CHAT/$conversationId"
+    fun fixedPartnerProfile(partnerKind: String): String = "fixed_partner/$partnerKind"
+
     /** IM V0 原生会话（SurfaceAudit / 高级入口） */
     const val IM = "im"
     const val APPROVAL = "approval"
@@ -38,6 +48,9 @@ object Routes {
     const val SCAN_QR = "scan_qr"
     /** AI 员工列表页（从聊天页右上角 + 号进入） */
     const val AI_EMPLOYEES = "ai_employees"
+    const val AI_CIRCLE = "ai_circle"
+    const val AI_EMPLOYEE_PROFILE = "ai_employee/{modId}/{employeeId}"
+    fun aiEmployeeProfile(modId: String, employeeId: String) = "ai_employee/$modId/$employeeId"
     /** 智慧分析（Kitten Analyzer） */
     const val SMART_ANALYSIS = "smart_analysis"
     /** AIOPEN 开放智控 */

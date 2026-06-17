@@ -34,8 +34,8 @@ import { applyEditionPackPlatformShell } from '@/constants/platformShellMode';
 import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl';
 import { filterWorkflowRegistrySourceMods } from '@/utils/modWorkflowEmployees';
 import {
+  ACCOUNT_CUSTOM_MOD_IDS,
   CLIENT_PRIMARY_ERP_MOD_ID,
-  hasInstalledClientPrimaryErpMod,
   isAuxEmployeePackModId,
   isClientErpSidebarContext,
   isHostMountedModMenuPath,
@@ -45,17 +45,12 @@ import {
 } from '@/constants/genericModPack';
 import {
   augmentEntitledModIdsForAccount,
-  isSunbirdAccountUsername,
-  shouldBindClientPrimaryErpMod,
 } from '@/constants/accountModBinding';
 import { useAccountProfileStore } from '@/stores/accountProfile';
-import { buildSunbirdClientModStub } from '@/constants/sunbirdClientMod';
+import { buildAttendanceIndustryModStub } from '@/constants/sunbirdClientMod';
 import { isProtectedClientModId } from '@/constants/protectedMods';
 import { bootstrapHostConfig, clientModPolicies } from '@/stores/hostConfig';
 import { XCAGI_ACTIVE_EXTENSION_MOD_ID_KEY, readActiveExtensionModIdFromStorage, writeActiveExtensionModIdToStorage } from '@/utils/xcagiStorageKeys';
-
-/** 防止 applyEntitledActiveMod 内 refetch 再次触发 entitlement 回流 */
-let entitledRefetchInProgress = false;
 
 type FetchModsOptions = {
   /** 为 true 时只更新 mods 列表，不再调用 applyEntitledActiveMod（打破递归） */
@@ -66,7 +61,7 @@ export type ModsInitializeOptions = {
   entitledModIds?: string[];
   /** 登录后按账号权益强制选 Mod（覆盖 localStorage 中的旧扩展） */
   forceFromEntitlements?: boolean;
-  /** 本机登录名（用于 SUNBIRD 等演示账号与太阳鸟 Mod 绑定） */
+  /** 本机登录名（仅用于本地演示账号兜底；正式账号由服务端 entitlement 驱动） */
   accountUsername?: string;
 };
 
@@ -271,6 +266,33 @@ function normalizeEntitledModIds(raw: string[] | undefined): string[] {
   return out;
 }
 
+const LEGACY_CLIENT_MOD_CANONICAL: Record<string, string> = {
+  'taiyangniao-pro': 'attendance-industry',
+  'sz-qsm-pro': 'coating-industry',
+};
+
+function canonicalEntitlementId(modId: string): string {
+  const id = String(modId || '').trim();
+  return LEGACY_CLIENT_MOD_CANONICAL[id] || id;
+}
+
+function isAccountCustomModId(modId: string): boolean {
+  return (ACCOUNT_CUSTOM_MOD_IDS as readonly string[]).includes(String(modId || '').trim());
+}
+
+function entitlementMatchesMod(modId: string, entitledSet: Set<string>): boolean {
+  const id = String(modId || '').trim();
+  if (!id) return false;
+  if (entitledSet.has(id)) return true;
+  if (isAccountCustomModId(id)) return false;
+  const canonical = canonicalEntitlementId(id);
+  if (canonical && entitledSet.has(canonical)) return true;
+  for (const entitled of entitledSet) {
+    if (canonicalEntitlementId(entitled) === canonical) return true;
+  }
+  return false;
+}
+
 function pickModIdFromEntitled(
   entitledModIds: string[],
   modsList: ModInfo[],
@@ -280,17 +302,23 @@ function pickModIdFromEntitled(
   const selectable = modsList.filter((m) => {
     const id = String(m.id || '').trim();
     if (!id || !isSelectableExtensionModId(id)) return false;
-    return entitledSet.size === 0 || entitledSet.has(id);
+    return entitledSet.size === 0 || entitlementMatchesMod(id, entitledSet);
   });
   if (!selectable.length) return '';
 
-  if (primaryErpModId && entitledSet.has(primaryErpModId)) {
+  const customHit = selectable.find((m) => {
+    const id = String(m.id || '').trim();
+    return isAccountCustomModId(id) && entitledSet.has(id);
+  });
+  if (customHit) return String(customHit.id || '').trim();
+
+  if (primaryErpModId && entitlementMatchesMod(primaryErpModId, entitledSet)) {
     const erpHit = selectable.find((m) => String(m.id || '').trim() === primaryErpModId);
     if (erpHit) return primaryErpModId;
   }
 
   const primaryHit = selectable.find(
-    (m) => m.primary && entitledSet.has(String(m.id || '').trim()),
+    (m) => m.primary && entitlementMatchesMod(String(m.id || '').trim(), entitledSet),
   );
   if (primaryHit) return String(primaryHit.id || '').trim();
 
@@ -347,7 +375,7 @@ export const useModsStore = defineStore('mods', () => {
     const hit = mods.value.find((m) => String(m.id || '').trim() === active);
     if (hit) return [hit];
     if (active === CLIENT_PRIMARY_ERP_MOD_ID) {
-      return [findClientPrimaryErpMod() || buildSunbirdClientModStub()];
+      return [findClientPrimaryErpMod() || buildAttendanceIndustryModStub()];
     }
     return mods.value;
   });
@@ -396,37 +424,11 @@ export const useModsStore = defineStore('mods', () => {
       setActiveModId('');
       return;
     }
-    const { accountUsername, isAdminAccount } = resolveModsAccountContext();
+    const { isAdminAccount } = resolveModsAccountContext();
     let current = String(activeModId.value || '').trim();
     if (isAdminAccount) {
       if (current === CLIENT_PRIMARY_ERP_MOD_ID) setActiveModId('');
       return;
-    }
-    if (isSunbirdAccountUsername(accountUsername)) {
-      const sunbird = findClientPrimaryErpMod();
-      if (sunbird || current === CLIENT_PRIMARY_ERP_MOD_ID) {
-        setActiveModId(CLIENT_PRIMARY_ERP_MOD_ID);
-        return;
-      }
-    }
-    const primaryErp = String(
-      clientModPolicies.value?.client_primary_erp_mod_id || CLIENT_PRIMARY_ERP_MOD_ID,
-    ).trim();
-    const primaryListed = mods.value.some((m) => String(m.id || '').trim() === primaryErp);
-    if (
-      shouldBindClientPrimaryErpMod(accountUsername, { isAdminAccount }) &&
-      primaryErp &&
-      isProtectedClientModId(primaryErp) &&
-      (primaryListed || isClientErpSidebarContext(mods.value.map((m) => String(m.id || '')), primaryErp))
-    ) {
-      if (
-        !current ||
-        current === ERP_DOMAIN_BRIDGE_MOD_ID ||
-        !isSelectableExtensionModId(current)
-      ) {
-        setActiveModId(primaryErp);
-        return;
-      }
     }
     if (current && mods.value.some((m) => String(m.id || '').trim() === current)) {
       // 若误选宿主 bridge，优先改到第一个行业扩展包（bridge 不作为「当前扩展」）
@@ -439,9 +441,6 @@ export const useModsStore = defineStore('mods', () => {
       return;
     }
     const preferred =
-      (shouldBindClientPrimaryErpMod(accountUsername, { isAdminAccount })
-        ? findClientPrimaryErpMod()
-        : undefined) ||
       mods.value.find((m) => m.primary && isSelectableExtensionModId(String(m.id || ''))) ||
       mods.value.find((m) => isSelectableExtensionModId(String(m.id || '')));
     setActiveModId(preferred ? String(preferred.id || '').trim() : '');
@@ -488,43 +487,9 @@ export const useModsStore = defineStore('mods', () => {
       username,
       normalizeEntitledModIds(entitledModIds),
     );
-    if (!entitled.length && !isSunbirdAccountUsername(username)) return;
+    if (!entitled.length) return;
 
     await bootstrapHostConfig();
-
-    /** SUNBIRD 演示账号：只要本机已装太阳鸟 pro，始终作为当前扩展（考勤表转换等 Mod 页） */
-    if (isSunbirdAccountUsername(username)) {
-      const listed = mods.value.some(
-        (m) => String(m.id || '').trim() === CLIENT_PRIMARY_ERP_MOD_ID,
-      );
-      const current = String(activeModId.value || '').trim();
-      if (listed) {
-        if (current !== CLIENT_PRIMARY_ERP_MOD_ID) {
-          setActiveModId(CLIENT_PRIMARY_ERP_MOD_ID);
-        }
-        await syncIndustryForActiveMod();
-        return;
-      }
-      if (Boolean(options?.force) || pendingInitOptions?.forceFromEntitlements) {
-        setActiveModId(CLIENT_PRIMARY_ERP_MOD_ID);
-        await syncIndustryForActiveMod();
-        if (!entitledRefetchInProgress) {
-          entitledRefetchInProgress = true;
-          try {
-            const refetch = await fetchModsOnce({ skipEntitledApply: true });
-            if (
-              refetch.ok &&
-              mods.value.some((m) => String(m.id || '').trim() === CLIENT_PRIMARY_ERP_MOD_ID)
-            ) {
-              await syncIndustryForActiveMod();
-            }
-          } finally {
-            entitledRefetchInProgress = false;
-          }
-        }
-        return;
-      }
-    }
     const primaryErp = String(
       clientModPolicies.value?.client_primary_erp_mod_id || CLIENT_PRIMARY_ERP_MOD_ID,
     ).trim();
@@ -534,38 +499,13 @@ export const useModsStore = defineStore('mods', () => {
     const current = String(activeModId.value || '').trim();
 
     let next = '';
-    const sunbirdForce =
-      force && isSunbirdAccountUsername(username) && entitledSet.has(CLIENT_PRIMARY_ERP_MOD_ID);
-    if (sunbirdForce) {
-      next = CLIENT_PRIMARY_ERP_MOD_ID;
-    } else if (force && entitledSet.has(CLIENT_PRIMARY_ERP_MOD_ID)) {
-      const listed = mods.value.some(
-        (m) => String(m.id || '').trim() === CLIENT_PRIMARY_ERP_MOD_ID,
-      );
-      if (listed) next = CLIENT_PRIMARY_ERP_MOD_ID;
-    }
-    if (!next && (force || !current || !entitledSet.has(current))) {
+    if (!next && (force || !current || !entitlementMatchesMod(current, entitledSet))) {
       next = pickModIdFromEntitled(entitled, mods.value, primaryErp);
     }
     if (!next) return;
 
     const listedNext = mods.value.some((m) => String(m.id || '').trim() === next);
-    if (!listedNext && sunbirdForce) {
-      setActiveModId(next);
-      await syncIndustryForActiveMod();
-      if (!entitledRefetchInProgress) {
-        entitledRefetchInProgress = true;
-        try {
-          const refetch = await fetchModsOnce({ skipEntitledApply: true });
-          if (refetch.ok && mods.value.some((m) => String(m.id || '').trim() === next)) {
-            await syncIndustryForActiveMod();
-          }
-        } finally {
-          entitledRefetchInProgress = false;
-        }
-      }
-      return;
-    }
+    if (!listedNext) return;
 
     if (next !== current) {
       setActiveModId(next);
@@ -856,7 +796,7 @@ export const useModsStore = defineStore('mods', () => {
       const fromFull = pickForActive(full);
       if (fromFull.length) return fromFull;
       if (active === CLIENT_PRIMARY_ERP_MOD_ID) {
-        const stub = findClientPrimaryErpMod() || buildSunbirdClientModStub();
+        const stub = findClientPrimaryErpMod() || buildAttendanceIndustryModStub();
         return [stub, ...full.filter((m) => isAuxEmployeePackModId(String(m.id || '')))];
       }
       return [];

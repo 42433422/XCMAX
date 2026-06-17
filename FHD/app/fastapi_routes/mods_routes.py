@@ -34,7 +34,7 @@ def get_mods_router() -> Any:
 
 
 async def _sync_enterprise_entitlements_from_request(request: Request) -> None:
-    """已登录会话拉 Mod 列表前同步权益（含 SUNBIRD → taiyangniao-pro 兜底）。"""
+    """已登录会话拉 Mod 列表前同步服务端 entitlement。"""
     try:
         from app.enterprise.mod_entitlements import sync_entitlements_from_request
 

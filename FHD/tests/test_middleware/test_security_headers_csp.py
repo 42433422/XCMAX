@@ -38,6 +38,22 @@ def test_default_security_headers_added():
     assert r.headers.get("strict-transport-security") is None  # http scheme
 
 
+def test_desktop_mode_allows_vue_i18n_runtime_compile(monkeypatch):
+    monkeypatch.setenv("XCAGI_DESKTOP_MODE", "1")
+    app = FastAPI()
+    app.add_middleware(SecurityHeadersMiddleware)
+
+    @app.get("/login")
+    def login():
+        return {"success": True}
+
+    client = TestClient(app)
+    r = client.get("/login")
+    assert r.status_code == 200
+    assert r.headers["x-frame-options"] == "DENY"
+    assert "script-src 'self' 'unsafe-inline' 'unsafe-eval'" in r.headers["content-security-policy"]
+
+
 def test_sandbox_query_param_relaxes_csp():
     app = FastAPI()
     app.add_middleware(SecurityHeadersMiddleware)

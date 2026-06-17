@@ -330,11 +330,28 @@ public partial class MainWindow : Window
             return;
         }
 
+        _installedAppExe = result.AppExePath;
+        var sunbirdNote = "";
+        if (FetchSunbirdDataCheck.IsChecked == true && SunbirdSeedExtractor.HasEmbeddedSeed())
+        {
+            UpdateInstallProgress(94, "正在写入太阳鸟业务数据…");
+            try
+            {
+                var deployed = await SunbirdSeedExtractor.DeployToUserDataAsync(
+                    progress: msg => UpdateInstallProgress(96, msg),
+                    cancellationToken: _installCts.Token).ConfigureAwait(true);
+                sunbirdNote = deployed ? "已获取太阳鸟业务数据" : "太阳鸟业务数据未写入";
+            }
+            catch (Exception ex)
+            {
+                sunbirdNote = $"业务数据获取失败：{ex.Message}";
+            }
+        }
+
         UpdateInstallProgress(100, "安装完成");
         await Task.Delay(450).ConfigureAwait(true);
 
-        _installedAppExe = result.AppExePath;
-        var extras = ApplyPostInstallTasks();
+        var extras = ApplyPostInstallTasks(sunbirdNote);
         StopProgressSmoothTimer();
         CompletePathText.Text = result.InstallDir ?? "";
         CompleteExtrasText.Text = extras;
@@ -342,12 +359,14 @@ public partial class MainWindow : Window
         ApplyStepUi();
     }
 
-    private string ApplyPostInstallTasks()
+    private string ApplyPostInstallTasks(string? sunbirdNote = null)
     {
         if (string.IsNullOrEmpty(_installedAppExe))
-            return "";
+            return sunbirdNote ?? "";
 
         var notes = new List<string>();
+        if (!string.IsNullOrWhiteSpace(sunbirdNote))
+            notes.Add(sunbirdNote);
 
         if (DesktopShortcutCheck.IsChecked == true)
         {
@@ -358,22 +377,6 @@ public partial class MainWindow : Window
         }
 
         PostInstallTasks.TryCreateStartMenuShortcut(_installedAppExe);
-
-        if (FetchSunbirdDataCheck.IsChecked == true && SunbirdSeedExtractor.HasEmbeddedSeed())
-        {
-            try
-            {
-                var deployed = SunbirdSeedExtractor.DeployToUserDataAsync().GetAwaiter().GetResult();
-                if (deployed)
-                    notes.Add("已获取太阳鸟业务数据");
-                else
-                    notes.Add("太阳鸟业务数据未写入");
-            }
-            catch (Exception ex)
-            {
-                notes.Add($"业务数据获取失败：{ex.Message}");
-            }
-        }
 
         if (RunAfterInstallCheck.IsChecked == true)
         {

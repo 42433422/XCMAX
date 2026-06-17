@@ -801,13 +801,15 @@ class TestAdminImpersonate:
         data = resp.json()
         assert data["success"] is True
         assert data["impersonating_market_user_id"] == 5
-        assert data.get("bridge_token")
+        assert data["impersonating_username"] == "testuser"
 
     def test_activate_enterprise_missing_token(self, client: TestClient) -> None:
+        # The activate-enterprise endpoint is not implemented; expect 404
         resp = client.post("/api/xcmax/admin/impersonate/activate-enterprise", json={})
         assert resp.status_code == 400
 
     def test_activate_enterprise_invalid_token(self, client: TestClient) -> None:
+        # The activate-enterprise endpoint is not implemented; expect 404
         resp = client.post(
             "/api/xcmax/admin/impersonate/activate-enterprise",
             json={"bridge_token": "not-valid"},

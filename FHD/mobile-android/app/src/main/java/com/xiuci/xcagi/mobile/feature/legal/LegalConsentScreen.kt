@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -42,7 +43,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.xiuci.xcagi.mobile.R
 import com.xiuci.xcagi.mobile.ui.AppViewModel
-import com.xiuci.xcagi.mobile.ui.components.mobile.MobileTokens
+import com.xiuci.xcagi.mobile.ui.theme.Spacing
+import com.xiuci.xcagi.mobile.ui.theme.XcagiTheme
 
 @Composable
 fun LegalConsentScreen(
@@ -59,12 +61,12 @@ fun LegalConsentScreen(
     Box(
         Modifier
             .fillMaxSize()
-            .background(MobileTokens.brandBlue),
+            .background(XcagiTheme.extra.brandBlue),
     ) {
         Column(
             Modifier
                 .fillMaxSize()
-                .padding(horizontal = 32.dp),
+                .padding(horizontal = Spacing.xxxl),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Spacer(Modifier.weight(1f))
@@ -73,7 +75,7 @@ fun LegalConsentScreen(
             Box(
                 Modifier
                     .size(88.dp)
-                    .clip(RoundedCornerShape(20.dp))
+                    .clip(MaterialTheme.shapes.extraLarge)
                     .background(Color.White.copy(alpha = 0.15f)),
                 contentAlignment = Alignment.Center,
             ) {
@@ -85,12 +87,11 @@ fun LegalConsentScreen(
                 )
             }
 
-            Spacer(Modifier.height(20.dp))
+            Spacer(Modifier.height(Spacing.xl))
 
             Text(
                 "XCAGI",
-                fontSize = 28.sp,
-                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.displayLarge,
                 color = Color.White,
                 letterSpacing = 2.sp,
             )
@@ -99,7 +100,7 @@ fun LegalConsentScreen(
 
             Text(
                 "企业智能工作平台",
-                fontSize = 14.sp,
+                style = MaterialTheme.typography.bodySmall,
                 color = Color.White.copy(alpha = 0.7f),
             )
 
@@ -109,8 +110,8 @@ fun LegalConsentScreen(
             Row(
                 Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 8.dp)
-                    .clip(RoundedCornerShape(8.dp))
+                    .padding(horizontal = Spacing.sm)
+                    .clip(MaterialTheme.shapes.small)
                     .clickable { checked = !checked },
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center,
@@ -118,7 +119,7 @@ fun LegalConsentScreen(
                 Box(
                     Modifier
                         .size(18.dp)
-                        .clip(RoundedCornerShape(4.dp))
+                        .clip(MaterialTheme.shapes.extraSmall)
                         .background(if (checked) Color.White else Color.White.copy(alpha = 0.2f)),
                     contentAlignment = Alignment.Center,
                 ) {
@@ -127,11 +128,11 @@ fun LegalConsentScreen(
                             Icons.Default.Check,
                             contentDescription = null,
                             modifier = Modifier.size(14.dp),
-                            tint = MobileTokens.brandBlue,
+                            tint = XcagiTheme.extra.brandBlue,
                         )
                     }
                 }
-                Spacer(Modifier.size(8.dp))
+                Spacer(Modifier.size(Spacing.sm))
                 Text(
                     buildAnnotatedString {
                         withStyle(SpanStyle(color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp)) {
@@ -150,7 +151,7 @@ fun LegalConsentScreen(
                 )
             }
 
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(Spacing.lg))
 
             // 进入按钮
             Box(
@@ -164,13 +165,12 @@ fun LegalConsentScreen(
             ) {
                 Text(
                     if (checked) "进入 XCAGI" else "请先同意协议",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = if (checked) MobileTokens.brandBlue else Color.White.copy(alpha = 0.5f),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = if (checked) XcagiTheme.extra.brandBlue else Color.White.copy(alpha = 0.5f),
                 )
             }
 
-            Spacer(Modifier.height(32.dp))
+            Spacer(Modifier.height(Spacing.xxxl))
         }
     }
 }

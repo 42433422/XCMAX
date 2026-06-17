@@ -36,6 +36,11 @@ def _csrf_exempt_public_auth(scope: Scope) -> bool:
         or path.endswith("/api/auth/login-with-phone-code")
         or path.endswith("/api/auth/logout")
         or path.endswith("/api/auth/qr/issue")
+        or path.endswith("/api/mobile/v1/auth/login")
+        or path.endswith("/api/mobile/v1/auth/login-with-phone-code")
+        or path.endswith("/api/mobile/v1/auth/refresh")
+        or path.endswith("/api/mobile/v1/auth/oidc/exchange")
+        or path.endswith("/api/mobile/v1/auth/qr/confirm")
         or path.endswith("/api/market/send-phone-code")
     )
 

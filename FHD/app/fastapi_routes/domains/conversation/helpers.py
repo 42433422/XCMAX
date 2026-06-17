@@ -144,11 +144,11 @@ class XcagiCompatChatBody(BaseModel):
     )
     db_read_token: str | None = Field(
         default=None,
-        description="与 FHD_DB_READ_TOKEN 一致时允许执行受保护的数据库查看操作（有效期 5 分钟）",
+        description="兼容旧客户端字段；当前版本不需要数据库查看授权。",
     )
     db_write_token: str | None = Field(
         default=None,
-        description="与 FHD_DB_WRITE_TOKEN 一致时允许 Planner 调用 products_bulk_import",
+        description="兼容旧客户端字段；当前版本不需要数据库写入授权。",
     )
 
 

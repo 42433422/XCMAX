@@ -245,11 +245,11 @@ describe('useChatOrchestration stream', () => {
 
   it('sendMessage stream handles requires_token event', async () => {
     readPlannerSseResponse.mockImplementation(async (_res, onEvent) => {
-      onEvent({ type: 'requires_token', token_name: 'DB_WRITE_TOKEN', token_description: '写入' })
+      onEvent({ type: 'requires_token', token_name: 'PAYMENT_TOKEN', token_description: '支付授权' })
       onEvent({ type: 'done', result: { success: true, response: '' } })
     })
     const api = useChatOrchestration({ sessionId: ref('s'), proIntentExperienceEnabled: ref(false) })
-    await api.sendMessage('导入数据库')
+    await api.sendMessage('发起支付')
     expect(handleChatRequiresToken).toHaveBeenCalled()
     expect(applyPlainTextToMessageIndex).toHaveBeenCalled()
   })

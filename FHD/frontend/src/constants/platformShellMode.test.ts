@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   bootstrapEditionDefaults,
+  bootstrapEnterpriseShellDefaults,
   bootstrapGenericEditionDefaults,
   bootstrapMinimalEditionDefaults,
   isGenericEditionBuild,
@@ -9,6 +10,7 @@ import {
   isPlatformShellModeEnabled,
   LS_PLATFORM_SHELL_MODE,
   SHELL_CORE_MENU_KEYS,
+  SHELL_CORE_ROUTE_NAMES,
 } from './platformShellMode'
 
 describe('platformShellMode', () => {
@@ -19,6 +21,13 @@ describe('platformShellMode', () => {
     expect(SHELL_CORE_MENU_KEYS.has('workflow-employee-space')).toBe(true)
     expect(SHELL_CORE_MENU_KEYS.has('other-tools')).toBe(false)
     expect(SHELL_CORE_MENU_KEYS.has('workflow-visualization')).toBe(false)
+  })
+
+  it('shell route allowlist keeps onboarding and login recovery pages reachable', () => {
+    expect(SHELL_CORE_ROUTE_NAMES.has('product-onboarding')).toBe(true)
+    expect(SHELL_CORE_ROUTE_NAMES.has('login')).toBe(true)
+    expect(SHELL_CORE_ROUTE_NAMES.has('login-help')).toBe(true)
+    expect(SHELL_CORE_ROUTE_NAMES.has('login-forgot-password')).toBe(true)
   })
 
   it('host business keys are not shell core', () => {
@@ -52,6 +61,25 @@ describe('platformShellMode', () => {
       vi.stubEnv('VITE_XCAGI_DEFAULT_PLATFORM_SHELL', '1')
       localStorage.setItem(LS_PLATFORM_SHELL_MODE, '0')
       bootstrapEditionDefaults()
+      expect(localStorage.getItem(LS_PLATFORM_SHELL_MODE)).toBe('0')
+      expect(isPlatformShellModeEnabled()).toBe(false)
+    })
+
+    it('enterprise SKU keeps shell mode when built as generic host', () => {
+      vi.stubEnv('VITE_XCAGI_PRODUCT_SKU', 'enterprise')
+      vi.stubEnv('VITE_XCAGI_EDITION', 'generic')
+      vi.stubEnv('VITE_XCAGI_DEFAULT_PLATFORM_SHELL', '1')
+      bootstrapEditionDefaults()
+      bootstrapEnterpriseShellDefaults()
+      expect(localStorage.getItem(LS_PLATFORM_SHELL_MODE)).toBe('1')
+      expect(isPlatformShellModeEnabled()).toBe(true)
+    })
+
+    it('enterprise SKU disables shell only for full host builds', () => {
+      vi.stubEnv('VITE_XCAGI_PRODUCT_SKU', 'enterprise')
+      vi.stubEnv('VITE_XCAGI_EDITION', 'full')
+      vi.stubEnv('VITE_XCAGI_DEFAULT_PLATFORM_SHELL', '')
+      bootstrapEnterpriseShellDefaults()
       expect(localStorage.getItem(LS_PLATFORM_SHELL_MODE)).toBe('0')
       expect(isPlatformShellModeEnabled()).toBe(false)
     })

@@ -7,7 +7,6 @@ import re
 from typing import Any
 
 from app.domain.context.session_context import (
-    _excel_analysis_from_runtime,
     enrich_excel_tool_arguments,
 )
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -73,7 +72,7 @@ def _query_excel_row_count(
     *,
     workspace_root: str | None,
 ) -> int | None:
-    ea = _excel_analysis_from_runtime(runtime_context)
+    ea = runtime_context.get("excel_analysis") if isinstance(runtime_context, dict) else None
     if not ea:
         return None
     if not _EXCEL_ROW_COUNT_RE.search(str(message or "")):

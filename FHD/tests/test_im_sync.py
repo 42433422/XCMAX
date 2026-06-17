@@ -6,7 +6,11 @@ import pytest
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 
-from app.application.im_app_service import ImApplicationService
+from app.application.im_app_service import (
+    ENTERPRISE_DEDICATED_CS_DISPLAY_NAME,
+    ENTERPRISE_DEDICATED_CS_USERNAME,
+    ImApplicationService,
+)
 from app.db.models.im import ImConversation, ImConversationMember, ImMessage
 from app.db.models.user import User
 from app.services.xcmax_sync_service import (
@@ -90,6 +94,33 @@ def test_record_change_on_mark_read(im_db, monkeypatch: pytest.MonkeyPatch):
     assert payload.get("last_read_message_id") == msg_id
     assert int((payload.get("meta") or {}).get("updated_at_ms") or 0) > 0
     assert result["last_read_message_id"] == msg_id
+
+
+def test_list_contacts_includes_enterprise_dedicated_cs(im_db):
+    svc = ImApplicationService(im_db)
+    contacts = svc.list_contacts(1)
+
+    cs = next((c for c in contacts if c.get("is_enterprise_dedicated_cs")), None)
+    assert cs is not None
+    assert cs["display_name"] == ENTERPRISE_DEDICATED_CS_DISPLAY_NAME
+    assert cs["username"] == ENTERPRISE_DEDICATED_CS_USERNAME
+
+    row = im_db.execute(
+        select(User).where(User.username == ENTERPRISE_DEDICATED_CS_USERNAME)
+    ).scalar_one()
+    assert row.is_active is True
+    assert row.role == "support"
+
+
+def test_direct_conversation_with_enterprise_cs_is_pinned(im_db):
+    svc = ImApplicationService(im_db)
+    cs = next(c for c in svc.list_contacts(1) if c.get("is_enterprise_dedicated_cs"))
+    conv = svc.get_or_create_direct(1, int(cs["id"]))
+
+    conversations = svc.list_conversations(1)
+    pinned = next(c for c in conversations if c["id"] == conv["id"])
+    assert pinned["title"] == ENTERPRISE_DEDICATED_CS_DISPLAY_NAME
+    assert pinned["is_enterprise_dedicated_cs"] is True
 
 
 def test_apply_im_message_insert(im_db, monkeypatch: pytest.MonkeyPatch):

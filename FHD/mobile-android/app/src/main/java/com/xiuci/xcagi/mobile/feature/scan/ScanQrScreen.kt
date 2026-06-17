@@ -42,7 +42,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.FlashOff
@@ -89,7 +88,7 @@ import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.common.InputImage
 import com.xiuci.xcagi.mobile.core.network.PairingQrCodec
 import com.xiuci.xcagi.mobile.ui.AppViewModel
-import com.xiuci.xcagi.mobile.ui.components.mobile.MobileTokens
+import com.xiuci.xcagi.mobile.ui.theme.XcagiTheme
 import kotlinx.coroutines.delay
 import java.util.concurrent.Executors
 
@@ -177,7 +176,7 @@ fun ScanQrScreen(vm: AppViewModel, onBack: () -> Unit) {
                         Text(
                                 "扫一扫",
                                 color = Color.White,
-                                fontSize = 17.sp,
+                                fontSize = MaterialTheme.typography.titleMedium.fontSize,
                                 fontWeight = FontWeight.Medium,
                         )
                         Spacer(Modifier.weight(1f))
@@ -338,7 +337,7 @@ fun ScanQrScreen(vm: AppViewModel, onBack: () -> Unit) {
                                         Text(
                                                 "需要相机权限以扫描配对二维码",
                                                 color = Color.White.copy(alpha = 0.8f),
-                                                fontSize = 15.sp,
+                                                fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                                                 textAlign = TextAlign.Center,
                                                 modifier = Modifier.padding(horizontal = 32.dp),
                                         )
@@ -349,7 +348,7 @@ fun ScanQrScreen(vm: AppViewModel, onBack: () -> Unit) {
                                                                 Manifest.permission.CAMERA
                                                         )
                                                 },
-                                        ) { Text("授予相机权限", color = MobileTokens.brandBlue) }
+                                        ) { Text("授予相机权限", color = XcagiTheme.extra.brandBlue) }
                                         Spacer(Modifier.height(12.dp))
                                         TextButton(
                                                 onClick = { showManualInput = true },
@@ -372,7 +371,7 @@ fun ScanQrScreen(vm: AppViewModel, onBack: () -> Unit) {
                                 Text(
                                         "将电脑端显示的配对二维码放入框内，即可自动扫描",
                                         color = Color.White.copy(alpha = 0.6f),
-                                        fontSize = 13.sp,
+                                        fontSize = MaterialTheme.typography.labelMedium.fontSize,
                                         textAlign = TextAlign.Center,
                                 )
                                 Spacer(Modifier.height(12.dp))
@@ -382,8 +381,8 @@ fun ScanQrScreen(vm: AppViewModel, onBack: () -> Unit) {
                                 ) {
                                         Text(
                                                 "手动输入配对码",
-                                                color = MobileTokens.brandBlue,
-                                                fontSize = 14.sp,
+                                                color = XcagiTheme.extra.brandBlue,
+                                                fontSize = MaterialTheme.typography.bodySmall.fontSize,
                                                 fontWeight = FontWeight.Medium,
                                         )
                                 }
@@ -397,7 +396,7 @@ fun ScanQrScreen(vm: AppViewModel, onBack: () -> Unit) {
                 ModalBottomSheet(
                         onDismissRequest = { showManualInput = false },
                         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-                        containerColor = MobileTokens.surfaceWhite,
+                        containerColor = MaterialTheme.colorScheme.surface,
                 ) {
                         Column(
                                 Modifier.fillMaxWidth()
@@ -406,15 +405,15 @@ fun ScanQrScreen(vm: AppViewModel, onBack: () -> Unit) {
                         ) {
                                 Text(
                                         "输入配对码",
-                                        fontSize = 18.sp,
+                                        fontSize = MaterialTheme.typography.titleLarge.fontSize,
                                         fontWeight = FontWeight.Bold,
-                                        color = MobileTokens.textPrimary,
+                                        color = MaterialTheme.colorScheme.onSurface,
                                 )
                                 Spacer(Modifier.height(6.dp))
                                 Text(
                                         "请输入电脑端显示的6位数字配对码",
-                                        fontSize = 13.sp,
-                                        color = MobileTokens.textSecondary,
+                                        fontSize = MaterialTheme.typography.labelMedium.fontSize,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                                 Spacer(Modifier.height(20.dp))
 
@@ -488,17 +487,17 @@ fun ScanQrScreen(vm: AppViewModel, onBack: () -> Unit) {
                                                 modifier =
                                                         Modifier.fillMaxWidth()
                                                                 .height(44.dp)
-                                                                .clip(RoundedCornerShape(8.dp))
-                                                                .background(MobileTokens.surfaceBg)
+                                                                .clip(MaterialTheme.shapes.small)
+                                                                .background(MaterialTheme.colorScheme.surfaceVariant)
                                                                 .border(
                                                                         0.5.dp,
-                                                                        MobileTokens.divider,
-                                                                        RoundedCornerShape(8.dp)
+                                                                        MaterialTheme.colorScheme.outlineVariant,
+                                                                        MaterialTheme.shapes.small
                                                                 )
                                                                 .padding(horizontal = 14.dp),
                                                 textStyle =
                                                         MaterialTheme.typography.bodyMedium.copy(
-                                                                color = MobileTokens.textPrimary,
+                                                                color = MaterialTheme.colorScheme.onSurface,
                                                         ),
                                                 singleLine = true,
                                                 decorationBox = { inner ->
@@ -511,8 +510,7 @@ fun ScanQrScreen(vm: AppViewModel, onBack: () -> Unit) {
                                                                         Text(
                                                                                 "企业账号",
                                                                                 color =
-                                                                                        MobileTokens
-                                                                                                .textDisabled
+                                                                                        MaterialTheme.colorScheme.onSurfaceVariant
                                                                         )
                                                                 }
                                                                 inner()
@@ -526,17 +524,17 @@ fun ScanQrScreen(vm: AppViewModel, onBack: () -> Unit) {
                                                 modifier =
                                                         Modifier.fillMaxWidth()
                                                                 .height(44.dp)
-                                                                .clip(RoundedCornerShape(8.dp))
-                                                                .background(MobileTokens.surfaceBg)
+                                                                .clip(MaterialTheme.shapes.small)
+                                                                .background(MaterialTheme.colorScheme.surfaceVariant)
                                                                 .border(
                                                                         0.5.dp,
-                                                                        MobileTokens.divider,
-                                                                        RoundedCornerShape(8.dp)
+                                                                        MaterialTheme.colorScheme.outlineVariant,
+                                                                        MaterialTheme.shapes.small
                                                                 )
                                                                 .padding(horizontal = 14.dp),
                                                 textStyle =
                                                         MaterialTheme.typography.bodyMedium.copy(
-                                                                color = MobileTokens.textPrimary
+                                                                color = MaterialTheme.colorScheme.onSurface
                                                         ),
                                                 singleLine = true,
                                                 decorationBox = { inner ->
@@ -549,8 +547,7 @@ fun ScanQrScreen(vm: AppViewModel, onBack: () -> Unit) {
                                                                         Text(
                                                                                 "密码",
                                                                                 color =
-                                                                                        MobileTokens
-                                                                                                .textDisabled
+                                                                                        MaterialTheme.colorScheme.onSurfaceVariant
                                                                         )
                                                                 }
                                                                 inner()
@@ -621,50 +618,50 @@ private fun PairingSuccessOverlay(onDismiss: () -> Unit) {
 	) {
 		Column(horizontalAlignment = Alignment.CenterHorizontally) {
 			// ✓ 圆形背景 + 打勾
-			Box(
-				modifier = Modifier
-					.size(88.dp)
-					.graphicsLayer(scaleX = scale, scaleY = scale, alpha = alpha)
-					.background(MobileTokens.brandBlue, shape = CircleShape),
-				contentAlignment = Alignment.Center,
-			) {
-				Canvas(modifier = Modifier.size(44.dp)) {
-				val w = size.width
-				val h = size.height
-				// ✓ 勾的路径
-				val checkPath = Path().apply {
-					moveTo(w * 0.2f, h * 0.52f)
-					lineTo(w * 0.42f, h * 0.72f)
-					lineTo(w * 0.8f, h * 0.28f)
-				}
-				drawPath(
-					path = checkPath,
-					color = Color.White,
-					style = Stroke(
-						width = w * 0.08f,
-						cap = StrokeCap.Round,
-						join = StrokeJoin.Round,
-					),
-				)
+		Box(
+			modifier = Modifier
+				.size(88.dp)
+				.graphicsLayer(scaleX = scale, scaleY = scale, alpha = alpha)
+				.background(XcagiTheme.extra.brandBlue, shape = CircleShape),
+			contentAlignment = Alignment.Center,
+		) {
+			Canvas(modifier = Modifier.size(44.dp)) {
+			val w = size.width
+			val h = size.height
+			// ✓ 勾的路径
+			val checkPath = Path().apply {
+				moveTo(w * 0.2f, h * 0.52f)
+				lineTo(w * 0.42f, h * 0.72f)
+				lineTo(w * 0.8f, h * 0.28f)
 			}
-			}
-
-			Spacer(Modifier.height(24.dp))
-
-			Text(
-				"配对成功",
+			drawPath(
+				path = checkPath,
 				color = Color.White,
-				fontSize = 20.sp,
-				fontWeight = FontWeight.Bold,
+				style = Stroke(
+					width = w * 0.08f,
+					cap = StrokeCap.Round,
+					join = StrokeJoin.Round,
+				),
 			)
+		}
+		}
 
-			Spacer(Modifier.height(8.dp))
+		Spacer(Modifier.height(24.dp))
 
-			Text(
-				"手机与电脑已连接",
-				color = Color.White.copy(alpha = 0.6f),
-				fontSize = 14.sp,
-			)
+		Text(
+			"配对成功",
+			color = Color.White,
+			fontSize = MaterialTheme.typography.headlineMedium.fontSize,
+			fontWeight = FontWeight.Bold,
+		)
+
+		Spacer(Modifier.height(8.dp))
+
+		Text(
+			"手机与电脑已连接",
+			color = Color.White.copy(alpha = 0.6f),
+			fontSize = MaterialTheme.typography.bodySmall.fontSize,
+		)
 		}
 	}
 }
@@ -678,6 +675,7 @@ private fun PairingSuccessOverlay(onDismiss: () -> Unit) {
 private fun ScannerOverlay() {
         val frameSize = 220.dp
         val strokeWidth = 2.5.dp
+        val brandBlue = XcagiTheme.extra.brandBlue
 
         // 扫描线动画：上下循环移动
         val infiniteTransition = rememberInfiniteTransition(label = "scanLine")
@@ -765,14 +763,14 @@ private fun ScannerOverlay() {
                                 // ── 扫描线（品牌蓝色水平线 + 光晕，上下移动） ──
                                 val lineY = scanLineY * h
                                 drawLine(
-                                        color = MobileTokens.brandBlue.copy(alpha = 0.7f),
+                                        color = brandBlue.copy(alpha = 0.7f),
                                         start = Offset(0f, lineY),
                                         end = Offset(w, lineY),
                                         strokeWidth = sw * 1.5f,
                                 )
                                 // 扫描线上方渐变光晕
                                 drawRect(
-                                        color = MobileTokens.brandBlue.copy(alpha = 0.08f),
+                                        color = brandBlue.copy(alpha = 0.08f),
                                         topLeft = Offset(0f, lineY - h * 0.15f),
                                         size = Size(w, h * 0.3f),
                                 )
@@ -833,20 +831,20 @@ private fun PairingCodeInput(
                         Box(
                                 modifier = Modifier
                                         .size(width = 46.dp, height = 54.dp)
-                                        .clip(RoundedCornerShape(10.dp))
-                                        .background(MobileTokens.surfaceBg)
+                                        .clip(MaterialTheme.shapes.small)
+                                        .background(MaterialTheme.colorScheme.surfaceVariant)
                                         .border(
                                                 width = if (isFocused) 1.8.dp else 0.7.dp,
-                                                color = if (isFocused) MobileTokens.brandBlue else MobileTokens.divider,
-                                                shape = RoundedCornerShape(10.dp),
+                                                color = if (isFocused) XcagiTheme.extra.brandBlue else MaterialTheme.colorScheme.outlineVariant,
+                                                shape = MaterialTheme.shapes.small,
                                         ),
                                 contentAlignment = Alignment.Center,
                         ) {
                                 Text(
                                         text = char,
-                                        fontSize = 24.sp,
+                                        fontSize = MaterialTheme.typography.displayMedium.fontSize,
                                         fontWeight = FontWeight.Bold,
-                                        color = if (char.isNotBlank()) MobileTokens.textPrimary else Color.Transparent,
+                                        color = if (char.isNotBlank()) MaterialTheme.colorScheme.onSurface else Color.Transparent,
                                 )
                         }
                 }

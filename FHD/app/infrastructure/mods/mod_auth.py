@@ -18,6 +18,7 @@ from typing import Any
 
 from fastapi import HTTPException, Request
 from starlette.requests import Request as StarletteRequest
+from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -178,7 +179,35 @@ class ModContextMiddleware:
                         )
 
                         if enterprise_mod_filter_active():
-                            await sync_entitlements_for_session(sid)
+                            from app.enterprise.mod_entitlements import (
+                                is_client_mod_id,
+                                is_mod_visible_for_enterprise,
+                            )
+
+                            if sid:
+                                await sync_entitlements_for_session(sid)
+                            elif is_client_mod_id(mod_context.mod_id):
+                                response = JSONResponse(
+                                    {
+                                        "success": False,
+                                        "error": "mod_not_entitled",
+                                        "message": "请先登录企业账号后再访问定制能力",
+                                    },
+                                    status_code=403,
+                                )
+                                await response(scope, receive, send)
+                                return
+                            if not is_mod_visible_for_enterprise(mod_context.mod_id):
+                                response = JSONResponse(
+                                    {
+                                        "success": False,
+                                        "error": "mod_not_entitled",
+                                        "message": "当前企业账号未开通该定制能力",
+                                    },
+                                    status_code=403,
+                                )
+                                await response(scope, receive, send)
+                                return
                     from app.infrastructure.mods.mod_manager import ensure_mod_api_ready
 
                     ensure_mod_api_ready(mod_context.mod_id, session_id=sid or None)

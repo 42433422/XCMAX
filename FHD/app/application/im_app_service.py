@@ -14,6 +14,9 @@ from app.utils.time import utc_now_naive
 
 logger = logging.getLogger(__name__)
 
+ENTERPRISE_DEDICATED_CS_USERNAME = "enterprise-cs"
+ENTERPRISE_DEDICATED_CS_DISPLAY_NAME = "企业专属客服"
+
 
 def ensure_im_tables(engine) -> None:
     from app.db.init_db import init_im_tables
@@ -41,6 +44,61 @@ class ImApplicationService:
         for u in rows:
             name = str(u.display_name or "").strip() or str(u.username or "").strip()
             out[int(u.id)] = name or f"用户{u.id}"
+        return out
+
+    @staticmethod
+    def _is_enterprise_dedicated_cs_user(user: User | None) -> bool:
+        return (
+            user is not None
+            and str(getattr(user, "username", "") or "").strip().lower()
+            == ENTERPRISE_DEDICATED_CS_USERNAME
+        )
+
+    def _ensure_enterprise_dedicated_cs_user(self) -> User | None:
+        row = (
+            self._db.execute(
+                select(User).where(User.username == ENTERPRISE_DEDICATED_CS_USERNAME).limit(1)
+            )
+            .scalars()
+            .first()
+        )
+        if row is None:
+            row = User(
+                username=ENTERPRISE_DEDICATED_CS_USERNAME,
+                password="!",
+                display_name=ENTERPRISE_DEDICATED_CS_DISPLAY_NAME,
+                email="",
+                role="support",
+                is_active=True,
+                created_at=utc_now_naive(),
+            )
+            self._db.add(row)
+            self._db.commit()
+            self._db.refresh(row)
+            return row
+
+        changed = False
+        if str(row.display_name or "").strip() != ENTERPRISE_DEDICATED_CS_DISPLAY_NAME:
+            row.display_name = ENTERPRISE_DEDICATED_CS_DISPLAY_NAME
+            changed = True
+        if not bool(row.is_active):
+            row.is_active = True
+            changed = True
+        if changed:
+            self._db.commit()
+            self._db.refresh(row)
+        return row
+
+    @staticmethod
+    def _contact_dict(user: User, *, dedicated_cs: bool = False) -> dict[str, Any]:
+        name = str(user.display_name or "").strip() or str(user.username or "").strip()
+        out: dict[str, Any] = {
+            "id": int(user.id),
+            "display_name": name or f"用户{user.id}",
+            "username": str(user.username or "").strip(),
+        }
+        if dedicated_cs:
+            out["is_enterprise_dedicated_cs"] = True
         return out
 
     def _direct_peer_id(self, conversation_id: int, user_id: int) -> int | None:
@@ -84,42 +142,46 @@ class ImApplicationService:
             unread = self._count_unread(conv.id, user_id)
             if conv.is_direct:
                 peer_id = self._direct_peer_id(conv.id, user_id)
+                peer = self._db.get(User, int(peer_id)) if peer_id else None
                 title = (
                     self._display_name(peer_id) if peer_id else (conv.title or f"会话 #{conv.id}")
                 )
             else:
+                peer = None
                 title = conv.title or f"会话 #{conv.id}"
-            out.append(
-                {
-                    "id": conv.id,
-                    "title": title,
-                    "is_direct": conv.is_direct,
-                    "last_message_at": (
-                        conv.last_message_at.isoformat() if conv.last_message_at else None
-                    ),
-                    "last_message_preview": (last_msg.body[:120] if last_msg else ""),
-                    "unread_count": unread,
-                }
-            )
+            item: dict[str, Any] = {
+                "id": conv.id,
+                "title": title,
+                "is_direct": conv.is_direct,
+                "last_message_at": (
+                    conv.last_message_at.isoformat() if conv.last_message_at else None
+                ),
+                "last_message_preview": (last_msg.body[:120] if last_msg else ""),
+                "unread_count": unread,
+            }
+            if conv.is_direct and self._is_enterprise_dedicated_cs_user(peer):
+                item["is_enterprise_dedicated_cs"] = True
+            out.append(item)
         return out
 
     def list_contacts(self, user_id: int) -> list[dict[str, Any]]:
         me = self._db.get(User, int(user_id))
         my_tenant = getattr(me, "tenant_id", None) if me else None
+        dedicated_cs = self._ensure_enterprise_dedicated_cs_user()
+        dedicated_cs_id = (
+            int(dedicated_cs.id) if dedicated_cs is not None and dedicated_cs.id else None
+        )
         q = select(User).where(User.id != int(user_id), User.is_active.is_(True))
+        if dedicated_cs_id is not None:
+            q = q.where(User.id != dedicated_cs_id)
         if my_tenant is not None:
             q = q.where(User.tenant_id == my_tenant)
         rows = self._db.execute(q.order_by(User.display_name, User.username)).scalars().all()
         out: list[dict[str, Any]] = []
+        if dedicated_cs is not None and dedicated_cs_id != int(user_id):
+            out.append(self._contact_dict(dedicated_cs, dedicated_cs=True))
         for u in rows:
-            name = str(u.display_name or "").strip() or str(u.username or "").strip()
-            out.append(
-                {
-                    "id": int(u.id),
-                    "display_name": name or f"用户{u.id}",
-                    "username": str(u.username or "").strip(),
-                }
-            )
+            out.append(self._contact_dict(u))
         return out
 
     def _count_unread(self, conversation_id: int, user_id: int) -> int:

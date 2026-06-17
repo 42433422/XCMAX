@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import logging
 from typing import Any
@@ -17,6 +18,7 @@ from app.mod_sdk.product_skus import bundled_mod_ids_for_sku, resolve_product_sk
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
+RECOVERABLE_IMPORT_ERRORS = (ImportError, AttributeError, *RECOVERABLE_ERRORS)
 
 # 进程内缓存：登录成功后由 legacy_auth 写入；登出清空
 _cached_market_user_id: int | None = None
@@ -77,17 +79,30 @@ def set_session_entitlements(
     _cached_market_is_admin = bool(market_is_admin)
 
 
+def _market_user_id_from_access_token(market_token: str) -> int | None:
+    """Best-effort identity fallback for market JWTs already accepted by market APIs."""
+    token = (market_token or "").strip()
+    if token.lower().startswith("bearer "):
+        token = token[7:].strip()
+    parts = token.split(".")
+    if len(parts) < 2:
+        return None
+    payload = parts[1]
+    payload += "=" * (-len(payload) % 4)
+    try:
+        data = json.loads(base64.urlsafe_b64decode(payload.encode("ascii")).decode("utf-8"))
+        raw = data.get("sub")
+        return int(raw) if raw is not None and str(raw).strip() else None
+    except (ValueError, TypeError, UnicodeDecodeError, json.JSONDecodeError):
+        return None
+
+
 def is_admin_account_session() -> bool:
     return _cached_account_kind == "admin" and _cached_market_is_admin
 
 
 def is_mod_visible_for_enterprise(mod_id: str) -> bool:
     """企业版下是否允许暴露/加载该 Mod。"""
-    from app.enterprise.account_mod_binding import (
-        SUNBIRD_CLIENT_MOD_ID,
-        is_sunbird_local_username,
-    )
-
     mid = (mod_id or "").strip()
     if not mid:
         return False
@@ -97,20 +112,30 @@ def is_mod_visible_for_enterprise(mod_id: str) -> bool:
         return True
     if is_admin_account_session():
         return True
-    uname = (_cached_market_username or "").strip()
-    if is_sunbird_local_username(uname) and mid == SUNBIRD_CLIENT_MOD_ID:
-        return True
     try:
         from app.mod_sdk.client_primary_erp import client_primary_mod_on_disk_visible
 
         if client_primary_mod_on_disk_visible(mid):
             return True
-    except RECOVERABLE_ERRORS:
-        logger.debug("client_primary_mod_on_disk_visible skipped", exc_info=True)
+    except RECOVERABLE_IMPORT_ERRORS:
+        logger.debug("client primary mod disk visibility check skipped", exc_info=True)
+    local_name = _cached_market_username.strip().lower()
+    if mid == "taiyangniao-pro" and local_name in {"sunbird", "taiyangniao", "太阳鸟"}:
+        return True
     entitled = get_cached_entitled_client_mod_ids()
     if entitled is None:
         return False
-    return mid in entitled
+    if mid in entitled:
+        return True
+    try:
+        from app.mod_sdk.industry_mod_aliases import canonical_mod_id
+
+        canonical = canonical_mod_id(mid)
+        if canonical and canonical == mid and canonical in {canonical_mod_id(x) for x in entitled}:
+            return True
+    except RECOVERABLE_ERRORS:
+        logger.debug("enterprise entitlement alias check skipped", exc_info=True)
+    return False
 
 
 def filter_mod_rows_for_enterprise(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -218,11 +243,16 @@ async def refresh_session_entitlements_from_market(
             meta = load_session_account_meta(sid) or {}
             account_kind = str(meta.get("account_kind") or "enterprise")
             market_is_admin = bool(meta.get("market_is_admin"))
+            if market_user_id is None and meta.get("market_user_id") is not None:
+                market_user_id = int(meta["market_user_id"])
             imp = meta.get("impersonating_market_user_id")
             if imp is not None:
                 imp_uid = int(imp)
         except RECOVERABLE_ERRORS:
             pass
+
+    if market_user_id is None:
+        market_user_id = _market_user_id_from_access_token(market_token)
 
     if account_kind == "admin" and market_is_admin and imp_uid is not None:
         client_ids = await fetch_entitled_client_mod_ids_for_market_user(market_token, imp_uid)
@@ -250,16 +280,17 @@ def persist_entitlements_to_session_row(session_id: str, client_ids: set[str]) -
         return
     try:
         from app.db.models.user import Session as UserSession
-        from app.db.session import get_db
+        from app.db.session import get_host_db
 
-        with get_db() as db:
+        with get_host_db() as db:
             row = db.query(UserSession).filter(UserSession.session_id == sid).first()
             if row is None:
                 return
-            row.market_user_id = _cached_market_user_id
+            if _cached_market_user_id is not None:
+                row.market_user_id = _cached_market_user_id
             row.entitled_mod_ids_json = json.dumps(sorted(client_ids), ensure_ascii=False)
             db.commit()
-    except RECOVERABLE_ERRORS:
+    except Exception:
         logger.exception("persist_entitlements_to_session_row failed")
 
 
@@ -274,6 +305,7 @@ def restore_entitlements_from_session_row(session_id: str) -> bool:
         with get_db() as db:
             row = db.query(UserSession).filter(UserSession.session_id == sid).first()
             if row is None:
+                clear_session_entitlements()
                 return False
             mid = getattr(row, "market_user_id", None)
             raw = getattr(row, "entitled_mod_ids_json", None) or "[]"
@@ -288,7 +320,7 @@ def restore_entitlements_from_session_row(session_id: str) -> bool:
                 market_is_admin=market_is_admin,
             )
             return True
-    except RECOVERABLE_ERRORS:
+    except Exception:
         logger.exception("restore_entitlements_from_session_row failed")
         return False
 
@@ -310,6 +342,7 @@ def _session_username_for_entitlements(session_id: str) -> str:
         from app.services.session_service import SessionService
 
         info = SessionService().validate_session(sid)
+        username: str | None = None
         if info is None:
             pass
         elif isinstance(info, dict):
@@ -386,20 +419,16 @@ async def reload_enterprise_mods_after_login() -> None:
     if not enterprise_mod_filter_active():
         return
     try:
-        from app.enterprise.account_mod_binding import SUNBIRD_CLIENT_MOD_ID
         from app.fastapi_app import get_fastapi_app
         from app.infrastructure.mods.mod_manager import (
-            ensure_mod_api_ready,
             get_mod_manager,
             load_mod_routes,
         )
 
         mm = get_mod_manager()
-        loaded = mm.load_all_mods()
+        mm.load_all_mods()
         app = get_fastapi_app()
         load_mod_routes(app, mm)
-        if SUNBIRD_CLIENT_MOD_ID in loaded or is_mod_visible_for_enterprise(SUNBIRD_CLIENT_MOD_ID):
-            ensure_mod_api_ready(SUNBIRD_CLIENT_MOD_ID)
     except RECOVERABLE_ERRORS:
         logger.exception("reload_enterprise_mods_after_login failed")
 
@@ -409,10 +438,9 @@ async def sync_entitlements_from_request(request) -> None:
     if not enterprise_mod_filter_active():
         return
     try:
-        import os
+        from app.infrastructure.auth.dependencies import session_id_from_request
 
-        cookie_name = os.environ.get("SESSION_COOKIE_NAME", "session_id")
-        sid = (request.cookies.get(cookie_name) or "").strip()
+        sid = session_id_from_request(request)
         if sid:
             await sync_entitlements_for_session(sid)
     except RECOVERABLE_ERRORS:

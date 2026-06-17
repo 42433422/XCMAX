@@ -26,24 +26,20 @@ class TestDbTokensStatus:
     def test_both_tokens_configured(self, client: TestClient) -> None:
         with (
             patch("app.request_active_mod_ctx.get_request_active_mod_id", return_value=""),
-            patch(
-                "app.infrastructure.auth.db_token.configured_db_read_token", return_value="RTOKEN"
-            ),
-            patch(
-                "app.infrastructure.auth.db_token.configured_db_write_token", return_value="WTOKEN"
-            ),
+            patch("app.infrastructure.auth.db_token.effective_db_read_token", return_value=None),
+            patch("app.infrastructure.auth.db_token.configured_db_write_token", return_value=None),
         ):
             r = client.get("/api/fhd/db-tokens/status")
         assert r.status_code == 200
         data = r.json()
-        assert data["read_token_configured"] is True
-        assert data["write_token_configured"] is True
+        assert data["read_token_configured"] is False
+        assert data["write_token_configured"] is False
         assert data["active_mod_id"] == ""
 
     def test_no_tokens(self, client: TestClient) -> None:
         with (
             patch("app.request_active_mod_ctx.get_request_active_mod_id", return_value=None),
-            patch("app.infrastructure.auth.db_token.configured_db_read_token", return_value=""),
+            patch("app.infrastructure.auth.db_token.effective_db_read_token", return_value=None),
             patch("app.infrastructure.auth.db_token.configured_db_write_token", return_value=""),
         ):
             r = client.get("/api/fhd/db-tokens/status")
@@ -52,13 +48,13 @@ class TestDbTokensStatus:
     def test_with_active_mod_id(self, client: TestClient) -> None:
         with (
             patch("app.request_active_mod_ctx.get_request_active_mod_id", return_value="mod-x"),
-            patch("app.infrastructure.auth.db_token.configured_db_read_token", return_value="R"),
+            patch("app.infrastructure.auth.db_token.effective_db_read_token", return_value=None),
             patch("app.infrastructure.auth.db_token.configured_db_write_token", return_value=None),
         ):
             r = client.get("/api/fhd/db-tokens/status")
         data = r.json()
         assert data["active_mod_id"] == "mod-x"
-        assert data["read_token_configured"] is True
+        assert data["read_token_configured"] is False
         assert data["write_token_configured"] is False
 
     def test_get_request_mod_id_failure_falls_back(self, client: TestClient) -> None:
@@ -67,7 +63,7 @@ class TestDbTokensStatus:
                 "app.request_active_mod_ctx.get_request_active_mod_id",
                 side_effect=RuntimeError("ctx missing"),
             ),
-            patch("app.infrastructure.auth.db_token.configured_db_read_token", return_value=""),
+            patch("app.infrastructure.auth.db_token.effective_db_read_token", return_value=None),
             patch("app.infrastructure.auth.db_token.configured_db_write_token", return_value=""),
         ):
             r = client.get("/api/fhd/db-tokens/status")

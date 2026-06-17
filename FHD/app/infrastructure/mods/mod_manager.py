@@ -961,8 +961,8 @@ class ModManager:
     def list_mods(self) -> list[dict[str, Any]]:
         """
         返回磁盘扫描 + 权益过滤后的 Mod 列表（与 list_all_mods 一致）。
-        勿仅用 list_loaded_mods：企业版启动时未 entitlement 的客户 Mod（如 taiyangniao-pro）
-        不会进入 _loaded_mods，但 SUNBIRD 登录后仍需在 /api/mods/ 中可见以便前端选中。
+        勿仅用 list_loaded_mods：企业版启动时未 entitlement 的客户 Mod
+        不会进入 _loaded_mods，但登录后仍需按服务端 entitlement 在 /api/mods/ 中可见。
         """
         return self.list_all_mods()
 
@@ -1218,17 +1218,23 @@ def _restore_entitlements_from_session_id(session_id: str | None) -> None:
             _augment_entitled_for_username,
             _session_username_for_entitlements,
             get_cached_entitled_client_mod_ids,
+            get_cached_market_identity,
             restore_entitlements_from_session_row,
             set_session_entitlements,
         )
 
         restore_entitlements_from_session_row(sid)
         uname = _session_username_for_entitlements(sid)
+        market_user_id, market_username = get_cached_market_identity()
         cached = _augment_entitled_for_username(
             uname, get_cached_entitled_client_mod_ids() or set()
         )
         if cached:
-            set_session_entitlements(entitled_client_mod_ids=cached)
+            set_session_entitlements(
+                market_user_id=market_user_id,
+                market_username=uname or market_username,
+                entitled_client_mod_ids=cached,
+            )
     except RECOVERABLE_ERRORS:
         logger.debug("restore entitlements from session failed", exc_info=True)
 
@@ -1238,28 +1244,15 @@ def _mod_allowed_for_api_load(mod_id: str, session_id: str | None = None) -> boo
     if not mid:
         return False
     try:
-        from app.enterprise.account_mod_binding import (
-            SUNBIRD_CLIENT_MOD_ID,
-            is_sunbird_local_username,
-        )
         from app.enterprise.mod_entitlements import (
-            _session_username_for_entitlements,
             enterprise_mod_filter_active,
             is_mod_visible_for_enterprise,
         )
-        from app.mod_sdk.industry_mod_aliases import canonical_mod_id
 
         if not enterprise_mod_filter_active():
             return True
         if is_mod_visible_for_enterprise(mid):
             return True
-        if mid == SUNBIRD_CLIENT_MOD_ID or canonical_mod_id(mid) == SUNBIRD_CLIENT_MOD_ID:
-            mm = get_mod_manager()
-            if mm.resolve_mod_directory(mid):
-                return True
-            uname = (_session_username_for_entitlements(session_id or "") or "").strip()
-            if is_sunbird_local_username(uname):
-                return True
     except RECOVERABLE_ERRORS:
         pass
     return False
@@ -1300,26 +1293,12 @@ def ensure_mod_api_ready(mod_id: str, session_id: str | None = None) -> bool:
 
 def mount_on_disk_primary_client_mods(mod_manager: ModManager | None = None) -> list[str]:
     """
-    企业版启动时 load_all_mods 可能因无会话跳过客户 Mod，但考勤等 /api/mod/* 仍需可挂载。
-    若磁盘上存在主客户 Mod（太阳鸟），执行 load_mod（不走 entitlement 过滤）。
-    """
-    if mod_manager is None:
-        mod_manager = get_mod_manager()
-    if is_mods_disabled():
-        return []
-    from app.enterprise.account_mod_binding import SUNBIRD_CLIENT_MOD_ID
+    企业客户 Mod 不再因“磁盘存在”自动加载。
 
-    mounted: list[str] = []
-    mid = SUNBIRD_CLIENT_MOD_ID
-    mod_path = mod_manager.resolve_mod_directory(mid)
-    if not mod_path:
-        return mounted
-    if mid in mod_manager._loaded_mods:
-        return [mid]
-    if mod_manager.load_mod(mid):
-        mounted.append(mid)
-        logger.info("[ModManager] mounted on-disk client mod for API: %s", mid)
-    return mounted
+    通用安装包会在不同账号之间复用本机目录，客户定制包必须由会话 entitlement
+    决定是否可见/可挂载；登录后通过 ensure_mod_api_ready 按需加载。
+    """
+    return []
 
 
 def load_mod_routes(app, mod_manager: ModManager | None = None) -> None:

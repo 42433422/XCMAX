@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import time
 from typing import Optional
 
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -20,6 +21,8 @@ logger = logging.getLogger(__name__)
 _scheduler: Optional[BackgroundScheduler] = None
 
 _JOB_PREFIX = "wf_trigger_"
+_LAST_TIME_RAIL_OBSERVABILITY_SYNC_TS = 0.0
+_LAST_TIME_RAIL_OBSERVABILITY_MISSING = -1
 
 
 def start_scheduler() -> None:
@@ -132,7 +135,20 @@ def start_scheduler() -> None:
         try:
             from modstore_server.daily_digest import run_daily_digest_email
 
-            run_daily_digest_email()
+            result = run_daily_digest_email()
+            if result and not result.get("ok"):
+                logger.error(
+                    "daily digest email job completed without delivery: reason=%s rows=%s",
+                    result.get("reason"),
+                    result.get("delivery_rows"),
+                )
+            else:
+                logger.info(
+                    "daily digest email job done: delivered=%s skipped=%s record_id=%s",
+                    result.get("delivered") if isinstance(result, dict) else None,
+                    result.get("skipped") if isinstance(result, dict) else None,
+                    result.get("record_id") if isinstance(result, dict) else None,
+                )
         except Exception:
             logger.exception("daily digest email job failed")
 
@@ -270,6 +286,97 @@ def start_scheduler() -> None:
         _dr_recovery_probe_job,
         IntervalTrigger(minutes=max(5, probe_mins)),
         id="dr_recovery_probe_job",
+        replace_existing=True,
+        coalesce=True,
+        max_instances=1,
+    )
+
+    def _time_rail_observability_job() -> None:
+        global _LAST_TIME_RAIL_OBSERVABILITY_SYNC_TS
+        global _LAST_TIME_RAIL_OBSERVABILITY_MISSING
+        try:
+            from modstore_server.time_rail_workflow import collect_node_runtime_status, sync_missing_evidence_backlog
+
+            threshold = int(os.environ.get("MODSTORE_TIME_RAIL_MISSING_EVIDENCE_THRESHOLD", "3"))
+            sync_limit = int(os.environ.get("MODSTORE_TIME_RAIL_MISSING_EVIDENCE_LIMIT", "32"))
+            min_queue_gap = int(os.environ.get("MODSTORE_TIME_RAIL_MAINTENANCE_MIN_QUEUE_GAP", "1"))
+            cooldown_seconds = int(os.environ.get("MODSTORE_TIME_RAIL_MAINTENANCE_COOLDOWN_SECONDS", str(10 * 60)))
+            if threshold < 1:
+                threshold = 1
+            if sync_limit < 1:
+                sync_limit = 1
+            if min_queue_gap < 1:
+                min_queue_gap = 1
+            if cooldown_seconds < 0:
+                cooldown_seconds = 10 * 60
+
+            now = time.time()
+            if (
+                _LAST_TIME_RAIL_OBSERVABILITY_SYNC_TS > 0
+                and (now - _LAST_TIME_RAIL_OBSERVABILITY_SYNC_TS) < cooldown_seconds
+            ):
+                logger.info(
+                    "time rail observability sync skipped: cooldown_not_elapsed",
+                    extra={"cooldown_seconds": cooldown_seconds},
+                )
+                return
+
+            status = collect_node_runtime_status()
+            missing_nodes = status.get("missing_evidence") or []
+            backlog_nodes = status.get("maintenance_backlog") or []
+            missing = len(missing_nodes)
+            queued = len(backlog_nodes)
+            remaining = missing - queued
+
+            if missing < threshold:
+                logger.info(
+                    "time rail observability sync skipped: below_threshold",
+                    extra={"missing": missing, "threshold": threshold},
+                )
+                return
+            if remaining < min_queue_gap:
+                logger.info(
+                    "time rail observability sync skipped: queue_gap_not_reached",
+                    extra={"remaining": remaining, "min_queue_gap": min_queue_gap},
+                )
+                return
+
+            if (
+                _LAST_TIME_RAIL_OBSERVABILITY_MISSING >= 0
+                and missing <= _LAST_TIME_RAIL_OBSERVABILITY_MISSING
+                and (now - _LAST_TIME_RAIL_OBSERVABILITY_SYNC_TS) < cooldown_seconds
+            ):
+                logger.info(
+                    "time rail observability sync skipped: no_new_missing_and_cooldown",
+                    extra={"missing": missing},
+                )
+                return
+
+            r = sync_missing_evidence_backlog(limit=sync_limit)
+            _LAST_TIME_RAIL_OBSERVABILITY_SYNC_TS = now
+            _LAST_TIME_RAIL_OBSERVABILITY_MISSING = missing
+            if r.get("added"):
+                logger.info(
+                    "time rail observability sync: added=%s missing=%s queued=%s",
+                    r.get("added"),
+                    r.get("total_missing"),
+                    queued,
+                )
+            else:
+                logger.info(
+                    "time rail observability sync: no_new_backlog missing=%s queued=%s",
+                    missing,
+                    queued,
+                )
+        except ValueError:
+            logger.exception("time rail observability sync env parse failed")
+        except Exception:
+            logger.exception("time rail observability sync failed")
+
+    _scheduler.add_job(
+        _time_rail_observability_job,
+        CronTrigger(hour=3, minute=0),
+        id="time_rail_observability_sync",
         replace_existing=True,
         coalesce=True,
         max_instances=1,

@@ -77,7 +77,10 @@ export const INDUSTRY_MENU_LABELS: Record<string, Record<string, string>> = {
     orders: '考勤单管理',
     'shipment-records': '考勤记录',
     customers: '部门管理',
+    'data-sources': '考勤数据源',
     print: '考勤表打印',
+    'printer-list': '考勤打印机',
+    'template-preview': '考勤模板库',
   },
   电商: {
     materials: '商品仓库',

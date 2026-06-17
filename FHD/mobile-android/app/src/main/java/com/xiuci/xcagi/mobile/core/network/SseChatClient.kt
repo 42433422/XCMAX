@@ -59,7 +59,7 @@ class SseChatClient @Inject constructor(
         try {
             okHttp.newCall(req).execute().use { resp ->
                 if (!resp.isSuccessful) {
-                    val hint = if (useCloud) "云端对话 HTTP ${resp.code}" else "HTTP ${resp.code}"
+                    val hint = if (useCloud) "远程对话 HTTP ${resp.code}" else "HTTP ${resp.code}"
                     onError(hint)
                     return@withContext
                 }

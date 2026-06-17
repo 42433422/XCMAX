@@ -13,39 +13,29 @@ from pathlib import Path
 
 from fastapi import FastAPI
 
-try:
-    from dotenv import load_dotenv
+from modstore_server.env_loader import load_modstore_env
 
-    _deploy_root = Path(__file__).resolve().parents[2]
-    load_dotenv(_deploy_root / ".env", override=False)
-    _shared_secret_env = {
-        key: os.environ.get(key) for key in ("MODSTORE_JWT_SECRET",) if os.environ.get(key)
-    }
-    _pilot_env_preserve = {
-        key: os.environ.get(key)
-        for key in (
-            "ALIPAY_APP_ID",
-            "ALIPAY_APP_PRIVATE_KEY",
-            "ALIPAY_APP_PRIVATE_KEY_PATH",
-            "ALIPAY_ALIPAY_PUBLIC_KEY",
-            "ALIPAY_ALIPAY_PUBLIC_KEY_PATH",
-            "ALIPAY_NOTIFY_URL",
-            "ALIPAY_DEBUG",
-            "PAYMENT_SECRET_KEY",
-            "PAYMENT_BACKEND",
-        )
-        if os.environ.get(key)
-    }
-    _preserved_db_path = (os.environ.get("MODSTORE_DB_PATH") or "").strip()
-    load_dotenv(_deploy_root / ".env.local", override=True)
-    if _preserved_db_path:
-        os.environ["MODSTORE_DB_PATH"] = _preserved_db_path
-    if os.environ.get("MODSTORE_PYTEST_USE_SQLITE") == "1":
-        os.environ.pop("DATABASE_URL", None)
-    os.environ.update(_shared_secret_env)
-    os.environ.update(_pilot_env_preserve)
-except ImportError:
-    pass
+_deploy_root = Path(__file__).resolve().parents[2]
+_preserved_db_path = (os.environ.get("MODSTORE_DB_PATH") or "").strip()
+load_modstore_env(
+    _deploy_root,
+    preserve_existing=(
+        "MODSTORE_JWT_SECRET",
+        "ALIPAY_APP_ID",
+        "ALIPAY_APP_PRIVATE_KEY",
+        "ALIPAY_APP_PRIVATE_KEY_PATH",
+        "ALIPAY_ALIPAY_PUBLIC_KEY",
+        "ALIPAY_ALIPAY_PUBLIC_KEY_PATH",
+        "ALIPAY_NOTIFY_URL",
+        "ALIPAY_DEBUG",
+        "PAYMENT_SECRET_KEY",
+        "PAYMENT_BACKEND",
+    ),
+)
+if _preserved_db_path:
+    os.environ["MODSTORE_DB_PATH"] = _preserved_db_path
+if os.environ.get("MODSTORE_PYTEST_USE_SQLITE") == "1":
+    os.environ.pop("DATABASE_URL", None)
 
 from modstore_server.constants import DEFAULT_API_PORT, DEFAULT_XCAGI_BACKEND_URL
 
