@@ -159,14 +159,14 @@ fun ProfileScreen(
                             Text(
                                 accountKindLabel,
                                 style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.outline,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                             if (fhdHost.isNotBlank()) {
                                 Spacer(Modifier.height(2.dp))
                                 Text(
                                     fhdHost,
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.outline,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
                             Spacer(Modifier.height(Spacing.sm))
@@ -194,8 +194,8 @@ fun ProfileScreen(
                 WeSpacer(Spacing.sm)
                 WeCellGroup {
                     WeCell(
-                        title = "连接电脑",
-                        subtitle = "扫码绑定局域网 FHD",
+                        title = "扫码绑定",
+                        subtitle = "绑定企业端、管理端或电脑端登录",
                         icon = Icons.Default.QrCode2,
                         iconTint = MaterialTheme.colorScheme.secondary,
                         iconBg = MaterialTheme.colorScheme.secondaryContainer,

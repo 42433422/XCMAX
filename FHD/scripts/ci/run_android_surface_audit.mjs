@@ -41,12 +41,15 @@ const APK_CANDIDATES =
 
 const outArgIdx = process.argv.indexOf('--out')
 const OUT_PATH = outArgIdx >= 0 ? process.argv[outArgIdx + 1] : ''
+const SAMPLE = process.argv.includes('--sample') || process.env.SURFACE_AUDIT_ANDROID_SAMPLE === '1'
+const MAX_PAGES = Number(process.env.SURFACE_AUDIT_ANDROID_MAX_PAGES || '0')
 
 const ADB = process.env.SURFACE_AUDIT_ANDROID_ADB || (fs.existsSync(DEFAULT_ADB) ? DEFAULT_ADB : 'adb')
 const ACTIVITY = `${PACKAGE}/com.xiuci.xcagi.mobile.MainActivity`
 const FHD_HOST = process.env.SURFACE_AUDIT_ANDROID_FHD_HOST || '10.0.2.2:5000'
 const DEFAULT_WAIT_MS = Number(process.env.SURFACE_AUDIT_ANDROID_WAIT_MS || '4000')
 const FOREGROUND_TIMEOUT_MS = Number(process.env.SURFACE_AUDIT_ANDROID_FOREGROUND_MS || '15000')
+const ADB_TIMEOUT_MS = Number(process.env.SURFACE_AUDIT_ANDROID_ADB_TIMEOUT_MS || '60000')
 const MOD_ID = process.env.SURFACE_AUDIT_SAMPLE_MOD_ID || 'taiyangniao-pro'
 
 const FRESH_ROUTES = new Set(['legal', 'connect', 'auth', 'register'])
@@ -59,11 +62,11 @@ let modstoreBlockIps = []
 let modstoreBlocked = false
 
 function adb(...args) {
-  return execFileSync(ADB, args, { encoding: 'utf8', maxBuffer: 20 * 1024 * 1024 }).trim()
+  return execFileSync(ADB, args, { encoding: 'utf8', maxBuffer: 20 * 1024 * 1024, timeout: ADB_TIMEOUT_MS }).trim()
 }
 
 function adbBuf(...args) {
-  return execFileSync(ADB, args, { maxBuffer: 20 * 1024 * 1024 })
+  return execFileSync(ADB, args, { maxBuffer: 20 * 1024 * 1024, timeout: ADB_TIMEOUT_MS })
 }
 
 function resolveApk() {
@@ -301,6 +304,15 @@ function filterPages(pages) {
   })
 }
 
+function pickSamplePages(pages) {
+  const preferred = ['home_hub', 'chat', 'auth', 'splash', 'connect']
+  for (const id of preferred) {
+    const found = pages.find((p) => p.id === id)
+    if (found) return [found]
+  }
+  return pages.slice(0, 1)
+}
+
 async function main() {
   let auditAuth = null
   try {
@@ -328,7 +340,12 @@ async function main() {
 
   const cfg = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'))
   const laneCfg = cfg.lanes['P-App']
-  const appPages = filterPages(laneCfg?.pages)
+  let appPages = filterPages(laneCfg?.pages)
+  if (SAMPLE || MAX_PAGES === 1) {
+    appPages = pickSamplePages(appPages)
+  } else if (Number.isFinite(MAX_PAGES) && MAX_PAGES > 1) {
+    appPages = appPages.slice(0, MAX_PAGES)
+  }
 
   const apk = resolveApk()
   if (apk) {
@@ -390,6 +407,8 @@ async function main() {
     package: PACKAGE,
     fhd_host: FHD_HOST,
     page_count: results.length,
+    sample: SAMPLE,
+    max_pages: Number.isFinite(MAX_PAGES) ? MAX_PAGES : 0,
     pages: results,
     apk_installed: Boolean(apk),
   })

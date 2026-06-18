@@ -7,7 +7,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CameraAlt
-import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.QrCodeScanner
@@ -36,36 +35,11 @@ fun DiscoverScreen(
 
         LazyColumn(state = rememberLazyListState()) {
             item {
-                WeSectionCaption("识别工具")
-                WeCellGroup {
-                    WeCell(
-                        title = "扫码识别",
-                        subtitle = "读取二维码、条码与设备绑定码",
-                        icon = Icons.Default.QrCodeScanner,
-                        iconTint = MaterialTheme.colorScheme.primary,
-                        iconBg = MaterialTheme.colorScheme.primaryContainer,
-                        showArrow = true,
-                        onClick = onScan,
-                    )
-                    WeCell(
-                        title = "OCR 拍照识别",
-                        subtitle = "拍照识别文字与文档",
-                        icon = Icons.Default.CameraAlt,
-                        iconTint = MaterialTheme.colorScheme.tertiary,
-                        iconBg = MaterialTheme.colorScheme.primaryContainer,
-                        showArrow = true,
-                        showDivider = false,
-                        onClick = onOcr,
-                    )
-                }
-            }
-
-            item {
-                WeSectionCaption("AI生态")
+                WeSectionCaption("AI交流")
                 WeCellGroup {
                     WeCell(
                         title = "AI交流圈",
-                        subtitle = "查看企业 AI 员工动态和主页",
+                        subtitle = "查看企业 AI 员工动态、主页和能力介绍",
                         icon = Icons.Default.Forum,
                         iconTint = XcagiTheme.extra.brandBlue,
                         iconBg = MaterialTheme.colorScheme.primaryContainer,
@@ -77,24 +51,26 @@ fun DiscoverScreen(
             }
 
             item {
-                WeSectionCaption("连接")
+                WeSectionCaption("工具")
                 WeCellGroup {
                     WeCell(
-                        title = "Agent 接管",
-                        subtitle = "远程控制电脑，执行任务和命令",
-                        icon = Icons.Default.Explore,
-                        iconTint = MaterialTheme.colorScheme.secondary,
-                        iconBg = MaterialTheme.colorScheme.secondaryContainer,
+                        title = "扫码绑定",
+                        subtitle = "绑定企业端、管理端或电脑端登录",
+                        icon = Icons.Default.QrCodeScanner,
+                        iconTint = MaterialTheme.colorScheme.primary,
+                        iconBg = MaterialTheme.colorScheme.primaryContainer,
                         showArrow = true,
-                        showDivider = false,
                         onClick = onScan,
                     )
-                }
-            }
-
-            item {
-                WeSectionCaption("更新")
-                WeCellGroup {
+                    WeCell(
+                        title = "OCR识别",
+                        subtitle = "拍照识别文字与文档",
+                        icon = Icons.Default.CameraAlt,
+                        iconTint = MaterialTheme.colorScheme.tertiary,
+                        iconBg = MaterialTheme.colorScheme.tertiaryContainer,
+                        showArrow = true,
+                        onClick = onOcr,
+                    )
                     WeCell(
                         title = "通知与公告",
                         subtitle = "企业公告与系统通知",

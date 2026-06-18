@@ -2,6 +2,7 @@ package com.xiuci.xcagi.mobile.core.network
 
 import com.google.gson.JsonObject
 import com.xiuci.xcagi.mobile.core.model.AccessRequestPayload
+import com.xiuci.xcagi.mobile.core.model.AdminMobileHomeData
 import com.xiuci.xcagi.mobile.core.model.DeviceRegisterBody
 import com.xiuci.xcagi.mobile.core.model.ChatRequest
 import com.xiuci.xcagi.mobile.core.model.DiscoverHintData
@@ -38,7 +39,7 @@ data class AuthQrConfirmBody(
     val qr_id: String,
     val username: String = "",
     val password: String = "",
-    val account_kind: String = "enterprise",
+    val account_kind: String = "",
 )
 
 data class OidcExchangeBody(
@@ -167,6 +168,9 @@ interface FhdApi {
     @GET("api/mobile/v1/home")
     suspend fun mobileHome(): MobileEnvelope<Map<String, Any?>>
 
+    @GET("api/mobile/v1/admin/home")
+    suspend fun mobileAdminHome(): MobileEnvelope<AdminMobileHomeData>
+
     @GET("api/mobile/v1/sync/status")
     suspend fun mobileSyncStatus(): MobileEnvelope<Map<String, Any?>>
 
@@ -217,11 +221,11 @@ interface FhdApi {
 
     // ── 专属客服接口 ──
     @GET("api/mobile/v1/cs/info")
-    suspend fun getCsInfo(): retrofit2.Response<CsInfoDto>
+    suspend fun getCsInfo(): MobileEnvelope<CsInfoDto>
 
     @POST("api/mobile/v1/cs/messages")
-    suspend fun sendCsMessage(@Body body: Map<String, String>): retrofit2.Response<CsMessageResponseDto>
+    suspend fun sendCsMessage(@Body body: Map<String, String>): MobileEnvelope<CsMessageResponseDto>
 
     @GET("api/mobile/v1/cs/messages")
-    suspend fun getCsMessages(@Query("since") since: String? = null): retrofit2.Response<CsMessagesListDto>
+    suspend fun getCsMessages(@Query("since") since: String? = null): MobileEnvelope<CsMessagesListDto>
 }

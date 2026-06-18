@@ -129,6 +129,9 @@ constructor(
                     }
                     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "未登录")
 
+    private fun isAdminAccountKind(kind: String): Boolean =
+            kind.trim().lowercase() in setOf("admin", "admin_portal")
+
     private val _marketAccess = MutableStateFlow("")
     val marketAccess: StateFlow<String> = _marketAccess.asStateFlow()
 
@@ -501,69 +504,86 @@ constructor(
         _chatSuggestions.value = base
     }
 
-    /** 构建会话列表：两个固定入口 + 企业端已安装生态里的 workflow_employees。 */
+    /** 构建会话列表：两个固定入口 + 当前账号生态里的 workflow_employees。 */
     fun loadConversations(isEnterprise: Boolean) {
-        val fixedItems = fixedConversationItems(isEnterprise)
-        _conversations.value = fixedItems
-
-        if (!isEnterprise) return
+        _conversations.value = fixedConversationItems(isEnterprise)
 
         viewModelScope.launch {
+            val adminMode = isAdminAccountKind(sessionStore.accountKindFlow.first())
+            val fixedItems = fixedConversationItems(isEnterprise || adminMode)
+            _conversations.value = fixedItems
+
+            if (adminMode) {
+                repo.loadAdminModInfos()
+                        .onSuccess { mods ->
+                            _modInfos.value = mods
+                            _conversations.value =
+                                    fixedItems +
+                                            employeeConversationItems(
+                                                    mods = mods,
+                                                    badgeText = "管理端",
+                                                    badgeColor =
+                                                            androidx.compose.ui.graphics.Color(
+                                                                    0xFFED7B2F
+                                                            ),
+                                            )
+                        }
+                        .onFailure { _conversations.value = fixedItems }
+                return@launch
+            }
+
+            if (!isEnterprise) return@launch
+
             repo.loadModInfos()
                     .onSuccess { mods ->
                         _modInfos.value = mods
-                        val employeeItems =
-                                mods.flatMap { mod ->
-                                    mod.workflow_employees.mapNotNull { employee ->
-                                        val employeeId = employee.id.trim()
-                                        val title =
-                                                employee.label.ifBlank {
-                                                    employee.panel_title
-                                                }
-                                                        .ifBlank { employeeId }
-                                                        .trim()
-                                        if (employeeId.isBlank() || title.isBlank()) {
-                                            null
-                                        } else {
-                                            val source =
-                                                    mod.name.ifBlank { mod.id }
-                                                            .trim()
-                                                            .takeIf { it.isNotBlank() }
-                                            ConversationItem(
-                                                    id = "employee:${mod.id}:$employeeId",
-                                                    type = ConversationType.AI_TASK,
-                                                    title = title,
-                                                    subtitle =
-                                                            employee.panel_summary.ifBlank {
-                                                                source?.let { "来自 $it" }.orEmpty()
-                                                            },
-                                                    timestamp = 0L,
-                                                    avatarType = AvatarType.LETTER,
-                                                    avatarLetter =
-                                                            title.firstOrNull {
-                                                                !it.isWhitespace()
-                                                            }
-                                                                    ?: 'A',
-                                                    avatarColor =
-                                                            employeeAvatarColor(
-                                                                    "${mod.id}:$employeeId"
-                                                            ),
-                                                    badgeText = "已安装",
-                                                    badgeColor =
-                                                            androidx.compose.ui.graphics.Color(
-                                                                    0xFF3370FF
-                                                            ),
-                                            )
-                                        }
-                                    }
-                                }
-                        _conversations.value = fixedItems + employeeItems
+                        _conversations.value =
+                                fixedItems +
+                                        employeeConversationItems(
+                                                mods = mods,
+                                                badgeText = "已安装",
+                                                badgeColor =
+                                                        androidx.compose.ui.graphics.Color(
+                                                                0xFF3370FF
+                                                        ),
+                                        )
                     }
-                    .onFailure {
-                        _conversations.value = fixedItems
-                    }
+                    .onFailure { _conversations.value = fixedItems }
         }
     }
+
+    private fun employeeConversationItems(
+            mods: List<ModInfo>,
+            badgeText: String,
+            badgeColor: androidx.compose.ui.graphics.Color,
+    ): List<ConversationItem> =
+            mods.flatMap { mod ->
+                mod.workflow_employees.mapNotNull { employee ->
+                    val employeeId = employee.id.trim()
+                    val title =
+                            employee.label.ifBlank { employee.panel_title }.ifBlank { employeeId }.trim()
+                    if (employeeId.isBlank() || title.isBlank()) {
+                        null
+                    } else {
+                        val source = mod.name.ifBlank { mod.id }.trim().takeIf { it.isNotBlank() }
+                        ConversationItem(
+                                id = "employee:${mod.id}:$employeeId",
+                                type = ConversationType.AI_TASK,
+                                title = title,
+                                subtitle =
+                                        employee.panel_summary.ifBlank {
+                                            source?.let { "来自 $it" }.orEmpty()
+                                        },
+                                timestamp = 0L,
+                                avatarType = AvatarType.LETTER,
+                                avatarLetter = title.firstOrNull { !it.isWhitespace() } ?: 'A',
+                                avatarColor = employeeAvatarColor("${mod.id}:$employeeId"),
+                                badgeText = badgeText,
+                                badgeColor = badgeColor,
+                        )
+                    }
+                }
+            }
 
     private fun fixedConversationItems(isEnterprise: Boolean): List<ConversationItem> {
         val items = mutableListOf<ConversationItem>()
@@ -737,7 +757,7 @@ constructor(
             isAdmin: Boolean = false,
             rememberPass: Boolean = false,
             autoLogin: Boolean = false,
-            onDone: (Boolean) -> Unit
+            onDone: (Boolean, String?) -> Unit
     ) =
             viewModelScope.launch {
                 repo.loginUnified(u, p, isAdmin)
@@ -754,12 +774,12 @@ constructor(
                             analytics.log("login_success", mapOf("method" to "password"))
                             refreshMarketTokens()
                             registerPushWithHint()
-                            onDone(true)
+                            onDone(true, null)
                         }
                         .onFailure {
                             analytics.log("login_fail", mapOf("method" to "password"))
                             snack(it.message ?: "登录失败，请检查账号密码", true)
-                            onDone(false)
+                            onDone(false, it.message)
                         }
             }
 
@@ -855,9 +875,15 @@ constructor(
                         }
             }
 
-    fun confirmAuthQr(qrId: String, username: String, password: String, onDone: (Boolean) -> Unit) =
+    fun confirmAuthQr(
+            qrId: String,
+            username: String,
+            password: String,
+            accountKind: String = "",
+            onDone: (Boolean) -> Unit,
+    ) =
             viewModelScope.launch {
-                repo.confirmAuthQr(qrId, username, password)
+                repo.confirmAuthQr(qrId, username, password, accountKind)
                         .onSuccess {
                             snack("已确认登录")
                             onDone(true)
@@ -875,7 +901,29 @@ constructor(
                 }
             }
 
+    private fun csItemsToChat(items: List<CsMessageItemDto>): List<Pair<String, String>> =
+            items.mapNotNull { msg ->
+                val body = msg.body.trim()
+                if (body.isBlank()) {
+                    null
+                } else {
+                    (if (msg.sender == "user") "user" else "assistant") to body
+                }
+            }
+
     fun loadChatCache() = viewModelScope.launch { _chatMessages.value = repo.loadCachedChat() }
+
+    fun loadAssistantCustomerServiceHistory() =
+            viewModelScope.launch {
+                csRepository.loadCsInfo()
+                csRepository
+                        .loadMessages()
+                        .onSuccess { _chatMessages.value = csItemsToChat(csRepository.messages.value) }
+                        .onFailure {
+                            snack(it.message ?: "小C助理历史加载失败", true)
+                            _chatMessages.value = emptyList()
+                        }
+            }
 
     fun clearChat() {
         chatJob?.cancel()
@@ -945,6 +993,40 @@ constructor(
                                 },
                         )
                     }
+                }
+    }
+
+    fun sendAssistantCustomerServiceMessage(text: String) {
+        chatJob?.cancel()
+        _chatAction.value = null
+        _chatMessages.value = _chatMessages.value + ("user" to text)
+        _streaming.value = true
+        chatJob =
+                viewModelScope.launch {
+                    csRepository
+                            .sendMessage(text)
+                            .onSuccess { response ->
+                                val reply =
+                                        response.reply.ifBlank {
+                                            csRepository.messages.value
+                                                    .lastOrNull { it.sender != "user" }
+                                                    ?.body
+                                                    .orEmpty()
+                                        }
+                                if (reply.isNotBlank()) {
+                                    _chatMessages.value =
+                                            _chatMessages.value + ("assistant" to reply)
+                                } else {
+                                    _chatMessages.value = csItemsToChat(csRepository.messages.value)
+                                }
+                            }
+                            .onFailure {
+                                val message = it.message ?: "小C助理暂时无法连接企业智能客服"
+                                _chatMessages.value =
+                                        _chatMessages.value + ("assistant" to "处理失败：$message")
+                                snack(message, true)
+                            }
+                    _streaming.value = false
                 }
     }
 
@@ -1038,6 +1120,29 @@ constructor(
 
     fun loadMods() =
             viewModelScope.launch {
+                val adminMode = isAdminAccountKind(sessionStore.accountKindFlow.first())
+                if (adminMode) {
+                    repo.loadAdminMobileHome()
+                            .onSuccess { home ->
+                                _items.value =
+                                        home.features.map { feature ->
+                                            ListItem(
+                                                    feature.id,
+                                                    feature.title,
+                                                    feature.description,
+                                            )
+                                        }
+                            }
+                            .onFailure {
+                                if ((it.message ?: "").contains("403")) {
+                                    snack("需要管理端管理员账号", true)
+                                }
+                            }
+                    repo.loadAdminModInfos().onSuccess { _modInfos.value = it }.onFailure {
+                        /* 管理端员工加载失败时静默，不阻断页面 */
+                    }
+                    return@launch
+                }
                 repo.mods().onSuccess { _items.value = it }.onFailure {
                     val msg = it.message ?: ""
                         when {
@@ -1057,7 +1162,9 @@ constructor(
 
     fun refreshModInfos(showError: Boolean = false) =
             viewModelScope.launch {
-                repo.loadModInfos()
+                val adminMode = isAdminAccountKind(sessionStore.accountKindFlow.first())
+                val result = if (adminMode) repo.loadAdminModInfos() else repo.loadModInfos()
+                result
                         .onSuccess { _modInfos.value = it }
                         .onFailure {
                             if (showError) snack(it.message ?: "AI 员工同步失败", true)
@@ -1129,13 +1236,18 @@ constructor(
             }
 
     fun handleDeepLink(route: String, nav: (String) -> Unit) {
+        val normalized = route.trim().trimStart('/')
         when {
-            route.contains("chat") -> nav(Routes.CHAT)
-            route.contains("approval") -> {
-                val id = Regex("approval/(\\d+)").find(route)?.groupValues?.getOrNull(1)
+            normalized.startsWith(Routes.AI_EMPLOYEES) || normalized == Routes.WORK -> nav(Routes.AI_EMPLOYEES)
+            normalized.startsWith(Routes.AI_CIRCLE) || normalized == Routes.DISCOVER -> nav(Routes.AI_CIRCLE)
+            normalized.startsWith("ai_employee/") -> nav(normalized)
+            normalized.startsWith(Routes.SCAN_QR) -> nav(Routes.SCAN_QR)
+            normalized.contains("chat") -> nav(Routes.CHAT)
+            normalized.contains("approval") -> {
+                val id = Regex("approval/(\\d+)").find(normalized)?.groupValues?.getOrNull(1)
                 if (id != null) nav("approval/$id") else nav(Routes.APPROVAL)
             }
-            route.contains("home") || route.contains("home_hub") -> nav(Routes.CHAT)
+            normalized.contains("home") || normalized.contains("home_hub") -> nav(Routes.CHAT)
             else -> nav(Routes.CHAT)
         }
     }
@@ -1150,7 +1262,10 @@ constructor(
     suspend fun loadCsInfo() = csRepository.loadCsInfo()
 
     /** 发送客服消息 */
-    suspend fun sendCsMessage(body: String) = csRepository.sendMessage(body)
+    suspend fun sendCsMessage(body: String) =
+            csRepository.sendMessage(body).onFailure {
+                snack(it.message ?: "客服消息发送失败", true)
+            }
 
     /** 加载客服历史消息 */
     suspend fun loadCsMessages(since: String? = null) = csRepository.loadMessages(since)

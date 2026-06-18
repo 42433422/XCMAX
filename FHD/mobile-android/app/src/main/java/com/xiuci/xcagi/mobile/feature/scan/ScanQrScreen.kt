@@ -79,6 +79,7 @@ import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -120,6 +121,7 @@ fun ScanQrScreen(vm: AppViewModel, onBack: () -> Unit) {
         var showSuccess by remember { mutableStateOf(false) }
         var nonce by remember { mutableStateOf("") }
         var authQrId by remember { mutableStateOf("") }
+        var authAccountKind by remember { mutableStateOf("") }
         var authUsername by remember { mutableStateOf("") }
         var authPassword by remember { mutableStateOf("") }
 
@@ -145,8 +147,9 @@ fun ScanQrScreen(vm: AppViewModel, onBack: () -> Unit) {
                                                         onBack,
                                                         nonceState = { nonce = it },
                                                         authQrIdState = { authQrId = it },
+                                                        authAccountKindState = { authAccountKind = it },
                                                         scannedState = { scanned = it },
-							onSuccess = { showSuccess = true },
+								onSuccess = { showSuccess = true },
                                                 )
                                         }
                                 )
@@ -289,6 +292,10 @@ fun ScanQrScreen(vm: AppViewModel, onBack: () -> Unit) {
                                                                                                                                         },
                                                                                                                                         authQrIdState = {
                                                                                                                                                 authQrId =
+                                                                                                                                                        it
+                                                                                                                                        },
+                                                                                                                                        authAccountKindState = {
+                                                                                                                                                authAccountKind =
                                                                                                                                                         it
                                                                                                                                         },
                                                                                                                                         scannedState = {
@@ -480,7 +487,17 @@ fun ScanQrScreen(vm: AppViewModel, onBack: () -> Unit) {
 
                                 // Auth QR 模式（企业版扫码登录）
                                 if (authQrId.isNotBlank()) {
+                                        val authTargetLabel =
+                                                if (authAccountKind == "admin") "管理端" else "企业端"
                                         Spacer(Modifier.height(4.dp))
+                                        Text(
+                                                "确认${authTargetLabel}扫码登录",
+                                                style = MaterialTheme.typography.titleSmall,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = MaterialTheme.colorScheme.onSurface,
+                                                modifier = Modifier.fillMaxWidth(),
+                                        )
+                                        Spacer(Modifier.height(8.dp))
                                         androidx.compose.foundation.text.BasicTextField(
                                                 value = authUsername,
                                                 onValueChange = { authUsername = it },
@@ -508,7 +525,7 @@ fun ScanQrScreen(vm: AppViewModel, onBack: () -> Unit) {
                                                         ) {
                                                                 if (authUsername.isEmpty()) {
                                                                         Text(
-                                                                                "企业账号",
+                                                                                if (authAccountKind == "admin") "管理员账号" else "企业账号",
                                                                                 color =
                                                                                         MaterialTheme.colorScheme.onSurfaceVariant
                                                                         )
@@ -535,8 +552,9 @@ fun ScanQrScreen(vm: AppViewModel, onBack: () -> Unit) {
                                                 textStyle =
                                                         MaterialTheme.typography.bodyMedium.copy(
                                                                 color = MaterialTheme.colorScheme.onSurface
-                                                        ),
+                                                ),
                                                 singleLine = true,
+                                                visualTransformation = PasswordVisualTransformation(),
                                                 decorationBox = { inner ->
                                                         Box(
                                                                 Modifier.fillMaxSize(),
@@ -556,12 +574,13 @@ fun ScanQrScreen(vm: AppViewModel, onBack: () -> Unit) {
                                         )
                                         Spacer(Modifier.height(8.dp))
                                         com.xiuci.xcagi.mobile.ui.components.mobile.WeGreenButton(
-                                                text = "确认 PC 登录",
+                                                text = "确认${authTargetLabel}登录",
                                                 onClick = {
                                                         vm.confirmAuthQr(
                                                                 authQrId,
                                                                 authUsername,
-                                                                authPassword
+                                                                authPassword,
+                                                                authAccountKind,
                                                         ) {
                                                                 if (it) {
                                                                         showManualInput = false
@@ -570,6 +589,9 @@ fun ScanQrScreen(vm: AppViewModel, onBack: () -> Unit) {
                                                         }
                                                 },
                                                 modifier = Modifier.fillMaxWidth(),
+                                                enabled =
+                                                        authUsername.isNotBlank() &&
+                                                                authPassword.isNotBlank(),
                                         )
                                 }
 
@@ -877,13 +899,15 @@ private fun handleScanResult(
         onBack: () -> Unit,
         nonceState: (String) -> Unit,
         authQrIdState: (String) -> Unit,
+        authAccountKindState: (String) -> Unit,
         scannedState: (Boolean) -> Unit,
         onSuccess: () -> Unit,
 ) {
-        val authMatch = Regex("qr_id=([^&]+)").find(raw)
+        val authMatch = Regex("(?:[?&])qr_id=([^&]+)").find(raw)
         when {
                 raw.contains("auth-qr") && authMatch != null -> {
-                        authQrIdState(authMatch.groupValues[1])
+                        authQrIdState(decodeQrValue(authMatch.groupValues[1]))
+                        authAccountKindState(authQrParam(raw, "account_kind").orEmpty())
                         // auth-qr 模式需要用户输入账号密码，不自动返回
                 }
                 else -> {
@@ -904,6 +928,19 @@ private fun handleScanResult(
                 }
         }
 }
+
+private fun authQrParam(raw: String, key: String): String? =
+        Regex("(?:[?&])${Regex.escape(key)}=([^&]+)")
+                .find(raw)
+                ?.groupValues
+                ?.getOrNull(1)
+                ?.let(::decodeQrValue)
+                ?.trim()
+                ?.lowercase()
+                ?.takeIf { it.isNotBlank() }
+
+private fun decodeQrValue(value: String): String =
+        runCatching { java.net.URLDecoder.decode(value, "UTF-8") }.getOrElse { value }
 
 private fun tryScanFromUri(
         uri: android.net.Uri,

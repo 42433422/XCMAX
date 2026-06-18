@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -24,6 +25,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -37,6 +39,8 @@ import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.QrCodeScanner
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material.icons.filled.ChevronRight
@@ -119,6 +123,7 @@ fun ChatScreen(
     vm: AppViewModel,
     conversationId: String? = null,          // 新增：会话 ID，null 表示 AI 对话模式
     conversationTitle: String = "小C助理",   // 新增：顶部栏标题，默认"小C助理"
+    useCustomerServiceBackend: Boolean = false,
     onBack: (() -> Unit)? = null,
     onOpenMod: (String) -> Unit = {},
     onOpenOcr: () -> Unit = {},
@@ -160,7 +165,11 @@ fun ChatScreen(
     LaunchedEffect(chatMode) { deepThinking = chatMode == "expert" }
 
     LaunchedEffect(Unit) {
-        vm.loadChatCache()
+        if (useCustomerServiceBackend) {
+            vm.loadAssistantCustomerServiceHistory()
+        } else {
+            vm.loadChatCache()
+        }
         if (suggestions.isEmpty()) vm.loadHomeHub()
     }
 
@@ -185,7 +194,11 @@ fun ChatScreen(
                     if (deepThinking) append("[深度思考] ")
                     if (smartSearch) append("[智能搜索] ")
                 }
-                vm.sendChat(prefix + text)
+                if (useCustomerServiceBackend) {
+                    vm.sendAssistantCustomerServiceMessage(text)
+                } else {
+                    vm.sendChat(prefix + text)
+                }
                 input = ""
             }
         }
@@ -325,7 +338,14 @@ fun ChatScreen(
                     modeHint = chatModes.firstOrNull { it.id == chatMode }?.hint.orEmpty(),
                     suggestions = suggestions,
                     streaming = streaming,
-                    onSuggestionClick = { prompt -> input = prompt; vm.sendChat(prompt) },
+                    onSuggestionClick = { prompt ->
+                        input = prompt
+                        if (useCustomerServiceBackend) {
+                            vm.sendAssistantCustomerServiceMessage(prompt)
+                        } else {
+                            vm.sendChat(prompt)
+                        }
+                    },
                 )
             } else {
                 LazyColumn(
@@ -729,8 +749,9 @@ private fun ChatEmptyState(
 @Composable
 fun AiEmployeeListScreen(
     vm: AppViewModel,
-    onBack: () -> Unit,
+    onBack: (() -> Unit)? = null,
     onSelect: (String, String) -> Unit,
+    onScan: () -> Unit = {},
 ) {
     val modInfos by vm.modInfos.collectAsState()
     val employees = remember(modInfos) { modInfos.aiEmployeeProfiles() }
@@ -743,20 +764,31 @@ fun AiEmployeeListScreen(
             androidx.compose.material3.TopAppBar(
                 title = {
                     Text(
-                        "AI 员工${employees.size.takeIf { it > 0 }?.let { "($it)" }.orEmpty()}",
+                        "AI员工${employees.size.takeIf { it > 0 }?.let { "($it)" }.orEmpty()}",
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurface,
                     )
                 },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                    if (onBack != null) {
+                        IconButton(onClick = onBack) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        }
+                    }
+                },
+                actions = {
+                    IconButton(onClick = { vm.refreshModInfos(showError = true) }) {
+                        Icon(Icons.Default.Refresh, contentDescription = "刷新AI员工")
+                    }
+                    IconButton(onClick = onScan) {
+                        Icon(Icons.Default.QrCodeScanner, contentDescription = "扫码绑定")
                     }
                 },
                 colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface,
                 ),
+                windowInsets = WindowInsets(0.dp),
             )
         },
     ) { padding ->
@@ -776,7 +808,33 @@ fun AiEmployeeListScreen(
                         tint = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
                     )
                     Spacer(Modifier.height(Spacing.md))
-                    Text("暂无 AI 员工", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.outline)
+                    Text(
+                        "暂无 AI 员工",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Spacer(Modifier.height(Spacing.xs))
+                    Text(
+                        "扫码绑定企业端或登录管理端后，员工会自动同步到这里。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(horizontal = 32.dp),
+                    )
+                    Spacer(Modifier.height(Spacing.lg))
+                    Button(
+                        onClick = onScan,
+                        colors = ButtonDefaults.buttonColors(containerColor = XcagiTheme.extra.brandBlue),
+                        shape = RoundedCornerShape(12.dp),
+                    ) {
+                        Icon(
+                            Icons.Default.QrCodeScanner,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text("扫码绑定")
+                    }
                 }
             }
         } else {
@@ -785,7 +843,10 @@ fun AiEmployeeListScreen(
                     .fillMaxSize()
                     .padding(padding),
             ) {
-                items(employees, key = { it.key }) { employee ->
+                itemsIndexed(
+                    items = employees,
+                    key = { index, employee -> "${employee.key}:$index" },
+                ) { _, employee ->
                     Surface(
                         color = MaterialTheme.colorScheme.surface,
                         modifier = Modifier
@@ -793,9 +854,9 @@ fun AiEmployeeListScreen(
                             .clickable { onSelect(employee.modId, employee.employeeId) },
                     ) {
                         Row(
-                            Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = Spacing.md, vertical = 10.dp),
+	                            Modifier
+	                                .fillMaxWidth()
+	                                .padding(horizontal = Spacing.md, vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             // 彩色头像（首字）
@@ -805,16 +866,16 @@ fun AiEmployeeListScreen(
                                 Color(0xFFE67E22), Color(0xFF3498DB),
                             )
                             val avatarColor = avatarColors[kotlin.math.abs(employee.key.hashCode()) % avatarColors.size]
-                            Box(
-                                Modifier
-                                    .size(48.dp)
-                                    .clip(MaterialTheme.shapes.extraSmall)
+	                            Box(
+	                                Modifier
+	                                    .size(44.dp)
+	                                    .clip(MaterialTheme.shapes.extraSmall)
                                     .background(avatarColor),
                                 contentAlignment = Alignment.Center,
                             ) {
                                 Text(
-                                    employee.avatarText,
-                                    style = MaterialTheme.typography.headlineSmall,
+	                                    employee.avatarText,
+	                                    style = MaterialTheme.typography.titleLarge,
                                     fontWeight = FontWeight.Bold,
                                     color = Color.White,
                                 )
@@ -834,7 +895,7 @@ fun AiEmployeeListScreen(
                                 Text(
                                     employee.summary,
                                     style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.outline,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     maxLines = 1,
                                 )
                             }
@@ -843,12 +904,12 @@ fun AiEmployeeListScreen(
                             Icon(
                                 Icons.Default.ChevronRight,
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f),
                                 modifier = Modifier.size(20.dp),
                             )
                         }
                     }
-                    HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(start = 72.dp))
+	                            HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(start = 68.dp))
                 }
             }
         }

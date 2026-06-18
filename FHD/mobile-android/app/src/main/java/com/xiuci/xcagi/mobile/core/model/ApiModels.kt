@@ -25,6 +25,10 @@ data class MobileLoginData(
     val refresh_token: String? = null,
     val account_kind: String? = null,
     val expires_in: Int? = null,
+    val market_access_token: String? = null,
+    val market_refresh_token: String? = null,
+    val market_is_admin: Boolean = false,
+    val market_is_enterprise: Boolean = false,
 )
 
 data class MeData(
@@ -174,6 +178,17 @@ data class WorkflowEmployeeInfo(
     val api_base_path: String = "",
     val phone_channel: String = "",
     val workflow_placeholder: Boolean = false,
+    val profile_source: String = "",
+    val market_connected: Boolean = false,
+    val market_pkg_id: String = "",
+    val market_name: String = "",
+    val market_description: String = "",
+    val market_version: String = "",
+    val market_author: String = "",
+    val market_industry: String = "",
+    val market_material_category: String = "",
+    val market_license_scope: String = "",
+    val market_security_level: String = "",
 )
 
 data class ModMenuItem(
@@ -193,4 +208,54 @@ data class ModMenuOverride(
 data class ModIndustry(
     val id: String = "",
     val name: String = "",
+)
+
+data class AdminMobileEmployeeInfo(
+    val id: String = "",
+    val name: String = "",
+    val label: String = "",
+    val title: String = "",
+    val description: String = "",
+    val panel_summary: String = "",
+    val version: String = "",
+    val industry: String = "",
+    val yuangon_area: String = "",
+    val employee_scope: String = "",
+    val employee_source: String = "",
+    val is_duty_employee: Boolean = false,
+    val is_store_employee: Boolean = false,
+    val status: String = "",
+    val api_base_path: String = "",
+    val phone_channel: String = "",
+    val profile_source: String = "",
+    val market_connected: Boolean = false,
+    val market_pkg_id: String = "",
+    val market_name: String = "",
+    val market_description: String = "",
+    val market_version: String = "",
+    val market_author: String = "",
+    val market_industry: String = "",
+    val market_material_category: String = "",
+    val market_license_scope: String = "",
+    val market_security_level: String = "",
+)
+
+data class AdminMobileFeature(
+    val id: String = "",
+    val title: String = "",
+    val description: String = "",
+    val category: String = "",
+    val method: String = "GET",
+    val api_path: String = "",
+)
+
+data class AdminMobileHomeData(
+    val account_kind: String = "",
+    val employees: List<AdminMobileEmployeeInfo> = emptyList(),
+    val employee_count: Int = 0,
+    val features: List<AdminMobileFeature> = emptyList(),
+    val feature_count: Int = 0,
+    val market_connected: Boolean = false,
+    val market_profile_count: Int = 0,
+    val market_error: String = "",
 )

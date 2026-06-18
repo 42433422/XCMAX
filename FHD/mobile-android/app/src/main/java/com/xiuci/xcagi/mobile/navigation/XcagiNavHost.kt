@@ -118,7 +118,11 @@ interface NetworkEntryPoint {
 }
 
 @Composable
-fun XcagiNavHost(vm: AppViewModel, pendingDeepLink: String? = null) {
+fun XcagiNavHost(
+        vm: AppViewModel,
+        pendingDeepLink: String? = null,
+        onDeepLinkHandled: () -> Unit = {},
+) {
     val nav = rememberNavController()
     val backStack by nav.currentBackStackEntryAsState()
     var currentSnack by remember { mutableStateOf<SnackData?>(null) }
@@ -145,6 +149,7 @@ fun XcagiNavHost(vm: AppViewModel, pendingDeepLink: String? = null) {
             vm.handleDeepLink(pendingDeepLink) { route ->
                 nav.navigate(route) { launchSingleTop = true }
             }
+            onDeepLinkHandled()
         }
     }
 
@@ -207,8 +212,6 @@ fun XcagiNavHost(vm: AppViewModel, pendingDeepLink: String? = null) {
         }
     }
 
-    val approvalCount by vm.approvalPendingCount.collectAsState()
-
     val current = backStack?.destination?.route?.substringBefore("?")
     val bottomNavRoutes = setOf(Routes.CHAT, Routes.WORK, Routes.DISCOVER, Routes.PROFILE)
     val showBar = loggedIn && current in bottomNavRoutes
@@ -243,14 +246,13 @@ fun XcagiNavHost(vm: AppViewModel, pendingDeepLink: String? = null) {
                                         listOf(
                                                 WeBottomNavItem(
                                                         Routes.CHAT,
-                                                        "会话",
+                                                        "消息",
                                                         Icons.Default.Forum
                                                 ),
                                                 WeBottomNavItem(
                                                         Routes.WORK,
-                                                        "名录",
-                                                        Icons.Default.Badge,
-                                                        approvalCount
+                                                        "AI员工",
+                                                        Icons.Default.Badge
                                                 ),
                                                 WeBottomNavItem(
                                                         Routes.DISCOVER,
@@ -259,7 +261,7 @@ fun XcagiNavHost(vm: AppViewModel, pendingDeepLink: String? = null) {
                                                 ),
                                                 WeBottomNavItem(
                                                         Routes.PROFILE,
-                                                        "个人",
+                                                        "我",
                                                         Icons.Default.AccountCircle
                                                 ),
                                         ),
@@ -326,11 +328,21 @@ fun XcagiNavHost(vm: AppViewModel, pendingDeepLink: String? = null) {
                 }
                 composable(Routes.SETTINGS) { SettingsScreen(vm) { nav.popBackStack() } }
                 composable(Routes.AUTH) {
-                    AuthScreen(vm, { nav.navigate(Routes.REGISTER) }, { nav.navigate(Routes.CHAT) })
+                    AuthScreen(
+                            vm,
+                            { nav.navigate(Routes.REGISTER) },
+                            { nav.navigate(Routes.CHAT) },
+                            { nav.navigate(Routes.SCAN_QR) },
+                    )
                 }
                 composable(Routes.AUTH_AUTO_LOGIN) {
                     // 自动登录路由：显示登录页同时自动尝试用保存的凭证登录
-                    AuthScreen(vm, { nav.navigate(Routes.REGISTER) }, { nav.navigate(Routes.CHAT) })
+                    AuthScreen(
+                            vm,
+                            { nav.navigate(Routes.REGISTER) },
+                            { nav.navigate(Routes.CHAT) },
+                            { nav.navigate(Routes.SCAN_QR) },
+                    )
                     LaunchedEffect(Unit) { vm.tryAutoLogin() }
                 }
                 composable(Routes.REGISTER) { RegisterScreen(vm) { nav.popBackStack() } }
@@ -367,26 +379,12 @@ fun XcagiNavHost(vm: AppViewModel, pendingDeepLink: String? = null) {
                         popEnterTransition = { fadeIn(tween(250)) },
                         popExitTransition = { fadeOut(tween(250)) },
                 ) {
-                    WorkScreen(
+                    AiEmployeeListScreen(
                             vm,
-                            onConnectPc = { nav.navigate(Routes.CONNECT_PC) },
-                            onModMenuClick = { menu ->
-                                // 已知 Mod 的原生路由映射
-                                when (menu.id) {
-                                    "approval", "approvals" -> nav.navigate(Routes.APPROVAL)
-                                    "erp", "customers" -> nav.navigate("${Routes.ERP}?tab=0")
-                                    "shipments" -> nav.navigate("${Routes.ERP}?tab=1")
-                                    "inventory" -> nav.navigate("${Routes.ERP}?tab=2")
-                                    "im" -> nav.navigate(Routes.IM)
-                                    "bridge", "service-bridge" -> nav.navigate(Routes.BRIDGE)
-                                    "finance", "long-tail" -> nav.navigate(Routes.LONGTAIL)
-                                    else -> {
-                                        // 未知 Mod 走 WebView
-                                        nav.navigate("mod/${menu.id}")
-                                    }
-                                }
+                            onSelect = { modId, employeeId ->
+                                nav.navigate(Routes.aiEmployeeProfile(modId, employeeId))
                             },
-                            onNavigateToApp = { route -> nav.navigate(route) },
+                            onScan = { nav.navigate(Routes.SCAN_QR) },
                     )
                 }
                 composable(
@@ -441,6 +439,7 @@ fun XcagiNavHost(vm: AppViewModel, pendingDeepLink: String? = null) {
                 composable(Routes.AI_CHAT) {
                     ChatScreen(
                             vm,
+                            useCustomerServiceBackend = true,
                             onBack = { nav.popBackStack() },
                             profileAvatar =
                                     ChatTopProfileAvatar(
@@ -506,6 +505,7 @@ fun XcagiNavHost(vm: AppViewModel, pendingDeepLink: String? = null) {
                             onSelect = { modId, employeeId ->
                                 nav.navigate(Routes.aiEmployeeProfile(modId, employeeId))
                             },
+                            onScan = { nav.navigate(Routes.SCAN_QR) },
                     )
                 }
                 composable(Routes.AI_CIRCLE) {
