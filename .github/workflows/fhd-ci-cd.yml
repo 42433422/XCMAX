@@ -497,8 +497,8 @@ jobs:
           ref="${{ steps.imgref.outputs.name }}"
           # build-push-action 只推送到 GHCR，本地 daemon 无镜像；先 pull 再 save
           docker pull "${ref}@${FHD_IMAGE_DIGEST}"
-          docker save "${ref}@${FHD_IMAGE_DIGEST}" -o FHD/dist/deploy/fhd-api-image.tar
-          gzip -f FHD/dist/deploy/fhd-api-image.tar
+          docker save "${ref}@${FHD_IMAGE_DIGEST}" -o dist/deploy/fhd-api-image.tar
+          gzip -f dist/deploy/fhd-api-image.tar
 
       - name: Upload manifest with image digest
         if: steps.build_fhd.outputs.digest != ''

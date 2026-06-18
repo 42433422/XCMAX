@@ -114,8 +114,9 @@ def _prefix_fhd_paths(content: str, out_name: str) -> str:
         "working-directory: mobile-android",
         "working-directory: FHD/mobile-android",
     )
-    # upload-artifact / download-artifact / build-push-action ignore defaults.run.working-directory
-    content = content.replace("dist/deploy/", "FHD/dist/deploy/")
+    # upload-artifact / download-artifact / build-push-action ignore defaults.run.working-directory.
+    # Prefix YAML path-list entries only; shell commands still run under FHD/.
+    content = re.sub(r"(?m)^(\s*)dist/deploy/", r"\1FHD/dist/deploy/", content)
     content = content.replace("path: dist/deploy\n", "path: FHD/dist/deploy\n")
     content = content.replace(
         "path: build/ci-sunbird-artifact/**",
