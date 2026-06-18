@@ -39,7 +39,7 @@ class InventoryServiceDomainHandlers:
         """处理 stock_in 事件"""
         logger.info("[InventoryServiceDomain] 处理 stock_in: %s", event.payload)
         if isinstance(event, InventoryStockInEvent):
-            logger.info("[InventoryServiceDomain] Product: %s", event.payload.get('product_id'))
+            logger.info("[InventoryServiceDomain] Product: %s", event.payload.get("product_id"))
         if os.environ.get("XCAGI_NEURO_UOW_ON_INVENTORY", "").strip().lower() in {
             "1",
             "true",
@@ -56,7 +56,7 @@ class InventoryServiceDomainHandlers:
         """处理 stock_out 事件"""
         logger.info("[InventoryServiceDomain] 处理 stock_out: %s", event.payload)
         if isinstance(event, InventoryStockOutEvent):
-            logger.info("[InventoryServiceDomain] Quantity: %s", event.payload.get('quantity'))
+            logger.info("[InventoryServiceDomain] Quantity: %s", event.payload.get("quantity"))
         return {"success": True, "event_type": "inventory.stock_out"}
 
     async def handle_transfer(self, event: NeuroEvent) -> dict[str, Any]:
@@ -73,7 +73,7 @@ class InventoryServiceDomainHandlers:
         """处理 check_completed 事件"""
         logger.info("[InventoryServiceDomain] 处理 check_completed: %s", event.payload)
         if isinstance(event, InventoryCheckCompletedEvent):
-            logger.info("[InventoryServiceDomain] Check ID: %s", event.payload.get('check_id'))
+            logger.info("[InventoryServiceDomain] Check ID: %s", event.payload.get("check_id"))
         return {"success": True, "event_type": "inventory.check_completed"}
 
 

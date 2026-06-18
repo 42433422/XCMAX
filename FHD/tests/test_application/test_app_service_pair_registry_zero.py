@@ -1,4 +1,5 @@
 """Tests for app.application.app_service_pair_registry."""
+
 from __future__ import annotations
 
 import pytest
@@ -117,7 +118,7 @@ class TestResolveHttpGetter:
         # If http_layer were v2, it would return v2_getter
         # For now, all are v1, so it returns v1_getter
         result = resolve_http_getter("auth")
-        assert "v1" in result or "get_auth_app_service" == result
+        assert "v1" in result or result == "get_auth_app_service"
 
 
 class TestNeuroV2ModulePath:

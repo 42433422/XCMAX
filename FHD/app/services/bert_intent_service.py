@@ -204,7 +204,10 @@ class BertIntentClassifier:
             self.model = self.model.half()
 
         logger.info(
-            "模型已加载：%s, 设备：%s, local_files_only=%s", model_path, self.device, local_files_only
+            "模型已加载：%s, 设备：%s, local_files_only=%s",
+            model_path,
+            self.device,
+            local_files_only,
         )
 
     def _setup_dummy_model(self):

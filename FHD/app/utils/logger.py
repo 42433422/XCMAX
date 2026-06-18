@@ -142,14 +142,16 @@ def log_operation(operation_name: str):
 
             try:
                 logger.info(
-                    "Operation started: %s", operation_name,
+                    "Operation started: %s",
+                    operation_name,
                     operation=operation_name,
                     request_id=request_id,
                 )
                 result = func(*args, **kwargs)
                 duration = (time.time() - start_time) * 1000
                 logger.info(
-                    "Operation completed: %s", operation_name,
+                    "Operation completed: %s",
+                    operation_name,
                     operation=operation_name,
                     request_id=request_id,
                     duration=duration,
@@ -158,7 +160,8 @@ def log_operation(operation_name: str):
             except RECOVERABLE_ERRORS as e:
                 duration = (time.time() - start_time) * 1000
                 logger.error(
-                    "Operation failed: %s", operation_name,
+                    "Operation failed: %s",
+                    operation_name,
                     operation=operation_name,
                     request_id=request_id,
                     duration=duration,
@@ -174,14 +177,16 @@ def log_operation(operation_name: str):
 
             try:
                 logger.info(
-                    "Operation started: %s", operation_name,
+                    "Operation started: %s",
+                    operation_name,
                     operation=operation_name,
                     request_id=request_id,
                 )
                 result = await func(*args, **kwargs)
                 duration = (time.time() - start_time) * 1000
                 logger.info(
-                    "Operation completed: %s", operation_name,
+                    "Operation completed: %s",
+                    operation_name,
                     operation=operation_name,
                     request_id=request_id,
                     duration=duration,
@@ -190,7 +195,8 @@ def log_operation(operation_name: str):
             except RECOVERABLE_ERRORS as e:
                 duration = (time.time() - start_time) * 1000
                 logger.error(
-                    "Operation failed: %s", operation_name,
+                    "Operation failed: %s",
+                    operation_name,
                     operation=operation_name,
                     request_id=request_id,
                     duration=duration,

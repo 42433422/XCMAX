@@ -1,4 +1,5 @@
 """Tests for app.fastapi_routes.knowledge_v1."""
+
 from __future__ import annotations
 
 import sys
@@ -82,7 +83,9 @@ class TestKnowledgeIndex:
     @patch("app.fastapi_routes.knowledge_v1.get_default_embedder", return_value=None)
     @patch("app.fastapi_routes.knowledge_v1.SemanticChunker")
     @patch("app.fastapi_routes.knowledge_v1.HybridRetriever")
-    def test_ingest_semantic_strategy(self, mock_retriever_cls: MagicMock, mock_chunker_cls: MagicMock, mock_embedder: MagicMock) -> None:
+    def test_ingest_semantic_strategy(
+        self, mock_retriever_cls: MagicMock, mock_chunker_cls: MagicMock, mock_embedder: MagicMock
+    ) -> None:
         mock_chunker = MagicMock()
         chunk = MagicMock()
         chunk.text = "chunk text"
@@ -100,7 +103,9 @@ class TestKnowledgeIndex:
     @patch("app.fastapi_routes.knowledge_v1.get_default_embedder", return_value=None)
     @patch("app.fastapi_routes.knowledge_v1.SemanticChunker")
     @patch("app.fastapi_routes.knowledge_v1.HybridRetriever")
-    def test_ingest_fixed_strategy(self, mock_retriever_cls: MagicMock, mock_chunker_cls: MagicMock, mock_embedder: MagicMock) -> None:
+    def test_ingest_fixed_strategy(
+        self, mock_retriever_cls: MagicMock, mock_chunker_cls: MagicMock, mock_embedder: MagicMock
+    ) -> None:
         mock_chunker = MagicMock()
         chunk = MagicMock()
         chunk.text = "fixed chunk"
@@ -113,12 +118,16 @@ class TestKnowledgeIndex:
         idx = _KnowledgeIndex()
         count = idx.ingest("some text", "source1", "fixed", 200, 20)
         assert count == 1
-        mock_chunker.split_by_fixed.assert_called_once_with("some text", chunk_size=200, chunk_overlap=20)
+        mock_chunker.split_by_fixed.assert_called_once_with(
+            "some text", chunk_size=200, chunk_overlap=20
+        )
 
     @patch("app.fastapi_routes.knowledge_v1.get_default_embedder", return_value=None)
     @patch("app.fastapi_routes.knowledge_v1.SemanticChunker")
     @patch("app.fastapi_routes.knowledge_v1.HybridRetriever")
-    def test_status_empty(self, mock_retriever_cls: MagicMock, mock_chunker_cls: MagicMock, mock_embedder: MagicMock) -> None:
+    def test_status_empty(
+        self, mock_retriever_cls: MagicMock, mock_chunker_cls: MagicMock, mock_embedder: MagicMock
+    ) -> None:
         mock_chunker_cls.return_value = MagicMock()
         idx = _KnowledgeIndex()
         s = idx.status()
@@ -128,7 +137,9 @@ class TestKnowledgeIndex:
     @patch("app.fastapi_routes.knowledge_v1.get_default_embedder", return_value=None)
     @patch("app.fastapi_routes.knowledge_v1.SemanticChunker")
     @patch("app.fastapi_routes.knowledge_v1.HybridRetriever")
-    def test_query_triggers_rebuild(self, mock_retriever_cls: MagicMock, mock_chunker_cls: MagicMock, mock_embedder: MagicMock) -> None:
+    def test_query_triggers_rebuild(
+        self, mock_retriever_cls: MagicMock, mock_chunker_cls: MagicMock, mock_embedder: MagicMock
+    ) -> None:
         mock_chunker = MagicMock()
         mock_chunker_cls.return_value = mock_chunker
         mock_retriever = MagicMock()
@@ -180,7 +191,9 @@ class TestStatusEndpoint:
     @patch("app.fastapi_routes.knowledge_v1.get_default_embedder", return_value=None)
     @patch("app.fastapi_routes.knowledge_v1.is_rag_enabled", return_value=False)
     @patch("app.fastapi_routes.knowledge_v1._index")
-    def test_status(self, mock_index: MagicMock, mock_rag: MagicMock, mock_embedder: MagicMock) -> None:
+    def test_status(
+        self, mock_index: MagicMock, mock_rag: MagicMock, mock_embedder: MagicMock
+    ) -> None:
         mock_index.status.return_value = {"sources": 2, "chunks": 10}
         result = status()
         assert result.rag_enabled is False
@@ -194,7 +207,9 @@ class TestHealthEndpoint:
     @patch("app.fastapi_routes.knowledge_v1.get_default_embedder", return_value=MagicMock())
     @patch("app.fastapi_routes.knowledge_v1.is_rag_enabled", return_value=True)
     @patch("app.fastapi_routes.knowledge_v1._index")
-    def test_health(self, mock_index: MagicMock, mock_rag: MagicMock, mock_embedder: MagicMock) -> None:
+    def test_health(
+        self, mock_index: MagicMock, mock_rag: MagicMock, mock_embedder: MagicMock
+    ) -> None:
         mock_index.status.return_value = {"sources": 1, "chunks": 5}
         result = health()
         assert result["success"] is True

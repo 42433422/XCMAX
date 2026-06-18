@@ -160,22 +160,28 @@ class TestProcessMessage:
 
     def test_order_message(self, service):
         task = {"raw_text": "10 箱 苹果"}
-        with patch.object(service, "_get_task", return_value=task), \
-             patch.object(service, "_update_task_status", return_value=True):
+        with (
+            patch.object(service, "_get_task", return_value=task),
+            patch.object(service, "_update_task_status", return_value=True),
+        ):
             result = service.process_message(1)
             assert result["success"] is True
 
     def test_shipment_message(self, service):
         task = {"raw_text": "发货 ：10 箱 苹果"}
-        with patch.object(service, "_get_task", return_value=task), \
-             patch.object(service, "_update_task_status", return_value=True):
+        with (
+            patch.object(service, "_get_task", return_value=task),
+            patch.object(service, "_update_task_status", return_value=True),
+        ):
             result = service.process_message(1)
             assert result["success"] is True
 
     def test_unknown_message_type(self, service):
         task = {"raw_text": "普通消息"}
-        with patch.object(service, "_get_task", return_value=task), \
-             patch.object(service, "_update_task_status", return_value=True):
+        with (
+            patch.object(service, "_get_task", return_value=task),
+            patch.object(service, "_update_task_status", return_value=True),
+        ):
             result = service.process_message(1)
             assert result["success"] is True
             assert "未知" in result["message"]
@@ -198,8 +204,10 @@ class TestConfirmIgnoreTask:
             assert result["success"] is False
 
     def test_confirm_task_success(self, service):
-        with patch.object(service, "_task_exists", return_value=True), \
-             patch.object(service, "_update_task_status", return_value=True):
+        with (
+            patch.object(service, "_task_exists", return_value=True),
+            patch.object(service, "_update_task_status", return_value=True),
+        ):
             result = service.confirm_task(1)
             assert result["success"] is True
 
@@ -209,8 +217,10 @@ class TestConfirmIgnoreTask:
             assert result["success"] is False
 
     def test_ignore_task_success(self, service):
-        with patch.object(service, "_task_exists", return_value=True), \
-             patch.object(service, "_update_task_status", return_value=True):
+        with (
+            patch.object(service, "_task_exists", return_value=True),
+            patch.object(service, "_update_task_status", return_value=True),
+        ):
             result = service.ignore_task(1)
             assert result["success"] is True
 
@@ -356,7 +366,9 @@ class TestGetTasks:
             mock_task.last_status_at = None
             mock_task.created_at = None
             mock_task.updated_at = None
-            mock_db.query.return_value.filter.return_value.order_by.return_value.limit.return_value.all.return_value = [mock_task]
+            mock_db.query.return_value.filter.return_value.order_by.return_value.limit.return_value.all.return_value = [
+                mock_task
+            ]
             mock_get_db.return_value.__enter__ = MagicMock(return_value=mock_db)
             mock_get_db.return_value.__exit__ = MagicMock(return_value=False)
             result = service.get_tasks()
@@ -386,7 +398,9 @@ class TestGetContacts:
             mock_row.contact_id = 1
             mock_row.last_message_time = 1700000000
             mock_row.message_count = 5
-            mock_db.query.return_value.group_by.return_value.order_by.return_value.limit.return_value.all.return_value = [mock_row]
+            mock_db.query.return_value.group_by.return_value.order_by.return_value.limit.return_value.all.return_value = [
+                mock_row
+            ]
             mock_get_db.return_value.__enter__ = MagicMock(return_value=mock_db)
             mock_get_db.return_value.__exit__ = MagicMock(return_value=False)
             result = service.get_contacts()
@@ -418,17 +432,21 @@ class TestGetContacts:
 class TestScanMessages:
     def test_db_path_not_exists(self, service, monkeypatch):
         monkeypatch.delenv("WECHAT_MSG_DB_PATH", raising=False)
-        with patch("app.utils.path_utils.get_resource_path", return_value="/nonexistent/path"), \
-             patch("os.path.exists", return_value=False):
+        with (
+            patch("app.utils.path_utils.get_resource_path", return_value="/nonexistent/path"),
+            patch("os.path.exists", return_value=False),
+        ):
             result = service.scan_messages()
             assert result == []
 
     def test_import_error(self, service, monkeypatch):
         monkeypatch.setenv("WECHAT_MSG_DB_PATH", "/tmp/fake.db")
-        with patch("app.utils.path_utils.get_resource_path", return_value="/tmp"), \
-             patch("os.path.exists", return_value=True), \
-             patch("os.path.isdir", return_value=False), \
-             patch.dict("sys.modules", {"wechat_db_read": None}):
+        with (
+            patch("app.utils.path_utils.get_resource_path", return_value="/tmp"),
+            patch("os.path.exists", return_value=True),
+            patch("os.path.isdir", return_value=False),
+            patch.dict("sys.modules", {"wechat_db_read": None}),
+        ):
             result = service.scan_messages()
             assert result == []
 
@@ -464,9 +482,11 @@ class TestInsertOrIgnoreWechatTask:
             mock_db.add = MagicMock()
             mock_db.commit = MagicMock()
             mock_db.refresh = MagicMock()
+
             # Make refresh set the id
             def set_id(task):
                 task.id = 42
+
             mock_db.refresh.side_effect = set_id
             mock_get_db.return_value.__enter__ = MagicMock(return_value=mock_db)
             mock_get_db.return_value.__exit__ = MagicMock(return_value=False)

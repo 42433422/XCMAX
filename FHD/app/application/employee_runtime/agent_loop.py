@@ -112,9 +112,7 @@ def run_employee_agent_loop(
 
     mdl = model or resolve_chat_model()
     tool_specs = tools if tools is not None else default_employee_tools()
-    user_payload = json.dumps(
-        {"task": task, "input": input_data or {}}, ensure_ascii=False
-    )[:12000]
+    user_payload = json.dumps({"task": task, "input": input_data or {}}, ensure_ascii=False)[:12000]
     messages: list[dict[str, Any]] = [
         {"role": "system", "content": system_prompt or "你是智能员工助手。"},
         {"role": "user", "content": user_payload},

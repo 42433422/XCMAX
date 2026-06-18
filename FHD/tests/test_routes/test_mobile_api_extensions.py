@@ -37,8 +37,10 @@ class TestEnsureMobileDeviceTable:
         mock_insp.has_table.return_value = True
         mock_db.__enter__ = MagicMock(return_value=mock_db)
         mock_db.__exit__ = MagicMock(return_value=False)
-        with patch("app.db.session.get_db", return_value=mock_db), \
-             patch("sqlalchemy.inspect", return_value=mock_insp):
+        with (
+            patch("app.db.session.get_db", return_value=mock_db),
+            patch("sqlalchemy.inspect", return_value=mock_insp),
+        ):
             ext_mod._ensure_mobile_device_table()
 
     def test_table_missing_creates(self, ext_mod):
@@ -49,8 +51,10 @@ class TestEnsureMobileDeviceTable:
         mock_insp.has_table.return_value = False
         mock_db.__enter__ = MagicMock(return_value=mock_db)
         mock_db.__exit__ = MagicMock(return_value=False)
-        with patch("app.db.session.get_db", return_value=mock_db), \
-             patch("sqlalchemy.inspect", return_value=mock_insp):
+        with (
+            patch("app.db.session.get_db", return_value=mock_db),
+            patch("sqlalchemy.inspect", return_value=mock_insp),
+        ):
             ext_mod._ensure_mobile_device_table()
 
     def test_recoverable_error_logged(self, ext_mod):
@@ -114,12 +118,18 @@ class TestPairingIssue:
     @pytest.mark.asyncio
     async def test_issue_success(self, ext_mod):
         body = ext_mod.PairingIssueBody(host="192.168.1.10", port=5000)
-        with patch.object(ext_mod, "_pairing_issue_host", return_value="192.168.1.10"), \
-             patch("app.security.mobile_pairing.issue_pairing_nonce", return_value={"nonce": "abc123", "host": "192.168.1.10", "port": 5000}):
+        with (
+            patch.object(ext_mod, "_pairing_issue_host", return_value="192.168.1.10"),
+            patch(
+                "app.security.mobile_pairing.issue_pairing_nonce",
+                return_value={"nonce": "abc123", "host": "192.168.1.10", "port": 5000},
+            ),
+        ):
             result = await ext_mod.mobile_pairing_issue(body)
         # format_mobile_response returns a dict
         if hasattr(result, "body"):
             import json
+
             data = json.loads(result.body)
         else:
             data = result
@@ -132,6 +142,7 @@ class TestPairingLookup:
         body = ext_mod.PairingLookupBody(code="000000")
         result = await ext_mod.mobile_pairing_lookup(body)
         import json
+
         data = json.loads(result.body)
         assert result.status_code == 404 or data.get("success") is False
 
@@ -140,14 +151,23 @@ class TestPairingExchange:
     @pytest.mark.asyncio
     async def test_exchange_by_nonce(self, ext_mod):
         # Mock the pairing functions to return valid data
-        with patch("app.security.mobile_pairing.issue_pairing_nonce", return_value={"nonce": "abc123", "host": "192.168.1.10", "port": 5000}), \
-             patch("app.security.mobile_pairing.consume_pairing_nonce", return_value={"host": "192.168.1.10", "port": 5000, "shortCode": "123456"}), \
-             patch.object(ext_mod, "_pairing_issue_host", return_value="192.168.1.10"):
+        with (
+            patch(
+                "app.security.mobile_pairing.issue_pairing_nonce",
+                return_value={"nonce": "abc123", "host": "192.168.1.10", "port": 5000},
+            ),
+            patch(
+                "app.security.mobile_pairing.consume_pairing_nonce",
+                return_value={"host": "192.168.1.10", "port": 5000, "shortCode": "123456"},
+            ),
+            patch.object(ext_mod, "_pairing_issue_host", return_value="192.168.1.10"),
+        ):
             # First issue a pairing to get a nonce
             body_issue = ext_mod.PairingIssueBody(host="192.168.1.10", port=5000)
             issue_result = await ext_mod.mobile_pairing_issue(body_issue)
             if hasattr(issue_result, "body"):
                 import json
+
                 issue_data = json.loads(issue_result.body)
             else:
                 issue_data = issue_result
@@ -156,6 +176,7 @@ class TestPairingExchange:
             result = await ext_mod.mobile_pairing_exchange(body_exchange)
             if hasattr(result, "body"):
                 import json
+
                 data = json.loads(result.body)
             else:
                 data = result
@@ -167,12 +188,18 @@ class TestPairingExchange:
         with patch.object(
             ext_mod,
             "consume_by_shortcode",
-            return_value={"host": "192.168.1.20", "port": 5100, "nonce": "n1", "shortCode": "123456"},
+            return_value={
+                "host": "192.168.1.20",
+                "port": 5100,
+                "nonce": "n1",
+                "shortCode": "123456",
+            },
         ) as consume:
             result = await ext_mod.mobile_pairing_exchange(body)
         consume.assert_called_once_with("123456")
         if hasattr(result, "body"):
             import json
+
             data = json.loads(result.body)
         else:
             data = result
@@ -297,7 +324,9 @@ class TestMobileModItems:
             assert items[0]["id"] == "mod-obj"
 
     def test_exception_returns_empty(self, ext_mod):
-        with patch("app.infrastructure.mods.mod_manager.get_mod_manager", side_effect=RuntimeError("fail")):
+        with patch(
+            "app.infrastructure.mods.mod_manager.get_mod_manager", side_effect=RuntimeError("fail")
+        ):
             assert ext_mod._mobile_mod_items() == []
 
     def test_limit_100(self, ext_mod):
@@ -331,7 +360,9 @@ class TestApprovalItems:
         mock_row.title = "Test"
         mock_row.status = "pending"
         mock_row.request_no = "REQ-001"
-        mock_db.query.return_value.order_by.return_value.limit.return_value.all.return_value = [mock_row]
+        mock_db.query.return_value.order_by.return_value.limit.return_value.all.return_value = [
+            mock_row
+        ]
         mock_db.__enter__ = MagicMock(return_value=mock_db)
         mock_db.__exit__ = MagicMock(return_value=False)
         with patch("app.db.session.get_db", return_value=mock_db):
@@ -352,7 +383,9 @@ class TestShipmentItems:
         mock_row.id = 5
         mock_row.order_number = "ORD-1"
         mock_row.status = "shipped"
-        mock_db.query.return_value.order_by.return_value.limit.return_value.all.return_value = [mock_row]
+        mock_db.query.return_value.order_by.return_value.limit.return_value.all.return_value = [
+            mock_row
+        ]
         mock_db.__enter__ = MagicMock(return_value=mock_db)
         mock_db.__exit__ = MagicMock(return_value=False)
         with patch("app.db.session.get_db", return_value=mock_db):
@@ -403,7 +436,9 @@ class TestAuthQrConfirm:
 class TestOidcExchange:
     @pytest.mark.asyncio
     async def test_invalid_state(self, ext_mod):
-        with patch("app.infrastructure.auth.oidc_provider.verify_oidc_state", return_value=(False, "")):
+        with patch(
+            "app.infrastructure.auth.oidc_provider.verify_oidc_state", return_value=(False, "")
+        ):
             body = ext_mod.OidcExchangeBody(code="abc123", state="s" * 8)
             result = await ext_mod.mobile_auth_oidc_exchange(body=body)
             assert result.status_code == 400
@@ -413,8 +448,15 @@ class TestOidcExchange:
         async def _raise(code):
             raise RuntimeError("OIDC down")
 
-        with patch("app.infrastructure.auth.oidc_provider.verify_oidc_state", return_value=(True, "rt")), \
-             patch("app.infrastructure.auth.oidc_provider.exchange_code_for_userinfo", side_effect=_raise):
+        with (
+            patch(
+                "app.infrastructure.auth.oidc_provider.verify_oidc_state", return_value=(True, "rt")
+            ),
+            patch(
+                "app.infrastructure.auth.oidc_provider.exchange_code_for_userinfo",
+                side_effect=_raise,
+            ),
+        ):
             body = ext_mod.OidcExchangeBody(code="abc123", state="s" * 8)
             result = await ext_mod.mobile_auth_oidc_exchange(body=body)
             assert result.status_code == 502

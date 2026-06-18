@@ -1,4 +1,5 @@
 """Tests for app.application.admin_deploy_push — additional coverage ramp."""
+
 from __future__ import annotations
 
 import json
@@ -24,7 +25,6 @@ from app.application.admin_deploy_push import (
     get_deploy_job,
     start_deploy_push,
 )
-
 
 # ========================= _hub_remote_dir ====================================
 
@@ -250,8 +250,16 @@ class TestCheckDeployUpdates:
         mock_sha.return_value = "abc123def456"
         mock_ver.return_value = "10.0.0"
         mock_manifest.return_value = {"git_sha": "abc123def456"}
-        mock_fetch.return_value = {"git_sha": "abc123def456", "sha256": "sha256abc", "version": "10.0.0"}
-        mock_probe.return_value = {"reachable": True, "deploy_sha256": "sha256abc", "version": "10.0.0"}
+        mock_fetch.return_value = {
+            "git_sha": "abc123def456",
+            "sha256": "sha256abc",
+            "version": "10.0.0",
+        }
+        mock_probe.return_value = {
+            "reachable": True,
+            "deploy_sha256": "sha256abc",
+            "version": "10.0.0",
+        }
 
         result = check_deploy_updates()
         assert result["admin_local"]["git_sha"] == "abc123def456"

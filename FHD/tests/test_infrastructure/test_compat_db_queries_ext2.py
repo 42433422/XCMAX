@@ -17,6 +17,7 @@ Focuses on:
 - _units_select_data_unified: id type coercion, max_id calculation
 - _products_units_for_select: data presence branches
 """
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
@@ -41,7 +42,6 @@ from app.infrastructure.persistence.compat_db.queries import (
     _products_units_for_select,
     _units_select_data_unified,
 )
-
 
 # ---------------------------------------------------------------------------
 # _load_purchase_units_rows_pg — uncovered branches
@@ -128,10 +128,22 @@ class TestLoadPurchaseUnitsRowsPg:
         mock_conn = MagicMock()
         mock_mapping = MagicMock()
         mock_mapping.all.return_value = [
-            {"id": 1, "unit_name": "CoA", "contact_person": "Z", "contact_phone": "1",
-             "address": "A", "is_active": 1},
-            {"id": 2, "unit_name": "CoB", "contact_person": "", "contact_phone": "",
-             "address": "", "is_active": 0},  # should be filtered out
+            {
+                "id": 1,
+                "unit_name": "CoA",
+                "contact_person": "Z",
+                "contact_phone": "1",
+                "address": "A",
+                "is_active": 1,
+            },
+            {
+                "id": 2,
+                "unit_name": "CoB",
+                "contact_person": "",
+                "contact_phone": "",
+                "address": "",
+                "is_active": 0,
+            },  # should be filtered out
         ]
         mock_conn.execute.return_value.mappings.return_value = mock_mapping
         mock_eng.connect.return_value.__enter__.return_value = mock_conn
@@ -383,7 +395,10 @@ class TestDistinctUnitsFromProductsDbPg:
         mock_insp = MagicMock()
         mock_insp.get_table_names.return_value = ["products"]
         mock_insp.get_columns.return_value = [
-            {"name": "id"}, {"name": "name"}, {"name": "unit"}, {"name": "is_active"}
+            {"name": "id"},
+            {"name": "name"},
+            {"name": "unit"},
+            {"name": "is_active"},
         ]
 
         mock_conn = MagicMock()
@@ -550,9 +565,7 @@ class TestLoadCustomersPgFromCustomersTable:
         """Should use customer_id column when id is missing."""
         mock_eng = MagicMock()
         mock_insp = MagicMock()
-        mock_insp.get_columns.return_value = [
-            {"name": "customer_id"}, {"name": "customer_name"}
-        ]
+        mock_insp.get_columns.return_value = [{"name": "customer_id"}, {"name": "customer_name"}]
 
         mock_conn = MagicMock()
         mock_mapping = MagicMock()
@@ -576,15 +589,23 @@ class TestLoadCustomersPgFromCustomersTable:
         mock_eng = MagicMock()
         mock_insp = MagicMock()
         mock_insp.get_columns.return_value = [
-            {"name": "id"}, {"name": "客户名称"}, {"name": "联系人"},
-            {"name": "电话"}, {"name": "地址"},
+            {"name": "id"},
+            {"name": "客户名称"},
+            {"name": "联系人"},
+            {"name": "电话"},
+            {"name": "地址"},
         ]
 
         mock_conn = MagicMock()
         mock_mapping = MagicMock()
         mock_mapping.all.return_value = [
-            {"id": 1, "customer_name": "中文名", "contact_person": "张",
-             "contact_phone": "138", "address": "北京"},
+            {
+                "id": 1,
+                "customer_name": "中文名",
+                "contact_person": "张",
+                "contact_phone": "138",
+                "address": "北京",
+            },
         ]
         mock_conn.execute.return_value.mappings.return_value = mock_mapping
         mock_eng.connect.return_value.__enter__.return_value = mock_conn
@@ -602,9 +623,7 @@ class TestLoadCustomersPgFromCustomersTable:
         """When query raises RECOVERABLE_ERRORS, should return []."""
         mock_eng = MagicMock()
         mock_insp = MagicMock()
-        mock_insp.get_columns.return_value = [
-            {"name": "id"}, {"name": "customer_name"}
-        ]
+        mock_insp.get_columns.return_value = [{"name": "id"}, {"name": "customer_name"}]
 
         mock_conn = MagicMock()
         mock_conn.execute.side_effect = OSError("query failed")
@@ -621,9 +640,7 @@ class TestLoadCustomersPgFromCustomersTable:
         """When is_active column is missing, should default to 1."""
         mock_eng = MagicMock()
         mock_insp = MagicMock()
-        mock_insp.get_columns.return_value = [
-            {"name": "id"}, {"name": "customer_name"}
-        ]
+        mock_insp.get_columns.return_value = [{"name": "id"}, {"name": "customer_name"}]
 
         mock_conn = MagicMock()
         mock_mapping = MagicMock()
@@ -647,7 +664,9 @@ class TestLoadCustomersPgFromCustomersTable:
         mock_eng = MagicMock()
         mock_insp = MagicMock()
         mock_insp.get_columns.return_value = [
-            {"name": "id"}, {"name": "customer_name"}, {"name": "is_active"}
+            {"name": "id"},
+            {"name": "customer_name"},
+            {"name": "is_active"},
         ]
 
         mock_conn = MagicMock()
@@ -685,8 +704,14 @@ class TestLoadCustomersPgFromPurchaseUnits:
         mock_conn = MagicMock()
         mock_mapping = MagicMock()
         mock_mapping.all.return_value = [
-            {"id": 1, "unit_name": "CoA", "contact_person": "Z",
-             "contact_phone": "1", "address": "A", "is_active": 1},
+            {
+                "id": 1,
+                "unit_name": "CoA",
+                "contact_person": "Z",
+                "contact_phone": "1",
+                "address": "A",
+                "is_active": 1,
+            },
         ]
         mock_conn.execute.return_value.mappings.return_value = mock_mapping
         mock_eng.connect.return_value.__enter__.return_value = mock_conn
@@ -1508,12 +1533,30 @@ class TestMergedPurchaseUnitEntriesAdditional:
             patch(
                 "app.infrastructure.persistence.compat_db.queries._load_purchase_units_rows",
                 return_value=[
-                    {"id": 5, "unit_name": "CoA", "is_active": 1,
-                     "contact_person": "", "contact_phone": "", "address": ""},
-                    {"id": "invalid", "unit_name": "CoB", "is_active": 1,
-                     "contact_person": "", "contact_phone": "", "address": ""},
-                    {"id": 10, "unit_name": "CoC", "is_active": 1,
-                     "contact_person": "", "contact_phone": "", "address": ""},
+                    {
+                        "id": 5,
+                        "unit_name": "CoA",
+                        "is_active": 1,
+                        "contact_person": "",
+                        "contact_phone": "",
+                        "address": "",
+                    },
+                    {
+                        "id": "invalid",
+                        "unit_name": "CoB",
+                        "is_active": 1,
+                        "contact_person": "",
+                        "contact_phone": "",
+                        "address": "",
+                    },
+                    {
+                        "id": 10,
+                        "unit_name": "CoC",
+                        "is_active": 1,
+                        "contact_person": "",
+                        "contact_phone": "",
+                        "address": "",
+                    },
                 ],
             ),
             patch(
@@ -1576,8 +1619,14 @@ class TestMergedPurchaseUnitEntriesAdditional:
             patch(
                 "app.infrastructure.persistence.compat_db.queries._load_purchase_units_rows",
                 return_value=[
-                    {"id": 1, "unit_name": "CoA", "is_active": 1,
-                     "contact_person": "", "contact_phone": "", "address": ""},
+                    {
+                        "id": 1,
+                        "unit_name": "CoA",
+                        "is_active": 1,
+                        "contact_person": "",
+                        "contact_phone": "",
+                        "address": "",
+                    },
                 ],
             ),
             patch(
@@ -1600,8 +1649,14 @@ class TestMergedPurchaseUnitEntriesAdditional:
             patch(
                 "app.infrastructure.persistence.compat_db.queries._load_purchase_units_rows",
                 return_value=[
-                    {"id": "invalid", "unit_name": "CoA", "is_active": 1,
-                     "contact_person": "", "contact_phone": "", "address": ""},
+                    {
+                        "id": "invalid",
+                        "unit_name": "CoA",
+                        "is_active": 1,
+                        "contact_person": "",
+                        "contact_phone": "",
+                        "address": "",
+                    },
                 ],
             ),
             patch(
@@ -1630,10 +1685,22 @@ class TestCustomerRowsFromMergedUnitEntriesAdditional:
         with patch(
             "app.infrastructure.persistence.compat_db.queries._merged_purchase_unit_entries",
             return_value=[
-                {"id": "invalid", "unit_name": "CoA", "contact_person": "",
-                 "contact_phone": "", "address": "", "is_active": 1},
-                {"id": "also_invalid", "unit_name": "CoB", "contact_person": "",
-                 "contact_phone": "", "address": "", "is_active": 1},
+                {
+                    "id": "invalid",
+                    "unit_name": "CoA",
+                    "contact_person": "",
+                    "contact_phone": "",
+                    "address": "",
+                    "is_active": 1,
+                },
+                {
+                    "id": "also_invalid",
+                    "unit_name": "CoB",
+                    "contact_person": "",
+                    "contact_phone": "",
+                    "address": "",
+                    "is_active": 1,
+                },
             ],
         ):
             result = _customer_rows_from_merged_unit_entries()
@@ -1646,8 +1713,14 @@ class TestCustomerRowsFromMergedUnitEntriesAdditional:
         with patch(
             "app.infrastructure.persistence.compat_db.queries._merged_purchase_unit_entries",
             return_value=[
-                {"id": 1, "unit_name": "CoA", "contact_person": "",
-                 "contact_phone": "", "address": "", "is_active": None},
+                {
+                    "id": 1,
+                    "unit_name": "CoA",
+                    "contact_person": "",
+                    "contact_phone": "",
+                    "address": "",
+                    "is_active": None,
+                },
             ],
         ):
             result = _customer_rows_from_merged_unit_entries()
@@ -1659,8 +1732,14 @@ class TestCustomerRowsFromMergedUnitEntriesAdditional:
         with patch(
             "app.infrastructure.persistence.compat_db.queries._merged_purchase_unit_entries",
             return_value=[
-                {"id": 1, "unit_name": "CoA", "contact_person": "",
-                 "contact_phone": "", "address": "", "is_active": 0},
+                {
+                    "id": 1,
+                    "unit_name": "CoA",
+                    "contact_person": "",
+                    "contact_phone": "",
+                    "address": "",
+                    "is_active": 0,
+                },
             ],
         ):
             result = _customer_rows_from_merged_unit_entries()
@@ -1673,8 +1752,14 @@ class TestCustomerRowsFromMergedUnitEntriesAdditional:
         with patch(
             "app.infrastructure.persistence.compat_db.queries._merged_purchase_unit_entries",
             return_value=[
-                {"id": 1, "unit_name": "CoA", "contact_person": "Zhang",
-                 "contact_phone": "138", "address": "Addr", "is_active": 1},
+                {
+                    "id": 1,
+                    "unit_name": "CoA",
+                    "contact_person": "Zhang",
+                    "contact_phone": "138",
+                    "address": "Addr",
+                    "is_active": 1,
+                },
             ],
         ):
             result = _customer_rows_from_merged_unit_entries()
@@ -1688,8 +1773,14 @@ class TestCustomerRowsFromMergedUnitEntriesAdditional:
         with patch(
             "app.infrastructure.persistence.compat_db.queries._merged_purchase_unit_entries",
             return_value=[
-                {"id": 1, "unit_name": "CoA", "contact_person": None,
-                 "contact_phone": None, "address": None, "is_active": 1},
+                {
+                    "id": 1,
+                    "unit_name": "CoA",
+                    "contact_person": None,
+                    "contact_phone": None,
+                    "address": None,
+                    "is_active": 1,
+                },
             ],
         ):
             result = _customer_rows_from_merged_unit_entries()

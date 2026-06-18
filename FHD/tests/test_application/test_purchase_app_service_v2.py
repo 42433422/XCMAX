@@ -1,8 +1,10 @@
 """Tests for app.application.purchase_app_service_v2."""
+
 from __future__ import annotations
 
-import pytest
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 from app.application.purchase_app_service_v2 import PurchaseAppServiceV2
 

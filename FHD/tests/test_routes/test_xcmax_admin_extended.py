@@ -67,12 +67,15 @@ class TestRequireMarketAdminSession:
     def test_non_admin_returns_403(self):
         """When session is not admin, should return 403."""
         req = MagicMock(spec=Request)
-        with patch(
-            "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-            return_value="sid123",
-        ), patch(
-            "app.application.session_account_meta.load_session_account_meta",
-            return_value={"account_kind": "user", "market_is_admin": False},
+        with (
+            patch(
+                "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
+                return_value="sid123",
+            ),
+            patch(
+                "app.application.session_account_meta.load_session_account_meta",
+                return_value={"account_kind": "user", "market_is_admin": False},
+            ),
         ):
             result = _require_market_admin_session(req)
             assert result is not None
@@ -81,12 +84,15 @@ class TestRequireMarketAdminSession:
     def test_admin_returns_none(self):
         """When session is admin, should return None (no gate)."""
         req = MagicMock(spec=Request)
-        with patch(
-            "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-            return_value="sid123",
-        ), patch(
-            "app.application.session_account_meta.load_session_account_meta",
-            return_value={"account_kind": "admin", "market_is_admin": True},
+        with (
+            patch(
+                "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
+                return_value="sid123",
+            ),
+            patch(
+                "app.application.session_account_meta.load_session_account_meta",
+                return_value={"account_kind": "admin", "market_is_admin": True},
+            ),
         ):
             result = _require_market_admin_session(req)
             assert result is None
@@ -94,12 +100,15 @@ class TestRequireMarketAdminSession:
     def test_admin_kind_but_not_market_admin_returns_403(self):
         """When account_kind is admin but market_is_admin is False, should return 403."""
         req = MagicMock(spec=Request)
-        with patch(
-            "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-            return_value="sid123",
-        ), patch(
-            "app.application.session_account_meta.load_session_account_meta",
-            return_value={"account_kind": "admin", "market_is_admin": False},
+        with (
+            patch(
+                "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
+                return_value="sid123",
+            ),
+            patch(
+                "app.application.session_account_meta.load_session_account_meta",
+                return_value={"account_kind": "admin", "market_is_admin": False},
+            ),
         ):
             result = _require_market_admin_session(req)
             assert result is not None
@@ -108,12 +117,15 @@ class TestRequireMarketAdminSession:
     def test_no_meta_returns_403(self):
         """When load_session_account_meta returns None, should return 403."""
         req = MagicMock(spec=Request)
-        with patch(
-            "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-            return_value="sid123",
-        ), patch(
-            "app.application.session_account_meta.load_session_account_meta",
-            return_value=None,
+        with (
+            patch(
+                "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
+                return_value="sid123",
+            ),
+            patch(
+                "app.application.session_account_meta.load_session_account_meta",
+                return_value=None,
+            ),
         ):
             result = _require_market_admin_session(req)
             assert result is not None
@@ -138,9 +150,7 @@ class TestReleaseTrainSnapshotEdgeCases:
             "started_at": "2026-06-01",
             "day_index": 15,
         }
-        (cfg_dir / "release_train.json").write_text(
-            json.dumps(test_data), encoding="utf-8"
-        )
+        (cfg_dir / "release_train.json").write_text(json.dumps(test_data), encoding="utf-8")
         with patch.dict("os.environ", {"XCMAX_MONOREPO_ROOT": str(tmp_path)}):
             result = _release_train_snapshot()
             assert result["epoch"] == "2.0.0.0"
@@ -272,12 +282,15 @@ class TestCollectEmployeePackModules:
             {"id": "emp2", "name": "Employee 2", "version": "2.0"},
         ]
 
-        with patch(
-            "app.infrastructure.mods.mod_manager.get_mod_manager",
-            return_value=mock_mgr,
-        ), patch(
-            "app.infrastructure.mods.employee_registry.EmployeeRegistry",
-            return_value=mock_registry,
+        with (
+            patch(
+                "app.infrastructure.mods.mod_manager.get_mod_manager",
+                return_value=mock_mgr,
+            ),
+            patch(
+                "app.infrastructure.mods.employee_registry.EmployeeRegistry",
+                return_value=mock_registry,
+            ),
         ):
             result = _collect_employee_pack_modules()
             assert len(result) == 2
@@ -295,12 +308,15 @@ class TestCollectEmployeePackModules:
             {"id": "emp1", "version": "1.0"},
         ]
 
-        with patch(
-            "app.infrastructure.mods.mod_manager.get_mod_manager",
-            return_value=mock_mgr,
-        ), patch(
-            "app.infrastructure.mods.employee_registry.EmployeeRegistry",
-            return_value=mock_registry,
+        with (
+            patch(
+                "app.infrastructure.mods.mod_manager.get_mod_manager",
+                return_value=mock_mgr,
+            ),
+            patch(
+                "app.infrastructure.mods.employee_registry.EmployeeRegistry",
+                return_value=mock_registry,
+            ),
         ):
             result = _collect_employee_pack_modules()
             assert result[0]["display_name"] == "emp1"
@@ -445,12 +461,15 @@ class TestListModulesRoute:
 
     def test_list_modules_returns_modules(self, client: TestClient):
         """Should return core + mod + employee modules."""
-        with patch(
-            "app.fastapi_routes.xcmax_admin._collect_mod_modules",
-            return_value=[],
-        ), patch(
-            "app.fastapi_routes.xcmax_admin._collect_employee_pack_modules",
-            return_value=[],
+        with (
+            patch(
+                "app.fastapi_routes.xcmax_admin._collect_mod_modules",
+                return_value=[],
+            ),
+            patch(
+                "app.fastapi_routes.xcmax_admin._collect_employee_pack_modules",
+                return_value=[],
+            ),
         ):
             response = client.get("/api/xcmax/admin/modules")
             assert response.status_code == 200
@@ -471,12 +490,15 @@ class TestListModulesRoute:
             "version": "1.0",
         }
 
-        with patch(
-            "app.fastapi_routes.xcmax_admin._collect_mod_modules",
-            return_value=[mock_mod],
-        ), patch(
-            "app.fastapi_routes.xcmax_admin._collect_employee_pack_modules",
-            return_value=[],
+        with (
+            patch(
+                "app.fastapi_routes.xcmax_admin._collect_mod_modules",
+                return_value=[mock_mod],
+            ),
+            patch(
+                "app.fastapi_routes.xcmax_admin._collect_employee_pack_modules",
+                return_value=[],
+            ),
         ):
             response = client.get("/api/xcmax/admin/modules")
             data = response.json()
@@ -637,10 +659,12 @@ class TestSyncReceiveRoute:
             patch("app.mod_sdk.audit.write_audit_event"),
         ):
             result = asyncio.get_event_loop().run_until_complete(
-                admin_routes.sync_receive([
-                    {"entity_type": "product", "action": "create"},
-                    {"entity_type": "order", "action": "update"},
-                ])
+                admin_routes.sync_receive(
+                    [
+                        {"entity_type": "product", "action": "create"},
+                        {"entity_type": "order", "action": "update"},
+                    ]
+                )
             )
             assert result["received"] == 2
 
@@ -753,12 +777,15 @@ class TestLocalEmployeeRoutes:
 
     def test_local_employee_manifest_not_found(self, client: TestClient):
         """Should return 404 when manifest not found."""
-        with patch(
-            "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-            return_value="sid123",
-        ), patch(
-            "app.application.local_duty_graph_health.read_local_employee_manifest",
-            return_value=None,
+        with (
+            patch(
+                "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
+                return_value="sid123",
+            ),
+            patch(
+                "app.application.local_duty_graph_health.read_local_employee_manifest",
+                return_value=None,
+            ),
         ):
             response = client.get("/api/xcmax/local/employees/emp1/manifest")
             assert response.status_code == 404
@@ -766,12 +793,15 @@ class TestLocalEmployeeRoutes:
     def test_local_employee_manifest_found(self, client: TestClient):
         """Should return manifest when found."""
         mock_manifest = {"id": "emp1", "name": "Employee 1"}
-        with patch(
-            "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-            return_value="sid123",
-        ), patch(
-            "app.application.local_duty_graph_health.read_local_employee_manifest",
-            return_value=mock_manifest,
+        with (
+            patch(
+                "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
+                return_value="sid123",
+            ),
+            patch(
+                "app.application.local_duty_graph_health.read_local_employee_manifest",
+                return_value=mock_manifest,
+            ),
         ):
             response = client.get("/api/xcmax/local/employees/emp1/manifest")
             assert response.status_code == 200
@@ -791,12 +821,15 @@ class TestLocalDutyGraphHealthRoute:
 
     def test_with_session_returns_health(self, client: TestClient):
         """Should return health data when session exists."""
-        with patch(
-            "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-            return_value="sid123",
-        ), patch(
-            "app.application.local_duty_graph_health.build_local_duty_graph_health",
-            return_value={"healthy": True},
+        with (
+            patch(
+                "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
+                return_value="sid123",
+            ),
+            patch(
+                "app.application.local_duty_graph_health.build_local_duty_graph_health",
+                return_value={"healthy": True},
+            ),
         ):
             response = client.get("/api/xcmax/local/duty-graph/health")
             assert response.status_code == 200
@@ -834,12 +867,15 @@ class TestMarketAdminProxyEdgeCases:
         """When market_account import fails, should return 500."""
         req = MagicMock(spec=Request)
 
-        with patch(
-            "app.fastapi_routes.xcmax_admin._require_market_admin_session",
-            return_value=None,
-        ), patch.dict(
-            "sys.modules",
-            {"app.fastapi_routes.market_account": None},
+        with (
+            patch(
+                "app.fastapi_routes.xcmax_admin._require_market_admin_session",
+                return_value=None,
+            ),
+            patch.dict(
+                "sys.modules",
+                {"app.fastapi_routes.market_account": None},
+            ),
         ):
             result = await admin_routes._market_admin_proxy(req, "GET", "/api/test")
             # Should handle import error gracefully
@@ -867,15 +903,19 @@ class TestWeChatGroupRoutes:
 
     def test_list_wechat_groups_with_session(self, client: TestClient):
         """Should return groups when admin session exists."""
-        with patch(
-            "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-            return_value="sid123",
-        ), patch(
-            "app.application.session_account_meta.load_session_account_meta",
-            return_value={"account_kind": "admin", "market_is_admin": True},
-        ), patch(
-            "app.services.wechat_group_customer_bridge.list_group_contacts",
-            return_value=[{"id": 1, "name": "Group1"}],
+        with (
+            patch(
+                "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
+                return_value="sid123",
+            ),
+            patch(
+                "app.application.session_account_meta.load_session_account_meta",
+                return_value={"account_kind": "admin", "market_is_admin": True},
+            ),
+            patch(
+                "app.services.wechat_group_customer_bridge.list_group_contacts",
+                return_value=[{"id": 1, "name": "Group1"}],
+            ),
         ):
             response = client.get("/api/xcmax/admin/wechat/groups")
             assert response.status_code == 200
@@ -903,24 +943,30 @@ class TestImpersonateRoutes:
 
     def test_impersonate_no_user_id(self, client: TestClient):
         """Should return 400 when market_user_id is missing."""
-        with patch(
-            "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-            return_value="sid123",
-        ), patch(
-            "app.application.session_account_meta.load_session_account_meta",
-            return_value={"account_kind": "admin", "market_is_admin": True},
+        with (
+            patch(
+                "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
+                return_value="sid123",
+            ),
+            patch(
+                "app.application.session_account_meta.load_session_account_meta",
+                return_value={"account_kind": "admin", "market_is_admin": True},
+            ),
         ):
             response = client.post("/api/xcmax/admin/impersonate", json={})
             assert response.status_code == 400
 
     def test_impersonate_invalid_user_id(self, client: TestClient):
         """Should return 400 when market_user_id is not a number."""
-        with patch(
-            "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-            return_value="sid123",
-        ), patch(
-            "app.application.session_account_meta.load_session_account_meta",
-            return_value={"account_kind": "admin", "market_is_admin": True},
+        with (
+            patch(
+                "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
+                return_value="sid123",
+            ),
+            patch(
+                "app.application.session_account_meta.load_session_account_meta",
+                return_value={"account_kind": "admin", "market_is_admin": True},
+            ),
         ):
             response = client.post(
                 "/api/xcmax/admin/impersonate",
@@ -939,12 +985,15 @@ class TestSyncPullRoute:
 
     def test_sync_pull_success(self, client: TestClient):
         """Should return pull and apply results."""
-        with patch(
-            "app.application.xcmax_sync_app.pull_from_remote",
-            return_value={"pulled": 3},
-        ), patch(
-            "app.application.xcmax_sync_app.apply_inbox",
-            return_value={"applied": 3},
+        with (
+            patch(
+                "app.application.xcmax_sync_app.pull_from_remote",
+                return_value={"pulled": 3},
+            ),
+            patch(
+                "app.application.xcmax_sync_app.apply_inbox",
+                return_value={"applied": 3},
+            ),
         ):
             response = client.post("/api/xcmax/sync/pull")
             assert response.status_code == 200

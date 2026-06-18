@@ -15,23 +15,22 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 import pytest
 
 from app.application.workflow.planner import (
-    LLMWorkflowPlanner,
     _WORKFLOW_TOOL_HANDLERS,
+    LLMWorkflowPlanner,
     _filter_tool_registry_for_profile,
     execute_tool,
     get_tool_registry,
 )
 from app.application.workflow.types import PlanGraph, WorkflowNode
 
-
 # ========================= _execute_excel_schema_tool - openpyxl fallback ===
 
 
 class TestExecuteExcelSchemaToolOpenpyxlFallback:
     def test_service_import_falls_back_to_openpyxl(self, tmp_path):
-        from app.application.workflow.planner import _execute_excel_schema_tool
-
         import openpyxl
+
+        from app.application.workflow.planner import _execute_excel_schema_tool
 
         wb = openpyxl.Workbook()
         ws = wb.active
@@ -48,9 +47,9 @@ class TestExecuteExcelSchemaToolOpenpyxlFallback:
         assert result["row_count"] == 1
 
     def test_service_runtime_error_falls_back(self, tmp_path):
-        from app.application.workflow.planner import _execute_excel_schema_tool
-
         import openpyxl
+
+        from app.application.workflow.planner import _execute_excel_schema_tool
 
         wb = openpyxl.Workbook()
         ws = wb.active
@@ -113,9 +112,9 @@ class TestExecuteExcelSchemaToolOpenpyxlFallback:
 
 class TestExecuteExcelAnalysisToolOpenpyxlFallback:
     def test_service_import_falls_back_to_openpyxl(self, tmp_path):
-        from app.application.workflow.planner import _execute_excel_analysis_tool
-
         import openpyxl
+
+        from app.application.workflow.planner import _execute_excel_analysis_tool
 
         wb = openpyxl.Workbook()
         ws = wb.active
@@ -132,9 +131,9 @@ class TestExecuteExcelAnalysisToolOpenpyxlFallback:
         assert result["total_rows"] == 2
 
     def test_with_columns_filter(self, tmp_path):
-        from app.application.workflow.planner import _execute_excel_analysis_tool
-
         import openpyxl
+
+        from app.application.workflow.planner import _execute_excel_analysis_tool
 
         wb = openpyxl.Workbook()
         ws = wb.active
@@ -152,9 +151,9 @@ class TestExecuteExcelAnalysisToolOpenpyxlFallback:
         assert result["success"] is True
 
     def test_service_runtime_error_falls_back(self, tmp_path):
-        from app.application.workflow.planner import _execute_excel_analysis_tool
-
         import openpyxl
+
+        from app.application.workflow.planner import _execute_excel_analysis_tool
 
         wb = openpyxl.Workbook()
         ws = wb.active
@@ -236,9 +235,9 @@ class TestExecuteImportExcelToolBranches:
         assert result["error_code"] == "service_init_failed"
 
     def test_customer_service_import_error_degrades(self, tmp_path):
-        from app.application.workflow.planner import _execute_import_excel_tool
-
         import openpyxl
+
+        from app.application.workflow.planner import _execute_import_excel_tool
 
         wb = openpyxl.Workbook()
         ws = wb.active
@@ -265,9 +264,9 @@ class TestExecuteImportExcelToolBranches:
         assert result["success"] is True
 
     def test_customer_service_runtime_error_degrades(self, tmp_path):
-        from app.application.workflow.planner import _execute_import_excel_tool
-
         import openpyxl
+
+        from app.application.workflow.planner import _execute_import_excel_tool
 
         wb = openpyxl.Workbook()
         ws = wb.active
@@ -511,10 +510,9 @@ class TestGetToolRegistryStructure:
 
 class TestGetPlannerHttpClient:
     def test_returns_client(self):
-        from app.application.workflow.planner import _get_planner_http_client
-
         # Reset singleton to ensure httpx.Client is actually invoked.
         import app.application.workflow.planner as planner_mod
+        from app.application.workflow.planner import _get_planner_http_client
 
         old_client = planner_mod._planner_http_client
         planner_mod._planner_http_client = None
@@ -526,10 +524,9 @@ class TestGetPlannerHttpClient:
             planner_mod._planner_http_client = old_client
 
     def test_singleton_reuse(self):
-        from app.application.workflow.planner import _get_planner_http_client, _planner_http_client
-
         # Reset singleton
         import app.application.workflow.planner as planner_mod
+        from app.application.workflow.planner import _get_planner_http_client, _planner_http_client
 
         old_client = planner_mod._planner_http_client
         try:

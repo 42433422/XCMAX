@@ -8,7 +8,6 @@ import pytest
 
 from app.utils.print_utils import PrinterUtils
 
-
 # ========================= PrinterUtils ==================================
 
 
@@ -38,8 +37,10 @@ class TestPrinterUtils:
 
     def test_get_printer_status_known_code(self):
         pu = PrinterUtils()
-        with patch("app.utils.print_utils._PRINT_BACKEND_AVAILABLE", True), \
-             patch("app.utils.print_utils.win32print") as mock_win32print:
+        with (
+            patch("app.utils.print_utils._PRINT_BACKEND_AVAILABLE", True),
+            patch("app.utils.print_utils.win32print") as mock_win32print,
+        ):
             mock_win32print.PRINTER_STATUS_PAUSED = 1
             mock_win32print.PRINTER_STATUS_ERROR = 2
             mock_win32print.PRINTER_STATUS_PRINTING = 512
@@ -54,8 +55,10 @@ class TestPrinterUtils:
 
     def test_ensure_com_initialized_success(self):
         pu = PrinterUtils()
-        with patch.object(pu, "_is_print_backend_available", return_value=True), \
-             patch("app.utils.print_utils.pythoncom") as mock_com:
+        with (
+            patch.object(pu, "_is_print_backend_available", return_value=True),
+            patch("app.utils.print_utils.pythoncom") as mock_com,
+        ):
             pu._ensure_com_initialized()
             mock_com.CoInitialize.assert_called_once()
             assert pu._com_initialized is True
@@ -63,8 +66,10 @@ class TestPrinterUtils:
     def test_ensure_com_initialized_already_done(self):
         pu = PrinterUtils()
         pu._com_initialized = True
-        with patch.object(pu, "_is_print_backend_available", return_value=True), \
-             patch("app.utils.print_utils.pythoncom") as mock_com:
+        with (
+            patch.object(pu, "_is_print_backend_available", return_value=True),
+            patch("app.utils.print_utils.pythoncom") as mock_com,
+        ):
             pu._ensure_com_initialized()
             mock_com.CoInitialize.assert_not_called()
 
@@ -106,31 +111,39 @@ class TestPrinterUtils:
 
     def test_print_file_no_printer_name(self):
         pu = PrinterUtils()
-        with patch.object(pu, "_is_print_backend_available", return_value=True), \
-             patch("os.path.exists", return_value=True):
+        with (
+            patch.object(pu, "_is_print_backend_available", return_value=True),
+            patch("os.path.exists", return_value=True),
+        ):
             result = pu.print_file("/tmp/test.pdf", printer_name=None)
             assert result["success"] is False
             assert "未指定打印机名称" in result["message"]
 
     def test_print_file_not_exists(self):
         pu = PrinterUtils()
-        with patch.object(pu, "_is_print_backend_available", return_value=True), \
-             patch("os.path.exists", return_value=False):
+        with (
+            patch.object(pu, "_is_print_backend_available", return_value=True),
+            patch("os.path.exists", return_value=False),
+        ):
             result = pu.print_file("/tmp/nonexistent.pdf", "printer1")
             assert result["success"] is False
             assert "文件不存在" in result["message"]
 
     def test_get_document_printer_no_printers(self):
         pu = PrinterUtils()
-        with patch.object(pu, "_is_print_backend_available", return_value=True), \
-             patch.object(pu, "get_available_printers", return_value=[]):
+        with (
+            patch.object(pu, "_is_print_backend_available", return_value=True),
+            patch.object(pu, "get_available_printers", return_value=[]),
+        ):
             result = pu.get_document_printer()
             assert result is None
 
     def test_get_label_printer_no_printers(self):
         pu = PrinterUtils()
-        with patch.object(pu, "_is_print_backend_available", return_value=True), \
-             patch.object(pu, "get_available_printers", return_value=[]):
+        with (
+            patch.object(pu, "_is_print_backend_available", return_value=True),
+            patch.object(pu, "get_available_printers", return_value=[]),
+        ):
             result = pu.get_label_printer()
             assert result is None
 
@@ -140,8 +153,10 @@ class TestPrinterUtils:
             {"name": "SomeOtherPrinter", "status": "就绪", "is_default": False},
             {"name": "HP LaserJet", "status": "就绪", "is_default": True},
         ]
-        with patch.object(pu, "_is_print_backend_available", return_value=True), \
-             patch.object(pu, "get_available_printers", return_value=printers):
+        with (
+            patch.object(pu, "_is_print_backend_available", return_value=True),
+            patch.object(pu, "get_available_printers", return_value=printers),
+        ):
             result = pu.get_document_printer()
             assert result == "HP LaserJet"
 
@@ -151,8 +166,10 @@ class TestPrinterUtils:
             {"name": "TSC Printer", "status": "就绪", "is_default": False},
             {"name": "HP LaserJet", "status": "就绪", "is_default": True},
         ]
-        with patch.object(pu, "_is_print_backend_available", return_value=True), \
-             patch.object(pu, "get_available_printers", return_value=printers):
+        with (
+            patch.object(pu, "_is_print_backend_available", return_value=True),
+            patch.object(pu, "get_available_printers", return_value=printers),
+        ):
             result = pu.get_label_printer()
             assert result == "TSC Printer"
 
@@ -161,8 +178,10 @@ class TestPrinterUtils:
         printers = [
             {"name": "RandomPrinter", "status": "就绪", "is_default": True},
         ]
-        with patch.object(pu, "_is_print_backend_available", return_value=True), \
-             patch.object(pu, "get_available_printers", return_value=printers):
+        with (
+            patch.object(pu, "_is_print_backend_available", return_value=True),
+            patch.object(pu, "get_available_printers", return_value=printers),
+        ):
             result = pu.get_document_printer()
             assert result == "RandomPrinter"
 
@@ -172,29 +191,37 @@ class TestPrinterUtils:
             {"name": "RandomPrinter1", "status": "就绪", "is_default": True},
             {"name": "RandomPrinter2", "status": "就绪", "is_default": False},
         ]
-        with patch.object(pu, "_is_print_backend_available", return_value=True), \
-             patch.object(pu, "get_available_printers", return_value=printers):
+        with (
+            patch.object(pu, "_is_print_backend_available", return_value=True),
+            patch.object(pu, "get_available_printers", return_value=printers),
+        ):
             result = pu.get_label_printer()
             assert result == "RandomPrinter2"
 
     def test_get_default_printer_error(self):
         pu = PrinterUtils()
-        with patch.object(pu, "_is_print_backend_available", return_value=True), \
-             patch("app.utils.print_utils.win32print") as mock_win32print:
+        with (
+            patch.object(pu, "_is_print_backend_available", return_value=True),
+            patch("app.utils.print_utils.win32print") as mock_win32print,
+        ):
             mock_win32print.GetDefaultPrinter.side_effect = RuntimeError("no printer")
             result = pu.get_default_printer()
             assert result is None
 
     def test_get_document_printer_error(self):
         pu = PrinterUtils()
-        with patch.object(pu, "_is_print_backend_available", return_value=True), \
-             patch.object(pu, "get_available_printers", side_effect=RuntimeError("err")):
+        with (
+            patch.object(pu, "_is_print_backend_available", return_value=True),
+            patch.object(pu, "get_available_printers", side_effect=RuntimeError("err")),
+        ):
             result = pu.get_document_printer()
             assert result is None
 
     def test_get_label_printer_error(self):
         pu = PrinterUtils()
-        with patch.object(pu, "_is_print_backend_available", return_value=True), \
-             patch.object(pu, "get_available_printers", side_effect=RuntimeError("err")):
+        with (
+            patch.object(pu, "_is_print_backend_available", return_value=True),
+            patch.object(pu, "get_available_printers", side_effect=RuntimeError("err")),
+        ):
             result = pu.get_label_printer()
             assert result is None

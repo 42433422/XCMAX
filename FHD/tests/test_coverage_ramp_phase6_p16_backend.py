@@ -59,7 +59,6 @@ from app.domain.neuro.processors.conscious import (
 from app.domain.value_objects import ContactInfo
 from app.neuro_bus.events.base import EventMetadata, EventPriority, NeuroEvent
 
-
 # ===========================================================================
 # Shared fixtures
 # ===========================================================================
@@ -367,13 +366,21 @@ class TestInitDbAuthBootstrap:
         from app.db.init_db import _seed_default_admin_user
 
         # Create users table with a row
-        from app.db.models.user import Session, User
+        from app.db.models.user import Session as UserSession
+        from app.db.models.user import User
 
-        Base.metadata.create_all(sqlite_engine, tables=[User.__table__, Session.__table__])
+        Base.metadata.create_all(sqlite_engine, tables=[User.__table__, UserSession.__table__])
         # Use ORM insert so column defaults (role, is_active, etc.) are applied.
         SessionLocal = sessionmaker(bind=sqlite_engine)
         with SessionLocal() as session:
-            session.add(User(username="existing", password="x", display_name="Existing", email="ex@example.com"))
+            session.add(
+                User(
+                    username="existing",
+                    password="x",
+                    display_name="Existing",
+                    email="ex@example.com",
+                )
+            )
             session.commit()
 
         # Should be no-op (users already exist)
@@ -443,9 +450,7 @@ class TestInitDbRuntimeAuthBootstrap:
             "app.fastapi_app.sqlite_paths.resolve_effective_database_url",
             lambda: "sqlite:///test.db",
         )
-        monkeypatch.setattr(
-            "app.fastapi_app.sqlite_paths.is_sqlite_url", lambda url: True
-        )
+        monkeypatch.setattr("app.fastapi_app.sqlite_paths.is_sqlite_url", lambda url: True)
         called = {"auth": 0, "rbac": 0, "inv": 0, "prefs": 0}
 
         def fake_auth(engine, *, database_url=None, swallow_errors=True):
@@ -475,9 +480,7 @@ class TestInitDbRuntimeAuthBootstrap:
             "app.fastapi_app.sqlite_paths.resolve_effective_database_url",
             lambda: "postgresql://user:pass@host/db",
         )
-        monkeypatch.setattr(
-            "app.fastapi_app.sqlite_paths.is_sqlite_url", lambda url: False
-        )
+        monkeypatch.setattr("app.fastapi_app.sqlite_paths.is_sqlite_url", lambda url: False)
         called = {"pg": 0, "prefs": 0}
 
         def fake_pg(engine, *, database_url=None):
@@ -890,7 +893,10 @@ class TestPaddleOcrPredictToTextBlocks:
                 "res": {
                     "rec_texts": ["hello", "world"],
                     "rec_scores": [0.9, 0.8],
-                    "rec_polys": [[[0, 0], [10, 0], [10, 10], [0, 10]], [[20, 20], [30, 20], [30, 30], [20, 30]]],
+                    "rec_polys": [
+                        [[0, 0], [10, 0], [10, 10], [0, 10]],
+                        [[20, 20], [30, 20], [30, 30], [20, 30]],
+                    ],
                 }
             }
         ]
@@ -917,7 +923,10 @@ class TestPaddleOcrPredictToTextBlocks:
                 "res": {
                     "rec_texts": ["", "real"],
                     "rec_scores": [0.9, 0.8],
-                    "rec_polys": [[[0, 0], [10, 0], [10, 10], [0, 10]], [[20, 20], [30, 20], [30, 30], [20, 30]]],
+                    "rec_polys": [
+                        [[0, 0], [10, 0], [10, 10], [0, 10]],
+                        [[20, 20], [30, 20], [30, 30], [20, 30]],
+                    ],
                 }
             }
         ]
@@ -2054,12 +2063,26 @@ class TestCustomerRepositoryFindAll:
         mock_query.filter.return_value = mock_query
         models = [
             SimpleNamespace(
-                id=1, unit_name="A", contact_person="", contact_phone="", address="",
-                discount_rate=1.0, is_active=True, created_at=None, updated_at=None,
+                id=1,
+                unit_name="A",
+                contact_person="",
+                contact_phone="",
+                address="",
+                discount_rate=1.0,
+                is_active=True,
+                created_at=None,
+                updated_at=None,
             ),
             SimpleNamespace(
-                id=2, unit_name="B", contact_person="", contact_phone="", address="",
-                discount_rate=1.0, is_active=True, created_at=None, updated_at=None,
+                id=2,
+                unit_name="B",
+                contact_person="",
+                contact_phone="",
+                address="",
+                discount_rate=1.0,
+                is_active=True,
+                created_at=None,
+                updated_at=None,
             ),
         ]
         mock_query.all.return_value = models
@@ -2186,8 +2209,15 @@ class TestPurchaseUnitRepository:
         mock_query = MagicMock()
         mock_query.filter.return_value = mock_query
         existing = SimpleNamespace(
-            id=3, unit_name="Old", contact_person="", contact_phone="", address="",
-            discount_rate=1.0, is_active=1, created_at=None, updated_at=None,
+            id=3,
+            unit_name="Old",
+            contact_person="",
+            contact_phone="",
+            address="",
+            discount_rate=1.0,
+            is_active=1,
+            created_at=None,
+            updated_at=None,
         )
         mock_query.first.return_value = existing
         mock_db.query.return_value = mock_query
@@ -2232,8 +2262,15 @@ class TestPurchaseUnitRepository:
         mock_query = MagicMock()
         mock_query.filter.return_value = mock_query
         model = SimpleNamespace(
-            id=1, unit_name="X", contact_person="", contact_phone="", address="",
-            discount_rate=1.0, is_active=True, created_at=None, updated_at=None,
+            id=1,
+            unit_name="X",
+            contact_person="",
+            contact_phone="",
+            address="",
+            discount_rate=1.0,
+            is_active=True,
+            created_at=None,
+            updated_at=None,
         )
         mock_query.first.return_value = model
         mock_db.query.return_value = mock_query
@@ -2431,7 +2468,10 @@ class TestKittenReportBuildReport:
         service = KittenReportExportService()
         payload = {
             "messages": [
-                {"role": "ai", "content": "<br>line1<br/>line2<br />line3<strong>bold</strong>&nbsp;&amp;"},
+                {
+                    "role": "ai",
+                    "content": "<br>line1<br/>line2<br />line3<strong>bold</strong>&nbsp;&amp;",
+                },
             ],
         }
         result = service.build_report(payload)
@@ -2486,9 +2526,7 @@ class TestKittenReportFinancialSheet:
 
         service = KittenReportExportService()
         # Patch FinancialReportPlugin to return rich data
-        with patch(
-            "app.services.kitten_report.service.FinancialReportPlugin"
-        ) as MockFinancial:
+        with patch("app.services.kitten_report.service.FinancialReportPlugin") as MockFinancial:
             MockFinancial.return_value.run.return_value = SimpleNamespace(
                 key="financial_report",
                 title="财务报表分析",
@@ -2532,9 +2570,7 @@ class TestKittenReportFinancialSheet:
         from app.services.kitten_report.service import KittenReportExportService
 
         service = KittenReportExportService()
-        with patch(
-            "app.services.kitten_report.service.InventoryValuationPlugin"
-        ) as MockInv:
+        with patch("app.services.kitten_report.service.InventoryValuationPlugin") as MockInv:
             MockInv.return_value.run.return_value = SimpleNamespace(
                 key="inventory_valuation",
                 title="库存价值评估",
@@ -2562,12 +2598,8 @@ class TestKittenReportFinancialSheet:
         service = KittenReportExportService()
         # Both plugins return non-matching keys -> _add_financial_sheet returns early
         with (
-            patch(
-                "app.services.kitten_report.service.FinancialReportPlugin"
-            ) as MockFinancial,
-            patch(
-                "app.services.kitten_report.service.InventoryValuationPlugin"
-            ) as MockInv,
+            patch("app.services.kitten_report.service.FinancialReportPlugin") as MockFinancial,
+            patch("app.services.kitten_report.service.InventoryValuationPlugin") as MockInv,
         ):
             MockFinancial.return_value.run.return_value = SimpleNamespace(
                 key="other",
@@ -2734,9 +2766,7 @@ class TestConsciousProcessorProcess:
         proc._circuit_breaker.check = Mock(return_value=True)
         proc._sandbox.validate = Mock(return_value=True)
         proc._sla_controller.start_monitoring = Mock()
-        proc._sla_controller.finish_monitoring = Mock(
-            return_value={"status": "ok"}
-        )
+        proc._sla_controller.finish_monitoring = Mock(return_value={"status": "ok"})
         proc._retry_handler.execute_for_event = AsyncMock(return_value={"ok": True})
 
         proc.register_handler("test.event", lambda e: {"ok": True})
@@ -2753,9 +2783,7 @@ class TestConsciousProcessorProcess:
         proc._circuit_breaker.check = Mock(return_value=True)
         proc._sandbox.validate = Mock(return_value=True)
         proc._sla_controller.start_monitoring = Mock()
-        proc._sla_controller.finish_monitoring = Mock(
-            return_value={"status": "violated"}
-        )
+        proc._sla_controller.finish_monitoring = Mock(return_value={"status": "violated"})
         proc._retry_handler.execute_for_event = AsyncMock(return_value={"ok": True})
 
         proc.register_handler("test.event", lambda e: {"ok": True})
@@ -2781,9 +2809,7 @@ class TestConsciousProcessorProcess:
         proc._sandbox.validate = Mock(return_value=True)
         proc._sla_controller = MagicMock()
         proc._sla_controller.start_monitoring = Mock()
-        proc._sla_controller.finish_monitoring = Mock(
-            return_value={"status": "ok"}
-        )
+        proc._sla_controller.finish_monitoring = Mock(return_value={"status": "ok"})
         proc._retry_handler = MagicMock()
         proc._retry_handler.execute_for_event = AsyncMock(
             side_effect=RuntimeError("retry exhausted")
@@ -2972,9 +2998,7 @@ class TestExcelAiParseSingle:
         assert response.status_code == 400
 
     def test_parse_single_success(self, excel_client):
-        with patch(
-            "app.application.facades.excel_facade.get_ai_product_parser"
-        ) as mock_get:
+        with patch("app.application.facades.excel_facade.get_ai_product_parser") as mock_get:
             mock_parser = MagicMock()
             mock_parser.parse_single.return_value = {"success": True, "data": "parsed"}
             mock_get.return_value = mock_parser
@@ -2987,16 +3011,12 @@ class TestExcelAiParseSingle:
         assert response.json()["success"] is True
 
     def test_parse_single_parse_failure_returns_422(self, excel_client):
-        with patch(
-            "app.application.facades.excel_facade.get_ai_product_parser"
-        ) as mock_get:
+        with patch("app.application.facades.excel_facade.get_ai_product_parser") as mock_get:
             mock_parser = MagicMock()
             mock_parser.parse_single.return_value = {"success": False, "error": "no match"}
             mock_get.return_value = mock_parser
 
-            response = excel_client.post(
-                "/api/ai/parse-single", json={"text": "unknown"}
-            )
+            response = excel_client.post("/api/ai/parse-single", json={"text": "unknown"})
         assert response.status_code == 422
 
     def test_parse_single_empty_body(self, excel_client):
@@ -3016,9 +3036,7 @@ class TestExcelAiParseProducts:
         assert response.status_code == 400
 
     def test_parse_products_success(self, excel_client):
-        with patch(
-            "app.application.facades.excel_facade.get_ai_product_parser"
-        ) as mock_get:
+        with patch("app.application.facades.excel_facade.get_ai_product_parser") as mock_get:
             mock_parser = MagicMock()
             mock_parser.parse_batch.return_value = {"success": True, "items": []}
             mock_get.return_value = mock_parser
@@ -3206,9 +3224,7 @@ class TestExcelSkillsAnalyze:
         assert response.status_code == 400
 
     def test_skills_analyze_excel_missing_file_path_returns_400(self, excel_client):
-        response = excel_client.post(
-            "/api/skills/analyze/excel", json={"sheet_name": "Sheet1"}
-        )
+        response = excel_client.post("/api/skills/analyze/excel", json={"sheet_name": "Sheet1"})
         assert response.status_code == 400
 
     def test_skills_analyze_excel_success(self, excel_client):
@@ -3230,9 +3246,7 @@ class TestExcelSkillsAnalyze:
         assert response.status_code == 400
 
     def test_skills_view_excel_missing_file_path_returns_400(self, excel_client):
-        response = excel_client.post(
-            "/api/skills/view/excel", json={"action": "view"}
-        )
+        response = excel_client.post("/api/skills/view/excel", json={"action": "view"})
         assert response.status_code == 400
 
     def test_skills_view_excel_success(self, excel_client):

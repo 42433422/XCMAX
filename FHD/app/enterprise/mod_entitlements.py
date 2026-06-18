@@ -18,6 +18,7 @@ from app.mod_sdk.product_skus import bundled_mod_ids_for_sku, resolve_product_sk
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
+RECOVERABLE_IMPORT_ERRORS = (ImportError, AttributeError, *RECOVERABLE_ERRORS)
 
 # 进程内缓存：登录成功后由 legacy_auth 写入；登出清空
 _cached_market_user_id: int | None = None
@@ -116,7 +117,7 @@ def is_mod_visible_for_enterprise(mod_id: str) -> bool:
 
         if client_primary_mod_on_disk_visible(mid):
             return True
-    except Exception:
+    except RECOVERABLE_IMPORT_ERRORS:
         logger.debug("client primary mod disk visibility check skipped", exc_info=True)
     local_name = _cached_market_username.strip().lower()
     if mid == "taiyangniao-pro" and local_name in {"sunbird", "taiyangniao", "太阳鸟"}:
@@ -279,9 +280,9 @@ def persist_entitlements_to_session_row(session_id: str, client_ids: set[str]) -
         return
     try:
         from app.db.models.user import Session as UserSession
-        from app.db.session import get_db
+        from app.db.session import get_host_db
 
-        with get_db() as db:
+        with get_host_db() as db:
             row = db.query(UserSession).filter(UserSession.session_id == sid).first()
             if row is None:
                 return

@@ -68,7 +68,9 @@ class WechatContactAppServiceV2:
             self._bus.publish(event)
 
             logger.info(
-                "[WechatContactAppServiceV2] 命令已发布: %s (event_id=%s)", command_type, event.metadata.event_id
+                "[WechatContactAppServiceV2] 命令已发布: %s (event_id=%s)",
+                command_type,
+                event.metadata.event_id,
             )
 
             return {

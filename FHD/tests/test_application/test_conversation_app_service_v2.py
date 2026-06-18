@@ -1,8 +1,10 @@
 """Tests for app.application.conversation_app_service_v2."""
+
 from __future__ import annotations
 
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 
 from app.application.conversation_app_service_v2 import ConversationAppServiceV2
 

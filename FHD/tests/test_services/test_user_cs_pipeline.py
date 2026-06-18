@@ -10,9 +10,9 @@ from unittest.mock import patch
 import pytest
 
 from app.services.user_cs_pipeline import (
+    _STAGE_ORDER,
     PIPELINE_STAGES,
     PipelineCrmGateError,
-    _STAGE_ORDER,
     _default_pipeline,
     _display_name_from_doc,
     _now_iso,
@@ -56,7 +56,7 @@ class TestPipelineStages:
 
     def test_stage_order_matches_stages(self):
         stage_ids = [s["id"] for s in PIPELINE_STAGES]
-        assert _STAGE_ORDER == stage_ids
+        assert stage_ids == _STAGE_ORDER
 
     def test_each_stage_has_id_and_label(self):
         for stage in PIPELINE_STAGES:
@@ -371,9 +371,7 @@ class TestAnalyzeCustomerPipeline:
     """测试客户 pipeline 分析。"""
 
     def test_sets_last_message_preview(self, mock_pipeline_roots):
-        doc = analyze_customer_pipeline(
-            1, username="test", message_texts=["你好，我想开单"]
-        )
+        doc = analyze_customer_pipeline(1, username="test", message_texts=["你好，我想开单"])
         assert doc["last_message_preview"] == "你好，我想开单"
 
     def test_sets_intake_sent(self, mock_pipeline_roots):

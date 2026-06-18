@@ -223,7 +223,9 @@ def _extract_structured_excel_preview(
             _extract_structured_excel_preview as _legacy,
         )
 
-        return cast("dict[str, Any]", _legacy(file_path, sheet_name=sheet_name, sample_limit=sample_limit))
+        return cast(
+            "dict[str, Any]", _legacy(file_path, sheet_name=sheet_name, sample_limit=sample_limit)
+        )
 
     try:
         from openpyxl import load_workbook
@@ -236,7 +238,9 @@ def _extract_structured_excel_preview(
             _extract_structured_excel_preview as _legacy,
         )
 
-        return cast("dict[str, Any]", _legacy(file_path, sheet_name=sheet_name, sample_limit=sample_limit))
+        return cast(
+            "dict[str, Any]", _legacy(file_path, sheet_name=sheet_name, sample_limit=sample_limit)
+        )
 
     try:
         wb = load_workbook(file_path, data_only=True)

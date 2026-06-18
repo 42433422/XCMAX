@@ -13,13 +13,13 @@ import json
 import os
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import MagicMock, patch
+
 # Use MagicMock for all mocks to support context manager protocol
 Mock = MagicMock  # type: ignore[assignment,misc]
 
 import pytest
 from sqlalchemy import create_engine, text
-
 
 # ========================= _iter_seed_dirs - deep =========================
 
@@ -43,7 +43,9 @@ class TestIterSeedDirsDeep:
         with (
             patch("app.db.init_db.get_resource_path", return_value="/r/db_seed"),
             patch("app.db.init_db.get_base_dir", return_value="/base"),
-            patch.object(sys, "_MEIPASS", fake_ipass if (fake_ipass := fake_meipass) else None, create=True),
+            patch.object(
+                sys, "_MEIPASS", fake_ipass if (fake_ipass := fake_meipass) else None, create=True
+            ),
         ):
             result = list(_iter_seed_dirs())
         assert fake_meipass in result
@@ -580,7 +582,10 @@ class TestEnsureRuntimeAuthBootstrapDeep:
         from app.db.init_db import ensure_runtime_auth_bootstrap
 
         with (
-            patch("app.fastapi_app.sqlite_paths.resolve_effective_database_url", return_value="sqlite:///test.db"),
+            patch(
+                "app.fastapi_app.sqlite_paths.resolve_effective_database_url",
+                return_value="sqlite:///test.db",
+            ),
             patch("app.fastapi_app.sqlite_paths.is_sqlite_url", return_value=True),
             patch("app.db.init_db.ensure_sqlite_auth_bootstrap") as mock_auth,
             patch("app.db.init_db.ensure_sqlite_rbac_bootstrap") as mock_rbac,
@@ -597,7 +602,10 @@ class TestEnsureRuntimeAuthBootstrapDeep:
         from app.db.init_db import ensure_runtime_auth_bootstrap
 
         with (
-            patch("app.fastapi_app.sqlite_paths.resolve_effective_database_url", return_value="postgresql://test"),
+            patch(
+                "app.fastapi_app.sqlite_paths.resolve_effective_database_url",
+                return_value="postgresql://test",
+            ),
             patch("app.fastapi_app.sqlite_paths.is_sqlite_url", return_value=False),
             patch("app.db.init_db.ensure_postgresql_auth_bootstrap") as mock_pg,
             patch("app.db.init_db.ensure_user_preferences_bootstrap") as mock_pref,
@@ -616,7 +624,11 @@ class TestSeedSqliteRbacDefaultsDeep:
 
         engine = create_engine("sqlite:///:memory:")
         with engine.begin() as conn:
-            conn.execute(text("CREATE TABLE permissions (id INTEGER PRIMARY KEY, name TEXT, code TEXT, description TEXT, module TEXT)"))
+            conn.execute(
+                text(
+                    "CREATE TABLE permissions (id INTEGER PRIMARY KEY, name TEXT, code TEXT, description TEXT, module TEXT)"
+                )
+            )
             conn.execute(text("INSERT INTO permissions (name, code) VALUES ('test', 'test')"))
 
         with patch("app.db.models.permission.DEFAULT_PERMISSIONS", []):
@@ -703,7 +715,9 @@ class TestEnsureProductQueryIndexesDeep:
 
         engine = create_engine("sqlite:///:memory:")
         with engine.begin() as conn:
-            conn.execute(text("CREATE TABLE products (id INTEGER PRIMARY KEY, unit TEXT, model_number TEXT)"))
+            conn.execute(
+                text("CREATE TABLE products (id INTEGER PRIMARY KEY, unit TEXT, model_number TEXT)")
+            )
 
         ensure_product_query_indexes(engine)
 
@@ -791,7 +805,10 @@ class TestBuildModDatabaseSeedPlanEdgeCases:
         with (
             patch("app.db.init_db.get_app_data_dir", return_value=str(tmp_path)),
             patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_mm,
-            patch("app.db.sqlite_mod_paths.sqlite_filename_with_mod_suffix", side_effect=lambda n, m: f"products__{m}.db"),
+            patch(
+                "app.db.sqlite_mod_paths.sqlite_filename_with_mod_suffix",
+                side_effect=lambda n, m: f"products__{m}.db",
+            ),
         ):
             mock_mm.return_value.list_loaded_mods.return_value = [mock_meta]
             result = build_mod_database_seed_plan()
@@ -814,7 +831,10 @@ class TestBuildModDatabaseSeedPlanEdgeCases:
         with (
             patch("app.db.init_db.get_app_data_dir", return_value=str(tmp_path)),
             patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_mm,
-            patch("app.db.sqlite_mod_paths.sqlite_filename_with_mod_suffix", side_effect=lambda n, m: f"products__{m}.db"),
+            patch(
+                "app.db.sqlite_mod_paths.sqlite_filename_with_mod_suffix",
+                side_effect=lambda n, m: f"products__{m}.db",
+            ),
         ):
             mock_mm.return_value.list_loaded_mods.return_value = [mock_meta]
             result = build_mod_database_seed_plan()
@@ -830,7 +850,10 @@ class TestBuildModDatabaseSeedPlanEdgeCases:
         with (
             patch("app.db.init_db.get_app_data_dir", return_value=str(tmp_path)),
             patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_mm,
-            patch("app.db.sqlite_mod_paths.sqlite_filename_with_mod_suffix", side_effect=lambda n, m: f"products__{m}.db"),
+            patch(
+                "app.db.sqlite_mod_paths.sqlite_filename_with_mod_suffix",
+                side_effect=lambda n, m: f"products__{m}.db",
+            ),
         ):
             mock_mm.return_value.list_loaded_mods.return_value = [mock_meta]
             result = build_mod_database_seed_plan()
@@ -856,7 +879,10 @@ class TestBuildModDatabaseSeedPlanEdgeCases:
         with (
             patch("app.db.init_db.get_app_data_dir", return_value=str(tmp_path)),
             patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_mm,
-            patch("app.db.sqlite_mod_paths.sqlite_filename_with_mod_suffix", side_effect=lambda n, m: f"products__{m}.db"),
+            patch(
+                "app.db.sqlite_mod_paths.sqlite_filename_with_mod_suffix",
+                side_effect=lambda n, m: f"products__{m}.db",
+            ),
         ):
             mock_mm.return_value.list_loaded_mods.return_value = [mock_meta]
             result = build_mod_database_seed_plan()
@@ -882,7 +908,10 @@ class TestBuildModDatabaseSeedPlanEdgeCases:
         with (
             patch("app.db.init_db.get_app_data_dir", return_value=str(tmp_path)),
             patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_mm,
-            patch("app.db.sqlite_mod_paths.sqlite_filename_with_mod_suffix", side_effect=lambda n, m: f"products__{m}.db"),
+            patch(
+                "app.db.sqlite_mod_paths.sqlite_filename_with_mod_suffix",
+                side_effect=lambda n, m: f"products__{m}.db",
+            ),
         ):
             mock_mm.return_value.list_loaded_mods.return_value = [mock_meta]
             result = build_mod_database_seed_plan()
@@ -987,7 +1016,9 @@ class TestEnsureSqliteAuthBootstrapCreatesTables:
         from app.db.base import Base
         from app.db.models.user import Session, User
 
-        Base.metadata.create_all(engine, tables=[User.__table__, Session.__table__], checkfirst=True)
+        Base.metadata.create_all(
+            engine, tables=[User.__table__, Session.__table__], checkfirst=True
+        )
 
         with (
             patch("app.db.init_db._resolve_auth_bootstrap_engine", return_value=engine),

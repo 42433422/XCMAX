@@ -22,13 +22,17 @@ async def test_publish_route_event_async_success(monkeypatch):
         published.append(event_type)
         return True
 
-    with patch(
-        "app.neuro_bus.route_event_publisher.is_neuro_stack_enabled",
-        return_value=True,
-    ), patch(
-        "app.neuro_bus.route_event_publisher.publish_neuro_event",
-        side_effect=_capture,
+    with (
+        patch(
+            "app.neuro_bus.route_event_publisher.is_neuro_stack_enabled",
+            return_value=True,
+        ),
+        patch(
+            "app.neuro_bus.route_event_publisher.publish_neuro_event",
+            side_effect=_capture,
+        ),
     ):
+
         @publish_route_event("unit.test", domain="unit")
         async def handler(request=None):
             return {"ok": True}
@@ -44,10 +48,14 @@ async def test_publish_route_event_async_success(monkeypatch):
 
 
 def test_publish_route_event_sync_skips_when_disabled(monkeypatch):
-    with patch(
-        "app.neuro_bus.route_event_publisher.is_neuro_stack_enabled",
-        return_value=False,
-    ), patch("app.neuro_bus.route_event_publisher.publish_neuro_event") as pub:
+    with (
+        patch(
+            "app.neuro_bus.route_event_publisher.is_neuro_stack_enabled",
+            return_value=False,
+        ),
+        patch("app.neuro_bus.route_event_publisher.publish_neuro_event") as pub,
+    ):
+
         @publish_route_event("sync.test")
         def handler():
             return 42
@@ -58,13 +66,17 @@ def test_publish_route_event_sync_skips_when_disabled(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_publish_route_event_async_failure():
-    with patch(
-        "app.neuro_bus.route_event_publisher.is_neuro_stack_enabled",
-        return_value=True,
-    ), patch(
-        "app.neuro_bus.route_event_publisher.publish_neuro_event",
-        return_value=True,
-    ) as pub:
+    with (
+        patch(
+            "app.neuro_bus.route_event_publisher.is_neuro_stack_enabled",
+            return_value=True,
+        ),
+        patch(
+            "app.neuro_bus.route_event_publisher.publish_neuro_event",
+            return_value=True,
+        ) as pub,
+    ):
+
         @publish_route_event("fail.test")
         async def handler():
             raise ValueError("boom")
@@ -84,12 +96,15 @@ def test_publish_simple_event_disabled():
 
 
 def test_publish_simple_event_success():
-    with patch(
-        "app.neuro_bus.route_event_publisher.is_neuro_stack_enabled",
-        return_value=True,
-    ), patch(
-        "app.neuro_bus.route_event_publisher.publish_neuro_event",
-        return_value=True,
+    with (
+        patch(
+            "app.neuro_bus.route_event_publisher.is_neuro_stack_enabled",
+            return_value=True,
+        ),
+        patch(
+            "app.neuro_bus.route_event_publisher.publish_neuro_event",
+            return_value=True,
+        ),
     ):
         assert publish_simple_event("chat.request", {"id": 1}, domain="ai") is True
 

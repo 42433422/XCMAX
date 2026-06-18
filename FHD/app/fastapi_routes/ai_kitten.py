@@ -162,6 +162,12 @@ def kitten_saved_delete(analysis_id: str):
         from app.application.facades.kitten_facade import analysis_save_service
 
         result = analysis_save_service.delete_analysis(analysis_id)
+        if isinstance(result, bool):
+            if result:
+                return {"success": True, "message": "删除成功"}
+            return JSONResponse(
+                {"success": False, "message": "Analysis not found"}, status_code=400
+            )
         if result.get("success"):
             return {"success": True, "message": "删除成功"}
         return JSONResponse(result, status_code=400)

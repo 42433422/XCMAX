@@ -126,7 +126,12 @@ class TestRecentMessages:
         assert format_recent_messages_excerpt_for_llm({"recent_messages": []}) is None
 
     def test_builds_excerpt(self):
-        ctx = {"recent_messages": [{"role": "user", "content": "hi"}, {"role": "assistant", "content": "yo"}]}
+        ctx = {
+            "recent_messages": [
+                {"role": "user", "content": "hi"},
+                {"role": "assistant", "content": "yo"},
+            ]
+        }
         out = format_recent_messages_excerpt_for_llm(ctx)
         assert "近期对话摘要" in out
         assert "[user] hi" in out
@@ -192,7 +197,12 @@ class TestKittenRuntime:
     def test_with_dataset(self):
         ctx = {
             "kitten_analyzer": True,
-            "kitten_dataset": {"file_name": "d.csv", "rows": 10, "columns": 3, "fields": ["a", "b"]},
+            "kitten_dataset": {
+                "file_name": "d.csv",
+                "rows": 10,
+                "columns": 3,
+                "fields": ["a", "b"],
+            },
         }
         out = _format_kitten_runtime_for_llm(ctx)
         assert "数据文件: d.csv" in out

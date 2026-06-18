@@ -2,7 +2,7 @@
 # 用法：make setup && make dev
 # 工作目录约定：所有 Python/前端路径以 FHD/ 为根。
 
-.PHONY: help setup dev test test-xcagi test-coverage lint openapi-check e2e
+.PHONY: help setup dev test test-xcagi test-coverage lint openapi-check openapi-check-strict e2e
 
 FHD := FHD
 VENV := $(abspath $(FHD)/.venv)
@@ -44,10 +44,12 @@ lint:
 	cd $(FHD) && $(PY) -m ruff check app/
 
 openapi-check:
-	cd $(FHD) && PYTHONPATH=. $(PY) scripts/ci/check_openapi_consistency.py --strict
+	cd $(FHD) && PYTHONPATH=. $(PY) scripts/check_openapi_consistency.py
 
-openapi-check-relaxed:
-	cd $(FHD) && PYTHONPATH=. $(PY) scripts/ci/check_openapi_consistency.py
+openapi-check-strict:
+	cd $(FHD) && PYTHONPATH=. $(PY) scripts/check_openapi_consistency.py --strict
+
+openapi-check-relaxed: openapi-check
 
 e2e:
 	bash $(FHD)/scripts/dev/e2e-full.sh

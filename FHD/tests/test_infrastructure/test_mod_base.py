@@ -1,8 +1,10 @@
 """Tests for app.infrastructure.mods.base."""
+
 from __future__ import annotations
 
-import pytest
 from unittest.mock import MagicMock
+
+import pytest
 
 from app.infrastructure.mods.base import Mod
 

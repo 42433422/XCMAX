@@ -1,4 +1,5 @@
 """Tests for app.fastapi_routes.domains.static.routes."""
+
 from __future__ import annotations
 
 import os
@@ -136,6 +137,7 @@ class TestAssetRoutes:
                 assert resp.status_code == 200
         finally:
             import shutil
+
             shutil.rmtree(tmpdir, ignore_errors=True)
 
     def test_vite_svg_missing(self):
@@ -162,6 +164,7 @@ class TestAssetRoutes:
                 assert resp.status_code == 200
         finally:
             import shutil
+
             shutil.rmtree(tmpdir, ignore_errors=True)
 
     def test_brand_xc_logo_png(self):
@@ -175,6 +178,7 @@ class TestAssetRoutes:
                 assert resp.status_code == 200
         finally:
             import shutil
+
             shutil.rmtree(tmpdir, ignore_errors=True)
 
     def test_workflow_employee_docs_json(self):
@@ -190,6 +194,7 @@ class TestAssetRoutes:
                 assert resp.status_code == 200
         finally:
             import shutil
+
             shutil.rmtree(tmpdir, ignore_errors=True)
 
     def test_sw_js(self):
@@ -203,6 +208,7 @@ class TestAssetRoutes:
                 assert resp.status_code == 200
         finally:
             import shutil
+
             shutil.rmtree(tmpdir, ignore_errors=True)
 
     def test_favicon_returns_gif(self):
@@ -973,6 +979,7 @@ class TestCustomersBatchDelete:
             return_value=mock_svc,
         ):
             import json as _json
+
             resp = client.request(
                 "DELETE",
                 "/api/customers/batch-delete",

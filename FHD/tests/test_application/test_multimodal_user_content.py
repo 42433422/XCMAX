@@ -1,4 +1,5 @@
 """Tests for app.application.workflow.multimodal_user_content — multimodal attachment processing."""
+
 from __future__ import annotations
 
 import base64
@@ -16,10 +17,10 @@ from app.application.workflow.multimodal_user_content import (
     build_openai_user_content,
 )
 
-
 # ---------------------------------------------------------------------------
 # _normalize_mime
 # ---------------------------------------------------------------------------
+
 
 class TestNormalizeMime:
     def test_jpg_to_jpeg(self):
@@ -44,6 +45,7 @@ class TestNormalizeMime:
 # ---------------------------------------------------------------------------
 # _decode_data_url
 # ---------------------------------------------------------------------------
+
 
 class TestDecodeDataUrl:
     def test_valid_data_url(self):
@@ -77,12 +79,16 @@ class TestDecodeDataUrl:
 # _maybe_downscale_image_jpeg
 # ---------------------------------------------------------------------------
 
+
 class TestMaybeDownscaleImageJpeg:
     def test_returns_data_url_without_pil(self):
-        with patch(
-            "app.application.workflow.multimodal_user_content.RECOVERABLE_ERRORS",
-            (ImportError,),
-        ), patch("builtins.__import__", side_effect=ImportError("no PIL")):
+        with (
+            patch(
+                "app.application.workflow.multimodal_user_content.RECOVERABLE_ERRORS",
+                (ImportError,),
+            ),
+            patch("builtins.__import__", side_effect=ImportError("no PIL")),
+        ):
             # When PIL is not available, it falls back to raw base64
             raw = b"fake image data"
             url, mime = _maybe_downscale_image_jpeg(raw, "image/png")
@@ -91,8 +97,9 @@ class TestMaybeDownscaleImageJpeg:
 
     def test_valid_image_downscaled(self):
         try:
-            from PIL import Image
             import io
+
+            from PIL import Image
         except ImportError:
             pytest.skip("PIL not available")
 
@@ -111,18 +118,23 @@ class TestMaybeDownscaleImageJpeg:
 # _pdf_bytes_to_text
 # ---------------------------------------------------------------------------
 
+
 class TestPdfBytesToText:
     def test_no_pdfplumber_returns_fallback(self):
-        with patch(
-            "app.application.workflow.multimodal_user_content.RECOVERABLE_ERRORS",
-            (ImportError,),
-        ), patch("builtins.__import__", side_effect=ImportError("no pdfplumber")):
+        with (
+            patch(
+                "app.application.workflow.multimodal_user_content.RECOVERABLE_ERRORS",
+                (ImportError,),
+            ),
+            patch("builtins.__import__", side_effect=ImportError("no pdfplumber")),
+        ):
             result = _pdf_bytes_to_text(b"fake pdf", "test.pdf")
             assert "无法读取" in result or "pdfplumber" in result
 
     def test_invalid_pdf_bytes(self):
         # Patch pdfplumber.open to raise ValueError (which is in RECOVERABLE_ERRORS)
         import pdfplumber
+
         with patch.object(pdfplumber, "open", side_effect=ValueError("invalid PDF")):
             result = _pdf_bytes_to_text(b"not a pdf", "bad.pdf")
         assert isinstance(result, str)
@@ -132,6 +144,7 @@ class TestPdfBytesToText:
 # ---------------------------------------------------------------------------
 # build_openai_user_content
 # ---------------------------------------------------------------------------
+
 
 class TestBuildOpenaiUserContent:
     def test_no_context_returns_message(self):
@@ -219,7 +232,11 @@ class TestBuildOpenaiUserContent:
     def test_invalid_base64_skipped(self):
         ctx = {
             "multimodal_attachments": [
-                {"filename": "bad.png", "mime_type": "image/png", "data_base64": "!!!not-base64!!!"},
+                {
+                    "filename": "bad.png",
+                    "mime_type": "image/png",
+                    "data_base64": "!!!not-base64!!!",
+                },
             ]
         }
         # binascii.Error should be caught and attachment skipped

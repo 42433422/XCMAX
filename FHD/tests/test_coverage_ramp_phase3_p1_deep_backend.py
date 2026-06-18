@@ -50,7 +50,6 @@ from app.infrastructure.persistence.compat_db.writes import (
     products_pg_update_row,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -440,9 +439,7 @@ def test_row_keyword_score_and_header_map() -> None:
 
 
 def test_product_row_cell_values_cn_keys() -> None:
-    vals = _product_row_cell_values(
-        {"型号": "M9", "产品名称": "漆", "规格": "1L", "单价": 50}
-    )
+    vals = _product_row_cell_values({"型号": "M9", "产品名称": "漆", "规格": "1L", "单价": 50})
     assert any("M9" in v or "漆" in v for v in vals)
 
 
@@ -639,7 +636,13 @@ def test_excel_extract_upload_ok(excel_client: TestClient, tmp_path) -> None:
         with open(p, "rb") as f:
             r = excel_client.post(
                 "/api/excel/data/extract/upload",
-                files={"excel_file": ("up.xlsx", f.read(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+                files={
+                    "excel_file": (
+                        "up.xlsx",
+                        f.read(),
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    )
+                },
             )
     assert r.status_code == 200
     assert r.json()["success"] is True

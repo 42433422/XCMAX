@@ -112,7 +112,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
             "data": {"message": f"Hello from {mod_id}", "mod": "taiyangniao-pro"},
         }
 
-    @router.get("/attendance/policy")
+    @router.get("/attendance/policy", response_model=None)
     async def attendance_policy_get() -> dict:
         """太阳鸟考勤裁窗配置（读写 approval_config.yaml 的 attendance_policy 段）。"""
         try:
@@ -127,7 +127,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
             )
         return {"success": True, "attendance_policy": pol}
 
-    @router.post("/attendance/policy")
+    @router.post("/attendance/policy", response_model=None)
     async def attendance_policy_post(body: dict = Body(default_factory=dict)) -> dict:
         payload = body if isinstance(body, dict) else {}
         raw = payload.get("attendance_policy")

@@ -1,16 +1,18 @@
 """Tests for app.routes.document_templates_compat."""
+
 from __future__ import annotations
 
-import pytest
-from unittest.mock import patch, MagicMock
 from io import BytesIO
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 from app.routes.document_templates_compat import (
-    _UploadLikeFile,
     _unpack_response,
+    _UploadLikeFile,
+    run_archive_template_analyze,
     run_archive_template_create,
     run_archive_template_update,
-    run_archive_template_analyze,
 )
 
 

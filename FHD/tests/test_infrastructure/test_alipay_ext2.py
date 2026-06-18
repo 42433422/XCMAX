@@ -5,6 +5,7 @@ Covers ``build_client``, ``_build_common_kwargs``, ``_try_precreate``,
 ``_standard_api_result``, ``_private_key_source``, ``_public_key_source``,
 ``diagnostics_snapshot``, and the bundled-key fallback path.
 """
+
 from __future__ import annotations
 
 import os
@@ -119,18 +120,14 @@ class TestBuildCommonKwargs:
 
 class TestTryPrecreate:
     def test_missing_credentials(self, clear_alipay_env):
-        out = alipay_mod._try_precreate(
-            out_trade_no="O1", subject="s", total_amount="0.01"
-        )
+        out = alipay_mod._try_precreate(out_trade_no="O1", subject="s", total_amount="0.01")
         assert out["success"] is False
         assert out["qr_code"] is None
         assert "ALIPAY_APP_ID" in out["message"]
 
     def test_build_client_failure(self, full_credentials, monkeypatch):
         with patch.object(alipay_mod, "build_client", side_effect=RuntimeError("no sdk")):
-            out = alipay_mod._try_precreate(
-                out_trade_no="O1", subject="s", total_amount="0.01"
-            )
+            out = alipay_mod._try_precreate(out_trade_no="O1", subject="s", total_amount="0.01")
         assert out["success"] is False
         assert "no sdk" in out["message"]
 
@@ -141,9 +138,7 @@ class TestTryPrecreate:
             "qr_code": "https://qr.alipay.com/abc",
         }
         with patch.object(alipay_mod, "build_client", return_value=fake_client):
-            out = alipay_mod._try_precreate(
-                out_trade_no="O1", subject="s", total_amount="0.01"
-            )
+            out = alipay_mod._try_precreate(out_trade_no="O1", subject="s", total_amount="0.01")
         assert out["success"] is True
         assert out["qr_code"] == "https://qr.alipay.com/abc"
 
@@ -155,9 +150,7 @@ class TestTryPrecreate:
             "msg": "fail",
         }
         with patch.object(alipay_mod, "build_client", return_value=fake_client):
-            out = alipay_mod._try_precreate(
-                out_trade_no="O1", subject="s", total_amount="0.01"
-            )
+            out = alipay_mod._try_precreate(out_trade_no="O1", subject="s", total_amount="0.01")
         assert out["success"] is False
         assert out["message"] == "业务失败"
 
@@ -168,9 +161,7 @@ class TestTryPrecreate:
             "msg": "fail",
         }
         with patch.object(alipay_mod, "build_client", return_value=fake_client):
-            out = alipay_mod._try_precreate(
-                out_trade_no="O1", subject="s", total_amount="0.01"
-            )
+            out = alipay_mod._try_precreate(out_trade_no="O1", subject="s", total_amount="0.01")
         assert out["success"] is False
         assert out["message"] == "fail"
 
@@ -178,9 +169,7 @@ class TestTryPrecreate:
         fake_client = MagicMock()
         fake_client.api_alipay_trade_precreate.return_value = {"code": "40004"}
         with patch.object(alipay_mod, "build_client", return_value=fake_client):
-            out = alipay_mod._try_precreate(
-                out_trade_no="O1", subject="s", total_amount="0.01"
-            )
+            out = alipay_mod._try_precreate(out_trade_no="O1", subject="s", total_amount="0.01")
         assert out["success"] is False
         assert out["message"] == "预下单失败"
 
@@ -188,9 +177,7 @@ class TestTryPrecreate:
         fake_client = MagicMock()
         fake_client.api_alipay_trade_precreate.return_value = "garbled"
         with patch.object(alipay_mod, "build_client", return_value=fake_client):
-            out = alipay_mod._try_precreate(
-                out_trade_no="O1", subject="s", total_amount="0.01"
-            )
+            out = alipay_mod._try_precreate(out_trade_no="O1", subject="s", total_amount="0.01")
         assert out["success"] is False
         assert "格式异常" in out["message"]
 
@@ -198,9 +185,7 @@ class TestTryPrecreate:
         fake_client = MagicMock()
         fake_client.api_alipay_trade_precreate.side_effect = ConnectionError("net fail")
         with patch.object(alipay_mod, "build_client", return_value=fake_client):
-            out = alipay_mod._try_precreate(
-                out_trade_no="O1", subject="s", total_amount="0.01"
-            )
+            out = alipay_mod._try_precreate(out_trade_no="O1", subject="s", total_amount="0.01")
         assert out["success"] is False
         assert "net fail" in out["message"]
 
@@ -210,17 +195,13 @@ class TestTryPrecreate:
 
 class TestTryPagePay:
     def test_missing_credentials(self, clear_alipay_env):
-        out = alipay_mod._try_page_pay(
-            out_trade_no="O1", subject="s", total_amount="0.01"
-        )
+        out = alipay_mod._try_page_pay(out_trade_no="O1", subject="s", total_amount="0.01")
         assert out["success"] is False
         assert out["order_string"] is None
 
     def test_build_client_failure(self, full_credentials, monkeypatch):
         with patch.object(alipay_mod, "build_client", side_effect=RuntimeError("no sdk")):
-            out = alipay_mod._try_page_pay(
-                out_trade_no="O1", subject="s", total_amount="0.01"
-            )
+            out = alipay_mod._try_page_pay(out_trade_no="O1", subject="s", total_amount="0.01")
         assert out["success"] is False
         assert "no sdk" in out["message"]
 
@@ -243,18 +224,14 @@ class TestTryPagePay:
         fake_client = MagicMock()
         fake_client.api_alipay_trade_page_pay.return_value = "order_string_value"
         with patch.object(alipay_mod, "build_client", return_value=fake_client):
-            out = alipay_mod._try_page_pay(
-                out_trade_no="O1", subject="s", total_amount="0.01"
-            )
+            out = alipay_mod._try_page_pay(out_trade_no="O1", subject="s", total_amount="0.01")
         assert "sandbox" in out["gateway"]
 
     def test_remote_exception(self, full_credentials, monkeypatch):
         fake_client = MagicMock()
         fake_client.api_alipay_trade_page_pay.side_effect = ConnectionError("net fail")
         with patch.object(alipay_mod, "build_client", return_value=fake_client):
-            out = alipay_mod._try_page_pay(
-                out_trade_no="O1", subject="s", total_amount="0.01"
-            )
+            out = alipay_mod._try_page_pay(out_trade_no="O1", subject="s", total_amount="0.01")
         assert out["success"] is False
         assert "net fail" in out["message"]
 
@@ -264,16 +241,12 @@ class TestTryPagePay:
 
 class TestTryWapPay:
     def test_missing_credentials(self, clear_alipay_env):
-        out = alipay_mod._try_wap_pay(
-            out_trade_no="O1", subject="s", total_amount="0.01"
-        )
+        out = alipay_mod._try_wap_pay(out_trade_no="O1", subject="s", total_amount="0.01")
         assert out["success"] is False
 
     def test_build_client_failure(self, full_credentials, monkeypatch):
         with patch.object(alipay_mod, "build_client", side_effect=RuntimeError("no sdk")):
-            out = alipay_mod._try_wap_pay(
-                out_trade_no="O1", subject="s", total_amount="0.01"
-            )
+            out = alipay_mod._try_wap_pay(out_trade_no="O1", subject="s", total_amount="0.01")
         assert out["success"] is False
         assert "no sdk" in out["message"]
 
@@ -295,9 +268,7 @@ class TestTryWapPay:
         fake_client = MagicMock()
         fake_client.api_alipay_trade_wap_pay.side_effect = ConnectionError("net fail")
         with patch.object(alipay_mod, "build_client", return_value=fake_client):
-            out = alipay_mod._try_wap_pay(
-                out_trade_no="O1", subject="s", total_amount="0.01"
-            )
+            out = alipay_mod._try_wap_pay(out_trade_no="O1", subject="s", total_amount="0.01")
         assert out["success"] is False
         assert "net fail" in out["message"]
 
@@ -308,13 +279,15 @@ class TestTryWapPay:
 class TestCreatePayOrder:
     def test_mobile_uses_wap_pay(self, full_credentials, monkeypatch):
         with patch.object(
-            alipay_mod, "_try_wap_pay", return_value={
+            alipay_mod,
+            "_try_wap_pay",
+            return_value={
                 "success": True,
                 "order_string": "wap_str",
                 "gateway": "https://g",
                 "message": None,
                 "raw": {"order_string": "wap_str"},
-            }
+            },
         ) as mock_wap:
             out = alipay_mod.create_pay_order(
                 out_trade_no="O1",
@@ -328,23 +301,30 @@ class TestCreatePayOrder:
         mock_wap.assert_called_once()
 
     def test_mobile_wap_failure_falls_back_to_page(self, full_credentials, monkeypatch):
-        with patch.object(
-            alipay_mod, "_try_wap_pay", return_value={
-                "success": False,
-                "order_string": None,
-                "gateway": "",
-                "message": "wap fail",
-                "raw": None,
-            }
-        ), patch.object(
-            alipay_mod, "_try_page_pay", return_value={
-                "success": True,
-                "order_string": "page_str",
-                "gateway": "https://g",
-                "message": None,
-                "raw": {"order_string": "page_str"},
-            }
-        ) as mock_page:
+        with (
+            patch.object(
+                alipay_mod,
+                "_try_wap_pay",
+                return_value={
+                    "success": False,
+                    "order_string": None,
+                    "gateway": "",
+                    "message": "wap fail",
+                    "raw": None,
+                },
+            ),
+            patch.object(
+                alipay_mod,
+                "_try_page_pay",
+                return_value={
+                    "success": True,
+                    "order_string": "page_str",
+                    "gateway": "https://g",
+                    "message": None,
+                    "raw": {"order_string": "page_str"},
+                },
+            ) as mock_page,
+        ):
             out = alipay_mod.create_pay_order(
                 out_trade_no="O1",
                 subject="s",
@@ -357,13 +337,15 @@ class TestCreatePayOrder:
 
     def test_pc_uses_page_pay(self, full_credentials, monkeypatch):
         with patch.object(
-            alipay_mod, "_try_page_pay", return_value={
+            alipay_mod,
+            "_try_page_pay",
+            return_value={
                 "success": True,
                 "order_string": "page_str",
                 "gateway": "https://g",
                 "message": None,
                 "raw": {"order_string": "page_str"},
-            }
+            },
         ) as mock_page:
             out = alipay_mod.create_pay_order(
                 out_trade_no="O1",
@@ -376,22 +358,29 @@ class TestCreatePayOrder:
         mock_page.assert_called_once()
 
     def test_page_failure_falls_back_to_precreate(self, full_credentials, monkeypatch):
-        with patch.object(
-            alipay_mod, "_try_page_pay", return_value={
-                "success": False,
-                "order_string": None,
-                "gateway": "",
-                "message": "page fail",
-                "raw": None,
-            }
-        ), patch.object(
-            alipay_mod, "_try_precreate", return_value={
-                "success": True,
-                "qr_code": "https://qr.alipay.com/abc",
-                "message": None,
-                "raw": {"qr_code": "abc"},
-            }
-        ) as mock_pre:
+        with (
+            patch.object(
+                alipay_mod,
+                "_try_page_pay",
+                return_value={
+                    "success": False,
+                    "order_string": None,
+                    "gateway": "",
+                    "message": "page fail",
+                    "raw": None,
+                },
+            ),
+            patch.object(
+                alipay_mod,
+                "_try_precreate",
+                return_value={
+                    "success": True,
+                    "qr_code": "https://qr.alipay.com/abc",
+                    "message": None,
+                    "raw": {"qr_code": "abc"},
+                },
+            ) as mock_pre,
+        ):
             out = alipay_mod.create_pay_order(
                 out_trade_no="O1",
                 subject="s",
@@ -404,21 +393,28 @@ class TestCreatePayOrder:
         mock_pre.assert_called_once()
 
     def test_all_failures(self, full_credentials, monkeypatch):
-        with patch.object(
-            alipay_mod, "_try_page_pay", return_value={
-                "success": False,
-                "order_string": None,
-                "gateway": "",
-                "message": "page fail",
-                "raw": None,
-            }
-        ), patch.object(
-            alipay_mod, "_try_precreate", return_value={
-                "success": False,
-                "qr_code": None,
-                "message": "pre fail",
-                "raw": None,
-            }
+        with (
+            patch.object(
+                alipay_mod,
+                "_try_page_pay",
+                return_value={
+                    "success": False,
+                    "order_string": None,
+                    "gateway": "",
+                    "message": "page fail",
+                    "raw": None,
+                },
+            ),
+            patch.object(
+                alipay_mod,
+                "_try_precreate",
+                return_value={
+                    "success": False,
+                    "qr_code": None,
+                    "message": "pre fail",
+                    "raw": None,
+                },
+            ),
         ):
             out = alipay_mod.create_pay_order(
                 out_trade_no="O1",
@@ -439,13 +435,15 @@ class TestCreatePayOrder:
             "Mozilla Windows Phone",
         ):
             with patch.object(
-                alipay_mod, "_try_wap_pay", return_value={
+                alipay_mod,
+                "_try_wap_pay",
+                return_value={
                     "success": True,
                     "order_string": "wap_str",
                     "gateway": "https://g",
                     "message": None,
                     "raw": {},
-                }
+                },
             ) as mock_wap:
                 alipay_mod.create_pay_order(
                     out_trade_no="O1",
@@ -491,9 +489,7 @@ class TestStandardApiResult:
         assert out["message"] == "失败"
 
     def test_failure_with_msg_only(self):
-        out = alipay_mod._standard_api_result(
-            {"code": "40004", "msg": "fail"}, "default"
-        )
+        out = alipay_mod._standard_api_result({"code": "40004", "msg": "fail"}, "default")
         assert out["success"] is False
         assert out["message"] == "fail"
 
@@ -607,9 +603,7 @@ class TestQueryRefund:
 
     def test_remote_exception(self, monkeypatch):
         fake_client = MagicMock()
-        fake_client.api_alipay_trade_fastpay_refund_query.side_effect = ConnectionError(
-            "net fail"
-        )
+        fake_client.api_alipay_trade_fastpay_refund_query.side_effect = ConnectionError("net fail")
         with patch.object(alipay_mod, "build_client", return_value=fake_client):
             out = alipay_mod.query_refund(out_trade_no="O1")
         assert out["success"] is False
@@ -621,7 +615,9 @@ class TestQueryRefund:
 
 class TestPrivateKeySource:
     def test_env(self, clear_alipay_env, monkeypatch):
-        monkeypatch.setenv("ALIPAY_APP_PRIVATE_KEY", "-----BEGIN PRIVATE KEY-----\\nX\\n-----END PRIVATE KEY-----")
+        monkeypatch.setenv(
+            "ALIPAY_APP_PRIVATE_KEY", "-----BEGIN PRIVATE KEY-----\\nX\\n-----END PRIVATE KEY-----"
+        )
         assert alipay_mod._private_key_source() == "env"
 
     def test_path(self, clear_alipay_env, monkeypatch, tmp_path):
@@ -640,7 +636,9 @@ class TestPrivateKeySource:
 
 class TestPublicKeySource:
     def test_env(self, clear_alipay_env, monkeypatch):
-        monkeypatch.setenv("ALIPAY_ALIPAY_PUBLIC_KEY", "-----BEGIN PUBLIC KEY-----\\nY\\n-----END PUBLIC KEY-----")
+        monkeypatch.setenv(
+            "ALIPAY_ALIPAY_PUBLIC_KEY", "-----BEGIN PUBLIC KEY-----\\nY\\n-----END PUBLIC KEY-----"
+        )
         assert alipay_mod._public_key_source() == "env"
 
     def test_path(self, clear_alipay_env, monkeypatch, tmp_path):
@@ -657,9 +655,7 @@ class TestPublicKeySource:
             assert alipay_mod._public_key_source() == "bundled"
 
     def test_missing(self, clear_alipay_env, monkeypatch):
-        with patch.object(
-            alipay_mod, "_default_bundled_alipay_public_key", return_value=""
-        ):
+        with patch.object(alipay_mod, "_default_bundled_alipay_public_key", return_value=""):
             assert alipay_mod._public_key_source() == "missing"
 
 
@@ -683,8 +679,9 @@ class TestDefaultBundledKey:
         bundled_dir.mkdir()
         key_file = bundled_dir / "alipayPublicKey_RSA2.txt"
         key_file.write_text("content")
-        with patch.object(alipay_mod, "_repo_root", return_value=tmp_path), patch(
-            "pathlib.Path.read_text", side_effect=OSError("perm")
+        with (
+            patch.object(alipay_mod, "_repo_root", return_value=tmp_path),
+            patch("pathlib.Path.read_text", side_effect=OSError("perm")),
         ):
             assert alipay_mod._default_bundled_alipay_public_key() == ""
 

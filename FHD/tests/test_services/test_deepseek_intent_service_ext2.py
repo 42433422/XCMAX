@@ -30,21 +30,19 @@ class TestGetApiKeyExtended:
         mock_spec = MagicMock()
         mock_spec.loader = MagicMock()
 
-        with patch(
-            "app.utils.path_utils.get_resource_path",
-            return_value="/fake/config/deepseek_config.py",
-        ), patch("os.path.exists", return_value=True), patch(
-            "importlib.util.spec_from_file_location", return_value=mock_spec
-        ), patch(
-            "importlib.util.module_from_spec", return_value=mock_module
-        ), patch.object(
-            mock_spec.loader, "exec_module"
+        with (
+            patch(
+                "app.utils.path_utils.get_resource_path",
+                return_value="/fake/config/deepseek_config.py",
+            ),
+            patch("os.path.exists", return_value=True),
+            patch("importlib.util.spec_from_file_location", return_value=mock_spec),
+            patch("importlib.util.module_from_spec", return_value=mock_module),
+            patch.object(mock_spec.loader, "exec_module"),
         ):
             assert r._get_api_key() == "config-key"
 
-    def test_get_api_key_config_recoverable_error(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_get_api_key_config_recoverable_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
         r = DeepSeekIntentRecognizer(api_key=None)
         with patch(
@@ -91,9 +89,7 @@ class TestParseResponseExtended:
         out = recognizer._parse_response(content, "msg")
         assert out["intent"] is None
 
-    def test_parse_response_empty_content(
-        self, recognizer: DeepSeekIntentRecognizer
-    ) -> None:
+    def test_parse_response_empty_content(self, recognizer: DeepSeekIntentRecognizer) -> None:
         out = recognizer._parse_response("", "msg")
         assert out["intent"] is None
         assert out["raw_response"] == ""
@@ -104,61 +100,43 @@ class TestNormalizeSlotsExtended:
     def recognizer(self) -> DeepSeekIntentRecognizer:
         return DeepSeekIntentRecognizer(api_key="k")
 
-    def test_quantity_tins_no_match_keeps_value(
-        self, recognizer: DeepSeekIntentRecognizer
-    ) -> None:
+    def test_quantity_tins_no_match_keeps_value(self, recognizer: DeepSeekIntentRecognizer) -> None:
         out = recognizer._normalize_slots({"quantity_tins": "abc"}, "")
         assert out["quantity_tins"] == "abc"
 
-    def test_quantity_tins_message_match(
-        self, recognizer: DeepSeekIntentRecognizer
-    ) -> None:
+    def test_quantity_tins_message_match(self, recognizer: DeepSeekIntentRecognizer) -> None:
         # Value has no 桶 but message does
         out = recognizer._normalize_slots({"quantity_tins": "x"}, "要3桶")
         assert out["quantity_tins"] == 3
 
-    def test_tin_spec_message_match(
-        self, recognizer: DeepSeekIntentRecognizer
-    ) -> None:
+    def test_tin_spec_message_match(self, recognizer: DeepSeekIntentRecognizer) -> None:
         out = recognizer._normalize_slots({"tin_spec": "x"}, "规格28")
         assert out["tin_spec"] == 28.0
 
-    def test_unit_name_message_match_pattern_2(
-        self, recognizer: DeepSeekIntentRecognizer
-    ) -> None:
+    def test_unit_name_message_match_pattern_2(self, recognizer: DeepSeekIntentRecognizer) -> None:
         # Pattern: ([^\s，,。]+)\s*(?:的|发货单)
         # The regex is greedy, so "七彩乐园的发货单" matches "七彩乐园的" as unit_name
         out = recognizer._normalize_slots({"unit_name": "x"}, "七彩乐园的发货单")
         # The actual behavior extracts "七彩乐园的" (greedy match)
         assert "unit_name" in out
 
-    def test_normalize_slots_none_value_skipped(
-        self, recognizer: DeepSeekIntentRecognizer
-    ) -> None:
+    def test_normalize_slots_none_value_skipped(self, recognizer: DeepSeekIntentRecognizer) -> None:
         out = recognizer._normalize_slots({"key": None}, "")  # type: ignore[dict-item]
         assert "key" not in out
 
-    def test_normalize_slots_contact_phone(
-        self, recognizer: DeepSeekIntentRecognizer
-    ) -> None:
+    def test_normalize_slots_contact_phone(self, recognizer: DeepSeekIntentRecognizer) -> None:
         out = recognizer._normalize_slots({"contact_phone": "13800138000"}, "")
         assert out["contact_phone"] == "13800138000"
 
-    def test_normalize_slots_contact_address(
-        self, recognizer: DeepSeekIntentRecognizer
-    ) -> None:
+    def test_normalize_slots_contact_address(self, recognizer: DeepSeekIntentRecognizer) -> None:
         out = recognizer._normalize_slots({"contact_address": "北京"}, "")
         assert out["contact_address"] == "北京"
 
-    def test_normalize_slots_order_no(
-        self, recognizer: DeepSeekIntentRecognizer
-    ) -> None:
+    def test_normalize_slots_order_no(self, recognizer: DeepSeekIntentRecognizer) -> None:
         out = recognizer._normalize_slots({"order_no": "ORD123"}, "")
         assert out["order_no"] == "ORD123"
 
-    def test_normalize_slots_model_number(
-        self, recognizer: DeepSeekIntentRecognizer
-    ) -> None:
+    def test_normalize_slots_model_number(self, recognizer: DeepSeekIntentRecognizer) -> None:
         out = recognizer._normalize_slots({"model_number": "9803"}, "")
         assert out["model_number"] == "9803"
 
@@ -198,30 +176,26 @@ class TestCnToNumberExtended:
 
 
 class TestGetDeepseekApiKeyExtended:
-    def test_get_deepseek_api_key_from_config(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_get_deepseek_api_key_from_config(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
         mock_module = MagicMock()
         mock_module.DEEPSEEK_API_KEY = "config-key"
         mock_spec = MagicMock()
         mock_spec.loader = MagicMock()
 
-        with patch(
-            "app.utils.path_utils.get_resource_path",
-            return_value="/fake/config.py",
-        ), patch("os.path.exists", return_value=True), patch(
-            "importlib.util.spec_from_file_location", return_value=mock_spec
-        ), patch(
-            "importlib.util.module_from_spec", return_value=mock_module
-        ), patch.object(
-            mock_spec.loader, "exec_module"
+        with (
+            patch(
+                "app.utils.path_utils.get_resource_path",
+                return_value="/fake/config.py",
+            ),
+            patch("os.path.exists", return_value=True),
+            patch("importlib.util.spec_from_file_location", return_value=mock_spec),
+            patch("importlib.util.module_from_spec", return_value=mock_module),
+            patch.object(mock_spec.loader, "exec_module"),
         ):
             assert get_deepseek_api_key() == "config-key"
 
-    def test_get_deepseek_api_key_recoverable_error(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_get_deepseek_api_key_recoverable_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
         with patch(
             "app.utils.path_utils.get_resource_path",
@@ -229,9 +203,7 @@ class TestGetDeepseekApiKeyExtended:
         ):
             assert get_deepseek_api_key() == ""
 
-    def test_get_deepseek_api_key_config_no_key_attr(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_get_deepseek_api_key_config_no_key_attr(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
         mock_module = MagicMock()
         # Remove the attribute to test getattr default
@@ -239,15 +211,15 @@ class TestGetDeepseekApiKeyExtended:
         mock_spec = MagicMock()
         mock_spec.loader = MagicMock()
 
-        with patch(
-            "app.utils.path_utils.get_resource_path",
-            return_value="/fake/config.py",
-        ), patch("os.path.exists", return_value=True), patch(
-            "importlib.util.spec_from_file_location", return_value=mock_spec
-        ), patch(
-            "importlib.util.module_from_spec", return_value=mock_module
-        ), patch.object(
-            mock_spec.loader, "exec_module"
+        with (
+            patch(
+                "app.utils.path_utils.get_resource_path",
+                return_value="/fake/config.py",
+            ),
+            patch("os.path.exists", return_value=True),
+            patch("importlib.util.spec_from_file_location", return_value=mock_spec),
+            patch("importlib.util.module_from_spec", return_value=mock_module),
+            patch.object(mock_spec.loader, "exec_module"),
         ):
             assert get_deepseek_api_key() == ""
 
@@ -268,9 +240,7 @@ class TestRecognizeAsyncExtended:
             out = await recognizer.recognize(msg)
         assert out["intent"] is None
 
-    async def test_recognize_retries_on_error(
-        self, recognizer: DeepSeekIntentRecognizer
-    ) -> None:
+    async def test_recognize_retries_on_error(self, recognizer: DeepSeekIntentRecognizer) -> None:
         msg = "RECOGNIZE_RETRIES_UNIQUE_006"
         call_count = {"n": 0}
 
@@ -280,11 +250,7 @@ class TestRecognizeAsyncExtended:
                 raise RuntimeError("first fail")
             return {
                 "choices": [
-                    {
-                        "message": {
-                            "content": '{"intent": "greet", "confidence": 0.8, "slots": {}}'
-                        }
-                    }
+                    {"message": {"content": '{"intent": "greet", "confidence": 0.8, "slots": {}}'}}
                 ]
             }
 
@@ -336,11 +302,12 @@ class TestHybridRecognizeExtended:
         h.distilled_recognizer = mock_distilled
         h.use_distilled = True
         rule = {"primary_intent": "unk"}
-        with patch(
-            "app.services.intent_service.recognize_intents", return_value=dict(rule)
-        ), patch(
-            "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
-            return_value=None,
+        with (
+            patch("app.services.intent_service.recognize_intents", return_value=dict(rule)),
+            patch(
+                "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
+                return_value=None,
+            ),
         ):
             out = await h.recognize("msg")
         assert out["intent_source"] == "distilled"
@@ -360,11 +327,12 @@ class TestHybridRecognizeExtended:
         h.distilled_recognizer = mock_distilled
         h.use_distilled = True
         rule = {"primary_intent": "unk"}
-        with patch(
-            "app.services.intent_service.recognize_intents", return_value=dict(rule)
-        ), patch(
-            "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
-            return_value=None,
+        with (
+            patch("app.services.intent_service.recognize_intents", return_value=dict(rule)),
+            patch(
+                "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
+                return_value=None,
+            ),
         ):
             out = await h.recognize("msg")
         assert out["intent_source"] == "distilled_low_confidence"
@@ -383,11 +351,12 @@ class TestHybridRecognizeExtended:
         h.distilled_recognizer = mock_distilled
         h.use_distilled = True
         rule = {"primary_intent": "unk"}
-        with patch(
-            "app.services.intent_service.recognize_intents", return_value=dict(rule)
-        ), patch(
-            "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
-            return_value=None,
+        with (
+            patch("app.services.intent_service.recognize_intents", return_value=dict(rule)),
+            patch(
+                "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
+                return_value=None,
+            ),
         ):
             out = await h.recognize("msg")
         assert out["intent_source"] == "rule"
@@ -402,11 +371,12 @@ class TestHybridRecognizeExtended:
         h.distilled_recognizer = mock_distilled
         h.use_distilled = True
         rule = {"primary_intent": "unk"}
-        with patch(
-            "app.services.intent_service.recognize_intents", return_value=dict(rule)
-        ), patch(
-            "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
-            return_value=None,
+        with (
+            patch("app.services.intent_service.recognize_intents", return_value=dict(rule)),
+            patch(
+                "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
+                return_value=None,
+            ),
         ):
             out = await h.recognize("msg")
         # Should fall through to no-deepseek branch
@@ -415,11 +385,12 @@ class TestHybridRecognizeExtended:
     async def test_goodbye_returns_rule_directly(self) -> None:
         h = HybridIntentWithDeepSeek(use_deepseek=True)
         rule = {"primary_intent": "goodbye", "is_goodbye": True, "tool_key": "goodbye"}
-        with patch(
-            "app.services.intent_service.recognize_intents", return_value=dict(rule)
-        ), patch(
-            "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
-            return_value=None,
+        with (
+            patch("app.services.intent_service.recognize_intents", return_value=dict(rule)),
+            patch(
+                "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
+                return_value=None,
+            ),
         ):
             out = await h.recognize("再见")
         assert out["intent_source"] == "rule"
@@ -428,11 +399,12 @@ class TestHybridRecognizeExtended:
     async def test_help_returns_rule_directly(self) -> None:
         h = HybridIntentWithDeepSeek(use_deepseek=True)
         rule = {"primary_intent": "help", "is_help": True, "tool_key": "help"}
-        with patch(
-            "app.services.intent_service.recognize_intents", return_value=dict(rule)
-        ), patch(
-            "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
-            return_value=None,
+        with (
+            patch("app.services.intent_service.recognize_intents", return_value=dict(rule)),
+            patch(
+                "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
+                return_value=None,
+            ),
         ):
             out = await h.recognize("帮助")
         assert out["intent_source"] == "rule"
@@ -469,9 +441,7 @@ class TestExtractSlotsFromRuleExtended:
         slots = hybrid._extract_slots_from_rule("七彩乐园的发货单", {})
         assert slots.get("unit_name") == "七彩乐园"
 
-    def test_default_pattern_invalid_unit_rejected(
-        self, hybrid: HybridIntentWithDeepSeek
-    ) -> None:
+    def test_default_pattern_invalid_unit_rejected(self, hybrid: HybridIntentWithDeepSeek) -> None:
         slots = hybrid._extract_slots_from_rule("我的发货单", {})
         # "我" is in invalid_unit_names
         assert "unit_name" not in slots
@@ -484,9 +454,7 @@ class TestExtractSlotsFromRuleExtended:
         slots = hybrid._extract_slots_from_rule("出货单海底捞", {})
         assert slots.get("unit_name") == "海底捞"
 
-    def test_contact_person_converted_to_unit_name(
-        self, hybrid: HybridIntentWithDeepSeek
-    ) -> None:
+    def test_contact_person_converted_to_unit_name(self, hybrid: HybridIntentWithDeepSeek) -> None:
         # The function builds slots from message, not from rule_result
         # contact_person conversion only happens if contact_person is in slots
         # which comes from rule_result passed in. But the function doesn't read
@@ -496,9 +464,7 @@ class TestExtractSlotsFromRuleExtended:
         # No unit_name extracted from "msg"
         assert "unit_name" not in slots or slots.get("unit_name") is None
 
-    def test_unit_name_needs_fix_with_keyword(
-        self, hybrid: HybridIntentWithDeepSeek
-    ) -> None:
+    def test_unit_name_needs_fix_with_keyword(self, hybrid: HybridIntentWithDeepSeek) -> None:
         # Pass keyword in rule_result - but the function doesn't read keyword from rule_result
         # It builds slots from scratch. So keyword won't be in slots.
         rule_result = {"keyword": "客户A 的 9803"}
@@ -506,9 +472,7 @@ class TestExtractSlotsFromRuleExtended:
         # keyword is not extracted from message "msg"
         assert "unit_name" not in slots
 
-    def test_keyword_extracts_unit_and_model(
-        self, hybrid: HybridIntentWithDeepSeek
-    ) -> None:
+    def test_keyword_extracts_unit_and_model(self, hybrid: HybridIntentWithDeepSeek) -> None:
         # keyword must be in slots (from rule_result) for the keyword logic to run
         # But the function doesn't read keyword from rule_result
         rule_result = {"keyword": "客户A 的 9803"}
@@ -516,18 +480,14 @@ class TestExtractSlotsFromRuleExtended:
         # keyword is not in slots, so no extraction
         assert "unit_name" not in slots
 
-    def test_keyword_extracts_model_only(
-        self, hybrid: HybridIntentWithDeepSeek
-    ) -> None:
+    def test_keyword_extracts_model_only(self, hybrid: HybridIntentWithDeepSeek) -> None:
         # keyword must be in slots for model extraction
         rule_result = {"keyword": "9803"}
         slots = hybrid._extract_slots_from_rule("msg", rule_result)
         # keyword is not in slots, so no model extraction
         assert "model_number" not in slots
 
-    def test_product_model_with_spec(
-        self, hybrid: HybridIntentWithDeepSeek
-    ) -> None:
+    def test_product_model_with_spec(self, hybrid: HybridIntentWithDeepSeek) -> None:
         slots = hybrid._extract_slots_from_rule("9803规格28", {})
         assert slots.get("product_model") == "9803"
         assert slots.get("tin_spec") == 28.0
@@ -536,14 +496,16 @@ class TestExtractSlotsFromRuleExtended:
 class TestRecognizeSyncExtended:
     def test_recognize_sync_recoverable_error(self) -> None:
         h = HybridIntentWithDeepSeek(use_deepseek=False)
-        with patch.object(
-            h, "recognize", new=AsyncMock(side_effect=RuntimeError("sync fail"))
-        ), patch(
-            "app.services.intent_service.recognize_intents",
-            return_value={"primary_intent": "fallback"},
-        ), patch(
-            "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
-            return_value=None,
+        with (
+            patch.object(h, "recognize", new=AsyncMock(side_effect=RuntimeError("sync fail"))),
+            patch(
+                "app.services.intent_service.recognize_intents",
+                return_value={"primary_intent": "fallback"},
+            ),
+            patch(
+                "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
+                return_value=None,
+            ),
         ):
             out = h.recognize_sync("msg")
         assert out["primary_intent"] == "fallback"
@@ -551,11 +513,12 @@ class TestRecognizeSyncExtended:
     def test_recognize_sync_success(self) -> None:
         h = HybridIntentWithDeepSeek(use_deepseek=False)
         rule = {"primary_intent": "greet", "is_greeting": True}
-        with patch(
-            "app.services.intent_service.recognize_intents", return_value=dict(rule)
-        ), patch(
-            "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
-            return_value=None,
+        with (
+            patch("app.services.intent_service.recognize_intents", return_value=dict(rule)),
+            patch(
+                "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
+                return_value=None,
+            ),
         ):
             out = h.recognize_sync("你好")
         assert out.get("final_intent") == "greet" or out.get("primary_intent") == "greet"
@@ -606,9 +569,7 @@ class TestSingletonsExtended:
             "app.services.distilled_intent_service.get_distilled_recognizer",
             side_effect=RuntimeError("no distilled"),
         ):
-            h = get_hybrid_intent_with_deepseek(
-                use_deepseek=False, use_distilled=True
-            )
+            h = get_hybrid_intent_with_deepseek(use_deepseek=False, use_distilled=True)
         assert h is not None
         reset_deepseek_intent_services()
 

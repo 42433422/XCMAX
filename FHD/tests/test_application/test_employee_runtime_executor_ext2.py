@@ -4,6 +4,7 @@ Covers helper functions and the action handlers (echo / direct_python /
 vendor convert / agent / llm_md), cognition, perception, memory, and
 ``execute_employee_task_local`` delegation.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -14,7 +15,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from app.application.employee_runtime import executor as exec_mod
-
 
 # ── _get_section / _normalize_actions_cfg / _handler_list ────────────────────
 
@@ -212,9 +212,7 @@ class TestActionVendorConvert:
     def test_missing_file_path_for_non_generate(self, tmp_path):
         backend = tmp_path / "backend" / "vendor" / "csv"
         backend.mkdir(parents=True)
-        (backend / "convert.py").write_text(
-            "def convert_file(*a, **k):\n    return {'ok': True}\n"
-        )
+        (backend / "convert.py").write_text("def convert_file(*a, **k):\n    return {'ok': True}\n")
         out = exec_mod._action_vendor_convert(tmp_path, "emp-1", {}, None)
         assert out["ok"] is False
         assert "file_path" in out["error"]
@@ -222,9 +220,7 @@ class TestActionVendorConvert:
     def test_generate_employee_without_input(self, tmp_path):
         backend = tmp_path / "backend" / "vendor" / "csv"
         backend.mkdir(parents=True)
-        (backend / "convert.py").write_text(
-            "def convert_file(*a, **k):\n    return {'ok': True}\n"
-        )
+        (backend / "convert.py").write_text("def convert_file(*a, **k):\n    return {'ok': True}\n")
         out = exec_mod._action_vendor_convert(tmp_path, "emp-generate-1", {}, None)
         assert out["ok"] is False
         assert "JSON 输入" in out["error"] or "user_request" in out["error"]
@@ -251,9 +247,7 @@ class TestActionVendorConvert:
         # Provide a file_path so we get past the missing-file check
         src = tmp_path / "src.txt"
         src.write_text("hi")
-        out = exec_mod._action_vendor_convert(
-            tmp_path, "emp-1", {"file_path": str(src)}, None
-        )
+        out = exec_mod._action_vendor_convert(tmp_path, "emp-1", {"file_path": str(src)}, None)
         assert out["ok"] is False
         assert "boom" in out["error"]
 
@@ -290,9 +284,7 @@ class TestActionDirectPythonModule:
         # No backend/employees dir but vendor convert present
         vendor = tmp_path / "backend" / "vendor" / "csv"
         vendor.mkdir(parents=True)
-        (vendor / "convert.py").write_text(
-            "def convert_file(*a, **k):\n    return {'ok': True}\n"
-        )
+        (vendor / "convert.py").write_text("def convert_file(*a, **k):\n    return {'ok': True}\n")
         # Provide file_path via reasoning
         src = tmp_path / "src.txt"
         src.write_text("hi")
@@ -332,9 +324,7 @@ class TestActionDirectPythonModule:
     def test_module_run_returns_non_dict(self, tmp_path):
         employees = tmp_path / "backend" / "employees"
         employees.mkdir(parents=True)
-        (employees / "worker.py").write_text(
-            "def run(payload, ctx):\n    return 'plain string'\n"
-        )
+        (employees / "worker.py").write_text("def run(payload, ctx):\n    return 'plain string'\n")
         out = exec_mod._action_direct_python_module(
             tmp_path, "emp-1", {}, {"input": {}}, "task", None
         )

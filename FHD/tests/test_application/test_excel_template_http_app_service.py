@@ -24,6 +24,7 @@ from app.application.excel_template_http_app_service import (
     _pick_sheet_name,
     _resolve_template_path,
     decompose_template,
+    delete_template,
     excel_templates_test,
     get_base_dir,
     get_default_template,
@@ -34,10 +35,8 @@ from app.application.excel_template_http_app_service import (
     list_templates_get,
     save_template,
     update_template,
-    delete_template,
     upload_excel,
 )
-
 
 # ---------------------------------------------------------------------------
 # _map_template_category
@@ -171,7 +170,7 @@ class TestJsonSafeCellValue:
         assert _json_safe_cell_value(Decimal("3.14")) == "3.14"
 
     def test_other_type(self):
-        assert _json_safe_cell_value(set([1, 2])) == "{1, 2}"
+        assert _json_safe_cell_value({1, 2}) == "{1, 2}"
 
 
 # ---------------------------------------------------------------------------
@@ -280,6 +279,7 @@ class TestListTemplatesByType:
         mock_svc.list_by_type.return_value = [{"id": "1"}]
         # Reset singleton and patch at the re-export level
         import app.application.template_app_service as _ts
+
         _ts._template_app_service = None
         with patch("app.application.get_template_app_service", return_value=mock_svc):
             resp = list_templates_by_type(type="发货单", active_only="true")
@@ -287,6 +287,7 @@ class TestListTemplatesByType:
 
     def test_error(self):
         import app.application.template_app_service as _ts
+
         _ts._template_app_service = None
         with patch("app.application.get_template_app_service", side_effect=RuntimeError("fail")):
             resp = list_templates_by_type(type="发货单", active_only="true")
@@ -308,7 +309,11 @@ class TestGetDefaultTemplate:
 
     def test_found(self):
         mock_svc = MagicMock()
-        mock_svc.get_default_for_type.return_value = {"id": "1", "template_type": "excel", "exists": True}
+        mock_svc.get_default_for_type.return_value = {
+            "id": "1",
+            "template_type": "excel",
+            "exists": True,
+        }
         with patch("app.application.get_template_app_service", return_value=mock_svc):
             resp = get_default_template()
             assert resp.status_code == 200

@@ -21,7 +21,6 @@ from app.infrastructure.skills.excel_toolkit.excel_toolkit import (
     view_excel_content,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helper to create a mock worksheet
 # ---------------------------------------------------------------------------
@@ -164,7 +163,9 @@ class TestViewExcelContent:
         excel_path = tmp_path / "test.xlsx"
         excel_path.write_bytes(b"fake")
 
-        original_import = __builtins__.__import__ if hasattr(__builtins__, "__import__") else __import__
+        original_import = (
+            __builtins__.__import__ if hasattr(__builtins__, "__import__") else __import__
+        )
 
         def fake_import(name, *args, **kwargs):
             if name == "openpyxl":
@@ -217,9 +218,7 @@ class TestGetMergedCells:
         excel_path.write_bytes(b"fake")
 
         cells = {(1, 1): "Title"}
-        ws = _make_ws(
-            max_row=10, max_col=5, cells=cells, merged_ranges=[(1, 1, 1, 5)]
-        )
+        ws = _make_ws(max_row=10, max_col=5, cells=cells, merged_ranges=[(1, 1, 1, 5)])
         wb = MagicMock()
         wb.sheetnames = ["Sheet1"]
         wb.active = ws
@@ -295,7 +294,9 @@ class TestGetMergedCells:
         excel_path = tmp_path / "test.xlsx"
         excel_path.write_bytes(b"fake")
 
-        original_import = __builtins__.__import__ if hasattr(__builtins__, "__import__") else __import__
+        original_import = (
+            __builtins__.__import__ if hasattr(__builtins__, "__import__") else __import__
+        )
 
         def fake_import(name, *args, **kwargs):
             if name == "openpyxl":
@@ -428,12 +429,15 @@ class TestAnalyzeStructure:
         wb.active = ws
         wb.__getitem__ = MagicMock(return_value=ws)
 
-        with patch(
-            "openpyxl.load_workbook",
-            return_value=wb,
-        ), patch(
-            "openpyxl.utils.get_column_letter",
-            side_effect=lambda n: chr(64 + n),
+        with (
+            patch(
+                "openpyxl.load_workbook",
+                return_value=wb,
+            ),
+            patch(
+                "openpyxl.utils.get_column_letter",
+                side_effect=lambda n: chr(64 + n),
+            ),
         ):
             result = analyze_structure(str(excel_path))
             assert result["success"] is True
@@ -452,12 +456,15 @@ class TestAnalyzeStructure:
         wb.sheetnames = ["Sheet1", "Data"]
         wb.__getitem__ = MagicMock(return_value=ws)
 
-        with patch(
-            "openpyxl.load_workbook",
-            return_value=wb,
-        ), patch(
-            "openpyxl.utils.get_column_letter",
-            side_effect=lambda n: chr(64 + n),
+        with (
+            patch(
+                "openpyxl.load_workbook",
+                return_value=wb,
+            ),
+            patch(
+                "openpyxl.utils.get_column_letter",
+                side_effect=lambda n: chr(64 + n),
+            ),
         ):
             result = analyze_structure(str(excel_path), sheet_name="Data")
             assert result["success"] is True
@@ -473,12 +480,15 @@ class TestAnalyzeStructure:
         wb.active = ws
         wb.__getitem__ = MagicMock(return_value=ws)
 
-        with patch(
-            "openpyxl.load_workbook",
-            return_value=wb,
-        ), patch(
-            "openpyxl.utils.get_column_letter",
-            side_effect=lambda n: chr(64 + n),
+        with (
+            patch(
+                "openpyxl.load_workbook",
+                return_value=wb,
+            ),
+            patch(
+                "openpyxl.utils.get_column_letter",
+                side_effect=lambda n: chr(64 + n),
+            ),
         ):
             result = analyze_structure(str(excel_path), sheet_name="Nonexistent")
             assert result["success"] is True
@@ -576,9 +586,7 @@ class TestExcelToolkitSkill:
             "app.infrastructure.skills.excel_toolkit.excel_toolkit.view_excel_content",
             return_value={"success": True},
         ) as mock_view:
-            result = skill.execute(
-                str(excel_path), action="view", max_rows=50
-            )
+            result = skill.execute(str(excel_path), action="view", max_rows=50)
             assert result["success"] is True
             # view_excel_content is called positionally: (file_path, sheet_name, max_rows)
             args, kwargs = mock_view.call_args

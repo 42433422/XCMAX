@@ -59,9 +59,7 @@ class TestModIndexDatabaseInit:
 
     def test_creates_tables(self, db):
         with db.get_connection() as conn:
-            cursor = conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            )
+            cursor = conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
             tables = {row["name"] for row in cursor.fetchall()}
         assert "mod_metadata" in tables
         assert "mod_dependencies" in tables
@@ -70,9 +68,7 @@ class TestModIndexDatabaseInit:
 
     def test_creates_indexes(self, db):
         with db.get_connection() as conn:
-            cursor = conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='index'"
-            )
+            cursor = conn.execute("SELECT name FROM sqlite_master WHERE type='index'")
             indexes = {row["name"] for row in cursor.fetchall()}
         assert "idx_mod_name" in indexes
         assert "idx_mod_author" in indexes
@@ -372,16 +368,12 @@ class TestModIndexService:
         ModIndexService._instance = None
 
     def test_search_delegates_to_db(self, service):
-        service.db.upsert_mod(
-            {"id": "1", "name": "TestMOD", "version": "1.0.0"}, "1.xcmod"
-        )
+        service.db.upsert_mod({"id": "1", "name": "TestMOD", "version": "1.0.0"}, "1.xcmod")
         result = service.search(query="Test")
         assert len(result) == 1
 
     def test_get_mod_delegates_to_db(self, service):
-        service.db.upsert_mod(
-            {"id": "1", "name": "TestMOD", "version": "1.0.0"}, "1.xcmod"
-        )
+        service.db.upsert_mod({"id": "1", "name": "TestMOD", "version": "1.0.0"}, "1.xcmod")
         result = service.get_mod("1")
         assert result is not None
         assert result["name"] == "TestMOD"
@@ -391,16 +383,12 @@ class TestModIndexService:
         assert result is None
 
     def test_get_all_mods_delegates(self, service):
-        service.db.upsert_mod(
-            {"id": "1", "name": "MOD1", "version": "1.0.0"}, "1.xcmod"
-        )
+        service.db.upsert_mod({"id": "1", "name": "MOD1", "version": "1.0.0"}, "1.xcmod")
         result = service.get_all_mods()
         assert len(result) == 1
 
     def test_add_rating_valid(self, service):
-        service.db.upsert_mod(
-            {"id": "1", "name": "MOD1", "version": "1.0.0"}, "1.xcmod"
-        )
+        service.db.upsert_mod({"id": "1", "name": "MOD1", "version": "1.0.0"}, "1.xcmod")
         result = service.add_rating("1", "user1", 4, "不错")
         assert result is True
 
@@ -413,39 +401,29 @@ class TestModIndexService:
         assert result is False
 
     def test_add_rating_boundary_values(self, service):
-        service.db.upsert_mod(
-            {"id": "1", "name": "MOD1", "version": "1.0.0"}, "1.xcmod"
-        )
+        service.db.upsert_mod({"id": "1", "name": "MOD1", "version": "1.0.0"}, "1.xcmod")
         assert service.add_rating("1", "u1", 1) is True
         assert service.add_rating("1", "u2", 5) is True
 
     def test_get_ratings_delegates(self, service):
-        service.db.upsert_mod(
-            {"id": "1", "name": "MOD1", "version": "1.0.0"}, "1.xcmod"
-        )
+        service.db.upsert_mod({"id": "1", "name": "MOD1", "version": "1.0.0"}, "1.xcmod")
         service.add_rating("1", "user1", 5)
         result = service.get_ratings("1")
         assert len(result) == 1
 
     def test_get_statistics_delegates(self, service):
-        service.db.upsert_mod(
-            {"id": "1", "name": "MOD1", "version": "1.0.0"}, "1.xcmod"
-        )
+        service.db.upsert_mod({"id": "1", "name": "MOD1", "version": "1.0.0"}, "1.xcmod")
         service.add_rating("1", "user1", 4)
         result = service.get_statistics("1")
         assert result is not None
 
     def test_get_popular_mods_delegates(self, service):
-        service.db.upsert_mod(
-            {"id": "1", "name": "MOD1", "version": "1.0.0"}, "1.xcmod"
-        )
+        service.db.upsert_mod({"id": "1", "name": "MOD1", "version": "1.0.0"}, "1.xcmod")
         result = service.get_popular_mods(limit=5)
         assert isinstance(result, list)
 
     def test_get_recent_mods_delegates(self, service):
-        service.db.upsert_mod(
-            {"id": "1", "name": "MOD1", "version": "1.0.0"}, "1.xcmod"
-        )
+        service.db.upsert_mod({"id": "1", "name": "MOD1", "version": "1.0.0"}, "1.xcmod")
         result = service.get_recent_mods(limit=5)
         assert isinstance(result, list)
 
@@ -455,10 +433,13 @@ class TestModIndexService:
         mock_mod_manager_module = MagicMock()
         mock_mod_manager_module.get_mod_manager.return_value = mock_manager
 
-        with patch.dict("sys.modules", {
-            "app.infrastructure.mods": mock_mod_manager_module,
-            "app.infrastructure.mods.mod_manager": mock_mod_manager_module,
-        }):
+        with patch.dict(
+            "sys.modules",
+            {
+                "app.infrastructure.mods": mock_mod_manager_module,
+                "app.infrastructure.mods.mod_manager": mock_mod_manager_module,
+            },
+        ):
             result = service.index_mod_package("/fake/path.xcmod", "fake.xcmod")
             assert result is False
 

@@ -404,7 +404,6 @@ def _registered_router_template_preview(
             result = db.execute(
                 text(
                     """
-from typing import cast
                     INSERT INTO templates (
                         template_key, template_name, template_type,
                         original_file_path, analyzed_data, editable_config,

@@ -2,20 +2,21 @@
 
 from __future__ import annotations
 
-import os
-import tempfile
-from unittest.mock import patch
-
 import importlib
+from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
 # The module uses a hyphen in directory name, so we need importlib
+FHD_ROOT = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location(
     "sidebar_menu_manager",
-    "/Users/a4243342/Desktop/XCMAX/FHD/app/infrastructure/skills/sidebar-menu-manager/sidebar_menu_manager.py",
+    FHD_ROOT / "app/infrastructure/skills/sidebar-menu-manager/sidebar_menu_manager.py",
 )
+assert spec is not None
 _mod = importlib.util.module_from_spec(spec)
+assert spec.loader is not None
 spec.loader.exec_module(_mod)
 
 add_menu_item = _mod.add_menu_item
@@ -29,7 +30,7 @@ reorder_menu_items = _mod.reorder_menu_items
 update_menu_item = _mod.update_menu_item
 
 
-SAMPLE_SIDEBAR = '''<template>
+SAMPLE_SIDEBAR = """<template>
   <div class="sidebar">
     <div v-for="item in menuItems" :key="item.key">
       {{ item.name }}
@@ -44,7 +45,7 @@ const menuItems = [
   { key: 'customers', name: '客户管理', icon: '👥' },
 ]
 </script>
-'''
+"""
 
 
 @pytest.fixture
@@ -86,7 +87,9 @@ class TestGetMenuItems:
         assert items[0]["icon"] == "📊"
 
     def test_nonexistent_file_returns_empty(self, tmp_path):
-        with patch.object(_mod, "get_sidebar_component_path",
+        with patch.object(
+            _mod,
+            "get_sidebar_component_path",
             return_value=str(tmp_path / "nonexistent.vue"),
         ):
             items = get_menu_items()
@@ -126,7 +129,9 @@ class TestAddMenuItem:
         assert "already exists" in result["message"]
 
     def test_add_to_nonexistent_file(self, tmp_path):
-        with patch.object(_mod, "get_sidebar_component_path",
+        with patch.object(
+            _mod,
+            "get_sidebar_component_path",
             return_value=str(tmp_path / "nonexistent.vue"),
         ):
             result = add_menu_item("test", "测试", "📌")
@@ -150,7 +155,9 @@ class TestRemoveMenuItem:
         assert "not found" in result["message"]
 
     def test_remove_from_nonexistent_file(self, tmp_path):
-        with patch.object(_mod, "get_sidebar_component_path",
+        with patch.object(
+            _mod,
+            "get_sidebar_component_path",
             return_value=str(tmp_path / "nonexistent.vue"),
         ):
             result = remove_menu_item("test")
@@ -181,7 +188,9 @@ class TestUpdateMenuItem:
         assert result["success"] is False
 
     def test_update_nonexistent_file(self, tmp_path):
-        with patch.object(_mod, "get_sidebar_component_path",
+        with patch.object(
+            _mod,
+            "get_sidebar_component_path",
             return_value=str(tmp_path / "nonexistent.vue"),
         ):
             result = update_menu_item("test", name="测试")
@@ -217,7 +226,9 @@ class TestReorderMenuItems:
         assert result["success"] is False
 
     def test_nonexistent_file(self, tmp_path):
-        with patch.object(_mod, "get_sidebar_component_path",
+        with patch.object(
+            _mod,
+            "get_sidebar_component_path",
             return_value=str(tmp_path / "nonexistent.vue"),
         ):
             result = reorder_menu_items("test", 0)
@@ -236,7 +247,9 @@ class TestGetSidebarInfo:
         assert info["item_count"] == 3
 
     def test_nonexistent_file(self, tmp_path):
-        with patch.object(_mod, "get_sidebar_component_path",
+        with patch.object(
+            _mod,
+            "get_sidebar_component_path",
             return_value=str(tmp_path / "nonexistent.vue"),
         ):
             info = get_sidebar_info()

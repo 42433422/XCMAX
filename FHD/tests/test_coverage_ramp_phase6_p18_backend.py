@@ -57,7 +57,6 @@ from app.services import wechat_contact_service as wechat_mod
 from app.services.ocr_service import OCRResult, OCRService
 from app.services.wechat_contact_service import WechatContactService
 
-
 # ===========================================================================
 # Shared helpers / fixtures
 # ===========================================================================
@@ -266,9 +265,7 @@ class TestProductRepositoryProductToDict:
         mock_col3 = MagicMock()
         mock_col3.name = "price"
 
-        with patch(
-            "app.infrastructure.persistence.product_repository_impl.inspect"
-        ) as mock_insp:
+        with patch("app.infrastructure.persistence.product_repository_impl.inspect") as mock_insp:
             mock_mapper = MagicMock()
             mock_mapper.columns = [mock_col1, mock_col2, mock_col3]
             mock_insp.return_value = mock_mapper
@@ -282,9 +279,7 @@ class TestProductRepositoryProductToDict:
         mock_col = MagicMock()
         mock_col.name = "name"
 
-        with patch(
-            "app.infrastructure.persistence.product_repository_impl.inspect"
-        ) as mock_insp:
+        with patch("app.infrastructure.persistence.product_repository_impl.inspect") as mock_insp:
             mock_mapper = MagicMock()
             mock_mapper.columns = [mock_col]
             mock_insp.return_value = mock_mapper
@@ -297,9 +292,7 @@ class TestProductRepositoryProductToDict:
         mock_col = MagicMock()
         mock_col.name = "price"
 
-        with patch(
-            "app.infrastructure.persistence.product_repository_impl.inspect"
-        ) as mock_insp:
+        with patch("app.infrastructure.persistence.product_repository_impl.inspect") as mock_insp:
             mock_mapper = MagicMock()
             mock_mapper.columns = [mock_col]
             mock_insp.return_value = mock_mapper
@@ -317,9 +310,7 @@ class TestProductRepositoryProductToDict:
         mock_col3 = MagicMock()
         mock_col3.name = "missing_col"
 
-        with patch(
-            "app.infrastructure.persistence.product_repository_impl.inspect"
-        ) as mock_insp:
+        with patch("app.infrastructure.persistence.product_repository_impl.inspect") as mock_insp:
             mock_mapper = MagicMock()
             mock_mapper.columns = [mock_col1, mock_col2, mock_col3]
             mock_insp.return_value = mock_mapper
@@ -342,9 +333,7 @@ class TestProductRepositoryFindAll:
         mock_db.__dict__["bind"] = MagicMock()
         mock_get_db.return_value = _mock_db_ctx(mock_db)
 
-        with patch(
-            "app.infrastructure.persistence.product_repository_impl.inspect"
-        ) as mock_insp:
+        with patch("app.infrastructure.persistence.product_repository_impl.inspect") as mock_insp:
             mock_bind_insp = MagicMock()
             mock_bind_insp.get_table_names.return_value = []
             mock_insp.return_value = mock_bind_insp
@@ -376,9 +365,7 @@ class TestProductRepositoryFindAll:
         mock_query.all.return_value = []
         mock_db.query.return_value = mock_query
 
-        with patch(
-            "app.infrastructure.persistence.product_repository_impl.inspect"
-        ) as mock_insp:
+        with patch("app.infrastructure.persistence.product_repository_impl.inspect") as mock_insp:
             mock_bind_insp = MagicMock()
             mock_bind_insp.get_table_names.return_value = ["products"]
             mock_insp.return_value = mock_bind_insp
@@ -401,9 +388,7 @@ class TestProductRepositoryFindAll:
         mock_query.all.return_value = []
         mock_db.query.return_value = mock_query
 
-        with patch(
-            "app.infrastructure.persistence.product_repository_impl.inspect"
-        ) as mock_insp:
+        with patch("app.infrastructure.persistence.product_repository_impl.inspect") as mock_insp:
             mock_bind_insp = MagicMock()
             mock_bind_insp.get_table_names.return_value = ["products"]
             mock_insp.return_value = mock_bind_insp
@@ -426,9 +411,7 @@ class TestProductRepositoryFindAll:
         mock_query.all.return_value = []
         mock_db.query.return_value = mock_query
 
-        with patch(
-            "app.infrastructure.persistence.product_repository_impl.inspect"
-        ) as mock_insp:
+        with patch("app.infrastructure.persistence.product_repository_impl.inspect") as mock_insp:
             mock_bind_insp = MagicMock()
             mock_bind_insp.get_table_names.return_value = ["products"]
             mock_insp.return_value = mock_bind_insp
@@ -451,9 +434,7 @@ class TestProductRepositoryFindAll:
         mock_query.all.return_value = []
         mock_db.query.return_value = mock_query
 
-        with patch(
-            "app.infrastructure.persistence.product_repository_impl.inspect"
-        ) as mock_insp:
+        with patch("app.infrastructure.persistence.product_repository_impl.inspect") as mock_insp:
             mock_bind_insp = MagicMock()
             mock_bind_insp.get_table_names.return_value = ["products"]
             mock_insp.return_value = mock_bind_insp
@@ -468,9 +449,7 @@ class TestProductRepositoryFindAll:
         mock_db.__dict__["bind"] = MagicMock()
         mock_get_db.return_value = _mock_db_ctx(mock_db)
 
-        with patch(
-            "app.infrastructure.persistence.product_repository_impl.inspect"
-        ) as mock_insp:
+        with patch("app.infrastructure.persistence.product_repository_impl.inspect") as mock_insp:
             mock_insp.side_effect = RuntimeError("inspect failed")
             result = repo.find_all()
 
@@ -524,9 +503,7 @@ class TestProductRepositoryCreateUpdate:
         mock_product.id = 42
         mock_get_db.return_value = _mock_db_ctx(mock_db)
 
-        with patch(
-            "app.infrastructure.persistence.product_repository_impl.Product"
-        ) as MockProduct:
+        with patch("app.infrastructure.persistence.product_repository_impl.Product") as MockProduct:
             MockProduct.return_value = mock_product
             result = repo.create({"product_name": "新产品", "price": 10.0})
 
@@ -549,9 +526,7 @@ class TestProductRepositoryCreateUpdate:
         mock_product.id = 1
         mock_get_db.return_value = _mock_db_ctx(mock_db)
 
-        with patch(
-            "app.infrastructure.persistence.product_repository_impl.Product"
-        ) as MockProduct:
+        with patch("app.infrastructure.persistence.product_repository_impl.Product") as MockProduct:
             MockProduct.return_value = mock_product
             result = repo.create({"name": "用name键创建"})
 
@@ -690,9 +665,7 @@ class TestProductRepositoryBatchOps:
         mock_db.flush.return_value = None
         mock_get_db.return_value = _mock_db_ctx(mock_db)
 
-        with patch(
-            "app.infrastructure.persistence.product_repository_impl.Product"
-        ) as MockProduct:
+        with patch("app.infrastructure.persistence.product_repository_impl.Product") as MockProduct:
             MockProduct.return_value = mock_product
             result = repo.batch_create([{"product_name": "产品1"}])
 
@@ -763,9 +736,7 @@ class TestProductRepositoryExistsAndNames:
         ]
         mock_get_db.return_value = _mock_db_ctx(mock_db)
 
-        with patch(
-            "app.infrastructure.persistence.product_repository_impl.inspect"
-        ) as mock_insp:
+        with patch("app.infrastructure.persistence.product_repository_impl.inspect") as mock_insp:
             mock_insp.return_value.get_table_names.return_value = ["products"]
             result = repo.find_names()
 
@@ -776,9 +747,7 @@ class TestProductRepositoryExistsAndNames:
         mock_db = MagicMock()
         mock_get_db.return_value = _mock_db_ctx(mock_db)
 
-        with patch(
-            "app.infrastructure.persistence.product_repository_impl.inspect"
-        ) as mock_insp:
+        with patch("app.infrastructure.persistence.product_repository_impl.inspect") as mock_insp:
             mock_insp.return_value.get_table_names.return_value = []
             result = repo.find_names()
 
@@ -809,9 +778,7 @@ class TestProductRepositoryFindProductUnits:
         ]
         mock_get_db.return_value = _mock_db_ctx(mock_db)
 
-        with patch(
-            "app.infrastructure.persistence.product_repository_impl.inspect"
-        ) as mock_insp:
+        with patch("app.infrastructure.persistence.product_repository_impl.inspect") as mock_insp:
             mock_insp_obj = MagicMock()
             mock_insp_obj.get_table_names.return_value = ["products"]
             mock_insp.return_value = mock_insp_obj
@@ -833,9 +800,7 @@ class TestProductRepositoryFindProductUnits:
         mock_db.query.return_value.distinct.return_value.all.return_value = []
         mock_get_db.return_value = _mock_db_ctx(mock_db)
 
-        with patch(
-            "app.infrastructure.persistence.product_repository_impl.inspect"
-        ) as mock_insp:
+        with patch("app.infrastructure.persistence.product_repository_impl.inspect") as mock_insp:
             mock_insp_obj = MagicMock()
             mock_insp_obj.get_table_names.return_value = ["products"]
             mock_insp.return_value = mock_insp_obj
@@ -859,9 +824,7 @@ class TestProductRepositoryFindProductUnits:
         ]
         mock_get_db.return_value = _mock_db_ctx(mock_db)
 
-        with patch(
-            "app.infrastructure.persistence.product_repository_impl.inspect"
-        ) as mock_insp:
+        with patch("app.infrastructure.persistence.product_repository_impl.inspect") as mock_insp:
             mock_insp_obj = MagicMock()
             mock_insp_obj.get_table_names.return_value = ["products"]
             mock_insp.return_value = mock_insp_obj
@@ -881,9 +844,7 @@ class TestProductRepositoryFindProductUnits:
         mock_db.query.return_value.distinct.return_value.all.return_value = []
         mock_get_db.return_value = _mock_db_ctx(mock_db)
 
-        with patch(
-            "app.infrastructure.persistence.product_repository_impl.inspect"
-        ) as mock_insp:
+        with patch("app.infrastructure.persistence.product_repository_impl.inspect") as mock_insp:
             mock_insp_obj = MagicMock()
             mock_insp_obj.get_table_names.return_value = ["products"]
             mock_insp.return_value = mock_insp_obj
@@ -921,11 +882,11 @@ class TestOCRServiceInit:
 
     def test_init_auto_backend_no_engines(self, monkeypatch):
         monkeypatch.setenv("XCAGI_OCR_BACKEND", "auto")
-        with patch(
-            "app.services.paddle_ocr_runner.check_paddle_available", return_value=False
-        ), patch("app.services.ocr_service.OCRService._init_easyocr") as mock_eo, patch(
-            "app.services.ocr_service.OCRService._init_tesseract"
-        ) as mock_ts:
+        with (
+            patch("app.services.paddle_ocr_runner.check_paddle_available", return_value=False),
+            patch("app.services.ocr_service.OCRService._init_easyocr") as mock_eo,
+            patch("app.services.ocr_service.OCRService._init_tesseract") as mock_ts,
+        ):
             svc = OCRService()
         assert svc._paddle_enabled is False
         mock_eo.assert_called_once()
@@ -933,48 +894,48 @@ class TestOCRServiceInit:
 
     def test_init_paddle_backend_unavailable_logs_error(self, monkeypatch, caplog):
         monkeypatch.setenv("XCAGI_OCR_BACKEND", "paddle")
-        with patch(
-            "app.services.paddle_ocr_runner.check_paddle_available", return_value=False
-        ):
+        with patch("app.services.paddle_ocr_runner.check_paddle_available", return_value=False):
             svc = OCRService()
         assert svc._paddle_enabled is False
 
     def test_init_paddle_backend_available(self, monkeypatch):
         monkeypatch.setenv("XCAGI_OCR_BACKEND", "paddle")
-        with patch(
-            "app.services.paddle_ocr_runner.check_paddle_available", return_value=True
-        ), patch(
-            "app.services.paddle_ocr_runner.get_paddle_ocr_instance"
-        ) as mock_inst:
+        with (
+            patch("app.services.paddle_ocr_runner.check_paddle_available", return_value=True),
+            patch("app.services.paddle_ocr_runner.get_paddle_ocr_instance") as mock_inst,
+        ):
             svc = OCRService()
         assert svc._paddle_enabled is True
         mock_inst.assert_called_once()
 
     def test_init_easyocr_backend(self, monkeypatch):
         monkeypatch.setenv("XCAGI_OCR_BACKEND", "easyocr")
-        with patch(
-            "app.services.paddle_ocr_runner.check_paddle_available", return_value=False
-        ), patch("app.services.ocr_service.OCRService._init_easyocr") as mock_eo:
+        with (
+            patch("app.services.paddle_ocr_runner.check_paddle_available", return_value=False),
+            patch("app.services.ocr_service.OCRService._init_easyocr") as mock_eo,
+        ):
             svc = OCRService()
         mock_eo.assert_called_once()
 
     def test_init_tesseract_backend(self, monkeypatch):
         monkeypatch.setenv("XCAGI_OCR_BACKEND", "tesseract")
-        with patch(
-            "app.services.paddle_ocr_runner.check_paddle_available", return_value=False
-        ), patch("app.services.ocr_service.OCRService._init_easyocr"), patch(
-            "app.services.ocr_service.OCRService._init_tesseract"
-        ) as mock_ts:
+        with (
+            patch("app.services.paddle_ocr_runner.check_paddle_available", return_value=False),
+            patch("app.services.ocr_service.OCRService._init_easyocr"),
+            patch("app.services.ocr_service.OCRService._init_tesseract") as mock_ts,
+        ):
             svc = OCRService()
         mock_ts.assert_called()
 
     def test_init_paddle_init_raises_recoverable(self, monkeypatch):
         monkeypatch.setenv("XCAGI_OCR_BACKEND", "auto")
-        with patch(
-            "app.services.paddle_ocr_runner.check_paddle_available",
-            side_effect=RuntimeError("paddle init fail"),
-        ), patch("app.services.ocr_service.OCRService._init_easyocr"), patch(
-            "app.services.ocr_service.OCRService._init_tesseract"
+        with (
+            patch(
+                "app.services.paddle_ocr_runner.check_paddle_available",
+                side_effect=RuntimeError("paddle init fail"),
+            ),
+            patch("app.services.ocr_service.OCRService._init_easyocr"),
+            patch("app.services.ocr_service.OCRService._init_tesseract"),
         ):
             svc = OCRService()
         assert svc._paddle_enabled is False
@@ -1098,10 +1059,13 @@ class TestOCRServiceRecognize:
 
         image = MagicMock()
         image.convert.return_value = image
-        with patch(
-            "app.services.paddle_ocr_runner.predict_to_text_blocks",
-            return_value=[{"text": "hello"}, {"text": "world"}],
-        ), patch("numpy.array", return_value=np.zeros((10, 10, 3))):
+        with (
+            patch(
+                "app.services.paddle_ocr_runner.predict_to_text_blocks",
+                return_value=[{"text": "hello"}, {"text": "world"}],
+            ),
+            patch("numpy.array", return_value=np.zeros((10, 10, 3))),
+        ):
             result = svc.recognize(image)
         assert "hello" in result
         assert "world" in result
@@ -1134,10 +1098,13 @@ class TestOCRServiceRecognize:
         fake_pil_image = MagicMock()
         fake_pil = MagicMock()
         fake_pil.Image.fromarray.return_value = fake_pil_image
-        with patch("numpy.array", return_value=np.zeros((10, 10, 3))), patch.dict(
-            "sys.modules",
-            {"pytesseract": fake_pytesseract, "PIL": fake_pil},
-            clear=False,
+        with (
+            patch("numpy.array", return_value=np.zeros((10, 10, 3))),
+            patch.dict(
+                "sys.modules",
+                {"pytesseract": fake_pytesseract, "PIL": fake_pil},
+                clear=False,
+            ),
         ):
             result = svc.recognize(image)
         assert "tess text" in result
@@ -1179,10 +1146,13 @@ class TestOCRServiceRecognizeTextBlocks:
 
         image = MagicMock()
         image.convert.return_value = image
-        with patch(
-            "app.services.paddle_ocr_runner.predict_to_text_blocks",
-            return_value=[{"text": "x"}],
-        ), patch("numpy.array", return_value=np.zeros((10, 10, 3))):
+        with (
+            patch(
+                "app.services.paddle_ocr_runner.predict_to_text_blocks",
+                return_value=[{"text": "x"}],
+            ),
+            patch("numpy.array", return_value=np.zeros((10, 10, 3))),
+        ):
             result = svc.recognize_text_blocks(image)
         assert result == [{"text": "x"}]
 
@@ -1190,9 +1160,7 @@ class TestOCRServiceRecognizeTextBlocks:
         svc = OCRService.__new__(OCRService)
         svc._paddle_enabled = False
         svc.reader = MagicMock()
-        svc.reader.readtext.return_value = [
-            ([[0, 0], [10, 0], [10, 10], [0, 10]], "hello", 0.95)
-        ]
+        svc.reader.readtext.return_value = [([[0, 0], [10, 0], [10, 10], [0, 10]], "hello", 0.95)]
         svc.tesseract_available = False
         svc.use_gpu = False
 
@@ -1291,9 +1259,7 @@ class TestOCRServiceRecognizeFile:
 
         file_path = tmp_path / "img.png"
         file_path.write_bytes(b"")
-        with patch("PIL.Image.open"), patch.object(
-            svc, "recognize", return_value="text"
-        ):
+        with patch("PIL.Image.open"), patch.object(svc, "recognize", return_value="text"):
             result = svc.recognize_text(str(file_path))
         assert "confidence" in result
         assert result["confidence"] == 0.0
@@ -1329,10 +1295,13 @@ class TestOCRServiceRecognizeFromBytes:
         svc.tesseract_available = False
         svc.use_gpu = False
 
-        with patch("PIL.Image.open") as mock_open, patch.object(
-            svc,
-            "recognize_text_blocks",
-            return_value=[{"text": "x", "conf": 80.0}],
+        with (
+            patch("PIL.Image.open") as mock_open,
+            patch.object(
+                svc,
+                "recognize_text_blocks",
+                return_value=[{"text": "x", "conf": 80.0}],
+            ),
         ):
             mock_open.return_value = MagicMock()
             result = svc.recognize_text_from_bytes(b"img bytes")
@@ -1346,8 +1315,9 @@ class TestOCRServiceRecognizeFromBytes:
         svc.tesseract_available = False
         svc.use_gpu = False
 
-        with patch("PIL.Image.open") as mock_open, patch.object(
-            svc, "recognize_text_blocks", return_value=[]
+        with (
+            patch("PIL.Image.open") as mock_open,
+            patch.object(svc, "recognize_text_blocks", return_value=[]),
         ):
             mock_open.return_value = MagicMock()
             result = svc.recognize_text_from_bytes(b"img bytes")
@@ -1362,8 +1332,9 @@ class TestOCRServiceRecognizeFromBytes:
         svc.tesseract_available = False
         svc.use_gpu = False
 
-        with patch("PIL.Image.open") as mock_open, patch.object(
-            svc, "recognize", return_value="text"
+        with (
+            patch("PIL.Image.open") as mock_open,
+            patch.object(svc, "recognize", return_value="text"),
         ):
             mock_open.return_value = MagicMock()
             result = svc.recognize_text_from_bytes(b"img bytes")
@@ -1410,9 +1381,7 @@ class TestOCRServiceRecognizeWithDetails:
         svc = OCRService.__new__(OCRService)
         svc._paddle_enabled = False
         svc.reader = MagicMock()
-        svc.reader.readtext.return_value = [
-            ([[0, 0], [10, 0], [10, 10], [0, 10]], "hello", 0.95)
-        ]
+        svc.reader.readtext.return_value = [([[0, 0], [10, 0], [10, 10], [0, 10]], "hello", 0.95)]
         svc.tesseract_available = False
         svc.use_gpu = False
 
@@ -1751,9 +1720,7 @@ class TestWorkflowEngineHasNonEmptyParam:
 
     def test_multiple_keys_one_present(self):
         assert (
-            WorkflowEngine._has_non_empty_param(
-                {"name": "x"}, ("keyword", "name", "unit_name")
-            )
+            WorkflowEngine._has_non_empty_param({"name": "x"}, ("keyword", "name", "unit_name"))
             is True
         )
 
@@ -1919,9 +1886,7 @@ class TestWorkflowEngineLlmDecideNextStep:
             "app.application.workflow.engine.get_ai_conversation_service",
             return_value=ai_service,
         ):
-            result = engine._llm_decide_next_step(
-                "msg", {}, {}, [], None
-            )
+            result = engine._llm_decide_next_step("msg", {}, {}, [], None)
         assert result is None
 
     def test_llm_call_failure_status(self):
@@ -1934,12 +1899,15 @@ class TestWorkflowEngineLlmDecideNextStep:
         mock_response.status_code = 500
         mock_client = MagicMock()
         mock_client.post.return_value = mock_response
-        with patch(
-            "app.application.workflow.engine.get_ai_conversation_service",
-            return_value=ai_service,
-        ), patch(
-            "app.application.workflow.engine._get_sync_http_client",
-            return_value=mock_client,
+        with (
+            patch(
+                "app.application.workflow.engine.get_ai_conversation_service",
+                return_value=ai_service,
+            ),
+            patch(
+                "app.application.workflow.engine._get_sync_http_client",
+                return_value=mock_client,
+            ),
         ):
             result = engine._llm_decide_next_step("msg", {}, {}, [], None)
         assert result is None
@@ -1955,12 +1923,15 @@ class TestWorkflowEngineLlmDecideNextStep:
         mock_response.json.return_value = {"choices": [{"message": {"content": ""}}]}
         mock_client = MagicMock()
         mock_client.post.return_value = mock_response
-        with patch(
-            "app.application.workflow.engine.get_ai_conversation_service",
-            return_value=ai_service,
-        ), patch(
-            "app.application.workflow.engine._get_sync_http_client",
-            return_value=mock_client,
+        with (
+            patch(
+                "app.application.workflow.engine.get_ai_conversation_service",
+                return_value=ai_service,
+            ),
+            patch(
+                "app.application.workflow.engine._get_sync_http_client",
+                return_value=mock_client,
+            ),
         ):
             result = engine._llm_decide_next_step("msg", {}, {}, [], None)
         assert result is None
@@ -1978,12 +1949,15 @@ class TestWorkflowEngineLlmDecideNextStep:
         }
         mock_client = MagicMock()
         mock_client.post.return_value = mock_response
-        with patch(
-            "app.application.workflow.engine.get_ai_conversation_service",
-            return_value=ai_service,
-        ), patch(
-            "app.application.workflow.engine._get_sync_http_client",
-            return_value=mock_client,
+        with (
+            patch(
+                "app.application.workflow.engine.get_ai_conversation_service",
+                return_value=ai_service,
+            ),
+            patch(
+                "app.application.workflow.engine._get_sync_http_client",
+                return_value=mock_client,
+            ),
         ):
             result = engine._llm_decide_next_step("msg", {}, {}, [], None)
         assert result == {"action": "done"}
@@ -2008,12 +1982,15 @@ class TestWorkflowEngineLlmDecideNextStep:
         }
         mock_client = MagicMock()
         mock_client.post.return_value = mock_response
-        with patch(
-            "app.application.workflow.engine.get_ai_conversation_service",
-            return_value=ai_service,
-        ), patch(
-            "app.application.workflow.engine._get_sync_http_client",
-            return_value=mock_client,
+        with (
+            patch(
+                "app.application.workflow.engine.get_ai_conversation_service",
+                return_value=ai_service,
+            ),
+            patch(
+                "app.application.workflow.engine._get_sync_http_client",
+                return_value=mock_client,
+            ),
         ):
             result = engine._llm_decide_next_step("msg", {}, {}, [], None)
         assert result["action"] == "execute"
@@ -2027,17 +2004,18 @@ class TestWorkflowEngineLlmDecideNextStep:
         ai_service.model = "m"
         mock_response = MagicMock()
         mock_response.status_code = 200
-        mock_response.json.return_value = {
-            "choices": [{"message": {"content": "not json"}}]
-        }
+        mock_response.json.return_value = {"choices": [{"message": {"content": "not json"}}]}
         mock_client = MagicMock()
         mock_client.post.return_value = mock_response
-        with patch(
-            "app.application.workflow.engine.get_ai_conversation_service",
-            return_value=ai_service,
-        ), patch(
-            "app.application.workflow.engine._get_sync_http_client",
-            return_value=mock_client,
+        with (
+            patch(
+                "app.application.workflow.engine.get_ai_conversation_service",
+                return_value=ai_service,
+            ),
+            patch(
+                "app.application.workflow.engine._get_sync_http_client",
+                return_value=mock_client,
+            ),
         ):
             result = engine._llm_decide_next_step("msg", {}, {}, [], None)
         assert result is None
@@ -2057,12 +2035,15 @@ class TestWorkflowEngineLlmDecideNextStep:
         }
         mock_client = MagicMock()
         mock_client.post.return_value = mock_response
-        with patch(
-            "app.application.workflow.engine.get_ai_conversation_service",
-            return_value=ai_service,
-        ), patch(
-            "app.application.workflow.engine._get_sync_http_client",
-            return_value=mock_client,
+        with (
+            patch(
+                "app.application.workflow.engine.get_ai_conversation_service",
+                return_value=ai_service,
+            ),
+            patch(
+                "app.application.workflow.engine._get_sync_http_client",
+                return_value=mock_client,
+            ),
         ):
             result = engine._llm_decide_next_step("msg", {}, {}, [], None)
         assert result is None
@@ -2075,12 +2056,15 @@ class TestWorkflowEngineLlmDecideNextStep:
         ai_service.model = "m"
         mock_client = MagicMock()
         mock_client.post.side_effect = RuntimeError("network fail")
-        with patch(
-            "app.application.workflow.engine.get_ai_conversation_service",
-            return_value=ai_service,
-        ), patch(
-            "app.application.workflow.engine._get_sync_http_client",
-            return_value=mock_client,
+        with (
+            patch(
+                "app.application.workflow.engine.get_ai_conversation_service",
+                return_value=ai_service,
+            ),
+            patch(
+                "app.application.workflow.engine._get_sync_http_client",
+                return_value=mock_client,
+            ),
         ):
             result = engine._llm_decide_next_step("msg", {}, {}, [], None)
         assert result is None
@@ -2098,12 +2082,15 @@ class TestWorkflowEngineLlmDecideNextStep:
         }
         mock_client = MagicMock()
         mock_client.post.return_value = mock_response
-        with patch(
-            "app.application.workflow.engine.get_ai_conversation_service",
-            return_value=ai_service,
-        ), patch(
-            "app.application.workflow.engine._get_sync_http_client",
-            return_value=mock_client,
+        with (
+            patch(
+                "app.application.workflow.engine.get_ai_conversation_service",
+                return_value=ai_service,
+            ),
+            patch(
+                "app.application.workflow.engine._get_sync_http_client",
+                return_value=mock_client,
+            ),
         ):
             result = engine._llm_decide_next_step(
                 "msg",
@@ -2129,8 +2116,9 @@ class TestMobileExtEnsureMobileDeviceTable:
         mock_insp.has_table.return_value = True
         mock_db.__enter__ = MagicMock(return_value=mock_db)
         mock_db.__exit__ = MagicMock(return_value=False)
-        with patch("app.db.session.get_db", return_value=mock_db), patch(
-            "sqlalchemy.inspect", return_value=mock_insp
+        with (
+            patch("app.db.session.get_db", return_value=mock_db),
+            patch("sqlalchemy.inspect", return_value=mock_insp),
         ):
             ext_mod._ensure_mobile_device_table()
 
@@ -2142,8 +2130,9 @@ class TestMobileExtEnsureMobileDeviceTable:
         mock_insp.has_table.return_value = False
         mock_db.__enter__ = MagicMock(return_value=mock_db)
         mock_db.__exit__ = MagicMock(return_value=False)
-        with patch("app.db.session.get_db", return_value=mock_db), patch(
-            "sqlalchemy.inspect", return_value=mock_insp
+        with (
+            patch("app.db.session.get_db", return_value=mock_db),
+            patch("sqlalchemy.inspect", return_value=mock_insp),
         ):
             ext_mod._ensure_mobile_device_table()
 
@@ -2199,9 +2188,12 @@ class TestMobileExtPairingRoutes:
     @pytest.mark.asyncio
     async def test_pairing_issue_success(self, ext_mod):
         body = ext_mod.PairingIssueBody(host="192.168.1.10", port=5000)
-        with patch.object(ext_mod, "_pairing_issue_host", return_value="192.168.1.10"), patch(
-            "app.security.mobile_pairing.issue_pairing_nonce",
-            return_value={"nonce": "abc123", "host": "192.168.1.10", "port": 5000},
+        with (
+            patch.object(ext_mod, "_pairing_issue_host", return_value="192.168.1.10"),
+            patch(
+                "app.security.mobile_pairing.issue_pairing_nonce",
+                return_value={"nonce": "abc123", "host": "192.168.1.10", "port": 5000},
+            ),
         ):
             result = await ext_mod.mobile_pairing_issue(body)
         if hasattr(result, "body"):
@@ -2447,9 +2439,11 @@ class TestMobileExtDeviceRegister:
         mock_db.query.return_value.filter.return_value.first.return_value = None
         mock_db.__enter__ = MagicMock(return_value=mock_db)
         mock_db.__exit__ = MagicMock(return_value=False)
-        with patch.object(ext_mod, "_ensure_mobile_device_table"), patch(
-            "app.db.session.get_db", return_value=mock_db
-        ), patch("app.utils.time.utc_now_naive", return_value=datetime.now()):
+        with (
+            patch.object(ext_mod, "_ensure_mobile_device_table"),
+            patch("app.db.session.get_db", return_value=mock_db),
+            patch("app.utils.time.utc_now_naive", return_value=datetime.now()),
+        ):
             result = await ext_mod.mobile_device_register(body=body, user=mock_user)
         if hasattr(result, "body"):
             data = json.loads(result.body)
@@ -2467,9 +2461,11 @@ class TestMobileExtDeviceRegister:
         mock_db.query.return_value.filter.return_value.first.return_value = mock_row
         mock_db.__enter__ = MagicMock(return_value=mock_db)
         mock_db.__exit__ = MagicMock(return_value=False)
-        with patch.object(ext_mod, "_ensure_mobile_device_table"), patch(
-            "app.db.session.get_db", return_value=mock_db
-        ), patch("app.utils.time.utc_now_naive", return_value=datetime.now()):
+        with (
+            patch.object(ext_mod, "_ensure_mobile_device_table"),
+            patch("app.db.session.get_db", return_value=mock_db),
+            patch("app.utils.time.utc_now_naive", return_value=datetime.now()),
+        ):
             result = await ext_mod.mobile_device_register(body=body, user=mock_user)
         if hasattr(result, "body"):
             data = json.loads(result.body)
@@ -2496,9 +2492,11 @@ class TestMobileExtSyncRoutes:
         mock_user.id = 1
         mock_sync = MagicMock()
         mock_sync.get_status.return_value = {"local_cursor": 5}
-        with patch("app.db.xcmax_sync.SyncDb", return_value=mock_sync), patch(
-            "app.db.xcmax_sync._ensure_schema"
-        ), patch("app.db.xcmax_sync._get_conn") as mock_conn_ctx:
+        with (
+            patch("app.db.xcmax_sync.SyncDb", return_value=mock_sync),
+            patch("app.db.xcmax_sync._ensure_schema"),
+            patch("app.db.xcmax_sync._get_conn") as mock_conn_ctx,
+        ):
             mock_conn = MagicMock()
             mock_conn.execute.return_value.fetchone.return_value = [0]
             mock_conn_ctx.return_value.__enter__ = MagicMock(return_value=mock_conn)
@@ -2530,9 +2528,11 @@ class TestMobileExtSyncRoutes:
         mock_sync.get_changes.return_value = [{"entity_type": "im_message"}]
         mock_sync.get_status.return_value = {"local_cursor": 5}
         body = ext_mod.SyncPullBody(since_cursor=0)
-        with patch("app.db.xcmax_sync.SyncDb", return_value=mock_sync), patch.object(
-            ext_mod, "_approval_items", return_value=[]
-        ), patch.object(ext_mod, "_shipment_items", return_value=[]):
+        with (
+            patch("app.db.xcmax_sync.SyncDb", return_value=mock_sync),
+            patch.object(ext_mod, "_approval_items", return_value=[]),
+            patch.object(ext_mod, "_shipment_items", return_value=[]),
+        ):
             result = await ext_mod.mobile_sync_pull(body=body, user=mock_user)
         if hasattr(result, "body"):
             data = json.loads(result.body)
@@ -2558,8 +2558,9 @@ class TestMobileExtSyncRoutes:
             items=[ext_mod.SyncPushItem(entity_type="customer", entity_id="1")]
         )
         mock_sync = MagicMock()
-        with patch("app.db.xcmax_sync.SyncDb", return_value=mock_sync), patch(
-            "app.application.xcmax_sync_app.apply_inbox", return_value={"applied": 1}
+        with (
+            patch("app.db.xcmax_sync.SyncDb", return_value=mock_sync),
+            patch("app.application.xcmax_sync_app.apply_inbox", return_value={"applied": 1}),
         ):
             result = await ext_mod.mobile_sync_push(body=body, user=mock_user)
         if hasattr(result, "body"):
@@ -2606,9 +2607,10 @@ class TestMobileExtSyncRoutes:
         mock_user.id = 1
         mock_conn = MagicMock()
         mock_conn.execute.return_value.fetchall.return_value = []
-        with patch("app.db.xcmax_sync._ensure_schema"), patch(
-            "app.db.xcmax_sync._get_conn"
-        ) as mock_conn_ctx:
+        with (
+            patch("app.db.xcmax_sync._ensure_schema"),
+            patch("app.db.xcmax_sync._get_conn") as mock_conn_ctx,
+        ):
             mock_conn_ctx.return_value.__enter__ = MagicMock(return_value=mock_conn)
             mock_conn_ctx.return_value.__exit__ = MagicMock(return_value=False)
             result = await ext_mod.mobile_sync_conflicts(user=mock_user)
@@ -3034,9 +3036,7 @@ class TestIndustrySeedDeactivate:
             lambda: [keep, other],
         )
         with patch("shutil.rmtree", side_effect=OSError("perm denied")):
-            rows = industry_seed_mod.deactivate_other_open_industry_mods(
-                keep, remove_files=True
-            )
+            rows = industry_seed_mod.deactivate_other_open_industry_mods(keep, remove_files=True)
         assert all(r.get("removed_files") is False for r in rows)
 
 
@@ -3344,8 +3344,9 @@ class TestWechatGetContacts:
         s = MagicMock()
         s.query.return_value = _fluent(all_=[])
         extra = [{"id": 99, "contact_name": "挖到的"}]
-        with _patch_db(wechat_mod, s), patch.object(
-            wechat_svc, "_search_contacts_from_wechat_db", return_value=extra
+        with (
+            _patch_db(wechat_mod, s),
+            patch.object(wechat_svc, "_search_contacts_from_wechat_db", return_value=extra),
         ):
             out = wechat_svc.get_contacts(keyword="找不到")
         assert out == extra
@@ -3353,10 +3354,13 @@ class TestWechatGetContacts:
     def test_keyword_fallback_raises_returns_empty(self, wechat_svc):
         s = MagicMock()
         s.query.return_value = _fluent(all_=[])
-        with _patch_db(wechat_mod, s), patch.object(
-            wechat_svc,
-            "_search_contacts_from_wechat_db",
-            side_effect=RuntimeError("db fail"),
+        with (
+            _patch_db(wechat_mod, s),
+            patch.object(
+                wechat_svc,
+                "_search_contacts_from_wechat_db",
+                side_effect=RuntimeError("db fail"),
+            ),
         ):
             out = wechat_svc.get_contacts(keyword="找不到")
         assert out == []
@@ -3435,10 +3439,13 @@ class TestWechatSearchContactsFromWechatDb:
         plugin = MagicMock()
         plugin.is_available.return_value = False
         plugin.get_decrypted_db_path.return_value = None
-        with patch(
-            "app.infrastructure.plugins.wechat_plugin.get_wechat_plugin",
-            return_value=plugin,
-        ), patch("app.utils.path_utils.get_base_dir", return_value=str(tmp_path)):
+        with (
+            patch(
+                "app.infrastructure.plugins.wechat_plugin.get_wechat_plugin",
+                return_value=plugin,
+            ),
+            patch("app.utils.path_utils.get_base_dir", return_value=str(tmp_path)),
+        ):
             out = wechat_svc._search_contacts_from_wechat_db("x")
         assert out == []
 
@@ -3605,9 +3612,7 @@ class TestWechatContactContext:
             assert wechat_svc.get_contact_context(1) == []
 
     def test_save_context_update_existing(self, wechat_svc):
-        ctx = SimpleNamespace(
-            wechat_id="", context_json="", message_count=0, updated_at=None
-        )
+        ctx = SimpleNamespace(wechat_id="", context_json="", message_count=0, updated_at=None)
         s = MagicMock()
         s.query.return_value = _fluent(first=ctx)
         with _patch_db(wechat_mod, s):

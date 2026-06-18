@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, Mock, patch
 import pytest
 
 from app.application.approval_workspace_app_service import (
+    _FINAL_STATUSES,
     _allow_x_user_id_header,
     _generate_request_no,
     _next_node,
@@ -13,9 +14,7 @@ from app.application.approval_workspace_app_service import (
     _normalize_statuses,
     _request_to_dict,
     _resolve_actor,
-    _FINAL_STATUSES,
 )
-
 
 # ========================= _allow_x_user_id_header ======================
 

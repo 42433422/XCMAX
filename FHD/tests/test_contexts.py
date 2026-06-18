@@ -6,10 +6,9 @@ import os
 
 import pytest
 
+from app.contexts.context_notifier import ContextNotifier, get_context_notifier
 from app.contexts.flags import _truthy, is_any_event_primary_enabled, is_event_primary_enabled
 from app.contexts.manifest import BOUNDED_CONTEXTS, BoundedContextMeta, contexts_by_id
-from app.contexts.context_notifier import ContextNotifier, get_context_notifier
-
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Flags

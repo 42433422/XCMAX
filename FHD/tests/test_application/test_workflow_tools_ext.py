@@ -10,7 +10,6 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
-
 # ========================= _read_excel_dataframe =========================
 
 
@@ -189,7 +188,11 @@ class TestExecuteWorkflowToolExtended:
                 result = json.loads(
                     execute_workflow_tool(
                         "import_excel_to_database",
-                        {"action": "products", "file_path": "/tmp/test.xlsx", "db_write_token": "test-token"},
+                        {
+                            "action": "products",
+                            "file_path": "/tmp/test.xlsx",
+                            "db_write_token": "test-token",
+                        },
                     )
                 )
         assert isinstance(result, dict)

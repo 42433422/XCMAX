@@ -21,7 +21,6 @@ from app.services.tools_payload_legacy import dispatch_legacy_tool_payload
 from app.services.tools_workflow_registered import _registered_router_customers
 from app.services.wechat_contact_service import WechatContactService
 
-
 # ---------------------------------------------------------------------------
 # DB mock helpers
 # ---------------------------------------------------------------------------
@@ -196,9 +195,7 @@ def test_registered_router_customers_query(mock_get: MagicMock) -> None:
 def test_registered_router_customers_ensure_exists(mock_get: MagicMock) -> None:
     mock_get.return_value.match_purchase_unit.return_value = None
     mock_get.return_value.create.return_value = {"success": True}
-    out = _registered_router_customers(
-        "ensure_exists", {"unit_name": "甲公司"}, {}, "pro", ""
-    )
+    out = _registered_router_customers("ensure_exists", {"unit_name": "甲公司"}, {}, "pro", "")
     assert out["success"] is True
 
 

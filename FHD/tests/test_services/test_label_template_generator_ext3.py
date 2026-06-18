@@ -15,6 +15,7 @@ Focuses on:
 - LabelTemplateGeneratorSkill.execute: enable_ocr=False path, verbose=True
 - get_label_template_generator_skill: thread-safe singleton creation
 """
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
@@ -37,7 +38,6 @@ from app.services.skills.label_template_generator.label_template_generator impor
     generate_template_code,
     get_label_template_generator_skill,
 )
-
 
 # ---------------------------------------------------------------------------
 # _classify_field — known labels mapping
@@ -136,16 +136,21 @@ class TestIdentifyFieldsDeep:
     def test_no_colon_unknown_text_skipped(self):
         """Text without colon and not matching known labels should be skipped."""
         blocks = [
-            {"text": "完全无法识别的文本", "left": 10, "top": 20, "width": 100, "height": 30, "conf": 0.9}
+            {
+                "text": "完全无法识别的文本",
+                "left": 10,
+                "top": 20,
+                "width": 100,
+                "height": 30,
+                "conf": 0.9,
+            }
         ]
         fields = _identify_fields(blocks)
         assert len(fields) == 0
 
     def test_no_colon_known_label_no_value_skipped(self):
         """Known label with no value part should be skipped."""
-        blocks = [
-            {"text": "品名", "left": 10, "top": 20, "width": 100, "height": 30, "conf": 0.9}
-        ]
+        blocks = [{"text": "品名", "left": 10, "top": 20, "width": 100, "height": 30, "conf": 0.9}]
         fields = _identify_fields(blocks)
         assert len(fields) == 0
 
@@ -221,8 +226,16 @@ class TestPairFieldsByGridDeep:
     def test_none_merged_horizontal_defaults_to_empty(self):
         """None merged_horizontal should default to empty list."""
         blocks = [
-            {"text": "品名", "y_center": 50, "center": (25, 50), "left": 10, "top": 40,
-             "width": 40, "height": 20, "conf": 0.9},
+            {
+                "text": "品名",
+                "y_center": 50,
+                "center": (25, 50),
+                "left": 10,
+                "top": 40,
+                "width": 40,
+                "height": 20,
+                "conf": 0.9,
+            },
         ]
         result = _pair_fields_by_grid(blocks, [0, 100], [0, 100], None)
         assert len(result) == 1
@@ -233,17 +246,49 @@ class TestPairFieldsByGridDeep:
         # 5 columns [0, 25, 50, 75, 100], merged from col 0 to col 2 (3 cols)
         blocks = [
             # Block at col 0 (start of merged, center x=12 falls in [0, 25))
-            {"text": "长标签", "y_center": 50, "center": (12, 50), "left": 5, "top": 40,
-             "width": 40, "height": 20, "conf": 0.9},
+            {
+                "text": "长标签",
+                "y_center": 50,
+                "center": (12, 50),
+                "left": 5,
+                "top": 40,
+                "width": 40,
+                "height": 20,
+                "conf": 0.9,
+            },
             # Block at col 1 (inside merged, center x=37 falls in [25, 50))
-            {"text": "skip1", "y_center": 50, "center": (37, 50), "left": 30, "top": 40,
-             "width": 20, "height": 20, "conf": 0.8},
+            {
+                "text": "skip1",
+                "y_center": 50,
+                "center": (37, 50),
+                "left": 30,
+                "top": 40,
+                "width": 20,
+                "height": 20,
+                "conf": 0.8,
+            },
             # Block at col 2 (inside merged, center x=62 falls in [50, 75))
-            {"text": "skip2", "y_center": 50, "center": (62, 50), "left": 55, "top": 40,
-             "width": 20, "height": 20, "conf": 0.7},
+            {
+                "text": "skip2",
+                "y_center": 50,
+                "center": (62, 50),
+                "left": 55,
+                "top": 40,
+                "width": 20,
+                "height": 20,
+                "conf": 0.7,
+            },
             # Block at col 3 (outside merged, center x=87 falls in [75, 100))
-            {"text": "正常", "y_center": 50, "center": (87, 50), "left": 80, "top": 40,
-             "width": 20, "height": 20, "conf": 0.85},
+            {
+                "text": "正常",
+                "y_center": 50,
+                "center": (87, 50),
+                "left": 80,
+                "top": 40,
+                "width": 20,
+                "height": 20,
+                "conf": 0.85,
+            },
         ]
         merged = [{"row": 0, "start_col": 0, "end_col": 2}]
         result = _pair_fields_by_grid(blocks, [0, 100], [0, 25, 50, 75, 100], merged)
@@ -260,8 +305,16 @@ class TestPairFieldsByGridDeep:
     def test_merged_cell_with_default_end_col(self):
         """Merged cell with missing end_col should default to start_col."""
         blocks = [
-            {"text": "标签", "y_center": 50, "center": (25, 50), "left": 10, "top": 40,
-             "width": 40, "height": 20, "conf": 0.9},
+            {
+                "text": "标签",
+                "y_center": 50,
+                "center": (25, 50),
+                "left": 10,
+                "top": 40,
+                "width": 40,
+                "height": 20,
+                "conf": 0.9,
+            },
         ]
         # merged_info without end_col - should default to start_col
         merged = [{"row": 0, "start_col": 0, "end_col": 0}]
@@ -275,14 +328,46 @@ class TestPairFieldsByGridDeep:
     def test_blocks_in_different_rows_grouped_separately(self):
         """Blocks in different rows should be in separate groups."""
         blocks = [
-            {"text": "品名", "y_center": 25, "center": (25, 25), "left": 10, "top": 15,
-             "width": 40, "height": 20, "conf": 0.9},
-            {"text": "鞋", "y_center": 25, "center": (75, 25), "left": 60, "top": 15,
-             "width": 40, "height": 20, "conf": 0.85},
-            {"text": "颜色", "y_center": 75, "center": (25, 75), "left": 10, "top": 65,
-             "width": 40, "height": 20, "conf": 0.9},
-            {"text": "红", "y_center": 75, "center": (75, 75), "left": 60, "top": 65,
-             "width": 40, "height": 20, "conf": 0.85},
+            {
+                "text": "品名",
+                "y_center": 25,
+                "center": (25, 25),
+                "left": 10,
+                "top": 15,
+                "width": 40,
+                "height": 20,
+                "conf": 0.9,
+            },
+            {
+                "text": "鞋",
+                "y_center": 25,
+                "center": (75, 25),
+                "left": 60,
+                "top": 15,
+                "width": 40,
+                "height": 20,
+                "conf": 0.85,
+            },
+            {
+                "text": "颜色",
+                "y_center": 75,
+                "center": (25, 75),
+                "left": 10,
+                "top": 65,
+                "width": 40,
+                "height": 20,
+                "conf": 0.9,
+            },
+            {
+                "text": "红",
+                "y_center": 75,
+                "center": (75, 75),
+                "left": 60,
+                "top": 65,
+                "width": 40,
+                "height": 20,
+                "conf": 0.85,
+            },
         ]
         result = _pair_fields_by_grid(blocks, [0, 50, 100], [0, 50, 100])
         assert len(result) == 2
@@ -293,11 +378,27 @@ class TestPairFieldsByGridDeep:
     def test_non_adjacent_blocks_not_paired(self):
         """Blocks in non-adjacent columns should not be paired."""
         blocks = [
-            {"text": "品名", "y_center": 50, "center": (16, 50), "left": 10, "top": 40,
-             "width": 20, "height": 20, "conf": 0.9},
+            {
+                "text": "品名",
+                "y_center": 50,
+                "center": (16, 50),
+                "left": 10,
+                "top": 40,
+                "width": 20,
+                "height": 20,
+                "conf": 0.9,
+            },
             # Block at col 2 (not adjacent to col 0)
-            {"text": "值", "y_center": 50, "center": (83, 50), "left": 70, "top": 40,
-             "width": 20, "height": 20, "conf": 0.85},
+            {
+                "text": "值",
+                "y_center": 50,
+                "center": (83, 50),
+                "left": 70,
+                "top": 40,
+                "width": 20,
+                "height": 20,
+                "conf": 0.85,
+            },
         ]
         # 3 columns: 0, 1, 2
         result = _pair_fields_by_grid(blocks, [0, 100], [0, 33, 66, 100])
@@ -309,13 +410,37 @@ class TestPairFieldsByGridDeep:
     def test_last_block_in_row_unpaired(self):
         """Last block in a row with no next block should have empty value."""
         blocks = [
-            {"text": "品名", "y_center": 50, "center": (25, 50), "left": 10, "top": 40,
-             "width": 40, "height": 20, "conf": 0.9},
-            {"text": "鞋", "y_center": 50, "center": (75, 50), "left": 60, "top": 40,
-             "width": 40, "height": 20, "conf": 0.85},
+            {
+                "text": "品名",
+                "y_center": 50,
+                "center": (25, 50),
+                "left": 10,
+                "top": 40,
+                "width": 40,
+                "height": 20,
+                "conf": 0.9,
+            },
+            {
+                "text": "鞋",
+                "y_center": 50,
+                "center": (75, 50),
+                "left": 60,
+                "top": 40,
+                "width": 40,
+                "height": 20,
+                "conf": 0.85,
+            },
             # Third block with no next block
-            {"text": "等级", "y_center": 50, "center": (125, 50), "left": 110, "top": 40,
-             "width": 40, "height": 20, "conf": 0.8},
+            {
+                "text": "等级",
+                "y_center": 50,
+                "center": (125, 50),
+                "left": 110,
+                "top": 40,
+                "width": 40,
+                "height": 20,
+                "conf": 0.8,
+            },
         ]
         # 3 columns
         result = _pair_fields_by_grid(blocks, [0, 100], [0, 50, 100, 150])
@@ -327,8 +452,16 @@ class TestPairFieldsByGridDeep:
     def test_block_at_merged_start_col_processed(self):
         """Block exactly at merged start_col should be processed as merged."""
         blocks = [
-            {"text": "合并标签", "y_center": 50, "center": (25, 50), "left": 10, "top": 40,
-             "width": 80, "height": 20, "conf": 0.9},
+            {
+                "text": "合并标签",
+                "y_center": 50,
+                "center": (25, 50),
+                "left": 10,
+                "top": 40,
+                "width": 80,
+                "height": 20,
+                "conf": 0.9,
+            },
         ]
         merged = [{"row": 0, "start_col": 0, "end_col": 1}]
         result = _pair_fields_by_grid(blocks, [0, 100], [0, 50, 100], merged)
@@ -339,10 +472,26 @@ class TestPairFieldsByGridDeep:
     def test_field_position_from_label_block(self):
         """Field position should come from the label block."""
         blocks = [
-            {"text": "品名", "y_center": 50, "center": (25, 50), "left": 11, "top": 41,
-             "width": 41, "height": 21, "conf": 0.9},
-            {"text": "鞋", "y_center": 50, "center": (75, 50), "left": 61, "top": 41,
-             "width": 41, "height": 21, "conf": 0.85},
+            {
+                "text": "品名",
+                "y_center": 50,
+                "center": (25, 50),
+                "left": 11,
+                "top": 41,
+                "width": 41,
+                "height": 21,
+                "conf": 0.9,
+            },
+            {
+                "text": "鞋",
+                "y_center": 50,
+                "center": (75, 50),
+                "left": 61,
+                "top": 41,
+                "width": 41,
+                "height": 21,
+                "conf": 0.85,
+            },
         ]
         result = _pair_fields_by_grid(blocks, [0, 100], [0, 50, 100])
         assert len(result) == 1
@@ -354,10 +503,26 @@ class TestPairFieldsByGridDeep:
     def test_confidence_averaged_for_paired_blocks(self):
         """Confidence should be averaged for paired label+value blocks."""
         blocks = [
-            {"text": "品名", "y_center": 50, "center": (25, 50), "left": 10, "top": 40,
-             "width": 40, "height": 20, "conf": 0.9},
-            {"text": "鞋", "y_center": 50, "center": (75, 50), "left": 60, "top": 40,
-             "width": 40, "height": 20, "conf": 0.7},
+            {
+                "text": "品名",
+                "y_center": 50,
+                "center": (25, 50),
+                "left": 10,
+                "top": 40,
+                "width": 40,
+                "height": 20,
+                "conf": 0.9,
+            },
+            {
+                "text": "鞋",
+                "y_center": 50,
+                "center": (75, 50),
+                "left": 60,
+                "top": 40,
+                "width": 40,
+                "height": 20,
+                "conf": 0.7,
+            },
         ]
         result = _pair_fields_by_grid(blocks, [0, 100], [0, 50, 100])
         assert len(result) == 1
@@ -366,10 +531,26 @@ class TestPairFieldsByGridDeep:
     def test_full_text_combines_label_and_value(self):
         """full_text should combine label and value with ': ' separator."""
         blocks = [
-            {"text": "品名", "y_center": 50, "center": (25, 50), "left": 10, "top": 40,
-             "width": 40, "height": 20, "conf": 0.9},
-            {"text": "运动鞋", "y_center": 50, "center": (75, 50), "left": 60, "top": 40,
-             "width": 40, "height": 20, "conf": 0.85},
+            {
+                "text": "品名",
+                "y_center": 50,
+                "center": (25, 50),
+                "left": 10,
+                "top": 40,
+                "width": 40,
+                "height": 20,
+                "conf": 0.9,
+            },
+            {
+                "text": "运动鞋",
+                "y_center": 50,
+                "center": (75, 50),
+                "left": 60,
+                "top": 40,
+                "width": 40,
+                "height": 20,
+                "conf": 0.85,
+            },
         ]
         result = _pair_fields_by_grid(blocks, [0, 100], [0, 50, 100])
         assert len(result) == 1
@@ -567,17 +748,26 @@ class TestExtractTextWithOcrGridDetectionDeep:
         mock_gray.__getitem__ = MagicMock(return_value=MagicMock())
         mock_gray.__getitem__.return_value.__getitem__ = MagicMock(return_value=0)
 
-        with patch.dict("sys.modules", {"cv2": mock_cv2, "numpy": mock_np}), patch(
-            "app.services.skills.label_template_generator.label_template_generator.Image"
-        ) as MockImage:
+        with (
+            patch.dict("sys.modules", {"cv2": mock_cv2, "numpy": mock_np}),
+            patch(
+                "app.services.skills.label_template_generator.label_template_generator.Image"
+            ) as MockImage,
+        ):
             MockImage.open.return_value = img
-            with patch(
-                "app.services.ocr_service.get_ocr_service"
-            ) as mock_get_svc:
+            with patch("app.services.ocr_service.get_ocr_service") as mock_get_svc:
                 mock_svc = MagicMock()
                 mock_svc.recognize_text_blocks.return_value = [
-                    {"text": "品名", "center": (50, 50), "y_center": 50, "left": 10, "top": 40,
-                     "width": 40, "height": 20, "conf": 0.9},
+                    {
+                        "text": "品名",
+                        "center": (50, 50),
+                        "y_center": 50,
+                        "left": 10,
+                        "top": 40,
+                        "width": 40,
+                        "height": 20,
+                        "conf": 0.9,
+                    },
                 ]
                 mock_svc.get_active_ocr_backend.return_value = "mock"
                 mock_get_svc.return_value = mock_svc
@@ -635,13 +825,14 @@ class TestExtractTextWithOcrGridDetectionDeep:
         mock_binary.shape = (0, 0)
         mock_cv2.threshold.return_value = (0, mock_binary)
 
-        with patch.dict("sys.modules", {"cv2": mock_cv2, "numpy": mock_np}), patch(
-            "app.services.skills.label_template_generator.label_template_generator.Image"
-        ) as MockImage:
+        with (
+            patch.dict("sys.modules", {"cv2": mock_cv2, "numpy": mock_np}),
+            patch(
+                "app.services.skills.label_template_generator.label_template_generator.Image"
+            ) as MockImage,
+        ):
             MockImage.open.return_value = img
-            with patch(
-                "app.services.ocr_service.get_ocr_service"
-            ) as mock_get_svc:
+            with patch("app.services.ocr_service.get_ocr_service") as mock_get_svc:
                 mock_svc = MagicMock()
                 mock_svc.recognize_text_blocks.return_value = []
                 mock_svc.get_active_ocr_backend.return_value = "mock"

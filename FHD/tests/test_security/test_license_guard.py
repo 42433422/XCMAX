@@ -1,19 +1,21 @@
 """测试 license_guard 模块的 LAN 许可校验中间件。"""
+
 import json
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
-from unittest.mock import MagicMock, patch, AsyncMock
 
 from app.security.license_guard import (
+    LanLicenseGuard,
     _read_cookie,
     _read_header,
     _send_json,
-    LanLicenseGuard,
 )
-
 
 # ---------------------------------------------------------------------------
 # _read_cookie
 # ---------------------------------------------------------------------------
+
 
 class TestReadCookie:
     def test_finds_cookie(self):
@@ -58,6 +60,7 @@ class TestReadCookie:
 # _read_header
 # ---------------------------------------------------------------------------
 
+
 class TestReadHeader:
     def test_finds_header(self):
         scope = {"headers": [(b"x-lan-token", b"mytoken")]}
@@ -80,10 +83,12 @@ class TestReadHeader:
 # _send_json
 # ---------------------------------------------------------------------------
 
+
 class TestSendJson:
     @pytest.mark.asyncio
     async def test_sends_json_response(self):
         messages = []
+
         async def mock_send(msg):
             messages.append(msg)
 
@@ -99,13 +104,11 @@ class TestSendJson:
     @pytest.mark.asyncio
     async def test_sends_with_extra_headers(self):
         messages = []
+
         async def mock_send(msg):
             messages.append(msg)
 
-        await _send_json(
-            mock_send, 200, {"ok": True},
-            extra_headers=[(b"x-custom", b"value")]
-        )
+        await _send_json(mock_send, 200, {"ok": True}, extra_headers=[(b"x-custom", b"value")])
         assert len(messages) == 2
         header_names = [h[0] for h in messages[0]["headers"]]
         assert b"x-custom" in header_names
@@ -114,6 +117,7 @@ class TestSendJson:
 # ---------------------------------------------------------------------------
 # LanLicenseGuard
 # ---------------------------------------------------------------------------
+
 
 class TestLanLicenseGuard:
     @pytest.fixture
@@ -153,8 +157,10 @@ class TestLanLicenseGuard:
     async def test_bypassed_path_passes(self, guard, mock_app):
         mock_cfg = MagicMock()
         mock_cfg.enabled = True
-        with patch("app.security.license_guard.get_lan_config", return_value=mock_cfg), \
-             patch("app.security.license_guard.lan_guard_path_is_bypassed", return_value=True):
+        with (
+            patch("app.security.license_guard.get_lan_config", return_value=mock_cfg),
+            patch("app.security.license_guard.lan_guard_path_is_bypassed", return_value=True),
+        ):
             scope = {"type": "http", "method": "GET", "path": "/health"}
             await guard(scope, MagicMock(), MagicMock())
             mock_app.assert_called_once()
@@ -165,6 +171,7 @@ class TestLanLicenseGuard:
         mock_cfg.enabled = True
         mock_cfg.is_secret_ready.return_value = False
         messages = []
+
         async def mock_send(msg):
             messages.append(msg)
 
@@ -183,12 +190,15 @@ class TestLanLicenseGuard:
         mock_cfg.trusted_proxies = []
         mock_cfg.admin_host_ips = []
         messages = []
+
         async def mock_send(msg):
             messages.append(msg)
 
-        with patch("app.security.license_guard.get_lan_config", return_value=mock_cfg), \
-             patch("app.security.license_guard.ensure_schema"), \
-             patch("app.security.license_guard.get_client_ip", return_value="10.0.0.1"):
+        with (
+            patch("app.security.license_guard.get_lan_config", return_value=mock_cfg),
+            patch("app.security.license_guard.ensure_schema"),
+            patch("app.security.license_guard.get_client_ip", return_value="10.0.0.1"),
+        ):
             scope = {"type": "http", "method": "GET", "path": "/api/test", "headers": []}
             await guard(scope, MagicMock(), mock_send)
             assert len(messages) == 2
@@ -204,16 +214,22 @@ class TestLanLicenseGuard:
         mock_cfg.trusted_proxies = []
         mock_cfg.admin_host_ips = []
         messages = []
+
         async def mock_send(msg):
             messages.append(msg)
 
         from app.security.license_token import TokenError
-        with patch("app.security.license_guard.get_lan_config", return_value=mock_cfg), \
-             patch("app.security.license_guard.ensure_schema"), \
-             patch("app.security.license_guard.get_client_ip", return_value="10.0.0.1"), \
-             patch("app.security.license_guard.parse_token", side_effect=TokenError("bad")):
+
+        with (
+            patch("app.security.license_guard.get_lan_config", return_value=mock_cfg),
+            patch("app.security.license_guard.ensure_schema"),
+            patch("app.security.license_guard.get_client_ip", return_value="10.0.0.1"),
+            patch("app.security.license_guard.parse_token", side_effect=TokenError("bad")),
+        ):
             scope = {
-                "type": "http", "method": "GET", "path": "/api/test",
+                "type": "http",
+                "method": "GET",
+                "path": "/api/test",
                 "headers": [(b"cookie", b"lan_token=badtoken")],
             }
             await guard(scope, MagicMock(), mock_send)
@@ -232,6 +248,7 @@ class TestLanLicenseGuard:
         mock_cfg.trusted_proxies = []
         mock_cfg.admin_host_ips = []
         messages = []
+
         async def mock_send(msg):
             messages.append(msg)
 
@@ -239,12 +256,16 @@ class TestLanLicenseGuard:
         mock_payload.is_expired.return_value = True
         mock_payload.jti = "test-jti"
 
-        with patch("app.security.license_guard.get_lan_config", return_value=mock_cfg), \
-             patch("app.security.license_guard.ensure_schema"), \
-             patch("app.security.license_guard.get_client_ip", return_value="10.0.0.1"), \
-             patch("app.security.license_guard.parse_token", return_value=mock_payload):
+        with (
+            patch("app.security.license_guard.get_lan_config", return_value=mock_cfg),
+            patch("app.security.license_guard.ensure_schema"),
+            patch("app.security.license_guard.get_client_ip", return_value="10.0.0.1"),
+            patch("app.security.license_guard.parse_token", return_value=mock_payload),
+        ):
             scope = {
-                "type": "http", "method": "GET", "path": "/api/test",
+                "type": "http",
+                "method": "GET",
+                "path": "/api/test",
                 "headers": [(b"cookie", b"lan_token=expiredtoken")],
             }
             await guard(scope, MagicMock(), mock_send)
@@ -263,6 +284,7 @@ class TestLanLicenseGuard:
         mock_cfg.trusted_proxies = []
         mock_cfg.admin_host_ips = []
         messages = []
+
         async def mock_send(msg):
             messages.append(msg)
 
@@ -270,13 +292,17 @@ class TestLanLicenseGuard:
         mock_payload.is_expired.return_value = False
         mock_payload.jti = "test-jti"
 
-        with patch("app.security.license_guard.get_lan_config", return_value=mock_cfg), \
-             patch("app.security.license_guard.ensure_schema"), \
-             patch("app.security.license_guard.get_client_ip", return_value="10.0.0.1"), \
-             patch("app.security.license_guard.parse_token", return_value=mock_payload), \
-             patch("app.security.license_guard.get_active_session_by_jti", return_value=None):
+        with (
+            patch("app.security.license_guard.get_lan_config", return_value=mock_cfg),
+            patch("app.security.license_guard.ensure_schema"),
+            patch("app.security.license_guard.get_client_ip", return_value="10.0.0.1"),
+            patch("app.security.license_guard.parse_token", return_value=mock_payload),
+            patch("app.security.license_guard.get_active_session_by_jti", return_value=None),
+        ):
             scope = {
-                "type": "http", "method": "GET", "path": "/api/test",
+                "type": "http",
+                "method": "GET",
+                "path": "/api/test",
                 "headers": [(b"cookie", b"lan_token=revokedtoken")],
             }
             await guard(scope, MagicMock(), mock_send)
@@ -307,15 +333,21 @@ class TestLanLicenseGuard:
         mock_key.id = 1
         mock_key.is_admin = False
 
-        with patch("app.security.license_guard.get_lan_config", return_value=mock_cfg), \
-             patch("app.security.license_guard.ensure_schema"), \
-             patch("app.security.license_guard.get_client_ip", return_value="10.0.0.1"), \
-             patch("app.security.license_guard.parse_token", return_value=mock_payload), \
-             patch("app.security.license_guard.get_active_session_by_jti", return_value=mock_session), \
-             patch("app.security.license_guard.list_keys", return_value=[mock_key]), \
-             patch("app.security.license_guard.touch_session"):
+        with (
+            patch("app.security.license_guard.get_lan_config", return_value=mock_cfg),
+            patch("app.security.license_guard.ensure_schema"),
+            patch("app.security.license_guard.get_client_ip", return_value="10.0.0.1"),
+            patch("app.security.license_guard.parse_token", return_value=mock_payload),
+            patch(
+                "app.security.license_guard.get_active_session_by_jti", return_value=mock_session
+            ),
+            patch("app.security.license_guard.list_keys", return_value=[mock_key]),
+            patch("app.security.license_guard.touch_session"),
+        ):
             scope = {
-                "type": "http", "method": "GET", "path": "/api/test",
+                "type": "http",
+                "method": "GET",
+                "path": "/api/test",
                 "headers": [(b"cookie", b"lan_token=validtoken")],
             }
             await guard(scope, MagicMock(), MagicMock())
@@ -331,8 +363,10 @@ class TestLanLicenseGuard:
         mock_cfg.trusted_proxies = []
         mock_cfg.admin_host_ips = ["127.0.0.1"]
 
-        with patch("app.security.license_guard.get_lan_config", return_value=mock_cfg), \
-             patch("app.security.license_guard.get_client_ip", return_value="127.0.0.1"):
+        with (
+            patch("app.security.license_guard.get_lan_config", return_value=mock_cfg),
+            patch("app.security.license_guard.get_client_ip", return_value="127.0.0.1"),
+        ):
             scope = {"type": "http", "method": "GET", "path": "/api/test", "headers": []}
             await guard(scope, MagicMock(), MagicMock())
             mock_app.assert_called_once()

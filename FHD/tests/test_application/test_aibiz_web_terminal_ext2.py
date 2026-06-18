@@ -22,7 +22,6 @@ from app.application.aibiz_web_terminal_service import (
     _unwrap,
 )
 
-
 # ---------------------------------------------------------------------------
 # _surface_cache_token
 # ---------------------------------------------------------------------------
@@ -189,7 +188,12 @@ class TestSanitizePwAdminPages:
     def test_removes_bad_admin_pages(self):
         pages = [
             {"name": "Home", "url": "/home", "status": 200, "screenshot_saved": "/tmp/1.png"},
-            {"name": "管理端Dashboard", "url": "/market/admin/", "error": "digest required", "status": 401},
+            {
+                "name": "管理端Dashboard",
+                "url": "/market/admin/",
+                "error": "digest required",
+                "status": 401,
+            },
         ]
         surface = {"pages": pages}
         result = _sanitize_pw_admin_pages("P-W", surface)
@@ -198,7 +202,13 @@ class TestSanitizePwAdminPages:
 
     def test_keeps_unlocked_admin_pages(self):
         pages = [
-            {"name": "管理端OK", "url": "/market/admin/", "digest_unlock_ok": True, "status": 200, "screenshot_saved": "/tmp/ok.png"},
+            {
+                "name": "管理端OK",
+                "url": "/market/admin/",
+                "digest_unlock_ok": True,
+                "status": 200,
+                "screenshot_saved": "/tmp/ok.png",
+            },
         ]
         surface = {"pages": pages}
         result = _sanitize_pw_admin_pages("P-W", surface)
@@ -206,7 +216,12 @@ class TestSanitizePwAdminPages:
 
     def test_admin_page_with_image_no_error(self):
         pages = [
-            {"name": "管理端", "url": "/market/admin/", "status": 200, "screenshot_saved": "/tmp/a.png"},
+            {
+                "name": "管理端",
+                "url": "/market/admin/",
+                "status": 200,
+                "screenshot_saved": "/tmp/a.png",
+            },
         ]
         surface = {"pages": pages}
         result = _sanitize_pw_admin_pages("P-W", surface)

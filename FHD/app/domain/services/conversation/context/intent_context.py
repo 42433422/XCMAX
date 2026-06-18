@@ -122,9 +122,11 @@ class IntentContext:
         """
         self._pending_store[user_id] = pending
         logger.info(
-            "[INTENT_CONTEXT] Set pending: user=%s, "
-            f"intent=%s, missing=%s, "
-            f"turn_count=%s", user_id, pending.intent, pending.missing_slots, pending.turn_count
+            "[INTENT_CONTEXT] Set pending: user=%s, intent=%s, missing=%s, turn_count=%s",
+            user_id,
+            pending.intent,
+            pending.missing_slots,
+            pending.turn_count,
         )
         self._notify_update(user_id, pending, "created")
 
@@ -160,8 +162,10 @@ class IntentContext:
             old_pending = self._pending_store[user_id]
             del self._pending_store[user_id]
             logger.info(
-                "[INTENT_CONTEXT] Cleared pending: user=%s, "
-                f"intent=%s, turn_count=%s", user_id, old_pending.intent, old_pending.turn_count
+                "[INTENT_CONTEXT] Cleared pending: user=%s, intent=%s, turn_count=%s",
+                user_id,
+                old_pending.intent,
+                old_pending.turn_count,
             )
             self._notify_cleared(user_id, reason)
 

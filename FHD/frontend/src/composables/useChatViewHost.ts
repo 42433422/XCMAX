@@ -249,18 +249,27 @@ export function useChatViewHost(deps: UseChatViewHostDeps) {
     window.addEventListener('xcagi:assistant-push', onAssistantPush)
     window.addEventListener('xcagi:pro-intent-experience-changed', syncProIntentExperienceFromStorage)
     window.addEventListener('storage', onStorageForProIntent)
-    taskPaneViewportMedia = window.matchMedia(CHAT_RIGHT_PANE_MQ)
-    onTaskPaneViewportChange(taskPaneViewportMedia)
-    if (typeof taskPaneViewportMedia.addEventListener === 'function') {
+    taskPaneViewportMedia =
+      typeof window.matchMedia === 'function' ? window.matchMedia(CHAT_RIGHT_PANE_MQ) : null
+    if (taskPaneViewportMedia) {
+      onTaskPaneViewportChange(taskPaneViewportMedia)
+    } else {
+      isTaskPaneResizable.value = true
+    }
+    if (typeof taskPaneViewportMedia?.addEventListener === 'function') {
       taskPaneViewportMedia.addEventListener('change', onTaskPaneViewportChange)
-    } else if (typeof taskPaneViewportMedia.addListener === 'function') {
+    } else if (typeof taskPaneViewportMedia?.addListener === 'function') {
       taskPaneViewportMedia.addListener(onTaskPaneViewportChange)
     }
-    proModeObserver = new MutationObserver(() => syncProModeState())
-    proModeObserver.observe(document.body, { attributes: true, attributeFilter: ['class'] })
-    const overlay = document.getElementById('proModeOverlay')
-    if (overlay) {
-      proModeObserver.observe(overlay, { attributes: true, attributeFilter: ['class', 'style'] })
+    if (typeof MutationObserver === 'function') {
+      const observer = new MutationObserver(() => syncProModeState())
+      if (typeof observer.observe !== 'function') return
+      proModeObserver = observer
+      observer.observe(document.body, { attributes: true, attributeFilter: ['class'] })
+      const overlay = document.getElementById('proModeOverlay')
+      if (overlay) {
+        observer.observe(overlay, { attributes: true, attributeFilter: ['class', 'style'] })
+      }
     }
   })
 

@@ -9,6 +9,7 @@ Targets remaining uncovered branches:
 - cleanup_expired with no pending at all
 - PendingIntent.merge_slots with all missing slots filled
 """
+
 from __future__ import annotations
 
 import time
@@ -17,16 +18,15 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from app.domain.services.conversation.context.intent_context import (
-    AdoptionReason,
     HIGH_PRIORITY_INTENTS,
     LOW_PRIORITY_INTENTS,
     SPECIAL_INTENTS,
+    AdoptionReason,
     IntentContext,
     IntentContextContainer,
     PendingIntent,
     get_intent_context,
 )
-
 
 # ── _notify_preserved (uncovered) ───────────────────────────────────────────
 
@@ -222,16 +222,12 @@ class TestPendingIntentMergeSlotsDeep:
         assert merged.last_updated_at > original_updated
 
     def test_merge_all_missing_filled(self):
-        p = PendingIntent(
-            intent="order", slots={}, missing_slots=["a", "b", "c"]
-        )
+        p = PendingIntent(intent="order", slots={}, missing_slots=["a", "b", "c"])
         merged = p.merge_slots({"a": "1", "b": "2", "c": "3"})
         assert merged.missing_slots == []
 
     def test_merge_partial_fill(self):
-        p = PendingIntent(
-            intent="order", slots={}, missing_slots=["a", "b", "c"]
-        )
+        p = PendingIntent(intent="order", slots={}, missing_slots=["a", "b", "c"])
         merged = p.merge_slots({"a": "1"})
         assert merged.missing_slots == ["b", "c"]
 
@@ -328,9 +324,7 @@ class TestClearPendingDeep:
         p = PendingIntent(intent="i", slots={}, missing_slots=[])
         ctx.set_pending("u1", p)
         ctx.clear_pending("u1", reason="custom_reason")
-        ctx._notifier.notify_pending_cleared.assert_called_once_with(
-            "u1", "custom_reason"
-        )
+        ctx._notifier.notify_pending_cleared.assert_called_once_with("u1", "custom_reason")
 
 
 # ── IntentContextContainer deep ─────────────────────────────────────────────

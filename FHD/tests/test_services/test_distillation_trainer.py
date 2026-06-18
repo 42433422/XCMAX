@@ -171,7 +171,10 @@ class TestDistillationTrainerLoadData:
         data_path = str(tmp_path / "test.jsonl")
         with open(data_path, "w", encoding="utf-8") as f:
             f.write(json.dumps({"text": "你好", "label": "greet"}, ensure_ascii=False) + "\n")
-            f.write(json.dumps({"text": "开单", "label": "shipment_generate"}, ensure_ascii=False) + "\n")
+            f.write(
+                json.dumps({"text": "开单", "label": "shipment_generate"}, ensure_ascii=False)
+                + "\n"
+            )
 
         texts, labels = trainer.load_data(data_path)
         assert len(texts) == 2
@@ -184,7 +187,10 @@ class TestDistillationTrainerLoadData:
         data_path = str(tmp_path / "test.jsonl")
         with open(data_path, "w", encoding="utf-8") as f:
             f.write(json.dumps({"text": "你好", "label": "greet"}, ensure_ascii=False) + "\n")
-            f.write(json.dumps({"text": "unknown", "label": "nonexistent_label"}, ensure_ascii=False) + "\n")
+            f.write(
+                json.dumps({"text": "unknown", "label": "nonexistent_label"}, ensure_ascii=False)
+                + "\n"
+            )
 
         texts, labels = trainer.load_data(data_path)
         assert len(texts) == 1
@@ -263,7 +269,9 @@ class TestDistillationTrainerSaveCheckpoint:
         checkpoint_path = str(tmp_path / "ckpt")
         os.makedirs(checkpoint_path, exist_ok=True)
 
-        with patch("app.services.distillation_trainer.CHECKPOINT_DIR", str(tmp_path / "checkpoints")):
+        with patch(
+            "app.services.distillation_trainer.CHECKPOINT_DIR", str(tmp_path / "checkpoints")
+        ):
             os.makedirs(str(tmp_path / "checkpoints"), exist_ok=True)
             trainer.save_checkpoint(checkpoint_path, epoch=1, best=True)
 
@@ -284,7 +292,9 @@ class TestDistillationTrainerSaveCheckpoint:
         checkpoint_path = str(tmp_path / "ckpt")
         os.makedirs(checkpoint_path, exist_ok=True)
 
-        with patch("app.services.distillation_trainer.CHECKPOINT_DIR", str(tmp_path / "checkpoints")):
+        with patch(
+            "app.services.distillation_trainer.CHECKPOINT_DIR", str(tmp_path / "checkpoints")
+        ):
             os.makedirs(str(tmp_path / "checkpoints"), exist_ok=True)
             trainer.save_checkpoint(checkpoint_path, epoch=2, best=False)
 
@@ -320,7 +330,9 @@ class TestDistillationTrainerTrain:
         data_path = str(tmp_path / "small.jsonl")
         with open(data_path, "w", encoding="utf-8") as f:
             for i in range(5):
-                f.write(json.dumps({"text": f"text{i}", "label": "greet"}, ensure_ascii=False) + "\n")
+                f.write(
+                    json.dumps({"text": f"text{i}", "label": "greet"}, ensure_ascii=False) + "\n"
+                )
 
         with patch("app.services.distillation_trainer.CHECKPOINT_DIR", str(tmp_path / "ckpt")):
             with patch("app.services.distillation_trainer.LOG_DIR", str(tmp_path / "logs")):
@@ -334,18 +346,20 @@ class TestDistillationTrainerPrepareData:
     def test_prepare_data_sets_tokenizer_and_model(self, tmp_path):
         trainer = DistillationTrainer(device="cpu", batch_size=2)
         texts = ["你好", "开单", "查客户", "打印"]
-        labels = [LABEL_TO_ID["greet"], LABEL_TO_ID["shipment_generate"],
-                  LABEL_TO_ID["customers"], LABEL_TO_ID["print_label"]]
+        labels = [
+            LABEL_TO_ID["greet"],
+            LABEL_TO_ID["shipment_generate"],
+            LABEL_TO_ID["customers"],
+            LABEL_TO_ID["print_label"],
+        ]
 
         mock_tokenizer = MagicMock()
         mock_model = MagicMock()
-        with patch(
-            "app.services.distillation_trainer.BertTokenizer"
-        ) as MockTokenizer, patch(
-            "app.services.distillation_trainer.BertForSequenceClassification"
-        ) as MockModel, patch(
-            "app.services.distillation_trainer.DataLoader"
-        ) as MockDataLoader:
+        with (
+            patch("app.services.distillation_trainer.BertTokenizer") as MockTokenizer,
+            patch("app.services.distillation_trainer.BertForSequenceClassification") as MockModel,
+            patch("app.services.distillation_trainer.DataLoader") as MockDataLoader,
+        ):
             MockTokenizer.from_pretrained.return_value = mock_tokenizer
             MockModel.from_pretrained.return_value = mock_model
             MockDataLoader.return_value = MagicMock()
@@ -363,13 +377,11 @@ class TestDistillationTrainerPrepareData:
 
         mock_tokenizer = MagicMock()
         mock_model = MagicMock()
-        with patch(
-            "app.services.distillation_trainer.BertTokenizer"
-        ) as MockTokenizer, patch(
-            "app.services.distillation_trainer.BertForSequenceClassification"
-        ) as MockModel, patch(
-            "app.services.distillation_trainer.DataLoader"
-        ) as MockDataLoader:
+        with (
+            patch("app.services.distillation_trainer.BertTokenizer") as MockTokenizer,
+            patch("app.services.distillation_trainer.BertForSequenceClassification") as MockModel,
+            patch("app.services.distillation_trainer.DataLoader") as MockDataLoader,
+        ):
             MockTokenizer.from_pretrained.return_value = mock_tokenizer
             MockModel.from_pretrained.return_value = mock_model
             MockDataLoader.return_value = MagicMock()
@@ -387,15 +399,12 @@ class TestDistillationTrainerPrepareData:
 
         mock_tokenizer = MagicMock()
         mock_model = MagicMock()
-        with patch(
-            "app.services.distillation_trainer.BertTokenizer"
-        ) as MockTokenizer, patch(
-            "app.services.distillation_trainer.BertForSequenceClassification"
-        ) as MockModel, patch(
-            "app.services.distillation_trainer.DataLoader"
-        ) as MockDataLoader, patch(
-            "app.services.distillation_trainer.train_test_split"
-        ) as mock_split:
+        with (
+            patch("app.services.distillation_trainer.BertTokenizer") as MockTokenizer,
+            patch("app.services.distillation_trainer.BertForSequenceClassification") as MockModel,
+            patch("app.services.distillation_trainer.DataLoader") as MockDataLoader,
+            patch("app.services.distillation_trainer.train_test_split") as mock_split,
+        ):
             MockTokenizer.from_pretrained.return_value = mock_tokenizer
             MockModel.from_pretrained.return_value = mock_model
             MockDataLoader.return_value = MagicMock()
@@ -552,22 +561,30 @@ class TestDistillationTrainerTrainFull:
         with open(data_path, "w", encoding="utf-8") as f:
             for label_name in INTENT_LABELS[:5]:
                 for i in range(5):
-                    f.write(json.dumps({"text": f"text_{label_name}_{i}", "label": label_name},
-                                       ensure_ascii=False) + "\n")
+                    f.write(
+                        json.dumps(
+                            {"text": f"text_{label_name}_{i}", "label": label_name},
+                            ensure_ascii=False,
+                        )
+                        + "\n"
+                    )
 
         mock_tokenizer = MagicMock()
         mock_model = MagicMock()
         mock_model.parameters.return_value = []
 
-        with patch("app.services.distillation_trainer.BertTokenizer") as MockTokenizer, \
-             patch("app.services.distillation_trainer.BertForSequenceClassification") as MockModel, \
-             patch("app.services.distillation_trainer.AdamW") as MockAdamW, \
-             patch("app.services.distillation_trainer.get_linear_schedule_with_warmup") as MockScheduler, \
-             patch("app.services.distillation_trainer.DataLoader") as MockDataLoader, \
-             patch("app.services.distillation_trainer.train_test_split") as mock_split, \
-             patch("app.services.distillation_trainer.CHECKPOINT_DIR", str(tmp_path / "ckpt")), \
-             patch("app.services.distillation_trainer.LOG_DIR", str(tmp_path / "logs")):
-
+        with (
+            patch("app.services.distillation_trainer.BertTokenizer") as MockTokenizer,
+            patch("app.services.distillation_trainer.BertForSequenceClassification") as MockModel,
+            patch("app.services.distillation_trainer.AdamW") as MockAdamW,
+            patch(
+                "app.services.distillation_trainer.get_linear_schedule_with_warmup"
+            ) as MockScheduler,
+            patch("app.services.distillation_trainer.DataLoader") as MockDataLoader,
+            patch("app.services.distillation_trainer.train_test_split") as mock_split,
+            patch("app.services.distillation_trainer.CHECKPOINT_DIR", str(tmp_path / "ckpt")),
+            patch("app.services.distillation_trainer.LOG_DIR", str(tmp_path / "logs")),
+        ):
             MockTokenizer.from_pretrained.return_value = mock_tokenizer
             MockModel.from_pretrained.return_value = mock_model
             MockAdamW.return_value = MagicMock()
@@ -590,9 +607,14 @@ class TestDistillationTrainerTrainFull:
 
             # Mock train_epoch and evaluate
             trainer.train_epoch = MagicMock(return_value=(0.5, 0.8))
-            trainer.evaluate = MagicMock(return_value={
-                "val_loss": 0.4, "val_accuracy": 0.85, "preds": [0, 1], "labels": [0, 1]
-            })
+            trainer.evaluate = MagicMock(
+                return_value={
+                    "val_loss": 0.4,
+                    "val_accuracy": 0.85,
+                    "preds": [0, 1],
+                    "labels": [0, 1],
+                }
+            )
             trainer.save_checkpoint = MagicMock()
 
             os.makedirs(str(tmp_path / "ckpt"), exist_ok=True)
@@ -611,8 +633,13 @@ class TestDistillationTrainerTrainFull:
         data_path = str(tmp_path / "train.jsonl")
         with open(data_path, "w", encoding="utf-8") as f:
             for i in range(15):
-                f.write(json.dumps({"text": f"t{i}", "label": INTENT_LABELS[i % len(INTENT_LABELS)]},
-                                   ensure_ascii=False) + "\n")
+                f.write(
+                    json.dumps(
+                        {"text": f"t{i}", "label": INTENT_LABELS[i % len(INTENT_LABELS)]},
+                        ensure_ascii=False,
+                    )
+                    + "\n"
+                )
 
         log_dir = str(tmp_path / "logs")
         ckpt_dir = str(tmp_path / "ckpt")
@@ -622,17 +649,20 @@ class TestDistillationTrainerTrainFull:
         trainer.load_data = MagicMock(return_value=(["a"] * 15, [0] * 15))
         trainer.prepare_data = MagicMock()
         trainer.train_epoch = MagicMock(return_value=(0.5, 0.8))
-        trainer.evaluate = MagicMock(return_value={
-            "val_loss": 0.4, "val_accuracy": 0.9, "preds": [0], "labels": [0]
-        })
+        trainer.evaluate = MagicMock(
+            return_value={"val_loss": 0.4, "val_accuracy": 0.9, "preds": [0], "labels": [0]}
+        )
         trainer.save_checkpoint = MagicMock()
 
-        with patch("app.services.distillation_trainer.AdamW", return_value=MagicMock()), \
-             patch("app.services.distillation_trainer.get_linear_schedule_with_warmup",
-                   return_value=MagicMock()), \
-             patch("app.services.distillation_trainer.CHECKPOINT_DIR", ckpt_dir), \
-             patch("app.services.distillation_trainer.LOG_DIR", log_dir):
-
+        with (
+            patch("app.services.distillation_trainer.AdamW", return_value=MagicMock()),
+            patch(
+                "app.services.distillation_trainer.get_linear_schedule_with_warmup",
+                return_value=MagicMock(),
+            ),
+            patch("app.services.distillation_trainer.CHECKPOINT_DIR", ckpt_dir),
+            patch("app.services.distillation_trainer.LOG_DIR", log_dir),
+        ):
             trainer.train(data_path, output_dir=ckpt_dir)
 
         # Verify log file was created

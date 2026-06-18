@@ -24,8 +24,8 @@ from unittest.mock import MagicMock, Mock, patch
 import pytest
 
 from app.infrastructure.documents.price_list_export import (
-    _apply_tc_borders_to_all_body_rows,
     _append_tr_clone_from_last,
+    _apply_tc_borders_to_all_body_rows,
     _border_el_effective,
     _border_element_as_w_bottom,
     _cell_bottom_effective,
@@ -62,7 +62,6 @@ from app.infrastructure.documents.price_list_export import (
     resolve_price_list_docx_template,
 )
 
-
 # ---------------------------------------------------------------------------
 # _row_keyword_score — extended
 # ---------------------------------------------------------------------------
@@ -82,7 +81,22 @@ class TestRowKeywordScoreExtended:
         assert _row_keyword_score(cells) == 3
 
     def test_all_keywords(self):
-        cells = [Mock(text=x) for x in ("型号", "名称", "规格", "单价", "数量", "金额", "产品", "序号", "单位", "售价", "定价")]
+        cells = [
+            Mock(text=x)
+            for x in (
+                "型号",
+                "名称",
+                "规格",
+                "单价",
+                "数量",
+                "金额",
+                "产品",
+                "序号",
+                "单位",
+                "售价",
+                "定价",
+            )
+        ]
         assert _row_keyword_score(cells) == 11
 
     def test_empty_cells(self):
@@ -133,7 +147,13 @@ class TestParseHeaderSerialAndColumnMapExtended:
         assert col_map == {"model": 0, "name": 1, "spec": 2, "price": 3}
 
     def test_serial_column(self):
-        cells = [Mock(text="序号"), Mock(text="型号"), Mock(text="名称"), Mock(text="规格"), Mock(text="单价")]
+        cells = [
+            Mock(text="序号"),
+            Mock(text="型号"),
+            Mock(text="名称"),
+            Mock(text="规格"),
+            Mock(text="单价"),
+        ]
         with_serial, col_map = _parse_header_serial_and_column_map(cells)
         assert with_serial is True
         assert "model" in col_map
@@ -199,7 +219,13 @@ class TestWriteProductRowExtended:
     def test_basic_write(self):
         cells = [Mock(text=""), Mock(text=""), Mock(text=""), Mock(text="")]
         prod = {"model_number": "M1", "name": "Widget", "specification": "10x20", "price": 99}
-        _write_product_row(cells, prod, 1, with_serial=False, col_map={"model": 0, "name": 1, "spec": 2, "price": 3})
+        _write_product_row(
+            cells,
+            prod,
+            1,
+            with_serial=False,
+            col_map={"model": 0, "name": 1, "spec": 2, "price": 3},
+        )
         assert cells[0].text == "M1"
         assert cells[1].text == "Widget"
         assert cells[2].text == "10x20"
@@ -208,7 +234,9 @@ class TestWriteProductRowExtended:
     def test_with_serial(self):
         cells = [Mock(text=""), Mock(text=""), Mock(text=""), Mock(text=""), Mock(text="")]
         prod = {"model_number": "M1", "name": "Widget", "specification": "10x20", "price": 99}
-        _write_product_row(cells, prod, 5, with_serial=True, col_map={"model": 1, "name": 2, "spec": 3, "price": 4})
+        _write_product_row(
+            cells, prod, 5, with_serial=True, col_map={"model": 1, "name": 2, "spec": 3, "price": 4}
+        )
         assert cells[0].text == "5"
         assert cells[1].text == "M1"
 
@@ -216,7 +244,13 @@ class TestWriteProductRowExtended:
         cells = [Mock(text="")]
         prod = {"model_number": "M1", "name": "Widget", "specification": "10x20", "price": 99}
         # col_map points to indices that don't exist
-        _write_product_row(cells, prod, 1, with_serial=False, col_map={"model": 5, "name": 6, "spec": 7, "price": 8})
+        _write_product_row(
+            cells,
+            prod,
+            1,
+            with_serial=False,
+            col_map={"model": 5, "name": 6, "spec": 7, "price": 8},
+        )
         # Should not raise, just skip out-of-range indices
 
 

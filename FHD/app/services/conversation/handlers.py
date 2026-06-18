@@ -160,7 +160,9 @@ class HandlersMixin:
             pending_intent = pending.get("intent")
             if pending_intent not in (current_tool_key, intent_result.get("primary_intent")):
                 logger.info(
-                    "[DEBUG_PENDING] 检测到新意图 %s 与 pending 意图 %s 不同，清除 pending", current_tool_key, pending_intent
+                    "[DEBUG_PENDING] 检测到新意图 %s 与 pending 意图 %s 不同，清除 pending",
+                    current_tool_key,
+                    pending_intent,
                 )
                 self.confirmation_service.clear_pending_intent(user_id)
                 return None
@@ -184,7 +186,9 @@ class HandlersMixin:
             }
         )
         logger.info(
-            "[DEBUG_PENDING] check_result status: %s, missing: %s", check_result.get('status'), check_result.get('missing_slots')
+            "[DEBUG_PENDING] check_result status: %s, missing: %s",
+            check_result.get("status"),
+            check_result.get("missing_slots"),
         )
 
         if check_result["status"] == "complete":

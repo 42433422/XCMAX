@@ -35,9 +35,7 @@ class TestEmployeeMemoryManager:
             (1, "s", "u", "user", "hello", None, json.dumps({"employee_id": "emp-x"})),
             (2, "s", "u", "user", "skip", None, json.dumps({"employee_id": "other"})),
         ]
-        with patch(
-            "app.services.conversation_service.ConversationService"
-        ) as conv_cls:
+        with patch("app.services.conversation_service.ConversationService") as conv_cls:
             conv_cls.return_value.get_session_messages.return_value = rows
             ctx = mgr.recall("task", session_id="sid-1")
         assert len(ctx.short_term_messages) == 1

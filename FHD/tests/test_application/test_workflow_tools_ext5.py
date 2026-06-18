@@ -19,7 +19,6 @@ from unittest.mock import MagicMock, patch
 import pandas as pd
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # handle_excel_analysis — action branches
 # ---------------------------------------------------------------------------
@@ -113,9 +112,7 @@ class TestHandleExcelAnalysisActions:
         from app.application.tools.workflow import handle_excel_analysis
 
         p = tmp_path / "data.xlsx"
-        pd.DataFrame(
-            {"category": ["A", "A", "B"], "amount": [10, 20, 30]}
-        ).to_excel(p, index=False)
+        pd.DataFrame({"category": ["A", "A", "B"], "amount": [10, 20, 30]}).to_excel(p, index=False)
         result = handle_excel_analysis(
             {
                 "file_path": str(p),
@@ -392,9 +389,7 @@ class TestExecuteWorkflowToolProphet:
     def test_prophet_no_file_path(self, tmp_path: Path):
         from app.application.tools.workflow import execute_workflow_tool
 
-        result = execute_workflow_tool(
-            "excel_prophet", {}, workspace_root=str(tmp_path)
-        )
+        result = execute_workflow_tool("excel_prophet", {}, workspace_root=str(tmp_path))
         parsed = json.loads(result)
         assert parsed["action"] == "forecast"
         assert parsed["note"] == "数据不足，使用零预测"
@@ -403,15 +398,14 @@ class TestExecuteWorkflowToolProphet:
         from app.application.tools.workflow import execute_workflow_tool
 
         p = tmp_path / "data.xlsx"
-        pd.DataFrame({"label": ["a", "b", "c"], "value": [10, 20, 30]}).to_excel(
-            p, index=False
-        )
+        pd.DataFrame({"label": ["a", "b", "c"], "value": [10, 20, 30]}).to_excel(p, index=False)
         with patch(
             "app.application.tools.workflow._read_excel_dataframe",
             side_effect=lambda path, **kw: pd.read_excel(path),
         ):
             result = execute_workflow_tool(
-                "excel_prophet", {"file_path": str(p), "periods": 2},
+                "excel_prophet",
+                {"file_path": str(p), "periods": 2},
                 workspace_root=str(tmp_path),
             )
         parsed = json.loads(result)
@@ -526,9 +520,7 @@ class TestExecuteWorkflowToolVectorIndex:
     def test_vector_index_missing_file_path(self, tmp_path: Path):
         from app.application.tools.workflow import execute_workflow_tool
 
-        result = execute_workflow_tool(
-            "excel_vector_index", {}, workspace_root=str(tmp_path)
-        )
+        result = execute_workflow_tool("excel_vector_index", {}, workspace_root=str(tmp_path))
         parsed = json.loads(result)
         assert parsed["success"] is False
         assert "file_path" in parsed["error"]
@@ -609,11 +601,10 @@ class TestExecuteWorkflowToolGenerateOffice:
     def test_invalid_format_defaults_to_docx(self):
         from app.application.tools.workflow import execute_workflow_tool
 
-        with patch(
-            "app.services.kitten_ai_document.generate.generate_office_file"
-        ) as mock_gen, patch(
-            "app.services.kitten_ai_document.pickup.store_document_pickup"
-        ) as mock_store:
+        with (
+            patch("app.services.kitten_ai_document.generate.generate_office_file") as mock_gen,
+            patch("app.services.kitten_ai_document.pickup.store_document_pickup") as mock_store,
+        ):
             mock_gen.return_value = (b"content", "out.docx")
             mock_store.return_value = "tok123"
             result = execute_workflow_tool(
@@ -627,11 +618,10 @@ class TestExecuteWorkflowToolGenerateOffice:
     def test_generate_xlsx(self):
         from app.application.tools.workflow import execute_workflow_tool
 
-        with patch(
-            "app.services.kitten_ai_document.generate.generate_office_file"
-        ) as mock_gen, patch(
-            "app.services.kitten_ai_document.pickup.store_document_pickup"
-        ) as mock_store:
+        with (
+            patch("app.services.kitten_ai_document.generate.generate_office_file") as mock_gen,
+            patch("app.services.kitten_ai_document.pickup.store_document_pickup") as mock_store,
+        ):
             mock_gen.return_value = (b"content", "out.xlsx")
             mock_store.return_value = "tok456"
             result = execute_workflow_tool(
@@ -645,11 +635,10 @@ class TestExecuteWorkflowToolGenerateOffice:
     def test_generate_via_prompt_alias(self):
         from app.application.tools.workflow import execute_workflow_tool
 
-        with patch(
-            "app.services.kitten_ai_document.generate.generate_office_file"
-        ) as mock_gen, patch(
-            "app.services.kitten_ai_document.pickup.store_document_pickup"
-        ) as mock_store:
+        with (
+            patch("app.services.kitten_ai_document.generate.generate_office_file") as mock_gen,
+            patch("app.services.kitten_ai_document.pickup.store_document_pickup") as mock_store,
+        ):
             mock_gen.return_value = (b"content", "out.docx")
             mock_store.return_value = "tok789"
             result = execute_workflow_tool(
@@ -687,9 +676,7 @@ class TestHandleImportExcelTokenPaths:
             "app.application.tools.workflow.configured_db_write_token",
             return_value="expected_token",
         ):
-            result = _handle_import_excel_to_database(
-                {"db_write_token": "wrong_token"}
-            )
+            result = _handle_import_excel_to_database({"db_write_token": "wrong_token"})
         parsed = json.loads(result)
         assert parsed["success"] is False
         assert parsed["error"] == "file_path is required"
@@ -784,9 +771,7 @@ class TestHandleImportExcelTokenPaths:
 
         p = tmp_path / "data.xlsx"
         with pd.ExcelWriter(p) as writer:
-            pd.DataFrame({"a": [1, 2]}).to_excel(
-                writer, sheet_name="MySheet", index=False
-            )
+            pd.DataFrame({"a": [1, 2]}).to_excel(writer, sheet_name="MySheet", index=False)
         with patch(
             "app.application.tools.workflow.configured_db_write_token",
             return_value="",
@@ -836,9 +821,7 @@ class TestImportProductsPreviewOrExecute:
         from app.application.tools.workflow import _import_products_preview_or_execute
 
         df = pd.DataFrame({"产品名称": ["A", "B"], "数量": [1, 2]})
-        result = _import_products_preview_or_execute(
-            df, list(df.columns), "ACME", False, 2
-        )
+        result = _import_products_preview_or_execute(df, list(df.columns), "ACME", False, 2)
         parsed = json.loads(result)
         assert parsed["success"] is True
         assert parsed["preview"] is True
@@ -849,11 +832,13 @@ class TestImportProductsPreviewOrExecute:
         from app.application.tools.workflow import _import_products_preview_or_execute
 
         df = pd.DataFrame({"产品名称": ["A"], "数量": [1]})
-        with patch("app.bootstrap.get_products_service") as mock_ps, patch(
-            "app.bootstrap.get_customer_app_service"
-        ) as mock_cs, patch(
-            "app.services.unified_query_service.find_purchase_unit",
-            return_value=True,
+        with (
+            patch("app.bootstrap.get_products_service") as mock_ps,
+            patch("app.bootstrap.get_customer_app_service") as mock_cs,
+            patch(
+                "app.services.unified_query_service.find_purchase_unit",
+                return_value=True,
+            ),
         ):
             mock_svc = MagicMock()
             mock_svc.batch_add_products.return_value = {
@@ -863,9 +848,7 @@ class TestImportProductsPreviewOrExecute:
             }
             mock_ps.return_value = mock_svc
             mock_cs.return_value = MagicMock()
-            result = _import_products_preview_or_execute(
-                df, list(df.columns), "ACME", True, 1
-            )
+            result = _import_products_preview_or_execute(df, list(df.columns), "ACME", True, 1)
         parsed = json.loads(result)
         assert parsed["success"] is True
         assert parsed["preview"] is False
@@ -875,11 +858,13 @@ class TestImportProductsPreviewOrExecute:
         from app.application.tools.workflow import _import_products_preview_or_execute
 
         df = pd.DataFrame({"产品名称": ["A"], "数量": [1]})
-        with patch("app.bootstrap.get_products_service") as mock_ps, patch(
-            "app.bootstrap.get_customer_app_service"
-        ) as mock_cs, patch(
-            "app.services.unified_query_service.find_purchase_unit",
-            return_value=False,
+        with (
+            patch("app.bootstrap.get_products_service") as mock_ps,
+            patch("app.bootstrap.get_customer_app_service") as mock_cs,
+            patch(
+                "app.services.unified_query_service.find_purchase_unit",
+                return_value=False,
+            ),
         ):
             mock_svc = MagicMock()
             mock_svc.batch_add_products.return_value = {
@@ -889,9 +874,7 @@ class TestImportProductsPreviewOrExecute:
             mock_ps.return_value = mock_svc
             mock_customer_svc = MagicMock()
             mock_cs.return_value = mock_customer_svc
-            result = _import_products_preview_or_execute(
-                df, list(df.columns), "ACME", True, 1
-            )
+            result = _import_products_preview_or_execute(df, list(df.columns), "ACME", True, 1)
         parsed = json.loads(result)
         assert parsed["success"] is True
         mock_customer_svc.create.assert_called_once()
@@ -900,20 +883,20 @@ class TestImportProductsPreviewOrExecute:
         from app.application.tools.workflow import _import_products_preview_or_execute
 
         df = pd.DataFrame({"产品名称": ["A"], "数量": [1]})
-        with patch("app.bootstrap.get_products_service") as mock_ps, patch(
-            "app.bootstrap.get_customer_app_service"
-        ), patch(
-            "app.services.unified_query_service.find_purchase_unit",
-            return_value=True,
+        with (
+            patch("app.bootstrap.get_products_service") as mock_ps,
+            patch("app.bootstrap.get_customer_app_service"),
+            patch(
+                "app.services.unified_query_service.find_purchase_unit",
+                return_value=True,
+            ),
         ):
             mock_svc = MagicMock()
             mock_svc.batch_add_products.return_value = {
                 "data": {"success_count": 5, "failed_count": 1},
             }
             mock_ps.return_value = mock_svc
-            result = _import_products_preview_or_execute(
-                df, list(df.columns), "ACME", True, 1
-            )
+            result = _import_products_preview_or_execute(df, list(df.columns), "ACME", True, 1)
         parsed = json.loads(result)
         assert parsed["success"] is True
         assert parsed["imported"] == 5
@@ -928,11 +911,13 @@ class TestImportProductsPreviewOrExecute:
                 "数量": [1, 0],
             }
         )
-        with patch("app.bootstrap.get_products_service") as mock_ps, patch(
-            "app.bootstrap.get_customer_app_service"
-        ), patch(
-            "app.services.unified_query_service.find_purchase_unit",
-            return_value=True,
+        with (
+            patch("app.bootstrap.get_products_service") as mock_ps,
+            patch("app.bootstrap.get_customer_app_service"),
+            patch(
+                "app.services.unified_query_service.find_purchase_unit",
+                return_value=True,
+            ),
         ):
             mock_svc = MagicMock()
             mock_svc.batch_add_products.return_value = {
@@ -940,9 +925,7 @@ class TestImportProductsPreviewOrExecute:
                 "failed_count": 0,
             }
             mock_ps.return_value = mock_svc
-            result = _import_products_preview_or_execute(
-                df, list(df.columns), "ACME", True, 2
-            )
+            result = _import_products_preview_or_execute(df, list(df.columns), "ACME", True, 2)
         parsed = json.loads(result)
         assert parsed["success"] is True
         assert parsed["skipped_clause_like_rows"] >= 1
@@ -959,12 +942,8 @@ class TestImportCustomersPreviewOrExecute:
     def test_preview_mode(self):
         from app.application.tools.workflow import _import_customers_preview_or_execute
 
-        df = pd.DataFrame(
-            {"客户名称": ["A", "B"], "联系人": ["x", "y"], "电话": ["1", "2"]}
-        )
-        result = _import_customers_preview_or_execute(
-            df, list(df.columns), False, 2
-        )
+        df = pd.DataFrame({"客户名称": ["A", "B"], "联系人": ["x", "y"], "电话": ["1", "2"]})
+        result = _import_customers_preview_or_execute(df, list(df.columns), False, 2)
         parsed = json.loads(result)
         assert parsed["success"] is True
         assert parsed["preview"] is True
@@ -979,9 +958,7 @@ class TestImportCustomersPreviewOrExecute:
             mock_svc = MagicMock()
             mock_svc.create.return_value = {"success": True}
             mock_cs.return_value = mock_svc
-            result = _import_customers_preview_or_execute(
-                df, list(df.columns), True, 1
-            )
+            result = _import_customers_preview_or_execute(df, list(df.columns), True, 1)
         parsed = json.loads(result)
         assert parsed["success"] is True
         assert parsed["imported"] == 1
@@ -995,9 +972,7 @@ class TestImportCustomersPreviewOrExecute:
             mock_svc = MagicMock()
             mock_svc.create.return_value = {"success": False}
             mock_cs.return_value = mock_svc
-            result = _import_customers_preview_or_execute(
-                df, list(df.columns), True, 1
-            )
+            result = _import_customers_preview_or_execute(df, list(df.columns), True, 1)
         parsed = json.loads(result)
         assert parsed["success"] is True
         assert parsed["failed"] == 1
@@ -1010,9 +985,7 @@ class TestImportCustomersPreviewOrExecute:
             mock_svc = MagicMock()
             mock_svc.create.return_value = {"success": True}
             mock_cs.return_value = mock_svc
-            result = _import_customers_preview_or_execute(
-                df, list(df.columns), True, 3
-            )
+            result = _import_customers_preview_or_execute(df, list(df.columns), True, 3)
         parsed = json.loads(result)
         # Only the first row has a customer_name.
         assert parsed["imported"] == 1
@@ -1030,9 +1003,7 @@ class TestImportOrdersPreviewOrExecute:
         from app.application.tools.workflow import _import_orders_preview_or_execute
 
         df = pd.DataFrame({"产品名称": ["A"], "数量": [1], "购买单位": ["ACME"]})
-        result = _import_orders_preview_or_execute(
-            df, list(df.columns), "ACME", False, 1
-        )
+        result = _import_orders_preview_or_execute(df, list(df.columns), "ACME", False, 1)
         parsed = json.loads(result)
         assert parsed["success"] is True
         assert parsed["preview"] is True
@@ -1047,9 +1018,7 @@ class TestImportOrdersPreviewOrExecute:
             mock_svc = MagicMock()
             mock_svc.create_shipment.return_value = {"success": True}
             mock_ss.return_value = mock_svc
-            result = _import_orders_preview_or_execute(
-                df, list(df.columns), "ACME", True, 1
-            )
+            result = _import_orders_preview_or_execute(df, list(df.columns), "ACME", True, 1)
         parsed = json.loads(result)
         assert parsed["success"] is True
         assert parsed["imported"] == 1
@@ -1062,9 +1031,7 @@ class TestImportOrdersPreviewOrExecute:
             mock_svc = MagicMock()
             mock_svc.create_shipment.return_value = {"success": False}
             mock_ss.return_value = mock_svc
-            result = _import_orders_preview_or_execute(
-                df, list(df.columns), "ACME", True, 1
-            )
+            result = _import_orders_preview_or_execute(df, list(df.columns), "ACME", True, 1)
         parsed = json.loads(result)
         assert parsed["success"] is True
         assert parsed["failed"] == 1
@@ -1077,9 +1044,7 @@ class TestImportOrdersPreviewOrExecute:
             mock_svc = MagicMock()
             mock_svc.create_shipment.return_value = {"success": True}
             mock_ss.return_value = mock_svc
-            result = _import_orders_preview_or_execute(
-                df, list(df.columns), "", True, 1
-            )
+            result = _import_orders_preview_or_execute(df, list(df.columns), "", True, 1)
         parsed = json.loads(result)
         assert parsed["success"] is True
         assert parsed["failed"] == 1
@@ -1104,7 +1069,11 @@ class TestRunNaturalLanguagePandasErrors:
         mock_converter.translate.return_value = "result = df.loc['nonexistent']"
         with patch.dict(
             "sys.modules",
-            {"app.legacy.excel_text_to_pandas": MagicMock(ExcelTextToPandas=MagicMock(return_value=mock_converter))},
+            {
+                "app.legacy.excel_text_to_pandas": MagicMock(
+                    ExcelTextToPandas=MagicMock(return_value=mock_converter)
+                )
+            },
         ):
             result = run_natural_language_pandas(df, "anything")
         assert isinstance(result, dict)
@@ -1119,7 +1088,11 @@ class TestRunNaturalLanguagePandasErrors:
         mock_converter.translate.return_value = ""
         with patch.dict(
             "sys.modules",
-            {"app.legacy.excel_text_to_pandas": MagicMock(ExcelTextToPandas=MagicMock(return_value=mock_converter))},
+            {
+                "app.legacy.excel_text_to_pandas": MagicMock(
+                    ExcelTextToPandas=MagicMock(return_value=mock_converter)
+                )
+            },
         ):
             result = run_natural_language_pandas(df, "anything")
         assert isinstance(result, dict)
@@ -1134,7 +1107,11 @@ class TestRunNaturalLanguagePandasErrors:
         mock_converter.translate.return_value = "result = df.head(1)"
         with patch.dict(
             "sys.modules",
-            {"app.legacy.excel_text_to_pandas": MagicMock(ExcelTextToPandas=MagicMock(return_value=mock_converter))},
+            {
+                "app.legacy.excel_text_to_pandas": MagicMock(
+                    ExcelTextToPandas=MagicMock(return_value=mock_converter)
+                )
+            },
         ):
             result = run_natural_language_pandas(df, "first row")
         assert isinstance(result, dict)
@@ -1153,9 +1130,7 @@ class TestExecuteWorkflowToolStringArgs:
     def test_string_args_valid_json(self):
         from app.application.tools.workflow import execute_workflow_tool
 
-        result = execute_workflow_tool(
-            "excel_chart_recommend", json.dumps({"file_path": "x.xlsx"})
-        )
+        result = execute_workflow_tool("excel_chart_recommend", json.dumps({"file_path": "x.xlsx"}))
         parsed = json.loads(result)
         assert "suggestions" in parsed
 

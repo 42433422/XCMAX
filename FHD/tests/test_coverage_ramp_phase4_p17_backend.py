@@ -348,9 +348,7 @@ def test_get_inventory_transactions(svc: InventoryService) -> None:
     )
     s = _session([_fluent(all_=[tx], count_=1)])
     with _patch_db(s):
-        out = svc.get_inventory_transactions(
-            product_id=1, warehouse_id=1, transaction_type="in"
-        )
+        out = svc.get_inventory_transactions(product_id=1, warehouse_id=1, transaction_type="in")
     assert out["total"] == 1
     assert out["data"][0]["product_name"] == "苹果"
 

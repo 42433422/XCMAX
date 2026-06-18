@@ -1,4 +1,5 @@
 """Tests for app.domain.services.conversation.coordinator — UnifiedConversationCoordinator + SlotValidator."""
+
 from __future__ import annotations
 
 import time
@@ -16,10 +17,10 @@ from app.domain.services.conversation.coordinator import (
     get_conversation_coordinator,
 )
 
-
 # ---------------------------------------------------------------------------
 # PendingIntent
 # ---------------------------------------------------------------------------
+
 
 class TestPendingIntent:
     def test_is_expired_false_when_recent(self):
@@ -28,7 +29,9 @@ class TestPendingIntent:
 
     def test_is_expired_true_when_old(self):
         p = PendingIntent(
-            intent="test", slots={}, missing_slots=[],
+            intent="test",
+            slots={},
+            missing_slots=[],
             last_updated_at=time.time() - 600,
         )
         assert p.is_expired() is True
@@ -46,7 +49,9 @@ class TestPendingIntent:
 
     def test_merge_slots_updates_timestamp(self):
         p = PendingIntent(
-            intent="test", slots={}, missing_slots=[],
+            intent="test",
+            slots={},
+            missing_slots=[],
             last_updated_at=time.time() - 100,
         )
         merged = p.merge_slots({})
@@ -56,6 +61,7 @@ class TestPendingIntent:
 # ---------------------------------------------------------------------------
 # SlotValidator
 # ---------------------------------------------------------------------------
+
 
 class TestSlotValidator:
     def test_validate_unknown_intent_passes(self):
@@ -116,6 +122,7 @@ class TestSlotValidator:
 # ---------------------------------------------------------------------------
 # UnifiedConversationCoordinator
 # ---------------------------------------------------------------------------
+
 
 class TestUnifiedConversationCoordinator:
     def _make_coordinator(self):
@@ -190,7 +197,12 @@ class TestUnifiedConversationCoordinator:
         coord = self._make_coordinator()
         pending = PendingIntent(
             intent="shipment_generate",
-            slots={"unit_name": "Acme", "model_number": "M1", "tin_spec": "20L", "quantity_tins": 10},
+            slots={
+                "unit_name": "Acme",
+                "model_number": "M1",
+                "tin_spec": "20L",
+                "quantity_tins": 10,
+            },
             missing_slots=[],
         )
         coord._context_facade.intent_context.get_pending.return_value = MagicMock(
@@ -253,11 +265,10 @@ class TestUnifiedConversationCoordinator:
 # Singleton
 # ---------------------------------------------------------------------------
 
+
 class TestGetConversationCoordinator:
     def test_returns_instance(self):
-        with patch(
-            "app.domain.services.conversation.coordinator._coordinator", None
-        ):
+        with patch("app.domain.services.conversation.coordinator._coordinator", None):
             with patch(
                 "app.domain.services.conversation.coordinator.UnifiedConversationCoordinator"
             ) as MockCls:
@@ -265,6 +276,7 @@ class TestGetConversationCoordinator:
                 MockCls.return_value = mock_inst
                 # Reset module-level singleton
                 import app.domain.services.conversation.coordinator as mod
+
                 mod._coordinator = None
                 result = get_conversation_coordinator()
                 assert result is mock_inst

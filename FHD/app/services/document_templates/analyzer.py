@@ -463,7 +463,7 @@ def _analyze_label_template(
 
             if ocr_data and ocr_data.get("grid"):
                 preview_data["grid"] = ocr_data["grid"]
-                logger.info("网格信息：%s", ocr_data['grid'])
+                logger.info("网格信息：%s", ocr_data["grid"])
             else:
                 logger.warning("未找到网格信息")
 

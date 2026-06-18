@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-import time
-
 import importlib
+import time
 
 import pytest
 

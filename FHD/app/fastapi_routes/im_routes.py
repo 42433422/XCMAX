@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Body, Depends, Query, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Body, Depends, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 
 from app.application.im_app_service import ImApplicationService, ensure_im_tables
@@ -13,6 +13,7 @@ from app.db import HostSessionLocal, get_host_engine
 from app.infrastructure.auth.dependencies import (
     CurrentUser,
     require_identified_user,
+    session_id_from_request,
 )
 from app.infrastructure.im.ws_hub import im_ws_hub
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -50,12 +51,9 @@ def _resolve_ws_user_id(ws: WebSocket) -> int | None:
     sid = ws.cookies.get(cookie_name) or ws.query_params.get("session_id")
     if not sid:
         return None
-    try:
-        from app.services import get_session_service
-    except Exception:
-        from app.application.facades.session_facade import get_session_service
+    from app.application.facades import session_facade
 
-    user = get_session_service().validate_session(str(sid).strip())
+    user = session_facade.get_session_service().validate_session(str(sid).strip())
     if user is None:
         return None
     return int(user.id)
@@ -66,7 +64,7 @@ async def _notify_offline_im_members(member_ids: list[int], sender_id: int, body
         from app.infrastructure.im import ws_hub as ws_hub_module
 
         source_hub = ws_hub_module.im_ws_hub
-    except Exception:
+    except (ImportError, AttributeError):
         source_hub = im_ws_hub
     local_is_mock = hasattr(im_ws_hub, "mock_calls")
     source_is_mock = hasattr(source_hub, "mock_calls")
@@ -76,10 +74,7 @@ async def _notify_offline_im_members(member_ids: list[int], sender_id: int, body
     if not offline:
         return
     try:
-        try:
-            from app.services.mobile_push import notify_user as notify_mobile_user
-        except Exception:
-            from app.application.mobile_push_app_service import notify_mobile_user
+        from app.application.mobile_push_app_service import notify_mobile_user
 
         preview = (body or "").strip()[:120] or "新消息"
         for uid in offline:
@@ -97,12 +92,14 @@ async def _notify_offline_im_members(member_ids: list[int], sender_id: int, body
 
 
 @router.get("/api/im/conversations")
-def im_list_conversations(user: CurrentUser = Depends(require_identified_user)):
+def im_list_conversations(request: Request, user: CurrentUser = Depends(require_identified_user)):
     _ensure_schema()
     uid = _uid(user)
     db = HostSessionLocal()
     try:
-        items = ImApplicationService(db).list_conversations(uid)
+        sid = session_id_from_request(request)
+        service = ImApplicationService(db)
+        items = service.list_conversations(uid, sid) if sid else service.list_conversations(uid)
         return {"success": True, "user_id": uid, "conversations": items}
     except RECOVERABLE_ERRORS as exc:
         logger.exception("im_list_conversations")

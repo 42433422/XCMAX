@@ -14,6 +14,7 @@ These tests target branches not covered by ``test_aiopen_service.py``:
 - ``revoke_api_key`` whitespace key.
 - ``list_api_keys`` env + runtime combined.
 """
+
 from __future__ import annotations
 
 import json
@@ -44,7 +45,6 @@ from app.application.aiopen.service import (
     revoke_api_key,
     verify_api_key,
 )
-
 
 # ── _repo_stdio_bridge_path ───────────────────────────────────
 
@@ -92,6 +92,7 @@ class TestVerifyApiKeyExt:
     def test_runtime_key_match_with_whitespace(self):
         with patch.dict("os.environ", {}, clear=True):
             import os
+
             os.environ.pop("AIOPEN_API_KEY", None)
         saved = AIOPEN_STATE.setdefault("runtime_keys", {})
         saved["rt_key_ws"] = {"label": "test", "created_at": 1.0}
@@ -167,6 +168,7 @@ class TestListApiKeysExt:
     def test_runtime_key_missing_label_uses_empty(self):
         with patch.dict("os.environ", {}, clear=True):
             import os
+
             os.environ.pop("AIOPEN_API_KEY", None)
         saved = AIOPEN_STATE.setdefault("runtime_keys", {})
         saved["aiopen_nolabel123"] = {"created_at": 3.0}  # no 'label' key
@@ -180,6 +182,7 @@ class TestListApiKeysExt:
     def test_runtime_key_missing_created_at_uses_none(self):
         with patch.dict("os.environ", {}, clear=True):
             import os
+
             os.environ.pop("AIOPEN_API_KEY", None)
         saved = AIOPEN_STATE.setdefault("runtime_keys", {})
         saved["aiopen_notime12345"] = {"label": "x"}  # no 'created_at' key
@@ -704,9 +707,7 @@ class TestToolApiCallExt:
             saved_whitelist = AIOPEN_STATE.get("whitelist", {})
             AIOPEN_STATE["whitelist"] = {"/api/products": True}
             try:
-                result = _tool_api_call(
-                    MagicMock(), {"path": "/api/products", "method": "post"}
-                )
+                result = _tool_api_call(MagicMock(), {"path": "/api/products", "method": "post"})
                 assert result["method"] == "POST"
             finally:
                 AIOPEN_STATE["whitelist"] = saved_whitelist
@@ -774,9 +775,7 @@ class TestInvokeToolExt:
         saved = AIOPEN_STATE.get("remote_control_enabled")
         AIOPEN_STATE["remote_control_enabled"] = True
         try:
-            with patch(
-                "app.application.aiopen.service.aiopen_cursor_hub"
-            ) as mock_hub:
+            with patch("app.application.aiopen.service.aiopen_cursor_hub") as mock_hub:
                 mock_hub.dispatch = AsyncMock(return_value={"success": True})
                 await invoke_tool(
                     "ui_click",
@@ -786,7 +785,9 @@ class TestInvokeToolExt:
                 # session_id should be passed separately, not in params
                 call_args = mock_hub.dispatch.call_args
                 # action is positional[0], params is positional[1]
-                params = call_args[0][1] if len(call_args[0]) > 1 else call_args.kwargs.get("params")
+                params = (
+                    call_args[0][1] if len(call_args[0]) > 1 else call_args.kwargs.get("params")
+                )
                 assert "session_id" not in params
                 assert call_args.kwargs["session_id"] == "sess-123"
         finally:
@@ -797,9 +798,7 @@ class TestInvokeToolExt:
         saved = AIOPEN_STATE.get("remote_control_enabled")
         AIOPEN_STATE["remote_control_enabled"] = True
         try:
-            with patch(
-                "app.application.aiopen.service.aiopen_cursor_hub"
-            ) as mock_hub:
+            with patch("app.application.aiopen.service.aiopen_cursor_hub") as mock_hub:
                 mock_hub.dispatch = AsyncMock(return_value={"success": True})
                 await invoke_tool(
                     "ui_navigate",
@@ -816,9 +815,7 @@ class TestInvokeToolExt:
         saved = AIOPEN_STATE.get("remote_control_enabled")
         AIOPEN_STATE["remote_control_enabled"] = True
         try:
-            with patch(
-                "app.application.aiopen.service.aiopen_cursor_hub"
-            ) as mock_hub:
+            with patch("app.application.aiopen.service.aiopen_cursor_hub") as mock_hub:
                 mock_hub.dispatch = AsyncMock(return_value={"success": True})
                 await invoke_tool(
                     "ui_type",
@@ -835,9 +832,7 @@ class TestInvokeToolExt:
         saved = AIOPEN_STATE.get("remote_control_enabled")
         AIOPEN_STATE["remote_control_enabled"] = True
         try:
-            with patch(
-                "app.application.aiopen.service.aiopen_cursor_hub"
-            ) as mock_hub:
+            with patch("app.application.aiopen.service.aiopen_cursor_hub") as mock_hub:
                 mock_hub.dispatch = AsyncMock(return_value={"success": True})
                 await invoke_tool("ui_scroll", {"delta_y": 100}, MagicMock())
                 call_args = mock_hub.dispatch.call_args
@@ -851,9 +846,7 @@ class TestInvokeToolExt:
         saved = AIOPEN_STATE.get("remote_control_enabled")
         AIOPEN_STATE["remote_control_enabled"] = True
         try:
-            with patch(
-                "app.application.aiopen.service.aiopen_cursor_hub"
-            ) as mock_hub:
+            with patch("app.application.aiopen.service.aiopen_cursor_hub") as mock_hub:
                 mock_hub.dispatch = AsyncMock(return_value={"success": True})
                 await invoke_tool("ui_snapshot", {}, MagicMock())
                 call_kwargs = mock_hub.dispatch.call_args.kwargs
@@ -908,9 +901,7 @@ class TestInvokeToolExt:
                 ("ui_type", "type"),
                 ("ui_scroll", "scroll"),
             ]:
-                with patch(
-                    "app.application.aiopen.service.aiopen_cursor_hub"
-                ) as mock_hub:
+                with patch("app.application.aiopen.service.aiopen_cursor_hub") as mock_hub:
                     mock_hub.dispatch = AsyncMock(return_value={"success": True})
                     await invoke_tool(tool_name, {}, MagicMock())
                     call_args = mock_hub.dispatch.call_args
@@ -928,9 +919,7 @@ class TestOpenclawChatProxyExt:
         mock_resp.read.return_value = b"not json at all"
         mock_resp.__enter__ = MagicMock(return_value=mock_resp)
         mock_resp.__exit__ = MagicMock(return_value=False)
-        with patch(
-            "app.application.aiopen.service.urllib.request.urlopen", return_value=mock_resp
-        ):
+        with patch("app.application.aiopen.service.urllib.request.urlopen", return_value=mock_resp):
             payload, status = openclaw_chat_proxy("hi")
             assert payload["success"] is True
             assert status == 200
@@ -941,9 +930,7 @@ class TestOpenclawChatProxyExt:
         mock_resp.read.return_value = b""
         mock_resp.__enter__ = MagicMock(return_value=mock_resp)
         mock_resp.__exit__ = MagicMock(return_value=False)
-        with patch(
-            "app.application.aiopen.service.urllib.request.urlopen", return_value=mock_resp
-        ):
+        with patch("app.application.aiopen.service.urllib.request.urlopen", return_value=mock_resp):
             payload, status = openclaw_chat_proxy("hi")
             assert payload["success"] is True
             assert status == 200
@@ -951,11 +938,10 @@ class TestOpenclawChatProxyExt:
 
     def test_http_error_with_empty_body_uses_str_err(self):
         import urllib.error
+
         err = urllib.error.HTTPError("http://x", 503, "Service Unavailable", {}, None)
         err.read = MagicMock(return_value=b"")
-        with patch(
-            "app.application.aiopen.service.urllib.request.urlopen", side_effect=err
-        ):
+        with patch("app.application.aiopen.service.urllib.request.urlopen", side_effect=err):
             payload, status = openclaw_chat_proxy("hi")
             assert payload["success"] is False
             assert status == 502
@@ -990,7 +976,7 @@ class TestOpenclawChatProxyExt:
 
     def test_request_payload_contains_message(self):
         mock_resp = MagicMock()
-        mock_resp.read.return_value = b'{}'
+        mock_resp.read.return_value = b"{}"
         mock_resp.__enter__ = MagicMock(return_value=mock_resp)
         mock_resp.__exit__ = MagicMock(return_value=False)
         with patch(
@@ -1001,12 +987,13 @@ class TestOpenclawChatProxyExt:
             req = call_args[0][0]
             # req.data is the JSON-encoded payload
             import json as _json
+
             payload = _json.loads(req.data.decode("utf-8"))
             assert payload["message"] == "my custom message"
 
     def test_request_has_json_content_type(self):
         mock_resp = MagicMock()
-        mock_resp.read.return_value = b'{}'
+        mock_resp.read.return_value = b"{}"
         mock_resp.__enter__ = MagicMock(return_value=mock_resp)
         mock_resp.__exit__ = MagicMock(return_value=False)
         with patch(

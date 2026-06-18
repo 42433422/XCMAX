@@ -1,4 +1,5 @@
 """Tests for app.utils.printer_automation — coverage ramp."""
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
@@ -188,7 +189,9 @@ class TestPrinterAutomationPrintWithAutomation:
     @patch("app.utils.printer_automation.win32api", create=True)
     @patch("app.utils.printer_automation.win32print", create=True)
     @patch("app.utils.printer_automation.PrinterAutomation._is_available", return_value=True)
-    def test_print_success_same_printer(self, mock_avail, mock_win32print, mock_win32api, mock_sleep):
+    def test_print_success_same_printer(
+        self, mock_avail, mock_win32print, mock_win32api, mock_sleep
+    ):
         mock_win32print.GetDefaultPrinter.return_value = "HP LaserJet"
         mock_win32api.ShellExecute.return_value = 33  # > 32 means success
         pa = PrinterAutomation()
@@ -201,7 +204,9 @@ class TestPrinterAutomationPrintWithAutomation:
     @patch("app.utils.printer_automation.win32api", create=True)
     @patch("app.utils.printer_automation.win32print", create=True)
     @patch("app.utils.printer_automation.PrinterAutomation._is_available", return_value=True)
-    def test_print_different_printer_changes_default(self, mock_avail, mock_win32print, mock_win32api, mock_sleep):
+    def test_print_different_printer_changes_default(
+        self, mock_avail, mock_win32print, mock_win32api, mock_sleep
+    ):
         mock_win32print.GetDefaultPrinter.return_value = "Other Printer"
         mock_win32api.ShellExecute.return_value = 33
         pa = PrinterAutomation()
@@ -216,7 +221,9 @@ class TestPrinterAutomationPrintWithAutomation:
     @patch("app.utils.printer_automation.win32api", create=True)
     @patch("app.utils.printer_automation.win32print", create=True)
     @patch("app.utils.printer_automation.PrinterAutomation._is_available", return_value=True)
-    def test_print_shell_execute_failure(self, mock_avail, mock_win32print, mock_win32api, mock_sleep):
+    def test_print_shell_execute_failure(
+        self, mock_avail, mock_win32print, mock_win32api, mock_sleep
+    ):
         mock_win32print.GetDefaultPrinter.return_value = "HP LaserJet"
         mock_win32api.ShellExecute.return_value = 2  # <= 32 means failure
         pa = PrinterAutomation()
@@ -248,23 +255,21 @@ class TestEnhancedPrinterUtils:
             mock_utils = MagicMock()
             mock_utils.print_file.return_value = {"success": True}
             mock_utils_cls.return_value = mock_utils
-            result = epu.print_file_enhanced(
-                "/tmp/test.docx", "HP LaserJet", use_automation=False
-            )
+            result = epu.print_file_enhanced("/tmp/test.docx", "HP LaserJet", use_automation=False)
         assert result["success"] is True
 
     @patch("app.utils.printer_automation.time.sleep")
     @patch("app.utils.printer_automation.win32api", create=True)
     @patch("app.utils.printer_automation.win32print", create=True)
     @patch("app.utils.printer_automation.PrinterAutomation._is_available", return_value=True)
-    def test_print_file_enhanced_with_automation(self, mock_avail, mock_win32print, mock_win32api, mock_sleep):
+    def test_print_file_enhanced_with_automation(
+        self, mock_avail, mock_win32print, mock_win32api, mock_sleep
+    ):
         mock_win32print.GetDefaultPrinter.return_value = "HP LaserJet"
         mock_win32api.ShellExecute.return_value = 33
         epu = EnhancedPrinterUtils()
         with patch.object(epu.automation, "handle_printer_dialog", return_value=True):
-            result = epu.print_file_enhanced(
-                "/tmp/test.docx", "HP LaserJet", use_automation=True
-            )
+            result = epu.print_file_enhanced("/tmp/test.docx", "HP LaserJet", use_automation=True)
         assert result["success"] is True
 
     def test_print_file_enhanced_exception(self):
@@ -274,7 +279,5 @@ class TestEnhancedPrinterUtils:
             "print_with_automation",
             side_effect=OSError("print failed"),
         ):
-            result = epu.print_file_enhanced(
-                "/tmp/test.docx", "HP LaserJet", use_automation=True
-            )
+            result = epu.print_file_enhanced("/tmp/test.docx", "HP LaserJet", use_automation=True)
         assert result["success"] is False

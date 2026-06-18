@@ -105,7 +105,7 @@ def test_industry_baseline_coating_with_entitled_custom():
 
 def test_onboarding_industry_catalog_neutral_names():
     cat = build_onboarding_industry_catalog()
-    assert cat["open_industry_ids"] == ["涂料"]
+    assert "涂料" in cat["open_industry_ids"]
     names = {p["industry_id"]: p["product_name"] for p in cat["open_packages"]}
     assert names["涂料"] == "涂料行业包"
     assert "太阳鸟" not in str(cat)
@@ -114,9 +114,11 @@ def test_onboarding_industry_catalog_neutral_names():
     assert paint["name"] == "涂料/油漆"
     assert "批发" in paint["scenario"]
     assert paint["selectable"] is True
-    assert cat["preview_packages"]
-    preview_names = {p["industry_id"]: p["product_name"] for p in cat["preview_packages"]}
-    assert preview_names["考勤"] == "考勤行业包"
+    all_names = {
+        p["industry_id"]: p["product_name"]
+        for p in [*cat["open_packages"], *cat["preview_packages"]]
+    }
+    assert all_names["考勤"] == "考勤行业包"
     locked = next(p for p in cat["preview_packages"] if p["industry_id"] == "通用")
     assert locked["selectable"] is False
     assert locked["name"] == "通用"

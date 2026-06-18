@@ -1,4 +1,5 @@
 """Tests for app.infrastructure.persistence.compat_db.product_queries — PG product list loading."""
+
 from __future__ import annotations
 
 import os
@@ -12,10 +13,10 @@ from app.infrastructure.persistence.compat_db.product_queries import (
     _load_products_list_impl_pg,
 )
 
-
 # ---------------------------------------------------------------------------
 # _load_products_list_impl_pg — tested via mocking the DB engine
 # ---------------------------------------------------------------------------
+
 
 class TestLoadProductsListImplPg:
     def test_operational_error_returns_connection_error(self):
@@ -39,12 +40,15 @@ class TestLoadProductsListImplPg:
         mock_conn.__enter__ = MagicMock(return_value=mock_conn)
         mock_conn.__exit__ = MagicMock(return_value=False)
         mock_eng.connect.return_value = mock_conn
-        with patch(
-            "app.infrastructure.persistence.compat_db.product_queries.get_sync_engine",
-            return_value=mock_eng,
-        ), patch(
-            "app.infrastructure.persistence.compat_db.product_queries.inspect",
-            return_value=mock_insp,
+        with (
+            patch(
+                "app.infrastructure.persistence.compat_db.product_queries.get_sync_engine",
+                return_value=mock_eng,
+            ),
+            patch(
+                "app.infrastructure.persistence.compat_db.product_queries.inspect",
+                return_value=mock_insp,
+            ),
         ):
             rows, total, hint = _load_products_list_impl_pg(1, 20, None, None)
         assert rows == []
@@ -60,12 +64,15 @@ class TestLoadProductsListImplPg:
         mock_conn.__enter__ = MagicMock(return_value=mock_conn)
         mock_conn.__exit__ = MagicMock(return_value=False)
         mock_eng.connect.return_value = mock_conn
-        with patch(
-            "app.infrastructure.persistence.compat_db.product_queries.get_sync_engine",
-            return_value=mock_eng,
-        ), patch(
-            "app.infrastructure.persistence.compat_db.product_queries.inspect",
-            return_value=mock_insp,
+        with (
+            patch(
+                "app.infrastructure.persistence.compat_db.product_queries.get_sync_engine",
+                return_value=mock_eng,
+            ),
+            patch(
+                "app.infrastructure.persistence.compat_db.product_queries.inspect",
+                return_value=mock_insp,
+            ),
         ):
             rows, total, hint = _load_products_list_impl_pg(1, 20, None, None)
         assert rows == []
@@ -82,12 +89,15 @@ class TestLoadProductsListImplPg:
         mock_conn.__exit__ = MagicMock(return_value=False)
         mock_eng.connect.return_value = mock_conn
 
-        with patch(
-            "app.infrastructure.persistence.compat_db.product_queries.get_sync_engine",
-            return_value=mock_eng,
-        ), patch(
-            "app.infrastructure.persistence.compat_db.product_queries.inspect",
-            return_value=mock_insp,
+        with (
+            patch(
+                "app.infrastructure.persistence.compat_db.product_queries.get_sync_engine",
+                return_value=mock_eng,
+            ),
+            patch(
+                "app.infrastructure.persistence.compat_db.product_queries.inspect",
+                return_value=mock_insp,
+            ),
         ):
             rows, total, hint = _load_products_list_impl_pg(1, 20, None, None)
         assert rows == []
@@ -98,10 +108,18 @@ class TestLoadProductsListImplPg:
         mock_insp = MagicMock()
         mock_insp.get_table_names.return_value = ["products"]
         all_cols = [
-            {"name": "id"}, {"name": "model_number"}, {"name": "name"},
-            {"name": "specification"}, {"name": "price"}, {"name": "quantity"},
-            {"name": "description"}, {"name": "category"}, {"name": "brand"},
-            {"name": "unit"}, {"name": "is_active"}, {"name": "created_at"},
+            {"name": "id"},
+            {"name": "model_number"},
+            {"name": "name"},
+            {"name": "specification"},
+            {"name": "price"},
+            {"name": "quantity"},
+            {"name": "description"},
+            {"name": "category"},
+            {"name": "brand"},
+            {"name": "unit"},
+            {"name": "is_active"},
+            {"name": "created_at"},
             {"name": "updated_at"},
         ]
         mock_insp.get_columns.return_value = all_cols
@@ -117,10 +135,19 @@ class TestLoadProductsListImplPg:
         mock_result.scalar_one.return_value = 1
         # data query returns rows
         row_dict = {
-            "id": 1, "model_number": "M1", "name": "Paint",
-            "specification": "20L", "price": 100, "quantity": 10,
-            "description": "desc", "category": "cat", "brand": "brand",
-            "unit": "桶", "is_active": 1, "created_at": None, "updated_at": None,
+            "id": 1,
+            "model_number": "M1",
+            "name": "Paint",
+            "specification": "20L",
+            "price": 100,
+            "quantity": 10,
+            "description": "desc",
+            "category": "cat",
+            "brand": "brand",
+            "unit": "桶",
+            "is_active": 1,
+            "created_at": None,
+            "updated_at": None,
         }
         mock_mappings = MagicMock()
         mock_mappings.all.return_value = [row_dict]
@@ -129,14 +156,18 @@ class TestLoadProductsListImplPg:
         # First call: metadata get_columns, then count, then data
         mock_conn.execute.return_value = mock_result
 
-        with patch(
-            "app.infrastructure.persistence.compat_db.product_queries.get_sync_engine",
-            return_value=mock_eng,
-        ), patch(
-            "app.infrastructure.persistence.compat_db.product_queries.inspect",
-            return_value=mock_insp,
-        ), patch(
-            "app.infrastructure.persistence.compat_db.product_queries.append_mod_scope_where",
+        with (
+            patch(
+                "app.infrastructure.persistence.compat_db.product_queries.get_sync_engine",
+                return_value=mock_eng,
+            ),
+            patch(
+                "app.infrastructure.persistence.compat_db.product_queries.inspect",
+                return_value=mock_insp,
+            ),
+            patch(
+                "app.infrastructure.persistence.compat_db.product_queries.append_mod_scope_where",
+            ),
         ):
             rows, total, hint = _load_products_list_impl_pg(1, 20, None, None)
         assert isinstance(rows, list)

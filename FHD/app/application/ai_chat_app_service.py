@@ -267,7 +267,7 @@ class AIChatApplicationService:
             loop.close()
 
         logger.info(
-            "用户 %s 消息：%s... -> %s", user_id, message[:50], ai_result.get('action', 'unknown')
+            "用户 %s 消息：%s... -> %s", user_id, message[:50], ai_result.get("action", "unknown")
         )
 
         response_data = self._build_response(ai_result, source, message)
@@ -1049,7 +1049,9 @@ class AIChatApplicationService:
         try:
             from app.services.ai_db_schema_index import price_column_buckets_for_keys
 
-            return cast("tuple[list[str], list[str], list[str]]", price_column_buckets_for_keys(list(keys)))
+            return cast(
+                "tuple[list[str], list[str], list[str]]", price_column_buckets_for_keys(list(keys))
+            )
         except RECOVERABLE_ERRORS as err:
             logger.debug("价格列分桶失败，回退启发式: %s", err)
             before: list[str] = []

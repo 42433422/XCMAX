@@ -1,4 +1,5 @@
 """Tests for app.infrastructure.skills — SkillRegistry, execute_skill, get_skill_registry."""
+
 from __future__ import annotations
 
 import tempfile
@@ -13,10 +14,10 @@ from app.infrastructure.skills import (
     get_skill_registry,
 )
 
-
 # ---------------------------------------------------------------------------
 # SkillRegistry
 # ---------------------------------------------------------------------------
+
 
 class TestSkillRegistry:
     def test_register_and_get(self):
@@ -67,6 +68,7 @@ class TestSkillRegistry:
 # SkillRegistry.initialize
 # ---------------------------------------------------------------------------
 
+
 class TestSkillRegistryInitialize:
     def test_initialize_idempotent(self):
         reg = SkillRegistry()
@@ -91,7 +93,9 @@ class TestSkillRegistryInitialize:
                 "# Test Skill\n\n## When to Use This Skill\n\n- trigger one\n- trigger two\n",
                 encoding="utf-8",
             )
-            with patch.object(Path, "parent", new_callable=lambda: property(lambda self: Path(tmp))):
+            with patch.object(
+                Path, "parent", new_callable=lambda: property(lambda self: Path(tmp))
+            ):
                 # Patch __file__ to point to our temp dir
                 with patch("app.infrastructure.skills.Path") as MockPath:
                     MockPath.return_value.parent = Path(tmp)
@@ -107,6 +111,7 @@ class TestSkillRegistryInitialize:
 # ---------------------------------------------------------------------------
 # _parse_skill_md
 # ---------------------------------------------------------------------------
+
 
 class TestParseSkillMd:
     def test_valid_frontmatter(self):
@@ -132,9 +137,7 @@ class TestParseSkillMd:
     def test_extracts_keywords_from_when_to_use(self):
         reg = SkillRegistry()
         content = (
-            "---\nname: Skill\n---\n"
-            "## When to Use This Skill\n\n"
-            "- trigger one\n- trigger two\n"
+            "---\nname: Skill\n---\n## When to Use This Skill\n\n- trigger one\n- trigger two\n"
         )
         result = reg._parse_skill_md(content)
         assert result is not None
@@ -151,6 +154,7 @@ class TestParseSkillMd:
 # execute_skill
 # ---------------------------------------------------------------------------
 
+
 class TestExecuteSkill:
     def test_unknown_skill_returns_failure(self):
         with patch(
@@ -163,36 +167,47 @@ class TestExecuteSkill:
 
     def test_known_skill_dispatches(self):
         reg = SkillRegistry()
-        reg.register("excel_analyzer", {
-            "name": "Excel Analyzer",
-            "module_path": "/fake/path",
-        })
+        reg.register(
+            "excel_analyzer",
+            {
+                "name": "Excel Analyzer",
+                "module_path": "/fake/path",
+            },
+        )
         mock_skill = MagicMock()
         mock_skill.execute.return_value = {"success": True, "data": "analyzed"}
 
-        with patch(
-            "app.infrastructure.skills.get_skill_registry",
-            return_value=reg,
-        ), patch(
-            "app.infrastructure.skills.execute_skill",
-            # We need to actually test the real function
+        with (
+            patch(
+                "app.infrastructure.skills.get_skill_registry",
+                return_value=reg,
+            ),
+            patch(
+                "app.infrastructure.skills.execute_skill",
+                # We need to actually test the real function
+            ),
         ):
             # Test the real execute_skill with the mock registry
             pass
 
     def test_execute_skill_import_error(self):
         reg = SkillRegistry()
-        reg.register("excel_analyzer", {
-            "name": "Excel Analyzer",
-            "module_path": "/fake/path",
-        })
+        reg.register(
+            "excel_analyzer",
+            {
+                "name": "Excel Analyzer",
+                "module_path": "/fake/path",
+            },
+        )
         import app.infrastructure.skills as skills_mod
+
         old_reg = skills_mod._skill_registry
         skills_mod._skill_registry = reg
         try:
             # Force the inner import to raise ImportError so the RECOVERABLE_ERRORS
             # branch returns a dict instead of propagating.
             import builtins
+
             real_import = builtins.__import__
 
             def fake_import(name, *args, **kwargs):
@@ -213,9 +228,11 @@ class TestExecuteSkill:
 # get_skill_registry
 # ---------------------------------------------------------------------------
 
+
 class TestGetSkillRegistry:
     def test_returns_singleton(self):
         import app.infrastructure.skills as skills_mod
+
         old = skills_mod._skill_registry
         skills_mod._skill_registry = None
         with patch.object(SkillRegistry, "initialize"):

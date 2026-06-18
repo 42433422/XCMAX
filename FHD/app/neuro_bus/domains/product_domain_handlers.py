@@ -45,11 +45,16 @@ class ProductDomainHandlers:
         4. 发送通知（如果需要）
         """
         logger.info(
-            "[ProductDomain] 处理产品创建: %s "
-            f"(ID: %s)", event.payload.get('product_name'), event.payload.get('product_id')
+            "[ProductDomain] 处理产品创建: %s (ID: %s)",
+            event.payload.get("product_name"),
+            event.payload.get("product_id"),
         )
 
-        result: object = {"success": True, "product_id": event.payload.get("product_id"), "actions": []}
+        result: object = {
+            "success": True,
+            "product_id": event.payload.get("product_id"),
+            "actions": [],
+        }
 
         try:
             # 1. 记录审计日志
@@ -86,9 +91,13 @@ class ProductDomainHandlers:
         2. 检查价格变更并触发价格变更事件
         3. 使相关缓存失效
         """
-        logger.info("[ProductDomain] 处理产品更新: %s", event.payload.get('product_id'))
+        logger.info("[ProductDomain] 处理产品更新: %s", event.payload.get("product_id"))
 
-        result: object = {"success": True, "product_id": event.payload.get("product_id"), "actions": []}
+        result: object = {
+            "success": True,
+            "product_id": event.payload.get("product_id"),
+            "actions": [],
+        }
 
         try:
             # 1. 记录变更历史
@@ -140,9 +149,13 @@ class ProductDomainHandlers:
         2. 使相关缓存失效
         3. 清理相关关联数据
         """
-        logger.info("[ProductDomain] 处理产品删除: %s", event.payload.get('product_id'))
+        logger.info("[ProductDomain] 处理产品删除: %s", event.payload.get("product_id"))
 
-        result: object = {"success": True, "product_id": event.payload.get("product_id"), "actions": []}
+        result: object = {
+            "success": True,
+            "product_id": event.payload.get("product_id"),
+            "actions": [],
+        }
 
         try:
             # 1. 记录删除审计
@@ -178,8 +191,9 @@ class ProductDomainHandlers:
         3. 发送导入完成通知
         """
         logger.info(
-            "[ProductDomain] 处理产品批量导入: %s "
-            f"(数量: %s)", event.payload.get('unit_name'), event.payload.get('count', 0)
+            "[ProductDomain] 处理产品批量导入: %s (数量: %s)",
+            event.payload.get("unit_name"),
+            event.payload.get("count", 0),
         )
 
         result = {
@@ -223,8 +237,10 @@ class ProductDomainHandlers:
         3. 通知相关业务方
         """
         logger.info(
-            "[ProductDomain] 处理价格变更: %s "
-            f"(%s -> %s)", event.payload.get('product_id'), event.payload.get('old_price'), event.payload.get('new_price')
+            "[ProductDomain] 处理价格变更: %s (%s -> %s)",
+            event.payload.get("product_id"),
+            event.payload.get("old_price"),
+            event.payload.get("new_price"),
         )
 
         result = {
@@ -259,9 +275,9 @@ class ProductDomainHandlers:
         payload = event.payload
 
         if "product_id" in payload:
-            logger.info("[ProductDomain] 清除产品缓存: %s", payload.get('product_id'))
+            logger.info("[ProductDomain] 清除产品缓存: %s", payload.get("product_id"))
         elif "unit_name" in payload:
-            logger.info("[ProductDomain] 清除单位缓存: %s", payload.get('unit_name'))
+            logger.info("[ProductDomain] 清除单位缓存: %s", payload.get("unit_name"))
 
         result = {"success": True, "invalidated": payload, "actions": ["cache_cleared"]}
 

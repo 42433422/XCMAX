@@ -22,6 +22,7 @@ Focuses on:
 - ops_duty_run_detail: invalid run_id
 - ops_staffing_onboard: no ids
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -62,7 +63,13 @@ class TestReleaseTrainSnapshot:
         # Provide a fake modstore_server module
         fake_module = MagicMock()
         fake_module.release_train.snapshot_public = MagicMock(return_value=expected)
-        with patch.dict("sys.modules", {"modstore_server": fake_module, "modstore_server.release_train": fake_module.release_train}):
+        with patch.dict(
+            "sys.modules",
+            {
+                "modstore_server": fake_module,
+                "modstore_server.release_train": fake_module.release_train,
+            },
+        ):
             result = admin_routes._release_train_snapshot()
         assert result == expected
 
@@ -70,11 +77,20 @@ class TestReleaseTrainSnapshot:
         """When modstore_server.snapshot_public raises, should fall back to default."""
         # Provide a fake modstore_server module that raises
         fake_module = MagicMock()
-        fake_module.release_train.snapshot_public = MagicMock(side_effect=RuntimeError("no modstore"))
+        fake_module.release_train.snapshot_public = MagicMock(
+            side_effect=RuntimeError("no modstore")
+        )
         # Point to a non-existent mono root so the file doesn't exist
         monkeypatch.setenv("XCMAX_MONOREPO_ROOT", str(tmp_path / "nonexistent"))
-        with patch.dict("sys.modules", {"modstore_server": fake_module, "modstore_server.release_train": fake_module.release_train}), patch(
-            "app.fastapi_routes.xcmax_admin.RECOVERABLE_ERRORS", (RuntimeError,)
+        with (
+            patch.dict(
+                "sys.modules",
+                {
+                    "modstore_server": fake_module,
+                    "modstore_server.release_train": fake_module.release_train,
+                },
+            ),
+            patch("app.fastapi_routes.xcmax_admin.RECOVERABLE_ERRORS", (RuntimeError,)),
         ):
             result = admin_routes._release_train_snapshot()
         assert "epoch" in result
@@ -101,7 +117,10 @@ class TestReleaseTrainSnapshot:
 
         monkeypatch.setenv("XCMAX_MONOREPO_ROOT", str(mono_root))
 
-        with patch("app.fastapi_routes.xcmax_admin.RECOVERABLE_ERRORS", (ImportError, ValueError, json.JSONDecodeError)):
+        with patch(
+            "app.fastapi_routes.xcmax_admin.RECOVERABLE_ERRORS",
+            (ImportError, ValueError, json.JSONDecodeError),
+        ):
             result = admin_routes._release_train_snapshot()
         assert "epoch" in result
 
@@ -212,10 +231,13 @@ class TestCollectModModules:
 
     def test_import_error_returns_empty(self):
         """When import fails, should return empty list."""
-        with patch(
-            "app.infrastructure.mods.mod_manager.get_mod_manager",
-            side_effect=ImportError("no module"),
-        ), patch("app.fastapi_routes.xcmax_admin.RECOVERABLE_ERRORS", (ImportError,)):
+        with (
+            patch(
+                "app.infrastructure.mods.mod_manager.get_mod_manager",
+                side_effect=ImportError("no module"),
+            ),
+            patch("app.fastapi_routes.xcmax_admin.RECOVERABLE_ERRORS", (ImportError,)),
+        ):
             result = admin_routes._collect_mod_modules()
         assert result == []
 
@@ -257,12 +279,15 @@ class TestCollectEmployeePackModules:
             {"id": "pack1", "name": "Pack 1", "version": "1.0"},
             {"id": "pack2", "name": None, "version": ""},  # Falls back to id
         ]
-        with patch(
-            "app.infrastructure.mods.mod_manager.get_mod_manager",
-            return_value=mgr,
-        ), patch(
-            "app.infrastructure.mods.employee_registry.EmployeeRegistry",
-            return_value=mock_registry,
+        with (
+            patch(
+                "app.infrastructure.mods.mod_manager.get_mod_manager",
+                return_value=mgr,
+            ),
+            patch(
+                "app.infrastructure.mods.employee_registry.EmployeeRegistry",
+                return_value=mock_registry,
+            ),
         ):
             result = admin_routes._collect_employee_pack_modules()
         assert len(result) == 2
@@ -274,10 +299,13 @@ class TestCollectEmployeePackModules:
 
     def test_import_error_returns_empty(self):
         """When import fails, should return empty list."""
-        with patch(
-            "app.infrastructure.mods.mod_manager.get_mod_manager",
-            side_effect=ImportError("no module"),
-        ), patch("app.fastapi_routes.xcmax_admin.RECOVERABLE_ERRORS", (ImportError,)):
+        with (
+            patch(
+                "app.infrastructure.mods.mod_manager.get_mod_manager",
+                side_effect=ImportError("no module"),
+            ),
+            patch("app.fastapi_routes.xcmax_admin.RECOVERABLE_ERRORS", (ImportError,)),
+        ):
             result = admin_routes._collect_employee_pack_modules()
         assert result == []
 
@@ -322,8 +350,9 @@ class TestProbeRemoteHealthSync:
 
     def test_network_error_returns_unreachable(self):
         """When network error occurs, should return unreachable."""
-        with patch("urllib.request.urlopen", side_effect=ConnectionError("network fail")), patch(
-            "app.fastapi_routes.xcmax_admin.RECOVERABLE_ERRORS", (ConnectionError,)
+        with (
+            patch("urllib.request.urlopen", side_effect=ConnectionError("network fail")),
+            patch("app.fastapi_routes.xcmax_admin.RECOVERABLE_ERRORS", (ConnectionError,)),
         ):
             result = admin_routes._probe_remote_health_sync()
         assert result["success"] is True
@@ -387,12 +416,15 @@ class TestRequireMarketAdminSession:
     def test_not_admin_returns_403(self):
         """When account_kind is not admin, should return 403."""
         req = MagicMock(spec=Request)
-        with patch(
-            "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-            return_value="sid123",
-        ), patch(
-            "app.application.session_account_meta.load_session_account_meta",
-            return_value={"account_kind": "user", "market_is_admin": True},
+        with (
+            patch(
+                "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
+                return_value="sid123",
+            ),
+            patch(
+                "app.application.session_account_meta.load_session_account_meta",
+                return_value={"account_kind": "user", "market_is_admin": True},
+            ),
         ):
             result = admin_routes._require_market_admin_session(req)
         assert isinstance(result, JSONResponse)
@@ -401,12 +433,15 @@ class TestRequireMarketAdminSession:
     def test_not_market_admin_returns_403(self):
         """When market_is_admin is False, should return 403."""
         req = MagicMock(spec=Request)
-        with patch(
-            "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-            return_value="sid123",
-        ), patch(
-            "app.application.session_account_meta.load_session_account_meta",
-            return_value={"account_kind": "admin", "market_is_admin": False},
+        with (
+            patch(
+                "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
+                return_value="sid123",
+            ),
+            patch(
+                "app.application.session_account_meta.load_session_account_meta",
+                return_value={"account_kind": "admin", "market_is_admin": False},
+            ),
         ):
             result = admin_routes._require_market_admin_session(req)
         assert isinstance(result, JSONResponse)
@@ -415,12 +450,15 @@ class TestRequireMarketAdminSession:
     def test_admin_session_returns_none(self):
         """When admin session is valid, should return None."""
         req = MagicMock(spec=Request)
-        with patch(
-            "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-            return_value="sid123",
-        ), patch(
-            "app.application.session_account_meta.load_session_account_meta",
-            return_value={"account_kind": "admin", "market_is_admin": True},
+        with (
+            patch(
+                "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
+                return_value="sid123",
+            ),
+            patch(
+                "app.application.session_account_meta.load_session_account_meta",
+                return_value={"account_kind": "admin", "market_is_admin": True},
+            ),
         ):
             result = admin_routes._require_market_admin_session(req)
         assert result is None
@@ -428,12 +466,15 @@ class TestRequireMarketAdminSession:
     def test_meta_none_returns_403(self):
         """When meta is None, should return 403."""
         req = MagicMock(spec=Request)
-        with patch(
-            "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-            return_value="sid123",
-        ), patch(
-            "app.application.session_account_meta.load_session_account_meta",
-            return_value=None,
+        with (
+            patch(
+                "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
+                return_value="sid123",
+            ),
+            patch(
+                "app.application.session_account_meta.load_session_account_meta",
+                return_value=None,
+            ),
         ):
             result = admin_routes._require_market_admin_session(req)
         assert isinstance(result, JSONResponse)
@@ -459,12 +500,15 @@ class TestLocalDutyGraphHealth:
 
     @pytest.mark.asyncio
     async def test_with_session_returns_data(self, client: TestClient):
-        with patch(
-            "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-            return_value="sid123",
-        ), patch(
-            "app.application.local_duty_graph_health.build_local_duty_graph_health",
-            return_value={"success": True, "data": {"healthy": True}},
+        with (
+            patch(
+                "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
+                return_value="sid123",
+            ),
+            patch(
+                "app.application.local_duty_graph_health.build_local_duty_graph_health",
+                return_value={"success": True, "data": {"healthy": True}},
+            ),
         ):
             response = client.get("/api/xcmax/local/duty-graph/health")
         assert response.status_code == 200
@@ -500,12 +544,15 @@ class TestLocalEmployeeStatus:
 
     @pytest.mark.asyncio
     async def test_with_session_returns_data(self, client: TestClient):
-        with patch(
-            "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-            return_value="sid123",
-        ), patch(
-            "app.application.local_duty_graph_health.build_local_employee_status",
-            return_value={"success": True, "data": {"status": "active"}},
+        with (
+            patch(
+                "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
+                return_value="sid123",
+            ),
+            patch(
+                "app.application.local_duty_graph_health.build_local_employee_status",
+                return_value={"success": True, "data": {"status": "active"}},
+            ),
         ):
             response = client.get("/api/xcmax/local/employees/emp1/status")
         assert response.status_code == 200
@@ -539,24 +586,30 @@ class TestLocalEmployeeManifest:
 
     @pytest.mark.asyncio
     async def test_not_found_returns_404(self, client: TestClient):
-        with patch(
-            "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-            return_value="sid123",
-        ), patch(
-            "app.application.local_duty_graph_health.read_local_employee_manifest",
-            return_value=None,
+        with (
+            patch(
+                "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
+                return_value="sid123",
+            ),
+            patch(
+                "app.application.local_duty_graph_health.read_local_employee_manifest",
+                return_value=None,
+            ),
         ):
             response = client.get("/api/xcmax/local/employees/emp1/manifest")
         assert response.status_code == 404
 
     @pytest.mark.asyncio
     async def test_success_returns_data(self, client: TestClient):
-        with patch(
-            "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-            return_value="sid123",
-        ), patch(
-            "app.application.local_duty_graph_health.read_local_employee_manifest",
-            return_value={"success": True, "data": {"id": "emp1"}},
+        with (
+            patch(
+                "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
+                return_value="sid123",
+            ),
+            patch(
+                "app.application.local_duty_graph_health.read_local_employee_manifest",
+                return_value={"success": True, "data": {"id": "emp1"}},
+            ),
         ):
             response = client.get("/api/xcmax/local/employees/emp1/manifest")
         assert response.status_code == 200
@@ -572,12 +625,15 @@ class TestListModules:
 
     @pytest.mark.asyncio
     async def test_list_modules_returns_all(self, client: TestClient):
-        with patch(
-            "app.fastapi_routes.xcmax_admin._collect_mod_modules",
-            return_value=[{"module_id": "mod1", "source": "local"}],
-        ), patch(
-            "app.fastapi_routes.xcmax_admin._collect_employee_pack_modules",
-            return_value=[{"module_id": "pack1", "source": "employee"}],
+        with (
+            patch(
+                "app.fastapi_routes.xcmax_admin._collect_mod_modules",
+                return_value=[{"module_id": "mod1", "source": "local"}],
+            ),
+            patch(
+                "app.fastapi_routes.xcmax_admin._collect_employee_pack_modules",
+                return_value=[{"module_id": "pack1", "source": "employee"}],
+            ),
         ):
             response = client.get("/api/xcmax/admin/modules")
         assert response.status_code == 200
@@ -594,12 +650,15 @@ class TestListModules:
     @pytest.mark.asyncio
     async def test_list_modules_only_core(self, client: TestClient):
         """When no mods or packs, should return only core modules."""
-        with patch(
-            "app.fastapi_routes.xcmax_admin._collect_mod_modules",
-            return_value=[],
-        ), patch(
-            "app.fastapi_routes.xcmax_admin._collect_employee_pack_modules",
-            return_value=[],
+        with (
+            patch(
+                "app.fastapi_routes.xcmax_admin._collect_mod_modules",
+                return_value=[],
+            ),
+            patch(
+                "app.fastapi_routes.xcmax_admin._collect_employee_pack_modules",
+                return_value=[],
+            ),
         ):
             response = client.get("/api/xcmax/admin/modules")
         assert response.status_code == 200
@@ -683,10 +742,13 @@ class TestSyncStatus:
 
     @pytest.mark.asyncio
     async def test_db_error_returns_fallback(self, client: TestClient):
-        with patch(
-            "app.db.xcmax_sync.SyncDb",
-            side_effect=RuntimeError("db init fail"),
-        ), patch("app.fastapi_routes.xcmax_admin.RECOVERABLE_ERRORS", (RuntimeError,)):
+        with (
+            patch(
+                "app.db.xcmax_sync.SyncDb",
+                side_effect=RuntimeError("db init fail"),
+            ),
+            patch("app.fastapi_routes.xcmax_admin.RECOVERABLE_ERRORS", (RuntimeError,)),
+        ):
             response = client.get("/api/xcmax/sync/status")
         assert response.status_code == 200
         data = response.json()
@@ -717,10 +779,13 @@ class TestSyncPush:
 
     @pytest.mark.asyncio
     async def test_error_returns_500(self, client: TestClient):
-        with patch(
-            "app.application.xcmax_sync_app.push_outbox",
-            side_effect=RuntimeError("push fail"),
-        ), patch("app.fastapi_routes.xcmax_admin.RECOVERABLE_ERRORS", (RuntimeError,)):
+        with (
+            patch(
+                "app.application.xcmax_sync_app.push_outbox",
+                side_effect=RuntimeError("push fail"),
+            ),
+            patch("app.fastapi_routes.xcmax_admin.RECOVERABLE_ERRORS", (RuntimeError,)),
+        ):
             response = client.post("/api/xcmax/sync/push")
         assert response.status_code == 500
         data = response.json()
@@ -749,10 +814,13 @@ class TestSyncChanges:
 
     @pytest.mark.asyncio
     async def test_db_error_returns_empty(self, client: TestClient):
-        with patch(
-            "app.db.xcmax_sync.SyncDb",
-            side_effect=RuntimeError("db fail"),
-        ), patch("app.fastapi_routes.xcmax_admin.RECOVERABLE_ERRORS", (RuntimeError,)):
+        with (
+            patch(
+                "app.db.xcmax_sync.SyncDb",
+                side_effect=RuntimeError("db fail"),
+            ),
+            patch("app.fastapi_routes.xcmax_admin.RECOVERABLE_ERRORS", (RuntimeError,)),
+        ):
             response = client.get("/api/xcmax/sync/changes")
         assert response.status_code == 200
         data = response.json()
@@ -771,12 +839,15 @@ class TestSyncPull:
 
     @pytest.mark.asyncio
     async def test_success(self, client: TestClient):
-        with patch(
-            "app.application.xcmax_sync_app.pull_from_remote",
-            return_value={"pulled": 3},
-        ), patch(
-            "app.application.xcmax_sync_app.apply_inbox",
-            return_value={"applied": 3},
+        with (
+            patch(
+                "app.application.xcmax_sync_app.pull_from_remote",
+                return_value={"pulled": 3},
+            ),
+            patch(
+                "app.application.xcmax_sync_app.apply_inbox",
+                return_value={"applied": 3},
+            ),
         ):
             response = client.post("/api/xcmax/sync/pull")
         assert response.status_code == 200
@@ -787,10 +858,13 @@ class TestSyncPull:
 
     @pytest.mark.asyncio
     async def test_error_returns_500(self, client: TestClient):
-        with patch(
-            "app.application.xcmax_sync_app.pull_from_remote",
-            side_effect=RuntimeError("pull fail"),
-        ), patch("app.fastapi_routes.xcmax_admin.RECOVERABLE_ERRORS", (RuntimeError,)):
+        with (
+            patch(
+                "app.application.xcmax_sync_app.pull_from_remote",
+                side_effect=RuntimeError("pull fail"),
+            ),
+            patch("app.fastapi_routes.xcmax_admin.RECOVERABLE_ERRORS", (RuntimeError,)),
+        ):
             response = client.post("/api/xcmax/sync/pull")
         assert response.status_code == 500
         data = response.json()
@@ -819,10 +893,13 @@ class TestListConflicts:
 
     @pytest.mark.asyncio
     async def test_error_returns_empty(self, client: TestClient):
-        with patch(
-            "app.services.admin_sync_service.list_sync_conflicts",
-            side_effect=RuntimeError("conflict fail"),
-        ), patch("app.fastapi_routes.xcmax_admin.RECOVERABLE_ERRORS", (RuntimeError,)):
+        with (
+            patch(
+                "app.services.admin_sync_service.list_sync_conflicts",
+                side_effect=RuntimeError("conflict fail"),
+            ),
+            patch("app.fastapi_routes.xcmax_admin.RECOVERABLE_ERRORS", (RuntimeError,)),
+        ):
             response = client.get("/api/xcmax/sync/conflicts")
         assert response.status_code == 200
         data = response.json()
@@ -844,13 +921,13 @@ class TestSyncReceiveDeep:
         """sync_receive with list body should process each item."""
         mock_db = MagicMock()
         mock_db.enqueue_inbox.return_value = 2
-        with patch(
-            "app.db.xcmax_sync.SyncDb", return_value=mock_db
-        ), patch(
-            "app.application.xcmax_sync_app.apply_inbox",
-            return_value={"applied": 2},
-        ), patch(
-            "app.mod_sdk.audit.write_audit_event"
+        with (
+            patch("app.db.xcmax_sync.SyncDb", return_value=mock_db),
+            patch(
+                "app.application.xcmax_sync_app.apply_inbox",
+                return_value={"applied": 2},
+            ),
+            patch("app.mod_sdk.audit.write_audit_event"),
         ):
             result = await admin_routes.sync_receive(
                 [{"entity_type": "product"}, {"entity_type": "order"}]
@@ -863,13 +940,13 @@ class TestSyncReceiveDeep:
         """sync_receive with dict body should wrap in list."""
         mock_db = MagicMock()
         mock_db.enqueue_inbox.return_value = 1
-        with patch(
-            "app.db.xcmax_sync.SyncDb", return_value=mock_db
-        ), patch(
-            "app.application.xcmax_sync_app.apply_inbox",
-            return_value={"applied": 1},
-        ), patch(
-            "app.mod_sdk.audit.write_audit_event"
+        with (
+            patch("app.db.xcmax_sync.SyncDb", return_value=mock_db),
+            patch(
+                "app.application.xcmax_sync_app.apply_inbox",
+                return_value={"applied": 1},
+            ),
+            patch("app.mod_sdk.audit.write_audit_event"),
         ):
             result = await admin_routes.sync_receive({"entity_type": "product"})
         assert result["success"] is True
@@ -895,15 +972,19 @@ class TestAdminListWechatGroups:
 
     @pytest.mark.asyncio
     async def test_with_session_returns_data(self, client: TestClient):
-        with patch(
-            "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-            return_value="sid123",
-        ), patch(
-            "app.application.session_account_meta.load_session_account_meta",
-            return_value={"account_kind": "admin", "market_is_admin": True},
-        ), patch(
-            "app.services.wechat_group_customer_bridge.list_group_contacts",
-            return_value=[{"id": 1, "name": "Group 1"}],
+        with (
+            patch(
+                "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
+                return_value="sid123",
+            ),
+            patch(
+                "app.application.session_account_meta.load_session_account_meta",
+                return_value={"account_kind": "admin", "market_is_admin": True},
+            ),
+            patch(
+                "app.services.wechat_group_customer_bridge.list_group_contacts",
+                return_value=[{"id": 1, "name": "Group 1"}],
+            ),
         ):
             response = client.get("/api/xcmax/admin/wechat/groups?keyword=test&limit=10")
         assert response.status_code == 200
@@ -913,32 +994,41 @@ class TestAdminListWechatGroups:
 
     @pytest.mark.asyncio
     async def test_error_returns_500(self, client: TestClient):
-        with patch(
-            "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-            return_value="sid123",
-        ), patch(
-            "app.application.session_account_meta.load_session_account_meta",
-            return_value={"account_kind": "admin", "market_is_admin": True},
-        ), patch(
-            "app.services.wechat_group_customer_bridge.list_group_contacts",
-            side_effect=RuntimeError("db fail"),
-        ), patch("app.fastapi_routes.xcmax_admin.RECOVERABLE_ERRORS", (RuntimeError,)):
+        with (
+            patch(
+                "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
+                return_value="sid123",
+            ),
+            patch(
+                "app.application.session_account_meta.load_session_account_meta",
+                return_value={"account_kind": "admin", "market_is_admin": True},
+            ),
+            patch(
+                "app.services.wechat_group_customer_bridge.list_group_contacts",
+                side_effect=RuntimeError("db fail"),
+            ),
+            patch("app.fastapi_routes.xcmax_admin.RECOVERABLE_ERRORS", (RuntimeError,)),
+        ):
             response = client.get("/api/xcmax/admin/wechat/groups")
         assert response.status_code == 500
 
     @pytest.mark.asyncio
     async def test_no_keyword_passes_none(self, client: TestClient):
         """When keyword is empty, should pass None to list_group_contacts."""
-        with patch(
-            "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-            return_value="sid123",
-        ), patch(
-            "app.application.session_account_meta.load_session_account_meta",
-            return_value={"account_kind": "admin", "market_is_admin": True},
-        ), patch(
-            "app.services.wechat_group_customer_bridge.list_group_contacts",
-            return_value=[],
-        ) as mock_list:
+        with (
+            patch(
+                "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
+                return_value="sid123",
+            ),
+            patch(
+                "app.application.session_account_meta.load_session_account_meta",
+                return_value={"account_kind": "admin", "market_is_admin": True},
+            ),
+            patch(
+                "app.services.wechat_group_customer_bridge.list_group_contacts",
+                return_value=[],
+            ) as mock_list,
+        ):
             response = client.get("/api/xcmax/admin/wechat/groups")
         assert response.status_code == 200
         # Verify None was passed for keyword
@@ -1044,14 +1134,16 @@ class TestMarketAdminProxyImportError:
             def __getattr__(self, name):
                 raise ImportError(f"cannot import {name}")
 
-        with patch(
-            "app.fastapi_routes.xcmax_admin._require_market_admin_session",
-            return_value=None,
-        ), patch.dict(
-            "sys.modules",
-            {"app.fastapi_routes.market_account": FakeModule()},
-        ), patch(
-            "app.fastapi_routes.xcmax_admin.RECOVERABLE_ERRORS", (ImportError,)
+        with (
+            patch(
+                "app.fastapi_routes.xcmax_admin._require_market_admin_session",
+                return_value=None,
+            ),
+            patch.dict(
+                "sys.modules",
+                {"app.fastapi_routes.market_account": FakeModule()},
+            ),
+            patch("app.fastapi_routes.xcmax_admin.RECOVERABLE_ERRORS", (ImportError,)),
         ):
             result = await admin_routes._market_admin_proxy(req, "GET", "/api/test")
         assert isinstance(result, JSONResponse)
@@ -1062,15 +1154,19 @@ class TestMarketAdminProxyImportError:
     async def test_proxy_returns_dict_payload_success(self):
         """When _proxy_json returns a dict without __proxy_error__, should return it."""
         req = MagicMock(spec=Request)
-        with patch(
-            "app.fastapi_routes.xcmax_admin._require_market_admin_session",
-            return_value=None,
-        ), patch(
-            "app.fastapi_routes.market_account._authorization_from_request",
-            return_value="Bearer tok",
-        ), patch(
-            "app.fastapi_routes.market_account._proxy_json",
-            new=AsyncMock(return_value={"success": True, "data": {"id": 1}}),
+        with (
+            patch(
+                "app.fastapi_routes.xcmax_admin._require_market_admin_session",
+                return_value=None,
+            ),
+            patch(
+                "app.fastapi_routes.market_account._authorization_from_request",
+                return_value="Bearer tok",
+            ),
+            patch(
+                "app.fastapi_routes.market_account._proxy_json",
+                new=AsyncMock(return_value={"success": True, "data": {"id": 1}}),
+            ),
         ):
             result = await admin_routes._market_admin_proxy(req, "GET", "/api/test")
         assert isinstance(result, dict)
@@ -1089,13 +1185,16 @@ class TestDigestLocalOrProxyDeep:
     async def test_prefer_local_false_uses_proxy(self):
         """When prefer_local_modstore is False, should use proxy with admin session."""
         req = MagicMock(spec=Request)
-        with patch(
-            "app.application.modstore_local_client.prefer_local_modstore",
-            return_value=False,
-        ), patch(
-            "app.fastapi_routes.xcmax_admin._market_admin_proxy",
-            new=AsyncMock(return_value={"success": True, "proxied": True}),
-        ) as mock_proxy:
+        with (
+            patch(
+                "app.application.modstore_local_client.prefer_local_modstore",
+                return_value=False,
+            ),
+            patch(
+                "app.fastapi_routes.xcmax_admin._market_admin_proxy",
+                new=AsyncMock(return_value={"success": True, "proxied": True}),
+            ) as mock_proxy,
+        ):
             result = await admin_routes._digest_local_or_proxy(
                 req, "GET", "/api/agent/butler/daily-digests?limit=10"
             )
@@ -1109,12 +1208,15 @@ class TestDigestLocalOrProxyDeep:
     async def test_prefer_local_true_get_uses_local(self):
         """When prefer_local_modstore is True and GET, should use local."""
         req = MagicMock(spec=Request)
-        with patch(
-            "app.application.modstore_local_client.prefer_local_modstore",
-            return_value=True,
-        ), patch(
-            "app.application.digest_email_app_service.list_daily_digests_local",
-            new=AsyncMock(return_value={"success": True, "data": []}),
+        with (
+            patch(
+                "app.application.modstore_local_client.prefer_local_modstore",
+                return_value=True,
+            ),
+            patch(
+                "app.application.digest_email_app_service.list_daily_digests_local",
+                new=AsyncMock(return_value={"success": True, "data": []}),
+            ),
         ):
             result = await admin_routes._digest_local_or_proxy(
                 req, "GET", "/api/agent/butler/daily-digests?limit=20&offset=0"
@@ -1126,13 +1228,16 @@ class TestDigestLocalOrProxyDeep:
     async def test_local_path_with_query_params(self):
         """Local path with query params should parse them."""
         req = MagicMock(spec=Request)
-        with patch(
-            "app.application.modstore_local_client.prefer_local_modstore",
-            return_value=True,
-        ), patch(
-            "app.application.digest_email_app_service.list_daily_digests_local",
-            new=AsyncMock(return_value={"success": True, "data": []}),
-        ) as mock_list:
+        with (
+            patch(
+                "app.application.modstore_local_client.prefer_local_modstore",
+                return_value=True,
+            ),
+            patch(
+                "app.application.digest_email_app_service.list_daily_digests_local",
+                new=AsyncMock(return_value={"success": True, "data": []}),
+            ) as mock_list,
+        ):
             result = await admin_routes._digest_local_or_proxy(
                 req, "GET", "/api/agent/butler/daily-digests?limit=20&offset=0"
             )
@@ -1146,13 +1251,16 @@ class TestDigestLocalOrProxyDeep:
     async def test_local_action_items_with_query_params(self):
         """Local action-items path with query params should parse them."""
         req = MagicMock(spec=Request)
-        with patch(
-            "app.application.modstore_local_client.prefer_local_modstore",
-            return_value=True,
-        ), patch(
-            "app.application.digest_email_app_service.action_items_stats_local",
-            new=AsyncMock(return_value={"success": True, "data": {}}),
-        ) as mock_stats:
+        with (
+            patch(
+                "app.application.modstore_local_client.prefer_local_modstore",
+                return_value=True,
+            ),
+            patch(
+                "app.application.digest_email_app_service.action_items_stats_local",
+                new=AsyncMock(return_value={"success": True, "data": {}}),
+            ) as mock_stats,
+        ):
             result = await admin_routes._digest_local_or_proxy(
                 req, "GET", "/api/admin/action-items/stats?kind=patch&day=2026-06-17"
             )
@@ -1165,13 +1273,16 @@ class TestDigestLocalOrProxyDeep:
     async def test_local_action_items_with_only_kind(self):
         """Local action-items path with only kind param."""
         req = MagicMock(spec=Request)
-        with patch(
-            "app.application.modstore_local_client.prefer_local_modstore",
-            return_value=True,
-        ), patch(
-            "app.application.digest_email_app_service.list_action_items_local",
-            new=AsyncMock(return_value={"success": True, "data": []}),
-        ) as mock_list:
+        with (
+            patch(
+                "app.application.modstore_local_client.prefer_local_modstore",
+                return_value=True,
+            ),
+            patch(
+                "app.application.digest_email_app_service.list_action_items_local",
+                new=AsyncMock(return_value={"success": True, "data": []}),
+            ) as mock_list,
+        ):
             result = await admin_routes._digest_local_or_proxy(
                 req, "GET", "/api/admin/action-items?kind=update"
             )
@@ -1184,13 +1295,16 @@ class TestDigestLocalOrProxyDeep:
     async def test_local_action_items_with_only_day(self):
         """Local action-items path with only day param."""
         req = MagicMock(spec=Request)
-        with patch(
-            "app.application.modstore_local_client.prefer_local_modstore",
-            return_value=True,
-        ), patch(
-            "app.application.digest_email_app_service.list_action_items_local",
-            new=AsyncMock(return_value={"success": True, "data": []}),
-        ) as mock_list:
+        with (
+            patch(
+                "app.application.modstore_local_client.prefer_local_modstore",
+                return_value=True,
+            ),
+            patch(
+                "app.application.digest_email_app_service.list_action_items_local",
+                new=AsyncMock(return_value={"success": True, "data": []}),
+            ) as mock_list,
+        ):
             result = await admin_routes._digest_local_or_proxy(
                 req, "GET", "/api/admin/action-items?day=2026-06-17"
             )

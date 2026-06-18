@@ -24,9 +24,11 @@ from app.services.xcmax_sync_service import (
 
 def _mock_get_db(mock_db):
     """Create a contextmanager mock for get_db generator."""
+
     @contextlib.contextmanager
     def _get_db():
         yield mock_db
+
     return _get_db
 
 
@@ -71,26 +73,35 @@ class TestPayloadUpdatedAtMs:
 class TestReadSyncMeta:
     def test_returns_empty_when_key_missing(self, tmp_path):
         db_path = tmp_path / "test_sync.db"
-        with patch("app.db.xcmax_sync._resolve_db_path", return_value=db_path), \
-             patch("app.db.xcmax_sync._db_path", None):
+        with (
+            patch("app.db.xcmax_sync._resolve_db_path", return_value=db_path),
+            patch("app.db.xcmax_sync._db_path", None),
+        ):
             from app.services.xcmax_sync_service import _read_sync_meta
+
             result = _read_sync_meta("nonexistent_key")
         assert result == {}
 
     def test_reads_written_value(self, tmp_path):
         db_path = tmp_path / "test_sync.db"
-        with patch("app.db.xcmax_sync._resolve_db_path", return_value=db_path), \
-             patch("app.db.xcmax_sync._db_path", None):
+        with (
+            patch("app.db.xcmax_sync._resolve_db_path", return_value=db_path),
+            patch("app.db.xcmax_sync._db_path", None),
+        ):
             from app.services.xcmax_sync_service import _read_sync_meta, _write_sync_meta
+
             _write_sync_meta("test_key", {"foo": "bar"})
             result = _read_sync_meta("test_key")
         assert result == {"foo": "bar"}
 
     def test_handles_corrupt_json(self, tmp_path):
         db_path = tmp_path / "test_sync.db"
-        with patch("app.db.xcmax_sync._resolve_db_path", return_value=db_path), \
-             patch("app.db.xcmax_sync._db_path", None):
+        with (
+            patch("app.db.xcmax_sync._resolve_db_path", return_value=db_path),
+            patch("app.db.xcmax_sync._db_path", None),
+        ):
             from app.services.xcmax_sync_service import _read_sync_meta, _write_sync_meta
+
             _write_sync_meta("bad_key", {"a": 1})
             conn = sqlite3.connect(str(db_path))
             conn.execute(
@@ -106,9 +117,12 @@ class TestReadSyncMeta:
 class TestWriteSyncMeta:
     def test_write_and_read_roundtrip(self, tmp_path):
         db_path = tmp_path / "test_sync.db"
-        with patch("app.db.xcmax_sync._resolve_db_path", return_value=db_path), \
-             patch("app.db.xcmax_sync._db_path", None):
+        with (
+            patch("app.db.xcmax_sync._resolve_db_path", return_value=db_path),
+            patch("app.db.xcmax_sync._db_path", None),
+        ):
             from app.services.xcmax_sync_service import _read_sync_meta, _write_sync_meta
+
             _write_sync_meta("k1", {"x": 1})
             _write_sync_meta("k1", {"x": 2})  # overwrite
             result = _read_sync_meta("k1")
@@ -123,8 +137,10 @@ class TestWriteSyncMeta:
 class TestRecordChange:
     def test_returns_positive_id_on_success(self, tmp_path):
         db_path = tmp_path / "test_sync.db"
-        with patch("app.db.xcmax_sync._resolve_db_path", return_value=db_path), \
-             patch("app.db.xcmax_sync._db_path", None):
+        with (
+            patch("app.db.xcmax_sync._resolve_db_path", return_value=db_path),
+            patch("app.db.xcmax_sync._db_path", None),
+        ):
             result = record_change("personnel", "123", "insert", {"name": "张三"})
         assert isinstance(result, int)
         assert result > 0
@@ -175,7 +191,13 @@ class TestPushOutbox:
     def test_push_marks_sent_on_success(self):
         mock_db = MagicMock()
         mock_db.get_pending_outbox.return_value = [
-            {"id": 1, "entity_type": "personnel", "entity_id": "1", "operation": "insert", "payload": {"name": "test"}},
+            {
+                "id": 1,
+                "entity_type": "personnel",
+                "entity_id": "1",
+                "operation": "insert",
+                "payload": {"name": "test"},
+            },
         ]
         mock_resp = MagicMock()
         mock_resp.read.return_value = b"ok"
@@ -197,7 +219,13 @@ class TestPushOutbox:
 
         mock_db = MagicMock()
         mock_db.get_pending_outbox.return_value = [
-            {"id": 1, "entity_type": "personnel", "entity_id": "1", "operation": "insert", "payload": {}},
+            {
+                "id": 1,
+                "entity_type": "personnel",
+                "entity_id": "1",
+                "operation": "insert",
+                "payload": {},
+            },
         ]
         with (
             patch(
@@ -218,7 +246,13 @@ class TestPushOutbox:
 
         mock_db = MagicMock()
         mock_db.get_pending_outbox.return_value = [
-            {"id": 1, "entity_type": "personnel", "entity_id": "1", "operation": "insert", "payload": {}},
+            {
+                "id": 1,
+                "entity_type": "personnel",
+                "entity_id": "1",
+                "operation": "insert",
+                "payload": {},
+            },
         ]
         with (
             patch(
@@ -236,7 +270,13 @@ class TestPushOutbox:
     def test_push_marks_failed_on_recoverable_error(self):
         mock_db = MagicMock()
         mock_db.get_pending_outbox.return_value = [
-            {"id": 1, "entity_type": "personnel", "entity_id": "1", "operation": "insert", "payload": {}},
+            {
+                "id": 1,
+                "entity_type": "personnel",
+                "entity_id": "1",
+                "operation": "insert",
+                "payload": {},
+            },
         ]
         with (
             patch(
@@ -253,8 +293,20 @@ class TestPushOutbox:
     def test_push_multiple_items(self):
         mock_db = MagicMock()
         mock_db.get_pending_outbox.return_value = [
-            {"id": 1, "entity_type": "personnel", "entity_id": "1", "operation": "insert", "payload": {}},
-            {"id": 2, "entity_type": "department", "entity_id": "2", "operation": "update", "payload": {}},
+            {
+                "id": 1,
+                "entity_type": "personnel",
+                "entity_id": "1",
+                "operation": "insert",
+                "payload": {},
+            },
+            {
+                "id": 2,
+                "entity_type": "department",
+                "entity_id": "2",
+                "operation": "update",
+                "payload": {},
+            },
         ]
         mock_resp = MagicMock()
         mock_resp.read.return_value = b"ok"
@@ -283,7 +335,17 @@ class TestPullFromRemote:
 
         mock_resp = MagicMock()
         mock_resp.read.return_value = json.dumps(
-            {"data": [{"id": 10, "entity_type": "personnel", "entity_id": "1", "operation": "insert", "payload": {"name": "test"}}]}
+            {
+                "data": [
+                    {
+                        "id": 10,
+                        "entity_type": "personnel",
+                        "entity_id": "1",
+                        "operation": "insert",
+                        "payload": {"name": "test"},
+                    }
+                ]
+            }
         ).encode("utf-8")
         mock_resp.__enter__ = lambda s: s
         mock_resp.__exit__ = MagicMock(return_value=False)
@@ -397,15 +459,26 @@ class TestRegisterEntityApplier:
 class TestApplyInbox:
     def test_applies_pending_items(self, tmp_path):
         db_path = tmp_path / "test_sync.db"
-        with patch("app.db.xcmax_sync._resolve_db_path", return_value=db_path), \
-             patch("app.db.xcmax_sync._db_path", None):
+        with (
+            patch("app.db.xcmax_sync._resolve_db_path", return_value=db_path),
+            patch("app.db.xcmax_sync._db_path", None),
+        ):
             # Create schema and insert a pending inbox item
             from app.db.xcmax_sync import _ensure_schema
+
             conn = sqlite3.connect(str(db_path))
             _ensure_schema(conn)
             conn.execute(
                 "INSERT INTO sync_inbox (remote_cursor, entity_type, entity_id, operation, payload_json, origin_node, received_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (1, "personnel", "99", "insert", json.dumps({"name": "test"}), "remote", datetime.now().isoformat()),
+                (
+                    1,
+                    "personnel",
+                    "99",
+                    "insert",
+                    json.dumps({"name": "test"}),
+                    "remote",
+                    datetime.now().isoformat(),
+                ),
             )
             conn.commit()
             conn.close()
@@ -422,9 +495,12 @@ class TestApplyInbox:
 
     def test_skips_unknown_entity_type(self, tmp_path):
         db_path = tmp_path / "test_sync.db"
-        with patch("app.db.xcmax_sync._resolve_db_path", return_value=db_path), \
-             patch("app.db.xcmax_sync._db_path", None):
+        with (
+            patch("app.db.xcmax_sync._resolve_db_path", return_value=db_path),
+            patch("app.db.xcmax_sync._db_path", None),
+        ):
             from app.db.xcmax_sync import _ensure_schema
+
             conn = sqlite3.connect(str(db_path))
             _ensure_schema(conn)
             conn.execute(
@@ -443,11 +519,13 @@ class TestApplyInbox:
         # SyncDb() needs to succeed, but the subsequent _resolve_db_path call inside
         # the try block should fail
         from app.db.xcmax_sync import _ensure_schema
+
         conn = sqlite3.connect(str(db_path))
         _ensure_schema(conn)
         conn.close()
 
         call_count = 0
+
         def resolve_side_effect():
             nonlocal call_count
             call_count += 1
@@ -455,8 +533,10 @@ class TestApplyInbox:
                 return db_path  # For SyncDb() init
             raise OSError("db error")  # For the try block
 
-        with patch("app.db.xcmax_sync._resolve_db_path", side_effect=resolve_side_effect), \
-             patch("app.db.xcmax_sync._db_path", None):
+        with (
+            patch("app.db.xcmax_sync._resolve_db_path", side_effect=resolve_side_effect),
+            patch("app.db.xcmax_sync._db_path", None),
+        ):
             result = apply_inbox()
 
         assert result["applied"] == 0
@@ -480,7 +560,10 @@ class TestApplyPersonnel:
 
     def test_handles_db_error_gracefully(self):
         applier = _ENTITY_APPLIERS.get("personnel")
-        with patch("app.mod_sdk.private_sqlite.resolve_mod_private_sqlite_path", side_effect=OSError("no db")):
+        with patch(
+            "app.mod_sdk.private_sqlite.resolve_mod_private_sqlite_path",
+            side_effect=OSError("no db"),
+        ):
             applier({"payload": {"name": "张三"}, "operation": "insert"})
 
 
@@ -492,7 +575,10 @@ class TestApplyDepartment:
 
     def test_handles_db_error_gracefully(self):
         applier = _ENTITY_APPLIERS.get("department")
-        with patch("app.mod_sdk.private_sqlite.resolve_mod_private_sqlite_path", side_effect=OSError("no db")):
+        with patch(
+            "app.mod_sdk.private_sqlite.resolve_mod_private_sqlite_path",
+            side_effect=OSError("no db"),
+        ):
             applier({"payload": {"department": "研发部"}, "operation": "insert"})
 
 
@@ -549,7 +635,9 @@ class TestApplyApproval:
         mock_obj = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = mock_obj
         with patch("app.db.get_db", _mock_get_db(mock_db)):
-            applier({"payload": {"id": 1, "status": "approved", "title": "新标题"}, "operation": "sync"})
+            applier(
+                {"payload": {"id": 1, "status": "approved", "title": "新标题"}, "operation": "sync"}
+            )
             assert mock_obj.status == "approved"
             assert mock_obj.title == "新标题"
 
@@ -600,14 +688,22 @@ class TestApplyTemplate:
         applier = _ENTITY_APPLIERS.get("template")
         mock_db = MagicMock()
         with patch("app.db.get_db", _mock_get_db(mock_db)):
-            applier({"payload": {"template_id": "tpl1"}, "operation": "delete", "entity_id": "tpl1"})
+            applier(
+                {"payload": {"template_id": "tpl1"}, "operation": "delete", "entity_id": "tpl1"}
+            )
             mock_db.execute.assert_called()
 
     def test_upsert_operation(self):
         applier = _ENTITY_APPLIERS.get("template")
         mock_db = MagicMock()
         with patch("app.db.get_db", _mock_get_db(mock_db)):
-            applier({"payload": {"template_id": "tpl1", "name": "模板1", "category": "word"}, "operation": "sync", "entity_id": "tpl1"})
+            applier(
+                {
+                    "payload": {"template_id": "tpl1", "name": "模板1", "category": "word"},
+                    "operation": "sync",
+                    "entity_id": "tpl1",
+                }
+            )
             mock_db.execute.assert_called()
 
 
@@ -625,7 +721,9 @@ class TestApplyModelConfig:
         mock_user = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = mock_user
         with patch("app.db.get_db", _mock_get_db(mock_db)):
-            applier({"payload": {"user_id": 1, "llm_config": {"model": "gpt-4"}}, "operation": "sync"})
+            applier(
+                {"payload": {"user_id": 1, "llm_config": {"model": "gpt-4"}}, "operation": "sync"}
+            )
             assert mock_user.default_llm_json is not None
 
     def test_skips_when_user_not_found(self):
@@ -633,7 +731,9 @@ class TestApplyModelConfig:
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = None
         with patch("app.db.get_db", _mock_get_db(mock_db)):
-            applier({"payload": {"user_id": 999, "llm_config": {"model": "gpt-4"}}, "operation": "sync"})
+            applier(
+                {"payload": {"user_id": 999, "llm_config": {"model": "gpt-4"}}, "operation": "sync"}
+            )
             mock_db.commit.assert_not_called()
 
 
@@ -642,9 +742,12 @@ class TestApplyEcosystem:
         db_path = tmp_path / "test_sync.db"
         applier = _ENTITY_APPLIERS.get("ecosystem")
         assert applier is not None
-        with patch("app.db.xcmax_sync._resolve_db_path", return_value=db_path), \
-             patch("app.db.xcmax_sync._db_path", None):
+        with (
+            patch("app.db.xcmax_sync._resolve_db_path", return_value=db_path),
+            patch("app.db.xcmax_sync._db_path", None),
+        ):
             from app.db.xcmax_sync import _ensure_schema
+
             conn = sqlite3.connect(str(db_path))
             _ensure_schema(conn)
             conn.close()
@@ -656,24 +759,38 @@ class TestApplyWorkflowEmployee:
         db_path = tmp_path / "test_sync.db"
         applier = _ENTITY_APPLIERS.get("workflow_employee")
         assert applier is not None
-        with patch("app.db.xcmax_sync._resolve_db_path", return_value=db_path), \
-             patch("app.db.xcmax_sync._db_path", None):
+        with (
+            patch("app.db.xcmax_sync._resolve_db_path", return_value=db_path),
+            patch("app.db.xcmax_sync._db_path", None),
+        ):
             from app.db.xcmax_sync import _ensure_schema
+
             conn = sqlite3.connect(str(db_path))
             _ensure_schema(conn)
             conn.close()
-            applier({"payload": {"employee_id": "emp1"}, "entity_id": "emp1", "operation": "delete"})
+            applier(
+                {"payload": {"employee_id": "emp1"}, "entity_id": "emp1", "operation": "delete"}
+            )
 
     def test_upsert_operation(self, tmp_path):
         db_path = tmp_path / "test_sync.db"
         applier = _ENTITY_APPLIERS.get("workflow_employee")
-        with patch("app.db.xcmax_sync._resolve_db_path", return_value=db_path), \
-             patch("app.db.xcmax_sync._db_path", None):
+        with (
+            patch("app.db.xcmax_sync._resolve_db_path", return_value=db_path),
+            patch("app.db.xcmax_sync._db_path", None),
+        ):
             from app.db.xcmax_sync import _ensure_schema
+
             conn = sqlite3.connect(str(db_path))
             _ensure_schema(conn)
             conn.close()
-            applier({"payload": {"employee_id": "emp2", "status": "active"}, "entity_id": "emp2", "operation": "sync"})
+            applier(
+                {
+                    "payload": {"employee_id": "emp2", "status": "active"},
+                    "entity_id": "emp2",
+                    "operation": "sync",
+                }
+            )
 
     def test_skips_when_employee_id_empty(self):
         applier = _ENTITY_APPLIERS.get("workflow_employee")
@@ -696,23 +813,38 @@ class TestApplyImMessage:
 
     def test_skips_insert_when_no_sender(self):
         applier = _ENTITY_APPLIERS.get("im_message")
-        applier({"payload": {"id": 1, "conversation_id": 1, "body": "hello", "sender_user_id": 0}, "operation": "insert"})
+        applier(
+            {
+                "payload": {"id": 1, "conversation_id": 1, "body": "hello", "sender_user_id": 0},
+                "operation": "insert",
+            }
+        )
 
     def test_lww_skips_older_message(self, tmp_path):
         db_path = tmp_path / "test_sync.db"
         applier = _ENTITY_APPLIERS.get("im_message")
-        with patch("app.db.xcmax_sync._resolve_db_path", return_value=db_path), \
-             patch("app.db.xcmax_sync._db_path", None):
+        with (
+            patch("app.db.xcmax_sync._resolve_db_path", return_value=db_path),
+            patch("app.db.xcmax_sync._db_path", None),
+        ):
             from app.services.xcmax_sync_service import _read_sync_meta, _write_sync_meta
+
             # Write a newer timestamp first
             _write_sync_meta("im_message:1", {"updated_at_ms": 2000, "id": 1})
             # Try to apply an older message - should skip
-            applier({
-                "payload": {"id": 1, "conversation_id": 1, "body": "old", "sender_user_id": 1,
-                            "meta": {"updated_at_ms": 1000}},
-                "operation": "insert",
-                "entity_id": "1",
-            })
+            applier(
+                {
+                    "payload": {
+                        "id": 1,
+                        "conversation_id": 1,
+                        "body": "old",
+                        "sender_user_id": 1,
+                        "meta": {"updated_at_ms": 1000},
+                    },
+                    "operation": "insert",
+                    "entity_id": "1",
+                }
+            )
 
 
 class TestApplyImReadState:
@@ -732,14 +864,25 @@ class TestApplyImReadState:
     def test_lww_skips_older_read_state(self, tmp_path):
         db_path = tmp_path / "test_sync.db"
         applier = _ENTITY_APPLIERS.get("im_read_state")
-        with patch("app.db.xcmax_sync._resolve_db_path", return_value=db_path), \
-             patch("app.db.xcmax_sync._db_path", None):
+        with (
+            patch("app.db.xcmax_sync._resolve_db_path", return_value=db_path),
+            patch("app.db.xcmax_sync._db_path", None),
+        ):
             from app.services.xcmax_sync_service import _write_sync_meta
+
             # Write a newer timestamp
-            _write_sync_meta("im_read_state:1:1", {"updated_at_ms": 2000, "last_read_message_id": 50})
+            _write_sync_meta(
+                "im_read_state:1:1", {"updated_at_ms": 2000, "last_read_message_id": 50}
+            )
             # Try to apply an older read state
-            applier({
-                "payload": {"conversation_id": 1, "user_id": 1, "last_read_message_id": 30,
-                            "meta": {"updated_at_ms": 1000}},
-                "entity_id": "1:1",
-            })
+            applier(
+                {
+                    "payload": {
+                        "conversation_id": 1,
+                        "user_id": 1,
+                        "last_read_message_id": 30,
+                        "meta": {"updated_at_ms": 1000},
+                    },
+                    "entity_id": "1:1",
+                }
+            )

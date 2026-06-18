@@ -18,7 +18,6 @@ from app.db.init_db import (
     initialize_databases,
 )
 
-
 # ========================= initialize_databases ==========================
 
 
@@ -78,7 +77,9 @@ class TestEnsureSqlitePerModDatabaseCopies:
             patch("app.db.init_db.get_app_data_dir", return_value=str(tmp_path)),
             patch("app.db.sqlite_mod_paths.sqlite_filename_with_mod_suffix") as mock_suffix,
         ):
-            mock_suffix.side_effect = lambda name, mod_id: f"products__{mod_id}.db" if mod_id else name
+            mock_suffix.side_effect = lambda name, mod_id: (
+                f"products__{mod_id}.db" if mod_id else name
+            )
             ensure_sqlite_per_mod_database_copies(["test_mod"])
 
         assert (tmp_path / "products__test_mod.db").exists()
@@ -92,7 +93,9 @@ class TestEnsureSqlitePerModDatabaseCopies:
             patch("app.db.init_db.get_app_data_dir", return_value=str(tmp_path)),
             patch("app.db.sqlite_mod_paths.sqlite_filename_with_mod_suffix") as mock_suffix,
         ):
-            mock_suffix.side_effect = lambda name, mod_id: f"products__{mod_id}.db" if mod_id else name
+            mock_suffix.side_effect = lambda name, mod_id: (
+                f"products__{mod_id}.db" if mod_id else name
+            )
             ensure_sqlite_per_mod_database_copies(["test_mod"])
 
         assert (tmp_path / "products__test_mod.db").read_bytes() == b"existing_mod_db"
@@ -104,7 +107,9 @@ class TestEnsureSqlitePerModDatabaseCopies:
             patch("app.db.init_db.get_app_data_dir", return_value=str(tmp_path)),
             patch("app.db.sqlite_mod_paths.sqlite_filename_with_mod_suffix") as mock_suffix,
         ):
-            mock_suffix.side_effect = lambda name, mod_id: f"products__{mod_id}.db" if mod_id else name
+            mock_suffix.side_effect = lambda name, mod_id: (
+                f"products__{mod_id}.db" if mod_id else name
+            )
             ensure_sqlite_per_mod_database_copies([])
 
 
@@ -128,7 +133,10 @@ class TestGetDbPath:
         with (
             patch("app.db.init_db.get_app_data_dir", return_value=str(tmp_path)),
             patch("app.request_active_mod_ctx.get_request_active_mod_id", return_value="test_mod"),
-            patch("app.db.sqlite_mod_paths.sqlite_filename_with_mod_suffix", return_value="products__test_mod.db"),
+            patch(
+                "app.db.sqlite_mod_paths.sqlite_filename_with_mod_suffix",
+                return_value="products__test_mod.db",
+            ),
         ):
             result = get_db_path("products.db")
             assert "products__test_mod.db" in result
@@ -217,7 +225,10 @@ class TestBuildModDatabaseSeedPlan:
         assert result["mods"][0]["mod_id"] == "test_mod"
 
     @patch("app.db.sqlite_mod_paths.sqlite_filename_with_mod_suffix")
-    @patch("app.infrastructure.mods.mod_manager.get_mod_manager", side_effect=RuntimeError("no manager"))
+    @patch(
+        "app.infrastructure.mods.mod_manager.get_mod_manager",
+        side_effect=RuntimeError("no manager"),
+    )
     @patch("app.db.init_db.get_app_data_dir")
     def test_mod_manager_failure(self, mock_dir, mock_mm, mock_suffix, tmp_path):
         mock_dir.return_value = str(tmp_path)

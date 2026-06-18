@@ -1,4 +1,5 @@
 """Tests for app.infrastructure.lookups.purchase_unit_resolver — purchase unit fuzzy matching."""
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
@@ -15,10 +16,10 @@ from app.infrastructure.lookups.purchase_unit_resolver import (
     resolve_purchase_unit,
 )
 
-
 # ---------------------------------------------------------------------------
 # _to_pinyin
 # ---------------------------------------------------------------------------
+
 
 class TestToPinyin:
     def test_empty_string(self):
@@ -42,6 +43,7 @@ class TestToPinyin:
 # _to_first_letters
 # ---------------------------------------------------------------------------
 
+
 class TestToFirstLetters:
     def test_empty_string(self):
         assert _to_first_letters("") == ""
@@ -59,6 +61,7 @@ class TestToFirstLetters:
 # _get_pinyin_parts
 # ---------------------------------------------------------------------------
 
+
 class TestGetPinyinParts:
     def test_empty_string(self):
         assert _get_pinyin_parts("") == []
@@ -71,6 +74,7 @@ class TestGetPinyinParts:
 # ---------------------------------------------------------------------------
 # _pinyin_similarity
 # ---------------------------------------------------------------------------
+
 
 class TestPinyinSimilarity:
     def test_same_string_high_similarity(self):
@@ -89,6 +93,7 @@ class TestPinyinSimilarity:
 # ---------------------------------------------------------------------------
 # _first_letter_match
 # ---------------------------------------------------------------------------
+
 
 class TestFirstLetterMatch:
     def test_exact_match(self):
@@ -114,6 +119,7 @@ class TestFirstLetterMatch:
 # ---------------------------------------------------------------------------
 # resolve_purchase_unit
 # ---------------------------------------------------------------------------
+
 
 class TestResolvePurchaseUnit:
     def test_empty_input_returns_none(self):
@@ -190,6 +196,7 @@ class TestResolvePurchaseUnit:
 # ---------------------------------------------------------------------------
 # ResolvedPurchaseUnit dataclass
 # ---------------------------------------------------------------------------
+
 
 class TestResolvedPurchaseUnit:
     def test_creation(self):

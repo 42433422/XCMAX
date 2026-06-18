@@ -1,4 +1,5 @@
 """Tests for app.fastapi_routes.domains.conversation.compat_extra — conversation compat routes."""
+
 from __future__ import annotations
 
 import time
@@ -9,6 +10,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.fastapi_routes.domains.conversation.compat_extra import (
+    _conversation_lock,
     _xcagi_evict_oldest_session_if_needed,
     _xcagi_iso_from_ts,
     _xcagi_normalize_chat_role,
@@ -17,14 +19,13 @@ from app.fastapi_routes.domains.conversation.compat_extra import (
     _xcagi_summary_from_messages,
     _xcagi_title_from_messages,
     _xcagi_user_sessions,
-    _conversation_lock,
     router,
 )
-
 
 # ---------------------------------------------------------------------------
 # Unit tests for helper functions
 # ---------------------------------------------------------------------------
+
 
 class TestXcagiResolveSessionScope:
     def test_default_user_id(self):
@@ -174,6 +175,7 @@ class TestXcagiEvictOldestSession:
 # Route integration tests
 # ---------------------------------------------------------------------------
 
+
 def _make_app() -> FastAPI:
     app = FastAPI()
     app.include_router(router)
@@ -183,11 +185,14 @@ def _make_app() -> FastAPI:
 class TestConversationsSaveMessage:
     def test_empty_session_id_returns_saved_false(self):
         client = TestClient(_make_app())
-        with patch(
-            "app.fastapi_routes.domains.conversation.compat_extra.publish_simple_event",
-            create=True,
-        ), patch(
-            "app.neuro_bus.route_event_publisher.publish_simple_event",
+        with (
+            patch(
+                "app.fastapi_routes.domains.conversation.compat_extra.publish_simple_event",
+                create=True,
+            ),
+            patch(
+                "app.neuro_bus.route_event_publisher.publish_simple_event",
+            ),
         ):
             resp = client.post("/conversations/message", json={"session_id": "", "content": "hi"})
         data = resp.json()
@@ -195,15 +200,16 @@ class TestConversationsSaveMessage:
 
     def test_empty_content_returns_saved_false(self):
         client = TestClient(_make_app())
-        with patch(
-            "app.fastapi_routes.domains.conversation.compat_extra.publish_simple_event",
-            create=True,
-        ), patch(
-            "app.neuro_bus.route_event_publisher.publish_simple_event",
+        with (
+            patch(
+                "app.fastapi_routes.domains.conversation.compat_extra.publish_simple_event",
+                create=True,
+            ),
+            patch(
+                "app.neuro_bus.route_event_publisher.publish_simple_event",
+            ),
         ):
-            resp = client.post(
-                "/conversations/message", json={"session_id": "s1", "content": ""}
-            )
+            resp = client.post("/conversations/message", json={"session_id": "s1", "content": ""})
         data = resp.json()
         assert data["saved"] is False
 

@@ -1,11 +1,12 @@
 """Tests for app.desktop_runtime.db."""
+
 from __future__ import annotations
 
 import os
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
-from unittest.mock import patch
 
 from app.desktop_runtime.db import configure_sqlite_defaults, database_file
 

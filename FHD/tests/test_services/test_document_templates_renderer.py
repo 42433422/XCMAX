@@ -12,7 +12,6 @@ from app.services.document_templates.renderer import (
     _parse_json_list,
 )
 
-
 # ========================= _is_unreadable_workbook_error =================
 
 
@@ -76,7 +75,7 @@ class TestParseJsonDict:
 
 class TestParseJsonList:
     def test_valid_list(self):
-        result = _parse_json_list('[1, 2, 3]')
+        result = _parse_json_list("[1, 2, 3]")
         assert result == [1, 2, 3]
 
     def test_invalid_json(self):

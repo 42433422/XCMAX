@@ -36,7 +36,6 @@ from app.application.workflow.types import (
     WorkflowRunResult,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers / fixtures
 # ---------------------------------------------------------------------------
@@ -197,7 +196,9 @@ def test_gated_plan_decision_to_dict_empty_node_decisions() -> None:
 def test_evaluate_plan_auto_strategy_all_approved() -> None:
     engine = _make_engine()
     plan = _make_plan()
-    decision = engine.evaluate_plan(plan, runtime_context={}, strategy=ApprovalGatedEngine.APPROVAL_STRATEGY_AUTO)
+    decision = engine.evaluate_plan(
+        plan, runtime_context={}, strategy=ApprovalGatedEngine.APPROVAL_STRATEGY_AUTO
+    )
 
     # write_op 是 high risk → requires_approval=True, auto → approved=True
     nd_write = next(nd for nd in decision.node_decisions if nd.node_id == "write_op")
@@ -267,7 +268,9 @@ def test_evaluate_plan_low_risk_only_no_approval_needed() -> None:
             WorkflowNode(node_id="n2", tool_id="customers", action="query", risk="low"),
         ],
     )
-    decision = engine.evaluate_plan(plan, strategy=ApprovalGatedEngine.APPROVAL_STRATEGY_INTERACTIVE)
+    decision = engine.evaluate_plan(
+        plan, strategy=ApprovalGatedEngine.APPROVAL_STRATEGY_INTERACTIVE
+    )
     assert decision.all_approved is True
     assert decision.pending_approval is False
     assert decision.any_rejected is False
@@ -356,9 +359,7 @@ def test_resume_after_approval_all_approved_runs_engine() -> None:
 def test_resume_after_approval_partial_rejected_skips_engine() -> None:
     engine = _make_engine()
     plan = _make_plan()
-    result = engine.resume_after_approval(
-        plan, {"req-x": False, "req-y": True}, runtime_context={}
-    )
+    result = engine.resume_after_approval(plan, {"req-x": False, "req-y": True}, runtime_context={})
     assert result.success is False
     assert "未全部通过审批" in result.message
     engine._engine.run.assert_not_called()
@@ -378,7 +379,9 @@ def test_resume_after_approval_empty_map_treated_as_all_approved() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _make_decision_for_evidence(*, pending: bool = False, rejected: bool = False) -> GatedPlanDecision:
+def _make_decision_for_evidence(
+    *, pending: bool = False, rejected: bool = False
+) -> GatedPlanDecision:
     risk_decision = RiskDecision(
         requires_confirmation=pending or rejected,
         reason="测试",
@@ -489,9 +492,7 @@ def test_build_gated_evidence_not_executed_fallback() -> None:
     """decision 既不 pending 也不 rejected,但 run_result=None → 走 'not executed' 分支。"""
     plan = _make_plan()
     # 构造一个 all_approved=False 但 pending/rejected 都为 False 的 decision
-    risk_decision = RiskDecision(
-        requires_confirmation=False, reason="ok", blocking_nodes=[]
-    )
+    risk_decision = RiskDecision(requires_confirmation=False, reason="ok", blocking_nodes=[])
     decision = GatedPlanDecision(
         plan_id="plan-1",
         risk_decision=risk_decision,
@@ -528,9 +529,7 @@ def test_build_gated_evidence_node_depends_on_and_params_serialized() -> None:
             ),
         ],
     )
-    risk_decision = RiskDecision(
-        requires_confirmation=False, reason="ok", blocking_nodes=[]
-    )
+    risk_decision = RiskDecision(requires_confirmation=False, reason="ok", blocking_nodes=[])
     decision = GatedPlanDecision(
         plan_id="p-deps",
         risk_decision=risk_decision,
@@ -728,12 +727,8 @@ def test_chat_unified_propagates_explicit_http_status(
 
 
 def test_chat_unified_batch_empty_returns_400(ai_intent_client: TestClient) -> None:
-    with patch(
-        "app.routes.ai_chat.normalize_batch_messages_payload", return_value=[]
-    ):
-        r = ai_intent_client.post(
-            "/api/ai/chat-unified/batch", json={"messages": []}
-        )
+    with patch("app.routes.ai_chat.normalize_batch_messages_payload", return_value=[]):
+        r = ai_intent_client.post("/api/ai/chat-unified/batch", json={"messages": []})
     assert r.status_code == 400
     assert r.json()["success"] is False
 
@@ -743,9 +738,7 @@ def test_chat_unified_batch_too_many_returns_400(ai_intent_client: TestClient) -
         "app.routes.ai_chat.normalize_batch_messages_payload",
         return_value=[f"m{i}" for i in range(25)],
     ):
-        r = ai_intent_client.post(
-            "/api/ai/chat-unified/batch", json={"messages": ["x"] * 25}
-        )
+        r = ai_intent_client.post("/api/ai/chat-unified/batch", json={"messages": ["x"] * 25})
     assert r.status_code == 400
     assert "最多 20 条" in r.json()["message"]
 
@@ -764,9 +757,7 @@ def test_chat_unified_batch_success(ai_intent_client: TestClient) -> None:
             },
         ),
     ):
-        r = ai_intent_client.post(
-            "/api/ai/chat-unified/batch", json={"messages": ["a", "b"]}
-        )
+        r = ai_intent_client.post("/api/ai/chat-unified/batch", json={"messages": ["a", "b"]})
     assert r.status_code == 200
     body = r.json()
     assert body["success"] is True
@@ -791,9 +782,7 @@ def test_chat_unified_batch_with_error_status_preserved(
             ],
         ),
     ):
-        r = ai_intent_client.post(
-            "/api/ai/chat-unified/batch", json={"messages": ["ok", "bad"]}
-        )
+        r = ai_intent_client.post("/api/ai/chat-unified/batch", json={"messages": ["ok", "bad"]})
     assert r.status_code == 200
     body = r.json()
     assert body["success"] is False  # 因为有一条失败
@@ -823,9 +812,7 @@ def test_intent_test_success(ai_intent_client: TestClient) -> None:
             "tool_key": "shipment_generate",
             "intent_hints": ["生成发货单"],
         }
-        r = ai_intent_client.post(
-            "/api/ai/intent/test", json={"message": "生成发货单"}
-        )
+        r = ai_intent_client.post("/api/ai/intent/test", json={"message": "生成发货单"})
     assert r.status_code == 200
     body = r.json()
     assert body["success"] is True
@@ -852,9 +839,7 @@ def test_intent_test_recognizer_raises_returns_500(
 
 
 def test_intent_health_ok(ai_intent_client: TestClient) -> None:
-    with patch(
-        "app.application.facades.intent_facade.BertIntentClassifier"
-    ) as mock_cls:
+    with patch("app.application.facades.intent_facade.BertIntentClassifier") as mock_cls:
         mock_cls.return_value.is_available.return_value = True
         r = ai_intent_client.get("/api/intent/health")
     assert r.status_code == 200
@@ -867,9 +852,7 @@ def test_intent_health_with_model_path_env(
     ai_intent_client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("INTENT_MODEL_PATH", "/tmp/fake-model")
-    with patch(
-        "app.application.facades.intent_facade.BertIntentClassifier"
-    ) as mock_cls:
+    with patch("app.application.facades.intent_facade.BertIntentClassifier") as mock_cls:
         mock_cls.return_value.is_available.return_value = False
         r = ai_intent_client.get("/api/intent/health")
     assert r.status_code == 200
@@ -922,9 +905,7 @@ def test_intent_packages_post_empty_body(ai_intent_client: TestClient) -> None:
 
 
 def test_intent_packages_post_no_packages_key(ai_intent_client: TestClient) -> None:
-    r = ai_intent_client.post(
-        "/api/intent-packages", json={"other": "value"}
-    )
+    r = ai_intent_client.post("/api/intent-packages", json={"other": "value"})
     assert r.status_code == 200
     assert r.json()["success"] is True
 
@@ -935,9 +916,7 @@ def test_intent_packages_post_no_packages_key(ai_intent_client: TestClient) -> N
 
 
 def test_intent_packages_put_unknown_returns_404(ai_intent_client: TestClient) -> None:
-    r = ai_intent_client.put(
-        "/api/intent-packages/nonexistent", json={"enabled": True}
-    )
+    r = ai_intent_client.put("/api/intent-packages/nonexistent", json={"enabled": True})
     assert r.status_code == 404
     body = r.json()
     assert body["success"] is False
@@ -945,9 +924,7 @@ def test_intent_packages_put_unknown_returns_404(ai_intent_client: TestClient) -
 
 
 def test_intent_packages_put_known_with_enabled(ai_intent_client: TestClient) -> None:
-    r = ai_intent_client.put(
-        "/api/intent-packages/base", json={"enabled": False}
-    )
+    r = ai_intent_client.put("/api/intent-packages/base", json={"enabled": False})
     assert r.status_code == 200
     body = r.json()
     assert body["success"] is True
@@ -961,9 +938,7 @@ def test_intent_packages_put_known_without_enabled_key(
     """body 不含 enabled → 不更新,返回当前状态。"""
     # 先确保 base 是 True
     ai_intent_client.put("/api/intent-packages/base", json={"enabled": True})
-    r = ai_intent_client.put(
-        "/api/intent-packages/base", json={"other": "value"}
-    )
+    r = ai_intent_client.put("/api/intent-packages/base", json={"other": "value"})
     assert r.status_code == 200
     body = r.json()
     assert body["success"] is True
@@ -994,17 +969,13 @@ def test_intent_predict_missing_text_returns_400(ai_intent_client: TestClient) -
 
 
 def test_intent_predict_success(ai_intent_client: TestClient) -> None:
-    with patch(
-        "app.application.facades.intent_facade.BertIntentClassifier"
-    ) as mock_cls:
+    with patch("app.application.facades.intent_facade.BertIntentClassifier") as mock_cls:
         mock_cls.return_value.predict.return_value = {
             "text": "你好",
             "intent": "greeting",
             "confidence": 0.95,
         }
-        r = ai_intent_client.post(
-            "/api/intent/predict", json={"text": "你好"}
-        )
+        r = ai_intent_client.post("/api/intent/predict", json={"text": "你好"})
     assert r.status_code == 200
     body = r.json()
     assert body["intent"] == "greeting"
@@ -1015,13 +986,9 @@ def test_intent_predict_with_model_path_env(
     ai_intent_client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("INTENT_MODEL_PATH", "/tmp/model")
-    with patch(
-        "app.application.facades.intent_facade.BertIntentClassifier"
-    ) as mock_cls:
+    with patch("app.application.facades.intent_facade.BertIntentClassifier") as mock_cls:
         mock_cls.return_value.predict.return_value = {"intent": "x"}
-        r = ai_intent_client.post(
-            "/api/intent/predict", json={"text": "hi"}
-        )
+        r = ai_intent_client.post("/api/intent/predict", json={"text": "hi"})
     assert r.status_code == 200
     mock_cls.assert_called_once_with(model_path="/tmp/model")
 
@@ -1033,9 +1000,7 @@ def test_intent_predict_recoverable_error_returns_500(
         "app.application.facades.intent_facade.BertIntentClassifier",
         side_effect=RuntimeError("model down"),
     ):
-        r = ai_intent_client.post(
-            "/api/intent/predict", json={"text": "hi"}
-        )
+        r = ai_intent_client.post("/api/intent/predict", json={"text": "hi"})
     assert r.status_code == 500
     assert "model down" in r.json()["error"]
 
@@ -1046,9 +1011,7 @@ def test_intent_predict_recoverable_error_returns_500(
 
 
 def test_intent_predict_batch_empty_returns_400(ai_intent_client: TestClient) -> None:
-    r = ai_intent_client.post(
-        "/api/intent/predict_batch", json={"texts": []}
-    )
+    r = ai_intent_client.post("/api/intent/predict_batch", json={"texts": []})
     assert r.status_code == 400
     assert r.json()["error"] == "texts is required"
 
@@ -1059,22 +1022,16 @@ def test_intent_predict_batch_missing_returns_400(ai_intent_client: TestClient) 
 
 
 def test_intent_predict_batch_success(ai_intent_client: TestClient) -> None:
-    with patch(
-        "app.application.facades.intent_facade.BertIntentClassifier"
-    ) as mock_cls:
+    with patch("app.application.facades.intent_facade.BertIntentClassifier") as mock_cls:
         mock_cls.return_value.predict_batch.return_value = [
             {"text": "a", "intent": "x"},
             {"text": "b", "intent": "y"},
         ]
-        r = ai_intent_client.post(
-            "/api/intent/predict_batch", json={"texts": ["a", "b"]}
-        )
+        r = ai_intent_client.post("/api/intent/predict_batch", json={"texts": ["a", "b"]})
     assert r.status_code == 200
     body = r.json()
     assert len(body["results"]) == 2
-    mock_cls.return_value.predict_batch.assert_called_once_with(
-        ["a", "b"], return_probs=True
-    )
+    mock_cls.return_value.predict_batch.assert_called_once_with(["a", "b"], return_probs=True)
 
 
 def test_intent_predict_batch_recoverable_error_returns_500(
@@ -1084,9 +1041,7 @@ def test_intent_predict_batch_recoverable_error_returns_500(
         "app.application.facades.intent_facade.BertIntentClassifier",
         side_effect=ValueError("batch failed"),
     ):
-        r = ai_intent_client.post(
-            "/api/intent/predict_batch", json={"texts": ["a"]}
-        )
+        r = ai_intent_client.post("/api/intent/predict_batch", json={"texts": ["a"]})
     assert r.status_code == 500
     assert "batch failed" in r.json()["error"]
 

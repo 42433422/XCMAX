@@ -56,7 +56,10 @@ class EmployeeAgent:
             return None
 
     def _build_agent_gate(
-        self, manifest: dict[str, Any], config: dict[str, Any], workspace_root: str | None,
+        self,
+        manifest: dict[str, Any],
+        config: dict[str, Any],
+        workspace_root: str | None,
         input_data: dict[str, Any] | None = None,
     ) -> Any:
         """返回 (tool_name, args) -> {ok, reason} 的 gate；None 表示无额外门控。"""
@@ -95,8 +98,8 @@ class EmployeeAgent:
         if payload.get("skip_collaboration"):
             return None
         try:
-            from app.application.employee_runtime.orchestrator import EmployeeOrchestrator
             from app.application.employee_runtime.metrics import record_orchestration
+            from app.application.employee_runtime.orchestrator import EmployeeOrchestrator
 
             orch = EmployeeOrchestrator()
             deps = orch.depends_on(self.employee_id, manifest, config)
@@ -231,7 +234,9 @@ class EmployeeAgent:
                     "input": dict(payload),
                     "reasoning": "",
                     "skipped_cognition": True,
-                    **{k: payload[k] for k in ("file_path", "path", "user_request") if k in payload},
+                    **{
+                        k: payload[k] for k in ("file_path", "path", "user_request") if k in payload
+                    },
                 }
             else:
                 memory = _ex._memory_light({"employee_id": employee_id})
@@ -239,7 +244,9 @@ class EmployeeAgent:
                 if reasoning.get("error") and handler_list != ["direct_python"]:
                     return self._cognition_failed_result(pack, task, handler_list, reasoning, t0)
 
-            agent_tools = self._build_agent_tools(manifest, config) if "agent" in handler_list else None
+            agent_tools = (
+                self._build_agent_tools(manifest, config) if "agent" in handler_list else None
+            )
             agent_gate = (
                 self._build_agent_gate(manifest, config, workspace_root, payload)
                 if "agent" in handler_list
@@ -263,7 +270,9 @@ class EmployeeAgent:
             record_employee_run(employee_id, success=ok)
             if not ok:
                 try:
-                    from app.application.employee_runtime.triggers import publish_employee_task_failed
+                    from app.application.employee_runtime.triggers import (
+                        publish_employee_task_failed,
+                    )
 
                     publish_employee_task_failed(
                         employee_id,
@@ -290,7 +299,9 @@ class EmployeeAgent:
                 "executed_at": datetime.now(UTC).isoformat(),
                 "source": "employee_runtime.local",
                 "memory_used": mem_ctx.has_content,
-                "collaboration_upstream": upstream if upstream and not upstream.get("skipped") else None,
+                "collaboration_upstream": upstream
+                if upstream and not upstream.get("skipped")
+                else None,
             }
         except RECOVERABLE_ERRORS as exc:
             duration_ms = round((time.perf_counter() - t0) * 1000, 3)
@@ -305,7 +316,12 @@ class EmployeeAgent:
 
     # ---- 结果构造（与历史结构一致） ----
     def _blocked_result(
-        self, pack: dict[str, Any], task: str, handler_list: list[str], gate: dict[str, Any], t0: float
+        self,
+        pack: dict[str, Any],
+        task: str,
+        handler_list: list[str],
+        gate: dict[str, Any],
+        t0: float,
     ) -> dict[str, Any]:
         return {
             "employee_id": self.employee_id,

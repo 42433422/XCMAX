@@ -12,9 +12,9 @@ from fastapi.testclient import TestClient
 
 from app.fastapi_routes import system_routes as mod
 from app.fastapi_routes.system_routes import (
+    IndustriesListData,
     IndustryData,
     IndustryResponse,
-    IndustriesListData,
     SetIndustryRequest,
     _build_industry_response,
     get_current_industry_endpoint,
@@ -27,7 +27,6 @@ from app.fastapi_routes.system_routes import (
     router,
     set_industry_endpoint,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -153,11 +152,13 @@ class TestGetIndustries:
         ]
         fake_module.get_current_industry.return_value = "涂料"
         fake_module.get_industry_profile.return_value = _make_profile()
-        with patch.dict(sys.modules, {"resources.config.industry_config": fake_module}), \
-             patch(
-                 "app.fastapi_routes.system_routes._allowed_industry_ids_for_request",
-                 new=AsyncMock(return_value=({"考勤"}, "考勤")),
-             ):
+        with (
+            patch.dict(sys.modules, {"resources.config.industry_config": fake_module}),
+            patch(
+                "app.fastapi_routes.system_routes._allowed_industry_ids_for_request",
+                new=AsyncMock(return_value=({"考勤"}, "考勤")),
+            ),
+        ):
             r = client.get("/api/system/industries")
         assert r.status_code == 200
         body = r.json()
@@ -183,11 +184,13 @@ class TestGetCurrentIndustryEndpoint:
         fake_module.get_current_industry.return_value = "涂料"
         fake_module.get_industry_profile.return_value = _make_profile()
         # resolve_session_user returns None (no user)
-        with patch.dict(sys.modules, {"resources.config.industry_config": fake_module}), \
-             patch(
-                 "app.infrastructure.auth.dependencies.resolve_session_user",
-                 return_value=None,
-             ):
+        with (
+            patch.dict(sys.modules, {"resources.config.industry_config": fake_module}),
+            patch(
+                "app.infrastructure.auth.dependencies.resolve_session_user",
+                return_value=None,
+            ),
+        ):
             r = client.get("/api/system/industry")
         assert r.status_code == 200
         body = r.json()
@@ -199,19 +202,21 @@ class TestGetCurrentIndustryEndpoint:
         fake_module.get_current_industry.return_value = "涂料"
         fake_module.get_industry_profile.return_value = _make_profile()
         user = SimpleNamespace(id=1, username="u")
-        with patch.dict(sys.modules, {"resources.config.industry_config": fake_module}), \
-             patch(
-                 "app.infrastructure.auth.dependencies.resolve_session_user",
-                 return_value=user,
-             ), \
-             patch(
-                 "app.application.tenant_workspace_prefs.resolve_workspace_owner_id",
-                 return_value=1,
-             ), \
-             patch(
-                 "app.application.tenant_workspace_prefs.get_selected_industry_id",
-                 return_value="食品",
-             ):
+        with (
+            patch.dict(sys.modules, {"resources.config.industry_config": fake_module}),
+            patch(
+                "app.infrastructure.auth.dependencies.resolve_session_user",
+                return_value=user,
+            ),
+            patch(
+                "app.application.tenant_workspace_prefs.resolve_workspace_owner_id",
+                return_value=1,
+            ),
+            patch(
+                "app.application.tenant_workspace_prefs.get_selected_industry_id",
+                return_value="食品",
+            ),
+        ):
             r = client.get("/api/system/industry")
         assert r.status_code == 200
         # current_id should be overridden by saved pref "食品"
@@ -225,23 +230,25 @@ class TestGetCurrentIndustryEndpoint:
         fake_module.get_current_industry.return_value = "涂料"
         fake_module.get_industry_profile.return_value = _make_profile()
         user = SimpleNamespace(id=1, username="SUNBIRD")
-        with patch.dict(sys.modules, {"resources.config.industry_config": fake_module}), \
-             patch(
-                 "app.infrastructure.auth.dependencies.resolve_session_user",
-                 return_value=user,
-             ), \
-             patch(
-                 "app.application.tenant_workspace_prefs.resolve_workspace_owner_id",
-                 return_value=1,
-             ), \
-             patch(
-                 "app.application.tenant_workspace_prefs.get_selected_industry_id",
-                 return_value="涂料",
-             ), \
-             patch(
-                 "app.fastapi_routes.system_routes._allowed_industry_ids_for_request",
-                 new=AsyncMock(return_value=({"考勤"}, "考勤")),
-             ):
+        with (
+            patch.dict(sys.modules, {"resources.config.industry_config": fake_module}),
+            patch(
+                "app.infrastructure.auth.dependencies.resolve_session_user",
+                return_value=user,
+            ),
+            patch(
+                "app.application.tenant_workspace_prefs.resolve_workspace_owner_id",
+                return_value=1,
+            ),
+            patch(
+                "app.application.tenant_workspace_prefs.get_selected_industry_id",
+                return_value="涂料",
+            ),
+            patch(
+                "app.fastapi_routes.system_routes._allowed_industry_ids_for_request",
+                new=AsyncMock(return_value=({"考勤"}, "考勤")),
+            ),
+        ):
             r = client.get("/api/system/industry")
         assert r.status_code == 200
         assert r.json()["data"]["id"] == "考勤"
@@ -250,11 +257,13 @@ class TestGetCurrentIndustryEndpoint:
         fake_module = MagicMock()
         fake_module.get_current_industry.return_value = "涂料"
         fake_module.get_industry_profile.return_value = _make_profile()
-        with patch.dict(sys.modules, {"resources.config.industry_config": fake_module}), \
-             patch(
-                 "app.infrastructure.auth.dependencies.resolve_session_user",
-                 side_effect=ValueError("no session"),
-             ):
+        with (
+            patch.dict(sys.modules, {"resources.config.industry_config": fake_module}),
+            patch(
+                "app.infrastructure.auth.dependencies.resolve_session_user",
+                side_effect=ValueError("no session"),
+            ),
+        ):
             r = client.get("/api/system/industry")
         assert r.status_code == 200
         assert r.json()["data"]["id"] == "涂料"
@@ -290,11 +299,13 @@ class TestSetIndustryEndpoint:
         fake_module = MagicMock()
         fake_module.set_current_industry.return_value = True
         fake_module.get_industry_profile.return_value = _make_profile()
-        with patch.dict(sys.modules, {"resources.config.industry_config": fake_module}), \
-             patch(
-                 "app.infrastructure.auth.dependencies.resolve_session_user",
-                 return_value=None,
-             ):
+        with (
+            patch.dict(sys.modules, {"resources.config.industry_config": fake_module}),
+            patch(
+                "app.infrastructure.auth.dependencies.resolve_session_user",
+                return_value=None,
+            ),
+        ):
             r = client.post("/api/system/industry", json={"industry_id": "涂料"})
         assert r.status_code == 200
         body = r.json()
@@ -319,33 +330,35 @@ class TestSetIndustryEndpoint:
             "open_packages": [{"industry_id": "涂料", "mod_id": "mod-1"}],
             "open_industry_ids": ["涂料"],
         }
-        with patch.dict(sys.modules, {"resources.config.industry_config": fake_module}), \
-             patch(
-                 "app.infrastructure.auth.dependencies.resolve_session_user",
-                 return_value=user,
-             ), \
-             patch(
-                 "app.application.tenant_workspace_prefs.resolve_workspace_owner_id",
-                 return_value=1,
-             ), \
-             patch(
-                 "app.application.tenant_workspace_prefs.save_selected_industry",
-             ) as mock_save, \
-             patch(
-                 "app.mod_sdk.industry_baseline.build_onboarding_industry_catalog_for_request",
-                 new=AsyncMock(return_value=cat),
-             ), \
-             patch(
-                 "app.mod_sdk.industry_mod_aliases.canonical_mod_id_for_industry",
-                 return_value="mod-1",
-             ), \
-             patch(
-                 "app.mod_sdk.industry_seed.industry_mod_id_for",
-                 return_value="mod-1",
-             ), \
-             patch(
-                 "app.mod_sdk.industry_seed.deactivate_other_open_industry_mods",
-             ) as mock_deactivate:
+        with (
+            patch.dict(sys.modules, {"resources.config.industry_config": fake_module}),
+            patch(
+                "app.infrastructure.auth.dependencies.resolve_session_user",
+                return_value=user,
+            ),
+            patch(
+                "app.application.tenant_workspace_prefs.resolve_workspace_owner_id",
+                return_value=1,
+            ),
+            patch(
+                "app.application.tenant_workspace_prefs.save_selected_industry",
+            ) as mock_save,
+            patch(
+                "app.mod_sdk.industry_baseline.build_onboarding_industry_catalog_for_request",
+                new=AsyncMock(return_value=cat),
+            ),
+            patch(
+                "app.mod_sdk.industry_mod_aliases.canonical_mod_id_for_industry",
+                return_value="mod-1",
+            ),
+            patch(
+                "app.mod_sdk.industry_seed.industry_mod_id_for",
+                return_value="mod-1",
+            ),
+            patch(
+                "app.mod_sdk.industry_seed.deactivate_other_open_industry_mods",
+            ) as mock_deactivate,
+        ):
             r = client.post("/api/system/industry", json={"industry_id": "涂料"})
         assert r.status_code == 200
         mock_save.assert_called_once()
@@ -360,23 +373,25 @@ class TestSetIndustryEndpoint:
             "open_packages": [],
             "open_industry_ids": ["other"],
         }
-        with patch.dict(sys.modules, {"resources.config.industry_config": fake_module}), \
-             patch(
-                 "app.infrastructure.auth.dependencies.resolve_session_user",
-                 return_value=user,
-             ), \
-             patch(
-                 "app.application.tenant_workspace_prefs.resolve_workspace_owner_id",
-                 return_value=1,
-             ), \
-             patch(
-                 "app.mod_sdk.industry_baseline.build_onboarding_industry_catalog_for_request",
-                 new=AsyncMock(return_value=cat),
-             ), \
-             patch(
-                 "app.mod_sdk.industry_mod_aliases.canonical_mod_id_for_industry",
-                 return_value="mod-1",
-             ):
+        with (
+            patch.dict(sys.modules, {"resources.config.industry_config": fake_module}),
+            patch(
+                "app.infrastructure.auth.dependencies.resolve_session_user",
+                return_value=user,
+            ),
+            patch(
+                "app.application.tenant_workspace_prefs.resolve_workspace_owner_id",
+                return_value=1,
+            ),
+            patch(
+                "app.mod_sdk.industry_baseline.build_onboarding_industry_catalog_for_request",
+                new=AsyncMock(return_value=cat),
+            ),
+            patch(
+                "app.mod_sdk.industry_mod_aliases.canonical_mod_id_for_industry",
+                return_value="mod-1",
+            ),
+        ):
             r = client.post("/api/system/industry", json={"industry_id": "涂料"})
         assert r.status_code == 403
         assert "未开通" in r.json()["detail"]
@@ -386,11 +401,13 @@ class TestSetIndustryEndpoint:
         fake_module.set_current_industry.return_value = True
         fake_module.get_industry_profile.return_value = _make_profile()
         user = SimpleNamespace(id=1, username="u")
-        with patch.dict(sys.modules, {"resources.config.industry_config": fake_module}), \
-             patch(
-                 "app.infrastructure.auth.dependencies.resolve_session_user",
-                 side_effect=ValueError("no session"),
-             ):
+        with (
+            patch.dict(sys.modules, {"resources.config.industry_config": fake_module}),
+            patch(
+                "app.infrastructure.auth.dependencies.resolve_session_user",
+                side_effect=ValueError("no session"),
+            ),
+        ):
             r = client.post("/api/system/industry", json={"industry_id": "涂料"})
         assert r.status_code == 200
 
@@ -480,18 +497,20 @@ class TestGetIndustryPresets:
 
 class TestGetWorkflowEmployeeCatalog:
     def test_success(self, client: TestClient) -> None:
-        with patch(
-            "app.mod_sdk.host_profile.scan_workflow_employee_catalog_from_mods",
-            return_value={"items": []},
-        ), \
-             patch(
-                 "app.mod_sdk.host_profile.load_host_profile",
-                 return_value={"workflow_delivery": "monolith", "workflow_monolith_mod_id": "m1"},
-             ), \
-             patch(
-                 "app.mod_sdk.host_profile.load_workflow_employee_catalog",
-                 return_value={"static": True},
-             ):
+        with (
+            patch(
+                "app.mod_sdk.host_profile.scan_workflow_employee_catalog_from_mods",
+                return_value={"items": []},
+            ),
+            patch(
+                "app.mod_sdk.host_profile.load_host_profile",
+                return_value={"workflow_delivery": "monolith", "workflow_monolith_mod_id": "m1"},
+            ),
+            patch(
+                "app.mod_sdk.host_profile.load_workflow_employee_catalog",
+                return_value={"static": True},
+            ),
+        ):
             r = client.get("/api/system/workflow-employee-catalog")
         assert r.status_code == 200
         body = r.json()

@@ -33,17 +33,17 @@ class TestSerialization:
         assert cache._serialize("hello") == '"hello"'
 
     def test_serialize_int(self, cache):
-        assert cache._serialize(42) == '42'
+        assert cache._serialize(42) == "42"
 
     def test_serialize_float(self, cache):
         result = cache._serialize(3.14)
         assert "3.14" in result
 
     def test_serialize_bool(self, cache):
-        assert cache._serialize(True) == 'true'
+        assert cache._serialize(True) == "true"
 
     def test_serialize_none(self, cache):
-        assert cache._serialize(None) == 'null'
+        assert cache._serialize(None) == "null"
 
     def test_serialize_dict(self, cache):
         result = cache._serialize({"a": 1})
@@ -58,6 +58,7 @@ class TestSerialization:
     def test_serialize_unsupported_type_raises_typeerror(self, cache):
         class CustomObj:
             pass
+
         # TypeError is NOT in RECOVERABLE_ERRORS, so it propagates
         with pytest.raises(TypeError, match="Redis cache only supports"):
             cache._serialize(CustomObj())
@@ -452,6 +453,7 @@ class TestAsyncCacheDecorator:
 class TestGlobalFunctions:
     def test_get_redis_cache_creates_instance(self, monkeypatch):
         import app.utils.redis_cache as rc_mod
+
         old = rc_mod._redis_cache_instance
         rc_mod._redis_cache_instance = None
         try:
@@ -462,6 +464,7 @@ class TestGlobalFunctions:
 
     def test_get_redis_cache_returns_existing(self):
         import app.utils.redis_cache as rc_mod
+
         existing = rc_mod._redis_cache_instance
         if existing is None:
             rc_mod._redis_cache_instance = rc.RedisCache(None)

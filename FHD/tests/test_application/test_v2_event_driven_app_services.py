@@ -7,11 +7,20 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.application.customer_app_service_v2 import CustomerAppServiceV2, get_customer_app_service_v2
-from app.application.inventory_app_service_v2 import InventoryAppServiceV2, get_inventory_app_service_v2
+from app.application.customer_app_service_v2 import (
+    CustomerAppServiceV2,
+    get_customer_app_service_v2,
+)
+from app.application.inventory_app_service_v2 import (
+    InventoryAppServiceV2,
+    get_inventory_app_service_v2,
+)
 from app.application.order_app_service_v2 import OrderAppServiceV2, get_order_app_service_v2
 from app.application.product_app_service_v2 import ProductAppServiceV2, get_product_app_service_v2
-from app.application.shipment_app_service_v2 import ShipmentAppServiceV2, get_shipment_app_service_v2
+from app.application.shipment_app_service_v2 import (
+    ShipmentAppServiceV2,
+    get_shipment_app_service_v2,
+)
 
 
 def _fake_event(*_args, **_kwargs) -> MagicMock:
@@ -156,7 +165,9 @@ class TestCustomerAppServiceV2:
         assert out["success"] is False
 
     def test_singleton(self):
-        with patch("app.application.customer_app_service_v2.get_neuro_bus", return_value=MagicMock()):
+        with patch(
+            "app.application.customer_app_service_v2.get_neuro_bus", return_value=MagicMock()
+        ):
             import app.application.customer_app_service_v2 as mod
 
             mod._customer_app_service_v2 = None
@@ -207,7 +218,9 @@ class TestProductAppServiceV2:
         assert out["mode"] == "event_driven"
 
     def test_singleton(self):
-        with patch("app.application.product_app_service_v2.get_neuro_bus", return_value=MagicMock()):
+        with patch(
+            "app.application.product_app_service_v2.get_neuro_bus", return_value=MagicMock()
+        ):
             import app.application.product_app_service_v2 as mod
 
             mod._product_app_service_v2 = None
@@ -320,7 +333,9 @@ class TestShipmentAppServiceV2:
         assert out["success"] is True
 
     def test_singleton(self):
-        with patch("app.application.shipment_app_service_v2.get_neuro_bus", return_value=MagicMock()):
+        with patch(
+            "app.application.shipment_app_service_v2.get_neuro_bus", return_value=MagicMock()
+        ):
             import app.application.shipment_app_service_v2 as mod
 
             mod._shipment_app_service_v2 = None
@@ -373,7 +388,9 @@ class TestInventoryAppServiceV2:
         assert out["success"] is False
 
     def test_singleton(self):
-        with patch("app.application.inventory_app_service_v2.get_neuro_bus", return_value=MagicMock()):
+        with patch(
+            "app.application.inventory_app_service_v2.get_neuro_bus", return_value=MagicMock()
+        ):
             import app.application.inventory_app_service_v2 as mod
 
             mod._inventory_app_service_v2 = None

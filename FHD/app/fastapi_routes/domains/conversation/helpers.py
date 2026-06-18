@@ -529,6 +529,18 @@ def _thinking_steps_from_planner_stream_text(merged: str) -> str | None:
     return "\n".join(lines)
 
 
+def strip_planner_stream_markers(merged: str) -> tuple[str, str | None]:
+    text = str(merged or "")
+    thinking = _thinking_steps_from_planner_stream_text(text)
+    cleaned = re.sub(
+        r"\[(?:正在调用工具:[^\]\n]+|工具已返回[^\]\n]*|工具未成功[^\]\n]*|需要授权:[^\]\n]+|请提供令牌:[^\]\n]+)\]",
+        "",
+        text,
+    )
+    cleaned = re.sub(r"\s{2,}", " ", cleaned).strip()
+    return cleaned, thinking
+
+
 async def _xcagi_planner_stream_bytes_async(
     request: Request, body: XcagiCompatChatBody, *, ai_tier: str
 ):

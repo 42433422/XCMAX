@@ -1,4 +1,5 @@
 """Tests for app.application.workflow.approval_service — coverage ramp."""
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -101,9 +102,7 @@ class TestCheckNodeRequiresApproval:
     def test_no_matching_rule(self):
         svc = ApprovalService()
         svc._config = MagicMock(enabled=True)
-        svc._config.rules = [
-            {"tool_id": "other_tool", "action": "execute", "trigger": "always"}
-        ]
+        svc._config.rules = [{"tool_id": "other_tool", "action": "execute", "trigger": "always"}]
         node = _make_node(tool_id="shipment_generate")
         assert svc.check_node_requires_approval(node) is False
 
@@ -175,12 +174,16 @@ class TestEvaluateConditions:
     def test_op_contains(self):
         svc = ApprovalService()
         node = _make_node(params={"name": "hello world"})
-        assert svc._evaluate_conditions({"name": {"op": "contains", "value": "world"}}, node) is True
+        assert (
+            svc._evaluate_conditions({"name": {"op": "contains", "value": "world"}}, node) is True
+        )
 
     def test_op_contains_fail(self):
         svc = ApprovalService()
         node = _make_node(params={"name": "hello"})
-        assert svc._evaluate_conditions({"name": {"op": "contains", "value": "world"}}, node) is False
+        assert (
+            svc._evaluate_conditions({"name": {"op": "contains", "value": "world"}}, node) is False
+        )
 
     def test_multiple_conditions_all_match(self):
         svc = ApprovalService()
@@ -215,10 +218,12 @@ class TestGetApprovalRequiredNodes:
         svc._config.rules = [
             {"tool_id": "shipment_generate", "action": "execute", "trigger": "always"}
         ]
-        plan = _make_plan([
-            _make_node(tool_id="shipment_generate"),
-            _make_node(node_id="n2", tool_id="other"),
-        ])
+        plan = _make_plan(
+            [
+                _make_node(tool_id="shipment_generate"),
+                _make_node(node_id="n2", tool_id="other"),
+            ]
+        )
         result = svc.get_approval_required_nodes(plan)
         assert len(result) == 1
         assert result[0].tool_id == "shipment_generate"

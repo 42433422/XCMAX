@@ -1,4 +1,5 @@
 """Tests for app.infrastructure.mods.catalog_remote."""
+
 from __future__ import annotations
 
 import json
@@ -58,7 +59,9 @@ class TestFetchRemotePackageList:
         import urllib.error
 
         with patch.dict("os.environ", {"XCAGI_MOD_CATALOG_URL": "https://catalog.test"}):
-            with patch("urllib.request.urlopen", side_effect=urllib.error.URLError("connection refused")):
+            with patch(
+                "urllib.request.urlopen", side_effect=urllib.error.URLError("connection refused")
+            ):
                 result = fetch_remote_package_list()
                 assert result == []
 

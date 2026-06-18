@@ -35,7 +35,6 @@ import pytest
 
 from app.fastapi_routes import xcagi_compat_chat_helpers as ch
 
-
 # ---------------------------------------------------------------------------
 # _chat_request_subject — client.host fallback
 # ---------------------------------------------------------------------------
@@ -276,8 +275,7 @@ class TestXcagiCompatReplyPayloadAdditional:
 
         # The notice includes tool_key, err_code, and err_msg when present
         text_with_notice = (
-            "原始回复\n\n---\n**工具反馈**（最近一次）\n"
-            "- 工具：`tool_a`\n- 错误码：`ERR001`"
+            "原始回复\n\n---\n**工具反馈**（最近一次）\n- 工具：`tool_a`\n- 错误码：`ERR001`"
         )
         with (
             patch(
@@ -465,9 +463,7 @@ class TestExtractExcelPathsFromMessageAdditional:
 
     def test_multiple_different_paths(self):
         """Test multiple different paths."""
-        result = ch._extract_excel_paths_from_message(
-            "files a.xlsx and b.xlsx and c.xls end"
-        )
+        result = ch._extract_excel_paths_from_message("files a.xlsx and b.xlsx and c.xls end")
         assert len(result) == 3
 
     def test_path_with_mixed_separators(self):
@@ -612,25 +608,19 @@ class TestMergeRuntimeContextAdditional:
 class TestEnsureVectorIndexIfNeededAdditional:
     def test_vector_request_with_empty_file_path(self):
         """Test vector request with empty file_path."""
-        result = ch._ensure_vector_index_if_needed(
-            "建立向量索引", {"excel_file_path": ""}
-        )
+        result = ch._ensure_vector_index_if_needed("建立向量索引", {"excel_file_path": ""})
         assert result is not None
         assert "Excel 路径" in result
 
     def test_vector_request_with_none_file_path(self):
         """Test vector request with None file_path."""
-        result = ch._ensure_vector_index_if_needed(
-            "建立向量索引", {"excel_file_path": None}
-        )
+        result = ch._ensure_vector_index_if_needed("建立向量索引", {"excel_file_path": None})
         assert result is not None
         assert "Excel 路径" in result
 
     def test_vector_request_with_whitespace_file_path(self):
         """Test vector request with whitespace-only file_path."""
-        result = ch._ensure_vector_index_if_needed(
-            "建立向量索引", {"excel_file_path": "   "}
-        )
+        result = ch._ensure_vector_index_if_needed("建立向量索引", {"excel_file_path": "   "})
         assert result is not None
         assert "Excel 路径" in result
 
@@ -642,9 +632,7 @@ class TestEnsureVectorIndexIfNeededAdditional:
 
     def test_vector_request_success_no_error(self):
         """Test vector request with success result (no error key)."""
-        with patch(
-            "app.mod_sdk.planner_tools.resolve_planner_tool_executor"
-        ) as mock_resolver:
+        with patch("app.mod_sdk.planner_tools.resolve_planner_tool_executor") as mock_resolver:
             mock_executor = Mock(return_value='{"status": "ok", "rows": 100}')
             mock_resolver.return_value = mock_executor
             result = ch._ensure_vector_index_if_needed(
@@ -654,9 +642,7 @@ class TestEnsureVectorIndexIfNeededAdditional:
 
     def test_vector_request_with_non_dict_json(self):
         """Test vector request with non-dict JSON result."""
-        with patch(
-            "app.mod_sdk.planner_tools.resolve_planner_tool_executor"
-        ) as mock_resolver:
+        with patch("app.mod_sdk.planner_tools.resolve_planner_tool_executor") as mock_resolver:
             mock_executor = Mock(return_value='["not", "a", "dict"]')
             mock_resolver.return_value = mock_executor
             result = ch._ensure_vector_index_if_needed(
@@ -667,9 +653,7 @@ class TestEnsureVectorIndexIfNeededAdditional:
 
     def test_vector_request_with_error_no_message(self):
         """Test vector request with error but no message."""
-        with patch(
-            "app.mod_sdk.planner_tools.resolve_planner_tool_executor"
-        ) as mock_resolver:
+        with patch("app.mod_sdk.planner_tools.resolve_planner_tool_executor") as mock_resolver:
             mock_executor = Mock(return_value='{"error": "failed"}')
             mock_resolver.return_value = mock_executor
             result = ch._ensure_vector_index_if_needed(
@@ -680,9 +664,7 @@ class TestEnsureVectorIndexIfNeededAdditional:
 
     def test_vector_request_with_json_decode_error(self):
         """Test vector request with JSON decode error."""
-        with patch(
-            "app.mod_sdk.planner_tools.resolve_planner_tool_executor"
-        ) as mock_resolver:
+        with patch("app.mod_sdk.planner_tools.resolve_planner_tool_executor") as mock_resolver:
             mock_executor = Mock(return_value="not valid json")
             mock_resolver.return_value = mock_executor
             result = ch._ensure_vector_index_if_needed(
@@ -694,12 +676,15 @@ class TestEnsureVectorIndexIfNeededAdditional:
 
     def test_vector_request_with_import_error(self):
         """Test vector request with ImportError."""
-        with patch(
-            "app.mod_sdk.planner_tools.resolve_planner_tool_executor",
-            side_effect=ImportError("module not found"),
-        ), patch(
-            "app.fastapi_routes.xcagi_compat_chat_helpers.RECOVERABLE_ERRORS",
-            (RuntimeError, ImportError, ValueError),
+        with (
+            patch(
+                "app.mod_sdk.planner_tools.resolve_planner_tool_executor",
+                side_effect=ImportError("module not found"),
+            ),
+            patch(
+                "app.fastapi_routes.xcagi_compat_chat_helpers.RECOVERABLE_ERRORS",
+                (RuntimeError, ImportError, ValueError),
+            ),
         ):
             result = ch._ensure_vector_index_if_needed(
                 "建立向量索引", {"excel_file_path": "/test.xlsx"}
@@ -721,9 +706,7 @@ class TestXcagiPlannerStreamBytesAdditional:
         return request
 
     def _make_body(self, message="hello", mode=None, db_read_token=None):
-        return ch.XcagiCompatChatBody(
-            message=message, mode=mode, db_read_token=db_read_token
-        )
+        return ch.XcagiCompatChatBody(message=message, mode=mode, db_read_token=db_read_token)
 
     def test_mode_online_sets_llm_mode(self):
         """Test that mode='online' calls set_llm_mode."""
@@ -844,9 +827,7 @@ class TestXcagiPlannerStreamBytesAdditional:
                 side_effect=lambda ctx, tier: ctx,
             ),
         ):
-            results = list(
-                ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard")
-            )
+            results = list(ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard"))
         # Should yield 2 events: token and requires_token
         assert len(results) == 2
         # First event: token with authorization message
@@ -880,9 +861,7 @@ class TestXcagiPlannerStreamBytesAdditional:
                 side_effect=lambda ctx, tier: ctx,
             ),
         ):
-            results = list(
-                ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard")
-            )
+            results = list(ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard"))
         # Should yield 2 events: token and done
         assert len(results) == 2
         first_data = json.loads(results[0].replace(b"data: ", b"").strip())
@@ -914,9 +893,7 @@ class TestXcagiPlannerStreamBytesAdditional:
                 side_effect=lambda ctx, tier: ctx,
             ),
         ):
-            results = list(
-                ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard")
-            )
+            results = list(ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard"))
         assert len(results) == 1
         data = json.loads(results[0].replace(b"data: ", b"").strip())
         assert data["type"] == "error"
@@ -951,9 +928,7 @@ class TestXcagiPlannerStreamBytesAdditional:
                 side_effect=lambda ctx, tier: ctx,
             ),
         ):
-            results = list(
-                ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard")
-            )
+            results = list(ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard"))
         # Should yield token event + error event
         assert len(results) == 2
         # Last event should be error
@@ -995,9 +970,7 @@ class TestXcagiPlannerStreamBytesAdditional:
                 side_effect=lambda ctx, tier: ctx,
             ),
         ):
-            results = list(
-                ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard")
-            )
+            results = list(ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard"))
         # Should yield 2 token events + 1 done event
         assert len(results) == 3
         last_data = json.loads(results[-1].replace(b"data: ", b"").strip())
@@ -1040,9 +1013,7 @@ class TestXcagiPlannerStreamBytesAdditional:
                 side_effect=lambda ctx, tier: ctx,
             ),
         ):
-            results = list(
-                ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard")
-            )
+            results = list(ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard"))
         # Should yield token + error, then return
         assert len(results) == 2
         last_data = json.loads(results[-1].replace(b"data: ", b"").strip())
@@ -1083,9 +1054,7 @@ class TestXcagiPlannerStreamBytesAdditional:
                 side_effect=lambda ctx, tier: ctx,
             ),
         ):
-            results = list(
-                ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard")
-            )
+            results = list(ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard"))
         # Should yield token + requires_token, then return (no done event)
         assert len(results) == 2
         last_data = json.loads(results[-1].replace(b"data: ", b"").strip())
@@ -1125,9 +1094,7 @@ class TestXcagiPlannerStreamBytesAdditional:
                 side_effect=lambda ctx, tier: ctx,
             ),
         ):
-            results = list(
-                ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard")
-            )
+            results = list(ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard"))
         # done event is skipped (continue), then token + final done
         assert len(results) >= 2
 
@@ -1165,9 +1132,7 @@ class TestXcagiPlannerStreamBytesAdditional:
                 side_effect=lambda ctx, tier: ctx,
             ),
         ):
-            results = list(
-                ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard")
-            )
+            results = list(ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard"))
         # Should yield custom + token + done
         assert len(results) >= 2
 
@@ -1200,9 +1165,7 @@ class TestXcagiPlannerStreamBytesAdditional:
                 side_effect=lambda ctx, tier: ctx,
             ),
         ):
-            results = list(
-                ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard")
-            )
+            results = list(ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard"))
         # Should yield error event
         assert len(results) == 1
         data = json.loads(results[0].replace(b"data: ", b"").strip())
@@ -1242,9 +1205,7 @@ class TestXcagiPlannerStreamBytesAdditional:
                 side_effect=lambda ctx, tier: ctx,
             ),
         ):
-            results = list(
-                ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard")
-            )
+            results = list(ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard"))
         # Should yield 2 tokens + done
         assert len(results) == 3
         last_data = json.loads(results[-1].replace(b"data: ", b"").strip())
@@ -1381,18 +1342,23 @@ class TestXcagiGuardedPlannerStreamEventsAdditional:
             yield {"type": "token", "text": "hello"}
             yield {"type": "token", "text": " world"}
 
-        with patch(
-            "app.fastapi_routes.xcagi_compat_chat_helpers.chat_stream_sse_events",
-            side_effect=mock_chat_stream,
-        ), patch(
-            "app.fastapi_routes.xcagi_compat_chat_helpers._xcagi_chat_timeout_seconds",
-            return_value=600.0,
-        ), patch(
-            "app.fastapi_routes.xcagi_compat_chat_helpers._xcagi_stream_first_token_timeout_seconds",
-            return_value=120.0,
-        ), patch(
-            "app.fastapi_routes.xcagi_compat_chat_helpers._xcagi_stream_idle_notice_seconds",
-            return_value=60.0,
+        with (
+            patch(
+                "app.fastapi_routes.xcagi_compat_chat_helpers.chat_stream_sse_events",
+                side_effect=mock_chat_stream,
+            ),
+            patch(
+                "app.fastapi_routes.xcagi_compat_chat_helpers._xcagi_chat_timeout_seconds",
+                return_value=600.0,
+            ),
+            patch(
+                "app.fastapi_routes.xcagi_compat_chat_helpers._xcagi_stream_first_token_timeout_seconds",
+                return_value=120.0,
+            ),
+            patch(
+                "app.fastapi_routes.xcagi_compat_chat_helpers._xcagi_stream_idle_notice_seconds",
+                return_value=60.0,
+            ),
         ):
             results = list(
                 ch._xcagi_guarded_planner_stream_events(
@@ -1414,18 +1380,23 @@ class TestXcagiGuardedPlannerStreamEventsAdditional:
             raise RuntimeError("worker failed")
             yield  # never reached
 
-        with patch(
-            "app.fastapi_routes.xcagi_compat_chat_helpers.chat_stream_sse_events",
-            side_effect=mock_chat_stream,
-        ), patch(
-            "app.fastapi_routes.xcagi_compat_chat_helpers._xcagi_chat_timeout_seconds",
-            return_value=600.0,
-        ), patch(
-            "app.fastapi_routes.xcagi_compat_chat_helpers._xcagi_stream_first_token_timeout_seconds",
-            return_value=120.0,
-        ), patch(
-            "app.fastapi_routes.xcagi_compat_chat_helpers._xcagi_stream_idle_notice_seconds",
-            return_value=60.0,
+        with (
+            patch(
+                "app.fastapi_routes.xcagi_compat_chat_helpers.chat_stream_sse_events",
+                side_effect=mock_chat_stream,
+            ),
+            patch(
+                "app.fastapi_routes.xcagi_compat_chat_helpers._xcagi_chat_timeout_seconds",
+                return_value=600.0,
+            ),
+            patch(
+                "app.fastapi_routes.xcagi_compat_chat_helpers._xcagi_stream_first_token_timeout_seconds",
+                return_value=120.0,
+            ),
+            patch(
+                "app.fastapi_routes.xcagi_compat_chat_helpers._xcagi_stream_idle_notice_seconds",
+                return_value=60.0,
+            ),
         ):
             results = list(
                 ch._xcagi_guarded_planner_stream_events(

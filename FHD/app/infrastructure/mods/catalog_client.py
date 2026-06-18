@@ -59,7 +59,7 @@ def _catalog_url(path: str) -> str:
 
 async def _http_get_json(url: str) -> dict[str, Any]:
     try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        async with httpx.AsyncClient(timeout=60.0, trust_env=False) as client:
             resp = await client.get(url, headers=_catalog_headers())
     except httpx.RequestError as exc:
         raise HTTPException(status_code=502, detail=f"远端 Catalog 不可达：{exc}") from exc
@@ -192,7 +192,7 @@ async def catalog_download_to(path: str, dest: Path) -> None:
     url = _catalog_url(path)
     dest.parent.mkdir(parents=True, exist_ok=True)
     try:
-        async with httpx.AsyncClient(timeout=None) as client:
+        async with httpx.AsyncClient(timeout=None, trust_env=False) as client:
             async with client.stream("GET", url, headers=_catalog_headers()) as resp:
                 if resp.status_code >= 400:
                     text = await resp.aread()

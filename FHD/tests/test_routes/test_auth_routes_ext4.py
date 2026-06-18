@@ -16,7 +16,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi.responses import JSONResponse, RedirectResponse
 
-
 # ---------------------------------------------------------------------------
 # _sync_local_password_for_email
 # ---------------------------------------------------------------------------
@@ -211,15 +210,17 @@ class TestAuthMe:
         mock_user.email = "e@x.com"
         mock_user.role = "user"
 
-        with patch(
-            "app.fastapi_routes.domains.auth.routes.resolve_session_user",
-            return_value=mock_user,
-        ), patch(
-            "app.fastapi_routes.domains.auth.routes._session_meta_for_response",
-            return_value={},
-        ), patch(
-            "app.application.auth_app_service.get_auth_app_service"
-        ) as mock_get:
+        with (
+            patch(
+                "app.fastapi_routes.domains.auth.routes.resolve_session_user",
+                return_value=mock_user,
+            ),
+            patch(
+                "app.fastapi_routes.domains.auth.routes._session_meta_for_response",
+                return_value={},
+            ),
+            patch("app.application.auth_app_service.get_auth_app_service") as mock_get,
+        ):
             mock_service = MagicMock()
             mock_service.get_user_permissions.return_value = ["read"]
             mock_get.return_value = mock_service
@@ -252,12 +253,13 @@ class TestAuthSessionValidate:
         from app.fastapi_routes.domains.auth.routes import auth_session_validate
 
         request = MagicMock()
-        with patch(
-            "app.fastapi_routes.domains.auth.routes.session_id_from_request",
-            return_value="sid",
-        ), patch(
-            "app.application.auth_app_service.get_auth_app_service"
-        ) as mock_get:
+        with (
+            patch(
+                "app.fastapi_routes.domains.auth.routes.session_id_from_request",
+                return_value="sid",
+            ),
+            patch("app.application.auth_app_service.get_auth_app_service") as mock_get,
+        ):
             mock_service = MagicMock()
             mock_service.session_manager.get_session_info.return_value = None
             mock_get.return_value = mock_service
@@ -270,28 +272,33 @@ class TestAuthSessionValidate:
         from app.fastapi_routes.domains.auth.routes import auth_session_validate
 
         request = MagicMock()
-        with patch(
-            "app.fastapi_routes.domains.auth.routes.session_id_from_request",
-            return_value="sid",
-        ), patch(
-            "app.application.auth_app_service.get_auth_app_service"
-        ) as mock_get, patch(
-            "app.mod_sdk.product_skus.resolve_product_sku", return_value="enterprise"
-        ), patch(
-            "app.fastapi_routes.market_account.resolve_valid_market_access_token",
-            new=AsyncMock(return_value=None),
-        ), patch(
-            "app.enterprise.mod_entitlements.sync_entitlements_for_session",
-            new=AsyncMock(return_value=[]),
-        ), patch(
-            "app.enterprise.mod_entitlements.get_cached_entitled_client_mod_ids",
-            return_value=None,
-        ), patch(
-            "app.fastapi_routes.domains.auth.routes.resolve_session_user",
-            return_value=None,
-        ), patch(
-            "app.fastapi_routes.domains.auth.routes._session_meta_for_response",
-            return_value={},
+        with (
+            patch(
+                "app.fastapi_routes.domains.auth.routes.session_id_from_request",
+                return_value="sid",
+            ),
+            patch("app.application.auth_app_service.get_auth_app_service") as mock_get,
+            patch("app.mod_sdk.product_skus.resolve_product_sku", return_value="enterprise"),
+            patch(
+                "app.fastapi_routes.market_account.resolve_valid_market_access_token",
+                new=AsyncMock(return_value=None),
+            ),
+            patch(
+                "app.enterprise.mod_entitlements.sync_entitlements_for_session",
+                new=AsyncMock(return_value=[]),
+            ),
+            patch(
+                "app.enterprise.mod_entitlements.get_cached_entitled_client_mod_ids",
+                return_value=None,
+            ),
+            patch(
+                "app.fastapi_routes.domains.auth.routes.resolve_session_user",
+                return_value=None,
+            ),
+            patch(
+                "app.fastapi_routes.domains.auth.routes._session_meta_for_response",
+                return_value={},
+            ),
         ):
             mock_service = MagicMock()
             mock_service.session_manager.get_session_info.return_value = {"user_id": 1}
@@ -305,28 +312,33 @@ class TestAuthSessionValidate:
         from app.fastapi_routes.domains.auth.routes import auth_session_validate
 
         request = MagicMock()
-        with patch(
-            "app.fastapi_routes.domains.auth.routes.session_id_from_request",
-            return_value="sid",
-        ), patch(
-            "app.application.auth_app_service.get_auth_app_service"
-        ) as mock_get, patch(
-            "app.mod_sdk.product_skus.resolve_product_sku", return_value="enterprise"
-        ), patch(
-            "app.fastapi_routes.market_account.resolve_valid_market_access_token",
-            new=AsyncMock(return_value="Bearer xyz"),
-        ), patch(
-            "app.enterprise.mod_entitlements.sync_entitlements_for_session",
-            new=AsyncMock(return_value=["mod1", "mod2"]),
-        ), patch(
-            "app.enterprise.mod_entitlements.get_cached_entitled_client_mod_ids",
-            return_value=None,
-        ), patch(
-            "app.fastapi_routes.domains.auth.routes.resolve_session_user",
-            return_value=None,
-        ), patch(
-            "app.fastapi_routes.domains.auth.routes._session_meta_for_response",
-            return_value={"account_kind": "enterprise"},
+        with (
+            patch(
+                "app.fastapi_routes.domains.auth.routes.session_id_from_request",
+                return_value="sid",
+            ),
+            patch("app.application.auth_app_service.get_auth_app_service") as mock_get,
+            patch("app.mod_sdk.product_skus.resolve_product_sku", return_value="enterprise"),
+            patch(
+                "app.fastapi_routes.market_account.resolve_valid_market_access_token",
+                new=AsyncMock(return_value="Bearer xyz"),
+            ),
+            patch(
+                "app.enterprise.mod_entitlements.sync_entitlements_for_session",
+                new=AsyncMock(return_value=["mod1", "mod2"]),
+            ),
+            patch(
+                "app.enterprise.mod_entitlements.get_cached_entitled_client_mod_ids",
+                return_value=None,
+            ),
+            patch(
+                "app.fastapi_routes.domains.auth.routes.resolve_session_user",
+                return_value=None,
+            ),
+            patch(
+                "app.fastapi_routes.domains.auth.routes._session_meta_for_response",
+                return_value={"account_kind": "enterprise"},
+            ),
         ):
             mock_service = MagicMock()
             mock_service.session_manager.get_session_info.return_value = {"user_id": 1}
@@ -341,28 +353,33 @@ class TestAuthSessionValidate:
         from app.fastapi_routes.domains.auth.routes import auth_session_validate
 
         request = MagicMock()
-        with patch(
-            "app.fastapi_routes.domains.auth.routes.session_id_from_request",
-            return_value="sid",
-        ), patch(
-            "app.application.auth_app_service.get_auth_app_service"
-        ) as mock_get, patch(
-            "app.mod_sdk.product_skus.resolve_product_sku", return_value="enterprise"
-        ), patch(
-            "app.fastapi_routes.market_account.resolve_valid_market_access_token",
-            new=AsyncMock(return_value="Bearer xyz"),
-        ), patch(
-            "app.enterprise.mod_entitlements.sync_entitlements_for_session",
-            new=AsyncMock(return_value=None),
-        ), patch(
-            "app.enterprise.mod_entitlements.get_cached_entitled_client_mod_ids",
-            return_value=["cached_mod"],
-        ), patch(
-            "app.fastapi_routes.domains.auth.routes.resolve_session_user",
-            return_value=None,
-        ), patch(
-            "app.fastapi_routes.domains.auth.routes._session_meta_for_response",
-            return_value={},
+        with (
+            patch(
+                "app.fastapi_routes.domains.auth.routes.session_id_from_request",
+                return_value="sid",
+            ),
+            patch("app.application.auth_app_service.get_auth_app_service") as mock_get,
+            patch("app.mod_sdk.product_skus.resolve_product_sku", return_value="enterprise"),
+            patch(
+                "app.fastapi_routes.market_account.resolve_valid_market_access_token",
+                new=AsyncMock(return_value="Bearer xyz"),
+            ),
+            patch(
+                "app.enterprise.mod_entitlements.sync_entitlements_for_session",
+                new=AsyncMock(return_value=None),
+            ),
+            patch(
+                "app.enterprise.mod_entitlements.get_cached_entitled_client_mod_ids",
+                return_value=["cached_mod"],
+            ),
+            patch(
+                "app.fastapi_routes.domains.auth.routes.resolve_session_user",
+                return_value=None,
+            ),
+            patch(
+                "app.fastapi_routes.domains.auth.routes._session_meta_for_response",
+                return_value={},
+            ),
         ):
             mock_service = MagicMock()
             mock_service.session_manager.get_session_info.return_value = {"user_id": 1}
@@ -435,12 +452,15 @@ class TestAuthForgotPasswordSendCode:
     async def test_send_success(self):
         from app.fastapi_routes.domains.auth.routes import auth_forgot_password_send_code
 
-        with patch(
-            "app.fastapi_routes.domains.auth.routes._find_local_users_by_email",
-            return_value=[],
-        ), patch(
-            "app.fastapi_routes.market_account.send_market_reset_password_code",
-            new=AsyncMock(return_value={"success": True, "message": "ok"}),
+        with (
+            patch(
+                "app.fastapi_routes.domains.auth.routes._find_local_users_by_email",
+                return_value=[],
+            ),
+            patch(
+                "app.fastapi_routes.market_account.send_market_reset_password_code",
+                new=AsyncMock(return_value={"success": True, "message": "ok"}),
+            ),
         ):
             result = await auth_forgot_password_send_code({"email": "a@b.com"})
         assert result["success"] is True
@@ -449,12 +469,15 @@ class TestAuthForgotPasswordSendCode:
     async def test_send_failure_no_local_users(self):
         from app.fastapi_routes.domains.auth.routes import auth_forgot_password_send_code
 
-        with patch(
-            "app.fastapi_routes.domains.auth.routes._find_local_users_by_email",
-            return_value=[],
-        ), patch(
-            "app.fastapi_routes.market_account.send_market_reset_password_code",
-            new=AsyncMock(return_value={"success": False, "message": "fail"}),
+        with (
+            patch(
+                "app.fastapi_routes.domains.auth.routes._find_local_users_by_email",
+                return_value=[],
+            ),
+            patch(
+                "app.fastapi_routes.market_account.send_market_reset_password_code",
+                new=AsyncMock(return_value={"success": False, "message": "fail"}),
+            ),
         ):
             result = await auth_forgot_password_send_code({"email": "a@b.com"})
         assert isinstance(result, JSONResponse)
@@ -465,12 +488,15 @@ class TestAuthForgotPasswordSendCode:
         from app.fastapi_routes.domains.auth.routes import auth_forgot_password_send_code
 
         mock_user = MagicMock()
-        with patch(
-            "app.fastapi_routes.domains.auth.routes._find_local_users_by_email",
-            return_value=[mock_user],
-        ), patch(
-            "app.fastapi_routes.market_account.send_market_reset_password_code",
-            new=AsyncMock(return_value={"success": False, "message": "fail"}),
+        with (
+            patch(
+                "app.fastapi_routes.domains.auth.routes._find_local_users_by_email",
+                return_value=[mock_user],
+            ),
+            patch(
+                "app.fastapi_routes.market_account.send_market_reset_password_code",
+                new=AsyncMock(return_value={"success": False, "message": "fail"}),
+            ),
         ):
             result = await auth_forgot_password_send_code({"email": "a@b.com"})
         assert isinstance(result, JSONResponse)
@@ -495,9 +521,7 @@ class TestAuthForgotPasswordReset:
     async def test_weak_password(self):
         from app.fastapi_routes.domains.auth.routes import auth_forgot_password_reset
 
-        result = await auth_forgot_password_reset(
-            {"email": "a@b.com", "new_password": "123"}
-        )
+        result = await auth_forgot_password_reset({"email": "a@b.com", "new_password": "123"})
         assert isinstance(result, JSONResponse)
         assert result.status_code == 400
 
@@ -519,12 +543,15 @@ class TestAuthForgotPasswordReset:
     async def test_reset_success(self):
         from app.fastapi_routes.domains.auth.routes import auth_forgot_password_reset
 
-        with patch(
-            "app.fastapi_routes.market_account.reset_market_password_with_code",
-            new=AsyncMock(return_value={"success": True}),
-        ), patch(
-            "app.fastapi_routes.domains.auth.routes._sync_local_password_for_email",
-            return_value=2,
+        with (
+            patch(
+                "app.fastapi_routes.market_account.reset_market_password_with_code",
+                new=AsyncMock(return_value={"success": True}),
+            ),
+            patch(
+                "app.fastapi_routes.domains.auth.routes._sync_local_password_for_email",
+                return_value=2,
+            ),
         ):
             result = await auth_forgot_password_reset(
                 {"email": "a@b.com", "code": "123456", "new_password": "newpass123"}
@@ -562,12 +589,8 @@ class TestAuthRegister:
         from app.fastapi_routes.domains.auth.routes import auth_register
 
         request = MagicMock()
-        with patch(
-            "app.mod_sdk.product_skus.resolve_product_sku", return_value="enterprise"
-        ):
-            result = await auth_register(
-                request, {"username": "u", "password": "pass123"}
-            )
+        with patch("app.mod_sdk.product_skus.resolve_product_sku", return_value="enterprise"):
+            result = await auth_register(request, {"username": "u", "password": "pass123"})
         assert isinstance(result, JSONResponse)
         assert result.status_code == 400
 
@@ -576,11 +599,12 @@ class TestAuthRegister:
         from app.fastapi_routes.domains.auth.routes import auth_register
 
         request = MagicMock()
-        with patch(
-            "app.mod_sdk.product_skus.resolve_product_sku", return_value="enterprise"
-        ), patch(
-            "app.fastapi_routes.market_account.register_market_user",
-            new=AsyncMock(return_value={"success": False, "message": "exists"}),
+        with (
+            patch("app.mod_sdk.product_skus.resolve_product_sku", return_value="enterprise"),
+            patch(
+                "app.fastapi_routes.market_account.register_market_user",
+                new=AsyncMock(return_value={"success": False, "message": "exists"}),
+            ),
         ):
             result = await auth_register(
                 request,
@@ -594,24 +618,25 @@ class TestAuthRegister:
         from app.fastapi_routes.domains.auth.routes import auth_register
 
         request = MagicMock()
-        with patch(
-            "app.mod_sdk.product_skus.resolve_product_sku", return_value="enterprise"
-        ), patch(
-            "app.fastapi_routes.market_account.register_market_user",
-            new=AsyncMock(
-                return_value={
-                    "success": True,
-                    "raw": {"user": {"email": "a@b.com"}},
-                    "token": "tok",
-                    "refresh_token": "rtok",
-                }
+        with (
+            patch("app.mod_sdk.product_skus.resolve_product_sku", return_value="enterprise"),
+            patch(
+                "app.fastapi_routes.market_account.register_market_user",
+                new=AsyncMock(
+                    return_value={
+                        "success": True,
+                        "raw": {"user": {"email": "a@b.com"}},
+                        "token": "tok",
+                        "refresh_token": "rtok",
+                    }
+                ),
             ),
-        ), patch(
-            "app.fastapi_routes.domains.auth.routes._jit_create_local_user_for_enterprise",
-            return_value=True,
-        ), patch(
-            "app.application.auth_app_service.get_auth_app_service"
-        ) as mock_get:
+            patch(
+                "app.fastapi_routes.domains.auth.routes._jit_create_local_user_for_enterprise",
+                return_value=True,
+            ),
+            patch("app.application.auth_app_service.get_auth_app_service") as mock_get,
+        ):
             mock_service = MagicMock()
             mock_service.login.return_value = {"success": False, "message": "no user"}
             mock_get.return_value = mock_service
@@ -627,28 +652,29 @@ class TestAuthRegister:
         from app.fastapi_routes.domains.auth.routes import auth_register
 
         request = MagicMock()
-        with patch(
-            "app.mod_sdk.product_skus.resolve_product_sku", return_value="enterprise"
-        ), patch(
-            "app.fastapi_routes.market_account.register_market_user",
-            new=AsyncMock(
-                return_value={
-                    "success": True,
-                    "raw": {"user": {"email": "a@b.com"}},
-                    "token": "tok",
-                    "refresh_token": "rtok",
-                }
+        with (
+            patch("app.mod_sdk.product_skus.resolve_product_sku", return_value="enterprise"),
+            patch(
+                "app.fastapi_routes.market_account.register_market_user",
+                new=AsyncMock(
+                    return_value={
+                        "success": True,
+                        "raw": {"user": {"email": "a@b.com"}},
+                        "token": "tok",
+                        "refresh_token": "rtok",
+                    }
+                ),
             ),
-        ), patch(
-            "app.fastapi_routes.domains.auth.routes._jit_create_local_user_for_enterprise",
-            return_value=True,
-        ), patch(
-            "app.application.auth_app_service.get_auth_app_service"
-        ) as mock_get, patch(
-            "app.fastapi_routes.market_account.save_session_market_token"
-        ), patch(
-            "app.fastapi_routes.domains.auth.routes._enrich_register_with_tenant",
-            side_effect=lambda **kw: kw["result"],
+            patch(
+                "app.fastapi_routes.domains.auth.routes._jit_create_local_user_for_enterprise",
+                return_value=True,
+            ),
+            patch("app.application.auth_app_service.get_auth_app_service") as mock_get,
+            patch("app.fastapi_routes.market_account.save_session_market_token"),
+            patch(
+                "app.fastapi_routes.domains.auth.routes._enrich_register_with_tenant",
+                side_effect=lambda **kw: kw["result"],
+            ),
         ):
             mock_service = MagicMock()
             mock_service.login.return_value = {
@@ -667,15 +693,14 @@ class TestAuthRegister:
         from app.fastapi_routes.domains.auth.routes import auth_register
 
         request = MagicMock()
-        with patch(
-            "app.mod_sdk.product_skus.resolve_product_sku", return_value="generic"
-        ), patch(
-            "app.fastapi_routes.domains.auth.routes._open_registration_allowed",
-            return_value=False,
+        with (
+            patch("app.mod_sdk.product_skus.resolve_product_sku", return_value="generic"),
+            patch(
+                "app.fastapi_routes.domains.auth.routes._open_registration_allowed",
+                return_value=False,
+            ),
         ):
-            result = await auth_register(
-                request, {"username": "u", "password": "pass123"}
-            )
+            result = await auth_register(request, {"username": "u", "password": "pass123"})
         assert isinstance(result, JSONResponse)
         assert result.status_code == 403
 
@@ -684,23 +709,21 @@ class TestAuthRegister:
         from app.fastapi_routes.domains.auth.routes import auth_register
 
         request = MagicMock()
-        with patch(
-            "app.mod_sdk.product_skus.resolve_product_sku", return_value="generic"
-        ), patch(
-            "app.fastapi_routes.domains.auth.routes._open_registration_allowed",
-            return_value=True,
-        ), patch(
-            "app.application.get_user_app_service"
-        ) as mock_get:
+        with (
+            patch("app.mod_sdk.product_skus.resolve_product_sku", return_value="generic"),
+            patch(
+                "app.fastapi_routes.domains.auth.routes._open_registration_allowed",
+                return_value=True,
+            ),
+            patch("app.application.get_user_app_service") as mock_get,
+        ):
             mock_service = MagicMock()
             mock_service.create_user.return_value = {
                 "success": False,
                 "message": "用户名已存在",
             }
             mock_get.return_value = mock_service
-            result = await auth_register(
-                request, {"username": "u", "password": "pass123"}
-            )
+            result = await auth_register(request, {"username": "u", "password": "pass123"})
         assert isinstance(result, JSONResponse)
         assert result.status_code == 400
 
@@ -709,16 +732,15 @@ class TestAuthRegister:
         from app.fastapi_routes.domains.auth.routes import auth_register
 
         request = MagicMock()
-        with patch(
-            "app.mod_sdk.product_skus.resolve_product_sku", return_value="generic"
-        ), patch(
-            "app.fastapi_routes.domains.auth.routes._open_registration_allowed",
-            return_value=True,
-        ), patch(
-            "app.application.get_user_app_service"
-        ) as mock_get_user, patch(
-            "app.application.auth_app_service.get_auth_app_service"
-        ) as mock_get_auth:
+        with (
+            patch("app.mod_sdk.product_skus.resolve_product_sku", return_value="generic"),
+            patch(
+                "app.fastapi_routes.domains.auth.routes._open_registration_allowed",
+                return_value=True,
+            ),
+            patch("app.application.get_user_app_service") as mock_get_user,
+            patch("app.application.auth_app_service.get_auth_app_service") as mock_get_auth,
+        ):
             mock_user_service = MagicMock()
             mock_user_service.create_user.return_value = {
                 "success": True,
@@ -728,9 +750,7 @@ class TestAuthRegister:
             mock_auth_service = MagicMock()
             mock_auth_service.login.return_value = {"success": False, "message": "fail"}
             mock_get_auth.return_value = mock_auth_service
-            result = await auth_register(
-                request, {"username": "u", "password": "pass123"}
-            )
+            result = await auth_register(request, {"username": "u", "password": "pass123"})
         assert isinstance(result, JSONResponse)
         assert result.status_code == 500
 
@@ -739,23 +759,23 @@ class TestAuthRegister:
         from app.fastapi_routes.domains.auth.routes import auth_register
 
         request = MagicMock()
-        with patch(
-            "app.mod_sdk.product_skus.resolve_product_sku", return_value="generic"
-        ), patch(
-            "app.fastapi_routes.domains.auth.routes._open_registration_allowed",
-            return_value=True,
-        ), patch(
-            "app.application.get_user_app_service"
-        ) as mock_get_user, patch(
-            "app.application.auth_app_service.get_auth_app_service"
-        ) as mock_get_auth, patch(
-            "app.fastapi_routes.market_account.login_market_with_password",
-            new=AsyncMock(return_value={"success": True, "token": "t", "refresh_token": "r"}),
-        ), patch(
-            "app.fastapi_routes.market_account.save_session_market_token"
-        ), patch(
-            "app.fastapi_routes.domains.auth.routes._enrich_register_with_tenant",
-            side_effect=lambda **kw: kw["result"],
+        with (
+            patch("app.mod_sdk.product_skus.resolve_product_sku", return_value="generic"),
+            patch(
+                "app.fastapi_routes.domains.auth.routes._open_registration_allowed",
+                return_value=True,
+            ),
+            patch("app.application.get_user_app_service") as mock_get_user,
+            patch("app.application.auth_app_service.get_auth_app_service") as mock_get_auth,
+            patch(
+                "app.fastapi_routes.market_account.login_market_with_password",
+                new=AsyncMock(return_value={"success": True, "token": "t", "refresh_token": "r"}),
+            ),
+            patch("app.fastapi_routes.market_account.save_session_market_token"),
+            patch(
+                "app.fastapi_routes.domains.auth.routes._enrich_register_with_tenant",
+                side_effect=lambda **kw: kw["result"],
+            ),
         ):
             mock_user_service = MagicMock()
             mock_user_service.create_user.return_value = {
@@ -769,9 +789,7 @@ class TestAuthRegister:
                 "session_id": "sid",
             }
             mock_get_auth.return_value = mock_auth_service
-            result = await auth_register(
-                request, {"username": "u", "password": "pass123"}
-            )
+            result = await auth_register(request, {"username": "u", "password": "pass123"})
         assert isinstance(result, JSONResponse)
 
 
@@ -799,13 +817,14 @@ class TestAuthLogin:
 
         request = MagicMock()
         err_resp = JSONResponse({"success": False}, status_code=401)
-        with patch("app.utils.metrics.auth_login_duration_seconds") as mock_metric, patch(
-            "app.application.auth_app_service.get_auth_app_service"
-        ), patch(
-            "app.mod_sdk.product_skus.resolve_product_sku", return_value="generic"
-        ), patch(
-            "app.application.enterprise_login_flow.run_market_first_login",
-            new=AsyncMock(return_value=(None, err_resp)),
+        with (
+            patch("app.utils.metrics.auth_login_duration_seconds") as mock_metric,
+            patch("app.application.auth_app_service.get_auth_app_service"),
+            patch("app.mod_sdk.product_skus.resolve_product_sku", return_value="generic"),
+            patch(
+                "app.application.enterprise_login_flow.run_market_first_login",
+                new=AsyncMock(return_value=(None, err_resp)),
+            ),
         ):
             mock_labels = MagicMock()
             mock_metric.labels.return_value = mock_labels
@@ -817,14 +836,13 @@ class TestAuthLogin:
         from app.fastapi_routes.domains.auth.routes import auth_login
 
         request = MagicMock()
-        with patch("app.utils.metrics.auth_login_duration_seconds") as mock_metric, patch(
-            "app.application.auth_app_service.get_auth_app_service"
-        ), patch(
-            "app.mod_sdk.product_skus.resolve_product_sku", return_value="generic"
-        ), patch(
-            "app.application.enterprise_login_flow.run_market_first_login",
-            new=AsyncMock(
-                return_value=({"success": True, "session_id": "sid"}, None)
+        with (
+            patch("app.utils.metrics.auth_login_duration_seconds") as mock_metric,
+            patch("app.application.auth_app_service.get_auth_app_service"),
+            patch("app.mod_sdk.product_skus.resolve_product_sku", return_value="generic"),
+            patch(
+                "app.application.enterprise_login_flow.run_market_first_login",
+                new=AsyncMock(return_value=({"success": True, "session_id": "sid"}, None)),
             ),
         ):
             mock_labels = MagicMock()
@@ -857,16 +875,18 @@ class TestAuthLoginWithPhoneCode:
 
         request = MagicMock()
         err_resp = JSONResponse({"success": False}, status_code=401)
-        with patch("app.utils.metrics.auth_login_duration_seconds") as mock_metric, patch(
-            "app.application.auth_app_service.get_auth_app_service"
-        ), patch(
-            "app.mod_sdk.product_skus.resolve_product_sku", return_value="generic"
-        ), patch(
-            "app.fastapi_routes.market_account.login_market_with_phone_code",
-            new=AsyncMock(return_value={"success": True}),
-        ), patch(
-            "app.application.enterprise_login_flow.run_market_first_login",
-            new=AsyncMock(return_value=(None, err_resp)),
+        with (
+            patch("app.utils.metrics.auth_login_duration_seconds") as mock_metric,
+            patch("app.application.auth_app_service.get_auth_app_service"),
+            patch("app.mod_sdk.product_skus.resolve_product_sku", return_value="generic"),
+            patch(
+                "app.fastapi_routes.market_account.login_market_with_phone_code",
+                new=AsyncMock(return_value={"success": True}),
+            ),
+            patch(
+                "app.application.enterprise_login_flow.run_market_first_login",
+                new=AsyncMock(return_value=(None, err_resp)),
+            ),
         ):
             mock_labels = MagicMock()
             mock_metric.labels.return_value = mock_labels
@@ -880,17 +900,17 @@ class TestAuthLoginWithPhoneCode:
         from app.fastapi_routes.domains.auth.routes import auth_login_with_phone_code
 
         request = MagicMock()
-        with patch("app.utils.metrics.auth_login_duration_seconds") as mock_metric, patch(
-            "app.application.auth_app_service.get_auth_app_service"
-        ), patch(
-            "app.mod_sdk.product_skus.resolve_product_sku", return_value="generic"
-        ), patch(
-            "app.fastapi_routes.market_account.login_market_with_phone_code",
-            new=AsyncMock(return_value={"success": True}),
-        ), patch(
-            "app.application.enterprise_login_flow.run_market_first_login",
-            new=AsyncMock(
-                return_value=({"success": True, "session_id": "sid"}, None)
+        with (
+            patch("app.utils.metrics.auth_login_duration_seconds") as mock_metric,
+            patch("app.application.auth_app_service.get_auth_app_service"),
+            patch("app.mod_sdk.product_skus.resolve_product_sku", return_value="generic"),
+            patch(
+                "app.fastapi_routes.market_account.login_market_with_phone_code",
+                new=AsyncMock(return_value={"success": True}),
+            ),
+            patch(
+                "app.application.enterprise_login_flow.run_market_first_login",
+                new=AsyncMock(return_value=({"success": True, "session_id": "sid"}, None)),
             ),
         ):
             mock_labels = MagicMock()
@@ -910,9 +930,7 @@ class TestAuthOidcStatus:
     def test_returns_status(self):
         from app.fastapi_routes.domains.auth.routes import auth_oidc_status
 
-        with patch(
-            "app.infrastructure.auth.oidc_provider.oidc_enabled", return_value=True
-        ):
+        with patch("app.infrastructure.auth.oidc_provider.oidc_enabled", return_value=True):
             result = auth_oidc_status()
         assert result["success"] is True
         assert result["data"]["enabled"] is True
@@ -924,9 +942,7 @@ class TestAuthOidcStart:
         from app.fastapi_routes.domains.auth.routes import auth_oidc_start
 
         request = MagicMock()
-        with patch(
-            "app.infrastructure.auth.oidc_provider.oidc_enabled", return_value=False
-        ):
+        with patch("app.infrastructure.auth.oidc_provider.oidc_enabled", return_value=False):
             result = await auth_oidc_start(request)
         assert isinstance(result, JSONResponse)
         assert result.status_code == 404
@@ -937,13 +953,13 @@ class TestAuthOidcStart:
 
         request = MagicMock()
         request.query_params = {"return": "/dashboard"}
-        with patch(
-            "app.infrastructure.auth.oidc_provider.oidc_enabled", return_value=True
-        ), patch(
-            "app.infrastructure.auth.oidc_provider.sign_oidc_state", return_value="state123"
-        ), patch(
-            "app.infrastructure.auth.oidc_provider.build_authorize_url",
-            new=AsyncMock(return_value="https://idp/authorize"),
+        with (
+            patch("app.infrastructure.auth.oidc_provider.oidc_enabled", return_value=True),
+            patch("app.infrastructure.auth.oidc_provider.sign_oidc_state", return_value="state123"),
+            patch(
+                "app.infrastructure.auth.oidc_provider.build_authorize_url",
+                new=AsyncMock(return_value="https://idp/authorize"),
+            ),
         ):
             result = await auth_oidc_start(request)
         assert isinstance(result, RedirectResponse)
@@ -956,11 +972,12 @@ class TestAuthOidcCallback:
         from app.fastapi_routes.domains.auth.routes import auth_oidc_callback
 
         request = MagicMock()
-        with patch(
-            "app.infrastructure.auth.oidc_provider.oidc_enabled", return_value=False
-        ), patch(
-            "app.infrastructure.auth.oidc_provider.frontend_redirect_path",
-            return_value="/",
+        with (
+            patch("app.infrastructure.auth.oidc_provider.oidc_enabled", return_value=False),
+            patch(
+                "app.infrastructure.auth.oidc_provider.frontend_redirect_path",
+                return_value="/",
+            ),
         ):
             result = await auth_oidc_callback(request)
         assert isinstance(result, RedirectResponse)
@@ -972,14 +989,16 @@ class TestAuthOidcCallback:
 
         request = MagicMock()
         request.query_params = {"code": "abc", "state": "bad"}
-        with patch(
-            "app.infrastructure.auth.oidc_provider.oidc_enabled", return_value=True
-        ), patch(
-            "app.infrastructure.auth.oidc_provider.frontend_redirect_path",
-            return_value="/",
-        ), patch(
-            "app.infrastructure.auth.oidc_provider.verify_oidc_state",
-            return_value=(False, None),
+        with (
+            patch("app.infrastructure.auth.oidc_provider.oidc_enabled", return_value=True),
+            patch(
+                "app.infrastructure.auth.oidc_provider.frontend_redirect_path",
+                return_value="/",
+            ),
+            patch(
+                "app.infrastructure.auth.oidc_provider.verify_oidc_state",
+                return_value=(False, None),
+            ),
         ):
             result = await auth_oidc_callback(request)
         assert isinstance(result, RedirectResponse)
@@ -991,14 +1010,16 @@ class TestAuthOidcCallback:
 
         request = MagicMock()
         request.query_params = {"code": "", "state": "ok"}
-        with patch(
-            "app.infrastructure.auth.oidc_provider.oidc_enabled", return_value=True
-        ), patch(
-            "app.infrastructure.auth.oidc_provider.frontend_redirect_path",
-            return_value="/",
-        ), patch(
-            "app.infrastructure.auth.oidc_provider.verify_oidc_state",
-            return_value=(True, None),
+        with (
+            patch("app.infrastructure.auth.oidc_provider.oidc_enabled", return_value=True),
+            patch(
+                "app.infrastructure.auth.oidc_provider.frontend_redirect_path",
+                return_value="/",
+            ),
+            patch(
+                "app.infrastructure.auth.oidc_provider.verify_oidc_state",
+                return_value=(True, None),
+            ),
         ):
             result = await auth_oidc_callback(request)
         assert isinstance(result, RedirectResponse)
@@ -1010,20 +1031,24 @@ class TestAuthOidcCallback:
 
         request = MagicMock()
         request.query_params = {"code": "abc", "state": "ok"}
-        with patch(
-            "app.infrastructure.auth.oidc_provider.oidc_enabled", return_value=True
-        ), patch(
-            "app.infrastructure.auth.oidc_provider.frontend_redirect_path",
-            return_value="/",
-        ), patch(
-            "app.infrastructure.auth.oidc_provider.verify_oidc_state",
-            return_value=(True, None),
-        ), patch(
-            "app.infrastructure.auth.oidc_provider.exchange_code_for_userinfo",
-            new=AsyncMock(side_effect=RuntimeError("exchange failed")),
-        ), patch(
-            "app.fastapi_routes.domains.auth.routes.INFRA_TRANSIENT",
-            (RuntimeError,),
+        with (
+            patch("app.infrastructure.auth.oidc_provider.oidc_enabled", return_value=True),
+            patch(
+                "app.infrastructure.auth.oidc_provider.frontend_redirect_path",
+                return_value="/",
+            ),
+            patch(
+                "app.infrastructure.auth.oidc_provider.verify_oidc_state",
+                return_value=(True, None),
+            ),
+            patch(
+                "app.infrastructure.auth.oidc_provider.exchange_code_for_userinfo",
+                new=AsyncMock(side_effect=RuntimeError("exchange failed")),
+            ),
+            patch(
+                "app.fastapi_routes.domains.auth.routes.INFRA_TRANSIENT",
+                (RuntimeError,),
+            ),
         ):
             result = await auth_oidc_callback(request)
         assert isinstance(result, RedirectResponse)
@@ -1035,20 +1060,22 @@ class TestAuthOidcCallback:
 
         request = MagicMock()
         request.query_params = {"code": "abc", "state": "ok"}
-        with patch(
-            "app.infrastructure.auth.oidc_provider.oidc_enabled", return_value=True
-        ), patch(
-            "app.infrastructure.auth.oidc_provider.frontend_redirect_path",
-            return_value="/",
-        ), patch(
-            "app.infrastructure.auth.oidc_provider.verify_oidc_state",
-            return_value=(True, None),
-        ), patch(
-            "app.infrastructure.auth.oidc_provider.exchange_code_for_userinfo",
-            new=AsyncMock(return_value={"sub": "x", "email": "a@b.com"}),
-        ), patch(
-            "app.application.auth_app_service.get_auth_app_service"
-        ) as mock_get:
+        with (
+            patch("app.infrastructure.auth.oidc_provider.oidc_enabled", return_value=True),
+            patch(
+                "app.infrastructure.auth.oidc_provider.frontend_redirect_path",
+                return_value="/",
+            ),
+            patch(
+                "app.infrastructure.auth.oidc_provider.verify_oidc_state",
+                return_value=(True, None),
+            ),
+            patch(
+                "app.infrastructure.auth.oidc_provider.exchange_code_for_userinfo",
+                new=AsyncMock(return_value={"sub": "x", "email": "a@b.com"}),
+            ),
+            patch("app.application.auth_app_service.get_auth_app_service") as mock_get,
+        ):
             mock_service = MagicMock()
             mock_service.authenticate_oidc_user.return_value = {
                 "success": False,
@@ -1065,24 +1092,26 @@ class TestAuthOidcCallback:
 
         request = MagicMock()
         request.query_params = {"code": "abc", "state": "ok"}
-        with patch(
-            "app.infrastructure.auth.oidc_provider.oidc_enabled", return_value=True
-        ), patch(
-            "app.infrastructure.auth.oidc_provider.frontend_redirect_path",
-            return_value="/",
-        ), patch(
-            "app.infrastructure.auth.oidc_provider.verify_oidc_state",
-            return_value=(True, None),
-        ), patch(
-            "app.infrastructure.auth.oidc_provider.exchange_code_for_userinfo",
-            new=AsyncMock(return_value={"sub": "x", "email": "a@b.com"}),
-        ), patch(
-            "app.application.auth_app_service.get_auth_app_service"
-        ) as mock_get, patch(
-            "app.mod_sdk.product_skus.resolve_product_sku", return_value="generic"
-        ), patch(
-            "app.application.enterprise_login_flow.finalize_enterprise_login",
-            new=AsyncMock(return_value={"session_id": "sid"}),
+        with (
+            patch("app.infrastructure.auth.oidc_provider.oidc_enabled", return_value=True),
+            patch(
+                "app.infrastructure.auth.oidc_provider.frontend_redirect_path",
+                return_value="/",
+            ),
+            patch(
+                "app.infrastructure.auth.oidc_provider.verify_oidc_state",
+                return_value=(True, None),
+            ),
+            patch(
+                "app.infrastructure.auth.oidc_provider.exchange_code_for_userinfo",
+                new=AsyncMock(return_value={"sub": "x", "email": "a@b.com"}),
+            ),
+            patch("app.application.auth_app_service.get_auth_app_service") as mock_get,
+            patch("app.mod_sdk.product_skus.resolve_product_sku", return_value="generic"),
+            patch(
+                "app.application.enterprise_login_flow.finalize_enterprise_login",
+                new=AsyncMock(return_value={"session_id": "sid"}),
+            ),
         ):
             mock_service = MagicMock()
             mock_service.authenticate_oidc_user.return_value = {
@@ -1153,15 +1182,18 @@ class TestAuthQrStatus:
     async def test_qr_confirmed_with_session(self):
         from app.fastapi_routes.domains.auth.routes import auth_qr_status
 
-        with patch(
-            "app.security.auth_qr_login.poll_auth_qr",
-            return_value={"status": "confirmed"},
-        ), patch(
-            "app.security.auth_qr_login.consume_confirmed_qr",
-            return_value={
-                "session_id": "sid",
-                "login_payload": {"user": {"id": 1}},
-            },
+        with (
+            patch(
+                "app.security.auth_qr_login.poll_auth_qr",
+                return_value={"status": "confirmed"},
+            ),
+            patch(
+                "app.security.auth_qr_login.consume_confirmed_qr",
+                return_value={
+                    "session_id": "sid",
+                    "login_payload": {"user": {"id": 1}},
+                },
+            ),
         ):
             result = await auth_qr_status(qr_id="q1", poll_secret="s1")
         assert isinstance(result, JSONResponse)
@@ -1171,12 +1203,15 @@ class TestAuthQrStatus:
     async def test_qr_confirmed_no_session(self):
         from app.fastapi_routes.domains.auth.routes import auth_qr_status
 
-        with patch(
-            "app.security.auth_qr_login.poll_auth_qr",
-            return_value={"status": "confirmed"},
-        ), patch(
-            "app.security.auth_qr_login.consume_confirmed_qr",
-            return_value={"session_id": None},
+        with (
+            patch(
+                "app.security.auth_qr_login.poll_auth_qr",
+                return_value={"status": "confirmed"},
+            ),
+            patch(
+                "app.security.auth_qr_login.consume_confirmed_qr",
+                return_value={"session_id": None},
+            ),
         ):
             result = await auth_qr_status(qr_id="q1", poll_secret="s1")
         assert result["data"]["status"] == "confirmed"
@@ -1217,18 +1252,14 @@ class TestAuthProfilePatch:
 
         mock_user = MagicMock()
         mock_user.id = 1
-        with patch(
-            "app.application.user_app_service.get_user_app_service"
-        ) as mock_get:
+        with patch("app.application.user_app_service.get_user_app_service") as mock_get:
             mock_service = MagicMock()
             mock_service.update_user.return_value = {
                 "success": False,
                 "message": "fail",
             }
             mock_get.return_value = mock_service
-            result = auth_profile_patch(
-                body={"display_name": "New"}, user=mock_user
-            )
+            result = auth_profile_patch(body={"display_name": "New"}, user=mock_user)
         assert isinstance(result, JSONResponse)
         assert result.status_code == 400
 
@@ -1237,9 +1268,10 @@ class TestAuthProfilePatch:
 
         mock_user = MagicMock()
         mock_user.id = 1
-        with patch(
-            "app.application.user_app_service.get_user_app_service"
-        ) as mock_get, patch("app.db.session.get_db") as mock_get_db:
+        with (
+            patch("app.application.user_app_service.get_user_app_service") as mock_get,
+            patch("app.db.session.get_db") as mock_get_db,
+        ):
             mock_service = MagicMock()
             mock_service.update_user.return_value = {"success": True}
             mock_get.return_value = mock_service
@@ -1247,9 +1279,7 @@ class TestAuthProfilePatch:
             mock_db.query.return_value.filter.return_value.first.return_value = None
             mock_get_db.return_value.__enter__ = MagicMock(return_value=mock_db)
             mock_get_db.return_value.__exit__ = MagicMock(return_value=False)
-            result = auth_profile_patch(
-                body={"display_name": "New"}, user=mock_user
-            )
+            result = auth_profile_patch(body={"display_name": "New"}, user=mock_user)
         assert isinstance(result, JSONResponse)
         assert result.status_code == 404
 
@@ -1258,9 +1288,10 @@ class TestAuthProfilePatch:
 
         mock_user = MagicMock()
         mock_user.id = 1
-        with patch(
-            "app.application.user_app_service.get_user_app_service"
-        ) as mock_get, patch("app.db.session.get_db") as mock_get_db:
+        with (
+            patch("app.application.user_app_service.get_user_app_service") as mock_get,
+            patch("app.db.session.get_db") as mock_get_db,
+        ):
             mock_service = MagicMock()
             mock_service.update_user.return_value = {"success": True}
             mock_get.return_value = mock_service
@@ -1291,9 +1322,7 @@ class TestAuthPasswordChange:
         from app.fastapi_routes.domains.auth.routes import auth_password_change
 
         mock_user = MagicMock()
-        result = auth_password_change(
-            body={"old_password": "", "new_password": ""}, user=mock_user
-        )
+        result = auth_password_change(body={"old_password": "", "new_password": ""}, user=mock_user)
         assert isinstance(result, JSONResponse)
         assert result.status_code == 400
 
@@ -1312,9 +1341,7 @@ class TestAuthPasswordChange:
 
         mock_user = MagicMock()
         mock_user.id = 1
-        with patch(
-            "app.application.auth_app_service.get_auth_app_service"
-        ) as mock_get:
+        with patch("app.application.auth_app_service.get_auth_app_service") as mock_get:
             mock_service = MagicMock()
             mock_service.change_password.return_value = {
                 "success": False,
@@ -1333,9 +1360,7 @@ class TestAuthPasswordChange:
 
         mock_user = MagicMock()
         mock_user.id = 1
-        with patch(
-            "app.application.auth_app_service.get_auth_app_service"
-        ) as mock_get:
+        with patch("app.application.auth_app_service.get_auth_app_service") as mock_get:
             mock_service = MagicMock()
             mock_service.change_password.return_value = {"success": True}
             mock_get.return_value = mock_service
@@ -1368,15 +1393,14 @@ class TestAuthLogout:
         from app.fastapi_routes.domains.auth.routes import auth_logout
 
         request = MagicMock()
-        with patch(
-            "app.fastapi_routes.domains.auth.routes.session_id_from_request",
-            return_value="sid",
-        ), patch(
-            "app.application.auth_app_service.get_auth_app_service"
-        ) as mock_get, patch(
-            "app.fastapi_routes.market_account.clear_session_market_token"
-        ), patch(
-            "app.enterprise.mod_entitlements.clear_session_entitlements"
+        with (
+            patch(
+                "app.fastapi_routes.domains.auth.routes.session_id_from_request",
+                return_value="sid",
+            ),
+            patch("app.application.auth_app_service.get_auth_app_service") as mock_get,
+            patch("app.fastapi_routes.market_account.clear_session_market_token"),
+            patch("app.enterprise.mod_entitlements.clear_session_entitlements"),
         ):
             mock_service = MagicMock()
             mock_service.logout.return_value = {"success": True}
@@ -1409,12 +1433,15 @@ class TestAuthSubscriptionStatus:
         request = MagicMock()
         mock_user = MagicMock()
         mock_user.id = 1
-        with patch(
-            "app.fastapi_routes.domains.auth.routes.resolve_session_user",
-            return_value=mock_user,
-        ), patch(
-            "app.application.tenant_subscription_app_service.subscription_status_for_user",
-            return_value={"plan": "trial"},
+        with (
+            patch(
+                "app.fastapi_routes.domains.auth.routes.resolve_session_user",
+                return_value=mock_user,
+            ),
+            patch(
+                "app.application.tenant_subscription_app_service.subscription_status_for_user",
+                return_value={"plan": "trial"},
+            ),
         ):
             result = auth_subscription_status(request)
         assert result["success"] is True
@@ -1449,17 +1476,20 @@ class TestAuthUpdateCompanyBrand:
 
         request = MagicMock()
         mock_user = MagicMock()
-        with patch(
-            "app.fastapi_routes.domains.auth.routes.session_id_from_request",
-            return_value="sid",
-        ), patch(
-            "app.application.session_account_meta.load_session_account_meta",
-            return_value={"account_kind": "enterprise"},
-        ), patch(
-            "app.application.session_account_meta.persist_session_account_meta"
-        ), patch(
-            "app.fastapi_routes.market_account.resolve_valid_market_access_token",
-            new=AsyncMock(return_value=None),
+        with (
+            patch(
+                "app.fastapi_routes.domains.auth.routes.session_id_from_request",
+                return_value="sid",
+            ),
+            patch(
+                "app.application.session_account_meta.load_session_account_meta",
+                return_value={"account_kind": "enterprise"},
+            ),
+            patch("app.application.session_account_meta.persist_session_account_meta"),
+            patch(
+                "app.fastapi_routes.market_account.resolve_valid_market_access_token",
+                new=AsyncMock(return_value=None),
+            ),
         ):
             result = await auth_update_company_brand(
                 request, {"company_brand": "Acme"}, user=mock_user
@@ -1473,19 +1503,21 @@ class TestAuthUpdateCompanyBrand:
 
         request = MagicMock()
         mock_user = MagicMock()
-        with patch(
-            "app.fastapi_routes.domains.auth.routes.session_id_from_request",
-            return_value="sid",
-        ), patch(
-            "app.application.session_account_meta.load_session_account_meta",
-            return_value={"account_kind": "enterprise"},
-        ), patch(
-            "app.application.session_account_meta.persist_session_account_meta"
-        ), patch(
-            "app.fastapi_routes.market_account.resolve_valid_market_access_token",
-            new=AsyncMock(return_value="Bearer xyz"),
-        ), patch(
-            "app.fastapi_routes.market_account._proxy_json", new=AsyncMock()
+        with (
+            patch(
+                "app.fastapi_routes.domains.auth.routes.session_id_from_request",
+                return_value="sid",
+            ),
+            patch(
+                "app.application.session_account_meta.load_session_account_meta",
+                return_value={"account_kind": "enterprise"},
+            ),
+            patch("app.application.session_account_meta.persist_session_account_meta"),
+            patch(
+                "app.fastapi_routes.market_account.resolve_valid_market_access_token",
+                new=AsyncMock(return_value="Bearer xyz"),
+            ),
+            patch("app.fastapi_routes.market_account._proxy_json", new=AsyncMock()),
         ):
             result = await auth_update_company_brand(
                 request, {"company_brand": "Acme"}, user=mock_user
@@ -1503,9 +1535,7 @@ class TestUsersList:
         from app.fastapi_routes.domains.auth.routes import users_list
 
         mock_admin = MagicMock()
-        with patch(
-            "app.application.get_user_app_service"
-        ) as mock_get:
+        with patch("app.application.get_user_app_service") as mock_get:
             mock_service = MagicMock()
             mock_service.list_users.return_value = [
                 {"id": 1, "is_active": True},
@@ -1519,9 +1549,7 @@ class TestUsersList:
         from app.fastapi_routes.domains.auth.routes import users_list
 
         mock_admin = MagicMock()
-        with patch(
-            "app.application.get_user_app_service"
-        ) as mock_get:
+        with patch("app.application.get_user_app_service") as mock_get:
             mock_service = MagicMock()
             mock_service.list_users.return_value = [
                 {"id": 1, "is_active": True},
@@ -1537,9 +1565,7 @@ class TestUsersGet:
         from app.fastapi_routes.domains.auth.routes import users_get
 
         mock_admin = MagicMock()
-        with patch(
-            "app.application.get_user_app_service"
-        ) as mock_get:
+        with patch("app.application.get_user_app_service") as mock_get:
             mock_service = MagicMock()
             mock_service.get_user.return_value = None
             mock_get.return_value = mock_service
@@ -1551,9 +1577,7 @@ class TestUsersGet:
         from app.fastapi_routes.domains.auth.routes import users_get
 
         mock_admin = MagicMock()
-        with patch(
-            "app.application.get_user_app_service"
-        ) as mock_get:
+        with patch("app.application.get_user_app_service") as mock_get:
             mock_service = MagicMock()
             mock_service.get_user.return_value = {"id": 1, "username": "u"}
             mock_get.return_value = mock_service
@@ -1574,9 +1598,7 @@ class TestUsersCreate:
         from app.fastapi_routes.domains.auth.routes import users_create
 
         mock_admin = MagicMock()
-        result = users_create(
-            body={"username": "u", "password": "123"}, _user=mock_admin
-        )
+        result = users_create(body={"username": "u", "password": "123"}, _user=mock_admin)
         assert isinstance(result, JSONResponse)
         assert result.status_code == 400
 
@@ -1595,9 +1617,7 @@ class TestUsersCreate:
         from app.fastapi_routes.domains.auth.routes import users_create
 
         mock_admin = MagicMock()
-        with patch(
-            "app.application.get_user_app_service"
-        ) as mock_get:
+        with patch("app.application.get_user_app_service") as mock_get:
             mock_service = MagicMock()
             mock_service.create_user.return_value = {
                 "success": False,
@@ -1615,9 +1635,7 @@ class TestUsersCreate:
         from app.fastapi_routes.domains.auth.routes import users_create
 
         mock_admin = MagicMock()
-        with patch(
-            "app.application.get_user_app_service"
-        ) as mock_get:
+        with patch("app.application.get_user_app_service") as mock_get:
             mock_service = MagicMock()
             mock_service.create_user.return_value = {
                 "success": True,
@@ -1637,9 +1655,7 @@ class TestUsersUpdate:
         from app.fastapi_routes.domains.auth.routes import users_update
 
         mock_admin = MagicMock()
-        result = users_update(
-            user_id=1, body={"role": "superadmin"}, _user=mock_admin
-        )
+        result = users_update(user_id=1, body={"role": "superadmin"}, _user=mock_admin)
         assert isinstance(result, JSONResponse)
         assert result.status_code == 400
 
@@ -1647,18 +1663,14 @@ class TestUsersUpdate:
         from app.fastapi_routes.domains.auth.routes import users_update
 
         mock_admin = MagicMock()
-        with patch(
-            "app.application.get_user_app_service"
-        ) as mock_get:
+        with patch("app.application.get_user_app_service") as mock_get:
             mock_service = MagicMock()
             mock_service.update_user.return_value = {
                 "success": False,
                 "error": "no user",
             }
             mock_get.return_value = mock_service
-            result = users_update(
-                user_id=1, body={"display_name": "New"}, _user=mock_admin
-            )
+            result = users_update(user_id=1, body={"display_name": "New"}, _user=mock_admin)
         assert isinstance(result, JSONResponse)
         assert result.status_code == 400
 
@@ -1666,18 +1678,14 @@ class TestUsersUpdate:
         from app.fastapi_routes.domains.auth.routes import users_update
 
         mock_admin = MagicMock()
-        with patch(
-            "app.application.get_user_app_service"
-        ) as mock_get:
+        with patch("app.application.get_user_app_service") as mock_get:
             mock_service = MagicMock()
             mock_service.update_user.return_value = {
                 "success": True,
                 "user": {"id": 1},
             }
             mock_get.return_value = mock_service
-            result = users_update(
-                user_id=1, body={"display_name": "New"}, _user=mock_admin
-            )
+            result = users_update(user_id=1, body={"display_name": "New"}, _user=mock_admin)
         assert result["success"] is True
 
 
@@ -1696,9 +1704,7 @@ class TestUsersDelete:
 
         mock_admin = MagicMock()
         mock_admin.id = 1
-        with patch(
-            "app.application.get_user_app_service"
-        ) as mock_get:
+        with patch("app.application.get_user_app_service") as mock_get:
             mock_service = MagicMock()
             mock_service.delete_user.return_value = {"success": False}
             mock_get.return_value = mock_service
@@ -1711,9 +1717,7 @@ class TestUsersDelete:
 
         mock_admin = MagicMock()
         mock_admin.id = 1
-        with patch(
-            "app.application.get_user_app_service"
-        ) as mock_get:
+        with patch("app.application.get_user_app_service") as mock_get:
             mock_service = MagicMock()
             mock_service.delete_user.return_value = {"success": True}
             mock_get.return_value = mock_service
@@ -1726,9 +1730,7 @@ class TestUsersResetPassword:
         from app.fastapi_routes.domains.auth.routes import users_reset_password
 
         mock_admin = MagicMock()
-        result = users_reset_password(
-            user_id=1, body={"new_password": ""}, _user=mock_admin
-        )
+        result = users_reset_password(user_id=1, body={"new_password": ""}, _user=mock_admin)
         assert isinstance(result, JSONResponse)
         assert result.status_code == 400
 
@@ -1736,9 +1738,7 @@ class TestUsersResetPassword:
         from app.fastapi_routes.domains.auth.routes import users_reset_password
 
         mock_admin = MagicMock()
-        result = users_reset_password(
-            user_id=1, body={"new_password": "123"}, _user=mock_admin
-        )
+        result = users_reset_password(user_id=1, body={"new_password": "123"}, _user=mock_admin)
         assert isinstance(result, JSONResponse)
         assert result.status_code == 400
 
@@ -1746,9 +1746,7 @@ class TestUsersResetPassword:
         from app.fastapi_routes.domains.auth.routes import users_reset_password
 
         mock_admin = MagicMock()
-        with patch(
-            "app.application.auth_app_service.get_auth_app_service"
-        ) as mock_get:
+        with patch("app.application.auth_app_service.get_auth_app_service") as mock_get:
             mock_service = MagicMock()
             mock_service.reset_password.return_value = {
                 "success": False,
@@ -1765,9 +1763,7 @@ class TestUsersResetPassword:
         from app.fastapi_routes.domains.auth.routes import users_reset_password
 
         mock_admin = MagicMock()
-        with patch(
-            "app.application.auth_app_service.get_auth_app_service"
-        ) as mock_get:
+        with patch("app.application.auth_app_service.get_auth_app_service") as mock_get:
             mock_service = MagicMock()
             mock_service.reset_password.return_value = {"success": True}
             mock_get.return_value = mock_service

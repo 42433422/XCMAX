@@ -51,9 +51,7 @@ def test_desktop_mode_allows_vue_i18n_runtime_compile(monkeypatch):
     r = client.get("/login")
     assert r.status_code == 200
     assert r.headers["x-frame-options"] == "DENY"
-    assert "script-src 'self' 'unsafe-inline' 'unsafe-eval'" in r.headers[
-        "content-security-policy"
-    ]
+    assert "script-src 'self' 'unsafe-inline' 'unsafe-eval'" in r.headers["content-security-policy"]
 
 
 def test_sandbox_query_param_relaxes_csp():

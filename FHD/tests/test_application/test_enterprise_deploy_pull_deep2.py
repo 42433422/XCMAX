@@ -11,6 +11,7 @@ Targets remaining uncovered branches:
 - _execute_pull_job apply_frontend with vue dist present
 - _execute_pull_job restart in production env
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -35,7 +36,6 @@ from app.application.enterprise_deploy_pull import (
     get_pull_job,
     start_enterprise_pull,
 )
-
 
 # ── _read_deployed_sha256 ───────────────────────────────────────────────────
 
@@ -137,8 +137,9 @@ class TestFetchHubManifest:
 
 class TestCheckEnterpriseUpdatesDeep:
     def test_no_hub_manifest(self, monkeypatch):
-        with patch.object(edp, "_fetch_hub_manifest", return_value=None), patch.object(
-            edp, "_read_deployed_sha256", return_value=""
+        with (
+            patch.object(edp, "_fetch_hub_manifest", return_value=None),
+            patch.object(edp, "_read_deployed_sha256", return_value=""),
         ):
             result = check_enterprise_updates()
         assert result["role"] == "enterprise"
@@ -147,31 +148,35 @@ class TestCheckEnterpriseUpdatesDeep:
         assert result["update_hub"]["reachable"] is False
 
     def test_up_to_date(self, monkeypatch):
-        with patch.object(edp, "_fetch_hub_manifest", return_value={"sha256": "abc"}), patch.object(
-            edp, "_read_deployed_sha256", return_value="abc"
+        with (
+            patch.object(edp, "_fetch_hub_manifest", return_value={"sha256": "abc"}),
+            patch.object(edp, "_read_deployed_sha256", return_value="abc"),
         ):
             result = check_enterprise_updates()
         assert result["flags"]["needs_update"] is False
         assert result["flags"]["up_to_date"] is True
 
     def test_needs_update_when_different(self, monkeypatch):
-        with patch.object(
-            edp, "_fetch_hub_manifest", return_value={"sha256": "new"}
-        ), patch.object(edp, "_read_deployed_sha256", return_value="old"):
+        with (
+            patch.object(edp, "_fetch_hub_manifest", return_value={"sha256": "new"}),
+            patch.object(edp, "_read_deployed_sha256", return_value="old"),
+        ):
             result = check_enterprise_updates()
         assert result["flags"]["needs_update"] is True
         assert result["flags"]["up_to_date"] is False
 
     def test_needs_update_when_no_deployed(self, monkeypatch):
-        with patch.object(
-            edp, "_fetch_hub_manifest", return_value={"sha256": "new"}
-        ), patch.object(edp, "_read_deployed_sha256", return_value=""):
+        with (
+            patch.object(edp, "_fetch_hub_manifest", return_value={"sha256": "new"}),
+            patch.object(edp, "_read_deployed_sha256", return_value=""),
+        ):
             result = check_enterprise_updates()
         assert result["flags"]["needs_update"] is True
 
     def test_no_update_when_no_hub_sha(self, monkeypatch):
-        with patch.object(edp, "_fetch_hub_manifest", return_value={}), patch.object(
-            edp, "_read_deployed_sha256", return_value=""
+        with (
+            patch.object(edp, "_fetch_hub_manifest", return_value={}),
+            patch.object(edp, "_read_deployed_sha256", return_value=""),
         ):
             result = check_enterprise_updates()
         assert result["flags"]["needs_update"] is False
@@ -184,8 +189,9 @@ class TestCheckEnterpriseUpdatesDeep:
             "version": "1.0.0",
             "built_at": "2024-01-01",
         }
-        with patch.object(edp, "_fetch_hub_manifest", return_value=manifest), patch.object(
-            edp, "_read_deployed_sha256", return_value="abc"
+        with (
+            patch.object(edp, "_fetch_hub_manifest", return_value=manifest),
+            patch.object(edp, "_read_deployed_sha256", return_value="abc"),
         ):
             result = check_enterprise_updates()
         assert result["update_hub"]["version"] == "1.0.0"
@@ -201,8 +207,9 @@ class TestCheckEnterpriseUpdatesDeep:
         local_vue.mkdir()
         monkeypatch.setattr(edp, "HUB_VUE_DIST", str(hub_vue))
         monkeypatch.setattr(edp, "LOCAL_VUE_DIST", str(local_vue))
-        with patch.object(edp, "_fetch_hub_manifest", return_value={"sha256": "abc"}), patch.object(
-            edp, "_read_deployed_sha256", return_value="abc"
+        with (
+            patch.object(edp, "_fetch_hub_manifest", return_value={"sha256": "abc"}),
+            patch.object(edp, "_read_deployed_sha256", return_value="abc"),
         ):
             result = check_enterprise_updates()
         assert result["update_hub"]["has_vue_dist"] is True
@@ -303,9 +310,11 @@ class TestExecutePullJobDeep:
             step.started_at = time.time()
             step.finished_at = time.time()
 
-        with patch.object(edp, "check_enterprise_updates", side_effect=fake_check), patch.object(
-            edp, "_run_shell", side_effect=fake_run_shell
-        ), patch.object(edp, "Path") as mock_path_cls:
+        with (
+            patch.object(edp, "check_enterprise_updates", side_effect=fake_check),
+            patch.object(edp, "_run_shell", side_effect=fake_run_shell),
+            patch.object(edp, "Path") as mock_path_cls,
+        ):
             mock_path = MagicMock()
             mock_path.is_file.return_value = True
             mock_path.is_dir.return_value = True
@@ -342,9 +351,10 @@ class TestExecutePullJobDeep:
                 step.started_at = time.time()
                 step.finished_at = time.time()
 
-            with patch.object(edp, "_run_shell", side_effect=fake_run_shell), patch.object(
-                edp, "Path"
-            ) as mock_path_cls:
+            with (
+                patch.object(edp, "_run_shell", side_effect=fake_run_shell),
+                patch.object(edp, "Path") as mock_path_cls,
+            ):
                 mock_path = MagicMock()
                 mock_path.is_file.return_value = True
                 mock_path.is_dir.return_value = False  # dev env (skip restart)
@@ -381,9 +391,10 @@ class TestExecutePullJobDeep:
                 step.started_at = time.time()
                 step.finished_at = time.time()
 
-            with patch.object(edp, "_run_shell", side_effect=fake_run_shell), patch.object(
-                edp, "Path"
-            ) as mock_path_cls:
+            with (
+                patch.object(edp, "_run_shell", side_effect=fake_run_shell),
+                patch.object(edp, "Path") as mock_path_cls,
+            ):
                 mock_path = MagicMock()
                 mock_path.is_file.return_value = False
                 mock_path.is_dir.return_value = True  # vue dist exists, dev env (no app dir)
@@ -420,9 +431,10 @@ class TestExecutePullJobDeep:
                 step.started_at = time.time()
                 step.finished_at = time.time()
 
-            with patch.object(edp, "_run_shell", side_effect=fake_run_shell), patch.object(
-                edp, "Path"
-            ) as mock_path_cls:
+            with (
+                patch.object(edp, "_run_shell", side_effect=fake_run_shell),
+                patch.object(edp, "Path") as mock_path_cls,
+            ):
                 mock_path = MagicMock()
                 mock_path.is_file.return_value = False
                 mock_path.is_dir.return_value = True  # app dir exists → production
@@ -442,9 +454,7 @@ class TestExecutePullJobDeep:
     @pytest.mark.asyncio
     async def test_check_step_failure_propagates(self, monkeypatch):
         """When check_enterprise_updates raises, job errors out."""
-        with patch.object(
-            edp, "check_enterprise_updates", side_effect=RuntimeError("check fail")
-        ):
+        with patch.object(edp, "check_enterprise_updates", side_effect=RuntimeError("check fail")):
             opts = {"force": False, "include_backend": True, "include_frontend": True}
             job = PullJob(job_id="j1", options=opts, steps=_build_pull_steps(opts))
             await _execute_pull_job(job)
@@ -462,6 +472,7 @@ class TestExecutePullJobDeep:
                 "update_hub": {"git_sha": "abc"},
             },
         ):
+
             async def failing_run_shell(step, cmd, **kw):
                 step.status = "error"
                 step.detail = "shell fail"
@@ -469,9 +480,10 @@ class TestExecutePullJobDeep:
                 step.finished_at = time.time()
                 raise RuntimeError("shell fail")
 
-            with patch.object(edp, "_run_shell", side_effect=failing_run_shell), patch.object(
-                edp, "Path"
-            ) as mock_path_cls:
+            with (
+                patch.object(edp, "_run_shell", side_effect=failing_run_shell),
+                patch.object(edp, "Path") as mock_path_cls,
+            ):
                 mock_path = MagicMock()
                 mock_path.is_file.return_value = True
                 mock_path.is_dir.return_value = True

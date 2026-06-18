@@ -23,7 +23,6 @@ from app.fastapi_routes.service_bridge import (
     _set_config_value,
 )
 
-
 # ---------------------------------------------------------------------------
 # _get_instance_name
 # ---------------------------------------------------------------------------
@@ -71,14 +70,15 @@ class TestGetOrCreateInstanceId:
             mock_file.__enter__ = MagicMock(return_value=mock_file)
             mock_file.__exit__ = MagicMock(return_value=False)
             mock_file.read.return_value = ""
-            with patch("builtins.open", return_value=mock_file), \
-                 patch("os.makedirs"):
+            with patch("builtins.open", return_value=mock_file), patch("os.makedirs"):
                 result = _get_or_create_instance_id()
                 assert result.startswith("xcagi-host-")
 
     def test_write_error(self):
-        with patch("os.path.exists", return_value=False), \
-             patch("os.makedirs", side_effect=OSError("no write")):
+        with (
+            patch("os.path.exists", return_value=False),
+            patch("os.makedirs", side_effect=OSError("no write")),
+        ):
             result = _get_or_create_instance_id()
             assert result.startswith("xcagi-host-")
 
@@ -105,8 +105,10 @@ class TestGetConfigValue:
         mock_db.query.return_value.filter.return_value.first.return_value = None
         mock_db.__enter__ = MagicMock(return_value=mock_db)
         mock_db.__exit__ = MagicMock(return_value=False)
-        with patch("app.fastapi_routes.service_bridge.get_db", return_value=mock_db), \
-             patch.dict(os.environ, {"SERVICE_BRIDGE_TEST_KEY": "env_value"}):
+        with (
+            patch("app.fastapi_routes.service_bridge.get_db", return_value=mock_db),
+            patch.dict(os.environ, {"SERVICE_BRIDGE_TEST_KEY": "env_value"}),
+        ):
             result = _get_config_value("test_key")
             assert result == "env_value"
 
@@ -115,8 +117,10 @@ class TestGetConfigValue:
         mock_db.query.return_value.filter.return_value.first.return_value = None
         mock_db.__enter__ = MagicMock(return_value=mock_db)
         mock_db.__exit__ = MagicMock(return_value=False)
-        with patch("app.fastapi_routes.service_bridge.get_db", return_value=mock_db), \
-             patch.dict(os.environ, {}, clear=True):
+        with (
+            patch("app.fastapi_routes.service_bridge.get_db", return_value=mock_db),
+            patch.dict(os.environ, {}, clear=True),
+        ):
             result = _get_config_value("test_key", default="fallback")
             assert result == "fallback"
 
@@ -205,9 +209,16 @@ class TestGetConfig:
     async def test_returns_config(self):
         from app.fastapi_routes.service_bridge import get_config
 
-        with patch("app.fastapi_routes.service_bridge._get_or_create_instance_id", return_value="inst-1"), \
-             patch("app.fastapi_routes.service_bridge._get_instance_name", return_value="Test"), \
-             patch("app.fastapi_routes.service_bridge._get_config_value", return_value="http://main"):
+        with (
+            patch(
+                "app.fastapi_routes.service_bridge._get_or_create_instance_id",
+                return_value="inst-1",
+            ),
+            patch("app.fastapi_routes.service_bridge._get_instance_name", return_value="Test"),
+            patch(
+                "app.fastapi_routes.service_bridge._get_config_value", return_value="http://main"
+            ),
+        ):
             result = await get_config()
             assert result["success"] is True
             assert result["data"]["instance_id"] == "inst-1"
@@ -245,8 +256,9 @@ class TestUpdateConfig:
 class TestReceiveRequest:
     @pytest.mark.asyncio
     async def test_invalid_priority(self):
-        from app.fastapi_routes.service_bridge import receive_request
         from fastapi import HTTPException
+
+        from app.fastapi_routes.service_bridge import receive_request
 
         body = ServiceRequestCreate(
             source_instance_id="inst-1",
@@ -269,8 +281,10 @@ class TestReceiveRequest:
         mock_req.to_dict.return_value = {"id": 1, "title": "Help"}
         # The route creates ServiceRequest internally, then calls db.add and db.flush
         # We need to mock the ServiceRequest class
-        with patch("app.fastapi_routes.service_bridge.get_db", return_value=_mock_db_ctx(mock_db)), \
-             patch("app.db.models.service_request.ServiceRequest", return_value=mock_req):
+        with (
+            patch("app.fastapi_routes.service_bridge.get_db", return_value=_mock_db_ctx(mock_db)),
+            patch("app.db.models.service_request.ServiceRequest", return_value=mock_req),
+        ):
             body = ServiceRequestCreate(
                 source_instance_id="inst-1",
                 source_instance_name="Test",
@@ -290,7 +304,9 @@ class TestListRequests:
         mock_req = MagicMock()
         mock_req.to_dict.return_value = {"id": 1}
         mock_db.query.return_value.count.return_value = 1
-        mock_db.query.return_value.order_by.return_value.offset.return_value.limit.return_value.all.return_value = [mock_req]
+        mock_db.query.return_value.order_by.return_value.offset.return_value.limit.return_value.all.return_value = [
+            mock_req
+        ]
         with patch("app.fastapi_routes.service_bridge.get_db", return_value=_mock_db_ctx(mock_db)):
             result = await list_requests(page=1, per_page=20)
             assert result["success"] is True
@@ -305,15 +321,18 @@ class TestListRequests:
         mock_db.query.return_value.filter.return_value.filter.return_value.count.return_value = 0
         mock_db.query.return_value.filter.return_value.filter.return_value.order_by.return_value.offset.return_value.limit.return_value.all.return_value = []
         with patch("app.fastapi_routes.service_bridge.get_db", return_value=_mock_db_ctx(mock_db)):
-            result = await list_requests(status="pending", source_instance_id="inst-1", page=1, per_page=20)
+            result = await list_requests(
+                status="pending", source_instance_id="inst-1", page=1, per_page=20
+            )
             assert result["success"] is True
 
 
 class TestGetRequest:
     @pytest.mark.asyncio
     async def test_not_found(self):
-        from app.fastapi_routes.service_bridge import get_request
         from fastapi import HTTPException
+
+        from app.fastapi_routes.service_bridge import get_request
 
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = None
@@ -326,8 +345,9 @@ class TestGetRequest:
 class TestRespondRequest:
     @pytest.mark.asyncio
     async def test_invalid_status(self):
-        from app.fastapi_routes.service_bridge import respond_request
         from fastapi import HTTPException
+
+        from app.fastapi_routes.service_bridge import respond_request
 
         body = ServiceRequestRespond(response="done", status="invalid_status")
         with pytest.raises(HTTPException) as exc_info:
@@ -336,8 +356,9 @@ class TestRespondRequest:
 
     @pytest.mark.asyncio
     async def test_not_found(self):
-        from app.fastapi_routes.service_bridge import respond_request
         from fastapi import HTTPException
+
+        from app.fastapi_routes.service_bridge import respond_request
 
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = None
@@ -381,12 +402,18 @@ class TestGetStats:
 class TestOutboxSend:
     @pytest.mark.asyncio
     async def test_invalid_priority(self):
-        from app.fastapi_routes.service_bridge import send_outbox
         from fastapi import HTTPException
 
+        from app.fastapi_routes.service_bridge import send_outbox
+
         body = OutboxCreate(title="Test", priority="bad")
-        with patch("app.fastapi_routes.service_bridge._get_or_create_instance_id", return_value="inst-1"), \
-             patch("app.fastapi_routes.service_bridge._get_config_value", return_value="test"):
+        with (
+            patch(
+                "app.fastapi_routes.service_bridge._get_or_create_instance_id",
+                return_value="inst-1",
+            ),
+            patch("app.fastapi_routes.service_bridge._get_config_value", return_value="test"),
+        ):
             with pytest.raises(HTTPException) as exc_info:
                 await send_outbox(body)
             assert exc_info.value.status_code == 400
@@ -399,8 +426,13 @@ class TestListOutbox:
 
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.order_by.return_value.all.return_value = []
-        with patch("app.fastapi_routes.service_bridge.get_db", return_value=_mock_db_ctx(mock_db)), \
-             patch("app.fastapi_routes.service_bridge._get_or_create_instance_id", return_value="inst-1"):
+        with (
+            patch("app.fastapi_routes.service_bridge.get_db", return_value=_mock_db_ctx(mock_db)),
+            patch(
+                "app.fastapi_routes.service_bridge._get_or_create_instance_id",
+                return_value="inst-1",
+            ),
+        ):
             result = await list_outbox()
             assert result["success"] is True
 
@@ -410,8 +442,13 @@ class TestSyncOutbox:
     async def test_no_main_server(self):
         from app.fastapi_routes.service_bridge import sync_outbox
 
-        with patch("app.fastapi_routes.service_bridge._get_or_create_instance_id", return_value="inst-1"), \
-             patch("app.fastapi_routes.service_bridge._get_config_value", return_value=""):
+        with (
+            patch(
+                "app.fastapi_routes.service_bridge._get_or_create_instance_id",
+                return_value="inst-1",
+            ),
+            patch("app.fastapi_routes.service_bridge._get_config_value", return_value=""),
+        ):
             result = await sync_outbox()
             assert result["synced_count"] == 0
 
@@ -429,8 +466,13 @@ class TestPingMain:
     async def test_main_server_unreachable(self):
         from app.fastapi_routes.service_bridge import ping_main_server
 
-        with patch("app.fastapi_routes.service_bridge._get_config_value", return_value="http://unreachable:9999"), \
-             patch("httpx.AsyncClient") as mock_client_cls:
+        with (
+            patch(
+                "app.fastapi_routes.service_bridge._get_config_value",
+                return_value="http://unreachable:9999",
+            ),
+            patch("httpx.AsyncClient") as mock_client_cls,
+        ):
             mock_client = AsyncMock()
             mock_client.get.side_effect = RuntimeError("unreachable")
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)

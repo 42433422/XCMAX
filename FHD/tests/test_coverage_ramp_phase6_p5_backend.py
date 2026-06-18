@@ -22,7 +22,6 @@ import pytest
 from app.infrastructure.db import sync_engine
 from app.mod_sdk import mod_employee_llm
 
-
 # ===========================================================================
 # 1. mod_employee_llm — _resolve_provider_override
 # ===========================================================================
@@ -49,9 +48,7 @@ class TestResolveProviderOverride:
         out = mod_employee_llm._resolve_provider_override()
         assert out == {"use_direct": False}
 
-    def test_provider_with_key_uses_default_url(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_provider_with_key_uses_default_url(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("XCAGI_LLM_PROVIDER", "deepseek")
         monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-abc")
         monkeypatch.delenv("DEEPSEEK_BASE_URL", raising=False)
@@ -64,9 +61,7 @@ class TestResolveProviderOverride:
         assert out["model"] == "deepseek-chat"
         assert out["provider"] == "deepseek"
 
-    def test_openai_provider_default_model(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_openai_provider_default_model(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("XCAGI_LLM_PROVIDER", "openai")
         monkeypatch.setenv("OPENAI_API_KEY", "sk-xyz")
         monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
@@ -112,9 +107,7 @@ class TestResolveProviderOverride:
         assert "error" in out
         assert "UNKNOWNPROV_BASE_URL" in out["error"]
 
-    def test_provider_model_overrides_default(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_provider_model_overrides_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("XCAGI_LLM_PROVIDER", "openai")
         monkeypatch.setenv("OPENAI_API_KEY", "k1")
         monkeypatch.setenv("OPENAI_MODEL", "gpt-4-turbo")
@@ -287,33 +280,25 @@ class TestModEmployeeComplete:
     """``mod_employee_complete`` 顶层入口。"""
 
     @pytest.mark.asyncio
-    async def test_empty_messages_returns_error(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_empty_messages_returns_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("XCAGI_LLM_PROVIDER", raising=False)
         out = await mod_employee_llm.mod_employee_complete([])
         assert out["success"] is False
         assert "非空列表" in out["error"]
 
     @pytest.mark.asyncio
-    async def test_non_list_messages_returns_error(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_non_list_messages_returns_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("XCAGI_LLM_PROVIDER", raising=False)
         out = await mod_employee_llm.mod_employee_complete("not a list")  # type: ignore[arg-type]
         assert out["success"] is False
         assert "非空列表" in out["error"]
 
     @pytest.mark.asyncio
-    async def test_override_error_propagates(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_override_error_propagates(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("XCAGI_LLM_PROVIDER", "unknownprov")
         monkeypatch.setenv("UNKNOWNPROV_API_KEY", "k1")
         monkeypatch.delenv("UNKNOWNPROV_BASE_URL", raising=False)
-        out = await mod_employee_llm.mod_employee_complete(
-            [{"role": "user", "content": "hi"}]
-        )
+        out = await mod_employee_llm.mod_employee_complete([{"role": "user", "content": "hi"}])
         assert out["success"] is False
         assert "UNKNOWNPROV_BASE_URL" in out["error"]
 
@@ -330,16 +315,12 @@ class TestModEmployeeComplete:
         with patch.object(
             mod_employee_llm, "_call_openai_compatible_chat", new=AsyncMock(return_value=None)
         ):
-            out = await mod_employee_llm.mod_employee_complete(
-                [{"role": "user", "content": "hi"}]
-            )
+            out = await mod_employee_llm.mod_employee_complete([{"role": "user", "content": "hi"}])
         assert out["success"] is False
         assert "LLM 返回空" in out["error"]
 
     @pytest.mark.asyncio
-    async def test_direct_path_success(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_direct_path_success(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("XCAGI_LLM_PROVIDER", "deepseek")
         monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-abc")
         monkeypatch.delenv("DEEPSEEK_BASE_URL", raising=False)
@@ -371,16 +352,12 @@ class TestModEmployeeComplete:
             "app.services.ai_conversation_service.get_ai_conversation_service",
             return_value=mock_svc,
         ):
-            out = await mod_employee_llm.mod_employee_complete(
-                [{"role": "user", "content": "hi"}]
-            )
+            out = await mod_employee_llm.mod_employee_complete([{"role": "user", "content": "hi"}])
         assert out["success"] is False
         assert "DEEPSEEK_API_KEY" in out["error"]
 
     @pytest.mark.asyncio
-    async def test_default_path_call_returns_none(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_default_path_call_returns_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("XCAGI_LLM_PROVIDER", raising=False)
 
         mock_svc = MagicMock()
@@ -390,9 +367,7 @@ class TestModEmployeeComplete:
             "app.services.ai_conversation_service.get_ai_conversation_service",
             return_value=mock_svc,
         ):
-            out = await mod_employee_llm.mod_employee_complete(
-                [{"role": "user", "content": "hi"}]
-            )
+            out = await mod_employee_llm.mod_employee_complete([{"role": "user", "content": "hi"}])
         assert out["success"] is False
         assert "LLM 返回空" in out["error"]
 
@@ -409,16 +384,12 @@ class TestModEmployeeComplete:
             "app.services.ai_conversation_service.get_ai_conversation_service",
             return_value=mock_svc,
         ):
-            out = await mod_employee_llm.mod_employee_complete(
-                [{"role": "user", "content": "hi"}]
-            )
+            out = await mod_employee_llm.mod_employee_complete([{"role": "user", "content": "hi"}])
         assert out["success"] is False
         assert "db down" in out["error"]
 
     @pytest.mark.asyncio
-    async def test_default_path_success(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_default_path_success(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("XCAGI_LLM_PROVIDER", raising=False)
 
         mock_svc = MagicMock()
@@ -455,9 +426,7 @@ class TestModEmployeeComplete:
         # 不设置 get_ai_conversation_service 属性
         monkeypatch.setitem(sys.modules, "app.services.ai_conversation_service", fake_mod)
 
-        out = await mod_employee_llm.mod_employee_complete(
-            [{"role": "user", "content": "hi"}]
-        )
+        out = await mod_employee_llm.mod_employee_complete([{"role": "user", "content": "hi"}])
         assert out["success"] is False
         assert "not available" in out["error"]
 
@@ -496,9 +465,7 @@ class TestSyncEngineMode:
         p = sync_engine._sqlite_path_for_mode("test")
         assert p.name == "products_test.db"
 
-    def test_resolve_customer_db_path_reflects_mode(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_resolve_customer_db_path_reflects_mode(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("WORKSPACE_ROOT", "/tmp/xctest_ws")
         sync_engine.set_mode("test")
         p = sync_engine.resolve_customer_db_path()
@@ -728,9 +695,7 @@ class TestRedactDatabaseUrl:
 class TestGetDbStatus:
     """``get_db_status`` 状态汇总。"""
 
-    def test_gate_closed_returns_closed_status(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_gate_closed_returns_closed_status(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("FHD_DB_MOD_GATE", "mod-x")
         monkeypatch.delenv("FHD_ENABLED_MOD_IDS", raising=False)
         status = sync_engine.get_db_status()
@@ -778,16 +743,12 @@ class TestPostgresqlConnectionSummary:
         assert ":p@" not in out["redacted_url"]
 
     def test_postgres_url_no_port(self) -> None:
-        out = sync_engine.postgresql_connection_summary(
-            "postgresql://u:p@host.example/mydb2"
-        )
+        out = sync_engine.postgresql_connection_summary("postgresql://u:p@host.example/mydb2")
         assert out["database_name"] == "mydb2"
         assert "host.example" in out["host_port"]
 
     def test_postgres_url_empty_path(self) -> None:
-        out = sync_engine.postgresql_connection_summary(
-            "postgresql://u:p@host.example:5432/"
-        )
+        out = sync_engine.postgresql_connection_summary("postgresql://u:p@host.example:5432/")
         assert out["database_name"] == ""
 
 

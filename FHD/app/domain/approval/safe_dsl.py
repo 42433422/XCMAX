@@ -252,7 +252,7 @@ def should_trigger_condition(node, context: dict[str, Any]) -> bool:
         return evaluate_condition(node.condition_expression, context)
     except SafeEvaluationError as e:
         logger.warning(
-            "Condition evaluation failed for node %s: %s", getattr(node, 'id', 'unknown'), e
+            "Condition evaluation failed for node %s: %s", getattr(node, "id", "unknown"), e
         )
         return False  # Fail closed for safety
     except RECOVERABLE_ERRORS as e:

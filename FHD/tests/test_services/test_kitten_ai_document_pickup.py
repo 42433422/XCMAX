@@ -1,4 +1,5 @@
 """Tests for app.services.kitten_ai_document.pickup — document pickup store/pop."""
+
 from __future__ import annotations
 
 import json
@@ -19,10 +20,10 @@ from app.services.kitten_ai_document.pickup import (
     store_document_pickup,
 )
 
-
 # ---------------------------------------------------------------------------
 # _sanitize_token
 # ---------------------------------------------------------------------------
+
 
 class TestSanitizeToken:
     def test_valid_token(self):
@@ -57,12 +58,14 @@ class TestSanitizeToken:
 # _pickup_base_dir
 # ---------------------------------------------------------------------------
 
+
 class TestPickupBaseDir:
     def test_returns_writable_path(self):
         with tempfile.TemporaryDirectory() as tmp:
             with patch.dict(os.environ, {"KITTEN_PICKUP_DIR": tmp}):
                 # Reset cached value
                 import app.services.kitten_ai_document.pickup as mod
+
                 mod._CACHED_BASE = None
                 result = _pickup_base_dir()
             assert isinstance(result, Path)
@@ -74,6 +77,7 @@ class TestPickupBaseDir:
             os.environ.pop("KITTEN_PICKUP_DIR", None)
             os.environ.pop("WORKSPACE_ROOT", None)
             import app.services.kitten_ai_document.pickup as mod
+
             mod._CACHED_BASE = None
             result = _pickup_base_dir()
             assert isinstance(result, Path)
@@ -83,6 +87,7 @@ class TestPickupBaseDir:
 # ---------------------------------------------------------------------------
 # _prune_disk
 # ---------------------------------------------------------------------------
+
 
 class TestPruneDisk:
     def test_removes_expired_entries(self):
@@ -115,11 +120,13 @@ class TestPruneDisk:
 # store_document_pickup / pop_document_pickup
 # ---------------------------------------------------------------------------
 
+
 class TestStoreAndPopDocumentPickup:
     def test_store_and_pop_roundtrip(self):
         with tempfile.TemporaryDirectory() as tmp:
             with patch.dict(os.environ, {"KITTEN_PICKUP_DIR": tmp}):
                 import app.services.kitten_ai_document.pickup as mod
+
                 mod._CACHED_BASE = None
 
                 content = b"hello world document"
@@ -140,6 +147,7 @@ class TestStoreAndPopDocumentPickup:
         with tempfile.TemporaryDirectory() as tmp:
             with patch.dict(os.environ, {"KITTEN_PICKUP_DIR": tmp}):
                 import app.services.kitten_ai_document.pickup as mod
+
                 mod._CACHED_BASE = None
 
                 result = pop_document_pickup("nonexistent_token_12345")
@@ -159,6 +167,7 @@ class TestStoreAndPopDocumentPickup:
         with tempfile.TemporaryDirectory() as tmp:
             with patch.dict(os.environ, {"KITTEN_PICKUP_DIR": tmp}):
                 import app.services.kitten_ai_document.pickup as mod
+
                 mod._CACHED_BASE = None
 
                 token = store_document_pickup(b"data", "f.txt", "text/plain")
@@ -173,6 +182,7 @@ class TestStoreAndPopDocumentPickup:
         with tempfile.TemporaryDirectory() as tmp:
             with patch.dict(os.environ, {"KITTEN_PICKUP_DIR": tmp}):
                 import app.services.kitten_ai_document.pickup as mod
+
                 mod._CACHED_BASE = None
 
                 content = b"x" * 1024 * 100  # 100KB

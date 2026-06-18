@@ -39,7 +39,6 @@ import pytest
 
 from app.neuro_bus.events.base import EventMetadata, EventPriority, NeuroEvent
 
-
 # ===========================================================================
 # Shared fixtures
 # ===========================================================================
@@ -176,65 +175,85 @@ class TestPlatformStreamPayloadToOpenaiChunk:
     """Cover ``_platform_stream_payload_to_openai_chunk`` helper."""
 
     def test_empty_string_returns_none(self):
-        from app.services.conversation.modstore_adapter import _platform_stream_payload_to_openai_chunk
+        from app.services.conversation.modstore_adapter import (
+            _platform_stream_payload_to_openai_chunk,
+        )
 
         assert _platform_stream_payload_to_openai_chunk("") is None
 
     def test_done_returns_none(self):
-        from app.services.conversation.modstore_adapter import _platform_stream_payload_to_openai_chunk
+        from app.services.conversation.modstore_adapter import (
+            _platform_stream_payload_to_openai_chunk,
+        )
 
         assert _platform_stream_payload_to_openai_chunk("[DONE]") is None
 
     def test_invalid_json_returns_raw_text_as_content(self):
-        from app.services.conversation.modstore_adapter import _platform_stream_payload_to_openai_chunk
+        from app.services.conversation.modstore_adapter import (
+            _platform_stream_payload_to_openai_chunk,
+        )
 
         result = _platform_stream_payload_to_openai_chunk("not json")
         assert result["choices"][0]["delta"]["content"] == "not json"
 
     def test_valid_json_with_choices_normalizes(self):
-        from app.services.conversation.modstore_adapter import _platform_stream_payload_to_openai_chunk
+        from app.services.conversation.modstore_adapter import (
+            _platform_stream_payload_to_openai_chunk,
+        )
 
         data = json.dumps({"choices": [{"message": {"content": "hi"}, "index": 0}]})
         result = _platform_stream_payload_to_openai_chunk(data)
         assert result["choices"][0]["delta"]["content"] == "hi"
 
     def test_error_type_raises_value_error(self):
-        from app.services.conversation.modstore_adapter import _platform_stream_payload_to_openai_chunk
+        from app.services.conversation.modstore_adapter import (
+            _platform_stream_payload_to_openai_chunk,
+        )
 
         data = json.dumps({"type": "error", "message": "boom"})
         with pytest.raises(ValueError, match="boom"):
             _platform_stream_payload_to_openai_chunk(data)
 
     def test_plain_dict_with_content_returns_chunk(self):
-        from app.services.conversation.modstore_adapter import _platform_stream_payload_to_openai_chunk
+        from app.services.conversation.modstore_adapter import (
+            _platform_stream_payload_to_openai_chunk,
+        )
 
         data = json.dumps({"content": "hello"})
         result = _platform_stream_payload_to_openai_chunk(data)
         assert result["choices"][0]["delta"]["content"] == "hello"
 
     def test_plain_dict_with_text_field_returns_chunk(self):
-        from app.services.conversation.modstore_adapter import _platform_stream_payload_to_openai_chunk
+        from app.services.conversation.modstore_adapter import (
+            _platform_stream_payload_to_openai_chunk,
+        )
 
         data = json.dumps({"text": "world"})
         result = _platform_stream_payload_to_openai_chunk(data)
         assert result["choices"][0]["delta"]["content"] == "world"
 
     def test_plain_dict_with_delta_field_returns_chunk(self):
-        from app.services.conversation.modstore_adapter import _platform_stream_payload_to_openai_chunk
+        from app.services.conversation.modstore_adapter import (
+            _platform_stream_payload_to_openai_chunk,
+        )
 
         data = json.dumps({"delta": "delta_text"})
         result = _platform_stream_payload_to_openai_chunk(data)
         assert result["choices"][0]["delta"]["content"] == "delta_text"
 
     def test_plain_dict_with_tool_calls(self):
-        from app.services.conversation.modstore_adapter import _platform_stream_payload_to_openai_chunk
+        from app.services.conversation.modstore_adapter import (
+            _platform_stream_payload_to_openai_chunk,
+        )
 
         data = json.dumps({"tool_calls": [{"id": "tc1"}], "finish_reason": "stop"})
         result = _platform_stream_payload_to_openai_chunk(data)
         assert result["choices"][0]["delta"]["tool_calls"] == [{"id": "tc1"}]
 
     def test_plain_dict_empty_returns_none(self):
-        from app.services.conversation.modstore_adapter import _platform_stream_payload_to_openai_chunk
+        from app.services.conversation.modstore_adapter import (
+            _platform_stream_payload_to_openai_chunk,
+        )
 
         data = json.dumps({"other": 123})
         result = _platform_stream_payload_to_openai_chunk(data)
@@ -371,7 +390,11 @@ class TestModstorePlatformAdapterNormalizeResponse:
         a = ModstorePlatformAdapter()
         raw = {
             "choices": [
-                {"message": {"role": "assistant", "content": "hi"}, "index": 0, "finish_reason": "stop"}
+                {
+                    "message": {"role": "assistant", "content": "hi"},
+                    "index": 0,
+                    "finish_reason": "stop",
+                }
             ],
             "usage": {"prompt_tokens": 5},
             "model": "gpt-4",
@@ -456,12 +479,15 @@ class TestModstorePlatformAdapterChatCompletion:
         mock_client.is_closed = False
         a._client = mock_client
 
-        with patch(
-            "app.services.conversation.modstore_adapter.neuro_notify_ai_model_roundtrip",
-            create=True,
-        ), patch(
-            "app.neuro_bus.application_neuro_bridge.neuro_notify_ai_model_roundtrip",
-            create=True,
+        with (
+            patch(
+                "app.services.conversation.modstore_adapter.neuro_notify_ai_model_roundtrip",
+                create=True,
+            ),
+            patch(
+                "app.neuro_bus.application_neuro_bridge.neuro_notify_ai_model_roundtrip",
+                create=True,
+            ),
         ):
             result = await a.chat_completion([{"role": "user", "content": "hi"}])
         assert result["choices"][0]["message"]["content"] == "hello"
@@ -497,12 +523,15 @@ class TestModstorePlatformAdapterChatCompletion:
         mock_client.post = AsyncMock(return_value=mock_response)
         a._client = mock_client
 
-        with patch(
-            "app.services.conversation.modstore_adapter.neuro_notify_ai_model_roundtrip",
-            create=True,
-        ), patch(
-            "app.neuro_bus.application_neuro_bridge.neuro_notify_ai_model_roundtrip",
-            create=True,
+        with (
+            patch(
+                "app.services.conversation.modstore_adapter.neuro_notify_ai_model_roundtrip",
+                create=True,
+            ),
+            patch(
+                "app.neuro_bus.application_neuro_bridge.neuro_notify_ai_model_roundtrip",
+                create=True,
+            ),
         ):
             await a.chat_completion([{"role": "user", "content": "hi"}])
         call_kwargs = mock_client.post.call_args
@@ -563,10 +592,12 @@ class TestModstorePlatformAdapterRefreshToken:
         a = ModstorePlatformAdapter(auth_token="old")
         with patch.dict(
             "sys.modules",
-            {"app.fastapi_routes.market_account": MagicMock(
-                session_id_from_request=Mock(return_value=""),
-                session_market_token=Mock(return_value="new_token"),
-            )},
+            {
+                "app.fastapi_routes.market_account": MagicMock(
+                    session_id_from_request=Mock(return_value=""),
+                    session_market_token=Mock(return_value="new_token"),
+                )
+            },
         ):
             result = a.refresh_token_from_session(session_id="sid1")
         assert result is True
@@ -578,10 +609,12 @@ class TestModstorePlatformAdapterRefreshToken:
         a = ModstorePlatformAdapter(auth_token="old")
         with patch.dict(
             "sys.modules",
-            {"app.fastapi_routes.market_account": MagicMock(
-                session_id_from_request=Mock(return_value=""),
-                session_market_token=Mock(return_value=""),
-            )},
+            {
+                "app.fastapi_routes.market_account": MagicMock(
+                    session_id_from_request=Mock(return_value=""),
+                    session_market_token=Mock(return_value=""),
+                )
+            },
         ):
             result = a.refresh_token_from_session(session_id="sid1")
         assert result is False
@@ -773,7 +806,13 @@ class TestModstoreOpenAICompletionsCreate:
 
         a = ModstorePlatformAdapter(platform_url="http://test")
         mock_result = {
-            "choices": [{"message": {"role": "assistant", "content": "hi"}, "index": 0, "finish_reason": "stop"}],
+            "choices": [
+                {
+                    "message": {"role": "assistant", "content": "hi"},
+                    "index": 0,
+                    "finish_reason": "stop",
+                }
+            ],
             "usage": {},
             "model": "test/model",
         }
@@ -838,15 +877,18 @@ class TestEmployeeRegistryListPacks:
         from app.infrastructure.mods.employee_registry import EmployeeRegistry
 
         emp_dir = os.path.join(tmp_dir, "_employees", "pack1")
-        _write_manifest(emp_dir, {
-            "artifact": "employee_pack",
-            "id": "pack1",
-            "name": "Test Pack",
-            "version": "1.0",
-            "author": "dev",
-            "description": "desc",
-            "employee": {"id": "emp1"},
-        })
+        _write_manifest(
+            emp_dir,
+            {
+                "artifact": "employee_pack",
+                "id": "pack1",
+                "name": "Test Pack",
+                "version": "1.0",
+                "author": "dev",
+                "description": "desc",
+                "employee": {"id": "emp1"},
+            },
+        )
         reg = EmployeeRegistry(tmp_dir)
         packs = reg.list_packs()
         assert len(packs) == 1
@@ -891,16 +933,19 @@ class TestEmployeeRegistryListPacks:
         from app.infrastructure.mods.employee_registry import EmployeeRegistry
 
         emp_dir = os.path.join(tmp_dir, "_employees", "pack2")
-        _write_manifest(emp_dir, {
-            "artifact": "employee_pack",
-            "id": "pack2",
-            "name": "P2",
-            "version": "1.0",
-            "author": "",
-            "description": "",
-            "employee": {},
-            "xcagi_host_profile": {"panel_kind": "builtin_track"},
-        })
+        _write_manifest(
+            emp_dir,
+            {
+                "artifact": "employee_pack",
+                "id": "pack2",
+                "name": "P2",
+                "version": "1.0",
+                "author": "",
+                "description": "",
+                "employee": {},
+                "xcagi_host_profile": {"panel_kind": "builtin_track"},
+            },
+        )
         reg = EmployeeRegistry(tmp_dir)
         packs = reg.list_packs()
         assert packs[0]["xcagi_host_profile"] == {"panel_kind": "builtin_track"}
@@ -913,15 +958,18 @@ class TestEmployeeRegistryListForModsApi:
         from app.infrastructure.mods.employee_registry import EmployeeRegistry
 
         emp_dir = os.path.join(tmp_dir, "_employees", "pack1")
-        _write_manifest(emp_dir, {
-            "artifact": "employee_pack",
-            "id": "pack1",
-            "name": "Pack1",
-            "version": "2.0",
-            "author": "a",
-            "description": "d",
-            "employee": {"id": "e1"},
-        })
+        _write_manifest(
+            emp_dir,
+            {
+                "artifact": "employee_pack",
+                "id": "pack1",
+                "name": "Pack1",
+                "version": "2.0",
+                "author": "a",
+                "description": "d",
+                "employee": {"id": "e1"},
+            },
+        )
         reg = EmployeeRegistry(tmp_dir)
         rows = reg.list_for_mods_api()
         assert len(rows) == 1
@@ -932,17 +980,20 @@ class TestEmployeeRegistryListForModsApi:
         from app.infrastructure.mods.employee_registry import EmployeeRegistry
 
         emp_dir = os.path.join(tmp_dir, "_employees", "hfp")
-        _write_manifest(emp_dir, {
-            "artifact": "employee_pack",
-            "id": "hfp",
-            "name": "Host FP",
-            "version": "1.0",
-            "author": "",
-            "description": "",
-            "employee": {},
-            "config": {"host_foundation_pack": True},
-            "workflow_employees": [{"id": "w1"}],
-        })
+        _write_manifest(
+            emp_dir,
+            {
+                "artifact": "employee_pack",
+                "id": "hfp",
+                "name": "Host FP",
+                "version": "1.0",
+                "author": "",
+                "description": "",
+                "employee": {},
+                "config": {"host_foundation_pack": True},
+                "workflow_employees": [{"id": "w1"}],
+            },
+        )
         reg = EmployeeRegistry(tmp_dir)
         rows = reg.list_for_mods_api()
         assert rows[0]["workflow_employees"] == []
@@ -951,16 +1002,19 @@ class TestEmployeeRegistryListForModsApi:
         from app.infrastructure.mods.employee_registry import EmployeeRegistry
 
         emp_dir = os.path.join(tmp_dir, "_employees", "wp")
-        _write_manifest(emp_dir, {
-            "artifact": "employee_pack",
-            "id": "wp",
-            "name": "WP",
-            "version": "1.0",
-            "author": "",
-            "description": "",
-            "employee": {},
-            "workflow_employees": [{"id": "w1"}, {"id": "w2"}, "invalid"],
-        })
+        _write_manifest(
+            emp_dir,
+            {
+                "artifact": "employee_pack",
+                "id": "wp",
+                "name": "WP",
+                "version": "1.0",
+                "author": "",
+                "description": "",
+                "employee": {},
+                "workflow_employees": [{"id": "w1"}, {"id": "w2"}, "invalid"],
+            },
+        )
         reg = EmployeeRegistry(tmp_dir)
         rows = reg.list_for_mods_api()
         assert len(rows[0]["workflow_employees"]) == 2
@@ -990,10 +1044,10 @@ class TestEmployeeRegistryInstallFromPackage:
         assert "不存在" in msg
 
     def test_install_non_employee_pack_returns_false(self, tmp_dir):
-        from app.infrastructure.mods.employee_registry import EmployeeRegistry
-
         # Create a zip with a mod manifest (not employee_pack)
         import zipfile
+
+        from app.infrastructure.mods.employee_registry import EmployeeRegistry
 
         zip_path = os.path.join(tmp_dir, "mod.zip")
         with zipfile.ZipFile(zip_path, "w") as zf:
@@ -1004,9 +1058,9 @@ class TestEmployeeRegistryInstallFromPackage:
         assert "非 employee_pack" in msg
 
     def test_install_invalid_manifest_returns_false(self, tmp_dir):
-        from app.infrastructure.mods.employee_registry import EmployeeRegistry
-
         import zipfile
+
+        from app.infrastructure.mods.employee_registry import EmployeeRegistry
 
         zip_path = os.path.join(tmp_dir, "bad_emp.zip")
         manifest = {"artifact": "employee_pack", "id": "bad", "employee": None}
@@ -1017,9 +1071,9 @@ class TestEmployeeRegistryInstallFromPackage:
         assert ok is False
 
     def test_install_non_global_scope_returns_false(self, tmp_dir):
-        from app.infrastructure.mods.employee_registry import EmployeeRegistry
-
         import zipfile
+
+        from app.infrastructure.mods.employee_registry import EmployeeRegistry
 
         zip_path = os.path.join(tmp_dir, "host_emp.zip")
         manifest = {
@@ -1036,9 +1090,9 @@ class TestEmployeeRegistryInstallFromPackage:
         assert "scope" in msg
 
     def test_install_missing_id_returns_false(self, tmp_dir):
-        from app.infrastructure.mods.employee_registry import EmployeeRegistry
-
         import zipfile
+
+        from app.infrastructure.mods.employee_registry import EmployeeRegistry
 
         zip_path = os.path.join(tmp_dir, "noid.zip")
         manifest = {
@@ -1056,9 +1110,9 @@ class TestEmployeeRegistryInstallFromPackage:
         assert "id" in msg.lower()
 
     def test_install_global_employee_pack_success(self, tmp_dir):
-        from app.infrastructure.mods.employee_registry import EmployeeRegistry
-
         import zipfile
+
+        from app.infrastructure.mods.employee_registry import EmployeeRegistry
 
         zip_path = os.path.join(tmp_dir, "good.zip")
         manifest = {
@@ -1080,9 +1134,9 @@ class TestEmployeeRegistryInstallFromPackage:
         assert "安装成功" in msg
 
     def test_install_host_foundation_pack_success(self, tmp_dir):
-        from app.infrastructure.mods.employee_registry import EmployeeRegistry
-
         import zipfile
+
+        from app.infrastructure.mods.employee_registry import EmployeeRegistry
 
         zip_path = os.path.join(tmp_dir, "hf.zip")
         manifest = {
@@ -1106,9 +1160,9 @@ class TestEmployeeRegistryInstallFromPackage:
         assert "bridge" in msg
 
     def test_install_host_foundation_pack_bridges_not_ready(self, tmp_dir):
-        from app.infrastructure.mods.employee_registry import EmployeeRegistry
-
         import zipfile
+
+        from app.infrastructure.mods.employee_registry import EmployeeRegistry
 
         zip_path = os.path.join(tmp_dir, "hf2.zip")
         manifest = {
@@ -1132,10 +1186,10 @@ class TestEmployeeRegistryInstallFromPackage:
         assert "bridge 未齐" in msg
 
     def test_install_signature_error(self, tmp_dir):
+        import zipfile
+
         from app.infrastructure.mods.employee_registry import EmployeeRegistry
         from app.infrastructure.mods.package import ModSignatureError
-
-        import zipfile
 
         zip_path = os.path.join(tmp_dir, "sig_err.zip")
         manifest = {"artifact": "employee_pack", "id": "s1", "employee": {"id": "e1"}}
@@ -1188,11 +1242,14 @@ class TestEmployeeRegistryUninstallPack:
         from app.infrastructure.mods.employee_registry import EmployeeRegistry
 
         emp_dir = os.path.join(tmp_dir, "_employees", "pack1")
-        _write_manifest(emp_dir, {
-            "artifact": "employee_pack",
-            "id": "pack1",
-            "employee": {},
-        })
+        _write_manifest(
+            emp_dir,
+            {
+                "artifact": "employee_pack",
+                "id": "pack1",
+                "employee": {},
+            },
+        )
         reg = EmployeeRegistry(tmp_dir)
         with patch(
             "app.mod_sdk.employee_runtime.refresh_employee_pack_runtime",
@@ -1205,11 +1262,14 @@ class TestEmployeeRegistryUninstallPack:
         from app.infrastructure.mods.employee_registry import EmployeeRegistry
 
         emp_dir = os.path.join(tmp_dir, "_employees", "pack1")
-        _write_manifest(emp_dir, {
-            "artifact": "employee_pack",
-            "id": "pack1",
-            "employee": {},
-        })
+        _write_manifest(
+            emp_dir,
+            {
+                "artifact": "employee_pack",
+                "id": "pack1",
+                "employee": {},
+            },
+        )
         reg = EmployeeRegistry(tmp_dir)
         with patch(
             "app.mod_sdk.employee_runtime.refresh_employee_pack_runtime",
@@ -1228,7 +1288,9 @@ class TestGetEmployeeRegistry:
 
         # Clear the global registry to avoid cross-test pollution
         er_mod._registry.clear()
-        monkeypatch.setattr("app.infrastructure.mods.mod_manager._default_mods_root", lambda: tmp_dir)
+        monkeypatch.setattr(
+            "app.infrastructure.mods.mod_manager._default_mods_root", lambda: tmp_dir
+        )
         r1 = er_mod.get_employee_registry(tmp_dir)
         r2 = er_mod.get_employee_registry(tmp_dir)
         assert r1 is r2
@@ -1261,7 +1323,9 @@ class TestProductsDeleteByUnitPg:
         mock_eng = MagicMock()
         mock_insp = MagicMock()
         mock_insp.get_table_names.return_value = ["customers"]
-        with patch("app.infrastructure.persistence.compat_db.writes.inspect", return_value=mock_insp):
+        with patch(
+            "app.infrastructure.persistence.compat_db.writes.inspect", return_value=mock_insp
+        ):
             result = _products_delete_by_unit_pg(mock_eng, "unit1")
         assert result == 0
 
@@ -1272,7 +1336,9 @@ class TestProductsDeleteByUnitPg:
         mock_insp = MagicMock()
         mock_insp.get_table_names.return_value = ["products"]
         mock_insp.get_columns.return_value = [{"name": "id"}, {"name": "name"}]
-        with patch("app.infrastructure.persistence.compat_db.writes.inspect", return_value=mock_insp):
+        with patch(
+            "app.infrastructure.persistence.compat_db.writes.inspect", return_value=mock_insp
+        ):
             result = _products_delete_by_unit_pg(mock_eng, "unit1")
         assert result == 0
 
@@ -1281,29 +1347,39 @@ class TestPurchaseUnitsDeleteByNormUnitPg:
     """Cover ``_purchase_units_delete_by_norm_unit_pg``."""
 
     def test_empty_unit_name_returns_zero(self):
-        from app.infrastructure.persistence.compat_db.writes import _purchase_units_delete_by_norm_unit_pg
+        from app.infrastructure.persistence.compat_db.writes import (
+            _purchase_units_delete_by_norm_unit_pg,
+        )
 
         result = _purchase_units_delete_by_norm_unit_pg(MagicMock(), "")
         assert result == 0
 
     def test_no_purchase_units_table_returns_zero(self):
-        from app.infrastructure.persistence.compat_db.writes import _purchase_units_delete_by_norm_unit_pg
+        from app.infrastructure.persistence.compat_db.writes import (
+            _purchase_units_delete_by_norm_unit_pg,
+        )
 
         mock_eng = MagicMock()
         mock_insp = MagicMock()
         mock_insp.get_table_names.return_value = ["products"]
-        with patch("app.infrastructure.persistence.compat_db.writes.inspect", return_value=mock_insp):
+        with patch(
+            "app.infrastructure.persistence.compat_db.writes.inspect", return_value=mock_insp
+        ):
             result = _purchase_units_delete_by_norm_unit_pg(mock_eng, "unit1")
         assert result == 0
 
     def test_no_unit_name_column_returns_zero(self):
-        from app.infrastructure.persistence.compat_db.writes import _purchase_units_delete_by_norm_unit_pg
+        from app.infrastructure.persistence.compat_db.writes import (
+            _purchase_units_delete_by_norm_unit_pg,
+        )
 
         mock_eng = MagicMock()
         mock_insp = MagicMock()
         mock_insp.get_table_names.return_value = ["purchase_units"]
         mock_insp.get_columns.return_value = [{"name": "id"}]
-        with patch("app.infrastructure.persistence.compat_db.writes.inspect", return_value=mock_insp):
+        with patch(
+            "app.infrastructure.persistence.compat_db.writes.inspect", return_value=mock_insp
+        ):
             result = _purchase_units_delete_by_norm_unit_pg(mock_eng, "unit1")
         assert result == 0
 
@@ -1312,14 +1388,18 @@ class TestCustomersDeleteByNormNamePg:
     """Cover ``_customers_delete_by_norm_name_pg``."""
 
     def test_empty_name_returns_zero(self):
-        from app.infrastructure.persistence.compat_db.writes import _customers_delete_by_norm_name_pg
+        from app.infrastructure.persistence.compat_db.writes import (
+            _customers_delete_by_norm_name_pg,
+        )
 
         mock_insp = MagicMock()
         result = _customers_delete_by_norm_name_pg(MagicMock(), mock_insp, "")
         assert result == 0
 
     def test_no_customers_table_returns_zero(self):
-        from app.infrastructure.persistence.compat_db.writes import _customers_delete_by_norm_name_pg
+        from app.infrastructure.persistence.compat_db.writes import (
+            _customers_delete_by_norm_name_pg,
+        )
 
         mock_insp = MagicMock()
         mock_insp.get_table_names.return_value = ["products"]
@@ -1327,7 +1407,9 @@ class TestCustomersDeleteByNormNamePg:
         assert result == 0
 
     def test_no_name_column_returns_zero(self):
-        from app.infrastructure.persistence.compat_db.writes import _customers_delete_by_norm_name_pg
+        from app.infrastructure.persistence.compat_db.writes import (
+            _customers_delete_by_norm_name_pg,
+        )
 
         mock_insp = MagicMock()
         mock_insp.get_table_names.return_value = ["customers"]
@@ -1345,7 +1427,9 @@ class TestPurchaseUnitsDeleteByIdPg:
         mock_eng = MagicMock()
         mock_insp = MagicMock()
         mock_insp.get_table_names.return_value = ["products"]
-        with patch("app.infrastructure.persistence.compat_db.writes.inspect", return_value=mock_insp):
+        with patch(
+            "app.infrastructure.persistence.compat_db.writes.inspect", return_value=mock_insp
+        ):
             result = _purchase_units_delete_by_id_pg(mock_eng, 1)
         assert result == 0
 
@@ -1356,7 +1440,9 @@ class TestPurchaseUnitsDeleteByIdPg:
         mock_insp = MagicMock()
         mock_insp.get_table_names.return_value = ["purchase_units"]
         mock_insp.get_columns.return_value = [{"name": "unit_name"}]
-        with patch("app.infrastructure.persistence.compat_db.writes.inspect", return_value=mock_insp):
+        with patch(
+            "app.infrastructure.persistence.compat_db.writes.inspect", return_value=mock_insp
+        ):
             result = _purchase_units_delete_by_id_pg(mock_eng, 1)
         assert result == 0
 
@@ -1410,7 +1496,9 @@ class TestProductsUnitReplacePg:
         mock_eng = MagicMock()
         mock_insp = MagicMock()
         mock_insp.get_table_names.return_value = ["customers"]
-        with patch("app.infrastructure.persistence.compat_db.writes.inspect", return_value=mock_insp):
+        with patch(
+            "app.infrastructure.persistence.compat_db.writes.inspect", return_value=mock_insp
+        ):
             result = _products_unit_replace_pg(mock_eng, "old", "new")
         assert result is None
 
@@ -1492,16 +1580,20 @@ class TestCustomerPgDeleteAnywhere:
         mock_eng = MagicMock()
         mock_insp = MagicMock()
         mock_insp.get_table_names.return_value = []
-        with patch(
-            "app.infrastructure.persistence.compat_db.writes._customer_pg_engine_insp",
-            return_value=(mock_eng, mock_insp),
-        ), patch(
-            "app.infrastructure.persistence.compat_db.writes._customer_pg_select_customers_name_by_id",
-            return_value=None,
-        ), patch(
-            "app.infrastructure.persistence.compat_db.queries._customer_find_by_id",
-            return_value=None,
-            create=True,
+        with (
+            patch(
+                "app.infrastructure.persistence.compat_db.writes._customer_pg_engine_insp",
+                return_value=(mock_eng, mock_insp),
+            ),
+            patch(
+                "app.infrastructure.persistence.compat_db.writes._customer_pg_select_customers_name_by_id",
+                return_value=None,
+            ),
+            patch(
+                "app.infrastructure.persistence.compat_db.queries._customer_find_by_id",
+                return_value=None,
+                create=True,
+            ),
         ):
             with pytest.raises(Exception) as exc_info:
                 _customer_pg_delete_anywhere(999)
@@ -1515,17 +1607,23 @@ class TestProductsPgUpdateRow:
         from app.infrastructure.persistence.compat_db.writes import products_pg_update_row
 
         mock_eng = MagicMock()
-        with patch(
-            "app.infrastructure.persistence.compat_db.writes.get_sync_engine",
-            return_value=mock_eng,
-        ), patch(
-            "app.infrastructure.persistence.compat_db.writes._products_pg_col_names",
-            return_value={"id"},
+        with (
+            patch(
+                "app.infrastructure.persistence.compat_db.writes.get_sync_engine",
+                return_value=mock_eng,
+            ),
+            patch(
+                "app.infrastructure.persistence.compat_db.writes._products_pg_col_names",
+                return_value={"id"},
+            ),
         ):
             with pytest.raises(Exception) as exc_info:
                 products_pg_update_row(
-                    1, {"name": "x"}, parse_price=lambda x: x,
-                    parse_quantity=lambda x: x, parse_is_active=lambda x: x,
+                    1,
+                    {"name": "x"},
+                    parse_price=lambda x: x,
+                    parse_quantity=lambda x: x,
+                    parse_is_active=lambda x: x,
                 )
             assert exc_info.value.status_code == 503
 
@@ -1533,17 +1631,23 @@ class TestProductsPgUpdateRow:
         from app.infrastructure.persistence.compat_db.writes import products_pg_update_row
 
         mock_eng = MagicMock()
-        with patch(
-            "app.infrastructure.persistence.compat_db.writes.get_sync_engine",
-            return_value=mock_eng,
-        ), patch(
-            "app.infrastructure.persistence.compat_db.writes._products_pg_col_names",
-            return_value={"id", "model_number", "name"},
+        with (
+            patch(
+                "app.infrastructure.persistence.compat_db.writes.get_sync_engine",
+                return_value=mock_eng,
+            ),
+            patch(
+                "app.infrastructure.persistence.compat_db.writes._products_pg_col_names",
+                return_value={"id", "model_number", "name"},
+            ),
         ):
             with pytest.raises(Exception) as exc_info:
                 products_pg_update_row(
-                    1, {"name": ""}, parse_price=lambda x: x,
-                    parse_quantity=lambda x: x, parse_is_active=lambda x: x,
+                    1,
+                    {"name": ""},
+                    parse_price=lambda x: x,
+                    parse_quantity=lambda x: x,
+                    parse_is_active=lambda x: x,
                 )
             assert exc_info.value.status_code == 400
 
@@ -1557,20 +1661,26 @@ class TestProductsPgInsertRow:
         mock_eng = MagicMock()
         mock_excel = MagicMock()
         mock_excel._norm_model = MagicMock(return_value="model")
-        with patch(
-            "app.infrastructure.persistence.compat_db.writes.get_sync_engine",
-            return_value=mock_eng,
-        ), patch(
-            "app.infrastructure.persistence.compat_db.writes._products_pg_col_names",
-            return_value={"id"},
-        ), patch.dict(
-            "sys.modules",
-            {"app.application.excel_imports": mock_excel},
+        with (
+            patch(
+                "app.infrastructure.persistence.compat_db.writes.get_sync_engine",
+                return_value=mock_eng,
+            ),
+            patch(
+                "app.infrastructure.persistence.compat_db.writes._products_pg_col_names",
+                return_value={"id"},
+            ),
+            patch.dict(
+                "sys.modules",
+                {"app.application.excel_imports": mock_excel},
+            ),
         ):
             with pytest.raises(Exception) as exc_info:
                 products_pg_insert_row(
-                    {"name": "x"}, parse_price=lambda x: x,
-                    parse_quantity=lambda x: x, parse_is_active=lambda x: x,
+                    {"name": "x"},
+                    parse_price=lambda x: x,
+                    parse_quantity=lambda x: x,
+                    parse_is_active=lambda x: x,
                 )
             assert exc_info.value.status_code == 503
 
@@ -1580,20 +1690,26 @@ class TestProductsPgInsertRow:
         mock_eng = MagicMock()
         mock_excel = MagicMock()
         mock_excel._norm_model = MagicMock(return_value="model")
-        with patch(
-            "app.infrastructure.persistence.compat_db.writes.get_sync_engine",
-            return_value=mock_eng,
-        ), patch(
-            "app.infrastructure.persistence.compat_db.writes._products_pg_col_names",
-            return_value={"model_number", "name"},
-        ), patch.dict(
-            "sys.modules",
-            {"app.application.excel_imports": mock_excel},
+        with (
+            patch(
+                "app.infrastructure.persistence.compat_db.writes.get_sync_engine",
+                return_value=mock_eng,
+            ),
+            patch(
+                "app.infrastructure.persistence.compat_db.writes._products_pg_col_names",
+                return_value={"model_number", "name"},
+            ),
+            patch.dict(
+                "sys.modules",
+                {"app.application.excel_imports": mock_excel},
+            ),
         ):
             with pytest.raises(Exception) as exc_info:
                 products_pg_insert_row(
-                    {"name": ""}, parse_price=lambda x: x,
-                    parse_quantity=lambda x: x, parse_is_active=lambda x: x,
+                    {"name": ""},
+                    parse_price=lambda x: x,
+                    parse_quantity=lambda x: x,
+                    parse_is_active=lambda x: x,
                 )
             assert exc_info.value.status_code == 400
 
@@ -1612,12 +1728,15 @@ class TestProductsPgDeleteRow:
         mock_eng.begin.return_value.__enter__ = Mock(return_value=mock_conn)
         mock_eng.begin.return_value.__exit__ = Mock(return_value=False)
 
-        with patch(
-            "app.infrastructure.persistence.compat_db.writes.get_sync_engine",
-            return_value=mock_eng,
-        ), patch(
-            "app.infrastructure.persistence.compat_db.writes._products_pg_col_names",
-            return_value={"id"},
+        with (
+            patch(
+                "app.infrastructure.persistence.compat_db.writes.get_sync_engine",
+                return_value=mock_eng,
+            ),
+            patch(
+                "app.infrastructure.persistence.compat_db.writes._products_pg_col_names",
+                return_value={"id"},
+            ),
         ):
             with pytest.raises(Exception) as exc_info:
                 products_pg_delete_row(999)
@@ -1638,12 +1757,15 @@ class TestProductsPgBatchDeleteRows:
         mock_eng.begin.return_value.__enter__ = Mock(return_value=mock_conn)
         mock_eng.begin.return_value.__exit__ = Mock(return_value=False)
 
-        with patch(
-            "app.infrastructure.persistence.compat_db.writes.get_sync_engine",
-            return_value=mock_eng,
-        ), patch(
-            "app.infrastructure.persistence.compat_db.writes._products_pg_col_names",
-            return_value={"id"},
+        with (
+            patch(
+                "app.infrastructure.persistence.compat_db.writes.get_sync_engine",
+                return_value=mock_eng,
+            ),
+            patch(
+                "app.infrastructure.persistence.compat_db.writes._products_pg_col_names",
+                return_value={"id"},
+            ),
         ):
             deleted, skipped = products_pg_batch_delete_rows(["abc", None, False])
         assert deleted == 0
@@ -2085,7 +2207,9 @@ class TestChartDataServiceProductPieChart:
         row = MagicMock()
         row.product_name = "Widget"
         row.total = 100.0
-        mock_db.query.return_value.filter.return_value.group_by.return_value.order_by.return_value.limit.return_value.all.return_value = [row]
+        mock_db.query.return_value.filter.return_value.group_by.return_value.order_by.return_value.limit.return_value.all.return_value = [
+            row
+        ]
         mock_db.__enter__ = Mock(return_value=mock_db)
         mock_db.__exit__ = Mock(return_value=False)
 
@@ -2119,7 +2243,9 @@ class TestChartDataServiceCustomerBarChart:
         row.purchase_unit = "A" * 15  # longer than 10 chars
         row.total = 500.0
         row.count = 3
-        mock_db.query.return_value.filter.return_value.group_by.return_value.order_by.return_value.limit.return_value.all.return_value = [row]
+        mock_db.query.return_value.filter.return_value.group_by.return_value.order_by.return_value.limit.return_value.all.return_value = [
+            row
+        ]
         mock_db.__enter__ = Mock(return_value=mock_db)
         mock_db.__exit__ = Mock(return_value=False)
 
@@ -2137,7 +2263,9 @@ class TestChartDataServiceCustomerBarChart:
         row.purchase_unit = "Short"
         row.total = 200.0
         row.count = 1
-        mock_db.query.return_value.filter.return_value.group_by.return_value.order_by.return_value.limit.return_value.all.return_value = [row]
+        mock_db.query.return_value.filter.return_value.group_by.return_value.order_by.return_value.limit.return_value.all.return_value = [
+            row
+        ]
         mock_db.__enter__ = Mock(return_value=mock_db)
         mock_db.__exit__ = Mock(return_value=False)
 
@@ -2200,8 +2328,9 @@ class TestChartDataServiceInventoryChart:
         but it's unreachable because ProgrammingError isn't caught by RECOVERABLE_ERRORS.
         We verify the exception propagates instead.
         """
-        from app.services.kitten_report.chart_data_service import ChartDataService
         from sqlalchemy.exc import ProgrammingError
+
+        from app.services.kitten_report.chart_data_service import ChartDataService
 
         svc = ChartDataService()
         err = ProgrammingError("SELECT 1", {}, Exception("table does not exist"))
@@ -2239,11 +2368,13 @@ class TestChartDataServiceGetAllChartsData:
         from app.services.kitten_report.chart_data_service import ChartDataService
 
         svc = ChartDataService()
-        with patch.object(svc, "get_revenue_chart_data", return_value={"success": True}), \
-             patch.object(svc, "get_product_pie_chart_data", return_value={"success": True}), \
-             patch.object(svc, "get_customer_bar_chart_data", return_value={"success": True}), \
-             patch.object(svc, "get_profit_trend_chart_data", return_value={"success": True}), \
-             patch.object(svc, "get_inventory_chart_data", return_value={"success": True}):
+        with (
+            patch.object(svc, "get_revenue_chart_data", return_value={"success": True}),
+            patch.object(svc, "get_product_pie_chart_data", return_value={"success": True}),
+            patch.object(svc, "get_customer_bar_chart_data", return_value={"success": True}),
+            patch.object(svc, "get_profit_trend_chart_data", return_value={"success": True}),
+            patch.object(svc, "get_inventory_chart_data", return_value={"success": True}),
+        ):
             result = svc.get_all_charts_data()
         assert "revenue_trend" in result
         assert "product_distribution" in result
@@ -2431,12 +2562,15 @@ class TestComputeOperationsHealth:
         mock_resp.status_code = 200
         mock_resp.json.return_value = {"java_service_healthy": True, "payment_backend": "java"}
 
-        with patch(
-            "app.services.operations_line_bridge._scan_pipelines",
-            return_value=(0, 0, 0, {}),
-        ), patch(
-            "httpx.get",
-            return_value=mock_resp,
+        with (
+            patch(
+                "app.services.operations_line_bridge._scan_pipelines",
+                return_value=(0, 0, 0, {}),
+            ),
+            patch(
+                "httpx.get",
+                return_value=mock_resp,
+            ),
         ):
             result = compute_operations_health()
         assert result["steps"]["O4"]["status"] == "done"
@@ -2448,12 +2582,15 @@ class TestComputeOperationsHealth:
         monkeypatch.delenv("MODEL_PAYMENT_BACKEND", raising=False)
         monkeypatch.delenv("PAYMENT_BACKEND", raising=False)
 
-        with patch(
-            "app.services.operations_line_bridge._scan_pipelines",
-            return_value=(0, 0, 0, {}),
-        ), patch(
-            "httpx.get",
-            side_effect=OSError("conn refused"),
+        with (
+            patch(
+                "app.services.operations_line_bridge._scan_pipelines",
+                return_value=(0, 0, 0, {}),
+            ),
+            patch(
+                "httpx.get",
+                side_effect=OSError("conn refused"),
+            ),
         ):
             result = compute_operations_health()
         assert result["steps"]["O4"]["status"] == "partial"
@@ -2468,12 +2605,15 @@ class TestComputeOperationsHealth:
         mock_resp = MagicMock()
         mock_resp.status_code = 500
 
-        with patch(
-            "app.services.operations_line_bridge._scan_pipelines",
-            return_value=(0, 0, 0, {}),
-        ), patch(
-            "httpx.get",
-            return_value=mock_resp,
+        with (
+            patch(
+                "app.services.operations_line_bridge._scan_pipelines",
+                return_value=(0, 0, 0, {}),
+            ),
+            patch(
+                "httpx.get",
+                return_value=mock_resp,
+            ),
         ):
             result = compute_operations_health()
         assert result["steps"]["O4"]["status"] == "partial"
@@ -2485,18 +2625,19 @@ class TestComputeOperationsHealth:
         monkeypatch.delenv("MODEL_PAYMENT_BACKEND", raising=False)
         monkeypatch.delenv("PAYMENT_BACKEND", raising=False)
 
-        mock_signoff = MagicMock(
-            return_value={"backend": "postgres", "note": "PG签收存储"}
-        )
+        mock_signoff = MagicMock(return_value={"backend": "postgres", "note": "PG签收存储"})
         mock_module = MagicMock()
         mock_module.signoff_backend_info = mock_signoff
 
-        with patch(
-            "app.services.operations_line_bridge._scan_pipelines",
-            return_value=(0, 0, 0, {}),
-        ), patch.dict(
-            "sys.modules",
-            {"app.services.user_cs_delivery_signoff": mock_module},
+        with (
+            patch(
+                "app.services.operations_line_bridge._scan_pipelines",
+                return_value=(0, 0, 0, {}),
+            ),
+            patch.dict(
+                "sys.modules",
+                {"app.services.user_cs_delivery_signoff": mock_module},
+            ),
         ):
             result = compute_operations_health()
         assert result["steps"]["O8"]["status"] == "done"
@@ -2508,18 +2649,19 @@ class TestComputeOperationsHealth:
         monkeypatch.delenv("MODEL_PAYMENT_BACKEND", raising=False)
         monkeypatch.delenv("PAYMENT_BACKEND", raising=False)
 
-        mock_signoff = MagicMock(
-            return_value={"backend": "sqlite", "note": "本地签收"}
-        )
+        mock_signoff = MagicMock(return_value={"backend": "sqlite", "note": "本地签收"})
         mock_module = MagicMock()
         mock_module.signoff_backend_info = mock_signoff
 
-        with patch(
-            "app.services.operations_line_bridge._scan_pipelines",
-            return_value=(0, 0, 0, {}),
-        ), patch.dict(
-            "sys.modules",
-            {"app.services.user_cs_delivery_signoff": mock_module},
+        with (
+            patch(
+                "app.services.operations_line_bridge._scan_pipelines",
+                return_value=(0, 0, 0, {}),
+            ),
+            patch.dict(
+                "sys.modules",
+                {"app.services.user_cs_delivery_signoff": mock_module},
+            ),
         ):
             result = compute_operations_health()
         assert result["steps"]["O8"]["status"] == "partial"
@@ -2540,12 +2682,15 @@ class TestComputeOperationsHealth:
         mock_module = MagicMock()
         mock_module.get_reconciliation_status = mock_rec
 
-        with patch(
-            "app.services.operations_line_bridge._scan_pipelines",
-            return_value=(0, 0, 0, {}),
-        ), patch.dict(
-            "sys.modules",
-            {"app.services.reconciliation_scheduler": mock_module},
+        with (
+            patch(
+                "app.services.operations_line_bridge._scan_pipelines",
+                return_value=(0, 0, 0, {}),
+            ),
+            patch.dict(
+                "sys.modules",
+                {"app.services.reconciliation_scheduler": mock_module},
+            ),
         ):
             result = compute_operations_health()
         assert result["steps"]["O10"]["status"] == "partial"
@@ -2558,18 +2703,19 @@ class TestComputeOperationsHealth:
         monkeypatch.delenv("MODEL_PAYMENT_BACKEND", raising=False)
         monkeypatch.delenv("PAYMENT_BACKEND", raising=False)
 
-        mock_rec = MagicMock(
-            return_value={"last_run": None, "auto_confirm_enabled": False}
-        )
+        mock_rec = MagicMock(return_value={"last_run": None, "auto_confirm_enabled": False})
         mock_module = MagicMock()
         mock_module.get_reconciliation_status = mock_rec
 
-        with patch(
-            "app.services.operations_line_bridge._scan_pipelines",
-            return_value=(0, 0, 0, {}),
-        ), patch.dict(
-            "sys.modules",
-            {"app.services.reconciliation_scheduler": mock_module},
+        with (
+            patch(
+                "app.services.operations_line_bridge._scan_pipelines",
+                return_value=(0, 0, 0, {}),
+            ),
+            patch.dict(
+                "sys.modules",
+                {"app.services.reconciliation_scheduler": mock_module},
+            ),
         ):
             result = compute_operations_health()
         # O10 should stay at default partial

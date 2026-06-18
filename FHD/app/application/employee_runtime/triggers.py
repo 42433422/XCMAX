@@ -148,9 +148,7 @@ def refresh_employee_triggers(pack_id: str | None = None) -> dict[str, Any]:
     return {
         "registered": registered,
         "active_employees": list(_ACTIVE_SUBSCRIPTIONS.keys()),
-        "event_types": sorted(
-            {e for subs in _ACTIVE_SUBSCRIPTIONS.values() for e, _ in subs}
-        ),
+        "event_types": sorted({e for subs in _ACTIVE_SUBSCRIPTIONS.values() for e, _ in subs}),
     }
 
 

@@ -1,4 +1,5 @@
 """Tests for app.desktop_runtime.paths."""
+
 from __future__ import annotations
 
 import os

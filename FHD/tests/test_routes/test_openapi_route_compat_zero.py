@@ -1,4 +1,5 @@
 """Tests for app.fastapi_routes.openapi_route_compat."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -10,6 +11,7 @@ from fastapi import FastAPI
 from app.fastapi_routes.openapi_route_compat import (
     hide_trailing_slash_openapi_duplicates,
     include_router_with_slash_compat,
+    iter_effective_routes,
 )
 
 
@@ -78,7 +80,7 @@ class TestIncludeRouterWithSlashCompat:
 
         include_router_with_slash_compat(app, router)
         # Verify the route was included
-        routes = [r.path for r in app.routes if hasattr(r, "path")]
+        routes = [r.path for r in iter_effective_routes(app.routes)]
         assert "/hello" in routes
 
     def test_includes_router_without_hiding(self) -> None:
@@ -92,5 +94,5 @@ class TestIncludeRouterWithSlashCompat:
             return {"simple": "true"}
 
         include_router_with_slash_compat(app, router, hide_slash_in_schema=False)
-        routes = [r.path for r in app.routes if hasattr(r, "path")]
+        routes = [r.path for r in iter_effective_routes(app.routes)]
         assert "/simple" in routes

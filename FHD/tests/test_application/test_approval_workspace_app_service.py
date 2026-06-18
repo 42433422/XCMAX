@@ -180,9 +180,7 @@ class TestNodeQueryForUser:
 class TestResolveActor:
     def test_session_user_found(self):
         request = Mock()
-        with patch(
-            "app.infrastructure.auth.dependencies.resolve_session_user"
-        ) as mock_resolve:
+        with patch("app.infrastructure.auth.dependencies.resolve_session_user") as mock_resolve:
             user = Mock()
             user.id = 42
             mock_resolve.return_value = user
@@ -191,9 +189,7 @@ class TestResolveActor:
 
     def test_session_user_no_id(self):
         request = Mock()
-        with patch(
-            "app.infrastructure.auth.dependencies.resolve_session_user"
-        ) as mock_resolve:
+        with patch("app.infrastructure.auth.dependencies.resolve_session_user") as mock_resolve:
             user = Mock()
             user.id = None
             mock_resolve.return_value = user
@@ -204,9 +200,7 @@ class TestResolveActor:
 
     def test_session_user_none(self):
         request = Mock()
-        with patch(
-            "app.infrastructure.auth.dependencies.resolve_session_user"
-        ) as mock_resolve:
+        with patch("app.infrastructure.auth.dependencies.resolve_session_user") as mock_resolve:
             mock_resolve.return_value = None
             result = _resolve_actor(request)
             assert result is None
@@ -214,9 +208,7 @@ class TestResolveActor:
     def test_x_user_id_header_allowed(self, monkeypatch):
         monkeypatch.setenv("FHD_ALLOW_X_USER_ID_HEADER", "1")
         request = Mock()
-        with patch(
-            "app.infrastructure.auth.dependencies.resolve_session_user"
-        ) as mock_resolve:
+        with patch("app.infrastructure.auth.dependencies.resolve_session_user") as mock_resolve:
             mock_resolve.return_value = None
             result = _resolve_actor(request, x_user_id="5")
             assert result == 5
@@ -224,9 +216,7 @@ class TestResolveActor:
     def test_x_user_id_header_not_allowed(self, monkeypatch):
         monkeypatch.delenv("FHD_ALLOW_X_USER_ID_HEADER", raising=False)
         request = Mock()
-        with patch(
-            "app.infrastructure.auth.dependencies.resolve_session_user"
-        ) as mock_resolve:
+        with patch("app.infrastructure.auth.dependencies.resolve_session_user") as mock_resolve:
             mock_resolve.return_value = None
             result = _resolve_actor(request, x_user_id="5")
             assert result is None
@@ -234,36 +224,28 @@ class TestResolveActor:
     def test_x_user_id_non_digit(self, monkeypatch):
         monkeypatch.setenv("FHD_ALLOW_X_USER_ID_HEADER", "1")
         request = Mock()
-        with patch(
-            "app.infrastructure.auth.dependencies.resolve_session_user"
-        ) as mock_resolve:
+        with patch("app.infrastructure.auth.dependencies.resolve_session_user") as mock_resolve:
             mock_resolve.return_value = None
             result = _resolve_actor(request, x_user_id="abc")
             assert result is None
 
     def test_fallback_used(self):
         request = Mock()
-        with patch(
-            "app.infrastructure.auth.dependencies.resolve_session_user"
-        ) as mock_resolve:
+        with patch("app.infrastructure.auth.dependencies.resolve_session_user") as mock_resolve:
             mock_resolve.return_value = None
             result = _resolve_actor(request, fallback=99)
             assert result == 99
 
     def test_fallback_invalid(self):
         request = Mock()
-        with patch(
-            "app.infrastructure.auth.dependencies.resolve_session_user"
-        ) as mock_resolve:
+        with patch("app.infrastructure.auth.dependencies.resolve_session_user") as mock_resolve:
             mock_resolve.return_value = None
             result = _resolve_actor(request, fallback="not_a_number")
             assert result is None
 
     def test_fallback_none(self):
         request = Mock()
-        with patch(
-            "app.infrastructure.auth.dependencies.resolve_session_user"
-        ) as mock_resolve:
+        with patch("app.infrastructure.auth.dependencies.resolve_session_user") as mock_resolve:
             mock_resolve.return_value = None
             result = _resolve_actor(request, fallback=None)
             assert result is None
@@ -492,7 +474,10 @@ class TestListRequests:
         mock_query.limit.return_value = mock_query
         mock_query.all.return_value = []
 
-        with patch("app.application.approval_workspace_app_service.get_db", return_value=_make_db_ctx(mock_db)):
+        with patch(
+            "app.application.approval_workspace_app_service.get_db",
+            return_value=_make_db_ctx(mock_db),
+        ):
             result = list_requests(page=1, page_size=50)
             assert result["success"] is True
             assert result["data"] == []
@@ -508,7 +493,10 @@ class TestListRequests:
         mock_query.limit.return_value = mock_query
         mock_query.all.return_value = []
 
-        with patch("app.application.approval_workspace_app_service.get_db", return_value=_make_db_ctx(mock_db)):
+        with patch(
+            "app.application.approval_workspace_app_service.get_db",
+            return_value=_make_db_ctx(mock_db),
+        ):
             result = list_requests(applicant_id=1, page=1, page_size=50)
             assert result["success"] is True
 
@@ -523,7 +511,10 @@ class TestListRequests:
         mock_query.limit.return_value = mock_query
         mock_query.all.return_value = []
 
-        with patch("app.application.approval_workspace_app_service.get_db", return_value=_make_db_ctx(mock_db)):
+        with patch(
+            "app.application.approval_workspace_app_service.get_db",
+            return_value=_make_db_ctx(mock_db),
+        ):
             result = list_requests(status="pending", page=1, page_size=50)
             assert result["success"] is True
 
@@ -544,7 +535,10 @@ class TestListRequests:
         req.status = "pending"
         mock_query.all.return_value = [req]
 
-        with patch("app.application.approval_workspace_app_service.get_db", return_value=_make_db_ctx(mock_db)):
+        with patch(
+            "app.application.approval_workspace_app_service.get_db",
+            return_value=_make_db_ctx(mock_db),
+        ):
             result = list_requests(approver_id=1, page=1, page_size=50)
             # current_node is None so the request is filtered out
             assert result["pagination"]["returned"] == 0
@@ -560,7 +554,10 @@ class TestListRequests:
         mock_query.limit.return_value = mock_query
         mock_query.all.return_value = []
 
-        with patch("app.application.approval_workspace_app_service.get_db", return_value=_make_db_ctx(mock_db)):
+        with patch(
+            "app.application.approval_workspace_app_service.get_db",
+            return_value=_make_db_ctx(mock_db),
+        ):
             result = list_requests(business_type="general", page=1, page_size=50)
             assert result["success"] is True
 
@@ -571,9 +568,7 @@ class TestListRequests:
 class TestCleanupRequests:
     def test_cleanup_no_actor_raises_401(self):
         request = Mock()
-        with patch(
-            "app.application.approval_workspace_app_service._resolve_actor"
-        ) as mock_resolve:
+        with patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve:
             mock_resolve.return_value = None
             with pytest.raises(Exception) as exc_info:
                 cleanup_requests(request, body={})
@@ -581,9 +576,7 @@ class TestCleanupRequests:
 
     def test_cleanup_unsupported_scope_returns_400(self):
         request = Mock()
-        with patch(
-            "app.application.approval_workspace_app_service._resolve_actor"
-        ) as mock_resolve:
+        with patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve:
             mock_resolve.return_value = 1
             result = cleanup_requests(request, body={"scope": "all_users"})
             assert result.status_code == 400
@@ -596,11 +589,10 @@ class TestCleanupRequests:
         mock_query.filter.return_value = mock_query
         mock_query.all.return_value = []
 
-        with patch(
-            "app.application.approval_workspace_app_service._resolve_actor"
-        ) as mock_resolve, patch(
-            "app.application.approval_workspace_app_service.get_db"
-        ) as mock_get_db:
+        with (
+            patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve,
+            patch("app.application.approval_workspace_app_service.get_db") as mock_get_db,
+        ):
             mock_resolve.return_value = 1
             mock_get_db.return_value = _make_db_ctx(mock_db)
             result = cleanup_requests(request, body={"dry_run": True})
@@ -615,11 +607,10 @@ class TestCleanupRequests:
         mock_query.filter.return_value = mock_query
         mock_query.all.return_value = []
 
-        with patch(
-            "app.application.approval_workspace_app_service._resolve_actor"
-        ) as mock_resolve, patch(
-            "app.application.approval_workspace_app_service.get_db"
-        ) as mock_get_db:
+        with (
+            patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve,
+            patch("app.application.approval_workspace_app_service.get_db") as mock_get_db,
+        ):
             mock_resolve.return_value = 1
             mock_get_db.return_value = _make_db_ctx(mock_db)
             result = cleanup_requests(request, body={"before_days": 30})
@@ -633,11 +624,10 @@ class TestCleanupRequests:
         mock_query.filter.return_value = mock_query
         mock_query.all.return_value = []
 
-        with patch(
-            "app.application.approval_workspace_app_service._resolve_actor"
-        ) as mock_resolve, patch(
-            "app.application.approval_workspace_app_service.get_db"
-        ) as mock_get_db:
+        with (
+            patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve,
+            patch("app.application.approval_workspace_app_service.get_db") as mock_get_db,
+        ):
             mock_resolve.return_value = 1
             mock_get_db.return_value = _make_db_ctx(mock_db)
             result = cleanup_requests(request, body={"before_days": -5})
@@ -652,11 +642,10 @@ class TestCleanupRequests:
         mock_query.filter.return_value = mock_query
         mock_query.all.return_value = []
 
-        with patch(
-            "app.application.approval_workspace_app_service._resolve_actor"
-        ) as mock_resolve, patch(
-            "app.application.approval_workspace_app_service.get_db"
-        ) as mock_get_db:
+        with (
+            patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve,
+            patch("app.application.approval_workspace_app_service.get_db") as mock_get_db,
+        ):
             mock_resolve.return_value = 1
             mock_get_db.return_value = _make_db_ctx(mock_db)
             result = cleanup_requests(request, body={"before_days": "abc"})
@@ -675,12 +664,10 @@ class TestCleanupRequests:
         req1.request_no = "APR20260101-ABC"
         mock_query.all.return_value = [req1]
 
-        with patch(
-            "app.application.approval_workspace_app_service._resolve_actor"
-        ) as mock_resolve, patch(
-            "app.application.approval_workspace_app_service.get_db"
-        ) as mock_get_db, patch(
-            "app.application.approval_workspace_app_service._audit"
+        with (
+            patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve,
+            patch("app.application.approval_workspace_app_service.get_db") as mock_get_db,
+            patch("app.application.approval_workspace_app_service._audit"),
         ):
             mock_resolve.return_value = 1
             mock_get_db.return_value = _make_db_ctx(mock_db)
@@ -698,11 +685,10 @@ class TestCleanupRequests:
         mock_query.filter.return_value = mock_query
         mock_query.all.return_value = []
 
-        with patch(
-            "app.application.approval_workspace_app_service._resolve_actor"
-        ) as mock_resolve, patch(
-            "app.application.approval_workspace_app_service.get_db"
-        ) as mock_get_db:
+        with (
+            patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve,
+            patch("app.application.approval_workspace_app_service.get_db") as mock_get_db,
+        ):
             mock_resolve.return_value = 1
             mock_get_db.return_value = _make_db_ctx(mock_db)
             result = cleanup_requests(request, body={})
@@ -761,14 +747,10 @@ class TestSubmitRequest:
 
     def test_no_actor_raises_401(self):
         request = Mock()
-        with patch(
-            "app.application.approval_workspace_app_service._resolve_actor"
-        ) as mock_resolve:
+        with patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve:
             mock_resolve.return_value = None
             with pytest.raises(Exception) as exc_info:
-                submit_request(
-                    request, body={"flow_key": "fk", "title": "t"}
-                )
+                submit_request(request, body={"flow_key": "fk", "title": "t"})
             assert exc_info.value.status_code == 401
 
     def test_flow_not_found(self):
@@ -779,16 +761,13 @@ class TestSubmitRequest:
         mock_query.filter.return_value = mock_query
         mock_query.first.return_value = None
 
-        with patch(
-            "app.application.approval_workspace_app_service._resolve_actor"
-        ) as mock_resolve, patch(
-            "app.application.approval_workspace_app_service.get_db"
-        ) as mock_get_db:
+        with (
+            patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve,
+            patch("app.application.approval_workspace_app_service.get_db") as mock_get_db,
+        ):
             mock_resolve.return_value = 1
             mock_get_db.return_value = _make_db_ctx(mock_db)
-            result = submit_request(
-                request, body={"flow_key": "missing", "title": "test"}
-            )
+            result = submit_request(request, body={"flow_key": "missing", "title": "test"})
             assert result.status_code == 404
 
     def test_flow_no_nodes(self):
@@ -802,21 +781,16 @@ class TestSubmitRequest:
         flow.flow_key = "fk"
         mock_query.first.return_value = flow
 
-        with patch(
-            "app.application.approval_workspace_app_service._resolve_actor"
-        ) as mock_resolve, patch(
-            "app.application.approval_workspace_app_service.get_db"
-        ) as mock_get_db, patch(
-            "app.application.approval_workspace_app_service._ordered_nodes"
-        ) as mock_nodes, patch(
-            "app.application.approval_workspace_app_service._audit"
+        with (
+            patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve,
+            patch("app.application.approval_workspace_app_service.get_db") as mock_get_db,
+            patch("app.application.approval_workspace_app_service._ordered_nodes") as mock_nodes,
+            patch("app.application.approval_workspace_app_service._audit"),
         ):
             mock_resolve.return_value = 1
             mock_get_db.return_value = _make_db_ctx(mock_db)
             mock_nodes.return_value = []
-            result = submit_request(
-                request, body={"flow_key": "fk", "title": "test"}
-            )
+            result = submit_request(request, body={"flow_key": "fk", "title": "test"})
             assert result.status_code == 400
 
     def test_submit_success(self):
@@ -834,17 +808,15 @@ class TestSubmitRequest:
         first_node.id = 10
         first_node.node_order = 1
 
-        with patch(
-            "app.application.approval_workspace_app_service._resolve_actor"
-        ) as mock_resolve, patch(
-            "app.application.approval_workspace_app_service.get_db"
-        ) as mock_get_db, patch(
-            "app.application.approval_workspace_app_service._ordered_nodes"
-        ) as mock_nodes, patch(
-            "app.application.approval_workspace_app_service._audit"
-        ), patch(
-            "app.application.approval_workspace_app_service._generate_request_no"
-        ) as mock_gen:
+        with (
+            patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve,
+            patch("app.application.approval_workspace_app_service.get_db") as mock_get_db,
+            patch("app.application.approval_workspace_app_service._ordered_nodes") as mock_nodes,
+            patch("app.application.approval_workspace_app_service._audit"),
+            patch(
+                "app.application.approval_workspace_app_service._generate_request_no"
+            ) as mock_gen,
+        ):
             mock_resolve.return_value = 1
             mock_get_db.return_value = _make_db_ctx(mock_db)
             mock_nodes.return_value = [first_node]
@@ -875,9 +847,7 @@ class TestSubmitRequest:
 class TestApproveRequest:
     def test_no_actor_raises_401(self):
         request = Mock()
-        with patch(
-            "app.application.approval_workspace_app_service._resolve_actor"
-        ) as mock_resolve:
+        with patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve:
             mock_resolve.return_value = None
             with pytest.raises(Exception) as exc_info:
                 approve_request(1, request, body={})
@@ -891,11 +861,10 @@ class TestApproveRequest:
         mock_query.filter.return_value = mock_query
         mock_query.first.return_value = None
 
-        with patch(
-            "app.application.approval_workspace_app_service._resolve_actor"
-        ) as mock_resolve, patch(
-            "app.application.approval_workspace_app_service.get_db"
-        ) as mock_get_db:
+        with (
+            patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve,
+            patch("app.application.approval_workspace_app_service.get_db") as mock_get_db,
+        ):
             mock_resolve.return_value = 1
             mock_get_db.return_value = _make_db_ctx(mock_db)
             result = approve_request(999, request, body={})
@@ -911,11 +880,10 @@ class TestApproveRequest:
         req.status = ApprovalStatus.APPROVED.value
         mock_query.first.return_value = req
 
-        with patch(
-            "app.application.approval_workspace_app_service._resolve_actor"
-        ) as mock_resolve, patch(
-            "app.application.approval_workspace_app_service.get_db"
-        ) as mock_get_db:
+        with (
+            patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve,
+            patch("app.application.approval_workspace_app_service.get_db") as mock_get_db,
+        ):
             mock_resolve.return_value = 1
             mock_get_db.return_value = _make_db_ctx(mock_db)
             result = approve_request(1, request, body={})
@@ -932,11 +900,10 @@ class TestApproveRequest:
         req.current_node = None
         mock_query.first.return_value = req
 
-        with patch(
-            "app.application.approval_workspace_app_service._resolve_actor"
-        ) as mock_resolve, patch(
-            "app.application.approval_workspace_app_service.get_db"
-        ) as mock_get_db:
+        with (
+            patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve,
+            patch("app.application.approval_workspace_app_service.get_db") as mock_get_db,
+        ):
             mock_resolve.return_value = 1
             mock_get_db.return_value = _make_db_ctx(mock_db)
             result = approve_request(1, request, body={})
@@ -956,13 +923,13 @@ class TestApproveRequest:
         req.current_node = node
         mock_query.first.return_value = req
 
-        with patch(
-            "app.application.approval_workspace_app_service._resolve_actor"
-        ) as mock_resolve, patch(
-            "app.application.approval_workspace_app_service.get_db"
-        ) as mock_get_db, patch(
-            "app.application.approval_workspace_app_service._node_query_for_user"
-        ) as mock_nqf:
+        with (
+            patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve,
+            patch("app.application.approval_workspace_app_service.get_db") as mock_get_db,
+            patch(
+                "app.application.approval_workspace_app_service._node_query_for_user"
+            ) as mock_nqf,
+        ):
             mock_resolve.return_value = 1
             mock_nqf.return_value = False
             mock_get_db.return_value = _make_db_ctx(mock_db)
@@ -990,23 +957,20 @@ class TestApproveRequest:
         req.current_node = node
         mock_query.first.return_value = req
 
-        with patch(
-            "app.application.approval_workspace_app_service._resolve_actor"
-        ) as mock_resolve, patch(
-            "app.application.approval_workspace_app_service.get_db"
-        ) as mock_get_db, patch(
-            "app.application.approval_workspace_app_service._node_query_for_user"
-        ) as mock_nqf, patch(
-            "app.application.approval_workspace_app_service._ordered_nodes"
-        ) as mock_on, patch(
-            "app.application.approval_workspace_app_service._close_request_if_needed"
-        ) as mock_close, patch(
-            "app.application.approval_workspace_app_service._audit"
-        ), patch(
-            "app.application.approval_workspace_app_service.notify_mobile_user"
-        ), patch(
-            "app.application.approval_workspace_app_service._request_to_dict"
-        ) as mock_rtd:
+        with (
+            patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve,
+            patch("app.application.approval_workspace_app_service.get_db") as mock_get_db,
+            patch(
+                "app.application.approval_workspace_app_service._node_query_for_user"
+            ) as mock_nqf,
+            patch("app.application.approval_workspace_app_service._ordered_nodes") as mock_on,
+            patch(
+                "app.application.approval_workspace_app_service._close_request_if_needed"
+            ) as mock_close,
+            patch("app.application.approval_workspace_app_service._audit"),
+            patch("app.application.approval_workspace_app_service.notify_mobile_user"),
+            patch("app.application.approval_workspace_app_service._request_to_dict") as mock_rtd,
+        ):
             mock_resolve.return_value = 1
             mock_nqf.return_value = True
             mock_on.return_value = [node]
@@ -1024,9 +988,7 @@ class TestApproveRequest:
 class TestRejectRequest:
     def test_no_actor_raises_401(self):
         request = Mock()
-        with patch(
-            "app.application.approval_workspace_app_service._resolve_actor"
-        ) as mock_resolve:
+        with patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve:
             mock_resolve.return_value = None
             with pytest.raises(Exception) as exc_info:
                 reject_request(1, request, body={})
@@ -1034,9 +996,7 @@ class TestRejectRequest:
 
     def test_empty_reason_raises_400(self):
         request = Mock()
-        with patch(
-            "app.application.approval_workspace_app_service._resolve_actor"
-        ) as mock_resolve:
+        with patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve:
             mock_resolve.return_value = 1
             with pytest.raises(Exception) as exc_info:
                 reject_request(1, request, body={})
@@ -1050,11 +1010,10 @@ class TestRejectRequest:
         mock_query.filter.return_value = mock_query
         mock_query.first.return_value = None
 
-        with patch(
-            "app.application.approval_workspace_app_service._resolve_actor"
-        ) as mock_resolve, patch(
-            "app.application.approval_workspace_app_service.get_db"
-        ) as mock_get_db:
+        with (
+            patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve,
+            patch("app.application.approval_workspace_app_service.get_db") as mock_get_db,
+        ):
             mock_resolve.return_value = 1
             mock_get_db.return_value = _make_db_ctx(mock_db)
             result = reject_request(999, request, body={"reason": "bad"})
@@ -1070,11 +1029,10 @@ class TestRejectRequest:
         req.status = ApprovalStatus.APPROVED.value
         mock_query.first.return_value = req
 
-        with patch(
-            "app.application.approval_workspace_app_service._resolve_actor"
-        ) as mock_resolve, patch(
-            "app.application.approval_workspace_app_service.get_db"
-        ) as mock_get_db:
+        with (
+            patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve,
+            patch("app.application.approval_workspace_app_service.get_db") as mock_get_db,
+        ):
             mock_resolve.return_value = 1
             mock_get_db.return_value = _make_db_ctx(mock_db)
             result = reject_request(1, request, body={"reason": "bad"})
@@ -1091,11 +1049,10 @@ class TestRejectRequest:
         req.current_node = None
         mock_query.first.return_value = req
 
-        with patch(
-            "app.application.approval_workspace_app_service._resolve_actor"
-        ) as mock_resolve, patch(
-            "app.application.approval_workspace_app_service.get_db"
-        ) as mock_get_db:
+        with (
+            patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve,
+            patch("app.application.approval_workspace_app_service.get_db") as mock_get_db,
+        ):
             mock_resolve.return_value = 1
             mock_get_db.return_value = _make_db_ctx(mock_db)
             result = reject_request(1, request, body={"reason": "bad"})
@@ -1115,13 +1072,13 @@ class TestRejectRequest:
         req.current_node = node
         mock_query.first.return_value = req
 
-        with patch(
-            "app.application.approval_workspace_app_service._resolve_actor"
-        ) as mock_resolve, patch(
-            "app.application.approval_workspace_app_service.get_db"
-        ) as mock_get_db, patch(
-            "app.application.approval_workspace_app_service._node_query_for_user"
-        ) as mock_nqf:
+        with (
+            patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve,
+            patch("app.application.approval_workspace_app_service.get_db") as mock_get_db,
+            patch(
+                "app.application.approval_workspace_app_service._node_query_for_user"
+            ) as mock_nqf,
+        ):
             mock_resolve.return_value = 1
             mock_nqf.return_value = False
             mock_get_db.return_value = _make_db_ctx(mock_db)
@@ -1147,17 +1104,15 @@ class TestRejectRequest:
         req.current_node = node
         mock_query.first.return_value = req
 
-        with patch(
-            "app.application.approval_workspace_app_service._resolve_actor"
-        ) as mock_resolve, patch(
-            "app.application.approval_workspace_app_service.get_db"
-        ) as mock_get_db, patch(
-            "app.application.approval_workspace_app_service._node_query_for_user"
-        ) as mock_nqf, patch(
-            "app.application.approval_workspace_app_service._audit"
-        ), patch(
-            "app.application.approval_workspace_app_service._request_to_dict"
-        ) as mock_rtd:
+        with (
+            patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve,
+            patch("app.application.approval_workspace_app_service.get_db") as mock_get_db,
+            patch(
+                "app.application.approval_workspace_app_service._node_query_for_user"
+            ) as mock_nqf,
+            patch("app.application.approval_workspace_app_service._audit"),
+            patch("app.application.approval_workspace_app_service._request_to_dict") as mock_rtd,
+        ):
             mock_resolve.return_value = 1
             mock_nqf.return_value = True
             mock_rtd.return_value = {"id": 1, "status": "rejected"}
@@ -1187,17 +1142,15 @@ class TestRejectRequest:
         req.current_node = node
         mock_query.first.return_value = req
 
-        with patch(
-            "app.application.approval_workspace_app_service._resolve_actor"
-        ) as mock_resolve, patch(
-            "app.application.approval_workspace_app_service.get_db"
-        ) as mock_get_db, patch(
-            "app.application.approval_workspace_app_service._node_query_for_user"
-        ) as mock_nqf, patch(
-            "app.application.approval_workspace_app_service._audit"
-        ), patch(
-            "app.application.approval_workspace_app_service._request_to_dict"
-        ) as mock_rtd:
+        with (
+            patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve,
+            patch("app.application.approval_workspace_app_service.get_db") as mock_get_db,
+            patch(
+                "app.application.approval_workspace_app_service._node_query_for_user"
+            ) as mock_nqf,
+            patch("app.application.approval_workspace_app_service._audit"),
+            patch("app.application.approval_workspace_app_service._request_to_dict") as mock_rtd,
+        ):
             mock_resolve.return_value = 1
             mock_nqf.return_value = True
             mock_rtd.return_value = {"id": 1, "status": "rejected"}
@@ -1212,9 +1165,7 @@ class TestRejectRequest:
 class TestWithdrawRequest:
     def test_no_actor_raises_401(self):
         request = Mock()
-        with patch(
-            "app.application.approval_workspace_app_service._resolve_actor"
-        ) as mock_resolve:
+        with patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve:
             mock_resolve.return_value = None
             with pytest.raises(Exception) as exc_info:
                 withdraw_request(1, request, body={})
@@ -1228,11 +1179,10 @@ class TestWithdrawRequest:
         mock_query.filter.return_value = mock_query
         mock_query.first.return_value = None
 
-        with patch(
-            "app.application.approval_workspace_app_service._resolve_actor"
-        ) as mock_resolve, patch(
-            "app.application.approval_workspace_app_service.get_db"
-        ) as mock_get_db:
+        with (
+            patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve,
+            patch("app.application.approval_workspace_app_service.get_db") as mock_get_db,
+        ):
             mock_resolve.return_value = 1
             mock_get_db.return_value = _make_db_ctx(mock_db)
             result = withdraw_request(999, request, body={})
@@ -1249,11 +1199,10 @@ class TestWithdrawRequest:
         req.status = ApprovalStatus.PENDING.value
         mock_query.first.return_value = req
 
-        with patch(
-            "app.application.approval_workspace_app_service._resolve_actor"
-        ) as mock_resolve, patch(
-            "app.application.approval_workspace_app_service.get_db"
-        ) as mock_get_db:
+        with (
+            patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve,
+            patch("app.application.approval_workspace_app_service.get_db") as mock_get_db,
+        ):
             mock_resolve.return_value = 1
             mock_get_db.return_value = _make_db_ctx(mock_db)
             result = withdraw_request(1, request, body={})
@@ -1270,11 +1219,10 @@ class TestWithdrawRequest:
         req.status = ApprovalStatus.APPROVED.value
         mock_query.first.return_value = req
 
-        with patch(
-            "app.application.approval_workspace_app_service._resolve_actor"
-        ) as mock_resolve, patch(
-            "app.application.approval_workspace_app_service.get_db"
-        ) as mock_get_db:
+        with (
+            patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve,
+            patch("app.application.approval_workspace_app_service.get_db") as mock_get_db,
+        ):
             mock_resolve.return_value = 1
             mock_get_db.return_value = _make_db_ctx(mock_db)
             result = withdraw_request(1, request, body={})
@@ -1295,11 +1243,10 @@ class TestWithdrawRequest:
         req.flow = flow
         mock_query.first.return_value = req
 
-        with patch(
-            "app.application.approval_workspace_app_service._resolve_actor"
-        ) as mock_resolve, patch(
-            "app.application.approval_workspace_app_service.get_db"
-        ) as mock_get_db:
+        with (
+            patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve,
+            patch("app.application.approval_workspace_app_service.get_db") as mock_get_db,
+        ):
             mock_resolve.return_value = 1
             mock_get_db.return_value = _make_db_ctx(mock_db)
             result = withdraw_request(1, request, body={})
@@ -1327,15 +1274,12 @@ class TestWithdrawRequest:
         req.current_node = node
         mock_query.first.return_value = req
 
-        with patch(
-            "app.application.approval_workspace_app_service._resolve_actor"
-        ) as mock_resolve, patch(
-            "app.application.approval_workspace_app_service.get_db"
-        ) as mock_get_db, patch(
-            "app.application.approval_workspace_app_service._audit"
-        ), patch(
-            "app.application.approval_workspace_app_service._request_to_dict"
-        ) as mock_rtd:
+        with (
+            patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve,
+            patch("app.application.approval_workspace_app_service.get_db") as mock_get_db,
+            patch("app.application.approval_workspace_app_service._audit"),
+            patch("app.application.approval_workspace_app_service._request_to_dict") as mock_rtd,
+        ):
             mock_resolve.return_value = 1
             mock_rtd.return_value = {"id": 1, "status": "withdrawn"}
             mock_get_db.return_value = _make_db_ctx(mock_db)
@@ -1364,15 +1308,12 @@ class TestWithdrawRequest:
         req.current_node = node
         mock_query.first.return_value = req
 
-        with patch(
-            "app.application.approval_workspace_app_service._resolve_actor"
-        ) as mock_resolve, patch(
-            "app.application.approval_workspace_app_service.get_db"
-        ) as mock_get_db, patch(
-            "app.application.approval_workspace_app_service._audit"
-        ), patch(
-            "app.application.approval_workspace_app_service._request_to_dict"
-        ) as mock_rtd:
+        with (
+            patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve,
+            patch("app.application.approval_workspace_app_service.get_db") as mock_get_db,
+            patch("app.application.approval_workspace_app_service._audit"),
+            patch("app.application.approval_workspace_app_service._request_to_dict") as mock_rtd,
+        ):
             mock_resolve.return_value = 1
             mock_rtd.return_value = {"id": 1, "status": "withdrawn"}
             mock_get_db.return_value = _make_db_ctx(mock_db)
@@ -1386,9 +1327,7 @@ class TestWithdrawRequest:
 class TestDeleteRequest:
     def test_no_actor_raises_401(self):
         request = Mock()
-        with patch(
-            "app.application.approval_workspace_app_service._resolve_actor"
-        ) as mock_resolve:
+        with patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve:
             mock_resolve.return_value = None
             with pytest.raises(Exception) as exc_info:
                 delete_request(1, request)
@@ -1402,11 +1341,10 @@ class TestDeleteRequest:
         mock_query.filter.return_value = mock_query
         mock_query.first.return_value = None
 
-        with patch(
-            "app.application.approval_workspace_app_service._resolve_actor"
-        ) as mock_resolve, patch(
-            "app.application.approval_workspace_app_service.get_db"
-        ) as mock_get_db:
+        with (
+            patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve,
+            patch("app.application.approval_workspace_app_service.get_db") as mock_get_db,
+        ):
             mock_resolve.return_value = 1
             mock_get_db.return_value = _make_db_ctx(mock_db)
             result = delete_request(999, request)
@@ -1423,11 +1361,10 @@ class TestDeleteRequest:
         req.status = ApprovalStatus.APPROVED.value
         mock_query.first.return_value = req
 
-        with patch(
-            "app.application.approval_workspace_app_service._resolve_actor"
-        ) as mock_resolve, patch(
-            "app.application.approval_workspace_app_service.get_db"
-        ) as mock_get_db:
+        with (
+            patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve,
+            patch("app.application.approval_workspace_app_service.get_db") as mock_get_db,
+        ):
             mock_resolve.return_value = 1
             mock_get_db.return_value = _make_db_ctx(mock_db)
             result = delete_request(1, request)
@@ -1444,11 +1381,10 @@ class TestDeleteRequest:
         req.status = ApprovalStatus.PENDING.value
         mock_query.first.return_value = req
 
-        with patch(
-            "app.application.approval_workspace_app_service._resolve_actor"
-        ) as mock_resolve, patch(
-            "app.application.approval_workspace_app_service.get_db"
-        ) as mock_get_db:
+        with (
+            patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve,
+            patch("app.application.approval_workspace_app_service.get_db") as mock_get_db,
+        ):
             mock_resolve.return_value = 1
             mock_get_db.return_value = _make_db_ctx(mock_db)
             result = delete_request(1, request)
@@ -1471,12 +1407,10 @@ class TestDeleteRequest:
         req.title = "Test"
         mock_query.first.return_value = req
 
-        with patch(
-            "app.application.approval_workspace_app_service._resolve_actor"
-        ) as mock_resolve, patch(
-            "app.application.approval_workspace_app_service.get_db"
-        ) as mock_get_db, patch(
-            "app.application.approval_workspace_app_service._audit"
+        with (
+            patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve,
+            patch("app.application.approval_workspace_app_service.get_db") as mock_get_db,
+            patch("app.application.approval_workspace_app_service._audit"),
         ):
             mock_resolve.return_value = 1
             mock_get_db.return_value = _make_db_ctx(mock_db)
@@ -1507,8 +1441,13 @@ class TestGetApprovalUsers:
         MockUser = Mock()
         MockUser.is_active = Mock()
 
-        with patch("app.application.approval_workspace_app_service.get_db", return_value=_make_db_ctx(mock_db)), \
-             patch("app.db.models.User", MockUser, create=True):
+        with (
+            patch(
+                "app.application.approval_workspace_app_service.get_db",
+                return_value=_make_db_ctx(mock_db),
+            ),
+            patch("app.db.models.User", MockUser, create=True),
+        ):
             result = get_approval_users()
             assert result["success"] is True
             assert len(result["data"]) == 1
@@ -1521,9 +1460,16 @@ class TestGetApprovalUsers:
             {"id": 1, "name": "产品A", "product_name": "产品A"},
         ]
 
-        with patch("app.application.approval_workspace_app_service.get_db", side_effect=ImportError("no User")), \
-             patch("app.application.approval_workspace_app_service.RECOVERABLE_ERRORS", (ImportError,)), \
-             patch("app.application.get_product_app_service", return_value=mock_product_svc):
+        with (
+            patch(
+                "app.application.approval_workspace_app_service.get_db",
+                side_effect=ImportError("no User"),
+            ),
+            patch(
+                "app.application.approval_workspace_app_service.RECOVERABLE_ERRORS", (ImportError,)
+            ),
+            patch("app.application.get_product_app_service", return_value=mock_product_svc),
+        ):
             result = get_approval_users()
             assert result["success"] is True
             assert "data" in result
@@ -1709,11 +1655,10 @@ class TestCreateFlow:
         mock_query.filter.return_value = mock_query
         mock_query.first.return_value = Mock()  # existing flow
 
-        with patch(
-            "app.application.approval_workspace_app_service._resolve_actor"
-        ) as mock_resolve, patch(
-            "app.application.approval_workspace_app_service.get_db"
-        ) as mock_get_db:
+        with (
+            patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve,
+            patch("app.application.approval_workspace_app_service.get_db") as mock_get_db,
+        ):
             mock_resolve.return_value = 1
             mock_get_db.return_value = _make_db_ctx(mock_db)
             result = create_flow(
@@ -1740,17 +1685,13 @@ class TestCreateFlow:
         mock_db.add.side_effect = lambda obj: None
         mock_db.flush.side_effect = lambda: setattr(flow, "id", 1) if hasattr(flow, "id") else None
 
-        with patch(
-            "app.application.approval_workspace_app_service._resolve_actor"
-        ) as mock_resolve, patch(
-            "app.application.approval_workspace_app_service.get_db"
-        ) as mock_get_db, patch(
-            "app.application.approval_workspace_app_service._audit"
-        ), patch(
-            "app.application.approval_workspace_app_service.ApprovalFlow"
-        ) as MockFlow, patch(
-            "app.application.approval_workspace_app_service.ApprovalFlowNode"
-        ) as MockNode:
+        with (
+            patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve,
+            patch("app.application.approval_workspace_app_service.get_db") as mock_get_db,
+            patch("app.application.approval_workspace_app_service._audit"),
+            patch("app.application.approval_workspace_app_service.ApprovalFlow") as MockFlow,
+            patch("app.application.approval_workspace_app_service.ApprovalFlowNode") as MockNode,
+        ):
             mock_resolve.return_value = 1
             MockFlow.return_value = flow
             mock_node = Mock()
@@ -1788,17 +1729,13 @@ class TestCreateFlow:
         flow.id = 1
         flow.to_dict.return_value = {"id": 1}
 
-        with patch(
-            "app.application.approval_workspace_app_service._resolve_actor"
-        ) as mock_resolve, patch(
-            "app.application.approval_workspace_app_service.get_db"
-        ) as mock_get_db, patch(
-            "app.application.approval_workspace_app_service._audit"
-        ), patch(
-            "app.application.approval_workspace_app_service.ApprovalFlow"
-        ) as MockFlow, patch(
-            "app.application.approval_workspace_app_service.ApprovalFlowNode"
-        ) as MockNode:
+        with (
+            patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve,
+            patch("app.application.approval_workspace_app_service.get_db") as mock_get_db,
+            patch("app.application.approval_workspace_app_service._audit"),
+            patch("app.application.approval_workspace_app_service.ApprovalFlow") as MockFlow,
+            patch("app.application.approval_workspace_app_service.ApprovalFlowNode") as MockNode,
+        ):
             mock_resolve.return_value = 1
             MockFlow.return_value = flow
             MockNode.return_value = Mock()
@@ -1825,11 +1762,10 @@ class TestUpdateFlow:
         mock_query.filter.return_value = mock_query
         mock_query.first.return_value = None
 
-        with patch(
-            "app.application.approval_workspace_app_service._resolve_actor"
-        ) as mock_resolve, patch(
-            "app.application.approval_workspace_app_service.get_db"
-        ) as mock_get_db:
+        with (
+            patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve,
+            patch("app.application.approval_workspace_app_service.get_db") as mock_get_db,
+        ):
             mock_resolve.return_value = 1
             mock_get_db.return_value = _make_db_ctx(mock_db)
             result = update_flow(999, request, body={"flow_name": "new"})
@@ -1845,12 +1781,10 @@ class TestUpdateFlow:
         flow.to_dict.return_value = {"id": 1, "flow_name": "Updated"}
         mock_query.first.return_value = flow
 
-        with patch(
-            "app.application.approval_workspace_app_service._resolve_actor"
-        ) as mock_resolve, patch(
-            "app.application.approval_workspace_app_service.get_db"
-        ) as mock_get_db, patch(
-            "app.application.approval_workspace_app_service._audit"
+        with (
+            patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve,
+            patch("app.application.approval_workspace_app_service.get_db") as mock_get_db,
+            patch("app.application.approval_workspace_app_service._audit"),
         ):
             mock_resolve.return_value = 1
             mock_get_db.return_value = _make_db_ctx(mock_db)
@@ -1871,11 +1805,10 @@ class TestToggleFlowActive:
         mock_query.filter.return_value = mock_query
         mock_query.first.return_value = None
 
-        with patch(
-            "app.application.approval_workspace_app_service._resolve_actor"
-        ) as mock_resolve, patch(
-            "app.application.approval_workspace_app_service.get_db"
-        ) as mock_get_db:
+        with (
+            patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve,
+            patch("app.application.approval_workspace_app_service.get_db") as mock_get_db,
+        ):
             mock_resolve.return_value = 1
             mock_get_db.return_value = _make_db_ctx(mock_db)
             result = toggle_flow_active(999, request, body={"is_active": True})
@@ -1891,12 +1824,10 @@ class TestToggleFlowActive:
         flow.is_active = False
         mock_query.first.return_value = flow
 
-        with patch(
-            "app.application.approval_workspace_app_service._resolve_actor"
-        ) as mock_resolve, patch(
-            "app.application.approval_workspace_app_service.get_db"
-        ) as mock_get_db, patch(
-            "app.application.approval_workspace_app_service._audit"
+        with (
+            patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve,
+            patch("app.application.approval_workspace_app_service.get_db") as mock_get_db,
+            patch("app.application.approval_workspace_app_service._audit"),
         ):
             mock_resolve.return_value = 1
             mock_get_db.return_value = _make_db_ctx(mock_db)
@@ -1914,12 +1845,10 @@ class TestToggleFlowActive:
         flow.is_active = True
         mock_query.first.return_value = flow
 
-        with patch(
-            "app.application.approval_workspace_app_service._resolve_actor"
-        ) as mock_resolve, patch(
-            "app.application.approval_workspace_app_service.get_db"
-        ) as mock_get_db, patch(
-            "app.application.approval_workspace_app_service._audit"
+        with (
+            patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve,
+            patch("app.application.approval_workspace_app_service.get_db") as mock_get_db,
+            patch("app.application.approval_workspace_app_service._audit"),
         ):
             mock_resolve.return_value = 1
             mock_get_db.return_value = _make_db_ctx(mock_db)
@@ -1940,11 +1869,10 @@ class TestDeleteFlow:
         mock_query.filter.return_value = mock_query
         mock_query.first.return_value = None
 
-        with patch(
-            "app.application.approval_workspace_app_service._resolve_actor"
-        ) as mock_resolve, patch(
-            "app.application.approval_workspace_app_service.get_db"
-        ) as mock_get_db:
+        with (
+            patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve,
+            patch("app.application.approval_workspace_app_service.get_db") as mock_get_db,
+        ):
             mock_resolve.return_value = 1
             mock_get_db.return_value = _make_db_ctx(mock_db)
             result = delete_flow(999, request)
@@ -1965,11 +1893,10 @@ class TestDeleteFlow:
         mock_count_query.filter.return_value = mock_count_query
         mock_count_query.count.return_value = 3
 
-        with patch(
-            "app.application.approval_workspace_app_service._resolve_actor"
-        ) as mock_resolve, patch(
-            "app.application.approval_workspace_app_service.get_db"
-        ) as mock_get_db:
+        with (
+            patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve,
+            patch("app.application.approval_workspace_app_service.get_db") as mock_get_db,
+        ):
             mock_resolve.return_value = 1
             mock_get_db.return_value = _make_db_ctx(mock_db)
             result = delete_flow(1, request)
@@ -1999,12 +1926,10 @@ class TestDeleteFlow:
         count_query.filter.return_value = count_query
         count_query.count.return_value = 0
 
-        with patch(
-            "app.application.approval_workspace_app_service._resolve_actor"
-        ) as mock_resolve, patch(
-            "app.application.approval_workspace_app_service.get_db"
-        ) as mock_get_db, patch(
-            "app.application.approval_workspace_app_service._audit"
+        with (
+            patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve,
+            patch("app.application.approval_workspace_app_service.get_db") as mock_get_db,
+            patch("app.application.approval_workspace_app_service._audit"),
         ):
             mock_resolve.return_value = 1
             mock_get_db.return_value = _make_db_ctx(mock_db)

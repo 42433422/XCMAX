@@ -1,4 +1,5 @@
 """Tests for app.fastapi_routes.shipment.schemas."""
+
 from __future__ import annotations
 
 import pytest

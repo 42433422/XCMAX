@@ -17,18 +17,17 @@ from app.application.aibiz_web_terminal_service import (
     _local_surface_page,
     _png_http_response,
     _resize_png_thumb,
+    _resolve_market_authorization,
     _sanitize_pw_admin_pages,
     _strip_b64_attach_image_urls,
     _surface_cache_token,
     _surface_image_url,
     _transform_png_view,
     _unwrap,
-    _resolve_market_authorization,
     build_terminal_payload,
     fetch_surface_page_payload,
     serve_surface_image,
 )
-
 
 # ========================= _png_http_response ============================
 
@@ -227,7 +226,14 @@ class TestSanitizePwAdminPagesExtended:
         surface = {
             "pages": [
                 {"id": "home", "name": "首页", "status": 200, "screenshot_saved": "/tmp/a.png"},
-                {"id": "admin", "name": "管理端", "admin": True, "digest_unlock_ok": True, "status": 200, "screenshot_saved": "/tmp/b.png"},
+                {
+                    "id": "admin",
+                    "name": "管理端",
+                    "admin": True,
+                    "digest_unlock_ok": True,
+                    "status": 200,
+                    "screenshot_saved": "/tmp/b.png",
+                },
             ]
         }
         result = _sanitize_pw_admin_pages("P-W", surface)
@@ -446,8 +452,9 @@ class TestCropPngTopExtended:
     def test_with_valid_png(self):
         # Create a minimal valid PNG
         try:
-            from PIL import Image
             import io
+
+            from PIL import Image
 
             img = Image.new("RGB", (100, 200), color="red")
             buf = io.BytesIO()
@@ -461,8 +468,9 @@ class TestCropPngTopExtended:
 
     def test_with_small_png(self):
         try:
-            from PIL import Image
             import io
+
+            from PIL import Image
 
             img = Image.new("RGB", (100, 50), color="blue")
             buf = io.BytesIO()
@@ -481,8 +489,9 @@ class TestCropPngTopExtended:
 class TestResizePngThumbExtended:
     def test_with_wide_png(self):
         try:
-            from PIL import Image
             import io
+
+            from PIL import Image
 
             img = Image.new("RGB", (200, 100), color="green")
             buf = io.BytesIO()
@@ -496,8 +505,9 @@ class TestResizePngThumbExtended:
 
     def test_with_narrow_png(self):
         try:
-            from PIL import Image
             import io
+
+            from PIL import Image
 
             img = Image.new("RGB", (50, 100), color="yellow")
             buf = io.BytesIO()

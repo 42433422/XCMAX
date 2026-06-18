@@ -57,7 +57,12 @@ class TestBooleanAndUnary:
         assert evaluate_condition("amount > 5000 and department == 'sales'", ctx) is True
 
     def test_or(self):
-        assert evaluate_condition("priority == 'high' or amount > 10000", {"priority": "high", "amount": 0}) is True
+        assert (
+            evaluate_condition(
+                "priority == 'high' or amount > 10000", {"priority": "high", "amount": 0}
+            )
+            is True
+        )
 
     def test_not(self):
         assert evaluate_condition("not (amount > 100)", {"amount": 5}) is True

@@ -1,4 +1,5 @@
 """Tests for app.services.kitten_business_snapshot — business data snapshot builder."""
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
@@ -11,10 +12,10 @@ from app.services.kitten_business_snapshot import (
     build_kitten_business_snapshot,
 )
 
-
 # ---------------------------------------------------------------------------
 # _iso_now
 # ---------------------------------------------------------------------------
+
 
 class TestIsoNow:
     def test_returns_iso_string(self):
@@ -25,12 +26,15 @@ class TestIsoNow:
     def test_no_microseconds(self):
         result = _iso_now()
         # Should not have fractional seconds beyond whole seconds
-        assert "." not in result.split("+")[0].split("Z")[0].split("T")[-1] or result.count(".") == 0
+        assert (
+            "." not in result.split("+")[0].split("Z")[0].split("T")[-1] or result.count(".") == 0
+        )
 
 
 # ---------------------------------------------------------------------------
 # _fmt_dt
 # ---------------------------------------------------------------------------
+
 
 class TestFmtDt:
     def test_none_returns_empty(self):
@@ -38,6 +42,7 @@ class TestFmtDt:
 
     def test_datetime_isoformat(self):
         from datetime import UTC, datetime
+
         dt = datetime(2024, 1, 15, 10, 30, 0, tzinfo=UTC)
         result = _fmt_dt(dt)
         assert "2024" in result
@@ -53,6 +58,7 @@ class TestFmtDt:
         class BadDatetime:
             def isoformat(self):
                 raise RuntimeError("bad isoformat")
+
         result = _fmt_dt(BadDatetime())
         assert isinstance(result, str)
 
@@ -60,6 +66,7 @@ class TestFmtDt:
 # ---------------------------------------------------------------------------
 # build_kitten_business_snapshot — uses lazy imports inside function body
 # ---------------------------------------------------------------------------
+
 
 def _patch_materials(side_effect=None, return_value=None):
     """Patch the lazy import of get_material_application_service inside the function."""
@@ -91,9 +98,11 @@ def _patch_shipments(side_effect=None, return_value=None):
 
 class TestBuildKittenBusinessSnapshot:
     def test_returns_success_structure(self):
-        with _patch_materials(side_effect=RuntimeError("no db")), \
-             _patch_products(side_effect=RuntimeError("no db")), \
-             _patch_shipments(side_effect=RuntimeError("no db")):
+        with (
+            _patch_materials(side_effect=RuntimeError("no db")),
+            _patch_products(side_effect=RuntimeError("no db")),
+            _patch_shipments(side_effect=RuntimeError("no db")),
+        ):
             result = build_kitten_business_snapshot()
         assert result["success"] is True
         assert "generated_at" in result
@@ -101,24 +110,30 @@ class TestBuildKittenBusinessSnapshot:
         assert "text" in result
 
     def test_materials_section_error(self):
-        with _patch_materials(side_effect=RuntimeError("db error")), \
-             _patch_products(side_effect=RuntimeError("db error")), \
-             _patch_shipments(side_effect=RuntimeError("db error")):
+        with (
+            _patch_materials(side_effect=RuntimeError("db error")),
+            _patch_products(side_effect=RuntimeError("db error")),
+            _patch_shipments(side_effect=RuntimeError("db error")),
+        ):
             result = build_kitten_business_snapshot()
         assert "materials_error" in result["stats"]
         assert "读取失败" in result["text"] or "materials_error" in result["stats"]
 
     def test_products_section_error(self):
-        with _patch_materials(side_effect=RuntimeError("db error")), \
-             _patch_products(side_effect=RuntimeError("db error")), \
-             _patch_shipments(side_effect=RuntimeError("db error")):
+        with (
+            _patch_materials(side_effect=RuntimeError("db error")),
+            _patch_products(side_effect=RuntimeError("db error")),
+            _patch_shipments(side_effect=RuntimeError("db error")),
+        ):
             result = build_kitten_business_snapshot()
         assert "products_error" in result["stats"]
 
     def test_shipments_section_error(self):
-        with _patch_materials(side_effect=RuntimeError("db error")), \
-             _patch_products(side_effect=RuntimeError("db error")), \
-             _patch_shipments(side_effect=RuntimeError("db error")):
+        with (
+            _patch_materials(side_effect=RuntimeError("db error")),
+            _patch_products(side_effect=RuntimeError("db error")),
+            _patch_shipments(side_effect=RuntimeError("db error")),
+        ):
             result = build_kitten_business_snapshot()
         assert "shipments_error" in result["stats"]
 
@@ -126,8 +141,14 @@ class TestBuildKittenBusinessSnapshot:
         mock_mat_svc = MagicMock()
         mock_mat_svc.get_all_materials.return_value = {
             "data": [
-                {"name": "Paint A", "category": "coating", "quantity": 100,
-                 "unit_price": 50.0, "unit": "kg", "supplier": "Supplier X"},
+                {
+                    "name": "Paint A",
+                    "category": "coating",
+                    "quantity": 100,
+                    "unit_price": 50.0,
+                    "unit": "kg",
+                    "supplier": "Supplier X",
+                },
             ]
         }
         mock_db = MagicMock()
@@ -136,31 +157,42 @@ class TestBuildKittenBusinessSnapshot:
         mock_db.__enter__ = MagicMock(return_value=mock_db)
         mock_db.__exit__ = MagicMock(return_value=False)
 
-        with patch("app.application.get_material_application_service", return_value=mock_mat_svc), \
-             patch("app.db.session.get_db", return_value=mock_db), \
-             _patch_products(side_effect=RuntimeError("no products")), \
-             _patch_shipments(side_effect=RuntimeError("no shipments")):
+        with (
+            patch("app.application.get_material_application_service", return_value=mock_mat_svc),
+            patch("app.db.session.get_db", return_value=mock_db),
+            _patch_products(side_effect=RuntimeError("no products")),
+            _patch_shipments(side_effect=RuntimeError("no shipments")),
+        ):
             result = build_kitten_business_snapshot()
         assert result["stats"]["materials_total"] == 10
         assert "Paint A" in result["text"]
 
     def test_text_truncation(self):
-        with _patch_materials(side_effect=RuntimeError("db error")), \
-             _patch_products(side_effect=RuntimeError("db error")), \
-             _patch_shipments(side_effect=RuntimeError("db error")):
+        with (
+            _patch_materials(side_effect=RuntimeError("db error")),
+            _patch_products(side_effect=RuntimeError("db error")),
+            _patch_shipments(side_effect=RuntimeError("db error")),
+        ):
             result = build_kitten_business_snapshot(max_text_chars=50)
         assert len(result["text"]) <= 74  # 50 + truncation suffix
 
     def test_shipments_with_records(self):
         mock_svc = MagicMock()
         mock_svc.get_shipment_records.return_value = [
-            {"purchase_unit": "Acme", "product_name": "Paint",
-             "quantity_kg": 100, "quantity_tins": 10,
-             "amount": 5000.0, "created_at": None},
+            {
+                "purchase_unit": "Acme",
+                "product_name": "Paint",
+                "quantity_kg": 100,
+                "quantity_tins": 10,
+                "amount": 5000.0,
+                "created_at": None,
+            },
         ]
-        with _patch_materials(side_effect=RuntimeError("no mat")), \
-             _patch_products(side_effect=RuntimeError("no prod")), \
-             patch("app.bootstrap.get_shipment_app_service", return_value=mock_svc):
+        with (
+            _patch_materials(side_effect=RuntimeError("no mat")),
+            _patch_products(side_effect=RuntimeError("no prod")),
+            patch("app.bootstrap.get_shipment_app_service", return_value=mock_svc),
+        ):
             result = build_kitten_business_snapshot()
         assert result["stats"]["shipments_sample_count"] == 1
         assert result["stats"]["shipments_sample_amount_sum"] == 5000.0

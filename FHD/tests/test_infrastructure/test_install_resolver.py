@@ -1,17 +1,19 @@
 """测试 install_resolver 模块的安装调度。"""
+
 import os
-import pytest
 from unittest.mock import MagicMock, patch
 
-from app.infrastructure.mods.install_resolver import (
-    _find_package_in_store,
-    InstallResolver,
-)
+import pytest
 
+from app.infrastructure.mods.install_resolver import (
+    InstallResolver,
+    _find_package_in_store,
+)
 
 # ---------------------------------------------------------------------------
 # _find_package_in_store
 # ---------------------------------------------------------------------------
+
 
 class TestFindPackageInStore:
     def test_empty_dir(self, tmp_path):
@@ -76,6 +78,7 @@ class TestFindPackageInStore:
 # InstallResolver
 # ---------------------------------------------------------------------------
 
+
 class TestInstallResolver:
     @pytest.fixture
     def mock_mm(self):
@@ -100,8 +103,10 @@ class TestInstallResolver:
         mock_get_mm.return_value = mock_mm
         resolver = InstallResolver()
 
-        with patch("app.infrastructure.mods.install_resolver.peek_artifact",
-                    side_effect=RuntimeError("bad file")):
+        with patch(
+            "app.infrastructure.mods.install_resolver.peek_artifact",
+            side_effect=RuntimeError("bad file"),
+        ):
             ok, msg, data = resolver.install_package_dispatch("/bad/path", "/store")
             assert ok is False
             assert "无法读取包" in msg
@@ -110,16 +115,23 @@ class TestInstallResolver:
     @patch("app.infrastructure.mods.install_resolver.peek_artifact")
     def test_install_package_dispatch_employee_pack(self, mock_peek, mock_get_mm, mock_mm):
         from app.infrastructure.mods.artifact_constants import ARTIFACT_EMPLOYEE_PACK
+
         mock_peek.return_value = ARTIFACT_EMPLOYEE_PACK
         mock_get_mm.return_value = mock_mm
 
         mock_registry = MagicMock()
         mock_registry.install_from_package.return_value = (True, "ok")
 
-        with patch("app.infrastructure.mods.install_resolver.get_employee_registry",
-                    return_value=mock_registry), \
-             patch("app.infrastructure.mods.artifact_package.peek_manifest_from_zip",
-                    return_value={"id": "emp1"}):
+        with (
+            patch(
+                "app.infrastructure.mods.install_resolver.get_employee_registry",
+                return_value=mock_registry,
+            ),
+            patch(
+                "app.infrastructure.mods.artifact_package.peek_manifest_from_zip",
+                return_value={"id": "emp1"},
+            ),
+        ):
             resolver = InstallResolver()
             ok, msg, data = resolver.install_package_dispatch("/path/to/pack.xcemp", "/store")
             assert ok is True
@@ -128,15 +140,22 @@ class TestInstallResolver:
     @patch("app.infrastructure.mods.install_resolver.peek_artifact")
     def test_install_package_dispatch_bundle(self, mock_peek, mock_get_mm, mock_mm):
         from app.infrastructure.mods.artifact_constants import ARTIFACT_BUNDLE
+
         mock_peek.return_value = ARTIFACT_BUNDLE
         mock_get_mm.return_value = mock_mm
 
         mock_pkg = MagicMock()
-        mock_pkg.extract_package.return_value = ("/tmp/extract", {"bundle": {"embeds": [], "contains": []}})
+        mock_pkg.extract_package.return_value = (
+            "/tmp/extract",
+            {"bundle": {"embeds": [], "contains": []}},
+        )
 
-        with patch("app.infrastructure.mods.install_resolver.validate_bundle_manifest",
-                    return_value=[]), \
-             patch("app.infrastructure.mods.install_resolver.ModPackage", mock_pkg):
+        with (
+            patch(
+                "app.infrastructure.mods.install_resolver.validate_bundle_manifest", return_value=[]
+            ),
+            patch("app.infrastructure.mods.install_resolver.ModPackage", mock_pkg),
+        ):
             resolver = InstallResolver()
             ok, msg, data = resolver.install_package_dispatch("/path/to/bundle.xcmod", "/store")
             assert ok is True

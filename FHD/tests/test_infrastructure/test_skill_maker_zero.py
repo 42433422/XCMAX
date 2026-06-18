@@ -1,4 +1,5 @@
 """Tests for app.infrastructure.skills.skill_maker.skill_maker."""
+
 from __future__ import annotations
 
 import importlib
@@ -11,7 +12,16 @@ import pytest
 # skill-maker has a hyphen, so we use importlib to load it
 _spec = importlib.util.spec_from_file_location(
     "skill_maker",
-    os.path.join(os.path.dirname(__file__), "..", "..", "app", "infrastructure", "skills", "skill-maker", "skill_maker.py"),
+    os.path.join(
+        os.path.dirname(__file__),
+        "..",
+        "..",
+        "app",
+        "infrastructure",
+        "skills",
+        "skill-maker",
+        "skill_maker.py",
+    ),
 )
 _mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)
@@ -180,7 +190,9 @@ class TestValidateSkill:
         skills_dir.mkdir()
         skill_path = skills_dir / "valid-skill"
         skill_path.mkdir()
-        (skill_path / "SKILL.md").write_text('---\nname: "valid-skill"\ndescription: "A skill"\n---\n')
+        (skill_path / "SKILL.md").write_text(
+            '---\nname: "valid-skill"\ndescription: "A skill"\n---\n'
+        )
         (skill_path / "__init__.py").write_text("")
         with patch.object(_mod, "get_skills_dir", return_value=str(skills_dir)):
             result = validate_skill("valid-skill")

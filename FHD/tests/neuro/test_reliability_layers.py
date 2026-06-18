@@ -45,18 +45,18 @@ from app.neuro_bus.rate_limiter import (
     SlidingWindowCounter,
 )
 from app.neuro_bus.retry_handler import (
+    NeuroRetryHandler,
     RetryConfig,
     RetryContext,
     RetryHandler,
-    NeuroRetryHandler,
     get_retry_handler,
 )
 from app.neuro_bus.sla_controller import (
     SLAConfig,
+    SLAController,
     SLALevel,
     SLAMonitor,
     SLAViolation,
-    SLAController,
     with_sla,
 )
 from app.neuro_bus.tracer import (
@@ -567,12 +567,14 @@ class TestNeuroBusDLQIntegration:
 class TestDLQGlobals:
     def test_enqueue_dead_letter(self, monkeypatch):
         import app.neuro_bus.dead_letter_queue as dlq_mod
+
         monkeypatch.setattr(dlq_mod, "_dlq_instance", None)
         eid = enqueue_dead_letter(_make_event(), "unrecoverable", "err", 0)
         assert eid.startswith("dlq-")
 
     def test_get_dlq_stats(self, monkeypatch):
         import app.neuro_bus.dead_letter_queue as dlq_mod
+
         monkeypatch.setattr(dlq_mod, "_dlq_instance", None)
         stats = get_dlq_stats()
         assert "current_size" in stats
@@ -586,17 +588,25 @@ class TestDLQGlobals:
 class TestLifeline:
     def test_normal_load_allows_all(self):
         ll = Lifeline()
-        assert ll.should_process(_make_event(priority=EventPriority.BACKGROUND), queue_depth=0) is True
+        assert (
+            ll.should_process(_make_event(priority=EventPriority.BACKGROUND), queue_depth=0) is True
+        )
 
     def test_emergency_drops_low_priority(self):
-        ll = Lifeline(queue_threshold_normal=10, queue_threshold_high=50, queue_threshold_critical=80)
+        ll = Lifeline(
+            queue_threshold_normal=10, queue_threshold_high=50, queue_threshold_critical=80
+        )
         ll._last_check = 0  # bypass check interval
         ll.check_system_load(queue_depth=200)  # EMERGENCY
         assert ll.should_process(_make_event(priority=EventPriority.LOW), queue_depth=200) is False
-        assert ll.should_process(_make_event(priority=EventPriority.CRITICAL), queue_depth=200) is True
+        assert (
+            ll.should_process(_make_event(priority=EventPriority.CRITICAL), queue_depth=200) is True
+        )
 
     def test_load_change_callback(self):
-        ll = Lifeline(queue_threshold_normal=10, queue_threshold_high=50, queue_threshold_critical=80)
+        ll = Lifeline(
+            queue_threshold_normal=10, queue_threshold_high=50, queue_threshold_critical=80
+        )
         ll._last_check = 0  # bypass check interval
         changes = []
         ll.set_load_change_callback(lambda old, new: changes.append((old, new)))
@@ -609,7 +619,9 @@ class TestLifeline:
         assert ll.check_system_load(queue_depth=0) == SystemLoad.NORMAL
 
     def test_check_system_load_elevated(self):
-        ll = Lifeline(queue_threshold_normal=10, queue_threshold_high=50, queue_threshold_critical=80)
+        ll = Lifeline(
+            queue_threshold_normal=10, queue_threshold_high=50, queue_threshold_critical=80
+        )
         ll._last_check = 0  # bypass check interval
         result = ll.check_system_load(queue_depth=40)
         assert result == SystemLoad.ELEVATED
@@ -856,6 +868,7 @@ class TestNeuroTracer:
 
     def test_get_current_trace_id(self):
         from app.neuro_bus.tracer import current_trace
+
         current_trace.set(None)  # reset any leaked context
         tracer = NeuroTracer()
         assert tracer.get_current_trace_id() is None

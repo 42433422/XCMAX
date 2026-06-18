@@ -15,6 +15,7 @@ Focuses on:
 - LabelTemplateGeneratorSkill.execute with verbose flag and OCR success
 - get_label_template_generator_skill singleton reset edge cases
 """
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
@@ -37,7 +38,6 @@ from app.services.skills.label_template_generator.label_template_generator impor
     generate_template_code,
     get_label_template_generator_skill,
 )
-
 
 # ---------------------------------------------------------------------------
 # analyze_image — additional edge cases
@@ -322,7 +322,14 @@ class TestIdentifyFieldsAdditional:
     def test_no_colon_production_date_fixed_label(self):
         """生产日期 should be fixed_label."""
         blocks = [
-            {"text": "生产日期 2026-01-01", "left": 10, "top": 20, "width": 100, "height": 30, "conf": 0.9}
+            {
+                "text": "生产日期 2026-01-01",
+                "left": 10,
+                "top": 20,
+                "width": 100,
+                "height": 30,
+                "conf": 0.9,
+            }
         ]
         fields = _identify_fields(blocks)
         assert len(fields) == 1
@@ -332,7 +339,14 @@ class TestIdentifyFieldsAdditional:
     def test_no_colon_shelf_life_fixed_label(self):
         """保质期 should be fixed_label."""
         blocks = [
-            {"text": "保质期 12个月", "left": 10, "top": 20, "width": 100, "height": 30, "conf": 0.9}
+            {
+                "text": "保质期 12个月",
+                "left": 10,
+                "top": 20,
+                "width": 100,
+                "height": 30,
+                "conf": 0.9,
+            }
         ]
         fields = _identify_fields(blocks)
         assert len(fields) == 1
@@ -362,7 +376,14 @@ class TestIdentifyFieldsAdditional:
     def test_no_colon_product_number_fixed_label(self):
         """产品编号 should be fixed_label."""
         blocks = [
-            {"text": "产品编号 ABC123", "left": 10, "top": 20, "width": 100, "height": 30, "conf": 0.9}
+            {
+                "text": "产品编号 ABC123",
+                "left": 10,
+                "top": 20,
+                "width": 100,
+                "height": 30,
+                "conf": 0.9,
+            }
         ]
         fields = _identify_fields(blocks)
         assert len(fields) == 1
@@ -372,7 +393,14 @@ class TestIdentifyFieldsAdditional:
     def test_no_colon_product_name_fixed_label(self):
         """产品名称 should be fixed_label."""
         blocks = [
-            {"text": "产品名称 PE漆", "left": 10, "top": 20, "width": 100, "height": 30, "conf": 0.9}
+            {
+                "text": "产品名称 PE漆",
+                "left": 10,
+                "top": 20,
+                "width": 100,
+                "height": 30,
+                "conf": 0.9,
+            }
         ]
         fields = _identify_fields(blocks)
         assert len(fields) == 1
@@ -381,9 +409,7 @@ class TestIdentifyFieldsAdditional:
 
     def test_block_missing_text_key_skipped(self):
         """Block without 'text' key should be skipped (KeyError caught)."""
-        blocks = [
-            {"left": 10, "top": 20, "width": 100, "height": 30, "conf": 0.9}
-        ]
+        blocks = [{"left": 10, "top": 20, "width": 100, "height": 30, "conf": 0.9}]
         # This will raise KeyError - the function does not catch it
         with pytest.raises(KeyError):
             _identify_fields(blocks)
@@ -412,11 +438,27 @@ class TestPairFieldsByGridAdditional:
         """Block in merged cell but not at start_col should hit the else branch (skip)."""
         blocks = [
             # First block at col 0 (start of merged)
-            {"text": "长标签内容", "y_center": 50, "center": (25, 50), "left": 10, "top": 40,
-             "width": 40, "height": 20, "conf": 0.9},
+            {
+                "text": "长标签内容",
+                "y_center": 50,
+                "center": (25, 50),
+                "left": 10,
+                "top": 40,
+                "width": 40,
+                "height": 20,
+                "conf": 0.9,
+            },
             # Second block at col 1 (inside merged, not start)
-            {"text": "extra", "y_center": 50, "center": (75, 50), "left": 60, "top": 40,
-             "width": 40, "height": 20, "conf": 0.8},
+            {
+                "text": "extra",
+                "y_center": 50,
+                "center": (75, 50),
+                "left": 60,
+                "top": 40,
+                "width": 40,
+                "height": 20,
+                "conf": 0.8,
+            },
         ]
         merged = [{"row": 0, "start_col": 0, "end_col": 1}]
         result = _pair_fields_by_grid(blocks, [0, 100], [0, 50, 100], merged)
@@ -428,10 +470,26 @@ class TestPairFieldsByGridAdditional:
     def test_next_block_in_merged_current_unpaired(self):
         """When next block is in merged cell, current block should have empty value."""
         blocks = [
-            {"text": "品名", "y_center": 50, "center": (25, 50), "left": 10, "top": 40,
-             "width": 40, "height": 20, "conf": 0.9},
-            {"text": "merged_val", "y_center": 50, "center": (75, 50), "left": 60, "top": 40,
-             "width": 40, "height": 20, "conf": 0.8},
+            {
+                "text": "品名",
+                "y_center": 50,
+                "center": (25, 50),
+                "left": 10,
+                "top": 40,
+                "width": 40,
+                "height": 20,
+                "conf": 0.9,
+            },
+            {
+                "text": "merged_val",
+                "y_center": 50,
+                "center": (75, 50),
+                "left": 60,
+                "top": 40,
+                "width": 40,
+                "height": 20,
+                "conf": 0.8,
+            },
         ]
         merged = [{"row": 0, "start_col": 1, "end_col": 2}]
         result = _pair_fields_by_grid(blocks, [0, 100], [0, 33, 66, 100], merged)
@@ -442,8 +500,16 @@ class TestPairFieldsByGridAdditional:
     def test_single_block_no_merged(self):
         """Single block with no merged cells should have empty value."""
         blocks = [
-            {"text": "品名", "y_center": 50, "center": (25, 50), "left": 10, "top": 40,
-             "width": 40, "height": 20, "conf": 0.9},
+            {
+                "text": "品名",
+                "y_center": 50,
+                "center": (25, 50),
+                "left": 10,
+                "top": 40,
+                "width": 40,
+                "height": 20,
+                "conf": 0.9,
+            },
         ]
         result = _pair_fields_by_grid(blocks, [0, 100], [0, 100], [])
         assert len(result) == 1
@@ -453,10 +519,26 @@ class TestPairFieldsByGridAdditional:
     def test_two_adjacent_blocks_paired(self):
         """Two adjacent blocks in same row should be paired."""
         blocks = [
-            {"text": "品名", "y_center": 50, "center": (25, 50), "left": 10, "top": 40,
-             "width": 40, "height": 20, "conf": 0.9},
-            {"text": "运动鞋", "y_center": 50, "center": (75, 50), "left": 60, "top": 40,
-             "width": 40, "height": 20, "conf": 0.85},
+            {
+                "text": "品名",
+                "y_center": 50,
+                "center": (25, 50),
+                "left": 10,
+                "top": 40,
+                "width": 40,
+                "height": 20,
+                "conf": 0.9,
+            },
+            {
+                "text": "运动鞋",
+                "y_center": 50,
+                "center": (75, 50),
+                "left": 60,
+                "top": 40,
+                "width": 40,
+                "height": 20,
+                "conf": 0.85,
+            },
         ]
         result = _pair_fields_by_grid(blocks, [0, 100], [0, 50, 100], [])
         assert len(result) == 1
@@ -468,8 +550,16 @@ class TestPairFieldsByGridAdditional:
         """Merged cell spanning 3 columns should have merge_cols=3."""
         # Block center at x=50 falls in first column [0, 33)
         blocks = [
-            {"text": "长标签", "y_center": 50, "center": (16, 50), "left": 10, "top": 40,
-             "width": 140, "height": 20, "conf": 0.9},
+            {
+                "text": "长标签",
+                "y_center": 50,
+                "center": (16, 50),
+                "left": 10,
+                "top": 40,
+                "width": 140,
+                "height": 20,
+                "conf": 0.9,
+            },
         ]
         merged = [{"row": 0, "start_col": 0, "end_col": 2}]
         result = _pair_fields_by_grid(blocks, [0, 100], [0, 33, 66, 100], merged)
@@ -545,14 +635,15 @@ class TestExtractTextWithOcrGridDetection:
         mock_binary.shape = (0, 0)
         mock_cv2.threshold.return_value = (0, mock_binary)
 
-        with patch.dict("sys.modules", {"cv2": mock_cv2, "numpy": mock_np}), patch(
-            "app.services.skills.label_template_generator.label_template_generator.Image"
-        ) as MockImage:
+        with (
+            patch.dict("sys.modules", {"cv2": mock_cv2, "numpy": mock_np}),
+            patch(
+                "app.services.skills.label_template_generator.label_template_generator.Image"
+            ) as MockImage,
+        ):
             MockImage.open.return_value = img
             # Mock get_ocr_service to return empty text blocks
-            with patch(
-                "app.services.ocr_service.get_ocr_service"
-            ) as mock_get_svc:
+            with patch("app.services.ocr_service.get_ocr_service") as mock_get_svc:
                 mock_svc = MagicMock()
                 mock_svc.recognize_text_blocks.return_value = []
                 mock_svc.get_active_ocr_backend.return_value = "mock"
@@ -608,7 +699,12 @@ class TestGenerateTemplateCodeAdditional:
         ocr_result = {
             "success": True,
             "fields": [
-                {"label": "品名", "value": "鞋", "field_key": "product_name", "type": "fixed_label"},
+                {
+                    "label": "品名",
+                    "value": "鞋",
+                    "field_key": "product_name",
+                    "type": "fixed_label",
+                },
                 {"label": "颜色", "value": "白", "field_key": "color", "type": "fixed_label"},
             ],
         }
@@ -849,16 +945,24 @@ class TestLabelTemplateGeneratorSkillAdditional:
         mock_ocr_result = {
             "success": True,
             "fields": [
-                {"label": "品名", "value": "鞋", "field_key": "product_name", "type": "fixed_label"},
+                {
+                    "label": "品名",
+                    "value": "鞋",
+                    "field_key": "product_name",
+                    "type": "fixed_label",
+                },
                 {"label": "颜色", "value": "白", "field_key": "color", "type": "fixed_label"},
             ],
         }
-        with patch(
-            "app.services.skills.label_template_generator.label_template_generator.extract_text_with_ocr",
-            return_value=mock_ocr_result,
-        ), patch(
-            "app.services.skills.label_template_generator.label_template_generator.logger"
-        ) as mock_logger:
+        with (
+            patch(
+                "app.services.skills.label_template_generator.label_template_generator.extract_text_with_ocr",
+                return_value=mock_ocr_result,
+            ),
+            patch(
+                "app.services.skills.label_template_generator.label_template_generator.logger"
+            ) as mock_logger,
+        ):
             result = skill.execute(img_path, enable_ocr=True)
             assert result["success"] is True
             assert result["ocr_result"]["success"] is True
@@ -874,12 +978,15 @@ class TestLabelTemplateGeneratorSkillAdditional:
         img.save(img_path)
 
         skill = LabelTemplateGeneratorSkill()
-        with patch(
-            "app.services.skills.label_template_generator.label_template_generator.extract_text_with_ocr",
-            return_value={"success": False, "message": "OCR failed"},
-        ), patch(
-            "app.services.skills.label_template_generator.label_template_generator.logger"
-        ) as mock_logger:
+        with (
+            patch(
+                "app.services.skills.label_template_generator.label_template_generator.extract_text_with_ocr",
+                return_value={"success": False, "message": "OCR failed"},
+            ),
+            patch(
+                "app.services.skills.label_template_generator.label_template_generator.logger"
+            ) as mock_logger,
+        ):
             result = skill.execute(img_path, enable_ocr=True)
             assert result["success"] is True
             assert result["ocr_result"]["success"] is False

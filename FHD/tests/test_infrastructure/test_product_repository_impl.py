@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import math
-from datetime import datetime
 from contextlib import contextmanager
-from unittest.mock import MagicMock, patch, PropertyMock
+from datetime import datetime
+from unittest.mock import MagicMock, PropertyMock, patch
 
 import pytest
 
@@ -14,10 +14,10 @@ from app.infrastructure.persistence.product_repository_impl import (
     SQLAlchemyProductRepository,
 )
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def repo():
@@ -49,15 +49,18 @@ def _make_mock_product(**overrides):
 
 def _mock_db_ctx(mock_db):
     """Return a context manager that yields mock_db."""
+
     @contextmanager
     def _ctx():
         yield mock_db
+
     return _ctx()
 
 
 # ---------------------------------------------------------------------------
 # _api_scalar
 # ---------------------------------------------------------------------------
+
 
 class TestApiScalar:
     def test_none_returns_none(self):
@@ -107,11 +110,13 @@ class TestApiScalar:
         class NanLike:
             def __float__(self):
                 return float("nan")
+
         assert SQLAlchemyProductRepository._api_scalar(NanLike()) is None
 
     def test_object_without_float_conversion(self):
         class Weird:
             pass
+
         w = Weird()
         assert SQLAlchemyProductRepository._api_scalar(w) is w
 
@@ -126,6 +131,7 @@ class TestApiScalar:
 # _product_to_dict
 # ---------------------------------------------------------------------------
 
+
 class TestProductToDict:
     def test_basic_conversion(self, repo):
         mock_product = _make_mock_product()
@@ -139,9 +145,7 @@ class TestProductToDict:
         mock_col4 = MagicMock()
         mock_col4.name = "unit"
 
-        with patch(
-            "app.infrastructure.persistence.product_repository_impl.inspect"
-        ) as mock_insp:
+        with patch("app.infrastructure.persistence.product_repository_impl.inspect") as mock_insp:
             # inspect(Product) returns a mapper-like object
             mock_mapper = MagicMock()
             mock_mapper.columns = [mock_col1, mock_col2, mock_col3, mock_col4]
@@ -158,9 +162,7 @@ class TestProductToDict:
         mock_col = MagicMock()
         mock_col.name = "name"
 
-        with patch(
-            "app.infrastructure.persistence.product_repository_impl.inspect"
-        ) as mock_insp:
+        with patch("app.infrastructure.persistence.product_repository_impl.inspect") as mock_insp:
             mock_mapper = MagicMock()
             mock_mapper.columns = [mock_col]
             mock_insp.return_value = mock_mapper
@@ -173,9 +175,7 @@ class TestProductToDict:
         mock_col = MagicMock()
         mock_col.name = "name"
 
-        with patch(
-            "app.infrastructure.persistence.product_repository_impl.inspect"
-        ) as mock_insp:
+        with patch("app.infrastructure.persistence.product_repository_impl.inspect") as mock_insp:
             mock_mapper = MagicMock()
             mock_mapper.columns = [mock_col]
             mock_insp.return_value = mock_mapper
@@ -189,9 +189,7 @@ class TestProductToDict:
         mock_col = MagicMock()
         mock_col.name = "price"
 
-        with patch(
-            "app.infrastructure.persistence.product_repository_impl.inspect"
-        ) as mock_insp:
+        with patch("app.infrastructure.persistence.product_repository_impl.inspect") as mock_insp:
             mock_mapper = MagicMock()
             mock_mapper.columns = [mock_col]
             mock_insp.return_value = mock_mapper
@@ -204,6 +202,7 @@ class TestProductToDict:
 # find_all
 # ---------------------------------------------------------------------------
 
+
 class TestFindAll:
     @patch("app.infrastructure.persistence.product_repository_impl.get_db")
     def test_products_table_not_exists_returns_empty(self, mock_get_db, repo):
@@ -211,9 +210,7 @@ class TestFindAll:
         mock_db.__dict__["bind"] = MagicMock()
         mock_get_db.return_value = _mock_db_ctx(mock_db)
 
-        with patch(
-            "app.infrastructure.persistence.product_repository_impl.inspect"
-        ) as mock_insp:
+        with patch("app.infrastructure.persistence.product_repository_impl.inspect") as mock_insp:
             mock_bind_insp = MagicMock()
             mock_bind_insp.get_table_names.return_value = []
             mock_insp.return_value = mock_bind_insp
@@ -245,9 +242,7 @@ class TestFindAll:
         mock_query.all.return_value = []
         mock_db.query.return_value = mock_query
 
-        with patch(
-            "app.infrastructure.persistence.product_repository_impl.inspect"
-        ) as mock_insp:
+        with patch("app.infrastructure.persistence.product_repository_impl.inspect") as mock_insp:
             mock_bind_insp = MagicMock()
             mock_bind_insp.get_table_names.return_value = ["products"]
             mock_insp.return_value = mock_bind_insp
@@ -270,9 +265,7 @@ class TestFindAll:
         mock_query.all.return_value = []
         mock_db.query.return_value = mock_query
 
-        with patch(
-            "app.infrastructure.persistence.product_repository_impl.inspect"
-        ) as mock_insp:
+        with patch("app.infrastructure.persistence.product_repository_impl.inspect") as mock_insp:
             mock_bind_insp = MagicMock()
             mock_bind_insp.get_table_names.return_value = ["products"]
             mock_insp.return_value = mock_bind_insp
@@ -295,9 +288,7 @@ class TestFindAll:
         mock_query.all.return_value = []
         mock_db.query.return_value = mock_query
 
-        with patch(
-            "app.infrastructure.persistence.product_repository_impl.inspect"
-        ) as mock_insp:
+        with patch("app.infrastructure.persistence.product_repository_impl.inspect") as mock_insp:
             mock_bind_insp = MagicMock()
             mock_bind_insp.get_table_names.return_value = ["products"]
             mock_insp.return_value = mock_bind_insp
@@ -320,9 +311,7 @@ class TestFindAll:
         mock_query.all.return_value = []
         mock_db.query.return_value = mock_query
 
-        with patch(
-            "app.infrastructure.persistence.product_repository_impl.inspect"
-        ) as mock_insp:
+        with patch("app.infrastructure.persistence.product_repository_impl.inspect") as mock_insp:
             mock_bind_insp = MagicMock()
             mock_bind_insp.get_table_names.return_value = ["products"]
             mock_insp.return_value = mock_bind_insp
@@ -339,9 +328,7 @@ class TestFindAll:
         mock_db.__dict__["bind"] = MagicMock()
         mock_get_db.return_value = _mock_db_ctx(mock_db)
 
-        with patch(
-            "app.infrastructure.persistence.product_repository_impl.inspect"
-        ) as mock_insp:
+        with patch("app.infrastructure.persistence.product_repository_impl.inspect") as mock_insp:
             mock_insp.side_effect = RuntimeError("inspect failed")
             result = repo.find_all()
 
@@ -352,6 +339,7 @@ class TestFindAll:
 # ---------------------------------------------------------------------------
 # find_by_id
 # ---------------------------------------------------------------------------
+
 
 class TestFindById:
     @patch("app.infrastructure.persistence.product_repository_impl.get_db")
@@ -390,6 +378,7 @@ class TestFindById:
 # find_product_units
 # ---------------------------------------------------------------------------
 
+
 class TestFindProductUnits:
     @patch("app.infrastructure.persistence.product_repository_impl.get_db")
     def test_fallback_to_products_unit(self, mock_get_db, repo):
@@ -402,9 +391,7 @@ class TestFindProductUnits:
         ]
         mock_get_db.return_value = _mock_db_ctx(mock_db)
 
-        with patch(
-            "app.infrastructure.persistence.product_repository_impl.inspect"
-        ) as mock_insp:
+        with patch("app.infrastructure.persistence.product_repository_impl.inspect") as mock_insp:
             mock_insp_obj = MagicMock()
             mock_insp_obj.get_table_names.return_value = ["products"]
             mock_insp.return_value = mock_insp_obj
@@ -426,13 +413,13 @@ class TestFindProductUnits:
         mock_cs.bind = MagicMock()
         mock_cs.get_bind.return_value = MagicMock()
 
-        with patch(
-            "app.infrastructure.persistence.product_repository_impl.inspect"
-        ) as mock_insp:
+        with patch("app.infrastructure.persistence.product_repository_impl.inspect") as mock_insp:
             mock_insp_obj = MagicMock()
             mock_insp_obj.get_table_names.return_value = ["purchase_units"]
             mock_insp_obj.get_columns.return_value = [
-                {"name": "id"}, {"name": "unit_name"}, {"name": "is_active"}
+                {"name": "id"},
+                {"name": "unit_name"},
+                {"name": "is_active"},
             ]
             mock_insp.return_value = mock_insp_obj
 
@@ -457,9 +444,7 @@ class TestFindProductUnits:
         mock_db.query.return_value.distinct.return_value.all.return_value = []
         mock_get_db.return_value = _mock_db_ctx(mock_db)
 
-        with patch(
-            "app.infrastructure.persistence.product_repository_impl.inspect"
-        ) as mock_insp:
+        with patch("app.infrastructure.persistence.product_repository_impl.inspect") as mock_insp:
             mock_insp_obj = MagicMock()
             mock_insp_obj.get_table_names.return_value = ["products"]
             mock_insp.return_value = mock_insp_obj
@@ -483,9 +468,7 @@ class TestFindProductUnits:
         ]
         mock_get_db.return_value = _mock_db_ctx(mock_db)
 
-        with patch(
-            "app.infrastructure.persistence.product_repository_impl.inspect"
-        ) as mock_insp:
+        with patch("app.infrastructure.persistence.product_repository_impl.inspect") as mock_insp:
             mock_insp_obj = MagicMock()
             mock_insp_obj.get_table_names.return_value = ["products"]
             mock_insp.return_value = mock_insp_obj
@@ -503,6 +486,7 @@ class TestFindProductUnits:
 # create
 # ---------------------------------------------------------------------------
 
+
 class TestCreate:
     @patch("app.infrastructure.persistence.product_repository_impl.get_db")
     def test_create_success(self, mock_get_db, repo):
@@ -514,9 +498,7 @@ class TestCreate:
         mock_db.refresh.return_value = None
         mock_get_db.return_value = _mock_db_ctx(mock_db)
 
-        with patch(
-            "app.infrastructure.persistence.product_repository_impl.Product"
-        ) as MockProduct:
+        with patch("app.infrastructure.persistence.product_repository_impl.Product") as MockProduct:
             MockProduct.return_value = mock_product
             result = repo.create({"product_name": "新产品", "price": 10.0})
 
@@ -539,9 +521,7 @@ class TestCreate:
         mock_product.id = 1
         mock_get_db.return_value = _mock_db_ctx(mock_db)
 
-        with patch(
-            "app.infrastructure.persistence.product_repository_impl.Product"
-        ) as MockProduct:
+        with patch("app.infrastructure.persistence.product_repository_impl.Product") as MockProduct:
             MockProduct.return_value = mock_product
             result = repo.create({"name": "用name键创建"})
 
@@ -558,6 +538,7 @@ class TestCreate:
 # ---------------------------------------------------------------------------
 # update
 # ---------------------------------------------------------------------------
+
 
 class TestUpdate:
     @patch("app.infrastructure.persistence.product_repository_impl.get_db")
@@ -599,17 +580,20 @@ class TestUpdate:
         mock_db.query.return_value.filter.return_value.first.return_value = mock_product
         mock_get_db.return_value = _mock_db_ctx(mock_db)
 
-        result = repo.update(1, {
-            "price": 50.0,
-            "description": "新描述",
-            "model_number": "M2",
-            "specification": "200x300",
-            "quantity": 100,
-            "category": "工具",
-            "brand": "品牌B",
-            "unit": "箱",
-            "is_active": 0,
-        })
+        result = repo.update(
+            1,
+            {
+                "price": 50.0,
+                "description": "新描述",
+                "model_number": "M2",
+                "specification": "200x300",
+                "quantity": 100,
+                "category": "工具",
+                "brand": "品牌B",
+                "unit": "箱",
+                "is_active": 0,
+            },
+        )
         assert result["success"] is True
 
     @patch("app.infrastructure.persistence.product_repository_impl.get_db")
@@ -633,6 +617,7 @@ class TestUpdate:
 # ---------------------------------------------------------------------------
 # delete
 # ---------------------------------------------------------------------------
+
 
 class TestDelete:
     @patch("app.infrastructure.persistence.product_repository_impl.get_db")
@@ -665,6 +650,7 @@ class TestDelete:
 # batch_create
 # ---------------------------------------------------------------------------
 
+
 class TestBatchCreate:
     def test_empty_list_returns_error(self, repo):
         result = repo.batch_create([])
@@ -678,10 +664,12 @@ class TestBatchCreate:
         mock_db.commit.return_value = None
         mock_get_db.return_value = _mock_db_ctx(mock_db)
 
-        result = repo.batch_create([
-            {"product_name": "产品1", "price": 10},
-            {"product_name": "产品2", "price": 20},
-        ])
+        result = repo.batch_create(
+            [
+                {"product_name": "产品1", "price": 10},
+                {"product_name": "产品2", "price": 20},
+            ]
+        )
         assert result["success"] is True
         assert result["success_count"] == 2
 
@@ -692,10 +680,12 @@ class TestBatchCreate:
         mock_db.commit.return_value = None
         mock_get_db.return_value = _mock_db_ctx(mock_db)
 
-        result = repo.batch_create([
-            {"product_name": "有效产品"},
-            {"product_name": ""},
-        ])
+        result = repo.batch_create(
+            [
+                {"product_name": "有效产品"},
+                {"product_name": ""},
+            ]
+        )
         assert result["success"] is False
         assert result["failed_count"] == 1
 
@@ -710,6 +700,7 @@ class TestBatchCreate:
 # ---------------------------------------------------------------------------
 # batch_delete
 # ---------------------------------------------------------------------------
+
 
 class TestBatchDelete:
     def test_empty_ids_returns_error(self, repo):
@@ -749,6 +740,7 @@ class TestBatchDelete:
 # exists
 # ---------------------------------------------------------------------------
 
+
 class TestExists:
     @patch("app.infrastructure.persistence.product_repository_impl.get_db")
     def test_exists_true(self, mock_get_db, repo):
@@ -776,6 +768,7 @@ class TestExists:
 # find_names
 # ---------------------------------------------------------------------------
 
+
 class TestFindNames:
     @patch("app.infrastructure.persistence.product_repository_impl.get_db")
     def test_find_names_success(self, mock_get_db, repo):
@@ -788,9 +781,7 @@ class TestFindNames:
         ]
         mock_get_db.return_value = _mock_db_ctx(mock_db)
 
-        with patch(
-            "app.infrastructure.persistence.product_repository_impl.inspect"
-        ) as mock_insp:
+        with patch("app.infrastructure.persistence.product_repository_impl.inspect") as mock_insp:
             mock_insp.return_value.get_table_names.return_value = ["products"]
             result = repo.find_names()
 
@@ -805,9 +796,7 @@ class TestFindNames:
         ]
         mock_get_db.return_value = _mock_db_ctx(mock_db)
 
-        with patch(
-            "app.infrastructure.persistence.product_repository_impl.inspect"
-        ) as mock_insp:
+        with patch("app.infrastructure.persistence.product_repository_impl.inspect") as mock_insp:
             mock_insp.return_value.get_table_names.return_value = ["products"]
             result = repo.find_names(keyword="测试")
 
@@ -818,9 +807,7 @@ class TestFindNames:
         mock_db = MagicMock()
         mock_get_db.return_value = _mock_db_ctx(mock_db)
 
-        with patch(
-            "app.infrastructure.persistence.product_repository_impl.inspect"
-        ) as mock_insp:
+        with patch("app.infrastructure.persistence.product_repository_impl.inspect") as mock_insp:
             mock_insp.return_value.get_table_names.return_value = []
             result = repo.find_names()
 
@@ -836,6 +823,7 @@ class TestFindNames:
 # ---------------------------------------------------------------------------
 # TRIVIAL_MEASURE_UNITS constant
 # ---------------------------------------------------------------------------
+
 
 class TestTrivialMeasureUnits:
     def test_contains_common_units(self):

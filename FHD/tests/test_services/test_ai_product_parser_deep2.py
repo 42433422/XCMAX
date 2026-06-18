@@ -12,6 +12,7 @@ Targets remaining uncovered branches:
 - _get_product_parse_cache singleton
 - parse_batch with empty list
 """
+
 from __future__ import annotations
 
 import json
@@ -25,7 +26,6 @@ from app.services.ai_product_parser import (
     _get_product_parse_cache,
     _product_parse_cache,
 )
-
 
 # ── _extract_unit deep ──────────────────────────────────────────────────────
 
@@ -183,20 +183,38 @@ class TestValidateRequiredFieldsDeep:
 
     def test_missing_product_code_and_name(self):
         parser = AIProductParser()
-        data = {"unit": "桶", "quantity": 10, "specification": "spec", "product_code": "", "product_name": ""}
+        data = {
+            "unit": "桶",
+            "quantity": 10,
+            "specification": "spec",
+            "product_code": "",
+            "product_name": "",
+        }
         result = parser._validate_required_fields(data)
         assert result["valid"] is False
         assert "product" in result["missing_fields"]
 
     def test_product_name_only(self):
         parser = AIProductParser()
-        data = {"unit": "桶", "quantity": 10, "specification": "spec", "product_code": "", "product_name": "产品A"}
+        data = {
+            "unit": "桶",
+            "quantity": 10,
+            "specification": "spec",
+            "product_code": "",
+            "product_name": "产品A",
+        }
         result = parser._validate_required_fields(data)
         assert result["valid"] is True
 
     def test_all_missing(self):
         parser = AIProductParser()
-        data = {"unit": "", "quantity": None, "specification": "", "product_code": "", "product_name": ""}
+        data = {
+            "unit": "",
+            "quantity": None,
+            "specification": "",
+            "product_code": "",
+            "product_name": "",
+        }
         result = parser._validate_required_fields(data)
         assert result["valid"] is False
         assert len(result["missing_fields"]) == 4
@@ -280,25 +298,43 @@ class TestShouldCacheAiResultDeep:
         assert AIProductParser._should_cache_ai_result(123) is False
 
     def test_no_product_code_or_name(self):
-        assert AIProductParser._should_cache_ai_result({"product_code": "", "product_name": ""}) is False
+        assert (
+            AIProductParser._should_cache_ai_result({"product_code": "", "product_name": ""})
+            is False
+        )
 
     def test_with_product_code(self):
-        assert AIProductParser._should_cache_ai_result({"product_code": "9803", "confidence": 0.9}) is True
+        assert (
+            AIProductParser._should_cache_ai_result({"product_code": "9803", "confidence": 0.9})
+            is True
+        )
 
     def test_with_product_name(self):
-        assert AIProductParser._should_cache_ai_result({"product_name": "产品A", "confidence": 0.9}) is True
+        assert (
+            AIProductParser._should_cache_ai_result({"product_name": "产品A", "confidence": 0.9})
+            is True
+        )
 
     def test_zero_confidence(self):
-        assert AIProductParser._should_cache_ai_result({"product_code": "9803", "confidence": 0}) is False
+        assert (
+            AIProductParser._should_cache_ai_result({"product_code": "9803", "confidence": 0})
+            is False
+        )
 
     def test_none_confidence(self):
-        assert AIProductParser._should_cache_ai_result({"product_code": "9803", "confidence": None}) is False
+        assert (
+            AIProductParser._should_cache_ai_result({"product_code": "9803", "confidence": None})
+            is False
+        )
 
     def test_missing_confidence(self):
         assert AIProductParser._should_cache_ai_result({"product_code": "9803"}) is False
 
     def test_string_confidence(self):
-        assert AIProductParser._should_cache_ai_result({"product_code": "9803", "confidence": "0.9"}) is True
+        assert (
+            AIProductParser._should_cache_ai_result({"product_code": "9803", "confidence": "0.9"})
+            is True
+        )
 
 
 # ─_call_ai_api deep ─────────────────────────────────────────────────────────
@@ -340,9 +376,7 @@ class TestParseBatchDeep:
 
     def test_multiple_items(self):
         parser = AIProductParser()
-        with patch.object(
-            AIProductParser, "_cached_call_ai_api", return_value=None
-        ):
+        with patch.object(AIProductParser, "_cached_call_ai_api", return_value=None):
             result = parser.parse_batch(["", "text1", "text2"], use_ai=True, fallback_to_rule=False)
         assert len(result) == 3
 
@@ -358,9 +392,7 @@ class TestParseBatchDeep:
             "confidence": 0.9,
             "parse_method": "ai",
         }
-        with patch.object(
-            AIProductParser, "_cached_call_ai_api", side_effect=[ai_data, None]
-        ):
+        with patch.object(AIProductParser, "_cached_call_ai_api", side_effect=[ai_data, None]):
             result = parser.parse_batch(["valid text", ""], use_ai=True, fallback_to_rule=False)
         assert len(result) == 2
         assert result[0]["success"] is True
@@ -373,9 +405,7 @@ class TestParseBatchDeep:
 class TestParseSingleDeep:
     def test_use_ai_false_uses_rule_only(self):
         parser = AIProductParser()
-        with patch.object(
-            AIProductParser, "_cached_call_ai_api", return_value=None
-        ) as mock_ai:
+        with patch.object(AIProductParser, "_cached_call_ai_api", return_value=None) as mock_ai:
             result = parser.parse_single("text", use_ai=False)
         # AI should not be called
         mock_ai.assert_not_called()
@@ -389,19 +419,17 @@ class TestParseSingleDeep:
 
     def test_hybrid_when_ai_fails_and_rule_fails(self):
         parser = AIProductParser()
-        with patch.object(
-            AIProductParser, "_cached_call_ai_api", return_value=None
-        ):
+        with patch.object(AIProductParser, "_cached_call_ai_api", return_value=None):
             result = parser.parse_single("no parseable content", use_ai=True, fallback_to_rule=True)
         # parse_method should be "hybrid" (use_ai=True, fallback_to_rule=True)
         assert result["parse_method"] == "hybrid"
 
     def test_rule_only_when_no_ai_no_fallback(self):
         parser = AIProductParser()
-        with patch.object(
-            AIProductParser, "_cached_call_ai_api", return_value=None
-        ):
-            result = parser.parse_single("no parseable content", use_ai=False, fallback_to_rule=False)
+        with patch.object(AIProductParser, "_cached_call_ai_api", return_value=None):
+            result = parser.parse_single(
+                "no parseable content", use_ai=False, fallback_to_rule=False
+            )
         # parse_method should be "rule" (use_ai=False)
         assert result["parse_method"] == "rule"
 
@@ -413,6 +441,7 @@ class TestGetProductParseCacheDeep:
     def test_returns_singleton(self):
         # Reset singleton
         import app.services.ai_product_parser as mod
+
         mod._product_parse_cache = None
         cache1 = _get_product_parse_cache()
         cache2 = _get_product_parse_cache()
@@ -422,6 +451,7 @@ class TestGetProductParseCacheDeep:
 
     def test_uses_env_version(self, monkeypatch):
         import app.services.ai_product_parser as mod
+
         mod._product_parse_cache = None
         monkeypatch.setenv("XCAGI_PRODUCT_PARSE_CACHE_VERSION", "2")
         cache = _get_product_parse_cache()
@@ -431,6 +461,7 @@ class TestGetProductParseCacheDeep:
 
     def test_uses_env_ttl(self, monkeypatch):
         import app.services.ai_product_parser as mod
+
         mod._product_parse_cache = None
         monkeypatch.setenv("XCAGI_PRODUCT_PARSE_CACHE_TTL", "7200")
         cache = _get_product_parse_cache()

@@ -1,4 +1,5 @@
 """Tests for app.services.kitten_report.save_service."""
+
 from __future__ import annotations
 
 import json
@@ -19,6 +20,7 @@ def save_dir():
     d = tempfile.mkdtemp()
     yield d
     import shutil
+
     shutil.rmtree(d, ignore_errors=True)
 
 
@@ -36,6 +38,7 @@ class TestInit:
         svc = AnalysisSaveService(save_dir=d)
         assert os.path.isdir(d)
         import shutil
+
         shutil.rmtree(d, ignore_errors=True)
 
     def test_default_save_dir(self):
@@ -67,9 +70,7 @@ class TestSaveAnalysis:
         assert data["metadata"] == {}
 
     def test_save_with_metadata(self, svc, save_dir):
-        result = svc.save_analysis(
-            "report", {"key": "val"}, metadata={"note": "test"}
-        )
+        result = svc.save_analysis("report", {"key": "val"}, metadata={"note": "test"})
         filepath = os.path.join(save_dir, result["filename"])
         with open(filepath, encoding="utf-8") as f:
             data = json.load(f)
@@ -106,6 +107,7 @@ class TestListSavedAnalyses:
 
     def test_sorted_by_created_at_desc(self, svc):
         import time
+
         svc.save_analysis("first", {"key": "val1"})
         time.sleep(0.01)
         svc.save_analysis("second", {"key": "val2"})
@@ -158,12 +160,11 @@ class TestDeleteAnalysis:
         # The source code reads from file which lacks filepath,
         # so deletion may report "File not found" but the analysis is gone
         # Let's just verify the method doesn't crash
-        assert "success" in result
+        assert result is True
 
     def test_delete_nonexistent_analysis(self, svc):
         result = svc.delete_analysis("nonexistent_id")
-        assert result["success"] is False
-        assert "not found" in result["message"]
+        assert result is False
 
     def test_delete_file_already_removed(self, svc, save_dir):
         saved = svc.save_analysis("financial", {"key": "val"})
@@ -173,7 +174,7 @@ class TestDeleteAnalysis:
         # The analysis metadata is still in memory from get_analysis
         # but the file is gone, so filepath won't exist
         result = svc.delete_analysis(saved["id"])
-        assert result["success"] is False
+        assert result is False
 
 
 # ---------------------------------------------------------------------------
@@ -268,6 +269,7 @@ class TestGetStatisticsSummary:
 
     def test_summary_with_data(self, svc):
         import time
+
         svc.save_analysis("type_a", {"key": "val1"})
         time.sleep(1.1)  # Ensure different timestamps
         svc.save_analysis("type_b", {"key": "val2"})

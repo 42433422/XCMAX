@@ -1,4 +1,5 @@
 """Tests for app.application.aiopen.service."""
+
 from __future__ import annotations
 
 import base64
@@ -9,6 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.application.aiopen.service import (
+    _UI_ACTIONS,
     AIOPEN_PRODUCT_NAME,
     AIOPEN_PRODUCT_TAGLINE,
     AIOPEN_STATE,
@@ -16,10 +18,9 @@ from app.application.aiopen.service import (
     MCP_PROTOCOL_VERSIONS,
     MCP_SERVER_NAME,
     TOOL_DEFINITIONS,
-    _UI_ACTIONS,
     _env_api_key,
-    _tool_api_catalog,
     _tool_api_call,
+    _tool_api_catalog,
     _tool_chat,
     aiopen_manifest,
     build_aiopen_guide,
@@ -36,7 +37,6 @@ from app.application.aiopen.service import (
     revoke_api_key,
     verify_api_key,
 )
-
 
 # ── API Key 鉴权 ──────────────────────────────────────────────
 
@@ -255,6 +255,7 @@ class TestBuildCursorDeeplink:
         link = build_cursor_deeplink("test-server", cfg)
         # Extract config param
         import urllib.parse
+
         parsed = urllib.parse.urlparse(link)
         params = urllib.parse.parse_qs(parsed.query)
         config_b64 = params["config"][0]
@@ -656,9 +657,7 @@ class TestInvokeTool:
         saved = AIOPEN_STATE.get("remote_control_enabled")
         AIOPEN_STATE["remote_control_enabled"] = True
         try:
-            with patch(
-                "app.application.aiopen.service.aiopen_cursor_hub"
-            ) as mock_hub:
+            with patch("app.application.aiopen.service.aiopen_cursor_hub") as mock_hub:
                 mock_hub.dispatch = AsyncMock(return_value={"success": True})
                 result = await invoke_tool(
                     "ui_click", {"selector": "#btn", "session_id": "s1"}, MagicMock()
@@ -702,6 +701,7 @@ class TestOpenclawChatProxy:
 
     def test_http_error(self):
         import urllib.error
+
         err = urllib.error.HTTPError("http://x", 500, "Server Error", {}, None)
         err.read = MagicMock(return_value=b"internal error")
         with patch("app.application.aiopen.service.urllib.request.urlopen", side_effect=err):
@@ -723,10 +723,12 @@ class TestOpenclawChatProxy:
         AIOPEN_STATE["openclaw_base"] = "http://custom:9999"
         try:
             mock_resp = MagicMock()
-            mock_resp.read.return_value = b'{}'
+            mock_resp.read.return_value = b"{}"
             mock_resp.__enter__ = MagicMock(return_value=mock_resp)
             mock_resp.__exit__ = MagicMock(return_value=False)
-            with patch("app.application.aiopen.service.urllib.request.urlopen", return_value=mock_resp) as mock_urlopen:
+            with patch(
+                "app.application.aiopen.service.urllib.request.urlopen", return_value=mock_resp
+            ) as mock_urlopen:
                 openclaw_chat_proxy("hi")
                 call_args = mock_urlopen.call_args
                 req = call_args[0][0]
