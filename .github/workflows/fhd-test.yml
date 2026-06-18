@@ -69,6 +69,7 @@ jobs:
             printf '%s' "${bad}"
             exit 1
           fi
+          python3 scripts/ci/check_windows_checkout_paths.py
           echo "Repo hygiene check passed."
 
   backend-smoke:
