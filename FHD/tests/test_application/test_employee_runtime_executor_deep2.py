@@ -1,4 +1,5 @@
 """Deep tests for ``app.application.employee_runtime.executor`` covering remaining uncovered branches."""
+
 from __future__ import annotations
 
 import asyncio
@@ -10,7 +11,6 @@ from unittest.mock import MagicMock, Mock, patch
 import pytest
 
 from app.application.employee_runtime import executor as exec_mod
-
 
 # ── _get_section deep ────────────────────────────────────────────────────────
 
@@ -193,11 +193,13 @@ class TestRunMaybeAsyncDeep:
     def test_sync_function_with_kwargs(self) -> None:
         def fn(a, b, c=10):
             return a + b + c
+
         assert exec_mod._run_maybe_async(fn, 1, 2, c=3) == 6
 
     def test_async_function_no_running_loop(self) -> None:
         async def coro(x):
             return x * 2
+
         assert exec_mod._run_maybe_async(coro, 5) == 10
 
     def test_async_function_with_running_loop(self) -> None:
@@ -212,11 +214,13 @@ class TestRunMaybeAsyncDeep:
     def test_sync_function_returns_none(self) -> None:
         def fn():
             return None
+
         assert exec_mod._run_maybe_async(fn) is None
 
     def test_sync_function_returns_dict(self) -> None:
         def fn():
             return {"key": "value"}
+
         assert exec_mod._run_maybe_async(fn) == {"key": "value"}
 
 
@@ -237,8 +241,8 @@ class TestFindVendorConvertModuleDeep:
         # The temp path may contain "vendor" in the test name, so we need to
         # ensure the convert.py path doesn't contain "vendor".
         # Use a pack_root that definitely doesn't have "vendor" in its path.
-        import tempfile
         import os
+        import tempfile
 
         # Create a temp dir without "vendor" in the name
         with tempfile.TemporaryDirectory() as clean_tmp:
@@ -311,9 +315,7 @@ class TestActionVendorConvertDeep:
         payload_file = inputs_dir / "payload.json"
         payload_file.write_text(json.dumps({"data": "test"}))
 
-        out = exec_mod._action_vendor_convert(
-            tmp_path, "emp-generate-1", {}, None
-        )
+        out = exec_mod._action_vendor_convert(tmp_path, "emp-generate-1", {}, None)
         assert out["ok"] is True
         assert out["handler"] == "direct_python"
 
@@ -340,9 +342,7 @@ class TestActionVendorConvertDeep:
         )
         src = tmp_path / "src.txt"
         src.write_text("hi")
-        out = exec_mod._action_vendor_convert(
-            tmp_path, "emp-1", {"file_path": str(src)}, None
-        )
+        out = exec_mod._action_vendor_convert(tmp_path, "emp-1", {"file_path": str(src)}, None)
         assert out["ok"] is True
         assert out["output"] == {"result": "string result"}
 
@@ -359,9 +359,7 @@ class TestActionVendorConvertDeep:
         )
         src = tmp_path / "src.txt"
         src.write_text("hi")
-        out = exec_mod._action_vendor_convert(
-            tmp_path, "emp-1", {"file_path": str(src)}, None
-        )
+        out = exec_mod._action_vendor_convert(tmp_path, "emp-1", {"file_path": str(src)}, None)
         assert out["ok"] is True
         assert "custom.json" in out["output_path"]
 
@@ -374,9 +372,7 @@ class TestActionVendorConvertDeep:
         )
         src = tmp_path / "src.txt"
         src.write_text("hi")
-        out = exec_mod._action_vendor_convert(
-            tmp_path, "emp-1", {"file_path": str(src)}, None
-        )
+        out = exec_mod._action_vendor_convert(tmp_path, "emp-1", {"file_path": str(src)}, None)
         assert out["ok"] is False
         assert "file system error" in out["error"]
 
@@ -426,9 +422,7 @@ class TestActionDirectPythonModuleDeep:
     def test_module_name_empty_defaults_to_worker(self, tmp_path) -> None:
         employees = tmp_path / "backend" / "employees"
         employees.mkdir(parents=True)
-        (employees / "worker.py").write_text(
-            "def run(payload, ctx):\n    return {'ok': True}\n"
-        )
+        (employees / "worker.py").write_text("def run(payload, ctx):\n    return {'ok': True}\n")
         out = exec_mod._action_direct_python_module(
             tmp_path,
             "emp-1",
@@ -590,9 +584,7 @@ class TestCognitionFhdDeep:
             "app.application.employee_runtime.agent_runner._run_async",
             return_value={"choices": [{"message": {"content": "resp"}}]},
         ):
-            out = exec_mod._cognition_fhd(
-                {}, {"normalized_input": "not a dict"}, {}, "task"
-            )
+            out = exec_mod._cognition_fhd({}, {"normalized_input": "not a dict"}, {}, "task")
         # normalized_input is not a dict, so input should be {}
         assert out["input"] == {}
 
@@ -639,9 +631,7 @@ class TestActionsFhdDeep:
         assert out["outputs"][1]["handler"] == "llm_md"
 
     def test_agent_handler_with_tools_and_gate(self) -> None:
-        with patch(
-            "app.application.employee_runtime.executor.run_agent_handler"
-        ) as mock_run:
+        with patch("app.application.employee_runtime.executor.run_agent_handler") as mock_run:
             mock_run.return_value = {"handler": "agent", "ok": True}
             tools = [{"name": "tool1"}]
             gate = MagicMock()
@@ -664,9 +654,7 @@ class TestActionsFhdDeep:
     def test_direct_python_with_runtime(self, tmp_path) -> None:
         employees = tmp_path / "backend" / "employees"
         employees.mkdir(parents=True)
-        (employees / "worker.py").write_text(
-            "def run(payload, ctx):\n    return {'ok': True}\n"
-        )
+        (employees / "worker.py").write_text("def run(payload, ctx):\n    return {'ok': True}\n")
         out = exec_mod._actions_fhd(
             {"actions": {"handlers": ["direct_python"]}},
             {"input": {}},
@@ -722,17 +710,12 @@ class TestHandlersExecutionOkDeep:
     def test_mixed_ok_and_no_ok_key(self) -> None:
         # One with ok=False, one without ok key
         assert (
-            exec_mod._handlers_execution_ok(
-                {"outputs": [{"output": "x"}, {"ok": False}]}
-            )
-            is False
+            exec_mod._handlers_execution_ok({"outputs": [{"output": "x"}, {"ok": False}]}) is False
         )
 
     def test_all_ok_true(self) -> None:
         assert (
-            exec_mod._handlers_execution_ok(
-                {"outputs": [{"ok": True}, {"ok": True}, {"ok": True}]}
-            )
+            exec_mod._handlers_execution_ok({"outputs": [{"ok": True}, {"ok": True}, {"ok": True}]})
             is True
         )
 
@@ -742,9 +725,7 @@ class TestHandlersExecutionOkDeep:
 
 class TestExecuteEmployeeTaskLocalDeep:
     def test_passes_input_data(self) -> None:
-        with patch(
-            "app.application.employee_runtime.agent.EmployeeAgent"
-        ) as mock_agent_cls:
+        with patch("app.application.employee_runtime.agent.EmployeeAgent") as mock_agent_cls:
             mock_agent = MagicMock()
             mock_agent.run.return_value = {"ok": True}
             mock_agent_cls.return_value = mock_agent
@@ -755,9 +736,7 @@ class TestExecuteEmployeeTaskLocalDeep:
             assert args[1] == {"key": "value"}
 
     def test_passes_none_input_data(self) -> None:
-        with patch(
-            "app.application.employee_runtime.agent.EmployeeAgent"
-        ) as mock_agent_cls:
+        with patch("app.application.employee_runtime.agent.EmployeeAgent") as mock_agent_cls:
             mock_agent = MagicMock()
             mock_agent.run.return_value = {}
             mock_agent_cls.return_value = mock_agent
@@ -766,9 +745,7 @@ class TestExecuteEmployeeTaskLocalDeep:
             assert args[1] is None
 
     def test_passes_user_id(self) -> None:
-        with patch(
-            "app.application.employee_runtime.agent.EmployeeAgent"
-        ) as mock_agent_cls:
+        with patch("app.application.employee_runtime.agent.EmployeeAgent") as mock_agent_cls:
             mock_agent = MagicMock()
             mock_agent.run.return_value = {}
             mock_agent_cls.return_value = mock_agent

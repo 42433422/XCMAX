@@ -1,4 +1,5 @@
 """Tests for app.services.train_intent — intent model training/evaluation/serve CLI."""
+
 from __future__ import annotations
 
 import sys
@@ -16,14 +17,16 @@ from app.services.train_intent import (
     evaluate_model,
     main,
     serve_model,
-    test_model as _do_test_model,
     train_model,
 )
-
+from app.services.train_intent import (
+    test_model as _do_test_model,
+)
 
 # ---------------------------------------------------------------------------
 # train_model
 # ---------------------------------------------------------------------------
+
 
 class TestTrainModel:
     """train_model() — 训练意图识别模型"""
@@ -149,6 +152,7 @@ class TestTrainModel:
 # evaluate_model
 # ---------------------------------------------------------------------------
 
+
 class TestEvaluateModel:
     """evaluate_model() — 评估模型准确率"""
 
@@ -212,6 +216,7 @@ class TestEvaluateModel:
 # ---------------------------------------------------------------------------
 # test_model (renamed to avoid pytest collection)
 # ---------------------------------------------------------------------------
+
 
 class TestBatchTestModel:
     """_do_test_model() — 批量测试模型"""
@@ -296,6 +301,7 @@ class TestBatchTestModel:
 # serve_model
 # ---------------------------------------------------------------------------
 
+
 class TestServeModel:
     """serve_model() — 启动 FastAPI 意图推理服务"""
 
@@ -308,10 +314,13 @@ class TestServeModel:
         mock_uvicorn = MagicMock()
 
         with (
-            patch.dict(sys.modules, {
-                "app.services.bert_intent_service": mock_svc,
-                "uvicorn": mock_uvicorn,
-            }),
+            patch.dict(
+                sys.modules,
+                {
+                    "app.services.bert_intent_service": mock_svc,
+                    "uvicorn": mock_uvicorn,
+                },
+            ),
         ):
             serve_model(model_path="/models/fake", port=8080)
 
@@ -321,6 +330,7 @@ class TestServeModel:
 # ---------------------------------------------------------------------------
 # main() — CLI argument parsing
 # ---------------------------------------------------------------------------
+
 
 class TestMain:
     """main() — CLI 入口"""
@@ -334,33 +344,52 @@ class TestMain:
     def test_train_mode_with_data(self, mock_train):
         """train 模式有 --data 时调用 train_model"""
         mock_train.return_value = "/models/final"
-        with patch("sys.argv", [
-            "train_intent",
-            "--mode", "train",
-            "--data", "/tmp/data.yml",
-        ]):
+        with patch(
+            "sys.argv",
+            [
+                "train_intent",
+                "--mode",
+                "train",
+                "--data",
+                "/tmp/data.yml",
+            ],
+        ):
             main()
         mock_train.assert_called_once()
 
     @patch("app.services.train_intent.evaluate_model")
     def test_evaluate_mode(self, mock_eval):
         """evaluate 模式调用 evaluate_model"""
-        with patch("sys.argv", [
-            "train_intent",
-            "--mode", "evaluate",
-            "--model", "/models/final",
-        ]):
+        with patch(
+            "sys.argv",
+            [
+                "train_intent",
+                "--mode",
+                "evaluate",
+                "--model",
+                "/models/final",
+            ],
+        ):
             main()
         mock_eval.assert_called_once_with(model_path="/models/final", data_path=None)
 
-    @patch("app.services.train_intent._do_test_model" if False else "app.services.train_intent.test_model")
+    @patch(
+        "app.services.train_intent._do_test_model"
+        if False
+        else "app.services.train_intent.test_model"
+    )
     def test_test_mode_with_texts(self, mock_test):
         """test 模式解析 --texts 参数"""
-        with patch("sys.argv", [
-            "train_intent",
-            "--mode", "test",
-            "--texts", "你好|再见",
-        ]):
+        with patch(
+            "sys.argv",
+            [
+                "train_intent",
+                "--mode",
+                "test",
+                "--texts",
+                "你好|再见",
+            ],
+        ):
             main()
         mock_test.assert_called_once()
         call_kwargs = mock_test.call_args
@@ -370,10 +399,14 @@ class TestMain:
     @patch("app.services.train_intent.test_model")
     def test_test_mode_without_texts_uses_defaults(self, mock_test):
         """test 模式无 --texts 时使用默认文本"""
-        with patch("sys.argv", [
-            "train_intent",
-            "--mode", "test",
-        ]):
+        with patch(
+            "sys.argv",
+            [
+                "train_intent",
+                "--mode",
+                "test",
+            ],
+        ):
             main()
         mock_test.assert_called_once()
         call_kwargs = mock_test.call_args
@@ -383,11 +416,16 @@ class TestMain:
     @patch("app.services.train_intent.serve_model")
     def test_serve_mode(self, mock_serve):
         """serve 模式调用 serve_model"""
-        with patch("sys.argv", [
-            "train_intent",
-            "--mode", "serve",
-            "--port", "9000",
-        ]):
+        with patch(
+            "sys.argv",
+            [
+                "train_intent",
+                "--mode",
+                "serve",
+                "--port",
+                "9000",
+            ],
+        ):
             main()
         mock_serve.assert_called_once_with(model_path="models/intent_bert/final", port=9000)
 
@@ -395,18 +433,29 @@ class TestMain:
     def test_train_mode_with_all_args(self, mock_train):
         """train 模式传递所有参数"""
         mock_train.return_value = "/models/final"
-        with patch("sys.argv", [
-            "train_intent",
-            "--mode", "train",
-            "--data", "/tmp/data.yml",
-            "--model", "bert-base",
-            "--output", "models/out",
-            "--epochs", "5",
-            "--batch_size", "32",
-            "--lr", "3e-5",
-            "--max_length", "128",
-            "--export_onnx",
-        ]):
+        with patch(
+            "sys.argv",
+            [
+                "train_intent",
+                "--mode",
+                "train",
+                "--data",
+                "/tmp/data.yml",
+                "--model",
+                "bert-base",
+                "--output",
+                "models/out",
+                "--epochs",
+                "5",
+                "--batch_size",
+                "32",
+                "--lr",
+                "3e-5",
+                "--max_length",
+                "128",
+                "--export_onnx",
+            ],
+        ):
             main()
         mock_train.assert_called_once_with(
             data_path="/tmp/data.yml",

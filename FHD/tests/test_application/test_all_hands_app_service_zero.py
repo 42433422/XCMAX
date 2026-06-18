@@ -1,4 +1,5 @@
 """Tests for app.application.all_hands_app_service."""
+
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -30,21 +31,33 @@ class TestStartAllHandsSessionLocal:
     """Tests for start_all_hands_session_local."""
 
     @pytest.mark.asyncio
-    @patch("app.application.all_hands_app_service.modstore_post", new_callable=AsyncMock, return_value={"success": True})
+    @patch(
+        "app.application.all_hands_app_service.modstore_post",
+        new_callable=AsyncMock,
+        return_value={"success": True},
+    )
     async def test_calls_modstore_post(self, mock_post: AsyncMock) -> None:
         result = await start_all_hands_session_local()
         assert result["success"] is True
         mock_post.assert_called_once()
 
     @pytest.mark.asyncio
-    @patch("app.application.all_hands_app_service.modstore_post", new_callable=AsyncMock, return_value={"success": True})
+    @patch(
+        "app.application.all_hands_app_service.modstore_post",
+        new_callable=AsyncMock,
+        return_value={"success": True},
+    )
     async def test_passes_body(self, mock_post: AsyncMock) -> None:
         result = await start_all_hands_session_local(body={"key": "val"})
         call_kwargs = mock_post.call_args
         assert call_kwargs[1]["json_body"] == {"key": "val"}
 
     @pytest.mark.asyncio
-    @patch("app.application.all_hands_app_service.modstore_post", new_callable=AsyncMock, return_value={"success": True})
+    @patch(
+        "app.application.all_hands_app_service.modstore_post",
+        new_callable=AsyncMock,
+        return_value={"success": True},
+    )
     async def test_default_empty_body(self, mock_post: AsyncMock) -> None:
         result = await start_all_hands_session_local()
         call_kwargs = mock_post.call_args
@@ -55,7 +68,11 @@ class TestStartAllHandsSessionWithAuthorization:
     """Tests for start_all_hands_session_with_authorization."""
 
     @pytest.mark.asyncio
-    @patch("app.application.all_hands_app_service.modstore_post", new_callable=AsyncMock, return_value={"success": True})
+    @patch(
+        "app.application.all_hands_app_service.modstore_post",
+        new_callable=AsyncMock,
+        return_value={"success": True},
+    )
     async def test_passes_authorization(self, mock_post: AsyncMock) -> None:
         result = await start_all_hands_session_with_authorization("Bearer token")
         call_kwargs = mock_post.call_args
@@ -66,7 +83,11 @@ class TestGetAllHandsSessionLocal:
     """Tests for get_all_hands_session_local."""
 
     @pytest.mark.asyncio
-    @patch("app.application.all_hands_app_service.modstore_get", new_callable=AsyncMock, return_value={"data": {}})
+    @patch(
+        "app.application.all_hands_app_service.modstore_get",
+        new_callable=AsyncMock,
+        return_value={"data": {}},
+    )
     async def test_valid_session_id(self, mock_get: AsyncMock) -> None:
         result = await get_all_hands_session_local("sess123")
         call_args = mock_get.call_args
@@ -83,7 +104,11 @@ class TestGetAllHandsSessionLocal:
             await get_all_hands_session_local(None)
 
     @pytest.mark.asyncio
-    @patch("app.application.all_hands_app_service.modstore_get", new_callable=AsyncMock, return_value={"data": {}})
+    @patch(
+        "app.application.all_hands_app_service.modstore_get",
+        new_callable=AsyncMock,
+        return_value={"data": {}},
+    )
     async def test_sanitizes_session_id(self, mock_get: AsyncMock) -> None:
         result = await get_all_hands_session_local("sess!@#123")
         call_args = mock_get.call_args
@@ -94,7 +119,11 @@ class TestGetAllHandsSessionWithAuthorization:
     """Tests for get_all_hands_session_with_authorization."""
 
     @pytest.mark.asyncio
-    @patch("app.application.all_hands_app_service.modstore_get", new_callable=AsyncMock, return_value={"data": {}})
+    @patch(
+        "app.application.all_hands_app_service.modstore_get",
+        new_callable=AsyncMock,
+        return_value={"data": {}},
+    )
     async def test_passes_authorization(self, mock_get: AsyncMock) -> None:
         result = await get_all_hands_session_with_authorization("Bearer token", "sess123")
         call_kwargs = mock_get.call_args

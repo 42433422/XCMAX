@@ -121,7 +121,7 @@ describe('offlineTts', () => {
       })
       mockPipeline.mockImplementation(async (task: string, model: string, opts: Record<string, unknown>) => {
         // Simulate progress callback
-        const progressCb = opts?.progress_callback as Function
+        const progressCb = opts?.progress_callback as ((event: unknown) => void) | undefined
         if (progressCb) {
           progressCb({ progress: 50 })
           progressCb({ status: 'done' })

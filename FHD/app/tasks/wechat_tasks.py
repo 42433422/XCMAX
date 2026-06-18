@@ -34,7 +34,7 @@ def process_wechat_message(self, message_data: dict[str, Any]) -> bool:
         是否处理成功
     """
     try:
-        logger.info("开始处理微信消息：%s", message_data.get('message_id'))
+        logger.info("开始处理微信消息：%s", message_data.get("message_id"))
 
         # 调用服务层处理消息（基于 task_id）
         from app.services import get_wechat_task_service
@@ -52,7 +52,7 @@ def process_wechat_message(self, message_data: dict[str, Any]) -> bool:
         try:
             self.retry(exc=e, countdown=60)
         except self.MaxRetriesExceededError:
-            logger.error("微信消息处理达到最大重试次数：%s", message_data.get('message_id'))
+            logger.error("微信消息处理达到最大重试次数：%s", message_data.get("message_id"))
             return False
 
 

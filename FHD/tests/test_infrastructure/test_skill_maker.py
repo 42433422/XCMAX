@@ -1,15 +1,26 @@
 """Tests for app.infrastructure.skills.skill_maker.skill_maker."""
+
 from __future__ import annotations
 
 import importlib
 import os
-import pytest
 import tempfile
+
+import pytest
 
 # skill-maker uses a hyphen, so we need importlib
 _spec = importlib.util.spec_from_file_location(
     "skill_maker",
-    os.path.join(os.path.dirname(__file__), "..", "..", "app", "infrastructure", "skills", "skill-maker", "skill_maker.py"),
+    os.path.join(
+        os.path.dirname(__file__),
+        "..",
+        "..",
+        "app",
+        "infrastructure",
+        "skills",
+        "skill-maker",
+        "skill_maker.py",
+    ),
 )
 _mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)
@@ -141,7 +152,9 @@ class TestValidateSkill:
     def test_valid_skill(self, monkeypatch, tmp_path):
         skill_dir = tmp_path / "good-skill"
         skill_dir.mkdir()
-        (skill_dir / "SKILL.md").write_text('---\nname: "good-skill"\ndescription: "Good"\n---\n# Good')
+        (skill_dir / "SKILL.md").write_text(
+            '---\nname: "good-skill"\ndescription: "Good"\n---\n# Good'
+        )
         (skill_dir / "__init__.py").write_text("")
 
         monkeypatch.setattr(_mod, "get_skills_dir", lambda: str(tmp_path))

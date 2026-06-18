@@ -11,6 +11,7 @@ from urllib.parse import quote
 from fastapi import APIRouter, Body, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, Response
 
+from app.infrastructure.auth.db_token import verify_db_read_token_header
 from app.infrastructure.persistence.compat_db.base import (
     _business_mod_json_block,
     _product_parse_id,
@@ -26,7 +27,6 @@ from app.infrastructure.persistence.compat_db.queries import (
     _merged_purchase_unit_entries,
     _products_units_for_select,
 )
-from app.infrastructure.auth.db_token import verify_db_read_token_header
 from app.infrastructure.persistence.compat_db.writes import (
     products_pg_batch_delete_rows,
     products_pg_delete_row,

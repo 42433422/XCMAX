@@ -50,8 +50,6 @@ class ShipmentNumberModeService:
         if not typed or not unit_pool:
             return ""
 
-        # 兼容口语尾巴把数量粘到单位名（如“蕊芯1”“七彩乐园一”）：
-        # 优先用原始文本匹配，失败后再对尾部数量噪声做清洗并重试。
         candidate_typed_list = [typed]
         stripped_qty_tail = re.sub(r"(?:\d+|[一二两三四五六七八九十零〇]+)\s*$", "", typed).strip()
         if stripped_qty_tail and stripped_qty_tail not in candidate_typed_list:
@@ -85,7 +83,6 @@ class ShipmentNumberModeService:
             if len(contains) == 1:
                 return contains[0]
             if len(contains) > 1:
-                # 若用户输入带尾号（如“蕊芯1”），优先匹配同尾号单位（如“蕊芯家私1”）。
                 typed_digits = _tail_digits(normalized_typed)
                 if typed_digits:
                     digit_matched = [
@@ -423,7 +420,11 @@ class ShipmentNumberModeService:
             model_number = str(product.get("model_number") or "").strip().upper()
             product_name = str(product.get("product_name") or product.get("name") or "").strip()
             tin_spec = str(product.get("tin_spec") or product.get("specification") or "").strip()
-            quantity = product.get("quantity_tins") or product.get("quantity")
+            quantity = (
+                product.get("quantity_tins")
+                if "quantity_tins" in product
+                else product.get("quantity")
+            )
 
             try:
                 quantity_value = float(quantity)

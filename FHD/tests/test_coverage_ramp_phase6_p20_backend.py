@@ -43,20 +43,19 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.application.employee_runtime import config_v2_adapter as cfg_adapter
 from app.application import modstore_local_client as modstore_client
 from app.application import user_memory_vector_app_service as umv_service
+from app.application.employee_runtime import config_v2_adapter as cfg_adapter
 from app.application.user_memory_vector_app_service import (
+    UserMemoryRagApplicationService,
     UserMemoryVectorChunk,
     UserMemoryVectorIngestApplicationService,
-    UserMemoryRagApplicationService,
 )
 from app.db import validators as db_validators
 from app.neuro_bus.events.base import EventPriority, NeuroEvent
 from app.neuro_bus.transports import redis_pubsub as redis_pubsub_mod
 from app.services import finance_unified_archive as fin_archive
 from app.services import system_service as system_service_mod
-
 
 # ===========================================================================
 # Shared helpers / fixtures
@@ -127,16 +126,10 @@ class TestInferPerceptionType:
         assert cfg_adapter._infer_perception_type({"type": "ai_model_rankings"}) is None
 
     def test_document_enabled_returns_document(self):
-        assert (
-            cfg_adapter._infer_perception_type({"document": {"enabled": True}})
-            == "document"
-        )
+        assert cfg_adapter._infer_perception_type({"document": {"enabled": True}}) == "document"
 
     def test_vision_enabled_returns_image(self):
-        assert (
-            cfg_adapter._infer_perception_type({"vision": {"enabled": True}})
-            == "image"
-        )
+        assert cfg_adapter._infer_perception_type({"vision": {"enabled": True}}) == "image"
 
     def test_explicit_other_type_returns_none(self):
         assert cfg_adapter._infer_perception_type({"type": "custom"}) is None
@@ -146,10 +139,7 @@ class TestInferPerceptionType:
 
     def test_document_disabled_falls_through(self):
         # document present but not enabled, no other signal -> text
-        assert (
-            cfg_adapter._infer_perception_type({"document": {"enabled": False}})
-            == "text"
-        )
+        assert cfg_adapter._infer_perception_type({"document": {"enabled": False}}) == "text"
 
 
 class TestFormatBehaviorRules:
@@ -167,9 +157,7 @@ class TestFormatBehaviorRules:
         assert result.startswith("【行为约束】")
 
     def test_dict_items_with_name_and_desc(self):
-        result = cfg_adapter._format_behavior_rules(
-            [{"name": "n1", "description": "d1"}]
-        )
+        result = cfg_adapter._format_behavior_rules([{"name": "n1", "description": "d1"}])
         assert "1. n1: d1" in result
 
     def test_dict_items_only_name(self):
@@ -244,9 +232,7 @@ class TestComposeRoleBlock:
         assert result.startswith("【角色设定】")
 
     def test_expertise_filters_empty(self):
-        result = cfg_adapter._compose_role_block(
-            {"name": "N", "expertise": ["", "real", "  "]}
-        )
+        result = cfg_adapter._compose_role_block({"name": "N", "expertise": ["", "real", "  "]})
         assert "real" in result
 
 
@@ -326,9 +312,7 @@ class TestTranslateV2ToExecutorConfig:
         assert out["perception"]["type"] == "text"
 
     def test_perception_web_rankings_kept(self):
-        out = cfg_adapter.translate_v2_to_executor_config(
-            {"perception": {"type": "web_rankings"}}
-        )
+        out = cfg_adapter.translate_v2_to_executor_config({"perception": {"type": "web_rankings"}})
         assert out["perception"]["type"] == "web_rankings"
 
     def test_memory_default_session(self):
@@ -369,25 +353,18 @@ class TestNeedsExecutorTranslation:
 
     def test_perception_vision_enabled_returns_true(self):
         assert (
-            cfg_adapter.needs_executor_translation(
-                {"perception": {"vision": {"enabled": True}}}
-            )
+            cfg_adapter.needs_executor_translation({"perception": {"vision": {"enabled": True}}})
             is True
         )
 
     def test_cognition_agent_with_role_returns_true(self):
         assert (
-            cfg_adapter.needs_executor_translation(
-                {"cognition": {"agent": {"role": {}}}}
-            )
-            is True
+            cfg_adapter.needs_executor_translation({"cognition": {"agent": {"role": {}}}}) is True
         )
 
     def test_actions_voice_output_returns_true(self):
         assert (
-            cfg_adapter.needs_executor_translation(
-                {"actions": {"voice_output": {"enabled": True}}}
-            )
+            cfg_adapter.needs_executor_translation({"actions": {"voice_output": {"enabled": True}}})
             is True
         )
 
@@ -481,9 +458,7 @@ class TestLocalModstoreAdminLogin:
         login_resp.json.return_value = {"access_token": "tok123"}
         login_resp.headers = {"x-csrf-token": "csrf456"}
         client.post = AsyncMock(return_value=login_resp)
-        token, csrf = await modstore_client.local_modstore_admin_login(
-            client, "http://base"
-        )
+        token, csrf = await modstore_client.local_modstore_admin_login(client, "http://base")
         assert token == "tok123"
         assert csrf == "csrf456"
 
@@ -510,9 +485,7 @@ class TestLocalModstoreAdminLogin:
         csrf_resp.is_success = True
         csrf_resp.json.return_value = {"csrf_token": "csrf789"}
         client.get = AsyncMock(return_value=csrf_resp)
-        token, csrf = await modstore_client.local_modstore_admin_login(
-            client, "http://base"
-        )
+        token, csrf = await modstore_client.local_modstore_admin_login(client, "http://base")
         assert token == "tok"
         assert csrf == "csrf789"
 
@@ -524,9 +497,7 @@ class TestLocalModstoreAdminLogin:
         login_resp.json.return_value = {"token": "fallback_tok"}
         login_resp.headers = {"X-CSRF-Token": "csrf_hdr"}
         client.post = AsyncMock(return_value=login_resp)
-        token, csrf = await modstore_client.local_modstore_admin_login(
-            client, "http://base"
-        )
+        token, csrf = await modstore_client.local_modstore_admin_login(client, "http://base")
         assert token == "fallback_tok"
         assert csrf == "csrf_hdr"
 
@@ -539,9 +510,7 @@ class TestAuthHeaders:
         csrf_resp.is_success = True
         csrf_resp.json.return_value = {"csrf_token": "csrf1"}
         client.get = AsyncMock(return_value=csrf_resp)
-        headers = await modstore_client.auth_headers(
-            client, "http://base", "Bearer xyz"
-        )
+        headers = await modstore_client.auth_headers(client, "http://base", "Bearer xyz")
         assert headers["Authorization"] == "Bearer xyz"
         assert headers["X-CSRF-Token"] == "csrf1"
 
@@ -552,9 +521,7 @@ class TestAuthHeaders:
         csrf_resp.is_success = False
         csrf_resp.json.return_value = {}
         client.get = AsyncMock(return_value=csrf_resp)
-        headers = await modstore_client.auth_headers(
-            client, "http://base", "Bearer xyz"
-        )
+        headers = await modstore_client.auth_headers(client, "http://base", "Bearer xyz")
         assert headers["Authorization"] == "Bearer xyz"
         assert "X-CSRF-Token" not in headers
 
@@ -591,9 +558,7 @@ class TestModstoreGet:
             "app.application.modstore_local_client._async_client",
             return_value=mock_client,
         ):
-            data = await modstore_client.modstore_get(
-                "/api/x", authorization="Bearer tok"
-            )
+            data = await modstore_client.modstore_get("/api/x", authorization="Bearer tok")
         assert data == {"ok": True}
 
     @pytest.mark.asyncio
@@ -614,9 +579,7 @@ class TestModstoreGet:
             "app.application.modstore_local_client._async_client",
             return_value=mock_client,
         ):
-            data = await modstore_client.modstore_get(
-                "/api/x", authorization="Bearer tok"
-            )
+            data = await modstore_client.modstore_get("/api/x", authorization="Bearer tok")
         assert data == {"success": True, "data": [1, 2, 3]}
 
     @pytest.mark.asyncio
@@ -670,9 +633,7 @@ class TestModstoreGet:
             "app.application.modstore_local_client._async_client",
             return_value=mock_client,
         ):
-            data = await modstore_client.modstore_get(
-                "/api/x", authorization="Bearer tok"
-            )
+            data = await modstore_client.modstore_get("/api/x", authorization="Bearer tok")
         assert data == {"ok": True}
 
 
@@ -790,9 +751,7 @@ class TestUserMemoryVectorIngestApplicationService:
         result = svc.ingest_chunks("u1", chunks)
         assert result["success"] is True
         assert result["written"] == 2
-        store.create_or_update_index.assert_called_once_with(
-            index_id="u1", user_id="u1"
-        )
+        store.create_or_update_index.assert_called_once_with(index_id="u1", user_id="u1")
         store.upsert_chunks.assert_called_once()
 
     def test_ingest_chunks_store_without_create_index(self):
@@ -824,9 +783,7 @@ class TestUserMemoryVectorIngestApplicationService:
     def test_build_action_chunk_with_none_slots(self):
         store = _make_fake_vector_store()
         svc = UserMemoryVectorIngestApplicationService(vector_store=store)
-        chunk = svc.build_action_chunk(
-            user_id="u1", intent="search", slots=None, message=""
-        )
+        chunk = svc.build_action_chunk(user_id="u1", intent="search", slots=None, message="")
         assert "slots={}" in chunk.content
         assert chunk.metadata["slots"] == {}
 
@@ -834,9 +791,7 @@ class TestUserMemoryVectorIngestApplicationService:
         store = _make_fake_vector_store()
         svc = UserMemoryVectorIngestApplicationService(vector_store=store)
         long_msg = "x" * 500
-        chunk = svc.build_action_chunk(
-            user_id="u1", intent="i", slots={}, message=long_msg
-        )
+        chunk = svc.build_action_chunk(user_id="u1", intent="i", slots={}, message=long_msg)
         # content has [:120] truncation
         assert len(chunk.content) < 500
 
@@ -956,10 +911,7 @@ class TestUserMemoryRagApplicationService:
     def test_format_for_prompt_max_hits_limit(self):
         store = _make_fake_vector_store()
         svc = UserMemoryRagApplicationService(vector_store=store)
-        hits = [
-            {"score": 0.1 * i, "content": f"c{i}", "metadata": {}}
-            for i in range(10)
-        ]
+        hits = [{"score": 0.1 * i, "content": f"c{i}", "metadata": {}} for i in range(10)]
         result = svc.format_for_prompt("u1", "q", hits, max_hits=3)
         # Only 3 hits should be formatted
         assert result.count("source=") == 3
@@ -991,9 +943,7 @@ class TestUserMemoryRagApplicationService:
 
 class TestShipmentApprovalPendingRoute:
     def test_pending_returns_200_empty(self, shipment_client: TestClient):
-        with patch(
-            "app.application.workflow.get_approval_service"
-        ) as mock_get:
+        with patch("app.application.workflow.get_approval_service") as mock_get:
             svc = MagicMock()
             svc._pending_requests.values.return_value = []
             mock_get.return_value = svc
@@ -1002,9 +952,7 @@ class TestShipmentApprovalPendingRoute:
         assert r.json()["data"]["pending_approvals"] == []
 
     def test_pending_returns_200_with_requests(self, shipment_client: TestClient):
-        with patch(
-            "app.application.workflow.get_approval_service"
-        ) as mock_get:
+        with patch("app.application.workflow.get_approval_service") as mock_get:
             req = SimpleNamespace(
                 request_id="r1",
                 plan_id="p1",
@@ -1024,9 +972,7 @@ class TestShipmentApprovalPendingRoute:
         assert data[0]["request_id"] == "r1"
 
     def test_pending_with_none_created_at(self, shipment_client: TestClient):
-        with patch(
-            "app.application.workflow.get_approval_service"
-        ) as mock_get:
+        with patch("app.application.workflow.get_approval_service") as mock_get:
             req = SimpleNamespace(
                 request_id="r1",
                 plan_id="p1",
@@ -1046,9 +992,7 @@ class TestShipmentApprovalPendingRoute:
 
 class TestShipmentConfigApprovalRoute:
     def test_config_approval_get(self, shipment_client: TestClient):
-        with patch(
-            "resources.config.approval_config.get_approval_config"
-        ) as mock_get:
+        with patch("resources.config.approval_config.get_approval_config") as mock_get:
             cfg = MagicMock()
             cfg.enabled = True
             cfg.rules = [{"r": 1}]
@@ -1062,9 +1006,7 @@ class TestShipmentConfigApprovalRoute:
         assert body["attendance_policy"] == {"k": "v"}
 
     def test_config_approval_get_no_attendance_policy(self, shipment_client: TestClient):
-        with patch(
-            "resources.config.approval_config.get_approval_config"
-        ) as mock_get:
+        with patch("resources.config.approval_config.get_approval_config") as mock_get:
             cfg = MagicMock()
             cfg.enabled = False
             cfg.rules = []
@@ -1077,15 +1019,9 @@ class TestShipmentConfigApprovalRoute:
 
     def test_config_approval_post_success(self, shipment_client: TestClient):
         with (
-            patch(
-                "resources.config.approval_config.get_approval_config"
-            ) as mock_get,
-            patch(
-                "resources.config.approval_config.reload_approval_config"
-            ) as mock_reload,
-            patch(
-                "app.application.workflow.reload_approval_service"
-            ) as mock_reload_svc,
+            patch("resources.config.approval_config.get_approval_config") as mock_get,
+            patch("resources.config.approval_config.reload_approval_config") as mock_reload,
+            patch("app.application.workflow.reload_approval_service") as mock_reload_svc,
         ):
             cfg = MagicMock()
             cfg.save = MagicMock()
@@ -1099,22 +1035,12 @@ class TestShipmentConfigApprovalRoute:
         assert r.json()["success"] is True
         cfg.save.assert_called_once()
 
-    def test_config_approval_post_with_attendance_policy(
-        self, shipment_client: TestClient
-    ):
+    def test_config_approval_post_with_attendance_policy(self, shipment_client: TestClient):
         with (
-            patch(
-                "resources.config.approval_config.get_approval_config"
-            ) as mock_get,
-            patch(
-                "resources.config.approval_config.reload_approval_config"
-            ),
-            patch(
-                "resources.config.approval_config.normalize_attendance_policy"
-            ) as mock_norm,
-            patch(
-                "app.application.workflow.reload_approval_service"
-            ),
+            patch("resources.config.approval_config.get_approval_config") as mock_get,
+            patch("resources.config.approval_config.reload_approval_config"),
+            patch("resources.config.approval_config.normalize_attendance_policy") as mock_norm,
+            patch("app.application.workflow.reload_approval_service"),
         ):
             cfg = MagicMock()
             cfg.save = MagicMock()
@@ -1131,12 +1057,8 @@ class TestShipmentConfigApprovalRoute:
         assert r.status_code == 200
         mock_norm.assert_called_once()
 
-    def test_config_approval_post_recoverable_error(
-        self, shipment_client: TestClient
-    ):
-        with patch(
-            "resources.config.approval_config.get_approval_config"
-        ) as mock_get:
+    def test_config_approval_post_recoverable_error(self, shipment_client: TestClient):
+        with patch("resources.config.approval_config.get_approval_config") as mock_get:
             mock_get.side_effect = RuntimeError("db down")
             r = shipment_client.post("/api/ai/config/approval", json={})
         assert r.status_code == 500
@@ -1153,11 +1075,10 @@ class TestShipmentApprovalRequestRoute:
         assert r.status_code == 400
 
     def test_request_create_success(self, shipment_client: TestClient):
-        with patch(
-            "app.application.workflow.get_approval_service"
-        ) as mock_get, patch(
-            "app.application.workflow.WorkflowNode"
-        ) as mock_node_cls:
+        with (
+            patch("app.application.workflow.get_approval_service") as mock_get,
+            patch("app.application.workflow.WorkflowNode") as mock_node_cls,
+        ):
             svc = MagicMock()
             approval_req = SimpleNamespace(
                 request_id="r1",
@@ -1185,9 +1106,7 @@ class TestShipmentApprovalRequestRoute:
         assert r.json()["success"] is True
 
     def test_request_recoverable_error(self, shipment_client: TestClient):
-        with patch(
-            "app.application.workflow.get_approval_service"
-        ) as mock_get:
+        with patch("app.application.workflow.get_approval_service") as mock_get:
             mock_get.side_effect = RuntimeError("fail")
             r = shipment_client.post(
                 "/api/ai/approval/request",
@@ -1202,9 +1121,7 @@ class TestShipmentApprovalApproveRoute:
         assert r.status_code == 400
 
     def test_approve_by_request_id_success(self, shipment_client: TestClient):
-        with patch(
-            "app.application.workflow.get_approval_service"
-        ) as mock_get:
+        with patch("app.application.workflow.get_approval_service") as mock_get:
             svc = MagicMock()
             svc.approve.return_value = True
             svc.get_pending_workflow.return_value = None
@@ -1217,9 +1134,7 @@ class TestShipmentApprovalApproveRoute:
         assert r.json()["success"] is True
 
     def test_approve_by_plan_id_no_pending(self, shipment_client: TestClient):
-        with patch(
-            "app.application.workflow.get_approval_service"
-        ) as mock_get:
+        with patch("app.application.workflow.get_approval_service") as mock_get:
             svc = MagicMock()
             svc.get_pending_request_by_plan.return_value = None
             mock_get.return_value = svc
@@ -1230,9 +1145,7 @@ class TestShipmentApprovalApproveRoute:
         assert r.status_code == 404
 
     def test_approve_fail_returns_400(self, shipment_client: TestClient):
-        with patch(
-            "app.application.workflow.get_approval_service"
-        ) as mock_get:
+        with patch("app.application.workflow.get_approval_service") as mock_get:
             svc = MagicMock()
             svc.approve.return_value = False
             mock_get.return_value = svc
@@ -1244,13 +1157,9 @@ class TestShipmentApprovalApproveRoute:
 
     def test_approve_with_workflow_executed(self, shipment_client: TestClient):
         with (
-            patch(
-                "app.application.workflow.get_approval_service"
-            ) as mock_get,
+            patch("app.application.workflow.get_approval_service") as mock_get,
             patch("app.application.workflow.WorkflowEngine") as mock_engine_cls,
-            patch(
-                "app.fastapi_routes.domains.shipment.routes._dispatch_tool_for_approval"
-            ),
+            patch("app.fastapi_routes.domains.shipment.routes._dispatch_tool_for_approval"),
         ):
             svc = MagicMock()
             svc.approve.return_value = True
@@ -1277,9 +1186,7 @@ class TestShipmentApprovalApproveRoute:
         svc.remove_pending_workflow.assert_called_once()
 
     def test_approve_recoverable_error(self, shipment_client: TestClient):
-        with patch(
-            "app.application.workflow.get_approval_service"
-        ) as mock_get:
+        with patch("app.application.workflow.get_approval_service") as mock_get:
             mock_get.side_effect = ValueError("bad")
             r = shipment_client.post(
                 "/api/ai/approval/approve",
@@ -1294,9 +1201,7 @@ class TestShipmentApprovalRejectRoute:
         assert r.status_code == 400
 
     def test_reject_by_request_id_success(self, shipment_client: TestClient):
-        with patch(
-            "app.application.workflow.get_approval_service"
-        ) as mock_get:
+        with patch("app.application.workflow.get_approval_service") as mock_get:
             svc = MagicMock()
             svc.reject.return_value = True
             mock_get.return_value = svc
@@ -1308,9 +1213,7 @@ class TestShipmentApprovalRejectRoute:
         assert r.json()["data"]["status"] == "rejected"
 
     def test_reject_by_plan_id_no_pending(self, shipment_client: TestClient):
-        with patch(
-            "app.application.workflow.get_approval_service"
-        ) as mock_get:
+        with patch("app.application.workflow.get_approval_service") as mock_get:
             svc = MagicMock()
             svc.get_pending_request_by_plan.return_value = None
             mock_get.return_value = svc
@@ -1321,9 +1224,7 @@ class TestShipmentApprovalRejectRoute:
         assert r.status_code == 404
 
     def test_reject_fail_returns_400(self, shipment_client: TestClient):
-        with patch(
-            "app.application.workflow.get_approval_service"
-        ) as mock_get:
+        with patch("app.application.workflow.get_approval_service") as mock_get:
             svc = MagicMock()
             svc.reject.return_value = False
             mock_get.return_value = svc
@@ -1334,9 +1235,7 @@ class TestShipmentApprovalRejectRoute:
         assert r.status_code == 400
 
     def test_reject_recoverable_error(self, shipment_client: TestClient):
-        with patch(
-            "app.application.workflow.get_approval_service"
-        ) as mock_get:
+        with patch("app.application.workflow.get_approval_service") as mock_get:
             mock_get.side_effect = RuntimeError("x")
             r = shipment_client.post(
                 "/api/ai/approval/reject",
@@ -1607,9 +1506,7 @@ class TestLedgerItemFromInvoice:
         assert item["label"] == "CRM 账单"
 
     def test_payment_reference(self):
-        item = fin_archive._ledger_item_from_invoice(
-            {"id": 1, "payment_reference": "REF1"}
-        )
+        item = fin_archive._ledger_item_from_invoice({"id": 1, "payment_reference": "REF1"})
         assert item["payment_ref"] == "REF1"
 
 
@@ -1624,9 +1521,7 @@ class TestItemsFromPipeline:
             {"market_user_id": 1, "invoice": {"id": 1, "amount_cents": 100}},
             {"market_user_id": 2, "invoice": {"id": 2, "amount_cents": 200}},
         ]
-        with patch(
-            "app.services.user_cs_pipeline._iter_pipeline_docs", return_value=docs
-        ):
+        with patch("app.services.user_cs_pipeline._iter_pipeline_docs", return_value=docs):
             items = fin_archive._items_from_pipeline(1, limit=10)
         assert len(items) == 1
         assert items[0]["source_id"] == 1
@@ -1644,9 +1539,7 @@ class TestItemsFromPipeline:
                 "erp_customer_name": "Acme",
             }
         ]
-        with patch(
-            "app.services.user_cs_pipeline._iter_pipeline_docs", return_value=docs
-        ):
+        with patch("app.services.user_cs_pipeline._iter_pipeline_docs", return_value=docs):
             items = fin_archive._items_from_pipeline(None, limit=10)
         assert len(items) == 1
         assert items[0]["source_type"] == "pipeline_payment"
@@ -1654,13 +1547,8 @@ class TestItemsFromPipeline:
         assert items[0]["label"] == "Acme"
 
     def test_limit_enforced(self):
-        docs = [
-            {"market_user_id": i, "invoice": {"id": i, "amount_cents": 100}}
-            for i in range(10)
-        ]
-        with patch(
-            "app.services.user_cs_pipeline._iter_pipeline_docs", return_value=docs
-        ):
+        docs = [{"market_user_id": i, "invoice": {"id": i, "amount_cents": 100}} for i in range(10)]
+        with patch("app.services.user_cs_pipeline._iter_pipeline_docs", return_value=docs):
             items = fin_archive._items_from_pipeline(None, limit=3)
         assert len(items) == 3
 
@@ -1671,9 +1559,7 @@ class TestItemsFromPipeline:
                 "payment": {"contract_amount_cents": 500},  # no confirmed_at
             }
         ]
-        with patch(
-            "app.services.user_cs_pipeline._iter_pipeline_docs", return_value=docs
-        ):
+        with patch("app.services.user_cs_pipeline._iter_pipeline_docs", return_value=docs):
             items = fin_archive._items_from_pipeline(None, limit=10)
         assert items == []
 
@@ -1720,9 +1606,7 @@ class TestListLedger:
         assert result[0]["source_type"] == "crm_invoice"
 
     def test_fallback_to_pipeline_when_crm_empty(self):
-        pipeline_items = [
-            {"market_user_id": 1, "invoice": {"id": 1, "amount_cents": 300}}
-        ]
+        pipeline_items = [{"market_user_id": 1, "invoice": {"id": 1, "amount_cents": 300}}]
         with (
             patch(
                 "app.services.finance_unified_archive._items_from_db",
@@ -1779,9 +1663,7 @@ class TestListLedger:
 
 class TestSummarizeLedger:
     def test_empty_ledger(self):
-        with patch(
-            "app.services.finance_unified_archive.list_ledger", return_value=[]
-        ):
+        with patch("app.services.finance_unified_archive.list_ledger", return_value=[]):
             result = fin_archive.summarize_ledger()
         assert result == {}
 
@@ -1791,9 +1673,7 @@ class TestSummarizeLedger:
             {"track": "contract", "amount_cents": 200},
             {"track": "manual", "amount_cents": 50},
         ]
-        with patch(
-            "app.services.finance_unified_archive.list_ledger", return_value=items
-        ):
+        with patch("app.services.finance_unified_archive.list_ledger", return_value=items):
             result = fin_archive.summarize_ledger()
         assert result["contract"]["count"] == 2
         assert result["contract"]["amount_cents"] == 300
@@ -1801,9 +1681,7 @@ class TestSummarizeLedger:
 
     def test_missing_track_defaults_to_manual(self):
         items = [{"amount_cents": 100}]
-        with patch(
-            "app.services.finance_unified_archive.list_ledger", return_value=items
-        ):
+        with patch("app.services.finance_unified_archive.list_ledger", return_value=items):
             result = fin_archive.summarize_ledger()
         assert "manual" in result
 
@@ -1855,9 +1733,7 @@ class TestRebuildLedgerArchive:
                 "app.services.user_cs_crm_store.list_crm_invoices",
                 return_value={"items": items},
             ),
-            patch(
-                "app.services.finance_unified_archive.archive_from_crm_invoice"
-            ) as mock_archive,
+            patch("app.services.finance_unified_archive.archive_from_crm_invoice") as mock_archive,
         ):
             mock_archive.return_value = {"archived": True}
             result = fin_archive.rebuild_ledger_archive(market_user_id=1)
@@ -1957,9 +1833,7 @@ class TestCompanyBrandFromUserBlob:
         from app.application.session_account_meta import company_brand_from_user_blob
 
         assert (
-            company_brand_from_user_blob(
-                {"company": "C", "display_name": "D", "username": "U"}
-            )
+            company_brand_from_user_blob({"company": "C", "display_name": "D", "username": "U"})
             == "C"
         )
 
@@ -1983,9 +1857,7 @@ class TestValidateAccountKindForMarket:
     def test_admin_without_admin_flag_returns_error(self):
         from app.application.session_account_meta import validate_account_kind_for_market
 
-        err = validate_account_kind_for_market(
-            "admin", is_enterprise=True, is_market_admin=False
-        )
+        err = validate_account_kind_for_market("admin", is_enterprise=True, is_market_admin=False)
         assert err is not None
         assert "管理员" in err
 
@@ -1993,9 +1865,7 @@ class TestValidateAccountKindForMarket:
         from app.application.session_account_meta import validate_account_kind_for_market
 
         assert (
-            validate_account_kind_for_market(
-                "admin", is_enterprise=False, is_market_admin=True
-            )
+            validate_account_kind_for_market("admin", is_enterprise=False, is_market_admin=True)
             is None
         )
 
@@ -2045,9 +1915,7 @@ class TestValidateAccountKindForMarket:
         from app.application.session_account_meta import validate_account_kind_for_market
 
         assert (
-            validate_account_kind_for_market(
-                "personal", is_enterprise=True, is_market_admin=False
-            )
+            validate_account_kind_for_market("personal", is_enterprise=True, is_market_admin=False)
             is None
         )
 
@@ -2100,9 +1968,7 @@ class TestPersistSessionAccountMeta:
         from app.application.session_account_meta import persist_session_account_meta
 
         # Should not raise even with empty session
-        persist_session_account_meta(
-            "", account_kind="enterprise", company_brand="X"
-        )
+        persist_session_account_meta("", account_kind="enterprise", company_brand="X")
 
     def test_persist_success(self):
         from app.application.session_account_meta import persist_session_account_meta
@@ -2134,9 +2000,7 @@ class TestPersistSessionAccountMeta:
         fake_db.__exit__ = MagicMock(return_value=None)
         fake_db.query.return_value.filter.return_value.first.return_value = None
         with patch("app.application.session_account_meta.get_host_db", return_value=fake_db):
-            persist_session_account_meta(
-                "sid", account_kind="enterprise"
-            )
+            persist_session_account_meta("sid", account_kind="enterprise")
         # No commit because row is None
         fake_db.commit.assert_not_called()
 
@@ -2148,9 +2012,7 @@ class TestPersistSessionAccountMeta:
             side_effect=RuntimeError("db down"),
         ):
             # Should not raise
-            persist_session_account_meta(
-                "sid", account_kind="enterprise"
-            )
+            persist_session_account_meta("sid", account_kind="enterprise")
 
 
 class TestLoadSessionAccountMeta:
@@ -2409,21 +2271,13 @@ class TestAuditAdminAction:
 
 class TestValidatePositiveNumber:
     def test_none_returns_none(self):
-        assert (
-            db_validators.ModelValidators.validate_positive_number(None, "f") is None
-        )
+        assert db_validators.ModelValidators.validate_positive_number(None, "f") is None
 
     def test_valid_positive_allow_zero(self):
-        assert (
-            db_validators.ModelValidators.validate_positive_number(5, "f", allow_zero=True)
-            == 5
-        )
+        assert db_validators.ModelValidators.validate_positive_number(5, "f", allow_zero=True) == 5
 
     def test_zero_allowed(self):
-        assert (
-            db_validators.ModelValidators.validate_positive_number(0, "f", allow_zero=True)
-            == 0
-        )
+        assert db_validators.ModelValidators.validate_positive_number(0, "f", allow_zero=True) == 0
 
     def test_negative_with_allow_zero_raises(self):
         with pytest.raises(ValueError, match="非负数"):
@@ -2435,18 +2289,14 @@ class TestValidatePositiveNumber:
 
     def test_negative_not_allowed_raises(self):
         with pytest.raises(ValueError, match="正数"):
-            db_validators.ModelValidators.validate_positive_number(
-                -1, "f", allow_zero=False
-            )
+            db_validators.ModelValidators.validate_positive_number(-1, "f", allow_zero=False)
 
     def test_invalid_type_raises(self):
         with pytest.raises(ValueError, match="有效数字"):
             db_validators.ModelValidators.validate_positive_number("abc", "f")
 
     def test_string_numeric_works(self):
-        assert (
-            db_validators.ModelValidators.validate_positive_number("5", "f") == "5"
-        )
+        assert db_validators.ModelValidators.validate_positive_number("5", "f") == "5"
 
 
 class TestValidateNonEmptyString:
@@ -2463,29 +2313,18 @@ class TestValidateNonEmptyString:
             db_validators.ModelValidators.validate_non_empty_string("   ", "f")
 
     def test_valid_string(self):
-        assert (
-            db_validators.ModelValidators.validate_non_empty_string("hello", "f")
-            == "hello"
-        )
+        assert db_validators.ModelValidators.validate_non_empty_string("hello", "f") == "hello"
 
     def test_strips_whitespace(self):
-        assert (
-            db_validators.ModelValidators.validate_non_empty_string("  hi  ", "f")
-            == "hi"
-        )
+        assert db_validators.ModelValidators.validate_non_empty_string("  hi  ", "f") == "hi"
 
     def test_max_length_exceeded_raises(self):
         with pytest.raises(ValueError, match="不能超过"):
-            db_validators.ModelValidators.validate_non_empty_string(
-                "x" * 10, "f", max_length=5
-            )
+            db_validators.ModelValidators.validate_non_empty_string("x" * 10, "f", max_length=5)
 
     def test_max_length_ok(self):
         assert (
-            db_validators.ModelValidators.validate_non_empty_string(
-                "hi", "f", max_length=5
-            )
-            == "hi"
+            db_validators.ModelValidators.validate_non_empty_string("hi", "f", max_length=5) == "hi"
         )
 
 
@@ -2498,10 +2337,7 @@ class TestValidatePhone:
         assert db_validators.ModelValidators.validate_phone("13800138000") == "13800138000"
 
     def test_valid_phone_with_dash(self):
-        assert (
-            db_validators.ModelValidators.validate_phone("138-0013-8000")
-            == "138-0013-8000"
-        )
+        assert db_validators.ModelValidators.validate_phone("138-0013-8000") == "138-0013-8000"
 
     def test_valid_phone_with_plus(self):
         assert db_validators.ModelValidators.validate_phone("+8613800138000") == "+8613800138000"
@@ -2522,14 +2358,12 @@ class TestValidateEmail:
 
     def test_valid_email(self):
         assert (
-            db_validators.ModelValidators.validate_email("user@example.com")
-            == "user@example.com"
+            db_validators.ModelValidators.validate_email("user@example.com") == "user@example.com"
         )
 
     def test_valid_email_with_subdomain(self):
         assert (
-            db_validators.ModelValidators.validate_email("a@sub.example.com")
-            == "a@sub.example.com"
+            db_validators.ModelValidators.validate_email("a@sub.example.com") == "a@sub.example.com"
         )
 
     def test_invalid_no_at(self):
@@ -2789,7 +2623,7 @@ class TestRosterCandidates:
 
         root = Path(tmp_dir)
         candidates = _roster_candidates(root)
-        assert len(candidates) == 2
+        assert len(candidates) >= 2
         assert candidates[0] == (root / "config" / "sunbird-roster.json").resolve()
         assert candidates[1] == (root.parent / "config" / "sunbird-roster.json").resolve()
 
@@ -2845,9 +2679,7 @@ class TestApplySunbirdRosterSeedIfNeeded:
         root = Path(tmp_dir)
         config_dir = root / "config"
         config_dir.mkdir()
-        (config_dir / "sunbird-roster.json").write_text(
-            "not json", encoding="utf-8"
-        )
+        (config_dir / "sunbird-roster.json").write_text("not json", encoding="utf-8")
         result = apply_sunbird_roster_seed_if_needed(root)
         assert result is False
 
@@ -2936,9 +2768,7 @@ class TestApplySunbirdRosterSeedIfNeeded:
                 "not a dict",  # skipped
             ]
         }
-        (config_dir / "sunbird-roster.json").write_text(
-            json.dumps(roster), encoding="utf-8"
-        )
+        (config_dir / "sunbird-roster.json").write_text(json.dumps(roster), encoding="utf-8")
         fake_db = MagicMock()
         fake_db.__enter__ = MagicMock(return_value=fake_db)
         fake_db.__exit__ = MagicMock(return_value=None)

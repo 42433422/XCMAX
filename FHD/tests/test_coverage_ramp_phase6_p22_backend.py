@@ -65,7 +65,6 @@ from app.neuro_bus.domains.shipment_domain_handlers import (
     register_shipment_domain_handlers,
 )
 
-
 # ---------------------------------------------------------------------------
 # Shared helpers
 # ---------------------------------------------------------------------------
@@ -404,9 +403,7 @@ class TestAiAssistantBranches:
             mock_svc = MagicMock()
             mock_svc.print_single_label.return_value = {"success": True}
             mock_svc_get.return_value = mock_svc
-            resp = ai_assistant.compat_print_single_label(
-                {"model_number": "", "quantity": 200}
-            )
+            resp = ai_assistant.compat_print_single_label({"model_number": "", "quantity": 200})
         assert resp.status_code == 200
         call_kwargs = mock_svc.print_single_label.call_args.kwargs
         assert call_kwargs["quantity"] == 1
@@ -423,9 +420,7 @@ class TestAiAssistantBranches:
             mock_svc = MagicMock()
             mock_svc.print_single_label.return_value = {"success": True}
             mock_svc_get.return_value = mock_svc
-            resp = ai_assistant.compat_print_single_label(
-                {"model_number": "", "quantity": -5}
-            )
+            resp = ai_assistant.compat_print_single_label({"model_number": "", "quantity": -5})
         assert resp.status_code == 200
         call_kwargs = mock_svc.print_single_label.call_args.kwargs
         assert call_kwargs["quantity"] == 1
@@ -434,12 +429,8 @@ class TestAiAssistantBranches:
         """TTS 携带 speakerId / voice / rate / pitch 参数。"""
         client = _ai_assistant_client()
         with (
-            patch(
-                "app.application.facades.tts_facade.trigger_common_tts_warmup"
-            ) as mock_warmup,
-            patch(
-                "app.application.facades.tts_facade.synthesize_to_data_uri"
-            ) as mock_synth,
+            patch("app.application.facades.tts_facade.trigger_common_tts_warmup") as mock_warmup,
+            patch("app.application.facades.tts_facade.synthesize_to_data_uri") as mock_synth,
         ):
             mock_synth.return_value = {
                 "audioBase64": "abc",
@@ -484,9 +475,7 @@ class TestIndustryBaselinePlanBranches:
                     "core_mod_ids": [],
                     "mod_labels": {},
                     "industries": {"涂料": {"industry_mod_ids": ["ind-1"]}},
-                    "industry_packages": {
-                        "涂料": {"mod_id": "pkg-1", "product_name": "涂料包"}
-                    },
+                    "industry_packages": {"涂料": {"mod_id": "pkg-1", "product_name": "涂料包"}},
                 },
             ),
             patch(
@@ -1118,9 +1107,7 @@ class TestShipmentDomainHandlersBranches:
             patch(
                 "app.neuro_bus.domains.shipment_domain_handlers.get_shipment_application_service_core"
             ) as mock_core_get,
-            patch(
-                "app.neuro_bus.domains.shipment_domain_handlers.try_complete_command_reply"
-            ),
+            patch("app.neuro_bus.domains.shipment_domain_handlers.try_complete_command_reply"),
         ):
             mock_core = MagicMock()
             mock_core.create_shipment.return_value = {"success": True}
@@ -1228,9 +1215,7 @@ class TestShipmentDomainHandlersBranches:
     async def test_handle_exported_with_record_count(self) -> None:
         """exported 含 record_count。"""
         handlers = ShipmentDomainHandlers()
-        event = _make_event(
-            {"file_path": "/tmp/export.xlsx", "record_count": 100}
-        )
+        event = _make_event({"file_path": "/tmp/export.xlsx", "record_count": 100})
         result = await handlers.handle_exported(event)
         assert result["success"] is True
         assert "export_logged" in result["actions"]
@@ -1328,9 +1313,7 @@ class TestProductDomainHandlersBranches:
     ) -> None:
         handlers = ProductDomainHandlers()
         handlers._bus = mock_bus
-        event = _make_event(
-            {"product_id": "P1", "unit_name": "甲公司", "product_name": "漆"}
-        )
+        event = _make_event({"product_id": "P1", "unit_name": "甲公司", "product_name": "漆"})
         result = await handlers.handle_product_created(event)
         assert result["success"] is True
         assert "cache_warmup_triggered" in result["actions"]
@@ -1365,9 +1348,7 @@ class TestProductDomainHandlersBranches:
     ) -> None:
         handlers = ProductDomainHandlers()
         handlers._bus = mock_bus
-        event = _make_event(
-            {"product_id": "P1", "changed_fields": ["name"]}
-        )
+        event = _make_event({"product_id": "P1", "changed_fields": ["name"]})
         result = await handlers.handle_product_updated(event)
         assert result["success"] is True
         assert "price_change_event_triggered" not in result["actions"]
@@ -1410,9 +1391,7 @@ class TestProductDomainHandlersBranches:
     ) -> None:
         handlers = ProductDomainHandlers()
         handlers._bus = mock_bus
-        event = _make_event(
-            {"product_id": "P1", "old_price": 100, "new_price": 150}
-        )
+        event = _make_event({"product_id": "P1", "old_price": 100, "new_price": 150})
         result = await handlers.handle_price_changed(event)
         assert result["success"] is True
         assert result["price_delta"] == 50
@@ -1581,15 +1560,9 @@ class TestEmployeeAgentBranches:
             patch(
                 "app.application.employee_runtime.agent.MemoryScope.from_config"
             ) as mock_scope_cls,
-            patch(
-                "app.application.employee_runtime.agent.EmployeeMemoryManager"
-            ) as mock_mm_cls,
-            patch(
-                "app.application.employee_runtime.agent.build_employee_context"
-            ),
-            patch.object(
-                EmployeeAgent, "_perceive", return_value={"normalized_input": {}}
-            ),
+            patch("app.application.employee_runtime.agent.EmployeeMemoryManager") as mock_mm_cls,
+            patch("app.application.employee_runtime.agent.build_employee_context"),
+            patch.object(EmployeeAgent, "_perceive", return_value={"normalized_input": {}}),
             patch(
                 "app.application.employee_runtime.agent._ex._actions_fhd",
                 return_value={"outputs": []},
@@ -1598,9 +1571,7 @@ class TestEmployeeAgentBranches:
                 "app.application.employee_runtime.agent._ex._handlers_execution_ok",
                 return_value=True,
             ),
-            patch(
-                "app.application.employee_runtime.metrics.record_employee_run"
-            ),
+            patch("app.application.employee_runtime.metrics.record_employee_run"),
         ):
             mock_scope = MagicMock()
             mock_scope_cls.return_value = mock_scope
@@ -1655,15 +1626,9 @@ class TestEmployeeAgentBranches:
             patch(
                 "app.application.employee_runtime.agent.MemoryScope.from_config"
             ) as mock_scope_cls,
-            patch(
-                "app.application.employee_runtime.agent.EmployeeMemoryManager"
-            ) as mock_mm_cls,
-            patch(
-                "app.application.employee_runtime.agent.build_employee_context"
-            ),
-            patch.object(
-                EmployeeAgent, "_perceive", return_value={"normalized_input": {}}
-            ),
+            patch("app.application.employee_runtime.agent.EmployeeMemoryManager") as mock_mm_cls,
+            patch("app.application.employee_runtime.agent.build_employee_context"),
+            patch.object(EmployeeAgent, "_perceive", return_value={"normalized_input": {}}),
             patch(
                 "app.application.employee_runtime.agent._ex._memory_light",
                 return_value={"session": {}},
@@ -1680,9 +1645,7 @@ class TestEmployeeAgentBranches:
                 "app.application.employee_runtime.agent._ex._handlers_execution_ok",
                 return_value=True,
             ),
-            patch(
-                "app.application.employee_runtime.metrics.record_employee_run"
-            ),
+            patch("app.application.employee_runtime.metrics.record_employee_run"),
         ):
             mock_scope = MagicMock()
             mock_scope_cls.return_value = mock_scope
@@ -1732,15 +1695,9 @@ class TestEmployeeAgentBranches:
             patch(
                 "app.application.employee_runtime.agent.MemoryScope.from_config"
             ) as mock_scope_cls,
-            patch(
-                "app.application.employee_runtime.agent.EmployeeMemoryManager"
-            ) as mock_mm_cls,
-            patch(
-                "app.application.employee_runtime.agent.build_employee_context"
-            ),
-            patch.object(
-                EmployeeAgent, "_perceive", return_value={"normalized_input": {}}
-            ),
+            patch("app.application.employee_runtime.agent.EmployeeMemoryManager") as mock_mm_cls,
+            patch("app.application.employee_runtime.agent.build_employee_context"),
+            patch.object(EmployeeAgent, "_perceive", return_value={"normalized_input": {}}),
             patch(
                 "app.application.employee_runtime.agent._ex._memory_light",
                 return_value={"session": {}},
@@ -1757,9 +1714,7 @@ class TestEmployeeAgentBranches:
                 "app.application.employee_runtime.agent._ex._handlers_execution_ok",
                 return_value=True,
             ),
-            patch(
-                "app.application.employee_runtime.metrics.record_employee_run"
-            ),
+            patch("app.application.employee_runtime.metrics.record_employee_run"),
         ):
             mock_scope = MagicMock()
             mock_scope_cls.return_value = mock_scope
@@ -1812,15 +1767,9 @@ class TestEmployeeAgentBranches:
             patch(
                 "app.application.employee_runtime.agent.MemoryScope.from_config"
             ) as mock_scope_cls,
-            patch(
-                "app.application.employee_runtime.agent.EmployeeMemoryManager"
-            ) as mock_mm_cls,
-            patch(
-                "app.application.employee_runtime.agent.build_employee_context"
-            ),
-            patch.object(
-                EmployeeAgent, "_perceive", return_value={"normalized_input": {}}
-            ),
+            patch("app.application.employee_runtime.agent.EmployeeMemoryManager") as mock_mm_cls,
+            patch("app.application.employee_runtime.agent.build_employee_context"),
+            patch.object(EmployeeAgent, "_perceive", return_value={"normalized_input": {}}),
             patch(
                 "app.application.employee_runtime.agent._ex._memory_light",
                 return_value={"session": {}},
@@ -1837,9 +1786,7 @@ class TestEmployeeAgentBranches:
                 "app.application.employee_runtime.agent._ex._handlers_execution_ok",
                 return_value=True,
             ),
-            patch(
-                "app.application.employee_runtime.metrics.record_employee_run"
-            ),
+            patch("app.application.employee_runtime.metrics.record_employee_run"),
         ):
             mock_scope = MagicMock()
             mock_scope_cls.return_value = mock_scope
@@ -1892,15 +1839,9 @@ class TestEmployeeAgentBranches:
             patch(
                 "app.application.employee_runtime.agent.MemoryScope.from_config"
             ) as mock_scope_cls,
-            patch(
-                "app.application.employee_runtime.agent.EmployeeMemoryManager"
-            ) as mock_mm_cls,
-            patch(
-                "app.application.employee_runtime.agent.build_employee_context"
-            ),
-            patch.object(
-                EmployeeAgent, "_perceive", return_value={"normalized_input": {}}
-            ),
+            patch("app.application.employee_runtime.agent.EmployeeMemoryManager") as mock_mm_cls,
+            patch("app.application.employee_runtime.agent.build_employee_context"),
+            patch.object(EmployeeAgent, "_perceive", return_value={"normalized_input": {}}),
             patch(
                 "app.application.employee_runtime.agent._ex._memory_light",
                 return_value={"session": {}},
@@ -1917,9 +1858,7 @@ class TestEmployeeAgentBranches:
                 "app.application.employee_runtime.agent._ex._handlers_execution_ok",
                 return_value=True,
             ),
-            patch(
-                "app.application.employee_runtime.metrics.record_employee_run"
-            ),
+            patch("app.application.employee_runtime.metrics.record_employee_run"),
         ):
             mock_scope = MagicMock()
             mock_scope_cls.return_value = mock_scope
@@ -1967,15 +1906,9 @@ class TestEmployeeAgentBranches:
             patch(
                 "app.application.employee_runtime.agent.MemoryScope.from_config"
             ) as mock_scope_cls,
-            patch(
-                "app.application.employee_runtime.agent.EmployeeMemoryManager"
-            ) as mock_mm_cls,
-            patch(
-                "app.application.employee_runtime.agent.build_employee_context"
-            ),
-            patch.object(
-                EmployeeAgent, "_perceive", return_value={"normalized_input": {}}
-            ),
+            patch("app.application.employee_runtime.agent.EmployeeMemoryManager") as mock_mm_cls,
+            patch("app.application.employee_runtime.agent.build_employee_context"),
+            patch.object(EmployeeAgent, "_perceive", return_value={"normalized_input": {}}),
             patch(
                 "app.application.employee_runtime.agent._ex._actions_fhd",
                 return_value={"outputs": []},
@@ -1984,9 +1917,7 @@ class TestEmployeeAgentBranches:
                 "app.application.employee_runtime.agent._ex._handlers_execution_ok",
                 return_value=True,
             ),
-            patch(
-                "app.application.employee_runtime.metrics.record_employee_run"
-            ),
+            patch("app.application.employee_runtime.metrics.record_employee_run"),
         ):
             mock_scope = MagicMock()
             mock_scope_cls.return_value = mock_scope
@@ -2316,9 +2247,7 @@ class TestModsRoutesBranches:
             resp1 = client.get("/api/mods")
             etag = resp1.headers.get("ETag", "").strip('"')
             # 第二次带 If-None-Match
-            resp2 = client.get(
-                "/api/mods", headers={"If-None-Match": etag}
-            )
+            resp2 = client.get("/api/mods", headers={"If-None-Match": etag})
         assert resp2.status_code == 304
 
     def test_list_mods_etag_mismatch_returns_200(self) -> None:
@@ -2338,9 +2267,7 @@ class TestModsRoutesBranches:
             ),
         ):
             client = TestClient(app)
-            resp = client.get(
-                "/api/mods", headers={"If-None-Match": "wrong-etag"}
-            )
+            resp = client.get("/api/mods", headers={"If-None-Match": "wrong-etag"})
         assert resp.status_code == 200
 
     def test_list_mods_recoverable_error_returns_failure(self) -> None:
@@ -2549,9 +2476,7 @@ class TestModsRoutesBranches:
     def test_list_comms_endpoints_success(self) -> None:
         """list_comms_endpoints 成功。"""
         app = _build_mods_app()
-        with patch(
-            "app.infrastructure.mods.comms.get_mod_comms"
-        ) as mock_get_comms:
+        with patch("app.infrastructure.mods.comms.get_mod_comms") as mock_get_comms:
             mock_comms = MagicMock()
             mock_comms.list_endpoints.return_value = [{"id": "ep1"}]
             mock_get_comms.return_value = mock_comms

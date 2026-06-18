@@ -62,7 +62,7 @@ def train_model(
     logger.info("  训练轮数: %s", epochs)
     logger.info("  批次大小: %s", batch_size)
     logger.info("  学习率: %s", learning_rate)
-    logger.info("  设备: %s", 'CUDA' if torch.cuda.is_available() else 'CPU')
+    logger.info("  设备: %s", "CUDA" if torch.cuda.is_available() else "CPU")
     logger.info("=" * 60)
 
     try:
@@ -172,11 +172,11 @@ def test_model(model_path: str, texts: list[str]):
     for text in texts:
         result = classifier.predict(text, return_probs=True)
         logger.info("\n文本: %s", text)
-        logger.info("  意图: %s", result['intent'])
+        logger.info("  意图: %s", result["intent"])
         logger.info(f"  置信度: {result['confidence']:.4f}")  # noqa: G004
         if "all_probs" in result and result["all_probs"]:
             top3 = sorted(result["all_probs"].items(), key=lambda x: x[1], reverse=True)[:3]
-            logger.info("  Top-3: %s", ', '.join([f'{k}: {v:.4f}' for k, v in top3]))
+            logger.info("  Top-3: %s", ", ".join([f"{k}: {v:.4f}" for k, v in top3]))
 
     logger.info("=" * 60)
 

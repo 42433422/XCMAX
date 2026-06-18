@@ -1,4 +1,5 @@
 """Tests for app.fastapi_routes.six_line_webhook_api."""
+
 from __future__ import annotations
 
 import hashlib
@@ -54,9 +55,7 @@ class TestNormalizeGithub:
     """Tests for _normalize_github."""
 
     def test_returns_event_for_failed_workflow(self) -> None:
-        payload = {
-            "workflow_run": {"conclusion": "failure", "id": 12345}
-        }
+        payload = {"workflow_run": {"conclusion": "failure", "id": 12345}}
         result = _normalize_github(payload)
         assert result is not None
         assert result["event_type"] == "ci.failed"
@@ -66,9 +65,7 @@ class TestNormalizeGithub:
         assert result["payload"]["run_id"] == 12345
 
     def test_returns_none_for_successful_workflow(self) -> None:
-        payload = {
-            "workflow_run": {"conclusion": "success", "id": 12345}
-        }
+        payload = {"workflow_run": {"conclusion": "success", "id": 12345}}
         result = _normalize_github(payload)
         assert result is None
 
@@ -113,7 +110,12 @@ class TestNormalizeBody:
     """Tests for _normalize_body."""
 
     def test_passes_through_complete_event(self) -> None:
-        body = {"event_type": "ci.failed", "step_id": "P3", "status": "anomaly", "payload": {"x": 1}}
+        body = {
+            "event_type": "ci.failed",
+            "step_id": "P3",
+            "status": "anomaly",
+            "payload": {"x": 1},
+        }
         result = _normalize_body(body)
         assert result == body
 

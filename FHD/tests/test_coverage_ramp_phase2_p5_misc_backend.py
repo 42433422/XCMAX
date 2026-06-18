@@ -11,7 +11,10 @@ import pytest
 from fastapi import HTTPException
 from starlette.requests import Request
 
-from app.application.session_account_meta import normalize_account_kind, company_brand_from_user_blob
+from app.application.session_account_meta import (
+    company_brand_from_user_blob,
+    normalize_account_kind,
+)
 from app.fastapi_routes.domains.misc.helpers import (
     _http_exception_to_json,
     _message_to_dict,

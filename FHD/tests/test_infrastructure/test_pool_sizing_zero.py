@@ -1,4 +1,5 @@
 """Tests for app.infrastructure.db.pool_sizing."""
+
 from __future__ import annotations
 
 from unittest.mock import patch
@@ -32,16 +33,12 @@ class TestEstimateTotalConnections:
     """Tests for estimate_total_connections."""
 
     def test_basic_calculation(self) -> None:
-        result = estimate_total_connections(
-            pods=2, workers_per_pod=4, pool_size=5, max_overflow=10
-        )
+        result = estimate_total_connections(pods=2, workers_per_pod=4, pool_size=5, max_overflow=10)
         # 2 * 4 * (5 + 10) = 120
         assert result == 120
 
     def test_single_pod(self) -> None:
-        result = estimate_total_connections(
-            pods=1, workers_per_pod=1, pool_size=5, max_overflow=5
-        )
+        result = estimate_total_connections(pods=1, workers_per_pod=1, pool_size=5, max_overflow=5)
         assert result == 10
 
     def test_large_deployment(self) -> None:
@@ -63,9 +60,7 @@ class TestRecommendPoolForPg:
         assert result["max_overflow"] >= 2
 
     def test_custom_pg_max_connections(self) -> None:
-        result = recommend_pool_for_pg(
-            pods=1, workers_per_pod=1, pg_max_connections=50, reserve=10
-        )
+        result = recommend_pool_for_pg(pods=1, workers_per_pod=1, pg_max_connections=50, reserve=10)
         # budget = 40, per_pod = 40, per_worker = 40
         assert result["pool_size"] >= 2
 

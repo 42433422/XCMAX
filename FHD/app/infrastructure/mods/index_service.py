@@ -422,7 +422,9 @@ class ModIndexService:
         limit: int = 100,
     ) -> list[dict[str, Any]]:
         """搜索 MOD"""
-        return cast("list[dict[str, Any]]", self.db.search_mods(query, author, installed_only, limit))
+        return cast(
+            "list[dict[str, Any]]", self.db.search_mods(query, author, installed_only, limit)
+        )
 
     def get_mod(self, mod_id: str) -> dict[str, Any] | None:
         """获取 MOD 详情"""

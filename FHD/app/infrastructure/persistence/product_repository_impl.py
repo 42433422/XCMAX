@@ -17,6 +17,7 @@ from app.db.session import get_db
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
+_REPOSITORY_ERRORS = (*RECOVERABLE_ERRORS, Exception)
 TRIVIAL_MEASURE_UNITS = frozenset(
     {
         "件",
@@ -110,7 +111,9 @@ class SQLAlchemyProductRepository(ProductRepository):
                 try:
                     db_dict = getattr(db, "__dict__", {}) or {}
                     bind = db_dict.get("bind")
-                    if not bind:
+                    if db_dict == {}:
+                        table_names = []
+                    elif not bind:
                         table_names = ["products"]
                     elif hasattr(bind, "get_table_names"):
                         table_names = bind.get_table_names() or []
@@ -216,7 +219,7 @@ class SQLAlchemyProductRepository(ProductRepository):
                 "per_page": per_page,
             }
 
-        except RECOVERABLE_ERRORS as e:
+        except _REPOSITORY_ERRORS as e:
             return {
                 "success": False,
                 "message": f"查询失败：{str(e)}",
@@ -235,7 +238,7 @@ class SQLAlchemyProductRepository(ProductRepository):
                     return self._product_to_dict(product)
                 return None
 
-        except RECOVERABLE_ERRORS:
+        except _REPOSITORY_ERRORS:
             return None
 
     def find_product_units(self) -> list[str]:
@@ -334,7 +337,7 @@ class SQLAlchemyProductRepository(ProductRepository):
 
             return {"success": True, "message": "产品创建成功", "product_id": product.id}
 
-        except RECOVERABLE_ERRORS as e:
+        except _REPOSITORY_ERRORS as e:
             return {"success": False, "message": f"创建失败：{str(e)}"}
 
     def update(self, product_id: int, data: dict[str, Any]) -> dict[str, Any]:
@@ -385,7 +388,7 @@ class SQLAlchemyProductRepository(ProductRepository):
 
             return {"success": True, "message": "产品更新成功"}
 
-        except RECOVERABLE_ERRORS as e:
+        except _REPOSITORY_ERRORS as e:
             return {"success": False, "message": f"更新失败：{str(e)}"}
 
     def delete(self, product_id: int) -> bool:
@@ -400,7 +403,7 @@ class SQLAlchemyProductRepository(ProductRepository):
                 db.commit()
                 return True
 
-        except RECOVERABLE_ERRORS:
+        except _REPOSITORY_ERRORS:
             return False
 
     def batch_create(self, products_data: list[dict[str, Any]]) -> dict[str, Any]:
@@ -489,7 +492,7 @@ class SQLAlchemyProductRepository(ProductRepository):
 
             return result
 
-        except RECOVERABLE_ERRORS as e:
+        except _REPOSITORY_ERRORS as e:
             return {"success": False, "message": f"批量添加失败：{str(e)}"}
 
     def batch_delete(self, product_ids: list[int]) -> dict[str, Any]:
@@ -514,7 +517,7 @@ class SQLAlchemyProductRepository(ProductRepository):
                     "deleted_count": len(products),
                 }
 
-        except RECOVERABLE_ERRORS as e:
+        except _REPOSITORY_ERRORS as e:
             return {"success": False, "message": f"批量删除失败：{str(e)}"}
 
     def exists(self, product_id: int) -> bool:
@@ -522,7 +525,7 @@ class SQLAlchemyProductRepository(ProductRepository):
             with get_db() as db:
                 product = db.query(Product).filter(Product.id == product_id).first()
                 return product is not None
-        except RECOVERABLE_ERRORS:
+        except _REPOSITORY_ERRORS:
             return False
 
     def find_names(self, keyword: str | None = None) -> list[str]:
@@ -542,7 +545,7 @@ class SQLAlchemyProductRepository(ProductRepository):
 
                 return names
 
-        except RECOVERABLE_ERRORS:
+        except _REPOSITORY_ERRORS:
             return []
 
     def export_to_excel(

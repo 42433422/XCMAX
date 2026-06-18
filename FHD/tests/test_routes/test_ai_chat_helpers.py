@@ -16,7 +16,6 @@ from app.routes.ai_chat import (
     unified_chat_single_payload,
 )
 
-
 # ========================= _fetch_product_meta_by_models =================
 
 
@@ -126,9 +125,7 @@ class TestBuildNumberPreviewItems:
                 "name": "Widget",
             }
         ]
-        with patch(
-            "app.routes.ai_chat._fetch_product_meta_by_models", return_value={}
-        ):
+        with patch("app.routes.ai_chat._fetch_product_meta_by_models", return_value={}):
             result = _build_number_preview_items("TestUnit", products)
             assert len(result["items"]) == 1
             assert result["items"][0]["型号"] == "M1"
@@ -145,9 +142,7 @@ class TestBuildNumberPreviewItems:
                 "name": "Widget",
             }
         ]
-        with patch(
-            "app.routes.ai_chat._fetch_product_meta_by_models", return_value={}
-        ):
+        with patch("app.routes.ai_chat._fetch_product_meta_by_models", return_value={}):
             result = _build_number_preview_items("TestUnit", products)
             assert result["grand_total"] == 300.0
 
@@ -159,9 +154,7 @@ class TestBuildNumberPreviewItems:
                 "name": "Widget",
             }
         ]
-        with patch(
-            "app.routes.ai_chat._fetch_product_meta_by_models", return_value={}
-        ):
+        with patch("app.routes.ai_chat._fetch_product_meta_by_models", return_value={}):
             result = _build_number_preview_items("TestUnit", products)
             assert result["grand_total"] == 200.0
 
@@ -204,9 +197,7 @@ class TestBuildNumberPreviewItems:
                 "name": "Widget",
             }
         ]
-        with patch(
-            "app.routes.ai_chat._fetch_product_meta_by_models", return_value={}
-        ):
+        with patch("app.routes.ai_chat._fetch_product_meta_by_models", return_value={}):
             result = _build_number_preview_items("TestUnit", products)
             assert result["items"][0]["桶数"] == 2.5
             assert result["grand_total"] == 25.0
@@ -217,9 +208,7 @@ class TestBuildNumberPreviewItems:
 
 class TestBuildShipmentPreviewResponseDict:
     def test_basic_structure(self):
-        products = [
-            {"model_number": "M1", "quantity_tins": 5, "unit_price": 10, "name": "Widget"}
-        ]
+        products = [{"model_number": "M1", "quantity_tins": 5, "unit_price": 10, "name": "Widget"}]
         with patch(
             "app.routes.ai_chat._build_number_preview_items",
             return_value={"items": [{"型号": "M1"}], "grand_total": 50.0},
@@ -336,127 +325,160 @@ class TestNormalizeBatchMessagesPayload:
 
 class TestUnifiedChatSinglePayload:
     def test_pro_source_rejected(self):
-        with patch("app.utils.ai_helpers.is_pro_source", return_value=True), \
-             patch("app.utils.ai_helpers.is_professional_mode", return_value=False), \
-             patch("app.utils.ai_helpers.is_qclaw_source", return_value=False):
-            result = unified_chat_single_payload(
-                "hello", "user1", "127.0.0.1", "pro", None
-            )
+        with (
+            patch("app.utils.ai_helpers.is_pro_source", return_value=True),
+            patch("app.utils.ai_helpers.is_professional_mode", return_value=False),
+            patch("app.utils.ai_helpers.is_qclaw_source", return_value=False),
+        ):
+            result = unified_chat_single_payload("hello", "user1", "127.0.0.1", "pro", None)
             assert result["success"] is False
             assert result["mode_guard"] == "normal_only"
             assert result["_http_status"] == 400
 
     def test_professional_mode_rejected(self):
-        with patch("app.utils.ai_helpers.is_pro_source", return_value=False), \
-             patch("app.utils.ai_helpers.is_professional_mode", return_value=True), \
-             patch("app.utils.ai_helpers.is_qclaw_source", return_value=False):
+        with (
+            patch("app.utils.ai_helpers.is_pro_source", return_value=False),
+            patch("app.utils.ai_helpers.is_professional_mode", return_value=True),
+            patch("app.utils.ai_helpers.is_qclaw_source", return_value=False),
+        ):
             result = unified_chat_single_payload(
                 "hello", "user1", "127.0.0.1", "normal", "professional"
             )
             assert result["success"] is False
 
     def test_qclaw_source_allowed(self):
-        with patch("app.utils.ai_helpers.is_pro_source", return_value=True), \
-             patch("app.utils.ai_helpers.is_professional_mode", return_value=False), \
-             patch("app.utils.ai_helpers.is_qclaw_source", return_value=True), \
-             patch("app.application.normal_chat_dispatch.route_normal_mode_message",
-                   return_value={"intent": "other"}):
-            result = unified_chat_single_payload(
-                "hello", "user1", "127.0.0.1", "qclaw", None
-            )
+        with (
+            patch("app.utils.ai_helpers.is_pro_source", return_value=True),
+            patch("app.utils.ai_helpers.is_professional_mode", return_value=False),
+            patch("app.utils.ai_helpers.is_qclaw_source", return_value=True),
+            patch(
+                "app.application.normal_chat_dispatch.route_normal_mode_message",
+                return_value={"intent": "other"},
+            ),
+        ):
+            result = unified_chat_single_payload("hello", "user1", "127.0.0.1", "qclaw", None)
             assert result.get("mode_guard") != "normal_only"
 
     def test_excel_analysis_with_import_keyword(self):
-        with patch("app.utils.ai_helpers.is_pro_source", return_value=False), \
-             patch("app.utils.ai_helpers.is_professional_mode", return_value=False), \
-             patch("app.utils.ai_helpers.is_qclaw_source", return_value=False), \
-             patch("app.application.get_ai_chat_app_service") as mock_svc:
+        with (
+            patch("app.utils.ai_helpers.is_pro_source", return_value=False),
+            patch("app.utils.ai_helpers.is_professional_mode", return_value=False),
+            patch("app.utils.ai_helpers.is_qclaw_source", return_value=False),
+            patch("app.application.get_ai_chat_app_service") as mock_svc,
+        ):
             mock_service = MagicMock()
             mock_service.process_chat.return_value = {"success": True, "data": {}}
             mock_svc.return_value = mock_service
             result = unified_chat_single_payload(
-                "导入数据", "user1", "127.0.0.1", "normal", None,
+                "导入数据",
+                "user1",
+                "127.0.0.1",
+                "normal",
+                None,
                 context={"excel_analysis": {"sheets": 1}},
             )
             mock_service.process_chat.assert_called_once()
 
     def test_shipment_intent(self):
-        with patch("app.utils.ai_helpers.is_pro_source", return_value=False), \
-             patch("app.utils.ai_helpers.is_professional_mode", return_value=False), \
-             patch("app.utils.ai_helpers.is_qclaw_source", return_value=False), \
-             patch("app.application.normal_chat_dispatch.route_normal_mode_message",
-                   return_value={"intent": "shipment"}), \
-             patch("app.routes.tools._parse_order_text", return_value={
-                 "success": True, "unit_name": "TestUnit", "products": [{"model_number": "M1"}]
-             }), \
-             patch("app.routes.ai_chat.build_shipment_preview_response_dict", return_value={
-                 "success": True, "task": {"type": "shipment_generate"}
-             }):
-            result = unified_chat_single_payload(
-                "发货单", "user1", "127.0.0.1", "normal", None
-            )
+        with (
+            patch("app.utils.ai_helpers.is_pro_source", return_value=False),
+            patch("app.utils.ai_helpers.is_professional_mode", return_value=False),
+            patch("app.utils.ai_helpers.is_qclaw_source", return_value=False),
+            patch(
+                "app.application.normal_chat_dispatch.route_normal_mode_message",
+                return_value={"intent": "shipment"},
+            ),
+            patch(
+                "app.routes.tools._parse_order_text",
+                return_value={
+                    "success": True,
+                    "unit_name": "TestUnit",
+                    "products": [{"model_number": "M1"}],
+                },
+            ),
+            patch(
+                "app.routes.ai_chat.build_shipment_preview_response_dict",
+                return_value={"success": True, "task": {"type": "shipment_generate"}},
+            ),
+        ):
+            result = unified_chat_single_payload("发货单", "user1", "127.0.0.1", "normal", None)
             assert result["success"] is True
 
     def test_shipment_intent_parse_fails(self):
-        with patch("app.utils.ai_helpers.is_pro_source", return_value=False), \
-             patch("app.utils.ai_helpers.is_professional_mode", return_value=False), \
-             patch("app.utils.ai_helpers.is_qclaw_source", return_value=False), \
-             patch("app.application.normal_chat_dispatch.route_normal_mode_message",
-                   return_value={"intent": "shipment"}), \
-             patch("app.routes.tools._parse_order_text", return_value={
-                 "success": False, "message": "订单信息不完整"
-             }):
-            result = unified_chat_single_payload(
-                "发货单", "user1", "127.0.0.1", "normal", None
-            )
+        with (
+            patch("app.utils.ai_helpers.is_pro_source", return_value=False),
+            patch("app.utils.ai_helpers.is_professional_mode", return_value=False),
+            patch("app.utils.ai_helpers.is_qclaw_source", return_value=False),
+            patch(
+                "app.application.normal_chat_dispatch.route_normal_mode_message",
+                return_value={"intent": "shipment"},
+            ),
+            patch(
+                "app.routes.tools._parse_order_text",
+                return_value={"success": False, "message": "订单信息不完整"},
+            ),
+        ):
+            result = unified_chat_single_payload("发货单", "user1", "127.0.0.1", "normal", None)
             assert result["success"] is True
 
     def test_shipment_intent_parse_error(self):
-        with patch("app.utils.ai_helpers.is_pro_source", return_value=False), \
-             patch("app.utils.ai_helpers.is_professional_mode", return_value=False), \
-             patch("app.utils.ai_helpers.is_qclaw_source", return_value=False), \
-             patch("app.application.normal_chat_dispatch.route_normal_mode_message",
-                   return_value={"intent": "shipment"}), \
-             patch("app.routes.tools._parse_order_text", side_effect=RuntimeError("parse error")):
-            result = unified_chat_single_payload(
-                "发货单", "user1", "127.0.0.1", "normal", None
-            )
+        with (
+            patch("app.utils.ai_helpers.is_pro_source", return_value=False),
+            patch("app.utils.ai_helpers.is_professional_mode", return_value=False),
+            patch("app.utils.ai_helpers.is_qclaw_source", return_value=False),
+            patch(
+                "app.application.normal_chat_dispatch.route_normal_mode_message",
+                return_value={"intent": "shipment"},
+            ),
+            patch("app.routes.tools._parse_order_text", side_effect=RuntimeError("parse error")),
+        ):
+            result = unified_chat_single_payload("发货单", "user1", "127.0.0.1", "normal", None)
             assert result["success"] is False
 
     def test_product_query_intent(self):
-        with patch("app.utils.ai_helpers.is_pro_source", return_value=False), \
-             patch("app.utils.ai_helpers.is_professional_mode", return_value=False), \
-             patch("app.utils.ai_helpers.is_qclaw_source", return_value=False), \
-             patch("app.application.normal_chat_dispatch.route_normal_mode_message",
-                   return_value={"intent": "product_query"}), \
-             patch("app.application.normal_chat_dispatch.build_product_query_response_dict",
-                   return_value={"success": True, "data": {}}):
-            result = unified_chat_single_payload(
-                "查询产品", "user1", "127.0.0.1", "normal", None
-            )
+        with (
+            patch("app.utils.ai_helpers.is_pro_source", return_value=False),
+            patch("app.utils.ai_helpers.is_professional_mode", return_value=False),
+            patch("app.utils.ai_helpers.is_qclaw_source", return_value=False),
+            patch(
+                "app.application.normal_chat_dispatch.route_normal_mode_message",
+                return_value={"intent": "product_query"},
+            ),
+            patch(
+                "app.application.normal_chat_dispatch.build_product_query_response_dict",
+                return_value={"success": True, "data": {}},
+            ),
+        ):
+            result = unified_chat_single_payload("查询产品", "user1", "127.0.0.1", "normal", None)
             assert result["success"] is True
 
     def test_product_query_intent_no_body(self):
-        with patch("app.utils.ai_helpers.is_pro_source", return_value=False), \
-             patch("app.utils.ai_helpers.is_professional_mode", return_value=False), \
-             patch("app.utils.ai_helpers.is_qclaw_source", return_value=False), \
-             patch("app.application.normal_chat_dispatch.route_normal_mode_message",
-                   return_value={"intent": "product_query"}), \
-             patch("app.application.normal_chat_dispatch.build_product_query_response_dict",
-                   return_value=None):
-            result = unified_chat_single_payload(
-                "查询产品", "user1", "127.0.0.1", "normal", None
-            )
+        with (
+            patch("app.utils.ai_helpers.is_pro_source", return_value=False),
+            patch("app.utils.ai_helpers.is_professional_mode", return_value=False),
+            patch("app.utils.ai_helpers.is_qclaw_source", return_value=False),
+            patch(
+                "app.application.normal_chat_dispatch.route_normal_mode_message",
+                return_value={"intent": "product_query"},
+            ),
+            patch(
+                "app.application.normal_chat_dispatch.build_product_query_response_dict",
+                return_value=None,
+            ),
+        ):
+            result = unified_chat_single_payload("查询产品", "user1", "127.0.0.1", "normal", None)
             assert "success" in result
 
     def test_other_intent_default_response(self):
-        with patch("app.utils.ai_helpers.is_pro_source", return_value=False), \
-             patch("app.utils.ai_helpers.is_professional_mode", return_value=False), \
-             patch("app.utils.ai_helpers.is_qclaw_source", return_value=False), \
-             patch("app.application.normal_chat_dispatch.route_normal_mode_message",
-                   return_value={"intent": "other"}):
-            result = unified_chat_single_payload(
-                "你好", "user1", "127.0.0.1", "normal", None
-            )
+        with (
+            patch("app.utils.ai_helpers.is_pro_source", return_value=False),
+            patch("app.utils.ai_helpers.is_professional_mode", return_value=False),
+            patch("app.utils.ai_helpers.is_qclaw_source", return_value=False),
+            patch(
+                "app.application.normal_chat_dispatch.route_normal_mode_message",
+                return_value={"intent": "other"},
+            ),
+        ):
+            result = unified_chat_single_payload("你好", "user1", "127.0.0.1", "normal", None)
             assert result["success"] is True
             assert "两套独立能力" in result["response"]

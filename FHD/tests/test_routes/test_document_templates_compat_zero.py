@@ -1,4 +1,5 @@
 """Tests for app.routes.document_templates_compat."""
+
 from __future__ import annotations
 
 from io import BytesIO
@@ -7,8 +8,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from app.routes.document_templates_compat import (
-    _UploadLikeFile,
     _unpack_response,
+    _UploadLikeFile,
     run_archive_template_analyze,
     run_archive_template_create,
     run_archive_template_update,
@@ -32,6 +33,7 @@ class TestUploadLikeFile:
 
     def test_save_writes_to_file(self, tmp_path: object) -> None:
         from pathlib import Path
+
         tmp = tmp_path  # type: Path
         stream = BytesIO(b"file content here")
         f = _UploadLikeFile(stream, "test.bin")

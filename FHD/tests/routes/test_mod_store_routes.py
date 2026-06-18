@@ -165,9 +165,7 @@ class TestRemoteToModInfo:
             "app.mod_sdk.host_foundation.catalog_store_collection",
             return_value="default",
         ):
-            result = ms._remote_to_mod_info(
-                {"id": "rmod1"}, installed_ids={"rmod1"}
-            )
+            result = ms._remote_to_mod_info({"id": "rmod1"}, installed_ids={"rmod1"})
         assert result["is_installed"] is True
 
     def test_commerce_fields(self) -> None:
@@ -190,9 +188,7 @@ class TestRemoteToModInfo:
             "app.mod_sdk.host_foundation.catalog_store_collection",
             return_value="default",
         ):
-            result = ms._remote_to_mod_info(
-                {"pkg_id": "pkg1"}, installed_ids=set()
-            )
+            result = ms._remote_to_mod_info({"pkg_id": "pkg1"}, installed_ids=set())
         assert result["id"] == "pkg1"
 
 
@@ -417,7 +413,13 @@ class TestModStoreDetails:
                 new_callable=AsyncMock,
                 side_effect=[
                     {"versions": [{"version": "1.0"}]},
-                    {"id": "mod1", "name": "Test Mod", "version": "1.0", "author": "Author", "description": "Desc"},
+                    {
+                        "id": "mod1",
+                        "name": "Test Mod",
+                        "version": "1.0",
+                        "author": "Author",
+                        "description": "Desc",
+                    },
                 ],
             ),
         ):
@@ -440,7 +442,16 @@ class TestModStoreDetails:
                 "app.fastapi_routes.mod_store_routes._combined_rows",
                 new_callable=AsyncMock,
                 return_value=(
-                    [{"id": "mod1", "name": "Local Mod", "version": "1.0", "author": "A", "description": "D", "source": "local"}],
+                    [
+                        {
+                            "id": "mod1",
+                            "name": "Local Mod",
+                            "version": "1.0",
+                            "author": "A",
+                            "description": "D",
+                            "source": "local",
+                        }
+                    ],
                     [],
                 ),
             ),
@@ -739,9 +750,7 @@ class TestModStoreInstallIndustrySeed:
             new_callable=AsyncMock,
             return_value={"success": True, "message": "installed"},
         ):
-            resp = client.post(
-                "/install-industry-seed", json={"industry_id": "manufacturing"}
-            )
+            resp = client.post("/install-industry-seed", json={"industry_id": "manufacturing"})
         assert resp.status_code == 200
         data = resp.json()
         assert data["success"] is True
@@ -753,9 +762,7 @@ class TestModStoreSyncModstoreLibrary:
         assert resp.status_code == 400
 
     def test_missing_mod_ids_without_all(self, client: TestClient) -> None:
-        resp = client.post(
-            "/sync-modstore-library", json={"token": "pat123"}
-        )
+        resp = client.post("/sync-modstore-library", json={"token": "pat123"})
         assert resp.status_code == 400
 
     def test_success_with_all(self, client: TestClient) -> None:

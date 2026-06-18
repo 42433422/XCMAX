@@ -63,12 +63,15 @@ class TestMain:
                     )
 
         mock_trainer_instance = MagicMock()
-        with patch(
-            "app.services.distillation_trainer.DistillationTrainer",
-            return_value=mock_trainer_instance,
-        ) as MockTrainer, patch(
-            "sys.argv",
-            ["distillation_trainer", "--data", data_path, "--epochs", "1"],
+        with (
+            patch(
+                "app.services.distillation_trainer.DistillationTrainer",
+                return_value=mock_trainer_instance,
+            ) as MockTrainer,
+            patch(
+                "sys.argv",
+                ["distillation_trainer", "--data", data_path, "--epochs", "1"],
+            ),
         ):
             main()
             MockTrainer.assert_called_once()
@@ -76,10 +79,13 @@ class TestMain:
 
     def test_main_default_data_path(self, tmp_path):
         """main() uses default data path when --data not provided."""
-        with patch(
-            "app.services.distillation_trainer.get_distillation_training_data_path",
-            return_value="/nonexistent/default.jsonl",
-        ), patch("sys.argv", ["distillation_trainer"]):
+        with (
+            patch(
+                "app.services.distillation_trainer.get_distillation_training_data_path",
+                return_value="/nonexistent/default.jsonl",
+            ),
+            patch("sys.argv", ["distillation_trainer"]),
+        ):
             result = main()
             assert result is None
 
@@ -98,12 +104,15 @@ class TestMain:
 
         output_dir = str(tmp_path / "custom_output")
         mock_trainer_instance = MagicMock()
-        with patch(
-            "app.services.distillation_trainer.DistillationTrainer",
-            return_value=mock_trainer_instance,
-        ), patch(
-            "sys.argv",
-            ["distillation_trainer", "--data", data_path, "--output", output_dir],
+        with (
+            patch(
+                "app.services.distillation_trainer.DistillationTrainer",
+                return_value=mock_trainer_instance,
+            ),
+            patch(
+                "sys.argv",
+                ["distillation_trainer", "--data", data_path, "--output", output_dir],
+            ),
         ):
             main()
             mock_trainer_instance.train.assert_called_once_with(
@@ -124,26 +133,29 @@ class TestMain:
                 )
 
         mock_trainer_instance = MagicMock()
-        with patch(
-            "app.services.distillation_trainer.DistillationTrainer",
-            return_value=mock_trainer_instance,
-        ) as MockTrainer, patch(
-            "sys.argv",
-            [
-                "distillation_trainer",
-                "--data",
-                data_path,
-                "--model",
-                "bert-base-chinese",
-                "--epochs",
-                "5",
-                "--batch_size",
-                "32",
-                "--lr",
-                "3e-5",
-                "--max_length",
-                "128",
-            ],
+        with (
+            patch(
+                "app.services.distillation_trainer.DistillationTrainer",
+                return_value=mock_trainer_instance,
+            ) as MockTrainer,
+            patch(
+                "sys.argv",
+                [
+                    "distillation_trainer",
+                    "--data",
+                    data_path,
+                    "--model",
+                    "bert-base-chinese",
+                    "--epochs",
+                    "5",
+                    "--batch_size",
+                    "32",
+                    "--lr",
+                    "3e-5",
+                    "--max_length",
+                    "128",
+                ],
+            ),
         ):
             main()
             MockTrainer.assert_called_once_with(
@@ -182,7 +194,9 @@ class TestDistillationTrainerLoadDataEdgeCases:
         data_path = str(tmp_path / "mixed.jsonl")
         with open(data_path, "w", encoding="utf-8") as f:
             f.write(json.dumps({"text": "hello", "label": "greet"}, ensure_ascii=False) + "\n")
-            f.write(json.dumps({"text": "bad", "label": "invalid_intent"}, ensure_ascii=False) + "\n")
+            f.write(
+                json.dumps({"text": "bad", "label": "invalid_intent"}, ensure_ascii=False) + "\n"
+            )
             f.write(json.dumps({"text": "bye", "label": "goodbye"}, ensure_ascii=False) + "\n")
 
         texts, labels = trainer.load_data(data_path)
@@ -273,11 +287,15 @@ class TestDistillationTrainerTrainBranches:
         )
         trainer.save_checkpoint = MagicMock()
 
-        with patch("app.services.distillation_trainer.AdamW", return_value=MagicMock()), patch(
-            "app.services.distillation_trainer.get_linear_schedule_with_warmup",
-            return_value=MagicMock(),
-        ), patch("app.services.distillation_trainer.classification_report", return_value="report"), patch("app.services.distillation_trainer.CHECKPOINT_DIR", ckpt_dir), patch(
-            "app.services.distillation_trainer.LOG_DIR", log_dir
+        with (
+            patch("app.services.distillation_trainer.AdamW", return_value=MagicMock()),
+            patch(
+                "app.services.distillation_trainer.get_linear_schedule_with_warmup",
+                return_value=MagicMock(),
+            ),
+            patch("app.services.distillation_trainer.classification_report", return_value="report"),
+            patch("app.services.distillation_trainer.CHECKPOINT_DIR", ckpt_dir),
+            patch("app.services.distillation_trainer.LOG_DIR", log_dir),
         ):
             trainer.train(data_path, output_dir=ckpt_dir)
 
@@ -323,11 +341,15 @@ class TestDistillationTrainerTrainBranches:
         )
         trainer.save_checkpoint = MagicMock()
 
-        with patch("app.services.distillation_trainer.AdamW", return_value=MagicMock()), patch(
-            "app.services.distillation_trainer.get_linear_schedule_with_warmup",
-            return_value=MagicMock(),
-        ), patch("app.services.distillation_trainer.classification_report", return_value="report"), patch("app.services.distillation_trainer.CHECKPOINT_DIR", ckpt_dir), patch(
-            "app.services.distillation_trainer.LOG_DIR", log_dir
+        with (
+            patch("app.services.distillation_trainer.AdamW", return_value=MagicMock()),
+            patch(
+                "app.services.distillation_trainer.get_linear_schedule_with_warmup",
+                return_value=MagicMock(),
+            ),
+            patch("app.services.distillation_trainer.classification_report", return_value="report"),
+            patch("app.services.distillation_trainer.CHECKPOINT_DIR", ckpt_dir),
+            patch("app.services.distillation_trainer.LOG_DIR", log_dir),
         ):
             trainer.train(data_path, output_dir=ckpt_dir)
 
@@ -370,11 +392,15 @@ class TestDistillationTrainerTrainBranches:
         )
         trainer.save_checkpoint = MagicMock()
 
-        with patch("app.services.distillation_trainer.AdamW", return_value=MagicMock()), patch(
-            "app.services.distillation_trainer.get_linear_schedule_with_warmup",
-            return_value=MagicMock(),
-        ), patch("app.services.distillation_trainer.classification_report", return_value="report"), patch("app.services.distillation_trainer.CHECKPOINT_DIR", ckpt_dir), patch(
-            "app.services.distillation_trainer.LOG_DIR", log_dir
+        with (
+            patch("app.services.distillation_trainer.AdamW", return_value=MagicMock()),
+            patch(
+                "app.services.distillation_trainer.get_linear_schedule_with_warmup",
+                return_value=MagicMock(),
+            ),
+            patch("app.services.distillation_trainer.classification_report", return_value="report"),
+            patch("app.services.distillation_trainer.CHECKPOINT_DIR", ckpt_dir),
+            patch("app.services.distillation_trainer.LOG_DIR", log_dir),
         ):
             trainer.train(data_path, output_dir=ckpt_dir)
 
@@ -398,15 +424,12 @@ class TestDistillationTrainerPrepareDataStratify:
 
         mock_tokenizer = MagicMock()
         mock_model = MagicMock()
-        with patch(
-            "app.services.distillation_trainer.BertTokenizer"
-        ) as MockTokenizer, patch(
-            "app.services.distillation_trainer.BertForSequenceClassification"
-        ) as MockModel, patch(
-            "app.services.distillation_trainer.DataLoader"
-        ) as MockDataLoader, patch(
-            "app.services.distillation_trainer.train_test_split"
-        ) as mock_split:
+        with (
+            patch("app.services.distillation_trainer.BertTokenizer") as MockTokenizer,
+            patch("app.services.distillation_trainer.BertForSequenceClassification") as MockModel,
+            patch("app.services.distillation_trainer.DataLoader") as MockDataLoader,
+            patch("app.services.distillation_trainer.train_test_split") as mock_split,
+        ):
             MockTokenizer.from_pretrained.return_value = mock_tokenizer
             MockModel.from_pretrained.return_value = mock_model
             MockDataLoader.return_value = MagicMock()

@@ -182,16 +182,20 @@ class TestCreateProduct:
         mock_repo.create.return_value = mock_product
         # Product, Money, ModelNumber are imported inside create_product from
         # app.domain.product.entities and app.domain.value_objects
-        with patch("app.domain.product.entities.Product", return_value=mock_product), \
-             patch("app.domain.value_objects.Money", return_value=MagicMock()), \
-             patch("app.domain.value_objects.ModelNumber", return_value=MagicMock()):
+        with (
+            patch("app.domain.product.entities.Product", return_value=mock_product),
+            patch("app.domain.value_objects.Money", return_value=MagicMock()),
+            patch("app.domain.value_objects.ModelNumber", return_value=MagicMock()),
+        ):
             result = service.create_product({"name": "A", "product_code": "X1"})
         assert result["success"] is True
 
     def test_create_error(self, service, mock_repo):
         mock_repo.create.side_effect = RuntimeError("db error")
-        with patch("app.domain.product.entities.Product", side_effect=RuntimeError("fail")), \
-             patch("app.domain.value_objects.Money", return_value=MagicMock()):
+        with (
+            patch("app.domain.product.entities.Product", side_effect=RuntimeError("fail")),
+            patch("app.domain.value_objects.Money", return_value=MagicMock()),
+        ):
             result = service.create_product({"name": "A"})
         assert result["success"] is False
 

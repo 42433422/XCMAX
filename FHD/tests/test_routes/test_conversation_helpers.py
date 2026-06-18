@@ -11,7 +11,6 @@ from fastapi import HTTPException, Request
 
 from app.fastapi_routes.domains.conversation import helpers
 
-
 # ---------------------------------------------------------------------------
 # _chat_request_subject
 # ---------------------------------------------------------------------------
@@ -104,38 +103,65 @@ class TestChatReadTokenRequiredPayload:
 
 class TestEnsureChatDbReadAuthorized:
     def test_no_expected_token(self):
-        with patch("app.fastapi_routes.domains.conversation.helpers.effective_db_read_token", return_value=""):
+        with patch(
+            "app.fastapi_routes.domains.conversation.helpers.effective_db_read_token",
+            return_value="",
+        ):
             req = MagicMock(spec=Request)
-            ok, payload = helpers._ensure_chat_db_read_authorized(req, message="查看数据库", provided_token=None)
+            ok, payload = helpers._ensure_chat_db_read_authorized(
+                req, message="查看数据库", provided_token=None
+            )
             assert ok is True
             assert payload is None
 
     def test_non_db_read_message(self):
-        with patch("app.fastapi_routes.domains.conversation.helpers.effective_db_read_token", return_value="secret"):
+        with patch(
+            "app.fastapi_routes.domains.conversation.helpers.effective_db_read_token",
+            return_value="secret",
+        ):
             req = MagicMock(spec=Request)
-            ok, payload = helpers._ensure_chat_db_read_authorized(req, message="你好", provided_token=None)
+            ok, payload = helpers._ensure_chat_db_read_authorized(
+                req, message="你好", provided_token=None
+            )
             assert ok is True
 
     def test_grace_period_active(self):
-        with patch("app.fastapi_routes.domains.conversation.helpers.effective_db_read_token", return_value="secret"):
+        with patch(
+            "app.fastapi_routes.domains.conversation.helpers.effective_db_read_token",
+            return_value="secret",
+        ):
             req = MagicMock(spec=Request)
             with patch.object(helpers, "_chat_db_read_grace_seconds_left", return_value=100):
-                ok, payload = helpers._ensure_chat_db_read_authorized(req, message="查看数据库", provided_token=None)
+                ok, payload = helpers._ensure_chat_db_read_authorized(
+                    req, message="查看数据库", provided_token=None
+                )
                 assert ok is True
 
     def test_correct_token(self):
-        with patch("app.fastapi_routes.domains.conversation.helpers.effective_db_read_token", return_value="secret"):
+        with patch(
+            "app.fastapi_routes.domains.conversation.helpers.effective_db_read_token",
+            return_value="secret",
+        ):
             req = MagicMock(spec=Request)
-            with patch.object(helpers, "_chat_db_read_grace_seconds_left", return_value=0), \
-                 patch.object(helpers, "_touch_chat_db_read_grace", return_value=300):
-                ok, payload = helpers._ensure_chat_db_read_authorized(req, message="查看数据库", provided_token="secret")
+            with (
+                patch.object(helpers, "_chat_db_read_grace_seconds_left", return_value=0),
+                patch.object(helpers, "_touch_chat_db_read_grace", return_value=300),
+            ):
+                ok, payload = helpers._ensure_chat_db_read_authorized(
+                    req, message="查看数据库", provided_token="secret"
+                )
                 assert ok is True
 
     def test_wrong_token(self):
-        with patch("app.fastapi_routes.domains.conversation.helpers.effective_db_read_token", return_value="secret"):
+        with patch(
+            "app.fastapi_routes.domains.conversation.helpers.effective_db_read_token",
+            return_value="secret",
+        ):
             req = MagicMock(spec=Request)
             with patch.object(helpers, "_chat_db_read_grace_seconds_left", return_value=0):
-                ok, payload = helpers._ensure_chat_db_read_authorized(req, message="查看数据库", provided_token="wrong")
+                ok, payload = helpers._ensure_chat_db_read_authorized(
+                    req, message="查看数据库", provided_token="wrong"
+                )
                 assert ok is False
                 assert payload is not None
                 assert payload["requires_token"] is True
@@ -154,25 +180,37 @@ class TestXcagiChatHttpExc:
 
     def test_authentication_error(self):
         from openai import AuthenticationError
-        exc = helpers._xcagi_chat_http_exc(AuthenticationError(message="bad key", response=MagicMock(), body=None))
+
+        exc = helpers._xcagi_chat_http_exc(
+            AuthenticationError(message="bad key", response=MagicMock(), body=None)
+        )
         assert isinstance(exc, HTTPException)
         assert exc.status_code == 401
 
     def test_rate_limit_error(self):
         from openai import RateLimitError
-        exc = helpers._xcagi_chat_http_exc(RateLimitError(message="slow down", response=MagicMock(), body=None))
+
+        exc = helpers._xcagi_chat_http_exc(
+            RateLimitError(message="slow down", response=MagicMock(), body=None)
+        )
         assert isinstance(exc, HTTPException)
         assert exc.status_code == 429
 
     def test_api_connection_error(self):
         from openai import APIConnectionError
-        exc = helpers._xcagi_chat_http_exc(APIConnectionError(message="no connect", request=MagicMock()))
+
+        exc = helpers._xcagi_chat_http_exc(
+            APIConnectionError(message="no connect", request=MagicMock())
+        )
         assert isinstance(exc, HTTPException)
         assert exc.status_code == 503
 
     def test_api_error(self):
         from openai import APIError
-        exc = helpers._xcagi_chat_http_exc(APIError(message="generic", request=MagicMock(), body=None))
+
+        exc = helpers._xcagi_chat_http_exc(
+            APIError(message="generic", request=MagicMock(), body=None)
+        )
         assert isinstance(exc, HTTPException)
         assert exc.status_code == 502
 
@@ -223,7 +261,9 @@ class TestXcagiCompatReplyPayload:
         assert result["data"]["runtime_context"] == {"key": "val"}
 
     def test_kitten_attachments(self):
-        result = helpers._xcagi_compat_reply_payload("ok", kitten_attachments={"chart": {"type": "bar"}})
+        result = helpers._xcagi_compat_reply_payload(
+            "ok", kitten_attachments={"chart": {"type": "bar"}}
+        )
         assert result["data"]["chart"] == {"type": "bar"}
 
     def test_kitten_attachments_none_skipped(self):

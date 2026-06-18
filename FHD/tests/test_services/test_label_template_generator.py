@@ -1,4 +1,5 @@
 """Tests for app.services.skills.label_template_generator.label_template_generator."""
+
 from __future__ import annotations
 
 import os
@@ -22,7 +23,6 @@ from app.services.skills.label_template_generator.label_template_generator impor
     generate_template_code,
     get_label_template_generator_skill,
 )
-
 
 # ---------------------------------------------------------------------------
 # analyze_image
@@ -325,7 +325,14 @@ class TestIdentifyFields:
 
     def test_colon_separated_label_value(self):
         blocks = [
-            {"text": "品名：运动鞋", "left": 10, "top": 20, "width": 100, "height": 30, "conf": 0.95}
+            {
+                "text": "品名：运动鞋",
+                "left": 10,
+                "top": 20,
+                "width": 100,
+                "height": 30,
+                "conf": 0.95,
+            }
         ]
         fields = _identify_fields(blocks)
         assert len(fields) == 1
@@ -345,7 +352,14 @@ class TestIdentifyFields:
 
     def test_no_colon_with_known_label(self):
         blocks = [
-            {"text": "产品编号 6808AA", "left": 10, "top": 20, "width": 100, "height": 30, "conf": 0.9}
+            {
+                "text": "产品编号 6808AA",
+                "left": 10,
+                "top": 20,
+                "width": 100,
+                "height": 30,
+                "conf": 0.9,
+            }
         ]
         fields = _identify_fields(blocks)
         assert len(fields) == 1
@@ -360,9 +374,7 @@ class TestIdentifyFields:
         assert len(fields) == 0
 
     def test_no_colon_known_label_no_value_skipped(self):
-        blocks = [
-            {"text": "品名", "left": 10, "top": 20, "width": 100, "height": 30, "conf": 0.9}
-        ]
+        blocks = [{"text": "品名", "left": 10, "top": 20, "width": 100, "height": 30, "conf": 0.9}]
         fields = _identify_fields(blocks)
         assert len(fields) == 0
 
@@ -443,10 +455,26 @@ class TestPairFieldsByGrid:
     def test_none_merged_horizontal(self):
         """merged_horizontal=None should default to empty list."""
         blocks = [
-            {"text": "品名", "y_center": 50, "center": (25, 50), "left": 10, "top": 40,
-             "width": 40, "height": 20, "conf": 0.9},
-            {"text": "运动鞋", "y_center": 50, "center": (75, 50), "left": 60, "top": 40,
-             "width": 40, "height": 20, "conf": 0.85},
+            {
+                "text": "品名",
+                "y_center": 50,
+                "center": (25, 50),
+                "left": 10,
+                "top": 40,
+                "width": 40,
+                "height": 20,
+                "conf": 0.9,
+            },
+            {
+                "text": "运动鞋",
+                "y_center": 50,
+                "center": (75, 50),
+                "left": 60,
+                "top": 40,
+                "width": 40,
+                "height": 20,
+                "conf": 0.85,
+            },
         ]
         result = _pair_fields_by_grid(blocks, [0, 100], [0, 50, 100])
         assert len(result) >= 1
@@ -454,10 +482,30 @@ class TestPairFieldsByGrid:
     def test_pair_adjacent_blocks(self):
         """Two adjacent blocks in same row should be paired as label+value."""
         blocks = [
-            {"text": "品名", "y_center": 50, "center": (25, 50), "left": 10, "top": 40,
-             "width": 40, "height": 20, "conf": 0.9, "cell_row": 0, "cell_col": 0},
-            {"text": "运动鞋", "y_center": 50, "center": (75, 50), "left": 60, "top": 40,
-             "width": 40, "height": 20, "conf": 0.85, "cell_row": 0, "cell_col": 1},
+            {
+                "text": "品名",
+                "y_center": 50,
+                "center": (25, 50),
+                "left": 10,
+                "top": 40,
+                "width": 40,
+                "height": 20,
+                "conf": 0.9,
+                "cell_row": 0,
+                "cell_col": 0,
+            },
+            {
+                "text": "运动鞋",
+                "y_center": 50,
+                "center": (75, 50),
+                "left": 60,
+                "top": 40,
+                "width": 40,
+                "height": 20,
+                "conf": 0.85,
+                "cell_row": 0,
+                "cell_col": 1,
+            },
         ]
         result = _pair_fields_by_grid(blocks, [0, 100], [0, 50, 100])
         # Should have at least one field
@@ -469,8 +517,16 @@ class TestPairFieldsByGrid:
     def test_single_block_no_pair(self):
         """Single block with no adjacent should have empty value."""
         blocks = [
-            {"text": "品名", "y_center": 50, "center": (25, 50), "left": 10, "top": 40,
-             "width": 40, "height": 20, "conf": 0.9},
+            {
+                "text": "品名",
+                "y_center": 50,
+                "center": (25, 50),
+                "left": 10,
+                "top": 40,
+                "width": 40,
+                "height": 20,
+                "conf": 0.9,
+            },
         ]
         result = _pair_fields_by_grid(blocks, [0, 100], [0, 100])
         assert len(result) == 1
@@ -479,8 +535,16 @@ class TestPairFieldsByGrid:
     def test_merged_cell_field(self):
         """Block in a merged cell should have is_merged=True."""
         blocks = [
-            {"text": "品名运动鞋", "y_center": 50, "center": (25, 50), "left": 10, "top": 40,
-             "width": 140, "height": 20, "conf": 0.9},
+            {
+                "text": "品名运动鞋",
+                "y_center": 50,
+                "center": (25, 50),
+                "left": 10,
+                "top": 40,
+                "width": 140,
+                "height": 20,
+                "conf": 0.9,
+            },
         ]
         merged = [{"row": 0, "start_col": 0, "end_col": 1}]
         result = _pair_fields_by_grid(blocks, [0, 100], [0, 50, 100], merged)
@@ -521,7 +585,9 @@ class TestExtractTextWithOcr:
         img_path = str(tmp_path / "test_ocr_err.png")
         img.save(img_path)
 
-        with patch("app.services.skills.label_template_generator.label_template_generator.Image") as mock_img:
+        with patch(
+            "app.services.skills.label_template_generator.label_template_generator.Image"
+        ) as mock_img:
             mock_img.open.side_effect = OSError("broken")
             result = extract_text_with_ocr(img_path)
             assert result["success"] is False
@@ -571,8 +637,12 @@ class TestGenerateTemplateCode:
         ocr_result = {
             "success": True,
             "fields": [
-                {"label": "品名", "value": "运动鞋", "field_key": "product_name",
-                 "type": "fixed_label"},
+                {
+                    "label": "品名",
+                    "value": "运动鞋",
+                    "field_key": "product_name",
+                    "type": "fixed_label",
+                },
             ],
         }
         code = generate_template_code(img_path, ocr_result=ocr_result)
@@ -672,13 +742,17 @@ class TestLabelTemplateGeneratorSkill:
 
         skill = LabelTemplateGeneratorSkill()
         mock_analysis = {"success": True, "colors": [], "sections": [], "font_sizes": []}
-        with patch(
-            "app.services.skills.label_template_generator.label_template_generator.analyze_image",
-            return_value=mock_analysis,
-        ), patch(
-            "app.services.skills.label_template_generator.label_template_generator.generate_template_code",
-            return_value="# generated code",
-        ), patch("builtins.open", side_effect=PermissionError("no write")):
+        with (
+            patch(
+                "app.services.skills.label_template_generator.label_template_generator.analyze_image",
+                return_value=mock_analysis,
+            ),
+            patch(
+                "app.services.skills.label_template_generator.label_template_generator.generate_template_code",
+                return_value="# generated code",
+            ),
+            patch("builtins.open", side_effect=PermissionError("no write")),
+        ):
             result = skill.execute(img_path, output_file="/forbidden/output.py", enable_ocr=False)
             assert result["success"] is True
             assert "output_error" in result

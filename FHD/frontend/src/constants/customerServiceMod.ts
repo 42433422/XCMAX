@@ -13,6 +13,10 @@ export function readCustomerServiceModPagesEnabled(): boolean {
   }
 }
 
+export function customerServiceModFrontendRoutesAvailable(): boolean {
+  return true
+}
+
 export function setCustomerServiceModPagesEnabled(on: boolean): void {
   if (typeof localStorage === 'undefined') return
   try {

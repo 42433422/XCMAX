@@ -83,9 +83,7 @@ def test_extract_excel_paths_from_context() -> None:
 
 
 def test_merge_runtime_context_with_message_paths() -> None:
-    merged, found = _merge_runtime_context_with_message_paths(
-        {"foo": 1}, "打开 数据.xlsx"
-    )
+    merged, found = _merge_runtime_context_with_message_paths({"foo": 1}, "打开 数据.xlsx")
     assert merged.get("foo") == 1
     assert isinstance(found, list)
 

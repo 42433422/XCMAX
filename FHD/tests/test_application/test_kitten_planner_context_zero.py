@@ -1,4 +1,5 @@
 """Tests for app.application.kitten_planner_context."""
+
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -68,7 +69,12 @@ class TestEnrichKittenAnalyzerRuntime:
         with patch(
             "app.infrastructure.web_search.kitten_web_search",
             new_callable=AsyncMock,
-            return_value={"success": True, "hits": [{"title": "result"}], "provider": "test", "query": "hello"},
+            return_value={
+                "success": True,
+                "hits": [{"title": "result"}],
+                "provider": "test",
+                "query": "hello",
+            },
         ):
             result = await enrich_kitten_analyzer_runtime(rc, "hello")
             assert result["web_search_results"] == [{"title": "result"}]

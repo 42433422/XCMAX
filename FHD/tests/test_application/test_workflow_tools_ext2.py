@@ -13,43 +13,49 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
-
 # ========================= _parse_excel_header_row_1based - extended =======
 
 
 class TestParseExcelHeaderRow1BasedExtended:
     def test_none_raw(self):
         from app.application.tools.workflow import _parse_excel_header_row_1based
+
         result = _parse_excel_header_row_1based({})
         assert result is None
 
     def test_empty_string(self):
         from app.application.tools.workflow import _parse_excel_header_row_1based
+
         result = _parse_excel_header_row_1based({"header_row": ""})
         assert result is None
 
     def test_fallback_to_header_row_index(self):
         from app.application.tools.workflow import _parse_excel_header_row_1based
+
         result = _parse_excel_header_row_1based({"header_row": None, "header_row_index": 3})
         assert result == 3
 
     def test_invalid_value(self):
         from app.application.tools.workflow import _parse_excel_header_row_1based
+
         result = _parse_excel_header_row_1based({"header_row": "abc"})
         assert result is None
 
     def test_zero_value(self):
         from app.application.tools.workflow import _parse_excel_header_row_1based
+
         result = _parse_excel_header_row_1based({"header_row": 0})
         assert result is None
 
     def test_negative_value(self):
         from app.application.tools.workflow import _parse_excel_header_row_1based
+
         result = _parse_excel_header_row_1based({"header_row": -1})
         assert result is None
 
     def test_valid_value(self):
         from app.application.tools.workflow import _parse_excel_header_row_1based
+
         result = _parse_excel_header_row_1based({"header_row": 2})
         assert result == 2
 
@@ -60,19 +66,28 @@ class TestParseExcelHeaderRow1BasedExtended:
 class TestHandleExcelAnalysisDeep:
     def test_no_file_path(self):
         from app.application.tools.workflow import handle_excel_analysis
+
         result = handle_excel_analysis({"action": "read"})
         assert result["success"] is False
         assert "file_path" in result["error"]
 
     def test_resolve_error(self):
         from app.application.tools.workflow import handle_excel_analysis
-        with patch("app.application.tools.workflow.resolve_safe_excel_path", side_effect=ValueError("bad path")):
+
+        with patch(
+            "app.application.tools.workflow.resolve_safe_excel_path",
+            side_effect=ValueError("bad path"),
+        ):
             result = handle_excel_analysis({"file_path": "../etc/passwd", "action": "read"})
         assert result["success"] is False
 
     def test_file_not_found(self, tmp_path):
         from app.application.tools.workflow import handle_excel_analysis
-        with patch("app.application.tools.workflow.resolve_safe_excel_path", return_value=Path("/nonexistent.xlsx")):
+
+        with patch(
+            "app.application.tools.workflow.resolve_safe_excel_path",
+            return_value=Path("/nonexistent.xlsx"),
+        ):
             result = handle_excel_analysis({"file_path": "nonexistent.xlsx", "action": "read"})
         assert result["success"] is False
         assert "not found" in result["error"]
@@ -84,8 +99,14 @@ class TestHandleExcelAnalysisDeep:
         Path(xlsx_path).write_bytes(b"not an excel file")
 
         with (
-            patch("app.application.tools.workflow.resolve_safe_excel_path", return_value=Path(xlsx_path)),
-            patch("app.application.tools.workflow._read_excel_dataframe", side_effect=ValueError("bad excel")),
+            patch(
+                "app.application.tools.workflow.resolve_safe_excel_path",
+                return_value=Path(xlsx_path),
+            ),
+            patch(
+                "app.application.tools.workflow._read_excel_dataframe",
+                side_effect=ValueError("bad excel"),
+            ),
         ):
             result = handle_excel_analysis({"file_path": xlsx_path, "action": "read"})
         assert result["success"] is False
@@ -93,84 +114,106 @@ class TestHandleExcelAnalysisDeep:
 
     def test_unsupported_action(self, tmp_path):
         import pandas as pd
+
         from app.application.tools.workflow import handle_excel_analysis
 
         df = pd.DataFrame({"name": ["A"], "value": [1]})
         xlsx_path = str(tmp_path / "test.xlsx")
         df.to_excel(xlsx_path, index=False)
 
-        with patch("app.application.tools.workflow.resolve_safe_excel_path", return_value=Path(xlsx_path)):
+        with patch(
+            "app.application.tools.workflow.resolve_safe_excel_path", return_value=Path(xlsx_path)
+        ):
             result = handle_excel_analysis({"file_path": xlsx_path, "action": "unknown_action"})
         assert result["success"] is False
         assert "unsupported_action" in result["error"]
 
     def test_aggregate_action_with_metrics(self, tmp_path):
         import pandas as pd
+
         from app.application.tools.workflow import handle_excel_analysis
 
         df = pd.DataFrame({"category": ["A", "A", "B"], "value": [10, 20, 30]})
         xlsx_path = str(tmp_path / "agg.xlsx")
         df.to_excel(xlsx_path, index=False)
 
-        with patch("app.application.tools.workflow.resolve_safe_excel_path", return_value=Path(xlsx_path)):
-            result = handle_excel_analysis({
-                "file_path": xlsx_path,
-                "action": "aggregate",
-                "group_by": ["category"],
-                "metrics": [{"column": "value", "op": "sum"}],
-            })
+        with patch(
+            "app.application.tools.workflow.resolve_safe_excel_path", return_value=Path(xlsx_path)
+        ):
+            result = handle_excel_analysis(
+                {
+                    "file_path": xlsx_path,
+                    "action": "aggregate",
+                    "group_by": ["category"],
+                    "metrics": [{"column": "value", "op": "sum"}],
+                }
+            )
         assert result["success"] is True
         assert result["action"] == "aggregate"
 
     def test_aggregate_action_no_metrics(self, tmp_path):
         import pandas as pd
+
         from app.application.tools.workflow import handle_excel_analysis
 
         df = pd.DataFrame({"category": ["A", "B"], "value": [10, 20]})
         xlsx_path = str(tmp_path / "agg2.xlsx")
         df.to_excel(xlsx_path, index=False)
 
-        with patch("app.application.tools.workflow.resolve_safe_excel_path", return_value=Path(xlsx_path)):
-            result = handle_excel_analysis({
-                "file_path": xlsx_path,
-                "action": "aggregate",
-                "group_by": [],
-                "metrics": [],
-            })
+        with patch(
+            "app.application.tools.workflow.resolve_safe_excel_path", return_value=Path(xlsx_path)
+        ):
+            result = handle_excel_analysis(
+                {
+                    "file_path": xlsx_path,
+                    "action": "aggregate",
+                    "group_by": [],
+                    "metrics": [],
+                }
+            )
         assert result["success"] is True
 
     def test_statistics_action(self, tmp_path):
         import pandas as pd
+
         from app.application.tools.workflow import handle_excel_analysis
 
         df = pd.DataFrame({"name": ["A"], "value": [1]})
         xlsx_path = str(tmp_path / "stats.xlsx")
         df.to_excel(xlsx_path, index=False)
 
-        with patch("app.application.tools.workflow.resolve_safe_excel_path", return_value=Path(xlsx_path)):
+        with patch(
+            "app.application.tools.workflow.resolve_safe_excel_path", return_value=Path(xlsx_path)
+        ):
             result = handle_excel_analysis({"file_path": xlsx_path, "action": "statistics"})
         assert result["success"] is True
         assert "dtypes" in result
 
     def test_query_action_with_expression(self, tmp_path):
         import pandas as pd
+
         from app.application.tools.workflow import handle_excel_analysis
 
         df = pd.DataFrame({"name": ["A", "B"], "value": [1, 2]})
         xlsx_path = str(tmp_path / "query.xlsx")
         df.to_excel(xlsx_path, index=False)
 
-        with patch("app.application.tools.workflow.resolve_safe_excel_path", return_value=Path(xlsx_path)):
-            result = handle_excel_analysis({
-                "file_path": xlsx_path,
-                "action": "query",
-                "query_expression": "value > 1",
-            })
+        with patch(
+            "app.application.tools.workflow.resolve_safe_excel_path", return_value=Path(xlsx_path)
+        ):
+            result = handle_excel_analysis(
+                {
+                    "file_path": xlsx_path,
+                    "action": "query",
+                    "query_expression": "value > 1",
+                }
+            )
         assert result["success"] is True
         assert result["row_count"] == 1
 
     def test_excel_query_action(self, tmp_path):
         import pandas as pd
+
         from app.application.tools.workflow import handle_excel_analysis
 
         df = pd.DataFrame({"name": ["A", "B"], "value": [1, 2]})
@@ -178,19 +221,30 @@ class TestHandleExcelAnalysisDeep:
         df.to_excel(xlsx_path, index=False)
 
         with (
-            patch("app.application.tools.workflow.resolve_safe_excel_path", return_value=Path(xlsx_path)),
+            patch(
+                "app.application.tools.workflow.resolve_safe_excel_path",
+                return_value=Path(xlsx_path),
+            ),
             patch("app.application.tools.workflow.run_natural_language_pandas") as mock_run,
         ):
-            mock_run.return_value = {"generated_code": "", "result_kind": "dataframe", "row_count": 2, "records": []}
-            result = handle_excel_analysis({
-                "file_path": xlsx_path,
-                "action": "excel_query",
-                "natural_language": "show all",
-            })
+            mock_run.return_value = {
+                "generated_code": "",
+                "result_kind": "dataframe",
+                "row_count": 2,
+                "records": [],
+            }
+            result = handle_excel_analysis(
+                {
+                    "file_path": xlsx_path,
+                    "action": "excel_query",
+                    "natural_language": "show all",
+                }
+            )
         assert result["action"] == "excel_query"
 
     def test_read_with_customer_hint(self, tmp_path):
         import pandas as pd
+
         from app.application.tools.workflow import handle_excel_analysis
 
         df = pd.DataFrame({"name": ["A"], "value": [1]})
@@ -198,8 +252,14 @@ class TestHandleExcelAnalysisDeep:
         df.to_excel(xlsx_path, index=False)
 
         with (
-            patch("app.application.tools.workflow.resolve_safe_excel_path", return_value=Path(xlsx_path)),
-            patch("app.routes.template_grid_core._extract_customer_hint_from_excel", return_value="测试公司"),
+            patch(
+                "app.application.tools.workflow.resolve_safe_excel_path",
+                return_value=Path(xlsx_path),
+            ),
+            patch(
+                "app.routes.template_grid_core._extract_customer_hint_from_excel",
+                return_value="测试公司",
+            ),
         ):
             result = handle_excel_analysis({"file_path": xlsx_path, "action": "read"})
         assert result["success"] is True
@@ -207,14 +267,19 @@ class TestHandleExcelAnalysisDeep:
 
     def test_read_with_header_row(self, tmp_path):
         import pandas as pd
+
         from app.application.tools.workflow import handle_excel_analysis
 
         df = pd.DataFrame({"name": ["A"], "value": [1]})
         xlsx_path = str(tmp_path / "hdr.xlsx")
         df.to_excel(xlsx_path, index=False)
 
-        with patch("app.application.tools.workflow.resolve_safe_excel_path", return_value=Path(xlsx_path)):
-            result = handle_excel_analysis({"file_path": xlsx_path, "action": "read", "header_row": 1})
+        with patch(
+            "app.application.tools.workflow.resolve_safe_excel_path", return_value=Path(xlsx_path)
+        ):
+            result = handle_excel_analysis(
+                {"file_path": xlsx_path, "action": "read", "header_row": 1}
+            )
         assert result["success"] is True
         assert result["header_row"] == 1
 
@@ -225,6 +290,7 @@ class TestHandleExcelAnalysisDeep:
 class TestRunNaturalLanguagePandasExtended:
     def test_empty_code(self):
         import pandas as pd
+
         from app.application.tools.workflow import run_natural_language_pandas
 
         df = pd.DataFrame({"name": ["A"], "value": [1]})
@@ -237,6 +303,7 @@ class TestRunNaturalLanguagePandasExtended:
 
     def test_exception_in_translation(self):
         import pandas as pd
+
         from app.application.tools.workflow import run_natural_language_pandas
 
         df = pd.DataFrame({"name": ["A"], "value": [1]})
@@ -247,13 +314,21 @@ class TestRunNaturalLanguagePandasExtended:
 
     def test_successful_translation(self):
         import pandas as pd
+
         from app.application.tools.workflow import run_natural_language_pandas
 
         df = pd.DataFrame({"name": ["A", "B"], "value": [1, 2]})
         # Mock the ExcelTextToPandas import to simulate successful translation
         mock_converter = Mock()
         mock_converter.translate.return_value = "result = df[df['value'] > 1]"
-        with patch.dict("sys.modules", {"app.legacy.excel_text_to_pandas": Mock(ExcelTextToPandas=Mock(return_value=mock_converter))}):
+        with patch.dict(
+            "sys.modules",
+            {
+                "app.legacy.excel_text_to_pandas": Mock(
+                    ExcelTextToPandas=Mock(return_value=mock_converter)
+                )
+            },
+        ):
             result = run_natural_language_pandas(df, "value greater than 1")
         assert result["result_kind"] == "dataframe"
         assert result["row_count"] == 1
@@ -265,11 +340,17 @@ class TestRunNaturalLanguagePandasExtended:
 class TestGetWorkflowToolRegistryExtended:
     def test_base_registry_count(self):
         from app.application.tools.workflow import _base_registry
+
         reg = _base_registry()
-        assert len(reg) >= 5  # At least excel_analysis, excel_schema, excel_join, excel_chart, import_excel
+        assert (
+            len(reg) >= 5
+        )  # At least excel_analysis, excel_schema, excel_join, excel_chart, import_excel
 
     def test_registry_caching(self):
-        from app.application.tools.workflow import get_workflow_tool_registry, _workflow_tool_registry_cache
+        from app.application.tools.workflow import (
+            _workflow_tool_registry_cache,
+            get_workflow_tool_registry,
+        )
 
         # First call populates cache
         with patch("app.application.tools.workflow._workflow_tool_registry_cache", None):
@@ -293,6 +374,7 @@ class TestGetWorkflowToolRegistryExtended:
         with patch("app.application.tools.workflow._workflow_tool_registry_cache", [{"old": True}]):
             invalidate_workflow_tool_registry()
         from app.application.tools.workflow import _workflow_tool_registry_cache
+
         assert _workflow_tool_registry_cache is None
 
 
@@ -303,14 +385,20 @@ class TestExecuteWorkflowToolExtended:
     def test_string_args_parsed(self):
         from app.application.tools.workflow import execute_workflow_tool
 
-        with patch("app.application.tools.workflow.handle_excel_analysis", return_value={"success": True}):
-            result = execute_workflow_tool("excel_analysis", '{"file_path": "test.xlsx", "action": "read"}')
+        with patch(
+            "app.application.tools.workflow.handle_excel_analysis", return_value={"success": True}
+        ):
+            result = execute_workflow_tool(
+                "excel_analysis", '{"file_path": "test.xlsx", "action": "read"}'
+            )
         assert isinstance(result, str)
 
     def test_invalid_json_args(self):
         from app.application.tools.workflow import execute_workflow_tool
 
-        with patch("app.application.tools.workflow.handle_excel_analysis", return_value={"success": True}):
+        with patch(
+            "app.application.tools.workflow.handle_excel_analysis", return_value={"success": True}
+        ):
             result = execute_workflow_tool("excel_analysis", "not json")
         assert isinstance(result, str)
 
@@ -326,8 +414,14 @@ class TestExecuteWorkflowToolExtended:
 
         # Most unknown tools fall through to the end
         with patch("app.mod_sdk.employee_tool_registry.is_employee_tool", return_value=False):
-            with patch("app.mod_sdk.planner_native_tools.try_execute_native_planner_tool", return_value=(None, None)):
-                with patch("app.application.employee_pack_runner.try_execute_employee_planner_tool", return_value=None):
+            with patch(
+                "app.mod_sdk.planner_native_tools.try_execute_native_planner_tool",
+                return_value=(None, None),
+            ):
+                with patch(
+                    "app.application.employee_pack_runner.try_execute_employee_planner_tool",
+                    return_value=None,
+                ):
                     result = execute_workflow_tool("unknown_tool", {})
         # Returns string (json)
         assert isinstance(result, str)
@@ -336,7 +430,10 @@ class TestExecuteWorkflowToolExtended:
         from app.application.tools.workflow import execute_workflow_tool
 
         with patch("app.mod_sdk.employee_tool_registry.is_employee_tool", return_value=True):
-            with patch("app.mod_sdk.employee_tool_registry.execute_employee_tool", return_value='{"success": true}'):
+            with patch(
+                "app.mod_sdk.employee_tool_registry.execute_employee_tool",
+                return_value='{"success": true}',
+            ):
                 result = execute_workflow_tool("employee_tool", {})
         assert isinstance(result, str)
 
@@ -345,7 +442,10 @@ class TestExecuteWorkflowToolExtended:
 
         with (
             patch("app.mod_sdk.employee_tool_registry.is_employee_tool", return_value=False),
-            patch("app.mod_sdk.planner_native_tools.try_execute_native_planner_tool", return_value=('{"native": true}', None)),
+            patch(
+                "app.mod_sdk.planner_native_tools.try_execute_native_planner_tool",
+                return_value=('{"native": true}', None),
+            ),
         ):
             result = execute_workflow_tool("native_tool", {})
         assert isinstance(result, str)
@@ -357,36 +457,42 @@ class TestExecuteWorkflowToolExtended:
 class TestBaseRegistryToolDefinitions:
     def test_excel_analysis_tool(self):
         from app.application.tools.workflow import _base_registry
+
         reg = _base_registry()
         names = [t["function"]["name"] for t in reg]
         assert "excel_analysis" in names
 
     def test_excel_schema_understand_tool(self):
         from app.application.tools.workflow import _base_registry
+
         reg = _base_registry()
         names = [t["function"]["name"] for t in reg]
         assert "excel_schema_understand" in names
 
     def test_excel_join_compare_tool(self):
         from app.application.tools.workflow import _base_registry
+
         reg = _base_registry()
         names = [t["function"]["name"] for t in reg]
         assert "excel_join_compare" in names
 
     def test_excel_chart_recommend_tool(self):
         from app.application.tools.workflow import _base_registry
+
         reg = _base_registry()
         names = [t["function"]["name"] for t in reg]
         assert "excel_chart_recommend" in names
 
     def test_import_excel_to_database_tool(self):
         from app.application.tools.workflow import _base_registry
+
         reg = _base_registry()
         names = [t["function"]["name"] for t in reg]
         assert "import_excel_to_database" in names
 
     def test_generate_office_document_tool(self):
         from app.application.tools.workflow import _base_registry
+
         reg = _base_registry()
         names = [t["function"]["name"] for t in reg]
         assert "generate_office_document" in names

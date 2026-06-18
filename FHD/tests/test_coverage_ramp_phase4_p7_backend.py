@@ -20,7 +20,6 @@ from app.infrastructure.mods.mod_manager import (
     import_mod_backend_py,
 )
 
-
 # ---------------------------------------------------------------------------
 # helpers
 # ---------------------------------------------------------------------------
@@ -370,7 +369,5 @@ def test_critic_repair_no_api_key() -> None:
     planner = _make_planner()
     planner._ai_service.api_key = ""
     invalid = PlanGraph(plan_id="p", intent="x", todo_steps=[], nodes=[], risk_level="low")
-    out = planner._critic_repair_with_llm(
-        "p", "u1", "msg", _TOOL_REGISTRY, {}, "err", invalid
-    )
+    out = planner._critic_repair_with_llm("p", "u1", "msg", _TOOL_REGISTRY, {}, "err", invalid)
     assert out is None

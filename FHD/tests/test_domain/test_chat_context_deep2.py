@@ -10,6 +10,7 @@ Targets remaining uncovered branches:
 - _update_semantic_cache with response_text=None
 - ChatContextContainer thread-safety-ish reset behavior
 """
+
 from __future__ import annotations
 
 import time
@@ -23,7 +24,6 @@ from app.domain.services.conversation.context.chat_context import (
     ChatTurn,
     get_chat_context,
 )
-
 
 # ── ChatTurn edge cases ─────────────────────────────────────────────────────
 
@@ -58,12 +58,8 @@ class TestChatTurnEdgeCases:
         assert isinstance(fp, str)
 
     def test_semantic_fingerprint_slots_whitespace_only_skipped(self):
-        turn1 = ChatTurn(
-            "u", "msg", "intent1", "tool1", {"a": "   "}, None
-        )
-        turn2 = ChatTurn(
-            "u", "msg", "intent1", "tool1", {"a": "x"}, None
-        )
+        turn1 = ChatTurn("u", "msg", "intent1", "tool1", {"a": "   "}, None)
+        turn2 = ChatTurn("u", "msg", "intent1", "tool1", {"a": "x"}, None)
         # Whitespace-only slot value is skipped (str(v).strip() is falsy)
         # But turn1 has non-empty slots dict → appends empty string to key_parts
         # turn2 has slot with value → appends "a=x"
@@ -71,24 +67,16 @@ class TestChatTurnEdgeCases:
         assert turn1.make_semantic_fingerprint() != turn2.make_semantic_fingerprint()
 
     def test_semantic_fingerprint_slots_zero_value_skipped(self):
-        turn1 = ChatTurn(
-            "u", "msg", "intent1", "tool1", {"a": 0}, None
-        )
+        turn1 = ChatTurn("u", "msg", "intent1", "tool1", {"a": 0}, None)
         # 0 is falsy → skipped (v is falsy)
         # But slots dict is non-empty → appends empty string
-        turn2 = ChatTurn(
-            "u", "msg", "intent1", "tool1", {}, None
-        )
+        turn2 = ChatTurn("u", "msg", "intent1", "tool1", {}, None)
         # turn1 has non-empty slots dict (appends ""), turn2 has empty dict (no append)
         assert turn1.make_semantic_fingerprint() != turn2.make_semantic_fingerprint()
 
     def test_semantic_fingerprint_slots_numeric_string_kept(self):
-        turn1 = ChatTurn(
-            "u", "msg", "intent1", "tool1", {"a": "1"}, None
-        )
-        turn2 = ChatTurn(
-            "u", "msg", "intent1", "tool1", {"a": "2"}, None
-        )
+        turn1 = ChatTurn("u", "msg", "intent1", "tool1", {"a": "1"}, None)
+        turn2 = ChatTurn("u", "msg", "intent1", "tool1", {"a": "2"}, None)
         assert turn1.make_semantic_fingerprint() != turn2.make_semantic_fingerprint()
 
     def test_semantic_fingerprint_empty_dict(self):
@@ -98,12 +86,8 @@ class TestChatTurnEdgeCases:
         assert isinstance(fp, str)
 
     def test_semantic_fingerprint_slots_none_value(self):
-        turn1 = ChatTurn(
-            "u", "msg", "intent1", "tool1", {"a": None, "b": "1"}, None
-        )
-        turn2 = ChatTurn(
-            "u", "msg", "intent1", "tool1", {"b": "1"}, None
-        )
+        turn1 = ChatTurn("u", "msg", "intent1", "tool1", {"a": None, "b": "1"}, None)
+        turn2 = ChatTurn("u", "msg", "intent1", "tool1", {"b": "1"}, None)
         assert turn1.make_semantic_fingerprint() == turn2.make_semantic_fingerprint()
 
 
@@ -174,9 +158,7 @@ class TestIsDuplicateDeep:
         ctx = ChatContext()
         turn = ChatTurn("u1", "msg", "intent1", None, {}, "response1")
         ctx.add_turn("u1", turn)
-        is_dup, cached, exact = ctx.is_duplicate(
-            "u1", "different", intent="intent1"
-        )
+        is_dup, cached, exact = ctx.is_duplicate("u1", "different", intent="intent1")
         # No match due to fingerprint separator mismatch
         assert is_dup is False
 

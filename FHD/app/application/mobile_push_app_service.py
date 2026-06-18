@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.services.mobile_push import notify_user
-
 
 def notify_mobile_user(
     user_id: int,
@@ -13,4 +11,6 @@ def notify_mobile_user(
     body: str,
     data: dict[str, Any] | None = None,
 ) -> dict[str, bool]:
-    return notify_user(user_id, title, body, data)
+    from app.services.mobile_push import notify_user
+
+    return notify_user(user_id, title=title, body=body, data=data)

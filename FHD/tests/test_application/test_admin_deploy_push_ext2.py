@@ -37,9 +37,7 @@ from app.application.admin_deploy_push import (
 class TestLocalGitShaExtended:
     def test_git_sha_success(self, tmp_path: Path) -> None:
         with patch("subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(
-                stdout="abc123def456\n", returncode=0
-            )
+            mock_run.return_value = MagicMock(stdout="abc123def456\n", returncode=0)
             result = _local_git_sha(tmp_path)
         assert result == "abc123def456"
 
@@ -56,16 +54,12 @@ class TestLocalGitShaExtended:
         assert result == "local"
 
     def test_git_sha_oserror_returns_local(self, tmp_path: Path) -> None:
-        with patch(
-            "subprocess.run", side_effect=OSError("git not found")
-        ):
+        with patch("subprocess.run", side_effect=OSError("git not found")):
             result = _local_git_sha(tmp_path)
         assert result == "local"
 
     def test_git_sha_timeout_returns_local(self, tmp_path: Path) -> None:
-        with patch(
-            "subprocess.run", side_effect=subprocess.TimeoutExpired(cmd="git", timeout=8)
-        ):
+        with patch("subprocess.run", side_effect=subprocess.TimeoutExpired(cmd="git", timeout=8)):
             result = _local_git_sha(tmp_path)
         assert result == "local"
 
@@ -220,29 +214,30 @@ class TestProbeEnterpriseRuntimeExtended:
 
 class TestCheckDeployUpdatesExtended:
     def test_full_check_up_to_date(self) -> None:
-        with patch(
-            "app.application.admin_deploy_push._fhd_root", return_value=Path("/tmp/fhd")
-        ), patch(
-            "app.application.admin_deploy_push._local_git_sha", return_value="abc123def456"
-        ), patch(
-            "app.application.admin_deploy_push._local_version", return_value="10.0.0"
-        ), patch(
-            "app.application.admin_deploy_push._read_local_manifest",
-            return_value={"git_sha": "abc123def456"},
-        ), patch(
-            "app.application.admin_deploy_push._fetch_json_url",
-            return_value={
-                "git_sha": "abc123def456",
-                "sha256": "sha256abc",
-                "version": "10.0.0",
-            },
-        ), patch(
-            "app.application.admin_deploy_push._probe_enterprise_runtime",
-            return_value={
-                "reachable": True,
-                "deploy_sha256": "sha256abc",
-                "version": "10.0.0",
-            },
+        with (
+            patch("app.application.admin_deploy_push._fhd_root", return_value=Path("/tmp/fhd")),
+            patch("app.application.admin_deploy_push._local_git_sha", return_value="abc123def456"),
+            patch("app.application.admin_deploy_push._local_version", return_value="10.0.0"),
+            patch(
+                "app.application.admin_deploy_push._read_local_manifest",
+                return_value={"git_sha": "abc123def456"},
+            ),
+            patch(
+                "app.application.admin_deploy_push._fetch_json_url",
+                return_value={
+                    "git_sha": "abc123def456",
+                    "sha256": "sha256abc",
+                    "version": "10.0.0",
+                },
+            ),
+            patch(
+                "app.application.admin_deploy_push._probe_enterprise_runtime",
+                return_value={
+                    "reachable": True,
+                    "deploy_sha256": "sha256abc",
+                    "version": "10.0.0",
+                },
+            ),
         ):
             result = check_deploy_updates()
         assert result["admin_local"]["git_sha"] == "abc123def456"
@@ -250,106 +245,101 @@ class TestCheckDeployUpdatesExtended:
         assert result["flags"]["needs_push"] is False
 
     def test_needs_push(self) -> None:
-        with patch(
-            "app.application.admin_deploy_push._fhd_root", return_value=Path("/tmp/fhd")
-        ), patch(
-            "app.application.admin_deploy_push._local_git_sha", return_value="newsha123456"
-        ), patch(
-            "app.application.admin_deploy_push._local_version", return_value="10.0.0"
-        ), patch(
-            "app.application.admin_deploy_push._read_local_manifest", return_value=None
-        ), patch(
-            "app.application.admin_deploy_push._fetch_json_url",
-            return_value={"git_sha": "oldsha123456", "sha256": "sha256old"},
-        ), patch(
-            "app.application.admin_deploy_push._probe_enterprise_runtime",
-            return_value={"reachable": True, "deploy_sha256": "sha256old"},
+        with (
+            patch("app.application.admin_deploy_push._fhd_root", return_value=Path("/tmp/fhd")),
+            patch("app.application.admin_deploy_push._local_git_sha", return_value="newsha123456"),
+            patch("app.application.admin_deploy_push._local_version", return_value="10.0.0"),
+            patch("app.application.admin_deploy_push._read_local_manifest", return_value=None),
+            patch(
+                "app.application.admin_deploy_push._fetch_json_url",
+                return_value={"git_sha": "oldsha123456", "sha256": "sha256old"},
+            ),
+            patch(
+                "app.application.admin_deploy_push._probe_enterprise_runtime",
+                return_value={"reachable": True, "deploy_sha256": "sha256old"},
+            ),
         ):
             result = check_deploy_updates()
         assert result["flags"]["needs_push"] is True
         assert result["flags"]["needs_pack"] is True
 
     def test_local_sha_local_no_push(self) -> None:
-        with patch(
-            "app.application.admin_deploy_push._fhd_root", return_value=Path("/tmp/fhd")
-        ), patch(
-            "app.application.admin_deploy_push._local_git_sha", return_value="local"
-        ), patch(
-            "app.application.admin_deploy_push._local_version", return_value="10.0.0"
-        ), patch(
-            "app.application.admin_deploy_push._read_local_manifest", return_value=None
-        ), patch(
-            "app.application.admin_deploy_push._fetch_json_url",
-            return_value={"git_sha": "abc123", "sha256": "sha256abc"},
-        ), patch(
-            "app.application.admin_deploy_push._probe_enterprise_runtime",
-            return_value={"reachable": True, "deploy_sha256": "sha256abc"},
+        with (
+            patch("app.application.admin_deploy_push._fhd_root", return_value=Path("/tmp/fhd")),
+            patch("app.application.admin_deploy_push._local_git_sha", return_value="local"),
+            patch("app.application.admin_deploy_push._local_version", return_value="10.0.0"),
+            patch("app.application.admin_deploy_push._read_local_manifest", return_value=None),
+            patch(
+                "app.application.admin_deploy_push._fetch_json_url",
+                return_value={"git_sha": "abc123", "sha256": "sha256abc"},
+            ),
+            patch(
+                "app.application.admin_deploy_push._probe_enterprise_runtime",
+                return_value={"reachable": True, "deploy_sha256": "sha256abc"},
+            ),
         ):
             result = check_deploy_updates()
         assert result["flags"]["needs_push"] is False
         assert result["flags"]["needs_pack"] is False
 
     def test_hub_no_sha_triggers_push(self) -> None:
-        with patch(
-            "app.application.admin_deploy_push._fhd_root", return_value=Path("/tmp/fhd")
-        ), patch(
-            "app.application.admin_deploy_push._local_git_sha", return_value="abc123def456"
-        ), patch(
-            "app.application.admin_deploy_push._local_version", return_value="10.0.0"
-        ), patch(
-            "app.application.admin_deploy_push._read_local_manifest", return_value=None
-        ), patch(
-            "app.application.admin_deploy_push._fetch_json_url",
-            return_value={"git_sha": "", "sha256": ""},
-        ), patch(
-            "app.application.admin_deploy_push._probe_enterprise_runtime",
-            return_value={"reachable": True, "deploy_sha256": ""},
+        with (
+            patch("app.application.admin_deploy_push._fhd_root", return_value=Path("/tmp/fhd")),
+            patch("app.application.admin_deploy_push._local_git_sha", return_value="abc123def456"),
+            patch("app.application.admin_deploy_push._local_version", return_value="10.0.0"),
+            patch("app.application.admin_deploy_push._read_local_manifest", return_value=None),
+            patch(
+                "app.application.admin_deploy_push._fetch_json_url",
+                return_value={"git_sha": "", "sha256": ""},
+            ),
+            patch(
+                "app.application.admin_deploy_push._probe_enterprise_runtime",
+                return_value={"reachable": True, "deploy_sha256": ""},
+            ),
         ):
             result = check_deploy_updates()
         assert result["flags"]["needs_push"] is True
 
     def test_enterprise_pending(self) -> None:
-        with patch(
-            "app.application.admin_deploy_push._fhd_root", return_value=Path("/tmp/fhd")
-        ), patch(
-            "app.application.admin_deploy_push._local_git_sha", return_value="abc123def456"
-        ), patch(
-            "app.application.admin_deploy_push._local_version", return_value="10.0.0"
-        ), patch(
-            "app.application.admin_deploy_push._read_local_manifest",
-            return_value={"git_sha": "abc123def456"},
-        ), patch(
-            "app.application.admin_deploy_push._fetch_json_url",
-            return_value={
-                "git_sha": "abc123def456",
-                "sha256": "newsha256",
-                "version": "10.0.0",
-            },
-        ), patch(
-            "app.application.admin_deploy_push._probe_enterprise_runtime",
-            return_value={
-                "reachable": True,
-                "deploy_sha256": "oldsha256",
-                "version": "10.0.0",
-            },
+        with (
+            patch("app.application.admin_deploy_push._fhd_root", return_value=Path("/tmp/fhd")),
+            patch("app.application.admin_deploy_push._local_git_sha", return_value="abc123def456"),
+            patch("app.application.admin_deploy_push._local_version", return_value="10.0.0"),
+            patch(
+                "app.application.admin_deploy_push._read_local_manifest",
+                return_value={"git_sha": "abc123def456"},
+            ),
+            patch(
+                "app.application.admin_deploy_push._fetch_json_url",
+                return_value={
+                    "git_sha": "abc123def456",
+                    "sha256": "newsha256",
+                    "version": "10.0.0",
+                },
+            ),
+            patch(
+                "app.application.admin_deploy_push._probe_enterprise_runtime",
+                return_value={
+                    "reachable": True,
+                    "deploy_sha256": "oldsha256",
+                    "version": "10.0.0",
+                },
+            ),
         ):
             result = check_deploy_updates()
         assert result["flags"]["enterprise_pending"] is True
 
     def test_staging_channel(self) -> None:
-        with patch(
-            "app.application.admin_deploy_push._fhd_root", return_value=Path("/tmp/fhd")
-        ), patch(
-            "app.application.admin_deploy_push._local_git_sha", return_value="abc123def456"
-        ), patch(
-            "app.application.admin_deploy_push._local_version", return_value="10.0.0"
-        ), patch(
-            "app.application.admin_deploy_push._read_local_manifest", return_value=None
-        ), patch(
-            "app.application.admin_deploy_push._fetch_json_url", return_value=None
-        ), patch(
-            "app.application.admin_deploy_push._probe_enterprise_runtime",
-            return_value={"reachable": False},
+        with (
+            patch("app.application.admin_deploy_push._fhd_root", return_value=Path("/tmp/fhd")),
+            patch("app.application.admin_deploy_push._local_git_sha", return_value="abc123def456"),
+            patch("app.application.admin_deploy_push._local_version", return_value="10.0.0"),
+            patch("app.application.admin_deploy_push._read_local_manifest", return_value=None),
+            patch("app.application.admin_deploy_push._fetch_json_url", return_value=None),
+            patch(
+                "app.application.admin_deploy_push._probe_enterprise_runtime",
+                return_value={"reachable": False},
+            ),
         ):
             result = check_deploy_updates(channel="staging")
         assert "staging" in result["update_hub"]["manifest_url"]
@@ -440,9 +430,7 @@ class TestRunShellStepExtended:
 
         mock_proc.wait = wait
 
-        with patch(
-            "asyncio.create_subprocess_exec", new=AsyncMock(return_value=mock_proc)
-        ):
+        with patch("asyncio.create_subprocess_exec", new=AsyncMock(return_value=mock_proc)):
             await _run_shell_step(job, step, ["echo", "hello"], cwd=Path("/tmp"))
         assert step.status == "done"
         assert step.detail == "output line"
@@ -463,9 +451,7 @@ class TestRunShellStepExtended:
 
         mock_proc.wait = wait
 
-        with patch(
-            "asyncio.create_subprocess_exec", new=AsyncMock(return_value=mock_proc)
-        ):
+        with patch("asyncio.create_subprocess_exec", new=AsyncMock(return_value=mock_proc)):
             with pytest.raises(RuntimeError):
                 await _run_shell_step(job, step, ["false"], cwd=Path("/tmp"))
         assert step.status == "error"
@@ -505,17 +491,19 @@ class TestExecuteDeployJobExtended:
             step.started_at = time.time()
             step.finished_at = time.time()
 
-        with patch(
-            "app.application.admin_deploy_push._fhd_root", return_value=Path("/tmp")
-        ), patch(
-            "app.application.admin_deploy_push.check_deploy_updates",
-            return_value={
-                "admin_local": {"git_sha": "abc123"},
-                "update_hub": {"git_sha": "abc123"},
-            },
-        ), patch(
-            "app.application.admin_deploy_push._run_shell_step",
-            new=AsyncMock(side_effect=fake_run_step),
+        with (
+            patch("app.application.admin_deploy_push._fhd_root", return_value=Path("/tmp")),
+            patch(
+                "app.application.admin_deploy_push.check_deploy_updates",
+                return_value={
+                    "admin_local": {"git_sha": "abc123"},
+                    "update_hub": {"git_sha": "abc123"},
+                },
+            ),
+            patch(
+                "app.application.admin_deploy_push._run_shell_step",
+                new=AsyncMock(side_effect=fake_run_step),
+            ),
         ):
             await _execute_deploy_job(job)
         assert job.status == "done"
@@ -549,17 +537,19 @@ class TestExecuteDeployJobExtended:
             step.status = "done"
             step.finished_at = time.time()
 
-        with patch(
-            "app.application.admin_deploy_push._fhd_root", return_value=Path("/tmp")
-        ), patch(
-            "app.application.admin_deploy_push.check_deploy_updates",
-            return_value={
-                "admin_local": {"git_sha": "abc123"},
-                "update_hub": {"git_sha": "abc123"},
-            },
-        ), patch(
-            "app.application.admin_deploy_push._run_shell_step",
-            new=AsyncMock(side_effect=fake_run_step),
+        with (
+            patch("app.application.admin_deploy_push._fhd_root", return_value=Path("/tmp")),
+            patch(
+                "app.application.admin_deploy_push.check_deploy_updates",
+                return_value={
+                    "admin_local": {"git_sha": "abc123"},
+                    "update_hub": {"git_sha": "abc123"},
+                },
+            ),
+            patch(
+                "app.application.admin_deploy_push._run_shell_step",
+                new=AsyncMock(side_effect=fake_run_step),
+            ),
         ):
             await _execute_deploy_job(job)
         assert job.status == "error"
@@ -586,24 +576,24 @@ class TestExecuteDeployJobExtended:
             step.started_at = time.time()
             step.finished_at = time.time()
 
-        with patch(
-            "app.application.admin_deploy_push._fhd_root", return_value=Path("/tmp")
-        ), patch(
-            "app.application.admin_deploy_push.check_deploy_updates",
-            return_value={
-                "admin_local": {"git_sha": "abc123"},
-                "update_hub": {"git_sha": "abc123"},
-            },
-        ), patch(
-            "app.application.admin_deploy_push._run_shell_step",
-            new=AsyncMock(side_effect=fake_run_step),
+        with (
+            patch("app.application.admin_deploy_push._fhd_root", return_value=Path("/tmp")),
+            patch(
+                "app.application.admin_deploy_push.check_deploy_updates",
+                return_value={
+                    "admin_local": {"git_sha": "abc123"},
+                    "update_hub": {"git_sha": "abc123"},
+                },
+            ),
+            patch(
+                "app.application.admin_deploy_push._run_shell_step",
+                new=AsyncMock(side_effect=fake_run_step),
+            ),
         ):
             await _execute_deploy_job(job)
         assert job.status == "done"
 
-    async def test_execute_verify_mismatch(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_execute_verify_mismatch(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(adp, "_ACTIVE_JOB", None)
         monkeypatch.setattr(adp, "_JOBS", {})
 
@@ -619,24 +609,24 @@ class TestExecuteDeployJobExtended:
             steps=_build_steps(opts),
         )
 
-        with patch(
-            "app.application.admin_deploy_push._fhd_root", return_value=Path("/tmp")
-        ), patch(
-            "app.application.admin_deploy_push.check_deploy_updates",
-            return_value={
-                "admin_local": {"git_sha": "localsha12345"},
-                "update_hub": {"git_sha": "different_sha"},
-            },
-        ), patch("asyncio.sleep", new=AsyncMock()):
+        with (
+            patch("app.application.admin_deploy_push._fhd_root", return_value=Path("/tmp")),
+            patch(
+                "app.application.admin_deploy_push.check_deploy_updates",
+                return_value={
+                    "admin_local": {"git_sha": "localsha12345"},
+                    "update_hub": {"git_sha": "different_sha"},
+                },
+            ),
+            patch("asyncio.sleep", new=AsyncMock()),
+        ):
             await _execute_deploy_job(job)
         # Verify step should fail with mismatch
         assert job.status == "error"
 
 
 class TestStartDeployPushExtended:
-    async def test_start_push_creates_job(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_start_push_creates_job(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(adp, "_ACTIVE_JOB", None)
         monkeypatch.setattr(adp, "_JOBS", {})
 
@@ -647,9 +637,7 @@ class TestStartDeployPushExtended:
         assert len(job.steps) > 0
         assert job.options["channel"] == "staging"
 
-    async def test_start_push_default_options(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_start_push_default_options(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(adp, "_ACTIVE_JOB", None)
         monkeypatch.setattr(adp, "_JOBS", {})
 
@@ -660,9 +648,7 @@ class TestStartDeployPushExtended:
         assert job.options["skip_pack"] is False
         assert job.options["channel"] == "stable"
 
-    async def test_start_push_with_active_job_raises(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_start_push_with_active_job_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # Set up an active running job
         active_job = DeployJob(job_id="active", options={}, status="running")
         monkeypatch.setattr(adp, "_ACTIVE_JOB", "active")
@@ -703,9 +689,7 @@ class TestHubRemoteDirExtended:
             assert result == "/var/www/update/releases/stable/server"
 
     def test_custom_dir(self) -> None:
-        with patch.dict(
-            os.environ, {"FHD_PUSH_REMOTE_DIR": "/custom/path"}, clear=False
-        ):
+        with patch.dict(os.environ, {"FHD_PUSH_REMOTE_DIR": "/custom/path"}, clear=False):
             result = _hub_remote_dir("staging")
             assert result == "/custom/path"
 

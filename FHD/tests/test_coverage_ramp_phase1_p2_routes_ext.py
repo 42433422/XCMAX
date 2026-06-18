@@ -9,7 +9,6 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-
 # ---------------------------------------------------------------------------
 # Conversation compat (stream / batch / context)
 # ---------------------------------------------------------------------------
@@ -24,7 +23,10 @@ def conv_compat_client() -> TestClient:
     return TestClient(app, raise_server_exceptions=False)
 
 
-@patch("app.fastapi_routes.domains.conversation.compat_routes.execute_compat_chat", new_callable=AsyncMock)
+@patch(
+    "app.fastapi_routes.domains.conversation.compat_routes.execute_compat_chat",
+    new_callable=AsyncMock,
+)
 def test_ai_chat_unified_compat(mock_exec: AsyncMock, conv_compat_client: TestClient) -> None:
     mock_exec.return_value = {"success": True, "response": "ok"}
     r = conv_compat_client.post("/ai/chat", json={"message": "hi"})
@@ -223,9 +225,7 @@ def test_customers_get_by_id(
 
 
 @patch("app.mod_sdk.erp_customers_facade.is_erp_customers_via_service_enabled", return_value=False)
-def test_customers_post_missing_name(
-    _mock_erp: MagicMock, customer_client: TestClient
-) -> None:
+def test_customers_post_missing_name(_mock_erp: MagicMock, customer_client: TestClient) -> None:
     with patch("app.fastapi_routes.domains.customer.routes._customers_write_raise"):
         r = customer_client.post("/customers", json={})
     assert r.status_code == 400

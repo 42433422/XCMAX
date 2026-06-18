@@ -1,4 +1,5 @@
 """Tests for app.routes.template_grid_core — coverage ramp."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -114,9 +115,7 @@ class TestExtractInlineCustomerHitsFromCell:
         assert result == []
 
     def test_purchase_unit_with_paren(self):
-        result = _extract_inline_customer_hits_from_cell(
-            "购货单位（简称）：成都修茈科技有限公司"
-        )
+        result = _extract_inline_customer_hits_from_cell("购货单位（简称）：成都修茈科技有限公司")
         # May or may not match depending on regex; just ensure no crash
         assert isinstance(result, list)
 
@@ -244,9 +243,7 @@ class TestExtractStructuredExcelPreview:
             "app.application.facades.template_facade._extract_structured_excel_preview"
         ) as mock_legacy:
             mock_legacy.return_value = {"fields": [], "sample_rows": [], "sheet_name": ""}
-            result = _extract_structured_excel_preview(
-                "/tmp/test.xlsx", force_header_row_1based=0
-            )
+            result = _extract_structured_excel_preview("/tmp/test.xlsx", force_header_row_1based=0)
             mock_legacy.assert_called_once()
 
     @patch("openpyxl.load_workbook")
@@ -275,9 +272,7 @@ class TestExtractStructuredExcelPreview:
 
         from app.routes.template_grid_core import _extract_structured_excel_preview
 
-        result = _extract_structured_excel_preview(
-            "/tmp/test.xlsx", force_header_row_1based=1
-        )
+        result = _extract_structured_excel_preview("/tmp/test.xlsx", force_header_row_1based=1)
         assert len(result["fields"]) == 2
 
     @patch("openpyxl.load_workbook")
@@ -298,7 +293,5 @@ class TestExtractStructuredExcelPreview:
 
         from app.routes.template_grid_core import _extract_structured_excel_preview
 
-        result = _extract_structured_excel_preview(
-            "/tmp/test.xlsx", force_header_row_1based=1
-        )
+        result = _extract_structured_excel_preview("/tmp/test.xlsx", force_header_row_1based=1)
         assert result["fields"] == []

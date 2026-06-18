@@ -80,7 +80,6 @@ from app.services.xcmax_sync_service import (
     record_change,
 )
 
-
 # ---------------------------------------------------------------------------
 # Shared helpers
 # ---------------------------------------------------------------------------
@@ -146,8 +145,9 @@ class TestSessionServiceCreateSession:
         mock_db = MagicMock()
         mock_db.add.side_effect = RuntimeError("db down")
 
-        with pytest.raises(RuntimeError, match="db down"), patch(
-            "app.services.session_service.get_db", _mock_get_db(mock_db)
+        with (
+            pytest.raises(RuntimeError, match="db down"),
+            patch("app.services.session_service.get_db", _mock_get_db(mock_db)),
         ):
             SessionService().create_session(user_id=42)
 
@@ -263,9 +263,7 @@ class TestSessionServiceSingleton:
         mock_registry = MagicMock()
         mock_registry.session_service = MagicMock()
 
-        with patch(
-            "app.di.registry.get_service_registry", return_value=mock_registry
-        ):
+        with patch("app.di.registry.get_service_registry", return_value=mock_registry):
             result = session_service_mod.get_session_service()
 
         assert result is mock_registry.session_service
@@ -312,18 +310,14 @@ class TestPrintRoutesSaveSelection:
     def test_save_selection_invalid_document_printer(self, print_client: TestClient):
         with patch("app.fastapi_routes.print_routes._svc") as svc:
             svc.return_value.get_printers.return_value = {"printers": [{"name": "P1"}]}
-            r = print_client.put(
-                "/api/print/printer-selection", json={"document_printer": "P2"}
-            )
+            r = print_client.put("/api/print/printer-selection", json={"document_printer": "P2"})
         assert r.status_code == 400
         assert "发货单打印机" in r.json()["message"]
 
     def test_save_selection_invalid_label_printer(self, print_client: TestClient):
         with patch("app.fastapi_routes.print_routes._svc") as svc:
             svc.return_value.get_printers.return_value = {"printers": [{"name": "P1"}]}
-            r = print_client.put(
-                "/api/print/printer-selection", json={"label_printer": "P2"}
-            )
+            r = print_client.put("/api/print/printer-selection", json={"label_printer": "P2"})
         assert r.status_code == 400
         assert "标签打印机" in r.json()["message"]
 
@@ -361,8 +355,9 @@ class TestPrintRoutesDocument:
         assert "文件不存在" in r.json()["message"]
 
     def test_print_document_success(self, print_client: TestClient):
-        with patch("app.fastapi_routes.print_routes._svc") as svc, patch(
-            "os.path.exists", return_value=True
+        with (
+            patch("app.fastapi_routes.print_routes._svc") as svc,
+            patch("os.path.exists", return_value=True),
         ):
             svc.return_value.print_document.return_value = {"success": True}
             r = print_client.post(
@@ -373,8 +368,9 @@ class TestPrintRoutesDocument:
         assert r.json()["success"] is True
 
     def test_print_document_failed_result_returns_400(self, print_client: TestClient):
-        with patch("app.fastapi_routes.print_routes._svc") as svc, patch(
-            "os.path.exists", return_value=True
+        with (
+            patch("app.fastapi_routes.print_routes._svc") as svc,
+            patch("os.path.exists", return_value=True),
         ):
             svc.return_value.print_document.return_value = {
                 "success": False,
@@ -384,8 +380,9 @@ class TestPrintRoutesDocument:
         assert r.status_code == 400
 
     def test_print_document_exception(self, print_client: TestClient):
-        with patch("app.fastapi_routes.print_routes._svc") as svc, patch(
-            "os.path.exists", return_value=True
+        with (
+            patch("app.fastapi_routes.print_routes._svc") as svc,
+            patch("os.path.exists", return_value=True),
         ):
             svc.return_value.print_document.side_effect = RuntimeError("boom")
             r = print_client.post("/api/print/document", json={"file_path": "/tmp/x.pdf"})
@@ -429,8 +426,9 @@ class TestPrintRoutesLabel:
         assert token not in print_routes._print_confirm_cache
 
     def test_print_label_require_confirm_no_token(self, print_client: TestClient):
-        with patch("app.fastapi_routes.print_routes._svc") as svc, patch(
-            "os.path.exists", return_value=True
+        with (
+            patch("app.fastapi_routes.print_routes._svc") as svc,
+            patch("os.path.exists", return_value=True),
         ):
             svc.return_value.get_label_printer.return_value = "LabelPrinter"
             r = print_client.post(
@@ -460,8 +458,9 @@ class TestPrintRoutesLabel:
         token = print_routes._create_print_confirm_token(
             {"file_path": "/tmp/x.pdf", "copies": 2, "printer_name": "P1"}
         )
-        with patch("app.fastapi_routes.print_routes._svc") as svc, patch(
-            "os.path.exists", return_value=True
+        with (
+            patch("app.fastapi_routes.print_routes._svc") as svc,
+            patch("os.path.exists", return_value=True),
         ):
             svc.return_value.print_label.return_value = {"success": True}
             r = print_client.post(
@@ -472,8 +471,9 @@ class TestPrintRoutesLabel:
         assert r.json()["success"] is True
 
     def test_print_label_no_confirm_failed(self, print_client: TestClient):
-        with patch("app.fastapi_routes.print_routes._svc") as svc, patch(
-            "os.path.exists", return_value=True
+        with (
+            patch("app.fastapi_routes.print_routes._svc") as svc,
+            patch("os.path.exists", return_value=True),
         ):
             svc.return_value.print_label.return_value = {"success": False}
             r = print_client.post(
@@ -483,8 +483,9 @@ class TestPrintRoutesLabel:
         assert r.status_code == 400
 
     def test_print_label_exception(self, print_client: TestClient):
-        with patch("app.fastapi_routes.print_routes._svc") as svc, patch(
-            "os.path.exists", return_value=True
+        with (
+            patch("app.fastapi_routes.print_routes._svc") as svc,
+            patch("os.path.exists", return_value=True),
         ):
             svc.return_value.print_label.side_effect = RuntimeError("boom")
             r = print_client.post(
@@ -557,11 +558,10 @@ class TestPrintRoutesWorkflowLabel:
         assert r.json()["skipped"] is True
 
     def test_dispatch_lookup_error_still_prints(self, print_client: TestClient):
-        with patch(
-            "app.application.print_app_service.get_print_application_service"
-        ) as get_svc, patch(
-            "app.application.get_product_app_service"
-        ) as get_prod:
+        with (
+            patch("app.application.print_app_service.get_print_application_service") as get_svc,
+            patch("app.application.get_product_app_service") as get_prod,
+        ):
             get_prod.return_value.search_products.side_effect = RuntimeError("lookup fail")
             get_svc.return_value.print_single_label.return_value = {"success": True}
             r = print_client.post(
@@ -571,11 +571,10 @@ class TestPrintRoutesWorkflowLabel:
         assert r.status_code == 200
 
     def test_dispatch_print_failed(self, print_client: TestClient):
-        with patch(
-            "app.application.print_app_service.get_print_application_service"
-        ) as get_svc, patch(
-            "app.application.get_product_app_service"
-        ) as get_prod:
+        with (
+            patch("app.application.print_app_service.get_print_application_service") as get_svc,
+            patch("app.application.get_product_app_service") as get_prod,
+        ):
             get_prod.return_value.search_products.return_value = []
             get_svc.return_value.print_single_label.return_value = {
                 "success": False,
@@ -588,9 +587,7 @@ class TestPrintRoutesWorkflowLabel:
         assert r.status_code == 400
 
     def test_dispatch_exception(self, print_client: TestClient):
-        with patch(
-            "app.application.print_app_service.get_print_application_service"
-        ) as get_svc:
+        with patch("app.application.print_app_service.get_print_application_service") as get_svc:
             get_svc.return_value.print_single_label.side_effect = RuntimeError("boom")
             r = print_client.post(
                 "/api/print/workflow/label-print/dispatch",
@@ -601,9 +598,7 @@ class TestPrintRoutesWorkflowLabel:
 
 class TestPrintRoutesListLabels:
     def test_list_labels_dir_missing(self, print_client: TestClient):
-        with patch(
-            "app.utils.path_utils.get_resource_path", return_value="/no/such/dir"
-        ):
+        with patch("app.utils.path_utils.get_resource_path", return_value="/no/such/dir"):
             r = print_client.get("/api/print/list_labels")
         assert r.status_code == 200
         assert r.json()["labels"] == []
@@ -613,9 +608,7 @@ class TestPrintRoutesListLabels:
         labels_dir.mkdir()
         (labels_dir / "order1_第1项.png").write_text("png")
         (labels_dir / "order2.txt").write_text("txt")
-        with patch(
-            "app.utils.path_utils.get_resource_path", return_value=str(labels_dir)
-        ):
+        with patch("app.utils.path_utils.get_resource_path", return_value=str(labels_dir)):
             r = print_client.get("/api/print/list_labels")
         data = r.json()
         assert len(data["labels"]) == 1
@@ -626,16 +619,15 @@ class TestPrintRoutesListLabels:
         labels_dir.mkdir()
         for i in range(5):
             (labels_dir / f"order{i}.png").write_text("png")
-        with patch(
-            "app.utils.path_utils.get_resource_path", return_value=str(labels_dir)
-        ):
+        with patch("app.utils.path_utils.get_resource_path", return_value=str(labels_dir)):
             r = print_client.get("/api/print/list_labels?limit=2")
         assert len(r.json()["labels"]) == 2
 
     def test_serve_label_image_not_found(self, print_client: TestClient):
-        with patch(
-            "app.utils.path_utils.get_resource_path", return_value="/no/such/dir"
-        ), patch("os.path.exists", return_value=False):
+        with (
+            patch("app.utils.path_utils.get_resource_path", return_value="/no/such/dir"),
+            patch("os.path.exists", return_value=False),
+        ):
             r = print_client.get("/api/print/label/missing.png")
         assert r.status_code == 404
 
@@ -855,11 +847,7 @@ class TestSkillRegistryParseSkillMd:
 
     def test_parse_keywords_split_by_hash(self):
         reg = SkillRegistry()
-        content = (
-            "---\nname: S1\n---\n"
-            "## When to Use This Skill\n\n"
-            "- one\n- two\n# Next section\n"
-        )
+        content = "---\nname: S1\n---\n## When to Use This Skill\n\n- one\n- two\n# Next section\n"
         result = reg._parse_skill_md(content)
         assert result["keywords"] == ["one", "two"]
 
@@ -878,9 +866,12 @@ class TestExecuteSkill:
     def test_execute_skill_excel_analyzer_exception(self):
         reg = SkillRegistry()
         reg.register("excel_analyzer", {"name": "Excel"})
-        with patch("app.infrastructure.skills.get_skill_registry", return_value=reg), patch(
-            "app.infrastructure.skills.excel_analyzer.excel_template_analyzer.get_excel_analyzer_skill"
-        ) as get_skill:
+        with (
+            patch("app.infrastructure.skills.get_skill_registry", return_value=reg),
+            patch(
+                "app.infrastructure.skills.excel_analyzer.excel_template_analyzer.get_excel_analyzer_skill"
+            ) as get_skill,
+        ):
             get_skill.side_effect = ImportError("no module")
             result = execute_skill("excel_analyzer")
         assert result["success"] is False
@@ -890,9 +881,12 @@ class TestExecuteSkill:
         reg.register("excel_toolkit", {"name": "Toolkit"})
         mock_skill = MagicMock()
         mock_skill.execute.return_value = {"success": True}
-        with patch("app.infrastructure.skills.get_skill_registry", return_value=reg), patch(
-            "app.infrastructure.skills.excel_toolkit.excel_toolkit.get_excel_toolkit_skill",
-            return_value=mock_skill,
+        with (
+            patch("app.infrastructure.skills.get_skill_registry", return_value=reg),
+            patch(
+                "app.infrastructure.skills.excel_toolkit.excel_toolkit.get_excel_toolkit_skill",
+                return_value=mock_skill,
+            ),
         ):
             result = execute_skill("excel_toolkit")
         assert result["success"] is True
@@ -902,9 +896,12 @@ class TestExecuteSkill:
         reg.register("label_template_generator", {"name": "Label"})
         mock_skill = MagicMock()
         mock_skill.execute.return_value = {"success": True}
-        with patch("app.infrastructure.skills.get_skill_registry", return_value=reg), patch(
-            "app.infrastructure.skills.label_template_generator.label_template_generator.get_label_template_generator_skill",
-            return_value=mock_skill,
+        with (
+            patch("app.infrastructure.skills.get_skill_registry", return_value=reg),
+            patch(
+                "app.infrastructure.skills.label_template_generator.label_template_generator.get_label_template_generator_skill",
+                return_value=mock_skill,
+            ),
         ):
             result = execute_skill("label_template_generator")
         assert result["success"] is True
@@ -951,43 +948,41 @@ class TestDecideProcessorWithPolicy:
 
     @pytest.mark.parametrize("enabled", ["1", "true", "yes", "on"])
     def test_enabled_variants(self, enabled: str):
-        with patch.dict(os.environ, {"XCAGI_ROUTING_POLICY_ENABLED": enabled}), patch(
-            "app.neuro_bus.routing.policy_router.build_routing_features", return_value={}
-        ), patch(
-            "app.neuro_bus.routing.policy_router.predict_action_index", return_value=0
-        ), patch(
-            "app.neuro_bus.routing.policy_router.append_routing_decision"
+        with (
+            patch.dict(os.environ, {"XCAGI_ROUTING_POLICY_ENABLED": enabled}),
+            patch("app.neuro_bus.routing.policy_router.build_routing_features", return_value={}),
+            patch("app.neuro_bus.routing.policy_router.predict_action_index", return_value=0),
+            patch("app.neuro_bus.routing.policy_router.append_routing_decision"),
         ):
             result = decide_processor_with_policy("hello")
         assert result is not None
         assert result.processor_type == _ACTION_ORDER[0]
 
     def test_negative_index_returns_none(self):
-        with patch.dict(os.environ, {"XCAGI_ROUTING_POLICY_ENABLED": "1"}), patch(
-            "app.neuro_bus.routing.policy_router.build_routing_features", return_value={}
-        ), patch(
-            "app.neuro_bus.routing.policy_router.predict_action_index", return_value=-1
+        with (
+            patch.dict(os.environ, {"XCAGI_ROUTING_POLICY_ENABLED": "1"}),
+            patch("app.neuro_bus.routing.policy_router.build_routing_features", return_value={}),
+            patch("app.neuro_bus.routing.policy_router.predict_action_index", return_value=-1),
         ):
             result = decide_processor_with_policy("hello")
         assert result is None
 
     def test_index_out_of_range_returns_none(self):
-        with patch.dict(os.environ, {"XCAGI_ROUTING_POLICY_ENABLED": "1"}), patch(
-            "app.neuro_bus.routing.policy_router.build_routing_features", return_value={}
-        ), patch(
-            "app.neuro_bus.routing.policy_router.predict_action_index", return_value=99
+        with (
+            patch.dict(os.environ, {"XCAGI_ROUTING_POLICY_ENABLED": "1"}),
+            patch("app.neuro_bus.routing.policy_router.build_routing_features", return_value={}),
+            patch("app.neuro_bus.routing.policy_router.predict_action_index", return_value=99),
         ):
             result = decide_processor_with_policy("hello")
         assert result is None
 
     def test_trace_id_from_argument(self):
-        with patch.dict(os.environ, {"XCAGI_ROUTING_POLICY_ENABLED": "1"}), patch(
-            "app.neuro_bus.routing.policy_router.build_routing_features", return_value={}
-        ), patch(
-            "app.neuro_bus.routing.policy_router.predict_action_index", return_value=1
-        ), patch(
-            "app.neuro_bus.routing.policy_router.append_routing_decision"
-        ) as log_mock:
+        with (
+            patch.dict(os.environ, {"XCAGI_ROUTING_POLICY_ENABLED": "1"}),
+            patch("app.neuro_bus.routing.policy_router.build_routing_features", return_value={}),
+            patch("app.neuro_bus.routing.policy_router.predict_action_index", return_value=1),
+            patch("app.neuro_bus.routing.policy_router.append_routing_decision") as log_mock,
+        ):
             result = decide_processor_with_policy("hello", trace_id="tid-1")
         assert result is not None
         log_mock.assert_called_once()
@@ -996,26 +991,26 @@ class TestDecideProcessorWithPolicy:
     def test_trace_id_from_event(self):
         event = MagicMock()
         event.metadata.trace_id = "evt-tid"
-        with patch.dict(os.environ, {"XCAGI_ROUTING_POLICY_ENABLED": "1"}), patch(
-            "app.neuro_bus.routing.policy_router.build_routing_features", return_value={}
-        ), patch(
-            "app.neuro_bus.routing.policy_router.predict_action_index", return_value=2
-        ), patch(
-            "app.neuro_bus.routing.policy_router.append_routing_decision"
-        ) as log_mock:
+        with (
+            patch.dict(os.environ, {"XCAGI_ROUTING_POLICY_ENABLED": "1"}),
+            patch("app.neuro_bus.routing.policy_router.build_routing_features", return_value={}),
+            patch("app.neuro_bus.routing.policy_router.predict_action_index", return_value=2),
+            patch("app.neuro_bus.routing.policy_router.append_routing_decision") as log_mock,
+        ):
             result = decide_processor_with_policy("hello", event=event)
         assert result is not None
         assert log_mock.call_args.kwargs["trace_id"] == "evt-tid"
 
     def test_extra_passed_to_features(self):
         extra = {"lang": "zh"}
-        with patch.dict(os.environ, {"XCAGI_ROUTING_POLICY_ENABLED": "1"}), patch(
-            "app.neuro_bus.routing.policy_router.build_routing_features",
-            return_value={"lang": "zh"},
-        ) as feat_mock, patch(
-            "app.neuro_bus.routing.policy_router.predict_action_index", return_value=0
-        ), patch(
-            "app.neuro_bus.routing.policy_router.append_routing_decision"
+        with (
+            patch.dict(os.environ, {"XCAGI_ROUTING_POLICY_ENABLED": "1"}),
+            patch(
+                "app.neuro_bus.routing.policy_router.build_routing_features",
+                return_value={"lang": "zh"},
+            ) as feat_mock,
+            patch("app.neuro_bus.routing.policy_router.predict_action_index", return_value=0),
+            patch("app.neuro_bus.routing.policy_router.append_routing_decision"),
         ):
             decide_processor_with_policy("hello", extra=extra)
         feat_mock.assert_called_once_with("hello", None, extra)
@@ -1029,8 +1024,9 @@ class TestDecideProcessorWithPolicy:
 class TestXcmaxSyncRecordChange:
     def test_record_change_success(self, tmp_path: Path):
         db_path = tmp_path / "sync.db"
-        with patch("app.db.xcmax_sync._resolve_db_path", return_value=db_path), patch(
-            "app.db.xcmax_sync._db_path", None
+        with (
+            patch("app.db.xcmax_sync._resolve_db_path", return_value=db_path),
+            patch("app.db.xcmax_sync._db_path", None),
         ):
             result = record_change("personnel", "1", "insert", {"name": "张三"})
         assert isinstance(result, int)
@@ -1050,9 +1046,12 @@ class TestXcmaxSyncPushOutbox:
         mock_db.get_pending_outbox.return_value = [
             {"id": 1, "entity_type": "p", "entity_id": "1", "operation": "i", "payload": {}}
         ]
-        with patch("app.db.xcmax_sync.SyncDb", return_value=mock_db), patch(
-            "app.services.xcmax_sync_service.urllib.request.urlopen",
-            side_effect=urllib.error.HTTPError("url", 404, "Not Found", {}, None),
+        with (
+            patch("app.db.xcmax_sync.SyncDb", return_value=mock_db),
+            patch(
+                "app.services.xcmax_sync_service.urllib.request.urlopen",
+                side_effect=urllib.error.HTTPError("url", 404, "Not Found", {}, None),
+            ),
         ):
             result = push_outbox(remote_host="127.0.0.1", remote_port=9999)
         assert result["failed"] == 1
@@ -1065,9 +1064,12 @@ class TestXcmaxSyncPushOutbox:
         mock_db.get_pending_outbox.return_value = [
             {"id": 2, "entity_type": "p", "entity_id": "2", "operation": "i", "payload": {}}
         ]
-        with patch("app.db.xcmax_sync.SyncDb", return_value=mock_db), patch(
-            "app.services.xcmax_sync_service.urllib.request.urlopen",
-            side_effect=urllib.error.HTTPError("url", 503, "Busy", {}, None),
+        with (
+            patch("app.db.xcmax_sync.SyncDb", return_value=mock_db),
+            patch(
+                "app.services.xcmax_sync_service.urllib.request.urlopen",
+                side_effect=urllib.error.HTTPError("url", 503, "Busy", {}, None),
+            ),
         ):
             result = push_outbox()
         assert result["failed"] == 1
@@ -1091,8 +1093,9 @@ class TestXcmaxSyncApplyInbox:
         def bad_applier(item):
             raise RuntimeError("applier fail")
 
-        with patch("app.db.xcmax_sync._resolve_db_path", return_value=db_path), patch(
-            "app.db.xcmax_sync._db_path", None
+        with (
+            patch("app.db.xcmax_sync._resolve_db_path", return_value=db_path),
+            patch("app.db.xcmax_sync._db_path", None),
         ):
             with patch.dict(_ENTITY_APPLIERS, {"personnel": bad_applier}, clear=False):
                 result = apply_inbox()
@@ -1215,8 +1218,9 @@ class TestXcmaxSyncEntityAppliers:
         conn = sqlite3.connect(str(db_path))
         _ensure_schema(conn)
         conn.close()
-        with patch("app.db.xcmax_sync._resolve_db_path", return_value=db_path), patch(
-            "app.db.xcmax_sync._db_path", None
+        with (
+            patch("app.db.xcmax_sync._resolve_db_path", return_value=db_path),
+            patch("app.db.xcmax_sync._db_path", None),
         ):
             from app.services.xcmax_sync_service import _write_sync_meta
 
@@ -1247,9 +1251,7 @@ class TestXcmaxSyncEntityAppliers:
 
     def test_apply_ecosystem_db_error(self):
         applier = _ENTITY_APPLIERS.get("ecosystem")
-        with patch(
-            "app.db.xcmax_sync._resolve_db_path", side_effect=OSError("db down")
-        ):
+        with patch("app.db.xcmax_sync._resolve_db_path", side_effect=OSError("db down")):
             applier({"payload": {"enabled": True}, "entity_id": "eco1", "operation": "sync"})
 
     def test_apply_print_job_success(self):
@@ -1530,9 +1532,7 @@ class TestDeactivateOtherOpenIndustryMods:
                 unloaded.append(mod_id)
                 return True
 
-        monkeypatch.setattr(
-            "app.infrastructure.mods.mod_manager.get_mod_manager", lambda: FakeMM()
-        )
+        monkeypatch.setattr("app.infrastructure.mods.mod_manager.get_mod_manager", lambda: FakeMM())
         rows = deactivate_other_open_industry_mods(keep, remove_files=False)
         assert other in unloaded
         assert (mods_root_path / other).exists()
@@ -1548,9 +1548,7 @@ class TestDeactivateOtherOpenIndustryMods:
             def unload_mod(self, mod_id: str) -> bool:
                 raise RuntimeError("unload fail")
 
-        monkeypatch.setattr(
-            "app.infrastructure.mods.mod_manager.get_mod_manager", lambda: FakeMM()
-        )
+        monkeypatch.setattr("app.infrastructure.mods.mod_manager.get_mod_manager", lambda: FakeMM())
         rows = deactivate_other_open_industry_mods(keep, remove_files=False)
         assert any(r.get("mod_id") == other for r in rows)
 
@@ -1576,9 +1574,7 @@ class TestSeedIndustryMod:
             def unload_mod(self, mod_id: str) -> bool:
                 return True
 
-        monkeypatch.setattr(
-            "app.infrastructure.mods.mod_manager.get_mod_manager", lambda: FakeMM()
-        )
+        monkeypatch.setattr("app.infrastructure.mods.mod_manager.get_mod_manager", lambda: FakeMM())
         result = seed_industry_mod("涂料")
         assert result["success"] is True
         assert result["status"] == "already_present"
@@ -1591,9 +1587,7 @@ class TestSeedIndustryMod:
         class FakeMM:
             mods_root = str(mods_root_path)
 
-        monkeypatch.setattr(
-            "app.infrastructure.mods.mod_manager.get_mod_manager", lambda: FakeMM()
-        )
+        monkeypatch.setattr("app.infrastructure.mods.mod_manager.get_mod_manager", lambda: FakeMM())
         monkeypatch.setattr(industry_seed_mod, "bundled_industry_seeds_dir", lambda: None)
         result = seed_industry_mod("涂料")
         assert result["success"] is False
@@ -1608,9 +1602,7 @@ class TestSeedIndustryMod:
         class FakeMM:
             mods_root = str(mods_root_path)
 
-        monkeypatch.setattr(
-            "app.infrastructure.mods.mod_manager.get_mod_manager", lambda: FakeMM()
-        )
+        monkeypatch.setattr("app.infrastructure.mods.mod_manager.get_mod_manager", lambda: FakeMM())
         monkeypatch.setenv("XCAGI_INDUSTRY_SEEDS_DIR", str(pool))
         result = seed_industry_mod("涂料")
         assert result["success"] is False
@@ -1627,9 +1619,7 @@ class TestSeedIndustryMod:
         class FakeMM:
             mods_root = str(mods_root_path)
 
-        monkeypatch.setattr(
-            "app.infrastructure.mods.mod_manager.get_mod_manager", lambda: FakeMM()
-        )
+        monkeypatch.setattr("app.infrastructure.mods.mod_manager.get_mod_manager", lambda: FakeMM())
         monkeypatch.setenv("XCAGI_INDUSTRY_SEEDS_DIR", str(pool))
 
         with patch("shutil.copytree", side_effect=OSError("copy fail")):
@@ -1654,9 +1644,7 @@ class TestSeedIndustryMod:
             def load_mod(self, mod_id: str) -> bool:
                 return False
 
-        monkeypatch.setattr(
-            "app.infrastructure.mods.mod_manager.get_mod_manager", lambda: FakeMM()
-        )
+        monkeypatch.setattr("app.infrastructure.mods.mod_manager.get_mod_manager", lambda: FakeMM())
         monkeypatch.setenv("XCAGI_INDUSTRY_SEEDS_DIR", str(pool))
         result = seed_industry_mod("涂料")
         assert result["success"] is False

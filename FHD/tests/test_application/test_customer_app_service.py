@@ -14,11 +14,10 @@ import pytest
 
 from app.application.customer_app_service import (
     CustomerApplicationService,
-    get_customers_session,
     get_customer_app_service,
+    get_customers_session,
     reset_customers_engine,
 )
-
 
 # ---------------------------------------------------------------------------
 # get_customers_session
@@ -27,10 +26,13 @@ from app.application.customer_app_service import (
 
 class TestGetCustomersSession:
     def test_fallback_to_session_local(self):
-        with patch(
-            "app.mod_sdk.erp_repository_registry.resolve_customers_session",
-            side_effect=ImportError("no mod"),
-        ), patch("app.db.SessionLocal") as mock_sl:
+        with (
+            patch(
+                "app.mod_sdk.erp_repository_registry.resolve_customers_session",
+                side_effect=ImportError("no mod"),
+            ),
+            patch("app.db.SessionLocal") as mock_sl,
+        ):
             get_customers_session()
             mock_sl.assert_called_once()
 
@@ -68,7 +70,9 @@ class TestGetAll:
         mock_query = MagicMock()
         mock_query.filter.return_value = mock_query
         mock_query.count.return_value = 1
-        mock_query.order_by.return_value.offset.return_value.limit.return_value.all.return_value = [mock_unit]
+        mock_query.order_by.return_value.offset.return_value.limit.return_value.all.return_value = [
+            mock_unit
+        ]
         mock_session.query.return_value = mock_query
 
         with patch.object(svc, "_get_session", return_value=mock_session):
@@ -257,8 +261,12 @@ class TestDelete:
         mock_unit.unit_name = "TestCo"
         mock_session.query.return_value.filter.return_value.first.return_value = mock_unit
 
-        with patch.object(svc, "_get_session", return_value=mock_session), \
-             patch.object(svc, "_check_shipment_associations", return_value={"has_associations": False}):
+        with (
+            patch.object(svc, "_get_session", return_value=mock_session),
+            patch.object(
+                svc, "_check_shipment_associations", return_value={"has_associations": False}
+            ),
+        ):
             result = svc.delete(1)
             assert result["success"] is True
 
@@ -278,10 +286,18 @@ class TestDelete:
         mock_unit.unit_name = "LinkedCo"
         mock_session.query.return_value.filter.return_value.first.return_value = mock_unit
 
-        with patch.object(svc, "_get_session", return_value=mock_session), \
-             patch.object(svc, "_check_shipment_associations", return_value={
-                 "has_associations": True, "shipment_count": 3, "sample_records": [],
-             }):
+        with (
+            patch.object(svc, "_get_session", return_value=mock_session),
+            patch.object(
+                svc,
+                "_check_shipment_associations",
+                return_value={
+                    "has_associations": True,
+                    "shipment_count": 3,
+                    "sample_records": [],
+                },
+            ),
+        ):
             result = svc.delete(1, force=False)
             assert result["success"] is False
             assert result["has_associations"] is True
@@ -293,10 +309,18 @@ class TestDelete:
         mock_unit.unit_name = "LinkedCo"
         mock_session.query.return_value.filter.return_value.first.return_value = mock_unit
 
-        with patch.object(svc, "_get_session", return_value=mock_session), \
-             patch.object(svc, "_check_shipment_associations", return_value={
-                 "has_associations": True, "shipment_count": 3, "sample_records": [],
-             }):
+        with (
+            patch.object(svc, "_get_session", return_value=mock_session),
+            patch.object(
+                svc,
+                "_check_shipment_associations",
+                return_value={
+                    "has_associations": True,
+                    "shipment_count": 3,
+                    "sample_records": [],
+                },
+            ),
+        ):
             result = svc.delete(1, force=True)
             assert result["success"] is True
 
@@ -323,8 +347,12 @@ class TestBatchDelete:
         mock_unit.unit_name = "Co1"
         mock_session.query.return_value.filter.return_value.all.return_value = [mock_unit]
 
-        with patch.object(svc, "_get_session", return_value=mock_session), \
-             patch.object(svc, "_check_shipment_associations", return_value={"has_associations": False}):
+        with (
+            patch.object(svc, "_get_session", return_value=mock_session),
+            patch.object(
+                svc, "_check_shipment_associations", return_value={"has_associations": False}
+            ),
+        ):
             result = svc.batch_delete([1])
             assert result["success"] is True
             assert result["deleted_count"] == 1
@@ -337,10 +365,18 @@ class TestBatchDelete:
         mock_unit.unit_name = "Co1"
         mock_session.query.return_value.filter.return_value.all.return_value = [mock_unit]
 
-        with patch.object(svc, "_get_session", return_value=mock_session), \
-             patch.object(svc, "_check_shipment_associations", return_value={
-                 "has_associations": True, "shipment_count": 2, "sample_records": [],
-             }):
+        with (
+            patch.object(svc, "_get_session", return_value=mock_session),
+            patch.object(
+                svc,
+                "_check_shipment_associations",
+                return_value={
+                    "has_associations": True,
+                    "shipment_count": 2,
+                    "sample_records": [],
+                },
+            ),
+        ):
             result = svc.batch_delete([1], force=False)
             assert result["success"] is False
             assert result["has_associations"] is True
@@ -389,7 +425,9 @@ class TestImportData:
         mock_session.query.return_value.filter.return_value.first.return_value = mock_existing
 
         with patch.object(svc, "_get_session", return_value=mock_session):
-            result = svc.import_data([{"customer_name": "Existing", "contact_person": "New"}], skip_duplicates=False)
+            result = svc.import_data(
+                [{"customer_name": "Existing", "contact_person": "New"}], skip_duplicates=False
+            )
             assert result["imported"] == 1
 
     def test_db_error(self):
@@ -518,7 +556,9 @@ class TestCheckShipmentAssociations:
         mock_record.created_at = None
         # First query: db.query(ShipmentRecord).filter(...).order_by(...).limit(3).all()
         mock_q1 = MagicMock()
-        mock_q1.filter.return_value.order_by.return_value.limit.return_value.all.return_value = [mock_record]
+        mock_q1.filter.return_value.order_by.return_value.limit.return_value.all.return_value = [
+            mock_record
+        ]
         # Second query: db.query(ShipmentRecord).filter(...).count()
         mock_q2 = MagicMock()
         mock_q2.filter.return_value.count.return_value = 1

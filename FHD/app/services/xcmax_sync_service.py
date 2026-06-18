@@ -599,7 +599,11 @@ def _apply_im_message(item: dict[str, Any]) -> None:
         if not sender_user_id:
             return
         with get_db() as db:
-            obj = db.query(ImMessage).filter(ImMessage.id == message_id).first() if message_id else None
+            obj = (
+                db.query(ImMessage).filter(ImMessage.id == message_id).first()
+                if message_id
+                else None
+            )
             if obj:
                 if incoming_ms:
                     stored_ms = int((_read_sync_meta(meta_key) or {}).get("updated_at_ms") or 0)

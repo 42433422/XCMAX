@@ -65,7 +65,9 @@ class TemplateApplicationService:
         Returns:
             更新结果
         """
-        return cast("dict[str, Any]", self._template_service.update_template(template_id, template_data))
+        return cast(
+            "dict[str, Any]", self._template_service.update_template(template_id, template_data)
+        )
 
     def delete_template(self, template_id: int) -> dict[str, Any]:
         """
@@ -92,7 +94,9 @@ class TemplateApplicationService:
         Returns:
             分解结果
         """
-        return cast("dict[str, Any]", self._template_service.decompose_template(file_path, template_type))
+        return cast(
+            "dict[str, Any]", self._template_service.decompose_template(file_path, template_type)
+        )
 
 
 from app.neuro_bus.neuro_application_instrumentation import instrument_application_service_class

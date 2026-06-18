@@ -1,4 +1,5 @@
 """Tests for app.infrastructure.repositories.product_repository_impl — domain-style SQLAlchemy product repo."""
+
 from __future__ import annotations
 
 from contextlib import contextmanager
@@ -11,10 +12,10 @@ from app.infrastructure.repositories.product_repository_impl import (
     SQLAlchemyProductRepository,
 )
 
-
 # ---------------------------------------------------------------------------
 # Fixtures & helpers
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def repo():
@@ -23,9 +24,11 @@ def repo():
 
 def _mock_db_ctx(mock_db):
     """Return a context manager that yields mock_db."""
+
     @contextmanager
     def _ctx():
         yield mock_db
+
     return _ctx()
 
 
@@ -57,6 +60,7 @@ def _make_mock_product_model(**overrides):
 # _to_domain / _to_db_model
 # ---------------------------------------------------------------------------
 
+
 class TestToDomainAndToDb:
     """_to_domain / _to_db_model — 转换方法"""
 
@@ -85,6 +89,7 @@ class TestToDomainAndToDb:
 # ---------------------------------------------------------------------------
 # save
 # ---------------------------------------------------------------------------
+
 
 class TestSave:
     """save() — 保存产品（创建或更新）"""
@@ -175,6 +180,7 @@ class TestSave:
 # create
 # ---------------------------------------------------------------------------
 
+
 class TestCreate:
     """create() — 委托给 save"""
 
@@ -192,6 +198,7 @@ class TestCreate:
 # ---------------------------------------------------------------------------
 # find_by_id
 # ---------------------------------------------------------------------------
+
 
 class TestFindById:
     """find_by_id() — 按 ID 查找产品"""
@@ -225,6 +232,7 @@ class TestFindById:
 # ---------------------------------------------------------------------------
 # find_all
 # ---------------------------------------------------------------------------
+
 
 class TestFindAllRepo:
     """find_all() — 分页查询产品（domain 版）"""
@@ -371,6 +379,7 @@ class TestFindAllRepo:
 # find_all_dict
 # ---------------------------------------------------------------------------
 
+
 class TestFindAllDict:
     """find_all_dict() — 快速查询返回字典列表"""
 
@@ -477,6 +486,7 @@ class TestFindAllDict:
 # find_by_model_number
 # ---------------------------------------------------------------------------
 
+
 class TestFindByModelNumber:
     """find_by_model_number() — 按型号查找产品"""
 
@@ -509,6 +519,7 @@ class TestFindByModelNumber:
 # ---------------------------------------------------------------------------
 # find_by_name
 # ---------------------------------------------------------------------------
+
 
 class TestFindByName:
     """find_by_name() — 按名称模糊查找产品"""
@@ -545,6 +556,7 @@ class TestFindByName:
 # delete
 # ---------------------------------------------------------------------------
 
+
 class TestDelete:
     """delete() — 删除产品"""
 
@@ -576,6 +588,7 @@ class TestDelete:
 # count
 # ---------------------------------------------------------------------------
 
+
 class TestCount:
     """count() — 统计产品总数"""
 
@@ -604,6 +617,7 @@ class TestCount:
 # find_product_units
 # ---------------------------------------------------------------------------
 
+
 class TestFindProductUnits:
     """find_product_units() — 查询产品单位列表"""
 
@@ -619,9 +633,7 @@ class TestFindProductUnits:
         ]
         mock_get_db.return_value = _mock_db_ctx(mock_db)
 
-        with patch(
-            "app.infrastructure.repositories.product_repository_impl.inspect"
-        ) as mock_insp:
+        with patch("app.infrastructure.repositories.product_repository_impl.inspect") as mock_insp:
             mock_insp_obj = MagicMock()
             mock_insp_obj.get_table_names.return_value = ["products"]
             mock_insp.return_value = mock_insp_obj
@@ -644,9 +656,7 @@ class TestFindProductUnits:
         mock_cs.bind = MagicMock()
         mock_cs.get_bind.return_value = MagicMock()
 
-        with patch(
-            "app.infrastructure.repositories.product_repository_impl.inspect"
-        ) as mock_insp:
+        with patch("app.infrastructure.repositories.product_repository_impl.inspect") as mock_insp:
             mock_insp_obj = MagicMock()
             mock_insp_obj.get_table_names.return_value = ["purchase_units"]
             mock_insp.return_value = mock_insp_obj
@@ -670,9 +680,7 @@ class TestFindProductUnits:
         mock_db.query.return_value.distinct.return_value.all.return_value = []
         mock_get_db.return_value = _mock_db_ctx(mock_db)
 
-        with patch(
-            "app.infrastructure.repositories.product_repository_impl.inspect"
-        ) as mock_insp:
+        with patch("app.infrastructure.repositories.product_repository_impl.inspect") as mock_insp:
             mock_insp_obj = MagicMock()
             mock_insp_obj.get_table_names.return_value = ["products"]
             mock_insp.return_value = mock_insp_obj
@@ -697,9 +705,7 @@ class TestFindProductUnits:
         ]
         mock_get_db.return_value = _mock_db_ctx(mock_db)
 
-        with patch(
-            "app.infrastructure.repositories.product_repository_impl.inspect"
-        ) as mock_insp:
+        with patch("app.infrastructure.repositories.product_repository_impl.inspect") as mock_insp:
             mock_insp_obj = MagicMock()
             mock_insp_obj.get_table_names.return_value = ["products"]
             mock_insp.return_value = mock_insp_obj
@@ -724,9 +730,7 @@ class TestFindProductUnits:
         ]
         mock_get_db.return_value = _mock_db_ctx(mock_db)
 
-        with patch(
-            "app.infrastructure.repositories.product_repository_impl.inspect"
-        ) as mock_insp:
+        with patch("app.infrastructure.repositories.product_repository_impl.inspect") as mock_insp:
             mock_insp_obj = MagicMock()
             mock_insp_obj.get_table_names.return_value = ["products"]
             mock_insp.return_value = mock_insp_obj
@@ -750,9 +754,7 @@ class TestFindProductUnits:
         ]
         mock_get_db.return_value = _mock_db_ctx(mock_db)
 
-        with patch(
-            "app.infrastructure.repositories.product_repository_impl.inspect"
-        ) as mock_insp:
+        with patch("app.infrastructure.repositories.product_repository_impl.inspect") as mock_insp:
             # First call for purchase_units fails, second for products succeeds
             mock_insp_obj = MagicMock()
             mock_insp_obj.get_table_names.return_value = ["products"]

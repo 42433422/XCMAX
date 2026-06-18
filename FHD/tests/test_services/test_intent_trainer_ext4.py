@@ -225,9 +225,7 @@ class TestIntentDatasetGetitemValid:
 class TestTrainIntentModelErrors:
     def test_empty_training_data_raises(self, tmp_path):
         """Empty training data should raise ValueError."""
-        with patch(
-            "app.services.intent_trainer.load_training_data", return_value=[]
-        ):
+        with patch("app.services.intent_trainer.load_training_data", return_value=[]):
             with pytest.raises(ValueError, match="训练数据为空"):
                 train_intent_model(data_path="fake.json", output_dir=str(tmp_path / "out"))
 
@@ -242,9 +240,7 @@ class TestTrainIntentModelErrors:
         """When early_stopping_patience=0, no EarlyStoppingCallback is added."""
         import os
 
-        mock_load.return_value = [
-            IntentExample(text=f"t{i}", label="greet") for i in range(20)
-        ]
+        mock_load.return_value = [IntentExample(text=f"t{i}", label="greet") for i in range(20)]
         mock_tokenizer.return_value = MagicMock()
         mock_config.return_value = MagicMock()
         mock_model.return_value = MagicMock()
@@ -273,9 +269,7 @@ class TestExportToOnnxWithRuntime:
     @patch("app.services.intent_trainer.AutoModelForSequenceClassification.from_pretrained")
     @patch("app.services.intent_trainer.AutoTokenizer.from_pretrained")
     @patch("app.services.intent_trainer.torch.onnx.export")
-    def test_export_with_onnxruntime(
-        self, mock_onnx_export, mock_tokenizer, mock_model, tmp_path
-    ):
+    def test_export_with_onnxruntime(self, mock_onnx_export, mock_tokenizer, mock_model, tmp_path):
         """When onnxruntime is importable, export proceeds."""
         # Make onnxruntime importable
         import sys
@@ -324,17 +318,21 @@ class TestComputeMetricsEdgeCases:
 class TestMainCLIWithOnnx:
     def test_main_with_export_onnx_flag(self, tmp_path):
         """main() with --export_onnx should call export_to_onnx after training."""
-        with patch("sys.argv", [
-            "intent_trainer",
-            "--data", "fake.json",
-            "--epochs", "1",
-            "--export_onnx",
-        ]):
-            with patch(
-                "app.services.intent_trainer.train_intent_model"
-            ) as mock_train, patch(
-                "app.services.intent_trainer.export_to_onnx"
-            ) as mock_export:
+        with patch(
+            "sys.argv",
+            [
+                "intent_trainer",
+                "--data",
+                "fake.json",
+                "--epochs",
+                "1",
+                "--export_onnx",
+            ],
+        ):
+            with (
+                patch("app.services.intent_trainer.train_intent_model") as mock_train,
+                patch("app.services.intent_trainer.export_to_onnx") as mock_export,
+            ):
                 mock_train.return_value = str(tmp_path / "final")
 
                 main()
@@ -344,16 +342,20 @@ class TestMainCLIWithOnnx:
 
     def test_main_without_export_onnx_flag(self, tmp_path):
         """main() without --export_onnx should NOT call export_to_onnx."""
-        with patch("sys.argv", [
-            "intent_trainer",
-            "--data", "fake.json",
-            "--epochs", "1",
-        ]):
-            with patch(
-                "app.services.intent_trainer.train_intent_model"
-            ) as mock_train, patch(
-                "app.services.intent_trainer.export_to_onnx"
-            ) as mock_export:
+        with patch(
+            "sys.argv",
+            [
+                "intent_trainer",
+                "--data",
+                "fake.json",
+                "--epochs",
+                "1",
+            ],
+        ):
+            with (
+                patch("app.services.intent_trainer.train_intent_model") as mock_train,
+                patch("app.services.intent_trainer.export_to_onnx") as mock_export,
+            ):
                 mock_train.return_value = str(tmp_path / "final")
 
                 main()
@@ -375,17 +377,13 @@ class TestSplitDataMore:
         assert len(test) == 0
 
     def test_three_examples(self):
-        examples = [
-            IntentExample(text=f"text{i}", label="greet") for i in range(3)
-        ]
+        examples = [IntentExample(text=f"text{i}", label="greet") for i in range(3)]
         train, val, test = split_data(examples)
         total = len(train) + len(val) + len(test)
         assert total == 3
 
     def test_custom_seed_different_result(self):
-        examples = [
-            IntentExample(text=f"text{i}", label="greet") for i in range(50)
-        ]
+        examples = [IntentExample(text=f"text{i}", label="greet") for i in range(50)]
         train1, _, _ = split_data(examples, seed=42)
         train2, _, _ = split_data(examples, seed=99)
         # Different seeds should (very likely) produce different orders

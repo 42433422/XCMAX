@@ -138,9 +138,10 @@ class ContextFacade:
             ProcessingResult 处理结果
         """
         logger.info(
-            "[CONTEXT_FACADE] Processing: user=%s, "
-            f"intent=%s, "
-            f"msg=%s...", user_id, intent_result.primary_intent, message[:30]
+            "[CONTEXT_FACADE] Processing: user=%s, intent=%s, msg=%s...",
+            user_id,
+            intent_result.primary_intent,
+            message[:30],
         )
 
         is_dup, cached_resp, is_exact = self._chat_context.is_duplicate(

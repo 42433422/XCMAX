@@ -1,9 +1,11 @@
 """Tests for app.infrastructure.mods.catalog_remote."""
+
 from __future__ import annotations
 
 import json
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 
 from app.infrastructure.mods.catalog_remote import (
     catalog_base_url,
@@ -62,6 +64,7 @@ class TestFetchRemotePackageList:
     def test_network_error_returns_empty(self, mock_urlopen, monkeypatch):
         monkeypatch.setenv("XCAGI_MOD_CATALOG_URL", "https://catalog.example.com")
         import urllib.error
+
         mock_urlopen.side_effect = urllib.error.URLError("network error")
         result = fetch_remote_package_list()
         assert result == []

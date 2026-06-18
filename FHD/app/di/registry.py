@@ -17,10 +17,10 @@ if TYPE_CHECKING:
         ShipmentApplicationServiceEventPrimary,
     )
     from app.application.file_analysis_app_service import FileAnalysisService
+    from app.application.ports.wechat_contact_store import WechatContactStorePort
     from app.application.shipment_app_service import ShipmentApplicationService
     from app.application.unit_products_import_app_service import UnitProductsImportService
     from app.application.wechat_contact_app_service import WechatContactApplicationService
-    from app.application.ports.wechat_contact_store import WechatContactStorePort
     from app.services.auth_service import AuthService
     from app.services.session_service import SessionService
     from app.services.user_preference_service import UserPreferenceService

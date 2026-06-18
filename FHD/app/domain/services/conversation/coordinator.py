@@ -308,7 +308,9 @@ class UnifiedConversationCoordinator:
         self, user_id: str, message: str, intent_result: IntentResult, pending: PendingIntent
     ) -> ProcessingResult:
         """处理 pending 任务的续接"""
-        logger.info("[COORDINATOR] Pending continuation: user=%s, pending=%s", user_id, pending.intent)
+        logger.info(
+            "[COORDINATOR] Pending continuation: user=%s, pending=%s", user_id, pending.intent
+        )
 
         merged = pending.merge_slots(intent_result.slots)
 

@@ -18,7 +18,6 @@ from app.fastapi_routes.mobile_api import (
     router,
 )
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -129,7 +128,9 @@ class TestUserPublicDict:
         user.role = "admin"
         user.is_active = True
         user.wx_avatar_url = None
-        with patch("app.utils.user_avatar_storage.public_avatar_url", return_value="/avatar/default.png"):
+        with patch(
+            "app.utils.user_avatar_storage.public_avatar_url", return_value="/avatar/default.png"
+        ):
             result = _user_public_dict(user)
         assert result["id"] == 1
         assert result["username"] == "testuser"
@@ -145,7 +146,10 @@ class TestUserPublicDict:
         user.role = "user"
         user.is_active = True
         user.wx_avatar_url = "https://example.com/avatar.jpg"
-        with patch("app.utils.user_avatar_storage.public_avatar_url", return_value="https://example.com/avatar.jpg"):
+        with patch(
+            "app.utils.user_avatar_storage.public_avatar_url",
+            return_value="https://example.com/avatar.jpg",
+        ):
             result = _user_public_dict(user)
         assert result["avatar_url"] == "https://example.com/avatar.jpg"
 
@@ -232,13 +236,16 @@ class TestMobileHostDiscoverHint:
     def test_success(self, client):
         mock_info = MagicMock()
         mock_info.model_dump.return_value = {"ip": "192.168.1.1", "port": 5100}
-        with patch(
-            "app.fastapi_routes.lan_routes.host_info",
-            new_callable=AsyncMock,
-            return_value=mock_info,
-        ), patch(
-            "app.utils.listen_port.resolve_listen_port",
-            return_value=5100,
+        with (
+            patch(
+                "app.fastapi_routes.lan_routes.host_info",
+                new_callable=AsyncMock,
+                return_value=mock_info,
+            ),
+            patch(
+                "app.utils.listen_port.resolve_listen_port",
+                return_value=5100,
+            ),
         ):
             resp = client.get("/api/mobile/v1/host/discover-hint")
         assert resp.status_code == 200
@@ -291,7 +298,9 @@ class TestMobileMeLogic:
         user.role = "admin"
         user.is_active = True
         user.wx_avatar_url = None
-        with patch("app.utils.user_avatar_storage.public_avatar_url", return_value="/avatar/default.png"):
+        with patch(
+            "app.utils.user_avatar_storage.public_avatar_url", return_value="/avatar/default.png"
+        ):
             result = _user_public_dict(user)
         assert result["id"] == 1
         assert result["username"] == "meuser"

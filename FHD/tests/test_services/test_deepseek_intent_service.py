@@ -148,7 +148,9 @@ class TestParseResponse:
         assert out["intent"] == "negation"
 
     def test_code_fence_then_regex_fallback(self, recognizer):
-        content = '```json\n{"intent": "greet", "confidence": 0.8, "slots": {}, "reasoning": ""}\n```'
+        content = (
+            '```json\n{"intent": "greet", "confidence": 0.8, "slots": {}, "reasoning": ""}\n```'
+        )
         out = recognizer._parse_response(content, "你好")
         assert out["intent"] == "greet"
         assert out["source"] == "deepseek"
@@ -236,7 +238,9 @@ class TestRecognizeAsync:
     async def test_recognize_cache_hit(self, recognizer):
         msg = "CACHE_HIT_UNIQUE_MESSAGE_001"
         key = ds._make_intent_cache_key(msg)
-        ds._intent_recognition_cache.set(key, {"intent": "products", "source": "cached", "slots": {}})
+        ds._intent_recognition_cache.set(
+            key, {"intent": "products", "source": "cached", "slots": {}}
+        )
         out = await recognizer.recognize(msg)
         assert out["source"] == "cached"
         assert out["intent"] == "products"
@@ -316,11 +320,12 @@ class TestHybridRecognize:
         # deepseek_recognizer 不应被调用
         h.deepseek_recognizer = MagicMock()
         h.deepseek_recognizer.recognize = AsyncMock(side_effect=AssertionError("不应调用"))
-        with patch(
-            "app.services.intent_service.recognize_intents", return_value=dict(rule)
-        ), patch(
-            "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
-            return_value=None,
+        with (
+            patch("app.services.intent_service.recognize_intents", return_value=dict(rule)),
+            patch(
+                "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
+                return_value=None,
+            ),
         ):
             out = await h.recognize("查产品")
         assert out["intent_source"] == "rule"
@@ -329,11 +334,12 @@ class TestHybridRecognize:
     async def test_unk_without_deepseek_returns_rule(self):
         h = HybridIntentWithDeepSeek(use_deepseek=False)
         rule = {"primary_intent": "unk"}
-        with patch(
-            "app.services.intent_service.recognize_intents", return_value=dict(rule)
-        ), patch(
-            "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
-            return_value=None,
+        with (
+            patch("app.services.intent_service.recognize_intents", return_value=dict(rule)),
+            patch(
+                "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
+                return_value=None,
+            ),
         ):
             out = await h.recognize("不明确的消息")
         assert out["intent_source"] == "rule"
@@ -367,11 +373,12 @@ class TestHybridRecognize:
         rule = {"primary_intent": "unk"}
         h.deepseek_recognizer = MagicMock()
         h.deepseek_recognizer.recognize = AsyncMock(side_effect=RuntimeError("boom"))
-        with patch(
-            "app.services.intent_service.recognize_intents", return_value=dict(rule)
-        ), patch(
-            "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
-            return_value=None,
+        with (
+            patch("app.services.intent_service.recognize_intents", return_value=dict(rule)),
+            patch(
+                "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
+                return_value=None,
+            ),
         ):
             out = await h.recognize("触发异常")
         assert out["intent_source"] == "rule"

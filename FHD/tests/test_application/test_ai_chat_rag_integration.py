@@ -1,12 +1,15 @@
 """Tests for app.application.ai_chat_rag_integration — with RAG module mocked."""
+
 from __future__ import annotations
 
 import sys
 import types
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
-# Mock the RAG module before importing
+import pytest
+
+# Mock the RAG module before importing the target, then restore it so collection
+# of package-level RAG tests still sees the real package.
 rag_mock = types.ModuleType("app.infrastructure.rag")
 rag_mock.RagService = MagicMock
 rag_mock.get_default_embedder = MagicMock(return_value=None)
@@ -14,20 +17,26 @@ rag_mock.is_rag_enabled = MagicMock(return_value=False)
 rag_mock.HybridRetriever = MagicMock
 rag_mock.SemanticChunker = MagicMock
 rag_mock.RetrievedChunk = MagicMock
-# Override the existing module if already loaded
+_original_rag = sys.modules.get("app.infrastructure.rag")
 sys.modules["app.infrastructure.rag"] = rag_mock
-
-from app.application.ai_chat_rag_integration import (
-    get_rag_service,
-    augment_chat_with_rag,
-    get_rag_status,
-)
+try:
+    from app.application.ai_chat_rag_integration import (
+        augment_chat_with_rag,
+        get_rag_service,
+        get_rag_status,
+    )
+finally:
+    if _original_rag is not None:
+        sys.modules["app.infrastructure.rag"] = _original_rag
+    else:
+        del sys.modules["app.infrastructure.rag"]
 
 
 class TestGetRagService:
     @patch("app.application.ai_chat_rag_integration.is_rag_enabled", return_value=False)
     def test_rag_disabled_returns_none(self, mock_enabled):
         import app.application.ai_chat_rag_integration as mod
+
         mod._rag_service = None
         result = get_rag_service()
         assert result is None
@@ -37,6 +46,7 @@ class TestGetRagService:
     @patch("app.application.ai_chat_rag_integration.RagService", side_effect=RuntimeError("no rag"))
     def test_rag_init_failure_returns_none(self, mock_rag, mock_embedder, mock_enabled):
         import app.application.ai_chat_rag_integration as mod
+
         mod._rag_service = None
         result = get_rag_service()
         assert result is None

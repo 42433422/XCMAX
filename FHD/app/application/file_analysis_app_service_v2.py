@@ -68,7 +68,9 @@ class FileAnalysisAppServiceV2:
             self._bus.publish(event)
 
             logger.info(
-                "[FileAnalysisAppServiceV2] 命令已发布: %s (event_id=%s)", command_type, event.metadata.event_id
+                "[FileAnalysisAppServiceV2] 命令已发布: %s (event_id=%s)",
+                command_type,
+                event.metadata.event_id,
             )
 
             return {

@@ -88,9 +88,7 @@ def test_insert_or_ignore_existing(svc) -> None:
     s = MagicMock()
     s.query.return_value = _fluent(first=WechatTask(id=5))
     with _patch_db(s):
-        out = svc._insert_or_ignore_wechat_task(
-            raw_text="hi", message_id="m1", username="u1"
-        )
+        out = svc._insert_or_ignore_wechat_task(raw_text="hi", message_id="m1", username="u1")
     assert out == 5
 
 
@@ -111,9 +109,7 @@ def test_insert_or_ignore_integrity_error_recovers(svc) -> None:
     s2 = MagicMock()
     s2.query.return_value = _fluent(first=WechatTask(id=7))
     with _patch_db_sequence([s1, s2]):
-        out = svc._insert_or_ignore_wechat_task(
-            raw_text="hi", message_id="m1", username="u1"
-        )
+        out = svc._insert_or_ignore_wechat_task(raw_text="hi", message_id="m1", username="u1")
     assert out == 7
 
 

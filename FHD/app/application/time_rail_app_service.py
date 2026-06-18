@@ -64,7 +64,7 @@ class TimeRailAppService:
                 for n in (graph.get("nodes") or [])
                 if n.get("id")
             }
-        except Exception:
+        except (FileNotFoundError, OSError, ValueError):
             graph = {}
             graph_nodes = {}
         nodes: dict[str, Any] = {}

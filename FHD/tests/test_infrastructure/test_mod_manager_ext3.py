@@ -28,7 +28,6 @@ from app.infrastructure.mods.mod_manager import (
     is_mods_disabled,
 )
 
-
 # ========================= list_mods / list_all_mods =======================
 
 
@@ -50,7 +49,9 @@ class TestModManagerListMods:
         meta = ModMetadata(id="test", name="Test", version="1.0", mod_path="/tmp/test")
         mock_registry.list_mods.return_value = [meta]
         with (
-            patch("app.infrastructure.mods.mod_manager.get_mod_registry", return_value=mock_registry),
+            patch(
+                "app.infrastructure.mods.mod_manager.get_mod_registry", return_value=mock_registry
+            ),
             patch.object(mm, "scan_mods", return_value=[]),
         ):
             result = mm.list_all_mods()
@@ -64,12 +65,17 @@ class TestModManagerGetRoutes:
     def test_returns_routes(self, tmp_path):
         mm = ModManager(mods_root=str(tmp_path))
         meta = ModMetadata(
-            id="test", name="Test", version="1.0", mod_path="/tmp/test",
+            id="test",
+            name="Test",
+            version="1.0",
+            mod_path="/tmp/test",
             frontend_menu=[{"label": "Test", "path": "/test"}],
         )
         mock_registry = Mock()
         mock_registry.list_mods.return_value = [meta]
-        with patch("app.infrastructure.mods.mod_manager.get_mod_registry", return_value=mock_registry):
+        with patch(
+            "app.infrastructure.mods.mod_manager.get_mod_registry", return_value=mock_registry
+        ):
             result = mm.get_routes()
         assert isinstance(result, list)
 
@@ -82,7 +88,9 @@ class TestModManagerLoadAllMods:
         mm = ModManager(mods_root=str(tmp_path))
         # dependencies is dict[str, str], not list
         meta_a = ModMetadata(id="mod_a", name="A", version="1.0", mod_path="/tmp/a", primary=True)
-        meta_b = ModMetadata(id="mod_b", name="B", version="1.0", mod_path="/tmp/b", dependencies={"mod_a": ">=1.0"})
+        meta_b = ModMetadata(
+            id="mod_b", name="B", version="1.0", mod_path="/tmp/b", dependencies={"mod_a": ">=1.0"}
+        )
         with (
             patch.object(mm, "scan_mods", return_value=[meta_a, meta_b]),
             patch.object(mm, "load_mod", return_value=True),
@@ -102,10 +110,10 @@ class TestModManagerLoadAllMods:
 
 class TestGetModManagerSingleton:
     def test_returns_same_instance(self):
-        from app.infrastructure.mods.mod_manager import get_mod_manager
-
         # The singleton variable is _mod_manager
         import app.infrastructure.mods.mod_manager as mm_mod
+        from app.infrastructure.mods.mod_manager import get_mod_manager
+
         old = mm_mod._mod_manager
         try:
             mm_mod._mod_manager = None
@@ -169,12 +177,17 @@ class TestRepoLayoutModsCandidates:
     def test_returns_candidates(self, tmp_path):
         mods_dir = tmp_path / "mods"
         mods_dir.mkdir()
-        with patch("app.infrastructure.mods.mod_manager.os.path.dirname", return_value=str(tmp_path)):
+        with patch(
+            "app.infrastructure.mods.mod_manager.os.path.dirname", return_value=str(tmp_path)
+        ):
             result = _repo_layout_mods_candidates()
         assert isinstance(result, list)
 
     def test_skips_nonexistent_dirs(self, tmp_path):
-        with patch("app.infrastructure.mods.mod_manager.os.path.dirname", return_value=str(tmp_path / "nonexistent")):
+        with patch(
+            "app.infrastructure.mods.mod_manager.os.path.dirname",
+            return_value=str(tmp_path / "nonexistent"),
+        ):
             result = _repo_layout_mods_candidates()
         assert isinstance(result, list)
 
@@ -225,7 +238,9 @@ class TestRegisterSingleModHttpRoutes:
         meta = ModMetadata(id="test_mod", name="Test", version="1.0", mod_path=str(tmp_path))
         mock_registry.get_mod_metadata.return_value = meta
         mock_app = Mock()
-        with patch("app.infrastructure.mods.mod_manager.get_mod_registry", return_value=mock_registry):
+        with patch(
+            "app.infrastructure.mods.mod_manager.get_mod_registry", return_value=mock_registry
+        ):
             result = _register_single_mod_http_routes(mock_app, mm, "test_mod")
         assert result is False
 
@@ -243,7 +258,9 @@ class TestRestoreEntitlementsFromSessionId:
     def test_with_valid_session(self):
         from app.infrastructure.mods.mod_manager import _restore_entitlements_from_session_id
 
-        with patch("app.infrastructure.mods.mod_manager._restore_entitlements_from_session_id") as mock_fn:
+        with patch(
+            "app.infrastructure.mods.mod_manager._restore_entitlements_from_session_id"
+        ) as mock_fn:
             # Just verify it can be called without error
             mock_fn("sid1")
 
@@ -268,7 +285,14 @@ class TestModAllowedForApiLoad:
         from app.infrastructure.mods.mod_manager import _mod_allowed_for_api_load
 
         # When enterprise modules can't be imported, returns False
-        with patch.dict("sys.modules", {"app.enterprise.account_mod_binding": None, "app.enterprise.mod_entitlements": None, "app.mod_sdk.industry_mod_aliases": None}):
+        with patch.dict(
+            "sys.modules",
+            {
+                "app.enterprise.account_mod_binding": None,
+                "app.enterprise.mod_entitlements": None,
+                "app.mod_sdk.industry_mod_aliases": None,
+            },
+        ):
             result = _mod_allowed_for_api_load("test_mod")
         assert result is False
 
@@ -320,13 +344,24 @@ class TestLoadModRoutes:
         mm = ModManager(mods_root=str(tmp_path))
         mm._loaded_mods = ["test_mod"]
         mock_registry = Mock()
-        meta = ModMetadata(id="test_mod", name="Test", version="1.0", mod_path=str(tmp_path), backend_entry="backend.main")
+        meta = ModMetadata(
+            id="test_mod",
+            name="Test",
+            version="1.0",
+            mod_path=str(tmp_path),
+            backend_entry="backend.main",
+        )
         mock_registry.list_mods.return_value = [meta]
         mock_app = Mock()
         with (
-            patch("app.infrastructure.mods.mod_manager.get_mod_registry", return_value=mock_registry),
+            patch(
+                "app.infrastructure.mods.mod_manager.get_mod_registry", return_value=mock_registry
+            ),
             patch("app.infrastructure.mods.mod_manager._register_single_mod_http_routes"),
-            patch("app.infrastructure.mods.mod_manager.mount_on_disk_primary_client_mods", return_value=[]),
+            patch(
+                "app.infrastructure.mods.mod_manager.mount_on_disk_primary_client_mods",
+                return_value=[],
+            ),
             patch("app.infrastructure.mods.mod_manager.load_employee_pack_routes"),
             patch("app.fastapi_routes.spa_fallback.ensure_spa_fallback_last"),
         ):
@@ -340,8 +375,13 @@ class TestLoadModRoutes:
         mock_registry = Mock()
         mock_registry.list_mods.return_value = []
         with (
-            patch("app.infrastructure.mods.mod_manager.get_mod_registry", return_value=mock_registry),
-            patch("app.infrastructure.mods.mod_manager.mount_on_disk_primary_client_mods", return_value=[]),
+            patch(
+                "app.infrastructure.mods.mod_manager.get_mod_registry", return_value=mock_registry
+            ),
+            patch(
+                "app.infrastructure.mods.mod_manager.mount_on_disk_primary_client_mods",
+                return_value=[],
+            ),
             patch("app.infrastructure.mods.mod_manager.load_employee_pack_routes"),
             patch("app.fastapi_routes.spa_fallback.ensure_spa_fallback_last"),
         ):

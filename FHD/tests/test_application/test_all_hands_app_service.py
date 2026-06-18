@@ -1,15 +1,17 @@
 """Tests for app.application.all_hands_app_service."""
+
 from __future__ import annotations
 
+from unittest.mock import AsyncMock, patch
+
 import pytest
-from unittest.mock import patch, AsyncMock
 
 from app.application.all_hands_app_service import (
+    get_all_hands_session_local,
+    get_all_hands_session_with_authorization,
     prefer_local_all_hands,
     start_all_hands_session_local,
     start_all_hands_session_with_authorization,
-    get_all_hands_session_local,
-    get_all_hands_session_with_authorization,
 )
 
 

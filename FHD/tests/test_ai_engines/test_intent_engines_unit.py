@@ -114,7 +114,9 @@ class TestDeepseekIntentClassifier:
     @pytest.mark.asyncio
     async def test_recognize_cache_hit(self):
         clf = DeepseekIntentClassifier()
-        with patch("app.ai_engines.deepseek.intent_service._intent_recognition_cache") as mock_cache:
+        with patch(
+            "app.ai_engines.deepseek.intent_service._intent_recognition_cache"
+        ) as mock_cache:
             mock_cache.get.return_value = {"intent": "greet", "confidence": 0.99}
             out = await clf.recognize("hi")
         assert out["intent"] == "greet"
@@ -123,7 +125,9 @@ class TestDeepseekIntentClassifier:
     @pytest.mark.asyncio
     async def test_recognize_api_failure_returns_unk(self):
         clf = DeepseekIntentClassifier(api_key="k", max_retries=1)
-        with patch("app.ai_engines.deepseek.intent_service._intent_recognition_cache") as mock_cache:
+        with patch(
+            "app.ai_engines.deepseek.intent_service._intent_recognition_cache"
+        ) as mock_cache:
             mock_cache.get.return_value = None
             with patch(
                 "app.infrastructure.llm.invoke.chat_completion_openai_format",

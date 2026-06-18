@@ -18,8 +18,8 @@ def db_tokens_status() -> dict:
     except RECOVERABLE_ERRORS:
         active_mod_id = ""
     from app.infrastructure.auth.db_token import (
-        effective_db_read_token,
         configured_db_write_token,
+        effective_db_read_token,
     )
 
     read_t = str(effective_db_read_token() or "").strip()

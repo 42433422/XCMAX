@@ -12,6 +12,7 @@ Covers ``_resolve_product_sku``, ``resolve_fhd_config_dir``, ``_deep_merge``,
 ``workflow_delivery_mod_ids_for_package``, ``edition_legacy_routes_enabled``,
 ``scan_workflow_employee_catalog_from_mods``, ``build_host_profile_api_payload``.
 """
+
 from __future__ import annotations
 
 import json
@@ -22,7 +23,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from app.mod_sdk import host_profile as hp
-
 
 # ── _resolve_product_sku ─────────────────────────────────────────────────────
 
@@ -121,9 +121,7 @@ class TestDeepMerge:
         assert out == {"a": 1, "b": 3, "c": 4}
 
     def test_nested_dict_merge(self):
-        out = hp._deep_merge(
-            {"a": {"x": 1, "y": 2}}, {"a": {"y": 3, "z": 4}}
-        )
+        out = hp._deep_merge({"a": {"x": 1, "y": 2}}, {"a": {"y": 3, "z": 4}})
         assert out == {"a": {"x": 1, "y": 3, "z": 4}}
 
     def test_overlay_replaces_non_dict(self):
@@ -220,9 +218,7 @@ class TestLoadMergedProfile:
         (profiles_dir / "_base.json").write_text(
             json.dumps({"schema_version": 1, "base_key": "base"})
         )
-        (profiles_dir / "personal.json").write_text(
-            json.dumps({"sku_specific": "personal"})
-        )
+        (profiles_dir / "personal.json").write_text(json.dumps({"sku_specific": "personal"}))
         with patch.object(hp, "resolve_fhd_config_dir", return_value=config_dir):
             out = hp._load_merged_profile("personal")
         assert out is not None
@@ -473,9 +469,7 @@ class TestGetMinimalHostModIds:
 
 class TestGetGenericHostModIds:
     def test_returns_from_profile(self, monkeypatch):
-        with patch.object(
-            hp, "load_host_profile", return_value={"generic_host_mod_ids": ["a"]}
-        ):
+        with patch.object(hp, "load_host_profile", return_value={"generic_host_mod_ids": ["a"]}):
             assert hp.get_generic_host_mod_ids() == ("a",)
 
     def test_returns_legacy_when_empty(self, monkeypatch):
@@ -499,9 +493,7 @@ class TestGetProtectedClientModIds:
 
 class TestGetCoreWorkflowModId:
     def test_returns_from_profile(self, monkeypatch):
-        with patch.object(
-            hp, "load_host_profile", return_value={"core_workflow_mod_id": "custom"}
-        ):
+        with patch.object(hp, "load_host_profile", return_value={"core_workflow_mod_id": "custom"}):
             assert hp.get_core_workflow_mod_id() == "custom"
 
     def test_returns_legacy_when_missing(self, monkeypatch):
@@ -676,36 +668,38 @@ class TestWorkflowDeliveryModIdsForPackage:
 
 class TestEditionLegacyRoutesEnabled:
     def test_full_edition_enabled(self, monkeypatch):
-        with patch.object(
-            hp,
-            "load_host_profile",
-            return_value={"editions": {"full": {"legacy_routes_enabled": True}}},
-        ), patch(
-            "app.mod_sdk.edition_policy.resolve_edition", return_value="full"
+        with (
+            patch.object(
+                hp,
+                "load_host_profile",
+                return_value={"editions": {"full": {"legacy_routes_enabled": True}}},
+            ),
+            patch("app.mod_sdk.edition_policy.resolve_edition", return_value="full"),
         ):
             assert hp.edition_legacy_routes_enabled() is True
 
     def test_minimal_edition_disabled(self, monkeypatch):
-        with patch.object(
-            hp,
-            "load_host_profile",
-            return_value={"editions": {"minimal": {"legacy_routes_enabled": False}}},
-        ), patch(
-            "app.mod_sdk.edition_policy.resolve_edition", return_value="minimal"
+        with (
+            patch.object(
+                hp,
+                "load_host_profile",
+                return_value={"editions": {"minimal": {"legacy_routes_enabled": False}}},
+            ),
+            patch("app.mod_sdk.edition_policy.resolve_edition", return_value="minimal"),
         ):
             assert hp.edition_legacy_routes_enabled() is False
 
     def test_no_editions_block_defaults_to_full_check(self, monkeypatch):
-        with patch.object(
-            hp, "load_host_profile", return_value={"editions": {}}
-        ), patch(
-            "app.mod_sdk.edition_policy.resolve_edition", return_value="full"
+        with (
+            patch.object(hp, "load_host_profile", return_value={"editions": {}}),
+            patch("app.mod_sdk.edition_policy.resolve_edition", return_value="full"),
         ):
             assert hp.edition_legacy_routes_enabled() is True
 
     def test_no_editions_key(self, monkeypatch):
-        with patch.object(hp, "load_host_profile", return_value={}), patch(
-            "app.mod_sdk.edition_policy.resolve_edition", return_value="minimal"
+        with (
+            patch.object(hp, "load_host_profile", return_value={}),
+            patch("app.mod_sdk.edition_policy.resolve_edition", return_value="minimal"),
         ):
             assert hp.edition_legacy_routes_enabled() is False
 
@@ -723,9 +717,7 @@ class TestEditionLegacyRoutesEnabled:
 
 class TestScanWorkflowEmployeeCatalogFromMods:
     def test_no_mods_root_returns_default(self, monkeypatch):
-        with patch.object(
-            hp, "load_workflow_employee_catalog", return_value={"default": True}
-        ):
+        with patch.object(hp, "load_workflow_employee_catalog", return_value={"default": True}):
             out = hp.scan_workflow_employee_catalog_from_mods(mods_root=None)
         # When mods_root is None, it tries to import bundled_mods_dir
         # If that fails, returns the default doc
@@ -810,22 +802,27 @@ class TestScanWorkflowEmployeeCatalogFromMods:
 
 class TestBuildHostProfileApiPayload:
     def test_returns_complete_payload(self, monkeypatch):
-        with patch.object(
-            hp,
-            "load_host_profile",
-            return_value={
-                "schema_version": 1,
-                "workflow_delivery": "monolith",
-                "custom": "value",
-            },
-        ), patch.object(hp, "get_profile_validation_errors", return_value=[]), patch.object(
-            hp,
-            "load_industry_presets_document",
-            return_value={"schema_version": 1, "presets": {"a": {}}},
-        ), patch.object(
-            hp,
-            "load_workflow_employee_catalog",
-            return_value={"schema_version": 1},
+        with (
+            patch.object(
+                hp,
+                "load_host_profile",
+                return_value={
+                    "schema_version": 1,
+                    "workflow_delivery": "monolith",
+                    "custom": "value",
+                },
+            ),
+            patch.object(hp, "get_profile_validation_errors", return_value=[]),
+            patch.object(
+                hp,
+                "load_industry_presets_document",
+                return_value={"schema_version": 1, "presets": {"a": {}}},
+            ),
+            patch.object(
+                hp,
+                "load_workflow_employee_catalog",
+                return_value={"schema_version": 1},
+            ),
         ):
             out = hp.build_host_profile_api_payload()
         assert out["schema_version"] == 1

@@ -15,7 +15,6 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # _resolve_market_authorization — credential chain
 # ---------------------------------------------------------------------------
@@ -29,12 +28,15 @@ class TestResolveMarketAuthorization:
         from app.application.aibiz_web_terminal_service import _resolve_market_authorization
 
         request = MagicMock()
-        with patch(
-            "app.fastapi_routes.market_account.session_id_from_request",
-            return_value="session123",
-        ), patch(
-            "app.fastapi_routes.market_account._authorization_from_request",
-            return_value="Bearer token123",
+        with (
+            patch(
+                "app.fastapi_routes.market_account.session_id_from_request",
+                return_value="session123",
+            ),
+            patch(
+                "app.fastapi_routes.market_account._authorization_from_request",
+                return_value="Bearer token123",
+            ),
         ):
             result = await _resolve_market_authorization(request)
         assert result == "Bearer token123"
@@ -49,19 +51,24 @@ class TestResolveMarketAuthorization:
         monkeypatch.delenv("MODSTORE_DIGEST_ADMIN_PASSWORD", raising=False)
 
         request = MagicMock()
-        with patch(
-            "app.fastapi_routes.market_account.session_id_from_request",
-            return_value="",
-        ), patch(
-            "app.application.surface_audit_demo_account.demo_username",
-            return_value="",
-        ), patch(
-            "app.application.surface_audit_demo_account.demo_password",
-            return_value="",
-        ), patch(
-            "app.fastapi_routes.market_account.login_market_with_password",
-            new_callable=AsyncMock,
-            return_value={"success": True, "token": "env_token"},
+        with (
+            patch(
+                "app.fastapi_routes.market_account.session_id_from_request",
+                return_value="",
+            ),
+            patch(
+                "app.application.surface_audit_demo_account.demo_username",
+                return_value="",
+            ),
+            patch(
+                "app.application.surface_audit_demo_account.demo_password",
+                return_value="",
+            ),
+            patch(
+                "app.fastapi_routes.market_account.login_market_with_password",
+                new_callable=AsyncMock,
+                return_value={"success": True, "token": "env_token"},
+            ),
         ):
             result = await _resolve_market_authorization(request)
         assert result == "env_token"
@@ -76,19 +83,24 @@ class TestResolveMarketAuthorization:
         monkeypatch.delenv("MODSTORE_DIGEST_ADMIN_PASSWORD", raising=False)
 
         request = MagicMock()
-        with patch(
-            "app.fastapi_routes.market_account.session_id_from_request",
-            return_value="",
-        ), patch(
-            "app.application.surface_audit_demo_account.demo_username",
-            return_value="",
-        ), patch(
-            "app.application.surface_audit_demo_account.demo_password",
-            return_value="",
-        ), patch(
-            "app.fastapi_routes.market_account.login_market_with_password",
-            new_callable=AsyncMock,
-            return_value={"success": False},
+        with (
+            patch(
+                "app.fastapi_routes.market_account.session_id_from_request",
+                return_value="",
+            ),
+            patch(
+                "app.application.surface_audit_demo_account.demo_username",
+                return_value="",
+            ),
+            patch(
+                "app.application.surface_audit_demo_account.demo_password",
+                return_value="",
+            ),
+            patch(
+                "app.fastapi_routes.market_account.login_market_with_password",
+                new_callable=AsyncMock,
+                return_value={"success": False},
+            ),
         ):
             result = await _resolve_market_authorization(request)
         assert result == ""
@@ -103,15 +115,19 @@ class TestResolveMarketAuthorization:
         monkeypatch.delenv("MODSTORE_DIGEST_ADMIN_PASSWORD", raising=False)
 
         request = MagicMock()
-        with patch(
-            "app.fastapi_routes.market_account.session_id_from_request",
-            return_value="",
-        ), patch(
-            "app.application.surface_audit_demo_account.demo_username",
-            return_value="",
-        ), patch(
-            "app.application.surface_audit_demo_account.demo_password",
-            return_value="",
+        with (
+            patch(
+                "app.fastapi_routes.market_account.session_id_from_request",
+                return_value="",
+            ),
+            patch(
+                "app.application.surface_audit_demo_account.demo_username",
+                return_value="",
+            ),
+            patch(
+                "app.application.surface_audit_demo_account.demo_password",
+                return_value="",
+            ),
         ):
             result = await _resolve_market_authorization(request)
         assert result == ""
@@ -126,19 +142,24 @@ class TestResolveMarketAuthorization:
         monkeypatch.setenv("MODSTORE_DIGEST_ADMIN_PASSWORD", "digest_pass")
 
         request = MagicMock()
-        with patch(
-            "app.fastapi_routes.market_account.session_id_from_request",
-            return_value="",
-        ), patch(
-            "app.application.surface_audit_demo_account.demo_username",
-            return_value="",
-        ), patch(
-            "app.application.surface_audit_demo_account.demo_password",
-            return_value="",
-        ), patch(
-            "app.fastapi_routes.market_account.login_market_with_password",
-            new_callable=AsyncMock,
-            return_value={"success": True, "token": "digest_token"},
+        with (
+            patch(
+                "app.fastapi_routes.market_account.session_id_from_request",
+                return_value="",
+            ),
+            patch(
+                "app.application.surface_audit_demo_account.demo_username",
+                return_value="",
+            ),
+            patch(
+                "app.application.surface_audit_demo_account.demo_password",
+                return_value="",
+            ),
+            patch(
+                "app.fastapi_routes.market_account.login_market_with_password",
+                new_callable=AsyncMock,
+                return_value={"success": True, "token": "digest_token"},
+            ),
         ):
             result = await _resolve_market_authorization(request)
         assert result == "digest_token"
@@ -153,19 +174,24 @@ class TestResolveMarketAuthorization:
         monkeypatch.delenv("MODSTORE_DIGEST_ADMIN_PASSWORD", raising=False)
 
         request = MagicMock()
-        with patch(
-            "app.fastapi_routes.market_account.session_id_from_request",
-            return_value="",
-        ), patch(
-            "app.application.surface_audit_demo_account.demo_username",
-            return_value="demo_user",
-        ), patch(
-            "app.application.surface_audit_demo_account.demo_password",
-            return_value="demo_pass",
-        ), patch(
-            "app.fastapi_routes.market_account.login_market_with_password",
-            new_callable=AsyncMock,
-            return_value={"success": True, "token": "demo_token"},
+        with (
+            patch(
+                "app.fastapi_routes.market_account.session_id_from_request",
+                return_value="",
+            ),
+            patch(
+                "app.application.surface_audit_demo_account.demo_username",
+                return_value="demo_user",
+            ),
+            patch(
+                "app.application.surface_audit_demo_account.demo_password",
+                return_value="demo_pass",
+            ),
+            patch(
+                "app.fastapi_routes.market_account.login_market_with_password",
+                new_callable=AsyncMock,
+                return_value={"success": True, "token": "demo_token"},
+            ),
         ):
             result = await _resolve_market_authorization(request)
         assert result == "demo_token"
@@ -204,16 +230,14 @@ class TestLoadSurfacePngBytes:
             new_callable=AsyncMock,
             return_value=mock_page,
         ):
-            result = await _load_surface_png_bytes(
-                "P-S", 0, prefer_remote=False, authorization=""
-            )
+            result = await _load_surface_png_bytes("P-S", 0, prefer_remote=False, authorization="")
         assert result == b"\x89PNG\r\n\x1a\n"
 
     @pytest.mark.asyncio
     async def test_local_path_with_android_capture(self):
-        from app.application.aibiz_web_terminal_service import _load_surface_png_bytes
-
         import base64
+
+        from app.application.aibiz_web_terminal_service import _load_surface_png_bytes
 
         b64_data = base64.b64encode(b"android screenshot").decode()
         mock_page = {"android_capture": True, "screenshot_b64": b64_data}
@@ -235,38 +259,40 @@ class TestLoadSurfacePngBytes:
         png_file.write_bytes(b"resolved png")
 
         mock_page = {"id": "home"}
-        with patch(
-            "app.application.aibiz_web_terminal_service._local_surface_page",
-            new_callable=AsyncMock,
-            return_value=mock_page,
-        ), patch(
-            "app.application.surface_audit_service.resolve_lane_page_png_path",
-            return_value=png_file,
+        with (
+            patch(
+                "app.application.aibiz_web_terminal_service._local_surface_page",
+                new_callable=AsyncMock,
+                return_value=mock_page,
+            ),
+            patch(
+                "app.application.surface_audit_service.resolve_lane_page_png_path",
+                return_value=png_file,
+            ),
         ):
-            result = await _load_surface_png_bytes(
-                "P-S", 0, prefer_remote=False, authorization=""
-            )
+            result = await _load_surface_png_bytes("P-S", 0, prefer_remote=False, authorization="")
         assert result == b"resolved png"
 
     @pytest.mark.asyncio
     async def test_local_path_with_b64_fallback(self):
-        from app.application.aibiz_web_terminal_service import _load_surface_png_bytes
-
         import base64
+
+        from app.application.aibiz_web_terminal_service import _load_surface_png_bytes
 
         b64_data = base64.b64encode(b"fallback png").decode()
         mock_page = {"screenshot_b64": b64_data}
-        with patch(
-            "app.application.aibiz_web_terminal_service._local_surface_page",
-            new_callable=AsyncMock,
-            return_value=mock_page,
-        ), patch(
-            "app.application.surface_audit_service.resolve_lane_page_png_path",
-            return_value=None,
+        with (
+            patch(
+                "app.application.aibiz_web_terminal_service._local_surface_page",
+                new_callable=AsyncMock,
+                return_value=mock_page,
+            ),
+            patch(
+                "app.application.surface_audit_service.resolve_lane_page_png_path",
+                return_value=None,
+            ),
         ):
-            result = await _load_surface_png_bytes(
-                "P-S", 0, prefer_remote=False, authorization=""
-            )
+            result = await _load_surface_png_bytes("P-S", 0, prefer_remote=False, authorization="")
         assert result == b"fallback png"
 
     @pytest.mark.asyncio
@@ -278,9 +304,7 @@ class TestLoadSurfacePngBytes:
             new_callable=AsyncMock,
             return_value=None,
         ):
-            result = await _load_surface_png_bytes(
-                "P-S", 0, prefer_remote=False, authorization=""
-            )
+            result = await _load_surface_png_bytes("P-S", 0, prefer_remote=False, authorization="")
         assert result is None
 
     @pytest.mark.asyncio
@@ -296,13 +320,17 @@ class TestLoadSurfacePngBytes:
         mock_client.__aexit__.return_value = None
         mock_client.get = AsyncMock(return_value=mock_response)
 
-        with patch(
-            "app.application.aibiz_web_terminal_service._local_surface_page",
-            new_callable=AsyncMock,
-            return_value=None,
-        ), patch("httpx.AsyncClient", return_value=mock_client), patch(
-            "app.fastapi_routes.market_account._market_base_url",
-            return_value="https://example.com",
+        with (
+            patch(
+                "app.application.aibiz_web_terminal_service._local_surface_page",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+            patch("httpx.AsyncClient", return_value=mock_client),
+            patch(
+                "app.fastapi_routes.market_account._market_base_url",
+                return_value="https://example.com",
+            ),
         ):
             result = await _load_surface_png_bytes(
                 "P-W", 0, prefer_remote=True, authorization="Bearer token"
@@ -321,13 +349,17 @@ class TestLoadSurfacePngBytes:
         mock_client.__aexit__.return_value = None
         mock_client.get = AsyncMock(return_value=mock_response)
 
-        with patch(
-            "app.application.aibiz_web_terminal_service._local_surface_page",
-            new_callable=AsyncMock,
-            return_value=None,
-        ), patch("httpx.AsyncClient", return_value=mock_client), patch(
-            "app.fastapi_routes.market_account._market_base_url",
-            return_value="https://example.com",
+        with (
+            patch(
+                "app.application.aibiz_web_terminal_service._local_surface_page",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+            patch("httpx.AsyncClient", return_value=mock_client),
+            patch(
+                "app.fastapi_routes.market_account._market_base_url",
+                return_value="https://example.com",
+            ),
         ):
             result = await _load_surface_png_bytes(
                 "P-W", 0, prefer_remote=True, authorization="Bearer token"
@@ -343,9 +375,7 @@ class TestLoadSurfacePngBytes:
             new_callable=AsyncMock,
             return_value=None,
         ):
-            result = await _load_surface_png_bytes(
-                "P-W", 0, prefer_remote=True, authorization=""
-            )
+            result = await _load_surface_png_bytes("P-W", 0, prefer_remote=True, authorization="")
         assert result is None
 
 
@@ -359,8 +389,9 @@ class TestServeSurfaceImage:
 
     @pytest.mark.asyncio
     async def test_runtime_error_returns_500(self):
-        from app.application.aibiz_web_terminal_service import serve_surface_image
         from fastapi.responses import JSONResponse
+
+        from app.application.aibiz_web_terminal_service import serve_surface_image
 
         request = MagicMock()
         with patch(
@@ -374,18 +405,22 @@ class TestServeSurfaceImage:
 
     @pytest.mark.asyncio
     async def test_no_auth_no_screenshot_returns_401(self):
-        from app.application.aibiz_web_terminal_service import serve_surface_image
         from fastapi.responses import JSONResponse
 
+        from app.application.aibiz_web_terminal_service import serve_surface_image
+
         request = MagicMock()
-        with patch(
-            "app.application.aibiz_web_terminal_service._resolve_market_authorization",
-            new_callable=AsyncMock,
-            return_value="",
-        ), patch(
-            "app.application.aibiz_web_terminal_service._load_surface_png_bytes",
-            new_callable=AsyncMock,
-            return_value=None,
+        with (
+            patch(
+                "app.application.aibiz_web_terminal_service._resolve_market_authorization",
+                new_callable=AsyncMock,
+                return_value="",
+            ),
+            patch(
+                "app.application.aibiz_web_terminal_service._load_surface_png_bytes",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
         ):
             result = await serve_surface_image(request, terminal="web", index=0)
         assert isinstance(result, JSONResponse)
@@ -393,18 +428,22 @@ class TestServeSurfaceImage:
 
     @pytest.mark.asyncio
     async def test_auth_but_no_screenshot_returns_404(self):
-        from app.application.aibiz_web_terminal_service import serve_surface_image
         from fastapi.responses import JSONResponse
 
+        from app.application.aibiz_web_terminal_service import serve_surface_image
+
         request = MagicMock()
-        with patch(
-            "app.application.aibiz_web_terminal_service._resolve_market_authorization",
-            new_callable=AsyncMock,
-            return_value="Bearer token",
-        ), patch(
-            "app.application.aibiz_web_terminal_service._load_surface_png_bytes",
-            new_callable=AsyncMock,
-            return_value=None,
+        with (
+            patch(
+                "app.application.aibiz_web_terminal_service._resolve_market_authorization",
+                new_callable=AsyncMock,
+                return_value="Bearer token",
+            ),
+            patch(
+                "app.application.aibiz_web_terminal_service._load_surface_png_bytes",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
         ):
             result = await serve_surface_image(request, terminal="web", index=0)
         assert isinstance(result, JSONResponse)
@@ -412,40 +451,46 @@ class TestServeSurfaceImage:
 
     @pytest.mark.asyncio
     async def test_success_returns_png_response(self):
-        from app.application.aibiz_web_terminal_service import serve_surface_image
         from fastapi.responses import Response
 
+        from app.application.aibiz_web_terminal_service import serve_surface_image
+
         request = MagicMock()
-        with patch(
-            "app.application.aibiz_web_terminal_service._resolve_market_authorization",
-            new_callable=AsyncMock,
-            return_value="Bearer token",
-        ), patch(
-            "app.application.aibiz_web_terminal_service._load_surface_png_bytes",
-            new_callable=AsyncMock,
-            return_value=b"\x89PNG\r\n\x1a\n",
+        with (
+            patch(
+                "app.application.aibiz_web_terminal_service._resolve_market_authorization",
+                new_callable=AsyncMock,
+                return_value="Bearer token",
+            ),
+            patch(
+                "app.application.aibiz_web_terminal_service._load_surface_png_bytes",
+                new_callable=AsyncMock,
+                return_value=b"\x89PNG\r\n\x1a\n",
+            ),
         ):
-            result = await serve_surface_image(
-                request, terminal="web", index=0, view="thumb"
-            )
+            result = await serve_surface_image(request, terminal="web", index=0, view="thumb")
         assert isinstance(result, Response)
         assert result.media_type == "image/png"
 
     @pytest.mark.asyncio
     async def test_unknown_terminal_defaults_to_web(self):
-        from app.application.aibiz_web_terminal_service import serve_surface_image
         from fastapi.responses import Response
 
+        from app.application.aibiz_web_terminal_service import serve_surface_image
+
         request = MagicMock()
-        with patch(
-            "app.application.aibiz_web_terminal_service._resolve_market_authorization",
-            new_callable=AsyncMock,
-            return_value="Bearer token",
-        ), patch(
-            "app.application.aibiz_web_terminal_service._load_surface_png_bytes",
-            new_callable=AsyncMock,
-            return_value=b"\x89PNG\r\n\x1a\n",
-        ) as mock_load:
+        with (
+            patch(
+                "app.application.aibiz_web_terminal_service._resolve_market_authorization",
+                new_callable=AsyncMock,
+                return_value="Bearer token",
+            ),
+            patch(
+                "app.application.aibiz_web_terminal_service._load_surface_png_bytes",
+                new_callable=AsyncMock,
+                return_value=b"\x89PNG\r\n\x1a\n",
+            ) as mock_load,
+        ):
             result = await serve_surface_image(request, terminal="unknown", index=0)
         assert isinstance(result, Response)
         # Should default to P-W lane.
@@ -467,17 +512,21 @@ class TestBuildTerminalPayload:
 
         request = MagicMock()
         mock_surface = {"pages": [{"id": "home", "name": "首页"}]}
-        with patch(
-            "app.application.aibiz_web_terminal_service._resolve_market_authorization",
-            new_callable=AsyncMock,
-            return_value="",
-        ), patch(
-            "app.application.aibiz_web_terminal_service._resolve_surface_audit",
-            new_callable=AsyncMock,
-            return_value=(mock_surface, "local"),
-        ), patch(
-            "app.fastapi_routes.market_account._market_base_url",
-            return_value="https://example.com",
+        with (
+            patch(
+                "app.application.aibiz_web_terminal_service._resolve_market_authorization",
+                new_callable=AsyncMock,
+                return_value="",
+            ),
+            patch(
+                "app.application.aibiz_web_terminal_service._resolve_surface_audit",
+                new_callable=AsyncMock,
+                return_value=(mock_surface, "local"),
+            ),
+            patch(
+                "app.fastapi_routes.market_account._market_base_url",
+                return_value="https://example.com",
+            ),
         ):
             result = await build_terminal_payload(request, terminal="software")
         assert result["success"] is True
@@ -486,21 +535,26 @@ class TestBuildTerminalPayload:
 
     @pytest.mark.asyncio
     async def test_no_auth_no_pages_returns_401(self):
-        from app.application.aibiz_web_terminal_service import build_terminal_payload
         from fastapi.responses import JSONResponse
 
+        from app.application.aibiz_web_terminal_service import build_terminal_payload
+
         request = MagicMock()
-        with patch(
-            "app.application.aibiz_web_terminal_service._resolve_market_authorization",
-            new_callable=AsyncMock,
-            return_value="",
-        ), patch(
-            "app.application.aibiz_web_terminal_service._resolve_surface_audit",
-            new_callable=AsyncMock,
-            return_value=({}, "no data"),
-        ), patch(
-            "app.fastapi_routes.market_account._market_base_url",
-            return_value="https://example.com",
+        with (
+            patch(
+                "app.application.aibiz_web_terminal_service._resolve_market_authorization",
+                new_callable=AsyncMock,
+                return_value="",
+            ),
+            patch(
+                "app.application.aibiz_web_terminal_service._resolve_surface_audit",
+                new_callable=AsyncMock,
+                return_value=({}, "no data"),
+            ),
+            patch(
+                "app.fastapi_routes.market_account._market_base_url",
+                return_value="https://example.com",
+            ),
         ):
             result = await build_terminal_payload(request, terminal="web")
         assert isinstance(result, JSONResponse)
@@ -512,17 +566,21 @@ class TestBuildTerminalPayload:
 
         request = MagicMock()
         mock_surface = {"pages": [{"id": "home"}]}
-        with patch(
-            "app.application.aibiz_web_terminal_service._resolve_market_authorization",
-            new_callable=AsyncMock,
-            return_value="Bearer token",
-        ), patch(
-            "app.application.aibiz_web_terminal_service._resolve_surface_audit",
-            new_callable=AsyncMock,
-            return_value=(mock_surface, "remote"),
-        ), patch(
-            "app.fastapi_routes.market_account._market_base_url",
-            return_value="https://example.com",
+        with (
+            patch(
+                "app.application.aibiz_web_terminal_service._resolve_market_authorization",
+                new_callable=AsyncMock,
+                return_value="Bearer token",
+            ),
+            patch(
+                "app.application.aibiz_web_terminal_service._resolve_surface_audit",
+                new_callable=AsyncMock,
+                return_value=(mock_surface, "remote"),
+            ),
+            patch(
+                "app.fastapi_routes.market_account._market_base_url",
+                return_value="https://example.com",
+            ),
         ):
             result = await build_terminal_payload(request, terminal="web")
         assert result["success"] is True
@@ -530,30 +588,33 @@ class TestBuildTerminalPayload:
 
     @pytest.mark.asyncio
     async def test_market_proxy_unavailable_returns_500(self):
-        from app.application.aibiz_web_terminal_service import build_terminal_payload
         from fastapi.responses import JSONResponse
 
+        from app.application.aibiz_web_terminal_service import build_terminal_payload
+
         request = MagicMock()
-        with patch.dict(
-            "sys.modules", {"app.fastapi_routes.market_account": None}
-        ):
+        with patch.dict("sys.modules", {"app.fastapi_routes.market_account": None}):
             result = await build_terminal_payload(request, terminal="web")
         assert isinstance(result, JSONResponse)
         assert result.status_code == 500
 
     @pytest.mark.asyncio
     async def test_auth_runtime_error_returns_500(self):
-        from app.application.aibiz_web_terminal_service import build_terminal_payload
         from fastapi.responses import JSONResponse
 
+        from app.application.aibiz_web_terminal_service import build_terminal_payload
+
         request = MagicMock()
-        with patch(
-            "app.application.aibiz_web_terminal_service._resolve_market_authorization",
-            new_callable=AsyncMock,
-            side_effect=RuntimeError("boom"),
-        ), patch(
-            "app.fastapi_routes.market_account._market_base_url",
-            return_value="https://example.com",
+        with (
+            patch(
+                "app.application.aibiz_web_terminal_service._resolve_market_authorization",
+                new_callable=AsyncMock,
+                side_effect=RuntimeError("boom"),
+            ),
+            patch(
+                "app.fastapi_routes.market_account._market_base_url",
+                return_value="https://example.com",
+            ),
         ):
             result = await build_terminal_payload(request, terminal="web")
         assert isinstance(result, JSONResponse)
@@ -570,21 +631,23 @@ class TestFetchSurfacePagePayload:
 
     @pytest.mark.asyncio
     async def test_local_lane_index_out_of_range(self):
-        from app.application.aibiz_web_terminal_service import fetch_surface_page_payload
         from fastapi.responses import JSONResponse
 
+        from app.application.aibiz_web_terminal_service import fetch_surface_page_payload
+
         request = MagicMock()
-        with patch(
-            "app.application.aibiz_web_terminal_service._resolve_market_authorization",
-            new_callable=AsyncMock,
-            return_value="",
-        ), patch(
-            "app.application.surface_audit_service.run_surface_audit_lane",
-            return_value={"pages": [{"id": "home"}]},
+        with (
+            patch(
+                "app.application.aibiz_web_terminal_service._resolve_market_authorization",
+                new_callable=AsyncMock,
+                return_value="",
+            ),
+            patch(
+                "app.application.surface_audit_service.run_surface_audit_lane",
+                return_value={"pages": [{"id": "home"}]},
+            ),
         ):
-            result = await fetch_surface_page_payload(
-                request, terminal="software", index=5
-            )
+            result = await fetch_surface_page_payload(request, terminal="software", index=5)
         assert isinstance(result, JSONResponse)
         assert result.status_code == 404
 
@@ -598,37 +661,40 @@ class TestFetchSurfacePagePayload:
                 {"name": "Home", "url": "/", "status": 200, "title": "Home Page"},
             ]
         }
-        with patch(
-            "app.application.aibiz_web_terminal_service._resolve_market_authorization",
-            new_callable=AsyncMock,
-            return_value="",
-        ), patch(
-            "app.application.surface_audit_service.run_surface_audit_lane",
-            return_value=mock_local,
+        with (
+            patch(
+                "app.application.aibiz_web_terminal_service._resolve_market_authorization",
+                new_callable=AsyncMock,
+                return_value="",
+            ),
+            patch(
+                "app.application.surface_audit_service.run_surface_audit_lane",
+                return_value=mock_local,
+            ),
         ):
-            result = await fetch_surface_page_payload(
-                request, terminal="software", index=0
-            )
+            result = await fetch_surface_page_payload(request, terminal="software", index=0)
         assert result["success"] is True
         assert result["data"]["name"] == "Home"
 
     @pytest.mark.asyncio
     async def test_local_lane_recoverable_error(self):
-        from app.application.aibiz_web_terminal_service import fetch_surface_page_payload
         from fastapi.responses import JSONResponse
 
+        from app.application.aibiz_web_terminal_service import fetch_surface_page_payload
+
         request = MagicMock()
-        with patch(
-            "app.application.aibiz_web_terminal_service._resolve_market_authorization",
-            new_callable=AsyncMock,
-            return_value="",
-        ), patch(
-            "app.application.surface_audit_service.run_surface_audit_lane",
-            side_effect=RuntimeError("boom"),
+        with (
+            patch(
+                "app.application.aibiz_web_terminal_service._resolve_market_authorization",
+                new_callable=AsyncMock,
+                return_value="",
+            ),
+            patch(
+                "app.application.surface_audit_service.run_surface_audit_lane",
+                side_effect=RuntimeError("boom"),
+            ),
         ):
-            result = await fetch_surface_page_payload(
-                request, terminal="software", index=0
-            )
+            result = await fetch_surface_page_payload(request, terminal="software", index=0)
         assert isinstance(result, JSONResponse)
         assert result.status_code == 500
 
@@ -637,68 +703,74 @@ class TestFetchSurfacePagePayload:
         from app.application.aibiz_web_terminal_service import fetch_surface_page_payload
 
         request = MagicMock()
-        with patch(
-            "app.application.aibiz_web_terminal_service._resolve_market_authorization",
-            new_callable=AsyncMock,
-            return_value="Bearer token",
-        ), patch(
-            "app.fastapi_routes.market_account._proxy_json",
-            new_callable=AsyncMock,
-            return_value={"success": True, "data": {"name": "Remote"}},
+        with (
+            patch(
+                "app.application.aibiz_web_terminal_service._resolve_market_authorization",
+                new_callable=AsyncMock,
+                return_value="Bearer token",
+            ),
+            patch(
+                "app.fastapi_routes.market_account._proxy_json",
+                new_callable=AsyncMock,
+                return_value={"success": True, "data": {"name": "Remote"}},
+            ),
         ):
-            result = await fetch_surface_page_payload(
-                request, terminal="web", index=0
-            )
+            result = await fetch_surface_page_payload(request, terminal="web", index=0)
         assert result["success"] is True
         assert result["data"]["name"] == "Remote"
 
     @pytest.mark.asyncio
     async def test_remote_lane_error_response(self):
-        from app.application.aibiz_web_terminal_service import fetch_surface_page_payload
         from fastapi.responses import JSONResponse
+
+        from app.application.aibiz_web_terminal_service import fetch_surface_page_payload
 
         request = MagicMock()
         err_resp = JSONResponse({"error": "bad"}, status_code=500)
-        with patch(
-            "app.application.aibiz_web_terminal_service._resolve_market_authorization",
-            new_callable=AsyncMock,
-            return_value="Bearer token",
-        ), patch(
-            "app.fastapi_routes.market_account._proxy_json",
-            new_callable=AsyncMock,
-            return_value=err_resp,
+        with (
+            patch(
+                "app.application.aibiz_web_terminal_service._resolve_market_authorization",
+                new_callable=AsyncMock,
+                return_value="Bearer token",
+            ),
+            patch(
+                "app.fastapi_routes.market_account._proxy_json",
+                new_callable=AsyncMock,
+                return_value=err_resp,
+            ),
         ):
-            result = await fetch_surface_page_payload(
-                request, terminal="web", index=0
-            )
+            result = await fetch_surface_page_payload(request, terminal="web", index=0)
         # Should return the error response.
         assert isinstance(result, JSONResponse)
 
     @pytest.mark.asyncio
     async def test_remote_lane_no_success(self):
-        from app.application.aibiz_web_terminal_service import fetch_surface_page_payload
         from fastapi.responses import JSONResponse
 
+        from app.application.aibiz_web_terminal_service import fetch_surface_page_payload
+
         request = MagicMock()
-        with patch(
-            "app.application.aibiz_web_terminal_service._resolve_market_authorization",
-            new_callable=AsyncMock,
-            return_value="Bearer token",
-        ), patch(
-            "app.fastapi_routes.market_account._proxy_json",
-            new_callable=AsyncMock,
-            return_value={"success": False, "message": "unavailable"},
+        with (
+            patch(
+                "app.application.aibiz_web_terminal_service._resolve_market_authorization",
+                new_callable=AsyncMock,
+                return_value="Bearer token",
+            ),
+            patch(
+                "app.fastapi_routes.market_account._proxy_json",
+                new_callable=AsyncMock,
+                return_value={"success": False, "message": "unavailable"},
+            ),
         ):
-            result = await fetch_surface_page_payload(
-                request, terminal="web", index=0
-            )
+            result = await fetch_surface_page_payload(request, terminal="web", index=0)
         assert isinstance(result, JSONResponse)
         assert result.status_code == 502
 
     @pytest.mark.asyncio
     async def test_auth_runtime_error_returns_500(self):
-        from app.application.aibiz_web_terminal_service import fetch_surface_page_payload
         from fastapi.responses import JSONResponse
+
+        from app.application.aibiz_web_terminal_service import fetch_surface_page_payload
 
         request = MagicMock()
         with patch(
@@ -706,9 +778,7 @@ class TestFetchSurfacePagePayload:
             new_callable=AsyncMock,
             side_effect=RuntimeError("boom"),
         ):
-            result = await fetch_surface_page_payload(
-                request, terminal="web", index=0
-            )
+            result = await fetch_surface_page_payload(request, terminal="web", index=0)
         assert isinstance(result, JSONResponse)
         assert result.status_code == 500
 
@@ -876,8 +946,9 @@ class TestFetchRemoteSurfaceAudit:
 
     @pytest.mark.asyncio
     async def test_error_response_404(self):
-        from app.application.aibiz_web_terminal_service import _fetch_remote_surface_audit
         from fastapi.responses import JSONResponse
+
+        from app.application.aibiz_web_terminal_service import _fetch_remote_surface_audit
 
         err_resp = JSONResponse({"error": "not found"}, status_code=404)
         with patch(
@@ -892,8 +963,9 @@ class TestFetchRemoteSurfaceAudit:
 
     @pytest.mark.asyncio
     async def test_error_response_500(self):
-        from app.application.aibiz_web_terminal_service import _fetch_remote_surface_audit
         from fastapi.responses import JSONResponse
+
+        from app.application.aibiz_web_terminal_service import _fetch_remote_surface_audit
 
         err_resp = JSONResponse({"error": "server error"}, status_code=500)
         with patch(

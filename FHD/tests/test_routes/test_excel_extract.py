@@ -28,7 +28,6 @@ from app.fastapi_routes.excel_extract import (
     import_products,
 )
 
-
 # ---------------------------------------------------------------------------
 # _extract_from_excel
 # ---------------------------------------------------------------------------
@@ -118,7 +117,10 @@ class TestExtractFromExcel:
             os.unlink(path)
 
     def test_extract_error(self):
-        with patch("app.fastapi_routes.excel_extract._extract_from_excel", side_effect=RuntimeError("corrupt")):
+        with patch(
+            "app.fastapi_routes.excel_extract._extract_from_excel",
+            side_effect=RuntimeError("corrupt"),
+        ):
             # The route handler catches RECOVERABLE_ERRORS
             result, status = _extract_from_excel("/fake/path.xlsx")
             # If it's a direct call, the error propagates; if patched, we test the route
@@ -340,33 +342,57 @@ class TestImportProductsRoute:
     def test_import_success(self):
         mock_svc = MagicMock()
         mock_svc.import_data.return_value = {
-            "imported": 1, "skipped": 0, "failed": 0, "details": []
+            "imported": 1,
+            "skipped": 0,
+            "failed": 0,
+            "details": [],
         }
         mock_log_svc = MagicMock()
         mock_log_svc.create_log.return_value = 1
-        with patch("app.application.facades.excel_facade.get_product_import_service", return_value=mock_svc), \
-             patch("app.application.get_extract_log_app_service", return_value=mock_log_svc):
+        with (
+            patch(
+                "app.application.facades.excel_facade.get_product_import_service",
+                return_value=mock_svc,
+            ),
+            patch("app.application.get_extract_log_app_service", return_value=mock_log_svc),
+        ):
             resp = import_products({"data": [{"product_name": "Test"}]})
             assert resp.status_code == 200
 
     def test_import_with_ai_parse(self):
         mock_parser = MagicMock()
         mock_parser.parse_single.return_value = {
-            "success": True, "product_code": "P1", "product_name": "PN", "specification": "S1"
+            "success": True,
+            "product_code": "P1",
+            "product_name": "PN",
+            "specification": "S1",
         }
         mock_svc = MagicMock()
         mock_svc.import_data.return_value = {
-            "imported": 1, "skipped": 0, "failed": 0, "details": []
+            "imported": 1,
+            "skipped": 0,
+            "failed": 0,
+            "details": [],
         }
         mock_log_svc = MagicMock()
         mock_log_svc.create_log.return_value = 1
-        with patch("app.application.facades.excel_facade.get_product_import_service", return_value=mock_svc), \
-             patch("app.application.get_extract_log_app_service", return_value=mock_log_svc), \
-             patch("app.application.facades.excel_facade.get_ai_product_parser", return_value=mock_parser):
-            resp = import_products({
-                "data": [{"raw_text": "some text"}],
-                "options": {"use_ai_parse": True, "ai_source_field": "raw_text"},
-            })
+        with (
+            patch(
+                "app.application.facades.excel_facade.get_product_import_service",
+                return_value=mock_svc,
+            ),
+            patch("app.application.get_extract_log_app_service", return_value=mock_log_svc),
+            patch(
+                "app.application.facades.excel_facade.get_ai_product_parser",
+                return_value=mock_parser,
+            ),
+        ):
+            resp = import_products(
+                {
+                    "data": [{"raw_text": "some text"}],
+                    "options": {"use_ai_parse": True, "ai_source_field": "raw_text"},
+                }
+            )
             assert resp.status_code == 200
 
     def test_import_error(self):
@@ -374,8 +400,13 @@ class TestImportProductsRoute:
         mock_log_svc.create_log.return_value = 1
         mock_svc = MagicMock()
         mock_svc.import_data.side_effect = RuntimeError("import fail")
-        with patch("app.application.facades.excel_facade.get_product_import_service", return_value=mock_svc), \
-             patch("app.application.get_extract_log_app_service", return_value=mock_log_svc):
+        with (
+            patch(
+                "app.application.facades.excel_facade.get_product_import_service",
+                return_value=mock_svc,
+            ),
+            patch("app.application.get_extract_log_app_service", return_value=mock_log_svc),
+        ):
             resp = import_products({"data": [{"product_name": "Test"}]})
             assert resp.status_code == 500
 
@@ -388,12 +419,17 @@ class TestImportCustomersRoute:
     def test_import_success(self):
         mock_svc = MagicMock()
         mock_svc.import_data.return_value = {
-            "imported": 1, "skipped": 0, "failed": 0, "details": []
+            "imported": 1,
+            "skipped": 0,
+            "failed": 0,
+            "details": [],
         }
         mock_log_svc = MagicMock()
         mock_log_svc.create_log.return_value = 1
-        with patch("app.application.get_customer_app_service", return_value=mock_svc), \
-             patch("app.application.get_extract_log_app_service", return_value=mock_log_svc):
+        with (
+            patch("app.application.get_customer_app_service", return_value=mock_svc),
+            patch("app.application.get_extract_log_app_service", return_value=mock_log_svc),
+        ):
             resp = import_customers({"data": [{"customer_name": "Test"}]})
             assert resp.status_code == 200
 
@@ -402,8 +438,10 @@ class TestImportCustomersRoute:
         mock_svc.import_data.side_effect = RuntimeError("import fail")
         mock_log_svc = MagicMock()
         mock_log_svc.create_log.return_value = 1
-        with patch("app.application.get_customer_app_service", return_value=mock_svc), \
-             patch("app.application.get_extract_log_app_service", return_value=mock_log_svc):
+        with (
+            patch("app.application.get_customer_app_service", return_value=mock_svc),
+            patch("app.application.get_extract_log_app_service", return_value=mock_log_svc),
+        ):
             resp = import_customers({"data": [{"customer_name": "Test"}]})
             assert resp.status_code == 500
 

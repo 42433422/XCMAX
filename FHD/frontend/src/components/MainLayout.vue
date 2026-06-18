@@ -546,8 +546,10 @@ const ensureSidebarExpandedForTutorial = () => {
 }
 
 const scheduleSidebarAutoCollapse = () => {
-  if (isAnyTutorialActive.value) return
-  if (!isSidebarFeatureEnabled.value || sidebarCollapsed.value) return
+  if (isAnyTutorialActive.value || !isSidebarFeatureEnabled.value || sidebarCollapsed.value) {
+    clearSidebarCollapseTimer()
+    return
+  }
   clearSidebarCollapseTimer()
   sidebarCollapseTimer = window.setTimeout(() => {
     if (isAnyTutorialActive.value) return

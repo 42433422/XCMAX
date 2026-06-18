@@ -29,7 +29,11 @@ class TriggerBinding:
     def from_manifest(cls, employee_id: str, manifest: dict[str, Any] | None) -> TriggerBinding:
         manifest = manifest if isinstance(manifest, dict) else {}
         triggers = manifest.get("triggers") if isinstance(manifest.get("triggers"), dict) else {}
-        v2 = manifest.get("employee_config_v2") if isinstance(manifest.get("employee_config_v2"), dict) else {}
+        v2 = (
+            manifest.get("employee_config_v2")
+            if isinstance(manifest.get("employee_config_v2"), dict)
+            else {}
+        )
         if not triggers and isinstance(v2.get("triggers"), dict):
             triggers = v2["triggers"]
         sla = manifest.get("sla") if isinstance(manifest.get("sla"), dict) else {}

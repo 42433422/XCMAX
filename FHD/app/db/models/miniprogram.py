@@ -190,7 +190,6 @@ class MpFeedback(Base):
         "User",
         foreign_keys=[user_id],
         back_populates="mp_feedbacks",
-        overlaps="user",
     )
 
 

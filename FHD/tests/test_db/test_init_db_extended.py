@@ -1,4 +1,5 @@
 """Tests for app.db.init_db — extended coverage."""
+
 from __future__ import annotations
 
 import json
@@ -23,6 +24,7 @@ def tmp_dir():
     d = tempfile.mkdtemp()
     yield d
     import shutil
+
     shutil.rmtree(d, ignore_errors=True)
 
 
@@ -51,6 +53,7 @@ class TestInitializeDatabases:
         os.makedirs(seed_dir, exist_ok=True)
         seed_path = os.path.join(seed_dir, "test.db")
         import sqlite3
+
         conn = sqlite3.connect(seed_path)
         conn.execute("CREATE TABLE t (id INTEGER)")
         conn.commit()
@@ -96,13 +99,16 @@ class TestEnsureSqlitePerModDatabaseCopies:
         # Create mother db
         mother = os.path.join(tmp_dir, "products.db")
         import sqlite3
+
         conn = sqlite3.connect(mother)
         conn.execute("CREATE TABLE t (id INTEGER)")
         conn.commit()
         conn.close()
 
-        with patch("app.db.sqlite_mod_paths.sqlite_filename_with_mod_suffix",
-                    lambda name, mod_id: f"products__{mod_id}.db"):
+        with patch(
+            "app.db.sqlite_mod_paths.sqlite_filename_with_mod_suffix",
+            lambda name, mod_id: f"products__{mod_id}.db",
+        ):
             ensure_sqlite_per_mod_database_copies(["mymod"])
 
         assert os.path.exists(os.path.join(tmp_dir, "products__mymod.db"))
@@ -111,8 +117,10 @@ class TestEnsureSqlitePerModDatabaseCopies:
         from app.db.init_db import ensure_sqlite_per_mod_database_copies
 
         monkeypatch.setattr("app.db.init_db.get_app_data_dir", lambda: tmp_dir)
-        with patch("app.db.sqlite_mod_paths.sqlite_filename_with_mod_suffix",
-                    lambda name, mod_id: f"products__{mod_id}.db"):
+        with patch(
+            "app.db.sqlite_mod_paths.sqlite_filename_with_mod_suffix",
+            lambda name, mod_id: f"products__{mod_id}.db",
+        ):
             ensure_sqlite_per_mod_database_copies(["", "  ", None])
 
     def test_skips_duplicate_mod_ids(self, tmp_dir, monkeypatch):
@@ -121,13 +129,16 @@ class TestEnsureSqlitePerModDatabaseCopies:
         monkeypatch.setattr("app.db.init_db.get_app_data_dir", lambda: tmp_dir)
         mother = os.path.join(tmp_dir, "products.db")
         import sqlite3
+
         conn = sqlite3.connect(mother)
         conn.execute("CREATE TABLE t (id INTEGER)")
         conn.commit()
         conn.close()
 
-        with patch("app.db.sqlite_mod_paths.sqlite_filename_with_mod_suffix",
-                    lambda name, mod_id: f"products__{mod_id}.db"):
+        with patch(
+            "app.db.sqlite_mod_paths.sqlite_filename_with_mod_suffix",
+            lambda name, mod_id: f"products__{mod_id}.db",
+        ):
             ensure_sqlite_per_mod_database_copies(["mymod", "mymod"])
         # Only one copy should be created
         assert os.path.exists(os.path.join(tmp_dir, "products__mymod.db"))
@@ -140,8 +151,10 @@ class TestEnsureSqlitePerModDatabaseCopies:
         with open(dest, "w") as f:
             f.write("existing")
 
-        with patch("app.db.sqlite_mod_paths.sqlite_filename_with_mod_suffix",
-                    lambda name, mod_id: f"products__{mod_id}.db"):
+        with patch(
+            "app.db.sqlite_mod_paths.sqlite_filename_with_mod_suffix",
+            lambda name, mod_id: f"products__{mod_id}.db",
+        ):
             ensure_sqlite_per_mod_database_copies(["mymod"])
         with open(dest) as f:
             assert f.read() == "existing"
@@ -158,6 +171,7 @@ class TestInitWechatTasksTable:
         init_wechat_tasks_table(db_path)
 
         import sqlite3
+
         conn = sqlite3.connect(db_path)
         tables = conn.execute(
             "SELECT name FROM sqlite_master WHERE type='table' AND name='wechat_tasks'"
@@ -210,10 +224,9 @@ class TestInitTemplateTables:
         init_template_tables(db_path)
 
         import sqlite3
+
         conn = sqlite3.connect(db_path)
-        tables = conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table'"
-        ).fetchall()
+        tables = conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
         table_names = {t[0] for t in tables}
         conn.close()
         assert "templates" in table_names
@@ -225,8 +238,11 @@ class TestInitTemplateTables:
         db_path = os.path.join(tmp_dir, "test.db")
         # Create a minimal table without all columns but with enough for index creation
         import sqlite3
+
         conn = sqlite3.connect(db_path)
-        conn.execute("CREATE TABLE templates (id INTEGER PRIMARY KEY AUTOINCREMENT, template_type TEXT, is_active INTEGER DEFAULT 1)")
+        conn.execute(
+            "CREATE TABLE templates (id INTEGER PRIMARY KEY AUTOINCREMENT, template_type TEXT, is_active INTEGER DEFAULT 1)"
+        )
         conn.execute(
             "CREATE TABLE template_usage_log (id INTEGER PRIMARY KEY AUTOINCREMENT, template_id INTEGER)"
         )
@@ -250,7 +266,9 @@ class TestResolveAuthBootstrapEngine:
     def test_returns_none_when_no_engine_or_url(self, monkeypatch):
         from app.db.init_db import _resolve_auth_bootstrap_engine
 
-        with patch("app.db.init_db._create_engine_for_url", side_effect=Exception("no"), create=True):
+        with patch(
+            "app.db.init_db._create_engine_for_url", side_effect=Exception("no"), create=True
+        ):
             with patch("app.db._get_engine", side_effect=Exception("no"), create=True):
                 result = _resolve_auth_bootstrap_engine(None, database_url="sqlite:///test.db")
         # When _create_engine_for_url fails and no engine provided,
@@ -278,7 +296,8 @@ class TestSeedDefaultAdminUser:
 
         # Create users table
         with sqlite_engine.begin() as conn:
-            conn.execute(text("""
+            conn.execute(
+                text("""
                 CREATE TABLE users (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     username VARCHAR NOT NULL UNIQUE,
@@ -290,7 +309,8 @@ class TestSeedDefaultAdminUser:
                     mfa_enabled BOOLEAN DEFAULT FALSE,
                     created_at TIMESTAMP
                 )
-            """))
+            """)
+            )
 
         _seed_default_admin_user(sqlite_engine)
 
@@ -302,7 +322,8 @@ class TestSeedDefaultAdminUser:
         from app.db.init_db import _seed_default_admin_user
 
         with sqlite_engine.begin() as conn:
-            conn.execute(text("""
+            conn.execute(
+                text("""
                 CREATE TABLE users (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     username VARCHAR NOT NULL UNIQUE,
@@ -314,11 +335,14 @@ class TestSeedDefaultAdminUser:
                     mfa_enabled BOOLEAN DEFAULT FALSE,
                     created_at TIMESTAMP
                 )
-            """))
-            conn.execute(text(
-                "INSERT INTO users (username, password, role, is_active) "
-                "VALUES ('existing', 'x', 'user', 1)"
-            ))
+            """)
+            )
+            conn.execute(
+                text(
+                    "INSERT INTO users (username, password, role, is_active) "
+                    "VALUES ('existing', 'x', 'user', 1)"
+                )
+            )
 
         _seed_default_admin_user(sqlite_engine)
 
@@ -335,7 +359,8 @@ class TestSeedDefaultAdminUser:
         monkeypatch.setenv("ADMIN_PASSWORD", "")
 
         with sqlite_engine.begin() as conn:
-            conn.execute(text("""
+            conn.execute(
+                text("""
                 CREATE TABLE users (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     username VARCHAR NOT NULL UNIQUE,
@@ -347,7 +372,8 @@ class TestSeedDefaultAdminUser:
                     mfa_enabled BOOLEAN DEFAULT FALSE,
                     created_at TIMESTAMP
                 )
-            """))
+            """)
+            )
 
         _seed_default_admin_user(sqlite_engine)
 
@@ -392,7 +418,8 @@ class TestEnsureSqliteRbacBootstrap:
         from app.db.init_db import ensure_sqlite_rbac_bootstrap
 
         # Need users table first for RBAC
-        from app.db.models.user import User, Session
+        from app.db.models.user import Session, User
+
         Base.metadata.create_all(sqlite_engine, tables=[User.__table__, Session.__table__])
 
         with patch("app.db.init_db._resolve_auth_bootstrap_engine", return_value=sqlite_engine):
@@ -452,14 +479,16 @@ class TestEnsureSessionsMarketAccessTokenColumn:
 
         # Create sessions table without market_access_token
         with sqlite_engine.begin() as conn:
-            conn.execute(text("""
+            conn.execute(
+                text("""
                 CREATE TABLE sessions (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     session_id VARCHAR NOT NULL,
                     user_id INTEGER NOT NULL,
                     expires_at TIMESTAMP NOT NULL
                 )
-            """))
+            """)
+            )
 
         ensure_sessions_market_access_token_column(engine=sqlite_engine)
 
@@ -472,7 +501,8 @@ class TestEnsureSessionsMarketAccessTokenColumn:
         from app.db.init_db import ensure_sessions_market_access_token_column
 
         with sqlite_engine.begin() as conn:
-            conn.execute(text("""
+            conn.execute(
+                text("""
                 CREATE TABLE sessions (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     session_id VARCHAR NOT NULL,
@@ -480,7 +510,8 @@ class TestEnsureSessionsMarketAccessTokenColumn:
                     expires_at TIMESTAMP NOT NULL,
                     market_access_token TEXT
                 )
-            """))
+            """)
+            )
 
         ensure_sessions_market_access_token_column(engine=sqlite_engine)
         # Should not raise
@@ -494,14 +525,16 @@ class TestEnsureSessionsMarketRefreshTokenColumn:
         from app.db.init_db import ensure_sessions_market_refresh_token_column
 
         with sqlite_engine.begin() as conn:
-            conn.execute(text("""
+            conn.execute(
+                text("""
                 CREATE TABLE sessions (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     session_id VARCHAR NOT NULL,
                     user_id INTEGER NOT NULL,
                     expires_at TIMESTAMP NOT NULL
                 )
-            """))
+            """)
+            )
 
         ensure_sessions_market_refresh_token_column(engine=sqlite_engine)
 
@@ -519,14 +552,16 @@ class TestEnsureSessionsEnterpriseEntitlementColumns:
         from app.db.init_db import ensure_sessions_enterprise_entitlement_columns
 
         with sqlite_engine.begin() as conn:
-            conn.execute(text("""
+            conn.execute(
+                text("""
                 CREATE TABLE sessions (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     session_id VARCHAR NOT NULL,
                     user_id INTEGER NOT NULL,
                     expires_at TIMESTAMP NOT NULL
                 )
-            """))
+            """)
+            )
 
         ensure_sessions_enterprise_entitlement_columns(engine=sqlite_engine)
 
@@ -545,14 +580,16 @@ class TestEnsureSessionsAccountMetaColumns:
         from app.db.init_db import ensure_sessions_account_meta_columns
 
         with sqlite_engine.begin() as conn:
-            conn.execute(text("""
+            conn.execute(
+                text("""
                 CREATE TABLE sessions (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     session_id VARCHAR NOT NULL,
                     user_id INTEGER NOT NULL,
                     expires_at TIMESTAMP NOT NULL
                 )
-            """))
+            """)
+            )
 
         ensure_sessions_account_meta_columns(engine=sqlite_engine)
 
@@ -589,13 +626,15 @@ class TestEnsureProductQueryIndexes:
         from app.db.init_db import ensure_product_query_indexes
 
         with sqlite_engine.begin() as conn:
-            conn.execute(text("""
+            conn.execute(
+                text("""
                 CREATE TABLE products (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     unit TEXT,
                     model_number TEXT
                 )
-            """))
+            """)
+            )
 
         ensure_product_query_indexes(sqlite_engine)
         # Should not raise
@@ -619,8 +658,10 @@ class TestGetDbPath:
         monkeypatch.setattr("app.db.init_db.get_app_data_dir", lambda: tmp_dir)
         with (
             patch("app.request_active_mod_ctx.get_request_active_mod_id", return_value="mymod"),
-            patch("app.db.sqlite_mod_paths.sqlite_filename_with_mod_suffix",
-                  lambda name, mod_id: f"products__{mod_id}.db"),
+            patch(
+                "app.db.sqlite_mod_paths.sqlite_filename_with_mod_suffix",
+                lambda name, mod_id: f"products__{mod_id}.db",
+            ),
         ):
             result = get_db_path("products.db")
         assert "products__mymod.db" in result
@@ -647,7 +688,10 @@ class TestBuildModDatabaseSeedPlan:
         from app.db.init_db import build_mod_database_seed_plan
 
         monkeypatch.setattr("app.db.init_db.get_app_data_dir", lambda: tmp_dir)
-        with patch("app.infrastructure.mods.mod_manager.get_mod_manager", side_effect=ImportError("no mods")):
+        with patch(
+            "app.infrastructure.mods.mod_manager.get_mod_manager",
+            side_effect=ImportError("no mods"),
+        ):
             result = build_mod_database_seed_plan()
         assert "architecture_note_zh" in result
         assert "mods" in result

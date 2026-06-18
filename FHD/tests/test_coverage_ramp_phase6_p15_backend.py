@@ -37,9 +37,11 @@ from app.fastapi_routes.mod_store_routes import router as mod_store_router
 def _clear_market_token_caches():
     ma._MARKET_SESSION_TOKENS.clear()
     ma._MARKET_SESSION_REFRESH_TOKENS.clear()
+    ma._ACCOUNT_OVERVIEW_CACHE.clear()
     yield
     ma._MARKET_SESSION_TOKENS.clear()
     ma._MARKET_SESSION_REFRESH_TOKENS.clear()
+    ma._ACCOUNT_OVERVIEW_CACHE.clear()
 
 
 @pytest.fixture
@@ -360,9 +362,7 @@ class TestMarketLatestSessionToken:
     def test_latest_token_returns_empty_when_no_rows(self) -> None:
         mock_db = MagicMock()
         mock_query = MagicMock()
-        mock_query.filter.return_value.order_by.return_value.limit.return_value.all.return_value = (
-            []
-        )
+        mock_query.filter.return_value.order_by.return_value.limit.return_value.all.return_value = []
         mock_db.query.return_value = mock_query
         with patch("app.db.session.get_db") as get_db:
             get_db.return_value.__enter__.return_value = mock_db
@@ -820,18 +820,14 @@ class TestMarketResetMarketPasswordWithCode:
     @pytest.mark.asyncio
     async def test_success_path(self) -> None:
         with patch.object(ma, "_proxy_json", new_callable=AsyncMock, return_value={}):
-            result = await ma.reset_market_password_with_code(
-                "u@t.com", "123456", "newpassword"
-            )
+            result = await ma.reset_market_password_with_code("u@t.com", "123456", "newpassword")
         assert result["success"] is True
 
     @pytest.mark.asyncio
     async def test_proxy_error_returns_failure(self) -> None:
         error_payload = {"__proxy_error__": True, "status_code": 400, "payload": {}}
         with patch.object(ma, "_proxy_json", new_callable=AsyncMock, return_value=error_payload):
-            result = await ma.reset_market_password_with_code(
-                "u@t.com", "123456", "newpassword"
-            )
+            result = await ma.reset_market_password_with_code("u@t.com", "123456", "newpassword")
         assert result["success"] is False
 
     @pytest.mark.asyncio
@@ -842,9 +838,7 @@ class TestMarketResetMarketPasswordWithCode:
             new_callable=AsyncMock,
             return_value={"success": False, "message": "expired"},
         ):
-            result = await ma.reset_market_password_with_code(
-                "u@t.com", "123456", "newpassword"
-            )
+            result = await ma.reset_market_password_with_code("u@t.com", "123456", "newpassword")
         assert result["success"] is False
         assert "expired" in result["message"]
 
@@ -957,9 +951,7 @@ class TestMarketLoginMarketWithPassword:
                 return_value=None,
             ):
                 payload = {"access_token": "remote-tok"}
-                with patch.object(
-                    ma, "_proxy_json", new_callable=AsyncMock, return_value=payload
-                ):
+                with patch.object(ma, "_proxy_json", new_callable=AsyncMock, return_value=payload):
                     result = await ma.login_market_with_password("alice", "pass")
         assert result["success"] is True
         assert result["token"] == "remote-tok"
@@ -969,7 +961,9 @@ class TestMarketRegisterRoute:
     """Cover ``/api/market/register`` route."""
 
     def test_missing_username_returns_400(self, market_client: TestClient) -> None:
-        resp = market_client.post("/api/market/register", json={"password": "p", "email": "e@t.com"})
+        resp = market_client.post(
+            "/api/market/register", json={"password": "p", "email": "e@t.com"}
+        )
         assert resp.status_code == 400
         assert "必填" in resp.json()["message"]
 
@@ -1035,9 +1029,7 @@ class TestMarketLoginRoute:
                 "raw": {},
             },
         ):
-            resp = market_client.post(
-                "/api/market/login", json={"username": "u", "password": "p"}
-            )
+            resp = market_client.post("/api/market/login", json={"username": "u", "password": "p"})
         assert resp.status_code == 200
         assert resp.json()["data"]["token"] == "tok"
 
@@ -1048,9 +1040,7 @@ class TestMarketLoginRoute:
             new_callable=AsyncMock,
             return_value={"success": False, "message": "bad creds"},
         ):
-            resp = market_client.post(
-                "/api/market/login", json={"username": "u", "password": "p"}
-            )
+            resp = market_client.post("/api/market/login", json={"username": "u", "password": "p"})
         assert resp.status_code == 403
 
 
@@ -1068,9 +1058,7 @@ class TestMarketSendPhoneCodeRoute:
             new_callable=AsyncMock,
             return_value={"success": True, "message": "sent"},
         ):
-            resp = market_client.post(
-                "/api/market/send-phone-code", json={"phone": "13800000000"}
-            )
+            resp = market_client.post("/api/market/send-phone-code", json={"phone": "13800000000"})
         assert resp.status_code == 200
 
     def test_failure_returns_502(self, market_client: TestClient) -> None:
@@ -1080,9 +1068,7 @@ class TestMarketSendPhoneCodeRoute:
             new_callable=AsyncMock,
             return_value={"success": False, "message": "fail", "status_code": 502},
         ):
-            resp = market_client.post(
-                "/api/market/send-phone-code", json={"phone": "13800000000"}
-            )
+            resp = market_client.post("/api/market/send-phone-code", json={"phone": "13800000000"})
         assert resp.status_code == 502
 
 
@@ -1090,15 +1076,11 @@ class TestMarketLoginWithPhoneCodeRoute:
     """Cover ``/api/market/login-with-phone-code`` route."""
 
     def test_missing_phone_returns_400(self, market_client: TestClient) -> None:
-        resp = market_client.post(
-            "/api/market/login-with-phone-code", json={"code": "1234"}
-        )
+        resp = market_client.post("/api/market/login-with-phone-code", json={"code": "1234"})
         assert resp.status_code == 400
 
     def test_missing_code_returns_400(self, market_client: TestClient) -> None:
-        resp = market_client.post(
-            "/api/market/login-with-phone-code", json={"phone": "138"}
-        )
+        resp = market_client.post("/api/market/login-with-phone-code", json={"phone": "138"})
         assert resp.status_code == 400
 
     def test_success_returns_token(self, market_client: TestClient) -> None:
@@ -1172,9 +1154,7 @@ class TestMarketStatusRoute:
     """Cover ``/api/market/status`` route."""
 
     def test_reachable_returns_200(self, market_client: TestClient) -> None:
-        with patch.object(
-            ma, "_proxy_json", new_callable=AsyncMock, return_value={"status": "ok"}
-        ):
+        with patch.object(ma, "_proxy_json", new_callable=AsyncMock, return_value={"status": "ok"}):
             resp = market_client.get("/api/market/status")
         assert resp.status_code == 200
         assert resp.json()["success"] is True
@@ -1192,9 +1172,7 @@ class TestMarketPaymentRoutes:
     """Cover ``/api/market/payment/*`` routes."""
 
     def test_payment_plans_success(self, market_client: TestClient) -> None:
-        with patch.object(
-            ma, "_proxy_json", new_callable=AsyncMock, return_value={"plans": []}
-        ):
+        with patch.object(ma, "_proxy_json", new_callable=AsyncMock, return_value={"plans": []}):
             resp = market_client.get("/api/market/payment/plans")
         assert resp.status_code == 200
         assert resp.json()["success"] is True
@@ -1213,16 +1191,12 @@ class TestMarketPaymentRoutes:
         assert resp.status_code == 200
 
     def test_payment_orders_success(self, market_client: TestClient) -> None:
-        with patch.object(
-            ma, "_proxy_json", new_callable=AsyncMock, return_value={"orders": []}
-        ):
+        with patch.object(ma, "_proxy_json", new_callable=AsyncMock, return_value={"orders": []}):
             resp = market_client.get("/api/market/payment/orders")
         assert resp.status_code == 200
 
     def test_payment_orders_with_status(self, market_client: TestClient) -> None:
-        with patch.object(
-            ma, "_proxy_json", new_callable=AsyncMock, return_value={"orders": []}
-        ):
+        with patch.object(ma, "_proxy_json", new_callable=AsyncMock, return_value={"orders": []}):
             resp = market_client.get(
                 "/api/market/payment/orders", params={"status": "paid", "limit": 10}
             )
@@ -1240,9 +1214,7 @@ class TestMarketWalletOverviewRoute:
     """Cover ``/api/market/wallet/overview`` route."""
 
     def test_success(self, market_client: TestClient) -> None:
-        with patch.object(
-            ma, "_proxy_json", new_callable=AsyncMock, return_value={"balance": 100}
-        ):
+        with patch.object(ma, "_proxy_json", new_callable=AsyncMock, return_value={"balance": 100}):
             resp = market_client.get("/api/market/wallet/overview")
         assert resp.status_code == 200
 
@@ -1257,22 +1229,23 @@ class TestMarketDevCreateAccountRoute:
     """Cover ``/api/market/dev-create-account`` route."""
 
     def test_short_password_returns_400(self, market_client: TestClient) -> None:
-        resp = market_client.post(
-            "/api/market/dev-create-account", json={"password": "short"}
-        )
+        resp = market_client.post("/api/market/dev-create-account", json={"password": "short"})
         assert resp.status_code == 400
 
     def test_success_with_default_fields(self, market_client: TestClient) -> None:
-        with patch.object(
-            ma,
-            "_register_without_verification",
-            new_callable=AsyncMock,
-            return_value={"access_token": "tok"},
-        ), patch.object(
-            ma,
-            "_proxy_json",
-            new_callable=AsyncMock,
-            return_value={"status": "ok"},
+        with (
+            patch.object(
+                ma,
+                "_register_without_verification",
+                new_callable=AsyncMock,
+                return_value={"access_token": "tok"},
+            ),
+            patch.object(
+                ma,
+                "_proxy_json",
+                new_callable=AsyncMock,
+                return_value={"status": "ok"},
+            ),
         ):
             resp = market_client.post("/api/market/dev-create-account", json={})
         assert resp.status_code == 200
@@ -1284,16 +1257,19 @@ class TestMarketDevCreateAccountRoute:
             "status_code": 409,
             "payload": {"detail": "用户已存在"},
         }
-        with patch.object(
-            ma,
-            "_register_without_verification",
-            new_callable=AsyncMock,
-            return_value=error_payload,
-        ), patch.object(
-            ma,
-            "_proxy_json",
-            new_callable=AsyncMock,
-            return_value={"access_token": "login-tok"},
+        with (
+            patch.object(
+                ma,
+                "_register_without_verification",
+                new_callable=AsyncMock,
+                return_value=error_payload,
+            ),
+            patch.object(
+                ma,
+                "_proxy_json",
+                new_callable=AsyncMock,
+                return_value={"access_token": "login-tok"},
+            ),
         ):
             resp = market_client.post("/api/market/dev-create-account", json={})
         assert resp.status_code == 200
@@ -1318,16 +1294,18 @@ class TestMarketSessionHandoffRoute:
     """Cover ``/api/market/session-handoff`` route."""
 
     def test_no_user_no_token_returns_404(self, market_client: TestClient) -> None:
-        with patch(
-            "app.infrastructure.auth.dependencies.resolve_session_user", return_value=None
-        ), patch.object(ma, "latest_session_market_token", return_value=""):
+        with (
+            patch("app.infrastructure.auth.dependencies.resolve_session_user", return_value=None),
+            patch.object(ma, "latest_session_market_token", return_value=""),
+        ):
             resp = market_client.get("/api/market/session-handoff")
         assert resp.status_code == 404
 
     def test_no_user_with_latest_token_returns_200(self, market_client: TestClient) -> None:
-        with patch(
-            "app.infrastructure.auth.dependencies.resolve_session_user", return_value=None
-        ), patch.object(ma, "latest_session_market_token", return_value="latest-tok"):
+        with (
+            patch("app.infrastructure.auth.dependencies.resolve_session_user", return_value=None),
+            patch.object(ma, "latest_session_market_token", return_value="latest-tok"),
+        ):
             resp = market_client.get("/api/market/session-handoff")
         assert resp.status_code == 200
         assert resp.json()["data"]["market_access_token"] == "latest-tok"
@@ -1341,33 +1319,36 @@ class TestMarketAccountOverviewRoute:
         assert resp.status_code == 401
 
     def test_success_returns_data(self, market_client: TestClient) -> None:
-        with patch.object(
-            ma,
-            "_authorization_from_request_resolved",
-            new_callable=AsyncMock,
-            return_value="Bearer tok",
-        ), patch.object(
-            ma,
-            "_proxy_json",
-            new_callable=AsyncMock,
-            return_value={"data": {"user": {"id": 1}}},
-        ), patch.object(
-            ma, "_legacy_account_overview", new_callable=AsyncMock, return_value={}
+        with (
+            patch.object(
+                ma,
+                "_authorization_from_request_resolved",
+                new_callable=AsyncMock,
+                return_value="Bearer tok",
+            ),
+            patch.object(
+                ma,
+                "_proxy_json",
+                new_callable=AsyncMock,
+                return_value={"data": {"user": {"id": 1}}},
+            ),
+            patch.object(ma, "_legacy_account_overview", new_callable=AsyncMock, return_value={}),
         ):
             resp = market_client.post("/api/market/account-overview", json={})
         assert resp.status_code == 200
         assert resp.json()["success"] is True
 
-    def test_degraded_when_proxy_returns_json_response(
-        self, market_client: TestClient
-    ) -> None:
+    def test_degraded_when_proxy_returns_json_response(self, market_client: TestClient) -> None:
         json_resp = JSONResponse({"message": "unavailable"}, status_code=502)
-        with patch.object(
-            ma,
-            "_authorization_from_request_resolved",
-            new_callable=AsyncMock,
-            return_value="Bearer tok",
-        ), patch.object(ma, "_proxy_json", new_callable=AsyncMock, return_value=json_resp):
+        with (
+            patch.object(
+                ma,
+                "_authorization_from_request_resolved",
+                new_callable=AsyncMock,
+                return_value="Bearer tok",
+            ),
+            patch.object(ma, "_proxy_json", new_callable=AsyncMock, return_value=json_resp),
+        ):
             resp = market_client.post("/api/market/account-overview", json={})
         assert resp.status_code == 200
         assert resp.json()["data"]["degraded"] is True
@@ -1381,44 +1362,53 @@ class TestMarketLlmCatalogRoute:
         assert resp.status_code == 401
 
     def test_get_success(self, market_client: TestClient) -> None:
-        with patch.object(
-            ma,
-            "_authorization_from_request_resolved",
-            new_callable=AsyncMock,
-            return_value="Bearer tok",
-        ), patch.object(
-            ma,
-            "_proxy_json",
-            new_callable=AsyncMock,
-            return_value={"providers": ["openai"]},
+        with (
+            patch.object(
+                ma,
+                "_authorization_from_request_resolved",
+                new_callable=AsyncMock,
+                return_value="Bearer tok",
+            ),
+            patch.object(
+                ma,
+                "_proxy_json",
+                new_callable=AsyncMock,
+                return_value={"providers": ["openai"]},
+            ),
         ):
             resp = market_client.get("/api/market/llm-catalog")
         assert resp.status_code == 200
         assert "providers" in resp.json()["data"]
 
     def test_post_success(self, market_client: TestClient) -> None:
-        with patch.object(
-            ma,
-            "_authorization_from_request_resolved",
-            new_callable=AsyncMock,
-            return_value="Bearer tok",
-        ), patch.object(
-            ma,
-            "_proxy_json",
-            new_callable=AsyncMock,
-            return_value={"providers": ["openai"]},
+        with (
+            patch.object(
+                ma,
+                "_authorization_from_request_resolved",
+                new_callable=AsyncMock,
+                return_value="Bearer tok",
+            ),
+            patch.object(
+                ma,
+                "_proxy_json",
+                new_callable=AsyncMock,
+                return_value={"providers": ["openai"]},
+            ),
         ):
             resp = market_client.post("/api/market/llm-catalog", json={"refresh": True})
         assert resp.status_code == 200
 
     def test_proxy_error_returns_degraded(self, market_client: TestClient) -> None:
         error_payload = {"__proxy_error__": True, "status_code": 502, "payload": {}}
-        with patch.object(
-            ma,
-            "_authorization_from_request_resolved",
-            new_callable=AsyncMock,
-            return_value="Bearer tok",
-        ), patch.object(ma, "_proxy_json", new_callable=AsyncMock, return_value=error_payload):
+        with (
+            patch.object(
+                ma,
+                "_authorization_from_request_resolved",
+                new_callable=AsyncMock,
+                return_value="Bearer tok",
+            ),
+            patch.object(ma, "_proxy_json", new_callable=AsyncMock, return_value=error_payload),
+        ):
             resp = market_client.post("/api/market/llm-catalog", json={})
         assert resp.status_code == 200
         assert resp.json()["data"]["degraded"] is True
@@ -1429,21 +1419,23 @@ class TestMarketRefreshSessionMarketToken:
 
     @pytest.mark.asyncio
     async def test_no_refresh_token_returns_empty(self) -> None:
-        with patch.object(ma, "session_market_refresh_token", return_value=""), patch.object(
-            ma, "latest_session_market_refresh_token", return_value=""
+        with (
+            patch.object(ma, "session_market_refresh_token", return_value=""),
+            patch.object(ma, "latest_session_market_refresh_token", return_value=""),
         ):
             result = await ma.refresh_session_market_token("sid1")
         assert result == ""
 
     @pytest.mark.asyncio
     async def test_success_returns_new_token(self) -> None:
-        with patch.object(
-            ma, "session_market_refresh_token", return_value="rtok"
-        ), patch.object(
-            ma,
-            "_proxy_json",
-            new_callable=AsyncMock,
-            return_value={"access_token": "newtok", "refresh_token": "newrtok"},
+        with (
+            patch.object(ma, "session_market_refresh_token", return_value="rtok"),
+            patch.object(
+                ma,
+                "_proxy_json",
+                new_callable=AsyncMock,
+                return_value={"access_token": "newtok", "refresh_token": "newrtok"},
+            ),
         ):
             result = await ma.refresh_session_market_token("sid1")
         assert result == "newtok"
@@ -1452,9 +1444,10 @@ class TestMarketRefreshSessionMarketToken:
     @pytest.mark.asyncio
     async def test_proxy_error_returns_empty(self) -> None:
         error_payload = {"__proxy_error__": True, "status_code": 401, "payload": {}}
-        with patch.object(
-            ma, "session_market_refresh_token", return_value="rtok"
-        ), patch.object(ma, "_proxy_json", new_callable=AsyncMock, return_value=error_payload):
+        with (
+            patch.object(ma, "session_market_refresh_token", return_value="rtok"),
+            patch.object(ma, "_proxy_json", new_callable=AsyncMock, return_value=error_payload),
+        ):
             result = await ma.refresh_session_market_token("sid1")
         assert result == ""
 
@@ -1464,21 +1457,22 @@ class TestMarketResolveValidMarketAccessToken:
 
     @pytest.mark.asyncio
     async def test_no_token_returns_empty(self) -> None:
-        with patch.object(ma, "session_market_token", return_value=""), patch.object(
-            ma, "latest_session_market_token", return_value=""
+        with (
+            patch.object(ma, "session_market_token", return_value=""),
+            patch.object(ma, "latest_session_market_token", return_value=""),
         ):
             result = await ma.resolve_valid_market_access_token("sid1")
         assert result == ""
 
     @pytest.mark.asyncio
     async def test_demo_token_returned_as_is(self) -> None:
-        with patch.object(
-            ma, "session_market_token", return_value="demo-tok"
-        ), patch.object(
-            ma, "latest_session_market_token", return_value=""
-        ), patch(
-            "app.application.surface_audit_demo_account.is_local_demo_market_token",
-            return_value=True,
+        with (
+            patch.object(ma, "session_market_token", return_value="demo-tok"),
+            patch.object(ma, "latest_session_market_token", return_value=""),
+            patch(
+                "app.application.surface_audit_demo_account.is_local_demo_market_token",
+                return_value=True,
+            ),
         ):
             result = await ma.resolve_valid_market_access_token("sid1")
         assert result == "demo-tok"
@@ -1486,17 +1480,17 @@ class TestMarketResolveValidMarketAccessToken:
     @pytest.mark.asyncio
     async def test_401_triggers_refresh(self) -> None:
         error_payload = {"__proxy_error__": True, "status_code": 401, "payload": {}}
-        with patch.object(
-            ma, "session_market_token", return_value="tok"
-        ), patch.object(
-            ma, "latest_session_market_token", return_value=""
-        ), patch(
-            "app.application.surface_audit_demo_account.is_local_demo_market_token",
-            return_value=False,
-        ), patch.object(
-            ma, "_proxy_json", new_callable=AsyncMock, return_value=error_payload
-        ), patch.object(
-            ma, "refresh_session_market_token", new_callable=AsyncMock, return_value="refreshed"
+        with (
+            patch.object(ma, "session_market_token", return_value="tok"),
+            patch.object(ma, "latest_session_market_token", return_value=""),
+            patch(
+                "app.application.surface_audit_demo_account.is_local_demo_market_token",
+                return_value=False,
+            ),
+            patch.object(ma, "_proxy_json", new_callable=AsyncMock, return_value=error_payload),
+            patch.object(
+                ma, "refresh_session_market_token", new_callable=AsyncMock, return_value="refreshed"
+            ),
         ):
             result = await ma.resolve_valid_market_access_token("sid1")
         assert result == "refreshed"
@@ -1504,14 +1498,15 @@ class TestMarketResolveValidMarketAccessToken:
     @pytest.mark.asyncio
     async def test_other_error_returns_local_token(self) -> None:
         error_payload = {"__proxy_error__": True, "status_code": 500, "payload": {}}
-        with patch.object(
-            ma, "session_market_token", return_value="tok"
-        ), patch.object(
-            ma, "latest_session_market_token", return_value=""
-        ), patch(
-            "app.application.surface_audit_demo_account.is_local_demo_market_token",
-            return_value=False,
-        ), patch.object(ma, "_proxy_json", new_callable=AsyncMock, return_value=error_payload):
+        with (
+            patch.object(ma, "session_market_token", return_value="tok"),
+            patch.object(ma, "latest_session_market_token", return_value=""),
+            patch(
+                "app.application.surface_audit_demo_account.is_local_demo_market_token",
+                return_value=False,
+            ),
+            patch.object(ma, "_proxy_json", new_callable=AsyncMock, return_value=error_payload),
+        ):
             result = await ma.resolve_valid_market_access_token("sid1")
         assert result == "tok"
 
@@ -1571,9 +1566,7 @@ class TestMarketNormalizeMarketAuthPayload:
     @pytest.mark.asyncio
     async def test_success_with_user_blob(self) -> None:
         payload = {"access_token": "tok", "user": {"id": 1, "username": "alice"}}
-        with patch.object(
-            ma, "_proxy_json", new_callable=AsyncMock, return_value={}
-        ):
+        with patch.object(ma, "_proxy_json", new_callable=AsyncMock, return_value={}):
             result = await ma._normalize_market_auth_payload(payload)
         assert result["success"] is True
         assert result["token"] == "tok"
@@ -1586,9 +1579,7 @@ class TestMarketLegacyAccountOverview:
     @pytest.mark.asyncio
     async def test_me_error_propagated(self) -> None:
         error_payload = {"__proxy_error__": True, "status_code": 401, "payload": {}}
-        with patch.object(
-            ma, "_proxy_json", new_callable=AsyncMock, return_value=error_payload
-        ):
+        with patch.object(ma, "_proxy_json", new_callable=AsyncMock, return_value=error_payload):
             result = await ma._legacy_account_overview("Bearer tok")
         assert result.get("__proxy_error__") is True
 
@@ -2109,14 +2100,22 @@ class TestLTGGenerateTemplateCode:
 
     def test_generate_basic_code_returns_string(self, tmp_path) -> None:
         p = _make_test_image(str(tmp_path / "basic.png"), 500, 350)
-        code = ltg._generate_basic_code(p, "MyClass", 500, 350, {"background": "#ffffff", "border": "#000000", "text": "#000000"})
+        code = ltg._generate_basic_code(
+            p,
+            "MyClass",
+            500,
+            350,
+            {"background": "#ffffff", "border": "#000000", "text": "#000000"},
+        )
         assert "class MyClass" in code
         assert "def generate_label" in code
 
     def test_generate_code_with_fields_returns_string(self, tmp_path) -> None:
         p = _make_test_image(str(tmp_path / "fields.png"), 500, 350)
         colors = {"background": "#ffffff", "border": "#000000", "text": "#000000"}
-        fields = [{"label": "品名", "value": "鞋", "field_key": "product_name", "type": "fixed_label"}]
+        fields = [
+            {"label": "品名", "value": "鞋", "field_key": "product_name", "type": "fixed_label"}
+        ]
         code = ltg._generate_code_with_fields(p, "MyClass", 500, 350, colors, fields)
         assert "product_name" in code
         assert "品名" in code
@@ -2149,7 +2148,9 @@ class TestLTGSkillExecute:
     def test_skill_execute_with_ocr_import_error(self, tmp_path) -> None:
         p = _make_test_image(str(tmp_path / "skill3.png"), 500, 350)
         skill = ltg.LabelTemplateGeneratorSkill()
-        with patch("app.services.skills.label_template_generator.label_template_generator.extract_text_with_ocr") as mock_ocr:
+        with patch(
+            "app.services.skills.label_template_generator.label_template_generator.extract_text_with_ocr"
+        ) as mock_ocr:
             mock_ocr.return_value = {
                 "success": False,
                 "message": "缺少图像处理依赖",
@@ -2252,9 +2253,7 @@ class TestTWRNormalSlotDispatch:
             mock.assert_called_once_with("user msg")
 
     def test_normal_slot_dispatch_shipment_preview(self) -> None:
-        with patch(
-            "app.application.normal_chat_dispatch.run_normal_slot_shipment_preview"
-        ) as mock:
+        with patch("app.application.normal_chat_dispatch.run_normal_slot_shipment_preview") as mock:
             mock.return_value = {"success": True}
             result = twr._registered_router_normal_slot_dispatch(
                 "shipment_preview", {"order_text": "订单1"}, {}, "normal", ""
@@ -2263,9 +2262,7 @@ class TestTWRNormalSlotDispatch:
             mock.assert_called_once_with("订单1")
 
     def test_normal_slot_dispatch_shipment_preview_fallback_user_message(self) -> None:
-        with patch(
-            "app.application.normal_chat_dispatch.run_normal_slot_shipment_preview"
-        ) as mock:
+        with patch("app.application.normal_chat_dispatch.run_normal_slot_shipment_preview") as mock:
             mock.return_value = {"success": True}
             twr._registered_router_normal_slot_dispatch(
                 "shipment_preview", {}, {}, "normal", "fallback order"
@@ -2273,9 +2270,7 @@ class TestTWRNormalSlotDispatch:
             mock.assert_called_once_with("fallback order")
 
     def test_normal_slot_dispatch_unknown_action(self) -> None:
-        result = twr._registered_router_normal_slot_dispatch(
-            "unknown", {}, {}, "normal", ""
-        )
+        result = twr._registered_router_normal_slot_dispatch("unknown", {}, {}, "normal", "")
         assert result["success"] is False
         assert "未注册" in result["message"]
 
@@ -2284,9 +2279,7 @@ class TestTWRNormalSlotDispatch:
             "app.application.normal_chat_dispatch.run_normal_slot_product_query_from_message"
         ) as mock:
             mock.return_value = {"success": True}
-            twr._registered_router_normal_slot_dispatch(
-                "product_query", {}, {}, "normal", ""
-            )
+            twr._registered_router_normal_slot_dispatch("product_query", {}, {}, "normal", "")
             mock.assert_called_once_with("")
 
 
@@ -2298,9 +2291,7 @@ class TestTWRCustomers:
             svc = MagicMock()
             svc.get_all.return_value = {"success": True, "data": [{"id": 1}]}
             mock_get.return_value = svc
-            result = twr._registered_router_customers(
-                "query", {"keyword": "abc"}, {}, "normal", ""
-            )
+            result = twr._registered_router_customers("query", {"keyword": "abc"}, {}, "normal", "")
             assert result["success"] is True
             assert result["data"] == [{"id": 1}]
 
@@ -2309,18 +2300,14 @@ class TestTWRCustomers:
             svc = MagicMock()
             svc.get_all.return_value = {"success": True, "data": []}
             mock_get.return_value = svc
-            twr._registered_router_customers(
-                "query", {"unit_name": "unit1"}, {}, "normal", ""
-            )
+            twr._registered_router_customers("query", {"unit_name": "unit1"}, {}, "normal", "")
             svc.get_all.assert_called_once_with(keyword="unit1", page=1, per_page=20)
 
     def test_customers_ensure_exists_no_unit_name(self) -> None:
         with patch("app.application.get_customer_app_service") as mock_get:
             svc = MagicMock()
             mock_get.return_value = svc
-            result = twr._registered_router_customers(
-                "ensure_exists", {}, {}, "normal", ""
-            )
+            result = twr._registered_router_customers("ensure_exists", {}, {}, "normal", "")
             assert result["success"] is False
             assert "缺少 unit_name" in result["message"]
 
@@ -2388,9 +2375,7 @@ class TestTWRProducts:
             "app.application.normal_chat_dispatch.run_workflow_products_query_normal_profile"
         ) as mock:
             mock.return_value = {"success": True}
-            result = twr._registered_router_products(
-                "query", {}, {}, "normal", "user msg"
-            )
+            result = twr._registered_router_products("query", {}, {}, "normal", "user msg")
             assert result["success"] is True
 
     def test_products_query_non_normal_profile(self) -> None:
@@ -2474,7 +2459,11 @@ class TestTWRProducts:
                 "",
             )
             args, kwargs = svc.create_product.call_args
-            assert kwargs["unit_price"] == 0.0 if "unit_price" in kwargs else args[0]["unit_price"] == 0.0
+            assert (
+                kwargs["unit_price"] == 0.0
+                if "unit_price" in kwargs
+                else args[0]["unit_price"] == 0.0
+            )
 
 
 class TestTWRMaterials:
@@ -2501,9 +2490,7 @@ class TestTWRMaterials:
             svc = MagicMock()
             svc.create_material.return_value = {"success": True}
             mock_get.return_value = svc
-            result = twr._registered_router_materials(
-                "create", {"name": "mat1"}, {}, "normal", ""
-            )
+            result = twr._registered_router_materials("create", {"name": "mat1"}, {}, "normal", "")
             assert result["success"] is True
 
     def test_materials_create_with_material_name(self) -> None:
@@ -2511,9 +2498,7 @@ class TestTWRMaterials:
             svc = MagicMock()
             svc.create_material.return_value = {"success": True}
             mock_get.return_value = svc
-            twr._registered_router_materials(
-                "create", {"material_name": "mat2"}, {}, "normal", ""
-            )
+            twr._registered_router_materials("create", {"material_name": "mat2"}, {}, "normal", "")
             args, _ = svc.create_material.call_args
             assert args[0]["name"] == "mat2"
 
@@ -2532,9 +2517,7 @@ class TestTWRMaterials:
             svc = MagicMock()
             svc.delete_material.return_value = {"success": True}
             mock_get.return_value = svc
-            result = twr._registered_router_materials(
-                "delete", {"id": "1"}, {}, "normal", ""
-            )
+            result = twr._registered_router_materials("delete", {"id": "1"}, {}, "normal", "")
             assert result["success"] is True
 
     def test_materials_batch_delete(self) -> None:
@@ -2552,9 +2535,7 @@ class TestTWRMaterials:
             svc = MagicMock()
             svc.export_to_excel.return_value = {"success": True}
             mock_get.return_value = svc
-            result = twr._registered_router_materials(
-                "export", {"search": "abc"}, {}, "normal", ""
-            )
+            result = twr._registered_router_materials("export", {"search": "abc"}, {}, "normal", "")
             assert result["success"] is True
 
 
@@ -2614,16 +2595,12 @@ class TestTWRBusinessDocking:
     """Cover ``_registered_router_business_docking_family``."""
 
     def test_business_docking_view_action(self) -> None:
-        result = twr._registered_router_business_docking_family(
-            "view", {}, {}, "normal", ""
-        )
+        result = twr._registered_router_business_docking_family("view", {}, {}, "normal", "")
         assert result["success"] is True
         assert "redirect" in result
 
     def test_business_docking_no_file_path(self) -> None:
-        result = twr._registered_router_business_docking_family(
-            "analyze", {}, {}, "normal", ""
-        )
+        result = twr._registered_router_business_docking_family("analyze", {}, {}, "normal", "")
         assert result["success"] is False
         assert "file_path" in result["message"]
 
@@ -2637,11 +2614,21 @@ class TestTWRBusinessDocking:
     def test_business_docking_with_existing_file(self, tmp_path) -> None:
         f = tmp_path / "test.xlsx"
         f.write_bytes(b"fake")
-        with patch("app.services.document_templates_service._extract_structured_excel_preview") as mock_struct, \
-             patch("app.services.document_templates_service._extract_excel_grid_preview") as mock_grid, \
-             patch("app.services.document_templates_service._extract_excel_grid_style_cache") as mock_style, \
-             patch("app.services.document_templates_service._extract_excel_all_sheets_preview") as mock_all, \
-             patch("app.services.document_templates_service._list_excel_sheet_names") as mock_names:
+        with (
+            patch(
+                "app.services.document_templates_service._extract_structured_excel_preview"
+            ) as mock_struct,
+            patch(
+                "app.services.document_templates_service._extract_excel_grid_preview"
+            ) as mock_grid,
+            patch(
+                "app.services.document_templates_service._extract_excel_grid_style_cache"
+            ) as mock_style,
+            patch(
+                "app.services.document_templates_service._extract_excel_all_sheets_preview"
+            ) as mock_all,
+            patch("app.services.document_templates_service._list_excel_sheet_names") as mock_names,
+        ):
             mock_struct.return_value = {"fields": [], "sample_rows": []}
             mock_grid.return_value = {}
             mock_style.return_value = {}
@@ -2686,9 +2673,7 @@ class TestTWRWechat:
             "app.services.wechat_contact_cache_import.ensure_decrypted_wechat_dbs"
         ) as mock_ensure:
             mock_ensure.return_value = {"success": True}
-            result = twr._registered_router_wechat(
-                "refresh_contact_cache", {}, {}, "normal", ""
-            )
+            result = twr._registered_router_wechat("refresh_contact_cache", {}, {}, "normal", "")
             assert result["success"] is True
 
     def test_wechat_refresh_messages_cache(self) -> None:
@@ -2696,9 +2681,7 @@ class TestTWRWechat:
             "app.services.wechat_contact_cache_import.ensure_decrypted_wechat_dbs"
         ) as mock_ensure:
             mock_ensure.return_value = {"success": True}
-            result = twr._registered_router_wechat(
-                "refresh_messages_cache", {}, {}, "normal", ""
-            )
+            result = twr._registered_router_wechat("refresh_messages_cache", {}, {}, "normal", "")
             assert result["success"] is True
 
 
@@ -2749,9 +2732,7 @@ class TestTWRPrint:
             svc = MagicMock()
             svc.test_printer.return_value = {"success": True}
             mock_get.return_value = svc
-            result = twr._registered_router_print(
-                "test", {"printer_name": "P1"}, {}, "normal", ""
-            )
+            result = twr._registered_router_print("test", {"printer_name": "P1"}, {}, "normal", "")
             assert result["success"] is True
 
 
@@ -2807,9 +2788,7 @@ class TestTWRSettings:
             svc = MagicMock()
             svc.get_system_info.return_value = {"os": "test"}
             mock_get.return_value = svc
-            result = twr._registered_router_settings(
-                "get_system_info", {}, {}, "normal", ""
-            )
+            result = twr._registered_router_settings("get_system_info", {}, {}, "normal", "")
             assert result["success"] is True
 
     def test_settings_get_startup_config(self) -> None:
@@ -2817,9 +2796,7 @@ class TestTWRSettings:
             svc = MagicMock()
             svc.get_startup_config.return_value = {"enabled": False}
             mock_get.return_value = svc
-            result = twr._registered_router_settings(
-                "get_startup_config", {}, {}, "normal", ""
-            )
+            result = twr._registered_router_settings("get_startup_config", {}, {}, "normal", "")
             assert result["success"] is True
 
     def test_settings_enable_startup(self) -> None:
@@ -2827,9 +2804,7 @@ class TestTWRSettings:
             svc = MagicMock()
             svc.enable_startup.return_value = {"success": True}
             mock_get.return_value = svc
-            result = twr._registered_router_settings(
-                "enable_startup", {}, {}, "normal", ""
-            )
+            result = twr._registered_router_settings("enable_startup", {}, {}, "normal", "")
             assert result["success"] is True
 
     def test_settings_disable_startup(self) -> None:
@@ -2837,9 +2812,7 @@ class TestTWRSettings:
             svc = MagicMock()
             svc.disable_startup.return_value = {"success": True}
             mock_get.return_value = svc
-            result = twr._registered_router_settings(
-                "disable_startup", {}, {}, "normal", ""
-            )
+            result = twr._registered_router_settings("disable_startup", {}, {}, "normal", "")
             assert result["success"] is True
 
 
@@ -2847,19 +2820,19 @@ class TestTWRExcelAnalysis:
     """Cover ``_registered_router_excel_analysis``."""
 
     def test_excel_analysis_no_file_path(self) -> None:
-        result = twr._registered_router_excel_analysis(
-            "read", {}, {}, "normal", ""
-        )
+        result = twr._registered_router_excel_analysis("read", {}, {}, "normal", "")
         assert result["success"] is False
         assert "file_path" in result["message"]
 
     def test_excel_analysis_file_path_from_runtime_context(self) -> None:
-        with patch(
-            "app.infrastructure.skills.excel_toolkit.excel_toolkit.get_excel_toolkit_skill"
-        ) as mock_toolkit, \
-             patch(
-                 "app.infrastructure.skills.excel_analyzer.excel_template_analyzer.get_excel_analyzer_skill"
-             ) as mock_analyzer:
+        with (
+            patch(
+                "app.infrastructure.skills.excel_toolkit.excel_toolkit.get_excel_toolkit_skill"
+            ) as mock_toolkit,
+            patch(
+                "app.infrastructure.skills.excel_analyzer.excel_template_analyzer.get_excel_analyzer_skill"
+            ) as mock_analyzer,
+        ):
             tk = MagicMock()
             tk.execute.return_value = {"success": True, "content": []}
             mock_toolkit.return_value = tk
@@ -2874,12 +2847,14 @@ class TestTWRExcelAnalysis:
             assert result["success"] is True
 
     def test_excel_analysis_file_path_from_last_context(self) -> None:
-        with patch(
-            "app.infrastructure.skills.excel_toolkit.excel_toolkit.get_excel_toolkit_skill"
-        ) as mock_toolkit, \
-             patch(
-                 "app.infrastructure.skills.excel_analyzer.excel_template_analyzer.get_excel_analyzer_skill"
-             ) as mock_analyzer:
+        with (
+            patch(
+                "app.infrastructure.skills.excel_toolkit.excel_toolkit.get_excel_toolkit_skill"
+            ) as mock_toolkit,
+            patch(
+                "app.infrastructure.skills.excel_analyzer.excel_template_analyzer.get_excel_analyzer_skill"
+            ) as mock_analyzer,
+        ):
             tk = MagicMock()
             tk.execute.return_value = {"success": True, "content": []}
             mock_toolkit.return_value = tk
@@ -2926,15 +2901,11 @@ class TestTWRExcelImport:
     """Cover ``_registered_router_excel_import``."""
 
     def test_excel_import_unknown_action(self) -> None:
-        result = twr._registered_router_excel_import(
-            "unknown", {}, {}, "normal", ""
-        )
+        result = twr._registered_router_excel_import("unknown", {}, {}, "normal", "")
         assert result["success"] is False
 
     def test_excel_import_no_pending_id(self) -> None:
-        result = twr._registered_router_excel_import(
-            "execute_import", {}, {}, "normal", ""
-        )
+        result = twr._registered_router_excel_import("execute_import", {}, {}, "normal", "")
         assert result["success"] is False
         assert "pending_import_id" in result["message"]
 
@@ -2976,12 +2947,14 @@ class TestTWRExecuteRegisteredWorkflowTool:
             assert "未注册" in result["message"]
 
     def test_execute_with_runtime_context(self) -> None:
-        with patch(
-            "app.application.normal_chat_dispatch.resolve_tool_execution_profile"
-        ) as mock_profile, \
-             patch(
-                 "app.application.normal_chat_dispatch.run_normal_slot_product_query_from_message"
-             ) as mock_query:
+        with (
+            patch(
+                "app.application.normal_chat_dispatch.resolve_tool_execution_profile"
+            ) as mock_profile,
+            patch(
+                "app.application.normal_chat_dispatch.run_normal_slot_product_query_from_message"
+            ) as mock_query,
+        ):
             mock_profile.return_value = "normal"
             mock_query.return_value = {"success": True}
             result = twr.execute_registered_workflow_tool(
@@ -2996,9 +2969,7 @@ class TestTWRExecuteRegisteredWorkflowTool:
             "app.application.normal_chat_dispatch.resolve_tool_execution_profile"
         ) as mock_profile:
             mock_profile.return_value = "normal"
-            result = twr.execute_registered_workflow_tool(
-                "normal_slot_dispatch", "unknown", None
-            )
+            result = twr.execute_registered_workflow_tool("normal_slot_dispatch", "unknown", None)
             assert result["success"] is False
 
     def test_execute_registered_router_dict_contains_keys(self) -> None:
@@ -3340,8 +3311,13 @@ class TestMSRoutesWithData:
     """Cover routes that need data mocking."""
 
     def test_catalog_route_returns_data(self, mod_store_client) -> None:
-        with patch("app.fastapi_routes.mod_store_routes._combined_rows", new_callable=AsyncMock) as mock_combined:
-            mock_combined.return_value = ([{"id": "r1", "name": "R1"}], [{"id": "i1", "name": "I1"}])
+        with patch(
+            "app.fastapi_routes.mod_store_routes._combined_rows", new_callable=AsyncMock
+        ) as mock_combined:
+            mock_combined.return_value = (
+                [{"id": "r1", "name": "R1"}],
+                [{"id": "i1", "name": "I1"}],
+            )
             resp = mod_store_client.get("/catalog")
             assert resp.status_code == 200
             data = resp.json()
@@ -3349,7 +3325,9 @@ class TestMSRoutesWithData:
             assert data["data"]["indexed_count"] == 1
 
     def test_search_route_with_query(self, mod_store_client) -> None:
-        with patch("app.fastapi_routes.mod_store_routes._combined_rows", new_callable=AsyncMock) as mock_combined:
+        with patch(
+            "app.fastapi_routes.mod_store_routes._combined_rows", new_callable=AsyncMock
+        ) as mock_combined:
             mock_combined.return_value = (
                 [{"id": "1", "name": "Alpha"}, {"id": "2", "name": "Beta"}],
                 [],
@@ -3361,7 +3339,9 @@ class TestMSRoutesWithData:
             assert data["data"][0]["name"] == "Alpha"
 
     def test_popular_route_sorts_by_downloads(self, mod_store_client) -> None:
-        with patch("app.fastapi_routes.mod_store_routes._combined_rows", new_callable=AsyncMock) as mock_combined:
+        with patch(
+            "app.fastapi_routes.mod_store_routes._combined_rows", new_callable=AsyncMock
+        ) as mock_combined:
             mock_combined.return_value = (
                 [
                     {"id": "1", "name": "A", "total_downloads": 5},
@@ -3375,7 +3355,9 @@ class TestMSRoutesWithData:
             assert data["data"][0]["name"] == "B"
 
     def test_recent_route_sorts_by_created_at(self, mod_store_client) -> None:
-        with patch("app.fastapi_routes.mod_store_routes._combined_rows", new_callable=AsyncMock) as mock_combined:
+        with patch(
+            "app.fastapi_routes.mod_store_routes._combined_rows", new_callable=AsyncMock
+        ) as mock_combined:
             mock_combined.return_value = (
                 [
                     {"id": "1", "name": "A", "created_at": "2024-01-01"},
@@ -3389,7 +3371,9 @@ class TestMSRoutesWithData:
             assert data["data"][0]["name"] == "B"
 
     def test_details_route_remote_success(self, mod_store_client) -> None:
-        with patch("app.fastapi_routes.mod_store_routes.catalog_get_json", new_callable=AsyncMock) as mock_get:
+        with patch(
+            "app.fastapi_routes.mod_store_routes.catalog_get_json", new_callable=AsyncMock
+        ) as mock_get:
             mock_get.side_effect = [
                 {"versions": [{"version": "1.0.0"}]},
                 {"id": "m1", "name": "Mod1", "author": "A", "description": "d"},
@@ -3400,18 +3384,42 @@ class TestMSRoutesWithData:
             assert data["data"]["id"] == "m1"
 
     def test_details_route_fallback_local(self, mod_store_client) -> None:
-        with patch("app.fastapi_routes.mod_store_routes.catalog_get_json", new_callable=AsyncMock) as mock_get, \
-             patch("app.fastapi_routes.mod_store_routes._combined_rows", new_callable=AsyncMock) as mock_combined:
+        with (
+            patch(
+                "app.fastapi_routes.mod_store_routes.catalog_get_json", new_callable=AsyncMock
+            ) as mock_get,
+            patch(
+                "app.fastapi_routes.mod_store_routes._combined_rows", new_callable=AsyncMock
+            ) as mock_combined,
+        ):
             mock_get.side_effect = HTTPException(status_code=404, detail="not found")
-            mock_combined.return_value = ([{"id": "m1", "name": "Local", "version": "1.0", "author": "A", "description": "d", "source": "local"}], [])
+            mock_combined.return_value = (
+                [
+                    {
+                        "id": "m1",
+                        "name": "Local",
+                        "version": "1.0",
+                        "author": "A",
+                        "description": "d",
+                        "source": "local",
+                    }
+                ],
+                [],
+            )
             resp = mod_store_client.get("/mod/m1/details")
             assert resp.status_code == 200
             data = resp.json()
             assert data["data"]["name"] == "Local"
 
     def test_details_route_not_found(self, mod_store_client) -> None:
-        with patch("app.fastapi_routes.mod_store_routes.catalog_get_json", new_callable=AsyncMock) as mock_get, \
-             patch("app.fastapi_routes.mod_store_routes._combined_rows", new_callable=AsyncMock) as mock_combined:
+        with (
+            patch(
+                "app.fastapi_routes.mod_store_routes.catalog_get_json", new_callable=AsyncMock
+            ) as mock_get,
+            patch(
+                "app.fastapi_routes.mod_store_routes._combined_rows", new_callable=AsyncMock
+            ) as mock_combined,
+        ):
             mock_get.side_effect = HTTPException(status_code=404, detail="not found")
             mock_combined.return_value = ([], [])
             resp = mod_store_client.get("/mod/unknown/details")
@@ -3436,9 +3444,17 @@ class TestMSMarketCatalogRoute:
     """Cover ``/market-catalog`` route."""
 
     def test_market_catalog_success(self, mod_store_client) -> None:
-        with patch("app.fastapi_routes.mod_store_routes.fetch_market_catalog_page", new_callable=AsyncMock) as mock_fetch, \
-             patch("app.fastapi_routes.mod_store_routes._map_market_catalog_page", new_callable=AsyncMock) as mock_map, \
-             patch("app.fastapi_routes.mod_store_routes._installed_by_id") as mock_installed:
+        with (
+            patch(
+                "app.fastapi_routes.mod_store_routes.fetch_market_catalog_page",
+                new_callable=AsyncMock,
+            ) as mock_fetch,
+            patch(
+                "app.fastapi_routes.mod_store_routes._map_market_catalog_page",
+                new_callable=AsyncMock,
+            ) as mock_map,
+            patch("app.fastapi_routes.mod_store_routes._installed_by_id") as mock_installed,
+        ):
             mock_fetch.return_value = {"items": [], "total": 0}
             mock_map.return_value = ([], 0)
             mock_installed.return_value = {}
@@ -3449,9 +3465,17 @@ class TestMSMarketCatalogRoute:
             assert data["data"]["total"] == 0
 
     def test_market_catalog_with_query(self, mod_store_client) -> None:
-        with patch("app.fastapi_routes.mod_store_routes.fetch_market_catalog_page", new_callable=AsyncMock) as mock_fetch, \
-             patch("app.fastapi_routes.mod_store_routes._map_market_catalog_page", new_callable=AsyncMock) as mock_map, \
-             patch("app.fastapi_routes.mod_store_routes._installed_by_id") as mock_installed:
+        with (
+            patch(
+                "app.fastapi_routes.mod_store_routes.fetch_market_catalog_page",
+                new_callable=AsyncMock,
+            ) as mock_fetch,
+            patch(
+                "app.fastapi_routes.mod_store_routes._map_market_catalog_page",
+                new_callable=AsyncMock,
+            ) as mock_map,
+            patch("app.fastapi_routes.mod_store_routes._installed_by_id") as mock_installed,
+        ):
             mock_fetch.return_value = {"items": [], "total": 0}
             mock_map.return_value = ([], 0)
             mock_installed.return_value = {}
@@ -3464,7 +3488,9 @@ class TestMSSyncModstoreLibrary:
     """Cover ``/sync-modstore-library`` route."""
 
     def test_sync_no_json_body(self, mod_store_client) -> None:
-        resp = mod_store_client.post("/sync-modstore-library", content=b"not json", headers={"content-type": "text/plain"})
+        resp = mod_store_client.post(
+            "/sync-modstore-library", content=b"not json", headers={"content-type": "text/plain"}
+        )
         assert resp.status_code == 400
 
     def test_sync_no_token(self, mod_store_client) -> None:
@@ -3477,21 +3503,36 @@ class TestMSSyncModstoreLibrary:
         assert resp.status_code == 400
 
     def test_sync_with_all_flag(self, mod_store_client) -> None:
-        with patch("app.fastapi_routes.mod_store_routes.sync_modstore_library_to_local", new_callable=AsyncMock) as mock_sync:
+        with patch(
+            "app.fastapi_routes.mod_store_routes.sync_modstore_library_to_local",
+            new_callable=AsyncMock,
+        ) as mock_sync:
             mock_sync.return_value = {"success": True, "message": "ok", "data": {}}
-            resp = mod_store_client.post("/sync-modstore-library", json={"token": "t1", "all": True})
+            resp = mod_store_client.post(
+                "/sync-modstore-library", json={"token": "t1", "all": True}
+            )
             assert resp.status_code == 200
 
     def test_sync_value_error_returns_400(self, mod_store_client) -> None:
-        with patch("app.fastapi_routes.mod_store_routes.sync_modstore_library_to_local", new_callable=AsyncMock) as mock_sync:
+        with patch(
+            "app.fastapi_routes.mod_store_routes.sync_modstore_library_to_local",
+            new_callable=AsyncMock,
+        ) as mock_sync:
             mock_sync.side_effect = ValueError("bad")
-            resp = mod_store_client.post("/sync-modstore-library", json={"token": "t1", "all": True})
+            resp = mod_store_client.post(
+                "/sync-modstore-library", json={"token": "t1", "all": True}
+            )
             assert resp.status_code == 400
 
     def test_sync_runtime_error_returns_502(self, mod_store_client) -> None:
-        with patch("app.fastapi_routes.mod_store_routes.sync_modstore_library_to_local", new_callable=AsyncMock) as mock_sync:
+        with patch(
+            "app.fastapi_routes.mod_store_routes.sync_modstore_library_to_local",
+            new_callable=AsyncMock,
+        ) as mock_sync:
             mock_sync.side_effect = RuntimeError("network")
-            resp = mod_store_client.post("/sync-modstore-library", json={"token": "t1", "all": True})
+            resp = mod_store_client.post(
+                "/sync-modstore-library", json={"token": "t1", "all": True}
+            )
             assert resp.status_code == 502
 
 
@@ -3529,7 +3570,9 @@ class TestCCMarketCatalogListUrl:
     """Cover ``market_catalog_list_url`` helper."""
 
     def test_market_catalog_list_url_explicit(self) -> None:
-        with patch.dict(os.environ, {"XCAGI_MARKET_CATALOG_URL": "https://market.example.com/api/catalog"}):
+        with patch.dict(
+            os.environ, {"XCAGI_MARKET_CATALOG_URL": "https://market.example.com/api/catalog"}
+        ):
             assert cc.market_catalog_list_url() == "https://market.example.com/api/catalog"
 
     def test_market_catalog_list_url_explicit_strips_slash(self) -> None:
@@ -3537,7 +3580,10 @@ class TestCCMarketCatalogListUrl:
             assert cc.market_catalog_list_url() == "https://m.com/api/cat"
 
     def test_market_catalog_list_url_derived_from_base(self) -> None:
-        with patch.dict(os.environ, {"XCAGI_CATALOG_BASE_URL": "https://x.com/v1", "XCAGI_MARKET_CATALOG_URL": ""}):
+        with patch.dict(
+            os.environ,
+            {"XCAGI_CATALOG_BASE_URL": "https://x.com/v1", "XCAGI_MARKET_CATALOG_URL": ""},
+        ):
             assert cc.market_catalog_list_url() == "https://x.com/api/market/catalog"
 
     def test_market_catalog_list_url_default(self) -> None:
@@ -3793,8 +3839,10 @@ class TestCCHttpGetJson:
         mock_client.__aenter__.return_value = mock_client
         mock_client.get.return_value = mock_resp
 
-        with patch.dict(os.environ, {"XCAGI_CATALOG_TOKEN": "tok"}), \
-             patch("httpx.AsyncClient", return_value=mock_client):
+        with (
+            patch.dict(os.environ, {"XCAGI_CATALOG_TOKEN": "tok"}),
+            patch("httpx.AsyncClient", return_value=mock_client),
+        ):
             await cc._http_get_json("https://x.com/api")
             args, kwargs = mock_client.get.call_args
             assert kwargs["headers"] == {"Authorization": "Bearer tok"}
@@ -3805,7 +3853,9 @@ class TestCCCatalogGetJson:
 
     @pytest.mark.asyncio
     async def test_catalog_get_json_calls_http_get_json(self) -> None:
-        with patch("app.infrastructure.mods.catalog_client._http_get_json", new_callable=AsyncMock) as mock_get:
+        with patch(
+            "app.infrastructure.mods.catalog_client._http_get_json", new_callable=AsyncMock
+        ) as mock_get:
             mock_get.return_value = {"ok": True}
             result = await cc.catalog_get_json("/packages")
             assert result == {"ok": True}
@@ -3813,7 +3863,9 @@ class TestCCCatalogGetJson:
 
     @pytest.mark.asyncio
     async def test_catalog_get_json_with_absolute_url(self) -> None:
-        with patch("app.infrastructure.mods.catalog_client._http_get_json", new_callable=AsyncMock) as mock_get:
+        with patch(
+            "app.infrastructure.mods.catalog_client._http_get_json", new_callable=AsyncMock
+        ) as mock_get:
             mock_get.return_value = {"ok": True}
             await cc.catalog_get_json("https://example.com/api")
             args, _ = mock_get.call_args
@@ -3825,7 +3877,9 @@ class TestCCFetchMarketCatalogPage:
 
     @pytest.mark.asyncio
     async def test_fetch_market_catalog_page_basic(self) -> None:
-        with patch("app.infrastructure.mods.catalog_client._http_get_json", new_callable=AsyncMock) as mock_get:
+        with patch(
+            "app.infrastructure.mods.catalog_client._http_get_json", new_callable=AsyncMock
+        ) as mock_get:
             mock_get.return_value = {"items": [], "total": 0}
             result = await cc.fetch_market_catalog_page()
             assert result["total"] == 0
@@ -3835,7 +3889,9 @@ class TestCCFetchMarketCatalogPage:
 
     @pytest.mark.asyncio
     async def test_fetch_market_catalog_page_with_query(self) -> None:
-        with patch("app.infrastructure.mods.catalog_client._http_get_json", new_callable=AsyncMock) as mock_get:
+        with patch(
+            "app.infrastructure.mods.catalog_client._http_get_json", new_callable=AsyncMock
+        ) as mock_get:
             mock_get.return_value = {"items": [], "total": 0}
             await cc.fetch_market_catalog_page(q="test")
             args, _ = mock_get.call_args
@@ -3843,7 +3899,9 @@ class TestCCFetchMarketCatalogPage:
 
     @pytest.mark.asyncio
     async def test_fetch_market_catalog_page_with_collection(self) -> None:
-        with patch("app.infrastructure.mods.catalog_client._http_get_json", new_callable=AsyncMock) as mock_get:
+        with patch(
+            "app.infrastructure.mods.catalog_client._http_get_json", new_callable=AsyncMock
+        ) as mock_get:
             mock_get.return_value = {"items": [], "total": 0}
             await cc.fetch_market_catalog_page(collection="col1")
             args, _ = mock_get.call_args
@@ -3851,7 +3909,9 @@ class TestCCFetchMarketCatalogPage:
 
     @pytest.mark.asyncio
     async def test_fetch_market_catalog_page_limit_clamped(self) -> None:
-        with patch("app.infrastructure.mods.catalog_client._http_get_json", new_callable=AsyncMock) as mock_get:
+        with patch(
+            "app.infrastructure.mods.catalog_client._http_get_json", new_callable=AsyncMock
+        ) as mock_get:
             mock_get.return_value = {"items": [], "total": 0}
             await cc.fetch_market_catalog_page(limit=500)
             args, _ = mock_get.call_args
@@ -3859,7 +3919,9 @@ class TestCCFetchMarketCatalogPage:
 
     @pytest.mark.asyncio
     async def test_fetch_market_catalog_page_limit_min_one(self) -> None:
-        with patch("app.infrastructure.mods.catalog_client._http_get_json", new_callable=AsyncMock) as mock_get:
+        with patch(
+            "app.infrastructure.mods.catalog_client._http_get_json", new_callable=AsyncMock
+        ) as mock_get:
             mock_get.return_value = {"items": [], "total": 0}
             await cc.fetch_market_catalog_page(limit=0)
             args, _ = mock_get.call_args
@@ -3867,7 +3929,9 @@ class TestCCFetchMarketCatalogPage:
 
     @pytest.mark.asyncio
     async def test_fetch_market_catalog_page_negative_offset(self) -> None:
-        with patch("app.infrastructure.mods.catalog_client._http_get_json", new_callable=AsyncMock) as mock_get:
+        with patch(
+            "app.infrastructure.mods.catalog_client._http_get_json", new_callable=AsyncMock
+        ) as mock_get:
             mock_get.return_value = {"items": [], "total": 0}
             await cc.fetch_market_catalog_page(offset=-5)
             args, _ = mock_get.call_args
@@ -3875,7 +3939,9 @@ class TestCCFetchMarketCatalogPage:
 
     @pytest.mark.asyncio
     async def test_fetch_market_catalog_page_all_filters(self) -> None:
-        with patch("app.infrastructure.mods.catalog_client._http_get_json", new_callable=AsyncMock) as mock_get:
+        with patch(
+            "app.infrastructure.mods.catalog_client._http_get_json", new_callable=AsyncMock
+        ) as mock_get:
             mock_get.return_value = {"items": [], "total": 0}
             await cc.fetch_market_catalog_page(
                 q="q",
@@ -3902,7 +3968,9 @@ class TestCCFetchMarketCatalogRows:
 
     @pytest.mark.asyncio
     async def test_fetch_market_catalog_rows_single_page(self) -> None:
-        with patch("app.infrastructure.mods.catalog_client._http_get_json", new_callable=AsyncMock) as mock_get:
+        with patch(
+            "app.infrastructure.mods.catalog_client._http_get_json", new_callable=AsyncMock
+        ) as mock_get:
             mock_get.return_value = {
                 "items": [{"pkg_id": "p1"}, {"pkg_id": "p2"}],
                 "total": 2,
@@ -3913,14 +3981,18 @@ class TestCCFetchMarketCatalogRows:
 
     @pytest.mark.asyncio
     async def test_fetch_market_catalog_rows_empty(self) -> None:
-        with patch("app.infrastructure.mods.catalog_client._http_get_json", new_callable=AsyncMock) as mock_get:
+        with patch(
+            "app.infrastructure.mods.catalog_client._http_get_json", new_callable=AsyncMock
+        ) as mock_get:
             mock_get.return_value = {"items": [], "total": 0}
             rows = await cc._fetch_market_catalog_rows()
             assert rows == []
 
     @pytest.mark.asyncio
     async def test_fetch_market_catalog_rows_skips_non_dict(self) -> None:
-        with patch("app.infrastructure.mods.catalog_client._http_get_json", new_callable=AsyncMock) as mock_get:
+        with patch(
+            "app.infrastructure.mods.catalog_client._http_get_json", new_callable=AsyncMock
+        ) as mock_get:
             mock_get.return_value = {
                 "items": [{"pkg_id": "p1"}, "not_dict", 42],
                 "total": 1,
@@ -3930,7 +4002,9 @@ class TestCCFetchMarketCatalogRows:
 
     @pytest.mark.asyncio
     async def test_fetch_market_catalog_rows_skips_no_pkg_id(self) -> None:
-        with patch("app.infrastructure.mods.catalog_client._http_get_json", new_callable=AsyncMock) as mock_get:
+        with patch(
+            "app.infrastructure.mods.catalog_client._http_get_json", new_callable=AsyncMock
+        ) as mock_get:
             mock_get.return_value = {
                 "items": [{"pkg_id": "p1"}, {"name": "no id"}],
                 "total": 1,
@@ -3940,7 +4014,9 @@ class TestCCFetchMarketCatalogRows:
 
     @pytest.mark.asyncio
     async def test_fetch_market_catalog_rows_items_not_list_raises(self) -> None:
-        with patch("app.infrastructure.mods.catalog_client._http_get_json", new_callable=AsyncMock) as mock_get:
+        with patch(
+            "app.infrastructure.mods.catalog_client._http_get_json", new_callable=AsyncMock
+        ) as mock_get:
             mock_get.return_value = {"items": "not a list", "total": 0}
             with pytest.raises(HTTPException) as exc_info:
                 await cc._fetch_market_catalog_rows()
@@ -3948,7 +4024,9 @@ class TestCCFetchMarketCatalogRows:
 
     @pytest.mark.asyncio
     async def test_fetch_market_catalog_rows_invalid_total_uses_len(self) -> None:
-        with patch("app.infrastructure.mods.catalog_client._http_get_json", new_callable=AsyncMock) as mock_get:
+        with patch(
+            "app.infrastructure.mods.catalog_client._http_get_json", new_callable=AsyncMock
+        ) as mock_get:
             mock_get.return_value = {
                 "items": [{"pkg_id": "p1"}],
                 "total": "invalid",
@@ -4052,9 +4130,14 @@ class TestCCIterCatalogPackages:
 
     @pytest.mark.asyncio
     async def test_iter_catalog_packages_market_success(self) -> None:
-        with patch("app.infrastructure.mods.catalog_client._use_market_catalog", return_value=True), \
-             patch("app.infrastructure.mods.catalog_client._fetch_market_catalog_rows", new_callable=AsyncMock) as mock_fetch, \
-             patch("app.services.catalog_visibility.is_public_catalog_row", return_value=True):
+        with (
+            patch("app.infrastructure.mods.catalog_client._use_market_catalog", return_value=True),
+            patch(
+                "app.infrastructure.mods.catalog_client._fetch_market_catalog_rows",
+                new_callable=AsyncMock,
+            ) as mock_fetch,
+            patch("app.services.catalog_visibility.is_public_catalog_row", return_value=True),
+        ):
             mock_fetch.return_value = [{"id": "p1"}, {"id": "p2"}]
             rows = []
             async for row in cc.iter_catalog_packages():
@@ -4063,10 +4146,17 @@ class TestCCIterCatalogPackages:
 
     @pytest.mark.asyncio
     async def test_iter_catalog_packages_market_empty_falls_back(self) -> None:
-        with patch("app.infrastructure.mods.catalog_client._use_market_catalog", return_value=True), \
-             patch("app.infrastructure.mods.catalog_client._fetch_market_catalog_rows", new_callable=AsyncMock) as mock_fetch, \
-             patch("app.infrastructure.mods.catalog_client.catalog_get_json", new_callable=AsyncMock) as mock_get, \
-             patch("app.services.catalog_visibility.is_public_catalog_row", return_value=True):
+        with (
+            patch("app.infrastructure.mods.catalog_client._use_market_catalog", return_value=True),
+            patch(
+                "app.infrastructure.mods.catalog_client._fetch_market_catalog_rows",
+                new_callable=AsyncMock,
+            ) as mock_fetch,
+            patch(
+                "app.infrastructure.mods.catalog_client.catalog_get_json", new_callable=AsyncMock
+            ) as mock_get,
+            patch("app.services.catalog_visibility.is_public_catalog_row", return_value=True),
+        ):
             mock_fetch.return_value = []
             mock_get.return_value = {"packages": [{"id": "p1"}]}
             rows = []
@@ -4076,10 +4166,17 @@ class TestCCIterCatalogPackages:
 
     @pytest.mark.asyncio
     async def test_iter_catalog_packages_market_http_error_falls_back(self) -> None:
-        with patch("app.infrastructure.mods.catalog_client._use_market_catalog", return_value=True), \
-             patch("app.infrastructure.mods.catalog_client._fetch_market_catalog_rows", new_callable=AsyncMock) as mock_fetch, \
-             patch("app.infrastructure.mods.catalog_client.catalog_get_json", new_callable=AsyncMock) as mock_get, \
-             patch("app.services.catalog_visibility.is_public_catalog_row", return_value=True):
+        with (
+            patch("app.infrastructure.mods.catalog_client._use_market_catalog", return_value=True),
+            patch(
+                "app.infrastructure.mods.catalog_client._fetch_market_catalog_rows",
+                new_callable=AsyncMock,
+            ) as mock_fetch,
+            patch(
+                "app.infrastructure.mods.catalog_client.catalog_get_json", new_callable=AsyncMock
+            ) as mock_get,
+            patch("app.services.catalog_visibility.is_public_catalog_row", return_value=True),
+        ):
             mock_fetch.side_effect = HTTPException(status_code=502, detail="err")
             mock_get.return_value = {"packages": [{"id": "p1"}]}
             rows = []
@@ -4089,10 +4186,17 @@ class TestCCIterCatalogPackages:
 
     @pytest.mark.asyncio
     async def test_iter_catalog_packages_market_recoverable_error_falls_back(self) -> None:
-        with patch("app.infrastructure.mods.catalog_client._use_market_catalog", return_value=True), \
-             patch("app.infrastructure.mods.catalog_client._fetch_market_catalog_rows", new_callable=AsyncMock) as mock_fetch, \
-             patch("app.infrastructure.mods.catalog_client.catalog_get_json", new_callable=AsyncMock) as mock_get, \
-             patch("app.services.catalog_visibility.is_public_catalog_row", return_value=True):
+        with (
+            patch("app.infrastructure.mods.catalog_client._use_market_catalog", return_value=True),
+            patch(
+                "app.infrastructure.mods.catalog_client._fetch_market_catalog_rows",
+                new_callable=AsyncMock,
+            ) as mock_fetch,
+            patch(
+                "app.infrastructure.mods.catalog_client.catalog_get_json", new_callable=AsyncMock
+            ) as mock_get,
+            patch("app.services.catalog_visibility.is_public_catalog_row", return_value=True),
+        ):
             mock_fetch.side_effect = RuntimeError("err")
             mock_get.return_value = {"packages": [{"id": "p1"}]}
             rows = []
@@ -4102,9 +4206,13 @@ class TestCCIterCatalogPackages:
 
     @pytest.mark.asyncio
     async def test_iter_catalog_packages_disabled_market_uses_index(self) -> None:
-        with patch("app.infrastructure.mods.catalog_client._use_market_catalog", return_value=False), \
-             patch("app.infrastructure.mods.catalog_client.catalog_get_json", new_callable=AsyncMock) as mock_get, \
-             patch("app.services.catalog_visibility.is_public_catalog_row", return_value=True):
+        with (
+            patch("app.infrastructure.mods.catalog_client._use_market_catalog", return_value=False),
+            patch(
+                "app.infrastructure.mods.catalog_client.catalog_get_json", new_callable=AsyncMock
+            ) as mock_get,
+            patch("app.services.catalog_visibility.is_public_catalog_row", return_value=True),
+        ):
             mock_get.return_value = {"packages": [{"id": "p1"}, {"id": "p2"}]}
             rows = []
             async for row in cc.iter_catalog_packages():
@@ -4113,9 +4221,13 @@ class TestCCIterCatalogPackages:
 
     @pytest.mark.asyncio
     async def test_iter_catalog_packages_packages_not_list_raises(self) -> None:
-        with patch("app.infrastructure.mods.catalog_client._use_market_catalog", return_value=False), \
-             patch("app.infrastructure.mods.catalog_client.catalog_get_json", new_callable=AsyncMock) as mock_get, \
-             patch("app.services.catalog_visibility.is_public_catalog_row", return_value=True):
+        with (
+            patch("app.infrastructure.mods.catalog_client._use_market_catalog", return_value=False),
+            patch(
+                "app.infrastructure.mods.catalog_client.catalog_get_json", new_callable=AsyncMock
+            ) as mock_get,
+            patch("app.services.catalog_visibility.is_public_catalog_row", return_value=True),
+        ):
             mock_get.return_value = {"packages": "not a list"}
             with pytest.raises(HTTPException) as exc_info:
                 async for _ in cc.iter_catalog_packages():
@@ -4124,9 +4236,13 @@ class TestCCIterCatalogPackages:
 
     @pytest.mark.asyncio
     async def test_iter_catalog_packages_filters_non_dict(self) -> None:
-        with patch("app.infrastructure.mods.catalog_client._use_market_catalog", return_value=False), \
-             patch("app.infrastructure.mods.catalog_client.catalog_get_json", new_callable=AsyncMock) as mock_get, \
-             patch("app.services.catalog_visibility.is_public_catalog_row", return_value=True):
+        with (
+            patch("app.infrastructure.mods.catalog_client._use_market_catalog", return_value=False),
+            patch(
+                "app.infrastructure.mods.catalog_client.catalog_get_json", new_callable=AsyncMock
+            ) as mock_get,
+            patch("app.services.catalog_visibility.is_public_catalog_row", return_value=True),
+        ):
             mock_get.return_value = {"packages": [{"id": "p1"}, "not_dict", 42]}
             rows = []
             async for row in cc.iter_catalog_packages():

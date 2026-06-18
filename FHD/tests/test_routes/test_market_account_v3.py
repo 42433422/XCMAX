@@ -16,7 +16,6 @@ import pytest
 
 from app.fastapi_routes import market_account as ma
 
-
 # ========================= bind_market_auth_to_session ======================
 
 
@@ -230,7 +229,9 @@ class TestAuthorizationFromRequestResolved:
         request = MagicMock()
         request.cookies = {}
         request.headers = {}
-        result = await ma._authorization_from_request_resolved(request, {"authorization": "body_tok"})
+        result = await ma._authorization_from_request_resolved(
+            request, {"authorization": "body_tok"}
+        )
         assert "body_tok" in result
 
 
@@ -289,6 +290,7 @@ class TestProxyJsonRetryBranches:
         monkeypatch.setenv("XCAGI_MARKET_BASE_URL", "http://localhost:8765")
         monkeypatch.setenv("XCAGI_MARKET_HTTP_RETRIES", "2")
         import httpx
+
         with patch("httpx.AsyncClient") as mock_client_cls:
             mock_client = AsyncMock()
             mock_client.request = AsyncMock(side_effect=httpx.ConnectError("refused"))
@@ -403,7 +405,10 @@ class TestResolveValidMarketAccessToken:
         ma._MARKET_SESSION_TOKENS["sid1"] = "demo_market_token"
         with (
             patch("app.db.session.get_db", side_effect=ImportError("no db")),
-            patch("app.application.surface_audit_demo_account.is_local_demo_market_token", return_value=True),
+            patch(
+                "app.application.surface_audit_demo_account.is_local_demo_market_token",
+                return_value=True,
+            ),
         ):
             result = await ma.resolve_valid_market_access_token("sid1")
         assert result == "demo_market_token"
@@ -413,7 +418,10 @@ class TestResolveValidMarketAccessToken:
         ma._MARKET_SESSION_TOKENS["sid1"] = "valid_tok"
         with (
             patch("app.db.session.get_db", side_effect=ImportError("no db")),
-            patch("app.application.surface_audit_demo_account.is_local_demo_market_token", return_value=False),
+            patch(
+                "app.application.surface_audit_demo_account.is_local_demo_market_token",
+                return_value=False,
+            ),
             patch.object(ma, "_proxy_json", return_value={"user": {"id": 1}}),
         ):
             result = await ma.resolve_valid_market_access_token("sid1")
@@ -424,8 +432,13 @@ class TestResolveValidMarketAccessToken:
         ma._MARKET_SESSION_TOKENS["sid1"] = "expired_tok"
         with (
             patch("app.db.session.get_db", side_effect=ImportError("no db")),
-            patch("app.application.surface_audit_demo_account.is_local_demo_market_token", return_value=False),
-            patch.object(ma, "_proxy_json", return_value={"__proxy_error__": True, "status_code": 401}),
+            patch(
+                "app.application.surface_audit_demo_account.is_local_demo_market_token",
+                return_value=False,
+            ),
+            patch.object(
+                ma, "_proxy_json", return_value={"__proxy_error__": True, "status_code": 401}
+            ),
             patch.object(ma, "refresh_session_market_token", return_value="new_tok"),
         ):
             result = await ma.resolve_valid_market_access_token("sid1")
@@ -436,8 +449,15 @@ class TestResolveValidMarketAccessToken:
         ma._MARKET_SESSION_TOKENS["sid1"] = "local_tok"
         with (
             patch("app.db.session.get_db", side_effect=ImportError("no db")),
-            patch("app.application.surface_audit_demo_account.is_local_demo_market_token", return_value=False),
-            patch.object(ma, "_proxy_json", return_value=ma.JSONResponse({"error": "unreachable"}, status_code=502)),
+            patch(
+                "app.application.surface_audit_demo_account.is_local_demo_market_token",
+                return_value=False,
+            ),
+            patch.object(
+                ma,
+                "_proxy_json",
+                return_value=ma.JSONResponse({"error": "unreachable"}, status_code=502),
+            ),
         ):
             result = await ma.resolve_valid_market_access_token("sid1")
         assert result == "local_tok"
@@ -447,8 +467,13 @@ class TestResolveValidMarketAccessToken:
         ma._MARKET_SESSION_TOKENS["sid1"] = "local_tok"
         with (
             patch("app.db.session.get_db", side_effect=ImportError("no db")),
-            patch("app.application.surface_audit_demo_account.is_local_demo_market_token", return_value=False),
-            patch.object(ma, "_proxy_json", return_value={"__proxy_error__": True, "status_code": 500}),
+            patch(
+                "app.application.surface_audit_demo_account.is_local_demo_market_token",
+                return_value=False,
+            ),
+            patch.object(
+                ma, "_proxy_json", return_value={"__proxy_error__": True, "status_code": 500}
+            ),
         ):
             result = await ma.resolve_valid_market_access_token("sid1")
         assert result == "local_tok"
@@ -462,7 +487,10 @@ class TestLoginMarketWithPassword:
     async def test_demo_mode_login(self, monkeypatch):
         monkeypatch.setenv("XCAGI_MARKET_BASE_URL", "http://localhost:8765")
         with (
-            patch("app.application.surface_audit_demo_account.try_local_demo_market_login", return_value={"token": "demo_tok", "raw": {}}),
+            patch(
+                "app.application.surface_audit_demo_account.try_local_demo_market_login",
+                return_value={"token": "demo_tok", "raw": {}},
+            ),
             patch.object(ma, "_is_local_market_base", return_value=True),
         ):
             result = await ma.login_market_with_password("u", "p")
@@ -485,7 +513,10 @@ class TestLoginMarketWithPassword:
             return {}
 
         with (
-            patch("app.application.surface_audit_demo_account.try_local_demo_market_login", return_value=None),
+            patch(
+                "app.application.surface_audit_demo_account.try_local_demo_market_login",
+                return_value=None,
+            ),
             patch.object(ma, "_proxy_json", side_effect=mock_proxy),
         ):
             result = await ma.login_market_with_password("u", "p")
@@ -495,9 +526,16 @@ class TestLoginMarketWithPassword:
     @pytest.mark.asyncio
     async def test_login_proxy_error(self, monkeypatch):
         monkeypatch.setenv("XCAGI_MARKET_BASE_URL", "https://market.example.com")
-        error_payload = {"__proxy_error__": True, "status_code": 401, "payload": {"detail": "invalid credentials"}}
+        error_payload = {
+            "__proxy_error__": True,
+            "status_code": 401,
+            "payload": {"detail": "invalid credentials"},
+        }
         with (
-            patch("app.application.surface_audit_demo_account.try_local_demo_market_login", return_value=None),
+            patch(
+                "app.application.surface_audit_demo_account.try_local_demo_market_login",
+                return_value=None,
+            ),
             patch.object(ma, "_proxy_json", return_value=error_payload),
         ):
             result = await ma.login_market_with_password("u", "wrong_p")
@@ -517,7 +555,11 @@ class TestNormalizeMarketAuthPayload:
                 "user": {"id": 1, "username": "u", "is_enterprise": True, "is_admin": False},
             }
         }
-        with patch.object(ma, "_proxy_json", return_value={"user": {"id": 1, "username": "u", "is_enterprise": True}}):
+        with patch.object(
+            ma,
+            "_proxy_json",
+            return_value={"user": {"id": 1, "username": "u", "is_enterprise": True}},
+        ):
             result = await ma._normalize_market_auth_payload(payload)
         assert result["token"] == "tok1"
         assert result["refresh_token"] == "rt1"
@@ -531,7 +573,11 @@ class TestNormalizeMarketAuthPayload:
 
     @pytest.mark.asyncio
     async def test_proxy_error_payload(self):
-        payload = {"__proxy_error__": True, "status_code": 401, "payload": {"detail": "unauthorized"}}
+        payload = {
+            "__proxy_error__": True,
+            "status_code": 401,
+            "payload": {"detail": "unauthorized"},
+        }
         result = await ma._normalize_market_auth_payload(payload)
         assert result["success"] is False
 
@@ -664,7 +710,10 @@ class TestMarketSessionHandoffRoute:
         request.cookies = {"session_id": "sid1"}
         request.headers = {}
         with (
-            patch("app.infrastructure.auth.dependencies.resolve_session_user", return_value=MagicMock()),
+            patch(
+                "app.infrastructure.auth.dependencies.resolve_session_user",
+                return_value=MagicMock(),
+            ),
             patch.object(ma, "resolve_valid_market_access_token", return_value="valid_tok"),
             patch.object(ma, "session_market_refresh_token", return_value=""),
             patch.object(ma, "latest_session_market_refresh_token", return_value=""),
@@ -680,7 +729,10 @@ class TestMarketSessionHandoffRoute:
         request.cookies = {"session_id": "sid1"}
         request.headers = {}
         with (
-            patch("app.infrastructure.auth.dependencies.resolve_session_user", side_effect=RuntimeError("auth error")),
+            patch(
+                "app.infrastructure.auth.dependencies.resolve_session_user",
+                side_effect=RuntimeError("auth error"),
+            ),
             patch.object(ma, "session_market_token", return_value="fallback_tok"),
             patch.object(ma, "latest_session_market_token", return_value=""),
         ):
@@ -695,7 +747,10 @@ class TestMarketSessionHandoffRoute:
         request.cookies = {}
         request.headers = {}
         with (
-            patch("app.infrastructure.auth.dependencies.resolve_session_user", side_effect=RuntimeError("auth error")),
+            patch(
+                "app.infrastructure.auth.dependencies.resolve_session_user",
+                side_effect=RuntimeError("auth error"),
+            ),
             patch.object(ma, "session_market_token", return_value=""),
             patch.object(ma, "latest_session_market_token", return_value=""),
         ):

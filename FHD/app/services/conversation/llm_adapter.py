@@ -148,8 +148,11 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
         self._stream_client: Optional[httpx.AsyncClient] = None
 
         logger.info(
-            "初始化LLM适配器: %s/%s "
-            f"@ %s (Key长度: %s)", self.provider, self._model, self._base_url, len(self._api_key or '')
+            "初始化LLM适配器: %s/%s @ %s (Key长度: %s)",
+            self.provider,
+            self._model,
+            self._base_url,
+            len(self._api_key or ""),
         )
 
     def _resolve_api_key(self, provider: str) -> Optional[str]:
@@ -245,8 +248,12 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
         headers = {"Authorization": f"Bearer {self._api_key}", "Content-Type": "application/json"}
 
         logger.debug(
-            "调用 [%s/%s] "
-            f"messages=%s, temp=%s, max_tokens=%s", self.provider, self._model, len(messages), temperature, max_tokens
+            "调用 [%s/%s] messages=%s, temp=%s, max_tokens=%s",
+            self.provider,
+            self._model,
+            len(messages),
+            temperature,
+            max_tokens,
         )
 
         client = await self._get_client()
@@ -256,9 +263,10 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
         result = response.json()
 
         logger.debug(
-            "[%s] 响应成功, "
-            f"choices=%s, "
-            f"usage=%s", self.provider, len(result.get('choices', [])), result.get('usage', {})
+            "[%s] 响应成功, choices=%s, usage=%s",
+            self.provider,
+            len(result.get("choices", [])),
+            result.get("usage", {}),
         )
 
         return cast("dict[str, Any]", result)

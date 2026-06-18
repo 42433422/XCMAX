@@ -8,7 +8,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -16,8 +15,9 @@ from fastapi.testclient import TestClient
 
 @pytest.fixture
 def client():
-    from app.fastapi_routes.finance_invoices_api import router
     from fastapi import FastAPI
+
+    from app.fastapi_routes.finance_invoices_api import router
 
     app = FastAPI()
     app.include_router(router)
@@ -31,41 +31,57 @@ def client():
 
 class TestRequireAdminSession:
     def test_no_session_returns_401(self):
-        from app.fastapi_routes.finance_invoices_api import _require_admin_session
         from fastapi import Request
+
+        from app.fastapi_routes.finance_invoices_api import _require_admin_session
 
         scope = {"type": "http", "headers": []}
         req = Request(scope)
-        with patch("app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-                    return_value=None):
+        with patch(
+            "app.fastapi_routes.domains.misc.helpers._session_id_from_request", return_value=None
+        ):
             result = _require_admin_session(req)
         assert result is not None
         assert result.status_code == 401
 
     def test_non_admin_returns_403(self):
-        from app.fastapi_routes.finance_invoices_api import _require_admin_session
         from fastapi import Request
+
+        from app.fastapi_routes.finance_invoices_api import _require_admin_session
 
         scope = {"type": "http", "headers": []}
         req = Request(scope)
-        with patch("app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-                    return_value="sid123"), \
-             patch("app.application.session_account_meta.load_session_account_meta",
-                    return_value={"account_kind": "personal"}):
+        with (
+            patch(
+                "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
+                return_value="sid123",
+            ),
+            patch(
+                "app.application.session_account_meta.load_session_account_meta",
+                return_value={"account_kind": "personal"},
+            ),
+        ):
             result = _require_admin_session(req)
         assert result is not None
         assert result.status_code == 403
 
     def test_admin_passes(self):
-        from app.fastapi_routes.finance_invoices_api import _require_admin_session
         from fastapi import Request
+
+        from app.fastapi_routes.finance_invoices_api import _require_admin_session
 
         scope = {"type": "http", "headers": []}
         req = Request(scope)
-        with patch("app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-                    return_value="sid123"), \
-             patch("app.application.session_account_meta.load_session_account_meta",
-                    return_value={"account_kind": "admin"}):
+        with (
+            patch(
+                "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
+                return_value="sid123",
+            ),
+            patch(
+                "app.application.session_account_meta.load_session_account_meta",
+                return_value={"account_kind": "admin"},
+            ),
+        ):
             result = _require_admin_session(req)
         assert result is None
 
@@ -116,8 +132,9 @@ class TestPydanticModels:
         assert body.username == ""
 
     def test_market_invoice_review_body_action_pattern(self):
-        from app.fastapi_routes.finance_invoices_api import MarketInvoiceReviewBody
         from pydantic import ValidationError
+
+        from app.fastapi_routes.finance_invoices_api import MarketInvoiceReviewBody
 
         body = MarketInvoiceReviewBody(action="issue")
         assert body.action == "issue"
@@ -145,6 +162,7 @@ class TestFinanceCrmInvoicesList:
     def test_success_logic(self):
         """Test the route logic directly by mocking the inner imports."""
         from app.fastapi_routes.finance_invoices_api import _require_admin_session
+
         # Verify the function exists and can be patched
         assert callable(_require_admin_session)
 
@@ -152,6 +170,7 @@ class TestFinanceCrmInvoicesList:
 class TestFinanceCrmInvoiceDetail:
     def test_route_exists(self):
         from app.fastapi_routes.finance_invoices_api import router
+
         routes = [r.path for r in router.routes]
         assert "/api/finance/invoices/crm/{invoice_id}" in routes
 
@@ -159,6 +178,7 @@ class TestFinanceCrmInvoiceDetail:
 class TestFinanceCrmInvoiceIssue:
     def test_route_exists(self):
         from app.fastapi_routes.finance_invoices_api import router
+
         routes = [r.path for r in router.routes]
         assert "/api/finance/invoices/crm/issue" in routes
 
@@ -166,6 +186,7 @@ class TestFinanceCrmInvoiceIssue:
 class TestFinanceCrmInvoiceArchive:
     def test_route_exists(self):
         from app.fastapi_routes.finance_invoices_api import router
+
         routes = [r.path for r in router.routes]
         assert "/api/finance/invoices/crm/{invoice_id}/archive" in routes
 
@@ -173,6 +194,7 @@ class TestFinanceCrmInvoiceArchive:
 class TestFinanceMarketInvoicesList:
     def test_route_exists(self):
         from app.fastapi_routes.finance_invoices_api import router
+
         routes = [r.path for r in router.routes]
         assert "/api/finance/invoices/market" in routes
 
@@ -180,5 +202,6 @@ class TestFinanceMarketInvoicesList:
 class TestFinanceMarketInvoiceReview:
     def test_route_exists(self):
         from app.fastapi_routes.finance_invoices_api import router
+
         routes = [r.path for r in router.routes]
         assert "/api/finance/invoices/market/{invoice_id}" in routes

@@ -1,4 +1,5 @@
 """Tests for app.fastapi_routes.lan_routes."""
+
 from __future__ import annotations
 
 import time
@@ -9,9 +10,9 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.fastapi_routes.lan_routes import (
+    _clear_token_cookie,
     _ip_in_admin_hosts,
     _ip_in_cidrs,
-    _clear_token_cookie,
     _set_token_cookie,
     router,
 )
@@ -361,7 +362,9 @@ class TestActivateRoute:
             patch("app.fastapi_routes.lan_routes.ensure_schema"),
             patch("app.fastapi_routes.lan_routes.find_key_by_plaintext", return_value=record),
             patch("app.fastapi_routes.lan_routes.mark_key_used"),
-            patch("app.fastapi_routes.lan_routes.issue_token", return_value=("token123", mock_payload)),
+            patch(
+                "app.fastapi_routes.lan_routes.issue_token", return_value=("token123", mock_payload)
+            ),
             patch("app.fastapi_routes.lan_routes.record_session"),
             patch("app.fastapi_routes.lan_routes.write_audit"),
         ):
@@ -406,7 +409,9 @@ class TestActivateRoute:
             patch("app.fastapi_routes.lan_routes.find_key_by_plaintext", return_value=None),
             patch("app.fastapi_routes.lan_routes.has_any_active_key", return_value=False),
             patch("app.fastapi_routes.lan_routes.issue_key", return_value=("raw", new_key)),
-            patch("app.fastapi_routes.lan_routes.issue_token", return_value=("token123", mock_payload)),
+            patch(
+                "app.fastapi_routes.lan_routes.issue_token", return_value=("token123", mock_payload)
+            ),
             patch("app.fastapi_routes.lan_routes.record_session"),
             patch("app.fastapi_routes.lan_routes.write_audit"),
         ):
@@ -456,7 +461,9 @@ class TestAccessRequestRoute:
             patch("app.fastapi_routes.lan_routes.get_lan_config", return_value=mock_cfg),
             patch("app.fastapi_routes.lan_routes.get_client_ip", return_value="192.168.1.1"),
             patch("app.fastapi_routes.lan_routes.is_ip_explicitly_allowed", return_value=True),
-            patch("app.fastapi_routes.lan_routes.get_latest_access_request_by_ip", return_value=None),
+            patch(
+                "app.fastapi_routes.lan_routes.get_latest_access_request_by_ip", return_value=None
+            ),
         ):
             resp = client.post("/api/lan/access-requests", json={"device_label": "test"})
         assert resp.status_code == 200
@@ -477,7 +484,9 @@ class TestMyAccessRequestRoute:
             patch("app.fastapi_routes.lan_routes.get_lan_config", return_value=mock_cfg),
             patch("app.fastapi_routes.lan_routes.get_client_ip", return_value="10.0.0.1"),
             patch("app.fastapi_routes.lan_routes.is_ip_explicitly_allowed", return_value=False),
-            patch("app.fastapi_routes.lan_routes.get_latest_access_request_by_ip", return_value=None),
+            patch(
+                "app.fastapi_routes.lan_routes.get_latest_access_request_by_ip", return_value=None
+            ),
         ):
             resp = client.get("/api/lan/access-requests/mine")
         assert resp.status_code == 200

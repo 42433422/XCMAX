@@ -43,11 +43,17 @@
           </ul>
         </div>
 
-        <ul v-if="conversations.length" class="im-conv-list">
+        <ul v-if="sidebarRows.length" class="im-conv-list">
           <li
-            v-for="c in conversations"
-            :key="c.id"
-            :class="['im-conv-item', { active: c.id === activeConversationId }]"
+            v-for="c in sidebarRows"
+            :key="`c-${c.id}`"
+            :class="[
+              'im-conv-item',
+              {
+                active: c.kind === 'conversation' && c.id === activeConversationId,
+                'im-conv-item--pinned': c.isPinned,
+              },
+            ]"
             @click="selectConversation(c.id)"
           >
             <span class="im-avatar" aria-hidden="true">{{ avatarText(c.title) }}</span>
@@ -200,6 +206,20 @@ const activeTitle = computed(() => {
   const conv = conversations.value.find((c) => c.id === activeConversationId.value);
   return conv?.title || '会话';
 });
+
+type SidebarConversationRow = ImConversationSummary & {
+  kind: 'conversation';
+  isPinned: boolean;
+  contact?: never;
+};
+
+const sidebarRows = computed<SidebarConversationRow[]>(() =>
+  conversations.value.map((c) => ({
+    ...c,
+    kind: 'conversation',
+    isPinned: Boolean(c.is_enterprise_dedicated_cs),
+  })),
+);
 
 const filteredContacts = computed(() => {
   const kw = contactKeyword.value.trim().toLowerCase();

@@ -172,7 +172,9 @@ class TestGetModel:
         monkeypatch.delenv("XCAGI_CHAT_ASR_DEVICE", raising=False)
         monkeypatch.delenv("XCAGI_CHAT_ASR_COMPUTE_TYPE", raising=False)
 
-        original_import = __builtins__.__import__ if hasattr(__builtins__, "__import__") else __import__
+        original_import = (
+            __builtins__.__import__ if hasattr(__builtins__, "__import__") else __import__
+        )
 
         def fake_import(name, *args, **kwargs):
             if name == "faster_whisper":
@@ -426,7 +428,7 @@ class TestRunTranscribe:
         monkeypatch.setenv("XCAGI_CHAT_ASR_BEAM", "1")
 
         mock_model = MagicMock()
-        mock_model.transcribe.side_effect =RuntimeError("decode failed")
+        mock_model.transcribe.side_effect = RuntimeError("decode failed")
 
         with patch("app.fastapi_routes.voice_routes._get_model", return_value=mock_model):
             with pytest.raises(HTTPException) as exc_info:
@@ -525,7 +527,9 @@ class TestVoiceHealthRoute:
         monkeypatch.setenv("XCAGI_CHAT_ASR_MODEL", "small")
         monkeypatch.delenv("XCAGI_CHAT_ASR_DEVICE", raising=False)
 
-        original_import = __builtins__.__import__ if hasattr(__builtins__, "__import__") else __import__
+        original_import = (
+            __builtins__.__import__ if hasattr(__builtins__, "__import__") else __import__
+        )
 
         def fake_import(name, *args, **kwargs):
             if name == "faster_whisper":

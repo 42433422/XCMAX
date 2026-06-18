@@ -20,9 +20,11 @@ from app.services.shipment_number_mode_service import ShipmentNumberModeService
 
 def _mock_get_db(mock_db):
     """Create a contextmanager mock for get_db generator."""
+
     @contextlib.contextmanager
     def _get_db():
         yield mock_db
+
     return _get_db
 
 
@@ -503,7 +505,12 @@ class TestExecute:
                 custom_order_number="",
                 direct_unit_name="七彩乐园",
                 direct_products=[
-                    {"model_number": "", "product_name": "产品A", "tin_spec": "28", "quantity_tins": 5}
+                    {
+                        "model_number": "",
+                        "product_name": "产品A",
+                        "tin_spec": "28",
+                        "quantity_tins": 5,
+                    }
                 ],
                 parse_order_text=lambda x: {"success": False},
             )
@@ -524,7 +531,12 @@ class TestExecute:
                 custom_order_number="",
                 direct_unit_name="七彩乐园",
                 direct_products=[
-                    {"model_number": "9803", "product_name": "产品A", "tin_spec": "", "quantity_tins": 5}
+                    {
+                        "model_number": "9803",
+                        "product_name": "产品A",
+                        "tin_spec": "",
+                        "quantity_tins": 5,
+                    }
                 ],
                 parse_order_text=lambda x: {"success": False},
             )
@@ -540,20 +552,22 @@ class TestExecute:
             patch.object(svc, "_query_active_purchase_unit_names", return_value=["七彩乐园"]),
             patch("app.services.shipment_number_mode_service.get_db", _mock_get_db(mock_db)),
         ):
-            # 注意：源码 `quantity = product.get("quantity_tins") or product.get("quantity")`
-            # 当 quantity_tins=0 时，0 为 falsy，会回退到 quantity 字段（不存在）→ None。
-            # 随后 float(None) 抛出 TypeError（不在 RECOVERABLE_ERRORS 中），直接传播。
-            # 此测试记录该已知行为：零数量因 `or` 短路导致 TypeError 而非 400。
-            with pytest.raises(TypeError):
-                svc.execute(
-                    order_text="",
-                    custom_order_number="",
-                    direct_unit_name="七彩乐园",
-                    direct_products=[
-                        {"model_number": "9803", "product_name": "产品A", "tin_spec": "28", "quantity_tins": 0}
-                    ],
-                    parse_order_text=lambda x: {"success": False},
-                )
+            result, status = svc.execute(
+                order_text="",
+                custom_order_number="",
+                direct_unit_name="七彩乐园",
+                direct_products=[
+                    {
+                        "model_number": "9803",
+                        "product_name": "产品A",
+                        "tin_spec": "28",
+                        "quantity_tins": 0,
+                    }
+                ],
+                parse_order_text=lambda x: {"success": False},
+            )
+        assert status == 400
+        assert "数量缺失或无效" in result["message"]
 
     def test_model_not_in_db_returns_400(self, svc):
         mock_db = MagicMock()
@@ -570,7 +584,12 @@ class TestExecute:
                 custom_order_number="",
                 direct_unit_name="七彩乐园",
                 direct_products=[
-                    {"model_number": "9803", "product_name": "产品A", "tin_spec": "28", "quantity_tins": 5}
+                    {
+                        "model_number": "9803",
+                        "product_name": "产品A",
+                        "tin_spec": "28",
+                        "quantity_tins": 5,
+                    }
                 ],
                 parse_order_text=lambda x: {"success": False},
             )
@@ -600,7 +619,12 @@ class TestExecute:
                 custom_order_number="",
                 direct_unit_name="七彩乐园",
                 direct_products=[
-                    {"model_number": "9803", "product_name": "产品A", "tin_spec": "28", "quantity_tins": 5}
+                    {
+                        "model_number": "9803",
+                        "product_name": "产品A",
+                        "tin_spec": "28",
+                        "quantity_tins": 5,
+                    }
                 ],
                 parse_order_text=lambda x: {"success": False},
             )
@@ -632,7 +656,12 @@ class TestExecute:
                 custom_order_number="CUSTOM001",
                 direct_unit_name="七彩乐园",
                 direct_products=[
-                    {"model_number": "9803", "product_name": "产品A", "tin_spec": "28", "quantity_tins": 5}
+                    {
+                        "model_number": "9803",
+                        "product_name": "产品A",
+                        "tin_spec": "28",
+                        "quantity_tins": 5,
+                    }
                 ],
                 parse_order_text=lambda x: {"success": False},
             )

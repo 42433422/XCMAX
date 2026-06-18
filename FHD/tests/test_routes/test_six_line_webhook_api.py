@@ -1,17 +1,19 @@
 """Tests for app.fastapi_routes.six_line_webhook_api."""
+
 from __future__ import annotations
 
 import hashlib
 import hmac
 import json
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 
 from app.fastapi_routes.six_line_webhook_api import (
-    _verify_secret,
+    _normalize_body,
     _normalize_github,
     _normalize_grafana,
-    _normalize_body,
+    _verify_secret,
 )
 
 
@@ -45,9 +47,7 @@ class TestVerifySecret:
 
 class TestNormalizeGithub:
     def test_failed_workflow(self):
-        payload = {
-            "workflow_run": {"conclusion": "failure", "id": 12345}
-        }
+        payload = {"workflow_run": {"conclusion": "failure", "id": 12345}}
         result = _normalize_github(payload)
         assert result is not None
         assert result["event_type"] == "ci.failed"
@@ -55,9 +55,7 @@ class TestNormalizeGithub:
         assert result["payload"]["source"] == "github"
 
     def test_successful_workflow_returns_none(self):
-        payload = {
-            "workflow_run": {"conclusion": "success", "id": 12345}
-        }
+        payload = {"workflow_run": {"conclusion": "success", "id": 12345}}
         result = _normalize_github(payload)
         assert result is None
 

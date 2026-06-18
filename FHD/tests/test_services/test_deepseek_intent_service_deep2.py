@@ -1,4 +1,5 @@
 """Deep tests for ``app.services.deepseek_intent_service`` covering remaining uncovered branches."""
+
 from __future__ import annotations
 
 import json
@@ -17,7 +18,6 @@ from app.services.deepseek_intent_service import (
     get_hybrid_intent_with_deepseek,
     reset_deepseek_intent_services,
 )
-
 
 # ── _get_api_key deep ────────────────────────────────────────────────────────
 
@@ -43,20 +43,25 @@ class TestGetApiKeyDeep:
 
     def test_api_key_config_file_not_exists(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
-        with patch(
-            "app.utils.path_utils.get_resource_path",
-            return_value="/fake/config.py",
-        ), patch("os.path.exists", return_value=False):
+        with (
+            patch(
+                "app.utils.path_utils.get_resource_path",
+                return_value="/fake/config.py",
+            ),
+            patch("os.path.exists", return_value=False),
+        ):
             r = DeepSeekIntentRecognizer(api_key=None)
             assert r._get_api_key() == ""
 
     def test_api_key_config_spec_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
-        with patch(
-            "app.utils.path_utils.get_resource_path",
-            return_value="/fake/config.py",
-        ), patch("os.path.exists", return_value=True), patch(
-            "importlib.util.spec_from_file_location", return_value=None
+        with (
+            patch(
+                "app.utils.path_utils.get_resource_path",
+                return_value="/fake/config.py",
+            ),
+            patch("os.path.exists", return_value=True),
+            patch("importlib.util.spec_from_file_location", return_value=None),
         ):
             r = DeepSeekIntentRecognizer(api_key=None)
             assert r._get_api_key() == ""
@@ -65,11 +70,13 @@ class TestGetApiKeyDeep:
         monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
         mock_spec = MagicMock()
         mock_spec.loader = None
-        with patch(
-            "app.utils.path_utils.get_resource_path",
-            return_value="/fake/config.py",
-        ), patch("os.path.exists", return_value=True), patch(
-            "importlib.util.spec_from_file_location", return_value=mock_spec
+        with (
+            patch(
+                "app.utils.path_utils.get_resource_path",
+                return_value="/fake/config.py",
+            ),
+            patch("os.path.exists", return_value=True),
+            patch("importlib.util.spec_from_file_location", return_value=mock_spec),
         ):
             r = DeepSeekIntentRecognizer(api_key=None)
             assert r._get_api_key() == ""
@@ -80,14 +87,16 @@ class TestGetApiKeyDeep:
         mock_module.DEEPSEEK_API_KEY = ""
         mock_spec = MagicMock()
         mock_spec.loader = MagicMock()
-        with patch(
-            "app.utils.path_utils.get_resource_path",
-            return_value="/fake/config.py",
-        ), patch("os.path.exists", return_value=True), patch(
-            "importlib.util.spec_from_file_location", return_value=mock_spec
-        ), patch(
-            "importlib.util.module_from_spec", return_value=mock_module
-        ), patch.object(mock_spec.loader, "exec_module"):
+        with (
+            patch(
+                "app.utils.path_utils.get_resource_path",
+                return_value="/fake/config.py",
+            ),
+            patch("os.path.exists", return_value=True),
+            patch("importlib.util.spec_from_file_location", return_value=mock_spec),
+            patch("importlib.util.module_from_spec", return_value=mock_module),
+            patch.object(mock_spec.loader, "exec_module"),
+        ):
             r = DeepSeekIntentRecognizer(api_key=None)
             assert r._get_api_key() == ""
 
@@ -185,22 +194,16 @@ class TestNormalizeSlotsDeep:
         out = recognizer._normalize_slots({"tin_spec": "28"}, "")
         assert out["tin_spec"] == 28.0
 
-    def test_tin_spec_no_digit_keeps_value(
-        self, recognizer: DeepSeekIntentRecognizer
-    ) -> None:
+    def test_tin_spec_no_digit_keeps_value(self, recognizer: DeepSeekIntentRecognizer) -> None:
         out = recognizer._normalize_slots({"tin_spec": "abc"}, "")
         assert out["tin_spec"] == "abc"
 
-    def test_unit_name_pattern_1_give_prefix(
-        self, recognizer: DeepSeekIntentRecognizer
-    ) -> None:
+    def test_unit_name_pattern_1_give_prefix(self, recognizer: DeepSeekIntentRecognizer) -> None:
         # Pattern: 给\s*([^\s，,。]+)
         out = recognizer._normalize_slots({"unit_name": "x"}, "给客户A")
         assert out["unit_name"] == "客户A"
 
-    def test_unit_name_no_match_keeps_value(
-        self, recognizer: DeepSeekIntentRecognizer
-    ) -> None:
+    def test_unit_name_no_match_keeps_value(self, recognizer: DeepSeekIntentRecognizer) -> None:
         out = recognizer._normalize_slots({"unit_name": "custom"}, "no pattern")
         assert out["unit_name"] == "custom"
 
@@ -334,10 +337,13 @@ class TestRecognizeAsyncDeep:
         mock_cache = MagicMock()
         mock_cache.get.return_value = None
         monkeypatch.setattr(ds, "_intent_recognition_cache", mock_cache)
-        with patch(
-            "app.infrastructure.llm.invoke.chat_completion_openai_format",
-            new=AsyncMock(side_effect=RuntimeError("always fail")),
-        ), patch("asyncio.sleep", new=AsyncMock()):
+        with (
+            patch(
+                "app.infrastructure.llm.invoke.chat_completion_openai_format",
+                new=AsyncMock(side_effect=RuntimeError("always fail")),
+            ),
+            patch("asyncio.sleep", new=AsyncMock()),
+        ):
             out = await recognizer.recognize(msg)
         assert out["intent"] is None
         # Fallback should be cached
@@ -370,11 +376,12 @@ class TestHybridRecognizeDeep:
     async def test_greeting_returns_rule_directly(self) -> None:
         h = HybridIntentWithDeepSeek(use_deepseek=True)
         rule = {"primary_intent": "greet", "is_greeting": True, "tool_key": "greet"}
-        with patch(
-            "app.services.intent_service.recognize_intents", return_value=dict(rule)
-        ), patch(
-            "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
-            return_value=None,
+        with (
+            patch("app.services.intent_service.recognize_intents", return_value=dict(rule)),
+            patch(
+                "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
+                return_value=None,
+            ),
         ):
             out = await h.recognize("你好")
         assert out["intent_source"] == "rule"
@@ -383,11 +390,12 @@ class TestHybridRecognizeDeep:
     async def test_rule_primary_intent_not_unk_returns_rule(self) -> None:
         h = HybridIntentWithDeepSeek(use_deepseek=True)
         rule = {"primary_intent": "products", "tool_key": "products"}
-        with patch(
-            "app.services.intent_service.recognize_intents", return_value=dict(rule)
-        ), patch(
-            "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
-            return_value=None,
+        with (
+            patch("app.services.intent_service.recognize_intents", return_value=dict(rule)),
+            patch(
+                "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
+                return_value=None,
+            ),
         ):
             out = await h.recognize("查看产品")
         assert out["intent_source"] == "rule"
@@ -396,16 +404,18 @@ class TestHybridRecognizeDeep:
     async def test_deepseek_high_confidence_used(self) -> None:
         h = HybridIntentWithDeepSeek(use_deepseek=True, confidence_threshold=0.5)
         rule = {"primary_intent": "unk"}
-        with patch(
-            "app.services.intent_service.recognize_intents", return_value=dict(rule)
-        ), patch(
-            "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
-            return_value=None,
-        ), patch.object(
-            h.deepseek_recognizer,
-            "recognize",
-            new=AsyncMock(
-                return_value={"intent": "order", "confidence": 0.9, "slots": {"k": "v"}}
+        with (
+            patch("app.services.intent_service.recognize_intents", return_value=dict(rule)),
+            patch(
+                "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
+                return_value=None,
+            ),
+            patch.object(
+                h.deepseek_recognizer,
+                "recognize",
+                new=AsyncMock(
+                    return_value={"intent": "order", "confidence": 0.9, "slots": {"k": "v"}}
+                ),
             ),
         ):
             out = await h.recognize("msg")
@@ -415,16 +425,18 @@ class TestHybridRecognizeDeep:
     async def test_deepseek_low_confidence_used(self) -> None:
         h = HybridIntentWithDeepSeek(use_deepseek=True, confidence_threshold=0.8)
         rule = {"primary_intent": "unk"}
-        with patch(
-            "app.services.intent_service.recognize_intents", return_value=dict(rule)
-        ), patch(
-            "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
-            return_value=None,
-        ), patch.object(
-            h.deepseek_recognizer,
-            "recognize",
-            new=AsyncMock(
-                return_value={"intent": "order", "confidence": 0.3, "slots": {"k": "v"}}
+        with (
+            patch("app.services.intent_service.recognize_intents", return_value=dict(rule)),
+            patch(
+                "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
+                return_value=None,
+            ),
+            patch.object(
+                h.deepseek_recognizer,
+                "recognize",
+                new=AsyncMock(
+                    return_value={"intent": "order", "confidence": 0.3, "slots": {"k": "v"}}
+                ),
             ),
         ):
             out = await h.recognize("msg")
@@ -433,15 +445,17 @@ class TestHybridRecognizeDeep:
     async def test_deepseek_error_falls_to_rule(self) -> None:
         h = HybridIntentWithDeepSeek(use_deepseek=True, confidence_threshold=0.5)
         rule = {"primary_intent": "unk"}
-        with patch(
-            "app.services.intent_service.recognize_intents", return_value=dict(rule)
-        ), patch(
-            "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
-            return_value=None,
-        ), patch.object(
-            h.deepseek_recognizer,
-            "recognize",
-            new=AsyncMock(side_effect=RuntimeError("ds fail")),
+        with (
+            patch("app.services.intent_service.recognize_intents", return_value=dict(rule)),
+            patch(
+                "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
+                return_value=None,
+            ),
+            patch.object(
+                h.deepseek_recognizer,
+                "recognize",
+                new=AsyncMock(side_effect=RuntimeError("ds fail")),
+            ),
         ):
             out = await h.recognize("msg")
         assert out["intent_source"] == "rule"
@@ -506,25 +520,28 @@ class TestRecognizeSyncDeep:
     def test_recognize_sync_success(self) -> None:
         h = HybridIntentWithDeepSeek(use_deepseek=False)
         rule = {"primary_intent": "greet", "is_greeting": True}
-        with patch(
-            "app.services.intent_service.recognize_intents", return_value=dict(rule)
-        ), patch(
-            "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
-            return_value=None,
+        with (
+            patch("app.services.intent_service.recognize_intents", return_value=dict(rule)),
+            patch(
+                "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
+                return_value=None,
+            ),
         ):
             out = h.recognize_sync("你好")
         assert out.get("final_intent") == "greet" or out.get("primary_intent") == "greet"
 
     def test_recognize_sync_recoverable_error(self) -> None:
         h = HybridIntentWithDeepSeek(use_deepseek=False)
-        with patch.object(
-            h, "recognize", new=AsyncMock(side_effect=RuntimeError("sync fail"))
-        ), patch(
-            "app.services.intent_service.recognize_intents",
-            return_value={"primary_intent": "fallback"},
-        ), patch(
-            "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
-            return_value=None,
+        with (
+            patch.object(h, "recognize", new=AsyncMock(side_effect=RuntimeError("sync fail"))),
+            patch(
+                "app.services.intent_service.recognize_intents",
+                return_value={"primary_intent": "fallback"},
+            ),
+            patch(
+                "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
+                return_value=None,
+            ),
         ):
             out = h.recognize_sync("msg")
         assert out["primary_intent"] == "fallback"
@@ -583,19 +600,24 @@ class TestGetDeepseekApiKeyDeep:
 
     def test_config_path_not_exists(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
-        with patch(
-            "app.utils.path_utils.get_resource_path",
-            return_value="/fake/config.py",
-        ), patch("os.path.exists", return_value=False):
+        with (
+            patch(
+                "app.utils.path_utils.get_resource_path",
+                return_value="/fake/config.py",
+            ),
+            patch("os.path.exists", return_value=False),
+        ):
             assert get_deepseek_api_key() == ""
 
     def test_config_spec_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
-        with patch(
-            "app.utils.path_utils.get_resource_path",
-            return_value="/fake/config.py",
-        ), patch("os.path.exists", return_value=True), patch(
-            "importlib.util.spec_from_file_location", return_value=None
+        with (
+            patch(
+                "app.utils.path_utils.get_resource_path",
+                return_value="/fake/config.py",
+            ),
+            patch("os.path.exists", return_value=True),
+            patch("importlib.util.spec_from_file_location", return_value=None),
         ):
             assert get_deepseek_api_key() == ""
 
@@ -603,11 +625,13 @@ class TestGetDeepseekApiKeyDeep:
         monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
         mock_spec = MagicMock()
         mock_spec.loader = None
-        with patch(
-            "app.utils.path_utils.get_resource_path",
-            return_value="/fake/config.py",
-        ), patch("os.path.exists", return_value=True), patch(
-            "importlib.util.spec_from_file_location", return_value=mock_spec
+        with (
+            patch(
+                "app.utils.path_utils.get_resource_path",
+                return_value="/fake/config.py",
+            ),
+            patch("os.path.exists", return_value=True),
+            patch("importlib.util.spec_from_file_location", return_value=mock_spec),
         ):
             assert get_deepseek_api_key() == ""
 

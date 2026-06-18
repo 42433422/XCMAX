@@ -284,9 +284,7 @@ def _get_host_session_local():
         cached = _session_local_cache.get(key)
         if cached is not None:
             return cached
-        created = sessionmaker(
-            autocommit=False, autoflush=False, bind=_get_host_engine()
-        )
+        created = sessionmaker(autocommit=False, autoflush=False, bind=_get_host_engine())
         _session_local_cache[key] = created
         return created
 

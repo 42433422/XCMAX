@@ -167,10 +167,17 @@ class EmployeeMemoryManager:
 
             svc = ConversationService()
             if task:
-                svc.save_message(sid, uid, "user", str(task)[:4000], intent=self.scope.employee_id, metadata=meta)
+                svc.save_message(
+                    sid, uid, "user", str(task)[:4000], intent=self.scope.employee_id, metadata=meta
+                )
             if summary:
                 svc.save_message(
-                    sid, uid, "assistant", str(summary)[:4000], intent=self.scope.employee_id, metadata=meta
+                    sid,
+                    uid,
+                    "assistant",
+                    str(summary)[:4000],
+                    intent=self.scope.employee_id,
+                    metadata=meta,
                 )
         except RECOVERABLE_ERRORS:
             logger.debug("short-term remember skipped (session=%s)", sid, exc_info=True)

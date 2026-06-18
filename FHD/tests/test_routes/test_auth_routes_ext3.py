@@ -12,7 +12,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # _user_public_dict
 # ---------------------------------------------------------------------------
@@ -55,8 +54,15 @@ class TestSessionMetaForResponse:
         # session_id_from_request doesn't return a MagicMock sid that would
         # be passed to load_session_account_meta and hit the DB. Also stub
         # load_session_account_meta so no DB query is attempted.
-        with patch("app.fastapi_routes.domains.auth.routes.session_id_from_request", return_value="sid-1"), \
-             patch("app.application.session_account_meta.load_session_account_meta", return_value=None):
+        with (
+            patch(
+                "app.fastapi_routes.domains.auth.routes.session_id_from_request",
+                return_value="sid-1",
+            ),
+            patch(
+                "app.application.session_account_meta.load_session_account_meta", return_value=None
+            ),
+        ):
             result = _session_meta_for_response(mock_request, user=None)
         assert isinstance(result, dict)
 
@@ -66,8 +72,16 @@ class TestSessionMetaForResponse:
         mock_request = MagicMock()
         mock_user = MagicMock()
         mock_user.id = 1
-        with patch("app.fastapi_routes.domains.auth.routes.session_id_from_request", return_value="sid-1"), \
-             patch("app.application.session_account_meta.enrich_session_meta_with_tenant", return_value={"account_kind": "enterprise"}):
+        with (
+            patch(
+                "app.fastapi_routes.domains.auth.routes.session_id_from_request",
+                return_value="sid-1",
+            ),
+            patch(
+                "app.application.session_account_meta.enrich_session_meta_with_tenant",
+                return_value={"account_kind": "enterprise"},
+            ),
+        ):
             result = _session_meta_for_response(mock_request, user=mock_user)
         assert isinstance(result, dict)
 
@@ -182,16 +196,18 @@ class TestJitCreateLocalUserForEnterprise:
 
 class TestAttachSessionCookie:
     def test_with_session_id(self):
-        from app.fastapi_routes.domains.auth.routes import _attach_session_cookie
         from fastapi.responses import JSONResponse
+
+        from app.fastapi_routes.domains.auth.routes import _attach_session_cookie
 
         response = JSONResponse({"success": True})
         result = _attach_session_cookie(response, "test-session-id")
         assert isinstance(result, JSONResponse)
 
     def test_with_none_session_id(self):
-        from app.fastapi_routes.domains.auth.routes import _attach_session_cookie
         from fastapi.responses import JSONResponse
+
+        from app.fastapi_routes.domains.auth.routes import _attach_session_cookie
 
         response = JSONResponse({"success": True})
         result = _attach_session_cookie(response, None)

@@ -18,7 +18,6 @@ from app.application.workflow.planner import (
     get_tool_registry,
 )
 
-
 # ========================= execute_tool - deep ============================
 
 
@@ -84,6 +83,7 @@ class TestExecutePriceListToolDeep:
     def test_import_error(self):
         with patch("app.application.workflow.planner._WORKFLOW_TOOL_HANDLERS") as handlers:
             from app.application.workflow.planner import _execute_price_list_tool
+
             with patch.dict("sys.modules", {"app.application.tools": None}):
                 result = _execute_price_list_tool({"customer_name": "公司A"})
         # Either succeeds or returns service_unavailable
@@ -91,21 +91,30 @@ class TestExecutePriceListToolDeep:
 
     def test_value_error(self):
         from app.application.workflow.planner import _execute_price_list_tool
-        with patch("app.application.tools.handle_price_list_export", side_effect=ValueError("bad params")):
+
+        with patch(
+            "app.application.tools.handle_price_list_export", side_effect=ValueError("bad params")
+        ):
             result = _execute_price_list_tool({"customer_name": "公司A"})
         assert result["success"] is False
         assert result["error_code"] == "invalid_parameters"
 
     def test_os_error(self):
         from app.application.workflow.planner import _execute_price_list_tool
-        with patch("app.application.tools.handle_price_list_export", side_effect=OSError("disk full")):
+
+        with patch(
+            "app.application.tools.handle_price_list_export", side_effect=OSError("disk full")
+        ):
             result = _execute_price_list_tool({"customer_name": "公司A"})
         assert result["success"] is False
         assert result["error_code"] == "file_io_error"
 
     def test_runtime_error(self):
         from app.application.workflow.planner import _execute_price_list_tool
-        with patch("app.application.tools.handle_price_list_export", side_effect=RuntimeError("fail")):
+
+        with patch(
+            "app.application.tools.handle_price_list_export", side_effect=RuntimeError("fail")
+        ):
             result = _execute_price_list_tool({"customer_name": "公司A"})
         assert result["success"] is False
         assert result["error_code"] == "export_failed"
@@ -117,6 +126,7 @@ class TestExecutePriceListToolDeep:
 class TestExecuteProductsToolDeep:
     def test_with_model_number_and_unit_name(self):
         from app.application.workflow.planner import _execute_products_tool
+
         mock_svc = Mock()
         mock_svc.get_products.return_value = {"success": True, "data": []}
         with patch("app.bootstrap.get_products_service", return_value=mock_svc):
@@ -127,6 +137,7 @@ class TestExecuteProductsToolDeep:
 
     def test_with_model_number_only(self):
         from app.application.workflow.planner import _execute_products_tool
+
         mock_svc = Mock()
         mock_svc.get_products.return_value = {"success": True, "data": []}
         with patch("app.bootstrap.get_products_service", return_value=mock_svc):
@@ -137,6 +148,7 @@ class TestExecuteProductsToolDeep:
 
     def test_with_unit_name_only(self):
         from app.application.workflow.planner import _execute_products_tool
+
         mock_svc = Mock()
         mock_svc.get_products.return_value = {"success": True, "data": []}
         with patch("app.bootstrap.get_products_service", return_value=mock_svc):
@@ -147,6 +159,7 @@ class TestExecuteProductsToolDeep:
 
     def test_with_keyword_only(self):
         from app.application.workflow.planner import _execute_products_tool
+
         mock_svc = Mock()
         mock_svc.get_products.return_value = {"success": True, "data": []}
         with patch("app.bootstrap.get_products_service", return_value=mock_svc):
@@ -157,6 +170,7 @@ class TestExecuteProductsToolDeep:
 
     def test_import_error(self):
         from app.application.workflow.planner import _execute_products_tool
+
         with patch("app.bootstrap.get_products_service", side_effect=ImportError("no module")):
             result = _execute_products_tool({"keyword": "test"})
         assert result["success"] is False
@@ -164,6 +178,7 @@ class TestExecuteProductsToolDeep:
 
     def test_value_error(self):
         from app.application.workflow.planner import _execute_products_tool
+
         with patch("app.bootstrap.get_products_service", side_effect=ValueError("bad")):
             result = _execute_products_tool({"keyword": "test"})
         assert result["success"] is False
@@ -171,6 +186,7 @@ class TestExecuteProductsToolDeep:
 
     def test_runtime_error(self):
         from app.application.workflow.planner import _execute_products_tool
+
         with patch("app.bootstrap.get_products_service", side_effect=RuntimeError("fail")):
             result = _execute_products_tool({"keyword": "test"})
         assert result["success"] is False
@@ -183,12 +199,14 @@ class TestExecuteProductsToolDeep:
 class TestExecuteCustomersEnsureExistsToolDeep:
     def test_missing_unit_name(self):
         from app.application.workflow.planner import _execute_customers_ensure_exists_tool
+
         result = _execute_customers_ensure_exists_tool({})
         assert result["success"] is False
         assert result["error_code"] == "missing_unit_name"
 
     def test_existing_customer(self):
         from app.application.workflow.planner import _execute_customers_ensure_exists_tool
+
         mock_svc = Mock()
         mock_match = Mock()
         mock_match.id = 1
@@ -201,6 +219,7 @@ class TestExecuteCustomersEnsureExistsToolDeep:
 
     def test_new_customer_created(self):
         from app.application.workflow.planner import _execute_customers_ensure_exists_tool
+
         mock_svc = Mock()
         mock_svc.match_purchase_unit.return_value = None
         mock_svc.create.return_value = {"success": True}
@@ -210,6 +229,7 @@ class TestExecuteCustomersEnsureExistsToolDeep:
 
     def test_import_error(self):
         from app.application.workflow.planner import _execute_customers_ensure_exists_tool
+
         with patch("app.bootstrap.get_customer_app_service", side_effect=ImportError("no module")):
             result = _execute_customers_ensure_exists_tool({"unit_name": "公司A"})
         assert result["success"] is False
@@ -217,6 +237,7 @@ class TestExecuteCustomersEnsureExistsToolDeep:
 
     def test_runtime_error(self):
         from app.application.workflow.planner import _execute_customers_ensure_exists_tool
+
         with patch("app.bootstrap.get_customer_app_service", side_effect=RuntimeError("fail")):
             result = _execute_customers_ensure_exists_tool({"unit_name": "公司A"})
         assert result["success"] is False
@@ -229,48 +250,63 @@ class TestExecuteCustomersEnsureExistsToolDeep:
 class TestExecuteShipmentGenerateToolDeep:
     def test_missing_params(self):
         from app.application.workflow.planner import _execute_shipment_generate_tool
+
         result = _execute_shipment_generate_tool({})
         assert result["success"] is False
         assert result["error_code"] == "missing_order_params"
 
     def test_with_order_text(self):
         from app.application.workflow.planner import _execute_shipment_generate_tool
+
         mock_svc = Mock()
         mock_svc.generate_shipment_document.return_value = {"success": True}
         with (
             patch("app.bootstrap.get_shipment_app_service", return_value=mock_svc),
-            patch("app.routes.tools._parse_order_text", return_value={"success": True, "unit_name": "公司A", "products": []}),
+            patch(
+                "app.routes.tools._parse_order_text",
+                return_value={"success": True, "unit_name": "公司A", "products": []},
+            ),
         ):
             result = _execute_shipment_generate_tool({"order_text": "给公司A发10桶涂料"})
         assert result["success"] is True
 
     def test_with_unit_and_products(self):
         from app.application.workflow.planner import _execute_shipment_generate_tool
+
         mock_svc = Mock()
         mock_svc.generate_shipment_document.return_value = {"success": True}
         with patch("app.bootstrap.get_shipment_app_service", return_value=mock_svc):
-            result = _execute_shipment_generate_tool({
-                "unit_name": "公司A",
-                "products": [{"name": "涂料", "quantity": 10}],
-            })
+            result = _execute_shipment_generate_tool(
+                {
+                    "unit_name": "公司A",
+                    "products": [{"name": "涂料", "quantity": 10}],
+                }
+            )
         assert result["success"] is True
 
     def test_parse_failure(self):
         from app.application.workflow.planner import _execute_shipment_generate_tool
+
         with (
             patch("app.bootstrap.get_shipment_app_service"),
-            patch("app.routes.tools._parse_order_text", return_value={"success": False, "message": "无法解析"}),
+            patch(
+                "app.routes.tools._parse_order_text",
+                return_value={"success": False, "message": "无法解析"},
+            ),
         ):
             result = _execute_shipment_generate_tool({"order_text": "无效订单"})
         assert result["success"] is False
 
     def test_import_error(self):
         from app.application.workflow.planner import _execute_shipment_generate_tool
+
         # Make the import of _parse_order_text fail to trigger the ImportError handler
         with patch.dict("sys.modules", {"app.routes.tools": None}):
             result = _execute_shipment_generate_tool({"order_text": "test"})
         assert result["success"] is False
-        assert result.get("error_code") == "service_unavailable" or "不可用" in result.get("message", "")
+        assert result.get("error_code") == "service_unavailable" or "不可用" in result.get(
+            "message", ""
+        )
 
 
 # ========================= _execute_shipment_records_tool - deep ==========
@@ -279,6 +315,7 @@ class TestExecuteShipmentGenerateToolDeep:
 class TestExecuteShipmentRecordsToolDeep:
     def test_success(self):
         from app.application.workflow.planner import _execute_shipment_records_tool
+
         mock_svc = Mock()
         mock_svc.get_shipment_records.return_value = [{"id": 1}]
         with patch("app.bootstrap.get_shipment_app_service", return_value=mock_svc):
@@ -287,6 +324,7 @@ class TestExecuteShipmentRecordsToolDeep:
 
     def test_import_error(self):
         from app.application.workflow.planner import _execute_shipment_records_tool
+
         with patch("app.bootstrap.get_shipment_app_service", side_effect=ImportError("no module")):
             result = _execute_shipment_records_tool({})
         assert result["success"] is False
@@ -299,6 +337,7 @@ class TestExecuteShipmentRecordsToolDeep:
 class TestExecuteMaterialsToolDeep:
     def test_success(self):
         from app.application.workflow.planner import _execute_materials_tool
+
         mock_svc = Mock()
         mock_svc.get_all_materials.return_value = {"success": True}
         with patch("app.bootstrap.get_materials_service", return_value=mock_svc):
@@ -307,6 +346,7 @@ class TestExecuteMaterialsToolDeep:
 
     def test_import_error(self):
         from app.application.workflow.planner import _execute_materials_tool
+
         with patch("app.bootstrap.get_materials_service", side_effect=ImportError("no module")):
             result = _execute_materials_tool({})
         assert result["success"] is False
@@ -319,18 +359,21 @@ class TestExecuteMaterialsToolDeep:
 class TestExecutePrintLabelToolDeep:
     def test_missing_products(self):
         from app.application.workflow.planner import _execute_print_label_tool
+
         result = _execute_print_label_tool({})
         assert result["success"] is False
         assert result["error_code"] == "missing_products"
 
     def test_empty_products(self):
         from app.application.workflow.planner import _execute_print_label_tool
+
         result = _execute_print_label_tool({"products": []})
         assert result["success"] is False
         assert result["error_code"] == "missing_products"
 
     def test_non_list_products(self):
         from app.application.workflow.planner import _execute_print_label_tool
+
         result = _execute_print_label_tool({"products": "not a list"})
         assert result["success"] is False
         assert result["error_code"] == "missing_products"
@@ -342,12 +385,14 @@ class TestExecutePrintLabelToolDeep:
 class TestExecuteExcelDecomposeToolDeep:
     def test_missing_file_path(self):
         from app.application.workflow.planner import _execute_excel_decompose_tool
+
         result = _execute_excel_decompose_tool({})
         assert result["success"] is False
         assert result["error_code"] == "missing_file_path"
 
     def test_import_error(self):
         from app.application.workflow.planner import _execute_excel_decompose_tool
+
         with patch("app.bootstrap.get_template_app_service", side_effect=ImportError("no module")):
             result = _execute_excel_decompose_tool({"file_path": "/test.xlsx"})
         assert result["success"] is False
@@ -355,6 +400,7 @@ class TestExecuteExcelDecomposeToolDeep:
 
     def test_value_error(self):
         from app.application.workflow.planner import _execute_excel_decompose_tool
+
         with patch("app.bootstrap.get_template_app_service") as mock_svc:
             mock_svc.return_value.decompose_template.side_effect = ValueError("bad params")
             result = _execute_excel_decompose_tool({"file_path": "/test.xlsx"})
@@ -363,6 +409,7 @@ class TestExecuteExcelDecomposeToolDeep:
 
     def test_os_error(self):
         from app.application.workflow.planner import _execute_excel_decompose_tool
+
         with patch("app.bootstrap.get_template_app_service") as mock_svc:
             mock_svc.return_value.decompose_template.side_effect = OSError("file not found")
             result = _execute_excel_decompose_tool({"file_path": "/test.xlsx"})
@@ -371,6 +418,7 @@ class TestExecuteExcelDecomposeToolDeep:
 
     def test_runtime_error(self):
         from app.application.workflow.planner import _execute_excel_decompose_tool
+
         with patch("app.bootstrap.get_template_app_service") as mock_svc:
             mock_svc.return_value.decompose_template.side_effect = RuntimeError("fail")
             result = _execute_excel_decompose_tool({"file_path": "/test.xlsx"})
@@ -384,6 +432,7 @@ class TestExecuteExcelDecomposeToolDeep:
 class TestExecuteExcelSchemaToolDeep:
     def test_missing_file_path(self):
         from app.application.workflow.planner import _execute_excel_schema_tool
+
         result = _execute_excel_schema_tool({})
         assert result["success"] is False
         assert result["error_code"] == "missing_file_path"
@@ -395,6 +444,7 @@ class TestExecuteExcelSchemaToolDeep:
 class TestExecuteCustomersToolDeep:
     def test_import_error(self):
         from app.application.workflow.planner import _execute_customers_tool
+
         with patch("app.bootstrap.get_customer_app_service", side_effect=ImportError("no module")):
             result = _execute_customers_tool({"keyword": "test"})
         assert result["success"] is False
@@ -402,6 +452,7 @@ class TestExecuteCustomersToolDeep:
 
     def test_value_error(self):
         from app.application.workflow.planner import _execute_customers_tool
+
         with patch("app.bootstrap.get_customer_app_service", side_effect=ValueError("bad")):
             result = _execute_customers_tool({"keyword": "test"})
         assert result["success"] is False
@@ -409,6 +460,7 @@ class TestExecuteCustomersToolDeep:
 
     def test_runtime_error(self):
         from app.application.workflow.planner import _execute_customers_tool
+
         with patch("app.bootstrap.get_customer_app_service", side_effect=RuntimeError("fail")):
             result = _execute_customers_tool({"keyword": "test"})
         assert result["success"] is False

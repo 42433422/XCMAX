@@ -5,7 +5,7 @@
 # Lock file for CI: deploy/requirements-server-api.txt
 Celery==5.3.4
 redis==5.0.1
-openpyxl==3.1.2
+openpyxl==3.1.5
 Pillow>=10.2.0
 gunicorn>=22.0.0
 gevent>=25.4.2

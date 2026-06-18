@@ -14,9 +14,27 @@ export interface UiChatMessage {
     action: string
     error?: string
   }>
-  contextSummary?: string
+  contextSummary?: unknown
+  attachments?: Array<Record<string, unknown>>
+  downloadUrl?: string
+  toolProgressLabel?: string
+  streamingShell?: boolean
   /** 发货单文档下载链接（与右侧任务卡一致，便于在对话内直接下载） */
   shipmentDownloadUrl?: string
 }
 
-export type UiChatMessageExtras = Partial<Pick<UiChatMessage, 'shipmentDownloadUrl'>>
+export type UiChatMessageExtras = Partial<
+  Pick<
+    UiChatMessage,
+    | 'attachments'
+    | 'contextSummary'
+    | 'downloadUrl'
+    | 'shipmentDownloadUrl'
+    | 'streamingShell'
+    | 'thinkingSteps'
+    | 'todoSteps'
+    | 'toolProgressLabel'
+    | 'workflowAction'
+    | 'nodeResults'
+  >
+>

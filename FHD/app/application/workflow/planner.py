@@ -1164,6 +1164,7 @@ def _get_planner_http_client() -> httpx.Client:
         _planner_http_client = httpx.Client(
             timeout=httpx.Timeout(20.0, connect=10.0),
             limits=httpx.Limits(max_keepalive_connections=10, max_connections=20),
+            trust_env=False,
         )
     return _planner_http_client
 

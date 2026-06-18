@@ -28,7 +28,9 @@ def _coerce(item: Any) -> EmployeeCapability | None:
         label = str(item.get("label") or item.get("name") or "").strip()
         if not label:
             return None
-        return EmployeeCapability(label=label, description=str(item.get("description") or "").strip())
+        return EmployeeCapability(
+            label=label, description=str(item.get("description") or "").strip()
+        )
     return None
 
 
@@ -49,7 +51,11 @@ def parse_capabilities(manifest: dict[str, Any] | None) -> list[EmployeeCapabili
     for item in emp.get("capabilities") or []:
         _add(item)
 
-    v2 = manifest.get("employee_config_v2") if isinstance(manifest.get("employee_config_v2"), dict) else {}
+    v2 = (
+        manifest.get("employee_config_v2")
+        if isinstance(manifest.get("employee_config_v2"), dict)
+        else {}
+    )
     cog = v2.get("cognition") if isinstance(v2.get("cognition"), dict) else {}
     for item in cog.get("skills") or []:
         if isinstance(item, dict):

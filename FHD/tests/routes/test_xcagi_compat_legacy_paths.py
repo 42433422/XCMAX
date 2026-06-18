@@ -11,6 +11,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from app.fastapi_routes.openapi_route_compat import iter_effective_routes
 from app.fastapi_routes.xcagi_compat import router
 
 
@@ -46,7 +47,7 @@ class TestRouterEvents:
 class TestRouterAggregation:
     def test_includes_subrouters(self, client: TestClient) -> None:
         # The aggregated router should have at least the legacy endpoints
-        routes = [r.path for r in client.app.routes]
+        routes = [r.path for r in iter_effective_routes(client.app.routes)]
         # Loose assertion: at least one route under /api/...
         assert any(p.startswith("/api/") for p in routes) or any(
             "compat" in p or "v1" in p or "v2" in p for p in routes

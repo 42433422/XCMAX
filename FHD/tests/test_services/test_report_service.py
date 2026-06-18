@@ -1,4 +1,5 @@
 """Tests for app.services.report_service — sales/inventory/purchase reports."""
+
 from __future__ import annotations
 
 from contextlib import contextmanager
@@ -7,14 +8,15 @@ from decimal import Decimal
 from unittest.mock import MagicMock, PropertyMock, patch
 
 import pytest
-from sqlalchemy import column, func as sa_func
+from sqlalchemy import column
+from sqlalchemy import func as sa_func
 
 from app.services.report_service import ReportService
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def service():
@@ -23,9 +25,11 @@ def service():
 
 def _mock_db_ctx(mock_db):
     """Return a context manager that yields mock_db."""
+
     @contextmanager
     def _ctx():
         yield mock_db
+
     return _ctx()
 
 
@@ -39,6 +43,7 @@ def _decimal_to_float_static(value):
 # ---------------------------------------------------------------------------
 # _decimal_to_float
 # ---------------------------------------------------------------------------
+
 
 class TestDecimalToFloat:
     """_decimal_to_float() — Decimal 转 float"""
@@ -68,6 +73,7 @@ class TestDecimalToFloat:
 # ---------------------------------------------------------------------------
 # get_sales_report
 # ---------------------------------------------------------------------------
+
 
 class TestGetSalesReport:
     """get_sales_report() — 销售报表"""
@@ -263,6 +269,7 @@ class TestGetSalesReport:
 # get_inventory_report
 # ---------------------------------------------------------------------------
 
+
 class TestGetInventoryReport:
     """get_inventory_report() — 库存报表"""
 
@@ -352,6 +359,7 @@ class TestGetInventoryReport:
 # ---------------------------------------------------------------------------
 # get_purchase_report
 # ---------------------------------------------------------------------------
+
 
 class TestGetPurchaseReport:
     """get_purchase_report() — 采购报表"""
@@ -491,6 +499,7 @@ class TestGetPurchaseReport:
 # get_inventory_transaction_report
 # ---------------------------------------------------------------------------
 
+
 class TestGetInventoryTransactionReport:
     """get_inventory_transaction_report() — 库存事务报表"""
 
@@ -593,6 +602,7 @@ class TestGetInventoryTransactionReport:
 # get_dashboard_summary
 # ---------------------------------------------------------------------------
 
+
 class TestGetDashboardSummary:
     """get_dashboard_summary() — 仪表盘摘要"""
 
@@ -604,8 +614,15 @@ class TestGetDashboardSummary:
     @patch("app.services.report_service.func")
     @patch("app.services.report_service.get_db")
     def test_basic_summary(
-        self, mock_get_db, mock_func, mock_product, mock_supplier,
-        mock_ledger, mock_po, mock_sr, service,
+        self,
+        mock_get_db,
+        mock_func,
+        mock_product,
+        mock_supplier,
+        mock_ledger,
+        mock_po,
+        mock_sr,
+        service,
     ):
         """基本仪表盘摘要"""
         # Use real SQLAlchemy column objects so >= comparison with datetime works
@@ -660,8 +677,15 @@ class TestGetDashboardSummary:
     @patch("app.services.report_service.func")
     @patch("app.services.report_service.get_db")
     def test_null_amounts(
-        self, mock_get_db, mock_func, mock_product, mock_supplier,
-        mock_ledger, mock_po, mock_sr, service,
+        self,
+        mock_get_db,
+        mock_func,
+        mock_product,
+        mock_supplier,
+        mock_ledger,
+        mock_po,
+        mock_sr,
+        service,
     ):
         """金额为 None 时使用 0"""
         mock_sr.total_amount = column("total_amount")
@@ -688,13 +712,9 @@ class TestGetDashboardSummary:
                 m.scalar.return_value = 0
             elif call_count == 2:
                 m.filter.return_value.scalar.return_value = 0
-            elif call_count == 3:
+            elif call_count == 3 or call_count == 4:
                 m.filter.return_value.first.return_value = (0, None)
-            elif call_count == 4:
-                m.filter.return_value.first.return_value = (0, None)
-            elif call_count == 5:
-                m.filter.return_value.scalar.return_value = 0
-            elif call_count == 6:
+            elif call_count == 5 or call_count == 6:
                 m.filter.return_value.scalar.return_value = 0
             return m
 
@@ -711,6 +731,7 @@ class TestGetDashboardSummary:
 # export_to_excel
 # ---------------------------------------------------------------------------
 
+
 class TestExportToExcel:
     """export_to_excel() — 导出 Excel"""
 
@@ -724,7 +745,10 @@ class TestExportToExcel:
         assert result["success"] is True
         assert result["filename"] == "test_report.xlsx"
         assert result["data"] is not None
-        assert result["content_type"] == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        assert (
+            result["content_type"]
+            == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
 
     def test_empty_data(self, service):
         """空数据导出"""

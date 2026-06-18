@@ -1,4 +1,5 @@
 """Tests for app.infrastructure.documents.price_list_generator — coverage ramp."""
+
 from __future__ import annotations
 
 import os
@@ -74,7 +75,9 @@ class TestPriceListGeneratorGenerate:
         gen = PriceListGenerator(output_dir=str(tmp_path))
         mock_create.side_effect = lambda fp, cn, prods: fp.touch()
 
-        products = [{"model_number": "X", "name": "Y", "spec": "Z", "unit": "个", "unit_price": "10"}]
+        products = [
+            {"model_number": "X", "name": "Y", "spec": "Z", "unit": "个", "unit_price": "10"}
+        ]
         result = gen.generate("TestCustomer", products)
         assert result["success"] is True
         mock_print.assert_called_once()
@@ -87,7 +90,9 @@ class TestPriceListGeneratorGenerate:
         gen = PriceListGenerator(output_dir=str(tmp_path))
         mock_create.side_effect = lambda fp, cn, prods: fp.touch()
 
-        products = [{"model_number": "X", "name": "Y", "spec": "Z", "unit": "个", "unit_price": "10"}]
+        products = [
+            {"model_number": "X", "name": "Y", "spec": "Z", "unit": "个", "unit_price": "10"}
+        ]
         result = gen.generate("TestCustomer", products, printer_name="HP LaserJet")
         assert result["success"] is True
         mock_print.assert_called_once()
@@ -98,14 +103,18 @@ class TestPriceListGeneratorGenerate:
     )
     def test_generate_error(self, mock_create, tmp_path):
         gen = PriceListGenerator(output_dir=str(tmp_path))
-        products = [{"model_number": "X", "name": "Y", "spec": "Z", "unit": "个", "unit_price": "10"}]
+        products = [
+            {"model_number": "X", "name": "Y", "spec": "Z", "unit": "个", "unit_price": "10"}
+        ]
         result = gen.generate("TestCustomer", products)
         assert result["success"] is False
         assert "disk full" in result["message"]
 
     def test_generate_safe_filename(self, tmp_path):
         gen = PriceListGenerator(output_dir=str(tmp_path))
-        with patch.object(gen, "_create_price_list_pdf", side_effect=lambda fp, cn, prods: fp.touch()):
+        with patch.object(
+            gen, "_create_price_list_pdf", side_effect=lambda fp, cn, prods: fp.touch()
+        ):
             with patch.object(gen, "_get_default_printer", return_value=None):
                 result = gen.generate("Customer/With\\Slashes", [])
         assert result["success"] is True
@@ -148,9 +157,7 @@ class TestPriceListGeneratorCreatePdf:
                 mock_doc.add_paragraph.return_value = MagicMock(runs=[MagicMock()])
                 mock_table = MagicMock()
                 mock_table.rows = [MagicMock(cells=[MagicMock() for _ in range(6)])]
-                mock_table.add_row.return_value = MagicMock(
-                    cells=[MagicMock() for _ in range(6)]
-                )
+                mock_table.add_row.return_value = MagicMock(cells=[MagicMock() for _ in range(6)])
                 mock_doc.add_table.return_value = mock_table
                 gen._create_price_list_pdf(filepath, "TestCustomer", [])
 
@@ -183,9 +190,7 @@ class TestPriceListGeneratorCreatePdf:
                 mock_doc.add_paragraph.return_value = MagicMock(runs=[MagicMock()])
                 mock_table = MagicMock()
                 mock_table.rows = [MagicMock(cells=[MagicMock() for _ in range(6)])]
-                mock_table.add_row.return_value = MagicMock(
-                    cells=[MagicMock() for _ in range(6)]
-                )
+                mock_table.add_row.return_value = MagicMock(cells=[MagicMock() for _ in range(6)])
                 mock_doc.add_table.return_value = mock_table
                 gen._create_price_list_pdf(filepath, "TestCustomer", products)
 
@@ -216,9 +221,7 @@ class TestPriceListGeneratorCreatePdf:
                 mock_doc.add_paragraph.return_value = MagicMock(runs=[MagicMock()])
                 mock_table = MagicMock()
                 mock_table.rows = [MagicMock(cells=[MagicMock() for _ in range(6)])]
-                mock_table.add_row.return_value = MagicMock(
-                    cells=[MagicMock() for _ in range(6)]
-                )
+                mock_table.add_row.return_value = MagicMock(cells=[MagicMock() for _ in range(6)])
                 mock_doc.add_table.return_value = mock_table
                 gen._create_price_list_pdf(filepath, "TestCustomer", [mock_product])
 
@@ -325,6 +328,7 @@ class TestPriceListGeneratorPrintFile:
         # _print_file uses Path(filepath).suffix which creates WindowsPath when os.name=="nt"
         # Use PosixPath directly to avoid WindowsPath on macOS
         from pathlib import PosixPath
+
         with patch.dict(sys.modules, {"win32print": mock_win32print, "win32api": mock_win32api}):
             with patch("os.name", "nt"):
                 with patch("app.infrastructure.documents.price_list_generator.Path", PosixPath):
@@ -338,6 +342,7 @@ class TestPriceListGeneratorPrintFile:
         mock_win32print.EnumPrinters.side_effect = OSError("fail")
         mock_win32api = MagicMock()
         from pathlib import PosixPath
+
         with patch.dict(sys.modules, {"win32print": mock_win32print, "win32api": mock_win32api}):
             with patch("os.name", "nt"):
                 with patch("app.infrastructure.documents.price_list_generator.Path", PosixPath):

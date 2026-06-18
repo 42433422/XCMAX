@@ -1,4 +1,5 @@
 """Tests for app.fastapi_routes._shared."""
+
 from __future__ import annotations
 
 import pytest
@@ -29,15 +30,15 @@ class TestValidateOrderClause:
 
     def test_single_column_asc(self) -> None:
         result = validate_order_clause("name ASC")
-        assert '"name" ASC' == result
+        assert result == '"name" ASC'
 
     def test_single_column_desc(self) -> None:
         result = validate_order_clause("name DESC")
-        assert '"name" DESC' == result
+        assert result == '"name" DESC'
 
     def test_single_column_implicit_asc(self) -> None:
         result = validate_order_clause("name")
-        assert '"name"' == result
+        assert result == '"name"'
 
     def test_multiple_columns(self) -> None:
         result = validate_order_clause("name ASC, id DESC")
@@ -46,7 +47,7 @@ class TestValidateOrderClause:
 
     def test_id_column_allowed(self) -> None:
         result = validate_order_clause("id ASC")
-        assert '"id" ASC' == result
+        assert result == '"id" ASC'
 
     def test_invalid_column_raises(self) -> None:
         with pytest.raises(ValueError, match="invalid ORDER BY token"):
@@ -58,7 +59,7 @@ class TestValidateOrderClause:
 
     def test_quoted_column(self) -> None:
         result = validate_order_clause('"name" ASC')
-        assert '"name" ASC' == result
+        assert result == '"name" ASC'
 
     def test_nulls_first_suffix(self) -> None:
         result = validate_order_clause("name ASC NULLS FIRST")

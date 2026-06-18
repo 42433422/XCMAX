@@ -14,6 +14,7 @@ import os
 import threading
 from collections.abc import Iterable, Sequence
 from concurrent.futures import ThreadPoolExecutor
+from contextvars import ContextVar
 from typing import Any
 
 from openai import OpenAI
@@ -63,6 +64,9 @@ def _resolve_chat_execute_tool():
 
 _TOOL_DEDUP: set[str] = set()
 _TOOL_DEDUP_LOCK = threading.Lock()
+_LAST_TOOL_RESULT: ContextVar[dict[str, Any] | None] = ContextVar(
+    "planner_last_tool_result", default=None
+)
 
 # 这些工具可能在首轮就返回 requires_token,后续工具在串行语义下不应被执行;并行会改变该顺序。
 _TOKEN_ORDER_SENSITIVE_TOOLS = frozenset({"import_excel_to_database", "products_bulk_import"})
@@ -82,6 +86,44 @@ def _resolve_chat_model_for_client(client: Any | None, explicit_model: str | Non
 def reset_planner_tool_dedup_state() -> None:
     with _TOOL_DEDUP_LOCK:
         _TOOL_DEDUP.clear()
+
+
+def reset_last_tool_result() -> None:
+    _LAST_TOOL_RESULT.set(None)
+
+
+def _should_replace_tool_result(
+    previous: dict[str, Any] | None,
+    new_payload: dict[str, Any] | None,
+) -> bool:
+    if not previous:
+        return bool(new_payload)
+    if not new_payload:
+        return False
+    prev_success = previous.get("success") is True
+    new_success = new_payload.get("success") is True
+    if new_success and not prev_success:
+        return True
+    if prev_success and not new_success:
+        return False
+    if new_success and not previous.get("download_url") and new_payload.get("download_url"):
+        return True
+    return False
+
+
+def _record_tool_result(tool_key: str, payload: dict[str, Any] | None) -> None:
+    if not payload or payload.get("requires_token"):
+        return
+    record = {
+        "tool_key": tool_key,
+        "success": payload.get("success"),
+        "payload": payload,
+    }
+    if payload.get("download_url"):
+        record["download_url"] = payload.get("download_url")
+    previous = _LAST_TOOL_RESULT.get()
+    if _should_replace_tool_result(previous, record):
+        _LAST_TOOL_RESULT.set(record)
 
 
 def _tool_key(name: str, args: str) -> str:
@@ -248,6 +290,7 @@ def append_tool_messages(
                 payload = json.loads(
                     execute_tool(name, raw_eff, workspace_root, db_write_token=db_write_token)
                 )
+            _record_tool_result(key, payload)
             if payload.get("requires_token"):
                 return payload
             messages.append(
@@ -287,6 +330,7 @@ def append_tool_messages(
         payload = payloads[i]
         if payload is None:
             continue
+        _record_tool_result(_key, payload)
         if payload.get("requires_token"):
             return payload
         messages.append(

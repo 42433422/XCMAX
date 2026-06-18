@@ -15,7 +15,6 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 import pytest
 from fastapi.testclient import TestClient
 
-
 # ---------------------------------------------------------------------------
 # _market_base_url
 # ---------------------------------------------------------------------------
@@ -338,6 +337,7 @@ class TestMarketHttpConfig:
 class TestTransportErrorMessage:
     def test_read_timeout(self):
         import httpx
+
         from app.fastapi_routes.market_account import _transport_error_message
 
         exc = httpx.ReadTimeout("read timed out")
@@ -347,6 +347,7 @@ class TestTransportErrorMessage:
 
     def test_generic_http_error(self):
         import httpx
+
         from app.fastapi_routes.market_account import _transport_error_message
 
         exc = httpx.ConnectError("connection refused")
@@ -631,12 +632,15 @@ class TestAuthorizationFromRequest:
         mock_request = MagicMock()
         mock_request.cookies = {}
         mock_request.headers = {}
-        with patch(
-            "app.fastapi_routes.market_account.session_market_token",
-            return_value="",
-        ), patch(
-            "app.fastapi_routes.market_account.latest_session_market_token",
-            return_value="",
+        with (
+            patch(
+                "app.fastapi_routes.market_account.session_market_token",
+                return_value="",
+            ),
+            patch(
+                "app.fastapi_routes.market_account.latest_session_market_token",
+                return_value="",
+            ),
         ):
             result = _authorization_from_request(mock_request, {"token": "body_tok"})
             assert "body_tok" in result
@@ -647,12 +651,15 @@ class TestAuthorizationFromRequest:
         mock_request = MagicMock()
         mock_request.cookies = {}
         mock_request.headers = {"Authorization": "Bearer header_tok"}
-        with patch(
-            "app.fastapi_routes.market_account.session_market_token",
-            return_value="",
-        ), patch(
-            "app.fastapi_routes.market_account.latest_session_market_token",
-            return_value="",
+        with (
+            patch(
+                "app.fastapi_routes.market_account.session_market_token",
+                return_value="",
+            ),
+            patch(
+                "app.fastapi_routes.market_account.latest_session_market_token",
+                return_value="",
+            ),
         ):
             result = _authorization_from_request(mock_request, {})
             assert "header_tok" in result
@@ -663,12 +670,15 @@ class TestAuthorizationFromRequest:
         mock_request = MagicMock()
         mock_request.cookies = {}
         mock_request.headers = {}
-        with patch(
-            "app.fastapi_routes.market_account.session_market_token",
-            return_value="",
-        ), patch(
-            "app.fastapi_routes.market_account.latest_session_market_token",
-            return_value="",
+        with (
+            patch(
+                "app.fastapi_routes.market_account.session_market_token",
+                return_value="",
+            ),
+            patch(
+                "app.fastapi_routes.market_account.latest_session_market_token",
+                return_value="",
+            ),
         ):
             result = _authorization_from_request(mock_request, {})
             assert result == ""
@@ -742,7 +752,7 @@ class TestMarketAccountRoutes:
     @pytest.fixture
     def client(self):
         from fastapi import FastAPI
-        from fastapi.testclient import TestClient
+
         from app.fastapi_routes.market_account import router
 
         app = FastAPI()

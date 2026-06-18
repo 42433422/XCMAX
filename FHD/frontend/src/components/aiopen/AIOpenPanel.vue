@@ -46,10 +46,10 @@
       <button
         class="aiopen-primary-btn"
         type="button"
-        :disabled="setupRunning || readyStatus === 'ready'"
-        @click="quickSetup"
+        :disabled="setupRunning || shutdownRunning"
+        @click="handlePrimaryAction"
       >
-        {{ setupRunning ? '开启中…' : primaryBtnLabel }}
+        {{ setupRunning ? '开启中…' : shutdownRunning ? '关闭中…' : primaryBtnLabel }}
       </button>
 
       <div class="aiopen-oneline">
@@ -225,6 +225,7 @@ const panelError = ref('')
 const panelAvailable = ref(true)
 const manifestTools = ref([])
 const setupRunning = ref(false)
+const shutdownRunning = ref(false)
 const installBundle = ref(null)
 const mcpHealthy = ref(false)
 const mcpHealthText = ref('')
@@ -279,6 +280,8 @@ const readyStatus = computed(() => {
   return 'off'
 })
 
+const aiOpenActive = computed(() => remoteControlEnabled.value || cursorEnabled.value)
+
 const featureIntro = [
   { icon: '◎', title: '虚拟光标', desc: 'AI 看见页面，帮你点击和输入' },
   { icon: '⚡', title: '业务调用', desc: '查订单、发消息、调接口' },
@@ -303,7 +306,8 @@ const statusText = computed(() => {
 
 const primaryBtnLabel = computed(() => {
   if (setupRunning.value) return '开启中…'
-  return readyStatus.value === 'ready' ? '已开启' : '一键开启'
+  if (shutdownRunning.value) return '关闭中…'
+  return aiOpenActive.value ? '关闭智控' : '一键开启'
 })
 
 const friendlyTools = computed(() =>
@@ -533,7 +537,7 @@ const createKey = async () => {
 }
 
 const quickSetup = async () => {
-  if (readyStatus.value === 'ready') return
+  if (aiOpenActive.value) return
   setupRunning.value = true
   accessResult.value = ''
   try {
@@ -553,6 +557,33 @@ const quickSetup = async () => {
   } finally {
     setupRunning.value = false
   }
+}
+
+const shutdownAiOpen = async () => {
+  shutdownRunning.value = true
+  accessResult.value = ''
+  try {
+    if (panelAvailable.value) {
+      await safeJsonRequest('/api/aiopen/control', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: false }),
+      })
+    }
+    remoteControlEnabled.value = false
+    setCursorEnabled(false)
+    accessResult.value = '已关闭开放智控'
+  } finally {
+    shutdownRunning.value = false
+  }
+}
+
+const handlePrimaryAction = async () => {
+  if (aiOpenActive.value) {
+    await shutdownAiOpen()
+    return
+  }
+  await quickSetup()
 }
 
 const toggleWhitelist = async (path, event) => {

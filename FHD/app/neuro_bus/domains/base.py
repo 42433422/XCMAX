@@ -93,7 +93,9 @@ class NeuroDomain(ABC):
             logger.debug("Registered handler for %s.%s", self.domain_name, handler_def.event_type)
 
         self._registered = True
-        logger.info("Domain [%s] registered with %s handlers", self.domain_name, len(self._handlers))
+        logger.info(
+            "Domain [%s] registered with %s handlers", self.domain_name, len(self._handlers)
+        )
 
     def unregister(self):
         """注销领域"""

@@ -1,11 +1,12 @@
 """Tests for app.application.tools.tool_result_client."""
+
 from __future__ import annotations
 
 import pytest
 
 from app.application.tools.tool_result_client import (
-    flatten_tool_result_dict_for_client,
     _pick_client_fields,
+    flatten_tool_result_dict_for_client,
 )
 
 

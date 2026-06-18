@@ -1,4 +1,5 @@
 """Tests for app.services.document_templates.crud — comprehensive coverage."""
+
 from __future__ import annotations
 
 import json
@@ -13,7 +14,6 @@ from app.services.document_templates.crud import (
     create_template_with_payload,
     update_template_with_payload,
 )
-
 
 # ========================= _normalize_db_template_id =====================
 
@@ -78,12 +78,14 @@ class TestEnsureTemplateTablesReady:
     def test_calls_init_template_tables(self):
         with patch("app.db.init_db.init_template_tables") as mock_init:
             from app.services.document_templates.crud import _ensure_template_tables_ready
+
             _ensure_template_tables_ready()
             mock_init.assert_called_once()
 
     def test_handles_error_gracefully(self):
         with patch("app.db.init_db.init_template_tables", side_effect=RuntimeError("db error")):
             from app.services.document_templates.crud import _ensure_template_tables_ready
+
             # Should not raise
             _ensure_template_tables_ready()
 
@@ -100,17 +102,21 @@ class TestBuildTemplatePayloadFromRow:
         row.template_name = "测试模板"
         row.template_type = "出货明细"
         row.original_file_path = "/path/to/file.xlsx"
-        row.analyzed_data = json.dumps({
-            "business_scope": "orders",
-            "category": "excel",
-            "fields": [{"label": "产品型号", "name": "model"}],
-            "preview_data": {"sample": "data"},
-            "source": "upload",
-        })
-        row.business_rules = json.dumps({
-            "business_scope": "orders",
-            "source": "upload",
-        })
+        row.analyzed_data = json.dumps(
+            {
+                "business_scope": "orders",
+                "category": "excel",
+                "fields": [{"label": "产品型号", "name": "model"}],
+                "preview_data": {"sample": "data"},
+                "source": "upload",
+            }
+        )
+        row.business_rules = json.dumps(
+            {
+                "business_scope": "orders",
+                "source": "upload",
+            }
+        )
         row.editable_config = json.dumps([{"label": "产品型号", "name": "model"}])
 
         result = _build_template_payload_from_row(row)
@@ -258,19 +264,26 @@ class TestCreateTemplateWithPayload:
         mock_db.execute.return_value = mock_result
         mock_db.commit = MagicMock()
 
-        with patch("app.db.session.get_db") as mock_get_db, \
-             patch("app.db.init_db.init_template_tables"), \
-             patch("app.services.document_templates.crud._validate_required_terms", return_value=(True, [])):
+        with (
+            patch("app.db.session.get_db") as mock_get_db,
+            patch("app.db.init_db.init_template_tables"),
+            patch(
+                "app.services.document_templates.crud._validate_required_terms",
+                return_value=(True, []),
+            ),
+        ):
             mock_get_db.return_value.__enter__ = MagicMock(return_value=mock_db)
             mock_get_db.return_value.__exit__ = MagicMock(return_value=False)
 
-            result = create_template_with_payload({
-                "name": "测试模板",
-                "template_type": "出货明细",
-                "business_scope": "orders",
-                "fields": [{"label": "产品型号"}],
-                "preview_data": {"sample": "data"},
-            })
+            result = create_template_with_payload(
+                {
+                    "name": "测试模板",
+                    "template_type": "出货明细",
+                    "business_scope": "orders",
+                    "fields": [{"label": "产品型号"}],
+                    "preview_data": {"sample": "data"},
+                }
+            )
 
         data = result.get_json()
         assert data["success"] is True
@@ -284,9 +297,14 @@ class TestCreateTemplateWithPayload:
         mock_db.execute.return_value = mock_result
         mock_db.commit = MagicMock()
 
-        with patch("app.db.session.get_db") as mock_get_db, \
-             patch("app.db.init_db.init_template_tables"), \
-             patch("app.services.document_templates.crud._validate_required_terms", return_value=(True, [])):
+        with (
+            patch("app.db.session.get_db") as mock_get_db,
+            patch("app.db.init_db.init_template_tables"),
+            patch(
+                "app.services.document_templates.crud._validate_required_terms",
+                return_value=(True, []),
+            ),
+        ):
             mock_get_db.return_value.__enter__ = MagicMock(return_value=mock_db)
             mock_get_db.return_value.__exit__ = MagicMock(return_value=False)
 
@@ -303,16 +321,23 @@ class TestCreateTemplateWithPayload:
         mock_db.execute.return_value = mock_result
         mock_db.commit = MagicMock()
 
-        with patch("app.db.session.get_db") as mock_get_db, \
-             patch("app.db.init_db.init_template_tables"), \
-             patch("app.services.document_templates.crud._validate_required_terms", return_value=(True, [])):
+        with (
+            patch("app.db.session.get_db") as mock_get_db,
+            patch("app.db.init_db.init_template_tables"),
+            patch(
+                "app.services.document_templates.crud._validate_required_terms",
+                return_value=(True, []),
+            ),
+        ):
             mock_get_db.return_value.__enter__ = MagicMock(return_value=mock_db)
             mock_get_db.return_value.__exit__ = MagicMock(return_value=False)
 
-            result = create_template_with_payload({
-                "name": "无效分类",
-                "category": "pdf",
-            })
+            result = create_template_with_payload(
+                {
+                    "name": "无效分类",
+                    "category": "pdf",
+                }
+            )
 
         data = result.get_json()
         assert data["success"] is True
@@ -325,16 +350,23 @@ class TestCreateTemplateWithPayload:
         mock_db.execute.return_value = mock_result
         mock_db.commit = MagicMock()
 
-        with patch("app.db.session.get_db") as mock_get_db, \
-             patch("app.db.init_db.init_template_tables"), \
-             patch("app.services.document_templates.crud._validate_required_terms", return_value=(True, [])):
+        with (
+            patch("app.db.session.get_db") as mock_get_db,
+            patch("app.db.init_db.init_template_tables"),
+            patch(
+                "app.services.document_templates.crud._validate_required_terms",
+                return_value=(True, []),
+            ),
+        ):
             mock_get_db.return_value.__enter__ = MagicMock(return_value=mock_db)
             mock_get_db.return_value.__exit__ = MagicMock(return_value=False)
 
-            result = create_template_with_payload({
-                "name": "Word模板",
-                "category": "word",
-            })
+            result = create_template_with_payload(
+                {
+                    "name": "Word模板",
+                    "category": "word",
+                }
+            )
 
         data = result.get_json()
         assert data["success"] is True
@@ -342,15 +374,19 @@ class TestCreateTemplateWithPayload:
 
     def test_create_with_scope_validation_failure(self):
         """Business scope with missing required terms should fail."""
-        with patch("app.db.init_db.init_template_tables"), \
-             patch(
+        with (
+            patch("app.db.init_db.init_template_tables"),
+            patch(
                 "app.services.document_templates.crud._validate_required_terms",
                 return_value=(False, ["产品型号", "数量"]),
-            ):
-            result = create_template_with_payload({
-                "name": "不合规模板",
-                "business_scope": "orders",
-            })
+            ),
+        ):
+            result = create_template_with_payload(
+                {
+                    "name": "不合规模板",
+                    "business_scope": "orders",
+                }
+            )
 
         data = result.get_json()
         assert data["success"] is False
@@ -358,8 +394,10 @@ class TestCreateTemplateWithPayload:
         assert result.status_code == 400
 
     def test_create_with_db_error_returns_500(self):
-        with patch("app.db.session.get_db", side_effect=RuntimeError("db connection failed")), \
-             patch("app.db.init_db.init_template_tables"):
+        with (
+            patch("app.db.session.get_db", side_effect=RuntimeError("db connection failed")),
+            patch("app.db.init_db.init_template_tables"),
+        ):
             result = create_template_with_payload({"name": "测试"})
 
         data = result.get_json()
@@ -374,9 +412,14 @@ class TestCreateTemplateWithPayload:
         mock_db.execute.return_value = mock_result
         mock_db.commit = MagicMock()
 
-        with patch("app.db.session.get_db") as mock_get_db, \
-             patch("app.db.init_db.init_template_tables"), \
-             patch("app.services.document_templates.crud._validate_required_terms", return_value=(True, [])):
+        with (
+            patch("app.db.session.get_db") as mock_get_db,
+            patch("app.db.init_db.init_template_tables"),
+            patch(
+                "app.services.document_templates.crud._validate_required_terms",
+                return_value=(True, []),
+            ),
+        ):
             mock_get_db.return_value.__enter__ = MagicMock(return_value=mock_db)
             mock_get_db.return_value.__exit__ = MagicMock(return_value=False)
 
@@ -394,9 +437,14 @@ class TestCreateTemplateWithPayload:
         mock_db.execute.side_effect = [mock_result, RuntimeError("log table missing")]
         mock_db.commit = MagicMock()
 
-        with patch("app.db.session.get_db") as mock_get_db, \
-             patch("app.db.init_db.init_template_tables"), \
-             patch("app.services.document_templates.crud._validate_required_terms", return_value=(True, [])):
+        with (
+            patch("app.db.session.get_db") as mock_get_db,
+            patch("app.db.init_db.init_template_tables"),
+            patch(
+                "app.services.document_templates.crud._validate_required_terms",
+                return_value=(True, []),
+            ),
+        ):
             mock_get_db.return_value.__enter__ = MagicMock(return_value=mock_db)
             mock_get_db.return_value.__exit__ = MagicMock(return_value=False)
 
@@ -440,8 +488,10 @@ class TestUpdateTemplateWithPayload:
         mock_db = MagicMock()
         mock_db.execute.return_value.fetchone.return_value = None
 
-        with patch("app.db.session.get_db") as mock_get_db, \
-             patch("app.db.init_db.init_template_tables"):
+        with (
+            patch("app.db.session.get_db") as mock_get_db,
+            patch("app.db.init_db.init_template_tables"),
+        ):
             mock_get_db.return_value.__enter__ = MagicMock(return_value=mock_db)
             mock_get_db.return_value.__exit__ = MagicMock(return_value=False)
 
@@ -471,16 +521,23 @@ class TestUpdateTemplateWithPayload:
         ]
         mock_db.commit = MagicMock()
 
-        with patch("app.db.session.get_db") as mock_get_db, \
-             patch("app.db.init_db.init_template_tables"), \
-             patch("app.services.document_templates.crud._validate_required_terms", return_value=(True, [])):
+        with (
+            patch("app.db.session.get_db") as mock_get_db,
+            patch("app.db.init_db.init_template_tables"),
+            patch(
+                "app.services.document_templates.crud._validate_required_terms",
+                return_value=(True, []),
+            ),
+        ):
             mock_get_db.return_value.__enter__ = MagicMock(return_value=mock_db)
             mock_get_db.return_value.__exit__ = MagicMock(return_value=False)
 
-            result = update_template_with_payload({
-                "id": "db:1",
-                "name": "新名",
-            })
+            result = update_template_with_payload(
+                {
+                    "id": "db:1",
+                    "name": "新名",
+                }
+            )
 
         data = result.get_json()
         assert data["success"] is True
@@ -498,16 +555,20 @@ class TestUpdateTemplateWithPayload:
         mock_db = MagicMock()
         mock_db.execute.return_value.fetchone.return_value = mock_row
 
-        with patch("app.db.session.get_db") as mock_get_db, \
-             patch("app.db.init_db.init_template_tables"):
+        with (
+            patch("app.db.session.get_db") as mock_get_db,
+            patch("app.db.init_db.init_template_tables"),
+        ):
             mock_get_db.return_value.__enter__ = MagicMock(return_value=mock_db)
             mock_get_db.return_value.__exit__ = MagicMock(return_value=False)
 
-            result = update_template_with_payload({
-                "id": "db:1",
-                "business_scope": "customers",
-                "enforce_scope_match": True,
-            })
+            result = update_template_with_payload(
+                {
+                    "id": "db:1",
+                    "business_scope": "customers",
+                    "enforce_scope_match": True,
+                }
+            )
 
         data = result.get_json()
         assert data["success"] is False
@@ -526,27 +587,33 @@ class TestUpdateTemplateWithPayload:
         mock_db = MagicMock()
         mock_db.execute.return_value.fetchone.return_value = mock_row
 
-        with patch("app.db.session.get_db") as mock_get_db, \
-             patch("app.db.init_db.init_template_tables"), \
-             patch(
+        with (
+            patch("app.db.session.get_db") as mock_get_db,
+            patch("app.db.init_db.init_template_tables"),
+            patch(
                 "app.services.document_templates.crud._validate_required_terms",
                 return_value=(False, ["产品型号"]),
-            ):
+            ),
+        ):
             mock_get_db.return_value.__enter__ = MagicMock(return_value=mock_db)
             mock_get_db.return_value.__exit__ = MagicMock(return_value=False)
 
-            result = update_template_with_payload({
-                "id": "db:1",
-                "business_scope": "orders",
-            })
+            result = update_template_with_payload(
+                {
+                    "id": "db:1",
+                    "business_scope": "orders",
+                }
+            )
 
         data = result.get_json()
         assert data["success"] is False
         assert "必填字段未匹配" in data["message"]
 
     def test_update_with_db_error_returns_500(self):
-        with patch("app.db.session.get_db", side_effect=RuntimeError("db error")), \
-             patch("app.db.init_db.init_template_tables"):
+        with (
+            patch("app.db.session.get_db", side_effect=RuntimeError("db error")),
+            patch("app.db.init_db.init_template_tables"),
+        ):
             result = update_template_with_payload({"id": "db:1"})
 
         data = result.get_json()
@@ -572,16 +639,23 @@ class TestUpdateTemplateWithPayload:
         ]
         mock_db.commit = MagicMock()
 
-        with patch("app.db.session.get_db") as mock_get_db, \
-             patch("app.db.init_db.init_template_tables"), \
-             patch("app.services.document_templates.crud._validate_required_terms", return_value=(True, [])):
+        with (
+            patch("app.db.session.get_db") as mock_get_db,
+            patch("app.db.init_db.init_template_tables"),
+            patch(
+                "app.services.document_templates.crud._validate_required_terms",
+                return_value=(True, []),
+            ),
+        ):
             mock_get_db.return_value.__enter__ = MagicMock(return_value=mock_db)
             mock_get_db.return_value.__exit__ = MagicMock(return_value=False)
 
-            result = update_template_with_payload({
-                "id": "db:1",
-                "fields": [{"label": "新产品型号", "name": "new_model"}],
-            })
+            result = update_template_with_payload(
+                {
+                    "id": "db:1",
+                    "fields": [{"label": "新产品型号", "name": "new_model"}],
+                }
+            )
 
         data = result.get_json()
         assert data["success"] is True
@@ -592,11 +666,13 @@ class TestUpdateTemplateWithPayload:
         mock_row.template_name = "模板"
         mock_row.template_type = "出货明细"
         mock_row.original_file_path = None
-        mock_row.analyzed_data = json.dumps({
-            "business_scope": "orders",
-            "category": "excel",
-            "preview_data": {"old_key": "old_val"},
-        })
+        mock_row.analyzed_data = json.dumps(
+            {
+                "business_scope": "orders",
+                "category": "excel",
+                "preview_data": {"old_key": "old_val"},
+            }
+        )
         mock_row.business_rules = json.dumps({"business_scope": "orders", "source": "db"})
         mock_row.editable_config = json.dumps([])
 
@@ -609,16 +685,23 @@ class TestUpdateTemplateWithPayload:
         ]
         mock_db.commit = MagicMock()
 
-        with patch("app.db.session.get_db") as mock_get_db, \
-             patch("app.db.init_db.init_template_tables"), \
-             patch("app.services.document_templates.crud._validate_required_terms", return_value=(True, [])):
+        with (
+            patch("app.db.session.get_db") as mock_get_db,
+            patch("app.db.init_db.init_template_tables"),
+            patch(
+                "app.services.document_templates.crud._validate_required_terms",
+                return_value=(True, []),
+            ),
+        ):
             mock_get_db.return_value.__enter__ = MagicMock(return_value=mock_db)
             mock_get_db.return_value.__exit__ = MagicMock(return_value=False)
 
-            result = update_template_with_payload({
-                "id": "db:1",
-                "preview_data": {"new_key": "new_val"},
-            })
+            result = update_template_with_payload(
+                {
+                    "id": "db:1",
+                    "preview_data": {"new_key": "new_val"},
+                }
+            )
 
         data = result.get_json()
         assert data["success"] is True
@@ -642,16 +725,23 @@ class TestUpdateTemplateWithPayload:
         ]
         mock_db.commit = MagicMock()
 
-        with patch("app.db.session.get_db") as mock_get_db, \
-             patch("app.db.init_db.init_template_tables"), \
-             patch("app.services.document_templates.crud._validate_required_terms", return_value=(True, [])):
+        with (
+            patch("app.db.session.get_db") as mock_get_db,
+            patch("app.db.init_db.init_template_tables"),
+            patch(
+                "app.services.document_templates.crud._validate_required_terms",
+                return_value=(True, []),
+            ),
+        ):
             mock_get_db.return_value.__enter__ = MagicMock(return_value=mock_db)
             mock_get_db.return_value.__exit__ = MagicMock(return_value=False)
 
-            result = update_template_with_payload({
-                "id": "db:1",
-                "file_path": "/new/path.xlsx",
-            })
+            result = update_template_with_payload(
+                {
+                    "id": "db:1",
+                    "file_path": "/new/path.xlsx",
+                }
+            )
 
         data = result.get_json()
         assert data["success"] is True
@@ -675,16 +765,23 @@ class TestUpdateTemplateWithPayload:
         ]
         mock_db.commit = MagicMock()
 
-        with patch("app.db.session.get_db") as mock_get_db, \
-             patch("app.db.init_db.init_template_tables"), \
-             patch("app.services.document_templates.crud._validate_required_terms", return_value=(True, [])):
+        with (
+            patch("app.db.session.get_db") as mock_get_db,
+            patch("app.db.init_db.init_template_tables"),
+            patch(
+                "app.services.document_templates.crud._validate_required_terms",
+                return_value=(True, []),
+            ),
+        ):
             mock_get_db.return_value.__enter__ = MagicMock(return_value=mock_db)
             mock_get_db.return_value.__exit__ = MagicMock(return_value=False)
 
-            result = update_template_with_payload({
-                "id": "db:1",
-                "name": "更新名",
-            })
+            result = update_template_with_payload(
+                {
+                    "id": "db:1",
+                    "name": "更新名",
+                }
+            )
 
         data = result.get_json()
         assert data["success"] is True
@@ -702,16 +799,20 @@ class TestUpdateTemplateWithPayload:
         mock_db = MagicMock()
         mock_db.execute.return_value.fetchone.return_value = mock_row
 
-        with patch("app.db.session.get_db") as mock_get_db, \
-             patch("app.db.init_db.init_template_tables"):
+        with (
+            patch("app.db.session.get_db") as mock_get_db,
+            patch("app.db.init_db.init_template_tables"),
+        ):
             mock_get_db.return_value.__enter__ = MagicMock(return_value=mock_db)
             mock_get_db.return_value.__exit__ = MagicMock(return_value=False)
 
-            result = update_template_with_payload({
-                "id": "db:1",
-                "business_scope": "customers",
-                "replace_mode": True,
-            })
+            result = update_template_with_payload(
+                {
+                    "id": "db:1",
+                    "business_scope": "customers",
+                    "replace_mode": True,
+                }
+            )
 
         data = result.get_json()
         assert data["success"] is False

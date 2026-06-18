@@ -13,7 +13,6 @@ from app.application.workflow.planner import (
 )
 from app.application.workflow.types import PlanGraph, WorkflowNode, validate_plan_graph
 
-
 # ========================= get_tool_registry =============================
 
 

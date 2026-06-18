@@ -254,13 +254,21 @@ class TestBuildResponse:
             "action": "tool_call",
             "data": {"tool_key": "products", "params": {}},
         }
-        with patch.object(service, "_handle_tool_call", return_value={"success": True, "response": "ok", "data": {}}) as mock:
+        with patch.object(
+            service,
+            "_handle_tool_call",
+            return_value={"success": True, "response": "ok", "data": {}},
+        ) as mock:
             result = service._build_response(ai_result, "pro_default")
         mock.assert_called_once()
 
     def test_build_with_followup(self):
         service = _make_service()
-        ai_result = {"text": "需要更多信息", "action": "followup", "data": {"question": "哪个单位？"}}
+        ai_result = {
+            "text": "需要更多信息",
+            "action": "followup",
+            "data": {"question": "哪个单位？"},
+        }
         result = service._build_response(ai_result, "normal")
         assert result["success"] is True
         assert "followup" in result
@@ -393,24 +401,18 @@ class TestBuildOrderTextFromProducts:
 class TestTryMergeSplitModel:
     def test_merge_with_spec_pattern(self):
         service = _make_service()
-        result = service._try_merge_split_model(
-            "5003A 规格 25", {"quantity_tins": 10}
-        )
+        result = service._try_merge_split_model("5003A 规格 25", {"quantity_tins": 10})
         assert "5003A" in result
         assert "25" in result
 
     def test_merge_with_qty_spec_pattern(self):
         service = _make_service()
-        result = service._try_merge_split_model(
-            "10桶 5003A 规格 25", {"quantity_tins": 10}
-        )
+        result = service._try_merge_split_model("10桶 5003A 规格 25", {"quantity_tins": 10})
         assert "5003A" in result
 
     def test_no_match(self):
         service = _make_service()
-        result = service._try_merge_split_model(
-            "just some text", {"quantity_tins": 10}
-        )
+        result = service._try_merge_split_model("just some text", {"quantity_tins": 10})
         assert result == ""
 
 
@@ -424,7 +426,10 @@ class TestExecuteShipmentGenerate:
         mock_svc.generate_shipment_document.return_value = {"success": True, "doc_name": "test.pdf"}
         with (
             patch("app.bootstrap.get_shipment_app_service", return_value=mock_svc),
-            patch("app.routes.tools._parse_order_text", return_value={"success": True, "unit_name": "公司A", "products": []}),
+            patch(
+                "app.routes.tools._parse_order_text",
+                return_value={"success": True, "unit_name": "公司A", "products": []},
+            ),
         ):
             result = service._execute_shipment_generate(
                 {"success": True, "message": "", "data": {}},
@@ -435,7 +440,10 @@ class TestExecuteShipmentGenerate:
 
     def test_parse_failure(self):
         service = _make_service()
-        with patch("app.routes.tools._parse_order_text", return_value={"success": False, "message": "解析失败"}):
+        with patch(
+            "app.routes.tools._parse_order_text",
+            return_value={"success": False, "message": "解析失败"},
+        ):
             result = service._execute_shipment_generate(
                 {"success": True, "message": "", "data": {}},
                 {"order_text": "无效文本"},
@@ -452,7 +460,13 @@ class TestExecuteShipmentsQuery:
         service = _make_service()
         mock_svc = Mock()
         mock_svc.get_orders.return_value = [
-            {"order_number": "ORD001", "unit_name": "公司A", "date": "2024-01-01", "total_amount": 1000, "status": "已完成"}
+            {
+                "order_number": "ORD001",
+                "unit_name": "公司A",
+                "date": "2024-01-01",
+                "total_amount": 1000,
+                "status": "已完成",
+            }
         ]
         with patch("app.bootstrap.get_shipment_app_service", return_value=mock_svc):
             result = service._execute_shipments_query(
@@ -549,7 +563,11 @@ class TestExecuteProModeTools:
 class TestExecuteNormalModeTools:
     def test_shipment_generate(self):
         service = _make_service()
-        with patch.object(service, "_execute_shipment_generate", return_value={"success": True, "response": "ok", "data": {}}):
+        with patch.object(
+            service,
+            "_execute_shipment_generate",
+            return_value={"success": True, "response": "ok", "data": {}},
+        ):
             result = service._execute_normal_mode_tools(
                 {"success": True, "message": "", "data": {}},
                 "shipment_generate",
@@ -577,7 +595,11 @@ class TestExecuteNormalModeTools:
 class TestHandleToolCall:
     def test_pro_mode_dispatch(self):
         service = _make_service()
-        with patch.object(service, "_execute_pro_mode_tools", return_value={"success": True, "response": "ok", "data": {}}) as mock:
+        with patch.object(
+            service,
+            "_execute_pro_mode_tools",
+            return_value={"success": True, "response": "ok", "data": {}},
+        ) as mock:
             result = service._handle_tool_call(
                 {"success": True, "message": "", "data": {}},
                 {"text": "查询"},
@@ -588,7 +610,11 @@ class TestHandleToolCall:
 
     def test_normal_mode_dispatch(self):
         service = _make_service()
-        with patch.object(service, "_execute_normal_mode_tools", return_value={"success": True, "response": "ok", "data": {}}) as mock:
+        with patch.object(
+            service,
+            "_execute_normal_mode_tools",
+            return_value={"success": True, "response": "ok", "data": {}},
+        ) as mock:
             result = service._handle_tool_call(
                 {"success": True, "message": "", "data": {}},
                 {"text": "查询"},

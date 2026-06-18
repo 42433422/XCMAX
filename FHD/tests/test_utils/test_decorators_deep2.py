@@ -10,6 +10,7 @@ Targets remaining uncovered branches:
 - ``OptimizedServiceMixin._init_optimizers``
 - ``get_optimizer_components``: ImportError path
 """
+
 from __future__ import annotations
 
 import os
@@ -98,6 +99,7 @@ class TestOptimizedServiceMixinDeep:
     def test_init_optimizers_with_none_components(self):
         """When components are all None, attributes are set to None."""
         with patch.dict("sys.modules", {"app.utils.performance_initializer": None}):
+
             class MyService(dec.OptimizedServiceMixin):
                 pass
 
@@ -266,14 +268,13 @@ class TestRateLimitedDeep:
         fake_rl_module = MagicMock()
         fake_rl_module.check_rate_limit.return_value = {"allowed": True}
         with patch.dict("sys.modules", {"app.utils.rate_limiter": fake_rl_module}):
+
             @dec.rate_limited(max_requests=10, window_seconds=120)
             def fn(user_id):
                 return user_id
 
             fn("user-1")
-            fake_rl_module.check_rate_limit.assert_called_once_with(
-                "user-1", "fn", 10, 120
-            )
+            fake_rl_module.check_rate_limit.assert_called_once_with("user-1", "fn", 10, 120)
 
     def test_no_args_identifier_none(self):
         """When no args and no key_func, identifier is None and rate limit
@@ -281,6 +282,7 @@ class TestRateLimitedDeep:
         fake_rl_module = MagicMock()
         fake_rl_module.check_rate_limit.return_value = {"allowed": True}
         with patch.dict("sys.modules", {"app.utils.rate_limiter": fake_rl_module}):
+
             @dec.rate_limited(max_requests=10)
             def fn():
                 return "ok"
@@ -294,6 +296,7 @@ class TestRateLimitedDeep:
         fake_rl_module = MagicMock()
         fake_rl_module.check_rate_limit.return_value = {}
         with patch.dict("sys.modules", {"app.utils.rate_limiter": fake_rl_module}):
+
             @dec.rate_limited(max_requests=10)
             def fn(user_id):
                 return user_id
@@ -306,10 +309,14 @@ class TestRateLimitedDeep:
         fake_rl_module.check_rate_limit.return_value = {"allowed": False}
         fake_json_module = MagicMock()
         fake_json_module.json_response.return_value = ({"message": "rate"}, 429)
-        with patch.dict("sys.modules", {
-            "app.utils.rate_limiter": fake_rl_module,
-            "app.http.json_response": fake_json_module,
-        }):
+        with patch.dict(
+            "sys.modules",
+            {
+                "app.utils.rate_limiter": fake_rl_module,
+                "app.http.json_response": fake_json_module,
+            },
+        ):
+
             @dec.rate_limited(max_requests=1)
             def fn(user_id):
                 return user_id
@@ -324,6 +331,7 @@ class TestRateLimitedDeep:
     def test_rate_limit_import_error_falls_back(self):
         """ImportError on rate_limiter import is caught and function runs."""
         with patch.dict("sys.modules", {"app.utils.rate_limiter": None}):
+
             @dec.rate_limited(max_requests=10)
             def fn(user_id):
                 return user_id
@@ -334,20 +342,20 @@ class TestRateLimitedDeep:
         fake_rl_module = MagicMock()
         fake_rl_module.check_rate_limit.return_value = {"allowed": True}
         with patch.dict("sys.modules", {"app.utils.rate_limiter": fake_rl_module}):
+
             @dec.rate_limited(max_requests=10, key_func=lambda *a, **k: "custom")
             def fn(user_id, x):
                 return x
 
             fn("user-1", 5)
-            fake_rl_module.check_rate_limit.assert_called_once_with(
-                "custom", "fn", 10, 60
-            )
+            fake_rl_module.check_rate_limit.assert_called_once_with("custom", "fn", 10, 60)
 
     def test_first_arg_is_object_with_dict(self):
         """When first arg has __dict__, identifier is str(id(args[0]))."""
         fake_rl_module = MagicMock()
         fake_rl_module.check_rate_limit.return_value = {"allowed": True}
         with patch.dict("sys.modules", {"app.utils.rate_limiter": fake_rl_module}):
+
             @dec.rate_limited(max_requests=10)
             def method(self_, x):
                 return x
@@ -379,6 +387,7 @@ class TestMonitoredDeep:
             async_task_manager=None,
         )
         with patch.dict("sys.modules", {"app.utils.performance_initializer": fake_module}):
+
             @dec.monitored()  # name=None
             def fn(x):
                 return x
@@ -409,6 +418,7 @@ class TestMonitoredDeep:
             async_task_manager=None,
         )
         with patch.dict("sys.modules", {"app.utils.performance_initializer": fake_module}):
+
             @dec.monitored("slow_metric", slow_threshold_ms=500)
             def fn():
                 return "ok"
@@ -435,6 +445,7 @@ class TestMonitoredDeep:
             async_task_manager=None,
         )
         with patch.dict("sys.modules", {"app.utils.performance_initializer": fake_module}):
+
             @dec.monitored("fast_metric", slow_threshold_ms=500)
             def fn():
                 return "ok"
@@ -458,6 +469,7 @@ class TestMonitoredDeep:
         )
         long_error = RuntimeError("x" * 300)
         with patch.dict("sys.modules", {"app.utils.performance_initializer": fake_module}):
+
             @dec.monitored("my_metric")
             def fn():
                 raise long_error
@@ -695,6 +707,7 @@ class TestCombinedOptimizationDeep:
             async_task_manager=None,
         )
         with patch.dict("sys.modules", {"app.utils.performance_initializer": fake_module}):
+
             @dec.combined_optimization(dedup_window=30)
             def fn(x):
                 return x * 2
@@ -707,6 +720,7 @@ class TestCombinedOptimizationDeep:
         fake_rl_module = MagicMock()
         fake_rl_module.check_rate_limit.return_value = {"allowed": True}
         with patch.dict("sys.modules", {"app.utils.rate_limiter": fake_rl_module}):
+
             @dec.combined_optimization(rate_limit=10)
             def fn(user_id):
                 return user_id
@@ -730,6 +744,7 @@ class TestCombinedOptimizationDeep:
             async_task_manager=None,
         )
         with patch.dict("sys.modules", {"app.utils.performance_initializer": fake_module}):
+
             @dec.combined_optimization(monitor_slow_ms=500)
             def fn(x):
                 return x * 2
@@ -750,6 +765,7 @@ class TestCombinedOptimizationDeep:
             async_task_manager=None,
         )
         with patch.dict("sys.modules", {"app.utils.performance_initializer": fake_module}):
+
             @dec.combined_optimization(cache_ttl=60)
             def fn(x):
                 return x * 2
@@ -789,10 +805,14 @@ class TestCombinedOptimizationDeep:
             request_deduplicator=dedup,
             async_task_manager=None,
         )
-        with patch.dict("sys.modules", {
-            "app.utils.performance_initializer": fake_module,
-            "app.utils.rate_limiter": fake_rl_module,
-        }):
+        with patch.dict(
+            "sys.modules",
+            {
+                "app.utils.performance_initializer": fake_module,
+                "app.utils.rate_limiter": fake_rl_module,
+            },
+        ):
+
             @dec.combined_optimization(
                 cache_ttl=60,
                 rate_limit=10,
@@ -867,6 +887,7 @@ class TestAsyncTaskDeep:
             async_task_manager=async_mgr,
         )
         with patch.dict("sys.modules", {"app.utils.performance_initializer": fake_module}):
+
             @dec.async_task()
             def fn(x):
                 return x * 2
@@ -886,6 +907,7 @@ class TestAsyncTaskDeep:
             async_task_manager=async_mgr,
         )
         with patch.dict("sys.modules", {"app.utils.performance_initializer": fake_module}):
+
             @dec.async_task(queue="urgent")
             def fn(x):
                 return x
@@ -919,6 +941,7 @@ class TestAsyncTaskDeep:
             async_task_manager=async_mgr,
         )
         with patch.dict("sys.modules", {"app.utils.performance_initializer": fake_module}):
+
             @dec.async_task()
             def fn(x):
                 return x

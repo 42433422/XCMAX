@@ -11,6 +11,7 @@ import pytest
 @pytest.fixture
 def auth_mod():
     from app.fastapi_routes.domains.auth import routes
+
     return routes
 
 
@@ -105,7 +106,9 @@ class TestUserPublicDict:
         user.role = "admin"
         user.is_active = True
         user.wx_avatar_url = None
-        with patch("app.utils.user_avatar_storage.public_avatar_url", return_value="/avatar/default.png"):
+        with patch(
+            "app.utils.user_avatar_storage.public_avatar_url", return_value="/avatar/default.png"
+        ):
             result = auth_mod._user_public_dict(user)
         assert result["id"] == 1
         assert result["username"] == "admin"
@@ -120,7 +123,10 @@ class TestUserPublicDict:
         user.role = "user"
         user.is_active = True
         user.wx_avatar_url = "https://example.com/av.jpg"
-        with patch("app.utils.user_avatar_storage.public_avatar_url", return_value="https://example.com/av.jpg"):
+        with patch(
+            "app.utils.user_avatar_storage.public_avatar_url",
+            return_value="https://example.com/av.jpg",
+        ):
             result = auth_mod._user_public_dict(user)
         assert result["avatar_url"] == "https://example.com/av.jpg"
 
@@ -136,29 +142,54 @@ class TestSessionMetaForResponse:
         # routes.py binds session_id_from_request via ``from ... import`` at
         # module load, so patch the binding in routes, not the origin module;
         # otherwise the real fn runs and hits the DB with a MagicMock sid.
-        with patch("app.fastapi_routes.domains.auth.routes.session_id_from_request", return_value=None):
+        with patch(
+            "app.fastapi_routes.domains.auth.routes.session_id_from_request", return_value=None
+        ):
             result = auth_mod._session_meta_for_response(req)
         assert result == {}
 
     def test_with_user(self, auth_mod):
         req = MagicMock()
         user = MagicMock()
-        with patch("app.fastapi_routes.domains.auth.routes.session_id_from_request", return_value="sid1"), \
-             patch("app.application.session_account_meta.enrich_session_meta_with_tenant", return_value={"account_kind": "enterprise"}):
+        with (
+            patch(
+                "app.fastapi_routes.domains.auth.routes.session_id_from_request",
+                return_value="sid1",
+            ),
+            patch(
+                "app.application.session_account_meta.enrich_session_meta_with_tenant",
+                return_value={"account_kind": "enterprise"},
+            ),
+        ):
             result = auth_mod._session_meta_for_response(req, user)
         assert result["account_kind"] == "enterprise"
 
     def test_without_user(self, auth_mod):
         req = MagicMock()
-        with patch("app.fastapi_routes.domains.auth.routes.session_id_from_request", return_value="sid1"), \
-             patch("app.application.session_account_meta.load_session_account_meta", return_value={"account_kind": "personal"}):
+        with (
+            patch(
+                "app.fastapi_routes.domains.auth.routes.session_id_from_request",
+                return_value="sid1",
+            ),
+            patch(
+                "app.application.session_account_meta.load_session_account_meta",
+                return_value={"account_kind": "personal"},
+            ),
+        ):
             result = auth_mod._session_meta_for_response(req)
         assert result["account_kind"] == "personal"
 
     def test_without_user_no_meta(self, auth_mod):
         req = MagicMock()
-        with patch("app.fastapi_routes.domains.auth.routes.session_id_from_request", return_value="sid1"), \
-             patch("app.application.session_account_meta.load_session_account_meta", return_value=None):
+        with (
+            patch(
+                "app.fastapi_routes.domains.auth.routes.session_id_from_request",
+                return_value="sid1",
+            ),
+            patch(
+                "app.application.session_account_meta.load_session_account_meta", return_value=None
+            ),
+        ):
             result = auth_mod._session_meta_for_response(req)
         assert result == {}
 
@@ -208,9 +239,13 @@ class TestEnrichRegisterWithTenant:
         assert result == {"user": {}}
 
     def test_tenant_binding_success(self, auth_mod):
-        with patch("app.application.enterprise_login_flow.bind_tenant_for_login", return_value={
-            "tenant_id": 1, "tenant_name": "TestCo"
-        }), patch("app.application.session_account_meta.persist_session_account_meta"):
+        with (
+            patch(
+                "app.application.enterprise_login_flow.bind_tenant_for_login",
+                return_value={"tenant_id": 1, "tenant_name": "TestCo"},
+            ),
+            patch("app.application.session_account_meta.persist_session_account_meta"),
+        ):
             result = auth_mod._enrich_register_with_tenant(
                 result={"user": {"id": 1}},
                 username="test",
@@ -221,7 +256,10 @@ class TestEnrichRegisterWithTenant:
         assert result["tenant_name"] == "TestCo"
 
     def test_infra_transient_returns_unchanged(self, auth_mod):
-        with patch("app.application.enterprise_login_flow.bind_tenant_for_login", side_effect=RuntimeError("db down")):
+        with patch(
+            "app.application.enterprise_login_flow.bind_tenant_for_login",
+            side_effect=RuntimeError("db down"),
+        ):
             result = auth_mod._enrich_register_with_tenant(
                 result={"user": {"id": 1}},
                 username="test",
@@ -251,8 +289,10 @@ class TestJitCreateLocalUser:
         mock_db.query.return_value.filter.return_value.first.return_value = None
         mock_db.__enter__ = lambda s: mock_db
         mock_db.__exit__ = MagicMock(return_value=False)
-        with patch("app.db.session.get_db", return_value=mock_db), \
-             patch("app.utils.password_hash.generate_password_hash", return_value="hashed"):
+        with (
+            patch("app.db.session.get_db", return_value=mock_db),
+            patch("app.utils.password_hash.generate_password_hash", return_value="hashed"),
+        ):
             result = auth_mod._jit_create_local_user_for_enterprise("newuser", "pass", "e@e.com")
         assert result is True
 
@@ -302,8 +342,10 @@ class TestSyncLocalPasswordForEmail:
         user1.id = 1
         mock_auth = MagicMock()
         mock_auth.reset_password.return_value = {"success": True}
-        with patch.object(auth_mod, "_find_local_users_by_email", return_value=[user1]), \
-             patch("app.application.auth_app_service.get_auth_app_service", return_value=mock_auth):
+        with (
+            patch.object(auth_mod, "_find_local_users_by_email", return_value=[user1]),
+            patch("app.application.auth_app_service.get_auth_app_service", return_value=mock_auth),
+        ):
             result = auth_mod._sync_local_password_for_email("a@b.com", "newpass")
         assert result == 1
 

@@ -14,6 +14,7 @@ Targets remaining uncovered branches:
 - scan_workflow_employee_catalog_from_mods with empty workflow_employees
 - build_host_profile_api_payload with validation errors
 """
+
 from __future__ import annotations
 
 import json
@@ -24,7 +25,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from app.mod_sdk import host_profile as hp
-
 
 # ── _resolve_product_sku deep ───────────────────────────────────────────────
 
@@ -293,9 +293,7 @@ class TestLoadIndustryPresetsDocumentDeep:
         hp.load_industry_presets_document.cache_clear()
         config_dir = tmp_path / "config"
         config_dir.mkdir()
-        (config_dir / "industry_presets.json").write_text(
-            json.dumps({"presets": "not a dict"})
-        )
+        (config_dir / "industry_presets.json").write_text(json.dumps({"presets": "not a dict"}))
         with patch.object(hp, "resolve_fhd_config_dir", return_value=config_dir):
             out = hp.load_industry_presets_document()
         assert out["presets"] == {}
@@ -357,9 +355,7 @@ class TestLoadWorkflowEmployeeCatalogDeep:
 
 class TestGetBridgeModHostApisDeep:
     def test_handles_non_dict_bridge_api_map(self, monkeypatch):
-        with patch.object(
-            hp, "load_host_profile", return_value={"bridge_api_map": "not a dict"}
-        ):
+        with patch.object(hp, "load_host_profile", return_value={"bridge_api_map": "not a dict"}):
             out = hp.get_bridge_mod_host_apis()
         # Falls back to legacy
         assert "xcagi-planner-bridge" in out
@@ -528,57 +524,72 @@ class TestScanWorkflowEmployeeCatalogFromModsDeep:
 
 class TestBuildHostProfileApiPayloadDeep:
     def test_with_validation_errors(self, monkeypatch):
-        with patch.object(
-            hp,
-            "load_host_profile",
-            return_value={"schema_version": 1, "workflow_delivery": "monolith"},
-        ), patch.object(
-            hp,
-            "get_profile_validation_errors",
-            return_value=["error1", "error2"],
-        ), patch.object(
-            hp,
-            "load_industry_presets_document",
-            return_value={"schema_version": 1, "presets": {}},
-        ), patch.object(
-            hp,
-            "load_workflow_employee_catalog",
-            return_value={"schema_version": 1},
+        with (
+            patch.object(
+                hp,
+                "load_host_profile",
+                return_value={"schema_version": 1, "workflow_delivery": "monolith"},
+            ),
+            patch.object(
+                hp,
+                "get_profile_validation_errors",
+                return_value=["error1", "error2"],
+            ),
+            patch.object(
+                hp,
+                "load_industry_presets_document",
+                return_value={"schema_version": 1, "presets": {}},
+            ),
+            patch.object(
+                hp,
+                "load_workflow_employee_catalog",
+                return_value={"schema_version": 1},
+            ),
         ):
             out = hp.build_host_profile_api_payload()
         assert out["validation_errors"] == ["error1", "error2"]
 
     def test_with_empty_presets(self, monkeypatch):
-        with patch.object(
-            hp,
-            "load_host_profile",
-            return_value={"schema_version": 1, "workflow_delivery": "split"},
-        ), patch.object(hp, "get_profile_validation_errors", return_value=[]), patch.object(
-            hp,
-            "load_industry_presets_document",
-            return_value={"schema_version": 1, "presets": {}},
-        ), patch.object(
-            hp,
-            "load_workflow_employee_catalog",
-            return_value={"schema_version": 1},
+        with (
+            patch.object(
+                hp,
+                "load_host_profile",
+                return_value={"schema_version": 1, "workflow_delivery": "split"},
+            ),
+            patch.object(hp, "get_profile_validation_errors", return_value=[]),
+            patch.object(
+                hp,
+                "load_industry_presets_document",
+                return_value={"schema_version": 1, "presets": {}},
+            ),
+            patch.object(
+                hp,
+                "load_workflow_employee_catalog",
+                return_value={"schema_version": 1},
+            ),
         ):
             out = hp.build_host_profile_api_payload()
         assert out["industry_presets_meta"]["preset_count"] == 0
         assert out["workflow_catalog_meta"]["delivery"] == "split"
 
     def test_default_schema_version(self, monkeypatch):
-        with patch.object(
-            hp,
-            "load_host_profile",
-            return_value={"workflow_delivery": "monolith"},  # no schema_version
-        ), patch.object(hp, "get_profile_validation_errors", return_value=[]), patch.object(
-            hp,
-            "load_industry_presets_document",
-            return_value={"schema_version": 1, "presets": {"a": {}}},
-        ), patch.object(
-            hp,
-            "load_workflow_employee_catalog",
-            return_value={"schema_version": 1},
+        with (
+            patch.object(
+                hp,
+                "load_host_profile",
+                return_value={"workflow_delivery": "monolith"},  # no schema_version
+            ),
+            patch.object(hp, "get_profile_validation_errors", return_value=[]),
+            patch.object(
+                hp,
+                "load_industry_presets_document",
+                return_value={"schema_version": 1, "presets": {"a": {}}},
+            ),
+            patch.object(
+                hp,
+                "load_workflow_employee_catalog",
+                return_value={"schema_version": 1},
+            ),
         ):
             out = hp.build_host_profile_api_payload()
         assert out["schema_version"] == hp.PROFILE_SCHEMA_VERSION

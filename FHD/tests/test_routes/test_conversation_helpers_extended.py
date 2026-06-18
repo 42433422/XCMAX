@@ -21,7 +21,6 @@ from fastapi import HTTPException, Request
 
 from app.fastapi_routes.domains.conversation import helpers
 
-
 # ---------------------------------------------------------------------------
 # _chat_db_read_grace_seconds_left / _touch_chat_db_read_grace
 # ---------------------------------------------------------------------------
@@ -109,9 +108,7 @@ class TestEnsureVectorIndexIfNeeded:
         runtime_context = {"excel_file_path": "/data/test.xlsx"}
         mock_result = {"success": True, "index_size": 100}
 
-        with patch(
-            "app.mod_sdk.planner_tools.resolve_planner_tool_executor"
-        ) as mock_resolve:
+        with patch("app.mod_sdk.planner_tools.resolve_planner_tool_executor") as mock_resolve:
             mock_executor = MagicMock(return_value=json.dumps(mock_result))
             mock_resolve.return_value = mock_executor
 
@@ -123,9 +120,7 @@ class TestEnsureVectorIndexIfNeeded:
         runtime_context = {"excel_file_path": "/data/test.xlsx"}
         mock_result = {"error": "file not found", "message": "文件不存在"}
 
-        with patch(
-            "app.mod_sdk.planner_tools.resolve_planner_tool_executor"
-        ) as mock_resolve:
+        with patch("app.mod_sdk.planner_tools.resolve_planner_tool_executor") as mock_resolve:
             mock_executor = MagicMock(return_value=json.dumps(mock_result))
             mock_resolve.return_value = mock_executor
 
@@ -137,9 +132,7 @@ class TestEnsureVectorIndexIfNeeded:
         """Vector request with file path but exception should return error message."""
         runtime_context = {"excel_file_path": "/data/test.xlsx"}
 
-        with patch(
-            "app.mod_sdk.planner_tools.resolve_planner_tool_executor"
-        ) as mock_resolve:
+        with patch("app.mod_sdk.planner_tools.resolve_planner_tool_executor") as mock_resolve:
             mock_resolve.side_effect = OSError("connection failed")
 
             result = helpers._ensure_vector_index_if_needed("建立向量索引", runtime_context)
@@ -202,17 +195,13 @@ class TestXcagiCompatReplyPayloadWithToolResults:
     def test_dict_reply_with_runtime_context_update(self):
         """Dict reply with runtime_context_update should include it in data."""
         ctx_update = {"cleared": True}
-        result = helpers._xcagi_compat_reply_payload(
-            "done", runtime_context_update=ctx_update
-        )
+        result = helpers._xcagi_compat_reply_payload("done", runtime_context_update=ctx_update)
         assert result["data"]["runtime_context"] == ctx_update
 
     def test_dict_reply_with_kitten_attachments(self):
         """Dict reply with kitten_attachments should spread items into data."""
         attachments = {"files": ["a.xlsx"]}
-        result = helpers._xcagi_compat_reply_payload(
-            "done", kitten_attachments=attachments
-        )
+        result = helpers._xcagi_compat_reply_payload("done", kitten_attachments=attachments)
         assert result["data"]["files"] == ["a.xlsx"]
 
     def test_empty_string_reply(self):
@@ -303,25 +292,32 @@ class TestXcagiGuardedPlannerStreamEvents:
             {"type": "done", "result": {"response": "Hi"}},
         ]
 
-        with patch(
-            "app.fastapi_routes.domains.conversation.helpers.chat_stream_sse_events",
-            return_value=iter(mock_events),
-        ), patch(
-            "app.fastapi_routes.domains.conversation.helpers._xcagi_chat_timeout_seconds",
-            return_value=60.0,
-        ), patch(
-            "app.fastapi_routes.domains.conversation.helpers._xcagi_stream_first_token_timeout_seconds",
-            return_value=10.0,
-        ), patch(
-            "app.fastapi_routes.domains.conversation.helpers._xcagi_stream_idle_notice_seconds",
-            return_value=30.0,
+        with (
+            patch(
+                "app.fastapi_routes.domains.conversation.helpers.chat_stream_sse_events",
+                return_value=iter(mock_events),
+            ),
+            patch(
+                "app.fastapi_routes.domains.conversation.helpers._xcagi_chat_timeout_seconds",
+                return_value=60.0,
+            ),
+            patch(
+                "app.fastapi_routes.domains.conversation.helpers._xcagi_stream_first_token_timeout_seconds",
+                return_value=10.0,
+            ),
+            patch(
+                "app.fastapi_routes.domains.conversation.helpers._xcagi_stream_idle_notice_seconds",
+                return_value=30.0,
+            ),
         ):
-            events = list(helpers._xcagi_guarded_planner_stream_events(
-                body,
-                runtime_context={},
-                workspace_root="/tmp",
-                client=MagicMock(),
-            ))
+            events = list(
+                helpers._xcagi_guarded_planner_stream_events(
+                    body,
+                    runtime_context={},
+                    workspace_root="/tmp",
+                    client=MagicMock(),
+                )
+            )
             assert len(events) == 2
             assert events[0]["type"] == "token"
             assert events[1]["type"] == "done"
@@ -330,25 +326,32 @@ class TestXcagiGuardedPlannerStreamEvents:
         """Should yield error event when worker raises exception."""
         body = helpers.XcagiCompatChatBody(message="hello")
 
-        with patch(
-            "app.fastapi_routes.domains.conversation.helpers.chat_stream_sse_events",
-            side_effect=RuntimeError("service down"),
-        ), patch(
-            "app.fastapi_routes.domains.conversation.helpers._xcagi_chat_timeout_seconds",
-            return_value=60.0,
-        ), patch(
-            "app.fastapi_routes.domains.conversation.helpers._xcagi_stream_first_token_timeout_seconds",
-            return_value=10.0,
-        ), patch(
-            "app.fastapi_routes.domains.conversation.helpers._xcagi_stream_idle_notice_seconds",
-            return_value=30.0,
+        with (
+            patch(
+                "app.fastapi_routes.domains.conversation.helpers.chat_stream_sse_events",
+                side_effect=RuntimeError("service down"),
+            ),
+            patch(
+                "app.fastapi_routes.domains.conversation.helpers._xcagi_chat_timeout_seconds",
+                return_value=60.0,
+            ),
+            patch(
+                "app.fastapi_routes.domains.conversation.helpers._xcagi_stream_first_token_timeout_seconds",
+                return_value=10.0,
+            ),
+            patch(
+                "app.fastapi_routes.domains.conversation.helpers._xcagi_stream_idle_notice_seconds",
+                return_value=30.0,
+            ),
         ):
-            events = list(helpers._xcagi_guarded_planner_stream_events(
-                body,
-                runtime_context={},
-                workspace_root="/tmp",
-                client=MagicMock(),
-            ))
+            events = list(
+                helpers._xcagi_guarded_planner_stream_events(
+                    body,
+                    runtime_context={},
+                    workspace_root="/tmp",
+                    client=MagicMock(),
+                )
+            )
             assert len(events) == 1
             assert events[0]["type"] == "error"
             assert events[0]["status_code"] == 503
@@ -366,156 +369,200 @@ class TestXcagiPlannerStreamBytes:
         """When DB read not authorized, should yield token request events."""
         body = helpers.XcagiCompatChatBody(message="查看数据库", db_read_token="wrong")
 
-        with patch(
-            "app.fastapi_routes.domains.conversation.helpers.effective_db_read_token",
-            return_value="secret",
-        ), patch(
-            "app.fastapi_routes.domains.conversation.helpers._chat_db_read_grace_seconds_left",
-            return_value=0,
-        ), patch(
-            "app.fastapi_routes.domains.conversation.helpers._merge_runtime_context_with_message_paths",
-            return_value=({}, []),
-        ), patch(
-            "app.fastapi_routes.domains.conversation.helpers.runtime_context_with_tier",
-            return_value={},
+        with (
+            patch(
+                "app.fastapi_routes.domains.conversation.helpers.effective_db_read_token",
+                return_value="secret",
+            ),
+            patch(
+                "app.fastapi_routes.domains.conversation.helpers._chat_db_read_grace_seconds_left",
+                return_value=0,
+            ),
+            patch(
+                "app.fastapi_routes.domains.conversation.helpers._merge_runtime_context_with_message_paths",
+                return_value=({}, []),
+            ),
+            patch(
+                "app.fastapi_routes.domains.conversation.helpers.runtime_context_with_tier",
+                return_value={},
+            ),
         ):
-            chunks = list(helpers._xcagi_planner_stream_bytes(
-                MagicMock(spec=Request),
-                body,
-                ai_tier="default",
-            ))
+            chunks = list(
+                helpers._xcagi_planner_stream_bytes(
+                    MagicMock(spec=Request),
+                    body,
+                    ai_tier="default",
+                )
+            )
             # Should yield SSE events for token requirement
             assert len(chunks) > 0
             combined = b"".join(chunks)
-            assert b"requires_token" in combined or "需要授权".encode("utf-8") in combined
+            assert b"requires_token" in combined or "需要授权".encode() in combined
 
     def test_workflow_interrupt_yields_interrupt_reply(self):
         """When workflow interrupt is present, should yield interrupt reply."""
         body = helpers.XcagiCompatChatBody(message="确认操作")
 
-        with patch(
-            "app.fastapi_routes.domains.conversation.helpers.effective_db_read_token",
-            return_value="",
-        ), patch(
-            "app.fastapi_routes.domains.conversation.helpers._merge_runtime_context_with_message_paths",
-            return_value=({}, []),
-        ), patch(
-            "app.fastapi_routes.domains.conversation.helpers.runtime_context_with_tier",
-            return_value={},
-        ), patch(
-            "app.fastapi_routes.domains.conversation.helpers.planner_workflow_interrupt_reply",
-            return_value="请确认操作",
-        ), patch(
-            "app.fastapi_routes.domains.conversation.helpers.runtime_context_after_workflow_interrupt",
-            return_value={"cleared": True},
+        with (
+            patch(
+                "app.fastapi_routes.domains.conversation.helpers.effective_db_read_token",
+                return_value="",
+            ),
+            patch(
+                "app.fastapi_routes.domains.conversation.helpers._merge_runtime_context_with_message_paths",
+                return_value=({}, []),
+            ),
+            patch(
+                "app.fastapi_routes.domains.conversation.helpers.runtime_context_with_tier",
+                return_value={},
+            ),
+            patch(
+                "app.fastapi_routes.domains.conversation.helpers.planner_workflow_interrupt_reply",
+                return_value="请确认操作",
+            ),
+            patch(
+                "app.fastapi_routes.domains.conversation.helpers.runtime_context_after_workflow_interrupt",
+                return_value={"cleared": True},
+            ),
         ):
-            chunks = list(helpers._xcagi_planner_stream_bytes(
-                MagicMock(spec=Request),
-                body,
-                ai_tier="default",
-            ))
+            chunks = list(
+                helpers._xcagi_planner_stream_bytes(
+                    MagicMock(spec=Request),
+                    body,
+                    ai_tier="default",
+                )
+            )
             assert len(chunks) > 0
             combined = b"".join(chunks)
-            assert "请确认操作".encode("utf-8") in combined
+            assert "请确认操作".encode() in combined
 
     def test_sets_llm_mode(self):
         """When body.mode is 'online' or 'offline', should call set_llm_mode."""
         body = helpers.XcagiCompatChatBody(message="hello", mode="online")
 
-        with patch(
-            "app.fastapi_routes.domains.conversation.helpers.effective_db_read_token",
-            return_value="",
-        ), patch(
-            "app.fastapi_routes.domains.conversation.helpers._merge_runtime_context_with_message_paths",
-            return_value=({}, []),
-        ), patch(
-            "app.fastapi_routes.domains.conversation.helpers.runtime_context_with_tier",
-            return_value={},
-        ), patch(
-            "app.fastapi_routes.domains.conversation.helpers.planner_workflow_interrupt_reply",
-            return_value=None,
-        ), patch(
-            "app.fastapi_routes.domains.conversation.helpers._ensure_vector_index_if_needed",
-            return_value=None,
-        ), patch(
-            "app.fastapi_routes.domains.conversation.helpers.set_llm_mode",
-        ) as mock_set_mode, patch(
-            "app.fastapi_routes.domains.conversation.helpers.create_modstore_openai_client_from_request",
-            return_value=MagicMock(),
-        ), patch(
-            "app.fastapi_routes.domains.conversation.helpers._xcagi_guarded_planner_stream_events",
-            return_value=iter([]),
+        with (
+            patch(
+                "app.fastapi_routes.domains.conversation.helpers.effective_db_read_token",
+                return_value="",
+            ),
+            patch(
+                "app.fastapi_routes.domains.conversation.helpers._merge_runtime_context_with_message_paths",
+                return_value=({}, []),
+            ),
+            patch(
+                "app.fastapi_routes.domains.conversation.helpers.runtime_context_with_tier",
+                return_value={},
+            ),
+            patch(
+                "app.fastapi_routes.domains.conversation.helpers.planner_workflow_interrupt_reply",
+                return_value=None,
+            ),
+            patch(
+                "app.fastapi_routes.domains.conversation.helpers._ensure_vector_index_if_needed",
+                return_value=None,
+            ),
+            patch(
+                "app.fastapi_routes.domains.conversation.helpers.set_llm_mode",
+            ) as mock_set_mode,
+            patch(
+                "app.fastapi_routes.domains.conversation.helpers.create_modstore_openai_client_from_request",
+                return_value=MagicMock(),
+            ),
+            patch(
+                "app.fastapi_routes.domains.conversation.helpers._xcagi_guarded_planner_stream_events",
+                return_value=iter([]),
+            ),
         ):
-            list(helpers._xcagi_planner_stream_bytes(
-                MagicMock(spec=Request),
-                body,
-                ai_tier="default",
-            ))
+            list(
+                helpers._xcagi_planner_stream_bytes(
+                    MagicMock(spec=Request),
+                    body,
+                    ai_tier="default",
+                )
+            )
             mock_set_mode.assert_called_once_with("online")
 
     def test_vector_error_yields_error_event(self):
         """When vector index fails, should yield error event."""
         body = helpers.XcagiCompatChatBody(message="建立向量索引")
 
-        with patch(
-            "app.fastapi_routes.domains.conversation.helpers.effective_db_read_token",
-            return_value="",
-        ), patch(
-            "app.fastapi_routes.domains.conversation.helpers._merge_runtime_context_with_message_paths",
-            return_value=({}, []),
-        ), patch(
-            "app.fastapi_routes.domains.conversation.helpers.runtime_context_with_tier",
-            return_value={},
-        ), patch(
-            "app.fastapi_routes.domains.conversation.helpers.planner_workflow_interrupt_reply",
-            return_value=None,
-        ), patch(
-            "app.fastapi_routes.domains.conversation.helpers._ensure_vector_index_if_needed",
-            return_value="向量索引失败",
+        with (
+            patch(
+                "app.fastapi_routes.domains.conversation.helpers.effective_db_read_token",
+                return_value="",
+            ),
+            patch(
+                "app.fastapi_routes.domains.conversation.helpers._merge_runtime_context_with_message_paths",
+                return_value=({}, []),
+            ),
+            patch(
+                "app.fastapi_routes.domains.conversation.helpers.runtime_context_with_tier",
+                return_value={},
+            ),
+            patch(
+                "app.fastapi_routes.domains.conversation.helpers.planner_workflow_interrupt_reply",
+                return_value=None,
+            ),
+            patch(
+                "app.fastapi_routes.domains.conversation.helpers._ensure_vector_index_if_needed",
+                return_value="向量索引失败",
+            ),
         ):
-            chunks = list(helpers._xcagi_planner_stream_bytes(
-                MagicMock(spec=Request),
-                body,
-                ai_tier="default",
-            ))
+            chunks = list(
+                helpers._xcagi_planner_stream_bytes(
+                    MagicMock(spec=Request),
+                    body,
+                    ai_tier="default",
+                )
+            )
             assert len(chunks) > 0
             combined = b"".join(chunks)
-            assert "向量索引失败".encode("utf-8") in combined
+            assert "向量索引失败".encode() in combined
 
     def test_empty_reply_yields_error(self):
         """When stream produces empty reply, should yield error event."""
         body = helpers.XcagiCompatChatBody(message="hello")
 
-        with patch(
-            "app.fastapi_routes.domains.conversation.helpers.effective_db_read_token",
-            return_value="",
-        ), patch(
-            "app.fastapi_routes.domains.conversation.helpers._merge_runtime_context_with_message_paths",
-            return_value=({}, []),
-        ), patch(
-            "app.fastapi_routes.domains.conversation.helpers.runtime_context_with_tier",
-            return_value={},
-        ), patch(
-            "app.fastapi_routes.domains.conversation.helpers.planner_workflow_interrupt_reply",
-            return_value=None,
-        ), patch(
-            "app.fastapi_routes.domains.conversation.helpers._ensure_vector_index_if_needed",
-            return_value=None,
-        ), patch(
-            "app.fastapi_routes.domains.conversation.helpers.create_modstore_openai_client_from_request",
-            return_value=MagicMock(),
-        ), patch(
-            "app.fastapi_routes.domains.conversation.helpers._xcagi_guarded_planner_stream_events",
-            return_value=iter([]),
+        with (
+            patch(
+                "app.fastapi_routes.domains.conversation.helpers.effective_db_read_token",
+                return_value="",
+            ),
+            patch(
+                "app.fastapi_routes.domains.conversation.helpers._merge_runtime_context_with_message_paths",
+                return_value=({}, []),
+            ),
+            patch(
+                "app.fastapi_routes.domains.conversation.helpers.runtime_context_with_tier",
+                return_value={},
+            ),
+            patch(
+                "app.fastapi_routes.domains.conversation.helpers.planner_workflow_interrupt_reply",
+                return_value=None,
+            ),
+            patch(
+                "app.fastapi_routes.domains.conversation.helpers._ensure_vector_index_if_needed",
+                return_value=None,
+            ),
+            patch(
+                "app.fastapi_routes.domains.conversation.helpers.create_modstore_openai_client_from_request",
+                return_value=MagicMock(),
+            ),
+            patch(
+                "app.fastapi_routes.domains.conversation.helpers._xcagi_guarded_planner_stream_events",
+                return_value=iter([]),
+            ),
         ):
-            chunks = list(helpers._xcagi_planner_stream_bytes(
-                MagicMock(spec=Request),
-                body,
-                ai_tier="default",
-            ))
+            chunks = list(
+                helpers._xcagi_planner_stream_bytes(
+                    MagicMock(spec=Request),
+                    body,
+                    ai_tier="default",
+                )
+            )
             assert len(chunks) > 0
             combined = b"".join(chunks)
-            assert b"error" in combined or "未返回内容".encode("utf-8") in combined
+            assert b"error" in combined or "未返回内容".encode() in combined
 
     def test_requires_token_halts_stream(self):
         """When stream yields requires_token event, should halt."""
@@ -526,33 +573,43 @@ class TestXcagiPlannerStreamBytes:
             {"type": "requires_token", "token_name": "DB_WRITE_TOKEN"},
         ]
 
-        with patch(
-            "app.fastapi_routes.domains.conversation.helpers.effective_db_read_token",
-            return_value="",
-        ), patch(
-            "app.fastapi_routes.domains.conversation.helpers._merge_runtime_context_with_message_paths",
-            return_value=({}, []),
-        ), patch(
-            "app.fastapi_routes.domains.conversation.helpers.runtime_context_with_tier",
-            return_value={},
-        ), patch(
-            "app.fastapi_routes.domains.conversation.helpers.planner_workflow_interrupt_reply",
-            return_value=None,
-        ), patch(
-            "app.fastapi_routes.domains.conversation.helpers._ensure_vector_index_if_needed",
-            return_value=None,
-        ), patch(
-            "app.fastapi_routes.domains.conversation.helpers.create_modstore_openai_client_from_request",
-            return_value=MagicMock(),
-        ), patch(
-            "app.fastapi_routes.domains.conversation.helpers._xcagi_guarded_planner_stream_events",
-            return_value=iter(mock_events),
+        with (
+            patch(
+                "app.fastapi_routes.domains.conversation.helpers.effective_db_read_token",
+                return_value="",
+            ),
+            patch(
+                "app.fastapi_routes.domains.conversation.helpers._merge_runtime_context_with_message_paths",
+                return_value=({}, []),
+            ),
+            patch(
+                "app.fastapi_routes.domains.conversation.helpers.runtime_context_with_tier",
+                return_value={},
+            ),
+            patch(
+                "app.fastapi_routes.domains.conversation.helpers.planner_workflow_interrupt_reply",
+                return_value=None,
+            ),
+            patch(
+                "app.fastapi_routes.domains.conversation.helpers._ensure_vector_index_if_needed",
+                return_value=None,
+            ),
+            patch(
+                "app.fastapi_routes.domains.conversation.helpers.create_modstore_openai_client_from_request",
+                return_value=MagicMock(),
+            ),
+            patch(
+                "app.fastapi_routes.domains.conversation.helpers._xcagi_guarded_planner_stream_events",
+                return_value=iter(mock_events),
+            ),
         ):
-            chunks = list(helpers._xcagi_planner_stream_bytes(
-                MagicMock(spec=Request),
-                body,
-                ai_tier="default",
-            ))
+            chunks = list(
+                helpers._xcagi_planner_stream_bytes(
+                    MagicMock(spec=Request),
+                    body,
+                    ai_tier="default",
+                )
+            )
             combined = b"".join(chunks)
             assert b"requires_token" in combined
 
@@ -564,41 +621,49 @@ class TestXcagiPlannerStreamBytes:
             {"type": "error", "message": "LLM service unavailable", "status_code": 503},
         ]
 
-        with patch(
-            "app.fastapi_routes.domains.conversation.helpers.effective_db_read_token",
-            return_value="",
-        ), patch(
-            "app.fastapi_routes.domains.conversation.helpers._merge_runtime_context_with_message_paths",
-            return_value=({}, []),
-        ), patch(
-            "app.fastapi_routes.domains.conversation.helpers.runtime_context_with_tier",
-            return_value={},
-        ), patch(
-            "app.fastapi_routes.domains.conversation.helpers.planner_workflow_interrupt_reply",
-            return_value=None,
-        ), patch(
-            "app.fastapi_routes.domains.conversation.helpers._ensure_vector_index_if_needed",
-            return_value=None,
-        ), patch(
-            "app.fastapi_routes.domains.conversation.helpers.create_modstore_openai_client_from_request",
-            return_value=MagicMock(),
-        ), patch(
-            "app.fastapi_routes.domains.conversation.helpers._xcagi_guarded_planner_stream_events",
-            return_value=iter(mock_events),
+        with (
+            patch(
+                "app.fastapi_routes.domains.conversation.helpers.effective_db_read_token",
+                return_value="",
+            ),
+            patch(
+                "app.fastapi_routes.domains.conversation.helpers._merge_runtime_context_with_message_paths",
+                return_value=({}, []),
+            ),
+            patch(
+                "app.fastapi_routes.domains.conversation.helpers.runtime_context_with_tier",
+                return_value={},
+            ),
+            patch(
+                "app.fastapi_routes.domains.conversation.helpers.planner_workflow_interrupt_reply",
+                return_value=None,
+            ),
+            patch(
+                "app.fastapi_routes.domains.conversation.helpers._ensure_vector_index_if_needed",
+                return_value=None,
+            ),
+            patch(
+                "app.fastapi_routes.domains.conversation.helpers.create_modstore_openai_client_from_request",
+                return_value=MagicMock(),
+            ),
+            patch(
+                "app.fastapi_routes.domains.conversation.helpers._xcagi_guarded_planner_stream_events",
+                return_value=iter(mock_events),
+            ),
         ):
-            chunks = list(helpers._xcagi_planner_stream_bytes(
-                MagicMock(spec=Request),
-                body,
-                ai_tier="default",
-            ))
+            chunks = list(
+                helpers._xcagi_planner_stream_bytes(
+                    MagicMock(spec=Request),
+                    body,
+                    ai_tier="default",
+                )
+            )
             combined = b"".join(chunks)
             assert b"LLM service unavailable" in combined
 
     def test_db_read_authorized_sets_context(self):
         """When DB read is authorized, should set chat_db_read_authorized in context."""
-        body = helpers.XcagiCompatChatBody(
-            message="查看数据库", db_read_token="secret", context={}
-        )
+        body = helpers.XcagiCompatChatBody(message="查看数据库", db_read_token="secret", context={})
 
         captured_ctx = {}
 
@@ -607,39 +672,51 @@ class TestXcagiPlannerStreamBytes:
                 captured_ctx.update(ctx)
             return ctx if ctx is not None else {}, []
 
-        with patch(
-            "app.fastapi_routes.domains.conversation.helpers.effective_db_read_token",
-            return_value="secret",
-        ), patch(
-            "app.fastapi_routes.domains.conversation.helpers._chat_db_read_grace_seconds_left",
-            return_value=0,
-        ), patch(
-            "app.fastapi_routes.domains.conversation.helpers._touch_chat_db_read_grace",
-            return_value=300,
-        ), patch(
-            "app.fastapi_routes.domains.conversation.helpers._merge_runtime_context_with_message_paths",
-            side_effect=capture_merge,
-        ), patch(
-            "app.fastapi_routes.domains.conversation.helpers.runtime_context_with_tier",
-            return_value={},
-        ), patch(
-            "app.fastapi_routes.domains.conversation.helpers.planner_workflow_interrupt_reply",
-            return_value=None,
-        ), patch(
-            "app.fastapi_routes.domains.conversation.helpers._ensure_vector_index_if_needed",
-            return_value=None,
-        ), patch(
-            "app.fastapi_routes.domains.conversation.helpers.create_modstore_openai_client_from_request",
-            return_value=MagicMock(),
-        ), patch(
-            "app.fastapi_routes.domains.conversation.helpers._xcagi_guarded_planner_stream_events",
-            return_value=iter([{"type": "done", "result": {"response": "ok"}}]),
+        with (
+            patch(
+                "app.fastapi_routes.domains.conversation.helpers.effective_db_read_token",
+                return_value="secret",
+            ),
+            patch(
+                "app.fastapi_routes.domains.conversation.helpers._chat_db_read_grace_seconds_left",
+                return_value=0,
+            ),
+            patch(
+                "app.fastapi_routes.domains.conversation.helpers._touch_chat_db_read_grace",
+                return_value=300,
+            ),
+            patch(
+                "app.fastapi_routes.domains.conversation.helpers._merge_runtime_context_with_message_paths",
+                side_effect=capture_merge,
+            ),
+            patch(
+                "app.fastapi_routes.domains.conversation.helpers.runtime_context_with_tier",
+                return_value={},
+            ),
+            patch(
+                "app.fastapi_routes.domains.conversation.helpers.planner_workflow_interrupt_reply",
+                return_value=None,
+            ),
+            patch(
+                "app.fastapi_routes.domains.conversation.helpers._ensure_vector_index_if_needed",
+                return_value=None,
+            ),
+            patch(
+                "app.fastapi_routes.domains.conversation.helpers.create_modstore_openai_client_from_request",
+                return_value=MagicMock(),
+            ),
+            patch(
+                "app.fastapi_routes.domains.conversation.helpers._xcagi_guarded_planner_stream_events",
+                return_value=iter([{"type": "done", "result": {"response": "ok"}}]),
+            ),
         ):
-            list(helpers._xcagi_planner_stream_bytes(
-                MagicMock(spec=Request),
-                body,
-                ai_tier="default",
-            ))
+            list(
+                helpers._xcagi_planner_stream_bytes(
+                    MagicMock(spec=Request),
+                    body,
+                    ai_tier="default",
+                )
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -712,16 +789,12 @@ class TestXcagiCompatChatBatchBodyEdgeCases:
         assert body.messages == []
 
     def test_user_id_and_source(self):
-        body = helpers.XcagiCompatChatBatchBody(
-            messages=["a"], user_id="user1", source="test"
-        )
+        body = helpers.XcagiCompatChatBatchBody(messages=["a"], user_id="user1", source="test")
         assert body.user_id == "user1"
         assert body.source == "test"
 
     def test_context_alias_neuro_ddd_context(self):
-        body = helpers.XcagiCompatChatBatchBody(
-            messages=["a"], neuro_ddd_context={"k": "v"}
-        )
+        body = helpers.XcagiCompatChatBatchBody(messages=["a"], neuro_ddd_context={"k": "v"})
         assert body.context == {"k": "v"}
 
 

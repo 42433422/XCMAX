@@ -27,7 +27,6 @@ from app.application.aibiz_web_terminal_service import (
     _unwrap,
 )
 
-
 # ---------------------------------------------------------------------------
 # _surface_cache_token
 # ---------------------------------------------------------------------------
@@ -163,9 +162,9 @@ class TestPngHttpResponse:
 
     def test_non_cacheable_view(self):
         resp = _png_http_response(b"\x89PNG\r\n", view="full")
-        assert "no-cache" in resp.headers.get("Cache-Control", "") or "max-age" not in resp.headers.get(
+        assert "no-cache" in resp.headers.get(
             "Cache-Control", ""
-        )
+        ) or "max-age" not in resp.headers.get("Cache-Control", "")
 
 
 # ---------------------------------------------------------------------------

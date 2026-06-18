@@ -1,4 +1,5 @@
 """Tests for app.application.impersonation_bridge."""
+
 from __future__ import annotations
 
 import time
@@ -25,6 +26,7 @@ class TestCreateImpersonationBridgeToken:
         token = create_impersonation_bridge_token("  admin-sid  ")
         # Verify the stored entry has stripped value
         from app.application.impersonation_bridge import _BRIDGE
+
         entry = _BRIDGE.get(token)
         assert entry is not None
         assert entry["admin_sid"] == "admin-sid"
@@ -32,6 +34,7 @@ class TestCreateImpersonationBridgeToken:
     def test_handles_empty_session_id(self) -> None:
         token = create_impersonation_bridge_token("")
         from app.application.impersonation_bridge import _BRIDGE
+
         entry = _BRIDGE.get(token)
         assert entry is not None
         assert entry["admin_sid"] == ""
@@ -66,6 +69,7 @@ class TestConsumeImpersonationBridgeToken:
 
     def test_expired_token_returns_none(self) -> None:
         from app.application.impersonation_bridge import _BRIDGE
+
         token = create_impersonation_bridge_token("admin-expired")
         # Manually expire the entry
         _BRIDGE[token]["created_at"] = time.time() - _BRIDGE_TTL_SEC - 10
@@ -79,6 +83,7 @@ class TestConsumeImpersonationBridgeToken:
 
     def test_empty_admin_sid_returns_none(self) -> None:
         from app.application.impersonation_bridge import _BRIDGE
+
         token = create_impersonation_bridge_token("")
         # Force admin_sid to empty
         _BRIDGE[token]["admin_sid"] = "   "
@@ -91,6 +96,7 @@ class TestPurgeExpiredTokens:
 
     def test_expired_tokens_are_purged_on_create(self) -> None:
         from app.application.impersonation_bridge import _BRIDGE
+
         # Create an old token
         old_token = create_impersonation_bridge_token("old-admin")
         _BRIDGE[old_token]["created_at"] = time.time() - _BRIDGE_TTL_SEC - 100

@@ -82,9 +82,7 @@ class TestListLedger:
     """测试 list_ledger 函数。"""
 
     def test_empty_ledger(self):
-        with patch(
-            "app.services.finance_unified_archive._items_from_db", return_value=[]
-        ):
+        with patch("app.services.finance_unified_archive._items_from_db", return_value=[]):
             with patch(
                 "app.services.finance_unified_archive._items_from_pipeline",
                 return_value=[],
@@ -160,9 +158,7 @@ class TestSummarizeLedger:
     """测试 summarize_ledger 函数。"""
 
     def test_empty_summary(self):
-        with patch(
-            "app.services.finance_unified_archive.list_ledger", return_value=[]
-        ):
+        with patch("app.services.finance_unified_archive.list_ledger", return_value=[]):
             result = summarize_ledger()
             assert result == {}
 
@@ -172,9 +168,7 @@ class TestSummarizeLedger:
             {"track": "contract", "amount_cents": 200},
             {"track": "manual", "amount_cents": 50},
         ]
-        with patch(
-            "app.services.finance_unified_archive.list_ledger", return_value=items
-        ):
+        with patch("app.services.finance_unified_archive.list_ledger", return_value=items):
             result = summarize_ledger()
             assert result["contract"]["count"] == 2
             assert result["contract"]["amount_cents"] == 300
@@ -183,16 +177,12 @@ class TestSummarizeLedger:
 
     def test_summary_missing_track_defaults_to_manual(self):
         items = [{"amount_cents": 100}]
-        with patch(
-            "app.services.finance_unified_archive.list_ledger", return_value=items
-        ):
+        with patch("app.services.finance_unified_archive.list_ledger", return_value=items):
             result = summarize_ledger()
             assert "manual" in result
 
     def test_summary_missing_amount_cents(self):
         items = [{"track": "contract"}]
-        with patch(
-            "app.services.finance_unified_archive.list_ledger", return_value=items
-        ):
+        with patch("app.services.finance_unified_archive.list_ledger", return_value=items):
             result = summarize_ledger()
             assert result["contract"]["amount_cents"] == 0

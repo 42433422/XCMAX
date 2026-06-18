@@ -9,7 +9,7 @@ from __future__ import annotations
 import os
 
 from fastapi import Request
-from fastapi.responses import JSONResponse, RedirectResponse, Response
+from fastapi.responses import Response
 
 CLIENT_SHELL_HEADER = "X-XCMAX-Client-Shell"
 ADMIN_SHELL = "admin"

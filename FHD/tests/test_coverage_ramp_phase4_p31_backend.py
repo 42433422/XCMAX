@@ -47,7 +47,11 @@ def test_default_mods_root_from_env(tmp_path: Path, monkeypatch: pytest.MonkeyPa
 
 def test_load_mod_missing_directory(isolated_mods) -> None:
     manager, _root = isolated_mods
-    with patch.object(mm, "get_mod_registry", return_value=MagicMock(get_mod_metadata=MagicMock(return_value=None))):
+    with patch.object(
+        mm,
+        "get_mod_registry",
+        return_value=MagicMock(get_mod_metadata=MagicMock(return_value=None)),
+    ):
         assert manager.load_mod("ghost-mod") is False
 
 
@@ -59,7 +63,11 @@ def test_load_mod_sku_policy_blocked(isolated_mods) -> None:
             "app.mod_sdk.product_skus.assert_mod_allowed_for_sku",
             side_effect=PermissionError("SKU policy"),
         ),
-        patch.object(mm, "get_mod_registry", return_value=MagicMock(get_mod_metadata=MagicMock(return_value=None))),
+        patch.object(
+            mm,
+            "get_mod_registry",
+            return_value=MagicMock(get_mod_metadata=MagicMock(return_value=None)),
+        ),
     ):
         assert manager.load_mod("blocked") is False
     assert manager.get_recent_load_failures()[0]["stage"] == "sku_policy"

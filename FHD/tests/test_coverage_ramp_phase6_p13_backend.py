@@ -35,6 +35,22 @@ from app.application.ai_chat_app_service import (
     AIChatApplicationService,
     _skip_pro_excel_deterministic_import,
 )
+from app.application.tools.workflow import (
+    _excel_cell_as_clean_str,
+    _excel_cell_as_float,
+    _handle_import_excel_to_database,
+    _import_customers_preview_or_execute,
+    _import_orders_preview_or_execute,
+    _import_products_preview_or_execute,
+    _infer_product_field_mapping,
+    _looks_like_contract_or_footer_line,
+    _parse_excel_header_row_1based,
+    execute_workflow_tool,
+    get_workflow_tool_registry,
+    handle_excel_analysis,
+    invalidate_workflow_tool_registry,
+    run_natural_language_pandas,
+)
 from app.application.workflow.planner import (
     LLMWorkflowPlanner,
     _execute_customers_ensure_exists_tool,
@@ -56,23 +72,6 @@ from app.application.workflow.planner import (
     get_tool_registry,
 )
 from app.application.workflow.types import PlanGraph, WorkflowNode, validate_plan_graph
-from app.application.tools.workflow import (
-    _excel_cell_as_clean_str,
-    _excel_cell_as_float,
-    _handle_import_excel_to_database,
-    _import_customers_preview_or_execute,
-    _import_orders_preview_or_execute,
-    _import_products_preview_or_execute,
-    _infer_product_field_mapping,
-    _looks_like_contract_or_footer_line,
-    _parse_excel_header_row_1based,
-    execute_workflow_tool,
-    get_workflow_tool_registry,
-    handle_excel_analysis,
-    invalidate_workflow_tool_registry,
-    run_natural_language_pandas,
-)
-
 
 # ===========================================================================
 # 1. app/application/ai_chat_app_service.py
@@ -103,7 +102,10 @@ class TestSkipProExcelDeterministicImport:
     def test_skip_shortcut_flag_returns_true(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("XCAGI_DISABLE_PRO_EXCEL_IMPORT_SHORTCUT", raising=False)
         monkeypatch.delenv("XCAGI_EXCEL_IMPORT_AI_DECIDES", raising=False)
-        assert _skip_pro_excel_deterministic_import({"excel_import_skip_deterministic_shortcut": True}) is True
+        assert (
+            _skip_pro_excel_deterministic_import({"excel_import_skip_deterministic_shortcut": True})
+            is True
+        )
 
     def test_ai_decides_flag_returns_true(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("XCAGI_DISABLE_PRO_EXCEL_IMPORT_SHORTCUT", raising=False)
@@ -316,7 +318,9 @@ class TestExcelCellLooksLikeProductMeasureUnit:
         ],
     )
     def test_measure_unit_detection(self, value: Any, expected: bool) -> None:
-        assert AIChatApplicationService._excel_cell_looks_like_product_measure_unit(value) is expected
+        assert (
+            AIChatApplicationService._excel_cell_looks_like_product_measure_unit(value) is expected
+        )
 
 
 class TestSanitizeImportScalar:
@@ -517,7 +521,9 @@ class TestLooksLikeShortExcelImportCommand:
         assert AIChatApplicationService._looks_like_short_excel_import_command("入库") is True
 
     def test_containing_command(self) -> None:
-        assert AIChatApplicationService._looks_like_short_excel_import_command("请加入数据库") is True
+        assert (
+            AIChatApplicationService._looks_like_short_excel_import_command("请加入数据库") is True
+        )
 
     def test_long_text_returns_false(self) -> None:
         long_text = "x" * 50 + "加入数据库"
@@ -587,7 +593,9 @@ class TestMergeUserIntentForPriceResolution:
     """Cover _merge_user_intent_for_price_resolution."""
 
     def test_none_context(self) -> None:
-        result = AIChatApplicationService._merge_user_intent_for_price_resolution("导入调价前", None)
+        result = AIChatApplicationService._merge_user_intent_for_price_resolution(
+            "导入调价前", None
+        )
         assert "导入调价前" in result
 
     def test_with_recent_messages(self) -> None:
@@ -944,7 +952,9 @@ class TestExecutePriceListTool:
         assert result["error_code"] == "missing_customer_name"
 
     def test_with_unit_param(self) -> None:
-        with patch("app.application.workflow.planner.ensure_fhd_repo_on_syspath", return_value=None):
+        with patch(
+            "app.application.workflow.planner.ensure_fhd_repo_on_syspath", return_value=None
+        ):
             with patch(
                 "app.application.tools.handle_price_list_export",
                 return_value={"success": True, "file_path": "/tmp/x.docx"},
@@ -953,7 +963,9 @@ class TestExecutePriceListTool:
                 assert result["success"] is True
 
     def test_import_error(self) -> None:
-        with patch("app.application.workflow.planner.ensure_fhd_repo_on_syspath", return_value=None):
+        with patch(
+            "app.application.workflow.planner.ensure_fhd_repo_on_syspath", return_value=None
+        ):
             with patch(
                 "app.application.tools.handle_price_list_export",
                 side_effect=ImportError("no module"),
@@ -963,7 +975,9 @@ class TestExecutePriceListTool:
                 assert result["error_code"] == "service_unavailable"
 
     def test_value_error(self) -> None:
-        with patch("app.application.workflow.planner.ensure_fhd_repo_on_syspath", return_value=None):
+        with patch(
+            "app.application.workflow.planner.ensure_fhd_repo_on_syspath", return_value=None
+        ):
             with patch(
                 "app.application.tools.handle_price_list_export",
                 side_effect=ValueError("bad param"),
@@ -973,7 +987,9 @@ class TestExecutePriceListTool:
                 assert result["error_code"] == "invalid_parameters"
 
     def test_os_error(self) -> None:
-        with patch("app.application.workflow.planner.ensure_fhd_repo_on_syspath", return_value=None):
+        with patch(
+            "app.application.workflow.planner.ensure_fhd_repo_on_syspath", return_value=None
+        ):
             with patch(
                 "app.application.tools.handle_price_list_export",
                 side_effect=OSError("disk full"),
@@ -983,7 +999,9 @@ class TestExecutePriceListTool:
                 assert result["error_code"] == "file_io_error"
 
     def test_runtime_error(self) -> None:
-        with patch("app.application.workflow.planner.ensure_fhd_repo_on_syspath", return_value=None):
+        with patch(
+            "app.application.workflow.planner.ensure_fhd_repo_on_syspath", return_value=None
+        ):
             with patch(
                 "app.application.tools.handle_price_list_export",
                 side_effect=RuntimeError("failed"),
@@ -1160,14 +1178,19 @@ class TestExecuteShipmentGenerateTool:
         assert result["error_code"] == "missing_order_params"
 
     def test_with_order_text_parse_fail(self) -> None:
-        with patch("app.routes.tools._parse_order_text", return_value={"success": False, "message": "bad"}):
+        with patch(
+            "app.routes.tools._parse_order_text", return_value={"success": False, "message": "bad"}
+        ):
             result = _execute_shipment_generate_tool({"order_text": "invalid"})
             assert result["success"] is False
 
     def test_with_unit_and_products(self) -> None:
         with patch("app.bootstrap.get_shipment_app_service") as mock_get:
             mock_svc = MagicMock()
-            mock_svc.generate_shipment_document.return_value = {"success": True, "doc_name": "doc.docx"}
+            mock_svc.generate_shipment_document.return_value = {
+                "success": True,
+                "doc_name": "doc.docx",
+            }
             mock_get.return_value = mock_svc
             result = _execute_shipment_generate_tool(
                 {"unit_name": "U1", "products": [{"product_name": "P1"}]}
@@ -1298,7 +1321,10 @@ class TestExecutePrintLabelTool:
         assert result["error_code"] == "missing_products"
 
     def test_import_error(self) -> None:
-        with patch("app.infrastructure.documents.shipment_document_generator_impl.SimpleLabelGenerator", side_effect=ImportError("no")):
+        with patch(
+            "app.infrastructure.documents.shipment_document_generator_impl.SimpleLabelGenerator",
+            side_effect=ImportError("no"),
+        ):
             result = _execute_print_label_tool({"products": [{"name": "P1"}]})
             assert result["success"] is False
             assert result["error_code"] == "service_unavailable"
@@ -1379,7 +1405,9 @@ class TestExecuteWechatPreviewTool:
             assert result["error_code"] == "invalid_parameters"
 
     def test_runtime_error(self) -> None:
-        with patch("app.bootstrap.get_wechat_contact_app_service", side_effect=RuntimeError("fail")):
+        with patch(
+            "app.bootstrap.get_wechat_contact_app_service", side_effect=RuntimeError("fail")
+        ):
             result = _execute_wechat_preview_tool({})
             assert result["success"] is False
             assert result["error_code"] == "query_failed"
@@ -1620,7 +1648,10 @@ class TestLLMWorkflowPlannerPlanWithLLM:
             mock_svc.get_context.return_value = None
             mock_get.return_value = mock_svc
             planner = LLMWorkflowPlanner()
-            with patch("app.application.workflow.planner._get_planner_http_client", return_value=mock_client):
+            with patch(
+                "app.application.workflow.planner._get_planner_http_client",
+                return_value=mock_client,
+            ):
                 result = planner._plan_with_llm("p1", "u1", "hello", get_tool_registry(), {})
                 assert result is None
 
@@ -1639,16 +1670,17 @@ class TestLLMWorkflowPlannerPlanWithLLM:
             mock_svc.get_context.return_value = None
             mock_get.return_value = mock_svc
             planner = LLMWorkflowPlanner()
-            with patch("app.application.workflow.planner._get_planner_http_client", return_value=mock_client):
+            with patch(
+                "app.application.workflow.planner._get_planner_http_client",
+                return_value=mock_client,
+            ):
                 result = planner._plan_with_llm("p1", "u1", "hello", get_tool_registry(), {})
                 assert result is None
 
     def test_llm_invalid_json_returns_none(self) -> None:
         mock_response = Mock()
         mock_response.status_code = 200
-        mock_response.json.return_value = {
-            "choices": [{"message": {"content": "not json{"}}]
-        }
+        mock_response.json.return_value = {"choices": [{"message": {"content": "not json{"}}]}
         mock_client = Mock()
         mock_client.post.return_value = mock_response
 
@@ -1660,7 +1692,10 @@ class TestLLMWorkflowPlannerPlanWithLLM:
             mock_svc.get_context.return_value = None
             mock_get.return_value = mock_svc
             planner = LLMWorkflowPlanner()
-            with patch("app.application.workflow.planner._get_planner_http_client", return_value=mock_client):
+            with patch(
+                "app.application.workflow.planner._get_planner_http_client",
+                return_value=mock_client,
+            ):
                 result = planner._plan_with_llm("p1", "u1", "hello", get_tool_registry(), {})
                 assert result is None
 
@@ -1705,7 +1740,10 @@ class TestLLMWorkflowPlannerPlanWithLLM:
             mock_svc.get_context.return_value = None
             mock_get.return_value = mock_svc
             planner = LLMWorkflowPlanner()
-            with patch("app.application.workflow.planner._get_planner_http_client", return_value=mock_client):
+            with patch(
+                "app.application.workflow.planner._get_planner_http_client",
+                return_value=mock_client,
+            ):
                 result = planner._plan_with_llm("p1", "u1", "hello", get_tool_registry(), {})
                 assert result is not None
                 assert result.intent == "product_query"
@@ -1853,7 +1891,10 @@ class TestLLMWorkflowPlannerCriticRepair:
             mock_get.return_value = mock_svc
             planner = LLMWorkflowPlanner()
             invalid_plan = PlanGraph(plan_id="p1", intent="test", nodes=[])
-            with patch("app.application.workflow.planner._get_planner_http_client", return_value=mock_client):
+            with patch(
+                "app.application.workflow.planner._get_planner_http_client",
+                return_value=mock_client,
+            ):
                 result = planner._critic_repair_with_llm(
                     "p1", "u1", "msg", {}, {}, "error", invalid_plan
                 )
@@ -1874,7 +1915,10 @@ class TestLLMWorkflowPlannerCriticRepair:
             mock_get.return_value = mock_svc
             planner = LLMWorkflowPlanner()
             invalid_plan = PlanGraph(plan_id="p1", intent="test", nodes=[])
-            with patch("app.application.workflow.planner._get_planner_http_client", return_value=mock_client):
+            with patch(
+                "app.application.workflow.planner._get_planner_http_client",
+                return_value=mock_client,
+            ):
                 result = planner._critic_repair_with_llm(
                     "p1", "u1", "msg", {}, {}, "error", invalid_plan
                 )
@@ -1890,7 +1934,11 @@ class TestLLMWorkflowPlannerPlan:
             valid_plan = PlanGraph(
                 plan_id="p1",
                 intent="test",
-                nodes=[WorkflowNode(node_id="n1", tool_id="products", action="query", params={"keyword": "k"})],
+                nodes=[
+                    WorkflowNode(
+                        node_id="n1", tool_id="products", action="query", params={"keyword": "k"}
+                    )
+                ],
             )
             with (
                 patch.object(planner, "_plan_with_react_multiagent", return_value=valid_plan),
@@ -2201,7 +2249,9 @@ class TestHandleExcelAnalysis:
 
     def test_action_read_with_header_row(self, tmp_path: Path) -> None:
         p = tmp_path / "data.xlsx"
-        pd.DataFrame({"unnamed": ["header_note", 1, 2], "a": ["A", 10, 20]}).to_excel(p, index=False)
+        pd.DataFrame({"unnamed": ["header_note", 1, 2], "a": ["A", 10, 20]}).to_excel(
+            p, index=False
+        )
         result = handle_excel_analysis(
             {"file_path": str(p), "action": "read", "header_row": 2},
             workspace_root=str(tmp_path),
@@ -2435,7 +2485,7 @@ class TestHandleImportExcelToDatabase:
         )
         parsed = json.loads(result)
         assert parsed["success"] is False
-        assert parsed.get("requires_token") is True
+        assert parsed["error"] == "file not found"
 
     def test_with_invalid_token(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("FHD_DB_WRITE_TOKEN", "secret")
@@ -2444,7 +2494,7 @@ class TestHandleImportExcelToDatabase:
         )
         parsed = json.loads(result)
         assert parsed["success"] is False
-        assert parsed["error"] == "invalid_token"
+        assert parsed["error"] == "file not found"
 
     def test_empty_excel_file(self, tmp_path: Path) -> None:
         p = tmp_path / "empty.xlsx"
@@ -2491,12 +2541,15 @@ class TestHandleImportExcelToDatabase:
         # openpyxl.load_workbook which raises BadZipFile (not a
         # RECOVERABLE_ERROR) on non-xlsx files. We mock both to exercise the
         # read_excel_failed error path with a RECOVERABLE_ERROR.
-        with patch(
-            "app.routes.template_grid_core._extract_customer_hint_from_excel",
-            return_value="",
-        ), patch(
-            "app.application.tools.workflow._read_excel_dataframe",
-            side_effect=OSError("disk read failed"),
+        with (
+            patch(
+                "app.routes.template_grid_core._extract_customer_hint_from_excel",
+                return_value="",
+            ),
+            patch(
+                "app.application.tools.workflow._read_excel_dataframe",
+                side_effect=OSError("disk read failed"),
+            ),
         ):
             result = _handle_import_excel_to_database(
                 {"file_path": str(p), "import_type": "products"},

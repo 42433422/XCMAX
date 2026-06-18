@@ -306,8 +306,10 @@ class NeuroSandbox:
 
         if not report.can_execute or report.risk_score > 70:
             logger.error(
-                "Event %s failed prescreening: "
-                f"risk=%s, warnings=%s", event.event_type, report.risk_score, report.warnings
+                "Event %s failed prescreening: risk=%s, warnings=%s",
+                event.event_type,
+                report.risk_score,
+                report.warnings,
             )
 
         return cast("SandboxReport | None", report)

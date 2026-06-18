@@ -35,21 +35,21 @@ class PrinterServiceDomainHandlers:
         """处理 job_submitted 事件"""
         logger.info("[PrinterServiceDomain] 处理 job_submitted: %s", event.payload)
         if isinstance(event, PrintJobSubmittedEvent):
-            logger.info("[PrinterServiceDomain] Job ID: %s", event.payload.get('job_id'))
+            logger.info("[PrinterServiceDomain] Job ID: %s", event.payload.get("job_id"))
         return {"success": True, "event_type": "print.job_submitted"}
 
     async def handle_job_completed(self, event: NeuroEvent) -> dict[str, Any]:
         """处理 job_completed 事件"""
         logger.info("[PrinterServiceDomain] 处理 job_completed: %s", event.payload)
         if isinstance(event, PrintJobCompletedEvent):
-            logger.info("[PrinterServiceDomain] Pages: %s", event.payload.get('pages_printed'))
+            logger.info("[PrinterServiceDomain] Pages: %s", event.payload.get("pages_printed"))
         return {"success": True, "event_type": "print.job_completed"}
 
     async def handle_label_requested(self, event: NeuroEvent) -> dict[str, Any]:
         """处理 label_requested 事件"""
         logger.info("[PrinterServiceDomain] 处理 label_requested: %s", event.payload)
         if isinstance(event, LabelPrintRequestEvent):
-            logger.info("[PrinterServiceDomain] Label: %s", event.payload.get('label_type'))
+            logger.info("[PrinterServiceDomain] Label: %s", event.payload.get("label_type"))
         return {"success": True, "event_type": "print.label_requested"}
 
 

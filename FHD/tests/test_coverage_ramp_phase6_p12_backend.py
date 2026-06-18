@@ -39,6 +39,8 @@ from app.fastapi_routes.service_bridge import (
     _get_instance_name,
     _get_or_create_instance_id,
     _set_config_value,
+)
+from app.fastapi_routes.service_bridge import (
     router as service_bridge_router,
 )
 from app.services import distilled_intent_service as dis_svc
@@ -55,7 +57,6 @@ from app.services.modstore_library_sync import (
     fetch_modstore_library_mod_ids,
     sync_modstore_library_to_local,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers / fixtures
@@ -1191,7 +1192,10 @@ class TestSyncModstoreLibraryToLocal:
                 return_value=b"zip-bytes",
             ),
             patch("app.infrastructure.mods.mod_manager.get_mod_manager", return_value=mock_mm),
-            patch("app.services.modstore_library_sync.normalize_package_zip_path", side_effect=lambda p: p),
+            patch(
+                "app.services.modstore_library_sync.normalize_package_zip_path",
+                side_effect=lambda p: p,
+            ),
         ):
             result = await sync_modstore_library_to_local(
                 base_url="https://x.example",
@@ -1213,7 +1217,10 @@ class TestSyncModstoreLibraryToLocal:
                 side_effect=RuntimeError("net down"),
             ),
             patch("app.infrastructure.mods.mod_manager.get_mod_manager", return_value=mock_mm),
-            patch("app.services.modstore_library_sync.normalize_package_zip_path", side_effect=lambda p: p),
+            patch(
+                "app.services.modstore_library_sync.normalize_package_zip_path",
+                side_effect=lambda p: p,
+            ),
         ):
             result = await sync_modstore_library_to_local(
                 base_url="https://x.example",
@@ -1241,7 +1248,10 @@ class TestSyncModstoreLibraryToLocal:
                 return_value=b"zip-bytes",
             ),
             patch("app.infrastructure.mods.mod_manager.get_mod_manager", return_value=mock_mm),
-            patch("app.services.modstore_library_sync.normalize_package_zip_path", side_effect=lambda p: p),
+            patch(
+                "app.services.modstore_library_sync.normalize_package_zip_path",
+                side_effect=lambda p: p,
+            ),
         ):
             result = await sync_modstore_library_to_local(
                 base_url="https://x.example",
@@ -1267,7 +1277,10 @@ class TestSyncModstoreLibraryToLocal:
                 return_value=b"zip-bytes",
             ),
             patch("app.infrastructure.mods.mod_manager.get_mod_manager", return_value=mock_mm),
-            patch("app.services.modstore_library_sync.normalize_package_zip_path", side_effect=lambda p: p),
+            patch(
+                "app.services.modstore_library_sync.normalize_package_zip_path",
+                side_effect=lambda p: p,
+            ),
         ):
             result = await sync_modstore_library_to_local(
                 base_url="https://x.example",
@@ -1584,9 +1597,7 @@ class TestDistilledIntentRecognizerRecognize:
         assert out["source"] == "distilled_fallback"
         assert "蒸馏模型不可用" in out["reasoning"]
 
-    def test_recognize_happy_path(
-        self, fresh_distilled_singleton: None, tmp_path: Path
-    ) -> None:
+    def test_recognize_happy_path(self, fresh_distilled_singleton: None, tmp_path: Path) -> None:
         model_dir = tmp_path / "model"
         model_dir.mkdir()
         (model_dir / "config.json").write_text(

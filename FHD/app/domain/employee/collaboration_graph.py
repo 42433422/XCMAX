@@ -22,13 +22,15 @@ class CollaborationGraph:
         eid = str(employee_id or "").strip()
         if not eid:
             return
-        deps = [str(d).strip() for d in (depends_on or []) if str(d).strip() and str(d).strip() != eid]
+        deps = [
+            str(d).strip() for d in (depends_on or []) if str(d).strip() and str(d).strip() != eid
+        ]
         self.edges[eid] = list(dict.fromkeys(deps))
 
     def detect_cycle(self) -> list[str] | None:
         """返回检测到的一条环路径（含重复起点）；无环返回 None。"""
         WHITE, GRAY, BLACK = 0, 1, 2
-        color: dict[str, int] = {n: WHITE for n in self.edges}
+        color: dict[str, int] = dict.fromkeys(self.edges, WHITE)
         path: list[str] = []
 
         def visit(node: str) -> list[str] | None:

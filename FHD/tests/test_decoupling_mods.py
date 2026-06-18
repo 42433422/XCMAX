@@ -65,7 +65,5 @@ def test_platform_mod_inventory_after_sync() -> None:
     if not attendance_dir.is_dir():
         pytest.skip("physical 'attendance-industry' mod not present in this repo checkout")
     assert (attendance_dir / "manifest.json").is_file()
-    manifest = json.loads(
-        (attendance_dir / "manifest.json").read_text(encoding="utf-8")
-    )
+    manifest = json.loads((attendance_dir / "manifest.json").read_text(encoding="utf-8"))
     assert manifest.get("id") == "attendance-industry"

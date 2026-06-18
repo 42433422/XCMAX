@@ -1,4 +1,5 @@
 """Tests for app.application.excel_vector_app_service."""
+
 from __future__ import annotations
 
 import os
@@ -146,10 +147,12 @@ class TestBuildChunks:
         )
 
     def test_builds_row_and_window_chunks(self, svc, tmp_path):
-        df = pd.DataFrame({
-            "型号": ["M1", "M2", "M3"],
-            "名称": ["W1", "W2", "W3"],
-        })
+        df = pd.DataFrame(
+            {
+                "型号": ["M1", "M2", "M3"],
+                "名称": ["W1", "W2", "W3"],
+            }
+        )
         file_path = tmp_path / "test.xlsx"
         df.to_excel(str(file_path), index=False)
 
@@ -210,9 +213,7 @@ class TestExcelVectorSearchApplicationService:
         )
 
     def test_query_success(self, svc, mock_store):
-        mock_store.query.return_value = [
-            {"chunk_id": "c1", "content": "test", "score": 0.9}
-        ]
+        mock_store.query.return_value = [{"chunk_id": "c1", "content": "test", "score": 0.9}]
         result = svc.query("idx1", "search text")
         assert result["success"] is True
         assert result["hits"] is not None
@@ -234,9 +235,7 @@ class TestExcelVectorSearchApplicationService:
         assert result["top_k"] == 10
 
     def test_list_indexes(self, svc, mock_store):
-        mock_store.list_indexes.return_value = [
-            {"index_id": "idx1", "name": "test"}
-        ]
+        mock_store.list_indexes.return_value = [{"index_id": "idx1", "name": "test"}]
         result = svc.list_indexes()
         assert result["success"] is True
         assert len(result["indexes"]) == 1

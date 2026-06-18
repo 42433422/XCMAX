@@ -229,9 +229,7 @@ def test_get_contact_context_invalid_json(svc) -> None:
 
 
 def test_save_contact_context_update_existing(svc) -> None:
-    ctx = SimpleNamespace(
-        wechat_id="", context_json="", message_count=0, updated_at=None
-    )
+    ctx = SimpleNamespace(wechat_id="", context_json="", message_count=0, updated_at=None)
     s = MagicMock()
     s.query.return_value = _fluent(first=ctx)
     with _patch_db(s):

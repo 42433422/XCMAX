@@ -6,7 +6,9 @@ import json
 import logging
 import os
 import re
+import time
 import uuid
+from hashlib import sha256
 from typing import Any
 
 import httpx
@@ -19,6 +21,7 @@ router = APIRouter(prefix="/api/market", tags=["market-account"])
 logger = logging.getLogger(__name__)
 _MARKET_SESSION_TOKENS: dict[str, str] = {}
 _MARKET_SESSION_REFRESH_TOKENS: dict[str, str] = {}
+_ACCOUNT_OVERVIEW_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
 
 
 def _market_base_url() -> str:
@@ -366,6 +369,8 @@ def _body_snippet(payload: Any, limit: int = 240) -> str:
 
 def _error_message(payload: Any, status_code: int) -> str:
     base = _market_base_url()
+    if status_code == 429:
+        return "市场服务请求过于频繁，请稍后再试"
     if isinstance(payload, dict):
         detail = payload.get("detail") or payload.get("message") or payload.get("error")
         if isinstance(detail, list):
@@ -398,6 +403,17 @@ def _market_http_retries() -> int:
         return max(1, int(os.environ.get("XCAGI_MARKET_HTTP_RETRIES", "1")))
     except ValueError:
         return 1
+
+
+def _account_overview_cache_ttl() -> float:
+    try:
+        return max(0.0, float(os.environ.get("XCAGI_MARKET_OVERVIEW_CACHE_TTL", "45")))
+    except ValueError:
+        return 45.0
+
+
+def _overview_cache_key(authorization: str) -> str:
+    return sha256(_auth_header(authorization).encode("utf-8")).hexdigest()
 
 
 def _transport_error_message(exc: Exception) -> tuple[str, int]:
@@ -1092,6 +1108,16 @@ def _merge_live_overview_fields(data: dict[str, Any], live: dict[str, Any]) -> N
         data["user"] = live.get("user")
 
 
+def _bootstrap_overview_needs_live_merge(data: dict[str, Any] | None) -> bool:
+    if not isinstance(data, dict):
+        return True
+    return not (
+        isinstance(data.get("user"), dict)
+        and isinstance(data.get("wallet"), dict)
+        and (isinstance(data.get("membership"), dict) or isinstance(data.get("plan"), dict))
+    )
+
+
 @router.post("/account-overview")
 async def market_account_overview(
     request: Request, body: dict[str, Any] = Body(default_factory=dict)
@@ -1109,6 +1135,16 @@ async def market_account_overview(
             {"success": False, "message": "尚未绑定市场账号；请重新登录软件以自动同步"},
             status_code=401,
         )
+    cache_key = _overview_cache_key(authorization)
+    if not bool(body.get("refresh")):
+        cached = _ACCOUNT_OVERVIEW_CACHE.get(cache_key)
+        if cached is not None:
+            stored_at, cached_data = cached
+            if time.monotonic() - stored_at <= _account_overview_cache_ttl():
+                data = dict(cached_data)
+                data.setdefault("market_base_url", _market_base_url())
+                return {"success": True, "data": data}
+            _ACCOUNT_OVERVIEW_CACHE.pop(cache_key, None)
     try:
         payload = await _proxy_json(
             "GET", "/api/account/bootstrap", authorization=authorization, return_error_payload=True
@@ -1130,13 +1166,14 @@ async def market_account_overview(
             raw = payload.get("data") if isinstance(payload.get("data"), dict) else payload
             data = raw if isinstance(raw, dict) else None
             if isinstance(data, dict):
-                live = await _legacy_account_overview(authorization)
-                if isinstance(live, dict) and not live.get("__proxy_error__"):
-                    _merge_live_overview_fields(data, live)
-                elif isinstance(live, dict) and live.get("__proxy_error__"):
-                    sync_warning = _error_message(
-                        live.get("payload"), int(live.get("status_code") or 502)
-                    )
+                if _bootstrap_overview_needs_live_merge(data):
+                    live = await _legacy_account_overview(authorization)
+                    if isinstance(live, dict) and not live.get("__proxy_error__"):
+                        _merge_live_overview_fields(data, live)
+                    elif isinstance(live, dict) and live.get("__proxy_error__"):
+                        sync_warning = _error_message(
+                            live.get("payload"), int(live.get("status_code") or 502)
+                        )
 
         if data is None:
             legacy = await _legacy_account_overview(authorization)
@@ -1165,6 +1202,7 @@ async def market_account_overview(
         data = {**data, "market_base_url": _market_base_url()}
         if sync_warning and not data.get("sync_warning"):
             data["sync_warning"] = sync_warning
+        _ACCOUNT_OVERVIEW_CACHE[cache_key] = (time.monotonic(), dict(data))
         return {"success": True, "data": data}
     except RECOVERABLE_ERRORS as exc:
         logger.exception("market_account_overview failed")
@@ -1338,6 +1376,91 @@ async def market_payment_checkout(
             status_code=int(payload.get("status_code") or 502),
         )
     return {"success": True, "data": payload}
+
+
+def _checkout_sign_body_from_request(body: dict[str, Any]) -> dict[str, Any]:
+    out: dict[str, Any] = {}
+    if body.get("plan_id"):
+        out["plan_id"] = str(body.get("plan_id"))
+    wallet_recharge = body.get("wallet_recharge")
+    if wallet_recharge is True or str(wallet_recharge).strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }:
+        out["wallet_recharge"] = True
+        try:
+            out["total_amount"] = float(body.get("total_amount") or 0)
+        except (TypeError, ValueError):
+            out["total_amount"] = 0.0
+        out["subject"] = str(body.get("subject") or "钱包充值")
+    for key in ("out_trade_no", "metadata"):
+        if key in body:
+            out[key] = body[key]
+    return out
+
+
+def _checkout_body_has_signature(body: dict[str, Any]) -> bool:
+    return all(bool(body.get(key)) for key in ("request_id", "signature", "timestamp"))
+
+
+async def _resolve_market_authorization_for_checkout(
+    request: Request, body: dict[str, Any]
+) -> tuple[str, dict[str, Any] | None]:
+    return await _authorization_from_request_resolved(request, body), None
+
+
+@router.post("/payment/direct-checkout")
+async def market_payment_direct_checkout(
+    request: Request, body: dict[str, Any] = Body(default_factory=dict)
+):
+    resolved = await _resolve_market_authorization_for_checkout(request, body)
+    authorization = resolved[0] if isinstance(resolved, tuple) else str(resolved or "")
+    if not authorization:
+        return JSONResponse(
+            {"success": False, "message": "尚未绑定市场账号；请重新登录软件以自动同步"},
+            status_code=401,
+        )
+    sign_body = _checkout_sign_body_from_request(body)
+    signed = await _proxy_json(
+        "POST",
+        "/api/payment/sign-checkout",
+        json_body=sign_body,
+        authorization=authorization,
+        return_error_payload=True,
+    )
+    if isinstance(signed, dict) and signed.get("__proxy_error__"):
+        return JSONResponse(
+            {
+                "success": False,
+                "message": _error_message(
+                    signed.get("payload"), int(signed.get("status_code") or 502)
+                ),
+            },
+            status_code=int(signed.get("status_code") or 502),
+        )
+    checkout_body = {**body}
+    if isinstance(signed, dict):
+        checkout_body.update(signed)
+    payload = await _proxy_json(
+        "POST",
+        "/api/payment/checkout",
+        json_body=checkout_body,
+        authorization=authorization,
+        return_error_payload=True,
+    )
+    if isinstance(payload, dict) and payload.get("__proxy_error__"):
+        return JSONResponse(
+            {
+                "success": False,
+                "message": _error_message(
+                    payload.get("payload"), int(payload.get("status_code") or 502)
+                ),
+            },
+            status_code=int(payload.get("status_code") or 502),
+        )
+    return {"success": True, "data": payload, "signed": signed}
 
 
 @router.get("/payment/orders")

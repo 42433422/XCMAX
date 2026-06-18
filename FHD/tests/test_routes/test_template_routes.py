@@ -311,7 +311,13 @@ class TestTemplatesExtractGrid:
 
         r = client.post(
             "/templates/extract-grid",
-            files={"file": ("test.xlsx", buf.getvalue(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+            files={
+                "file": (
+                    "test.xlsx",
+                    buf.getvalue(),
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
+            },
         )
         assert r.status_code == 200
         data = r.json()

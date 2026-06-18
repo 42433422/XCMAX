@@ -19,7 +19,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # _skip_pro_excel_deterministic_import — env-var branches
 # ---------------------------------------------------------------------------
@@ -108,9 +107,7 @@ class TestMergeToolRuntimeContext:
     def test_minimal_context(self):
         from app.application.ai_chat_app_service import AIChatApplicationService
 
-        result = AIChatApplicationService._merge_tool_runtime_context(
-            "user1", "hello", None
-        )
+        result = AIChatApplicationService._merge_tool_runtime_context("user1", "hello", None)
         assert result["user_id"] == "user1"
         assert result["message"] == "hello"
 
@@ -123,9 +120,7 @@ class TestMergeToolRuntimeContext:
             "tool_execution_profile": "fast",
             "ignored_key": "ignored",
         }
-        result = AIChatApplicationService._merge_tool_runtime_context(
-            "user1", "hello", ctx
-        )
+        result = AIChatApplicationService._merge_tool_runtime_context("user1", "hello", ctx)
         assert result["ui_surface"] == "chat"
         assert result["intent_channel"] == "default"
         assert result["tool_execution_profile"] == "fast"
@@ -135,18 +130,14 @@ class TestMergeToolRuntimeContext:
         from app.application.ai_chat_app_service import AIChatApplicationService
 
         ctx = {"excel_analysis": {"file_path": "/tmp/x.xlsx"}}
-        result = AIChatApplicationService._merge_tool_runtime_context(
-            "user1", "hello", ctx
-        )
+        result = AIChatApplicationService._merge_tool_runtime_context("user1", "hello", ctx)
         assert result["excel_analysis"] == {"file_path": "/tmp/x.xlsx"}
 
     def test_with_none_context_values(self):
         from app.application.ai_chat_app_service import AIChatApplicationService
 
         ctx = {"ui_surface": None, "intent_channel": "ch"}
-        result = AIChatApplicationService._merge_tool_runtime_context(
-            "user1", "hello", ctx
-        )
+        result = AIChatApplicationService._merge_tool_runtime_context("user1", "hello", ctx)
         # None values are skipped.
         assert "ui_surface" not in result
         assert result["intent_channel"] == "ch"
@@ -268,9 +259,7 @@ class TestGuessDefaultPurchaseUnit:
     def test_short_stem_returns_empty(self):
         from app.application.ai_chat_app_service import AIChatApplicationService
 
-        result = AIChatApplicationService._guess_default_purchase_unit(
-            {"file_name": "a.xlsx"}
-        )
+        result = AIChatApplicationService._guess_default_purchase_unit({"file_name": "a.xlsx"})
         # Single-char stem should return empty.
         assert result == ""
 
@@ -404,25 +393,19 @@ class TestPackagingOrMeasureRatio:
     def test_all_units(self):
         from app.application.ai_chat_app_service import AIChatApplicationService
 
-        result = AIChatApplicationService._packaging_or_measure_ratio(
-            ["件", "个", "箱"]
-        )
+        result = AIChatApplicationService._packaging_or_measure_ratio(["件", "个", "箱"])
         assert result == 1.0
 
     def test_no_units(self):
         from app.application.ai_chat_app_service import AIChatApplicationService
 
-        result = AIChatApplicationService._packaging_or_measure_ratio(
-            ["Widget", "Gadget", "Thing"]
-        )
+        result = AIChatApplicationService._packaging_or_measure_ratio(["Widget", "Gadget", "Thing"])
         assert result == 0.0
 
     def test_mixed(self):
         from app.application.ai_chat_app_service import AIChatApplicationService
 
-        result = AIChatApplicationService._packaging_or_measure_ratio(
-            ["件", "Widget", "箱"]
-        )
+        result = AIChatApplicationService._packaging_or_measure_ratio(["件", "Widget", "箱"])
         assert 0.0 < result < 1.0
 
     def test_empty(self):
@@ -506,9 +489,7 @@ class TestMergeUserIntentForPriceResolution:
                 {"role": "system", "content": "ignored"},
             ]
         }
-        result = AIChatApplicationService._merge_user_intent_for_price_resolution(
-            "调价前", ctx
-        )
+        result = AIChatApplicationService._merge_user_intent_for_price_resolution("调价前", ctx)
         assert "导入" in result
         assert "好的" in result
         assert "调价前" in result
@@ -522,9 +503,7 @@ class TestMergeUserIntentForPriceResolution:
                 {"role": "user", "content": "<b>导入</b><br/>调价前"},
             ]
         }
-        result = AIChatApplicationService._merge_user_intent_for_price_resolution(
-            "确认", ctx
-        )
+        result = AIChatApplicationService._merge_user_intent_for_price_resolution("确认", ctx)
         assert "导入" in result
         assert "调价前" in result
         assert "<b>" not in result
@@ -533,9 +512,7 @@ class TestMergeUserIntentForPriceResolution:
         from app.application.ai_chat_app_service import AIChatApplicationService
 
         ctx = {"message": "导入调价前"}
-        result = AIChatApplicationService._merge_user_intent_for_price_resolution(
-            "确认", ctx
-        )
+        result = AIChatApplicationService._merge_user_intent_for_price_resolution("确认", ctx)
         assert "导入调价前" in result
 
     def test_dedup(self):
@@ -547,9 +524,7 @@ class TestMergeUserIntentForPriceResolution:
                 {"role": "user", "content": "same"},
             ]
         }
-        result = AIChatApplicationService._merge_user_intent_for_price_resolution(
-            "same", ctx
-        )
+        result = AIChatApplicationService._merge_user_intent_for_price_resolution("same", ctx)
         # History dedups against itself (the second "same" is dropped), but the
         # current user_message is always appended at the end without dedup
         # against history (per docstring: avoid overwriting latest intent).
@@ -587,9 +562,7 @@ class TestResolveUnitPriceColumn:
     def test_empty_keys(self):
         from app.application.ai_chat_app_service import AIChatApplicationService
 
-        col, err = AIChatApplicationService._resolve_unit_price_column(
-            [], "", "import", None
-        )
+        col, err = AIChatApplicationService._resolve_unit_price_column([], "", "import", None)
         assert col == ""
         assert err is None
 
@@ -653,9 +626,7 @@ class TestResolveUnitPriceColumn:
     def test_generic_single(self):
         from app.application.ai_chat_app_service import AIChatApplicationService
 
-        col, err = AIChatApplicationService._resolve_unit_price_column(
-            ["单价"], "", "import", None
-        )
+        col, err = AIChatApplicationService._resolve_unit_price_column(["单价"], "", "import", None)
         assert col == "单价"
         assert err is None
 
@@ -853,9 +824,7 @@ class TestCustomerHintFromPreviewGrid:
     def test_no_rows(self):
         from app.application.ai_chat_app_service import AIChatApplicationService
 
-        result = AIChatApplicationService._customer_hint_from_preview_grid(
-            {"grid_preview": {}}
-        )
+        result = AIChatApplicationService._customer_hint_from_preview_grid({"grid_preview": {}})
         assert result == ""
 
     def test_with_rows_no_hits(self):

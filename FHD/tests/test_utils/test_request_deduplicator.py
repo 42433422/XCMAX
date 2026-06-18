@@ -15,7 +15,6 @@ from app.utils.request_deduplicator import (
     idempotent_operation,
 )
 
-
 # ---------------------------------------------------------------------------
 # DedupRecord
 # ---------------------------------------------------------------------------
@@ -323,6 +322,7 @@ class TestDeduplicateRequestDecorator:
 class TestIdempotentOperationDecorator:
     def test_decorates_function(self):
         import app.utils.request_deduplicator as rd
+
         # Reset the global deduplicator to avoid state from other tests
         rd._deduplicator_instance = None
         call_count = 0
@@ -344,6 +344,7 @@ class TestIdempotentOperationDecorator:
 
     def test_without_key_func(self):
         import app.utils.request_deduplicator as rd
+
         rd._deduplicator_instance = None
 
         @idempotent_operation(ttl=60)

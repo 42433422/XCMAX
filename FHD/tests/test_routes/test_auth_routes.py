@@ -15,6 +15,7 @@ import pytest
 @pytest.fixture
 def auth_mod():
     from app.fastapi_routes.domains.auth import routes
+
     return routes
 
 
@@ -126,7 +127,9 @@ class TestFindLocalUsersByEmail:
 
 class TestSyncLocalPasswordForEmail:
     def test_no_users(self, auth_mod):
-        with patch("app.fastapi_routes.domains.auth.routes._find_local_users_by_email", return_value=[]):
+        with patch(
+            "app.fastapi_routes.domains.auth.routes._find_local_users_by_email", return_value=[]
+        ):
             result = auth_mod._sync_local_password_for_email("a@b.com", "newpass")
             assert result == 0
 
@@ -135,8 +138,13 @@ class TestSyncLocalPasswordForEmail:
         mock_user.id = 1
         mock_auth = MagicMock()
         mock_auth.reset_password.return_value = {"success": True}
-        with patch("app.fastapi_routes.domains.auth.routes._find_local_users_by_email", return_value=[mock_user]), \
-             patch("app.application.auth_app_service.get_auth_app_service", return_value=mock_auth):
+        with (
+            patch(
+                "app.fastapi_routes.domains.auth.routes._find_local_users_by_email",
+                return_value=[mock_user],
+            ),
+            patch("app.application.auth_app_service.get_auth_app_service", return_value=mock_auth),
+        ):
             result = auth_mod._sync_local_password_for_email("a@b.com", "newpass")
             assert result == 1
 
@@ -156,9 +164,11 @@ class TestJitCreateLocalUserForEnterprise:
         mock_db.query.return_value.filter.return_value.first.return_value = None
         mock_db.__enter__ = MagicMock(return_value=mock_db)
         mock_db.__exit__ = MagicMock(return_value=False)
-        with patch("app.db.session.get_db", return_value=mock_db), \
-             patch("app.utils.password_hash.generate_password_hash", return_value="hash"), \
-             patch("app.utils.time.utc_now_naive"):
+        with (
+            patch("app.db.session.get_db", return_value=mock_db),
+            patch("app.utils.password_hash.generate_password_hash", return_value="hash"),
+            patch("app.utils.time.utc_now_naive"),
+        ):
             result = auth_mod._jit_create_local_user_for_enterprise("newuser", "pass", "e@e.com")
             assert result is True
 
@@ -179,10 +189,13 @@ class TestEnrichRegisterWithTenant:
         assert result == {}
 
     def test_with_tenant(self, auth_mod):
-        with patch(
-            "app.application.enterprise_login_flow.bind_tenant_for_login",
-            return_value={"tenant_id": 1, "tenant_name": "T"},
-        ), patch("app.application.session_account_meta.persist_session_account_meta"):
+        with (
+            patch(
+                "app.application.enterprise_login_flow.bind_tenant_for_login",
+                return_value={"tenant_id": 1, "tenant_name": "T"},
+            ),
+            patch("app.application.session_account_meta.persist_session_account_meta"),
+        ):
             result = auth_mod._enrich_register_with_tenant(
                 result={"user": {"id": 1}}, username="u", session_id="sid", sku="enterprise"
             )
@@ -207,28 +220,53 @@ class TestSessionMetaForResponse:
         # origin module — otherwise the real function runs and, when a DB is
         # active in the full suite, load_session_account_meta receives a
         # MagicMock sid and raises sqlite3.ProgrammingError.
-        with patch("app.fastapi_routes.domains.auth.routes.session_id_from_request", return_value=None):
+        with patch(
+            "app.fastapi_routes.domains.auth.routes.session_id_from_request", return_value=None
+        ):
             result = auth_mod._session_meta_for_response(mock_req)
             assert result == {}
 
     def test_with_user(self, auth_mod):
         mock_req = MagicMock()
         mock_user = MagicMock()
-        with patch("app.fastapi_routes.domains.auth.routes.session_id_from_request", return_value="sid-1"), \
-             patch("app.application.session_account_meta.enrich_session_meta_with_tenant", return_value={"account_kind": "enterprise"}):
+        with (
+            patch(
+                "app.fastapi_routes.domains.auth.routes.session_id_from_request",
+                return_value="sid-1",
+            ),
+            patch(
+                "app.application.session_account_meta.enrich_session_meta_with_tenant",
+                return_value={"account_kind": "enterprise"},
+            ),
+        ):
             result = auth_mod._session_meta_for_response(mock_req, mock_user)
             assert result["account_kind"] == "enterprise"
 
     def test_without_user(self, auth_mod):
         mock_req = MagicMock()
-        with patch("app.fastapi_routes.domains.auth.routes.session_id_from_request", return_value="sid-1"), \
-             patch("app.application.session_account_meta.load_session_account_meta", return_value={"account_kind": "personal"}):
+        with (
+            patch(
+                "app.fastapi_routes.domains.auth.routes.session_id_from_request",
+                return_value="sid-1",
+            ),
+            patch(
+                "app.application.session_account_meta.load_session_account_meta",
+                return_value={"account_kind": "personal"},
+            ),
+        ):
             result = auth_mod._session_meta_for_response(mock_req, None)
             assert result["account_kind"] == "personal"
 
     def test_without_user_no_meta(self, auth_mod):
         mock_req = MagicMock()
-        with patch("app.fastapi_routes.domains.auth.routes.session_id_from_request", return_value="sid-1"), \
-             patch("app.application.session_account_meta.load_session_account_meta", return_value=None):
+        with (
+            patch(
+                "app.fastapi_routes.domains.auth.routes.session_id_from_request",
+                return_value="sid-1",
+            ),
+            patch(
+                "app.application.session_account_meta.load_session_account_meta", return_value=None
+            ),
+        ):
             result = auth_mod._session_meta_for_response(mock_req, None)
             assert result == {}

@@ -1,15 +1,17 @@
 """测试 template_store_impl 模块的文件系统模板库。"""
+
 import json
 import os
-import pytest
 from unittest.mock import MagicMock, patch
 
-from app.infrastructure.templates.template_store_impl import FileSystemTemplateStore
+import pytest
 
+from app.infrastructure.templates.template_store_impl import FileSystemTemplateStore
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def store(tmp_path):
@@ -34,6 +36,7 @@ def store_with_files(tmp_path):
 # __init__
 # ---------------------------------------------------------------------------
 
+
 class TestInit:
     def test_creates_template_dir(self, tmp_path):
         store = FileSystemTemplateStore(str(tmp_path))
@@ -43,6 +46,7 @@ class TestInit:
 # ---------------------------------------------------------------------------
 # _infer_template_type_from_filename
 # ---------------------------------------------------------------------------
+
 
 class TestInferTemplateType:
     def test_customer(self, store):
@@ -71,6 +75,7 @@ class TestInferTemplateType:
 # _map_category
 # ---------------------------------------------------------------------------
 
+
 class TestMapCategory:
     def test_label_print(self):
         assert FileSystemTemplateStore._map_category("标签模板") == "label_print"
@@ -95,6 +100,7 @@ class TestMapCategory:
 # _legacy_templates
 # ---------------------------------------------------------------------------
 
+
 class TestLegacyTemplates:
     def test_no_files(self, store):
         templates = store._legacy_templates()
@@ -114,6 +120,7 @@ class TestLegacyTemplates:
 # ---------------------------------------------------------------------------
 # _discover_excel_templates
 # ---------------------------------------------------------------------------
+
 
 class TestDiscoverExcelTemplates:
     def test_no_files(self, store):
@@ -156,6 +163,7 @@ class TestDiscoverExcelTemplates:
 # _discover_word_templates
 # ---------------------------------------------------------------------------
 
+
 class TestDiscoverWordTemplates:
     def test_no_files(self, store):
         templates = store._discover_word_templates()
@@ -184,6 +192,7 @@ class TestDiscoverWordTemplates:
 # list_templates
 # ---------------------------------------------------------------------------
 
+
 class TestListTemplates:
     @patch.object(FileSystemTemplateStore, "_db_templates", return_value=[])
     def test_empty_store(self, mock_db, store):
@@ -208,23 +217,32 @@ class TestListTemplates:
 # list_by_type
 # ---------------------------------------------------------------------------
 
+
 class TestListByType:
     @patch.object(FileSystemTemplateStore, "_db_templates", return_value=[])
     def test_no_matching_type(self, mock_db, store):
         result = store.list_by_type("不存在")
         assert result == []
 
-    @patch.object(FileSystemTemplateStore, "_db_templates", return_value=[
-        {"id": "db:1", "template_type": "发货单", "is_active": 1, "name": "发货模板"},
-    ])
+    @patch.object(
+        FileSystemTemplateStore,
+        "_db_templates",
+        return_value=[
+            {"id": "db:1", "template_type": "发货单", "is_active": 1, "name": "发货模板"},
+        ],
+    )
     def test_matching_type(self, mock_db, store):
         result = store.list_by_type("发货单")
         assert len(result) == 1
 
-    @patch.object(FileSystemTemplateStore, "_db_templates", return_value=[
-        {"id": "db:1", "template_type": "发货单", "is_active": 0, "name": "旧模板"},
-        {"id": "db:2", "template_type": "发货单", "is_active": 1, "name": "新模板"},
-    ])
+    @patch.object(
+        FileSystemTemplateStore,
+        "_db_templates",
+        return_value=[
+            {"id": "db:1", "template_type": "发货单", "is_active": 0, "name": "旧模板"},
+            {"id": "db:2", "template_type": "发货单", "is_active": 1, "name": "新模板"},
+        ],
+    )
     def test_active_only_filter(self, mock_db, store):
         result = store.list_by_type("发货单", active_only=True)
         assert len(result) == 1
@@ -235,15 +253,20 @@ class TestListByType:
 # get_default_for_type
 # ---------------------------------------------------------------------------
 
+
 class TestGetDefaultForType:
     @patch.object(FileSystemTemplateStore, "_db_templates", return_value=[])
     def test_no_templates(self, mock_db, store):
         result = store.get_default_for_type("发货单")
         assert result is None
 
-    @patch.object(FileSystemTemplateStore, "_db_templates", return_value=[
-        {"id": "db:1", "template_type": "发货单", "is_active": 1, "path": None, "db_id": 1},
-    ])
+    @patch.object(
+        FileSystemTemplateStore,
+        "_db_templates",
+        return_value=[
+            {"id": "db:1", "template_type": "发货单", "is_active": 1, "path": None, "db_id": 1},
+        ],
+    )
     def test_db_template_no_path(self, mock_db, store):
         result = store.get_default_for_type("发货单")
         # No path, falls through to legacy
@@ -262,6 +285,7 @@ class TestGetDefaultForType:
 # ---------------------------------------------------------------------------
 # resolve_template_file
 # ---------------------------------------------------------------------------
+
 
 class TestResolveTemplateFile:
     @patch.object(FileSystemTemplateStore, "_db_templates", return_value=[])
@@ -294,6 +318,7 @@ class TestResolveTemplateFile:
 # ---------------------------------------------------------------------------
 # save_template_file
 # ---------------------------------------------------------------------------
+
 
 class TestSaveTemplateFile:
     @patch.object(FileSystemTemplateStore, "_db_templates", return_value=[])
@@ -334,6 +359,7 @@ class TestSaveTemplateFile:
 # save_template (DB)
 # ---------------------------------------------------------------------------
 
+
 class TestSaveTemplate:
     def test_empty_name_fails(self, store):
         result = store.save_template({"template_name": ""})
@@ -368,16 +394,18 @@ class TestSaveTemplate:
         mock_db.__exit__ = MagicMock(return_value=False)
         mock_get_db.return_value = mock_db
 
-        result = store.save_template({
-            "template_name": "完整模板",
-            "template_type": "发货单",
-            "template_key": "tpl_full",
-            "original_file_path": "/tmp/test.xlsx",
-            "analyzed_data": {"key": "value"},
-            "editable_config": {"editable": True},
-            "zone_config": {"zones": []},
-            "merged_cells_config": {},
-            "style_config": None,
-            "business_rules": {"rule": 1},
-        })
+        result = store.save_template(
+            {
+                "template_name": "完整模板",
+                "template_type": "发货单",
+                "template_key": "tpl_full",
+                "original_file_path": "/tmp/test.xlsx",
+                "analyzed_data": {"key": "value"},
+                "editable_config": {"editable": True},
+                "zone_config": {"zones": []},
+                "merged_cells_config": {},
+                "style_config": None,
+                "business_rules": {"rule": 1},
+            }
+        )
         assert result["success"] is True

@@ -77,7 +77,6 @@ from app.services.modstore_library_sync import (
     sync_modstore_library_to_local,
 )
 
-
 # ---------------------------------------------------------------------------
 # Shared helpers
 # ---------------------------------------------------------------------------
@@ -420,9 +419,7 @@ class TestUpdateTemplate:
         with patch("app.db.session.get_db") as mock_get_db:
             mock_get_db.return_value.__enter__.return_value = mock_db
             mock_get_db.return_value.__exit__.return_value = False
-            result = tm.update_template(
-                1, analyzed_data={"key": "value"}, template_name="新名"
-            )
+            result = tm.update_template(1, analyzed_data={"key": "value"}, template_name="新名")
         assert result["success"] is True
         # First call is SELECT, second is UPDATE, third is INSERT log
         assert mock_db.execute.call_count == 3
@@ -584,9 +581,7 @@ class TestHandleConfirmationIntentEdges:
         pending = {"intent": "products", "tool_key": "products", "params": {}}
         svc.confirmation_service.get_pending_intent.return_value = pending
         ctx = ConversationContext(user_id="u1")
-        out = await svc._handle_confirmation_intent(
-            "好的", {"is_confirmation": True}, ctx, "u1"
-        )
+        out = await svc._handle_confirmation_intent("好的", {"is_confirmation": True}, ctx, "u1")
         assert out is not None
         assert ctx.last_action == "confirmed_products"
 
@@ -596,9 +591,7 @@ class TestHandleConfirmationIntentEdges:
         pending = {"intent": "x", "tool_key": "x"}  # no params/slots
         svc.confirmation_service.get_pending_intent.return_value = pending
         ctx = ConversationContext(user_id="u1")
-        out = await svc._handle_confirmation_intent(
-            "好的", {"is_confirmation": True}, ctx, "u1"
-        )
+        out = await svc._handle_confirmation_intent("好的", {"is_confirmation": True}, ctx, "u1")
         assert out is not None
         assert out["data"]["params"] == {}
 
@@ -613,9 +606,7 @@ class TestHandleConfirmationIntentEdges:
         }
         svc.confirmation_service.get_pending_intent.return_value = pending
         ctx = ConversationContext(user_id="u1")
-        await svc._handle_confirmation_intent(
-            "好的", {"is_confirmation": True}, ctx, "u1"
-        )
+        await svc._handle_confirmation_intent("好的", {"is_confirmation": True}, ctx, "u1")
         assert len(svc.feedback) == 1
         # recognized_intent falls back to action_type when intent missing... but
         # here intent is present so it uses intent
@@ -633,9 +624,7 @@ class TestHandleConfirmationIntentEdges:
         }
         svc.confirmation_service.get_pending_intent.return_value = pending
         ctx = ConversationContext(user_id="u1")
-        await svc._handle_confirmation_intent(
-            "好的", {"is_confirmation": True}, ctx, "u1"
-        )
+        await svc._handle_confirmation_intent("好的", {"is_confirmation": True}, ctx, "u1")
         assert len(svc.actions) == 1
         assert svc.actions[0]["intent"] == "shipment_generate"
         assert svc.actions[0]["slots"] == {"unit_name": "甲"}
@@ -671,9 +660,7 @@ class TestHandleNegationIntentEdges:
         svc = _HandlerHost()
         ctx = ConversationContext(user_id="u1")
         ctx.current_intent = "products"
-        out = await svc._handle_negation_intent(
-            "不要", {"is_negation_intent": True}, ctx, "u1"
-        )
+        out = await svc._handle_negation_intent("不要", {"is_negation_intent": True}, ctx, "u1")
         assert out is not None
         assert out["action"] == "negated"
         assert "已取消" in out["text"]
@@ -685,9 +672,7 @@ class TestHandleNegationIntentEdges:
         ctx = ConversationContext(user_id="u1")
         msg = "一二三四五六七八九十"  # exactly 10 chars
         assert len(msg) == 10
-        out = await svc._handle_negation_intent(
-            msg, {"is_negation_intent": True}, ctx, "u1"
-        )
+        out = await svc._handle_negation_intent(msg, {"is_negation_intent": True}, ctx, "u1")
         assert out is None
 
     @pytest.mark.asyncio
@@ -697,9 +682,7 @@ class TestHandleNegationIntentEdges:
         ctx = ConversationContext(user_id="u1")
         msg = "一二三四五六七八九"  # 9 chars
         assert len(msg) == 9
-        out = await svc._handle_negation_intent(
-            msg, {"is_negation_intent": True}, ctx, "u1"
-        )
+        out = await svc._handle_negation_intent(msg, {"is_negation_intent": True}, ctx, "u1")
         assert out is not None
         assert out["action"] == "negated"
 
@@ -711,9 +694,7 @@ class TestHandlePendingIntentEdges:
         pending = {"intent": "shipment_generate"}
         svc.confirmation_service.get_pending_intent.return_value = pending
         ctx = ConversationContext(user_id="u1")
-        out = await svc._handle_pending_intent(
-            "帮助", {"is_help": True}, ctx, "u1"
-        )
+        out = await svc._handle_pending_intent("帮助", {"is_help": True}, ctx, "u1")
         assert out is None
         svc.confirmation_service.clear_pending_intent.assert_called_once_with("u1")
 
@@ -768,9 +749,7 @@ class TestBuildPendingCompleteResponseEdges:
         """products action text uses keyword when unit_name missing."""
         svc = _HandlerHost()
         pending = {"intent": "products"}
-        out = svc._build_pending_complete_response(
-            pending, {"keyword": "漆"}, "u1"
-        )
+        out = svc._build_pending_complete_response(pending, {"keyword": "漆"}, "u1")
         assert out["action"] == "tool_call"
         assert "漆" in out["text"]
 
@@ -801,9 +780,7 @@ class TestOrderStorePaths:
         # Should be the FHD root (parents[3] from order_store.py location)
         assert result.name == "FHD" or result.exists()
 
-    def test_order_store_path_default_when_env_unset(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_order_store_path_default_when_env_unset(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("MODEL_PAYMENT_ORDER_STORE_PATH", raising=False)
         result = order_store.order_store_path()
         assert isinstance(result, Path)
@@ -843,9 +820,7 @@ class TestOrderStoreLoadEdges:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         target = tmp_path / "orders.json"
-        target.write_text(
-            '{"orders": "not-a-dict", "entitlements": {}}', encoding="utf-8"
-        )
+        target.write_text('{"orders": "not-a-dict", "entitlements": {}}', encoding="utf-8")
         monkeypatch.setenv("MODEL_PAYMENT_ORDER_STORE_PATH", str(target))
         data = order_store._load()
         assert data["orders"] == {}
@@ -855,36 +830,28 @@ class TestOrderStoreLoadEdges:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         target = tmp_path / "orders.json"
-        target.write_text(
-            '{"orders": {}, "entitlements": "bad"}', encoding="utf-8"
-        )
+        target.write_text('{"orders": {}, "entitlements": "bad"}', encoding="utf-8")
         monkeypatch.setenv("MODEL_PAYMENT_ORDER_STORE_PATH", str(target))
         data = order_store._load()
         assert data["entitlements"] == {}
 
 
 class TestOrderStoreAtomicWrite:
-    def test_atomic_write_creates_parent_dirs(
-        self, tmp_path: Path
-    ) -> None:
+    def test_atomic_write_creates_parent_dirs(self, tmp_path: Path) -> None:
         target = tmp_path / "nested" / "deep" / "orders.json"
         order_store._atomic_write(target, {"orders": {}, "entitlements": {}})
         assert target.is_file()
         loaded = json.loads(target.read_text(encoding="utf-8"))
         assert loaded == {"orders": {}, "entitlements": {}}
 
-    def test_atomic_write_replaces_existing(
-        self, tmp_path: Path
-    ) -> None:
+    def test_atomic_write_replaces_existing(self, tmp_path: Path) -> None:
         target = tmp_path / "orders.json"
         target.write_text('{"old": true}', encoding="utf-8")
         order_store._atomic_write(target, {"new": True})
         loaded = json.loads(target.read_text(encoding="utf-8"))
         assert loaded == {"new": True}
 
-    def test_atomic_write_uses_tmp_suffix(
-        self, tmp_path: Path
-    ) -> None:
+    def test_atomic_write_uses_tmp_suffix(self, tmp_path: Path) -> None:
         """Verify the .json.tmp file is created and replaced."""
         target = tmp_path / "orders.json"
         with patch("os.replace") as mock_replace:
@@ -964,9 +931,7 @@ class TestOrderStoreUpdateStatusEdges:
             encoding="utf-8",
         )
         monkeypatch.setenv("MODEL_PAYMENT_ORDER_STORE_PATH", str(target))
-        result = order_store.update_order_status(
-            out_trade_no="OT-X", status="closed"
-        )
+        result = order_store.update_order_status(out_trade_no="OT-X", status="closed")
         assert result is None
 
 
@@ -1139,9 +1104,7 @@ class TestApprovalGatedEngineResumeEdges:
     def test_resume_with_any_false_skips_engine(self) -> None:
         engine = _make_engine_for_gate()
         plan = _make_plan_for_gate()
-        result = engine.resume_after_approval(
-            plan, {"req-1": False}, runtime_context={}
-        )
+        result = engine.resume_after_approval(plan, {"req-1": False}, runtime_context={})
         assert result.success is False
         assert "未全部通过审批" in result.message
         engine._engine.run.assert_not_called()
@@ -1151,9 +1114,7 @@ class TestBuildGatedEvidenceEdges:
     def test_build_evidence_with_run_result_no_node_results(self) -> None:
         """run_result with empty node_results list."""
         plan = _make_plan_for_gate()
-        risk_decision = RiskDecision(
-            requires_confirmation=False, reason="ok", blocking_nodes=[]
-        )
+        risk_decision = RiskDecision(requires_confirmation=False, reason="ok", blocking_nodes=[])
         decision = GatedPlanDecision(
             plan_id="plan-test",
             risk_decision=risk_decision,
@@ -1181,9 +1142,7 @@ class TestBuildGatedEvidenceEdges:
     def test_build_evidence_with_failed_node_result(self) -> None:
         """node_result with success=False and error should be summarized."""
         plan = _make_plan_for_gate()
-        risk_decision = RiskDecision(
-            requires_confirmation=False, reason="ok", blocking_nodes=[]
-        )
+        risk_decision = RiskDecision(requires_confirmation=False, reason="ok", blocking_nodes=[])
         decision = GatedPlanDecision(
             plan_id="plan-test",
             risk_decision=risk_decision,
@@ -1459,9 +1418,7 @@ class TestServiceBridgeGetInstanceIdWrite:
             result = sb._get_or_create_instance_id()
         assert result == "xcagi-host-cached123"
 
-    def test_recoverable_error_falls_back_to_random_id(
-        self, tmp_path: Path
-    ) -> None:
+    def test_recoverable_error_falls_back_to_random_id(self, tmp_path: Path) -> None:
         """When makedirs raises OSError → returns random id without writing."""
         instance_file = tmp_path / "data" / ".service_bridge_instance_id"
         with (
@@ -1493,9 +1450,7 @@ class TestServiceBridgeListRequestsSingleFilter:
         single.count.return_value = 2
         single.order_by.return_value.offset.return_value.limit.return_value.all.return_value = []
         with patch("app.fastapi_routes.service_bridge.get_db", return_value=_mock_db_ctx(mock_db)):
-            result = await sb.list_requests(
-                source_instance_id="inst-1", page=1, per_page=20
-            )
+            result = await sb.list_requests(source_instance_id="inst-1", page=1, per_page=20)
         assert result["total"] == 2
 
     async def test_with_request_type_filter_only(self) -> None:
@@ -1504,9 +1459,7 @@ class TestServiceBridgeListRequestsSingleFilter:
         single.count.return_value = 0
         single.order_by.return_value.offset.return_value.limit.return_value.all.return_value = []
         with patch("app.fastapi_routes.service_bridge.get_db", return_value=_mock_db_ctx(mock_db)):
-            result = await sb.list_requests(
-                request_type="general", page=1, per_page=20
-            )
+            result = await sb.list_requests(request_type="general", page=1, per_page=20)
         assert result["total"] == 0
 
 
@@ -1570,9 +1523,7 @@ class TestServiceBridgePydanticModelValidation:
     def test_instance_register_defaults(self) -> None:
         from app.fastapi_routes.service_bridge import InstanceRegister
 
-        body = InstanceRegister(
-            instance_id="inst-1", instance_name="Test"
-        )
+        body = InstanceRegister(instance_id="inst-1", instance_name="Test")
         assert body.instance_url is None
         assert body.description is None
 
@@ -1729,9 +1680,7 @@ class TestDownloadModstoreExportZipEdges:
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
         with patch("httpx.AsyncClient", return_value=mock_client):
-            await download_modstore_export_zip(
-                "https://x.example/", "tok", "mod-1"
-            )
+            await download_modstore_export_zip("https://x.example/", "tok", "mod-1")
         called_url = mock_client.get.call_args.args[0]
         assert called_url == "https://x.example/v1/mod-sync/export-zip/mod-1"
 
@@ -1745,8 +1694,6 @@ class TestDownloadModstoreExportZipEdges:
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
         with patch("httpx.AsyncClient", return_value=mock_client):
-            await download_modstore_export_zip(
-                "  https://x.example  ", "tok", "mod-1"
-            )
+            await download_modstore_export_zip("  https://x.example  ", "tok", "mod-1")
         called_url = mock_client.get.call_args.args[0]
         assert called_url == "https://x.example/v1/mod-sync/export-zip/mod-1"

@@ -145,7 +145,10 @@ class DynamicRateLimiter:
                 if domain_count > domain_config.burst_size:
                     self._rejected_count += 1
                     logger.warning(
-                        "Domain rate limit exceeded [%s]: %s/%s", domain, domain_count, domain_config.burst_size
+                        "Domain rate limit exceeded [%s]: %s/%s",
+                        domain,
+                        domain_count,
+                        domain_config.burst_size,
                     )
                     return False
 
@@ -160,7 +163,10 @@ class DynamicRateLimiter:
             if event_count > event_config.burst_size:
                 self._rejected_count += 1
                 logger.warning(
-                    "Event type rate limit exceeded [%s]: %s/%s", event_type, event_count, event_config.burst_size
+                    "Event type rate limit exceeded [%s]: %s/%s",
+                    event_type,
+                    event_count,
+                    event_config.burst_size,
                 )
                 return False
 
