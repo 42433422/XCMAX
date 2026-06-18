@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Body, Depends, Query, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Body, Depends, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 
 from app.application.im_app_service import ImApplicationService, ensure_im_tables
+from app.application.codex_super_employee_service import CodexSuperEmployeeService
 from app.config import Config
 from app.db import HostSessionLocal, get_host_engine
 from app.infrastructure.auth.dependencies import (
@@ -36,6 +37,34 @@ def _uid(user: CurrentUser) -> int:
     if user.user_id is None:
         raise ValueError("user_id required")
     return int(user.user_id)
+
+
+def _is_admin_customer_service_session(request: Request, db) -> bool:
+    try:
+        from app.db.models.user import Session as UserSession
+        from app.infrastructure.auth.dependencies import session_id_from_request
+
+        sid = session_id_from_request(request)
+        if not sid:
+            return False
+        row = db.query(UserSession).filter(UserSession.session_id == sid).first()
+    except Exception:
+        return False
+    return bool(
+        row is not None
+        and str(getattr(row, "account_kind", "") or "").strip() == "admin"
+        and bool(getattr(row, "market_is_admin", False))
+    )
+
+
+def _include_enterprise_dedicated_cs(request: Request, db) -> bool:
+    return not _is_admin_customer_service_session(request, db)
+
+
+def _require_admin_customer_service_session(request: Request, db) -> JSONResponse | None:
+    if _is_admin_customer_service_session(request, db):
+        return None
+    return JSONResponse({"success": False, "message": "仅管理端可调用 Codex 超级员工"}, status_code=403)
 
 
 def _resolve_ws_user_id(ws: WebSocket) -> int | None:
@@ -97,12 +126,18 @@ async def _notify_offline_im_members(member_ids: list[int], sender_id: int, body
 
 
 @router.get("/api/im/conversations")
-def im_list_conversations(user: CurrentUser = Depends(require_identified_user)):
+def im_list_conversations(
+    request: Request,
+    user: CurrentUser = Depends(require_identified_user),
+):
     _ensure_schema()
     uid = _uid(user)
     db = HostSessionLocal()
     try:
-        items = ImApplicationService(db).list_conversations(uid)
+        items = ImApplicationService(db).list_conversations(
+            uid,
+            include_enterprise_dedicated_cs=_include_enterprise_dedicated_cs(request, db),
+        )
         return {"success": True, "user_id": uid, "conversations": items}
     except RECOVERABLE_ERRORS as exc:
         logger.exception("im_list_conversations")
@@ -113,6 +148,7 @@ def im_list_conversations(user: CurrentUser = Depends(require_identified_user)):
 
 @router.get("/api/im/contacts")
 def im_list_contacts(
+    request: Request,
     q: str | None = Query(default=None),
     user: CurrentUser = Depends(require_identified_user),
 ):
@@ -120,7 +156,10 @@ def im_list_contacts(
     uid = _uid(user)
     db = HostSessionLocal()
     try:
-        contacts = ImApplicationService(db).list_contacts(uid)
+        contacts = ImApplicationService(db).list_contacts(
+            uid,
+            include_enterprise_dedicated_cs=_include_enterprise_dedicated_cs(request, db),
+        )
         keyword = (q or "").strip().lower()
         if keyword:
             contacts = [
@@ -138,12 +177,18 @@ def im_list_contacts(
 
 
 @router.get("/api/im/unread-total")
-def im_unread_total(user: CurrentUser = Depends(require_identified_user)):
+def im_unread_total(
+    request: Request,
+    user: CurrentUser = Depends(require_identified_user),
+):
     _ensure_schema()
     uid = _uid(user)
     db = HostSessionLocal()
     try:
-        items = ImApplicationService(db).list_conversations(uid)
+        items = ImApplicationService(db).list_conversations(
+            uid,
+            include_enterprise_dedicated_cs=_include_enterprise_dedicated_cs(request, db),
+        )
         total = sum(int(c.get("unread_count") or 0) for c in items)
         return {"success": True, "unread_total": total}
     except RECOVERABLE_ERRORS as exc:
@@ -269,6 +314,54 @@ async def im_mark_read(
         return JSONResponse({"success": False, "message": str(exc)}, status_code=403)
     except RECOVERABLE_ERRORS as exc:
         logger.exception("im_mark_read")
+        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+    finally:
+        db.close()
+
+
+@router.get("/api/admin/codex-super-employee/messages")
+def codex_super_employee_messages(
+    request: Request,
+    user: CurrentUser = Depends(require_identified_user),
+    limit: int = Query(default=80, ge=1, le=200),
+):
+    """管理端 Codex 超级员工软件内对话记录。"""
+    uid = _uid(user)
+    db = HostSessionLocal()
+    try:
+        denied = _require_admin_customer_service_session(request, db)
+        if denied is not None:
+            return denied
+        messages = CodexSuperEmployeeService().list_messages(user_id=uid, limit=limit)
+        return {"success": True, "messages": messages}
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("codex_super_employee_messages")
+        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+    finally:
+        db.close()
+
+
+@router.post("/api/admin/codex-super-employee/messages")
+def codex_super_employee_invoke(
+    request: Request,
+    body: dict = Body(default_factory=dict),
+    user: CurrentUser = Depends(require_identified_user),
+):
+    """管理端 Codex 超级员工软件内调用入口。"""
+    uid = _uid(user)
+    db = HostSessionLocal()
+    try:
+        denied = _require_admin_customer_service_session(request, db)
+        if denied is not None:
+            return denied
+        text = str(body.get("message") or body.get("body") or "").strip()
+        context = body.get("context") if isinstance(body.get("context"), dict) else {}
+        result = CodexSuperEmployeeService().invoke(user_id=uid, message=text, context=context)
+        return {"success": True, **result}
+    except ValueError as exc:
+        return JSONResponse({"success": False, "message": str(exc)}, status_code=400)
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("codex_super_employee_invoke")
         return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
     finally:
         db.close()

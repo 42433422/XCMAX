@@ -4,6 +4,7 @@ import com.xiuci.xcagi.mobile.core.network.FhdApi
 import com.xiuci.xcagi.mobile.core.network.ServerRouter
 import com.xiuci.xcagi.mobile.model.CsInfoDto
 import com.xiuci.xcagi.mobile.model.CsMessageItemDto
+import com.xiuci.xcagi.mobile.model.CsMessageResponseDto
 import com.xiuci.xcagi.mobile.model.CsMessagesListDto
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -16,6 +17,7 @@ import javax.inject.Singleton
 @Singleton
 class CsRepository @Inject constructor(
     private val serverRouter: ServerRouter,
+    private val okHttp: OkHttpClient,
 ) {
     private val _messages = MutableStateFlow<List<CsMessageItemDto>>(emptyList())
     val messages: StateFlow<List<CsMessageItemDto>> = _messages
@@ -36,7 +38,7 @@ class CsRepository @Inject constructor(
             fhdApi =
                 Retrofit.Builder()
                     .baseUrl(base)
-                    .client(OkHttpClient.Builder().build())
+                    .client(okHttp)
                     .addConverterFactory(GsonConverterFactory.create())
                     .build()
                     .create(FhdApi::class.java)
@@ -46,22 +48,42 @@ class CsRepository @Inject constructor(
 
     suspend fun loadCsInfo(): Result<CsInfoDto> = runCatching {
         val resp = api().getCsInfo()
-        if (!resp.isSuccessful) {
-            throw Exception("CS info failed: ${resp.code()}")
+        if (!resp.success) {
+            throw Exception(resp.message.ifBlank { "CS info failed" })
         }
-        val body = resp.body() ?: throw Exception("CS info response body is null")
+        val body = resp.data ?: throw Exception("CS info response body is null")
         _csInfo.value = body
         body
     }
 
-    suspend fun sendMessage(body: String): Result<String> = runCatching {
+    suspend fun sendMessage(body: String): Result<CsMessageResponseDto> = runCatching {
         _streaming.value = true
+        val now = System.currentTimeMillis().toString()
+        _messages.value =
+            _messages.value + CsMessageItemDto(
+                messageId = "local_user_$now",
+                sender = "user",
+                body = body,
+                timestamp = now,
+            )
         try {
             val resp = api().sendCsMessage(mapOf("body" to body))
-            if (!resp.isSuccessful) {
-                throw Exception("Send CS message failed")
+            if (!resp.success) {
+                throw Exception(resp.message.ifBlank { "Send CS message failed" })
             }
-            resp.body()?.messageId ?: throw Exception("Send CS message response body is null")
+            val payload = resp.data ?: throw Exception("Send CS message response body is null")
+            if (payload.reply.isNotBlank()) {
+                _messages.value =
+                    _messages.value + CsMessageItemDto(
+                        messageId = "${payload.messageId.ifBlank { "local" }}_cs",
+                        sender = "cs",
+                        body = payload.reply,
+                        timestamp = payload.timestamp,
+                    )
+            } else {
+                loadMessages()
+            }
+            payload
         } finally {
             _streaming.value = false
         }
@@ -69,10 +91,10 @@ class CsRepository @Inject constructor(
 
     suspend fun loadMessages(since: String? = null): Result<Unit> = runCatching {
         val resp = api().getCsMessages(since)
-        if (!resp.isSuccessful) {
-            throw Exception("Load CS messages failed")
+        if (!resp.success) {
+            throw Exception(resp.message.ifBlank { "Load CS messages failed" })
         }
-        val listBody = resp.body() ?: return@runCatching
+        val listBody = resp.data ?: return@runCatching
         val newMsgs = listBody.messages
         _messages.value = if (since == null) newMsgs else _messages.value + newMsgs
     }

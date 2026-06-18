@@ -9,9 +9,9 @@ object Routes {
     const val AUTH_AUTO_LOGIN = "auth_auto_login"
     const val REGISTER = "register"
     const val HOME_HUB = "home_hub"
-    /** 4 Tab：工作（审批 + 业务聚合入口） */
+    /** 4 Tab：AI 员工通讯录。路由名沿用 work 以兼容旧跳转和巡检。 */
     const val WORK = "work"
-    /** 4 Tab：发现（扫码 / OCR / 连接能力） */
+    /** 4 Tab：探索（AI交流圈优先，扫码 / OCR / 通知作为工具入口） */
     const val DISCOVER = "discover"
     const val PROFILE = "profile"
     /** @deprecated 仅高级入口保留，不再作为底栏 Tab */
@@ -46,7 +46,7 @@ object Routes {
     const val SETTINGS = "settings"
     const val ABOUT = "about"
     const val SCAN_QR = "scan_qr"
-    /** AI 员工列表页（从聊天页右上角 + 号进入） */
+    /** AI 员工列表页。列表只来自当前账号的企业端/管理端生态。 */
     const val AI_EMPLOYEES = "ai_employees"
     const val AI_CIRCLE = "ai_circle"
     const val AI_EMPLOYEE_PROFILE = "ai_employee/{modId}/{employeeId}"

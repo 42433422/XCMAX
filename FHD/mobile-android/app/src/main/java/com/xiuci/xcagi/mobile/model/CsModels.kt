@@ -11,6 +11,9 @@ data class CsInfoDto(
 
 data class CsMessageResponseDto(
     @SerializedName("message_id") val messageId: String = "",
+    @SerializedName("request_id") val requestId: Int = 0,
+    @SerializedName("reply") val reply: String = "",
+    @SerializedName("backend") val backend: String = "",
     @SerializedName("timestamp") val timestamp: String = "",
 )
 

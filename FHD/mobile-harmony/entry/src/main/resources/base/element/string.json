@@ -1,0 +1,16 @@
+{
+  "string": [
+    {
+      "name": "app_name",
+      "value": "修辞企业版"
+    },
+    {
+      "name": "module_desc",
+      "value": "修辞企业版鸿蒙客户端"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "修辞企业版入口"
+    }
+  ]
+}

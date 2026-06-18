@@ -1,6 +1,7 @@
 package com.xiuci.xcagi.mobile.navigation
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -10,6 +11,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -17,7 +19,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -48,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import com.xiuci.xcagi.mobile.core.model.ModInfo
 import com.xiuci.xcagi.mobile.core.model.WorkflowEmployeeInfo
 import com.xiuci.xcagi.mobile.ui.AppViewModel
+import com.xiuci.xcagi.mobile.ui.components.mobile.LocalProfileAvatar
 import com.xiuci.xcagi.mobile.ui.components.mobile.MobileEmptyState
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeTopBar
 import com.xiuci.xcagi.mobile.ui.theme.XcagiTheme
@@ -66,9 +69,24 @@ internal data class AiEmployeeProfile(
     val apiBasePath: String,
     val phoneChannel: String,
     val workflowPlaceholder: Boolean,
+    val profileSource: String,
+    val marketConnected: Boolean,
+    val marketPkgId: String,
+    val marketVersion: String,
+    val marketAuthor: String,
+    val marketMaterialCategory: String,
+    val marketLicenseScope: String,
+    val marketSecurityLevel: String,
 ) {
     val key: String = "$modId:$employeeId"
     val avatarText: String = name.firstOrNull()?.toString() ?: "AI"
+    val sourceLabel: String =
+        when {
+            marketPkgId.isNotBlank() -> "AI市场 · ${modName.ifBlank { "已安装员工" }}"
+            modName.isNotBlank() -> modName
+            profileSource.isNotBlank() -> profileSource
+            else -> "当前账号生态"
+        }
 }
 
 internal fun List<ModInfo>.aiEmployeeProfiles(): List<AiEmployeeProfile> =
@@ -76,6 +94,8 @@ internal fun List<ModInfo>.aiEmployeeProfiles(): List<AiEmployeeProfile> =
         mod.workflow_employees.mapNotNull { employee ->
             val employeeId = employee.id.trim()
             val name = employee.displayName()
+            val marketDescription = employee.market_description.trim()
+            val marketIndustry = employee.market_industry.trim()
             if (employeeId.isBlank() || name.isBlank()) {
                 null
             } else {
@@ -83,18 +103,26 @@ internal fun List<ModInfo>.aiEmployeeProfiles(): List<AiEmployeeProfile> =
                     modId = mod.id,
                     modName = mod.name.ifBlank { mod.id },
                     modDescription = mod.description,
-                    modVersion = mod.version,
-                    modAuthor = mod.author,
-                    industryName = mod.industry?.name.orEmpty(),
+                    modVersion = employee.market_version.ifBlank { mod.version },
+                    modAuthor = employee.market_author.ifBlank { mod.author },
+                    industryName = marketIndustry.ifBlank { mod.industry?.name.orEmpty() },
                     employeeId = employeeId,
                     name = name,
                     title = employee.panel_title.ifBlank { name },
-                    summary = employee.panel_summary.ifBlank {
-                        mod.description.ifBlank { "由企业端安装的 ${mod.name.ifBlank { mod.id }} 同步到手机端。" }
+                    summary = marketDescription.ifBlank { employee.panel_summary }.ifBlank {
+                        mod.description.ifBlank { "由当前账号生态的 ${mod.name.ifBlank { mod.id }} 同步到手机端。" }
                     },
                     apiBasePath = employee.api_base_path,
                     phoneChannel = employee.phone_channel,
                     workflowPlaceholder = employee.workflow_placeholder,
+                    profileSource = employee.profile_source,
+                    marketConnected = employee.market_connected,
+                    marketPkgId = employee.market_pkg_id,
+                    marketVersion = employee.market_version,
+                    marketAuthor = employee.market_author,
+                    marketMaterialCategory = employee.market_material_category,
+                    marketLicenseScope = employee.market_license_scope,
+                    marketSecurityLevel = employee.market_security_level,
                 )
             }
         }
@@ -108,12 +136,12 @@ internal fun List<AiEmployeeProfile>.findEmployee(modId: String, employeeId: Str
 
 private fun AiEmployeeProfile.abilityLabels(): List<String> {
     val labels = mutableListOf<String>()
-    if (phoneChannel.isNotBlank()) labels += "移动端沟通"
-    if (apiBasePath.isNotBlank()) labels += "企业 API"
+    if (phoneChannel.isNotBlank()) labels += "可对话"
+    if (apiBasePath.isNotBlank()) labels += "可执行任务"
     if (industryName.isNotBlank()) labels += industryName
-    if (modVersion.isNotBlank()) labels += "v$modVersion"
-    if (workflowPlaceholder) labels += "待企业端完善"
-    if (labels.isEmpty()) labels += "企业端配置能力"
+    if (workflowPlaceholder) labels += "待完善"
+    if (marketPkgId.isNotBlank()) labels += "市场资料"
+    if (labels.isEmpty()) labels += "生态同步"
     return labels.take(4)
 }
 
@@ -137,6 +165,8 @@ fun AiCircleScreen(
     onOpenEmployee: (String, String) -> Unit,
 ) {
     val modInfos by vm.modInfos.collectAsState()
+    val displayName by vm.displayName.collectAsState()
+    val avatarUri by vm.avatarUri.collectAsState()
     val employees = remember(modInfos) { modInfos.aiEmployeeProfiles() }
 
     LaunchedEffect(Unit) { vm.refreshModInfos() }
@@ -155,17 +185,21 @@ fun AiCircleScreen(
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             item {
-                AiCircleHeader(count = employees.size)
+                AiCircleHeader(
+                    employees = employees,
+                    displayName = displayName.ifBlank { "当前账号" },
+                    avatarUri = avatarUri,
+                )
             }
-            items(
+            itemsIndexed(
                 items = employees,
-                key = { it.key },
-            ) { employee ->
+                key = { index, employee -> "${employee.key}:$index" },
+            ) { index, employee ->
                 AiMomentCard(
                     employee = employee,
+                    index = index,
                     onClick = { onOpenEmployee(employee.modId, employee.employeeId) },
                 )
             }
@@ -174,24 +208,94 @@ fun AiCircleScreen(
 }
 
 @Composable
-private fun AiCircleHeader(count: Int) {
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surface)
-            .padding(horizontal = 20.dp, vertical = 18.dp),
-    ) {
-        Text(
-            "企业 AI 动态",
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
-        Text(
-            "$count 位智能伙伴来自企业端已安装生态",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 4.dp),
+private fun AiCircleHeader(
+    employees: List<AiEmployeeProfile>,
+    displayName: String,
+    avatarUri: String,
+) {
+    val featured = employees.take(3)
+    Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(144.dp)
+                .background(Color(0xFF3F4A4D)),
+        ) {
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(start = 20.dp, end = 128.dp, bottom = 16.dp),
+            ) {
+                Text(
+                    "AI员工交流圈",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White,
+                )
+                Text(
+                    "${employees.size} 位智能伙伴正在企业账号里值守",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(alpha = 0.86f),
+                    modifier = Modifier.padding(top = 5.dp),
+                )
+            }
+            Row(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 20.dp, bottom = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    displayName,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(end = 10.dp),
+                )
+                LocalProfileAvatar(
+                    displayName = displayName,
+                    avatarUri = avatarUri,
+                    modifier = Modifier.border(2.dp, Color.White, MaterialTheme.shapes.extraSmall),
+                    size = 50.dp,
+                    shape = MaterialTheme.shapes.extraSmall,
+                    containerColor = Color(0xFF1FA67A),
+                    contentColor = Color.White,
+                )
+            }
+        }
+        Row(
+            Modifier.padding(start = 20.dp, end = 20.dp, top = 9.dp, bottom = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    "企业账号生态",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    "员工动态、能力更新和协同消息会在这里汇总。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy((-10).dp)) {
+                featured.forEach { employee ->
+                    AiEmployeeAvatar(employee = employee, size = 30.dp)
+                }
+            }
+        }
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(8.dp)
+                .background(MaterialTheme.colorScheme.background),
         )
     }
 }
@@ -200,70 +304,173 @@ private fun AiCircleHeader(count: Int) {
 @Composable
 private fun AiMomentCard(
     employee: AiEmployeeProfile,
+    index: Int,
     onClick: () -> Unit,
 ) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp)
-            .clip(MaterialTheme.shapes.medium)
             .clickable(onClick = onClick),
         color = MaterialTheme.colorScheme.surface,
-        shadowElevation = 1.dp,
     ) {
-        Row(Modifier.padding(14.dp)) {
-            AiEmployeeAvatar(employee = employee, size = 46.dp)
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        employee.name,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f),
-                    )
-                    Text(
-                        "刚刚同步",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Text(
-                    employee.modName,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = XcagiTheme.extra.brandBlue,
-                    modifier = Modifier.padding(top = 2.dp),
-                )
-                Text(
-                    employee.summary,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.padding(top = 8.dp),
-                    maxLines = 3,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                FlowRow(
-                    modifier = Modifier.padding(top = 10.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    employee.abilityLabels().forEach { label ->
-                        AiAbilityChip(label)
+        Column {
+            Row(Modifier.padding(start = 16.dp, end = 14.dp, top = 12.dp, bottom = 12.dp)) {
+                AiEmployeeAvatar(employee = employee, size = 42.dp)
+                Spacer(Modifier.width(10.dp))
+                Column(Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                employee.name,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFF1F6F50),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                employee.momentSourceLine(index),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(top = 2.dp),
+                            )
+                        }
+                        Icon(
+                            Icons.Default.MoreHoriz,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f),
+                            modifier = Modifier.size(22.dp),
+                        )
                     }
+                    Text(
+                        employee.momentBody(index),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.padding(top = 8.dp),
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    FlowRow(
+                        modifier = Modifier.padding(top = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        employee.abilityLabels().take(3).forEach { label ->
+                            AiAbilityChip(label)
+                        }
+                    }
+                    AiMomentActionBar(employee = employee, index = index)
+                    AiMomentReplyBox(employee = employee, index = index)
                 }
-                Text(
-                    "查看主页",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = XcagiTheme.extra.brandBlue,
-                    modifier = Modifier.padding(top = 12.dp),
-                )
             }
+            Box(
+                Modifier
+                    .padding(start = 68.dp)
+                    .fillMaxWidth()
+                    .height(0.6.dp)
+                    .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
+            )
         }
     }
 }
+
+@Composable
+private fun AiMomentActionBar(
+    employee: AiEmployeeProfile,
+    index: Int,
+) {
+    Row(
+        modifier = Modifier.padding(top = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            employee.momentTime(index),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f),
+        )
+        AiMomentActionText("赞")
+        Spacer(Modifier.width(16.dp))
+        AiMomentActionText("评论")
+        Spacer(Modifier.width(16.dp))
+        AiMomentActionText("主页")
+    }
+}
+
+@Composable
+private fun AiMomentActionText(label: String) {
+    Text(
+        label,
+        style = MaterialTheme.typography.labelMedium,
+        color = Color(0xFF1F6F50),
+        fontWeight = FontWeight.Medium,
+    )
+}
+
+@Composable
+private fun AiMomentReplyBox(
+    employee: AiEmployeeProfile,
+    index: Int,
+) {
+    Surface(
+        modifier = Modifier.padding(top = 6.dp).fillMaxWidth(),
+        shape = MaterialTheme.shapes.extraSmall,
+        color = Color(0xFFF4F5F4),
+    ) {
+        Column(Modifier.padding(horizontal = 9.dp, vertical = 6.dp)) {
+            Text(
+                "小C助理：${employee.assistantReply(index)}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                "专属客服：需要人工协同时我会接上。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 3.dp),
+            )
+        }
+    }
+}
+
+private fun AiEmployeeProfile.momentTime(index: Int): String =
+    listOf("刚刚", "8分钟前", "23分钟前", "1小时前", "今天 09:40", "昨天 18:12")[index % 6]
+
+private fun AiEmployeeProfile.momentSourceLine(index: Int): String {
+    val source =
+        if (marketPkgId.isNotBlank()) {
+            "AI市场同步"
+        } else {
+            sourceLabel
+        }
+    val state = listOf("在线值守", "整理能力边界", "等待任务", "可被呼叫")[index % 4]
+    return "$source · $state"
+}
+
+private fun AiEmployeeProfile.momentBody(index: Int): String {
+    val text = summary.replace('\n', ' ').trim()
+    val shortSummary = if (text.length > 56) "${text.take(56)}…" else text
+    val primaryAbility = abilityLabels().firstOrNull().orEmpty()
+    return when (index % 4) {
+        0 -> "今天在值守「${title.ifBlank { name }}」，主要处理${primaryAbility.ifBlank { "企业协同" }}。$shortSummary"
+        1 -> "刚更新了能力说明：$shortSummary"
+        2 -> "我已在手机端待命，适合我的事项会先拆成清单再推进。"
+        else -> "按岗位边界工作，复杂问题会和小C助理一起衔接。"
+    }
+}
+
+private fun AiEmployeeProfile.assistantReply(index: Int): String =
+    when (index % 3) {
+        0 -> "已把 ${name} 放进员工通讯录，可以从主页直接发起会话。"
+        1 -> "这位员工的资料已和企业端同步。"
+        else -> "收到，后续任务会优先按员工职责分派。"
+    }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -302,16 +509,16 @@ fun AiEmployeeProfileScreen(
             item { AiEmployeeContactHeader(employee) }
 
             item {
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(8.dp))
                 AiProfilePlainCell(
-                    title = "AI资料",
+                    title = "员工资料",
                     subtitle = employee.summary,
                     showArrow = true,
                 )
             }
 
             item {
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(8.dp))
                 AiProfileCirclePreview(
                     employee = employee,
                     onClick = onOpenCircle,
@@ -319,25 +526,25 @@ fun AiEmployeeProfileScreen(
             }
 
             item {
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(8.dp))
                 AiProfilePlainCell(
-                    title = "基础功能",
+                    title = "能做什么",
                     subtitle = employee.abilityLabels().joinToString("、"),
                     showArrow = false,
                 )
             }
 
             item {
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(8.dp))
                 AiProfilePlainCell(
                     title = "来源",
-                    subtitle = employee.modName,
+                    subtitle = employee.sourceLabel,
                     showArrow = false,
                 )
             }
 
             item {
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(8.dp))
                 AiProfileActionRow(
                     text = "发消息",
                     icon = Icons.AutoMirrored.Filled.Chat,
@@ -362,18 +569,10 @@ private fun AiProfileTopBar(onBack: () -> Unit) {
                 )
             }
         },
-        actions = {
-            IconButton(onClick = {}) {
-                Icon(
-                    Icons.Default.MoreHoriz,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurface,
-                )
-            }
-        },
         colors = TopAppBarDefaults.topAppBarColors(
             containerColor = MaterialTheme.colorScheme.surface,
         ),
+        windowInsets = WindowInsets(0.dp),
     )
 }
 
@@ -384,37 +583,37 @@ private fun AiEmployeeContactHeader(employee: AiEmployeeProfile) {
         color = MaterialTheme.colorScheme.surface,
     ) {
         Row(
-            Modifier.padding(start = 28.dp, end = 24.dp, top = 34.dp, bottom = 34.dp),
+            Modifier.padding(start = 24.dp, end = 22.dp, top = 18.dp, bottom = 18.dp),
             verticalAlignment = Alignment.Top,
         ) {
-            AiEmployeeAvatar(employee = employee, size = 76.dp)
-            Spacer(Modifier.width(18.dp))
+            AiEmployeeAvatar(employee = employee, size = 62.dp)
+            Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
                 Text(
                     employee.name,
-                    style = MaterialTheme.typography.headlineMedium,
+                    style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
                 Text(
                     "昵称：${employee.title}",
-                    style = MaterialTheme.typography.bodyLarge,
+                    style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 10.dp),
+                    modifier = Modifier.padding(top = 8.dp),
                 )
                 Text(
                     "AI号：${employee.employeeId}",
-                    style = MaterialTheme.typography.bodyLarge,
+                    style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 6.dp),
+                    modifier = Modifier.padding(top = 5.dp),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    "来源：${employee.modName}",
+                    "来源：${employee.sourceLabel}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 6.dp),
+                    modifier = Modifier.padding(top = 5.dp),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -434,7 +633,7 @@ private fun AiProfilePlainCell(
         color = MaterialTheme.colorScheme.surface,
     ) {
         Row(
-            Modifier.padding(horizontal = 20.dp, vertical = 18.dp),
+            Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(Modifier.weight(1f)) {
@@ -448,7 +647,7 @@ private fun AiProfilePlainCell(
                         subtitle,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 8.dp),
+                        modifier = Modifier.padding(top = 6.dp),
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -476,14 +675,14 @@ private fun AiProfileCirclePreview(
         color = MaterialTheme.colorScheme.surface,
     ) {
         Row(
-            Modifier.padding(horizontal = 20.dp, vertical = 18.dp),
+            Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
                 "AI交流圈",
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.width(96.dp),
+                modifier = Modifier.width(88.dp),
             )
             Row(
                 Modifier.weight(1f),
@@ -507,7 +706,7 @@ private fun AiProfileCirclePreview(
 private fun AiCirclePreviewTile(label: String, color: Color) {
     Box(
         modifier = Modifier
-            .size(54.dp)
+            .size(44.dp)
             .clip(MaterialTheme.shapes.extraSmall)
             .background(color.copy(alpha = 0.16f)),
         contentAlignment = Alignment.Center,
@@ -532,7 +731,7 @@ private fun AiProfileActionRow(
         color = MaterialTheme.colorScheme.surface,
     ) {
         Row(
-            Modifier.padding(vertical = 20.dp),
+            Modifier.padding(vertical = 14.dp),
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -540,7 +739,7 @@ private fun AiProfileActionRow(
                 icon,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(24.dp),
+                modifier = Modifier.size(22.dp),
             )
             Spacer(Modifier.width(10.dp))
             Text(
@@ -575,13 +774,13 @@ private fun AiEmployeeAvatar(employee: AiEmployeeProfile, size: androidx.compose
 private fun AiAbilityChip(label: String) {
     Surface(
         shape = MaterialTheme.shapes.large,
-        color = MaterialTheme.colorScheme.primaryContainer,
+        color = Color(0xFFEAF3EF),
     ) {
         Text(
             label,
             style = MaterialTheme.typography.labelMedium,
-            color = XcagiTheme.extra.brandBlue,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+            color = Color(0xFF1F6F50),
+            modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
         )
     }
 }
@@ -603,9 +802,9 @@ private fun AiMiniBadge(label: String) {
 
 private fun abilitySubtitle(employee: AiEmployeeProfile, label: String): String =
     when (label) {
-        "移动端沟通" -> "可通过手机端会话触达该员工"
-        "企业 API" -> "由企业端接口 ${employee.apiBasePath} 提供能力"
-        "企业端配置能力" -> "随企业端安装配置同步"
-        "待企业端完善" -> "该员工配置仍在企业端补齐中"
+        "可对话" -> "可通过手机端会话触达该员工"
+        "可执行任务" -> "已接入企业任务能力"
+        "生态同步" -> "随当前账号生态同步"
+        "待完善" -> "该员工配置仍在补齐中"
         else -> "来源于 ${employee.modName}"
     }

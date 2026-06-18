@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import json
 import logging
+import os
 import socket
+import time
 import uuid
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query, Request
@@ -13,6 +17,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from app.fastapi_routes.mobile_api import get_mobile_user
+from app.application.codex_super_employee_service import CodexSuperEmployeeService
 from app.security.mobile_pairing import (
     consume_by_shortcode,
     consume_pairing_nonce,
@@ -27,6 +32,13 @@ OPERATIONAL_ERRORS = RECOVERABLE_ERRORS
 logger = logging.getLogger(__name__)
 
 extension_router = APIRouter(tags=["mobile-api-ext"])
+
+_MARKET_AI_EMPLOYEE_CACHE: dict[str, Any] = {
+    "expires_at": 0.0,
+    "profiles": {},
+    "connected": False,
+    "error": "",
+}
 
 
 def _ensure_mobile_device_table() -> None:
@@ -66,6 +78,12 @@ class PairingLookupBody(BaseModel):
 class PairingIssueBody(BaseModel):
     host: str = Field(default="127.0.0.1")
     port: int = Field(default=5000, ge=1, le=65535)
+
+
+class CodexSuperEmployeeMobileMessageBody(BaseModel):
+    message: str = Field(default="", max_length=4000)
+    body: str = Field(default="", max_length=4000)
+    context: dict[str, Any] = Field(default_factory=dict)
 
 
 @extension_router.get("/approval/requests")
@@ -257,11 +275,28 @@ def _pairing_issue_host(requested: str) -> str:
     return host
 
 
+def _pairing_issue_port(request: Request, requested: int) -> int:
+    if requested > 0:
+        return requested
+    host_header = (request.headers.get("host") or "").strip()
+    if ":" in host_header:
+        raw_port = host_header.rsplit(":", 1)[-1]
+        port = int(raw_port) if raw_port.isdigit() else 0
+        if 0 < port <= 65535:
+            return port
+    for key in ("XCAGI_API_PORT", "FASTAPI_PORT"):
+        raw = os.environ.get(key, "").strip()
+        port = int(raw) if raw.isdigit() else 0
+        if 0 < port <= 65535:
+            return port
+    return 5000
+
+
 @extension_router.post("/pairing/issue")
-async def mobile_pairing_issue(body: PairingIssueBody):
+async def mobile_pairing_issue(body: PairingIssueBody, request: Request):
     """桌面或运维签发配对 QR 载荷（开发/内网）。"""
-    host = _pairing_issue_host(body.host)
-    port = int(body.port)
+    host = _pairing_issue_host(body.host or (request.url.hostname or ""))
+    port = _pairing_issue_port(request, int(body.port))
     payload = issue_pairing_nonce(host, port)
     return format_mobile_response(data=payload)
 
@@ -309,7 +344,76 @@ async def mobile_pairing_exchange(body: PairingExchangeBody):
     )
 
 
-def _mobile_mod_items() -> list[dict[str, Any]]:
+def _employee_text(employee: Any, key: str) -> str:
+    if isinstance(employee, dict):
+        return _compact_text(employee.get(key))
+    return _compact_text(getattr(employee, key, ""))
+
+
+def _workflow_employee_match_keys(mod_id: str, employee: Any) -> list[str]:
+    keys = [
+        mod_id,
+        _employee_text(employee, "id"),
+        _employee_text(employee, "label"),
+        _employee_text(employee, "name"),
+        _employee_text(employee, "panel_title"),
+    ]
+    out: list[str] = []
+    seen: set[str] = set()
+    for key in keys:
+        normalized = key.strip().lower()
+        if normalized and normalized not in seen:
+            out.append(normalized)
+            seen.add(normalized)
+    return out
+
+
+def _workflow_employee_to_dict(employee: Any) -> dict[str, Any]:
+    if isinstance(employee, dict):
+        return dict(employee)
+    out: dict[str, Any] = {}
+    for key in (
+        "id",
+        "label",
+        "name",
+        "panel_title",
+        "panel_summary",
+        "api_base_path",
+        "phone_channel",
+        "workflow_placeholder",
+    ):
+        value = getattr(employee, key, None)
+        if value is not None:
+            out[key] = value
+    return out
+
+
+def _enrich_workflow_employees(
+    mod_id: str,
+    employees: list[Any],
+    market_profiles: dict[str, dict[str, Any]] | None = None,
+    *,
+    market_connected: bool = False,
+) -> list[dict[str, Any]]:
+    enriched: list[dict[str, Any]] = []
+    for employee in employees:
+        row = _workflow_employee_to_dict(employee)
+        profile = None
+        if market_profiles:
+            for key in _workflow_employee_match_keys(mod_id, row):
+                profile = market_profiles.get(key)
+                if profile:
+                    break
+        _apply_market_profile(row, profile, market_connected=market_connected)
+        enriched.append(row)
+    return enriched
+
+
+def _mobile_mod_items(
+    market_profiles: dict[str, dict[str, Any]] | None = None,
+    *,
+    market_connected: bool = False,
+) -> list[dict[str, Any]]:
     try:
         from app.infrastructure.mods.mod_manager import get_mod_manager
 
@@ -332,7 +436,12 @@ def _mobile_mod_items() -> list[dict[str, Any]]:
                     "frontend_menu": menu if isinstance(menu, list) else [],
                     "menu": menu if isinstance(menu, list) else [],
                     "menu_overrides": menu_overrides if isinstance(menu_overrides, list) else [],
-                    "workflow_employees": employees,
+                    "workflow_employees": _enrich_workflow_employees(
+                        mid,
+                        employees,
+                        market_profiles,
+                        market_connected=market_connected,
+                    ),
                 }
             else:
                 mid = str(getattr(m, "id", None) or getattr(m, "mod_id", "") or "").strip()
@@ -353,7 +462,12 @@ def _mobile_mod_items() -> list[dict[str, Any]]:
                     "frontend_menu": menu if isinstance(menu, list) else [],
                     "menu": menu if isinstance(menu, list) else [],
                     "menu_overrides": menu_overrides if isinstance(menu_overrides, list) else [],
-                    "workflow_employees": employees,
+                    "workflow_employees": _enrich_workflow_employees(
+                        mid,
+                        employees,
+                        market_profiles,
+                        market_connected=market_connected,
+                    ),
                 }
             if mid:
                 items.append(item)
@@ -363,13 +477,542 @@ def _mobile_mod_items() -> list[dict[str, Any]]:
         return []
 
 
+ADMIN_MOBILE_FEATURES: list[dict[str, str]] = [
+    {
+        "id": "admin-status",
+        "title": "管理驾驶舱",
+        "description": "查看管理端运行状态、市场服务和关键健康指标。",
+        "category": "overview",
+        "method": "GET",
+        "api_path": "/api/admin/status",
+    },
+    {
+        "id": "admin-catalog",
+        "title": "能力包目录",
+        "description": "维护 MOD 与员工包上架、删除和目录同步。",
+        "category": "catalog",
+        "method": "GET",
+        "api_path": "/api/admin/catalog",
+    },
+    {
+        "id": "admin-duty-employees",
+        "title": "值班员工池",
+        "description": "查看管理端内部 duty AI 员工和岗位分区。",
+        "category": "employees",
+        "method": "GET",
+        "api_path": "/api/mobile/v1/admin/employees",
+    },
+    {
+        "id": "admin-duty-graph",
+        "title": "值班拓扑",
+        "description": "检查员工密钥、执行拓扑和 duty graph 健康状态。",
+        "category": "employees",
+        "method": "GET",
+        "api_path": "/api/admin/duty-graph/health",
+    },
+    {
+        "id": "admin-execution-capability",
+        "title": "执行能力矩阵",
+        "description": "汇总 AI 员工的执行能力、工具权限和运行边界。",
+        "category": "employees",
+        "method": "POST",
+        "api_path": "/api/admin/employees/execution-capabilities",
+    },
+    {
+        "id": "admin-autonomy-dashboard",
+        "title": "自治任务看板",
+        "description": "查看员工自治建议、简报任务和最近调度结果。",
+        "category": "automation",
+        "method": "GET",
+        "api_path": "/api/admin/employee-autonomy/dashboard",
+    },
+    {
+        "id": "admin-autonomy-suggestions",
+        "title": "自治建议审核",
+        "description": "审核员工提出的自动化建议和派发结果。",
+        "category": "automation",
+        "method": "GET",
+        "api_path": "/api/admin/employee-autonomy/suggestions",
+    },
+    {
+        "id": "admin-change-requests",
+        "title": "变更请求",
+        "description": "审批管理端变更请求并追踪执行状态。",
+        "category": "governance",
+        "method": "GET",
+        "api_path": "/api/admin/change-requests",
+    },
+    {
+        "id": "admin-ai-accounts",
+        "title": "AI 账号池",
+        "description": "管理模型账号、密钥轮换和可用性标记。",
+        "category": "accounts",
+        "method": "GET",
+        "api_path": "/api/admin/ai-accounts",
+    },
+    {
+        "id": "admin-users",
+        "title": "用户与企业授权",
+        "description": "管理用户、企业标记、管理员权限与可分配 MOD。",
+        "category": "users",
+        "method": "GET",
+        "api_path": "/api/admin/users",
+    },
+    {
+        "id": "admin-user-mods",
+        "title": "企业 MOD 授权",
+        "description": "查看和调整企业用户可用的 MOD 与能力包。",
+        "category": "users",
+        "method": "GET",
+        "api_path": "/api/admin/users/{user_id}/mods",
+    },
+    {
+        "id": "admin-wallets",
+        "title": "钱包与交易",
+        "description": "查看钱包余额、交易流水和账单核对状态。",
+        "category": "billing",
+        "method": "GET",
+        "api_path": "/api/admin/wallets",
+    },
+    {
+        "id": "admin-action-items",
+        "title": "运维待办",
+        "description": "跟踪管理端待办、Digest 事项和处理统计。",
+        "category": "ops",
+        "method": "GET",
+        "api_path": "/api/admin/action-items",
+    },
+    {
+        "id": "admin-ops-audit",
+        "title": "操作审计",
+        "description": "查看管理端关键操作、审批令牌和 staged changes。",
+        "category": "ops",
+        "method": "GET",
+        "api_path": "/api/admin/ops/audit",
+    },
+]
+
+
+def _mobile_session_meta(request: Request) -> dict[str, Any]:
+    from app.application.session_account_meta import load_session_account_meta
+    from app.infrastructure.auth.dependencies import session_id_from_request
+    from app.security.mobile_jwt import verify_mobile_jwt
+
+    sid = ""
+    authorization = request.headers.get("Authorization") or ""
+    if authorization.startswith("Bearer "):
+        payload = verify_mobile_jwt(authorization[7:].strip())
+        if payload:
+            sid = str(payload.get("session_id") or "").strip()
+    if not sid:
+        sid = session_id_from_request(request)
+    return load_session_account_meta(sid) if sid else {}
+
+
+def _require_mobile_admin(request: Request, user: Any) -> tuple[dict[str, Any], JSONResponse | None]:
+    if user is None:
+        return {}, JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401),
+            status_code=401,
+        )
+    meta = _mobile_session_meta(request) or {}
+    if meta.get("account_kind") != "admin" or not bool(meta.get("market_is_admin")):
+        return meta, JSONResponse(
+            format_mobile_response(None, "需要管理端管理员账号", success=False, code=403),
+            status_code=403,
+        )
+    return meta, None
+
+
+def _mobile_request_user_id(request: Request, user: Any) -> int:
+    authorization = request.headers.get("Authorization") or ""
+    if authorization.startswith("Bearer "):
+        try:
+            from app.security.mobile_jwt import user_id_from_mobile_bearer
+
+            uid = user_id_from_mobile_bearer(authorization)
+            if uid:
+                return int(uid)
+        except Exception:
+            pass
+    for attr in ("id", "user_id"):
+        try:
+            uid = getattr(user, attr, None)
+        except Exception:
+            continue
+        try:
+            uid_int = int(uid or 0)
+        except (TypeError, ValueError):
+            uid_int = 0
+        if uid_int > 0:
+            return uid_int
+    return 0
+
+
+def _candidate_duty_registry_paths() -> list[Path]:
+    roots: list[Path] = []
+    env_root = os.environ.get("MODSTORE_DEPLOY_ROOT", "").strip()
+    if env_root:
+        roots.append(Path(env_root))
+    here = Path(__file__).resolve()
+    roots.extend(
+        [
+            here.parents[3] / "成都修茈科技有限公司" / "MODstore_deploy",
+            Path.cwd() / "成都修茈科技有限公司" / "MODstore_deploy",
+        ]
+    )
+    out: list[Path] = []
+    for root in roots:
+        out.append(root / "modstore_server" / "catalog_data" / "duty_employee_registry.json")
+    return out
+
+
+def _load_admin_duty_records() -> list[dict[str, Any]]:
+    for path in _candidate_duty_registry_paths():
+        try:
+            if not path.is_file():
+                continue
+            raw = json.loads(path.read_text(encoding="utf-8"))
+            packages = raw.get("packages") if isinstance(raw, dict) else []
+            if isinstance(packages, list):
+                return [p for p in packages if isinstance(p, dict)]
+        except (OSError, json.JSONDecodeError) as exc:
+            logger.warning("mobile admin duty registry read failed: %s", exc)
+    return []
+
+
+def _compact_text(value: Any) -> str:
+    return " ".join(str(value or "").split()).strip()
+
+
+def _market_profile_text(profile: dict[str, Any], key: str) -> str:
+    return _compact_text(profile.get(key))
+
+
+def _market_profile_keys(row: dict[str, Any]) -> list[str]:
+    keys: list[str] = []
+    for key in ("pkg_id", "id", "name"):
+        value = _compact_text(row.get(key))
+        if value:
+            keys.append(value.lower())
+    return keys
+
+
+def _admin_employee_match_keys(raw: dict[str, Any], employee_id: str, name: str) -> list[str]:
+    keys = [employee_id, name]
+    stored = _compact_text(raw.get("stored_filename"))
+    if stored:
+        keys.append(stored)
+        base = stored.removesuffix(".xcemp")
+        keys.append(base)
+        parts = base.rsplit("-", 1)
+        if len(parts) == 2 and parts[1][:1].isdigit():
+            keys.append(parts[0])
+    out: list[str] = []
+    seen: set[str] = set()
+    for key in keys:
+        normalized = key.strip().lower()
+        if normalized and normalized not in seen:
+            out.append(normalized)
+            seen.add(normalized)
+    return out
+
+
+def _index_market_ai_employee_profiles(items: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    out: dict[str, dict[str, Any]] = {}
+    for row in items:
+        if not isinstance(row, dict):
+            continue
+        material = _compact_text(row.get("material_category")).lower()
+        artifact = _compact_text(row.get("artifact")).lower()
+        if material and material != "ai_employee":
+            continue
+        if artifact and artifact not in {"mod", "employee_pack", "ai_employee"}:
+            continue
+        for key in _market_profile_keys(row):
+            out.setdefault(key, row)
+    return out
+
+
+async def _load_market_ai_employee_profile_index() -> tuple[dict[str, dict[str, Any]], bool, str]:
+    now = time.monotonic()
+    ttl = float(os.environ.get("XCAGI_MOBILE_MARKET_PROFILE_CACHE_TTL", "300") or 300)
+    cached_profiles = _MARKET_AI_EMPLOYEE_CACHE.get("profiles")
+    if (
+        isinstance(cached_profiles, dict)
+        and cached_profiles
+        and now < float(_MARKET_AI_EMPLOYEE_CACHE.get("expires_at") or 0)
+    ):
+        return (
+            cached_profiles,
+            bool(_MARKET_AI_EMPLOYEE_CACHE.get("connected")),
+            str(_MARKET_AI_EMPLOYEE_CACHE.get("error") or ""),
+        )
+
+    try:
+        import httpx
+
+        from app.infrastructure.mods.catalog_client import market_catalog_list_url
+
+        timeout = float(os.environ.get("XCAGI_MOBILE_MARKET_PROFILE_TIMEOUT", "6") or 6)
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            resp = await client.get(
+                market_catalog_list_url(),
+                params={"material_category": "ai_employee", "limit": 200, "offset": 0},
+            )
+        resp.raise_for_status()
+        payload = resp.json()
+        items = payload.get("items") if isinstance(payload, dict) else []
+        profiles = _index_market_ai_employee_profiles(items if isinstance(items, list) else [])
+        _MARKET_AI_EMPLOYEE_CACHE.update(
+            {
+                "expires_at": now + ttl,
+                "profiles": profiles,
+                "connected": True,
+                "error": "",
+            }
+        )
+        return profiles, True, ""
+    except Exception as exc:  # pragma: no cover - network availability is environment-specific
+        error = _compact_text(exc)
+        if isinstance(cached_profiles, dict) and cached_profiles:
+            _MARKET_AI_EMPLOYEE_CACHE.update(
+                {
+                    "expires_at": now + min(ttl, 60),
+                    "connected": False,
+                    "error": error,
+                }
+            )
+            return cached_profiles, False, error
+        _MARKET_AI_EMPLOYEE_CACHE.update(
+            {
+                "expires_at": now + min(ttl, 60),
+                "profiles": {},
+                "connected": False,
+                "error": error,
+            }
+        )
+        return {}, False, error
+
+
+def _apply_market_profile(
+    item: dict[str, Any],
+    profile: dict[str, Any] | None,
+    *,
+    market_connected: bool,
+) -> None:
+    if not profile:
+        item.update(
+            {
+                "profile_source": "admin",
+                "market_connected": False,
+                "market_pkg_id": "",
+                "market_name": "",
+                "market_description": "",
+                "market_version": "",
+                "market_author": "",
+                "market_industry": "",
+                "market_material_category": "",
+                "market_license_scope": "",
+                "market_security_level": "",
+            }
+        )
+        return
+    item.update(
+        {
+            "profile_source": "ai_market",
+            "market_connected": bool(market_connected),
+            "market_pkg_id": _market_profile_text(profile, "pkg_id") or _market_profile_text(profile, "id"),
+            "market_name": _market_profile_text(profile, "name"),
+            "market_description": _market_profile_text(profile, "description"),
+            "market_version": _market_profile_text(profile, "version"),
+            "market_author": _market_profile_text(profile, "author")
+            or _market_profile_text(profile, "publisher")
+            or _market_profile_text(profile, "author_id"),
+            "market_industry": _market_profile_text(profile, "industry"),
+            "market_material_category": _market_profile_text(profile, "material_category"),
+            "market_license_scope": _market_profile_text(profile, "license_scope"),
+            "market_security_level": _market_profile_text(profile, "security_level"),
+        }
+    )
+
+
+def _admin_employee_items(
+    market_profiles: dict[str, dict[str, Any]] | None = None,
+    *,
+    market_connected: bool = False,
+) -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
+    for raw in _load_admin_duty_records():
+        employee_id = str(raw.get("id") or raw.get("pkg_id") or "").strip()
+        if not employee_id:
+            continue
+        name = _compact_text(raw.get("name") or employee_id)
+        area = _compact_text(raw.get("yuangon_area") or raw.get("industry"))
+        item = {
+            "id": employee_id,
+            "name": name,
+            "label": name,
+            "title": name,
+            "panel_title": name,
+            "description": _compact_text(raw.get("description")),
+            "panel_summary": _compact_text(raw.get("description")),
+            "version": str(raw.get("version") or "").strip(),
+            "industry": _compact_text(raw.get("industry")),
+            "yuangon_area": area,
+            "employee_scope": _compact_text(raw.get("employee_scope") or "duty"),
+            "employee_source": _compact_text(raw.get("employee_source") or "duty_roster"),
+            "is_duty_employee": bool(raw.get("is_duty_employee", True)),
+            "is_store_employee": bool(raw.get("is_store_employee", False)),
+            "status": "on_duty",
+            "api_base_path": f"/api/admin/employees/{employee_id}",
+            "phone_channel": "admin-duty",
+            "stored_filename": _compact_text(raw.get("stored_filename")),
+            "file_size": raw.get("file_size") or 0,
+        }
+        profile = None
+        if market_profiles:
+            for key in _admin_employee_match_keys(raw, employee_id, name):
+                profile = market_profiles.get(key)
+                if profile:
+                    break
+        _apply_market_profile(item, profile, market_connected=market_connected)
+        items.append(item)
+    return sorted(items, key=lambda item: str(item.get("id") or ""))
+
+
+@extension_router.get("/admin/employees")
+async def mobile_admin_employees(request: Request, user=Depends(get_mobile_user)):
+    _, err = _require_mobile_admin(request, user)
+    if err is not None:
+        return err
+    market_profiles, market_connected, market_error = await _load_market_ai_employee_profile_index()
+    items = _admin_employee_items(market_profiles, market_connected=market_connected)
+    return format_mobile_response(
+        data={
+            "items": items,
+            "count": len(items),
+            "market_connected": market_connected,
+            "market_profile_count": len(market_profiles),
+            "market_error": market_error,
+        }
+    )
+
+
+@extension_router.get("/admin/features")
+async def mobile_admin_features(request: Request, user=Depends(get_mobile_user)):
+    _, err = _require_mobile_admin(request, user)
+    if err is not None:
+        return err
+    return format_mobile_response(
+        data={"items": ADMIN_MOBILE_FEATURES, "count": len(ADMIN_MOBILE_FEATURES)}
+    )
+
+
+@extension_router.get("/admin/home")
+async def mobile_admin_home(request: Request, user=Depends(get_mobile_user)):
+    meta, err = _require_mobile_admin(request, user)
+    if err is not None:
+        return err
+    market_profiles, market_connected, market_error = await _load_market_ai_employee_profile_index()
+    employees = _admin_employee_items(market_profiles, market_connected=market_connected)
+    return format_mobile_response(
+        data={
+            "account_kind": meta.get("account_kind") or "admin",
+            "employees": employees,
+            "employee_count": len(employees),
+            "features": ADMIN_MOBILE_FEATURES,
+            "feature_count": len(ADMIN_MOBILE_FEATURES),
+            "market_connected": market_connected,
+            "market_profile_count": len(market_profiles),
+            "market_error": market_error,
+        }
+    )
+
+
+@extension_router.get("/admin/codex-super-employee/messages")
+async def mobile_admin_codex_super_employee_messages(
+    request: Request,
+    limit: int = Query(default=80, ge=1, le=200),
+    user=Depends(get_mobile_user),
+):
+    """移动端管理员信息页的 Codex 超级员工对话记录。"""
+    _, err = _require_mobile_admin(request, user)
+    if err is not None:
+        return err
+    uid = _mobile_request_user_id(request, user)
+    if uid <= 0:
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401),
+            status_code=401,
+        )
+    try:
+        messages = CodexSuperEmployeeService().list_messages(user_id=uid, limit=limit)
+        return format_mobile_response(data={"messages": messages})
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("mobile_admin_codex_super_employee_messages")
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=500),
+            status_code=500,
+        )
+
+
+@extension_router.post("/admin/codex-super-employee/messages")
+async def mobile_admin_codex_super_employee_invoke(
+    request: Request,
+    body: CodexSuperEmployeeMobileMessageBody,
+    user=Depends(get_mobile_user),
+):
+    """移动端管理员信息页的软件内 Codex 调用入口。"""
+    _, err = _require_mobile_admin(request, user)
+    if err is not None:
+        return err
+    uid = _mobile_request_user_id(request, user)
+    if uid <= 0:
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401),
+            status_code=401,
+        )
+    text = (body.message or body.body or "").strip()
+    context = dict(body.context or {})
+    context.setdefault("source", "mobile_im")
+    context.setdefault("client_surface", "mobile")
+    context.setdefault("target_devices", ["all"])
+    try:
+        result = CodexSuperEmployeeService().invoke(
+            user_id=uid,
+            message=text,
+            context=context,
+        )
+        return format_mobile_response(data=result)
+    except ValueError as exc:
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=400),
+            status_code=400,
+        )
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("mobile_admin_codex_super_employee_invoke")
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=500),
+            status_code=500,
+        )
+
+
 @extension_router.get("/mods")
 async def mobile_mods_summary(user=Depends(get_mobile_user)):
     if user is None:
         return JSONResponse(
             format_mobile_response(None, "未授权", success=False, code=401), status_code=401
         )
-    return format_mobile_response(data={"items": _mobile_mod_items()})
+    market_profiles, market_connected, market_error = await _load_market_ai_employee_profile_index()
+    return format_mobile_response(
+        data={
+            "items": _mobile_mod_items(market_profiles, market_connected=market_connected),
+            "market_connected": market_connected,
+            "market_profile_count": len(market_profiles),
+            "market_error": market_error,
+        }
+    )
 
 
 @extension_router.get("/platform-shell")
@@ -390,7 +1033,9 @@ async def mobile_home(user=Depends(get_mobile_user)):
         return JSONResponse(
             format_mobile_response(None, "未授权", success=False, code=401), status_code=401
         )
-    installed = [m["id"] for m in _mobile_mod_items()]
+    market_profiles, market_connected, market_error = await _load_market_ai_employee_profile_index()
+    mod_items = _mobile_mod_items(market_profiles, market_connected=market_connected)
+    installed = [m["id"] for m in mod_items]
     from app.mod_sdk.platform_shell import build_platform_shell_payload
 
     sync_data: dict[str, Any] = {}
@@ -402,7 +1047,10 @@ async def mobile_home(user=Depends(get_mobile_user)):
         sync_data = {"error": str(exc)}
     return format_mobile_response(
         data={
-            "mods": _mobile_mod_items(),
+            "mods": mod_items,
+            "market_connected": market_connected,
+            "market_profile_count": len(market_profiles),
+            "market_error": market_error,
             "platform_shell": build_platform_shell_payload(installed),
             "sync": sync_data,
         },
@@ -632,9 +1280,12 @@ async def mobile_auth_qr_confirm(body: AuthQrConfirmBody, request: Request):
     password = body.password or ""
     auth_app_service = get_auth_app_service()
     sku = resolve_product_sku()
+    fields_set = getattr(body, "model_fields_set", getattr(body, "__fields_set__", set()))
+    qr_account_kind = str(rec.get("account_kind") or "").strip()
+    body_account_kind = body.account_kind if "account_kind" in fields_set else qr_account_kind
     account_kind = normalize_account_kind(
-        body.account_kind,
-        default="enterprise" if sku == "enterprise" else "personal",
+        body_account_kind,
+        default=qr_account_kind or ("enterprise" if sku == "enterprise" else "personal"),
     )
 
     authorization = request.headers.get("Authorization") or ""
@@ -800,9 +1451,12 @@ async def mobile_auth_qr_confirm(body: AuthQrConfirmBody, request: Request):
     password = body.password or ""
     auth_app_service = get_auth_app_service()
     sku = resolve_product_sku()
+    fields_set = getattr(body, "model_fields_set", getattr(body, "__fields_set__", set()))
+    qr_account_kind = str(rec.get("account_kind") or "").strip()
+    body_account_kind = body.account_kind if "account_kind" in fields_set else qr_account_kind
     account_kind = normalize_account_kind(
-        body.account_kind,
-        default="enterprise" if sku == "enterprise" else "personal",
+        body_account_kind,
+        default=qr_account_kind or ("enterprise" if sku == "enterprise" else "personal"),
     )
 
     authorization = request.headers.get("Authorization") or ""
@@ -934,48 +1588,259 @@ async def mobile_auth_oidc_exchange(body: OidcExchangeBody):
 
 # ── 专属客服接口（企业版手机端） ──
 
+
+def _mobile_cs_source_id(user: Any) -> str:
+    uid = _safe_user_id(user)
+    return f"mobile:{uid or 'anonymous'}"
+
+
+def _mobile_cs_source_name(user: Any) -> str:
+    display = (
+        _safe_user_text(user, "display_name")
+        or _safe_user_text(user, "username")
+        or "移动端用户"
+    )
+    return f"手机端 {display}"
+
+
+def _safe_user_id(user: Any) -> int:
+    try:
+        raw = getattr(user, "id", None)
+        return int(raw or 0)
+    except Exception:
+        pass
+    raw = getattr(user, "__dict__", {}).get("id")
+    if raw:
+        try:
+            return int(raw)
+        except (TypeError, ValueError):
+            pass
+    try:
+        from sqlalchemy import inspect as sa_inspect
+
+        identity = sa_inspect(user).identity or ()
+        return int(identity[0]) if identity else 0
+    except Exception:
+        return 0
+
+
+def _safe_user_text(user: Any, key: str) -> str:
+    try:
+        return str(getattr(user, key, "") or "").strip()
+    except Exception:
+        return str(getattr(user, "__dict__", {}).get(key) or "").strip()
+
+
+def _coerce_user_cs_reply(result: dict[str, Any], fallback: str) -> str:
+    data = result.get("data") if isinstance(result, dict) else None
+    if isinstance(data, dict):
+        error = str(data.get("error") or "").strip()
+        if data.get("ok") is False or error:
+            logger.info("user-cs employee returned non-fatal error for mobile cs: %s", error[:200])
+            return fallback
+        items = data.get("items")
+        if isinstance(items, list) and items:
+            first = items[0]
+            if isinstance(first, dict):
+                for key in ("message_text", "reply", "answer", "summary"):
+                    val = str(first.get(key) or "").strip()
+                    if val:
+                        return val
+            elif isinstance(first, str) and first.strip():
+                return first.strip()
+        summary = str(data.get("summary") or "").strip()
+        if summary:
+            return summary
+    error = str((result or {}).get("error") or "").strip() if isinstance(result, dict) else ""
+    if error:
+        logger.info("user-cs employee failed for mobile cs: %s", error[:200])
+    return fallback
+
+
+def _service_request_to_cs_messages(row: Any) -> list[dict[str, Any]]:
+    created = row.created_at.isoformat() if getattr(row, "created_at", None) else ""
+    updated = row.updated_at.isoformat() if getattr(row, "updated_at", None) else created
+    messages = [
+        {
+            "message_id": f"sr_{row.id}_user",
+            "sender": "user",
+            "body": row.description or row.title or "",
+            "timestamp": created,
+            "msg_type": "text",
+        }
+    ]
+    extra: dict[str, Any] = {}
+    if row.extra_data:
+        try:
+            raw = json.loads(row.extra_data)
+            if isinstance(raw, dict):
+                extra = raw
+        except (TypeError, json.JSONDecodeError):
+            extra = {}
+    reply = str(extra.get("ai_reply") or row.response or "").strip()
+    if reply:
+        messages.append(
+            {
+                "message_id": f"sr_{row.id}_cs",
+                "sender": "cs",
+                "body": reply,
+                "timestamp": updated,
+                "msg_type": "text",
+            }
+        )
+    return messages
+
+
+def _persist_mobile_cs_request(
+    user: Any,
+    *,
+    message_id: str,
+    msg_body: str,
+    reply: str,
+    backend: str,
+    employee_result: dict[str, Any],
+) -> tuple[int, bool, str]:
+    from app.db.models.service_request import ServiceRequest
+    from app.db.session import get_db
+
+    username = _safe_user_text(user, "username")
+    extra = {
+        "message_id": message_id,
+        "mobile_user_id": _safe_user_id(user),
+        "username": username,
+        "ai_reply": reply,
+        "backend": backend,
+        "employee_result": employee_result,
+    }
+    try:
+        with get_db() as db:
+            ServiceRequest.__table__.create(db.get_bind(), checkfirst=True)
+            row = ServiceRequest(
+                source_instance_id=_mobile_cs_source_id(user),
+                source_instance_name=_mobile_cs_source_name(user),
+                request_type="mobile_ai_customer_service",
+                title=msg_body[:80] or "小C助理咨询",
+                description=msg_body,
+                priority="normal",
+                status="pending",
+                extra_data=json.dumps(extra, ensure_ascii=False),
+            )
+            db.add(row)
+            db.flush()
+            return int(row.id), True, ""
+    except OPERATIONAL_ERRORS as exc:
+        logger.warning("mobile cs service request persist skipped: %s", exc)
+        return 0, False, str(exc)[:300]
+
 @extension_router.get("/cs/info")
 async def get_cs_info(request: Request, user=Depends(get_mobile_user)):
-    """返回当前用户的专属客服信息。"""
+    """返回当前用户的小C/智能客服信息。"""
     if user is None:
         return JSONResponse(
             format_mobile_response(None, "未授权", success=False, code=401), status_code=401
         )
-    # TODO: Phase 2 从数据库/配置读取真实的客服信息
-    # Phase 1 返回演示数据
+    from app.services.user_cs_employee_runner import EMPLOYEE_MOD_ID
+
     return format_mobile_response(
         data={
             "cs_available": True,
-            "cs_name": "修茈客服",
+            "cs_name": "小C助理",
             "cs_avatar": None,
             "cs_online": True,
+            "backend": EMPLOYEE_MOD_ID,
         }
     )
 
 
 @extension_router.post("/cs/messages")
 async def post_cs_message(request: Request, body: dict, user=Depends(get_mobile_user)):
-    """发送消息到客服通道。"""
+    """发送消息到企业桌面端同源智能客服通道。"""
     if user is None:
         return JSONResponse(
             format_mobile_response(None, "未授权", success=False, code=401), status_code=401
         )
-    msg_body = body.get("body", "")
+    msg_body = str(body.get("body", "") or "").strip()
+    if not msg_body:
+        return JSONResponse(
+            format_mobile_response(None, "消息不能为空", success=False, code=400),
+            status_code=400,
+        )
+    from app.services.user_cs_employee_runner import EMPLOYEE_MOD_ID, run_user_cs_employee
+
     message_id = f"cs_{uuid.uuid4().hex[:12]}"
-    # TODO: Phase 2 存储到客服消息表并推送给客服人员
-    # Phase 1 返回模拟确认
+    username = _safe_user_text(user, "username")
+    display = _safe_user_text(user, "display_name") or username
+    fallback_reply = (
+        "我已收到，会同步到企业智能客服工作台继续跟进。"
+        "你也可以补充业务背景、目标客户、期望交付时间，我会一起整理给客服侧。"
+    )
+    employee_result = await run_user_cs_employee(
+        {
+            "handler": "llm_md",
+            "action": "mobile_ai_customer_service",
+            "channel": "mobile",
+            "client_name": display,
+            "market_user_id": _safe_user_id(user),
+            "form_url": "https://xiu-ci.com/market/about",
+            "message": msg_body,
+            "brief": (
+                "手机端用户正在和小C助理对话。请以 XCAGI 企业智能客服身份直接回复："
+                "先回答用户当前问题；如果需要进一步采集需求，再给出2-3个追问和需求提交链接。"
+                f"\n\n用户消息：{msg_body}"
+            ),
+        }
+    )
+    reply = _coerce_user_cs_reply(employee_result, fallback_reply)
+    now = datetime.utcnow().isoformat()
+    request_id, persisted, persist_error = _persist_mobile_cs_request(
+        user,
+        message_id=message_id,
+        msg_body=msg_body,
+        reply=reply,
+        backend=EMPLOYEE_MOD_ID,
+        employee_result=employee_result,
+    )
     return format_mobile_response(
-        data={"message_id": message_id, "timestamp": datetime.utcnow().isoformat()}
+        data={
+            "message_id": message_id,
+            "request_id": request_id,
+            "reply": reply,
+            "backend": EMPLOYEE_MOD_ID,
+            "persisted": persisted,
+            "persist_error": persist_error,
+            "timestamp": now,
+        }
     )
 
 
 @extension_router.get("/cs/messages")
 async def get_cs_messages(request: Request, since: str | None = None, user=Depends(get_mobile_user)):
-    """拉取客服消息。"""
+    """拉取小C/智能客服消息。"""
     if user is None:
         return JSONResponse(
             format_mobile_response(None, "未授权", success=False, code=401), status_code=401
         )
-    # TODO: Phase 2 从客服消息表查询
-    # Phase 1 返回空列表
-    return format_mobile_response(data={"messages": []})
+    from app.db.models.service_request import ServiceRequest
+    from app.db.session import get_db
+
+    source_id = _mobile_cs_source_id(user)
+    try:
+        with get_db() as db:
+            ServiceRequest.__table__.create(db.get_bind(), checkfirst=True)
+            rows = (
+                db.query(ServiceRequest)
+                .filter(ServiceRequest.source_instance_id == source_id)
+                .filter(ServiceRequest.request_type == "mobile_ai_customer_service")
+                .order_by(ServiceRequest.created_at.asc(), ServiceRequest.id.asc())
+                .limit(100)
+                .all()
+            )
+            messages = [msg for row in rows for msg in _service_request_to_cs_messages(row)]
+        error = ""
+    except OPERATIONAL_ERRORS as exc:
+        logger.warning("mobile cs message history unavailable: %s", exc)
+        messages = []
+        error = str(exc)[:300]
+    if since:
+        messages = [m for m in messages if str(m.get("timestamp") or "") > since]
+    return format_mobile_response(data={"messages": messages, "persist_error": error})

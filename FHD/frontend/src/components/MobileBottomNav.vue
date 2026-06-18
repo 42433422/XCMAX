@@ -8,6 +8,7 @@ const router = useRouter();
 const tabs = [
   { name: 'chat', label: '对话', icon: 'fa-comments', to: { name: 'chat' as const } },
   { name: 'discover', label: '发现', icon: 'fa-compass', to: { name: 'discover' as const } },
+  { name: 'im', label: '信息', icon: 'fa-envelope-o', to: { name: 'im' as const } },
   { name: 'mod-store', label: '市场', icon: 'fa-puzzle-piece', to: { name: 'mod-store' as const } },
   { name: 'settings', label: '我的', icon: 'fa-user', to: { name: 'settings' as const } },
 ];
@@ -16,6 +17,7 @@ const activeName = computed(() => {
   const name = String(route.name || '');
   if (name === 'chat') return 'chat';
   if (name === 'discover') return 'discover';
+  if (name === 'im') return 'im';
   if (name === 'mod-store') return 'mod-store';
   if (name === 'settings') return 'settings';
   return '';
@@ -56,7 +58,7 @@ function go(tab: (typeof tabs)[number]) {
   bottom: 0;
   z-index: 120;
   display: none;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   align-items: stretch;
   min-height: 56px;
   padding-bottom: env(safe-area-inset-bottom, 0);

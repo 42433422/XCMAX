@@ -24,6 +24,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -125,7 +126,12 @@ private enum class AuthLoginMode {
 }
 
 @Composable
-fun AuthScreen(vm: AppViewModel, onRegister: () -> Unit, onDone: () -> Unit) {
+fun AuthScreen(
+        vm: AppViewModel,
+        onRegister: () -> Unit,
+        onDone: () -> Unit,
+        onScan: () -> Unit,
+) {
         var loginMode by remember { mutableStateOf(AuthLoginMode.PASSWORD) }
         var user by remember { mutableStateOf("") }
         var pass by remember { mutableStateOf("") }
@@ -225,7 +231,8 @@ fun AuthScreen(vm: AppViewModel, onRegister: () -> Unit, onDone: () -> Unit) {
                 // ── 管理员切换（企业版） ──
                 if (isEnterprise && loginMode == AuthLoginMode.PASSWORD) {
                         Text(
-                                if (adminMode) "切换为普通账号" else "管理员账号登录",
+                                if (adminMode) "当前：管理员账号 · 切换企业账号"
+                                else "当前：企业账号 · 使用管理员账号",
                                 fontSize = MaterialTheme.typography.labelMedium.fontSize,
                                 fontWeight = FontWeight.Medium,
                                 color = XcagiTheme.extra.brandBlue,
@@ -324,10 +331,18 @@ fun AuthScreen(vm: AppViewModel, onRegister: () -> Unit, onDone: () -> Unit) {
                                                                 adminMode,
                                                                 rememberPass,
                                                                 autoLogin
-                                                        ) {
+                                                        ) { ok, error ->
                                                                 loggingIn = false
-                                                                if (it) onDone()
-                                                                else loginError = "用户名或密码错误"
+                                                                if (ok) onDone()
+                                                                else {
+                                                                        loginError =
+                                                                                error
+                                                                                        ?: if (adminMode) {
+                                                                                                "管理员账号或密码错误"
+                                                                                        } else {
+                                                                                                "用户名或密码错误"
+                                                                                        }
+                                                                }
                                                         }
                                                 AuthLoginMode.PHONE ->
                                                         vm.loginPhone(phone, otpCode) {
@@ -346,6 +361,8 @@ fun AuthScreen(vm: AppViewModel, onRegister: () -> Unit, onDone: () -> Unit) {
                                 color = if (canLogin) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                 }
+                Spacer(Modifier.height(12.dp))
+                LoginScanButton(onClick = onScan)
 
                 // ── 记住密码 / 免登录（密码模式） ──
                 if (loginMode == AuthLoginMode.PASSWORD) {
@@ -716,6 +733,42 @@ private fun LoginSecondaryButton(
                         text,
                         fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+        }
+}
+
+@Composable
+private fun LoginScanButton(
+        onClick: () -> Unit,
+        modifier: Modifier = Modifier,
+) {
+        Row(
+                modifier.fillMaxWidth()
+                        .padding(horizontal = 24.dp)
+                        .height(44.dp)
+                        .clip(RoundedCornerShape(22.dp))
+                        .border(
+                                0.5.dp,
+                                XcagiTheme.extra.brandBlue.copy(alpha = 0.35f),
+                                RoundedCornerShape(22.dp),
+                        )
+                        .background(XcagiTheme.extra.brandBlue.copy(alpha = 0.06f))
+                        .clickable(onClick = onClick),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically,
+        ) {
+                Icon(
+                        Icons.Default.QrCodeScanner,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                        tint = XcagiTheme.extra.brandBlue,
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                        "扫码绑定/登录",
+                        fontSize = MaterialTheme.typography.bodyMedium.fontSize,
+                        fontWeight = FontWeight.Medium,
+                        color = XcagiTheme.extra.brandBlue,
                 )
         }
 }

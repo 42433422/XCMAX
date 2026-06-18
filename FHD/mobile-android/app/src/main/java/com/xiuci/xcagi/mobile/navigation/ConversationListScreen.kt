@@ -77,7 +77,6 @@ fun ConversationListScreen(
     val conversations by vm.conversations.collectAsState()
     val displayName by vm.displayName.collectAsState()
     val avatarUri by vm.avatarUri.collectAsState()
-    val serverModeLabel by vm.serverModeLabel.collectAsState()
     val accountKindLabel by vm.accountKindLabel.collectAsState()
     var searchQuery by remember { mutableStateOf("") }
     var selectedFilter by remember { mutableStateOf(ConversationFilter.ALL) }
@@ -114,7 +113,11 @@ fun ConversationListScreen(
                                     if (isEnterprise) "XCAGI 企业版" else "XCAGI 个人版"
                                 },
                         avatarUri = avatarUri,
-                        subtitle = "${accountKindLabel.ifBlank { "未登录" }} · $serverModeLabel",
+                        subtitle =
+                                buildString {
+                                    append(accountKindLabel.ifBlank { "未登录" })
+                                    if (employeeCount > 0) append(" · ${employeeCount}位AI员工")
+                                },
                         searchQuery = searchQuery,
                         onSearchChange = { searchQuery = it },
                         onClearSearch = { searchQuery = "" },
@@ -358,7 +361,7 @@ private fun QuickActionRow(
             horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         QuickAction(
-                label = "智伴",
+                label = "AI员工",
                 badge = employeeCount.takeIf { it > 0 }?.toString(),
                 glyph = QuickGlyph.PARTNER,
                 color = XcagiTheme.extra.brandBlue,
@@ -366,21 +369,21 @@ private fun QuickActionRow(
                 modifier = Modifier.weight(1f),
         )
         QuickAction(
-                label = "名录",
+                label = "通讯录",
                 glyph = QuickGlyph.DIRECTORY,
                 color = XcagiTheme.extra.success,
                 onClick = onOpenContacts,
                 modifier = Modifier.weight(1f),
         )
         QuickAction(
-                label = "探索",
+                label = "交流圈",
                 glyph = QuickGlyph.COMPASS,
                 color = XcagiTheme.extra.warning,
                 onClick = onOpenDiscover,
                 modifier = Modifier.weight(1f),
         )
         QuickAction(
-                label = "识别",
+                label = "扫码",
                 glyph = QuickGlyph.SCAN,
                 color = XcagiTheme.extra.n600,
                 onClick = onOpenScan,
@@ -406,45 +409,49 @@ private fun QuickAction(
         modifier: Modifier = Modifier,
         badge: String? = null,
 ) {
-    Column(
-            modifier =
-                    modifier.clip(RoundedCornerShape(8.dp))
-                            .clickable(onClick = onClick)
-                            .padding(vertical = 4.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
+    Surface(
+            modifier = modifier.padding(horizontal = 2.dp),
+            onClick = onClick,
+            shape = RoundedCornerShape(8.dp),
+            color = Color.Transparent,
     ) {
-        Box(contentAlignment = Alignment.TopEnd) {
-            Box(
-                    Modifier.size(34.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(color.copy(alpha = 0.11f)),
-                    contentAlignment = Alignment.Center,
-            ) {
-                QuickGlyphIcon(glyph = glyph, color = color, modifier = Modifier.size(21.dp))
-            }
-            badge?.let {
-                Surface(
-                        shape = CircleShape,
-                        color = XcagiTheme.extra.danger,
-                        modifier = Modifier.offset(x = 8.dp, y = (-4).dp),
+        Column(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Box(contentAlignment = Alignment.TopEnd) {
+                Box(
+                        Modifier.size(34.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(color.copy(alpha = 0.11f)),
+                        contentAlignment = Alignment.Center,
                 ) {
-                    Text(
-                            it,
-                            color = Color.White,
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
-                    )
+                    QuickGlyphIcon(glyph = glyph, color = color, modifier = Modifier.size(21.dp))
+                }
+                badge?.let {
+                    Surface(
+                            shape = CircleShape,
+                            color = XcagiTheme.extra.danger,
+                            modifier = Modifier.offset(x = 8.dp, y = (-4).dp),
+                    ) {
+                        Text(
+                                it,
+                                color = Color.White,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
+                        )
+                    }
                 }
             }
+            Spacer(Modifier.height(5.dp))
+            Text(
+                    label,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+            )
         }
-        Spacer(Modifier.height(5.dp))
-        Text(
-                label,
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-        )
     }
 }
 
@@ -588,13 +595,13 @@ private fun EcosystemSyncHint() {
         Spacer(Modifier.width(Spacing.md))
         Column(Modifier.weight(1f)) {
             Text(
-                    "企业生态待同步",
+                    "账号生态待同步",
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurface,
             )
             Text(
-                    "登录企业账号后，已安装智能伙伴会自动出现在会话里。",
+                    "登录企业或管理端账号后，智能伙伴会自动出现在会话里。",
                     style = MaterialTheme.typography.bodySmall,
                     color = XcagiTheme.extra.n500,
                     maxLines = 1,
@@ -696,7 +703,9 @@ private fun ConversationCell(item: ConversationItem, onClick: () -> Unit) {
                     Text(
                             text = timestampText,
                             style = MaterialTheme.typography.labelMedium,
-                            color = if (hasUnread) XcagiTheme.extra.n600 else XcagiTheme.extra.n400,
+                            color =
+                                    if (hasUnread) XcagiTheme.extra.n600
+                                    else MaterialTheme.colorScheme.onSurfaceVariant,
                             fontWeight = if (hasUnread) FontWeight.Medium else FontWeight.Normal,
                     )
                 }
@@ -710,7 +719,7 @@ private fun ConversationCell(item: ConversationItem, onClick: () -> Unit) {
                             style = MaterialTheme.typography.bodyMedium,
                             color =
                                     if (hasUnread) MaterialTheme.colorScheme.onSurfaceVariant
-                                    else MaterialTheme.colorScheme.outline,
+                                    else XcagiTheme.extra.n600,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f),

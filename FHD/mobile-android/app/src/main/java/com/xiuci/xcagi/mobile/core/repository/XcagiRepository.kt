@@ -7,6 +7,7 @@ import com.xiuci.xcagi.mobile.core.db.ChatCacheEntity
 import com.xiuci.xcagi.mobile.core.db.ShipmentCacheEntity
 import com.xiuci.xcagi.mobile.core.db.XcagiDatabase
 import com.xiuci.xcagi.mobile.core.model.AccessRequestPayload
+import com.xiuci.xcagi.mobile.core.model.AdminMobileHomeData
 import com.xiuci.xcagi.mobile.core.model.ListItem
 import com.xiuci.xcagi.mobile.core.model.MarketAuthResponse
 import com.xiuci.xcagi.mobile.core.model.MarketLoginBody
@@ -237,6 +238,12 @@ class XcagiRepository @Inject constructor(
                 d.access_token!!, d.refresh_token ?: "", d.session_id ?: "", d.user?.username ?: username,
                 userId = d.user?.id ?: 0,
             )
+            if (!d.market_access_token.isNullOrBlank()) {
+                sessionStore.setMarketTokens(
+                    d.market_access_token,
+                    d.market_refresh_token.orEmpty(),
+                )
+            }
             refreshMe(resolvedKind)
             registerDeviceToken()
             syncMarketSessionHandoff()
@@ -246,7 +253,7 @@ class XcagiRepository @Inject constructor(
         Result.failure(e)
     }
 
-    /** 从 FHD 会话拉取 MODstore token，供工作台 WebView 注入。 */
+    /** 从 FHD 会话拉取 MODstore token，供企业端模块 WebView 注入。 */
     suspend fun syncMarketSessionHandoff(): Result<Unit> = try {
         syncRouterFromStore()
         val res = fhd().marketSessionHandoff()
@@ -385,41 +392,102 @@ class XcagiRepository @Inject constructor(
         exchangeHost: String = "",
         exchangePort: Int = 0,
     ): Result<Pair<String, Int>> {
-        return try {
-            val targetHost = exchangeHost.trim()
-            if (targetHost.isBlank() && code.isNotBlank() && sessionStore.fhdHostFlow.first().isBlank()) {
-                return Result.failure(Exception("请扫描电脑端二维码完成首次绑定"))
-            }
-            if (targetHost.isNotBlank()) {
-                val hostWithPort = if (exchangePort > 0 && ":" !in targetHost) {
-                    "$targetHost:$exchangePort"
-                } else {
-                    targetHost
+        val targetHost = exchangeHost.trim()
+        val body = PairingExchangeBody(nonce = nonce, code = code)
+        val primary =
+            try {
+                if (targetHost.isNotBlank()) {
+                    val hostWithPort = if (exchangePort > 0 && ":" !in targetHost) {
+                        "$targetHost:$exchangePort"
+                    } else {
+                        targetHost
+                    }
+                    sessionStore.setFhdHost(hostWithPort)
+                    sessionStore.setServerMode("lan")
+                    serverRouter.fhdHost = hostWithPort
+                    serverRouter.mode = ServerMode.LAN
                 }
-                sessionStore.setFhdHost(hostWithPort)
-                sessionStore.setServerMode("lan")
-                serverRouter.fhdHost = hostWithPort
-                serverRouter.mode = ServerMode.LAN
+                syncRouterFromStore()
+                completePairingExchange(fhd(), body)
+            } catch (e: Exception) {
+                Result.failure(e)
             }
-            syncRouterFromStore()
-            val r = fhd().pairingExchange(PairingExchangeBody(nonce = nonce, code = code))
-            val d = r.data ?: return Result.failure(Exception(r.message))
-            val host = d["host"]?.toString() ?: return Result.failure(Exception("无 host"))
-            val port = (d["port"] as? Number)?.toInt() ?: 5000
-            val hostWithPort = if (":" in host) host else "$host:$port"
-            sessionStore.setFhdHost(hostWithPort)
-            serverRouter.fhdHost = hostWithPort
-            Result.success(host to port)
-        } catch (e: Exception) {
-            Result.failure(e)
+
+        if (primary.isSuccess) return primary
+
+        if (targetHost.isBlank() && code.isNotBlank() && sessionStore.fhdHostFlow.first().isBlank()) {
+            tryDebugBootstrapPairingCode(code).fold(
+                onSuccess = { return Result.success(it) },
+                onFailure = { /* fall through to the primary error */ },
+            )
         }
+        return primary
     }
 
-    suspend fun confirmAuthQr(qrId: String, username: String, password: String): Result<Unit> {
+    private suspend fun completePairingExchange(
+        api: FhdApi,
+        body: PairingExchangeBody,
+    ): Result<Pair<String, Int>> {
+        val r = api.pairingExchange(body)
+        if (!r.success) return Result.failure(Exception(r.message.ifBlank { "设备配对失败" }))
+        val d = r.data ?: return Result.failure(Exception(r.message.ifBlank { "设备配对失败" }))
+        val host = d["host"]?.toString()?.trim().orEmpty()
+        if (host.isBlank()) return Result.failure(Exception("配对响应缺少 host"))
+        val port = (d["port"] as? Number)?.toInt() ?: BuildConfig.FHD_DEFAULT_PORT
+        val hostWithPort = if (":" in host) host else "$host:$port"
+        sessionStore.setFhdHost(hostWithPort)
+        sessionStore.setServerMode("lan")
+        serverRouter.fhdHost = hostWithPort
+        serverRouter.mode = ServerMode.LAN
+        return Result.success(host to port)
+    }
+
+    private suspend fun tryDebugBootstrapPairingCode(code: String): Result<Pair<String, Int>> {
+        if (!BuildConfig.DEBUG) {
+            return Result.failure(Exception("未配置电脑地址"))
+        }
+        val candidates =
+            listOf(
+                "10.0.2.2:5112",
+                "10.0.2.2:${BuildConfig.FHD_DEFAULT_PORT}",
+            ).distinct()
+        var last: Throwable? = null
+        for (candidate in candidates) {
+            val api =
+                Retrofit.Builder()
+                    .baseUrl("http://$candidate/")
+                    .client(okHttp)
+                    .addConverterFactory(GsonConverterFactory.create())
+                    .build()
+                    .create(FhdApi::class.java)
+            val result = completePairingExchange(api, PairingExchangeBody(code = code))
+            if (result.isSuccess) return result
+            last = result.exceptionOrNull()
+        }
+        return Result.failure(Exception(last?.message ?: "配对码无效或已过期"))
+    }
+
+    suspend fun confirmAuthQr(
+        qrId: String,
+        username: String,
+        password: String,
+        accountKind: String = "",
+    ): Result<Unit> {
         return try {
             syncRouterFromStore()
+            val targetKind =
+                normalizeAccountKind(
+                    accountKind.ifBlank {
+                        sessionStore.accountKindFlow.first().ifBlank { ProductSkuConfig.accountKind }
+                    },
+                )
             val r = fhd().authQrConfirm(
-                AuthQrConfirmBody(qr_id = qrId, username = username, password = password),
+                AuthQrConfirmBody(
+                    qr_id = qrId,
+                    username = username,
+                    password = password,
+                    account_kind = targetKind,
+                ),
             )
             if (r.success != true) {
                 Result.failure(Exception(r.message ?: "扫码登录确认失败"))
@@ -748,6 +816,21 @@ class XcagiRepository @Inject constructor(
         Result.failure(e)
     }
 
+    suspend fun loadAdminMobileHome(): Result<AdminMobileHomeData> = try {
+        syncRouterFromStore()
+        val res = fhd().mobileAdminHome()
+        if (!res.success) {
+            Result.failure(Exception(res.message.ifBlank { "管理端移动数据加载失败" }))
+        } else {
+            Result.success(res.data ?: AdminMobileHomeData())
+        }
+    } catch (e: Exception) {
+        Result.failure(e)
+    }
+
+    suspend fun loadAdminModInfos(): Result<List<ModInfo>> =
+        loadAdminMobileHome().map { home -> listOf(home.toAdminModInfo()) }
+
     suspend fun fetchHome(): Result<Map<String, Any?>> = try {
         syncRouterFromStore()
         val res = fhd().mobileHome()
@@ -927,6 +1010,17 @@ class XcagiRepository @Inject constructor(
             api_base_path = textValue("api_base_path"),
             phone_channel = textValue("phone_channel"),
             workflow_placeholder = this["workflow_placeholder"] as? Boolean ?: false,
+            profile_source = textValue("profile_source"),
+            market_connected = this["market_connected"] as? Boolean ?: false,
+            market_pkg_id = textValue("market_pkg_id"),
+            market_name = textValue("market_name"),
+            market_description = textValue("market_description"),
+            market_version = textValue("market_version"),
+            market_author = textValue("market_author"),
+            market_industry = textValue("market_industry"),
+            market_material_category = textValue("market_material_category"),
+            market_license_scope = textValue("market_license_scope"),
+            market_security_level = textValue("market_security_level"),
         )
     }
 
@@ -945,6 +1039,59 @@ class XcagiRepository @Inject constructor(
             label = optionalTextValue("label"),
             icon = optionalTextValue("icon"),
             hidden = this["hidden"] as? Boolean,
+        )
+    }
+
+    private fun AdminMobileHomeData.toAdminModInfo(): ModInfo {
+        val count = if (employee_count > 0) employee_count else employees.size
+        return ModInfo(
+            id = "admin-duty-employees",
+            name = "管理端 AI 员工",
+            version = "10.0",
+            description = "${count} 位管理端 duty AI 员工与 ${features.size} 个管理功能入口",
+            author = "XCAGI 管理端",
+            primary = true,
+            industry = ModIndustry(id = "admin", name = "管理端"),
+            frontend_menu =
+                features.map { feature ->
+                    ModMenuItem(
+                        id = feature.id,
+                        label = feature.title,
+                        icon = feature.category,
+                        path = feature.api_path,
+                    )
+                },
+            workflow_employees =
+                employees.map { employee ->
+                    val name =
+                        employee.name
+                            .ifBlank { employee.label }
+                            .ifBlank { employee.title }
+                            .ifBlank { employee.id }
+                    WorkflowEmployeeInfo(
+                        id = employee.id,
+                        label = name,
+                        panel_title = employee.title.ifBlank { name },
+                        panel_summary =
+                            employee.description
+                                .ifBlank { employee.panel_summary }
+                                .ifBlank { "管理端 ${employee.yuangon_area.ifBlank { "duty" }} 员工" },
+                        api_base_path = employee.api_base_path,
+                        phone_channel = employee.phone_channel.ifBlank { "admin-duty" },
+                        workflow_placeholder = false,
+                        profile_source = employee.profile_source.ifBlank { "admin" },
+                        market_connected = employee.market_connected,
+                        market_pkg_id = employee.market_pkg_id,
+                        market_name = employee.market_name,
+                        market_description = employee.market_description,
+                        market_version = employee.market_version,
+                        market_author = employee.market_author,
+                        market_industry = employee.market_industry,
+                        market_material_category = employee.market_material_category,
+                        market_license_scope = employee.market_license_scope,
+                        market_security_level = employee.market_security_level,
+                    )
+                },
         )
     }
 
