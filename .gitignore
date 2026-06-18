@@ -62,6 +62,9 @@ FHD/.venv-mypy/
 playwright-report/
 *.db-shm
 *.db-wal
+# SQLite in-memory DSNs must not become tracked filenames.
+:memory:
+**/:memory:
 modstore_server/payment_orders/
 FHD/.tools/
 FHD/mobile-android/.toolchain/
