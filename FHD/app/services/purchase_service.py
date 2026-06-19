@@ -430,7 +430,7 @@ class PurchaseService(NeuroEventPublisherMixin):
                         remark=f"采购入库单: {inbound_no}",
                     )
                     if not result.get("success"):
-                        logger.warning("库存入库失败: %s", result.get('message'))
+                        logger.warning("库存入库失败: %s", result.get("message"))
 
                 inbound.total_amount = total_amount
                 inbound.status = "completed"

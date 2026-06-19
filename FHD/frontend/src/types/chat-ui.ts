@@ -13,10 +13,21 @@ export interface UiChatMessage {
     tool_id: string
     action: string
     error?: string
+    message?: string
+    output_preview?: string
+    retries?: number
+    retryable?: boolean
+    recovery_hint?: string
+    duration_ms?: number
   }>
   contextSummary?: string
+  streamingShell?: boolean
+  toolProgressLabel?: string
+  downloadUrl?: string
   /** 发货单文档下载链接（与右侧任务卡一致，便于在对话内直接下载） */
   shipmentDownloadUrl?: string
 }
 
-export type UiChatMessageExtras = Partial<Pick<UiChatMessage, 'shipmentDownloadUrl'>>
+export type UiChatMessageExtras = Partial<
+  Pick<UiChatMessage, 'shipmentDownloadUrl' | 'downloadUrl' | 'toolProgressLabel'>
+>

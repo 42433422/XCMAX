@@ -135,7 +135,7 @@
               :to="workflowVisualizationLocation"
               class="workflow-employee-visual-link"
               :title="workflowPanoramaLinkTitle"
-            >流程全景</router-link>
+            >流程可视化</router-link>
           </div>
           <div class="workflow-employee-list" role="group" aria-label="工作流 AI 员工">
             <button

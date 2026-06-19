@@ -56,6 +56,8 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
     """
 
     PROVIDER_DEFAULT_URLS: Dict[str, str] = {
+        "xcauto": "https://xiu-ci.com/v1",
+        "xiuci": "https://xiu-ci.com/v1",
         "deepseek": "https://api.deepseek.com",
         "xiaomi": "https://token-plan-cn.xiaomimimo.com",
         "openai": "https://api.openai.com",
@@ -78,6 +80,8 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
     }
 
     DEFAULT_MODELS: Dict[str, str] = {
+        "xcauto": "xcauto-account",
+        "xiuci": "xcauto-account",
         "xiaomi": "mimo-v2.5-pro",
         "deepseek": "deepseek-chat",
         "openai": "gpt-4o-mini",
@@ -100,6 +104,8 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
     }
 
     ENV_KEY_MAPPING: Dict[str, List[str]] = {
+        "xcauto": ["XCAUTO_API_KEY", "XCAUTO_PAT", "XIUCI_API_KEY", "OPENAI_API_KEY"],
+        "xiuci": ["XCAUTO_API_KEY", "XCAUTO_PAT", "XIUCI_API_KEY", "OPENAI_API_KEY"],
         "xiaomi": ["XIAOMI_API_KEY", "MIMO_API_KEY", "XIAOMI_MIMO_API_KEY"],
         "deepseek": ["DEEPSEEK_API_KEY"],
         "openai": ["OPENAI_API_KEY"],
@@ -148,8 +154,11 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
         self._stream_client: Optional[httpx.AsyncClient] = None
 
         logger.info(
-            "初始化LLM适配器: %s/%s "
-            f"@ %s (Key长度: %s)", self.provider, self._model, self._base_url, len(self._api_key or '')
+            "初始化LLM适配器: %s/%s @ %s (Key长度: %s)",
+            self.provider,
+            self._model,
+            self._base_url,
+            len(self._api_key or ""),
         )
 
     def _resolve_api_key(self, provider: str) -> Optional[str]:
@@ -245,8 +254,12 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
         headers = {"Authorization": f"Bearer {self._api_key}", "Content-Type": "application/json"}
 
         logger.debug(
-            "调用 [%s/%s] "
-            f"messages=%s, temp=%s, max_tokens=%s", self.provider, self._model, len(messages), temperature, max_tokens
+            "调用 [%s/%s] messages=%s, temp=%s, max_tokens=%s",
+            self.provider,
+            self._model,
+            len(messages),
+            temperature,
+            max_tokens,
         )
 
         client = await self._get_client()
@@ -256,9 +269,10 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
         result = response.json()
 
         logger.debug(
-            "[%s] 响应成功, "
-            f"choices=%s, "
-            f"usage=%s", self.provider, len(result.get('choices', [])), result.get('usage', {})
+            "[%s] 响应成功, choices=%s, usage=%s",
+            self.provider,
+            len(result.get("choices", [])),
+            result.get("usage", {}),
         )
 
         return cast("dict[str, Any]", result)

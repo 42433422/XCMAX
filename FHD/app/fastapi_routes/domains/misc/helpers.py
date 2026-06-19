@@ -127,6 +127,6 @@ def _message_to_dict(message: object) -> dict:
 def _dispatch_tool_for_approval(
     *, tool_id: str, action: str, params: dict | None = None
 ) -> dict[str, Any]:
-    from app.routes.tools import execute_registered_workflow_tool
+    from app.application.facades.tools_facade import execute_registered_workflow_tool
 
     return execute_registered_workflow_tool(tool_id=tool_id, action=action, params=params)

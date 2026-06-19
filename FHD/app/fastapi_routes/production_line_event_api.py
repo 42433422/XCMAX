@@ -78,14 +78,18 @@ async def production_line_time_rail_maintenance_sync(
 ) -> JSONResponse:
     from app.application.time_rail_app_service import get_time_rail_app_service
 
-    req_limit = _coerce_limit(payload.get("limit") if isinstance(payload, dict) else limit, default=limit)
+    req_limit = _coerce_limit(
+        payload.get("limit") if isinstance(payload, dict) else limit, default=limit
+    )
     data = await get_time_rail_app_service().maintenance_sync(limit=req_limit)
     if not isinstance(data, dict) or data.get("ok") is False:
         return JSONResponse(
             {
                 "success": False,
                 "error": str(
-                    data.get("error") if isinstance(data, dict) else "time-rail maintenance sync failed",
+                    data.get("error")
+                    if isinstance(data, dict)
+                    else "time-rail maintenance sync failed",
                 ),
                 "data": data,
             },

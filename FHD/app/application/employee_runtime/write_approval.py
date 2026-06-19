@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import uuid
 from typing import Any
 
@@ -21,7 +22,8 @@ def build_write_approval_gate(
 
     写库类工具（``import_excel_to_database`` / ``products_bulk_import``）需满足其一：
     - 输入 ``approved_write=True`` / ``allow_write=True``
-    - ApprovalGatedEngine 评估为 auto-approve（strategy=auto，演示/CLI）
+    - 输入 ``write_token`` / ``approval_token`` 匹配 ``FHD_DB_WRITE_TOKEN``
+    - ApprovalGatedEngine 生成人工审批请求后，由审批工作台放行
     """
     payload = dict(input_data or {})
 
@@ -30,6 +32,16 @@ def build_write_approval_gate(
         if name not in WRITE_TOOLS:
             return {"ok": True}
         if payload.get("approved_write") or payload.get("allow_write"):
+            return {"ok": True}
+        configured_token = str(os.environ.get("FHD_DB_WRITE_TOKEN") or "").strip()
+        supplied_token = str(
+            payload.get("write_token")
+            or payload.get("approval_token")
+            or (args or {}).get("write_token")
+            or (args or {}).get("approval_token")
+            or ""
+        ).strip()
+        if configured_token and supplied_token and supplied_token == configured_token:
             return {"ok": True}
         try:
             from app.application.workflow.approval_gated_engine import ApprovalGatedEngine
@@ -51,7 +63,7 @@ def build_write_approval_gate(
                 risk_level="high",
             )
             gated = ApprovalGatedEngine(WorkflowEngine(lambda **kw: {"success": True}))
-            decision = gated.evaluate_plan(plan, runtime_context=payload, strategy="auto")
+            decision = gated.evaluate_plan(plan, runtime_context=payload, strategy="interactive")
             if decision.all_approved and not decision.any_rejected:
                 return {"ok": True}
             if decision.pending_approval:
@@ -62,7 +74,9 @@ def build_write_approval_gate(
                     "approval_request_ids": list(decision.approval_request_ids or []),
                 }
         except RECOVERABLE_ERRORS:
-            logger.debug("write approval gate fallback emp=%s tool=%s", employee_id, name, exc_info=True)
+            logger.debug(
+                "write approval gate fallback emp=%s tool=%s", employee_id, name, exc_info=True
+            )
 
         try:
             from app.application.employee_runtime.metrics import record_write_block
@@ -73,8 +87,7 @@ def build_write_approval_gate(
         return {
             "ok": False,
             "reason": (
-                f"写库工具 {name} 被审批门拦截：需 approved_write=True、"
-                "allow_write=True 或审批通过"
+                f"写库工具 {name} 被审批门拦截：需 approved_write=True、allow_write=True 或审批通过"
             ),
         }
 

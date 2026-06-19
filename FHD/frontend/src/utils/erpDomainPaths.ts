@@ -121,8 +121,15 @@ function pathMatchesPrefixes(pathOnly: string, prefixes: readonly string[]): boo
   return prefixes.some((prefix) => pathOnly === prefix || pathOnly.startsWith(`${prefix}/`))
 }
 
+function isIndustryShellModId(modId: string): boolean {
+  return String(modId || '').trim().endsWith('-industry')
+}
+
 function resolveErpBaseForClientMod(activeClient: string, installedModIds: string[]): string {
   const ids = installedModIds
+  if (isIndustryShellModId(activeClient)) {
+    return ids.includes(ERP_DOMAIN_BRIDGE_MOD_ID) ? MOD_FACADE_BASE : '/api'
+  }
   if (ids.includes(activeClient)) {
     return `/api/mod/${activeClient}`
   }

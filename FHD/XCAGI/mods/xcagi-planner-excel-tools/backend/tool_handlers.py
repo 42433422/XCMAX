@@ -30,7 +30,7 @@ def _parse_args(args: dict[str, Any] | str) -> dict[str, Any]:
         try:
             parsed = json.loads(args or "{}")
             return parsed if isinstance(parsed, dict) else {}
-        except Exception:
+        except Exception:  # noqa: BLE001 - native tool boundary must not crash planner
             return {}
     return {}
 
@@ -99,7 +99,7 @@ def _handle_excel_schema_understand(args: dict[str, Any], workspace_root: str | 
         if isinstance(out, dict):
             _tag_source(out)
         return json.dumps(out, ensure_ascii=False)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - native tool boundary returns JSON errors
         return json.dumps(
             _tag_source(
                 {
@@ -206,7 +206,7 @@ def _handle_excel_join_compare(args: dict[str, Any], workspace_root: str | None)
             _tag_source({"success": False, "error": f"unknown action: {action}"}),
             ensure_ascii=False,
         )
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - native tool boundary returns JSON errors
         return json.dumps(_tag_source({"success": False, "error": str(e)}), ensure_ascii=False)
 
 
@@ -226,7 +226,13 @@ def _handle_import_excel_to_database(
 
 
 def _handle_generate_office_document(args: dict[str, Any]) -> str:
-    req = str(args.get("user_request") or args.get("prompt") or "").strip()
+    req = str(
+        args.get("user_request")
+        or args.get("prompt")
+        or args.get("request")
+        or args.get("message")
+        or ""
+    ).strip()
     fmt = str(args.get("output_format") or "docx").lower().strip()
     if fmt not in ("docx", "xlsx"):
         fmt = "docx"
@@ -246,6 +252,7 @@ def _handle_generate_office_document(args: dict[str, Any]) -> str:
             else "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         )
         token = store_document_pickup(content, fname, mime)
+        download_url = f"/api/ai/kitten/document/pickup/{token}"
         return json.dumps(
             _tag_source(
                 {
@@ -256,7 +263,26 @@ def _handle_generate_office_document(args: dict[str, Any]) -> str:
                     ),
                     "pickup_token": token,
                     "file_name": fname,
-                    "download_url": f"/api/ai/kitten/document/pickup/{token}",
+                    "download_url": download_url,
+                    "artifacts": [
+                        {
+                            "artifact_type": "office_document",
+                            "name": fname,
+                            "source": "generate_office_document",
+                            "uri": download_url,
+                            "mime_type": mime,
+                            "summary": req[:500],
+                            "preview": {
+                                "file_name": fname,
+                                "download_url": download_url,
+                                "output_format": fmt,
+                            },
+                            "metadata": {
+                                "pickup_token": token,
+                                "generator": "generate_office_document",
+                            },
+                        }
+                    ],
                     "assistant_hint": (
                         "将 download_url 原样写入回复（可做成 Markdown 链接）；"
                         "不要再次调用 generate_office_document，除非用户明确要求重新生成。"
@@ -265,7 +291,7 @@ def _handle_generate_office_document(args: dict[str, Any]) -> str:
             ),
             ensure_ascii=False,
         )
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - native tool boundary returns JSON errors
         return json.dumps(_tag_source({"success": False, "error": str(e)}), ensure_ascii=False)
 
 

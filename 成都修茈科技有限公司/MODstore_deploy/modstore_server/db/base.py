@@ -152,6 +152,7 @@ def _ensure_columns(engine: Engine) -> None:
         ("daily_digest_records", "release_train_before", "TEXT DEFAULT ''"),
         ("daily_digest_records", "release_train_after", "TEXT DEFAULT ''"),
         ("daily_digest_records", "release_kind", "TEXT DEFAULT ''"),
+        ("transactions", "idempotency_key", "TEXT DEFAULT ''"),
     ]
     for table, column, ddl in patches:
         _add_column_if_missing(engine, table, column, ddl)

@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import logging
 import os
-import ipaddress
 import socket
 import time
 import uuid
@@ -18,8 +18,8 @@ from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from app.fastapi_routes.mobile_api import get_mobile_user
 from app.application.codex_super_employee_service import CodexSuperEmployeeService
+from app.fastapi_routes.mobile_api import get_mobile_user
 from app.security.mobile_jwt import issue_mobile_tokens
 from app.security.mobile_pairing import (
     consume_by_shortcode,
@@ -27,9 +27,9 @@ from app.security.mobile_pairing import (
     issue_pairing_nonce,
     lookup_by_shortcode,
 )
+from app.services.mobile_relay_service import MobileRelayService
 from app.utils.mobile_api import format_mobile_response, paginate_list
 from app.utils.operational_errors import RECOVERABLE_ERRORS
-from app.services.mobile_relay_service import MobileRelayService
 
 OPERATIONAL_ERRORS = RECOVERABLE_ERRORS
 
@@ -383,7 +383,18 @@ def _mobile_user_public_dict(user: Any) -> dict[str, Any]:
     }
 
 
-def _resolve_mobile_relay_user(user: Any) -> dict[str, Any]:
+def _relay_admin_fallback_user() -> dict[str, Any]:
+    return {
+        "id": 1,
+        "username": "admin",
+        "display_name": "管理员账号",
+        "email": "",
+        "role": "admin",
+        "is_active": True,
+    }
+
+
+def _resolve_mobile_relay_user(user: Any, *, prefer_admin: bool = False) -> dict[str, Any]:
     """Resolve the mobile user for physical QR/device-code relay binding.
 
     A relay pairing code already proves physical access to the desktop settings
@@ -392,45 +403,54 @@ def _resolve_mobile_relay_user(user: Any) -> dict[str, Any]:
     the database has no active users yet.
     """
     uid, _ = _mobile_user_identity(user)
-    if uid > 0:
+    role = str(getattr(user, "role", "") or "").strip()
+    if uid > 0 and (not prefer_admin or role in {"admin", "super_admin", "owner"}):
         return _mobile_user_public_dict(user)
 
     from app.db.models import User
     from app.db.session import get_db
 
-    with get_db() as db:
-        row = (
-            db.query(User)
-            .filter(User.is_active == True)  # noqa: E712
-            .filter(User.role.in_(["admin", "super_admin", "owner"]))
-            .order_by(User.id.asc())
-            .first()
-        )
-        if row is None:
-            row = (
-                db.query(User)
-                .filter(User.is_active == True)  # noqa: E712
-                .order_by(User.id.asc())
-                .first()
-            )
-        if row is None:
-            now = datetime.utcnow()
-            row = User(
-                username=f"mobile_relay_{uuid.uuid4().hex[:8]}",
-                password=uuid.uuid4().hex,
-                display_name="移动端设备绑定",
-                email="",
-                role="admin",
-                is_active=True,
-                created_at=now,
-                last_login=now,
-            )
-            db.add(row)
-            db.flush()
-        public = _mobile_user_public_dict(row)
-        if hasattr(db, "expunge"):
-            db.expunge(row)
-        return public
+    try:
+        with get_db() as db:
+            row = None
+            if prefer_admin or uid <= 0:
+                row = (
+                    db.query(User)
+                    .filter(User.is_active == True)  # noqa: E712
+                    .filter(User.role.in_(["admin", "super_admin", "owner"]))
+                    .order_by(User.id.asc())
+                    .first()
+                )
+            if row is None:
+                row = (
+                    db.query(User)
+                    .filter(User.is_active == True)  # noqa: E712
+                    .order_by(User.id.asc())
+                    .first()
+                )
+            if row is None:
+                now = datetime.utcnow()
+                row = User(
+                    username=f"mobile_relay_{uuid.uuid4().hex[:8]}",
+                    password=uuid.uuid4().hex,
+                    display_name="移动端设备绑定",
+                    email="",
+                    role="admin",
+                    is_active=True,
+                    created_at=now,
+                    last_login=now,
+                )
+                db.add(row)
+                db.flush()
+            public = _mobile_user_public_dict(row)
+            if hasattr(db, "expunge"):
+                db.expunge(row)
+            return public
+    except RECOVERABLE_ERRORS as exc:
+        logger.warning("mobile relay admin fallback: %s", exc)
+        if prefer_admin:
+            return _relay_admin_fallback_user()
+        raise
 
 
 def _relay_mobile_auth_payload(user_public: dict[str, Any]) -> dict[str, Any]:
@@ -460,12 +480,9 @@ def _register_desktop_relay_for_pairing(host: str, port: int) -> dict[str, Any] 
     if not _host_is_private_or_loopback(host):
         return None
     try:
-        from app.services.mobile_relay_desktop_client import (
-            cached_desktop_relay_payload,
-            register_desktop_relay,
-        )
+        from app.services.mobile_relay_desktop_client import register_desktop_relay
 
-        relay = register_desktop_relay(host=host, port=port) or cached_desktop_relay_payload()
+        relay = register_desktop_relay(host=host, port=port)
     except RECOVERABLE_ERRORS as exc:
         logger.warning("desktop relay registration skipped: %s", exc)
         return None
@@ -551,18 +568,18 @@ async def mobile_pairing_lookup(body: PairingLookupBody):
     return format_mobile_response(
         data=_enrich_pairing_payload(
             {
-            "host": rec.get("host"),
-            "port": rec.get("port"),
-            "nonce": rec.get("nonce"),
-            "shortCode": code,
-            "exp": rec.get("exp") or 0,
+                "host": rec.get("host"),
+                "port": rec.get("port"),
+                "nonce": rec.get("nonce"),
+                "shortCode": code,
+                "exp": rec.get("exp") or 0,
             }
         ),
     )
 
 
 @extension_router.post("/pairing/exchange")
-async def mobile_pairing_exchange(body: PairingExchangeBody):
+async def mobile_pairing_exchange(body: PairingExchangeBody, user=Depends(get_mobile_user)):
     nonce = body.nonce.strip()
     code = body.code.strip()
     if not nonce and not code:
@@ -573,12 +590,16 @@ async def mobile_pairing_exchange(body: PairingExchangeBody):
     rec = consume_by_shortcode(code) if code else consume_pairing_nonce(nonce)
     if not rec:
         return JSONResponse(
-            format_mobile_response(None, "配对码无效或已过期，请刷新二维码", success=False, code=400),
+            format_mobile_response(
+                None, "配对码无效或已过期，请刷新二维码", success=False, code=400
+            ),
             status_code=400,
         )
+    user_public = _resolve_mobile_relay_user(user, prefer_admin=True)
     return format_mobile_response(
         data={
             **_enrich_pairing_payload(rec),
+            **_relay_mobile_auth_payload(user_public),
             "hint": "已返回可保存的 api_base_url，手机端可直接绑定该设备。",
         }
     )
@@ -606,7 +627,7 @@ async def mobile_relay_desktop_register(body: RelayDesktopRegisterBody):
 @extension_router.post("/relay/mobile/confirm")
 async def mobile_relay_confirm(body: RelayMobileConfirmBody, user=Depends(get_mobile_user)):
     try:
-        user_public = _resolve_mobile_relay_user(user)
+        user_public = _resolve_mobile_relay_user(user, prefer_admin=True)
         uid = int(user_public.get("id") or 0)
         username = str(user_public.get("username") or user_public.get("display_name") or "")
         desktop = MobileRelayService().confirm_mobile(
@@ -641,7 +662,7 @@ async def mobile_relay_confirm_code(
     user=Depends(get_mobile_user),
 ):
     try:
-        user_public = _resolve_mobile_relay_user(user)
+        user_public = _resolve_mobile_relay_user(user, prefer_admin=True)
         uid = int(user_public.get("id") or 0)
         username = str(user_public.get("username") or user_public.get("display_name") or "")
         desktop = MobileRelayService().confirm_mobile_by_code(
@@ -860,7 +881,11 @@ def _mobile_mod_items(
             if isinstance(m, dict):
                 mid = str(m.get("id") or m.get("mod_id") or "").strip()
                 name = str(m.get("name") or m.get("title") or mid).strip()
-                employees = m.get("workflow_employees") if isinstance(m.get("workflow_employees"), list) else []
+                employees = (
+                    m.get("workflow_employees")
+                    if isinstance(m.get("workflow_employees"), list)
+                    else []
+                )
                 menu = m.get("frontend_menu") or m.get("menu") or m.get("menus")
                 menu_overrides = m.get("menu_overrides")
                 item = {
@@ -896,7 +921,9 @@ def _mobile_mod_items(
                     "author": str(getattr(m, "author", "") or ""),
                     "description": str(getattr(m, "description", "") or ""),
                     "primary": bool(getattr(m, "primary", False)),
-                    "industry": getattr(m, "industry", {}) if isinstance(getattr(m, "industry", {}), dict) else {},
+                    "industry": getattr(m, "industry", {})
+                    if isinstance(getattr(m, "industry", {}), dict)
+                    else {},
                     "frontend_menu": menu if isinstance(menu, list) else [],
                     "menu": menu if isinstance(menu, list) else [],
                     "menu_overrides": menu_overrides if isinstance(menu_overrides, list) else [],
@@ -909,10 +936,21 @@ def _mobile_mod_items(
                 }
             if mid:
                 items.append(item)
+        _upsert_admin_duty_mod_item(
+            items,
+            market_profiles,
+            market_connected=market_connected,
+        )
         return items[:100]
     except OPERATIONAL_ERRORS as exc:
         logger.warning("mobile mods list: %s", exc)
-        return []
+        items: list[dict[str, Any]] = []
+        _upsert_admin_duty_mod_item(
+            items,
+            market_profiles,
+            market_connected=market_connected,
+        )
+        return items
 
 
 ADMIN_MOBILE_FEATURES: list[dict[str, str]] = [
@@ -1037,24 +1075,42 @@ def _mobile_session_meta(request: Request) -> dict[str, Any]:
     from app.security.mobile_jwt import verify_mobile_jwt
 
     sid = ""
+    jwt_meta: dict[str, Any] = {}
     authorization = request.headers.get("Authorization") or ""
     if authorization.startswith("Bearer "):
         payload = verify_mobile_jwt(authorization[7:].strip())
         if payload:
             sid = str(payload.get("session_id") or "").strip()
+            account_kind = str(payload.get("account_kind") or "").strip()
+            jwt_meta = {
+                "session_id": sid,
+                "account_kind": account_kind,
+                "market_is_admin": account_kind == "admin",
+                "username": str(payload.get("username") or "").strip(),
+            }
     if not sid:
         sid = session_id_from_request(request)
-    return load_session_account_meta(sid) if sid else {}
+    if sid:
+        meta = load_session_account_meta(sid)
+        if meta:
+            return meta
+    return jwt_meta
 
 
-def _require_mobile_admin(request: Request, user: Any) -> tuple[dict[str, Any], JSONResponse | None]:
+def _require_mobile_admin(
+    request: Request, user: Any
+) -> tuple[dict[str, Any], JSONResponse | None]:
     if user is None:
         return {}, JSONResponse(
             format_mobile_response(None, "未授权", success=False, code=401),
             status_code=401,
         )
     meta = _mobile_session_meta(request) or {}
-    if meta.get("account_kind") != "admin" or not bool(meta.get("market_is_admin")):
+    role = str(getattr(user, "role", "") or "").strip()
+    jwt_or_session_admin = meta.get("account_kind") == "admin" and (
+        bool(meta.get("market_is_admin")) or role in {"admin", "super_admin", "owner"}
+    )
+    if not jwt_or_session_admin:
         return meta, JSONResponse(
             format_mobile_response(None, "需要管理端管理员账号", success=False, code=403),
             status_code=403,
@@ -1071,12 +1127,12 @@ def _mobile_request_user_id(request: Request, user: Any) -> int:
             uid = user_id_from_mobile_bearer(authorization)
             if uid:
                 return int(uid)
-        except Exception:
+        except (ImportError, ValueError, TypeError):
             pass
     for attr in ("id", "user_id"):
         try:
             uid = getattr(user, attr, None)
-        except Exception:
+        except (AttributeError, TypeError):
             continue
         try:
             uid_int = int(uid or 0)
@@ -1211,7 +1267,7 @@ async def _load_market_ai_employee_profile_index() -> tuple[dict[str, dict[str, 
             }
         )
         return profiles, True, ""
-    except Exception as exc:  # pragma: no cover - network availability is environment-specific
+    except Exception as exc:  # noqa: BLE001  # pragma: no cover - network availability is environment-specific
         error = _compact_text(exc)
         if isinstance(cached_profiles, dict) and cached_profiles:
             _MARKET_AI_EMPLOYEE_CACHE.update(
@@ -1260,7 +1316,8 @@ def _apply_market_profile(
         {
             "profile_source": "ai_market",
             "market_connected": bool(market_connected),
-            "market_pkg_id": _market_profile_text(profile, "pkg_id") or _market_profile_text(profile, "id"),
+            "market_pkg_id": _market_profile_text(profile, "pkg_id")
+            or _market_profile_text(profile, "id"),
             "market_name": _market_profile_text(profile, "name"),
             "market_description": _market_profile_text(profile, "description"),
             "market_version": _market_profile_text(profile, "version"),
@@ -1305,6 +1362,7 @@ def _admin_employee_items(
             "status": "on_duty",
             "api_base_path": f"/api/admin/employees/{employee_id}",
             "phone_channel": "admin-duty",
+            "workflow_placeholder": False,
             "stored_filename": _compact_text(raw.get("stored_filename")),
             "file_size": raw.get("file_size") or 0,
         }
@@ -1317,6 +1375,48 @@ def _admin_employee_items(
         _apply_market_profile(item, profile, market_connected=market_connected)
         items.append(item)
     return sorted(items, key=lambda item: str(item.get("id") or ""))
+
+
+def _admin_duty_mod_item(
+    market_profiles: dict[str, dict[str, Any]] | None = None,
+    *,
+    market_connected: bool = False,
+) -> dict[str, Any] | None:
+    employees = _admin_employee_items(market_profiles, market_connected=market_connected)
+    if not employees:
+        return None
+    return {
+        "id": "admin-duty-employees",
+        "name": "管理端编制员工",
+        "version": "local",
+        "author": "XCAGI 管理端",
+        "description": f"{len(employees)} 位管理端编制 AI 员工，来自本机 duty registry。",
+        "primary": True,
+        "industry": {"id": "admin", "name": "管理端"},
+        "frontend_menu": [],
+        "menu": [],
+        "menu_overrides": [],
+        "workflow_employees": employees,
+    }
+
+
+def _upsert_admin_duty_mod_item(
+    items: list[dict[str, Any]],
+    market_profiles: dict[str, dict[str, Any]] | None = None,
+    *,
+    market_connected: bool = False,
+) -> None:
+    duty_mod = _admin_duty_mod_item(market_profiles, market_connected=market_connected)
+    if not duty_mod:
+        return
+    duty_id = str(duty_mod.get("id") or "")
+    for item in items:
+        if str(item.get("id") or "") != duty_id:
+            continue
+        if not item.get("workflow_employees"):
+            item["workflow_employees"] = duty_mod["workflow_employees"]
+        return
+    items.insert(0, duty_mod)
 
 
 @extension_router.get("/admin/employees")
@@ -2034,9 +2134,7 @@ def _mobile_cs_source_id(user: Any) -> str:
 
 def _mobile_cs_source_name(user: Any) -> str:
     display = (
-        _safe_user_text(user, "display_name")
-        or _safe_user_text(user, "username")
-        or "移动端用户"
+        _safe_user_text(user, "display_name") or _safe_user_text(user, "username") or "移动端用户"
     )
     return f"手机端 {display}"
 
@@ -2045,7 +2143,7 @@ def _safe_user_id(user: Any) -> int:
     try:
         raw = getattr(user, "id", None)
         return int(raw or 0)
-    except Exception:
+    except (AttributeError, TypeError, ValueError):
         pass
     raw = getattr(user, "__dict__", {}).get("id")
     if raw:
@@ -2058,14 +2156,14 @@ def _safe_user_id(user: Any) -> int:
 
         identity = sa_inspect(user).identity or ()
         return int(identity[0]) if identity else 0
-    except Exception:
+    except Exception:  # noqa: BLE001
         return 0
 
 
 def _safe_user_text(user: Any, key: str) -> str:
     try:
         return str(getattr(user, key, "") or "").strip()
-    except Exception:
+    except (AttributeError, TypeError):
         return str(getattr(user, "__dict__", {}).get(key) or "").strip()
 
 
@@ -2170,6 +2268,7 @@ def _persist_mobile_cs_request(
         logger.warning("mobile cs service request persist skipped: %s", exc)
         return 0, False, str(exc)[:300]
 
+
 @extension_router.get("/cs/info")
 async def get_cs_info(request: Request, user=Depends(get_mobile_user)):
     """返回当前用户的小C/智能客服信息。"""
@@ -2252,7 +2351,9 @@ async def post_cs_message(request: Request, body: dict, user=Depends(get_mobile_
 
 
 @extension_router.get("/cs/messages")
-async def get_cs_messages(request: Request, since: str | None = None, user=Depends(get_mobile_user)):
+async def get_cs_messages(
+    request: Request, since: str | None = None, user=Depends(get_mobile_user)
+):
     """拉取小C/智能客服消息。"""
     if user is None:
         return JSONResponse(

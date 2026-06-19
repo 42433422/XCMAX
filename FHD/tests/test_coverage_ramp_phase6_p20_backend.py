@@ -43,20 +43,19 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.application.employee_runtime import config_v2_adapter as cfg_adapter
 from app.application import modstore_local_client as modstore_client
 from app.application import user_memory_vector_app_service as umv_service
+from app.application.employee_runtime import config_v2_adapter as cfg_adapter
 from app.application.user_memory_vector_app_service import (
+    UserMemoryRagApplicationService,
     UserMemoryVectorChunk,
     UserMemoryVectorIngestApplicationService,
-    UserMemoryRagApplicationService,
 )
 from app.db import validators as db_validators
 from app.neuro_bus.events.base import EventPriority, NeuroEvent
 from app.neuro_bus.transports import redis_pubsub as redis_pubsub_mod
 from app.services import finance_unified_archive as fin_archive
 from app.services import system_service as system_service_mod
-
 
 # ===========================================================================
 # Shared helpers / fixtures
@@ -1076,6 +1075,9 @@ class TestShipmentConfigApprovalRoute:
         assert r.json()["attendance_policy"] == {}
 
     def test_config_approval_post_success(self, shipment_client: TestClient):
+        from app.application.agent_orchestrator import InMemoryAgentRunRepository
+
+        repo = InMemoryAgentRunRepository()
         with (
             patch(
                 "resources.config.approval_config.get_approval_config"
@@ -1086,6 +1088,10 @@ class TestShipmentConfigApprovalRoute:
             patch(
                 "app.application.workflow.reload_approval_service"
             ) as mock_reload_svc,
+            patch(
+                "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
+                return_value=repo,
+            ),
         ):
             cfg = MagicMock()
             cfg.save = MagicMock()
@@ -1093,10 +1099,15 @@ class TestShipmentConfigApprovalRoute:
             mock_reload.return_value = cfg
             r = shipment_client.post(
                 "/api/ai/config/approval",
-                json={"enabled": False, "rules": [{"x": 1}]},
+                json={"enabled": False, "rules": [{"x": 1}], "user_id": "u-approval"},
             )
         assert r.status_code == 200
-        assert r.json()["success"] is True
+        body = r.json()
+        assert body["success"] is True
+        run = repo.get(body["run_id"])
+        assert run is not None
+        assert run.user_id == "u-approval"
+        assert run.intent == "approval_config_update"
         cfg.save.assert_called_once()
 
     def test_config_approval_post_with_attendance_policy(
@@ -1153,11 +1164,17 @@ class TestShipmentApprovalRequestRoute:
         assert r.status_code == 400
 
     def test_request_create_success(self, shipment_client: TestClient):
-        with patch(
-            "app.application.workflow.get_approval_service"
-        ) as mock_get, patch(
-            "app.application.workflow.WorkflowNode"
-        ) as mock_node_cls:
+        from app.application.agent_orchestrator import InMemoryAgentRunRepository
+
+        repo = InMemoryAgentRunRepository()
+        with (
+            patch("app.application.workflow.get_approval_service") as mock_get,
+            patch("app.application.workflow.WorkflowNode") as mock_node_cls,
+            patch(
+                "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
+                return_value=repo,
+            ),
+        ):
             svc = MagicMock()
             approval_req = SimpleNamespace(
                 request_id="r1",
@@ -1179,10 +1196,17 @@ class TestShipmentApprovalRequestRoute:
                     "tool_id": "t1",
                     "action": "a1",
                     "params": {"k": "v"},
+                    "user_id": "u-approval",
                 },
             )
         assert r.status_code == 200
-        assert r.json()["success"] is True
+        body = r.json()
+        assert body["success"] is True
+        run = repo.get(body["run_id"])
+        assert run is not None
+        assert run.user_id == "u-approval"
+        assert run.intent == "approval_request_create"
+        assert run.metadata["runtime_context"]["plan_id"] == "p1"
 
     def test_request_recoverable_error(self, shipment_client: TestClient):
         with patch(
@@ -1202,19 +1226,31 @@ class TestShipmentApprovalApproveRoute:
         assert r.status_code == 400
 
     def test_approve_by_request_id_success(self, shipment_client: TestClient):
-        with patch(
-            "app.application.workflow.get_approval_service"
-        ) as mock_get:
+        from app.application.agent_orchestrator import InMemoryAgentRunRepository
+
+        repo = InMemoryAgentRunRepository()
+        with (
+            patch("app.application.workflow.get_approval_service") as mock_get,
+            patch(
+                "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
+                return_value=repo,
+            ),
+        ):
             svc = MagicMock()
             svc.approve.return_value = True
             svc.get_pending_workflow.return_value = None
             mock_get.return_value = svc
             r = shipment_client.post(
                 "/api/ai/approval/approve",
-                json={"request_id": "r1", "comment": "ok"},
+                json={"request_id": "r1", "comment": "ok", "user_id": "u-approval"},
             )
         assert r.status_code == 200
-        assert r.json()["success"] is True
+        body = r.json()
+        assert body["success"] is True
+        run = repo.get(body["run_id"])
+        assert run is not None
+        assert run.intent == "approval_decision_approve"
+        assert run.metadata["runtime_context"]["request_id"] == "r1"
 
     def test_approve_by_plan_id_no_pending(self, shipment_client: TestClient):
         with patch(
@@ -1294,18 +1330,30 @@ class TestShipmentApprovalRejectRoute:
         assert r.status_code == 400
 
     def test_reject_by_request_id_success(self, shipment_client: TestClient):
-        with patch(
-            "app.application.workflow.get_approval_service"
-        ) as mock_get:
+        from app.application.agent_orchestrator import InMemoryAgentRunRepository
+
+        repo = InMemoryAgentRunRepository()
+        with (
+            patch("app.application.workflow.get_approval_service") as mock_get,
+            patch(
+                "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
+                return_value=repo,
+            ),
+        ):
             svc = MagicMock()
             svc.reject.return_value = True
             mock_get.return_value = svc
             r = shipment_client.post(
                 "/api/ai/approval/reject",
-                json={"request_id": "r1", "comment": "no"},
+                json={"request_id": "r1", "comment": "no", "user_id": "u-approval"},
             )
         assert r.status_code == 200
-        assert r.json()["data"]["status"] == "rejected"
+        body = r.json()
+        assert body["data"]["status"] == "rejected"
+        run = repo.get(body["run_id"])
+        assert run is not None
+        assert run.intent == "approval_decision_reject"
+        assert run.metadata["runtime_context"]["request_id"] == "r1"
 
     def test_reject_by_plan_id_no_pending(self, shipment_client: TestClient):
         with patch(

@@ -72,6 +72,17 @@ internal object AuthRoutingPolicy {
         } else {
             ServerMode.CLOUD
         }
+
+    fun preferredServerModeAfterLogin(
+        isEnterprise: Boolean,
+        configuredHost: String,
+        currentMode: String,
+    ): ServerMode {
+        if (isEnterprise && currentMode.trim().lowercase() == "cloud") {
+            return ServerMode.CLOUD
+        }
+        return preferredServerModeAfterLogin(isEnterprise, configuredHost)
+    }
 }
 
 @Singleton
@@ -98,6 +109,28 @@ class XcagiRepository @Inject constructor(
             sessionStore.setServerMode("cloud")
         }
         serverRouter.mode = if (mode == "cloud") ServerMode.CLOUD else ServerMode.LAN
+    }
+
+    /**
+     * Enterprise phones may keep an old LAN host after the user leaves Wi-Fi.
+     * When LAN is selected but unreachable, route product APIs through the
+     * configured enterprise relay base instead of retrying 192.168.x.x forever.
+     */
+    suspend fun preferCloudIfLanUnreachable(): Boolean {
+        syncRouterFromStore()
+        if (!ProductSkuConfig.isEnterprise) return false
+        if (sessionStore.serverModeFlow.first() == "cloud") return false
+        val host = sessionStore.fhdHostFlow.first()
+        if (host.isBlank()) {
+            sessionStore.setServerMode("cloud")
+            serverRouter.mode = ServerMode.CLOUD
+            return true
+        }
+        val reachable = checkHealth(host)
+        if (reachable) return false
+        sessionStore.setServerMode("cloud")
+        serverRouter.mode = ServerMode.CLOUD
+        return true
     }
 
     /** 未配置电脑时默认云端独立使用，跳过「必须先连电脑」引导。 */
@@ -515,6 +548,7 @@ class XcagiRepository @Inject constructor(
         return try {
             serverRouter.mode = ServerMode.CLOUD
             sessionStore.setServerMode("cloud")
+            sessionStore.setFhdHost("")
             val api = fhdForBase(relayBaseUrl)
             val r = api.relayConfirm(RelayConfirmBody(relay_id = cleanRelayId, code = cleanCode))
             if (!r.success) {
@@ -522,6 +556,7 @@ class XcagiRepository @Inject constructor(
             } else {
                 saveRelayAuthFromMap(r.data ?: emptyMap())
                 sessionStore.setRelayDesktopId(cleanRelayId)
+                sessionStore.setFhdHost("")
                 sessionStore.setSetupComplete(true)
                 Result.success("relay" to 0)
             }
@@ -541,6 +576,7 @@ class XcagiRepository @Inject constructor(
         return try {
             serverRouter.mode = ServerMode.CLOUD
             sessionStore.setServerMode("cloud")
+            sessionStore.setFhdHost("")
             val api = fhdForBase(relayBaseUrl)
             val r = api.relayConfirmCode(RelayConfirmCodeBody(code = cleanCode))
             if (!r.success) {
@@ -557,6 +593,7 @@ class XcagiRepository @Inject constructor(
                 } else {
                     saveRelayAuthFromMap(data)
                     sessionStore.setRelayDesktopId(relayId)
+                    sessionStore.setFhdHost("")
                     sessionStore.setSetupComplete(true)
                     Result.success("relay" to 0)
                 }
@@ -614,8 +651,10 @@ class XcagiRepository @Inject constructor(
         val hostWithPort = compactHostPort(host, port)
         sessionStore.setFhdHost(hostWithPort)
         sessionStore.setServerMode("lan")
+        sessionStore.setRelayDesktopId("")
         serverRouter.fhdHost = hostWithPort
         serverRouter.mode = ServerMode.LAN
+        saveRelayAuthFromMap(d)
         return Result.success(host to port)
     }
 
@@ -838,6 +877,7 @@ class XcagiRepository @Inject constructor(
         accountKind: String,
     ): Result<String> {
         syncRouterFromStore()
+        preferCloudIfLanUnreachable()
         unusablePhoneLanHostMessage()?.let { return Result.failure(Exception(it)) }
         return if (ProductSkuConfig.isEnterprise || isPcReachable()) {
             loginFhd(username, password, accountKind)
@@ -855,6 +895,7 @@ class XcagiRepository @Inject constructor(
         AuthRoutingPolicy.preferredServerModeAfterLogin(
             ProductSkuConfig.isEnterprise,
             sessionStore.fhdHostFlow.first(),
+            sessionStore.serverModeFlow.first(),
         )
 
     suspend fun streamChat(
@@ -882,6 +923,7 @@ class XcagiRepository @Inject constructor(
                 )
                 return
             }
+            preferCloudIfLanUnreachable()
         }
         sseChat.streamChat(
             message,
@@ -1059,8 +1101,13 @@ class XcagiRepository @Inject constructor(
 
     suspend fun loadModInfos(): Result<List<ModInfo>> = try {
         syncRouterFromStore()
+        preferCloudIfLanUnreachable()
         val body = if (isPcReachable()) {
-            fhd().modsList()
+            val res = fhd().mobileMods()
+            if (!res.success) {
+                throw Exception(res.message.ifBlank { "AI 员工同步失败" })
+            }
+            res.data ?: emptyMap()
         } else {
             val token = sessionStore.marketAccessToken().ifBlank { sessionStore.fhdAccessFlow.first() }
             val auth = if (token.isNotBlank()) "Bearer $token" else null
@@ -1077,6 +1124,7 @@ class XcagiRepository @Inject constructor(
 
     suspend fun loadAdminMobileHome(): Result<AdminMobileHomeData> = try {
         syncRouterFromStore()
+        preferCloudIfLanUnreachable()
         val res = fhd().mobileAdminHome()
         if (!res.success) {
             Result.failure(Exception(res.message.ifBlank { "管理端移动数据加载失败" }))
@@ -1092,6 +1140,7 @@ class XcagiRepository @Inject constructor(
 
     suspend fun fetchHome(): Result<Map<String, Any?>> = try {
         syncRouterFromStore()
+        preferCloudIfLanUnreachable()
         val res = fhd().mobileHome()
         if (!res.success) Result.failure(Exception(res.message ?: "加载失败"))
         else Result.success(res.data ?: emptyMap())
@@ -1212,6 +1261,7 @@ class XcagiRepository @Inject constructor(
         loader: suspend () -> Map<String, Any?>?,
     ): Result<List<ListItem>> = try {
         syncRouterFromStore()
+        preferCloudIfLanUnreachable()
         val data = loader() ?: emptyMap()
         val items = (data["items"] as? List<*>) ?: emptyList<Any>()
         Result.success(items.mapNotNull { row ->

@@ -82,6 +82,7 @@ def list_model_payment_facade_registry() -> dict[str, Any]:
         "POST /model-payment/notify/alipay",
         "GET /model-payment/diagnostics",
         "GET /model-payment/entitlements",
+        "GET /model-payment/usage",
         "GET /model-payment/query/{out_trade_no}",
         "POST /model-payment/refund",
         "POST /model-payment/close",

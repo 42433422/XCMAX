@@ -1,6 +1,7 @@
 import { primeCsrfCookie } from '@/api/core'
 import { EXCEL_FULL_READ_EMPLOYEE_ID, WORD_FULL_READ_EMPLOYEE_ID } from '@/constants/officeEmployeePack'
 import type { ExcelAnalysisResult, ExcelFieldInfo, ExcelSheetDetail } from '@/types/excel'
+import type { JsonValue } from '@/types/json'
 import { apiFetch } from '@/utils/apiBase'
 import { resolveOfficeInstalledPackIds } from '@/utils/officeToolDeskRows'
 import { fetchEmployeePlannerStatus } from '@/utils/platformShellApi'
@@ -162,6 +163,28 @@ function workbookPayloadFromEmployeeData(data: Record<string, unknown>): Record<
   return data
 }
 
+function toExcelCellValue(value: unknown): JsonValue {
+  if (
+    value === null ||
+    typeof value === 'string' ||
+    typeof value === 'number' ||
+    typeof value === 'boolean'
+  ) {
+    return value
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => toExcelCellValue(item))
+  }
+  if (value && typeof value === 'object') {
+    const out: Record<string, JsonValue> = {}
+    for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
+      out[key] = toExcelCellValue(nested)
+    }
+    return out
+  }
+  return value == null ? null : String(value)
+}
+
 export function mapOfficeExcelReadToAnalysisResult(
   upload: OfficeFileUploadResult,
   employeeData: Record<string, unknown>,
@@ -176,7 +199,10 @@ export function mapOfficeExcelReadToAnalysisResult(
       .map((name) => ({ name, label: name, type: 'dynamic' }))
     const sample_rows = asArray<Record<string, unknown>>(sheet.rows).map((row) => {
       const cells = asRecord(row.cells)
-      return Object.keys(cells).length ? cells : row
+      const source = Object.keys(cells).length ? cells : row
+      return Object.fromEntries(
+        Object.entries(source).map(([key, value]) => [key, toExcelCellValue(value)]),
+      )
     })
     const gridRows = [
       fields.map((f) => f.label || f.name || ''),
@@ -199,7 +225,7 @@ export function mapOfficeExcelReadToAnalysisResult(
   })
   const first = sheetDetails[0]
   return {
-    fields: first?.fields,
+    fields: first?.fields?.map((field) => String(field.label || field.name || '')).filter(Boolean),
     sheets: sheetDetails,
     preview_data: {
       sheet_name: first?.sheet_name,

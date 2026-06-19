@@ -1159,6 +1159,69 @@ def test_run_cognition_failed_returns_cognition_failed_result() -> None:
     assert out["result"]["cognition_error"] == "llm timeout"
 
 
+def test_run_interactive_chat_cognition_failed_returns_degraded_reply() -> None:
+    agent = EmployeeAgent("emp-1")
+    pack = {
+        "pack_id": "emp-1",
+        "version": "1.0.0",
+        "manifest": {"name": "变更评审员"},
+        "pack_dir": "/tmp/emp-1",
+    }
+    gate = {"ok": True, "risk_level": "low", "reason": "low"}
+    reasoning_err = {"reasoning": "", "error": "llm timeout", "input": {}}
+    with (
+        patch(
+            "app.application.employee_runtime.agent.load_employee_pack_from_disk",
+            return_value=pack,
+        ),
+        patch(
+            "app.application.employee_runtime.agent.parse_employee_config_v2",
+            return_value={},
+        ),
+        patch("app.application.employee_runtime.agent._ex._normalize_actions_cfg", return_value={}),
+        patch(
+            "app.application.employee_runtime.agent._ex._handler_list",
+            return_value=["echo"],
+        ),
+        patch(
+            "app.application.employee_runtime.agent.gate_action_or_block",
+            return_value=gate,
+        ),
+        patch("app.application.employee_runtime.agent.MemoryScope.from_config") as mock_scope_cls,
+        patch("app.application.employee_runtime.agent.EmployeeMemoryManager") as mock_mm_cls,
+        patch("app.application.employee_runtime.agent.build_employee_context"),
+        patch.object(EmployeeAgent, "_perceive", return_value={"normalized_input": {}}),
+        patch(
+            "app.application.employee_runtime.agent._ex._memory_light",
+            return_value={"session": {}},
+        ),
+        patch(
+            "app.application.employee_runtime.agent._ex._cognition_fhd",
+            return_value=reasoning_err,
+        ),
+        patch("app.application.employee_runtime.agent._ex._actions_fhd") as mock_actions,
+        patch("app.application.employee_runtime.metrics.record_employee_run") as mock_record,
+    ):
+        mock_scope = MagicMock()
+        mock_scope_cls.return_value = mock_scope
+        mock_mm = MagicMock()
+        mock_mm_cls.return_value = mock_mm
+        mock_mm.recall.return_value = MemoryContext()
+
+        out = agent.run(
+            "你好",
+            input_data={"source": "admin_im", "invoke_mode": "interactive_chat"},
+        )
+    assert out["success"] is True
+    assert out["degraded"] is True
+    assert out["result"]["summary"] == "interactive chat fallback"
+    assert out["result"]["cognition_error"] == "llm timeout"
+    assert out["result"]["outputs"][0]["handler"] == "interactive_chat_fallback"
+    assert "变更评审员" in out["result"]["outputs"][0]["output"]
+    mock_actions.assert_not_called()
+    mock_record.assert_called_once_with("emp-1", success=True)
+
+
 # ---------------------------------------------------------------------------
 # EmployeeAgent — run (full success path with agent handler)
 # ---------------------------------------------------------------------------

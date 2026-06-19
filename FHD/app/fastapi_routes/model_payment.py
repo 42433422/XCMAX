@@ -364,6 +364,33 @@ def entitlements():
     )
 
 
+@router.get("/usage")
+def usage(limit: int = 50, run_id: str = "", user_id: str = ""):
+    """AI 用量账本：AgentRun/XCauto/工具/员工成本审计与钱包扣费对账入口。"""
+    from app.infrastructure.billing.model_usage import (
+        get_model_wallet,
+        list_model_usage_entries,
+        model_usage_ledger_path,
+        model_usage_wallet_backend,
+    )
+
+    items = list_model_usage_entries(limit=limit, run_id=run_id, user_id=user_id)
+    wallet = get_model_wallet(user_id) if user_id else None
+    return JSONResponse(
+        {
+            "success": True,
+            "data": {
+                "entries": items,
+                "count": len(items),
+                "wallet": wallet,
+                "wallet_backend": model_usage_wallet_backend(),
+                "ledger_path": str(model_usage_ledger_path()),
+                "backend": model_payment_backend(),
+            },
+        }
+    )
+
+
 @router.get("/query/{out_trade_no}")
 def query_trade(out_trade_no: str):
     """alipay.trade.query：查询交易状态。同时返回本地订单快照。"""

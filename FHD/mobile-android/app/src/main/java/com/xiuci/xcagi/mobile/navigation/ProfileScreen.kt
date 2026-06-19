@@ -83,8 +83,8 @@ fun ProfileScreen(
 ) {
     val displayName by vm.displayName.collectAsState()
     val accountKindLabel by vm.accountKindLabel.collectAsState()
+    val serverModeLabel by vm.serverModeLabel.collectAsState()
     val avatarUri by vm.avatarUri.collectAsState()
-    val fhdHost by vm.fhdHost.collectAsState()
     val hub by vm.homeHub.collectAsState()
     val appConfig by vm.appConfig.collectAsState()
     var showDelete by remember { mutableStateOf(false) }
@@ -161,14 +161,12 @@ fun ProfileScreen(
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
-                            if (fhdHost.isNotBlank()) {
-                                Spacer(Modifier.height(2.dp))
-                                Text(
-                                    fhdHost,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
+                            Spacer(Modifier.height(2.dp))
+                            Text(
+                                serverModeLabel,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                             Spacer(Modifier.height(Spacing.sm))
                             Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
                                 StatusPill(
@@ -195,7 +193,7 @@ fun ProfileScreen(
                 WeCellGroup {
                     WeCell(
                         title = "扫码绑定",
-                        subtitle = "绑定企业端、管理端或电脑端登录",
+                        subtitle = "绑定服务器后台、企业工作台或电脑执行端",
                         icon = Icons.Default.QrCode2,
                         iconTint = MaterialTheme.colorScheme.secondary,
                         iconBg = MaterialTheme.colorScheme.secondaryContainer,
@@ -204,7 +202,7 @@ fun ProfileScreen(
                     )
                     WeCell(
                         title = "服务",
-                        subtitle = accountKindLabel,
+                        subtitle = serverModeLabel,
                         icon = Icons.Default.Verified,
                         iconTint = MaterialTheme.colorScheme.secondary,
                         iconBg = MaterialTheme.colorScheme.secondaryContainer,

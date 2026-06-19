@@ -3,6 +3,7 @@ package com.xiuci.xcagi.mobile.di
 import com.google.gson.Gson
 import com.xiuci.xcagi.mobile.core.datastore.SessionStore
 import com.xiuci.xcagi.mobile.core.network.AuthInterceptor
+import com.xiuci.xcagi.mobile.core.network.MobileCookieJar
 import com.xiuci.xcagi.mobile.core.network.ServerRouter
 import dagger.Module
 import dagger.Provides
@@ -27,11 +28,15 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideOkHttp(authInterceptor: AuthInterceptor): OkHttpClient {
+    fun provideOkHttp(
+        authInterceptor: AuthInterceptor,
+        cookieJar: MobileCookieJar,
+    ): OkHttpClient {
         val log = HttpLoggingInterceptor().apply {
             level = HttpLoggingInterceptor.Level.BASIC
         }
         return OkHttpClient.Builder()
+            .cookieJar(cookieJar)
             .addInterceptor(authInterceptor)
             .addInterceptor(log)
             .connectTimeout(12, TimeUnit.SECONDS)

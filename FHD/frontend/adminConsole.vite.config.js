@@ -66,6 +66,7 @@ const adminModuleAliases = [
 function buildDevProxy(apiBase) {
   return {
     '/api': { target: apiBase, changeOrigin: true },
+    '/ws': { target: apiBase, changeOrigin: true, ws: true },
     '/health': { target: apiBase, changeOrigin: true },
     '/xcmax-dashboard': { target: apiBase, changeOrigin: true },
   }

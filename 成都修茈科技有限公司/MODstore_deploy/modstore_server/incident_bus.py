@@ -161,6 +161,43 @@ def publish(
     return True
 
 
+def publish_unified_incident(
+    *,
+    scope: str,
+    summary: str,
+    source: str,
+    event_type: str = "on_error",
+    payload: Dict[str, Any] | None = None,
+    priority: int | None = None,
+    fingerprint: str | None = None,
+) -> bool:
+    """Standard cross-repo incident entrypoint.
+
+    FHD, MODstore and the public website should all publish here instead of
+    creating separate loops. The payload keeps scope/priority so the employee
+    task market can arbitrate one shared queue.
+    """
+
+    normalized_scope = (scope or "global").strip().lower() or "global"
+    body = dict(payload or {})
+    body.update(
+        {
+            "priority": priority,
+            "scope": normalized_scope,
+            "summary": str(summary or body.get("summary") or "")[:1000],
+            "unified_incident_bus": True,
+        }
+    )
+    if body.get("priority") is None:
+        body.pop("priority", None)
+    return publish(
+        event_type,
+        body,
+        source=(source or normalized_scope or "unified_incident")[:64],
+        fingerprint=fingerprint,
+    )
+
+
 def _admin_user_id() -> int:
     sf = get_session_factory()
     with sf() as session:
@@ -203,6 +240,96 @@ def _incident_employee_input(
 
 
 def _dispatch_incident(event_id: int) -> None:
+    try:
+        from modstore_server.node_coordinator import claim_incident_for_node
+
+        claim = claim_incident_for_node(event_id)
+        if not claim.get("claimed"):
+            logger.info(
+                "incident_bus: event_id=%s already claimed by node=%s",
+                event_id,
+                claim.get("owner"),
+            )
+            return
+    except Exception:
+        logger.debug("incident cluster claim skipped event_id=%s", event_id, exc_info=True)
+
+    if (os.environ.get("MODSTORE_UNIFIED_ORCHESTRATOR_ENABLED", "1") or "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }:
+        try:
+            from modstore_server.unified_autonomy_orchestrator import orchestrate_incident
+
+            orchestration = orchestrate_incident(event_id)
+            if not orchestration.get("should_dispatch", True):
+                logger.info(
+                    "incident_bus: unified orchestrator parked event_id=%s reason=%s",
+                    event_id,
+                    orchestration.get("reason"),
+                )
+                return
+        except Exception:
+            logger.exception("unified incident orchestrator failed event_id=%s; fallback dispatch", event_id)
+
+    if (os.environ.get("MODSTORE_INCIDENT_TEAM_ENABLED", "1") or "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }:
+        try:
+            from modstore_server.incident_team_orchestrator import dispatch_incident_team
+
+            team = dispatch_incident_team(event_id)
+            if team.get("claimed"):
+                logger.info(
+                    "incident_bus: team claimed event_id=%s ok=%s team=%s",
+                    event_id,
+                    team.get("ok"),
+                    (team.get("team") or {}).get("team")
+                    if isinstance(team.get("team"), dict)
+                    else None,
+                )
+                return
+            logger.info(
+                "incident_bus: team did not claim event_id=%s reason=%s; fallback market",
+                event_id,
+                team.get("reason"),
+            )
+        except Exception:
+            logger.exception("incident team failed event_id=%s; fallback market", event_id)
+
+    if (os.environ.get("MODSTORE_EMPLOYEE_TASK_MARKET_ENABLED", "1") or "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }:
+        try:
+            from modstore_server.employee_task_market import dispatch_incident_via_market
+
+            market = dispatch_incident_via_market(event_id)
+            if market.get("ok") and market.get("claimed"):
+                logger.info(
+                    "incident_bus: market claimed event_id=%s employee=%s score=%s",
+                    event_id,
+                    market.get("employee_id"),
+                    (market.get("winner") or {}).get("score")
+                    if isinstance(market.get("winner"), dict)
+                    else None,
+                )
+                return
+            logger.info(
+                "incident_bus: market did not claim event_id=%s reason=%s; fallback binding dispatch",
+                event_id,
+                market.get("reason"),
+            )
+        except Exception:
+            logger.exception("incident task market failed event_id=%s; fallback binding dispatch", event_id)
+
     sf = get_session_factory()
     admin_id = _admin_user_id()
     if admin_id <= 0:

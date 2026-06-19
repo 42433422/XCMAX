@@ -51,6 +51,17 @@
             <li v-for="(nr, nIdx) in msg.nodeResults" :key="nIdx">
               <span :class="['trace-status', nr.success ? 'ok' : 'fail']">{{ nr.success ? $t('chat.success') : $t('chat.failed') }}</span>
               <span>{{ nr.node_id }} · {{ nr.tool_id }}.{{ nr.action }}</span>
+              <span v-if="nr.retries || nr.duration_ms" class="trace-node-meta">
+                <template v-if="nr.retries">重试 {{ nr.retries }} 次</template>
+                <template v-if="nr.retries && nr.duration_ms"> · </template>
+                <template v-if="nr.duration_ms">{{ nr.duration_ms }}ms</template>
+              </span>
+              <span v-if="nr.error || nr.message" class="trace-node-error">
+                {{ nr.error || nr.message }}
+              </span>
+              <span v-if="nr.recovery_hint" class="trace-node-hint">
+                恢复建议：{{ nr.recovery_hint }}
+              </span>
             </li>
           </ul>
         </div>
@@ -117,7 +128,6 @@ const messagesHostRef = ref<HTMLElement | null>(null)
 watch(messagesHostRef, (el) => {
   const bag = props.chatMessagesRef
   if (!bag) return
-  // eslint-disable-next-line vue/no-mutating-props -- 父级 composable 传入 Ref 以挂载滚动宿主
   bag.value = el
 }, { immediate: true })
 </script>

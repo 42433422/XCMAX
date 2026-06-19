@@ -14,8 +14,9 @@ import hashlib
 import json
 import logging
 import os
+import uuid
 from collections import defaultdict
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, fields
 from datetime import datetime
 from typing import Any
 
@@ -31,6 +32,33 @@ JSON_MEMORY_PATH = os.path.join(MEMORY_DIR, "memory_store.json")
 MAX_FEEDBACK_HISTORY = 100
 MAX_FREQUENT_ACTIONS = 20
 MAX_CONTEXT_SUMMARIES = 10
+MAX_MEMORY_V2_RECORDS = 200
+
+MEMORY_V2_TYPES = {"preference", "entity", "episodic"}
+MEMORY_V2_STATUSES = {"pending", "active", "rejected", "deleted"}
+MEMORY_V2_TRUSTED_SOURCES = {
+    "agent_eval",
+    "memory_v2_api",
+    "settings_ui",
+    "user_correction",
+    "user_explicit",
+}
+MEMORY_V2_OBSERVED_SOURCES = {
+    "agent_observation",
+    "chat_trace",
+    "excel_artifact",
+    "file_analysis",
+    "ocr_artifact",
+    "tool_observation",
+    "workflow_observation",
+}
+MEMORY_V2_BLOCKED_SOURCES = {
+    "llm_guess",
+    "llm_inference_only",
+    "prompt_injection",
+    "system_prompt",
+    "unsafe_import",
+}
 
 
 @dataclass
@@ -90,6 +118,7 @@ class UserMemory:
     frequent_actions: list[dict[str, Any]] = field(default_factory=list)
     historical_contexts: list[dict[str, Any]] = field(default_factory=list)
     feedback_history: list[dict[str, Any]] = field(default_factory=list)
+    memory_v2_records: list[dict[str, Any]] = field(default_factory=list)
     updated_at: str = field(default_factory=lambda: datetime.now().isoformat())
 
     def to_dict(self) -> dict[str, Any]:
@@ -97,7 +126,8 @@ class UserMemory:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "UserMemory":
-        return cls(**data)
+        allowed = {f.name for f in fields(cls)}
+        return cls(**{k: v for k, v in data.items() if k in allowed})
 
 
 class UserMemoryStore:
@@ -243,6 +273,401 @@ class UserMemoryService(NeuroEventPublisherMixin):
         if memory:
             return {k: v.get("value") for k, v in memory.preferences.items()}
         return {}
+
+    def _normalize_memory_v2_type(self, memory_type: str) -> str:
+        normalized = str(memory_type or "").strip().lower()
+        aliases = {
+            "pref": "preference",
+            "preference_memory": "preference",
+            "entity_memory": "entity",
+            "episodic_memory": "episodic",
+            "task": "episodic",
+        }
+        normalized = aliases.get(normalized, normalized)
+        if normalized not in MEMORY_V2_TYPES:
+            raise ValueError(f"unsupported memory_type: {memory_type}")
+        return normalized
+
+    def _normalize_memory_v2_status(self, status: str) -> str:
+        normalized = str(status or "").strip().lower()
+        if normalized not in MEMORY_V2_STATUSES:
+            raise ValueError(f"unsupported memory status: {status}")
+        return normalized
+
+    def _memory_v2_fingerprint(self, memory_type: str, key: str, value: Any) -> str:
+        raw = json.dumps(
+            {"memory_type": memory_type, "key": key, "value": value},
+            ensure_ascii=False,
+            sort_keys=True,
+            default=str,
+        )
+        return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
+
+    def _govern_memory_v2_candidate(
+        self,
+        *,
+        source: str,
+        confidence: float,
+        evidence: list[dict[str, Any]] | None,
+    ) -> dict[str, Any]:
+        normalized_source = str(source or "agent_observation").strip().lower()
+        normalized_source = normalized_source.replace(" ", "_")[:80] or "agent_observation"
+        flags: list[str] = []
+        source_policy = "requires_confirmation"
+        source_trust = "observed"
+        try:
+            effective_confidence = max(0.0, min(1.0, float(confidence)))
+        except (TypeError, ValueError):
+            effective_confidence = 0.5
+            flags.append("invalid_confidence_defaulted")
+
+        evidence_items = [
+            dict(item) for item in list(evidence or []) if isinstance(item, dict) and item
+        ][:10]
+        evidence_required = False
+        if normalized_source in MEMORY_V2_BLOCKED_SOURCES:
+            source_policy = "blocked"
+            source_trust = "blocked"
+            flags.append("blocked_source")
+            effective_confidence = min(effective_confidence, 0.0)
+        elif normalized_source in MEMORY_V2_TRUSTED_SOURCES:
+            source_policy = "trusted_pending"
+            source_trust = "trusted_user"
+        elif normalized_source in MEMORY_V2_OBSERVED_SOURCES:
+            source_policy = "observed_pending"
+            source_trust = "observed"
+            evidence_required = True
+        else:
+            source_policy = "needs_evidence"
+            source_trust = "unverified"
+            evidence_required = True
+            flags.append("unknown_source")
+
+        if evidence_required and not evidence_items:
+            flags.append("missing_evidence")
+            effective_confidence = min(effective_confidence, 0.35)
+
+        return {
+            "source": normalized_source,
+            "source_policy": source_policy,
+            "source_trust": source_trust,
+            "source_evidence_required": evidence_required,
+            "requires_user_confirmation": True,
+            "auto_confirm_allowed": False,
+            "eligible_for_planner": False,
+            "governance_flags": flags,
+            "confidence": effective_confidence,
+            "evidence": evidence_items,
+        }
+
+    def _find_memory_v2_record(
+        self, memory: UserMemory, memory_id: str
+    ) -> tuple[int, dict[str, Any] | None]:
+        for idx, record in enumerate(memory.memory_v2_records):
+            if str(record.get("memory_id") or "") == str(memory_id or ""):
+                return idx, record
+        return -1, None
+
+    def propose_memory_candidate(
+        self,
+        user_id: str,
+        memory_type: str,
+        key: str,
+        value: Any,
+        *,
+        source: str = "agent_observation",
+        confidence: float = 0.5,
+        evidence: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        """写入待确认记忆候选，不直接污染 planner 可用记忆。"""
+        normalized_type = self._normalize_memory_v2_type(memory_type)
+        normalized_key = str(key or "").strip()
+        if not user_id:
+            return {"success": False, "message": "缺少 user_id"}
+        if not normalized_key:
+            return {"success": False, "message": "缺少 memory key"}
+
+        governance = self._govern_memory_v2_candidate(
+            source=source,
+            confidence=confidence,
+            evidence=evidence,
+        )
+        memory = self._store.get_memory(user_id) or UserMemory(user_id=user_id)
+        fingerprint = self._memory_v2_fingerprint(normalized_type, normalized_key, value)
+        for record in memory.memory_v2_records:
+            if record.get("fingerprint") == fingerprint and record.get("status") in {
+                "pending",
+                "active",
+                "rejected",
+            }:
+                return {"success": True, "created": False, "candidate": dict(record)}
+
+        now = datetime.now().isoformat()
+        candidate = {
+            "memory_id": f"mem_{uuid.uuid4().hex[:12]}",
+            "memory_type": normalized_type,
+            "key": normalized_key,
+            "value": value,
+            "status": "rejected" if governance["source_policy"] == "blocked" else "pending",
+            "confidence": governance["confidence"],
+            "source": governance["source"],
+            "source_policy": governance["source_policy"],
+            "source_trust": governance["source_trust"],
+            "source_evidence_required": governance["source_evidence_required"],
+            "requires_user_confirmation": governance["requires_user_confirmation"],
+            "auto_confirm_allowed": governance["auto_confirm_allowed"],
+            "eligible_for_planner": governance["eligible_for_planner"],
+            "governance_flags": governance["governance_flags"],
+            "evidence": governance["evidence"],
+            "fingerprint": fingerprint,
+            "created_at": now,
+            "updated_at": now,
+        }
+        if candidate["status"] == "rejected":
+            candidate["rejected_at"] = now
+            candidate["rejected_reason"] = "source_policy_blocked"
+        memory.memory_v2_records.insert(0, candidate)
+        memory.memory_v2_records = memory.memory_v2_records[:MAX_MEMORY_V2_RECORDS]
+        self._store.save_memory(user_id, memory)
+        return {"success": True, "created": True, "candidate": dict(candidate)}
+
+    def confirm_memory_candidate(
+        self,
+        user_id: str,
+        memory_id: str,
+        *,
+        correction: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """确认候选记忆，确认后才进入 active 状态并可被 planner 使用。"""
+        memory = self._store.get_memory(user_id)
+        if memory is None:
+            return {"success": False, "message": "用户记忆不存在"}
+        idx, record = self._find_memory_v2_record(memory, memory_id)
+        if record is None:
+            return {"success": False, "message": "记忆不存在"}
+        if record.get("status") == "deleted":
+            return {"success": False, "message": "记忆已删除"}
+        if record.get("status") == "rejected":
+            return {"success": False, "message": "记忆已拒绝，不能确认"}
+        if record.get("source_policy") == "blocked":
+            return {"success": False, "message": "记忆来源被策略阻断"}
+
+        updated = dict(record)
+        patch = dict(correction or {})
+        if patch:
+            if "memory_type" in patch:
+                updated["memory_type"] = self._normalize_memory_v2_type(str(patch["memory_type"]))
+            if "key" in patch:
+                updated["key"] = str(patch["key"] or "").strip()
+            if "value" in patch:
+                updated["value"] = patch["value"]
+            if "confidence" in patch:
+                updated["confidence"] = max(0.0, min(1.0, float(patch["confidence"])))
+            updated["correction_count"] = int(updated.get("correction_count") or 0) + 1
+
+        if not str(updated.get("key") or "").strip():
+            return {"success": False, "message": "缺少 memory key"}
+
+        now = datetime.now().isoformat()
+        updated["status"] = "active"
+        updated["confirmed_at"] = now
+        updated["updated_at"] = now
+        updated["eligible_for_planner"] = True
+        updated["fingerprint"] = self._memory_v2_fingerprint(
+            str(updated["memory_type"]), str(updated["key"]), updated.get("value")
+        )
+        memory.memory_v2_records[idx] = updated
+
+        if updated["memory_type"] == "preference":
+            key = str(updated["key"])
+            memory.preferences[key] = {
+                "value": updated.get("value"),
+                "updated_at": now,
+                "count": memory.preferences.get(key, {}).get("count", 0) + 1,
+                "source": "memory_v2",
+                "memory_id": updated["memory_id"],
+            }
+
+        self._store.save_memory(user_id, memory)
+        return {"success": True, "memory": dict(updated)}
+
+    def reject_memory_candidate(
+        self, user_id: str, memory_id: str, *, reason: str = ""
+    ) -> dict[str, Any]:
+        return self._set_memory_v2_status(user_id, memory_id, "rejected", reason=reason)
+
+    def delete_memory(self, user_id: str, memory_id: str, *, reason: str = "") -> dict[str, Any]:
+        return self._set_memory_v2_status(user_id, memory_id, "deleted", reason=reason)
+
+    def _set_memory_v2_status(
+        self, user_id: str, memory_id: str, status: str, *, reason: str = ""
+    ) -> dict[str, Any]:
+        normalized_status = self._normalize_memory_v2_status(status)
+        memory = self._store.get_memory(user_id)
+        if memory is None:
+            return {"success": False, "message": "用户记忆不存在"}
+        idx, record = self._find_memory_v2_record(memory, memory_id)
+        if record is None:
+            return {"success": False, "message": "记忆不存在"}
+
+        updated = dict(record)
+        now = datetime.now().isoformat()
+        updated["status"] = normalized_status
+        updated["updated_at"] = now
+        if reason:
+            updated[f"{normalized_status}_reason"] = reason
+        if normalized_status == "deleted":
+            updated["deleted_at"] = now
+        if normalized_status == "rejected":
+            updated["rejected_at"] = now
+        memory.memory_v2_records[idx] = updated
+        if (
+            normalized_status in {"deleted", "rejected"}
+            and record.get("memory_type") == "preference"
+        ):
+            pref_key = str(record.get("key") or "").strip()
+            previous_pref = memory.preferences.get(pref_key)
+            if isinstance(previous_pref, dict) and previous_pref.get("memory_id") == record.get(
+                "memory_id"
+            ):
+                memory.preferences.pop(pref_key, None)
+        self._store.save_memory(user_id, memory)
+        return {"success": True, "memory": dict(updated)}
+
+    def correct_memory(
+        self,
+        user_id: str,
+        memory_id: str,
+        *,
+        value: Any | None = None,
+        key: str | None = None,
+        reason: str = "",
+    ) -> dict[str, Any]:
+        """纠正 active/pending 记忆，保留同一个 memory_id 便于审计。"""
+        memory = self._store.get_memory(user_id)
+        if memory is None:
+            return {"success": False, "message": "用户记忆不存在"}
+        idx, record = self._find_memory_v2_record(memory, memory_id)
+        if record is None:
+            return {"success": False, "message": "记忆不存在"}
+        if record.get("status") == "deleted":
+            return {"success": False, "message": "记忆已删除"}
+
+        updated = dict(record)
+        previous_key = str(record.get("key") or "").strip()
+        if key is not None:
+            updated["key"] = str(key or "").strip()
+        if value is not None:
+            updated["value"] = value
+        if not str(updated.get("key") or "").strip():
+            return {"success": False, "message": "缺少 memory key"}
+
+        now = datetime.now().isoformat()
+        updated["updated_at"] = now
+        updated["last_correction_reason"] = reason
+        updated["correction_count"] = int(updated.get("correction_count") or 0) + 1
+        updated["fingerprint"] = self._memory_v2_fingerprint(
+            str(updated["memory_type"]), str(updated["key"]), updated.get("value")
+        )
+        memory.memory_v2_records[idx] = updated
+
+        if updated.get("status") == "active" and updated.get("memory_type") == "preference":
+            if previous_key and previous_key != str(updated["key"]):
+                previous_pref = memory.preferences.get(previous_key)
+                if (
+                    isinstance(previous_pref, dict)
+                    and previous_pref.get("memory_id") == updated["memory_id"]
+                ):
+                    memory.preferences.pop(previous_key, None)
+            pref_key = str(updated["key"])
+            memory.preferences[pref_key] = {
+                "value": updated.get("value"),
+                "updated_at": now,
+                "count": memory.preferences.get(pref_key, {}).get("count", 0) + 1,
+                "source": "memory_v2",
+                "memory_id": updated["memory_id"],
+            }
+
+        self._store.save_memory(user_id, memory)
+        return {"success": True, "memory": dict(updated)}
+
+    def list_memories(
+        self,
+        user_id: str,
+        *,
+        status: str | None = None,
+        memory_type: str | None = None,
+    ) -> list[dict[str, Any]]:
+        memory = self._store.get_memory(user_id)
+        if memory is None:
+            return []
+        normalized_status = self._normalize_memory_v2_status(status) if status else None
+        normalized_type = self._normalize_memory_v2_type(memory_type) if memory_type else None
+        records = []
+        for record in memory.memory_v2_records:
+            if normalized_status and record.get("status") != normalized_status:
+                continue
+            if normalized_type and record.get("memory_type") != normalized_type:
+                continue
+            records.append(dict(record))
+        return records
+
+    def get_memory_v2_summary(self, user_id: str) -> dict[str, Any]:
+        memory = self._store.get_memory(user_id)
+        if memory is None:
+            return {"total": 0, "by_status": {}, "by_type": {}}
+        by_status: object = defaultdict(int)
+        by_type: object = defaultdict(int)
+        by_source_policy: object = defaultdict(int)
+        for record in memory.memory_v2_records:
+            by_status[str(record.get("status") or "unknown")] += 1
+            by_type[str(record.get("memory_type") or "unknown")] += 1
+            by_source_policy[str(record.get("source_policy") or "unknown")] += 1
+        return {
+            "total": len(memory.memory_v2_records),
+            "by_status": dict(by_status),
+            "by_type": dict(by_type),
+            "by_source_policy": dict(by_source_policy),
+        }
+
+    def format_memory_v2_for_prompt(
+        self,
+        user_id: str,
+        *,
+        max_items: int = 6,
+        memory_type: str | None = None,
+    ) -> str:
+        """Format confirmed Memory v2 records as compact planner context."""
+        active = [
+            record
+            for record in self.list_memories(user_id, status="active", memory_type=memory_type)
+            if record.get("source_policy") != "blocked"
+            and record.get("eligible_for_planner", True) is not False
+        ]
+        if not active:
+            return "【MemoryV2】无已确认记忆。"
+
+        type_order = {"preference": 0, "entity": 1, "episodic": 2}
+        active.sort(
+            key=lambda item: (
+                type_order.get(str(item.get("memory_type") or ""), 99),
+                str(item.get("updated_at") or ""),
+            ),
+            reverse=False,
+        )
+        lines = ["【MemoryV2】已确认记忆（仅供 planner 补全偏好/实体/任务上下文，不得编造）:"]
+        for idx, record in enumerate(active[: max(1, int(max_items))], start=1):
+            memory_kind = str(record.get("memory_type") or "unknown")
+            key = str(record.get("key") or "-")
+            value = json.dumps(record.get("value"), ensure_ascii=False, default=str)
+            confidence = float(record.get("confidence") or 0.0)
+            source = str(record.get("source") or "-")
+            updated_at = str(record.get("updated_at") or "-")
+            lines.append(
+                f"{idx}. type={memory_kind}; key={key}; value={value}; "
+                f"confidence={confidence:.2f}; source={source}; updated_at={updated_at}"
+            )
+        return "\n".join(lines)
 
     def record_action(
         self, user_id: str, intent: str, slots: dict[str, Any], message: str = ""
@@ -600,6 +1025,13 @@ class UserMemoryService(NeuroEventPublisherMixin):
             "preference_count": len(memory.preferences),
             "action_count": len(memory.frequent_actions),
             "feedback_count": len(memory.feedback_history),
+            "memory_v2_count": len(memory.memory_v2_records),
+            "memory_v2_pending_count": len(
+                [m for m in memory.memory_v2_records if m.get("status") == "pending"]
+            ),
+            "memory_v2_active_count": len(
+                [m for m in memory.memory_v2_records if m.get("status") == "active"]
+            ),
             "last_updated": memory.updated_at,
             "top_intents": [a.get("intent") for a in memory.frequent_actions[:3]],
         }
@@ -621,6 +1053,7 @@ def reset_user_memory_service() -> None:
     global _user_memory_service
     _user_memory_service = None
     UserMemoryService._instance = None
+    UserMemoryStore._instance = None
 
 
 # NEURO-DDD: 为 Services 层类添加 instrumentation

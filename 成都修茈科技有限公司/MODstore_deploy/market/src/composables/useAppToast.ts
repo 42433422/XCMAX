@@ -15,7 +15,8 @@ export function showAppToast(message: string, opts?: { variant?: AppToastVariant
   const id = nextId++
   const variant = opts?.variant ?? 'info'
   const durationMs = opts?.durationMs ?? (variant === 'error' ? 6000 : 4000)
-  toasts.value = [...toasts.value, { id, message: String(message || '').trim(), variant }]
+  const currentToasts = Array.isArray(toasts.value) ? toasts.value : []
+  toasts.value = [...currentToasts, { id, message: String(message || '').trim(), variant }]
   if (durationMs > 0) {
     window.setTimeout(() => dismissAppToast(id), durationMs)
   }
@@ -23,7 +24,7 @@ export function showAppToast(message: string, opts?: { variant?: AppToastVariant
 }
 
 export function dismissAppToast(id: number) {
-  toasts.value = toasts.value.filter((t) => t.id !== id)
+  toasts.value = Array.isArray(toasts.value) ? toasts.value.filter((t) => t.id !== id) : []
 }
 
 export function useAppToastState() {

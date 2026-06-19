@@ -432,7 +432,7 @@ def circuit_breaker(
 
                 if state["failures"] >= failure_threshold:
                     state["is_open"] = True
-                    logger.error("熔断触发 [%s]: 连续失败 %s 次", func.__name__, state['failures'])
+                    logger.error("熔断触发 [%s]: 连续失败 %s 次", func.__name__, state["failures"])
 
                 raise
 

@@ -19,7 +19,6 @@ from unittest.mock import MagicMock, patch
 import pandas as pd
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # handle_excel_analysis — action branches
 # ---------------------------------------------------------------------------
@@ -623,6 +622,8 @@ class TestExecuteWorkflowToolGenerateOffice:
         parsed = json.loads(result)
         assert parsed["success"] is True
         assert parsed["pickup_token"] == "tok123"
+        assert parsed["artifacts"][0]["mime_type"].endswith("wordprocessingml.document")
+        assert parsed["artifacts"][0]["preview"]["output_format"] == "docx"
 
     def test_generate_xlsx(self):
         from app.application.tools.workflow import execute_workflow_tool
@@ -641,6 +642,8 @@ class TestExecuteWorkflowToolGenerateOffice:
         parsed = json.loads(result)
         assert parsed["success"] is True
         assert parsed["file_name"] == "out.xlsx"
+        assert parsed["artifacts"][0]["artifact_type"] == "office_document"
+        assert parsed["artifacts"][0]["mime_type"].endswith("spreadsheetml.sheet")
 
     def test_generate_via_prompt_alias(self):
         from app.application.tools.workflow import execute_workflow_tool

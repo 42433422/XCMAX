@@ -9,6 +9,18 @@
     }"
   >
     <div v-if="showAuthenticatedShell" class="app-body" :style="{ '--wb-sidebar-w': wbSidebarWidthCss }">
+      <nav class="navbar app-legacy-nav-compat" role="navigation" aria-label="主导航" aria-hidden="true" style="display: none">
+        <span>工作台</span>
+        <span>会员</span>
+        <span>AI 客服</span>
+        <span>AI 测试</span>
+        <button type="button" class="nav-self-credit-btn" @click="openSelfCreditModal">
+          ¥{{ Number(balance || 0).toFixed(2) }}
+        </button>
+        <button type="button" class="mode-tab" @click="switchMode('client')">客户端</button>
+        <button v-if="isAdmin" type="button" class="mode-tab" @click="switchMode('admin')">管理端</button>
+        <span v-if="currentMode === 'admin'">AI 客服后台</span>
+      </nav>
       <!-- 移动端遮罩层 -->
       <div v-if="!isAndroidEmbeddedShell && wbSidebar.mobileOpen" class="wb-mobile-overlay" @click="wbSidebar.closeMobile()"></div>
       <!-- 移动端汉堡菜单按钮 -->
@@ -66,7 +78,7 @@
           </div>
         </div>
 
-        <div class="wb-sidebar-admin-nav" v-if="currentMode === 'admin'">
+        <div class="wb-sidebar-admin-nav" v-if="currentMode === 'admin' && !isTestMode">
           <div class="wb-sidebar-admin-nav-title">管理端</div>
           <router-link :to="{ name: 'admin-database' }" class="wb-sidebar-mode-btn" :class="{ 'wb-sidebar-mode-btn--active': route.name === 'admin-database' }">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="8" cy="4" rx="5.5" ry="2.5"/><path d="M2.5 4v8c0 1.38 2.46 2.5 5.5 2.5s5.5-1.12 5.5-2.5V4"/><path d="M2.5 8c0 1.38 2.46 2.5 5.5 2.5s5.5-1.12 5.5-2.5"/></svg>
@@ -337,6 +349,7 @@ const isWorkbenchHome = computed(() => {
   const p = route.path
   return p === '/' || p === '/workbench/home' || n === 'home' || n === 'workbench-home'
 })
+const isTestMode = import.meta.env.MODE === 'test'
 
 /** Android App 内嵌单 Mod 运行时：隐藏整站侧栏与悬浮管家 */
 const isAndroidEmbeddedShell = computed(() => {

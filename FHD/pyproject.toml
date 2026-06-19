@@ -58,8 +58,6 @@ dev = [
     "pytest-asyncio>=0.23",
     "ruff>=0.8",
     "mypy>=1.8",
-    "black==25.11.0",
-    "isort>=5.13",
     "types-redis",
     "types-requests",
     "types-pyyaml",
@@ -91,7 +89,7 @@ exclude = [
 select = ["E", "F", "I", "B", "C4", "UP", "SIM", "PLC", "BLE001"]
 ignore = [
     "E501",    # line too long (handled by formatter)
-    "E402",    # module-import-not-at-top (有意的延迟导入)
+    "E402",    # module-import-not-at-top (历史遗留；DI registry 延迟导入由测试单独禁止)
     "E712",    # true-false-comparison
     "E722",    # bare-except (关键路径由 bare-except gate 单独校验)
     "E731",    # lambda-assignment
@@ -105,7 +103,7 @@ ignore = [
     "B025",    # duplicate-try-block-exception
     "B027",    # empty-method-without-abstract-decorator
     "C416",    # unnecessary-comprehension
-    "PLC0415", # import-outside-top-level (延迟导入是有意的启动优化)
+    "PLC0415", # import-outside-top-level (历史遗留；DI registry 延迟导入由测试单独禁止)
     "PLC2401", # non-ascii-name (中文变量名在业务代码中合理)
     "PLC0414", # useless-import-alias
     "PLC0206", # dict-index-missing-items
@@ -147,36 +145,6 @@ quote-style = "double"
 indent-style = "space"
 skip-magic-trailing-comma = false
 line-ending = "auto"
-
-# 兼容旧配置
-[tool.black]
-line-length = 100
-target-version = ['py311']
-include = '\.pyi?$'
-extend-exclude = '''
-/(
-    \.git
-    | \.venv
-    | venv
-    | node_modules
-    | frontend
-    | build
-    | dist
-    | migrations
-    | alembic/versions
-)/
-'''
-
-[tool.isort]
-profile = "black"
-line_length = 100
-multi_line_output = 3
-include_trailing_comma = true
-force_grid_wrap = 0
-use_parentheses = true
-ensure_newline_before_comments = true
-skip_gitignore = true
-skip = [".venv", "venv", "node_modules", "frontend", "migrations", "alembic/versions"]
 
 # mypy 配置唯一真相源（2026-05-04 整合）：
 # - 旧 mypy.ini（strict=True 但拼错过 frontned，且 ignore_missing_imports=False 与本节冲突）已删除。
@@ -257,10 +225,10 @@ exclude_lines = [
     "if DEBUG:",
 ]
 # fail_under 语义 = 纯**行覆盖率** floor（铁律1 全量 source=[app]，铁律6 分支单独由棘轮把关）。
-# 真实可复现基线（2026-06-14 HEAD 全绿 bump，`1569dfa4`）：
-#   行覆盖 52.74%；分支 37.17%；pytest 3,785 passed / 0 failed。
-# 工作区 WIP（2026-06-17，未提交）：行覆盖 79.89%；分支 69.06%；pytest 16,904 passed / 0 failed / 36 skipped。
-# 历史 36.35% 为 Phase 4 起点；58/60.63/66.33/77.4% 来自富依赖或误报，已退役。见 coverage-dual-summary.json。
+# 当前动态实测只看 metrics/coverage-dual-summary.json；本文件只保存 coverage.py 行覆盖 floor。
+# 禁止在这里复制 pytest passed/failed 快照，避免 SSOT 分裂。
+# 历史 36.35% 为 Phase 4 起点；58/60.63/66.33/77.4% 来自富依赖或误报，已退役。
+# 目标 90% 行 / 85% 分支；未修红灯前禁止对外宣称达标或 bump 棘轮。
 # 留 ~2pt 余量防止回退。开启 branch 后 coverage 自带门禁按合并指标拦截，故标准命令传
 # --cov-fail-under=0，由 coverage_ratchet.py --check 按行/分支分别守护（floor 只升不降）。
 fail_under = 80

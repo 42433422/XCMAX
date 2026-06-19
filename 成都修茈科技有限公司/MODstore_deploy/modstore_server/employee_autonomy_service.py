@@ -906,6 +906,22 @@ def run_employee_evolution_scan(
     processed = 0
     for employee_id, fail_count in candidates:
         processed += 1
+        try:
+            from modstore_server.employee_runtime_policy import record_employee_degradation
+
+            record_employee_degradation(
+                employee_id=employee_id,
+                fail_count=fail_count,
+                lookback_hours=lookback_hours,
+                reason="employee_evolution_signal_failure_rate",
+                severity="warn",
+            )
+        except Exception:
+            logger.debug(
+                "employee evolution runtime policy update failed employee=%s",
+                employee_id,
+                exc_info=True,
+            )
         sf2 = get_session_factory()
         with sf2() as session:
             try:

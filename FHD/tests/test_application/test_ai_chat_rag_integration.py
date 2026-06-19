@@ -3,8 +3,9 @@ from __future__ import annotations
 
 import sys
 import types
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 
 # Mock the RAG module before importing
 rag_mock = types.ModuleType("app.infrastructure.rag")
@@ -15,13 +16,20 @@ rag_mock.HybridRetriever = MagicMock
 rag_mock.SemanticChunker = MagicMock
 rag_mock.RetrievedChunk = MagicMock
 # Override the existing module if already loaded
+_original_rag = sys.modules.get("app.infrastructure.rag")
 sys.modules["app.infrastructure.rag"] = rag_mock
 
-from app.application.ai_chat_rag_integration import (
-    get_rag_service,
-    augment_chat_with_rag,
-    get_rag_status,
-)
+try:
+    from app.application.ai_chat_rag_integration import (
+        augment_chat_with_rag,
+        get_rag_service,
+        get_rag_status,
+    )
+finally:
+    if _original_rag is not None:
+        sys.modules["app.infrastructure.rag"] = _original_rag
+    else:
+        del sys.modules["app.infrastructure.rag"]
 
 
 class TestGetRagService:

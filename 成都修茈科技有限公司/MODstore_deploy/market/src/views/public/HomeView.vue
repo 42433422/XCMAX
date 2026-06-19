@@ -7,7 +7,7 @@
           <router-link to="/about" class="landing-logo" @click="closeMobileNav">XC AGI</router-link>
           <nav class="landing-nav-links" aria-label="主导航">
             <router-link :to="{ name: 'ai-store' }" class="nav-ghost">AI 市场</router-link>
-            <router-link :to="{ name: 'download' }" class="nav-ghost">软件下载</router-link>
+            <router-link to="/download" class="nav-ghost">软件下载</router-link>
             <router-link :to="workbenchLink" class="nav-ghost">进入工作台</router-link>
             <router-link
               v-if="!isLoggedIn"
@@ -48,7 +48,7 @@
         aria-label="移动端菜单"
       >
         <router-link :to="{ name: 'ai-store' }" class="landing-nav-drawer-link" @click="closeMobileNav">AI 市场</router-link>
-        <router-link :to="{ name: 'download' }" class="landing-nav-drawer-link" @click="closeMobileNav">软件下载</router-link>
+        <router-link to="/download" class="landing-nav-drawer-link" @click="closeMobileNav">软件下载</router-link>
         <router-link :to="workbenchLink" class="landing-nav-drawer-link" @click="closeMobileNav">
           {{ isLoggedIn ? '进入工作台' : '登录 / 工作台' }}
         </router-link>
@@ -79,7 +79,7 @@
           </p>
           <div class="hero-actions">
             <router-link to="/register" class="btn btn-white">免费注册</router-link>
-            <router-link :to="{ name: 'download' }" class="btn btn-ghost btn-ghost--download">下载 Android 客户端</router-link>
+            <router-link to="/download" class="btn btn-ghost btn-ghost--download">下载 Android 客户端</router-link>
             <router-link :to="{ name: 'plans' }" class="btn btn-ghost">查看会员方案</router-link>
             <a href="/services.html" class="btn btn-ghost btn-ghost--external">官网产品中心</a>
           </div>
@@ -389,7 +389,7 @@
               <router-link to="/" class="footer-link">首页</router-link>
               <router-link :to="{ name: 'ai-store' }" class="footer-link">AI 市场</router-link>
               <router-link to="/plans" class="footer-link">套餐</router-link>
-              <router-link :to="{ name: 'download' }" class="footer-link">软件下载</router-link>
+              <router-link to="/download" class="footer-link">软件下载</router-link>
             </div>
             <div class="footer-col">
               <h4 class="footer-heading">支持</h4>

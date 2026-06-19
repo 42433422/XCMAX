@@ -252,7 +252,9 @@ def export_shipment_records_task(
             - count: 导出记录数
     """
     try:
-        logger.info("开始异步导出出货记录：unit=%s, start=%s, end=%s", unit_name, start_date, end_date)
+        logger.info(
+            "开始异步导出出货记录：unit=%s, start=%s, end=%s", unit_name, start_date, end_date
+        )
 
         from app.bootstrap import get_shipment_app_service
 

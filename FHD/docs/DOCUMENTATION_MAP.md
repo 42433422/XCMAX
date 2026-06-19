@@ -27,7 +27,6 @@
 
 | 区域 | 说明 |
 |------|------|
-| [../WXCC/README.md](../WXCC/README.md) | 微信小程序（WXCC）开发与运行说明 |
 | [../XCAGI/README.md](../XCAGI/README.md) | 后端 XCAGI 子树说明（若独立检出） |
 | [../frontend/README.md](../frontend/README.md) | Web 前端 SPA |
 

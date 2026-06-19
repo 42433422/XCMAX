@@ -199,7 +199,7 @@ class TestHandleExcelAnalysisDeep:
 
         with (
             patch("app.application.tools.workflow.resolve_safe_excel_path", return_value=Path(xlsx_path)),
-            patch("app.routes.template_grid_core._extract_customer_hint_from_excel", return_value="测试公司"),
+            patch("app.application.template_grid_core._extract_customer_hint_from_excel", return_value="测试公司"),
         ):
             result = handle_excel_analysis({"file_path": xlsx_path, "action": "read"})
         assert result["success"] is True

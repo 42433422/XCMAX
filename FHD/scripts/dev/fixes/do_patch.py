@@ -1,6 +1,6 @@
 from pathlib import Path
 
-p = Path("e:/FHD/XCAGI/app/routes/tools.py")
+p = Path("e:/FHD/XCAGI/app/services/tools_execution/order_parser.py")
 lines = p.read_text(encoding="utf-8").splitlines()
 
 # 找到要替换的范围

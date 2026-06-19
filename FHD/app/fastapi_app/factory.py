@@ -28,6 +28,7 @@ from .cors import (
 from .lifespan import lifespan
 from .middleware_extra import register_extra_middleware, register_prometheus_metrics
 from .static_mounts import (
+    mount_admin_console_static,
     mount_vue_dist_assets_dir,
     mount_vue_dist_public_static,
     mount_xcmax_dashboard_static,
@@ -137,6 +138,7 @@ def create_fastapi_app(
         logger.warning("Mod extensions staged load failed (lifespan may retry): %s", e)
 
     mount_xcmax_dashboard_static(app)
+    mount_admin_console_static(app)
     mount_vue_dist_public_static(app)
     mount_vue_dist_assets_dir(app)
 

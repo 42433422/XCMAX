@@ -18,8 +18,10 @@ export type EnterpriseModStack = {
   stackShortLabel: string
 }
 
-/** 市场安装的独立员工 Mod；不含账号定制阶段才装的桥接载体 */
-const WORKFLOW_CARRIER_MOD_IDS = new Set<string>()
+/** 市场安装的独立员工 Mod；必须显式登记，避免任意 *-ai-employee 串栈 */
+const WORKFLOW_CARRIER_MOD_IDS = new Set<string>([
+  'wechat-contacts-ai-employee',
+])
 
 export function buildEnterpriseModStack(plan: IndustryBaselinePlan): EnterpriseModStack {
   const industryModIds = [...(plan.industry_mod_ids || [])]
@@ -73,7 +75,6 @@ export function isWorkflowCarrierModId(modId: string): boolean {
   if (!id) return false
   if (WORKFLOW_CARRIER_MOD_IDS.has(id)) return true
   if (id.startsWith('xcagi-workflow-employee-')) return true
-  if (id.endsWith('-ai-employee')) return true
   return false
 }
 

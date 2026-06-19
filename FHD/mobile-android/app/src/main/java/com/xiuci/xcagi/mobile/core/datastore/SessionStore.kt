@@ -123,7 +123,11 @@ constructor(
     }
 
     suspend fun setFhdHost(host: String) {
-        context.dataStore.edit { it[fhdHost] = host.trim() }
+        context.dataStore.edit { prefs ->
+            val value = host.trim()
+            if (value.isBlank()) prefs.remove(fhdHost)
+            else prefs[fhdHost] = value
+        }
     }
 
     suspend fun fhdHost(): String = fhdHostFlow.first()

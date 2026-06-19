@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import shutil
-import tempfile
 from datetime import datetime, timedelta, timezone
+from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, List, Optional
 
 from fastapi import (
     APIRouter,
@@ -20,7 +21,6 @@ from fastapi import (
     HTTPException,
     Query,
     Request,
-    Response,
     UploadFile,
 )
 from pydantic import BaseModel, Field
@@ -31,14 +31,16 @@ from modstore_server.auth_service import (
     authenticate_user,
     create_access_token,
     create_refresh_token,
-    decode_access_token,
     decode_refresh_token,
     get_user_by_id,
     hash_password,
     register_user,
     verify_password,
 )
-from modstore_server.duty_roster import is_planned_duty_employee_pack
+from modstore_server.duty_roster import (
+    employee_partition_meta,
+    is_planned_duty_employee_pack,
+)
 from modstore_server.email_service import (
     assert_email_outbound_configured,
     find_user_by_email,
@@ -178,6 +180,33 @@ class AdminSelfCreditDTO(BaseModel):
     description: str = ""
 
 
+class AiWalletPreauthorizeDTO(BaseModel):
+    amount: float = Field(..., gt=0)
+    provider: str = ""
+    model: str = ""
+    request_id: str = ""
+    idempotency_key: str = Field(..., min_length=1, max_length=128)
+
+
+class AiWalletSettleDTO(BaseModel):
+    hold_no: str = Field(..., min_length=1, max_length=64)
+    actual_amount: float = Field(..., ge=0)
+    idempotency_key: str = Field(..., min_length=1, max_length=128)
+
+
+class AiWalletReleaseDTO(BaseModel):
+    hold_no: str = Field(..., min_length=1, max_length=64)
+    reason: str = ""
+    idempotency_key: str = Field(..., min_length=1, max_length=128)
+
+
+class AiWalletRefundDTO(BaseModel):
+    hold_no: str = Field(..., min_length=1, max_length=64)
+    refund_amount: float = Field(..., gt=0)
+    reason: str = ""
+    idempotency_key: str = Field(..., min_length=1, max_length=128)
+
+
 class BuyDTO(BaseModel):
     pass
 
@@ -202,7 +231,7 @@ def _delete_unused_verification_code(email: str, code: str) -> None:
         session.query(VerificationCode).filter(
             VerificationCode.email == email,
             VerificationCode.code == code,
-            VerificationCode.used == False,
+            VerificationCode.used.is_(False),
         ).delete(synchronize_session=False)
         session.commit()
 
@@ -236,7 +265,7 @@ def _verify_and_consume_verification_code(email: str, code: str) -> None:
             .filter(
                 VerificationCode.email == email,
                 VerificationCode.code == code,
-                VerificationCode.used == False,
+                VerificationCode.used.is_(False),
                 VerificationCode.expires_at > datetime.now(timezone.utc),
             )
             .order_by(VerificationCode.created_at.desc())
@@ -414,7 +443,7 @@ def api_login_with_code(body: LoginWithCodeDTO):
             .filter(
                 VerificationCode.email == email_norm,
                 VerificationCode.code == (body.code or "").strip(),
-                VerificationCode.used == False,
+                VerificationCode.used.is_(False),
                 VerificationCode.expires_at > datetime.now(timezone.utc),
             )
             .order_by(VerificationCode.created_at.desc())
@@ -727,6 +756,395 @@ def api_wallet_admin_self_credit(body: AdminSelfCreditDTO, user: User = Depends(
         return {"ok": True, "new_balance": wallet.balance, "balance": wallet.balance}
 
 
+def _wallet_money(value: Any) -> Decimal:
+    try:
+        return Decimal(str(value or "0")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    except Exception:
+        return Decimal("0.00")
+
+
+def _wallet_money_str(value: Any) -> str:
+    return format(_wallet_money(value), "f")
+
+
+def _ai_hold_no(user_id: int, idempotency_key: str) -> str:
+    raw = f"{int(user_id)}:{idempotency_key}".encode("utf-8")
+    return "AIH" + hashlib.sha256(raw).hexdigest()[:16].upper()
+
+
+def _ai_wallet_meta(**payload: Any) -> str:
+    return "ai_wallet:" + json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str)
+
+
+def _parse_ai_wallet_meta(description: str) -> dict[str, Any]:
+    raw = str(description or "")
+    if not raw.startswith("ai_wallet:"):
+        return {}
+    try:
+        data = json.loads(raw[len("ai_wallet:") :])
+    except (TypeError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _ai_wallet_transaction_payload(txn: Transaction) -> dict[str, Any]:
+    meta = _parse_ai_wallet_meta(txn.description)
+    return {
+        "id": txn.id,
+        "amount": _wallet_money_str(txn.amount),
+        "txn_type": txn.txn_type,
+        "status": txn.status,
+        "hold_no": meta.get("hold_no") or "",
+        "provider": meta.get("provider") or "",
+        "model": meta.get("model") or "",
+        "request_id": meta.get("request_id") or "",
+        "idempotency_key": getattr(txn, "idempotency_key", "") or "",
+        "created_at": txn.created_at.isoformat() if txn.created_at else "",
+    }
+
+
+def _find_ai_preauth_by_hold(session: Any, user_id: int, hold_no: str) -> Transaction | None:
+    rows = (
+        session.query(Transaction)
+        .filter(Transaction.user_id == user_id, Transaction.txn_type == "ai_preauth")
+        .order_by(Transaction.created_at.desc())
+        .limit(200)
+        .all()
+    )
+    for row in rows:
+        if str(_parse_ai_wallet_meta(row.description).get("hold_no") or "") == hold_no:
+            return row
+    return None
+
+
+def _find_ai_txn_by_key(
+    session: Any,
+    user_id: int,
+    txn_type: str,
+    idempotency_key: str,
+) -> Transaction | None:
+    return (
+        session.query(Transaction)
+        .filter(
+            Transaction.user_id == user_id,
+            Transaction.txn_type == txn_type,
+            Transaction.idempotency_key == idempotency_key,
+        )
+        .first()
+    )
+
+
+def _ai_txns_for_hold(
+    session: Any,
+    user_id: int,
+    txn_type: str,
+    hold_no: str,
+) -> list[Transaction]:
+    rows = (
+        session.query(Transaction)
+        .filter(Transaction.user_id == user_id, Transaction.txn_type == txn_type)
+        .order_by(Transaction.created_at.desc())
+        .limit(200)
+        .all()
+    )
+    return [
+        row
+        for row in rows
+        if str(_parse_ai_wallet_meta(row.description).get("hold_no") or "") == hold_no
+    ]
+
+
+def _ai_settled_amount_for_hold(session: Any, user_id: int, hold_no: str) -> Decimal:
+    settled = Decimal("0.00")
+    for row in _ai_txns_for_hold(session, user_id, "ai_settle", hold_no):
+        meta = _parse_ai_wallet_meta(row.description)
+        settled = max(settled, _wallet_money(meta.get("actual_amount") or abs(row.amount or 0)))
+    return settled
+
+
+def _ai_refunded_amount_for_hold(session: Any, user_id: int, hold_no: str) -> Decimal:
+    return sum(
+        (_wallet_money(row.amount) for row in _ai_txns_for_hold(session, user_id, "ai_refund", hold_no)),
+        Decimal("0.00"),
+    )
+
+
+def _ai_hold_payload(
+    preauth: Transaction,
+    *,
+    status: str,
+    settled_amount: Any = 0,
+) -> dict[str, Any]:
+    meta = _parse_ai_wallet_meta(preauth.description)
+    return {
+        "hold_no": meta.get("hold_no") or "",
+        "amount": _wallet_money_str(abs(_wallet_money(preauth.amount))),
+        "settled_amount": _wallet_money_str(settled_amount),
+        "status": status,
+        "provider": meta.get("provider") or "",
+        "model": meta.get("model") or "",
+        "request_id": meta.get("request_id") or "",
+        "preauth_transaction_id": preauth.id,
+        "created_at": preauth.created_at.isoformat() if preauth.created_at else "",
+    }
+
+
+@router.post("/wallet/ai/preauthorize")
+def api_wallet_ai_preauthorize(
+    body: AiWalletPreauthorizeDTO,
+    user: User = Depends(_get_current_user),
+):
+    """Python 支付后端的 AI 钱包预授权；Java 后端同路径由 proxy 透传。"""
+    amount = _wallet_money(body.amount)
+    key = body.idempotency_key.strip()
+    sf = get_session_factory()
+    with sf() as session:
+        existing = _find_ai_txn_by_key(session, user.id, "ai_preauth", key)
+        wallet = session.query(Wallet).filter(Wallet.user_id == user.id).with_for_update().first()
+        if not wallet:
+            wallet = Wallet(user_id=user.id, balance=0.0)
+            session.add(wallet)
+            session.flush()
+        if existing:
+            return {
+                "ok": True,
+                "hold": _ai_hold_payload(existing, status="held"),
+                "balance": _wallet_money_str(wallet.balance),
+                "idempotent": True,
+            }
+        balance_before = _wallet_money(wallet.balance)
+        if balance_before < amount:
+            raise HTTPException(
+                402,
+                f"余额不足，需要 ¥{_wallet_money_str(amount)}，当前 ¥{_wallet_money_str(balance_before)}",
+            )
+        hold_no = _ai_hold_no(user.id, key)
+        wallet.balance = balance_before - amount
+        wallet.updated_at = datetime.now(timezone.utc)
+        txn = Transaction(
+            user_id=user.id,
+            amount=-amount,
+            txn_type="ai_preauth",
+            status="completed",
+            description=_ai_wallet_meta(
+                hold_no=hold_no,
+                provider=body.provider[:64],
+                model=body.model[:128],
+                request_id=body.request_id[:128],
+            ),
+            idempotency_key=key,
+        )
+        session.add(txn)
+        session.commit()
+        session.refresh(txn)
+        return {
+            "ok": True,
+            "hold": _ai_hold_payload(txn, status="held"),
+            "balance": _wallet_money_str(wallet.balance),
+        }
+
+
+@router.post("/wallet/ai/settle")
+def api_wallet_ai_settle(
+    body: AiWalletSettleDTO,
+    user: User = Depends(_get_current_user),
+):
+    """结算 AI 预授权：实际金额低于预授权则释放差额，高于则补扣差额。"""
+    actual = _wallet_money(body.actual_amount)
+    key = body.idempotency_key.strip()
+    sf = get_session_factory()
+    with sf() as session:
+        existing = _find_ai_txn_by_key(session, user.id, "ai_settle", key)
+        wallet = session.query(Wallet).filter(Wallet.user_id == user.id).with_for_update().first()
+        if not wallet:
+            wallet = Wallet(user_id=user.id, balance=0.0)
+            session.add(wallet)
+            session.flush()
+        preauth = _find_ai_preauth_by_hold(session, user.id, body.hold_no.strip())
+        if not preauth:
+            raise HTTPException(404, "预授权不存在")
+        if existing:
+            return {
+                "ok": True,
+                "hold": _ai_hold_payload(preauth, status="settled", settled_amount=actual),
+                "balance": _wallet_money_str(wallet.balance),
+                "idempotent": True,
+            }
+        reserved = abs(_wallet_money(preauth.amount))
+        delta = actual - reserved
+        balance_before = _wallet_money(wallet.balance)
+        if delta > 0 and balance_before < delta:
+            raise HTTPException(
+                402,
+                f"余额不足，需要 ¥{_wallet_money_str(delta)}，当前 ¥{_wallet_money_str(balance_before)}",
+            )
+        wallet.balance = balance_before - delta
+        wallet.updated_at = datetime.now(timezone.utc)
+        txn = Transaction(
+            user_id=user.id,
+            amount=-delta,
+            txn_type="ai_settle",
+            status="completed",
+            description=_ai_wallet_meta(
+                hold_no=body.hold_no.strip(),
+                actual_amount=_wallet_money_str(actual),
+                reserved_amount=_wallet_money_str(reserved),
+            ),
+            idempotency_key=key,
+        )
+        session.add(txn)
+        session.commit()
+        return {
+            "ok": True,
+            "hold": _ai_hold_payload(preauth, status="settled", settled_amount=actual),
+            "balance": _wallet_money_str(wallet.balance),
+        }
+
+
+@router.post("/wallet/ai/release")
+def api_wallet_ai_release(
+    body: AiWalletReleaseDTO,
+    user: User = Depends(_get_current_user),
+):
+    """释放 AI 预授权；已结算的 hold 不再退回，保持幂等。"""
+    key = body.idempotency_key.strip()
+    sf = get_session_factory()
+    with sf() as session:
+        existing = _find_ai_txn_by_key(session, user.id, "ai_release", key)
+        wallet = session.query(Wallet).filter(Wallet.user_id == user.id).with_for_update().first()
+        if not wallet:
+            wallet = Wallet(user_id=user.id, balance=0.0)
+            session.add(wallet)
+            session.flush()
+        preauth = _find_ai_preauth_by_hold(session, user.id, body.hold_no.strip())
+        if not preauth:
+            raise HTTPException(404, "预授权不存在")
+        if existing:
+            return {
+                "ok": True,
+                "hold": _ai_hold_payload(preauth, status="released", settled_amount=0),
+                "balance": _wallet_money_str(wallet.balance),
+                "idempotent": True,
+            }
+        settled = (
+            session.query(Transaction)
+            .filter(Transaction.user_id == user.id, Transaction.txn_type == "ai_settle")
+            .order_by(Transaction.created_at.desc())
+            .limit(200)
+            .all()
+        )
+        if any(
+            str(_parse_ai_wallet_meta(row.description).get("hold_no") or "")
+            == body.hold_no.strip()
+            for row in settled
+        ):
+            return {
+                "ok": True,
+                "hold": _ai_hold_payload(preauth, status="settled", settled_amount=0),
+                "balance": _wallet_money_str(wallet.balance),
+                "idempotent": True,
+            }
+        reserved = abs(_wallet_money(preauth.amount))
+        wallet.balance = _wallet_money(wallet.balance) + reserved
+        wallet.updated_at = datetime.now(timezone.utc)
+        txn = Transaction(
+            user_id=user.id,
+            amount=reserved,
+            txn_type="ai_release",
+            status="completed",
+            description=_ai_wallet_meta(
+                hold_no=body.hold_no.strip(),
+                reason=(body.reason or "release")[:128],
+            ),
+            idempotency_key=key,
+        )
+        session.add(txn)
+        session.commit()
+        return {
+            "ok": True,
+            "hold": _ai_hold_payload(preauth, status="released", settled_amount=0),
+            "balance": _wallet_money_str(wallet.balance),
+        }
+
+
+@router.post("/wallet/ai/refund")
+def api_wallet_ai_refund(
+    body: AiWalletRefundDTO,
+    user: User = Depends(_get_current_user),
+):
+    """Refund a settled AI wallet hold. The idempotency key makes retries safe."""
+    key = body.idempotency_key.strip()
+    hold_no = body.hold_no.strip()
+    refund_amount = _wallet_money(body.refund_amount)
+    sf = get_session_factory()
+    with sf() as session:
+        existing = _find_ai_txn_by_key(session, user.id, "ai_refund", key)
+        wallet = session.query(Wallet).filter(Wallet.user_id == user.id).with_for_update().first()
+        if not wallet:
+            wallet = Wallet(user_id=user.id, balance=0.0)
+            session.add(wallet)
+            session.flush()
+        preauth = _find_ai_preauth_by_hold(session, user.id, hold_no)
+        if not preauth:
+            raise HTTPException(404, "预授权不存在")
+        settled_amount = _ai_settled_amount_for_hold(session, user.id, hold_no)
+        if settled_amount <= 0:
+            raise HTTPException(400, "预授权尚未结算，不能退款")
+        if existing:
+            return {
+                "ok": True,
+                "refund": {
+                    "hold_no": hold_no,
+                    "amount": _wallet_money_str(existing.amount),
+                    "status": "refunded",
+                    "refund_transaction_id": existing.id,
+                },
+                "hold": _ai_hold_payload(preauth, status="refunded", settled_amount=settled_amount),
+                "balance": _wallet_money_str(wallet.balance),
+                "idempotent": True,
+            }
+        refunded_before = _ai_refunded_amount_for_hold(session, user.id, hold_no)
+        refundable = settled_amount - refunded_before
+        if refund_amount > refundable:
+            raise HTTPException(
+                400,
+                (
+                    f"退款金额超过可退余额：申请 ¥{_wallet_money_str(refund_amount)}，"
+                    f"可退 ¥{_wallet_money_str(refundable)}"
+                ),
+            )
+        wallet.balance = _wallet_money(wallet.balance) + refund_amount
+        wallet.updated_at = datetime.now(timezone.utc)
+        txn = Transaction(
+            user_id=user.id,
+            amount=refund_amount,
+            txn_type="ai_refund",
+            status="completed",
+            description=_ai_wallet_meta(
+                hold_no=hold_no,
+                refund_amount=_wallet_money_str(refund_amount),
+                settled_amount=_wallet_money_str(settled_amount),
+                refunded_total_after=_wallet_money_str(refunded_before + refund_amount),
+                reason=(body.reason or "refund")[:128],
+            ),
+            idempotency_key=key,
+        )
+        session.add(txn)
+        session.commit()
+        session.refresh(txn)
+        return {
+            "ok": True,
+            "refund": {
+                "hold_no": hold_no,
+                "amount": _wallet_money_str(refund_amount),
+                "status": "refunded",
+                "refund_transaction_id": txn.id,
+            },
+            "hold": _ai_hold_payload(preauth, status="refunded", settled_amount=settled_amount),
+            "balance": _wallet_money_str(wallet.balance),
+        }
+
+
 @router.get("/wallet/transactions")
 def api_wallet_transactions(
     limit: int = Query(50, ge=1, le=200),
@@ -790,7 +1208,7 @@ def api_submit_review(
             .filter(
                 Entitlement.user_id == user.id,
                 Entitlement.catalog_id == item_id,
-                Entitlement.is_active == True,
+                Entitlement.is_active.is_(True),
             )
             .first()
         )
@@ -1185,6 +1603,7 @@ def api_admin_list_catalog(
                     "sha256": r.sha256,
                     "is_public": r.is_public,
                     "created_at": r.created_at.isoformat() if r.created_at else "",
+                    **employee_partition_meta(r.pkg_id, r.artifact),
                 }
                 for r in rows
             ],
@@ -1492,21 +1911,24 @@ async def api_admin_align_single_employee_llm_to_auto(
 
 @router.post("/admin/employee-packs/purge-all")
 def api_admin_purge_all_employee_packs(user: User = Depends(_require_admin)):
-    """一键清空所有员工包：``packages.json`` 中 ``artifact=employee_pack`` 全部行 +
-    ``files/`` 下对应文件 + ``catalog_items`` 中 ``artifact=employee_pack`` 全部行。
+    """一键清空商店员工包，保留管理端上岗员工。
 
-    比前端循环逐条删更彻底——之前出现的「老是删不完」是因为 packages.json 与
-    数据库登记两边的 pkg_id 不重合（以及 norm_pkg_id 归一化差异），逐条对账时
-    会遗漏一边，这里统一在后端原子清空。"""
+    上岗员工由 ``duty_roster.py``/编制矩阵管理；商店清理不得删除这些岗位包。"""
     from modstore_server import catalog_store
 
     removed_packages = 0
     removed_files = 0
+    preserved_duty_packages = 0
     with catalog_store._lock:  # type: ignore[attr-defined]
         data = catalog_store.load_store()
         kept = []
         for r in data.get("packages") or []:
             if str((r or {}).get("artifact") or "") == "employee_pack":
+                pid = str((r or {}).get("id") or (r or {}).get("pkg_id") or "").strip()
+                if is_planned_duty_employee_pack(pid, "employee_pack"):
+                    preserved_duty_packages += 1
+                    kept.append(r)
+                    continue
                 fn = str((r or {}).get("stored_filename") or "").strip()
                 if fn:
                     p = catalog_store.files_dir() / fn
@@ -1523,10 +1945,14 @@ def api_admin_purge_all_employee_packs(user: User = Depends(_require_admin)):
         catalog_store.save_store(data)
 
     removed_db = 0
+    preserved_duty_db_rows = 0
     sf = get_session_factory()
     with sf() as session:
         rows = session.query(CatalogItem).filter(CatalogItem.artifact == "employee_pack").all()
         for item in rows:
+            if is_planned_duty_employee_pack(item.pkg_id, item.artifact):
+                preserved_duty_db_rows += 1
+                continue
             stored = (item.stored_filename or "").strip()
             if stored:
                 p = _catalog_files_dir() / stored
@@ -1546,6 +1972,8 @@ def api_admin_purge_all_employee_packs(user: User = Depends(_require_admin)):
         "removed_packages_json": removed_packages,
         "removed_db_rows": removed_db,
         "removed_files": removed_files,
+        "preserved_duty_packages_json": preserved_duty_packages,
+        "preserved_duty_db_rows": preserved_duty_db_rows,
     }
 
 

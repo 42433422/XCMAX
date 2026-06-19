@@ -206,7 +206,9 @@ class UnifiedIntentRecognizer:
                     sources_used.append("quick")
                     context_used = quick_result.get("context_inherited", False)
                     logger.info(
-                        "[CONTEXT] quick_recognize hit: intent=%s, context_used=%s", quick_result.get('primary_intent'), context_used
+                        "[CONTEXT] quick_recognize hit: intent=%s, context_used=%s",
+                        quick_result.get("primary_intent"),
+                        context_used,
                     )
                     return RecognizerResult(
                         primary_intent=quick_result.get("primary_intent"),

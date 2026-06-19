@@ -9,6 +9,42 @@ export type MarketAdminUser = {
   company?: string;
 };
 
+export type DeployCheckData = {
+  admin_local: {
+    version?: string;
+    git_sha?: string;
+  };
+  update_hub: {
+    version?: string;
+    git_sha?: string;
+  };
+  enterprise: {
+    reachable?: boolean;
+    version?: string;
+    deploy_sha256?: string;
+  };
+  flags: {
+    up_to_date?: boolean;
+    enterprise_pending?: boolean;
+    needs_push?: boolean;
+    needs_pack?: boolean;
+  };
+};
+
+export type DeployJobStep = {
+  id: string;
+  label: string;
+  status: 'pending' | 'running' | 'done' | 'error' | 'skipped' | string;
+  detail?: string;
+};
+
+export type DeployJobData = {
+  job_id: string;
+  status: 'pending' | 'running' | 'done' | 'error' | string;
+  steps: DeployJobStep[];
+  error?: string;
+};
+
 export const xcmaxAdminApi = {
   listUsers() {
     return api.get('/api/xcmax/admin/market/users');
@@ -39,7 +75,28 @@ export const xcmaxAdminApi = {
       username,
     });
   },
+  activateEnterpriseImpersonation(bridgeToken: string) {
+    return api.post('/api/xcmax/admin/impersonate/activate-enterprise', {
+      bridge_token: bridgeToken,
+    });
+  },
   endImpersonate() {
     return api.post('/api/xcmax/admin/impersonate/end', {});
+  },
+  checkDeployUpdates() {
+    return api.get<{ data?: DeployCheckData; message?: string }>(
+      '/api/xcmax/admin/deploy/check',
+    );
+  },
+  startDeployPush(body: Record<string, unknown>) {
+    return api.post<{ data?: DeployJobData; message?: string }>(
+      '/api/xcmax/admin/deploy/push',
+      body,
+    );
+  },
+  getDeployJob(jobId: string) {
+    return api.get<{ data?: DeployJobData; message?: string }>(
+      `/api/xcmax/admin/deploy/jobs/${encodeURIComponent(jobId)}`,
+    );
   },
 };

@@ -33,6 +33,11 @@ def _resolve_db_path() -> Path:
     global _db_path
     if _db_path is not None:
         return _db_path
+    base_override = os.environ.get("XCAGI_DATA_DIR") or os.environ.get("DATABASE_PATH")
+    if base_override:
+        _db_path = Path(base_override) / "mod_dbs" / _DB_FILENAME
+        _db_path.parent.mkdir(parents=True, exist_ok=True)
+        return _db_path
     try:
         from app.mod_sdk.private_sqlite import resolve_mod_private_sqlite_path
 

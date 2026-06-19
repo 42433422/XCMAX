@@ -2,8 +2,8 @@
 
 ## 前端/路由入口
 
-- 控制台 **模板预览 / 新建模板** 上传图片（`.png` / `.jpg` / …）时，会请求后端 **`POST .../templates/analyze`**（蓝图 `templates_bp`）。
-- 路由：`app/routes/templates.py` → `analyze_template()` → **`_analyze_label_template()`**
+- 控制台 **模板预览 / 新建模板** 上传图片（`.png` / `.jpg` / …）时，会请求后端 **`POST /api/templates/analyze`**。
+- 路由：`app/fastapi_routes/domains/system/routes.py` → `app/fastapi_routes/document_templates_compat.py` → `app/services/document_templates/analyzer.py` → **`_analyze_label_template()`**
 
 ## OCR 实现（已与 `/api/ocr` 统一）
 
@@ -50,10 +50,11 @@
 ## 相关代码位置（速查）
 
 ```
-app/routes/templates.py          → analyze_template, _analyze_label_template
+app/fastapi_routes/domains/system/routes.py → /api/templates/analyze
+app/services/document_templates/analyzer.py → analyze_template_with_upload, _analyze_label_template
 app/services/ocr_service.py      → OCRService（Paddle 优先）
 app/services/paddle_ocr_runner.py → PaddleOCR 单例与 predict 解析
 app/services/skills/label_template_generator/label_template_generator.py
   → extract_text_with_ocr, _pair_fields_by_grid, LabelTemplateGeneratorSkill.execute
-app/routes/ocr.py                → /api/ocr/*
+app/fastapi_routes/ocr.py        → /api/ocr/*
 ```

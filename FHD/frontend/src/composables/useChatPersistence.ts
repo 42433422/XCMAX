@@ -20,7 +20,7 @@ export interface TaskItem {
   id: string
   type: string
   title: string
-  source: 'workflow' | 'excel' | 'print' | 'shipment' | 'manual' | 'system' | 'wechat'
+  source: 'workflow' | 'excel' | 'print' | 'shipment' | 'manual' | 'system' | 'wechat' | 'agent'
   status: TaskStatus
   progress?: number
   stage?: string

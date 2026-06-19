@@ -16,6 +16,45 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["legacy-workflow"], deprecated=True)
 
 
+def _trace_approval_route(
+    payload: dict[str, Any],
+    *,
+    route: str,
+    message: str,
+    body: dict[str, Any] | None = None,
+    intent: str = "workflow_approval_route",
+) -> dict[str, Any]:
+    if not isinstance(payload, dict) or payload.get("run_id") or payload.get("agent_run_id"):
+        return payload
+    try:
+        from app.application.agent_orchestrator.chat_trace import attach_chat_trace_run
+
+        request_body = body if isinstance(body, dict) else {}
+        runtime_context = {
+            "route": route,
+            "source": "legacy_workflow_route",
+            "plan_id": str(request_body.get("plan_id") or ""),
+            "request_id": str(request_body.get("request_id") or ""),
+            "node_id": str(request_body.get("node_id") or ""),
+            "tool_id": str(request_body.get("tool_id") or ""),
+            "action": str(request_body.get("action") or ""),
+        }
+        return attach_chat_trace_run(
+            payload,
+            message=message,
+            runtime_context=runtime_context,
+            user_id=str(
+                request_body.get("user_id") or request_body.get("userId") or "approval-route"
+            ),
+            source="legacy_workflow_route",
+            channel="approval_route",
+            intent=intent,
+        )
+    except Exception:  # noqa: BLE001 - tracing must not break approval responses
+        logger.exception("failed to attach AgentRun trace to approval route response")
+        return payload
+
+
 @router.get("/api/ai/approval/pending")
 def ai_approval_pending():
     from app.application.workflow import get_approval_service
@@ -70,7 +109,13 @@ def ai_config_approval_post(body: dict = Body(default_factory=dict)):
         from app.application.workflow import reload_approval_service
 
         reload_approval_service()
-        return {"success": True, "message": "保存成功"}
+        return _trace_approval_route(
+            {"success": True, "message": "保存成功", "response": "审批配置已保存"},
+            route="/api/ai/config/approval",
+            message="保存审批配置",
+            body=payload,
+            intent="approval_config_update",
+        )
     except RECOVERABLE_ERRORS as e:
         logger.exception("save approval config: %s", e)
         return JSONResponse({"success": False, "message": f"保存失败：{str(e)}"}, status_code=500)
@@ -94,21 +139,28 @@ def ai_approval_request(body: dict = Body(default_factory=dict)):
         approval_service = get_approval_service()
         node = WorkflowNode(node_id=node_id, tool_id=tool_id, action=action, params=params)
         approval_req = approval_service.create_approval_request(plan_id=plan_id, node=node)
-        return {
-            "success": True,
-            "message": "审批请求已创建",
-            "data": {
-                "request_id": approval_req.request_id,
-                "plan_id": approval_req.plan_id,
-                "node_id": approval_req.node_id,
-                "tool_id": approval_req.tool_id,
-                "action": approval_req.action,
-                "status": approval_req.status.value,
-                "created_at": (
-                    approval_req.created_at.isoformat() if approval_req.created_at else None
-                ),
+        return _trace_approval_route(
+            {
+                "success": True,
+                "message": "审批请求已创建",
+                "response": "审批请求已创建",
+                "data": {
+                    "request_id": approval_req.request_id,
+                    "plan_id": approval_req.plan_id,
+                    "node_id": approval_req.node_id,
+                    "tool_id": approval_req.tool_id,
+                    "action": approval_req.action,
+                    "status": approval_req.status.value,
+                    "created_at": (
+                        approval_req.created_at.isoformat() if approval_req.created_at else None
+                    ),
+                },
             },
-        }
+            route="/api/ai/approval/request",
+            message=f"创建审批请求 {plan_id}/{node_id}",
+            body=payload,
+            intent="approval_request_create",
+        )
     except RECOVERABLE_ERRORS as e:
         logger.exception("approval request: %s", e)
         return JSONResponse(
@@ -179,11 +231,14 @@ def ai_approval_approve(body: dict = Body(default_factory=dict)):
         }
         if run_result_data:
             response_data["workflow_result"] = run_result_data
-        return {
-            "success": True,
-            "message": "审批已通过" + ("，工作流已执行" if workflow_data else ""),
-            "data": response_data,
-        }
+        message = "审批已通过" + ("，工作流已执行" if workflow_data else "")
+        return _trace_approval_route(
+            {"success": True, "message": message, "response": message, "data": response_data},
+            route="/api/ai/approval/approve",
+            message=message,
+            body=payload,
+            intent="approval_decision_approve",
+        )
     except RECOVERABLE_ERRORS as e:
         logger.exception("approval approve: %s", e)
         return JSONResponse({"success": False, "message": f"审批失败：{str(e)}"}, status_code=500)
@@ -213,7 +268,18 @@ def ai_approval_reject(body: dict = Body(default_factory=dict)):
                 {"success": False, "message": "缺少 request_id 或 plan_id"}, status_code=400
             )
         if success:
-            return {"success": True, "message": "审批已拒绝", "data": {"status": "rejected"}}
+            return _trace_approval_route(
+                {
+                    "success": True,
+                    "message": "审批已拒绝",
+                    "response": "审批已拒绝",
+                    "data": {"status": "rejected"},
+                },
+                route="/api/ai/approval/reject",
+                message="审批已拒绝",
+                body=payload,
+                intent="approval_decision_reject",
+            )
         return JSONResponse({"success": False, "message": "审批拒绝失败"}, status_code=400)
     except RECOVERABLE_ERRORS as e:
         logger.exception("approval reject: %s", e)

@@ -16,6 +16,7 @@ from typing import Any
 from app.db.models.customer import Customer
 from app.db.models.product import Product
 from app.db.session import get_db
+from app.di.registry import get_service_registry
 from app.infrastructure.db.sql_identifiers import (
     quote_sqlite_identifier,
     resolve_products_table,
@@ -306,6 +307,4 @@ instrument_application_service_class(UnitProductsImportService)
 
 def get_unit_products_import_app_service() -> UnitProductsImportService:
     """获取单位产品导入服务单例"""
-    from app.di.registry import get_service_registry
-
     return get_service_registry().unit_products_import_application_service

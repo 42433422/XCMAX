@@ -78,6 +78,21 @@ describe('xcmaxMarketProxy', () => {
     await xcmaxMarketProxy.butlerAllHandsReportStartSession({ x: 1 })
     expect(apiPost).toHaveBeenCalledWith('/api/xcmax/admin/all-hands-report/sessions', { x: 1 })
   })
+
+  it('localEmployeeCronJobs reads local cron jobs', async () => {
+    apiGet.mockResolvedValue([{ id: 'daily-sync' }])
+    await xcmaxMarketProxy.localEmployeeCronJobs()
+    expect(apiGet).toHaveBeenCalledWith('/api/xcmax/local/employee-cron/jobs')
+  })
+
+  it('localRunEmployeeCronJob posts manual run payload', async () => {
+    apiPost.mockResolvedValue({ ok: true })
+    await xcmaxMarketProxy.localRunEmployeeCronJob('job 1', { task: 'sync', input_data: { a: 1 } })
+    expect(apiPost).toHaveBeenCalledWith(
+      '/api/xcmax/local/employee-cron/jobs/job%201/run',
+      { task: 'sync', input_data: { a: 1 } },
+    )
+  })
 })
 
 describe('xcmaxMarketProxy local duty api probe', () => {
@@ -125,5 +140,37 @@ describe('xcmaxMarketProxy local duty api probe', () => {
     const mod = await import('./xcmaxMarketProxy')
     const r = (await mod.default.getEmployeeStatus('emp3')) as { deployed: boolean }
     expect(r.deployed).toBe(false)
+  })
+
+  it('executeEmployeeTask posts to local employee execute when local api is available', async () => {
+    apiGet.mockResolvedValueOnce({})
+    apiPost.mockResolvedValueOnce({ ok: true, source: 'local' })
+    const mod = await import('./xcmaxMarketProxy')
+    const r = await mod.default.executeEmployeeTask('emp 1', 'daily.brief', { topic: 'ops' })
+    expect(r).toEqual({ ok: true, source: 'local' })
+    expect(apiGet).toHaveBeenCalledWith('/api/xcmax/local/duty-graph/health')
+    expect(apiPost).toHaveBeenCalledWith(
+      '/api/xcmax/local/employees/emp%201/execute',
+      { task: 'daily.brief', input_data: { topic: 'ops' } },
+    )
+  })
+
+  it('executeEmployeeTask falls back to market proxy when local execute returns 404', async () => {
+    apiGet.mockResolvedValueOnce({})
+    apiPost.mockRejectedValueOnce({ status: 404 })
+    apiPost.mockResolvedValueOnce({ ok: true, source: 'market' })
+    const mod = await import('./xcmaxMarketProxy')
+    const r = await mod.default.executeEmployeeTask('emp 2', 'daily.brief', { topic: 'ops' })
+    expect(r).toEqual({ ok: true, source: 'market' })
+    expect(apiPost).toHaveBeenNthCalledWith(
+      1,
+      '/api/xcmax/local/employees/emp%202/execute',
+      { task: 'daily.brief', input_data: { topic: 'ops' } },
+    )
+    expect(apiPost).toHaveBeenNthCalledWith(
+      2,
+      '/api/xcmax/market-proxy/employees/emp%202/execute',
+      { task: 'daily.brief', input_data: { topic: 'ops' } },
+    )
   })
 })

@@ -422,7 +422,7 @@ def test_compat_customer_export_not_implemented() -> None:
 
 def test_legacy_tools_execute_route(tools_client: TestClient) -> None:
     with patch(
-        "app.routes.tools.run_archive_tools_execute",
+        "app.application.facades.tools_facade.run_archive_tools_execute",
         return_value=({"success": True, "tool": "excel_analysis"}, 200),
     ):
         r = tools_client.post(

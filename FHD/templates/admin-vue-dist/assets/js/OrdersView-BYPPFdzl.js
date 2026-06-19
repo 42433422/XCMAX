@@ -1,1 +1,0 @@
-import e from"./OrdersView-BXIlzXzO.js";import{E as r,d as o,Q as t}from"./index-BM0eyJ6q.js";import"./ConfirmDialog-CPemFTYK.js";const p=r({__name:"OrdersView",setup(a){return(n,s)=>(o(),t(e))}});export{p as default};

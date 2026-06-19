@@ -13,6 +13,7 @@ import sqlite3
 import uuid
 from typing import Any, cast
 
+from app.di.registry import get_service_registry
 from app.infrastructure.db.sql_identifiers import (
     quote_sqlite_identifier,
     resolve_products_table,
@@ -63,7 +64,10 @@ class FileAnalysisService:
             return self._analyze_sqlite_db(saved_path, saved_name, raw_filename, filename)
 
         if ext in (".xlsx", ".xls"):
-            return cast("dict[str, Any]", self._analyze_excel_file(saved_path, saved_name, raw_filename, filename))
+            return cast(
+                "dict[str, Any]",
+                self._analyze_excel_file(saved_path, saved_name, raw_filename, filename),
+            )
 
         return {
             "success": False,
@@ -223,6 +227,4 @@ instrument_application_service_class(FileAnalysisService)
 
 def get_file_analysis_app_service() -> FileAnalysisService:
     """获取文件分析服务单例"""
-    from app.di.registry import get_service_registry
-
     return get_service_registry().file_analysis_application_service

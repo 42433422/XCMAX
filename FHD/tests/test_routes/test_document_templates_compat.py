@@ -1,11 +1,11 @@
-"""Tests for app.routes.document_templates_compat."""
+"""Tests for app.fastapi_routes.document_templates_compat."""
 from __future__ import annotations
 
 import pytest
 from unittest.mock import patch, MagicMock
 from io import BytesIO
 
-from app.routes.document_templates_compat import (
+from app.fastapi_routes.document_templates_compat import (
     _UploadLikeFile,
     _unpack_response,
     run_archive_template_create,
@@ -90,7 +90,7 @@ class TestUnpackResponse:
 
 
 class TestRunArchiveTemplateCreate:
-    @patch("app.routes.document_templates_compat._tpl")
+    @patch("app.fastapi_routes.document_templates_compat._tpl")
     def test_create_with_payload(self, mock_tpl):
         mock_resp = MagicMock()
         mock_resp.get_json.return_value = {"success": True, "data": {"id": 1}}
@@ -100,7 +100,7 @@ class TestRunArchiveTemplateCreate:
         data, code = run_archive_template_create({"name": "test"})
         assert code == 201
 
-    @patch("app.routes.document_templates_compat._tpl")
+    @patch("app.fastapi_routes.document_templates_compat._tpl")
     def test_create_with_none_payload(self, mock_tpl):
         mock_resp = MagicMock()
         mock_resp.get_json.return_value = {"success": True}
@@ -112,7 +112,7 @@ class TestRunArchiveTemplateCreate:
 
 
 class TestRunArchiveTemplateAnalyze:
-    @patch("app.routes.document_templates_compat._tpl")
+    @patch("app.fastapi_routes.document_templates_compat._tpl")
     def test_analyze(self, mock_tpl):
         mock_resp = MagicMock()
         mock_resp.get_json.return_value = {"success": True, "fields": []}

@@ -19,6 +19,8 @@ from app.application.workflow.legacy_chat_adapter import (
     chat,
     chat_stream_sse_events,
     chat_stream_text,
+    get_last_tool_records,
+    get_last_tool_result,
     reset_planner_tool_dedup_state,
 )
 
@@ -318,6 +320,11 @@ class TestAppendToolMessages:
         assert messages[0]["role"] == "tool"
         payload = json.loads(messages[0]["content"])
         assert payload["success"] is True
+        last = get_last_tool_result()
+        assert last["tool_key"] == "excel_analysis"
+        assert last["tool_call_id"] == "tc1"
+        assert last["tool_params"] == {"query": "test"}
+        assert len(last["_tool_records"]) == 1
 
     def test_requires_token_returns_early(self):
         execute_tool = MagicMock(
@@ -390,6 +397,17 @@ class TestAppendToolMessages:
             )
             mock_enrich.assert_called_once()
 
+    def test_reset_clears_last_tool_records(self):
+        execute_tool = MagicMock(return_value='{"success": true}')
+        tcs = [_Tc("tc1", "excel_analysis", '{"query":"test"}')]
+        append_tool_messages([], tcs, workspace_root="/tmp", execute_tool=execute_tool)
+
+        assert get_last_tool_records()
+        reset_planner_tool_dedup_state()
+
+        assert get_last_tool_records() == []
+        assert get_last_tool_result() == {}
+
 
 # ---------------------------------------------------------------------------
 # chat (non-streaming)
@@ -457,6 +475,9 @@ class TestChat:
             result = chat("analyze", client=mock_client, model="test-model")
         assert isinstance(result, dict)
         assert "调用工具" in result["thinking_steps"]
+        assert result["legacy_tool_records"][0]["tool_id"] == "excel_analysis"
+        assert result["legacy_tool_records"][0]["tool_call_id"] == "tc1"
+        assert result["legacy_tool_records"][0]["output"]["success"] is True
 
     def test_chat_max_iterations_reached(self):
         mock_client = MagicMock()

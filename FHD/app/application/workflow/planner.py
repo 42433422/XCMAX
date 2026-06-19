@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import uuid
 from collections.abc import Callable
 from typing import Any, cast
@@ -18,6 +19,206 @@ logger = logging.getLogger(__name__)
 
 # 同步规划 LLM 复用 Client，减轻短时多次 DeepSeek 连接失败
 _planner_http_client: httpx.Client | None = None
+
+_DB_WRITE_KEYWORDS = frozenset(
+    {
+        "新增",
+        "添加",
+        "创建",
+        "写入",
+        "加入数据库",
+        "添加到数据库",
+        "保存到数据库",
+        "入库",
+    }
+)
+
+
+def _clean_db_slot_value(value: str) -> str:
+    text = str(value or "").strip(" \t\r\n，,。；;：:")
+    for token in (
+        "到数据库",
+        "写入数据库",
+        "加入数据库",
+        "添加到数据库",
+        "保存到数据库",
+        "入库",
+        "数据库",
+    ):
+        text = text.replace(token, "")
+    text = re.sub(r"^(新增|添加|创建|写入|保存|客户|单位|购买单位|产品|商品)\s*", "", text)
+    text = re.sub(r"\s*(客户|单位|购买单位|产品|商品)$", "", text)
+    return text.strip(" \t\r\n，,。；;：:")
+
+
+def _extract_named_slot(message: str, patterns: tuple[str, ...]) -> str:
+    for pattern in patterns:
+        match = re.search(pattern, message, flags=re.I)
+        if match:
+            value = _clean_db_slot_value(match.group(1))
+            if value:
+                return value
+    quoted = re.search(r"[「“\"']([^」”\"']+)[」”\"']", message)
+    if quoted:
+        return _clean_db_slot_value(quoted.group(1))
+    return ""
+
+
+def _looks_like_business_db_write(message: str, lower: str) -> bool:
+    if not any(k in message for k in _DB_WRITE_KEYWORDS) and not any(
+        k in lower for k in ("add", "create", "insert", "upsert")
+    ):
+        return False
+    return (
+        any(k in message for k in ("数据库", "入库", "写库"))
+        or "db" in lower
+        or "database" in lower
+    )
+
+
+def _infer_business_db_entity(message: str) -> str:
+    if any(k in message for k in ("产品", "商品")):
+        return "products"
+    if any(k in message for k in ("客户", "单位", "购买单位")):
+        return "customers"
+    if any(k in message for k in ("原材料", "物料")):
+        return "materials"
+    if any(k in message for k in ("出货", "发货", "发货单")):
+        return "shipment_records"
+    return "products"
+
+
+def _extract_business_db_write_node(message: str) -> WorkflowNode | None:
+    entity = _infer_business_db_entity(message)
+    if entity == "customers":
+        unit_name = _extract_named_slot(
+            message,
+            (
+                r"(?:客户|单位|购买单位)\s*[:：是为]?\s*([^\s，,。；;]+)",
+                r"(?:新增|添加|创建|写入|保存)\s*([^\s，,。；;]+)\s*(?:客户|单位)",
+            ),
+        )
+        if not unit_name:
+            return None
+        return WorkflowNode(
+            node_id="write_business_customer",
+            tool_id="business_db",
+            action="write",
+            params={
+                "entity": "customers",
+                "operation": "upsert",
+                "payload": {"unit_name": unit_name, "customer_name": unit_name},
+            },
+            risk="medium",
+            description=f"写入客户 {unit_name}",
+            idempotent=True,
+        )
+
+    if entity == "products":
+        product_name = _extract_named_slot(
+            message,
+            (
+                r"(?:产品|商品)\s*[:：是为]?\s*([^\s，,。；;]+)",
+                r"(?:新增|添加|创建|写入|保存)\s*([^\s，,。；;]+)\s*(?:产品|商品)",
+            ),
+        )
+        unit_name = _extract_named_slot(
+            message,
+            (
+                r"(?:客户|单位|购买单位)\s*[:：是为]?\s*([^\s，,。；;]+)",
+                r"(?:给|到|为)\s*([^\s，,。；;]+)\s*(?:客户|单位)?",
+            ),
+        )
+        if not product_name or not unit_name:
+            return None
+        model_match = re.search(r"(?:型号|model)\s*[:：]?\s*([A-Za-z0-9._-]+)", message, re.I)
+        payload: dict[str, Any] = {
+            "name_or_model": product_name,
+            "product_name": product_name,
+            "unit_name": unit_name,
+        }
+        if model_match:
+            payload["model_number"] = model_match.group(1).strip().upper()
+        return WorkflowNode(
+            node_id="write_business_product",
+            tool_id="business_db",
+            action="write",
+            params={"entity": "products", "operation": "create", "payload": payload},
+            risk="medium",
+            description=f"写入产品 {product_name}",
+            idempotent=False,
+        )
+
+    return None
+
+
+def _extract_business_db_read_keyword(message: str, entity: str) -> str:
+    quoted = re.search(r"[「“\"']([^」”\"']+)[」”\"']", message)
+    if quoted:
+        return _clean_db_slot_value(quoted.group(1))
+
+    if entity == "products":
+        slot = _extract_named_slot(
+            message,
+            (
+                r"(?:产品|商品|型号|model)\s*[:：的]?\s*([A-Za-z0-9._-]+|[^\s，,。；;]+)",
+                r"(?:查|查询|读取|读)\s*(?:数据库|db|database)?\s*(?:产品|商品)?\s*([A-Za-z0-9._-]+)",
+            ),
+        )
+        if slot:
+            return slot
+        model = re.search(r"\b[A-Za-z0-9][A-Za-z0-9._-]{1,}\b", message)
+        if model:
+            return model.group(0).strip()
+
+    if entity == "customers":
+        slot = _extract_named_slot(
+            message,
+            (
+                r"(?:客户|单位|购买单位)\s*[:：的]?\s*([^\s，,。；;]+)",
+                r"(?:查|查询|读取|读)\s*(?:数据库|db|database)?\s*(?:客户|单位)?\s*([^\s，,。；;]+)",
+            ),
+        )
+        if slot:
+            return slot
+
+    if entity == "materials":
+        slot = _extract_named_slot(
+            message,
+            (
+                r"(?:原材料|物料|材料)\s*[:：的]?\s*([^\s，,。；;]+)",
+                r"(?:查|查询|读取|读)\s*(?:数据库|db|database)?\s*(?:原材料|物料|材料)?\s*([^\s，,。；;]+)",
+            ),
+        )
+        if slot:
+            return slot
+
+    cleaned = str(message or "").strip()
+    for token in (
+        "查询数据库",
+        "读取数据库",
+        "查数据库",
+        "读数据库",
+        "数据库",
+        "database",
+        "查库",
+        "读库",
+        "查询",
+        "读取",
+        "查",
+        "读",
+        "产品",
+        "商品",
+        "客户",
+        "单位",
+        "购买单位",
+        "原材料",
+        "物料",
+        "材料",
+    ):
+        cleaned = cleaned.replace(token, " ")
+    cleaned = re.sub(r"\s+", " ", cleaned).strip(" \t\r\n，,。；;：:")
+    return cleaned or str(message or "").strip()
 
 
 def get_tool_registry() -> dict[str, Any]:
@@ -215,6 +416,46 @@ def get_tool_registry() -> dict[str, Any]:
                 },
             },
         },
+        "employee": {
+            "description": "调用本机已安装的 AI 员工 employee_pack；list 查看员工，execute 运行指定员工。",
+            "availability": "shared",
+            "actions": {
+                "list": {
+                    "description": "列出可调用员工包",
+                    "risk": "low",
+                    "idempotent": True,
+                    "availability": "shared",
+                    "required_params": [],
+                },
+                "execute": {
+                    "description": "运行指定 employee_id 的员工任务",
+                    "risk": "medium",
+                    "idempotent": False,
+                    "availability": "shared",
+                    "required_params": ["task"],
+                },
+            },
+        },
+        "business_db": {
+            "description": "受控业务数据库读写：customers/products/materials/shipment_records；不接受任意 SQL。",
+            "availability": "shared",
+            "actions": {
+                "read": {
+                    "description": "查询受控业务实体",
+                    "risk": "low",
+                    "idempotent": True,
+                    "availability": "shared",
+                    "required_params": ["entity"],
+                },
+                "write": {
+                    "description": "通过业务服务执行 create/update/delete 等写操作",
+                    "risk": "medium",
+                    "idempotent": False,
+                    "availability": "shared",
+                    "required_params": ["entity", "operation", "payload"],
+                },
+            },
+        },
     }
 
 
@@ -245,6 +486,8 @@ def execute_tool(tool_name: str, params: dict[str, Any]) -> dict[str, Any]:
             "excel_schema": "analyze",
             "excel_analysis": "analyze",
             "import_excel": "import",
+            "employee": "list",
+            "business_db": "read",
         }
         action = action_defaults.get(tool_name, "query")
 
@@ -465,8 +708,8 @@ def _execute_customers_ensure_exists_tool(params: dict[str, Any]) -> dict[str, A
 
 def _execute_shipment_generate_tool(params: dict[str, Any]) -> dict[str, Any]:
     try:
+        from app.application.facades.tools_facade import _parse_order_text
         from app.bootstrap import get_shipment_app_service
-        from app.routes.tools import _parse_order_text
 
         order_text = str(params.get("order_text") or "").strip()
         unit_name = str(params.get("unit_name") or "").strip()
@@ -1138,6 +1381,30 @@ def _execute_import_excel_tool(params: dict[str, Any]) -> dict[str, Any]:
         }
 
 
+def _execute_employee_list_tool(params: dict[str, Any]) -> dict[str, Any]:
+    from app.application.facades.tools_facade import execute_registered_workflow_tool
+
+    return execute_registered_workflow_tool("employee", "list", params)
+
+
+def _execute_employee_execute_tool(params: dict[str, Any]) -> dict[str, Any]:
+    from app.application.facades.tools_facade import execute_registered_workflow_tool
+
+    return execute_registered_workflow_tool("employee", "execute", params)
+
+
+def _execute_business_db_read_tool(params: dict[str, Any]) -> dict[str, Any]:
+    from app.application.facades.tools_facade import execute_registered_workflow_tool
+
+    return execute_registered_workflow_tool("business_db", "read", params)
+
+
+def _execute_business_db_write_tool(params: dict[str, Any]) -> dict[str, Any]:
+    from app.application.facades.tools_facade import execute_registered_workflow_tool
+
+    return execute_registered_workflow_tool("business_db", "write", params)
+
+
 # 与 get_tool_registry / execute_tool 默认 action 对齐；(tool_id, action) -> 实现函数
 _WORKFLOW_TOOL_HANDLERS: dict[tuple[str, str], Callable[[dict[str, Any]], dict[str, Any]]] = {
     ("price_list", "export"): _execute_price_list_tool,
@@ -1155,6 +1422,10 @@ _WORKFLOW_TOOL_HANDLERS: dict[tuple[str, str], Callable[[dict[str, Any]], dict[s
     ("excel_schema", "analyze"): _execute_excel_schema_tool,
     ("excel_analysis", "analyze"): _execute_excel_analysis_tool,
     ("import_excel", "import"): _execute_import_excel_tool,
+    ("employee", "list"): _execute_employee_list_tool,
+    ("employee", "execute"): _execute_employee_execute_tool,
+    ("business_db", "read"): _execute_business_db_read_tool,
+    ("business_db", "write"): _execute_business_db_write_tool,
 }
 
 
@@ -1240,10 +1511,21 @@ class LLMWorkflowPlanner:
                 context["user_memory_rag"] = {"summary": summary}
         except ImportError:
             logger.debug("用户记忆 RAG 服务不可用（不阻断主流程）")
-        except (ValueError, TypeError) as e:
-            logger.debug("用户记忆 RAG 参数错误（不阻断主流程）: %s", e)
-        except RuntimeError as e:
-            logger.warning("用户记忆 RAG 运行时错误（不阻断主流程）: %s", e)
+        except RECOVERABLE_ERRORS as e:
+            logger.warning("用户记忆 RAG 不可用（不阻断主流程）: %s", e)
+        try:
+            from app.services.user_memory_service import get_user_memory_service
+
+            memory_v2_summary = get_user_memory_service().format_memory_v2_for_prompt(
+                user_id=user_id,
+                max_items=6,
+            )
+            if "无已确认记忆" not in memory_v2_summary:
+                context["memory_v2"] = {"summary": memory_v2_summary}
+        except ImportError:
+            logger.debug("Memory v2 服务不可用（不阻断主流程）")
+        except RECOVERABLE_ERRORS as e:
+            logger.warning("Memory v2 不可用（不阻断主流程）: %s", e)
 
         planned = self._plan_with_react_multiagent(
             plan_id=plan_id,
@@ -1316,6 +1598,7 @@ class LLMWorkflowPlanner:
                 "query",
                 "exists",
                 "list",
+                "read",
                 "view",
                 "preview",
                 "decompose",
@@ -1431,7 +1714,7 @@ class LLMWorkflowPlanner:
                             if not params.get("keyword"):
                                 params["keyword"] = str(message or "").strip()[:80]
 
-                from app.routes.tools import execute_registered_workflow_tool
+                from app.application.facades.tools_facade import execute_registered_workflow_tool
 
                 merged_params = dict(params or {})
                 merged_params["_runtime_context"] = dict(runtime_context_for_probe)
@@ -1606,6 +1889,9 @@ class LLMWorkflowPlanner:
                     "node_id 必须唯一且非空。",
                     "所有 nodes 项必须包含 tool_id/action/params/risk/idempotent/description/depends_on 结构字段。",
                     "对于 required_params：必须在 params 中提供非空值（若无法从 user_message 推断，仍需给出最合理的非空占位/默认值，保证结构字段不缺失）。",
+                    "员工相关意图优先使用 employee.list/employee.execute；不知道 employee_id 时先 list，不要伪造员工 ID。",
+                    "数据库读写必须使用 business_db.read/write 的 entity/operation/payload 结构，不得生成 sql/raw_sql/query_sql。",
+                    "business_db.write 只在用户明确要求新增/添加/写入/入库/删除/更新时使用；普通查询使用 business_db.read。",
                 ],
                 "validation_error": error,
                 "invalid_plan": invalid_dict,
@@ -1743,9 +2029,13 @@ class LLMWorkflowPlanner:
                     "如果步骤有依赖，写到 depends_on。",
                     "todo_steps 要贴合用户语义，不要模板化。",
                     "risk_level 按节点最高风险确定。",
+                    "员工相关意图：若用户只是问有哪些员工，使用 employee.list；若明确指定 employee_id/pack_id 并要求执行，使用 employee.execute 并填写 task；不知道员工 ID 时先 list，不要编造。",
+                    "数据库相关意图：读数据库/查库使用 business_db.read，并填写 entity；写入/新增/更新/删除/入库才使用 business_db.write，并填写 entity、operation、payload。",
+                    "business_db 只能访问 customers/products/materials/shipment_records；禁止生成 sql/raw_sql/query_sql 或任意 SQL。",
                     "对 products.query / customers.query：必须在 params 填入 keyword 或 model_number 等检索词，"
                     "从用户话中提取（如「七彩乐园的9803」→ keyword 含单位+型号），禁止留空对象 {}。",
                     "如果 context 中包含 tool_probe_outputs 且其中 success=true，请优先使用其中 data_preview 的信息来补全 nodes.params。",
+                    "如果 context 中包含 memory_v2.summary，只能把其中已确认 active 记忆用于补全偏好、客户别名、产品习惯或任务上下文；禁止使用未确认候选或编造记忆。",
                     "若 context 中 tool_execution_profile 为 normal 或 ui_surface 为 normal 且 intent_channel 为 pro："
                     "仅可使用 availability 为 shared 或 normal_only 的工具；产品查询优先 normal_slot_dispatch.product_query 或 products.query。",
                     "若 context 为全专业链路（未带上述混合标记）：仅使用 shared 或 pro_only，勿选 normal_only。",
@@ -1832,11 +2122,15 @@ class LLMWorkflowPlanner:
 
             tool_probe_outputs = []
             user_memory_rag_summary = ""
+            memory_v2_summary = ""
             try:
                 if isinstance(context, dict):
                     user_memory_rag = context.get("user_memory_rag")
                     if isinstance(user_memory_rag, dict):
                         user_memory_rag_summary = str(user_memory_rag.get("summary") or "").strip()
+                    memory_v2 = context.get("memory_v2")
+                    if isinstance(memory_v2, dict):
+                        memory_v2_summary = str(memory_v2.get("summary") or "").strip()
                     tpo = context.get("tool_probe_outputs")
                     if isinstance(tpo, list):
                         tool_probe_outputs = []
@@ -1857,6 +2151,7 @@ class LLMWorkflowPlanner:
             except (ImportError, RuntimeError):
                 tool_probe_outputs = []
                 user_memory_rag_summary = ""
+                memory_v2_summary = ""
 
             return PlanGraph(
                 plan_id=plan_id,
@@ -1868,6 +2163,7 @@ class LLMWorkflowPlanner:
                     "planner": "llm",
                     "message": message,
                     "user_memory_rag_summary": user_memory_rag_summary,
+                    "memory_v2_summary": memory_v2_summary,
                     "tool_probe_outputs": tool_probe_outputs,
                 },
             )
@@ -1889,7 +2185,85 @@ class LLMWorkflowPlanner:
         todo = ["理解用户目标", "执行可用工具", "输出执行结果"]
         intent = "generic_workflow"
 
-        if ("添加" in message or "新增" in message or "create" in lower) and ("产品" in message):
+        if (
+            any(k in message for k in ("员工", "employee", "调用", "交给"))
+            and "employee" in tool_registry
+        ):
+            intent = "employee_dispatch"
+            todo = ["识别目标员工", "调用本机员工运行时", "返回员工执行结果"]
+            employee_id = ""
+            try:
+                from app.mod_sdk.employee_tool_registry import build_employee_tools_status
+
+                status = build_employee_tools_status()
+                for item in status.get("employee_pack_tools") or []:
+                    if not isinstance(item, dict):
+                        continue
+                    pid = str(item.get("pack_id") or "").strip()
+                    if pid and pid in message:
+                        employee_id = pid
+                        break
+            except (ImportError, RuntimeError):
+                employee_id = ""
+            if employee_id:
+                nodes.append(
+                    WorkflowNode(
+                        node_id="run_employee",
+                        tool_id="employee",
+                        action="execute",
+                        params={"employee_id": employee_id, "task": message},
+                        risk="medium",
+                        description=f"调用员工 {employee_id}",
+                        idempotent=False,
+                    )
+                )
+            else:
+                nodes.append(
+                    WorkflowNode(
+                        node_id="list_employees",
+                        tool_id="employee",
+                        action="list",
+                        params={},
+                        risk="low",
+                        description="列出可调用员工",
+                        idempotent=True,
+                    )
+                )
+
+        if (
+            not nodes
+            and _looks_like_business_db_write(message, lower)
+            and "business_db" in tool_registry
+        ):
+            node = _extract_business_db_write_node(message)
+            if node is not None:
+                intent = "business_db_write"
+                todo = ["识别业务实体与写入字段", "通过受控业务服务写入数据库", "返回写入结果"]
+                nodes.append(node)
+
+        if not nodes and (
+            any(k in lower for k in ("db", "database"))
+            or any(k in message for k in ("数据库", "查数据库", "读数据库"))
+        ):
+            if "business_db" in tool_registry:
+                intent = "business_db_read"
+                entity = _infer_business_db_entity(message)
+                keyword = _extract_business_db_read_keyword(message, entity)
+                nodes.append(
+                    WorkflowNode(
+                        node_id="read_business_db",
+                        tool_id="business_db",
+                        action="read",
+                        params={"entity": entity, "keyword": keyword},
+                        risk="low",
+                        description="读取受控业务数据库",
+                        idempotent=True,
+                    )
+                )
+
+        if not nodes and (
+            ("添加" in message or "新增" in message or "create" in lower) and ("产品" in message)
+        ):
             intent = "add_product_to_unit"
             todo = [
                 "意图分析：识别产品新增任务",

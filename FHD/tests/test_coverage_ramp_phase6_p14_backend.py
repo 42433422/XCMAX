@@ -2032,22 +2032,25 @@ class TestGetMobileUser:
         assert result is None
 
     @pytest.mark.asyncio
-    async def test_invalid_bearer_token_resolves_session_user(
+    async def test_invalid_bearer_token_returns_none_without_session_fallback(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         from app.fastapi_routes.mobile_api import get_mobile_user
 
         request = MagicMock()
         request.headers = {}
+        resolved = []
 
         def fake_resolve(request):
+            resolved.append(request)
             return "session_user"
 
         monkeypatch.setattr(
             "app.infrastructure.auth.dependencies.resolve_session_user", fake_resolve
         )
         result = await get_mobile_user(request, authorization="Bearer invalid_token")
-        assert result == "session_user"
+        assert result is None
+        assert resolved == []
 
     @pytest.mark.asyncio
     async def test_valid_bearer_token_loads_user_from_db(

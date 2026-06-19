@@ -286,7 +286,9 @@ bash /opt/fhd-full/scripts/deploy/fhd-apply-release-compose.sh
 | 工具 | CI 状态 |
 |------|---------|
 | **Ruff** | `fhd-ci-cd.yml` / `fhd-test.yml` — 唯一 formatter + linter（`ruff check` + `ruff format --check`） |
-| **black / isort** | **不在 CI** — 与 Ruff 冲突；本地 pre-commit 可保留，勿在 CI 重加除非统一配置 |
+| **black / isort** | **禁用** — 与 Ruff 冲突；CI、本地 pre-commit、FHD dev 依赖均不得重新启用 |
+
+`guard-temp-scripts` 使用 `FHD/scripts/ci/guard_temp_scripts.py`：对 `_find_zero.py` / `_analyze_coverage.py` 做全量 tracked 扫描，对新增 `_fail*.txt`、`*.v1_backup`、根级/直挂 `scripts/` 的 `fix_` / `check_` / `final_` 临时脚本做增量拦截。本地 pre-commit 同步执行同一脚本。
 
 ## 安全扫描门禁策略（FHD）
 
@@ -319,7 +321,9 @@ bash /opt/fhd-full/scripts/deploy/fhd-apply-release-compose.sh
 
 `fhd-ci-cd.yml` → job `backend-test` 上传 `coverage.xml` 至 Codecov。**可选**：需在 GitHub **Settings → Secrets → Actions** 配置 `CODECOV_TOKEN`；无 token 时步骤 `continue-on-error`（不阻断 CI）。本地 `coverage.xml` / `htmlcov/` 仍为 SSOT。
 
-**覆盖率门槛 SSOT**：唯一真值 = `FHD/pyproject.toml` → `[tool.coverage.report] fail_under`（当前 `35`，对应 `source=[app]` 全量诚实基线 ~36%）。`backend-test` **不再**用 CLI `--cov-fail-under` 硬编码阈值（旧 `58` 来自已废弃窄 include 口径，与全量口径不可比）。提升覆盖率请单独立项、上调 `fail_under`，禁止用窄 include 凑数。
+**覆盖率门槛 SSOT**：唯一真值 = `FHD/pyproject.toml` → `[tool.coverage.report] fail_under`（当前 `80`，对应 `source=[app]` 全量行覆盖 floor）。分支与前端 floor 见 `FHD/metrics/coverage_ratchet_baseline.json`；对外现状口径见 `FHD/metrics/coverage-dual-summary.json`。`backend-test` **不再**用 CLI `--cov-fail-under` 硬编码阈值；标准命令传 `--cov-fail-under=0`，再由 `coverage_ratchet.py --check` 同时检查行/分支。旧 `35/58/窄包70/77.4%` 等窄 include 或误报口径已退役，禁止再引用为当前值。
+
+`FHD/scripts/ci/check_coverage_ssot.py` 在 smoke/full CI 中校验上述三个文件互相一致，并禁止 `pyproject.toml` 复制动态 pytest passed/failed 快照；动态实测只允许出现在 `coverage-dual-summary.json`。
 
 ## E2E 分层
 

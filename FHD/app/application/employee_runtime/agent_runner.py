@@ -9,7 +9,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import os
 from collections.abc import Callable
@@ -31,6 +30,32 @@ def _run_async(coro):
         return pool.submit(asyncio.run, coro).result()
 
 
+def _resolve_employee_llm_config() -> dict[str, str | None]:
+    provider_override = (os.environ.get("FHD_EMPLOYEE_LLM_PROVIDER") or "").strip()
+    model_override = (os.environ.get("FHD_EMPLOYEE_LLM_MODEL") or "").strip()
+    if provider_override:
+        return {
+            "provider": provider_override,
+            "model": model_override or None,
+            "api_key": None,
+            "base_url": None,
+        }
+
+    from app.infrastructure.llm.providers.credentials import (
+        resolve_default_chat_model,
+        resolve_default_openai_provider,
+        resolve_openai_env_credentials,
+    )
+
+    api_key, base_url = resolve_openai_env_credentials()
+    return {
+        "provider": resolve_default_openai_provider(),
+        "model": model_override or resolve_default_chat_model(),
+        "api_key": api_key or None,
+        "base_url": base_url,
+    }
+
+
 async def _chat_completion(
     messages: list[dict[str, Any]], max_tokens: int = 4000
 ) -> dict[str, Any]:
@@ -40,17 +65,23 @@ async def _chat_completion(
         agent handler 已迁移至 ``agent_loop.run_employee_agent_loop`` 多轮循环；
         本函数仅供 ``executor._cognition_fhd`` 认知阶段使用，勿在新代码中直接调用。
     """
-    provider = (os.environ.get("FHD_EMPLOYEE_LLM_PROVIDER") or "deepseek").strip()
-    model = (os.environ.get("FHD_EMPLOYEE_LLM_MODEL") or "deepseek-chat").strip()
+    cfg = _resolve_employee_llm_config()
+    provider = str(cfg.get("provider") or "").strip() or "xcauto"
+    model = cfg.get("model")
     try:
         from app.services.conversation.llm_adapter import OpenAICompatibleAdapter
 
-        adapter = OpenAICompatibleAdapter(provider=provider, model=model)
+        adapter = OpenAICompatibleAdapter(
+            provider=provider,
+            model=str(model) if model else None,
+            api_key=cfg.get("api_key"),
+            base_url=cfg.get("base_url"),
+        )
         if not adapter.is_configured:
             return {
                 "error": "未配置 LLM API Key，请在设置中配置模型服务后再使用 agent 员工。",
                 "provider": provider,
-                "model": model,
+                "model": adapter.model_name,
             }
         return await adapter.chat_completion(messages, max_tokens=max_tokens)
     except RECOVERABLE_ERRORS as exc:

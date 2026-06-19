@@ -509,8 +509,12 @@ def retry_on_failure(
                     last_exception = e
                     if attempt < max_retries:
                         logger.warning(
-                            "重试 [%s] 第 %s/%s 次 "
-                            f"(等待 %ss): %s", func.__name__, attempt + 1, max_retries, current_delay, e
+                            "重试 [%s] 第 %s/%s 次 (等待 %ss): %s",
+                            func.__name__,
+                            attempt + 1,
+                            max_retries,
+                            current_delay,
+                            e,
                         )
                         time.sleep(current_delay)
                         current_delay *= backoff_factor

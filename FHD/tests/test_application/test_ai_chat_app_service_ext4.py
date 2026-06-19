@@ -43,7 +43,7 @@ class TestCustomerHintFromPreviewGrid:
             }
         }
         with patch(
-            "app.routes.template_grid_core._extract_inline_customer_hits_from_cell",
+            "app.application.template_grid_core._extract_inline_customer_hits_from_cell",
             return_value=["公司A"],
         ):
             result = service._customer_hint_from_preview_grid(preview_data)
@@ -189,7 +189,7 @@ class TestDispatchWorkflowTool:
         service = _make_service()
         mock_result = {"success": True, "data": []}
         with patch(
-            "app.routes.tools.execute_registered_workflow_tool",
+            "app.application.facades.tools_facade.execute_registered_workflow_tool",
             return_value=mock_result,
         ):
             result = service._dispatch_workflow_tool("products", "query", {"keyword": "涂料"})
@@ -198,7 +198,7 @@ class TestDispatchWorkflowTool:
     def test_dispatch_runtime_error(self):
         service = _make_service()
         with patch(
-            "app.routes.tools.execute_registered_workflow_tool",
+            "app.application.facades.tools_facade.execute_registered_workflow_tool",
             side_effect=RuntimeError("fail"),
         ):
             result = service._dispatch_workflow_tool("products", "query", {})
@@ -350,7 +350,7 @@ class TestExecuteCustomersIntent:
     def test_add_intent_with_unit_name(self):
         service = _make_service()
         with patch(
-            "app.routes.tools.execute_registered_workflow_tool",
+            "app.application.facades.tools_facade.execute_registered_workflow_tool",
             return_value={"success": True, "created": True},
         ):
             result = service._execute_customers_intent(
@@ -424,7 +424,7 @@ class TestExecuteShipmentGenerate:
         mock_svc.generate_shipment_document.return_value = {"success": True, "doc_name": "test.pdf"}
         with (
             patch("app.bootstrap.get_shipment_app_service", return_value=mock_svc),
-            patch("app.routes.tools._parse_order_text", return_value={"success": True, "unit_name": "公司A", "products": []}),
+            patch("app.application.facades.tools_facade._parse_order_text", return_value={"success": True, "unit_name": "公司A", "products": []}),
         ):
             result = service._execute_shipment_generate(
                 {"success": True, "message": "", "data": {}},
@@ -435,7 +435,7 @@ class TestExecuteShipmentGenerate:
 
     def test_parse_failure(self):
         service = _make_service()
-        with patch("app.routes.tools._parse_order_text", return_value={"success": False, "message": "解析失败"}):
+        with patch("app.application.facades.tools_facade._parse_order_text", return_value={"success": False, "message": "解析失败"}):
             result = service._execute_shipment_generate(
                 {"success": True, "message": "", "data": {}},
                 {"order_text": "无效文本"},

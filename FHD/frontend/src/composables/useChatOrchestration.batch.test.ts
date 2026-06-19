@@ -7,11 +7,15 @@ const {
   requestChatByModeBatchWithTimeout,
   enqueueChatBatchMessage,
   addAndSaveMessage,
+  upsertTask,
+  agentListEvents,
 } = vi.hoisted(() => ({
   requestChatByModeWithTimeout: vi.fn(),
   requestChatByModeBatchWithTimeout: vi.fn(),
   enqueueChatBatchMessage: vi.fn(),
   addAndSaveMessage: vi.fn().mockResolvedValue(undefined),
+  upsertTask: vi.fn(),
+  agentListEvents: vi.fn(),
 }))
 
 vi.mock('./useChatMessages', async () => {
@@ -42,7 +46,7 @@ vi.mock('./useChatTaskList', () => ({
     filteredTaskList: ref([]),
     createTaskId: (p: string) => `${p}-1`,
     sortTaskList: vi.fn(),
-    upsertTask: vi.fn(),
+    upsertTask,
     finishTask: vi.fn(),
     failTask: vi.fn(),
     cancelTask: vi.fn(),
@@ -184,6 +188,9 @@ vi.mock('@/stores/mods', () => ({
 }))
 vi.mock('@/api/chat', () => ({ default: {}, parseChatStreamErrorResponse: vi.fn() }))
 vi.mock('@/api/products', () => ({ default: { searchProducts: vi.fn() } }))
+vi.mock('@/api/agentRuns', () => ({
+  default: { listEvents: agentListEvents },
+}))
 vi.mock('@/utils/chatSseStream', () => ({
   readPlannerSseResponse: vi.fn(),
   isChatStreamEnabled: () => false,
@@ -217,6 +224,13 @@ describe('useChatOrchestration batch/json', () => {
       response: '请确认工作流',
       data: { action: 'workflow_confirmation_required', data: { pending_workflow_id: 'wf-1' } },
     })
+    agentListEvents.mockResolvedValue({
+      success: true,
+      data: [
+        { event_id: 'evt_1', run_id: 'run_1', event_type: 'planner.started' },
+        { event_id: 'evt_2', run_id: 'run_1', event_type: 'run.completed', message: '完成' },
+      ],
+    })
   })
 
   it('sendMessage debounce triggers batch chat round', async () => {
@@ -234,11 +248,19 @@ describe('useChatOrchestration batch/json', () => {
     requestChatByModeWithTimeout.mockResolvedValueOnce({
       success: true,
       response: '请确认',
+      run_id: 'run_1',
       data: { action: 'workflow_confirmation_required', data: { pending_workflow_id: 'wf-2' } },
     })
     const api = useChatOrchestration({ sessionId: ref('s'), proIntentExperienceEnabled: ref(false) })
     await api.sendMessage('执行计划')
+    await new Promise((resolve) => setTimeout(resolve, 0))
     expect(requestChatByModeWithTimeout).toHaveBeenCalled()
     expect(addAndSaveMessage).toHaveBeenCalledWith('请确认', 'ai', undefined, expect.any(Object))
+    expect(agentListEvents).toHaveBeenCalledWith('run_1', {})
+    expect(upsertTask).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'agent_run_1',
+      source: 'agent',
+      status: 'success',
+    }))
   })
 })

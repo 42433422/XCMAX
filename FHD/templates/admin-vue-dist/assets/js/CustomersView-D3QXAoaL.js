@@ -1,1 +1,0 @@
-import o from"./CustomersView-CEln6W_e.js";import{E as e,d as r,Q as t}from"./index-BM0eyJ6q.js";import"./templatePreview-CjCQYra9.js";import"./ConfirmDialog-CPemFTYK.js";import"./useCoreNavLabel-BMW4RzOT.js";const u=e({__name:"CustomersView",setup(m){return(s,p)=>(r(),t(o))}});export{u as default};

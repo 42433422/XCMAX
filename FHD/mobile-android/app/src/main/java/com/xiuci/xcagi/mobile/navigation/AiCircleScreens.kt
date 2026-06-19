@@ -154,7 +154,7 @@ internal fun aiEmployeeAvatarColor(key: String): Color {
         MaterialTheme.colorScheme.secondary,
         MaterialTheme.colorScheme.tertiary,
     )
-    return colors[kotlin.math.abs(key.hashCode()) % colors.size]
+    return colors[Math.floorMod(key.hashCode(), colors.size)]
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)

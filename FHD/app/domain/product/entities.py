@@ -12,7 +12,7 @@ class Product:
     model_number: ModelNumber = None
     name: str = ""
     specification: str = ""
-    price: Money = field(default_factory=lambda: Money(0))
+    price: Money = field(default_factory=Money.zero)
     quantity: int = 0
     description: str = ""
     category: str = ""
@@ -27,7 +27,7 @@ class Product:
             raise ValueError("产品名称不能为空")
 
     def apply_discount(self, discount_rate: float) -> Money:
-        return Money(self.price.amount * discount_rate)
+        return self.price.multiply(discount_rate)
 
     def is_available(self) -> bool:
         return self.is_active and self.quantity > 0
@@ -54,7 +54,7 @@ class Product:
         return cls(
             name=name,
             model_number=ModelNumber(model_number) if model_number else None,
-            price=Money(price),
+            price=Money.from_float(float(price)),
         )
 
     def match(self, name: str = "", model_number: str = "") -> bool:

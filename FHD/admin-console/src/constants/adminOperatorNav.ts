@@ -18,6 +18,7 @@ export const ADMIN_SIDEBAR_PINNED_TOP_KEYS = ADMIN_OPERATOR_MENU_ITEMS.map((m) =
  * 管理端 modsForUi=[]，Mod 侧栏不注入，须在此显式列出运维常用入口。
  */
 export const ADMIN_OPERATOR_AUX_MENU_ITEMS: CoreMenuCatalogItem[] = [
+  { key: 'im', name: '信息', iconClass: 'fa-envelope-o' },
   { key: 'internal-customer-service', name: '内部客服', iconClass: 'fa-headphones' },
   { key: 'data-sources', name: '数据来源', iconClass: 'fa-database' },
   { key: 'tools', name: '工具表', iconClass: 'fa-wrench' },
@@ -32,6 +33,7 @@ export const ADMIN_OPERATOR_VISIBLE_CORE_KEYS = new Set([
   'workflow-employee-space',
   'workflow-visualization',
   'mod-store',
+  'im',
   'tools',
   'data-sources',
   'chat-debug',

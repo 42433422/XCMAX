@@ -1,1 +1,0 @@
-import e from"./EnterpriseCustomerServiceView-4SJoZ9BC.js";import{E as r,d as o,Q as t}from"./index-BM0eyJ6q.js";import"./useServiceBridge-BoIuiY_3.js";import"./useServiceBridgeInstance-Ze9CSJsV.js";const _=r({__name:"EnterpriseCustomerServiceView",setup(i){return(p,s)=>(o(),t(e))}});export{_ as default};

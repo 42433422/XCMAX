@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.application.ports.wechat_contact_store import WechatContactStorePort
+from app.di.registry import get_service_registry
 
 
 class WechatContactApplicationService:
@@ -57,6 +58,4 @@ instrument_application_service_class(WechatContactApplicationService)
 
 def get_wechat_contact_app_service() -> WechatContactApplicationService:
     """获取微信联系人服务单例"""
-    from app.di.registry import get_service_registry
-
     return get_service_registry().wechat_contact_application_service

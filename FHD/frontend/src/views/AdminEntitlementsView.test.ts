@@ -269,6 +269,46 @@ describe('AdminEntitlementsView', () => {
     expect(wrapper.find('.admin-mod-install.is-installed').text()).toContain('已安装')
   })
 
+  it('shows entitlement chain employees for installed workflow employee mods', async () => {
+    mockListUsers.mockResolvedValue({
+      users: [{ id: 1, username: 'testuser', is_enterprise: true, mod_ids: ['mod1'] }],
+    })
+    mockListUserMods.mockResolvedValue({ mod_ids: ['mod1'] })
+    mockListAssignableMods.mockResolvedValue({ mods: [{ id: 'mod1', name: 'Test Mod' }] })
+    mockApiFetch.mockImplementation((url: string) => {
+      if (url.includes('catalog')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            data: {
+              installed: [
+                {
+                  id: 'mod1',
+                  name: 'Test Mod',
+                  version: '1.0',
+                  is_installed: true,
+                  workflow_employees: [{ id: 'employee-a', label: '员工 A' }],
+                },
+              ],
+              available: [],
+            },
+          }),
+        })
+      }
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ data: { last_sync_at: '' } }),
+      })
+    })
+    const wrapper = mountComponent()
+    await flushPromises()
+    await wrapper.find('.admin-user-row__btn').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('.admin-entitlement-chain').text()).toContain('账号 → Mod → AI 员工 → 设备执行')
+    expect(wrapper.find('.admin-entitlement-chain').text()).toContain('员工 A')
+    expect(wrapper.find('.admin-entitlement-chain').text()).toContain('1 个员工')
+  })
+
   it('shows bind mod section with select dropdown', async () => {
     mockListUsers.mockResolvedValue({
       users: [{ id: 1, username: 'testuser', mod_ids: [] }],
@@ -338,7 +378,7 @@ describe('AdminEntitlementsView', () => {
   })
 
   it('shows "刷新中…" while refreshing local status', async () => {
-    let resolveCatalog: Function
+    let resolveCatalog: (value: unknown) => void
     mockApiFetch.mockImplementation((url: string) => {
       if (url.includes('catalog')) {
         return new Promise(resolve => { resolveCatalog = resolve })

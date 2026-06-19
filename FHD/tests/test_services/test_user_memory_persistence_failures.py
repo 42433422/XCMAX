@@ -196,6 +196,129 @@ def test_get_all_preferences_empty(fresh_service, tmp_memory_dir):
 
 
 # ---------------------------------------------------------------------------
+# Memory v2 lifecycle
+# ---------------------------------------------------------------------------
+
+
+def test_memory_v2_candidate_requires_confirmation_before_preference_use(
+    fresh_service, tmp_memory_dir
+):
+    svc = UserMemoryService(storage_type="json")
+
+    proposed = svc.propose_memory_candidate(
+        "u1",
+        "preference",
+        "favorite_customer",
+        "ACME",
+        confidence=0.8,
+        evidence=[{"run_id": "run_1"}],
+    )
+
+    assert proposed["success"] is True
+    assert proposed["created"] is True
+    candidate = proposed["candidate"]
+    assert candidate["status"] == "pending"
+    assert candidate["memory_type"] == "preference"
+    assert svc.get_preference("u1", "favorite_customer") is None
+    assert svc.list_memories("u1", status="pending")[0]["memory_id"] == candidate["memory_id"]
+
+
+def test_memory_v2_confirm_preference_syncs_legacy_preference(
+    fresh_service, tmp_memory_dir
+):
+    svc = UserMemoryService(storage_type="json")
+    candidate = svc.propose_memory_candidate(
+        "u1", "preference", "favorite_customer", "ACME"
+    )["candidate"]
+
+    confirmed = svc.confirm_memory_candidate("u1", candidate["memory_id"])
+
+    assert confirmed["success"] is True
+    assert confirmed["memory"]["status"] == "active"
+    assert svc.get_preference("u1", "favorite_customer") == "ACME"
+    assert svc.list_memories("u1", status="active", memory_type="preference")[0][
+        "memory_id"
+    ] == candidate["memory_id"]
+
+
+def test_memory_v2_duplicate_candidate_is_idempotent(fresh_service, tmp_memory_dir):
+    svc = UserMemoryService(storage_type="json")
+
+    first = svc.propose_memory_candidate("u1", "entity", "customer_alias:acme", "ACME")
+    second = svc.propose_memory_candidate("u1", "entity", "customer_alias:acme", "ACME")
+
+    assert first["created"] is True
+    assert second["created"] is False
+    assert first["candidate"]["memory_id"] == second["candidate"]["memory_id"]
+    assert len(svc.list_memories("u1")) == 1
+
+
+def test_memory_v2_correct_and_delete_keep_auditable_record(fresh_service, tmp_memory_dir):
+    svc = UserMemoryService(storage_type="json")
+    candidate = svc.propose_memory_candidate(
+        "u1", "preference", "default_template", "TPL-OLD"
+    )["candidate"]
+    svc.confirm_memory_candidate("u1", candidate["memory_id"])
+
+    corrected = svc.correct_memory(
+        "u1", candidate["memory_id"], value="TPL-NEW", reason="user corrected template"
+    )
+
+    assert corrected["success"] is True
+    assert corrected["memory"]["value"] == "TPL-NEW"
+    assert corrected["memory"]["correction_count"] == 1
+    assert svc.get_preference("u1", "default_template") == "TPL-NEW"
+
+    deleted = svc.delete_memory("u1", candidate["memory_id"], reason="user removed memory")
+
+    assert deleted["success"] is True
+    assert deleted["memory"]["status"] == "deleted"
+    assert svc.get_preference("u1", "default_template") is None
+    assert svc.list_memories("u1", status="deleted")[0]["deleted_reason"] == "user removed memory"
+
+
+def test_memory_v2_summary_counts_status_and_type(fresh_service, tmp_memory_dir):
+    svc = UserMemoryService(storage_type="json")
+    pending = svc.propose_memory_candidate("u1", "episodic", "last_quote_task", "quoted A")[
+        "candidate"
+    ]
+    active = svc.propose_memory_candidate("u1", "entity", "customer_alias:acme", "ACME")[
+        "candidate"
+    ]
+    svc.confirm_memory_candidate("u1", active["memory_id"])
+
+    summary = svc.get_memory_v2_summary("u1")
+    memory_summary = svc.get_memory_summary("u1")
+
+    assert pending["status"] == "pending"
+    assert summary["total"] == 2
+    assert summary["by_status"] == {"active": 1, "pending": 1}
+    assert summary["by_type"] == {"entity": 1, "episodic": 1}
+    assert memory_summary["memory_v2_count"] == 2
+    assert memory_summary["memory_v2_pending_count"] == 1
+    assert memory_summary["memory_v2_active_count"] == 1
+
+
+def test_memory_v2_prompt_uses_only_active_records(fresh_service, tmp_memory_dir):
+    svc = UserMemoryService(storage_type="json")
+    active = svc.propose_memory_candidate(
+        "u1", "preference", "favorite_customer", "ACME"
+    )["candidate"]
+    pending = svc.propose_memory_candidate(
+        "u1", "entity", "customer_alias:pending", "PENDING LTD"
+    )["candidate"]
+    svc.confirm_memory_candidate("u1", active["memory_id"])
+
+    prompt = svc.format_memory_v2_for_prompt("u1")
+
+    assert "【MemoryV2】已确认记忆" in prompt
+    assert "favorite_customer" in prompt
+    assert "ACME" in prompt
+    assert pending["memory_id"] not in prompt
+    assert "PENDING LTD" not in prompt
+
+
+# ---------------------------------------------------------------------------
 # record_action
 # ---------------------------------------------------------------------------
 

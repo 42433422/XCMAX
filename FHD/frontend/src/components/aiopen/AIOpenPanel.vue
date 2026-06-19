@@ -46,10 +46,10 @@
       <button
         class="aiopen-primary-btn"
         type="button"
-        :disabled="setupRunning || readyStatus === 'ready'"
-        @click="quickSetup"
+        :disabled="setupRunning || shutdownRunning"
+        @click="handlePrimaryAction"
       >
-        {{ setupRunning ? '开启中…' : primaryBtnLabel }}
+        {{ setupRunning ? '开启中…' : shutdownRunning ? '关闭中…' : primaryBtnLabel }}
       </button>
 
       <div class="aiopen-oneline">
@@ -225,6 +225,7 @@ const panelError = ref('')
 const panelAvailable = ref(true)
 const manifestTools = ref([])
 const setupRunning = ref(false)
+const shutdownRunning = ref(false)
 const installBundle = ref(null)
 const mcpHealthy = ref(false)
 const mcpHealthText = ref('')
@@ -303,8 +304,11 @@ const statusText = computed(() => {
 
 const primaryBtnLabel = computed(() => {
   if (setupRunning.value) return '开启中…'
-  return readyStatus.value === 'ready' ? '已开启' : '一键开启'
+  if (remoteControlEnabled.value) return '关闭智控'
+  return '一键开启'
 })
+
+const aiOpenActive = computed(() => remoteControlEnabled.value)
 
 const friendlyTools = computed(() =>
   manifestTools.value.map((t) => ({
@@ -553,6 +557,33 @@ const quickSetup = async () => {
   } finally {
     setupRunning.value = false
   }
+}
+
+const shutdownAiOpen = async () => {
+  shutdownRunning.value = true
+  accessResult.value = ''
+  try {
+    remoteControlEnabled.value = false
+    setCursorEnabled(false)
+    if (panelAvailable.value) {
+      await safeJsonRequest('/api/aiopen/control', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: false }),
+      })
+    }
+    accessResult.value = '已关闭开放智控'
+  } finally {
+    shutdownRunning.value = false
+  }
+}
+
+const handlePrimaryAction = async () => {
+  if (aiOpenActive.value) {
+    await shutdownAiOpen()
+    return
+  }
+  await quickSetup()
 }
 
 const toggleWhitelist = async (path, event) => {

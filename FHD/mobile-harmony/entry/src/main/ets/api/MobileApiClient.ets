@@ -47,11 +47,11 @@ export class MobileApiClient {
     return this.baseUrl;
   }
 
-  async login(username: string, password: string): Promise<MobileLoginData> {
+  async login(username: string, password: string, accountKind: string = 'admin'): Promise<MobileLoginData> {
     const body: LoginRequestBody = {
       username: username.trim(),
       password: password,
-      account_kind: 'enterprise'
+      account_kind: accountKind.trim().length > 0 ? accountKind.trim() : 'admin'
     };
     const envelope = await this.request<MobileLoginData>(
       'api/mobile/v1/auth/login',

@@ -259,174 +259,103 @@ export function useSpeechRecognition() {
     }
 
     let startupError = ''
+    const handleResult = (r: ASRResult) => {
+      if (sessionId !== _sessionId) return
+      if (r.text.trim()) {
+        _lastRecognizedText = r.text.trim()
+        interimText.value = _lastRecognizedText
+        _gotAnyResult = true
+        if (!_continuousMode) {
+          clearResultTimeout()
+        }
+        loadingHint.value = ''
+      }
+      _onResult?.(r)
+    }
+    const handleError = async (msg: string) => {
+      if (sessionId !== _sessionId) return
+      clearResultTimeout()
+      loadingHint.value = ''
+      const savedPartial = _lastRecognizedText
+
+      // 启动阶段失败：由 tryBackend 在 start() 返回后同步重试
+      if (!sessionReady.value) {
+        startupError = msg
+        return
+      }
+
+      stopCurrentBackend()
+
+      if (
+        _continuousMode &&
+        chainIndex === 0 &&
+        _funasrRetryCount < FUNASR_CONTINUOUS_MAX_RETRY
+      ) {
+        _funasrRetryCount += 1
+        loadingHint.value = '正在重连语音服务…'
+        if (savedPartial) interimText.value = savedPartial
+        await new Promise((r) => setTimeout(r, 600 + _funasrRetryCount * 400))
+        if (sessionId !== _sessionId) return
+        await tryBackendChain(0, sessionId)
+        return
+      }
+
+      if (_continuousMode && chainIndex === 0) {
+        error.value = continuousFunasrFailMsg()
+        _onError?.(continuousFunasrFailMsg())
+        return
+      }
+
+      if (chainIndex + 1 < BACKEND_CHAIN.length) {
+        loadingHint.value = '正在切换识别方案…'
+        if (savedPartial) interimText.value = savedPartial
+        await tryBackendChain(chainIndex + 1, sessionId)
+        return
+      }
+      error.value = msg
+      _onError?.(msg)
+    }
+    const handleAudioLevel = (level: number) => {
+      if (sessionId !== _sessionId) return
+      audioLevel.value = level
+      _onAudioLevel?.(level)
+    }
+    const handleReady = () => {
+      if (sessionId !== _sessionId) return
+      if (_continuousMode && chainId === 'funasr') {
+        _funasrRetryCount = 0
+      }
+      clearResultTimeout()
+      sessionReady.value = true
+      loadingHint.value = '请开始说话…'
+      wakeSharedMicCapture()
+      if (!_continuousMode) {
+        startResultTimeout(chainIndex, sessionId)
+      }
+    }
+    const handleMicReady = () => {
+      if (sessionId !== _sessionId) return
+      loadingHint.value = '正在连接语音服务…'
+    }
 
     await (id === 'funasr'
       ? (backend as FunASRBackend).start(
-          (r: ASRResult) => {
-            if (sessionId !== _sessionId) return
-            if (r.text.trim()) {
-              _lastRecognizedText = r.text.trim()
-              interimText.value = _lastRecognizedText
-              _gotAnyResult = true
-              if (!_continuousMode) {
-                clearResultTimeout()
-              }
-              loadingHint.value = ''
-            }
-            _onResult?.(r)
-          },
-          async (msg: string) => {
-            if (sessionId !== _sessionId) return
-            clearResultTimeout()
-            loadingHint.value = ''
-            const savedPartial = _lastRecognizedText
-
-            if (!sessionReady.value) {
-              startupError = msg
-              return
-            }
-
-            stopCurrentBackend()
-
-            if (
-              _continuousMode &&
-              chainIndex === 0 &&
-              _funasrRetryCount < FUNASR_CONTINUOUS_MAX_RETRY
-            ) {
-              _funasrRetryCount += 1
-              loadingHint.value = '正在重连语音服务…'
-              if (savedPartial) interimText.value = savedPartial
-              await new Promise((r) => setTimeout(r, 600 + _funasrRetryCount * 400))
-              if (sessionId !== _sessionId) return
-              await tryBackendChain(0, sessionId)
-              return
-            }
-
-            if (_continuousMode && chainIndex === 0) {
-              error.value = continuousFunasrFailMsg()
-              _onError?.(continuousFunasrFailMsg())
-              return
-            }
-
-            if (chainIndex + 1 < BACKEND_CHAIN.length) {
-              loadingHint.value = '正在切换识别方案…'
-              if (savedPartial) interimText.value = savedPartial
-              await tryBackendChain(chainIndex + 1, sessionId)
-              return
-            }
-            error.value = msg
-            _onError?.(msg)
-          },
-          (level: number) => {
-            if (sessionId !== _sessionId) return
-            audioLevel.value = level
-            _onAudioLevel?.(level)
-          },
-          () => {
-            if (sessionId !== _sessionId) return
-            if (_continuousMode && chainId === 'funasr') {
-              _funasrRetryCount = 0
-            }
-            clearResultTimeout()
-            sessionReady.value = true
-            loadingHint.value = '请开始说话…'
-            wakeSharedMicCapture()
-            if (!_continuousMode) {
-              startResultTimeout(chainIndex, sessionId)
-            }
-          },
-          id === 'funasr'
-            ? () => {
-                if (sessionId !== _sessionId) return
-                loadingHint.value = '正在连接语音服务…'
-              }
-            : undefined,
+          handleResult,
+          handleError,
+          handleAudioLevel,
+          handleReady,
+          handleMicReady,
           mediaStream,
           { persistentMic: _continuousMode },
         )
       : backend.start(
-      (r: ASRResult) => {
-        if (sessionId !== _sessionId) return
-        if (r.text.trim()) {
-          _lastRecognizedText = r.text.trim()
-          interimText.value = _lastRecognizedText
-          _gotAnyResult = true
-          if (!_continuousMode) {
-            clearResultTimeout()
-          }
-          loadingHint.value = ''
-        }
-        _onResult?.(r)
-      },
-      async (msg: string) => {
-        if (sessionId !== _sessionId) return
-        clearResultTimeout()
-        loadingHint.value = ''
-        const savedPartial = _lastRecognizedText
-
-        // 启动阶段失败：由 tryBackend 在 start() 返回后同步重试
-        if (!sessionReady.value) {
-          startupError = msg
-          return
-        }
-
-        stopCurrentBackend()
-
-        if (
-          _continuousMode &&
-          chainIndex === 0 &&
-          _funasrRetryCount < FUNASR_CONTINUOUS_MAX_RETRY
-        ) {
-          _funasrRetryCount += 1
-          loadingHint.value = '正在重连语音服务…'
-          if (savedPartial) interimText.value = savedPartial
-          await new Promise((r) => setTimeout(r, 600 + _funasrRetryCount * 400))
-          if (sessionId !== _sessionId) return
-          await tryBackendChain(0, sessionId)
-          return
-        }
-
-        if (_continuousMode && chainIndex === 0) {
-          error.value = continuousFunasrFailMsg()
-          _onError?.(continuousFunasrFailMsg())
-          return
-        }
-
-        if (chainIndex + 1 < BACKEND_CHAIN.length) {
-          loadingHint.value = '正在切换识别方案…'
-          if (savedPartial) interimText.value = savedPartial
-          await tryBackendChain(chainIndex + 1, sessionId)
-          return
-        }
-        error.value = msg
-        _onError?.(msg)
-      },
-      (level: number) => {
-        if (sessionId !== _sessionId) return
-        audioLevel.value = level
-        _onAudioLevel?.(level)
-      },
-      () => {
-        if (sessionId !== _sessionId) return
-        if (_continuousMode && chainId === 'funasr') {
-          _funasrRetryCount = 0
-        }
-        clearResultTimeout()
-        sessionReady.value = true
-        loadingHint.value = '请开始说话…'
-        wakeSharedMicCapture()
-        if (!_continuousMode) {
-          startResultTimeout(chainIndex, sessionId)
-        }
-      },
-      id === 'funasr'
-        ? () => {
-            if (sessionId !== _sessionId) return
-            loadingHint.value = '正在连接语音服务…'
-          }
-        : undefined,
-      mediaStream,
-    ))
+          handleResult,
+          handleError,
+          handleAudioLevel,
+          handleReady,
+          undefined,
+          mediaStream,
+        ))
 
     if (sessionId !== _sessionId) return
 

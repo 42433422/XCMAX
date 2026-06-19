@@ -9,19 +9,18 @@ sandbox result / verdict）也聚合为 ``trace`` 字段返回给调用方持久
 from __future__ import annotations
 
 import asyncio
+import os as _os
 from dataclasses import dataclass, field
 from typing import Any, AsyncIterator, Awaitable, Callable, Dict, List, Optional
 
 from modstore_server.script_agent.brief import (
     AgentEvent,
     Brief,
-    ContextBundle,
-    PlanResult,
     Verdict,
 )
 from modstore_server.script_agent.code_writer import write_code
 from modstore_server.script_agent.context_collector import collect_context
-from modstore_server.script_agent.llm_client import LlmClient
+from modstore_server.script_agent.llm_client import LlmClient, SCRIPT_AGENT_CODE_MAX_TOKENS
 from modstore_server.script_agent.observer import judge
 from modstore_server.script_agent.planner import make_plan
 from modstore_server.script_agent.repairer import repair_code
@@ -666,8 +665,6 @@ async def run_vibe_agent_loop(
 # AgentEvent(type, iteration, payload) stream the SSE consumers expect.
 # ---------------------------------------------------------------------------
 
-import os as _os
-
 _AGENT_V2 = _os.environ.get("VIBE_AGENT_V2", "").lower() in ("1", "on", "true", "yes")
 
 
@@ -700,9 +697,7 @@ async def run_agent_loop_v2(
 
     # ---- try to import vibe_coding AgentLoop
     try:
-        from vibe_coding.agent.loop import AgentEvent as V2Event
-        from vibe_coding.agent.loop import AgentLoop, EventType
-        from vibe_coding.nl.llm import LLMClient as _VibeLLMClient
+        from vibe_coding.agent.loop import AgentLoop
     except ImportError:
         # vibe-coding not installed — fall back to v1
         async for ev in run_agent_loop(
@@ -719,13 +714,27 @@ async def run_agent_loop_v2(
         return
 
     # ---- build a thin LLM adapter wrapping the script_agent LlmClient
-    class _LLMBridge:
-        def chat(self, system: str, user: str, *, json_mode: bool = True) -> str:
-            import asyncio as _a
+    async def _maybe_await(value: Any) -> Any:
+        import inspect as _inspect
 
-            loop = _a.get_event_loop()
-            msgs = [{"role": "system", "content": system}, {"role": "user", "content": user}]
-            result = loop.run_until_complete(llm.complete(msgs))
+        if _inspect.isawaitable(value):
+            return await value
+        return value
+
+    class _LLMBridge:
+        async def chat(self, system: str, user: str, *, json_mode: bool = True) -> str:
+            sys_msg = (system or "").strip()
+            if json_mode:
+                sys_msg = (
+                    sys_msg + "\n\n" if sys_msg else ""
+                ) + "Return only one valid JSON object. Do not wrap it in Markdown fences."
+            msgs = []
+            if sys_msg:
+                msgs.append({"role": "system", "content": sys_msg})
+            msgs.append({"role": "user", "content": user or ""})
+            result = await _maybe_await(
+                llm.chat(msgs, max_tokens=SCRIPT_AGENT_CODE_MAX_TOKENS)
+            )
             return str(result or "")
 
     ctx = await collect_context(brief, user_id=user_id, upload_items=files)
@@ -742,7 +751,7 @@ async def run_agent_loop_v2(
     trace.append({"phase": "context", "iteration": 0, "engine": "v2"})
 
     # ---- script-agent specific tools (static_check + sandbox)
-    from vibe_coding.agent.react.tools import ToolRegistry, ToolResult, tool
+    from vibe_coding.agent.react.tools import ToolRegistry, tool
 
     reg = ToolRegistry()
 
@@ -751,7 +760,7 @@ async def run_agent_loop_v2(
         errs = validate_script(code)
         return {"ok": not errs, "errors": errs}
 
-    async def _run_sandbox_sync(code: str) -> dict:
+    async def _run_sandbox(code: str) -> dict:
         res = await sandbox_runner(
             user_id=user_id,
             session_id=f"{session_id}_v2",
@@ -769,11 +778,8 @@ async def run_agent_loop_v2(
         }
 
     @tool("run_sandbox", description="Run Python code in the project sandbox and return results.")
-    def run_sandbox_tool(code: str) -> dict:
-        import asyncio as _a
-
-        loop = _a.get_event_loop()
-        return loop.run_until_complete(_run_sandbox_sync(code))
+    async def run_sandbox_tool(code: str) -> dict:
+        return await _run_sandbox(code)
 
     reg.register(static_check_tool)
     reg.register(run_sandbox_tool)
@@ -814,7 +820,6 @@ async def run_agent_loop_v2(
 
         if evtype == "tool_call_end":
             tname = payload.get("tool", "")
-            obs = str(payload.get("observation") or "")
             it = v2ev.step_index
             if tname == "static_check":
                 errs = []

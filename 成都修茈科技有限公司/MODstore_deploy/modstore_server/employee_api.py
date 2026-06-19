@@ -15,6 +15,12 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from modstore_server.api.deps import _get_current_user, require_admin
+from modstore_server.duty_roster import (
+    all_planned_employee_ids,
+    employee_partition_meta,
+    is_planned_duty_employee_pack,
+)
+from modstore_server.duty_employee_registry import duty_employee_records
 from modstore_server.employee_executor import (
     get_employee_status,
 )
@@ -261,6 +267,8 @@ def _user_may_execute_employee_pack(db: Session, user_id: int, pack_id: str) -> 
     u = db.query(User).filter(User.id == user_id).first()
     if u and getattr(u, "is_admin", False):
         return True
+    if is_planned_duty_employee_pack(pack_id, "employee_pack"):
+        return False
 
     row = (
         db.query(CatalogItem)
@@ -324,18 +332,96 @@ def _load_employee_pack_with_aliases(db: Session, employee_id: str) -> Dict[str,
     return load_employee_pack_resolved(db, employee_id)
 
 
+def _employee_id_from_list_row(row: Dict[str, Any]) -> str:
+    for key in ("employee_id", "pack_id", "pkg_id", "id"):
+        val = row.get(key) if isinstance(row, dict) else None
+        if val:
+            return str(val).strip()
+    return ""
+
+
+def _annotate_employee_list_row(row: Dict[str, Any]) -> Dict[str, Any]:
+    out = dict(row or {})
+    pid = _employee_id_from_list_row(out)
+    artifact = str(out.get("artifact") or "employee_pack")
+    out.update(employee_partition_meta(pid, artifact))
+    return out
+
+
+def _list_duty_employee_rows() -> List[Dict[str, Any]]:
+    records = duty_employee_records()
+    rows: List[Dict[str, Any]] = []
+    for pid in sorted(all_planned_employee_ids()):
+        rec = dict(records.get(pid) or {})
+        name = str(rec.get("name") or pid)
+        version = str(rec.get("version") or "")
+        row = {
+            "id": pid,
+            "employee_id": pid,
+            "pack_id": pid,
+            "pkg_id": pid,
+            "name": name,
+            "label": name,
+            "version": version,
+            "artifact": "employee_pack",
+            "stored_filename": str(rec.get("stored_filename") or ""),
+            "registry": "duty_employee_registry",
+            "manifest_registered": bool(rec),
+        }
+        row.update(employee_partition_meta(pid, "employee_pack"))
+        rows.append(row)
+    return rows
+
+
+def _assert_employee_scope_visible_to_user(employee_id: str, user: User) -> None:
+    if is_planned_duty_employee_pack(employee_id, "employee_pack") and not bool(
+        getattr(user, "is_admin", False)
+    ):
+        raise HTTPException(403, "上岗员工仅管理端可见")
+
+
 @router.get("/", summary="获取员工列表")
 async def list_employees(
     response: Response,
+    scope: str = Query(
+        "auto",
+        description="auto|all|duty|store；duty=管理端上岗员工，store=商店员工",
+    ),
     db: Session = Depends(get_db),
     user: User = Depends(_get_current_user),
 ):
     """获取所有可用的 AI 员工（数据库 ``catalog_items`` 与本地 ``packages.json`` 已合并去重）。"""
     try:
-        employees = list_employees_exec()
+        raw_scope = str(scope or "auto").strip().lower()
+        if raw_scope not in ("auto", "all", "duty", "store"):
+            raise HTTPException(400, "scope 必须是 auto/all/duty/store")
+        is_admin = bool(getattr(user, "is_admin", False))
+        if raw_scope == "duty" and not is_admin:
+            raise HTTPException(403, "上岗员工仅管理端可见")
+        effective_scope = ("all" if is_admin else "store") if raw_scope == "auto" else raw_scope
+        employees = [_annotate_employee_list_row(e) for e in list_employees_exec()]
+        duty_rows = _list_duty_employee_rows()
+        if effective_scope == "duty":
+            employees = duty_rows
+        elif effective_scope == "store":
+            employees = [e for e in employees if e.get("is_store_employee")]
+        elif effective_scope == "all" and not is_admin:
+            employees = [e for e in employees if not e.get("is_duty_employee")]
+        elif effective_scope == "all" and is_admin:
+            by_id = {
+                str(e.get("employee_id") or e.get("pack_id") or e.get("pkg_id") or e.get("id")): e
+                for e in employees
+                if not e.get("is_duty_employee")
+            }
+            for e in duty_rows:
+                by_id[str(e.get("employee_id") or e.get("id"))] = e
+            employees = list(by_id.values())
         response.headers["Cache-Control"] = "private, no-store"
+        response.headers["X-Employee-Scope"] = effective_scope
         return employees
     except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
         raise HTTPException(500, f"获取员工列表失败: {e}")
 
 
@@ -437,8 +523,11 @@ async def get_employee_status_endpoint(
     user: User = Depends(_get_current_user),
 ):
     """获取员工的状态信息"""
+    _assert_employee_scope_visible_to_user(employee_id, user)
     try:
         status = get_employee_status(employee_id)
+        if isinstance(status, dict):
+            status.update(employee_partition_meta(employee_id, "employee_pack"))
         return status
     except Exception as e:
         raise HTTPException(500, f"获取员工状态失败: {e}")
@@ -457,6 +546,7 @@ async def get_employee_manifest_endpoint(
     ``workflow_employees[0].workflow_id/panel_summary`` 等字段；``list_employees``
     返回的轻量列表里没有这些。
     """
+    _assert_employee_scope_visible_to_user(employee_id, user)
     try:
         pack = _load_employee_pack_with_aliases(db, employee_id.strip())
         response.headers["Cache-Control"] = "private, no-store"

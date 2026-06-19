@@ -81,6 +81,49 @@
             </div>
           </header>
 
+          <section class="admin-entitlement-chain" aria-label="授权联动闭环">
+            <div class="admin-entitlement-chain__intro">
+              <div>
+                <strong>账号 → Mod → AI 员工 → 设备执行</strong>
+                <span class="muted">这里的绑定会决定企业端、手机端和信息页能看到并调用哪些员工。</span>
+              </div>
+              <div class="admin-chain-actions">
+                <a class="btn btn-secondary btn-sm" href="/admin/im">打开信息</a>
+                <a class="btn btn-secondary btn-sm" href="/admin/settings">设备绑定</a>
+              </div>
+            </div>
+            <div class="admin-chain-grid">
+              <div v-for="card in selectedChainCards" :key="card.label" class="admin-chain-card">
+                <span>{{ card.label }}</span>
+                <strong>{{ card.value }}</strong>
+                <small>{{ card.detail }}</small>
+              </div>
+            </div>
+            <div v-if="selectedMissingModIds.length" class="admin-chain-warning" role="status">
+              已授权但本机未安装：{{ selectedMissingModIds.map(modLabel).join('、') }}。手机端不会拿到这些 Mod 下的员工。
+            </div>
+            <div class="admin-chain-employees">
+              <div class="admin-chain-employees__head">
+                <strong>授权后会同步的 AI 员工</strong>
+                <span class="muted">{{ selectedWorkflowEmployees.length }} 个</span>
+              </div>
+              <div v-if="selectedWorkflowEmployees.length" class="admin-chain-employee-list">
+                <span
+                  v-for="emp in selectedWorkflowEmployees"
+                  :key="`${emp.modId}:${emp.id}`"
+                  class="admin-chain-employee-chip"
+                  :title="emp.summary || emp.modName"
+                >
+                  {{ emp.label }}
+                  <small>{{ emp.modName }}</small>
+                </span>
+              </div>
+              <p v-else class="muted admin-chain-empty">
+                当前账号的已安装 Mod 还没有暴露 workflow_employees；绑定并安装带员工的 Mod 后，会出现在信息页和手机端 AI 员工列表。
+              </p>
+            </div>
+          </section>
+
           <div class="admin-mod-panel">
             <h4>已绑定客户 Mod</h4>
             <div v-if="userModIds.length" class="admin-mod-chips">
@@ -143,7 +186,28 @@ type AdminUser = {
 };
 
 type AssignableMod = { id: string; name?: string };
-type LocalModRow = { id?: string; name?: string; version?: string; is_installed?: boolean };
+type WorkflowEmployeeRow = {
+  id?: string;
+  label?: string;
+  name?: string;
+  title?: string;
+  panel_title?: string;
+  panel_summary?: string;
+};
+type LocalModRow = {
+  id?: string;
+  name?: string;
+  version?: string;
+  is_installed?: boolean;
+  workflow_employees?: WorkflowEmployeeRow[];
+};
+type EntitlementEmployeePreview = {
+  id: string;
+  label: string;
+  modId: string;
+  modName: string;
+  summary: string;
+};
 
 const users = ref<AdminUser[]>([]);
 const assignableMods = ref<AssignableMod[]>([]);
@@ -185,6 +249,68 @@ const installedModMap = computed(() => {
 });
 
 const installedModIds = computed(() => new Set(installedModMap.value.keys()));
+
+const selectedInstalledMods = computed(() =>
+  userModIds.value
+    .map((id) => installedModMap.value.get(String(id || '').trim()))
+    .filter((row): row is LocalModRow => Boolean(row)),
+);
+
+const selectedMissingModIds = computed(() =>
+  userModIds.value.filter((id) => !installedModMap.value.has(String(id || '').trim())),
+);
+
+const selectedWorkflowEmployees = computed<EntitlementEmployeePreview[]>(() => {
+  const seen = new Set<string>();
+  const rows: EntitlementEmployeePreview[] = [];
+  for (const mod of selectedInstalledMods.value) {
+    const modId = String(mod.id || '').trim();
+    const modName = modLabel(modId);
+    for (const employee of mod.workflow_employees || []) {
+      const id = String(employee?.id || '').trim();
+      if (!id || seen.has(`${modId}:${id}`)) continue;
+      seen.add(`${modId}:${id}`);
+      rows.push({
+        id,
+        label: String(
+          employee.label || employee.name || employee.title || employee.panel_title || id,
+        ).trim(),
+        modId,
+        modName,
+        summary: String(employee.panel_summary || '').trim(),
+      });
+    }
+  }
+  return rows;
+});
+
+const selectedChainCards = computed(() => {
+  const modTotal = userModIds.value.length;
+  const installedTotal = selectedInstalledMods.value.length;
+  const employeeTotal = selectedWorkflowEmployees.value.length;
+  return [
+    {
+      label: '账号权益',
+      value: selectedUser.value?.is_enterprise ? '企业账号' : '普通账号',
+      detail: `${modTotal} 个客户 Mod 权益`,
+    },
+    {
+      label: '本机落地',
+      value: `${installedTotal}/${modTotal} 可用`,
+      detail: selectedMissingModIds.value.length ? '存在未安装 Mod' : '本机安装状态可用',
+    },
+    {
+      label: '信息/手机',
+      value: `${employeeTotal} 个员工`,
+      detail: '进入信息页、员工空间和手机 AI 员工列表',
+    },
+    {
+      label: '设备执行',
+      value: employeeTotal ? '可派工' : '待补员工',
+      detail: '手机可经局域网或服务器中继把任务派到电脑执行',
+    },
+  ];
+});
 
 const syncLastText = computed(() => {
   const raw = String(syncStatus.value?.last_sync_at || '').trim();
@@ -473,6 +599,109 @@ onMounted(async () => {
   gap: 6px;
 }
 
+.admin-entitlement-chain {
+  margin-bottom: 18px;
+  padding: 14px;
+  border: 1px solid #dce7f5;
+  border-radius: 12px;
+  background: #f8fbff;
+}
+
+.admin-entitlement-chain__intro {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.admin-entitlement-chain__intro strong,
+.admin-entitlement-chain__intro span {
+  display: block;
+}
+
+.admin-chain-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.admin-chain-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.admin-chain-card {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid #dbe6f3;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.admin-chain-card span,
+.admin-chain-card small {
+  display: block;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.admin-chain-card strong {
+  display: block;
+  margin: 4px 0;
+  color: #111827;
+  font-size: 15px;
+}
+
+.admin-chain-warning {
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #fff7ed;
+  color: #9a3412;
+  font-size: 12px;
+}
+
+.admin-chain-employees {
+  margin-top: 12px;
+}
+
+.admin-chain-employees__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.admin-chain-employee-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.admin-chain-employee-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 5px 8px;
+  border-radius: 8px;
+  background: #eef6ff;
+  color: #1d4ed8;
+  font-size: 12px;
+}
+
+.admin-chain-employee-chip small {
+  color: #64748b;
+}
+
+.admin-chain-empty {
+  margin: 0;
+  font-size: 12px;
+}
+
 .admin-mod-chips {
   display: flex;
   flex-wrap: wrap;
@@ -527,6 +756,14 @@ onMounted(async () => {
 @media (max-width: 900px) {
   .admin-entitlements-layout {
     grid-template-columns: 1fr;
+  }
+
+  .admin-chain-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .admin-entitlement-chain__intro {
+    flex-direction: column;
   }
 }
 </style>

@@ -7,10 +7,13 @@ MCP JSON-RPC（initialize → tools/list → tools/call）、
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from app.application.agent_orchestrator import InMemoryAgentRunRepository
 from app.application.aiopen import service as aiopen_service
 from app.application.aiopen.service import AIOPEN_STATE
 from app.fastapi_routes.ai_open import router as ai_open_router
@@ -94,6 +97,35 @@ def test_invoke_open_when_no_keys(client, monkeypatch):
     assert "/api/ai/unified_chat" in routes
 
 
+def test_aiopen_invoke_attaches_agent_run_for_tool_call(client, monkeypatch):
+    monkeypatch.delenv("AIOPEN_API_KEY", raising=False)
+    repo = InMemoryAgentRunRepository()
+
+    with patch(
+        "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
+        return_value=repo,
+    ):
+        resp = client.post(
+            "/api/aiopen/invoke",
+            json={"tool": "api_catalog", "args": {}, "user_id": "aiopen-rest-user"},
+        )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    run_id = body["run_id"]
+    assert body["agent_run_id"] == run_id
+    run = repo.get(run_id)
+    assert run is not None
+    assert run.user_id == "aiopen-rest-user"
+    assert run.intent == "aiopen_tool_call"
+    assert run.metadata["channel"] == "aiopen_invoke"
+    assert run.metadata["runtime_context"]["route"] == "/api/aiopen/invoke"
+    assert run.metadata["tool_call_count"] == 1
+    assert run.tool_calls[0].tool_id == "aiopen"
+    assert run.tool_calls[0].action == "api_catalog"
+    assert run.tool_calls[0].cost_units == 1
+
+
 def test_invoke_api_call_blocked_outside_whitelist(client, monkeypatch):
     monkeypatch.delenv("AIOPEN_API_KEY", raising=False)
     resp = client.post(
@@ -114,6 +146,7 @@ def test_runtime_key_lifecycle(client, monkeypatch):
     monkeypatch.delenv("AIOPEN_API_KEY", raising=False)
     created = client.post("/api/aiopen/keys", json={"label": "测试"}).json()
     assert created["success"] is True
+    assert created["run_id"] == created["agent_run_id"]
     key = created["key"]
     assert key.startswith("aiopen_")
 
@@ -128,7 +161,76 @@ def test_runtime_key_lifecycle(client, monkeypatch):
     # 吊销后失效（无任何 Key → 回到直通）
     resp = client.request("DELETE", "/api/aiopen/keys", json={"key": key})
     assert resp.json()["revoked"] is True
+    assert resp.json()["run_id"] == resp.json()["agent_run_id"]
     assert aiopen_service.list_api_keys() == []
+
+
+def test_aiopen_key_lifecycle_traces_without_key_leak(client, monkeypatch):
+    monkeypatch.delenv("AIOPEN_API_KEY", raising=False)
+    repo = InMemoryAgentRunRepository()
+
+    with patch(
+        "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
+        return_value=repo,
+    ):
+        created = client.post(
+            "/api/aiopen/keys",
+            json={"label": "trace-key", "user_id": "key-admin"},
+        ).json()
+        key = created["key"]
+        revoked = client.request("DELETE", "/api/aiopen/keys", json={"key": key}).json()
+
+    create_run = repo.get(created["run_id"])
+    assert create_run is not None
+    assert create_run.user_id == "key-admin"
+    assert create_run.intent == "aiopen_control_update"
+    assert create_run.metadata["channel"] == "aiopen_control"
+    assert create_run.metadata["runtime_context"]["route"] == "/api/aiopen/keys"
+    assert create_run.metadata["runtime_context"]["action"] == "keys_create"
+    assert key not in str(create_run.to_dict())
+
+    revoke_run = repo.get(revoked["run_id"])
+    assert revoke_run is not None
+    assert revoke_run.intent == "aiopen_control_update"
+    assert revoke_run.metadata["runtime_context"]["action"] == "keys_revoke"
+    assert "key_preview" in revoke_run.metadata["runtime_context"]["request"]
+    assert "key" not in revoke_run.metadata["runtime_context"]["request"]
+    assert key not in str(revoke_run.to_dict())
+
+
+def test_aiopen_control_routes_attach_agent_runs(client):
+    repo = InMemoryAgentRunRepository()
+
+    with patch(
+        "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
+        return_value=repo,
+    ):
+        whitelist = client.post(
+            "/api/aiopen/whitelist",
+            json={"path": "/api/aiopen/control-smoke", "enabled": True},
+        ).json()
+        config = client.post(
+            "/api/aiopen/config", json={"base_url": "http://openclaw.test:28789"}
+        ).json()
+        control = client.post("/api/aiopen/control", json={"enabled": True}).json()
+
+    for payload, route, action in (
+        (whitelist, "/api/aiopen/whitelist", "whitelist_update"),
+        (config, "/api/aiopen/config", "openclaw_config_update"),
+        (control, "/api/aiopen/control", "remote_control_update"),
+    ):
+        run_id = payload["run_id"]
+        assert payload["agent_run_id"] == run_id
+        run = repo.get(run_id)
+        assert run is not None
+        assert run.intent == "aiopen_control_update"
+        assert run.metadata["channel"] == "aiopen_control"
+        assert run.metadata["runtime_context"]["route"] == route
+        assert run.metadata["runtime_context"]["action"] == action
+
+    AIOPEN_STATE["whitelist"].pop("/api/aiopen/control-smoke", None)
+    AIOPEN_STATE["openclaw_base"] = "http://localhost:28789"
+    AIOPEN_STATE["remote_control_enabled"] = True
 
 
 def test_mcp_initialize_list_call(client, monkeypatch):
@@ -177,6 +279,38 @@ def test_mcp_initialize_list_call(client, monkeypatch):
         "/api/aiopen/mcp", json={"jsonrpc": "2.0", "id": 5, "method": "bogus/method"}
     ).json()
     assert unknown["error"]["code"] == -32601
+
+
+def test_aiopen_mcp_tools_call_attaches_agent_run_meta(client, monkeypatch):
+    monkeypatch.delenv("AIOPEN_API_KEY", raising=False)
+    repo = InMemoryAgentRunRepository()
+
+    with patch(
+        "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
+        return_value=repo,
+    ):
+        resp = client.post(
+            "/api/aiopen/mcp",
+            json={
+                "jsonrpc": "2.0",
+                "id": 30,
+                "method": "tools/call",
+                "params": {"name": "api_catalog", "arguments": {}},
+            },
+        )
+
+    assert resp.status_code == 200
+    result = resp.json()["result"]
+    assert result["isError"] is False
+    run_id = result["_meta"]["run_id"]
+    assert result["_meta"]["agent_run_id"] == run_id
+    run = repo.get(run_id)
+    assert run is not None
+    assert run.intent == "aiopen_tool_call"
+    assert run.metadata["channel"] == "aiopen_mcp"
+    assert run.metadata["runtime_context"]["route"] == "/api/aiopen/mcp"
+    assert run.tool_calls[0].tool_id == "aiopen"
+    assert run.tool_calls[0].action == "api_catalog"
 
 
 def test_mcp_get_probe(client, monkeypatch):
@@ -267,6 +401,138 @@ def test_legacy_qclaw_urls_share_state(client):
     # 还原，避免污染其他测试
     AIOPEN_STATE["whitelist"].pop("/api/legacy/test", None)
     AIOPEN_STATE["openclaw_base"] = "http://localhost:28789"
+
+
+def test_qclaw_control_and_test_route_attach_agent_runs():
+    app = FastAPI()
+
+    @app.get("/api/qclaw/smoke")
+    def qclaw_smoke():
+        return {"success": True, "source": "smoke"}
+
+    app.include_router(ai_open_router)
+    app.include_router(ai_qclaw_router)
+    repo = InMemoryAgentRunRepository()
+
+    with (
+        TestClient(app) as local_client,
+        patch(
+            "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
+            return_value=repo,
+        ),
+    ):
+        wechat = local_client.post(
+            "/api/ai/qclaw/wechat-gateway", json={"enabled": True}
+        ).json()
+        config = local_client.post(
+            "/api/ai/qclaw/openclaw/config",
+            json={"base_url": "http://qclaw-openclaw.test:28789"},
+        ).json()
+        whitelist = local_client.post(
+            "/api/ai/qclaw/whitelist",
+            json={"path": "/api/qclaw/smoke", "enabled": True},
+        ).json()
+        smoke = local_client.post(
+            "/api/ai/qclaw/test-route",
+            json={"path": "/api/qclaw/smoke", "method": "GET"},
+        ).json()
+
+    for payload, route, action in (
+        (wechat, "/api/ai/qclaw/wechat-gateway", "wechat_gateway_update"),
+        (config, "/api/ai/qclaw/openclaw/config", "openclaw_config_update"),
+        (whitelist, "/api/ai/qclaw/whitelist", "whitelist_update"),
+    ):
+        run_id = payload["run_id"]
+        assert payload["agent_run_id"] == run_id
+        run = repo.get(run_id)
+        assert run is not None
+        assert run.intent == "qclaw_control_update"
+        assert run.metadata["channel"] == "qclaw_control"
+        assert run.metadata["source"] == "qclaw"
+        assert run.metadata["runtime_context"]["route"] == route
+        assert run.metadata["runtime_context"]["action"] == action
+
+    smoke_run_id = smoke["run_id"]
+    assert smoke["agent_run_id"] == smoke_run_id
+    assert smoke["status_code"] == 200
+    smoke_run = repo.get(smoke_run_id)
+    assert smoke_run is not None
+    assert smoke_run.intent == "qclaw_route_smoke"
+    assert smoke_run.metadata["channel"] == "qclaw_route_smoke"
+    assert smoke_run.metadata["runtime_context"]["route"] == "/api/ai/qclaw/test-route"
+    assert smoke_run.metadata["runtime_context"]["request"]["path"] == "/api/qclaw/smoke"
+
+    AIOPEN_STATE["whitelist"].pop("/api/qclaw/smoke", None)
+    AIOPEN_STATE["openclaw_base"] = "http://localhost:28789"
+    AIOPEN_STATE["wechat_open"] = False
+
+
+def test_aiopen_openclaw_chat_attaches_agent_run(client):
+    repo = InMemoryAgentRunRepository()
+    with (
+        patch(
+            "app.fastapi_routes.ai_open.openclaw_chat_proxy",
+            return_value=({"success": True, "data": {"answer": "pong"}}, 200),
+        ),
+        patch(
+            "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
+            return_value=repo,
+        ),
+    ):
+        resp = client.post(
+            "/api/aiopen/openclaw/chat",
+            json={"message": "hello", "user_id": "aiopen-user"},
+        )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    run_id = body["run_id"]
+    assert body["agent_run_id"] == run_id
+    assert body["data"]["run_id"] == run_id
+    assert body["data"]["answer"] == "pong"
+
+    run = repo.get(run_id)
+    assert run is not None
+    assert run.status == "completed"
+    assert run.user_id == "aiopen-user"
+    assert run.intent == "external_openclaw_chat"
+    assert run.metadata["channel"] == "aiopen_openclaw"
+    assert run.metadata["source"] == "aiopen"
+    assert run.metadata["runtime_context"]["route"] == "/api/aiopen/openclaw/chat"
+
+
+def test_qclaw_openclaw_chat_attaches_agent_run(client):
+    repo = InMemoryAgentRunRepository()
+    with (
+        patch(
+            "app.fastapi_routes.ai_qclaw.openclaw_chat_proxy",
+            return_value=({"success": True, "data": {"answer": "pong"}}, 200),
+        ),
+        patch(
+            "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
+            return_value=repo,
+        ),
+    ):
+        resp = client.post(
+            "/api/ai/qclaw/openclaw/chat",
+            json={"message": "hello", "user_id": "qclaw-user"},
+        )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    run_id = body["run_id"]
+    assert body["agent_run_id"] == run_id
+    assert body["data"]["run_id"] == run_id
+    assert body["data"]["answer"] == "pong"
+
+    run = repo.get(run_id)
+    assert run is not None
+    assert run.status == "completed"
+    assert run.user_id == "qclaw-user"
+    assert run.intent == "external_openclaw_chat"
+    assert run.metadata["channel"] == "qclaw_openclaw"
+    assert run.metadata["source"] == "qclaw"
+    assert run.metadata["runtime_context"]["route"] == "/api/ai/qclaw/openclaw/chat"
 
 
 def test_screen_ws_command_roundtrip(client):

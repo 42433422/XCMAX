@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 # 与 FHD config/duty_roster.json areas 块、market yuangonDutyRoster.ts 保持一致
 YUANGON_AREAS: Dict[str, Dict[str, object]] = {
@@ -297,9 +297,13 @@ def all_planned_employee_ids() -> frozenset[str]:
     return frozenset(ids)
 
 
+def normalize_employee_pack_id(pkg_id: Optional[str]) -> str:
+    return str(pkg_id or "").strip()
+
+
 def yuangon_area_for_pkg(pkg_id: str) -> Optional[str]:
     """编制矩阵中 ``pkg_id`` 所属区域目录名（``yuangon/<area>/…`` 第一段），未知返回 ``None``。"""
-    pid = str(pkg_id or "").strip()
+    pid = normalize_employee_pack_id(pkg_id)
     if not pid:
         return None
     for area_key, block in YUANGON_AREAS.items():
@@ -309,9 +313,52 @@ def yuangon_area_for_pkg(pkg_id: str) -> Optional[str]:
     return None
 
 
+def is_planned_duty_employee_id(pkg_id: Optional[str]) -> bool:
+    pid = normalize_employee_pack_id(pkg_id)
+    return bool(pid) and pid in all_planned_employee_ids()
+
+
 def is_planned_duty_employee_pack(pkg_id: Optional[str], artifact: Optional[str]) -> bool:
     """编制矩阵内的 ``employee_pack``：运维/管理侧在岗岗位，不参与公开市场展示。"""
     if str(artifact or "").strip() != "employee_pack":
         return False
-    pid = str(pkg_id or "").strip()
-    return bool(pid) and pid in all_planned_employee_ids()
+    return is_planned_duty_employee_id(pkg_id)
+
+
+def is_store_employee_pack(pkg_id: Optional[str], artifact: Optional[str]) -> bool:
+    """公开商店员工包：``employee_pack`` 且不属于管理端编制矩阵。"""
+    if str(artifact or "").strip() != "employee_pack":
+        return False
+    pid = normalize_employee_pack_id(pkg_id)
+    return bool(pid) and not is_planned_duty_employee_id(pid)
+
+
+def employee_partition_meta(pkg_id: Optional[str], artifact: Optional[str]) -> Dict[str, Any]:
+    """统一员工隔离元数据。
+
+    - ``employee_scope=duty``：管理端上岗员工，只用于编制、调度、自维护。
+    - ``employee_scope=store``：商店员工，可购买、下载、普通用户执行。
+    - 非 ``employee_pack`` 不归入员工口径。
+    """
+    art = str(artifact or "").strip()
+    pid = normalize_employee_pack_id(pkg_id)
+    is_employee = art == "employee_pack"
+    is_duty = is_employee and is_planned_duty_employee_id(pid)
+    is_store = is_employee and bool(pid) and not is_duty
+    if is_duty:
+        scope = "duty"
+        source = "duty_roster"
+    elif is_store:
+        scope = "store"
+        source = "market_catalog"
+    else:
+        scope = ""
+        source = "non_employee_artifact"
+    return {
+        "employee_scope": scope,
+        "employee_source": source,
+        "is_duty_employee": is_duty,
+        "is_store_employee": is_store,
+        "yuangon_area": yuangon_area_for_pkg(pid) if is_duty else None,
+        "market_visible": is_store,
+    }

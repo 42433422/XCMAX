@@ -186,26 +186,57 @@ class ProductsService(NeuroEventPublisherMixin):
             return {"success": False, "message": "服务未正确初始化"}
 
         try:
-            from app.domain.product.entities import Product
-            from app.domain.value_objects import ModelNumber, Money
+            payload = dict(data or {})
+            if "product_name" not in payload and payload.get("name"):
+                payload["product_name"] = payload.get("name")
+            if "price" not in payload and "unit_price" in payload:
+                payload["price"] = payload.get("unit_price")
+            if "model_number" not in payload and payload.get("product_code"):
+                payload["model_number"] = payload.get("product_code")
+            if "unit" not in payload:
+                payload["unit"] = "个"
 
-            product = Product(
-                name=data.get("name", ""),
-                category=data.get("category", ""),
-                specification=data.get("specification", ""),
-                quantity=int(data.get("quantity", 0)),
-                price=Money(float(data.get("unit_price", 0))),
-                unit=data.get("unit", "个"),
-                description=data.get("description", ""),
-                brand=data.get("brand", ""),
-                model_number=(
-                    ModelNumber(data.get("product_code", "")) if data.get("product_code") else None
-                ),
-            )
-            result = self._repository.create(product)
+            try:
+                result = self._repository.create(payload)
+            except AttributeError as err:
+                if "'dict' object has no attribute" not in str(err):
+                    raise
+                from app.domain.product.entities import Product
+                from app.domain.value_objects import ModelNumber, Money
+
+                product = Product(
+                    name=payload.get("name") or payload.get("product_name") or "",
+                    category=payload.get("category", ""),
+                    specification=payload.get("specification", ""),
+                    quantity=int(payload.get("quantity", 0) or 0),
+                    price=Money.from_float(
+                        float(payload.get("unit_price", payload.get("price", 0)))
+                    ),
+                    unit=payload.get("unit", "个"),
+                    description=payload.get("description", ""),
+                    brand=payload.get("brand", ""),
+                    model_number=(
+                        ModelNumber(payload.get("model_number", ""))
+                        if payload.get("model_number")
+                        else None
+                    ),
+                )
+                result = self._repository.create(product)
 
             self._invalidate_product_cache()
 
+            if isinstance(result, dict):
+                if not result.get("success", False):
+                    return result
+                normalized = {
+                    "success": True,
+                    "data": result.get("data", result),
+                }
+                if result.get("message"):
+                    normalized["message"] = result["message"]
+                if result.get("product_id") is not None:
+                    normalized["product_id"] = result["product_id"]
+                return normalized
             return {
                 "success": True,
                 "data": result.to_dict() if hasattr(result, "to_dict") else result,

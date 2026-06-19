@@ -98,11 +98,11 @@ export const authApi = {
     return api.get<ApiResponse<{ enabled?: boolean }>>('/api/auth/oidc/status');
   },
 
-  async issueAuthQr(clientHint = ''): Promise<
-    ApiResponse<{ qr_id?: string; poll_secret?: string; expires_at?: number }>
+  async issueAuthQr(clientHint = '', accountKind = 'enterprise'): Promise<
+    ApiResponse<{ qr_id?: string; poll_secret?: string; expires_at?: number; account_kind?: string }>
   > {
     await primeCsrfCookie();
-    return api.post('/api/auth/qr/issue', { client_hint: clientHint });
+    return api.post('/api/auth/qr/issue', { client_hint: clientHint, account_kind: accountKind });
   },
 
   async pollAuthQr(

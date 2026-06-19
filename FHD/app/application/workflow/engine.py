@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import logging
+import time
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
@@ -73,7 +75,14 @@ class WorkflowEngine:
 
                 runtime_context.setdefault("node_outputs", {})
                 runtime_context["node_outputs"][node_id] = result.output
+                self._append_node_trace(runtime_context, result)
                 if not result.success:
+                    runtime_context["workflow_status"] = {
+                        "state": "failed",
+                        "failed_node_id": node_id,
+                        "message": result.error,
+                        "recovery_hint": result.recovery_hint,
+                    }
                     return WorkflowRunResult(
                         plan_id=plan.plan_id,
                         success=False,
@@ -86,6 +95,11 @@ class WorkflowEngine:
                 stalled_rounds += 1
                 if stalled_rounds > 1:
                     unresolved = ",".join(pending.keys())
+                    runtime_context["workflow_status"] = {
+                        "state": "blocked",
+                        "unresolved_nodes": list(pending.keys()),
+                        "message": f"工作流依赖无法继续解析: {unresolved}",
+                    }
                     return WorkflowRunResult(
                         plan_id=plan.plan_id,
                         success=False,
@@ -94,6 +108,11 @@ class WorkflowEngine:
                         message=f"工作流依赖无法继续解析: {unresolved}",
                     )
 
+        runtime_context["workflow_status"] = {
+            "state": "completed",
+            "executed_nodes": list(executed),
+            "message": "工作流执行完成",
+        }
         return WorkflowRunResult(
             plan_id=plan.plan_id,
             success=True,
@@ -136,8 +155,11 @@ class WorkflowEngine:
             if decision is None:
                 break
 
-            action = decision.get("action", "")
+            decision_action = str(decision.get("action") or "").strip()
             tool_id = decision.get("tool_id", "")
+            tool_action = str(
+                decision.get("action_name") or decision.get("tool_action") or decision_action
+            ).strip()
             params = decision.get("params") or {}
             reasoning = str(decision.get("reasoning", "")).strip()
 
@@ -145,32 +167,45 @@ class WorkflowEngine:
                 "AgenticLoop step=%d action=%s.%s reasoning=%s",
                 step,
                 tool_id,
-                action,
+                tool_action,
                 reasoning[:100],
             )
+
+            if decision_action == "done":
+                agent_history.append({"step": step, "role": "done"})
+                break
 
             agent_history.append(
                 {
                     "step": step,
                     "role": "assistant",
                     "tool_id": tool_id,
-                    "action": action,
+                    "action": tool_action,
                     "params": params,
                     "reasoning": reasoning,
                 }
             )
 
-            if action == "done":
-                break
+            if not tool_id or not tool_action or tool_action == "execute":
+                agent_history.append(
+                    {
+                        "step": step,
+                        "role": "system",
+                        "content": "工具决策缺少 tool_id 或真实 action_name，已跳过。",
+                    }
+                )
+                continue
 
             node_result = self._run_single_tool(
                 tool_id=tool_id,
-                action=action,
+                action=tool_action,
                 params=params,
                 runtime_context=runtime_context,
                 max_retries=max_retries,
+                retryable=self._agentic_tool_allows_auto_retry(tool_registry, tool_id, tool_action),
             )
             all_node_results.append(node_result)
+            self._append_node_trace(runtime_context, node_result)
 
             runtime_context.setdefault("node_outputs", {})
             runtime_context["node_outputs"][f"agent_step_{step}"] = node_result.output
@@ -329,7 +364,11 @@ class WorkflowEngine:
                 return {"action": "done"}
 
             tool_id = str(parsed.get("tool_id") or "").strip()
-            action_name = str(parsed.get("action_name") or parsed.get("action") or "").strip()
+            action_name = str(
+                parsed.get("action_name")
+                or parsed.get("tool_action")
+                or ("" if action == "execute" else action)
+            ).strip()
             params = parsed.get("params") if isinstance(parsed.get("params"), dict) else {}
             reasoning = str(parsed.get("reasoning") or "").strip()
 
@@ -373,39 +412,85 @@ class WorkflowEngine:
         params: dict[str, Any],
         runtime_context: dict[str, Any],
         max_retries: int,
+        retryable: bool = True,
     ) -> NodeExecutionResult:
         merged_params = dict(params or {})
         merged_params["_runtime_context"] = runtime_context
         retries = 0
         last_error = ""
+        started_at = datetime.now(UTC).isoformat()
+        started_perf = time.perf_counter()
+        attempts: list[dict[str, Any]] = []
+        last_output: dict[str, Any] = {}
 
-        while retries <= max_retries:
+        effective_max_retries = max_retries if retryable else 0
+
+        while retries <= effective_max_retries:
+            attempt_started = time.perf_counter()
             try:
                 output = self._dispatch(tool_id=tool_id, action=action, params=merged_params)
+                if isinstance(output, dict):
+                    last_output = output
                 if output.get("success", False):
+                    finished_at = datetime.now(UTC).isoformat()
                     return NodeExecutionResult(
                         node_id=f"agent_{tool_id}_{action}",
                         success=True,
                         tool_id=tool_id,
                         action=action,
+                        params=dict(params or {}),
                         output=output,
                         retries=retries,
+                        retryable=retryable,
+                        started_at=started_at,
+                        finished_at=finished_at,
+                        duration_ms=self._elapsed_ms(started_perf),
+                        attempts=attempts
+                        + [
+                            self._attempt_summary(
+                                retries + 1,
+                                True,
+                                "",
+                                attempt_started,
+                            )
+                        ],
                     )
                 last_error = str(output.get("message") or output.get("error") or "unknown error")
+                attempts.append(
+                    self._attempt_summary(retries + 1, False, last_error, attempt_started)
+                )
             except RECOVERABLE_ERRORS as err:
                 last_error = str(err)
+                attempts.append(
+                    self._attempt_summary(retries + 1, False, last_error, attempt_started)
+                )
                 logger.warning(
                     "AgenticLoop 工具执行失败 %s.%s: %s", tool_id, action, err, exc_info=True
                 )
             retries += 1
 
+        finished_at = datetime.now(UTC).isoformat()
         return NodeExecutionResult(
             node_id=f"agent_{tool_id}_{action}",
             success=False,
             tool_id=tool_id,
             action=action,
+            params=dict(params or {}),
+            output=last_output,
             error=last_error,
             retries=max(0, retries - 1),
+            retryable=retryable,
+            recovery_hint=self._recovery_hint(
+                tool_id=tool_id,
+                action=action,
+                error=last_error,
+                output=last_output,
+                retryable=retryable,
+            ),
+            started_at=started_at,
+            finished_at=finished_at,
+            duration_ms=self._elapsed_ms(started_perf),
+            attempts=attempts,
         )
 
     @staticmethod
@@ -443,6 +528,88 @@ class WorkflowEngine:
                     user_msg[:80],
                 )
 
+    @staticmethod
+    def _elapsed_ms(started_perf: float) -> int:
+        return max(0, int((time.perf_counter() - started_perf) * 1000))
+
+    @staticmethod
+    def _attempt_summary(
+        attempt: int, success: bool, error: str, started_perf: float
+    ) -> dict[str, Any]:
+        return {
+            "attempt": attempt,
+            "success": bool(success),
+            "error": str(error or "")[:240],
+            "duration_ms": WorkflowEngine._elapsed_ms(started_perf),
+        }
+
+    @staticmethod
+    def _node_allows_auto_retry(node: WorkflowNode) -> bool:
+        return bool(node.idempotent) or node.risk == "low"
+
+    @staticmethod
+    def _agentic_tool_allows_auto_retry(
+        tool_registry: dict[str, Any], tool_id: str, action: str
+    ) -> bool:
+        spec = tool_registry.get(tool_id) if isinstance(tool_registry, dict) else None
+        if not isinstance(spec, dict):
+            return True
+        actions = spec.get("actions") if isinstance(spec.get("actions"), dict) else {}
+        meta = actions.get(action) if isinstance(actions, dict) else None
+        if not isinstance(meta, dict):
+            return True
+        return bool(meta.get("idempotent")) or str(meta.get("risk") or "low") == "low"
+
+    @staticmethod
+    def _recovery_hint(
+        *,
+        tool_id: str,
+        action: str,
+        error: str,
+        output: dict[str, Any] | None,
+        retryable: bool,
+    ) -> str:
+        out = output if isinstance(output, dict) else {}
+        message = str(error or out.get("message") or out.get("error") or "").strip()
+        if out.get("pending_approval") or out.get("approval_required"):
+            return "写操作已进入审批流；在审批工作台通过后重试或继续执行。"
+        if out.get("requires_token"):
+            token_name = str(out.get("token_name") or "DB_WRITE_TOKEN").strip()
+            return f"缺少写库令牌 {token_name}；配置令牌或在受信任工作区内重试。"
+        if out.get("available_employee_ids"):
+            return "请从返回的 available_employee_ids 中选择员工 ID 后重新执行。"
+        if "缺少 employee_id" in message:
+            return "先执行 employee.list 查看可用员工，再带 employee_id 调用 employee.execute。"
+        if "缺少" in message or "required" in message.lower():
+            return "补齐提示中的必填参数后重新执行。"
+        if not retryable:
+            return "该节点可能产生副作用，系统未自动重试；请核对员工空间或数据库状态后手动重试。"
+        if tool_id == "business_db" and action == "write":
+            return "数据库写入失败；确认 entity/operation/payload 后重试，避免重复写入。"
+        if message:
+            return "可重试节点已耗尽自动重试；请检查参数、外部服务连接或稍后重试。"
+        return ""
+
+    @staticmethod
+    def _append_node_trace(runtime_context: dict[str, Any], result: NodeExecutionResult) -> None:
+        runtime_context.setdefault("workflow_trace", [])
+        trace = runtime_context["workflow_trace"]
+        if not isinstance(trace, list):
+            runtime_context["workflow_trace"] = trace = []
+        trace.append(
+            {
+                "node_id": result.node_id,
+                "tool_id": result.tool_id,
+                "action": result.action,
+                "success": result.success,
+                "retries": result.retries,
+                "retryable": result.retryable,
+                "duration_ms": result.duration_ms,
+                "error": result.error,
+                "recovery_hint": result.recovery_hint,
+            }
+        )
+
     def _run_node(
         self,
         node: WorkflowNode,
@@ -451,7 +618,15 @@ class WorkflowEngine:
     ) -> NodeExecutionResult:
         retries = 0
         last_error = ""
-        while retries <= max_retries:
+        retryable = self._node_allows_auto_retry(node)
+        effective_max_retries = max_retries if retryable else 0
+        started_at = datetime.now(UTC).isoformat()
+        started_perf = time.perf_counter()
+        attempts: list[dict[str, Any]] = []
+        last_output: dict[str, Any] = {}
+
+        while retries <= effective_max_retries:
+            attempt_started = time.perf_counter()
             try:
                 merged_params = dict(node.params or {})
                 merged_params["_runtime_context"] = runtime_context
@@ -461,26 +636,64 @@ class WorkflowEngine:
                     action=node.action,
                     params=merged_params,
                 )
+                if isinstance(output, dict):
+                    last_output = output
                 if output.get("success", False):
+                    finished_at = datetime.now(UTC).isoformat()
                     return NodeExecutionResult(
                         node_id=node.node_id,
                         success=True,
                         tool_id=node.tool_id,
                         action=node.action,
+                        params=dict(node.params or {}),
                         output=output,
                         retries=retries,
+                        retryable=retryable,
+                        started_at=started_at,
+                        finished_at=finished_at,
+                        duration_ms=self._elapsed_ms(started_perf),
+                        attempts=attempts
+                        + [
+                            self._attempt_summary(
+                                retries + 1,
+                                True,
+                                "",
+                                attempt_started,
+                            )
+                        ],
                     )
                 last_error = str(output.get("message") or output.get("error") or "unknown error")
+                attempts.append(
+                    self._attempt_summary(retries + 1, False, last_error, attempt_started)
+                )
             except RECOVERABLE_ERRORS as err:
                 last_error = str(err)
+                attempts.append(
+                    self._attempt_summary(retries + 1, False, last_error, attempt_started)
+                )
                 logger.warning("执行节点失败 node=%s err=%s", node.node_id, err, exc_info=True)
             retries += 1
 
+        finished_at = datetime.now(UTC).isoformat()
         return NodeExecutionResult(
             node_id=node.node_id,
             success=False,
             tool_id=node.tool_id,
             action=node.action,
+            params=dict(node.params or {}),
+            output=last_output,
             error=last_error,
             retries=max(0, retries - 1),
+            retryable=retryable,
+            recovery_hint=self._recovery_hint(
+                tool_id=node.tool_id,
+                action=node.action,
+                error=last_error,
+                output=last_output,
+                retryable=retryable,
+            ),
+            started_at=started_at,
+            finished_at=finished_at,
+            duration_ms=self._elapsed_ms(started_perf),
+            attempts=attempts,
         )

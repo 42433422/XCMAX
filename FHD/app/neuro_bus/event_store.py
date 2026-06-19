@@ -247,7 +247,10 @@ class EventStore:
         self._snapshots[stream_id] = snapshot
 
         logger.debug(
-            "[EventStore] 快照保存: %s (seq=%s, snap_id=%s)", stream_id, sequence_number, snapshot_id
+            "[EventStore] 快照保存: %s (seq=%s, snap_id=%s)",
+            stream_id,
+            sequence_number,
+            snapshot_id,
         )
 
         return snapshot_id

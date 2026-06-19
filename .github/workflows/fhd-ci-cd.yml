@@ -68,41 +68,8 @@ jobs:
           echo "Added files:"
           echo "${ADDED_FILES}"
 
-          VIOLATIONS=""
-          while IFS= read -r file; do
-            [ -z "${file}" ] && continue
-            # Root workflow runs against the XCMAX root repo where FHD paths are
-            # prefixed FHD/; strip it so allow-list/patterns compare FHD-relative.
-            rel="${file#FHD/}"
-            # Allow-listed homes for helper / launcher / throwaway scripts.
-            if [[ "${rel}" == XCAGI/tools/* ]] || [[ "${rel}" == XCAGI/archive/* ]] || \
-               [[ "${rel}" == tools/* ]] || [[ "${rel}" == archive/* ]] || \
-               [[ "${rel}" == scripts/launchers/* ]]; then
-              continue
-            fi
-            if [[ "${file}" =~ (^|/)_fail.*\.txt$ ]]; then
-              VIOLATIONS+="${file}"$'\n'
-            fi
-            # Block fix_/check_/final_ throwaway scripts at any subtree root and in the
-            # common dump dirs (产品文件夹/, scripts/<file>). scripts/launchers/ is
-            # allow-listed above; scripts/dev/ helpers (e.g. check_*.py) sit under a
-            # sub-dir, not directly in scripts/, so they are unaffected.
-            if [[ "${rel}" =~ (^|/)产品文件夹/(fix_|check_|final_).+\.py$ ]] || \
-               [[ "${rel}" =~ (^|/)scripts/(fix_|check_|final_).+\.py$ ]] || \
-               [[ "${rel}" =~ ^(fix_|check_|final_).+\.py$ ]]; then
-              VIOLATIONS+="${file}"$'\n'
-            fi
-            if [[ "${file}" =~ \.v1_backup$ ]]; then
-              VIOLATIONS+="${file}"$'\n'
-            fi
-          done <<< "${ADDED_FILES}"
-
-          if [ -n "${VIOLATIONS}" ]; then
-            echo "❌ Found forbidden new artifacts or temporary scripts:"
-            echo "${VIOLATIONS}"
-            echo "Use tools/, scripts/launchers/, or archive/; do not commit _fail*.txt, fix_*.py, or *.v1_backup files."
-            exit 1
-          fi
+          python3 scripts/ci/guard_temp_scripts.py --all-tracked
+          printf '%s\n' "${ADDED_FILES}" | python3 scripts/ci/guard_temp_scripts.py --added-from-stdin
           echo "✅ Temporary script location guard passed."
 
   # Backend Tests & Quality
@@ -138,6 +105,9 @@ jobs:
       - name: Verify requirements lock is in sync
         run: |
           python scripts/dev/check_requirements_lock.py
+
+      - name: Validate coverage SSOT metadata
+        run: python scripts/ci/check_coverage_ssot.py
 
       - name: Run Ruff lint
         run: ruff check app/ tests/

@@ -9,6 +9,7 @@ Phase 4B 从 ``app.legacy.planner`` 吸收实现。``chat`` / ``chat_stream_sse_
 
 from __future__ import annotations
 
+import copy
 import json
 import os
 import threading
@@ -63,6 +64,7 @@ def _resolve_chat_execute_tool():
 
 _TOOL_DEDUP: set[str] = set()
 _TOOL_DEDUP_LOCK = threading.Lock()
+_LAST_TOOL_TRACE = threading.local()
 
 # 这些工具可能在首轮就返回 requires_token,后续工具在串行语义下不应被执行;并行会改变该顺序。
 _TOKEN_ORDER_SENSITIVE_TOOLS = frozenset({"import_excel_to_database", "products_bulk_import"})
@@ -82,6 +84,81 @@ def _resolve_chat_model_for_client(client: Any | None, explicit_model: str | Non
 def reset_planner_tool_dedup_state() -> None:
     with _TOOL_DEDUP_LOCK:
         _TOOL_DEDUP.clear()
+    clear_last_tool_result()
+
+
+def clear_last_tool_result() -> None:
+    _LAST_TOOL_TRACE.records = []
+
+
+def get_last_tool_records() -> list[dict[str, Any]]:
+    records = getattr(_LAST_TOOL_TRACE, "records", [])
+    if not isinstance(records, list):
+        return []
+    return copy.deepcopy([item for item in records if isinstance(item, dict)])
+
+
+def get_last_tool_result() -> dict[str, Any]:
+    records = get_last_tool_records()
+    if not records:
+        return {}
+    last = records[-1]
+    output = last.get("output")
+    result = copy.deepcopy(output) if isinstance(output, dict) else {"message": str(output or "")}
+    result.setdefault("tool_key", last.get("tool_id") or last.get("tool_name") or "")
+    result.setdefault("tool_name", last.get("tool_name") or last.get("tool_id") or "")
+    result.setdefault("tool_call_id", last.get("tool_call_id") or "")
+    result.setdefault("tool_params", copy.deepcopy(last.get("params") or {}))
+    result["_tool_records"] = records
+    return result
+
+
+def _attach_last_tool_records(payload: dict[str, Any]) -> dict[str, Any]:
+    records = get_last_tool_records()
+    if records:
+        payload["legacy_tool_records"] = records
+    return payload
+
+
+def _tool_action_from_payload(tool_name: str, params: dict[str, Any]) -> str:
+    action = str(params.get("action") or "").strip()
+    if action:
+        return action
+    if tool_name in {"excel_analysis", "excel_schema_understand"}:
+        return "read"
+    return "execute"
+
+
+def _append_last_tool_record(
+    tc: Any,
+    tool_name: str,
+    raw_arguments: str,
+    payload: dict[str, Any],
+) -> None:
+    try:
+        params = json.loads(raw_arguments) if str(raw_arguments or "").strip() else {}
+        if not isinstance(params, dict):
+            params = {}
+    except json.JSONDecodeError:
+        params = {}
+    records = getattr(_LAST_TOOL_TRACE, "records", [])
+    if not isinstance(records, list):
+        records = []
+    output = (
+        copy.deepcopy(payload) if isinstance(payload, dict) else {"message": str(payload or "")}
+    )
+    records.append(
+        {
+            "tool_id": str(tool_name or "").strip(),
+            "tool_name": str(tool_name or "").strip(),
+            "action": _tool_action_from_payload(str(tool_name or "").strip(), params),
+            "params": copy.deepcopy(params),
+            "output": output,
+            "success": bool(output.get("success", False)) if isinstance(output, dict) else False,
+            "tool_call_id": str(getattr(tc, "id", "") or ""),
+        }
+    )
+    _LAST_TOOL_TRACE.records = records
 
 
 def _tool_key(name: str, args: str) -> str:
@@ -248,6 +325,7 @@ def append_tool_messages(
                 payload = json.loads(
                     execute_tool(name, raw_eff, workspace_root, db_write_token=db_write_token)
                 )
+            _append_last_tool_record(tc, name, raw_eff, payload)
             if payload.get("requires_token"):
                 return payload
             messages.append(
@@ -287,6 +365,7 @@ def append_tool_messages(
         payload = payloads[i]
         if payload is None:
             continue
+        _append_last_tool_record(tc, _name, _raw_eff, payload)
         if payload.get("requires_token"):
             return payload
         messages.append(
@@ -327,6 +406,7 @@ def chat(
     model: str | None = None,
     client: OpenAI | None = None,
 ) -> Any:
+    clear_last_tool_result()
     if max_iterations is None:
         max_iterations = 8
     sys = merge_system_prompt(system_prompt, runtime_context)
@@ -390,13 +470,15 @@ def chat(
             )
             if token_request and token_request.get("requires_token"):
                 return json.dumps(
-                    {
-                        "requires_token": True,
-                        "token_name": token_request.get("token_name"),
-                        "token_description": token_request.get("token_description"),
-                        "message": token_request.get("message"),
-                        "tool_outputs": tool_outputs,
-                    },
+                    _attach_last_tool_records(
+                        {
+                            "requires_token": True,
+                            "token_name": token_request.get("token_name"),
+                            "token_description": token_request.get("token_description"),
+                            "message": token_request.get("message"),
+                            "tool_outputs": tool_outputs,
+                        }
+                    ),
                     ensure_ascii=False,
                 )
             continue
@@ -404,16 +486,20 @@ def chat(
         full_response = result
         if tool_outputs:
             full_response = "\n".join(tool_outputs) + "\n\n" + result
-        return {
-            "response": full_response,
-            "thinking_steps": "\n".join(tool_outputs) if tool_outputs else None,
-            "text": result,
+        return _attach_last_tool_records(
+            {
+                "response": full_response,
+                "thinking_steps": "\n".join(tool_outputs) if tool_outputs else None,
+                "text": result,
+            }
+        )
+    return _attach_last_tool_records(
+        {
+            "response": "对话达到最大迭代次数，未完成。",
+            "thinking_steps": None,
+            "text": "对话达到最大迭代次数，未完成。",
         }
-    return {
-        "response": "对话达到最大迭代次数，未完成。",
-        "thinking_steps": None,
-        "text": "对话达到最大迭代次数，未完成。",
-    }
+    )
 
 
 def chat_stream_text(
@@ -427,6 +513,7 @@ def chat_stream_text(
     model: str | None = None,
     client: OpenAI | None = None,
 ) -> Iterable[str | dict[str, Any]]:
+    clear_last_tool_result()
     if max_iterations is None:
         max_iterations = 8
     sys = merge_system_prompt(system_prompt, runtime_context)
@@ -605,6 +692,9 @@ def chat_stream_sse_events(
 
 __all__ = [
     "reset_planner_tool_dedup_state",
+    "clear_last_tool_result",
+    "get_last_tool_result",
+    "get_last_tool_records",
     "append_tool_messages",
     "chat",
     "chat_stream_text",

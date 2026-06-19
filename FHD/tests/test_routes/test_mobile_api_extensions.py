@@ -7,6 +7,7 @@ approval/shipment/customer lists, mods, home, platform-shell, and all helper fun
 from __future__ import annotations
 
 import sys
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -23,6 +24,13 @@ def _resolve_circular_import():
 @pytest.fixture
 def ext_mod():
     return sys.modules["app.fastapi_routes.mobile_api_extensions"]
+
+
+def _mock_pairing_request(host_header: str = "127.0.0.1:5112", hostname: str = "127.0.0.1"):
+    return SimpleNamespace(
+        headers={"host": host_header},
+        url=SimpleNamespace(hostname=hostname),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -105,6 +113,17 @@ class TestPairingIssueHost:
             assert ext_mod._pairing_issue_host(None) == "192.168.1.100"
 
 
+class TestPairingIssuePort:
+    def test_requested_port_wins(self, ext_mod):
+        assert ext_mod._pairing_issue_port(_mock_pairing_request(), 8788) == 8788
+
+    def test_infers_port_from_host_header(self, ext_mod):
+        assert ext_mod._pairing_issue_port(_mock_pairing_request("127.0.0.1:5112"), 0) == 5112
+
+    def test_default_5000_yields_to_real_request_port(self, ext_mod):
+        assert ext_mod._pairing_issue_port(_mock_pairing_request("127.0.0.1:17500"), 5000) == 17500
+
+
 # ---------------------------------------------------------------------------
 # Pairing routes (direct handler tests)
 # ---------------------------------------------------------------------------
@@ -114,9 +133,10 @@ class TestPairingIssue:
     @pytest.mark.asyncio
     async def test_issue_success(self, ext_mod):
         body = ext_mod.PairingIssueBody(host="192.168.1.10", port=5000)
+        request = _mock_pairing_request("192.168.1.10:5000", "192.168.1.10")
         with patch.object(ext_mod, "_pairing_issue_host", return_value="192.168.1.10"), \
              patch("app.security.mobile_pairing.issue_pairing_nonce", return_value={"nonce": "abc123", "host": "192.168.1.10", "port": 5000}):
-            result = await ext_mod.mobile_pairing_issue(body)
+            result = await ext_mod.mobile_pairing_issue(body, request)
         # format_mobile_response returns a dict
         if hasattr(result, "body"):
             import json
@@ -124,6 +144,30 @@ class TestPairingIssue:
         else:
             data = result
         assert data.get("success") is True or data.get("data", {}).get("host") == "192.168.1.10"
+
+    @pytest.mark.asyncio
+    async def test_issue_returns_mobile_ready_base_url(self, ext_mod):
+        body = ext_mod.PairingIssueBody()
+        request = _mock_pairing_request("127.0.0.1:17500", "127.0.0.1")
+        with patch.object(ext_mod, "_guess_lan_ipv4", return_value="192.168.0.38"), patch.object(
+            ext_mod,
+            "issue_pairing_nonce",
+            return_value={
+                "nonce": "abc123",
+                "host": "192.168.0.38",
+                "port": 17500,
+                "shortCode": "123456",
+                "exp": 123,
+            },
+        ), patch.object(ext_mod, "_register_desktop_relay_for_pairing", return_value=None):
+            result = await ext_mod.mobile_pairing_issue(body, request)
+        data = result if isinstance(result, dict) else __import__("json").loads(result.body)
+        payload = data["data"]
+        assert payload["api_base_url"] == "http://192.168.0.38:17500/"
+        assert payload["base_url"] == "http://192.168.0.38:17500/"
+        assert payload["code"] == "123456"
+        assert payload["qr_json"]["api_base_url"] == "http://192.168.0.38:17500/"
+        assert "xcagi://pairing?" in payload["deep_link"]
 
 
 class TestPairingLookup:
@@ -145,7 +189,10 @@ class TestPairingExchange:
              patch.object(ext_mod, "_pairing_issue_host", return_value="192.168.1.10"):
             # First issue a pairing to get a nonce
             body_issue = ext_mod.PairingIssueBody(host="192.168.1.10", port=5000)
-            issue_result = await ext_mod.mobile_pairing_issue(body_issue)
+            issue_result = await ext_mod.mobile_pairing_issue(
+                body_issue,
+                _mock_pairing_request("192.168.1.10:5000", "192.168.1.10"),
+            )
             if hasattr(issue_result, "body"):
                 import json
                 issue_data = json.loads(issue_result.body)
@@ -179,6 +226,7 @@ class TestPairingExchange:
         assert data["success"] is True
         assert data["data"]["host"] == "192.168.1.20"
         assert data["data"]["port"] == 5100
+        assert data["data"]["api_base_url"] == "http://192.168.1.20:5100/"
 
     @pytest.mark.asyncio
     async def test_exchange_no_credentials(self, ext_mod):
@@ -359,6 +407,64 @@ class TestShipmentItems:
             items = ext_mod._shipment_items(limit=10)
             assert len(items) == 1
             assert items[0]["id"] == 5
+
+
+# ---------------------------------------------------------------------------
+# AI employee market profile enrichment
+# ---------------------------------------------------------------------------
+
+
+class TestAiEmployeeMarketProfiles:
+    def test_index_market_ai_employee_profiles_filters_non_employees(self, ext_mod):
+        profiles = ext_mod._index_market_ai_employee_profiles(
+            [
+                {
+                    "pkg_id": "deploy-release-officer",
+                    "name": "发布部署主管",
+                    "material_category": "ai_employee",
+                    "artifact": "mod",
+                },
+                {"pkg_id": "theme-pack", "name": "Theme", "material_category": "theme"},
+            ]
+        )
+        assert "deploy-release-officer" in profiles
+        assert "发布部署主管" in profiles
+        assert "theme-pack" not in profiles
+
+    def test_admin_employee_items_enriches_matching_market_profile(self, ext_mod):
+        with patch.object(
+            ext_mod,
+            "_load_admin_duty_records",
+            return_value=[
+                {
+                    "id": "deploy-release-officer",
+                    "name": "发布部署主管",
+                    "description": "本地职责",
+                    "stored_filename": "deploy-release-officer-1.0.0.xcemp",
+                }
+            ],
+        ):
+            items = ext_mod._admin_employee_items(
+                {
+                    "deploy-release-officer": {
+                        "pkg_id": "deploy-release-officer",
+                        "name": "发布部署主管",
+                        "description": "市场资料",
+                        "version": "2.0.0",
+                        "author": "MODstore",
+                        "industry": "企业服务",
+                        "material_category": "ai_employee",
+                        "license_scope": "enterprise",
+                        "security_level": "enterprise",
+                    }
+                },
+                market_connected=True,
+            )
+
+        assert items[0]["profile_source"] == "ai_market"
+        assert items[0]["market_connected"] is True
+        assert items[0]["market_pkg_id"] == "deploy-release-officer"
+        assert items[0]["market_description"] == "市场资料"
 
 
 # ---------------------------------------------------------------------------

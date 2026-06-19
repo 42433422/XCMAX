@@ -57,7 +57,8 @@ class PushRegistrar @Inject constructor(
                 fcm = FirebaseMessaging.getInstance().token.await()
                 PushTokenHolder.fcmToken = fcm
             } catch (e: Exception) {
-                hints.add("FCM 未就绪：${e.message ?: "请检查 google-services.json"}")
+                // Push is optional for the mobile control loop. Missing Firebase config
+                // must not surface as a blocking product error during pairing/login.
             }
         }
         if (fcm.isNotBlank()) {
@@ -71,7 +72,7 @@ class PushRegistrar @Inject constructor(
         }
 
         if (!isJpushConfigured()) {
-            hints.add("极光推送未配置（local.properties 缺少 JPUSH_APPKEY）")
+            // JPush is optional; keep the app usable when local builds do not provide an app key.
         } else {
             try {
                 val rid = JPushInterface.getRegistrationID(context)

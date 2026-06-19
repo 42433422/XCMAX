@@ -186,8 +186,10 @@ describe('ImMessengerView.vue', () => {
       },
       { scope: 'admin' },
     )
-    expect(wrapper.text()).toContain('已进入软件内 Codex 调用队列')
-    expect(wrapper.text()).toContain('调度器')
+    expect(wrapper.text()).toContain('Codex 已收到')
+    expect(wrapper.text()).not.toContain('调度器')
+    expect(wrapper.text()).not.toContain('调用队列')
+    expect(wrapper.find('.im-system-call-row.is-streaming').exists()).toBe(true)
 
     await input.setValue('继续验证回车调用')
     await input.trigger('keydown', { key: 'Enter' })

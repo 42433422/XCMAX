@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from fastapi import APIRouter, Body, File, Form, Query, Request, UploadFile
 from fastapi.responses import JSONResponse, PlainTextResponse
@@ -62,19 +63,14 @@ def system_printer_get():
 
 
 @router.post("/api/system/printer")
-def system_printer_post(body: dict = Body(default_factory=dict)):
-    from app.application.facades.session_facade import get_system_service
-
-    data = body or {}
-    if not data:
-        return JSONResponse({"success": False, "message": "请求数据不能为空"}, status_code=400)
-    printer_name = data.get("printer_name")
-    if not printer_name:
-        return JSONResponse(
-            {"success": False, "message": "缺少参数：printer_name"}, status_code=400
-        )
-    result = get_system_service().set_default_printer(printer_name)
-    return JSONResponse(result, status_code=200 if result.get("success") else 500)
+def system_printer_post(request: Request, body: dict = Body(default_factory=dict)):
+    data, code = _run_system_maintenance_agent(
+        request=request,
+        action="set_default_printer",
+        params=dict(body or {}),
+        route_path="/api/system/printer",
+    )
+    return JSONResponse(data, status_code=code)
 
 
 @router.get("/api/system/startup")
@@ -88,22 +84,25 @@ def system_startup_get():
 
 
 @router.post("/api/system/startup")
-def system_startup_post():
-    from app.application.facades.session_facade import get_system_service
-
-    result = get_system_service().enable_startup()
-    return JSONResponse(result, status_code=200 if result.get("success") else 500)
+def system_startup_post(request: Request):
+    data, code = _run_system_maintenance_agent(
+        request=request,
+        action="enable_startup",
+        params={},
+        route_path="/api/system/startup",
+    )
+    return JSONResponse(data, status_code=code)
 
 
 @router.delete("/api/system/startup")
-def system_startup_delete():
-    try:
-        from app.application.facades.session_facade import get_system_service
-
-        result = get_system_service().disable_startup()
-        return JSONResponse(result, status_code=200 if result.get("success") else 500)
-    except RECOVERABLE_ERRORS as e:
-        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+def system_startup_delete(request: Request):
+    data, code = _run_system_maintenance_agent(
+        request=request,
+        action="disable_startup",
+        params={},
+        route_path="/api/system/startup",
+    )
+    return JSONResponse(data, status_code=code)
 
 
 @router.get("/api/database/backups")
@@ -117,45 +116,36 @@ def database_backups_list():
 
 
 @router.delete("/api/database/backup/{backup_file:path}")
-def database_backup_delete(backup_file: str):
-    try:
-        from app.application.facades.session_facade import get_database_service
-
-        result = get_database_service().delete_backup(backup_file)
-        return JSONResponse(result, status_code=200 if result.get("success") else 500)
-    except RECOVERABLE_ERRORS as e:
-        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+def database_backup_delete(request: Request, backup_file: str):
+    data, code = _run_system_maintenance_agent(
+        request=request,
+        action="delete_database_backup",
+        params={"backup_file": backup_file},
+        route_path="/api/database/backup/{backup_file}",
+    )
+    return JSONResponse(data, status_code=code)
 
 
 @router.post("/api/database/backup")
-def database_backup():
-    try:
-        from app.application.facades.session_facade import get_database_service
-
-        db_service = get_database_service()
-        result = db_service.backup_database()
-        return JSONResponse(result, status_code=200 if result.get("success") else 500)
-    except RECOVERABLE_ERRORS as e:
-        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+def database_backup(request: Request):
+    data, code = _run_system_maintenance_agent(
+        request=request,
+        action="backup_database",
+        params={},
+        route_path="/api/database/backup",
+    )
+    return JSONResponse(data, status_code=code)
 
 
 @router.post("/api/database/restore")
-def database_restore(body: dict = Body(default_factory=dict)):
-    try:
-        from app.application.facades.session_facade import get_database_service
-
-        data = body or {}
-        backup_file = data.get("backup_file")
-        if not backup_file:
-            return JSONResponse(
-                {"success": False, "message": "缺少参数：backup_file"},
-                status_code=400,
-            )
-        db_service = get_database_service()
-        result = db_service.restore_database(backup_file)
-        return JSONResponse(result, status_code=200 if result.get("success") else 400)
-    except RECOVERABLE_ERRORS as e:
-        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+def database_restore(request: Request, body: dict = Body(default_factory=dict)):
+    data, code = _run_system_maintenance_agent(
+        request=request,
+        action="restore_database",
+        params=dict(body or {}),
+        route_path="/api/database/restore",
+    )
+    return JSONResponse(data, status_code=code)
 
 
 @router.get("/api/performance/status")
@@ -256,50 +246,25 @@ def performance_cache_stats():
 
 
 @router.post("/api/performance/cache/clear")
-def performance_cache_clear(pattern: str | None = Query(default=None)):
-    try:
-        from app.utils.performance_initializer import get_performance_optimizer
-
-        optimizer = get_performance_optimizer()
-        if not optimizer.redis_cache:
-            return JSONResponse(
-                {"success": False, "message": "Redis 缓存未初始化"}, status_code=503
-            )
-        if pattern:
-            cleared = optimizer.redis_cache.clear_pattern(pattern)
-            message = f"已清除模式 '{pattern}' 的缓存 ({cleared} 个键)"
-        else:
-            optimizer.redis_cache.clear_local_cache()
-            message = "已清除本地缓存"
-        return {"success": True, "message": message}
-    except RECOVERABLE_ERRORS as e:
-        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+def performance_cache_clear(request: Request, pattern: str | None = Query(default=None)):
+    data, code = _run_system_maintenance_agent(
+        request=request,
+        action="clear_performance_cache",
+        params={"pattern": pattern} if pattern else {},
+        route_path="/api/performance/cache/clear",
+    )
+    return JSONResponse(data, status_code=code)
 
 
 @router.post("/api/performance/cache/invalidate")
-def performance_cache_invalidate(body: dict = Body(default_factory=dict)):
-    try:
-        data = body or {}
-        keys = data.get("keys", [])
-        if not keys:
-            return JSONResponse(
-                {"success": False, "message": "请提供要失效的键列表"}, status_code=400
-            )
-        from app.utils.performance_initializer import get_performance_optimizer
-
-        optimizer = get_performance_optimizer()
-        if not optimizer.redis_cache:
-            return JSONResponse(
-                {"success": False, "message": "Redis 缓存未初始化"}, status_code=503
-            )
-        deleted = optimizer.redis_cache.delete(*keys)
-        return {
-            "success": True,
-            "data": {"deleted_count": deleted, "requested_keys": len(keys)},
-            "message": f"已删除 {deleted} 个缓存键",
-        }
-    except RECOVERABLE_ERRORS as e:
-        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+def performance_cache_invalidate(request: Request, body: dict = Body(default_factory=dict)):
+    data, code = _run_system_maintenance_agent(
+        request=request,
+        action="invalidate_performance_cache",
+        params=dict(body or {}),
+        route_path="/api/performance/cache/invalidate",
+    )
+    return JSONResponse(data, status_code=code)
 
 
 @router.get("/api/performance/tasks/status")
@@ -391,19 +356,14 @@ def performance_slow_queries(limit: int = Query(default=20)):
 
 
 @router.post("/api/performance/optimize/reinitialize")
-def performance_optimize_reinitialize():
-    try:
-        from app.utils.performance_initializer import init_performance_optimization
-
-        optimizer = init_performance_optimization()
-        return {
-            "success": True,
-            "message": "性能优化系统已重新初始化",
-            "data": optimizer.get_status(),
-        }
-    except RECOVERABLE_ERRORS as e:
-        logger.exception("performance reinit: %s", e)
-        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+def performance_optimize_reinitialize(request: Request):
+    data, code = _run_system_maintenance_agent(
+        request=request,
+        action="reinitialize_performance",
+        params={},
+        route_path="/api/performance/optimize/reinitialize",
+    )
+    return JSONResponse(data, status_code=code)
 
 
 @router.get("/api/templates/progress/{task_id}")
@@ -413,97 +373,37 @@ def templates_progress(task_id: str):
 
 @router.delete("/api/templates/delete")
 def templates_delete(request: Request, body: dict = Body(default_factory=dict)):
-    try:
-        import os as _os
-        from datetime import datetime
-
-        from sqlalchemy import text
-
-        from app.db.init_db import init_template_tables
-        from app.db.session import get_db
-
-        template_id = str(body.get("id") or request.query_params.get("id") or "").strip()
-        if not template_id:
-            return JSONResponse({"success": False, "message": "缺少模板 id"}, status_code=400)
-        if template_id.startswith("fs:"):
-            filename = template_id.split(":", 1)[1].strip()
-            if not filename:
-                return JSONResponse(
-                    {"success": False, "message": "模板文件名无效"}, status_code=400
-                )
-            base_dir = get_base_dir()
-            candidates = [
-                _os.path.join(base_dir, filename),
-                _os.path.join(base_dir, "templates", filename),
-                _os.path.join(base_dir, "resources", "templates", filename),
-            ]
-            target_path = None
-            for p in candidates:
-                if _os.path.isfile(p):
-                    target_path = p
-                    break
-            if not target_path:
-                return JSONResponse(
-                    {"success": False, "message": f"模板文件不存在: {filename}"}, status_code=404
-                )
-            _os.remove(target_path)
-            return {
-                "success": True,
-                "message": "模板删除成功",
-                "deleted": {"id": template_id, "path": target_path},
-            }
-        db_id = None
-        if template_id.startswith("db:"):
-            raw_db_id = template_id.split(":", 1)[1].strip()
-            if raw_db_id.isdigit():
-                db_id = int(raw_db_id)
-        elif template_id.isdigit():
-            db_id = int(template_id)
-        if db_id is not None:
-            try:
-                init_template_tables()
-            except RECOVERABLE_ERRORS:
-                pass
-            with get_db() as db:
-                row = db.execute(
-                    text("SELECT id FROM templates WHERE id = :id"), {"id": db_id}
-                ).fetchone()
-                if not row:
-                    return JSONResponse(
-                        {"success": False, "message": "模板不存在"}, status_code=404
-                    )
-                db.execute(
-                    text(
-                        "UPDATE templates SET is_active = 0, updated_at = :updated_at WHERE id = :id"
-                    ),
-                    {"id": db_id, "updated_at": datetime.now()},
-                )
-                db.commit()
-            return {
-                "success": True,
-                "message": "模板删除成功",
-                "deleted": {"id": template_id, "db_id": db_id},
-            }
-        return JSONResponse(
-            {"success": False, "message": f"暂不支持删除该模板类型: {template_id}"}, status_code=400
-        )
-    except RECOVERABLE_ERRORS as e:
-        return JSONResponse({"success": False, "message": f"删除失败：{str(e)}"}, status_code=500)
+    data = dict(body or {})
+    if not data.get("id") and request.query_params.get("id"):
+        data["id"] = request.query_params.get("id")
+    payload, code = _run_document_template_agent(
+        request=request,
+        body=data,
+        action="delete",
+        route_path="/api/templates/delete",
+    )
+    return JSONResponse(payload, status_code=code)
 
 
 @router.post("/api/templates/create")
-def templates_create(body: dict = Body(default_factory=dict)):
-    from app.routes.document_templates_compat import run_archive_template_create
-
-    data, code = run_archive_template_create(body)
+def templates_create(request: Request, body: dict = Body(default_factory=dict)):
+    data, code = _run_document_template_agent(
+        request=request,
+        body=body,
+        action="create",
+        route_path="/api/templates/create",
+    )
     return JSONResponse(data, status_code=code)
 
 
 @router.post("/api/templates/update")
-def templates_update(body: dict = Body(default_factory=dict)):
-    from app.routes.document_templates_compat import run_archive_template_update
-
-    data, code = run_archive_template_update(body)
+def templates_update(request: Request, body: dict = Body(default_factory=dict)):
+    data, code = _run_document_template_agent(
+        request=request,
+        body=body,
+        action="update",
+        route_path="/api/templates/update",
+    )
     return JSONResponse(data, status_code=code)
 
 
@@ -514,16 +414,14 @@ def templates_delete_post(request: Request, body: dict = Body(default_factory=di
 
 @router.post("/api/templates/analyze")
 async def templates_analyze(
+    request: Request,
     file: UploadFile = File(...),
     template_name: str = Form(default=""),
     template_scope: str = Form(default=""),
 ):
-    from app.routes.document_templates_compat import run_archive_template_analyze
-
-    raw = await file.read()
-    data, code = run_archive_template_analyze(
-        file_body=raw,
-        filename=file.filename or "upload.bin",
+    data, code = await _run_templates_analyze_agent(
+        request=request,
+        file=file,
         template_name=template_name,
         template_scope=template_scope,
     )
@@ -564,17 +462,352 @@ def skills_info(skill_id: str):
         return JSONResponse({"success": False, "message": str(e)}, status_code=500)
 
 
+def _user_id_from_tool_request(request: Request, body: dict[str, Any]) -> str:
+    params = body.get("params") if isinstance(body.get("params"), dict) else {}
+    return str(
+        request.headers.get("X-User-Id")
+        or request.headers.get("X-User-ID")
+        or body.get("user_id")
+        or body.get("userId")
+        or params.get("user_id")
+        or "tools-route"
+    ).strip()
+
+
+def _tool_route_agent_payload(run: Any, node_id: str) -> dict[str, Any]:
+    final_output = getattr(run, "final_output", None)
+    node_outputs = dict((final_output or {}).get("node_outputs") or {})
+    output = dict(node_outputs.get(node_id) or {})
+    if not output:
+        for step in getattr(run, "steps", []) or []:
+            if str(getattr(step, "node_id", "")) == node_id:
+                output = dict(getattr(step, "output", {}) or {})
+                if not output and str(getattr(step, "status", "")) == "waiting_user":
+                    output = {
+                        "success": True,
+                        "message": "工具执行需要用户确认",
+                        "waiting_step_id": getattr(step, "step_id", ""),
+                    }
+                break
+    if not output:
+        output = {"success": getattr(run, "status", "") in {"completed", "waiting_user"}}
+    if not output.get("success") and getattr(run, "error", "") and not output.get("message"):
+        output["message"] = getattr(run, "error", "")
+    run_id = str(getattr(run, "run_id", "") or "")
+    if run_id:
+        output["run_id"] = run_id
+        output["agent_run_id"] = run_id
+    output["agent_status"] = str(getattr(run, "status", "") or "")
+    output.setdefault("data", {})
+    if isinstance(output.get("data"), dict):
+        output["data"].setdefault("agent_run_id", run_id)
+        output["data"].setdefault("run_id", run_id)
+    return output
+
+
+def _run_tools_execute_agent(
+    *,
+    request: Request,
+    body: dict[str, Any],
+    route_path: str,
+) -> tuple[dict[str, Any], int] | None:
+    from app.application.agent_orchestrator import AgentOrchestrator
+    from app.application.workflow.types import PlanGraph, WorkflowNode
+    from app.services.tools_execution.registry import _normalize_action, get_workflow_tool_registry
+
+    raw_tool_id = body.get("tool_id") or body.get("skill_id")
+    tool_id = str(raw_tool_id or "").strip()
+    if not tool_id:
+        return None
+    params = body.get("params")
+    if not isinstance(params, dict):
+        params = {}
+    action = _normalize_action(str(body.get("action") or "view"), params)
+    registry = get_workflow_tool_registry()
+    if tool_id not in registry or action not in dict(registry[tool_id].get("actions") or {}):
+        return None
+
+    node_id = f"tools_execute_{tool_id}_{action}".replace(".", "_").replace("-", "_")
+    plan = PlanGraph(
+        plan_id=f"tools_execute_{tool_id}_{action}",
+        intent=f"tools_execute_{tool_id}_{action}",
+        todo_steps=[f"通过 AgentOrchestrator 执行 {tool_id}.{action}"],
+        nodes=[
+            WorkflowNode(
+                node_id=node_id,
+                tool_id=tool_id,
+                action=action,
+                params=dict(params),
+                risk=str(registry[tool_id]["actions"][action].get("risk") or "low"),
+                idempotent=bool(registry[tool_id]["actions"][action].get("idempotent", False)),
+                description=f"Execute {tool_id}.{action} through the unified Agent runtime.",
+            )
+        ],
+        risk_level=str(registry[tool_id]["actions"][action].get("risk") or "low"),
+        metadata={"source": "tools_execute_route", "route": route_path},
+    )
+    user_id = _user_id_from_tool_request(request, body)
+    run = AgentOrchestrator().start_run_from_plan(
+        user_id=user_id,
+        message=str(body.get("message") or f"Execute {tool_id}.{action}"),
+        plan=plan,
+        runtime_context={
+            "source": "tools_execute_route",
+            "route": route_path,
+            "request_path": str(request.url.path),
+            "user_id": user_id,
+        },
+    )
+    payload = _tool_route_agent_payload(run, node_id)
+    if run.status in {"waiting_user", "blocked"}:
+        return payload, 202
+    return payload, 200 if payload.get("success") else 400
+
+
+async def _run_templates_analyze_agent(
+    *,
+    request: Request,
+    file: UploadFile,
+    template_name: str,
+    template_scope: str,
+) -> tuple[dict[str, Any], int]:
+    from app.application.agent_orchestrator import AgentOrchestrator
+    from app.application.workflow.types import PlanGraph, WorkflowNode
+    from app.utils.upload_helpers import save_upload_file
+
+    saved_path = await save_upload_file(file, subdir="template-analysis")
+    node_id = "template_extract_analyze"
+    params = {
+        "file_path": saved_path,
+        "template_name": str(template_name or ""),
+        "template_scope": str(template_scope or ""),
+    }
+    plan = PlanGraph(
+        plan_id="templates_analyze",
+        intent="templates_analyze",
+        todo_steps=["通过 AgentOrchestrator 分析上传模板文件"],
+        nodes=[
+            WorkflowNode(
+                node_id=node_id,
+                tool_id="template_extract",
+                action="extract",
+                params=params,
+                risk="low",
+                idempotent=True,
+                description="Analyze uploaded template structure through the unified Agent runtime.",
+            )
+        ],
+        risk_level="low",
+        metadata={
+            "source": "templates_analyze_route",
+            "route": "/api/templates/analyze",
+            "artifacts": [
+                {
+                    "artifact_type": "excel_file",
+                    "name": file.filename or "upload.bin",
+                    "source": "templates_analyze_route",
+                    "uri": saved_path,
+                    "summary": "上传的模板分析源文件",
+                    "fields": [
+                        {"name": "template_name", "value": template_name},
+                        {"name": "template_scope", "value": template_scope},
+                    ],
+                }
+            ],
+        },
+    )
+    user_id = _user_id_from_tool_request(request, {"params": params})
+    run = AgentOrchestrator().start_run_from_plan(
+        user_id=user_id,
+        message=f"Analyze template: {file.filename or saved_path}",
+        plan=plan,
+        runtime_context={
+            "source": "templates_analyze_route",
+            "route": "/api/templates/analyze",
+            "request_path": str(request.url.path),
+            "user_id": user_id,
+            "file_path": saved_path,
+            "template_name": template_name,
+            "template_scope": template_scope,
+        },
+    )
+    payload = _tool_route_agent_payload(run, node_id)
+    if run.status in {"waiting_user", "blocked"}:
+        return payload, 202
+    return payload, 200 if payload.get("success") else 400
+
+
+def _run_system_maintenance_agent(
+    *,
+    request: Request,
+    action: str,
+    params: dict[str, Any],
+    route_path: str,
+) -> tuple[dict[str, Any], int]:
+    from app.application.agent_orchestrator import AgentOrchestrator
+    from app.application.workflow.types import PlanGraph, WorkflowNode
+    from app.services.tools_execution.registry import get_workflow_tool_registry
+
+    data = dict(params or {})
+    registry = get_workflow_tool_registry()
+    action_meta = dict((registry.get("system_maintenance") or {}).get("actions") or {}).get(action)
+    if not isinstance(action_meta, dict):
+        return {"success": False, "message": f"未注册的系统维护动作: {action}"}, 400
+
+    node_id = f"system_maintenance_{action}"
+    plan = PlanGraph(
+        plan_id=node_id,
+        intent=node_id,
+        todo_steps=[f"通过 AgentOrchestrator 执行 system_maintenance.{action}"],
+        nodes=[
+            WorkflowNode(
+                node_id=node_id,
+                tool_id="system_maintenance",
+                action=action,
+                params=data,
+                risk=str(action_meta.get("risk") or "high"),
+                idempotent=bool(action_meta.get("idempotent", False)),
+                description=f"Execute system_maintenance.{action} through the unified Agent runtime.",
+            )
+        ],
+        risk_level=str(action_meta.get("risk") or "high"),
+        metadata={"source": "system_maintenance_route", "route": route_path},
+    )
+    user_id = _user_id_from_tool_request(request, data)
+    runtime_context = {
+        "source": "system_maintenance_route",
+        "route": route_path,
+        "request_path": str(request.url.path),
+        "user_id": user_id,
+        "route_confirmed": True,
+    }
+    orchestrator = AgentOrchestrator()
+    run = orchestrator.start_run_from_plan(
+        user_id=user_id,
+        message=str(data.get("message") or f"System maintenance {action}"),
+        plan=plan,
+        runtime_context=runtime_context,
+    )
+    if run.status == "waiting_user":
+        continued = orchestrator.continue_run(
+            run.run_id,
+            approved_by=user_id or "system-maintenance-route",
+            runtime_context=runtime_context,
+        )
+        if continued is not None:
+            run = continued
+    payload = _tool_route_agent_payload(run, node_id)
+    status_code = int(
+        payload.pop("http_status_code", 0) or (200 if payload.get("success") else 400)
+    )
+    if payload.get("error_code") == "tool_exception":
+        status_code = 500
+    if run.status in {"waiting_user", "blocked"}:
+        status_code = 202
+    return payload, status_code
+
+
+def _run_document_template_agent(
+    *,
+    request: Request,
+    body: dict[str, Any],
+    action: str,
+    route_path: str,
+) -> tuple[dict[str, Any], int]:
+    from app.application.agent_orchestrator import AgentOrchestrator
+    from app.application.workflow.types import PlanGraph, WorkflowNode
+    from app.services.tools_execution.registry import get_workflow_tool_registry
+
+    data = dict(body or {})
+    registry = get_workflow_tool_registry()
+    action_meta = dict((registry.get("document_template") or {}).get("actions") or {}).get(action)
+    if not isinstance(action_meta, dict):
+        return {"success": False, "message": f"未注册的模板动作: {action}"}, 400
+    node_id = f"document_template_{action}"
+    plan = PlanGraph(
+        plan_id=f"document_template_{action}",
+        intent=f"document_template_{action}",
+        todo_steps=[f"通过 AgentOrchestrator 执行 document_template.{action}"],
+        nodes=[
+            WorkflowNode(
+                node_id=node_id,
+                tool_id="document_template",
+                action=action,
+                params=data,
+                risk=str(action_meta.get("risk") or "medium"),
+                idempotent=bool(action_meta.get("idempotent", False)),
+                description=f"Execute document_template.{action} through the unified Agent runtime.",
+            )
+        ],
+        risk_level=str(action_meta.get("risk") or "medium"),
+        metadata={"source": "document_template_route", "route": route_path},
+    )
+    user_id = _user_id_from_tool_request(request, data)
+    runtime_context = {
+        "source": "document_template_route",
+        "route": route_path,
+        "request_path": str(request.url.path),
+        "user_id": user_id,
+        "route_confirmed": True,
+    }
+    if action == "delete":
+        template_id = str(data.get("id") or "").strip()
+        if template_id.startswith("fs:") and template_id.split(":", 1)[1].strip():
+            try:
+                runtime_context["template_base_dir"] = get_base_dir()
+            except RECOVERABLE_ERRORS as exc:
+                return {"success": False, "message": f"删除失败：{str(exc)}"}, 500
+    orchestrator = AgentOrchestrator()
+    run = orchestrator.start_run_from_plan(
+        user_id=user_id,
+        message=str(data.get("message") or f"Template {action}"),
+        plan=plan,
+        runtime_context=runtime_context,
+    )
+    if run.status == "waiting_user":
+        continued = orchestrator.continue_run(
+            run.run_id,
+            approved_by=user_id or "document-template-route",
+            runtime_context=runtime_context,
+        )
+        if continued is not None:
+            run = continued
+    payload = _tool_route_agent_payload(run, node_id)
+    status_code = int(
+        payload.pop("http_status_code", 0) or (200 if payload.get("success") else 400)
+    )
+    if payload.get("error_code") == "tool_exception":
+        status_code = 500
+    if run.status in {"waiting_user", "blocked"}:
+        status_code = 202
+    return payload, status_code
+
+
 @router.post("/api/skills/execute")
-def skills_execute(body: dict = Body(default_factory=dict)):
-    from app.routes.tools import run_archive_tools_execute
+def skills_execute(request: Request, body: dict = Body(default_factory=dict)):
+    agent_result = _run_tools_execute_agent(
+        request=request,
+        body=body or {},
+        route_path="/api/skills/execute",
+    )
+    if agent_result is not None:
+        return JSONResponse(agent_result[0], status_code=agent_result[1])
+    from app.application.facades.tools_facade import run_archive_tools_execute
 
     data, code = run_archive_tools_execute(body)
     return JSONResponse(data, status_code=code)
 
 
 @router.post("/api/tools/execute")
-def tools_execute_route(body: dict = Body(default_factory=dict)):
-    from app.routes.tools import run_archive_tools_execute
+def tools_execute_route(request: Request, body: dict = Body(default_factory=dict)):
+    agent_result = _run_tools_execute_agent(
+        request=request,
+        body=body or {},
+        route_path="/api/tools/execute",
+    )
+    if agent_result is not None:
+        return JSONResponse(agent_result[0], status_code=agent_result[1])
+    from app.application.facades.tools_facade import run_archive_tools_execute
 
     data, code = run_archive_tools_execute(body)
     return JSONResponse(data, status_code=code)

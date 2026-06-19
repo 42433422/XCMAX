@@ -129,6 +129,9 @@ export function formatMarketServiceError(
   if (status === 401 || /凭证无效|未授权|unauthorized/i.test(msg)) {
     return '尚未绑定修茈市场账号；请重新登录本软件以自动同步市场会话。';
   }
+  if (status === 429) {
+    return '市场请求过于频繁，请稍后再试。';
+  }
   return msg || `市场请求失败（HTTP ${status}）`;
 }
 
@@ -356,6 +359,34 @@ export async function registerMarketAccount(
   };
   if (!j.success || !j.data?.token) {
     throw new Error(j.detail || j.message || '市场注册失败');
+  }
+  return j.data;
+}
+
+export type DirectMarketCheckoutResult = {
+  ok?: boolean;
+  type?: string;
+  redirect_url?: string;
+  order_id?: string;
+  [key: string]: unknown;
+};
+
+export async function directMarketCheckout(
+  payload: Record<string, unknown>,
+): Promise<DirectMarketCheckoutResult> {
+  const res = await apiFetch('/api/market/payment/checkout', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload || {}),
+  });
+  const j = (await res.json()) as {
+    success?: boolean;
+    detail?: string;
+    message?: string;
+    data?: DirectMarketCheckoutResult;
+  };
+  if (!j.success || !j.data) {
+    throw new Error(j.detail || j.message || '市场支付下单失败');
   }
   return j.data;
 }

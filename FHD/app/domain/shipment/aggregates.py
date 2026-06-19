@@ -17,7 +17,7 @@
 - 代表「向供应商下达的采购意向」
 - 由采购管理模块录入，核心字段：supplier、total_amount、status
 - 生命周期：draft → approved → inbound → completed
-- 实体表：purchase_orders；应用服务：purchase_app_service_v2
+- 实体表：purchase_orders；采购 API 当前复用 inventory facade 的 PurchaseService
 - 对应 API：/api/purchase/orders/*
 
 ## 历史混淆来源

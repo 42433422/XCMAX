@@ -55,7 +55,13 @@ function desktopInitialUrl(): string {
 }
 
 function readPackagedProductSku(): ProductSku | null {
-  if (!app.isPackaged) return null
+  if (!app.isPackaged) {
+    const sku = String(process.env.XCAGI_PRODUCT_SKU || '').trim().toLowerCase()
+    if (sku === 'personal' || sku === 'enterprise') {
+      return sku
+    }
+    return null
+  }
   const candidates = [
     path.join(process.resourcesPath, 'product-sku.json'),
     path.join(process.resourcesPath, 'backend', 'product-sku.json')

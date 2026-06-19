@@ -70,7 +70,7 @@ def _stub_planner_rag() -> None:
 def _dispatch_workflow_tool(
     tool_id: str, action: str, params: dict[str, Any]
 ) -> dict[str, Any]:
-    from app.routes.tools import execute_registered_workflow_tool
+    from app.application.facades.tools_facade import execute_registered_workflow_tool
 
     return execute_registered_workflow_tool(tool_id=tool_id, action=action, params=params)
 
