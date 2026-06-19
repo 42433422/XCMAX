@@ -8,7 +8,6 @@ import logging
 
 from app.neuro_bus.domains.base import DomainChannel, NeuroDomain, get_domain_registry
 from app.neuro_bus.events.base import EventPriority
-from app.neuro_bus.neuro_trace_config import bump_domain_handler_metric
 
 logger = logging.getLogger(__name__)
 
@@ -33,21 +32,7 @@ class WechatNeuroDomain(NeuroDomain):
         self._setup_handlers()
 
     def _setup_handlers(self):
-        @self.on("wechat.message.received", priority=1)
-        async def on_message(event):
-            msg_type = event.payload.get("msg_type")
-            from_user = event.payload.get("from_user")
-            logger.info("WeChat message: type=%s sender=%s", msg_type, from_user)
-            from app.neuro_bus.neuro_trace_config import bump_domain_handler_metric
-
-            bump_domain_handler_metric("wechat.message.received")
-
-        @self.on("wechat.payment.callback", priority=0, channel=DomainChannel.RELIABLE)
-        async def on_payment(event):
-            order_id = event.payload.get("order_id")
-            status = event.payload.get("status")
-            logger.info("WeChat payment: order=%s, status=%s", order_id, status)
-            bump_domain_handler_metric("wechat.payment.callback")
+        register_wechat_domain_handlers(self)
 
     async def initialize(self):
         logger.info("WechatNeuroDomain initialized")
@@ -103,3 +88,6 @@ def get_wechat_domain() -> WechatNeuroDomain:
         _wechat_domain = WechatNeuroDomain()
         get_domain_registry().register(_wechat_domain)
     return _wechat_domain
+
+
+from .wechat_domain_handlers import *  # noqa: F401,F403  向后兼容：暴露 handlers 符号
