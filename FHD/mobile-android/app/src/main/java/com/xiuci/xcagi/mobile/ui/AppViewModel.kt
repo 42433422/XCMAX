@@ -545,10 +545,8 @@ constructor(
         _chatSuggestions.value = base
     }
 
-    /** 构建会话列表：两个固定入口 + 当前账号生态里的 workflow_employees。 */
+    /** 构建会话列表：固定入口 + 当前账号生态里的 workflow_employees。 */
     fun loadConversations(isEnterprise: Boolean) {
-        _conversations.value = fixedConversationItems(isEnterprise)
-
         viewModelScope.launch {
             rebuildConversationItems(isEnterprise)
         }
@@ -556,7 +554,11 @@ constructor(
 
     private suspend fun rebuildConversationItems(isEnterprise: Boolean): Int {
         val adminMode = isAdminAccountKind(sessionStore.accountKindFlow.first())
-        val fixedItems = fixedConversationItems(isEnterprise || adminMode)
+        val fixedItems =
+                fixedConversationItems(
+                        showCodex = isEnterprise || adminMode,
+                        showCustomerService = isEnterprise && !adminMode,
+                )
         _conversations.value = fixedItems
 
         if (adminMode) {
@@ -675,7 +677,10 @@ constructor(
                 else -> trim()
             }
 
-    private fun fixedConversationItems(isEnterprise: Boolean): List<ConversationItem> {
+    private fun fixedConversationItems(
+            showCodex: Boolean,
+            showCustomerService: Boolean,
+    ): List<ConversationItem> {
         val items = mutableListOf<ConversationItem>()
 
         // 1. 小C助理（始终显示）
@@ -693,13 +698,13 @@ constructor(
             )
         )
 
-        if (isEnterprise) {
-            items.add(
+        if (showCodex) {
+                items.add(
                     ConversationItem(
                             id = PinnedIds.CODEX,
                             type = ConversationType.PINNED_CODEX,
                             title = "超级员工-Codex",
-                            subtitle = "全设备协同调度",
+                            subtitle = "全设备协同",
                             timestamp = System.currentTimeMillis(),
                             avatarType = AvatarType.ICON,
                             isOnline = true,
@@ -710,8 +715,8 @@ constructor(
             )
         }
 
-        // 3. 专属客服（仅企业版）
-        if (isEnterprise) {
+        // 3. 专属客服（仅企业客户账号；管理端账号不显示客服）
+        if (showCustomerService) {
             items.add(
                 ConversationItem(
                     id = PinnedIds.CS,
@@ -1085,7 +1090,20 @@ constructor(
                 }
             }
 
-    fun loadChatCache() = viewModelScope.launch { _chatMessages.value = repo.loadCachedChat() }
+    fun loadChatCache(conversationId: String? = null) =
+            viewModelScope.launch {
+                if (conversationId == PinnedIds.CODEX) {
+                    repo.loadCodexSuperEmployeeMessages()
+                            .onSuccess { _chatMessages.value = it }
+                            .onFailure {
+                                snack("超级员工-Codex 历史加载失败", true)
+                                _chatMessages.value = emptyList()
+                            }
+                    return@launch
+                }
+                val sessionId = conversationId ?: "default"
+                _chatMessages.value = repo.loadCachedChat(sessionId)
+            }
 
     fun loadAssistantCustomerServiceHistory() =
             viewModelScope.launch {
@@ -1115,18 +1133,21 @@ constructor(
                 repo.approvals().onSuccess { _approvalPendingCount.value = it.size }
             }
 
-    fun sendChat(text: String) {
+    fun sendChat(text: String, conversationId: String? = null) {
         chatJob?.cancel()
         _chatAction.value = null
         _chatMessages.value = _chatMessages.value + ("user" to text) + ("assistant" to "")
         _streaming.value = true
         var acc = ""
+        val sessionId = conversationId ?: "default"
         chatJob =
                 viewModelScope.launch {
                     if (repo.hasNativeFhdAuth()) {
                         // 有本地 FHD 认证，走局域网
                         repo.streamChat(
                                 text,
+                                conversationId,
+                                sessionId,
                                 onToken = { t ->
                                     acc += t
                                     _chatMessages.value =
@@ -1153,6 +1174,8 @@ constructor(
                         // 无本地认证，走云端 API
                         repo.streamChatCloud(
                                 text,
+                                conversationId,
+                                sessionId,
                                 onToken = { t ->
                                     acc += t
                                     _chatMessages.value =
