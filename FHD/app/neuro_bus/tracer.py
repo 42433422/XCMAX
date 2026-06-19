@@ -33,6 +33,7 @@ class Span:
     追踪 Span
 
     表示一个操作单元，包含时间、标签和事件
+    内部委托 OTel SDK（可用时）
     """
 
     span_id: str
@@ -48,11 +49,22 @@ class Span:
     def __post_init__(self):
         if not self.span_id:
             self.span_id = str(uuid.uuid4())[:16]
+        # 委托 OTel SDK（动态检查可用性，支持运行时 mock）
+        self._otel_span = None
+        try:
+            from opentelemetry import trace as _otel_trace
+
+            tracer = _otel_trace.get_tracer("xcagi.neurobus")
+            self._otel_span = tracer.start_as_current_span(self.name).__enter__()
+        except ImportError:
+            pass
 
     def finish(self, status: SpanStatus = SpanStatus.OK):
         """完成 Span"""
         self.end_time = time.time()
         self.status = status
+        if self._otel_span is not None:
+            self._otel_span.end()
 
     def add_event(self, name: str, attributes: dict[str, Any] | None = None):
         """添加事件"""
@@ -63,10 +75,14 @@ class Span:
                 "attributes": attributes or {},
             }
         )
+        if self._otel_span is not None:
+            self._otel_span.add_event(name, attributes or {})
 
     def set_tag(self, key: str, value: Any):
         """设置标签"""
         self.tags[key] = value
+        if self._otel_span is not None:
+            self._otel_span.set_attribute(key, value)
 
     @property
     def duration_ms(self) -> float | None:
