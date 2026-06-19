@@ -8,11 +8,14 @@ import androidx.room.OnConflictStrategy
 import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.flow.Flow
 
 @Entity(tableName = "chat_cache")
 data class ChatCacheEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val session_id: String = "default",
     val role: String,
     val text: String,
     val ts: Long = System.currentTimeMillis(),
@@ -32,11 +35,20 @@ interface ChatCacheDao {
     @Query("SELECT * FROM chat_cache ORDER BY id ASC LIMIT 200")
     suspend fun all(): List<ChatCacheEntity>
 
+    @Query("SELECT * FROM chat_cache WHERE session_id = :sessionId ORDER BY id ASC LIMIT 200")
+    fun observeBySession(sessionId: String): Flow<List<ChatCacheEntity>>
+
+    @Query("SELECT * FROM chat_cache WHERE session_id = :sessionId ORDER BY id ASC LIMIT 200")
+    suspend fun getBySession(sessionId: String): List<ChatCacheEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(row: ChatCacheEntity)
 
     @Query("DELETE FROM chat_cache")
     suspend fun clear()
+
+    @Query("DELETE FROM chat_cache WHERE session_id = :sessionId")
+    suspend fun clearSession(sessionId: String)
 }
 
 @Entity(tableName = "shipment_cache")
@@ -135,7 +147,7 @@ interface ImReadStateDao {
         ImMessageCacheEntity::class,
         ImReadStateEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = false,
 )
 abstract class XcagiDatabase : RoomDatabase() {
@@ -144,4 +156,14 @@ abstract class XcagiDatabase : RoomDatabase() {
     abstract fun shipmentDao(): ShipmentCacheDao
     abstract fun imMessageDao(): ImMessageCacheDao
     abstract fun imReadStateDao(): ImReadStateDao
+
+    companion object {
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    "ALTER TABLE chat_cache ADD COLUMN session_id TEXT NOT NULL DEFAULT 'default'"
+                )
+            }
+        }
+    }
 }
