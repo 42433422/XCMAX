@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field
 
 from app.fastapi_routes.mobile_api import get_mobile_user
 from app.application.codex_super_employee_service import CodexSuperEmployeeService
+from app.security.mobile_jwt import issue_mobile_tokens
 from app.security.mobile_pairing import (
     consume_by_shortcode,
     consume_pairing_nonce,
@@ -371,6 +372,87 @@ def _mobile_user_identity(user: Any) -> tuple[int, str]:
     return uid, username
 
 
+def _mobile_user_public_dict(user: Any) -> dict[str, Any]:
+    return {
+        "id": int(getattr(user, "id", 0) or 0),
+        "username": str(getattr(user, "username", "") or ""),
+        "display_name": str(getattr(user, "display_name", "") or ""),
+        "email": str(getattr(user, "email", "") or ""),
+        "role": str(getattr(user, "role", "") or ""),
+        "is_active": bool(getattr(user, "is_active", True)),
+    }
+
+
+def _resolve_mobile_relay_user(user: Any) -> dict[str, Any]:
+    """Resolve the mobile user for physical QR/device-code relay binding.
+
+    A relay pairing code already proves physical access to the desktop settings
+    screen, so first-time mobile binding must not require a pre-existing mobile
+    JWT. Prefer an existing admin account; create a local relay admin only when
+    the database has no active users yet.
+    """
+    uid, _ = _mobile_user_identity(user)
+    if uid > 0:
+        return _mobile_user_public_dict(user)
+
+    from app.db.models import User
+    from app.db.session import get_db
+
+    with get_db() as db:
+        row = (
+            db.query(User)
+            .filter(User.is_active == True)  # noqa: E712
+            .filter(User.role.in_(["admin", "super_admin", "owner"]))
+            .order_by(User.id.asc())
+            .first()
+        )
+        if row is None:
+            row = (
+                db.query(User)
+                .filter(User.is_active == True)  # noqa: E712
+                .order_by(User.id.asc())
+                .first()
+            )
+        if row is None:
+            now = datetime.utcnow()
+            row = User(
+                username=f"mobile_relay_{uuid.uuid4().hex[:8]}",
+                password=uuid.uuid4().hex,
+                display_name="移动端设备绑定",
+                email="",
+                role="admin",
+                is_active=True,
+                created_at=now,
+                last_login=now,
+            )
+            db.add(row)
+            db.flush()
+        public = _mobile_user_public_dict(row)
+        if hasattr(db, "expunge"):
+            db.expunge(row)
+        return public
+
+
+def _relay_mobile_auth_payload(user_public: dict[str, Any]) -> dict[str, Any]:
+    uid = int(user_public.get("id") or 0)
+    username = str(user_public.get("username") or user_public.get("display_name") or "mobile")
+    role = str(user_public.get("role") or "")
+    account_kind = "admin" if role in {"admin", "super_admin", "owner"} else "enterprise"
+    session_id = f"mobile-relay-{uuid.uuid4().hex}"
+    return {
+        "user": user_public,
+        "session_id": session_id,
+        "account_kind": account_kind,
+        **issue_mobile_tokens(
+            user_id=uid,
+            session_id=session_id,
+            account_kind=account_kind,
+            username=username,
+        ),
+        "expires_in": 24 * 3600,
+    }
+
+
 def _register_desktop_relay_for_pairing(host: str, port: int) -> dict[str, Any] | None:
     enabled = (os.environ.get("XCAGI_RELAY_PAIRING_ENABLED") or "1").strip().lower()
     if enabled in {"0", "false", "off", "no"}:
@@ -523,13 +605,10 @@ async def mobile_relay_desktop_register(body: RelayDesktopRegisterBody):
 
 @extension_router.post("/relay/mobile/confirm")
 async def mobile_relay_confirm(body: RelayMobileConfirmBody, user=Depends(get_mobile_user)):
-    uid, username = _mobile_user_identity(user)
-    if uid <= 0:
-        return JSONResponse(
-            format_mobile_response(None, "未授权", success=False, code=401),
-            status_code=401,
-        )
     try:
+        user_public = _resolve_mobile_relay_user(user)
+        uid = int(user_public.get("id") or 0)
+        username = str(user_public.get("username") or user_public.get("display_name") or "")
         desktop = MobileRelayService().confirm_mobile(
             user_id=uid,
             username=username,
@@ -541,7 +620,13 @@ async def mobile_relay_confirm(body: RelayMobileConfirmBody, user=Depends(get_mo
                 format_mobile_response(None, "中继配对码无效或已过期", success=False, code=400),
                 status_code=400,
             )
-        return format_mobile_response(data={"desktop": desktop, "relay_id": desktop.get("relay_id")})
+        return format_mobile_response(
+            data={
+                "desktop": desktop,
+                "relay_id": desktop.get("relay_id"),
+                **_relay_mobile_auth_payload(user_public),
+            }
+        )
     except RECOVERABLE_ERRORS as exc:
         logger.exception("mobile_relay_confirm")
         return JSONResponse(
@@ -555,13 +640,10 @@ async def mobile_relay_confirm_code(
     body: RelayMobileConfirmCodeBody,
     user=Depends(get_mobile_user),
 ):
-    uid, username = _mobile_user_identity(user)
-    if uid <= 0:
-        return JSONResponse(
-            format_mobile_response(None, "未授权", success=False, code=401),
-            status_code=401,
-        )
     try:
+        user_public = _resolve_mobile_relay_user(user)
+        uid = int(user_public.get("id") or 0)
+        username = str(user_public.get("username") or user_public.get("display_name") or "")
         desktop = MobileRelayService().confirm_mobile_by_code(
             user_id=uid,
             username=username,
@@ -572,7 +654,13 @@ async def mobile_relay_confirm_code(
                 format_mobile_response(None, "设备码无效或已过期", success=False, code=400),
                 status_code=400,
             )
-        return format_mobile_response(data={"desktop": desktop, "relay_id": desktop.get("relay_id")})
+        return format_mobile_response(
+            data={
+                "desktop": desktop,
+                "relay_id": desktop.get("relay_id"),
+                **_relay_mobile_auth_payload(user_public),
+            }
+        )
     except RECOVERABLE_ERRORS as exc:
         logger.exception("mobile_relay_confirm_code")
         return JSONResponse(

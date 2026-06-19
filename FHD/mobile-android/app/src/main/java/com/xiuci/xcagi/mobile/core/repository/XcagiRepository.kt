@@ -520,6 +520,7 @@ class XcagiRepository @Inject constructor(
             if (!r.success) {
                 Result.failure(Exception(r.message.ifBlank { "中继绑定失败" }))
             } else {
+                saveRelayAuthFromMap(r.data ?: emptyMap())
                 sessionStore.setRelayDesktopId(cleanRelayId)
                 sessionStore.setSetupComplete(true)
                 Result.success("relay" to 0)
@@ -554,6 +555,7 @@ class XcagiRepository @Inject constructor(
                 if (relayId.isBlank()) {
                     Result.failure(Exception("设备码绑定响应缺少 relay_id"))
                 } else {
+                    saveRelayAuthFromMap(data)
                     sessionStore.setRelayDesktopId(relayId)
                     sessionStore.setSetupComplete(true)
                     Result.success("relay" to 0)
@@ -562,6 +564,34 @@ class XcagiRepository @Inject constructor(
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+
+    private suspend fun saveRelayAuthFromMap(data: Map<String, Any?>) {
+        val access = data["access_token"]?.toString()?.trim().orEmpty()
+        if (access.isBlank()) return
+        val refresh = data["refresh_token"]?.toString()?.trim().orEmpty()
+        val sessionId = data["session_id"]?.toString()?.trim().orEmpty()
+        val accountKind = data["account_kind"]?.toString()?.trim().orEmpty().ifBlank { "enterprise" }
+        @Suppress("UNCHECKED_CAST")
+        val user = data["user"] as? Map<String, Any?>
+        val username =
+            user?.get("username")?.toString()?.trim().orEmpty()
+                .ifBlank { user?.get("display_name")?.toString()?.trim().orEmpty() }
+                .ifBlank { "mobile" }
+        val userId =
+            when (val raw = user?.get("id")) {
+                is Number -> raw.toInt()
+                is String -> raw.toIntOrNull() ?: 0
+                else -> 0
+            }
+        sessionStore.setAccountKind(accountKind)
+        sessionStore.saveFhdAuth(
+            access = access,
+            refresh = refresh,
+            sessionId = sessionId,
+            username = username,
+            userId = userId,
+        )
     }
 
     private suspend fun completePairingExchange(
