@@ -29,21 +29,8 @@ class SseChatClient @Inject constructor(
         onDone: (String) -> Unit,
         onError: (String) -> Unit,
     ) = withContext(Dispatchers.IO) {
-        val url = if (useCloud) {
-            "${serverRouter.modstoreBaseUrl()}api/agent/butler/chat/stream"
-        } else {
-            "${serverRouter.fhdBaseUrl()}api/ai/chat/stream"
-        }
-        val bodyJson = if (useCloud) {
-            gson.toJson(
-                mapOf(
-                    "messages" to listOf(mapOf("role" to "user", "content" to message)),
-                    "max_tokens" to 4096,
-                ),
-            )
-        } else {
-            gson.toJson(mapOf("message" to message))
-        }
+        val url = "${serverRouter.fhdBaseUrl()}api/ai/chat/stream"
+        val bodyJson = gson.toJson(mapOf("message" to message))
         val reqBuilder = Request.Builder()
             .url(url)
             .post(bodyJson.toRequestBody("application/json".toMediaType()))
@@ -73,22 +60,9 @@ class SseChatClient @Inject constructor(
                     if (payload.isBlank() || payload == "[DONE]") continue
                     try {
                         val json = JsonParser.parseString(payload).asJsonObject
-                        if (useCloud) {
-                            json.get("error")?.asString?.takeIf { it.isNotBlank() }?.let {
-                                onError(it)
-                                return@withContext
-                            }
-                            val t = json.get("text")?.asString ?: ""
-                            if (t.isNotEmpty()) {
-                                buf.append(t)
-                                onToken(t)
-                            }
-                            if (json.get("done")?.asBoolean == true) {
-                                onDone(buf.toString().ifBlank { "（无回复）" })
-                                return@withContext
-                            }
-                        } else {
-                            when (json.get("type")?.asString) {
+                        val eventType = json.get("type")?.asString
+                        if (!eventType.isNullOrBlank()) {
+                            when (eventType) {
                                 "token" -> {
                                     val t = json.get("text")?.asString ?: ""
                                     if (t.isNotEmpty()) {
@@ -107,6 +81,20 @@ class SseChatClient @Inject constructor(
                                     return@withContext
                                 }
                                 "error" -> onError(json.get("message")?.asString ?: "stream error")
+                            }
+                        } else if (useCloud) {
+                            json.get("error")?.asString?.takeIf { it.isNotBlank() }?.let {
+                                onError(it)
+                                return@withContext
+                            }
+                            val t = json.get("text")?.asString ?: ""
+                            if (t.isNotEmpty()) {
+                                buf.append(t)
+                                onToken(t)
+                            }
+                            if (json.get("done")?.asBoolean == true) {
+                                onDone(buf.toString().ifBlank { "（无回复）" })
+                                return@withContext
                             }
                         }
                     } catch (_: Exception) {

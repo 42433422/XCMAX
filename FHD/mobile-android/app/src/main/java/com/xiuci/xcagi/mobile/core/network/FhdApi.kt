@@ -60,6 +60,13 @@ data class ApproveBody(val approver_id: Int, val opinion: String = "")
 data class RejectBody(val approver_id: Int, val reason: String = "")
 data class BridgeRespondBody(val response: String, val responded_by: String? = null, val status: String = "resolved")
 data class PairingExchangeBody(val nonce: String = "", val code: String = "")
+data class RelayConfirmBody(val relay_id: String, val code: String)
+data class RelayConfirmCodeBody(val code: String)
+data class RelayTaskCreateBody(
+    val relay_id: String,
+    val kind: String = "codex.invoke",
+    val payload: Map<String, Any?> = emptyMap(),
+)
 
 data class SyncPullBody(val since_cursor: Int = 0)
 
@@ -194,6 +201,21 @@ interface FhdApi {
 
     @POST("api/mobile/v1/pairing/exchange")
     suspend fun pairingExchange(@Body body: PairingExchangeBody): MobileEnvelope<Map<String, Any?>>
+
+    @POST("api/mobile/v1/relay/mobile/confirm")
+    suspend fun relayConfirm(@Body body: RelayConfirmBody): MobileEnvelope<Map<String, Any?>>
+
+    @POST("api/mobile/v1/relay/mobile/confirm-code")
+    suspend fun relayConfirmCode(@Body body: RelayConfirmCodeBody): MobileEnvelope<Map<String, Any?>>
+
+    @GET("api/mobile/v1/relay/mobile/desktops")
+    suspend fun relayDesktops(): MobileEnvelope<Map<String, Any?>>
+
+    @POST("api/mobile/v1/relay/tasks")
+    suspend fun relayCreateTask(@Body body: RelayTaskCreateBody): MobileEnvelope<Map<String, Any?>>
+
+    @GET("api/mobile/v1/relay/tasks/{taskId}")
+    suspend fun relayTaskStatus(@Path("taskId") taskId: String): MobileEnvelope<Map<String, Any?>>
 
     @POST("api/market/account-sync")
     suspend fun marketAccountSync(@Body body: Map<String, String>): Map<String, Any?>

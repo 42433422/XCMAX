@@ -5,12 +5,14 @@ from __future__ import annotations
 import json
 import logging
 import os
+import ipaddress
 import socket
 import time
 import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse
@@ -26,6 +28,7 @@ from app.security.mobile_pairing import (
 )
 from app.utils.mobile_api import format_mobile_response, paginate_list
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.services.mobile_relay_service import MobileRelayService
 
 OPERATIONAL_ERRORS = RECOVERABLE_ERRORS
 
@@ -78,6 +81,41 @@ class PairingLookupBody(BaseModel):
 class PairingIssueBody(BaseModel):
     host: str = Field(default="127.0.0.1")
     port: int = Field(default=5000, ge=1, le=65535)
+
+
+class RelayDesktopRegisterBody(BaseModel):
+    label: str = Field(default="", max_length=200)
+    device_id: str = Field(default="", max_length=128)
+    relay_base_url: str = Field(default="", max_length=512)
+    capabilities: dict[str, Any] = Field(default_factory=dict)
+
+
+class RelayMobileConfirmBody(BaseModel):
+    relay_id: str = Field(..., min_length=8, max_length=80)
+    code: str = Field(..., min_length=4, max_length=16)
+
+
+class RelayMobileConfirmCodeBody(BaseModel):
+    code: str = Field(..., min_length=4, max_length=16)
+
+
+class RelayTaskCreateBody(BaseModel):
+    relay_id: str = Field(..., min_length=8, max_length=80)
+    kind: str = Field(default="codex.invoke", max_length=64)
+    payload: dict[str, Any] = Field(default_factory=dict)
+
+
+class RelayDesktopPollBody(BaseModel):
+    relay_id: str = Field(..., min_length=8, max_length=80)
+    desktop_token: str = Field(..., min_length=16, max_length=256)
+    max_tasks: int = Field(default=5, ge=1, le=20)
+
+
+class RelayDesktopCompleteBody(BaseModel):
+    relay_id: str = Field(..., min_length=8, max_length=80)
+    desktop_token: str = Field(..., min_length=16, max_length=256)
+    status: str = Field(default="done", max_length=32)
+    result: dict[str, Any] = Field(default_factory=dict)
 
 
 class CodexSuperEmployeeMobileMessageBody(BaseModel):
@@ -276,14 +314,14 @@ def _pairing_issue_host(requested: str) -> str:
 
 
 def _pairing_issue_port(request: Request, requested: int) -> int:
-    if requested > 0:
+    request_port = _request_host_port(request)
+    # Older callers omitted the port but hit the model default 5000.  When the
+    # current request clearly arrived on another port, prefer that real API port
+    # so mobile phones do not bind to stale desktop defaults.
+    if requested > 0 and not (requested == 5000 and request_port not in (0, 5000)):
         return requested
-    host_header = (request.headers.get("host") or "").strip()
-    if ":" in host_header:
-        raw_port = host_header.rsplit(":", 1)[-1]
-        port = int(raw_port) if raw_port.isdigit() else 0
-        if 0 < port <= 65535:
-            return port
+    if request_port:
+        return request_port
     for key in ("XCAGI_API_PORT", "FASTAPI_PORT"):
         raw = os.environ.get(key, "").strip()
         port = int(raw) if raw.isdigit() else 0
@@ -292,13 +330,131 @@ def _pairing_issue_port(request: Request, requested: int) -> int:
     return 5000
 
 
+def _request_host_port(request: Request) -> int:
+    host_header = (request.headers.get("host") or "").strip()
+    if ":" in host_header:
+        raw_port = host_header.rsplit(":", 1)[-1]
+        port = int(raw_port) if raw_port.isdigit() else 0
+        if 0 < port <= 65535:
+            return port
+    return 0
+
+
+def _pairing_api_base_url(host: str, port: int) -> str:
+    clean_host = str(host or "").strip().removeprefix("http://").removeprefix("https://")
+    clean_host = clean_host.strip("/").split("/", 1)[0].split("?", 1)[0]
+    bare_host = clean_host.rsplit(":", 1)[0] if ":" in clean_host else clean_host
+    clean_port = int(port or 0)
+    if clean_port <= 0:
+        clean_port = 5000
+    return f"http://{bare_host}:{clean_port}/"
+
+
+def _host_is_private_or_loopback(host: str) -> bool:
+    clean = str(host or "").strip().removeprefix("http://").removeprefix("https://")
+    clean = clean.strip("/").split("/", 1)[0].split("?", 1)[0].rsplit(":", 1)[0]
+    try:
+        ip = ipaddress.ip_address(clean)
+        return ip.is_private or ip.is_loopback
+    except ValueError:
+        return clean in {"localhost", "0.0.0.0"} or clean.endswith(".local")
+
+
+def _mobile_user_identity(user: Any) -> tuple[int, str]:
+    uid = int(getattr(user, "id", 0) or 0)
+    username = str(
+        getattr(user, "username", "")
+        or getattr(user, "display_name", "")
+        or getattr(user, "email", "")
+        or ""
+    ).strip()
+    return uid, username
+
+
+def _register_desktop_relay_for_pairing(host: str, port: int) -> dict[str, Any] | None:
+    enabled = (os.environ.get("XCAGI_RELAY_PAIRING_ENABLED") or "1").strip().lower()
+    if enabled in {"0", "false", "off", "no"}:
+        return None
+    if not _host_is_private_or_loopback(host):
+        return None
+    try:
+        from app.services.mobile_relay_desktop_client import (
+            cached_desktop_relay_payload,
+            register_desktop_relay,
+        )
+
+        relay = register_desktop_relay(host=host, port=port) or cached_desktop_relay_payload()
+    except RECOVERABLE_ERRORS as exc:
+        logger.warning("desktop relay registration skipped: %s", exc)
+        return None
+    if not relay:
+        return None
+    public_relay = dict(relay)
+    public_relay.pop("desktop_token", None)
+    return public_relay
+
+
+def _enrich_pairing_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    data = dict(payload)
+    host = str(data.get("host") or "").strip()
+    port = int(data.get("port") or 0)
+    base_url = _pairing_api_base_url(host, port)
+    code = str(data.get("shortCode") or data.get("code") or "").strip()
+    nonce = str(data.get("nonce") or "").strip()
+    data["api_base_url"] = base_url
+    data["base_url"] = base_url
+    if code:
+        data["code"] = code
+    data["deep_link"] = "xcagi://pairing?" + urlencode(
+        {
+            "code": code,
+            "nonce": nonce,
+            "host": host,
+            "port": str(port),
+            "api_base_url": base_url,
+        }
+    )
+    data["qr_json"] = {
+        "v": 2,
+        "kind": "xcagi_pairing",
+        "t": code,
+        "code": code,
+        "shortCode": code,
+        "nonce": nonce,
+        "host": host,
+        "port": port,
+        "api_base_url": base_url,
+    }
+    return data
+
+
 @extension_router.post("/pairing/issue")
 async def mobile_pairing_issue(body: PairingIssueBody, request: Request):
     """桌面或运维签发配对 QR 载荷（开发/内网）。"""
     host = _pairing_issue_host(body.host or (request.url.hostname or ""))
     port = _pairing_issue_port(request, int(body.port))
     payload = issue_pairing_nonce(host, port)
-    return format_mobile_response(data=payload)
+    data = _enrich_pairing_payload(payload)
+    relay = _register_desktop_relay_for_pairing(host, port)
+    if relay:
+        relay_code = str(relay.get("pairing_code") or "").strip()
+        data["relay"] = relay
+        data["relay_id"] = relay.get("relay_id")
+        data["relay_base_url"] = relay.get("relay_base_url")
+        if relay_code:
+            data["shortCode"] = relay_code
+            data["code"] = relay_code
+        relay_qr = dict(relay.get("qr_json") or {})
+        relay_qr["lan_fallback"] = dict(data.get("qr_json") or {})
+        data["qr_json"] = relay_qr
+        data["deep_link"] = "xcagi://relay-pairing?" + urlencode(
+            {
+                "relay_id": str(relay.get("relay_id") or ""),
+                "code": str(relay.get("pairing_code") or ""),
+                "relay_base_url": str(relay.get("relay_base_url") or ""),
+            }
+        )
+    return format_mobile_response(data=data)
 
 
 @extension_router.post("/pairing/lookup")
@@ -311,12 +467,15 @@ async def mobile_pairing_lookup(body: PairingLookupBody):
             status_code=404,
         )
     return format_mobile_response(
-        data={
+        data=_enrich_pairing_payload(
+            {
             "host": rec.get("host"),
             "port": rec.get("port"),
             "nonce": rec.get("nonce"),
+            "shortCode": code,
             "exp": rec.get("exp") or 0,
-        },
+            }
+        ),
     )
 
 
@@ -337,11 +496,202 @@ async def mobile_pairing_exchange(body: PairingExchangeBody):
         )
     return format_mobile_response(
         data={
-            "host": rec["host"],
-            "port": rec["port"],
-            "hint": "请在 App 中保存 host 并提交 LAN access-request",
-        },
+            **_enrich_pairing_payload(rec),
+            "hint": "已返回可保存的 api_base_url，手机端可直接绑定该设备。",
+        }
     )
+
+
+@extension_router.post("/relay/desktop/register")
+async def mobile_relay_desktop_register(body: RelayDesktopRegisterBody):
+    """Desktop runtime registers a long-lived cloud relay binding session."""
+    try:
+        data = MobileRelayService().register_desktop(
+            label=body.label,
+            device_id=body.device_id,
+            capabilities=body.capabilities,
+            relay_base_url=body.relay_base_url,
+        )
+        return format_mobile_response(data=data)
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("mobile_relay_desktop_register")
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=500),
+            status_code=500,
+        )
+
+
+@extension_router.post("/relay/mobile/confirm")
+async def mobile_relay_confirm(body: RelayMobileConfirmBody, user=Depends(get_mobile_user)):
+    uid, username = _mobile_user_identity(user)
+    if uid <= 0:
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401),
+            status_code=401,
+        )
+    try:
+        desktop = MobileRelayService().confirm_mobile(
+            user_id=uid,
+            username=username,
+            relay_id=body.relay_id,
+            code=body.code,
+        )
+        if not desktop:
+            return JSONResponse(
+                format_mobile_response(None, "中继配对码无效或已过期", success=False, code=400),
+                status_code=400,
+            )
+        return format_mobile_response(data={"desktop": desktop, "relay_id": desktop.get("relay_id")})
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("mobile_relay_confirm")
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=500),
+            status_code=500,
+        )
+
+
+@extension_router.post("/relay/mobile/confirm-code")
+async def mobile_relay_confirm_code(
+    body: RelayMobileConfirmCodeBody,
+    user=Depends(get_mobile_user),
+):
+    uid, username = _mobile_user_identity(user)
+    if uid <= 0:
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401),
+            status_code=401,
+        )
+    try:
+        desktop = MobileRelayService().confirm_mobile_by_code(
+            user_id=uid,
+            username=username,
+            code=body.code,
+        )
+        if not desktop:
+            return JSONResponse(
+                format_mobile_response(None, "设备码无效或已过期", success=False, code=400),
+                status_code=400,
+            )
+        return format_mobile_response(data={"desktop": desktop, "relay_id": desktop.get("relay_id")})
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("mobile_relay_confirm_code")
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=500),
+            status_code=500,
+        )
+
+
+@extension_router.get("/relay/mobile/desktops")
+async def mobile_relay_desktops(user=Depends(get_mobile_user)):
+    uid, _ = _mobile_user_identity(user)
+    if uid <= 0:
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401),
+            status_code=401,
+        )
+    try:
+        items = MobileRelayService().list_desktops(user_id=uid)
+        return format_mobile_response(data={"items": items, "count": len(items)})
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("mobile_relay_desktops")
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=500),
+            status_code=500,
+        )
+
+
+@extension_router.post("/relay/tasks")
+async def mobile_relay_create_task(body: RelayTaskCreateBody, user=Depends(get_mobile_user)):
+    uid, _ = _mobile_user_identity(user)
+    if uid <= 0:
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401),
+            status_code=401,
+        )
+    try:
+        payload = dict(body.payload or {})
+        payload.setdefault("user_id", uid)
+        task = MobileRelayService().create_task(
+            user_id=uid,
+            relay_id=body.relay_id,
+            kind=body.kind,
+            payload=payload,
+        )
+        if not task:
+            return JSONResponse(
+                format_mobile_response(None, "未找到已绑定的电脑执行端", success=False, code=404),
+                status_code=404,
+            )
+        return format_mobile_response(data={"task": task})
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("mobile_relay_create_task")
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=500),
+            status_code=500,
+        )
+
+
+@extension_router.get("/relay/tasks/{task_id}")
+async def mobile_relay_task_status(task_id: str, user=Depends(get_mobile_user)):
+    uid, _ = _mobile_user_identity(user)
+    if uid <= 0:
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401),
+            status_code=401,
+        )
+    task = MobileRelayService().get_task(user_id=uid, task_id=task_id)
+    if not task:
+        return JSONResponse(
+            format_mobile_response(None, "任务不存在", success=False, code=404),
+            status_code=404,
+        )
+    return format_mobile_response(data={"task": task})
+
+
+@extension_router.post("/relay/desktop/poll")
+async def mobile_relay_desktop_poll(body: RelayDesktopPollBody):
+    try:
+        data = MobileRelayService().poll_desktop(
+            relay_id=body.relay_id,
+            desktop_token=body.desktop_token,
+            max_tasks=body.max_tasks,
+        )
+        if not data:
+            return JSONResponse(
+                format_mobile_response(None, "中继桌面凭证无效", success=False, code=404),
+                status_code=404,
+            )
+        return format_mobile_response(data=data)
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("mobile_relay_desktop_poll")
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=500),
+            status_code=500,
+        )
+
+
+@extension_router.post("/relay/desktop/tasks/{task_id}/complete")
+async def mobile_relay_desktop_complete(task_id: str, body: RelayDesktopCompleteBody):
+    try:
+        task = MobileRelayService().complete_desktop_task(
+            relay_id=body.relay_id,
+            desktop_token=body.desktop_token,
+            task_id=task_id,
+            status=body.status,
+            result=body.result,
+        )
+        if not task:
+            return JSONResponse(
+                format_mobile_response(None, "任务或桌面凭证无效", success=False, code=404),
+                status_code=404,
+            )
+        return format_mobile_response(data={"task": task})
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("mobile_relay_desktop_complete")
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=500),
+            status_code=500,
+        )
 
 
 def _employee_text(employee: Any, key: str) -> str:

@@ -4,8 +4,12 @@ export interface PairingPayload {
   host: string;
   port: number;
   nonce: string;
-  shortCode: string; // v2 新增：6位数字配对码
+  shortCode: string; // 6 位设备码，v3 优先为服务器中继码
   exp: number;
+  relay_id?: string;
+  relay_base_url?: string;
+  qr_json?: Record<string, unknown>;
+  relay?: Record<string, unknown>;
 }
 
 export interface HostDiscoverHint {
@@ -41,13 +45,18 @@ export async function loadDesktopPairingPayload(): Promise<PairingPayload | null
   const raw = await desktop.getPairingQrPayload();
   if (!raw) return null;
   const parsed = JSON.parse(String(raw)) as Partial<PairingPayload>;
-  if (!parsed.nonce) return null;
+  const qrJson = typeof parsed.qr_json === 'object' && parsed.qr_json ? parsed.qr_json as Record<string, unknown> : undefined;
+  if (!parsed.nonce && !qrJson) return null;
   return {
     host: String(parsed.host || '127.0.0.1'),
     port: Number(parsed.port || 5000),
-    nonce: String(parsed.nonce),
+    nonce: String(parsed.nonce || ''),
     shortCode: String(parsed.shortCode || ''),
     exp: Number(parsed.exp || Math.floor(Date.now() / 1000) + 300),
+    relay_id: typeof parsed.relay_id === 'string' ? parsed.relay_id : undefined,
+    relay_base_url: typeof parsed.relay_base_url === 'string' ? parsed.relay_base_url : undefined,
+    qr_json: qrJson,
+    relay: typeof parsed.relay === 'object' && parsed.relay ? parsed.relay as Record<string, unknown> : undefined,
   };
 }
 
@@ -60,6 +69,9 @@ export function resolvePairingHost(): string {
 
 /** QR 内嵌短码，同时保留 host/port 作为首次绑定的局域网直连兜底。 */
 export function buildPairingQrText(payload: PairingPayload): string {
+  if (payload.qr_json && Object.keys(payload.qr_json).length > 0) {
+    return JSON.stringify(payload.qr_json);
+  }
   return JSON.stringify({
     v: 2,
     t: payload.shortCode || payload.nonce,

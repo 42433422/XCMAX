@@ -18,7 +18,6 @@ from app.db.init_db import (
     ensure_sessions_enterprise_entitlement_columns,
     ensure_sessions_market_access_token_column,
     ensure_sessions_market_refresh_token_column,
-    ensure_users_tenant_id_column,
     init_approval_tables,
     init_distillation_tables,
     init_extract_logs_tables,
@@ -72,6 +71,8 @@ async def lifespan(app: FastAPI):
         logger.warning("Performance optimizer init skipped: %s", exc)
 
     await _init_neuro_ddd_async(app)
+    await _init_employee_runtime_async(app)
+    await _init_mobile_relay_desktop_async(app)
 
     mark_startup("lifespan_ready")
     logger.info("✅ FastAPI 应用启动完成")
@@ -79,6 +80,20 @@ async def lifespan(app: FastAPI):
     yield
 
     logger.info("🛑 FastAPI 应用关闭中...")
+    try:
+        from app.application.employee_runtime.scheduler import stop_employee_scheduler
+
+        stop_employee_scheduler()
+        logger.info("✅ 员工本地调度器已关闭")
+    except RECOVERABLE_ERRORS as e:
+        logger.warning("⚠️ 员工本地调度器关闭失败: %s", e)
+    try:
+        from app.services.mobile_relay_desktop_client import stop_desktop_relay_poller
+
+        stop_desktop_relay_poller()
+        logger.info("✅ 移动端云中继轮询已关闭")
+    except RECOVERABLE_ERRORS as e:
+        logger.warning("⚠️ 移动端云中继轮询关闭失败: %s", e)
     try:
         from app.neuro_bus.bus_setup import teardown_neuro_bus
 
@@ -151,7 +166,12 @@ def _initialize_databases_sync(app: FastAPI):
         ensure_sessions_market_refresh_token_column(engine, database_url=cfg_db_url or None)
         ensure_sessions_enterprise_entitlement_columns(engine, database_url=cfg_db_url or None)
         ensure_sessions_account_meta_columns(engine, database_url=cfg_db_url or None)
-        ensure_users_tenant_id_column(engine, database_url=cfg_db_url or None)
+        try:
+            from app.db.init_db import ensure_users_tenant_id_column
+
+            ensure_users_tenant_id_column(engine, database_url=cfg_db_url or None)
+        except (ImportError, AttributeError) as tenant_err:
+            logger.warning("users.tenant_id 自检函数不可用，已跳过: %s", tenant_err)
         try:
             init_approval_tables(engine)
         except RECOVERABLE_ERRORS as approval_err:
@@ -217,6 +237,38 @@ async def _init_neuro_ddd_async(app: FastAPI):
         logger.info("✅ 神经总线已启动，域: %s", bus.registered_domains)
     except RECOVERABLE_ERRORS as e:
         logger.warning("⚠️ 神经总线初始化失败: %s", e)
+
+
+async def _init_employee_runtime_async(app: FastAPI):
+    """Initialize local AI employee triggers and cron scheduler."""
+    try:
+        from app.application.employee_runtime.scheduler import start_employee_scheduler
+        from app.application.employee_runtime.triggers import refresh_employee_triggers
+
+        trigger_status = await asyncio.to_thread(refresh_employee_triggers)
+        scheduler_status = await asyncio.to_thread(start_employee_scheduler)
+        app.state.employee_triggers = trigger_status
+        app.state.employee_scheduler = scheduler_status
+        logger.info(
+            "✅ 员工运行时已启动 triggers=%d scheduler_running=%s",
+            len(trigger_status.get("registered") or []),
+            scheduler_status.get("running"),
+        )
+    except RECOVERABLE_ERRORS as e:
+        logger.warning("⚠️ 员工运行时初始化失败: %s", e)
+
+
+async def _init_mobile_relay_desktop_async(app: FastAPI):
+    """Resume desktop relay polling when this runtime has a saved cloud binding."""
+    try:
+        from app.services.mobile_relay_desktop_client import start_desktop_relay_poller
+
+        running = await asyncio.to_thread(start_desktop_relay_poller)
+        app.state.mobile_relay_desktop_running = running
+        if running:
+            logger.info("✅ 移动端云中继轮询已启动")
+    except RECOVERABLE_ERRORS as e:
+        logger.warning("⚠️ 移动端云中继轮询启动失败: %s", e)
 
 
 async def _init_mods_async(app: FastAPI):

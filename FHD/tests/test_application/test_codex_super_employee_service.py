@@ -1,11 +1,24 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 
 import httpx
 
-from app.application.codex_super_employee_service import CodexSuperEmployeeService
+from app.application.codex_super_employee_service import (
+    CODEX_DIRECT_MESSAGE_KIND,
+    CodexSuperEmployeeService,
+)
+
+def fake_codex_runner(reply: str, seen: list[list[str]] | None = None):
+    def runner(cmd, **kwargs):
+        seen.append(list(cmd)) if seen is not None else None
+        output_path = Path(cmd[cmd.index("--output-last-message") + 1])
+        output_path.write_text(reply, encoding="utf-8")
+        return subprocess.CompletedProcess(cmd, 0, stdout=reply, stderr="")
+
+    return runner
 
 
 def test_codex_super_employee_invoke_writes_outbox_when_dispatch_not_configured(
@@ -41,6 +54,153 @@ def test_codex_super_employee_list_messages_is_user_scoped(tmp_path: Path, monke
 
     assert len(user_one_messages) == 2
     assert user_one_messages[0]["body"] == "任务 A"
+
+
+def test_codex_super_employee_answers_identity_without_dispatch(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("XCMAX_CODEX_SUPER_EMPLOYEE_DISPATCH_MODE", "outbox")
+    codex_bin = tmp_path / "codex"
+    codex_bin.write_text("#!/bin/sh\n", encoding="utf-8")
+    codex_bin.chmod(0o755)
+    monkeypatch.setenv("XCMAX_CODEX_CLI_PATH", str(codex_bin))
+    monkeypatch.delenv("XCMAX_CODEX_SUPER_EMPLOYEE_WEBHOOK", raising=False)
+    seen: list[list[str]] = []
+
+    svc = CodexSuperEmployeeService(
+        storage_root=tmp_path,
+        codex_cli_runner=fake_codex_runner("我是 Codex，一个真实接入的编程助手。", seen),
+    )
+    result = svc.invoke(user_id=1, message="你是谁")
+
+    assert result["dispatch"]["status"] == "completed"
+    assert result["dispatch"]["dispatcher"] == "codex_cli"
+    assert result["assistant_message"]["role"] == "assistant"
+    assert result["assistant_message"]["kind"] == CODEX_DIRECT_MESSAGE_KIND
+    assert "真实接入" in result["assistant_message"]["body"]
+    assert [m["role"] for m in result["messages"]] == ["user", "assistant"]
+    assert not list((tmp_path / "codex_super_employee" / "outbox").glob("*.json"))
+    assert seen and seen[0][:4] == [str(codex_bin), "--ask-for-approval", "never", "exec"]
+
+
+def test_codex_super_employee_natural_question_uses_codex_cli_without_dispatch(
+    tmp_path: Path,
+    monkeypatch,
+):
+    monkeypatch.setenv("XCMAX_CODEX_SUPER_EMPLOYEE_DISPATCH_MODE", "outbox")
+    codex_bin = tmp_path / "codex"
+    codex_bin.write_text("#!/bin/sh\n", encoding="utf-8")
+    codex_bin.chmod(0o755)
+    monkeypatch.setenv("XCMAX_CODEX_CLI_PATH", str(codex_bin))
+    seen: list[list[str]] = []
+    svc = CodexSuperEmployeeService(
+        storage_root=tmp_path,
+        codex_cli_runner=fake_codex_runner("我不能查看你的真实账户额度。", seen),
+    )
+
+    result = svc.invoke(user_id=1, message="你有多少额度的")
+
+    assert result["dispatch"]["dispatcher"] == "codex_cli"
+    assert "不能查看你的真实账户额度" in result["assistant_message"]["body"]
+    assert not list((tmp_path / "codex_super_employee" / "outbox").glob("*.json"))
+    assert any("你有多少额度的" in part for part in seen[0])
+
+
+def test_codex_super_employee_backfills_stuck_identity_dispatch(
+    tmp_path: Path,
+    monkeypatch,
+):
+    monkeypatch.setenv("XCMAX_CODEX_SUPER_EMPLOYEE_PARA_API_URL", "disabled")
+    messages_dir = tmp_path / "codex_super_employee"
+    messages_dir.mkdir(parents=True)
+    request_id = "req-identity"
+    rows = [
+        {
+            "id": "user-1",
+            "user_id": 1,
+            "role": "user",
+            "body": "你是谁",
+            "created_at": "2026-06-19T00:00:00Z",
+            "dispatch_request_id": request_id,
+            "status": "sent",
+        },
+        {
+            "id": "dispatcher-1",
+            "user_id": 1,
+            "role": "system",
+            "body": "Para 任务运行中：0/1 个子任务完成，进度 40%。任务 ID：task-identity",
+            "created_at": "2026-06-19T00:00:01Z",
+            "dispatch_request_id": request_id,
+            "status": "running",
+            "kind": "dispatcher",
+            "task_id": "task-identity",
+        },
+    ]
+    (messages_dir / "messages.jsonl").write_text(
+        "".join(json.dumps(row, ensure_ascii=False) + "\n" for row in rows),
+        encoding="utf-8",
+    )
+    svc = CodexSuperEmployeeService(storage_root=tmp_path)
+
+    first = svc.list_messages(user_id=1)
+    second = svc.list_messages(user_id=1)
+
+    direct = [item for item in first if item["kind"] == CODEX_DIRECT_MESSAGE_KIND]
+    assert len(direct) == 1
+    assert direct[0]["dispatch_request_id"] == request_id
+    assert "我是超级员工-Codex" in direct[0]["body"]
+    assert sum(1 for item in second if item["kind"] == CODEX_DIRECT_MESSAGE_KIND) == 1
+
+
+def test_codex_super_employee_backfills_stuck_natural_question_with_codex_cli(
+    tmp_path: Path,
+    monkeypatch,
+):
+    monkeypatch.setenv("XCMAX_CODEX_SUPER_EMPLOYEE_PARA_API_URL", "disabled")
+    codex_bin = tmp_path / "codex"
+    codex_bin.write_text("#!/bin/sh\n", encoding="utf-8")
+    codex_bin.chmod(0o755)
+    monkeypatch.setenv("XCMAX_CODEX_CLI_PATH", str(codex_bin))
+    messages_dir = tmp_path / "codex_super_employee"
+    messages_dir.mkdir(parents=True)
+    request_id = "req-quota"
+    rows = [
+        {
+            "id": "user-quota",
+            "user_id": 1,
+            "role": "user",
+            "body": "你有多少额度的",
+            "created_at": "2026-06-19T00:00:00Z",
+            "dispatch_request_id": request_id,
+            "status": "sent",
+        },
+        {
+            "id": "dispatcher-quota",
+            "user_id": 1,
+            "role": "system",
+            "body": "已进入软件内 Codex 任务队列，等待全设备 Codex 接走。",
+            "created_at": "2026-06-19T00:00:01Z",
+            "dispatch_request_id": request_id,
+            "status": "queued",
+            "kind": "dispatcher",
+        },
+    ]
+    (messages_dir / "messages.jsonl").write_text(
+        "".join(json.dumps(row, ensure_ascii=False) + "\n" for row in rows),
+        encoding="utf-8",
+    )
+    seen: list[list[str]] = []
+    svc = CodexSuperEmployeeService(
+        storage_root=tmp_path,
+        codex_cli_runner=fake_codex_runner("我不能查看你的真实账户额度。", seen),
+    )
+
+    first = svc.list_messages(user_id=1)
+    second = svc.list_messages(user_id=1)
+
+    direct = [item for item in first if item["kind"] == CODEX_DIRECT_MESSAGE_KIND]
+    assert len(direct) == 1
+    assert "不能查看你的真实账户额度" in direct[0]["body"]
+    assert sum(1 for item in second if item["kind"] == CODEX_DIRECT_MESSAGE_KIND) == 1
+    assert len(seen) == 1
 
 
 def test_codex_super_employee_upgrades_legacy_dispatch_ack_and_syncs_status(

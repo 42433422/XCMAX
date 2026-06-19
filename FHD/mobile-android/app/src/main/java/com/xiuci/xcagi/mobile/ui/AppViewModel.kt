@@ -834,35 +834,44 @@ constructor(
             viewModelScope.launch {
                 val parsed = PairingQrCodec.parse(raw)
                 if (parsed != null) {
-                            // v2 纯 token 模式：通过 code 或 token 做 exchange
-                            if (parsed.version >= 2 && parsed.token.isNotBlank()) {
-                                val useCode =
-                                        if (parsed.token.length == 6 &&
-                                                        parsed.token.all { it.isDigit() }
-                                        )
-                                                parsed.token
-                                        else ""
-                                repo.pairingExchange(
-                                        nonce =
-                                                if (useCode.isBlank())
-                                                        parsed.nonce.ifBlank { parsed.token }
-                                                else "",
-                                        code = useCode,
-                                        exchangeHost = parsed.host.ifBlank { targetHost },
-                                        exchangePort = parsed.port.takeIf { it > 0 } ?: targetPort,
-                                )
-                            } else {
-                                // v1 直连模式：host:port + nonce
-                                repo.pairingExchange(
-                                        nonce = parsed.nonce,
-                                        exchangeHost = parsed.host.ifBlank { targetHost },
-                                        exchangePort = parsed.port.takeIf { it > 0 } ?: targetPort,
-                                )
-                            }
+                    if (parsed.version >= 3 && parsed.relayId.isNotBlank()) {
+                        repo.relayPairingConfirm(
+                                relayId = parsed.relayId,
+                                code = parsed.token,
+                                relayBaseUrl = parsed.relayBaseUrl,
+                        )
+                    } else if (
+                            parsed.token.length == 6 &&
+                                    parsed.token.all { it.isDigit() }
+                    ) {
+                        val relayResult = repo.relayPairingConfirmCode(parsed.token)
+                        if (relayResult.isSuccess) {
+                            relayResult
+                        } else if (parsed.host.isNotBlank() || targetHost.isNotBlank()) {
+                            repo.pairingExchange(
+                                    code = parsed.token,
+                                    exchangeHost = parsed.host.ifBlank { targetHost },
+                                    exchangePort = parsed.port.takeIf { it > 0 } ?: targetPort,
+                            )
                         } else {
-                            // fallback: 原始文本直接当 nonce
-                            repo.pairingExchange(nonce = raw.trim())
+                            relayResult
                         }
+                    } else if (parsed.version >= 2 && parsed.token.isNotBlank()) {
+                        repo.pairingExchange(
+                                nonce = parsed.nonce.ifBlank { parsed.token },
+                                exchangeHost = parsed.host.ifBlank { targetHost },
+                                exchangePort = parsed.port.takeIf { it > 0 } ?: targetPort,
+                        )
+                    } else {
+                        repo.pairingExchange(
+                                nonce = parsed.nonce,
+                                exchangeHost = parsed.host.ifBlank { targetHost },
+                                exchangePort = parsed.port.takeIf { it > 0 } ?: targetPort,
+                        )
+                    }
+                } else {
+                    repo.pairingExchange(nonce = raw.trim())
+                }
                         .onSuccess { (_, _) ->
                             sessionStore.setSetupComplete(true)
                             refreshStartRoute()

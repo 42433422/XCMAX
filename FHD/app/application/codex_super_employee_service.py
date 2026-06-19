@@ -5,6 +5,9 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
+import subprocess
+import tempfile
 import uuid
 from collections.abc import Callable
 from datetime import datetime, timezone
@@ -21,6 +24,8 @@ CODEX_SUPER_EMPLOYEE_NAME = "超级员工-Codex"
 DEFAULT_PARA_API_URL = "http://127.0.0.1:3001"
 DISPATCHER_MESSAGE_KIND = "dispatcher"
 CODEX_RESULT_MESSAGE_KIND = "codex_result"
+CODEX_DIRECT_MESSAGE_KIND = "codex_direct"
+PARA_TERMINAL_TASK_STATUSES = {"completed", "failed", "merged", "merge_conflict", "cancelled"}
 TASK_ID_RE = re.compile(r"任务\s*ID[:：]\s*([A-Za-z0-9][A-Za-z0-9._:-]{5,})")
 
 
@@ -43,6 +48,7 @@ class CodexSuperEmployeeService:
         self,
         storage_root: str | Path | None = None,
         http_client_factory: Callable[[], httpx.Client] | None = None,
+        codex_cli_runner: Callable[..., subprocess.CompletedProcess[str]] | None = None,
     ) -> None:
         root = Path(storage_root) if storage_root is not None else Path(get_app_data_dir())
         self._root = root / "codex_super_employee"
@@ -51,13 +57,17 @@ class CodexSuperEmployeeService:
         self._outbox_dir = self._root / "outbox"
         self._outbox_dir.mkdir(parents=True, exist_ok=True)
         self._http_client_factory = http_client_factory or self._default_http_client
+        self._codex_cli_runner = codex_cli_runner or subprocess.run
 
     def list_messages(self, *, user_id: int, limit: int = 80) -> list[dict[str, Any]]:
         uid = int(user_id)
         all_rows = self._read_all_message_rows()
         if not all_rows:
             return []
+        direct_changed = self._upsert_direct_reply_messages(user_id=uid, rows=all_rows)
         self._sync_para_task_updates(user_id=uid, rows=all_rows)
+        if direct_changed:
+            self._write_all_message_rows(all_rows)
         rows = [
             self._public_message(item)
             for item in all_rows
@@ -78,13 +88,6 @@ class CodexSuperEmployeeService:
         ctx = context if isinstance(context, dict) else {}
         request_id = uuid.uuid4().hex
         created_at = _utc_now()
-        dispatch_request = self._build_dispatch_request(
-            request_id=request_id,
-            created_at=created_at,
-            user_id=int(user_id),
-            message=text,
-            context=ctx,
-        )
         user_msg = self._message_row(
             user_id=int(user_id),
             role="user",
@@ -92,6 +95,47 @@ class CodexSuperEmployeeService:
             created_at=created_at,
             request_id=request_id,
             status="sent",
+        )
+        if self._should_reply_with_codex_cli(text, ctx):
+            direct_body = self._codex_cli_reply_body(text, ctx) or self._direct_reply_body(text)
+            if not direct_body:
+                direct_body = "Codex CLI 暂时没有返回内容，请确认本机 Codex 已登录后重试。"
+            assistant_msg = self._message_row(
+                user_id=int(user_id),
+                role="assistant",
+                body=direct_body,
+                created_at=_utc_now(),
+                request_id=request_id,
+                status="completed",
+                extra={"kind": CODEX_DIRECT_MESSAGE_KIND},
+            )
+            self._append_messages([user_msg, assistant_msg])
+            dispatch = {
+                "request_id": request_id,
+                "status": "completed",
+                "accepted": True,
+                "queued": False,
+                "device_scope": "all_devices",
+                "dispatcher": "codex_cli",
+            }
+            return {
+                "employee": {
+                    "id": CODEX_SUPER_EMPLOYEE_ID,
+                    "name": CODEX_SUPER_EMPLOYEE_NAME,
+                    "device_scope": "all_devices",
+                },
+                "dispatch": dispatch,
+                "message": self._public_message(user_msg),
+                "assistant_message": self._public_message(assistant_msg),
+                "messages": self.list_messages(user_id=int(user_id)),
+            }
+
+        dispatch_request = self._build_dispatch_request(
+            request_id=request_id,
+            created_at=created_at,
+            user_id=int(user_id),
+            message=text,
+            context=ctx,
         )
         dispatch = self._dispatch(dispatch_request)
         dispatcher_msg = self._message_row(
@@ -593,7 +637,25 @@ class CodexSuperEmployeeService:
     def _sync_para_task_updates(self, *, user_id: int, rows: list[dict[str, Any]]) -> None:
         changed = False
         synced = 0
-        for row in list(rows):
+        direct_request_ids = {
+            str(item.get("dispatch_request_id") or "")
+            for item in rows
+            if int(item.get("user_id") or 0) == int(user_id)
+            and str(item.get("kind") or "") == CODEX_DIRECT_MESSAGE_KIND
+        }
+        result_request_ids = {
+            str(item.get("dispatch_request_id") or "")
+            for item in rows
+            if int(item.get("user_id") or 0) == int(user_id)
+            and str(item.get("kind") or "") == CODEX_RESULT_MESSAGE_KIND
+        }
+        result_task_ids = {
+            str(item.get("task_id") or "")
+            for item in rows
+            if int(item.get("user_id") or 0) == int(user_id)
+            and str(item.get("kind") or "") == CODEX_RESULT_MESSAGE_KIND
+        }
+        for row in reversed(list(rows)):
             if int(row.get("user_id") or 0) != int(user_id):
                 continue
             changed = self._upgrade_legacy_dispatcher_row(row) or changed
@@ -601,6 +663,14 @@ class CodexSuperEmployeeService:
                 continue
             task_id = str(row.get("task_id") or "").strip()
             if not task_id:
+                continue
+            request_id = str(row.get("dispatch_request_id") or "")
+            if request_id and request_id in direct_request_ids:
+                continue
+            task_status = str(row.get("task_status") or row.get("status") or "").strip()
+            if task_status in PARA_TERMINAL_TASK_STATUSES and (
+                (request_id and request_id in result_request_ids) or task_id in result_task_ids
+            ):
                 continue
             if synced >= 8:
                 break
@@ -648,6 +718,201 @@ class CodexSuperEmployeeService:
         match = TASK_ID_RE.search(body)
         return match.group(1).strip() if match else ""
 
+    def _should_reply_with_codex_cli(self, text: str, context: dict[str, Any]) -> bool:
+        raw_mode = str(context.get("mode") or "").strip().lower()
+        if raw_mode in {"chat", "qa", "direct", "codex_cli"}:
+            return True
+        if raw_mode in {"code", "task", "dispatch", "dev", "develop"}:
+            return False
+        normalized = re.sub(r"\s+", "", text.strip().lower())
+        if not normalized:
+            return False
+        task_markers = (
+            "修复",
+            "修改",
+            "改一下",
+            "改成",
+            "实现",
+            "新增",
+            "加一个",
+            "接入",
+            "打通",
+            "任务",
+            "测试",
+            "验证",
+            "跑测试",
+            "测试一下",
+            "验证一下",
+            "打包",
+            "构建",
+            "build",
+            "提交",
+            "commit",
+            "push",
+            "上传git",
+            "部署",
+            "发布",
+            "合并",
+            "开分支",
+            "派工",
+            "调用",
+            "调用所有设备",
+            "多设备",
+            "回写日志",
+            "检查当前工作区",
+        )
+        return not any(marker in normalized for marker in task_markers)
+
+    def _codex_cli_reply_body(self, text: str, context: dict[str, Any]) -> str:
+        if str(os.environ.get("XCMAX_CODEX_CLI_CHAT_ENABLED") or "1").strip().lower() in {
+            "0",
+            "false",
+            "off",
+            "disabled",
+        }:
+            return ""
+        codex_path = self._codex_cli_path()
+        if not codex_path:
+            return ""
+        timeout = self._codex_cli_timeout_seconds()
+        cwd = self._codex_cli_workspace(context)
+        prompt = self._codex_cli_prompt(text)
+        with tempfile.TemporaryDirectory(prefix="xcagi-codex-cli-") as tmp:
+            output_path = Path(tmp) / "last_message.txt"
+            cmd = [
+                codex_path,
+                "--ask-for-approval",
+                "never",
+                "exec",
+                "--sandbox",
+                "read-only",
+                "--skip-git-repo-check",
+                "--ephemeral",
+                "--output-last-message",
+                str(output_path),
+                "-C",
+                cwd,
+                prompt,
+            ]
+            try:
+                proc = self._codex_cli_runner(
+                    cmd,
+                    text=True,
+                    capture_output=True,
+                    timeout=timeout,
+                )
+            except subprocess.TimeoutExpired:
+                return f"Codex CLI 已接通，但本次回答超过 {timeout:g} 秒还没返回。请把问题拆短一点，或直接发开发任务给我派工。"
+            except Exception as exc:
+                return f"Codex CLI 调用失败：{str(exc)[:300]}"
+            if output_path.exists():
+                body = output_path.read_text(encoding="utf-8", errors="replace").strip()
+                if body:
+                    return body
+            stdout = str(getattr(proc, "stdout", "") or "").strip()
+            if stdout:
+                return self._clean_codex_cli_stdout(stdout)
+            stderr = str(getattr(proc, "stderr", "") or "").strip()
+            if getattr(proc, "returncode", 1) != 0:
+                return f"Codex CLI 已接入，但本次返回失败（code {getattr(proc, 'returncode', 1)}）：{stderr[:500]}"
+        return ""
+
+    def _codex_cli_path(self) -> str:
+        candidates = [
+            os.environ.get("XCMAX_CODEX_CLI_PATH", ""),
+            shutil.which("codex") or "",
+            "/Applications/Codex.app/Contents/Resources/codex",
+        ]
+        for item in candidates:
+            value = str(item or "").strip()
+            if value and Path(value).is_file():
+                return value
+        return ""
+
+    def _codex_cli_workspace(self, context: dict[str, Any]) -> str:
+        candidate = str(
+            context.get("workspace_root")
+            or os.environ.get("XCMAX_CODEX_WORKSPACE_ROOT")
+            or os.environ.get("MODSTORE_REPO_ROOT")
+            or ""
+        ).strip()
+        if candidate and Path(candidate).exists():
+            return candidate
+        return str(Path(__file__).resolve().parents[2])
+
+    def _codex_cli_timeout_seconds(self) -> float:
+        raw = os.environ.get("XCMAX_CODEX_CLI_TIMEOUT_SEC") or "45"
+        try:
+            return max(5.0, min(120.0, float(raw)))
+        except (TypeError, ValueError):
+            return 45.0
+
+    def _codex_cli_prompt(self, text: str) -> str:
+        return (
+            "你是 XCMAX 软件内的超级员工-Codex。请直接回答用户的问题。"
+            "这是普通对话通道：不要执行命令，不要修改文件，不要调用工具。"
+            "如果用户询问额度、账户余额、订阅或实时账户状态，而你无法从当前会话读取真实账户数据，请明确说明不能查看，不要编造数字。"
+            "\n\n用户问题："
+            f"{text.strip()}"
+        )
+
+    def _clean_codex_cli_stdout(self, stdout: str) -> str:
+        lines = []
+        for line in stdout.splitlines():
+            stripped = line.strip()
+            if not stripped:
+                continue
+            if stripped in {"codex", "tokens used"}:
+                continue
+            if re.fullmatch(r"[\d,]+", stripped):
+                continue
+            lines.append(line)
+        return "\n".join(lines).strip()
+
+    def _direct_reply_body(self, text: str) -> str:
+        normalized = re.sub(r"[\s，。！？!?、,.]+", "", text.strip().lower())
+        if not normalized:
+            return ""
+        identity_prompts = {
+            "你是谁",
+            "你是誰",
+            "你谁",
+            "你是哪个",
+            "你是什么",
+            "whoareyou",
+            "whatareyou",
+        }
+        help_prompts = {
+            "你能做什么",
+            "你能干什么",
+            "你会什么",
+            "怎么用",
+            "如何使用",
+            "帮助",
+            "help",
+        }
+        greeting_prompts = {"你好", "在吗", "在不在", "hello", "hi"}
+        slow_prompts = {"为什么这么慢", "为啥这么慢", "为什么出不来", "怎么出不来"}
+
+        if normalized in identity_prompts:
+            return (
+                "我是超级员工-Codex。你在软件里发普通问题时，我会直接回复；"
+                "你发开发、测试、打包、提交、跨设备协作这类任务时，我会调用可用的 Codex 工作设备完成。"
+            )
+        if normalized in help_prompts:
+            return (
+                "你可以直接给我派开发任务，例如修复某个页面、跑测试、打包移动端、提交代码。"
+                "如果只是问身份、用法或状态，我会在这里直接回复，不进入多设备派工。"
+            )
+        if normalized in greeting_prompts:
+            return "我在。需要改代码、跑验证或跨设备协作时，直接把任务发给我。"
+        if normalized in slow_prompts:
+            return (
+                "慢是因为这类消息之前被误当成开发任务派到多设备队列，必须等工作设备回传才显示结果。"
+                "现在身份、帮助和问候类消息会直接回复；真正的开发任务才进入派工。"
+            )
+        return ""
+
     def _fetch_para_task(self, task_id: str) -> dict[str, Any] | None:
         api_url = self._para_api_url()
         if not api_url or not task_id:
@@ -660,6 +925,52 @@ class CodexSuperEmployeeService:
             return task if isinstance(task, dict) else None
         except Exception:
             return None
+
+    def _upsert_direct_reply_messages(self, *, user_id: int, rows: list[dict[str, Any]]) -> bool:
+        request_ids_with_reply = {
+            str(item.get("dispatch_request_id") or "")
+            for item in rows
+            if int(item.get("user_id") or 0) == int(user_id)
+            and (
+                str(item.get("kind") or "") in {CODEX_DIRECT_MESSAGE_KIND, CODEX_RESULT_MESSAGE_KIND}
+                or (
+                    str(item.get("role") or "") == "assistant"
+                    and str(item.get("kind") or "") != DISPATCHER_MESSAGE_KIND
+                )
+            )
+        }
+        changed = False
+        codex_cli_backfills = 0
+        for item in list(rows):
+            if int(item.get("user_id") or 0) != int(user_id):
+                continue
+            if str(item.get("role") or "") != "user":
+                continue
+            request_id = str(item.get("dispatch_request_id") or "")
+            if not request_id or request_id in request_ids_with_reply:
+                continue
+            body = self._direct_reply_body(str(item.get("body") or ""))
+            if not body and codex_cli_backfills < 1:
+                text = str(item.get("body") or "")
+                if self._should_reply_with_codex_cli(text, {}):
+                    body = self._codex_cli_reply_body(text, {}) or "Codex CLI 暂时没有返回内容，请确认本机 Codex 已登录后重试。"
+                    codex_cli_backfills += 1
+            if not body:
+                continue
+            rows.append(
+                self._message_row(
+                    user_id=int(user_id),
+                    role="assistant",
+                    body=body,
+                    created_at=_utc_now(),
+                    request_id=request_id,
+                    status="completed",
+                    extra={"kind": CODEX_DIRECT_MESSAGE_KIND},
+                )
+            )
+            request_ids_with_reply.add(request_id)
+            changed = True
+        return changed
 
     def _refresh_dispatcher_row(self, row: dict[str, Any], task: dict[str, Any]) -> bool:
         task_id = str(task.get("id") or row.get("task_id") or "")

@@ -361,7 +361,7 @@ fun ScanQrScreen(vm: AppViewModel, onBack: () -> Unit) {
                                                 onClick = { showManualInput = true },
                                         ) {
                                                 Text(
-                                                        "手动输入配对码",
+                                                        "输入设备码",
                                                         color = Color.White.copy(alpha = 0.7f)
                                                 )
                                         }
@@ -382,12 +382,12 @@ fun ScanQrScreen(vm: AppViewModel, onBack: () -> Unit) {
                                         textAlign = TextAlign.Center,
                                 )
                                 Spacer(Modifier.height(12.dp))
-                                // v2: 快捷输入6位配对码入口（对标微信/钉钉）
+                                // 快捷输入 6 位设备码入口（对标微信/钉钉）
                                 TextButton(
                                         onClick = { showManualInput = true },
                                 ) {
                                         Text(
-                                                "手动输入配对码",
+                                                "输入设备码",
                                                 color = XcagiTheme.extra.brandBlue,
                                                 fontSize = MaterialTheme.typography.bodySmall.fontSize,
                                                 fontWeight = FontWeight.Medium,
@@ -398,7 +398,7 @@ fun ScanQrScreen(vm: AppViewModel, onBack: () -> Unit) {
                 }
         }
 
-        // ── 手动输入底部弹窗（v2: 配对码优先 + nonce 兼容） ──
+        // ── 手动输入底部弹窗（设备码优先 + nonce 兼容） ──
         if (showManualInput) {
                 ModalBottomSheet(
                         onDismissRequest = { showManualInput = false },
@@ -411,14 +411,14 @@ fun ScanQrScreen(vm: AppViewModel, onBack: () -> Unit) {
                                 horizontalAlignment = Alignment.CenterHorizontally,
                         ) {
                                 Text(
-                                        "输入配对码",
+                                        "输入设备码",
                                         fontSize = MaterialTheme.typography.titleLarge.fontSize,
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.onSurface,
                                 )
                                 Spacer(Modifier.height(6.dp))
                                 Text(
-                                        "请输入电脑端显示的6位数字配对码",
+                                        "请输入电脑端显示的 6 位设备码",
                                         fontSize = MaterialTheme.typography.labelMedium.fontSize,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
@@ -832,7 +832,7 @@ private fun ScannerOverlay() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PairingCodeInput  ─  OTP 风格 6 位配对码输入框（对标微信/钉钉配对体验）
+// PairingCodeInput  ─  OTP 风格 6 位设备码输入框（对标微信/钉钉配对体验）
 // 6 个独立方格 + 自动聚焦 + 数字键盘 + 提交回调
 // ─────────────────────────────────────────────────────────────────────────────
 
