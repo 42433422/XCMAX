@@ -1649,6 +1649,43 @@ def _shipment_items(limit: int = 100) -> list[dict[str, Any]]:
         ]
 
 
+def _ai_conversation_changes(user: Any, limit: int = 100) -> list[dict[str, Any]]:
+    """查询当前用户最近的 AI 对话消息，供移动端增量同步。"""
+    uid = int(getattr(user, "id", 0) or 0)
+    if uid <= 0:
+        return []
+    try:
+        from app.db.models.ai import AIConversation, AIConversationSession
+        from app.db.session import get_db
+
+        with get_db() as db:
+            rows = (
+                db.query(AIConversation)
+                .join(
+                    AIConversationSession,
+                    AIConversation.session_id == AIConversationSession.session_id,
+                )
+                .filter(AIConversationSession.user_id == uid)
+                .order_by(AIConversation.id.desc())
+                .limit(limit)
+                .all()
+            )
+            return [
+                {
+                    "id": r.id,
+                    "session_id": r.session_id,
+                    "role": r.role,
+                    "content": r.content,
+                    "intent": r.intent or "",
+                    "created_at": r.created_at.isoformat() if r.created_at else "",
+                }
+                for r in reversed(rows)
+            ]
+    except OPERATIONAL_ERRORS as exc:
+        logger.warning("ai_conversation_changes: %s", exc)
+        return []
+
+
 @extension_router.get("/sync/status")
 async def mobile_sync_status(user=Depends(get_mobile_user)):
     if user is None:
@@ -1686,12 +1723,15 @@ async def mobile_sync_pull(body: SyncPullBody, user=Depends(get_mobile_user)):
             sync_db.update_remote_cursor(int(cursor))
         im_entity_types = {"im_message", "im_read_state"}
         im_changes = [c for c in changes if str(c.get("entity_type") or "") in im_entity_types]
+        ai_changes = _ai_conversation_changes(user, limit=100)
         return format_mobile_response(
             data={
                 "cursor": cursor,
                 "changes": changes,
                 "im_changes": im_changes,
                 "im_change_count": len(im_changes),
+                "ai_changes": ai_changes,
+                "ai_change_count": len(ai_changes),
                 "approvals": _approval_items(),
                 "shipments": _shipment_items(),
             },
