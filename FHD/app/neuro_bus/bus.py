@@ -287,10 +287,27 @@ class NeuroBus:
             self._dlq_integration = NeuroBusDLQIntegration(get_dead_letter_queue())
 
         self._redis_bridge = None
-        if _neuro_env_flag("XCAGI_NEURO_BUS_REDIS_PUBSUB"):
+        if os.environ.get("XCAGI_NEURO_BUS_REDIS_TRANSPORT", "").strip().lower() == "streams":
+            from app.neuro_bus.transports.redis_pubsub import _resolve_redis_url
+            from app.neuro_bus.transports.redis_streams import RedisStreamsBridge
+
+            url = _resolve_redis_url()
+            if url:
+                try:
+                    import redis
+
+                    redis_client = redis.from_url(url, decode_responses=False)
+                    self._redis_bridge = RedisStreamsBridge(bus=self, redis_client=redis_client)
+                    logger.info("NeuroBus transport: redis_streams")
+                except RECOVERABLE_ERRORS as exc:
+                    logger.error("NeuroBus Redis Streams init failed: %s", exc)
+            else:
+                logger.warning("NeuroBus Redis Streams: no REDIS URL configured")
+        elif _neuro_env_flag("XCAGI_NEURO_BUS_REDIS_PUBSUB"):
             from app.neuro_bus.transports.redis_pubsub import RedisPubSubBridge
 
             self._redis_bridge = RedisPubSubBridge(self)
+            logger.info("NeuroBus transport: redis_pubsub")
 
         logger.info("NeuroBus initialized")
 
