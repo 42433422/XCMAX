@@ -8,6 +8,7 @@ import com.xiuci.xcagi.mobile.core.db.ShipmentCacheEntity
 import com.xiuci.xcagi.mobile.core.db.XcagiDatabase
 import com.xiuci.xcagi.mobile.core.model.AccessRequestPayload
 import com.xiuci.xcagi.mobile.core.model.AdminMobileHomeData
+import com.xiuci.xcagi.mobile.core.model.CodexSuperEmployeeMobileMessageBody
 import com.xiuci.xcagi.mobile.core.model.ListItem
 import com.xiuci.xcagi.mobile.core.model.MarketAuthResponse
 import com.xiuci.xcagi.mobile.core.model.MarketLoginBody
@@ -47,11 +48,13 @@ import com.xiuci.xcagi.mobile.core.ProductSkuConfig
 import com.xiuci.xcagi.mobile.core.network.ServerMode
 import com.xiuci.xcagi.mobile.core.network.ServerRouter
 import com.xiuci.xcagi.mobile.core.network.SseChatClient
+import com.xiuci.xcagi.mobile.model.PinnedIds
 import com.google.gson.Gson
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.map
 import okhttp3.OkHttpClient
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import org.json.JSONObject
@@ -554,8 +557,9 @@ class XcagiRepository @Inject constructor(
             if (!r.success) {
                 Result.failure(Exception(r.message.ifBlank { "中继绑定失败" }))
             } else {
-                saveRelayAuthFromMap(r.data ?: emptyMap())
-                sessionStore.setRelayDesktopId(cleanRelayId)
+                val data = r.data ?: emptyMap()
+                saveRelayAuthFromMap(data)
+                persistRelayBindingMeta(cleanRelayId, data)
                 sessionStore.setFhdHost("")
                 sessionStore.setSetupComplete(true)
                 Result.success("relay" to 0)
@@ -592,7 +596,7 @@ class XcagiRepository @Inject constructor(
                     Result.failure(Exception("设备码绑定响应缺少 relay_id"))
                 } else {
                     saveRelayAuthFromMap(data)
-                    sessionStore.setRelayDesktopId(relayId)
+                    persistRelayBindingMeta(relayId, data)
                     sessionStore.setFhdHost("")
                     sessionStore.setSetupComplete(true)
                     Result.success("relay" to 0)
@@ -607,7 +611,10 @@ class XcagiRepository @Inject constructor(
         val access = data["access_token"]?.toString()?.trim().orEmpty()
         if (access.isBlank()) return
         val refresh = data["refresh_token"]?.toString()?.trim().orEmpty()
-        val sessionId = data["session_id"]?.toString()?.trim().orEmpty()
+        val sessionId =
+            data["session_id"]?.toString()?.trim().orEmpty().ifBlank {
+                data["session_token"]?.toString()?.trim().orEmpty()
+            }
         val accountKind = data["account_kind"]?.toString()?.trim().orEmpty().ifBlank { "enterprise" }
         @Suppress("UNCHECKED_CAST")
         val user = data["user"] as? Map<String, Any?>
@@ -621,7 +628,20 @@ class XcagiRepository @Inject constructor(
                 is String -> raw.toIntOrNull() ?: 0
                 else -> 0
             }
+        val relayBaseUrl = data["relay_base_url"]?.toString()?.trim().orEmpty()
+        val localBaseUrl = data["local_base_url"]?.toString()?.trim().orEmpty()
+        val relaySessionToken =
+            data["session_token"]?.toString()?.trim().orEmpty().ifBlank { sessionId }
+        val accountId = data["account_id"]?.toString()?.trim().orEmpty().ifBlank { userId.toString() }
+        val tenantId = data["tenant_id"]?.toString()?.trim().orEmpty()
+        val pairedAt = data["paired_at"]?.toString()?.trim().orEmpty()
         sessionStore.setAccountKind(accountKind)
+        sessionStore.setRelayBaseUrl(relayBaseUrl)
+        sessionStore.setLocalBaseUrl(localBaseUrl)
+        if (relaySessionToken.isNotBlank()) sessionStore.setRelaySessionToken(relaySessionToken)
+        if (accountId.isNotBlank()) sessionStore.setRelayAccountId(accountId)
+        if (tenantId.isNotBlank()) sessionStore.setRelayTenantId(tenantId)
+        if (pairedAt.isNotBlank()) sessionStore.setRelayPairedAt(pairedAt)
         sessionStore.saveFhdAuth(
             access = access,
             refresh = refresh,
@@ -629,6 +649,42 @@ class XcagiRepository @Inject constructor(
             username = username,
             userId = userId,
         )
+    }
+
+    private suspend fun persistRelayBindingMeta(
+        relayId: String,
+        data: Map<String, Any?>,
+    ) {
+        @Suppress("UNCHECKED_CAST")
+        val desktop = data["desktop"] as? Map<String, Any?>
+        sessionStore.setRelayDesktopId(relayId)
+        sessionStore.setRelayBaseUrl(
+            data["relay_base_url"]?.toString()?.trim().orEmpty().ifBlank {
+                desktop?.get("relay_base_url")?.toString()?.trim().orEmpty()
+            },
+        )
+        sessionStore.setLocalBaseUrl(
+            data["local_base_url"]?.toString()?.trim().orEmpty().ifBlank {
+                desktop?.get("local_base_url")?.toString()?.trim().orEmpty()
+            },
+        )
+        val relaySessionToken = data["session_token"]?.toString()?.trim().orEmpty()
+        if (relaySessionToken.isNotBlank()) {
+            sessionStore.setRelaySessionToken(relaySessionToken)
+        }
+        val accountId = data["account_id"]?.toString()?.trim().orEmpty()
+        if (accountId.isNotBlank()) {
+            sessionStore.setRelayAccountId(accountId)
+        }
+        val tenantId = data["tenant_id"]?.toString()?.trim().orEmpty()
+        if (tenantId.isNotBlank()) {
+            sessionStore.setRelayTenantId(tenantId)
+        }
+        data["paired_at"]?.toString()?.trim().orEmpty().ifBlank {
+            desktop?.get("paired_at")?.toString()?.trim().orEmpty()
+        }.takeIf { it.isNotBlank() }?.let {
+            sessionStore.setRelayPairedAt(it)
+        }
     }
 
     private suspend fun completePairingExchange(
@@ -900,13 +956,33 @@ class XcagiRepository @Inject constructor(
 
     suspend fun streamChat(
         message: String,
+        conversationId: String? = null,
+        sessionId: String = "default",
         onToken: (String) -> Unit,
         onDone: (String) -> Unit,
         onError: (String) -> Unit,
     ) {
         syncRouterFromStore()
-        db.chatDao().insert(ChatCacheEntity(role = "user", text = message))
+        db.chatDao().insert(ChatCacheEntity(session_id = sessionId, role = "user", text = message))
         val acc = StringBuilder()
+
+        if (conversationId == PinnedIds.CODEX) {
+            streamCodexSuperEmployeeChat(
+                message = message,
+                onToken = { t ->
+                    acc.append(t)
+                    onToken(t)
+                },
+                onDone = onDone,
+                onError = onError,
+            )
+            val finalText = acc.toString()
+            if (finalText.isNotBlank()) {
+                db.chatDao().insert(ChatCacheEntity(session_id = sessionId, role = "assistant", text = finalText))
+            }
+            return
+        }
+
         val useCloud = !isPcReachable()
         if (useCloud) {
             val relayId = sessionStore.relayDesktopId()
@@ -942,7 +1018,261 @@ class XcagiRepository @Inject constructor(
         )
         val finalText = acc.toString()
         if (finalText.isNotBlank()) {
-            db.chatDao().insert(ChatCacheEntity(role = "assistant", text = finalText))
+            db.chatDao().insert(ChatCacheEntity(session_id = sessionId, role = "assistant", text = finalText))
+        }
+    }
+
+    private suspend fun streamCodexSuperEmployeeChat(
+        message: String,
+        onToken: (String) -> Unit,
+        onDone: (String) -> Unit,
+        onError: (String) -> Unit,
+    ) {
+        try {
+            val statusPrefix = "已提交到超级员工-Codex，正在执行"
+            onToken(statusPrefix)
+            var emitted = statusPrefix
+
+            val response = fhd().postCodexSuperEmployeeMessage(
+                body = CodexSuperEmployeeMobileMessageBody(
+                    message = message,
+                    body = message,
+                    context = mapOf(
+                        "source" to "mobile_chat",
+                        "client_surface" to "mobile",
+                        "mode" to "code",
+                    ),
+                ),
+            )
+            if (!response.success) {
+                onError(response.message.ifBlank { "超级员工-Codex 调用失败" })
+                return
+            }
+
+            val requestId = extractDispatchRequestId(response.data)
+            val taskId = extractTaskId(response.data)
+            val immediate = extractCodexMessageText(response.data, requestId, taskId)
+            if (immediate.isNotBlank()) {
+                val immediateTrimmed = immediate.trim()
+                val delta = immediateTrimmed.removePrefix(emitted)
+                if (delta.isNotBlank()) {
+                    onToken(delta)
+                    emitted = immediateTrimmed
+                }
+                onDone(immediateTrimmed)
+                return
+            }
+
+            var finalText = ""
+            repeat(60) {
+                delay(1000)
+                val polled = fetchMatchingCodexMessage(requestId, taskId)
+                if (polled.isNotBlank()) {
+                    finalText = polled.trim()
+                    if (finalText != emitted) {
+                        val delta = finalText.removePrefix(emitted)
+                        if (delta.isNotBlank()) {
+                            onToken(delta)
+                        }
+                        emitted = finalText
+                    }
+                    onDone(finalText)
+                    return
+                }
+                val progressText = "已提交到超级员工-Codex，正在执行 $requestId"
+                if (progressText != emitted) {
+                    onToken("\n$progressText")
+                    emitted = progressText
+                }
+            }
+
+            finalText = "已提交到超级员工-Codex，任务将在电脑端执行后回写。"
+            onDone(finalText)
+        } catch (e: Exception) {
+            onError(e.message ?: "超级员工-Codex 调用失败")
+        }
+    }
+
+    private suspend fun fetchLatestCodexMessage(): String =
+        fetchMatchingCodexMessage(requestId = null, taskId = null)
+
+    private suspend fun fetchMatchingCodexMessage(
+        requestId: String?,
+        taskId: String?,
+    ): String {
+        return try {
+            val response = fhd().getCodexSuperEmployeeMessages(80)
+            if (!response.success) return ""
+            extractCodexMessageFromList(response.data?.get("messages"), requestId, taskId)
+        } catch (_: Exception) {
+            ""
+        }
+    }
+
+    suspend fun loadCodexSuperEmployeeMessages(limit: Int = 80): Result<List<Pair<String, String>>> =
+        try {
+            syncRouterFromStore()
+            preferCloudIfLanUnreachable()
+            val response = fhd().getCodexSuperEmployeeMessages(limit)
+            if (!response.success) {
+                Result.failure(Exception(response.message.ifBlank { "加载超级员工会话失败" }))
+            } else {
+                Result.success(codexMessagesToPairs(response.data?.get("messages")))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+
+    private fun extractCodexMessageText(
+        data: Map<String, Any?>?,
+        requestId: String?,
+        taskId: String?,
+    ): String {
+        if (data == null) return ""
+        val assistantMessage = data["assistant_message"] as? Map<*, *>
+        val directBody = assistantMessage?.get("body")?.toString()?.trim().orEmpty()
+        val directRole = assistantMessage?.get("role")?.toString()?.trim()?.lowercase().orEmpty()
+        @Suppress("UNCHECKED_CAST")
+        val assistantRow = assistantMessage?.let { it as? Map<String, Any?> }
+        if (
+            directBody.isNotBlank() &&
+            (directRole.isEmpty() || directRole == "assistant") &&
+            !isCodexSchedulerNotice(assistantRow ?: emptyMap())
+        ) {
+            return directBody
+        }
+        return extractCodexMessageFromList(data["messages"], requestId, taskId)
+    }
+
+    private fun extractCodexMessageFromList(
+        raw: Any?,
+        requestId: String? = null,
+        taskId: String? = null,
+    ): String {
+        val rows = codexMessageRows(raw)
+        if (rows.isEmpty()) return ""
+        val targetRequest = requestId.orEmpty().trim()
+        val targetTask = taskId.orEmpty().trim()
+        val reversed = rows.asReversed()
+
+        if (targetRequest.isNotBlank() || targetTask.isNotBlank()) {
+            reversed.firstOrNull { row ->
+                isAssistantCodexMessage(row) && messageMatchesTask(row, targetRequest, targetTask)
+            }?.let { matched ->
+                matched["body"]?.toString()?.trim()?.takeIf { it.isNotBlank() }?.let {
+                    return it
+                }
+            }
+            reversed.firstOrNull { row ->
+                isAssistantMessage(row) && messageMatchesTask(row, targetRequest, targetTask)
+            }?.let { matched ->
+                matched["body"]?.toString()?.trim()?.takeIf { it.isNotBlank() }?.let {
+                    return it
+                }
+            }
+        }
+
+        return reversed
+            .firstOrNull { isAssistantCodexMessage(it) }
+            ?.get("body")
+            ?.toString()
+            ?.trim()
+            .orEmpty()
+    }
+
+    private fun messageMatchesTask(
+        row: Map<String, Any?>,
+        requestId: String,
+        taskId: String,
+    ): Boolean {
+        if (requestId.isBlank() && taskId.isBlank()) return true
+        val rowRequest = row["dispatch_request_id"]?.toString()?.trim().orEmpty()
+        val rowTask = row["task_id"]?.toString()?.trim().orEmpty()
+        val directRequest = row["request_id"]?.toString()?.trim().orEmpty()
+        return (requestId.isNotBlank() && (rowRequest == requestId || directRequest == requestId)) ||
+            (taskId.isNotBlank() && rowTask == taskId)
+    }
+
+    private fun isAssistantCodexMessage(row: Map<String, Any?>): Boolean {
+        val role = row["role"]?.toString()?.trim()?.lowercase().orEmpty()
+        if (role != "assistant") return false
+        if (isCodexSchedulerNotice(row)) return false
+        val kind = row["kind"]?.toString()?.trim()?.lowercase().orEmpty()
+        return kind == "codex_result" || kind.isBlank()
+            || kind == "codex_direct"
+    }
+
+    private fun isCodexSchedulerNotice(row: Map<String, Any?>): Boolean {
+        val role = row["role"]?.toString()?.trim()?.lowercase().orEmpty()
+        if (role == "system") return true
+        val kind = row["kind"]?.toString()?.trim()?.lowercase().orEmpty()
+        if (kind == "dispatcher") return true
+        val text = row["body"]?.toString()?.trim() ?: ""
+        if (text.isBlank()) return false
+        val lower = text.lowercase()
+        return lower.contains("调度") || lower.contains("dispatcher") || lower.contains("任务已派发")
+    }
+
+    private fun isAssistantMessage(row: Map<String, Any?>): Boolean {
+        return row["role"]?.toString()?.trim()?.lowercase().orEmpty() == "assistant"
+    }
+
+    private fun extractDispatchRequestId(data: Map<String, Any?>?): String {
+        if (data == null) return ""
+        @Suppress("UNCHECKED_CAST")
+        val dispatch = data["dispatch"] as? Map<String, Any?>
+        @Suppress("UNCHECKED_CAST")
+        val assistantMessage = data["assistant_message"] as? Map<String, Any?>
+        return dispatch?.get("request_id")?.toString()?.trim().orEmpty().ifBlank {
+            assistantMessage?.get("dispatch_request_id")?.toString()?.trim().orEmpty().ifBlank {
+                data["dispatch_request_id"]?.toString()?.trim().orEmpty().ifBlank {
+                    data["request_id"]?.toString()?.trim().orEmpty()
+                }
+            }
+        }
+    }
+
+    private fun extractTaskId(data: Map<String, Any?>?): String {
+        if (data == null) return ""
+        @Suppress("UNCHECKED_CAST")
+        val dispatch = data["dispatch"] as? Map<String, Any?>
+        @Suppress("UNCHECKED_CAST")
+        val assistantMessage = data["assistant_message"] as? Map<String, Any?>
+        return dispatch?.get("task_id")?.toString()?.trim().orEmpty().ifBlank {
+            assistantMessage?.get("task_id")?.toString()?.trim().orEmpty().ifBlank {
+                data["task_id"]?.toString()?.trim().orEmpty()
+            }
+        }
+    }
+
+    private fun codexMessagesToPairs(raw: Any?): List<Pair<String, String>> =
+        codexMessageRows(raw).mapNotNull { row ->
+            val role = row["role"]?.toString()?.trim()?.lowercase().orEmpty()
+            val text = row["body"]?.toString()?.trim().orEmpty()
+            if (
+                isCodexSchedulerNotice(row) ||
+                text.isBlank() ||
+                role !in setOf("user", "assistant")
+            ) {
+                null
+            } else {
+                role to text
+            }
+        }
+
+    private fun codexMessageRows(raw: Any?): List<Map<String, Any?>> {
+        val payload =
+            when (val data = raw) {
+                is Map<*, *> -> data["messages"] ?: data
+                else -> raw
+            }
+        return when (payload) {
+            is List<*> ->
+                payload.mapNotNull { row ->
+                    @Suppress("UNCHECKED_CAST")
+                    row as? Map<String, Any?>
+                }
+            else -> emptyList()
         }
     }
 
@@ -979,17 +1309,26 @@ class XcagiRepository @Inject constructor(
                 return
             }
             onToken("已派发到电脑执行端，等待 Codex 回写。")
-            repeat(60) {
+            var lastStatus = "queued"
+            repeat(150) {
                 delay(2000)
                 val status = fhd().relayTaskStatus(taskId)
                 val current = status.data?.get("task") as? Map<*, *> ?: emptyMap<Any?, Any?>()
-                when (current["status"]?.toString().orEmpty()) {
-                    "done" -> {
+                val currentStatus = current["status"]?.toString().orEmpty()
+                if (currentStatus.isNotBlank() && currentStatus != lastStatus) {
+                    when (currentStatus) {
+                        "running", "assigned" -> onToken("\n电脑执行端正在运行 Codex。")
+                        "queued" -> onToken("\n任务仍在服务器队列中。")
+                    }
+                    lastStatus = currentStatus
+                }
+                when (currentStatus) {
+                    "done", "completed" -> {
                         val final = relayTaskResultText(current).ifBlank { "电脑执行端已完成任务。" }
                         onDone(final)
                         return
                     }
-                    "failed" -> {
+                    "failed", "blocked", "cancelled" -> {
                         onError(relayTaskResultText(current).ifBlank { "电脑执行端执行失败" })
                         return
                     }
@@ -1011,15 +1350,64 @@ class XcagiRepository @Inject constructor(
 
     suspend fun streamChatCloud(
         message: String,
+        conversationId: String? = null,
+        sessionId: String = "default",
         onToken: (String) -> Unit,
         onDone: (String) -> Unit,
         onError: (String) -> Unit,
     ) {
-        streamChat(message, onToken, onDone, onError)
+        streamChat(message, conversationId, sessionId, onToken, onDone, onError)
     }
 
-    suspend fun loadCachedChat(): List<Pair<String, String>> =
-        db.chatDao().all().map { it.role to it.text }
+    suspend fun loadCachedChat(sessionId: String = "default"): List<Pair<String, String>> =
+        db.chatDao().getBySession(sessionId).map { it.role to it.text }
+
+    fun observeCachedChat(sessionId: String = "default"): Flow<List<Pair<String, String>>> =
+        db.chatDao().observeBySession(sessionId).map { rows -> rows.map { it.role to it.text } }
+
+    private fun parseBridgeRequestRows(raw: Any?): List<Map<String, Any?>> {
+        val payload = when (val data = raw) {
+            is Map<*, *> -> data["data"] ?: data
+            is List<*> -> data
+            else -> null
+        }
+        val rows = when (payload) {
+            is Map<*, *> -> payload["items"] as? List<*>
+            is List<*> -> payload
+            else -> null
+        } ?: emptyList()
+        return rows.mapNotNull { row ->
+            if (row is Map<*, *>) {
+                @Suppress("UNCHECKED_CAST")
+                row as? Map<String, Any?>
+            } else {
+                null
+            }
+        }
+    }
+
+    private fun mapServiceBridgeRequestRows(raw: Any?): List<ListItem> =
+        parseBridgeRequestRows(raw).map {
+            ListItem(
+                id = "${it["id"]}",
+                title = "${it["title"] ?: it["name"] ?: ""}",
+                subtitle = "${it["status"] ?: ""}",
+                payload = it,
+            )
+        }
+
+    private suspend fun bridgeRequestsFromMobile(): Result<List<ListItem>> {
+        val res = fhd().mobileBridgeRequests()
+        if (!res.success) {
+            return Result.failure(Exception(res.message.ifBlank { "移动端服务桥接请求列表加载失败" }))
+        }
+        return Result.success(mapServiceBridgeRequestRows(res.data))
+    }
+
+    private suspend fun bridgeRequestsFromLegacy(): Result<List<ListItem>> {
+        val res = fhd().bridgeRequests()
+        return Result.success(mapServiceBridgeRequestRows(res["data"]))
+    }
 
     suspend fun approvals(): Result<List<ListItem>> {
         val remote = parseMobileList { fhd().mobileApprovals().data }
@@ -1073,24 +1461,32 @@ class XcagiRepository @Inject constructor(
     }
     suspend fun bridgeRequests(): Result<List<ListItem>> = try {
         syncRouterFromStore()
-        val res = fhd().bridgeRequests()
-        val items = (res["data"] as? List<*>) ?: emptyList<Any>()
-        Result.success(items.mapNotNull { row ->
-            (row as? Map<*, *>)?.let {
-                ListItem(
-                    id = "${it["id"]}",
-                    title = "${it["title"] ?: ""}",
-                    subtitle = "${it["status"] ?: ""}",
-                )
-            }
-        })
+        bridgeRequestsFromMobile()
     } catch (e: Exception) {
-        Result.failure(e)
+        if (e is HttpException && e.code() == 404) {
+            try {
+                bridgeRequestsFromLegacy()
+            } catch (legacyError: Exception) {
+                Result.failure(legacyError)
+            }
+        } else {
+            Result.failure(e)
+        }
     }
 
     suspend fun bridgeRespond(id: Int, text: String): Result<Unit> = try {
-        fhd().bridgeRespond(id, BridgeRespondBody(text, "android"))
-        Result.success(Unit)
+        syncRouterFromStore()
+        try {
+            fhd().mobileBridgeRespond(id, BridgeRespondBody(text, "android"))
+            Result.success(Unit)
+        } catch (e: Exception) {
+            if (e is HttpException && e.code() == 404) {
+                fhd().bridgeRespond(id, BridgeRespondBody(text, "android"))
+                Result.success(Unit)
+            } else {
+                Result.failure(e)
+            }
+        }
     } catch (e: Exception) {
         Result.failure(e)
     }
