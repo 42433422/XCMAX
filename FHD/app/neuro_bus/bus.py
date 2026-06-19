@@ -9,6 +9,8 @@ NeuroBus - 神经总线核心实现
 - 领域隔离
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
 import os
@@ -18,12 +20,16 @@ from collections import defaultdict
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from heapq import heappop, heappush
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from app.neuro_bus.events.base import AsyncEventHandler, EventHandler, NeuroEvent
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from app.neuro_bus.transports.redis_pubsub import RedisPubSubBridge
+    from app.neuro_bus.transports.redis_streams import RedisStreamsBridge
 
 
 def _neuro_env_flag(name: str) -> bool:
@@ -286,7 +292,7 @@ class NeuroBus:
 
             self._dlq_integration = NeuroBusDLQIntegration(get_dead_letter_queue())
 
-        self._redis_bridge = None
+        self._redis_bridge: RedisStreamsBridge | RedisPubSubBridge | None = None
         if os.environ.get("XCAGI_NEURO_BUS_REDIS_TRANSPORT", "").strip().lower() == "streams":
             from app.neuro_bus.transports.redis_pubsub import _resolve_redis_url
             from app.neuro_bus.transports.redis_streams import RedisStreamsBridge

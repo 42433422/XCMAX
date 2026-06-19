@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from app.neuro_bus.bus import NeuroBus
+    from app.neuro_bus.events.base import NeuroEvent
 
 STREAM_KEY = "neurobus:events"
 DLQ_KEY = "neurobus:dlq"
@@ -63,6 +64,14 @@ class RedisStreamsBridge:
             approximate=True,
         )
         return msg_id.decode() if isinstance(msg_id, bytes) else str(msg_id)
+
+    def publish_remote(self, event: NeuroEvent) -> None:
+        """发布事件到远程 Stream（接口兼容 RedisPubSubBridge）。"""
+        if self._redis is None:
+            return
+        if event.payload.get("local_only") is True:
+            return
+        self.publish(event.to_dict())
 
     def consume(self, count: int = 100, block_ms: int = 5000) -> list[dict[str, Any]]:
         """从 Stream 消费消息（不自动 ACK）。"""

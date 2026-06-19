@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from app.neuro_bus.domains.base import DomainChannel, NeuroDomain, get_domain_registry
+from app.neuro_bus.domains.intent_domain_handlers import register_intent_domain_handlers
 from app.neuro_bus.events.base import EventPriority
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -186,5 +187,3 @@ def get_intent_domain() -> IntentNeuroDomain:
         get_domain_registry().register(_intent_domain)
     return _intent_domain
 
-
-from .intent_domain_handlers import *  # noqa: F401,F403  向后兼容：暴露 handlers 符号
