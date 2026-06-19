@@ -9,7 +9,6 @@ from typing import Any
 
 from app.neuro_bus.domains.base import DomainChannel, NeuroDomain, get_domain_registry
 from app.neuro_bus.events.base import EventPriority
-from app.neuro_bus.neuro_trace_config import bump_domain_handler_metric
 
 logger = logging.getLogger(__name__)
 
@@ -36,23 +35,7 @@ class AIServiceNeuroDomain(NeuroDomain):
         self._setup_handlers()
 
     def _setup_handlers(self):
-        @self.on("ai.completed", priority=1)
-        async def on_completed(event):
-            self._request_count += 1
-            model = event.payload.get("model")
-            latency_ms = event.payload.get("latency_ms")
-            logger.debug("AI completed: model=%s, latency=%sms", model, latency_ms)
-            from app.neuro_bus.neuro_trace_config import bump_domain_handler_metric
-
-            bump_domain_handler_metric("ai.completed")
-
-        @self.on("ai.failed", priority=0)
-        async def on_failed(event):
-            self._error_count += 1
-            model = event.payload.get("model")
-            error = event.payload.get("error")
-            logger.error("AI failed: model=%s, error=%s", model, error)
-            bump_domain_handler_metric("ai.failed")
+        register_ai_service_domain_handlers(self)
 
     async def initialize(self):
         logger.info("AIServiceNeuroDomain initialized")
@@ -133,3 +116,6 @@ def get_ai_service_domain() -> AIServiceNeuroDomain:
         _ai_domain = AIServiceNeuroDomain()
         get_domain_registry().register(_ai_domain)
     return _ai_domain
+
+
+from .ai_service_domain_handlers import *  # noqa: F401,F403  向后兼容：暴露 handlers 符号
