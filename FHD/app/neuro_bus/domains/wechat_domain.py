@@ -7,6 +7,7 @@
 import logging
 
 from app.neuro_bus.domains.base import DomainChannel, NeuroDomain, get_domain_registry
+from app.neuro_bus.domains.wechat_domain_handlers import register_wechat_domain_handlers
 from app.neuro_bus.events.base import EventPriority
 
 logger = logging.getLogger(__name__)
@@ -89,5 +90,3 @@ def get_wechat_domain() -> WechatNeuroDomain:
         get_domain_registry().register(_wechat_domain)
     return _wechat_domain
 
-
-from .wechat_domain_handlers import *  # noqa: F401,F403  向后兼容：暴露 handlers 符号

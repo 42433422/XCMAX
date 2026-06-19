@@ -8,6 +8,7 @@ import logging
 from typing import Any
 
 from app.neuro_bus.domains.base import DomainChannel, NeuroDomain, get_domain_registry
+from app.neuro_bus.domains.safety_domain_handlers import register_safety_domain_handlers
 from app.neuro_bus.events.base import EventPriority
 
 logger = logging.getLogger(__name__)
@@ -135,5 +136,3 @@ def get_safety_domain() -> SafetyNeuroDomain:
         get_domain_registry().register(_safety_domain)
     return _safety_domain
 
-
-from .safety_domain_handlers import *  # noqa: F401,F403  向后兼容：暴露 handlers 符号

@@ -7,6 +7,7 @@
 import logging
 
 from app.neuro_bus.domains.base import DomainChannel, NeuroDomain, get_domain_registry
+from app.neuro_bus.domains.customer_domain_handlers import register_customer_domain_handlers
 from app.neuro_bus.events.base import EventPriority
 
 logger = logging.getLogger(__name__)
@@ -86,5 +87,3 @@ def get_customer_domain() -> CustomerNeuroDomain:
         get_domain_registry().register(_customer_domain)
     return _customer_domain
 
-
-from .customer_domain_handlers import *  # noqa: F401,F403  向后兼容：暴露 handlers 符号
