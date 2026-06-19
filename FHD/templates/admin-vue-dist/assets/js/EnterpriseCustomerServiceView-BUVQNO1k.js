@@ -1,0 +1,1 @@
+import{_ as e}from"./HostModBridgeView.vue_vue_type_script_setup_true_lang-BvrZDvc2.js";import{a1 as r,t,a2 as i}from"./index-CinG43sm.js";const n=r({__name:"EnterpriseCustomerServiceView",setup(o){return(s,a)=>(t(),i(e,{"mod-id":"xcagi-customer-service-bridge",view:"EnterpriseCustomerServiceView",title:"客服"}))}});export{n as default};

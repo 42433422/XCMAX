@@ -41,6 +41,7 @@ const loopRuntime = ref<Record<string, unknown> | null>(null)
 let loopRuntimeTimer: number | null = null
 
 const enterpriseStack = ref<EnterpriseModStack | null>(null)
+const DUTY_ROSTER_VIEW_TOKENS = new Set(['department', 'dept', '六部门', 'hub', 'center', '中心', '中心图', 'legacy-area', 'area', '物理', '物理分区', 'client', 'workshop', '车间', '客户端车间'])
 
 /** 企业 Mod 栈内 AI 员工工位（排除平台编制 employee_pack 等游离项） */
 const workspaceDesks = computed(() => {
@@ -81,6 +82,11 @@ function syncWorkspaceEmployeeQuery(empId?: string | null) {
   if (id) nextQuery.employee = id
   else delete nextQuery.employee
   void router.replace({ query: nextQuery })
+}
+
+function normalizeDutyRosterView(raw: unknown): string {
+  const token = String(Array.isArray(raw) ? raw[0] : raw || '').trim().toLowerCase()
+  return DUTY_ROSTER_VIEW_TOKENS.has(token) ? token : 'department'
 }
 
 const routeFocusedEmployeeId = computed(() => routeEmployeeId())
@@ -127,13 +133,13 @@ const selectedDesk = computed(() =>
 )
 const panoramaLocation = computed<RouteLocationRaw>(() => {
   if (isAdminConsole && router.hasRoute('duty-roster-graph')) {
-    return { name: 'duty-roster-graph' }
+    return { name: 'duty-roster-graph', query: { view: 'department' } }
   }
   return { name: 'workflow-employee-stitch-full' }
 })
 const dutyRosterLoopLocation = computed<RouteLocationRaw>(() => {
   if (router.hasRoute('duty-roster-graph')) {
-    return { name: 'duty-roster-graph', query: { view: 'loop' } }
+    return { name: 'duty-roster-graph', query: { view: 'department' } }
   }
   return panoramaLocation.value
 })
@@ -287,7 +293,7 @@ const loopBridgeBlockedEmployeeIds = computed(() =>
     .filter(Boolean),
 )
 const dutyRosterGovernanceLocation = computed<RouteLocationRaw>(() => {
-  const view = loopString(loopUiBridge.value.primary_view) || 'loop'
+  const view = normalizeDutyRosterView(loopUiBridge.value.primary_view)
   const employeeId = loopBridgePrimaryEmployeeId.value
   if (router.hasRoute('duty-roster-graph')) {
     return {
@@ -354,6 +360,39 @@ const loopOpenRunCount = computed(() => loopArray(loopEvidence.value.open_run_id
 const loopRuntimeSchemaVersion = computed(() => loopFirstText(loopRecord(loopRuntime.value).schema_version))
 const loopRuntimeContract = computed(() => loopRecord(loopRuntime.value?.contract))
 const loopRuntimeContractValidation = computed(() => loopRecord(loopRuntime.value?.contract_validation))
+const loopRuntimeSurfaceReadinessCards = computed(() => {
+  const readiness = loopRecord(loopRuntimeContractValidation.value.surface_readiness)
+  const surfaces = [
+    { key: 'employee_space', label: '员工空间', role: '执行现场' },
+    { key: 'duty_roster_graph', label: '编制图谱', role: '治理准入' },
+    { key: 'self_evolution_loop_runtime', label: 'Runtime', role: '完整链路' },
+  ]
+  return surfaces.map((surface) => {
+    const item = loopRecord(readiness[surface.key])
+    const missing = loopArray(item.missing).map((value) => loopString(value)).filter(Boolean)
+    const known = Object.keys(item).length > 0
+    const ok = item.ok === true
+    const severity = loopFirstText(item.severity, ok ? 'ok' : known && missing.length ? 'bad' : 'warn')
+    const blocked = known && ok === false
+    return {
+      key: surface.key,
+      label: surface.label,
+      role: surface.role,
+      ok,
+      known,
+      blocked,
+      stateLabel: ok ? 'ready' : blocked ? 'blocked' : 'unknown',
+      ctaLabel: ok ? '查看链路' : blocked ? '处理断点' : '等待状态',
+      tone: severity === 'bad' || blocked ? 'bad' : severity === 'warn' || !known ? 'warn' : 'ok',
+      action: loopFirstText(item.action, ok ? 'watch' : known ? 'inspect_runtime_contract' : 'waiting_runtime_contract'),
+      detail: loopFirstText(item.detail, missing.length ? `missing ${missing.slice(0, 3).join(' / ')}` : known ? 'contract ready' : '等待后端暴露该 surface readiness'),
+      sourceLabel: known ? 'source · contract_validation.surface_readiness' : 'waiting · runtime surface readiness missing',
+      missing,
+      target: loopFirstText(item.target_surface, surface.key),
+      view: loopFirstText(item.target_view, 'runtime'),
+    }
+  })
+})
 const loopRuntimeContractRequiredFields = computed(() =>
   loopArray(loopRuntimeContract.value.required_top_level).map((item) => loopString(item)).filter(Boolean),
 )
@@ -399,7 +438,7 @@ const loopRuntimeContractPrimaryRoute = computed(() =>
 )
 const loopRuntimePrimaryRouteLocation = computed<RouteLocationRaw>(() => {
   const surface = loopString(loopRuntimeContractPrimaryRoute.value.surface)
-  const view = loopFirstText(loopRuntimeContractPrimaryRoute.value.view, 'loop')
+  const view = normalizeDutyRosterView(loopRuntimeContractPrimaryRoute.value.view)
   const routeEmployeeId = loopFirstText(
     loopRuntimeContractPrimaryRoute.value.employee_id,
     loopArray(loopRuntimeContractPrimaryRoute.value.target_employee_ids)[0],
@@ -1319,6 +1358,97 @@ const selectedDeskLoopState = computed(() =>
         </div>
       </div>
 
+      <div class="ews-loop-role-map" aria-label="员工空间、编制图谱与完整 Loop 分工">
+        <div
+          class="ews-loop-role-map-node ews-loop-role-map-node--active"
+          :class="{ 'ews-loop-role-map-node--route': loopFirstText(loopRuntimeContractPrimaryRoute.surface) === 'employee_space' }"
+        >
+          <span>Employee space</span>
+          <strong>执行现场</strong>
+          <small>看上岗员工、任务 step、证据回写</small>
+          <small>{{ loopFocusedEmployeeId ? `focus ${loopFocusedEmployeeId}` : `${loopOpenRunCount} open runs` }}</small>
+        </div>
+        <div class="ews-loop-role-map-arrow">↔</div>
+        <div
+          class="ews-loop-role-map-node"
+          :class="{ 'ews-loop-role-map-node--route': loopFirstText(loopRuntimeContractPrimaryRoute.surface, loopRuntimeContractStatus.primary_target_surface) === 'duty_roster_graph' }"
+        >
+          <span>Duty roster graph</span>
+          <strong>治理闸门</strong>
+          <small>补登记、隔离非编制、审计复核</small>
+          <small>{{ loopNotDeployedCount }} pending deploy · {{ loopOutOfRosterCount }} isolated risk</small>
+        </div>
+        <div class="ews-loop-role-map-arrow">→</div>
+        <div
+          class="ews-loop-role-map-node"
+          :class="{ 'ews-loop-role-map-node--route': loopFirstText(loopRuntimeContractPrimaryRoute.surface, loopRuntimeContractStatus.primary_target_surface) === 'self_evolution_loop_runtime' }"
+        >
+          <span>Runtime panel</span>
+          <strong>完整链路</strong>
+          <small>contract、surface incident、时间线</small>
+          <small>{{ loopFirstText(loopRuntimeContractPrimaryRoute.view, 'runtime') }} · {{ loopRuntimeContractPrimaryRoute.executable ? 'executable' : 'navigate-only' }}</small>
+        </div>
+      </div>
+
+      <div
+        class="ews-loop-directive"
+        :class="loopRuntimeContractStatus.tone === 'bad' ? 'ews-loop-directive--bad' : (loopNumber(loopRuntimeSurfaceIncidentSummary.total) ? 'ews-loop-directive--warn' : 'ews-loop-directive--ok')"
+        aria-label="Loop 下一步动作"
+      >
+        <div class="ews-loop-directive-copy">
+          <span>Next operator move</span>
+          <strong>{{ loopFirstText(loopRuntimeContractStatus.label, loopRuntimeSurfaceReadiness.title, loopRuntimeContractOk ? 'Loop 可继续观察' : '需要处理运行契约') }}</strong>
+          <small>{{ loopFirstText(loopRuntimeContractStatus.detail, loopRuntimeContractPrimaryRoute.detail, loopRuntimeSurfaceReadiness.detail, '后端 runtime 会给出下一步 surface 和 action') }}</small>
+        </div>
+        <div class="ews-loop-directive-meta">
+          <span>{{ loopFirstText(loopRuntimeContractPrimaryRoute.action, loopRuntimeContractStatus.primary_action, 'watch_loop') }}</span>
+          <strong>{{ loopFirstText(loopRuntimeContractPrimaryRoute.surface, loopRuntimeContractStatus.primary_target_surface, 'employee_space') }}</strong>
+          <small>{{ loopRuntimeContractPrimaryRoute.requires_admin ? 'admin-only' : 'operator' }} · {{ loopRuntimeContractPrimaryRoute.executable ? 'executable' : 'navigate-only' }}</small>
+          <small v-if="loopFirstText(loopRuntimeContractPrimaryRoute.employee_id, loopArray(loopRuntimeContractPrimaryRoute.target_employee_ids)[0])">target {{ loopFirstText(loopRuntimeContractPrimaryRoute.employee_id, loopArray(loopRuntimeContractPrimaryRoute.target_employee_ids)[0]) }}</small>
+        </div>
+        <router-link :to="loopRuntimePrimaryRouteLocation" class="ews-loop-directive-link">{{ loopRuntimePrimaryRouteLabel }}</router-link>
+      </div>
+
+      <div class="ews-loop-section-head" aria-label="三端健康对照说明">
+        <span>Surface readiness</span>
+        <strong>三端对照，断点不混在员工卡里</strong>
+        <small>employee_space / duty_roster_graph / runtime_panel 同源读取 contract_validation.surface_readiness；unknown 不当作故障。</small>
+        <div class="ews-loop-section-legend" aria-label="readiness 三态图例">
+          <span class="ews-loop-section-dot ews-loop-section-dot--ok">ready</span>
+          <span class="ews-loop-section-dot ews-loop-section-dot--bad">blocked</span>
+          <span class="ews-loop-section-dot ews-loop-section-dot--warn">unknown</span>
+        </div>
+      </div>
+
+      <div class="ews-loop-surface-grid" aria-label="三端 surface readiness">
+        <div
+          v-for="surface in loopRuntimeSurfaceReadinessCards"
+          :key="surface.key"
+          class="ews-loop-surface-card"
+          :class="`ews-loop-surface-card--${surface.tone}`"
+        >
+          <span>{{ surface.label }}</span>
+          <strong>{{ surface.stateLabel }}</strong>
+          <small>{{ surface.role }} · {{ surface.action }}</small>
+          <small>{{ surface.target }} / {{ surface.view }}</small>
+          <em>{{ surface.missing.length ? surface.missing.slice(0, 4).join(' / ') : surface.detail }}</em>
+          <router-link
+            v-if="surface.known"
+            :to="loopRuntimePrimaryRouteLocation"
+            :aria-label="`${surface.label} ${surface.ctaLabel}：${surface.detail}`"
+            :title="`${surface.label} · ${surface.target} / ${surface.view}`"
+          >{{ surface.ctaLabel }}</router-link>
+          <span
+            v-else
+            class="ews-loop-surface-wait"
+            :aria-label="`${surface.label} 等待状态：${surface.detail}`"
+            :title="`${surface.label} · ${surface.target} / ${surface.view}`"
+          >{{ surface.ctaLabel }}</span>
+          <small v-if="surface.known" class="ews-loop-surface-route-note">统一入口 · {{ loopRuntimePrimaryRouteLabel }}</small>
+          <small class="ews-loop-surface-source-note">{{ surface.sourceLabel }}</small>
+        </div>
+      </div>
+
       <div class="ews-loop-truth-strip" aria-label="Loop 真实数据来源">
         <div
           class="ews-loop-truth-card ews-loop-truth-card--primary"
@@ -1329,6 +1459,7 @@ const selectedDeskLoopState = computed(() =>
           <small>{{ loopFirstText(loopRuntimeContractPrimaryRoute.action, loopRuntimeContractStatus.primary_action, loopRuntimeSurfaceIncidentSummary.primary_action, loopRuntimeSurfaceReadiness.action, loopRuntimeContractOk ? 'all clear' : 'inspect contract') }} -> {{ loopFirstText(loopRuntimeContractPrimaryRoute.surface, loopRuntimeContractStatus.primary_target_surface, 'self_evolution_loop_runtime') }}</small>
           <small v-if="loopFirstText(loopRuntimeContractPrimaryRoute.employee_id, loopArray(loopRuntimeContractPrimaryRoute.target_employee_ids)[0])">target employee · {{ loopFirstText(loopRuntimeContractPrimaryRoute.employee_id, loopArray(loopRuntimeContractPrimaryRoute.target_employee_ids)[0]) }}</small>
           <small>global={{ loopRuntimeContractStatus.global_ok === false ? 'blocked' : 'ok' }} · all_surfaces={{ loopRuntimeContractStatus.all_surfaces_ok === false ? 'blocked' : 'ok' }}</small>
+          <small>view={{ loopFirstText(loopRuntimeContractPrimaryRoute.view, 'runtime') }} · label={{ loopFirstText(loopRuntimeContractPrimaryRoute.label, loopRuntimePrimaryRouteLabel) }}</small>
           <small>{{ loopRuntimeContractPrimaryRoute.requires_admin ? 'admin-only' : 'operator' }} · {{ loopRuntimeContractPrimaryRoute.executable ? 'executable' : 'navigate-only' }} · {{ loopFirstText(loopRuntimeContractPrimaryRoute.detail, '按后端 primary_route 跳转') }}</small>
           <router-link :to="loopRuntimePrimaryRouteLocation">{{ loopRuntimePrimaryRouteLabel }}</router-link>
         </div>
@@ -1354,6 +1485,7 @@ const selectedDeskLoopState = computed(() =>
           <span>{{ loopFirstText(incident.surface, 'employee_space') }} · {{ loopFirstText(incident.severity, 'bad') }}</span>
           <strong>{{ loopFirstText(incident.title, 'Surface contract incident') }}</strong>
           <small>{{ loopFirstText(incident.action, 'inspect_runtime_contract') }} -> {{ loopFirstText(incident.target_surface, 'self_evolution_loop_runtime') }}</small>
+          <small>target view · {{ loopFirstText(incident.target_view, loopRuntimeContractPrimaryRoute.view, 'runtime') }}</small>
           <small>{{ incident.requires_admin ? 'admin-only' : 'operator' }} · {{ incident.executable ? 'executable' : 'navigate-only' }} · {{ loopFirstText(incident.id, 'contract:employee_space') }}</small>
           <small>{{ loopFirstText(incident.source, 'contract_validation') }} · {{ loopFirstText(incident.schema_version, loopRuntimeSchemaVersion) }} · {{ loopFirstText(incident.created_at, 'time unknown') }}</small>
           <em>{{ loopArray(incident.missing).map((item) => loopString(item)).filter(Boolean).slice(0, 5).join(' / ') || loopFirstText(incident.detail, 'missing dependencies') }}</em>
@@ -2589,11 +2721,20 @@ const selectedDeskLoopState = computed(() =>
   white-space: nowrap;
 }
 
+.ews-loop-console,
+.ews-loop-console > * {
+  --loop-compact-card-min: 145px;
+  --loop-detail-card-min: 220px;
+  min-width: 0;
+}
+
 .ews-loop-cockpit {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(120px, 160px) minmax(120px, 160px);
   gap: 10px;
   align-items: stretch;
+  min-width: 0;
+  overflow: hidden;
   padding: 12px;
   border: 1px solid rgba(15, 23, 42, 0.08);
   border-radius: 18px;
@@ -2636,6 +2777,7 @@ const selectedDeskLoopState = computed(() =>
 
 .ews-loop-cockpit-meter {
   min-width: 0;
+  overflow: hidden;
   padding: 10px;
   border: 1px solid rgba(20, 184, 166, 0.18);
   border-radius: 14px;
@@ -2664,14 +2806,451 @@ const selectedDeskLoopState = computed(() =>
   font-weight: 800;
 }
 
+.ews-loop-role-map {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: stretch;
+  min-width: 0;
+  overflow: hidden;
+  padding: 10px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 8% 20%, rgba(20, 184, 166, 0.14), transparent 26%),
+    radial-gradient(circle at 92% 10%, rgba(14, 165, 233, 0.12), transparent 30%),
+    linear-gradient(135deg, rgba(15, 23, 42, 0.04), rgba(255, 255, 255, 0.84));
+}
+
+.ews-loop-role-map-node {
+  min-width: 0;
+  overflow: hidden;
+  contain: layout paint;
+  padding: 11px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.05);
+}
+
+.ews-loop-role-map-node--active {
+  border-color: rgba(20, 184, 166, 0.24);
+  background: linear-gradient(135deg, rgba(236, 253, 245, 0.92), rgba(240, 253, 250, 0.76));
+}
+
+.ews-loop-role-map-node--route {
+  border-color: rgba(14, 165, 233, 0.38);
+  box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.1), 0 14px 32px rgba(14, 165, 233, 0.1);
+}
+
+.ews-loop-role-map-node span,
+.ews-loop-role-map-node strong,
+.ews-loop-role-map-node small {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ews-loop-role-map-node span {
+  color: #0f766e;
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.ews-loop-role-map-node strong {
+  margin-top: 4px;
+  color: #0f172a;
+  font-size: 15px;
+  font-weight: 950;
+}
+
+.ews-loop-role-map-node small {
+  margin-top: 4px;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.ews-loop-role-map-arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  color: rgba(15, 118, 110, 0.78);
+  font-size: 18px;
+  font-weight: 950;
+}
+
+.ews-loop-directive {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 0.7fr) max-content;
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+  contain: layout paint;
+  padding: 12px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 0% 0%, rgba(45, 212, 191, 0.22), transparent 30%),
+    linear-gradient(135deg, rgba(15, 23, 42, 0.92), rgba(15, 118, 110, 0.84));
+  color: #f8fafc;
+  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.16);
+}
+
+.ews-loop-directive--ok {
+  background:
+    radial-gradient(circle at 0% 0%, rgba(16, 185, 129, 0.24), transparent 30%),
+    linear-gradient(135deg, rgba(6, 78, 59, 0.94), rgba(15, 118, 110, 0.86));
+}
+
+.ews-loop-directive--warn {
+  background:
+    radial-gradient(circle at 0% 0%, rgba(251, 191, 36, 0.22), transparent 30%),
+    linear-gradient(135deg, rgba(120, 53, 15, 0.94), rgba(180, 83, 9, 0.84));
+}
+
+.ews-loop-directive--bad {
+  background:
+    radial-gradient(circle at 0% 0%, rgba(248, 113, 113, 0.24), transparent 30%),
+    linear-gradient(135deg, rgba(127, 29, 29, 0.96), rgba(185, 28, 28, 0.84));
+}
+
+.ews-loop-directive-copy,
+.ews-loop-directive-meta {
+  min-width: 0;
+}
+
+.ews-loop-directive-copy span,
+.ews-loop-directive-meta span {
+  display: block;
+  color: rgba(240, 253, 250, 0.78);
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.ews-loop-directive-copy strong,
+.ews-loop-directive-meta strong {
+  display: block;
+  margin-top: 4px;
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 950;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ews-loop-directive-copy small,
+.ews-loop-directive-meta small {
+  display: block;
+  margin-top: 4px;
+  color: rgba(241, 245, 249, 0.78);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
+.ews-loop-directive-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  justify-self: end;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 32px;
+  padding: 9px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 950;
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ews-loop-directive-link:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.ews-loop-section-head {
+  display: grid;
+  grid-template-columns: minmax(0, 0.32fr) minmax(0, 0.68fr);
+  gap: 6px 10px;
+  align-items: baseline;
+  min-width: 0;
+  padding: 2px 2px 0;
+}
+
+.ews-loop-section-head span,
+.ews-loop-section-head strong,
+.ews-loop-section-head small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ews-loop-section-head span {
+  color: #0f766e;
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.ews-loop-section-head strong {
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 950;
+}
+
+.ews-loop-section-head small {
+  grid-column: 1 / -1;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 800;
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.ews-loop-section-legend {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.ews-loop-section-dot {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  padding: 3px 7px;
+  border-radius: 999px;
+  color: #475569;
+  font-size: 10px;
+  font-weight: 950;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.ews-loop-section-dot::before {
+  width: 6px;
+  height: 6px;
+  margin-right: 5px;
+  border-radius: 999px;
+  background: currentColor;
+  content: '';
+}
+
+.ews-loop-section-dot--ok {
+  background: rgba(16, 185, 129, 0.1);
+  color: #047857;
+}
+
+.ews-loop-section-dot--bad {
+  background: rgba(239, 68, 68, 0.1);
+  color: #b91c1c;
+}
+
+.ews-loop-section-dot--warn {
+  background: rgba(245, 158, 11, 0.12);
+  color: #92400e;
+}
+
+.ews-loop-surface-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+
+.ews-loop-surface-card {
+  min-width: 0;
+  overflow: hidden;
+  contain: layout paint;
+  padding: 11px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.84);
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.05);
+  isolation: isolate;
+}
+
+.ews-loop-surface-card--ok {
+  border-color: rgba(16, 185, 129, 0.22);
+  background: linear-gradient(135deg, rgba(236, 253, 245, 0.92), rgba(255, 255, 255, 0.84));
+}
+
+.ews-loop-surface-card--warn {
+  border-color: rgba(245, 158, 11, 0.24);
+  background: linear-gradient(135deg, rgba(255, 251, 235, 0.96), rgba(255, 255, 255, 0.84));
+}
+
+.ews-loop-surface-card--bad {
+  border-color: rgba(239, 68, 68, 0.24);
+  background: linear-gradient(135deg, rgba(254, 242, 242, 0.98), rgba(255, 255, 255, 0.84));
+}
+
+.ews-loop-surface-card span,
+.ews-loop-surface-card strong,
+.ews-loop-surface-card small,
+.ews-loop-surface-card em {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ews-loop-surface-card span {
+  color: #0f766e;
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.ews-loop-surface-card strong {
+  margin-top: 4px;
+  color: #0f172a;
+  font-size: 16px;
+  font-weight: 950;
+}
+
+.ews-loop-surface-card small,
+.ews-loop-surface-card em {
+  margin-top: 4px;
+  color: #64748b;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.ews-loop-surface-card a,
+.ews-loop-surface-wait {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  max-width: 100%;
+  min-height: 28px;
+  margin-top: 8px;
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: rgba(15, 118, 110, 0.1);
+  color: #0f766e;
+  font-size: 11px;
+  font-weight: 950;
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ews-loop-surface-card a:hover {
+  background: rgba(15, 118, 110, 0.16);
+}
+
+.ews-loop-surface-route-note {
+  color: #94a3b8;
+}
+
+.ews-loop-surface-source-note {
+  color: #94a3b8;
+  font-size: 10px;
+}
+
+.ews-loop-surface-wait {
+  background: rgba(100, 116, 139, 0.1);
+  color: #64748b;
+  cursor: default;
+}
+
+.ews-loop-surface-card a:focus-visible,
+.ews-loop-directive-link:focus-visible,
+.ews-loop-truth-card a:focus-visible,
+.ews-loop-incident a:focus-visible {
+  outline: 2px solid rgba(14, 165, 233, 0.72);
+  outline-offset: 2px;
+}
+
+.ews-loop-directive-copy small,
+.ews-loop-surface-card em {
+  display: -webkit-box;
+  overflow: hidden;
+  white-space: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+@media (max-width: 1180px) {
+  .ews-loop-cockpit {
+    grid-template-columns: 1fr;
+  }
+
+  .ews-loop-cockpit-copy p {
+    max-width: none;
+  }
+
+  .ews-loop-role-map {
+    grid-template-columns: 1fr;
+  }
+
+  .ews-loop-role-map-arrow {
+    min-height: 18px;
+    transform: rotate(90deg);
+  }
+
+  .ews-loop-directive {
+    grid-template-columns: 1fr;
+  }
+
+  .ews-loop-directive-link {
+    justify-self: start;
+  }
+
+  .ews-loop-section-head {
+    grid-template-columns: 1fr;
+  }
+
+  .ews-loop-surface-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .ews-loop-truth-card--primary {
+    grid-column: auto;
+  }
+
+  .ews-loop-freshness-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 .ews-loop-truth-strip {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(var(--loop-compact-card-min), 1fr));
   gap: 8px;
+  min-width: 0;
 }
 
 .ews-loop-truth-card {
   min-width: 0;
+  overflow: hidden;
+  contain: layout paint;
   padding: 9px 10px;
   border: 1px solid rgba(15, 23, 42, 0.08);
   border-radius: 13px;
@@ -2712,7 +3291,11 @@ const selectedDeskLoopState = computed(() =>
 
 .ews-loop-truth-card a {
   display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: fit-content;
+  max-width: 100%;
+  min-height: 28px;
   margin-top: 7px;
   padding: 5px 8px;
   border-radius: 999px;
@@ -2721,6 +3304,9 @@ const selectedDeskLoopState = computed(() =>
   font-size: 11px;
   font-weight: 950;
   text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .ews-loop-truth-card--run {
@@ -2751,12 +3337,15 @@ const selectedDeskLoopState = computed(() =>
 
 .ews-loop-incident-list {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(var(--loop-detail-card-min), 1fr));
   gap: 8px;
+  min-width: 0;
 }
 
 .ews-loop-incident {
   min-width: 0;
+  overflow: hidden;
+  contain: layout paint;
   padding: 10px;
   border: 1px solid rgba(239, 68, 68, 0.2);
   border-radius: 14px;
@@ -2809,7 +3398,11 @@ const selectedDeskLoopState = computed(() =>
 
 .ews-loop-incident a {
   display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: fit-content;
+  max-width: 100%;
+  min-height: 28px;
   margin-top: 7px;
   padding: 5px 8px;
   border-radius: 999px;
@@ -2818,16 +3411,22 @@ const selectedDeskLoopState = computed(() =>
   font-size: 11px;
   font-weight: 950;
   text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .ews-loop-freshness-strip {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(var(--loop-compact-card-min), 1fr));
+  min-width: 0;
   gap: 8px;
 }
 
 .ews-loop-freshness-card {
   min-width: 0;
+  overflow: hidden;
+  contain: layout paint;
   padding: 9px 10px;
   border: 1px solid rgba(15, 23, 42, 0.08);
   border-radius: 13px;

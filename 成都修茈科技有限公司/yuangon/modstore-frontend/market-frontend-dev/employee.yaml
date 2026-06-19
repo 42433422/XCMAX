@@ -25,6 +25,8 @@ scope_globs:
   - MODstore_deploy/market/env.d.ts
   - MODstore_deploy/market/eslint.config.js
   - MODstore_deploy/market/package-lock.json
+  - MODstore_deploy/market/public/**
+  - MODstore_deploy/market/vite.corp-butler.config.ts
 
 forbidden_globs:
   - MODstore_deploy/market/src/views/workbench/**     # 归 workbench-ux-stylist
@@ -51,13 +53,23 @@ sla:
 llm_default: "auto"
 llm_reasoning: "auto"
 
+capabilities:
+  - vue.view.update
+  - api.ts.sync
+
 skills:
   - skills/skill-vue-view-update.md
   - skills/skill-api-ts-sync.md
 
+actions:
+  handlers: ["agent"]
+  agent:
+    workspace:
+      read_only: false
+      requires_project_root: true
+
 depends_on:
   - modstore-backend-api   # 接口变更时同步 api.ts
-  - workbench-ux-stylist   # 工作台视图边界对齐
 
 # 技术栈约束（参见 .cursor/rules/vue-only-frontend.mdc）
 tech_stack:
@@ -67,6 +79,13 @@ tech_stack:
   flow: "Vue Flow"
   forbidden: ["react", "react-dom", "@types/react"]
   forbidden_extensions: [".jsx", ".tsx"]
+
+examples:
+  - title: "市场前端开发员岗位验收"
+    description: "以最小、无副作用输入验证岗位输出包含真实证据、风险与下一步。"
+    input:
+      task: "执行一次市场前端开发员职责范围内的只读检查，并返回证据、风险和下一步。"
+      dry_run: true
 
 changelog:
   - version: "1.0.1"

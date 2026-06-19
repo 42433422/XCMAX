@@ -50,6 +50,10 @@ sla:
 llm_default: "auto"
 llm_reasoning: "auto"
 
+capabilities:
+  - push.update.context
+  - yuangon.resync
+
 skills:
   - skills/skill-push-update-context.md
   - skills/skill-yuangon-resync.md
@@ -63,6 +67,13 @@ actions:
 
 depends_on:
   - deploy-release-officer
+
+examples:
+  - title: "推送更新员工岗位验收"
+    description: "以最小、无副作用输入验证岗位输出包含真实证据、风险与下一步。"
+    input:
+      task: "执行一次推送更新员工职责范围内的只读检查，并返回证据、风险和下一步。"
+      dry_run: true
 
 changelog:
   - version: "1.0.1"

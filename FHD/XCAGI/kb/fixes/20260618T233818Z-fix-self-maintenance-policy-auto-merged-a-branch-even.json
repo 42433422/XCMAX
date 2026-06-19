@@ -1,0 +1,12 @@
+{
+  "created_at": "2026-06-18T23:38:18.876048+00:00",
+  "fix_diff": "Added HIGH_RISK_REPORT_RE for standalone FAIL/QA: FAIL lines and added high-risk terms for do not merge, blocking QA findings, and recommendation: do not merge. Added regression test_high_risk_report_detects_standalone_qa_fail so QA FAIL cannot pass auto-merge policy.",
+  "kind": "fix",
+  "metadata": {
+    "component": "self_maintenance_loop_runner",
+    "run_id": "84c3aaf5-d3ff-420f-a31b-4680451cebbd"
+  },
+  "root_cause": "High-risk report parser only matched phrases such as result: fail and did not detect standalone FAIL lines, blocking QA findings, or recommendation: do not merge.",
+  "schema_version": 1,
+  "symptom": "Self-maintenance policy auto-merged a branch even though report-only QA output began with FAIL and recommended not to merge."
+}

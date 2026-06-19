@@ -460,16 +460,22 @@ class ModstorePlatformAdapter:
 
             result = response.json()
 
-            # 性能监控
+            # 性能监控（解析真实 token 用量，之前硬编码 token_count=0）
             try:
                 from app.neuro_bus.application_neuro_bridge import (
                     neuro_notify_ai_model_roundtrip,
                 )
 
+                raw_usage = result.get("usage") if isinstance(result.get("usage"), dict) else {}
+                raw_total = 0
+                try:
+                    raw_total = int(raw_usage.get("total_tokens") or 0)
+                except (TypeError, ValueError):
+                    raw_total = 0
                 neuro_notify_ai_model_roundtrip(
                     model=f"modstore:{effective_provider}/{effective_model}",
                     latency_ms=latency_ms,
-                    token_count=0,
+                    token_count=raw_total,
                     user_id=str(self.user_id or ""),
                 )
             except RECOVERABLE_ERRORS:
@@ -594,10 +600,16 @@ class ModstorePlatformAdapter:
         try:
             from app.neuro_bus.application_neuro_bridge import neuro_notify_ai_model_roundtrip
 
+            raw_usage = result.get("usage") if isinstance(result.get("usage"), dict) else {}
+            raw_total = 0
+            try:
+                raw_total = int(raw_usage.get("total_tokens") or 0)
+            except (TypeError, ValueError):
+                raw_total = 0
             neuro_notify_ai_model_roundtrip(
                 model=f"modstore:{effective_provider}/{effective_model}",
                 latency_ms=latency_ms,
-                token_count=0,
+                token_count=raw_total,
                 user_id=str(self.user_id or ""),
             )
         except RECOVERABLE_ERRORS:

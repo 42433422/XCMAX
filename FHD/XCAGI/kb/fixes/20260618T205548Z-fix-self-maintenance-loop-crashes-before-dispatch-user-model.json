@@ -1,0 +1,15 @@
+{
+  "created_at": "2026-06-18T20:55:48.619988+00:00",
+  "fix_diff": "diff --git a/self_maintenance_loop_runner.py b/self_maintenance_loop_runner.py\n-query = db.query(User).filter(User.is_active == True)\n+query = db.query(User)\n+if hasattr(User, \"is_active\"):\n+    query = query.filter(User.is_active == True)\n+try query.first(); except Exception: return 0\n",
+  "kind": "fix",
+  "metadata": {
+    "files": [
+      "self_maintenance_loop_runner.py",
+      "test_self_maintenance_loop_runner_policy.py"
+    ],
+    "source": "codex_direct_fix"
+  },
+  "root_cause": "_first_user_id assumed every runtime User model has is_active and every DB already has a users table; migrated/runtime-lite databases can lack either.",
+  "schema_version": 1,
+  "symptom": "self-maintenance loop crashes before dispatch: User model has no is_active or users table is missing"
+}

@@ -939,6 +939,31 @@ class TestGetSkillRegistry:
 
 
 class TestDecideProcessorWithPolicy:
+    """policy_router 的 _load_canary_state() 有模块级缓存 _canary_cache（30s TTL）。
+    全量套件中前序测试调用后缓存了旧值，patch.dict(os.environ) 无法影响缓存读取，
+    导致期望 result is not None 的测试失败。此 fixture 在每个测试前重置缓存。
+
+    注意：--import-mode=importlib 下，decide_processor_with_policy.__globals__
+    可能与 sys.modules 中的模块 __dict__ 不是同一对象，需同时重置两者。
+    """
+
+    @pytest.fixture(autouse=True)
+    def _reset_canary_cache(self):
+        from app.neuro_bus.routing import policy_router as _pr
+        # 重置 sys.modules 中模块的缓存
+        _pr._canary_cache = None
+        _pr._canary_cache_ts = 0.0
+        # 重置 decide_processor_with_policy 实际引用的模块字典中的缓存
+        # （--import-mode=importlib 可能导致两者不一致）
+        _g = decide_processor_with_policy.__globals__
+        _g["_canary_cache"] = None
+        _g["_canary_cache_ts"] = 0.0
+        yield
+        _pr._canary_cache = None
+        _pr._canary_cache_ts = 0.0
+        _g["_canary_cache"] = None
+        _g["_canary_cache_ts"] = 0.0
+
     def test_disabled_by_default(self):
         with patch.dict(os.environ, {}, clear=True):
             result = decide_processor_with_policy("hello")

@@ -167,7 +167,8 @@ async def _dispatch_run(mod_id: str, emp_id: str, stem: str, payload: Optional[D
         skip = {'.git', 'node_modules', '__pycache__', '.venv', 'venv', 'dist', 'build'}
         entries = []
         for name in sorted(os.listdir(r))[:50]:
-            if name in skip: continue
+            if name in skip:
+                continue
             full = os.path.join(r, name)
             entries.append({'name': name, 'type': 'dir' if os.path.isdir(full) else 'file',
                             'size': 0 if os.path.isdir(full) else os.path.getsize(full)})
@@ -200,7 +201,7 @@ async def _dispatch_run(mod_id: str, emp_id: str, stem: str, payload: Optional[D
         ctx['agent_runner'] = None
 
     try:
-        run_fn = getattr(module, 'run')
+        run_fn = module.run
         out = run_fn(payload or {}, ctx)
         if asyncio.iscoroutine(out):
             out = await out

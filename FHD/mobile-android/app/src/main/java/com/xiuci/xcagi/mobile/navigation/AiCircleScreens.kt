@@ -77,6 +77,7 @@ internal data class AiEmployeeProfile(
     val marketMaterialCategory: String,
     val marketLicenseScope: String,
     val marketSecurityLevel: String,
+    val avatarUrl: String? = null,
 ) {
     val key: String = "$modId:$employeeId"
     val avatarText: String = name.firstOrNull()?.toString() ?: "AI"
@@ -123,10 +124,12 @@ internal fun List<ModInfo>.aiEmployeeProfiles(): List<AiEmployeeProfile> =
                     marketMaterialCategory = employee.market_material_category,
                     marketLicenseScope = employee.market_license_scope,
                     marketSecurityLevel = employee.market_security_level,
+                    avatarUrl = employee.market_avatar?.takeIf { it.isNotBlank() }
+                        ?: mod.avatar_url?.takeIf { it.isNotBlank() },
                 )
             }
         }
-    }
+    }.distinctBy { it.key } // 防止后端返回重复 employee 导致 key 冲突
 
 private fun WorkflowEmployeeInfo.displayName(): String =
     label.ifBlank { panel_title }.ifBlank { id }
@@ -145,14 +148,15 @@ private fun AiEmployeeProfile.abilityLabels(): List<String> {
     return labels.take(4)
 }
 
-@Composable
+/** 员工头像颜色（与列表页/对话页统一，硬编码保证一致性，非 Composable 可在任意位置调用） */
 internal fun aiEmployeeAvatarColor(key: String): Color {
     val colors = listOf(
-        XcagiTheme.extra.brandBlue,
-        XcagiTheme.extra.success,
-        XcagiTheme.extra.warning,
-        MaterialTheme.colorScheme.secondary,
-        MaterialTheme.colorScheme.tertiary,
+        Color(0xFF3370FF),
+        Color(0xFF00B578),
+        Color(0xFF8B5CF6),
+        Color(0xFF00ACC1),
+        Color(0xFFED7B2F),
+        Color(0xFF494E56),
     )
     return colors[Math.floorMod(key.hashCode(), colors.size)]
 }

@@ -27,10 +27,20 @@ actions:
   handlers:
   - llm_md
   - echo
+capabilities:
+  - code.validation
+
 skills:
 - skills/skill-code-validation.md
 depends_on:
 - sandbox-tester
+examples:
+  - title: "代码校验员工岗位验收"
+    description: "以最小、无副作用输入验证岗位输出包含真实证据、风险与下一步。"
+    input:
+      task: "执行一次代码校验员工职责范围内的只读检查，并返回证据、风险和下一步。"
+      dry_run: true
+
 changelog:
 - version: 1.0.0
   date: '2026-05-18'

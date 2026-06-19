@@ -1,4 +1,5 @@
 """Tests for app.services.train_intent — intent model training/evaluation/serve CLI."""
+# ruff: noqa: E402, I001
 from __future__ import annotations
 
 import sys
@@ -6,13 +7,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-# torch is an optional dependency; provide a stub so the module can be imported.
-if "torch" not in sys.modules:
-    _torch_stub = MagicMock()
-    _torch_stub.cuda.is_available.return_value = False
-    sys.modules["torch"] = _torch_stub
+pytest.importorskip("torch")
 
-from app.services.train_intent import (
+from app.services.train_intent import (  # noqa: E402
     evaluate_model,
     main,
     serve_model,

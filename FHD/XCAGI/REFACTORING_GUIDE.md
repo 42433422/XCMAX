@@ -28,7 +28,7 @@
 | 维度 | 当前状态 | 目标状态 |
 |------|---------|---------|
 | 路由模块 | 单文件 >500 行 | 模块化，单文件 <200 行 |
-| 测试覆盖率 | ~30% | HEAD **52.74%** / WIP **74.56%**（`metrics/coverage-dual-summary.json`） | >= 80% |
+| 测试覆盖率 | ~30% | HEAD **85.07%** / WIP **74.56%**（`metrics/coverage-dual-summary.json`） | >= 80% |
 | 框架 | Flask + FastAPI | 纯 FastAPI |
 | 文档 | 部分缺失 | 完整体系 |
 

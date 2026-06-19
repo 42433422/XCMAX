@@ -1,0 +1,14 @@
+{
+  "created_at": "2026-06-18T21:28:29.472762+00:00",
+  "fix_diff": "diff --git a/devfleet.db b/devfleet.db\n+update tool_statuses\n+set current_task=NULL, status='idle'\n+where device_id='48acf8c9-3549-442d-8838-0849ee2dc50d' and tool_name='codex';\n",
+  "kind": "fix",
+  "metadata": {
+    "files": [
+      "DevFleet sqlite tool_statuses"
+    ],
+    "source": "codex_direct_fix"
+  },
+  "root_cause": "Manual/stale task failure updated sub_tasks/tasks but did not clear tool_statuses.current_task for codex.",
+  "schema_version": 1,
+  "symptom": "Device shows codex idle but currentTask still points to failed stale task, blocking new dispatch visibility"
+}

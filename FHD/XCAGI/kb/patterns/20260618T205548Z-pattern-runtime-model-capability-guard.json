@@ -1,0 +1,12 @@
+{
+  "after": "Feature-detect optional model columns and fail closed on missing runtime tables.",
+  "before": "Assume ORM model columns and tables always exist in every runtime database.",
+  "created_at": "2026-06-18T20:55:48.620970+00:00",
+  "kind": "code_pattern",
+  "metadata": {
+    "fix_path": "/Users/a4243342/Desktop/XCMAX/FHD/XCAGI/kb/fixes/20260618T205548Z-fix-self-maintenance-loop-crashes-before-dispatch-user-model.json"
+  },
+  "pattern": "runtime_model_capability_guard",
+  "schema_version": 1,
+  "summary": "Long-running maintenance controllers must tolerate older SQLite/runtime schemas before dispatching employees."
+}

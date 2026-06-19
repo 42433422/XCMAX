@@ -27,7 +27,6 @@ from app.application.agent_orchestrator.chat_trace import (
     finalize_legacy_chat_run,
     start_legacy_chat_run,
 )
-from app.application.workflow.legacy_chat_adapter import chat_stream_sse_events
 from app.domain.ai.tier import runtime_context_with_tier
 from app.domain.context.session_context import (
     planner_workflow_interrupt_reply,
@@ -35,6 +34,7 @@ from app.domain.context.session_context import (
 )
 from app.infrastructure.auth.db_token import effective_db_read_token
 from app.infrastructure.llm.client import set_mode as set_llm_mode
+from app.legacy.chat.legacy_chat_adapter import chat_stream_sse_events
 from app.services.conversation.modstore_adapter import create_modstore_openai_client_from_request
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -267,7 +267,7 @@ def _xcagi_compat_reply_payload(
             raw.setdefault("tool_params", dict(last_record.get("params") or {}))
             raw["_tool_records"] = reply_records
         else:
-            from app.application.workflow.legacy_chat_adapter import get_last_tool_result
+            from app.legacy.chat.legacy_chat_adapter import get_last_tool_result
 
             raw = get_last_tool_result()
         if isinstance(raw, dict) and raw:

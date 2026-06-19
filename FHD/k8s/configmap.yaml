@@ -18,6 +18,11 @@ data:
   XCAGI_NEURO_BUS_SLA_LOG: "1"
   # SLA 采集
   XCAGI_NEURO_BUS_SLA_COLLECT: "1"
+  # NN 路由策略：影子模式（记录 NN 决策但不实际路由，回退规则路由）
+  # 切换灰度：改为 "1" + XCAGI_ROUTING_POLICY_CANARY_RATIO="0.1"
+  # 全量接管：改为 "1" + XCAGI_ROUTING_POLICY_CANARY_RATIO="1.0"
+  XCAGI_ROUTING_POLICY_ENABLED: "shadow"
+  XCAGI_ROUTING_POLICY_CANARY_RATIO: "0.0"
   # Redis transport（staging 用 streams 灰度）
   XCAGI_NEURO_BUS_REDIS_TRANSPORT: "streams"
   # OTel exporter

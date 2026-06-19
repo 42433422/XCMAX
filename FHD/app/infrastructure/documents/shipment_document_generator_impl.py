@@ -23,11 +23,11 @@ from app.application.ports.shipment_document_generator import ShipmentDocumentGe
 from app.db.models import Product
 from app.db.session import get_db
 from app.domain.shipment.shipment_product_parser import prepare_parsed_products
-from app.infrastructure.documents.legacy_shipment_document import (
-    load_legacy_shipment_document_generator,
-)
 from app.infrastructure.lookups.purchase_unit_resolver import (
     resolve_purchase_unit,
+)
+from app.legacy.documents.legacy_shipment_document import (
+    load_legacy_shipment_document_generator,
 )
 from app.utils.path_utils import get_app_data_dir, get_base_dir, get_resource_path
 

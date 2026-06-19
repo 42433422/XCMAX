@@ -296,6 +296,24 @@ class TestCallOpenAICompatibleChat:
 class TestModEmployeeComplete:
     """``mod_employee_complete`` 顶层入口。"""
 
+    @pytest.fixture(autouse=True)
+    def _isolate_llm_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """隔离 LLM 环境变量，防止 .env 中的 key 污染 default path 测试。
+
+        default path 系列测试期望 ``_resolve_provider_override`` 返回
+        ``use_direct=False``，但若 .env 配了 OPENAI_API_KEY/DEEPSEEK_API_KEY，
+        会走直连路径导致 mock 不生效。autouse fixture 先清空所有 LLM key，
+        测试体内再按需 setenv。
+        """
+        for _key in (
+            "XCAGI_LLM_PROVIDER", "LLM_PROVIDER",
+            "XCAUTO_API_KEY", "XCAUTO_PAT", "XIUCI_API_KEY",
+            "OPENAI_API_KEY", "OPENAI_BASE_URL", "OPENAI_MODEL",
+            "DEEPSEEK_API_KEY", "DEEPSEEK_BASE_URL", "DEEPSEEK_MODEL",
+            "XCAGI_EMPLOYEE_LLM_MODEL",
+        ):
+            monkeypatch.delenv(_key, raising=False)
+
     @pytest.mark.asyncio
     async def test_empty_messages_returns_error(
         self, monkeypatch: pytest.MonkeyPatch

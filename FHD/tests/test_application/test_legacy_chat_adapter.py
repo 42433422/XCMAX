@@ -1,4 +1,4 @@
-"""Tests for app.application.workflow.legacy_chat_adapter."""
+"""Tests for app.legacy.chat.legacy_chat_adapter."""
 from __future__ import annotations
 
 import json
@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.application.workflow.legacy_chat_adapter import (
+from app.legacy.chat.legacy_chat_adapter import (
     _parse_generate_office_format,
     _planner_tools_max_workers,
     _post_tool_round_hint,
@@ -112,7 +112,7 @@ class TestResolveChatModelForClient:
         client.default_model = ""
         client.default_provider = "prov"
         with patch(
-            "app.application.workflow.legacy_chat_adapter.resolve_chat_model",
+            "app.legacy.chat.legacy_chat_adapter.resolve_chat_model",
             return_value="fallback-model",
         ):
             assert _resolve_chat_model_for_client(client, None) == "fallback-model"
@@ -121,14 +121,14 @@ class TestResolveChatModelForClient:
         client = MagicMock()
         client.is_modstore_openai_compatible = False
         with patch(
-            "app.application.workflow.legacy_chat_adapter.resolve_chat_model",
+            "app.legacy.chat.legacy_chat_adapter.resolve_chat_model",
             return_value="fallback-model",
         ):
             assert _resolve_chat_model_for_client(client, None) == "fallback-model"
 
     def test_none_client_falls_back(self):
         with patch(
-            "app.application.workflow.legacy_chat_adapter.resolve_chat_model",
+            "app.legacy.chat.legacy_chat_adapter.resolve_chat_model",
             return_value="fallback-model",
         ):
             assert _resolve_chat_model_for_client(None, None) == "fallback-model"
@@ -290,7 +290,7 @@ class TestPlannerToolsMaxWorkers:
 # ---------------------------------------------------------------------------
 class TestResetPlannerToolDedupState:
     def test_clears_dedup_set(self):
-        from app.application.workflow.legacy_chat_adapter import _TOOL_DEDUP
+        from app.legacy.chat.legacy_chat_adapter import _TOOL_DEDUP
 
         _TOOL_DEDUP.add("test_key")
         reset_planner_tool_dedup_state()
@@ -389,7 +389,7 @@ class TestAppendToolMessages:
         tcs = [_Tc("tc1", "excel_analysis", '{"query":"test"}')]
         messages: list = []
         with patch(
-            "app.application.workflow.legacy_chat_adapter.enrich_excel_tool_arguments",
+            "app.legacy.chat.legacy_chat_adapter.enrich_excel_tool_arguments",
             return_value={"query": "enriched"},
         ) as mock_enrich:
             append_tool_messages(
@@ -429,7 +429,7 @@ class TestChat:
         mock_client.is_modstore_openai_compatible = False
 
         with patch(
-            "app.application.workflow.legacy_chat_adapter._get_workflow_tool_registry",
+            "app.legacy.chat.legacy_chat_adapter._get_workflow_tool_registry",
             return_value=[],
         ):
             result = chat("hi", client=mock_client, model="test-model")
@@ -464,11 +464,11 @@ class TestChat:
 
         with (
             patch(
-                "app.application.workflow.legacy_chat_adapter._get_workflow_tool_registry",
+                "app.legacy.chat.legacy_chat_adapter._get_workflow_tool_registry",
                 return_value=[{"type": "function"}],
             ),
             patch(
-                "app.application.workflow.legacy_chat_adapter._resolve_chat_execute_tool",
+                "app.legacy.chat.legacy_chat_adapter._resolve_chat_execute_tool",
                 return_value=execute_tool,
             ),
         ):
@@ -496,11 +496,11 @@ class TestChat:
 
         with (
             patch(
-                "app.application.workflow.legacy_chat_adapter._get_workflow_tool_registry",
+                "app.legacy.chat.legacy_chat_adapter._get_workflow_tool_registry",
                 return_value=[{"type": "function"}],
             ),
             patch(
-                "app.application.workflow.legacy_chat_adapter._resolve_chat_execute_tool",
+                "app.legacy.chat.legacy_chat_adapter._resolve_chat_execute_tool",
                 return_value=execute_tool,
             ),
         ):
@@ -527,11 +527,11 @@ class TestChat:
 
         with (
             patch(
-                "app.application.workflow.legacy_chat_adapter._get_workflow_tool_registry",
+                "app.legacy.chat.legacy_chat_adapter._get_workflow_tool_registry",
                 return_value=[{"type": "function"}],
             ),
             patch(
-                "app.application.workflow.legacy_chat_adapter._resolve_chat_execute_tool",
+                "app.legacy.chat.legacy_chat_adapter._resolve_chat_execute_tool",
                 return_value=execute_tool,
             ),
         ):
@@ -564,7 +564,7 @@ class TestChatStreamText:
         mock_client.is_modstore_openai_compatible = False
 
         with patch(
-            "app.application.workflow.legacy_chat_adapter._get_workflow_tool_registry",
+            "app.legacy.chat.legacy_chat_adapter._get_workflow_tool_registry",
             return_value=[],
         ):
             parts = list(chat_stream_text("hi", client=mock_client, model="test-model"))
@@ -594,11 +594,11 @@ class TestChatStreamText:
 
         with (
             patch(
-                "app.application.workflow.legacy_chat_adapter._get_workflow_tool_registry",
+                "app.legacy.chat.legacy_chat_adapter._get_workflow_tool_registry",
                 return_value=[{"type": "function"}],
             ),
             patch(
-                "app.application.workflow.legacy_chat_adapter._resolve_chat_execute_tool",
+                "app.legacy.chat.legacy_chat_adapter._resolve_chat_execute_tool",
                 return_value=execute_tool,
             ),
         ):
@@ -631,11 +631,11 @@ class TestChatStreamText:
 
         with (
             patch(
-                "app.application.workflow.legacy_chat_adapter._get_workflow_tool_registry",
+                "app.legacy.chat.legacy_chat_adapter._get_workflow_tool_registry",
                 return_value=[{"type": "function"}],
             ),
             patch(
-                "app.application.workflow.legacy_chat_adapter._resolve_chat_execute_tool",
+                "app.legacy.chat.legacy_chat_adapter._resolve_chat_execute_tool",
                 return_value=execute_tool,
             ),
         ):
@@ -662,7 +662,7 @@ class TestChatStreamSseEvents:
         mock_client.is_modstore_openai_compatible = False
 
         with patch(
-            "app.application.workflow.legacy_chat_adapter._get_workflow_tool_registry",
+            "app.legacy.chat.legacy_chat_adapter._get_workflow_tool_registry",
             return_value=[],
         ):
             events = list(
@@ -697,11 +697,11 @@ class TestChatStreamSseEvents:
 
         with (
             patch(
-                "app.application.workflow.legacy_chat_adapter._get_workflow_tool_registry",
+                "app.legacy.chat.legacy_chat_adapter._get_workflow_tool_registry",
                 return_value=[{"type": "function"}],
             ),
             patch(
-                "app.application.workflow.legacy_chat_adapter._resolve_chat_execute_tool",
+                "app.legacy.chat.legacy_chat_adapter._resolve_chat_execute_tool",
                 return_value=execute_tool,
             ),
         ):

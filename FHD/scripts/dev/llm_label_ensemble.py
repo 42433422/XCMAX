@@ -1,26 +1,25 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""LLM 交叉评审标注：3 模型盲标 + 一致性分级。
+"""LLM 交叉评审标注：4 模型盲标 + 一致性分级。
 
-读取 ``routing_decisions.jsonl``（或指定输入文件），对每条样本用 3 个 LLM
-（DeepSeek-V3 / GPT-4o / Qwen-Max）独立标注，输出 ``labeled_data.jsonl``。
+读取 ``routing_decisions.jsonl``（或指定输入文件），对每条样本用 4 个 LLM
+（MiniMax-M3 / GLM-5.2 / Kimi-K2.5 / GPT-5.5）独立标注，输出 ``labeled_data.jsonl``。
 
-一致性分级：
-- 3/3 一致 → ``gold``
-- 2/3 一致 → ``silver``（多数派标签作为 ``label``）
-- 全不一致 → ``disputed``（``label`` 留空，交由仲裁脚本处理）
+所有模型通过 B.AI 网关（https://api.b.ai/v1）调用，OpenAI 兼容格式。
+
+一致性分级（4 模型）：
+- 4/4 一致 → ``gold``
+- 3/4 一致 → ``silver``（多数派标签作为 ``label``）
+- 2/4 或更低 → ``disputed``（``label`` 留空，交由仲裁脚本处理）
 
 每个模型输出::
 
     {"processor": "reflex|subconscious|conscious", "reason": "...", "confidence": 0.0-1.0}
 
 API key 通过环境变量配置：
-- ``DEEPSEEK_API_KEY``  → DeepSeek-V3
-- ``OPENAI_API_KEY``    → GPT-4o
-- ``DASHSCOPE_API_KEY`` → Qwen-Max
+- ``BAI_API_KEY`` → B.AI 网关密钥（所有模型共用）
 
-未配置 key 的模型会被跳过并记录 warning。当所有模型都不可用时，样本仍写入
-输出文件，但 ``labels`` 中对应模型字段为 ``null``，``consensus`` 为 ``disputed``。
+未配置 key 时所有模型跳过，样本仍写入输出文件但 labels 全为 null。
 
 用法::
 
@@ -58,26 +57,34 @@ PROCESSOR_TO_IDX = {"reflex": 0, "subconscious": 1, "conscious": 2}
 logger = logging.getLogger("llm_label_ensemble")
 
 # --------------------------------------------------------------------------- #
-# 模型配置
+# 模型配置（B.AI 网关，OpenAI 兼容，共用 BAI_API_KEY）
 # --------------------------------------------------------------------------- #
+BAI_BASE_URL = "https://api.b.ai/v1/chat/completions"
+
 MODEL_CONFIGS: dict[str, dict[str, str]] = {
-    "deepseek": {
-        "env_key": "DEEPSEEK_API_KEY",
-        "base_url": "https://api.deepseek.com/v1/chat/completions",
-        "model": "deepseek-chat",
-        "display": "DeepSeek-V3",
+    "minimax": {
+        "env_key": "BAI_API_KEY",
+        "base_url": BAI_BASE_URL,
+        "model": "minimax-m3",
+        "display": "MiniMax-M3",
     },
-    "openai": {
-        "env_key": "OPENAI_API_KEY",
-        "base_url": "https://api.openai.com/v1/chat/completions",
-        "model": "gpt-4o",
-        "display": "GPT-4o",
+    "glm": {
+        "env_key": "BAI_API_KEY",
+        "base_url": BAI_BASE_URL,
+        "model": "glm-5.2",
+        "display": "GLM-5.2",
     },
-    "qwen": {
-        "env_key": "DASHSCOPE_API_KEY",
-        "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
-        "model": "qwen-max",
-        "display": "Qwen-Max",
+    "kimi": {
+        "env_key": "BAI_API_KEY",
+        "base_url": BAI_BASE_URL,
+        "model": "gpt-5.4",
+        "display": "GPT-5.4",
+    },
+    "gpt": {
+        "env_key": "BAI_API_KEY",
+        "base_url": BAI_BASE_URL,
+        "model": "gpt-5.5",
+        "display": "GPT-5.5",
     },
 }
 
@@ -88,7 +95,7 @@ def _api_key(provider: str) -> str:
 
 def _available_providers() -> list[str]:
     avail: list[str] = []
-    for name in ("deepseek", "openai", "qwen"):
+    for name in ("minimax", "glm", "kimi", "gpt"):
         if _api_key(name):
             avail.append(name)
         else:
@@ -184,8 +191,11 @@ async def _call_model(
         "model": cfg["model"],
         "messages": _build_messages(features, row),
         "temperature": 0.0,
-        "max_tokens": 200,
+        "max_tokens": 2000,  # minimax-m3 推理需要大量 token
     }
+    # minimax-m3 支持分离推理内容，避免 <think> 耗尽 max_tokens
+    if provider == "minimax":
+        payload["reasoning_split"] = True
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
@@ -196,6 +206,19 @@ async def _call_model(
         )
         resp.raise_for_status()
         data = resp.json()
+    except (httpx.ConnectError, httpx.ReadError, httpx.ReadTimeout, httpx.RemoteProtocolError) as e:
+        # 网络瞬时错误：重试 1 次（minimax-m3 偶发断连）
+        logger.warning("模型 %s 网络错误，重试：%s", cfg["display"], e)
+        try:
+            await asyncio.sleep(1.0)
+            resp = await client.post(
+                cfg["base_url"], json=payload, headers=headers, timeout=timeout
+            )
+            resp.raise_for_status()
+            data = resp.json()
+        except Exception as e2:  # noqa: BLE001
+            logger.warning("模型 %s 重试仍失败：%s", cfg["display"], e2)
+            return None
     except Exception as e:  # noqa: BLE001
         logger.warning("模型 %s 调用失败：%s", cfg["display"], e)
         return None
@@ -209,10 +232,15 @@ async def _call_model(
 
 
 def _parse_model_output(content: str, provider: str) -> dict[str, Any] | None:
-    """从 LLM 文本中抽取 JSON。容忍前后多余文字与 ```json 代码块。"""
+    """从 LLM 文本中抽取 JSON。容忍 <think> 标签、前后多余文字、```json 代码块。"""
     text = (content or "").strip()
     if not text:
         return None
+    # 去除 minimax-m3 等模型的 <think>...</think> 推理标签
+    if "<think>" in text and "</think>" in text:
+        think_start = text.find("<think>")
+        think_end = text.find("</think>") + len("</think>")
+        text = (text[:think_start] + text[think_end:]).strip()
     # 去除 markdown 代码块
     if text.startswith("```"):
         text = text.strip("`")
@@ -254,7 +282,13 @@ def _parse_model_output(content: str, provider: str) -> dict[str, Any] | None:
 # 一致性分级
 # --------------------------------------------------------------------------- #
 def _grade_consensus(labels: dict[str, dict[str, Any] | None]) -> tuple[str, str]:
-    """返回 (consensus, label)。label 为多数派 processor 或空串。"""
+    """返回 (consensus, label)。label 为多数派 processor 或空串。
+
+    4 模型分级：
+    - 4/4 一致 → gold
+    - 3/4 一致 → silver
+    - 2/4 或更低 → disputed
+    """
     valid = [v for v in labels.values() if v is not None]
     if not valid:
         return "disputed", ""
@@ -262,12 +296,11 @@ def _grade_consensus(labels: dict[str, dict[str, Any] | None]) -> tuple[str, str
     for v in valid:
         counts[v["processor"]] = counts.get(v["processor"], 0) + 1
     max_count = max(counts.values())
-    if max_count == 3:
-        return "gold", next(iter(counts.keys()))
-    if max_count == 2:
-        # 多数派
-        label = next(p for p, c in counts.items() if c == 2)
-        return "silver", label
+    total_valid = len(valid)
+    # 4/4 或 3/4 一致
+    if max_count >= 3:
+        label = next(p for p, c in counts.items() if c == max_count)
+        return ("gold" if max_count == total_valid else "silver"), label
     return "disputed", ""
 
 
@@ -283,7 +316,7 @@ async def label_row(
     features = list(row.get("features") or [])
     tasks = [_call_model(client, p, features, row, timeout) for p in providers]
     results = await asyncio.gather(*tasks, return_exceptions=False)
-    labels = {p: r for p, r in zip(providers, results, strict=True)}
+    labels = {p: r for p, r in zip(providers, results)}
     consensus, label = _grade_consensus(labels)
     return {
         "ts": row.get("ts"),
@@ -333,23 +366,30 @@ async def run_labeling(args: argparse.Namespace) -> int:
 
     sem = asyncio.Semaphore(max(1, args.concurrency))
 
-    async with httpx.AsyncClient() as client:
-        async def _bounded(row: dict[str, Any]) -> dict[str, Any]:
+    async with httpx.AsyncClient(timeout=httpx.Timeout(args.timeout * 2, connect=30.0)) as client:
+        async def _bounded(idx: int, row: dict[str, Any]) -> tuple[int, dict[str, Any]]:
             async with sem:
-                return await label_row(client, providers, row, args.timeout)
+                labeled = await label_row(client, providers, row, args.timeout)
+                return idx, labeled
 
+        # 真正并发：一次性提交所有任务，由 Semaphore 限制同时在飞的样本数
+        tasks = [_bounded(i, row) for i, row in enumerate(rows)]
         written = 0
+        done = 0
         with output_path.open("w", encoding="utf-8") as out:
-            for i, row in enumerate(rows, 1):
+            for fut in asyncio.as_completed(tasks):
                 try:
-                    labeled = await _bounded(row)
+                    idx, labeled = await fut
                 except Exception as e:  # noqa: BLE001
-                    logger.warning("样本 %d 标注失败：%s", i, e)
+                    done += 1
+                    logger.warning("样本标注失败：%s", e)
                     continue
                 out.write(json.dumps(labeled, ensure_ascii=False) + "\n")
+                out.flush()
                 written += 1
-                if i % 20 == 0 or i == total:
-                    print(f"[llm-label] 进度 {i}/{total}（已写入 {written}）")
+                done += 1
+                if done % 20 == 0 or done == total:
+                    print(f"[llm-label] 进度 {done}/{total}（已写入 {written}）", flush=True)
 
     # 简要统计
     gold = silver = disputed = 0

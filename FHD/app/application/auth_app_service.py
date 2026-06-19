@@ -143,6 +143,16 @@ class AuthApplicationService:
                 if not session_result["success"]:
                     return {"success": False, "message": "会话创建失败"}
                 db.commit()
+                try:
+                    from app.neuro_bus.application_neuro_bridge import (
+                        neuro_notify_user_authenticated,
+                    )
+
+                    neuro_notify_user_authenticated(
+                        user_id=str(user.id), auth_method="oidc", success=True
+                    )
+                except RECOVERABLE_ERRORS:
+                    logger.debug("neuro_notify_user_authenticated skipped", exc_info=True)
                 return {
                     "success": True,
                     "user": {
@@ -259,6 +269,16 @@ class AuthApplicationService:
 
                 user.password = generate_password_hash(new_password)
                 db.commit()
+                try:
+                    from app.neuro_bus.application_neuro_bridge import (
+                        neuro_notify_user_authenticated,
+                    )
+
+                    neuro_notify_user_authenticated(
+                        user_id=str(user.id), auth_method="password", success=True
+                    )
+                except RECOVERABLE_ERRORS:
+                    logger.debug("neuro_notify_user_authenticated skipped", exc_info=True)
                 return {"success": True, "message": "密码修改成功"}
             except RECOVERABLE_ERRORS:
                 db.rollback()
@@ -279,6 +299,16 @@ class AuthApplicationService:
 
                 user.password = generate_password_hash(new_password)
                 db.commit()
+                try:
+                    from app.neuro_bus.application_neuro_bridge import (
+                        neuro_notify_user_authenticated,
+                    )
+
+                    neuro_notify_user_authenticated(
+                        user_id=str(user.id), auth_method="update", success=True
+                    )
+                except RECOVERABLE_ERRORS:
+                    logger.debug("neuro_notify_user_authenticated skipped", exc_info=True)
                 self.session_manager.delete_user_sessions(user_id)
                 return {"success": True, "message": "密码已重置，请使用新密码登录"}
             except RECOVERABLE_ERRORS:

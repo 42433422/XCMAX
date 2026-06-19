@@ -90,7 +90,7 @@ class TestGetCsInfo:
             data = result
         # Phase 1 demo data
         assert data.get("data", {}).get("cs_available") is True
-        assert data.get("data", {}).get("cs_name") == "修茈客服"
+        assert data.get("data", {}).get("cs_name") == "小C助理"
         assert data.get("data", {}).get("cs_online") is True
         assert data.get("data", {}).get("cs_avatar") is None
 
@@ -133,15 +133,8 @@ class TestPostCsMessage:
         result = await ext_mod.post_cs_message(
             request=mock_request, body={}, user=_mock_user()
         )
-        assert hasattr(result, "body") or isinstance(result, dict)
-        if hasattr(result, "body"):
-            import json
-
-            data = json.loads(result.body)
-        else:
-            data = result
-        # Even with empty body, a message_id is generated
-        assert "message_id" in data.get("data", {})
+        # 空消息体应返回 400
+        assert result.status_code == 400
 
     @pytest.mark.asyncio
     async def test_authorized_body_with_extra_fields(self, ext_mod):
@@ -160,6 +153,17 @@ class TestPostCsMessage:
 
 
 class TestGetCsMessages:
+    @pytest.fixture(autouse=True)
+    def _isolate_db(self):
+        """Mock get_db 返回空 session，避免前序测试持久化 ServiceRequest 污染。"""
+        mock_db = MagicMock()
+        mock_db.query.return_value.filter.return_value.filter.return_value.order_by.return_value.limit.return_value.all.return_value = []
+        mock_db.get_bind.return_value = MagicMock()
+        with patch("app.db.session.get_db") as mock_get_db:
+            mock_get_db.return_value.__enter__ = MagicMock(return_value=mock_db)
+            mock_get_db.return_value.__exit__ = MagicMock(return_value=False)
+            yield
+
     @pytest.mark.asyncio
     async def test_unauthorized_returns_401(self, ext_mod):
         mock_request = MagicMock()
@@ -939,7 +943,8 @@ class TestMobileModItemsAdditional2:
         """Test when list_all_mods returns None."""
         with patch(
             "app.infrastructure.mods.mod_manager.get_mod_manager"
-        ) as mock_mm:
+        ) as mock_mm, \
+            patch("app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item"):
             mock_mm.return_value.list_all_mods.return_value = None
             items = ext_mod._mobile_mod_items()
         assert items == []
@@ -948,7 +953,8 @@ class TestMobileModItemsAdditional2:
         """Test mix of dict and object mods."""
         with patch(
             "app.infrastructure.mods.mod_manager.get_mod_manager"
-        ) as mock_mm:
+        ) as mock_mm, \
+            patch("app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item"):
             obj_mod = MagicMock()
             obj_mod.id = "obj-1"
             obj_mod.name = "Object Mod"
@@ -967,7 +973,8 @@ class TestMobileModItemsAdditional2:
         """Test dict mod that only has title (no id, mod_id, or name)."""
         with patch(
             "app.infrastructure.mods.mod_manager.get_mod_manager"
-        ) as mock_mm:
+        ) as mock_mm, \
+            patch("app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item"):
             mock_mm.return_value.list_all_mods.return_value = [
                 {"title": "Title Only Mod"},
             ]
@@ -979,7 +986,8 @@ class TestMobileModItemsAdditional2:
         """Test dict mod with id and title (no name)."""
         with patch(
             "app.infrastructure.mods.mod_manager.get_mod_manager"
-        ) as mock_mm:
+        ) as mock_mm, \
+            patch("app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item"):
             mock_mm.return_value.list_all_mods.return_value = [
                 {"id": "mod-1", "title": "Title Mod"},
             ]
@@ -992,7 +1000,8 @@ class TestMobileModItemsAdditional2:
         """Test object mod where all attributes are None."""
         with patch(
             "app.infrastructure.mods.mod_manager.get_mod_manager"
-        ) as mock_mm:
+        ) as mock_mm, \
+            patch("app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item"):
             mod = MagicMock()
             mod.id = None
             mod.name = None
@@ -1007,7 +1016,8 @@ class TestMobileModItemsAdditional2:
         """Test dict mod with empty string id and empty mod_id."""
         with patch(
             "app.infrastructure.mods.mod_manager.get_mod_manager"
-        ) as mock_mm:
+        ) as mock_mm, \
+            patch("app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item"):
             mock_mm.return_value.list_all_mods.return_value = [
                 {"id": "", "mod_id": "", "name": "No ID"},
             ]
@@ -1018,7 +1028,8 @@ class TestMobileModItemsAdditional2:
         """Test dict mod with whitespace-only id."""
         with patch(
             "app.infrastructure.mods.mod_manager.get_mod_manager"
-        ) as mock_mm:
+        ) as mock_mm, \
+            patch("app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item"):
             mock_mm.return_value.list_all_mods.return_value = [
                 {"id": "   ", "name": "Whitespace ID"},
             ]

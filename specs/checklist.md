@@ -60,8 +60,8 @@
 
 ### P1-1: FHD-个人 测试覆盖率
 
-- [x] CI 全量 `source=[app]` 棘轮 `coverage_ratchet.py --check`（行 floor **51%**）
-- [x] `pyproject.toml` `fail_under=51`（全量口径，非窄包 70%）
+- [x] CI 全量 `source=[app]` 棘轮 `coverage_ratchet.py --check`（行 floor **84%**）
+- [x] `pyproject.toml` `fail_under=84`（全量口径，非窄包 70%）
 - [x] API 响应信封：`app/` + `mods/` JSON `"ok"` 已全量迁移为 `"success"`（`response_envelope.py` SSOT）
 - [x] 前端 `vitest run` 有 ≥5 个 API/Store 测试文件 — **`src/api/__tests__/` + `src/stores/__tests__/`**
 - [x] CI 前端 `vue-tsc --noEmit` 硬门禁
@@ -123,12 +123,12 @@
 
 ## 测试与覆盖率治理（2026-05 计划）
 
-- [x] FHD `ci-cd.yml` 全量 `--cov=app` + `coverage_ratchet.py --check`（行 floor **51%**）
+- [x] FHD `ci-cd.yml` 全量 `--cov=app` + `coverage_ratchet.py --check`（行 floor **84%**）
 - [x] FHD `backend-coverage-report` 全量 `--cov=app` 可观测（无 fail）
 - [x] FHD `tests/integration/`：auth、ERP、finance/report、rbac
 - [x] FHD 前端 `src/api` ≥5 个 `*.test.ts`（实际 30 个文件，367 测例）
 - [x] MODstore `tests/integration/test_payment_webhook_flow.py` + `docs/coverage-gates.md`
-- [x] 全量覆盖率棘轮 M3→Phase4（`fail_under` **51%** 行，分支 floor **36%**）已落地
+- [x] 全量覆盖率棘轮 M3→Phase4（`fail_under` **84%** 行，分支 floor **73%**）已落地
 - [ ] MODstore 全局 `pytest --cov-fail-under=55`（需完整服务环境）
 
 ---
@@ -137,7 +137,7 @@
 
 - [x] FHD-个人：`ruff check app/ tests/` 零错误 — **2026-06-07 全绿**
 - [x] FHD-个人：`ruff format --check app/ tests/` 零错误 — **2026-06-07 全绿**
-- [x] FHD：pytest 全量套件 HEAD **3,785 passed**（2026-06-14）；WIP **12,675 passed / 196 failed**（待清）
+- [x] FHD：pytest 全量套件 HEAD **85.07% 行**（2026-06-20 `bb5e15a7` bump）；WIP 2026-06-17 红灯已收口（purchase_service / wechat_* / tools_workflow / im_sync 全绿）
 - [x] 成都修茈：`black --check modstore_server modman tests` 零错误 — **2026-06-07 全绿**
 - [x] 成都修茈：`isort --check-only modstore_server modman tests` 零错误 — **2026-06-07 全绿**
 - [x] 成都修茈：`flake8 modman/ modstore_server/ tests/` 零错误 — **2026-06-07 全绿（含 .flake8 配置）**

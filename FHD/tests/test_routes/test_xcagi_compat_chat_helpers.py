@@ -314,34 +314,34 @@ class TestXcagiChatHttpExc:
 
 class TestXcagiCompatReplyPayload:
     def test_string_reply(self):
-        with patch("app.application.workflow.legacy_chat_adapter.get_last_tool_result", return_value=None, create=True):
+        with patch("app.legacy.chat.legacy_chat_adapter.get_last_tool_result", return_value=None, create=True):
             result = ch._xcagi_compat_reply_payload("hello")
             assert result["success"] is True
             assert result["response"] == "hello"
 
     def test_dict_reply(self):
-        with patch("app.application.workflow.legacy_chat_adapter.get_last_tool_result", return_value=None, create=True):
+        with patch("app.legacy.chat.legacy_chat_adapter.get_last_tool_result", return_value=None, create=True):
             result = ch._xcagi_compat_reply_payload({"response": "world", "thinking_steps": "step1"})
             assert result["response"] == "world"
             assert result["data"]["thinking_steps"] == "step1"
 
     def test_dict_reply_text_key(self):
-        with patch("app.application.workflow.legacy_chat_adapter.get_last_tool_result", return_value=None, create=True):
+        with patch("app.legacy.chat.legacy_chat_adapter.get_last_tool_result", return_value=None, create=True):
             result = ch._xcagi_compat_reply_payload({"text": "msg"})
             assert result["response"] == "msg"
 
     def test_with_runtime_context(self):
-        with patch("app.application.workflow.legacy_chat_adapter.get_last_tool_result", return_value=None, create=True):
+        with patch("app.legacy.chat.legacy_chat_adapter.get_last_tool_result", return_value=None, create=True):
             result = ch._xcagi_compat_reply_payload("hello", runtime_context_update={"k": "v"})
             assert result["data"]["runtime_context"] == {"k": "v"}
 
     def test_with_kitten_attachments(self):
-        with patch("app.application.workflow.legacy_chat_adapter.get_last_tool_result", return_value=None, create=True):
+        with patch("app.legacy.chat.legacy_chat_adapter.get_last_tool_result", return_value=None, create=True):
             result = ch._xcagi_compat_reply_payload("hello", kitten_attachments={"chart": "data"})
             assert result["data"]["chart"] == "data"
 
     def test_kitten_attachments_none_skipped(self):
-        with patch("app.application.workflow.legacy_chat_adapter.get_last_tool_result", return_value=None, create=True):
+        with patch("app.legacy.chat.legacy_chat_adapter.get_last_tool_result", return_value=None, create=True):
             result = ch._xcagi_compat_reply_payload("hello", kitten_attachments={"chart": None})
             assert "chart" not in result["data"]
 

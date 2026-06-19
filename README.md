@@ -50,7 +50,7 @@ make -f Makefile.win dev
 
 其他常用目标（仓根执行）：`make test`、`make lint`、`make openapi-check`、`make e2e`（Windows 将 `make` 换为 `make -f Makefile.win`）。  
 详细场景（桌面 SQLite、Docker、双模式）见 [`FHD/docs/guides/快速启动说明.md`](FHD/docs/guides/快速启动说明.md) 与 [`FHD/docs/QUICK_START.md`](FHD/docs/QUICK_START.md)。  
-**macOS 桌面**：双击 [`FHD/start-desktop.command`](FHD/start-desktop.command)（**实验性**，主交付仍为 Windows；与 `start-desktop-sqlite.bat` 等价）。
+**macOS 桌面**：双击 [`FHD/XCAGI/start-desktop-sqlite.command`](FHD/XCAGI/start-desktop-sqlite.command)（arm64/x64 双架构已适配，尚未经生产级完整验证；主交付仍为 Windows；与 `start-desktop-sqlite.bat` 等价）。
 
 ### 发版口径
 
@@ -77,7 +77,7 @@ make -f Makefile.win dev
 
 **测试命名 SSOT**：[`specs/test-naming.md`](specs/test-naming.md)（禁止新增 `test_coverage_ramp_phase*`；pre-commit 钩子 `guard-no-new-coverage-ramp`）。
 
-覆盖率 SSOT：[`FHD/docs/reports/COVERAGE_RAMP.md`](FHD/docs/reports/COVERAGE_RAMP.md) · HEAD **52.74%** 行 / WIP **74.56%**（`metrics/coverage-dual-summary.json`）。
+覆盖率 SSOT：[`FHD/docs/reports/COVERAGE_RAMP.md`](FHD/docs/reports/COVERAGE_RAMP.md) · HEAD **85.07%** 行 / WIP **74.56%**（`metrics/coverage-dual-summary.json`）。
 
 ## Python 依赖锁定
 

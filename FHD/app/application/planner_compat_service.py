@@ -16,7 +16,6 @@ from app.application.agent_orchestrator.chat_trace import (
     finalize_legacy_chat_run,
     start_legacy_chat_run,
 )
-from app.application.workflow.legacy_chat_adapter import chat as run_agent_chat
 from app.domain.ai.tier import (
     assert_p2_elevated_claim_or_raise,
     resolve_ai_tier,
@@ -40,6 +39,7 @@ from app.fastapi_routes.xcagi_compat_chat_helpers import (
     _xcagi_planner_stream_bytes_async,
 )
 from app.infrastructure.llm.client import set_mode as set_llm_mode
+from app.legacy.chat.legacy_chat_adapter import chat as run_agent_chat
 from app.services.conversation.modstore_adapter import create_modstore_openai_client_from_request
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -96,7 +96,7 @@ def _clear_legacy_tool_result_if_reply_has_no_records(reply: Any) -> None:
     if _reply_has_legacy_tool_records(reply):
         return
     try:
-        from app.application.workflow.legacy_chat_adapter import clear_last_tool_result
+        from app.legacy.chat.legacy_chat_adapter import clear_last_tool_result
 
         clear_last_tool_result()
     except RECOVERABLE_ERRORS:

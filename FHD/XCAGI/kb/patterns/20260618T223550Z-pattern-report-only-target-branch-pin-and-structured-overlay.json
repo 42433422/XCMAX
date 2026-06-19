@@ -1,0 +1,12 @@
+{
+  "after": "Prompts and input data pin repo/base/target branch; overlay prep failures become structured validation results and temp dirs are cleaned.",
+  "before": "Report-only QA inferred target from its own branch and overlay preparation exceptions escaped as unstructured failures.",
+  "created_at": "2026-06-18T22:35:50.962068+00:00",
+  "kind": "code_pattern",
+  "metadata": {
+    "fix_path": "/Users/a4243342/Desktop/XCMAX/FHD/XCAGI/kb/fixes/20260618T223550Z-fix-self-maintenance-review-qa-blocks-a-narrow-ci.json"
+  },
+  "pattern": "report_only_target_branch_pin_and_structured_overlay_failure",
+  "schema_version": 1,
+  "summary": "When review/QA delegates run in separate branches, always pin the true target branch and make local validation setup failures structured and auditable."
+}

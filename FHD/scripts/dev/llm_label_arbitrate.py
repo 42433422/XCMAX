@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""LLM-D 仲裁：对 disputed 样本用 Claude-Sonnet 仲裁，并与规则路由交叉验证。
+"""LLM-D 仲裁：对 disputed 样本用 MiniMax-M3 仲裁，并与规则路由交叉验证。
 
-读取 ``labeled_data.jsonl`` 中的 ``disputed`` 样本，调用 LLM-D（Claude-Sonnet，
-通过 ``ANTHROPIC_API_KEY``）仲裁。仲裁结果作为 ground truth。
+读取 ``labeled_data.jsonl`` 中的 ``disputed`` 样本，调用 LLM-D（MiniMax-M3，
+通过 B.AI 网关 ``BAI_API_KEY``）仲裁。仲裁结果作为 ground truth。
 
 规则路由交叉验证：
 - 对比 LLM-D 仲裁与历史规则路由（``history_action`` 字段）
@@ -66,14 +66,13 @@ ACTION_TO_PROCESSOR = {
 
 logger = logging.getLogger("llm_label_arbitrate")
 
-# Anthropic Messages API
-ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
-ANTHROPIC_MODEL = "claude-sonnet-4-20250514"
-ANTHROPIC_VERSION = "2023-06-01"
+# B.AI OpenAI 兼容 API（仲裁用 minimax-m3）
+BAI_BASE_URL = "https://api.b.ai/v1/chat/completions"
+ARBITRATION_MODEL = "minimax-m3"
 
 
 def _api_key() -> str:
-    return (os.environ.get("ANTHROPIC_API_KEY") or "").strip()
+    return (os.environ.get("BAI_API_KEY") or "").strip()
 
 
 PROMPT_SYSTEM = (
@@ -116,7 +115,7 @@ def _build_messages(row: dict[str, Any]) -> list[dict[str, str]]:
     features = list(row.get("features") or [])
     labels = row.get("labels") or {}
     label_lines = []
-    for provider in ("deepseek", "openai", "qwen"):
+    for provider in ("minimax", "glm", "kimi", "gpt"):
         v = labels.get(provider)
         if v is None:
             continue
@@ -142,6 +141,11 @@ def _parse_arbitration(content: str) -> dict[str, Any] | None:
     text = (content or "").strip()
     if not text:
         return None
+    # 去除 minimax-m3 的 <think>...</think> 推理标签
+    if "<think>" in text and "</think>" in text:
+        think_start = text.find("<think>")
+        think_end = text.find("</think>") + len("</think>")
+        text = (text[:think_start] + text[think_end:]).strip()
     if text.startswith("```"):
         text = text.strip("`")
         if text.lower().startswith("json"):
@@ -173,36 +177,48 @@ def _parse_arbitration(content: str) -> dict[str, Any] | None:
     }
 
 
-async def _call_anthropic(
+async def _call_arbitrator(
     client: "httpx.AsyncClient",
     row: dict[str, Any],
     timeout: float,
 ) -> dict[str, Any] | None:
     api_key = _api_key()
     if not api_key:
-        logger.warning("未配置 ANTHROPIC_API_KEY，跳过仲裁。")
+        logger.warning("未配置 BAI_API_KEY，跳过仲裁。")
         return None
     payload = {
-        "model": ANTHROPIC_MODEL,
-        "max_tokens": 200,
+        "model": ARBITRATION_MODEL,
+        "max_tokens": 2000,
+        "temperature": 0.0,
         "messages": _build_messages(row),
+        "reasoning_split": True,
     }
     headers = {
-        "x-api-key": api_key,
-        "anthropic-version": ANTHROPIC_VERSION,
+        "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
     }
     try:
-        resp = await client.post(ANTHROPIC_URL, json=payload, headers=headers, timeout=timeout)
+        resp = await client.post(BAI_BASE_URL, json=payload, headers=headers, timeout=timeout)
         resp.raise_for_status()
         data = resp.json()
+    except (httpx.ConnectError, httpx.ReadError, httpx.ReadTimeout, httpx.RemoteProtocolError) as e:
+        # 网络瞬时错误：重试 1 次（minimax-m3 偶发断连）
+        logger.warning("B.AI 仲裁网络错误，重试：%s", e)
+        try:
+            await asyncio.sleep(1.0)
+            resp = await client.post(BAI_BASE_URL, json=payload, headers=headers, timeout=timeout)
+            resp.raise_for_status()
+            data = resp.json()
+        except Exception as e2:  # noqa: BLE001
+            logger.warning("B.AI 仲裁重试仍失败：%s", e2)
+            return None
     except Exception as e:  # noqa: BLE001
-        logger.warning("Anthropic 调用失败：%s", e)
+        logger.warning("B.AI 仲裁调用失败：%s", e)
         return None
     try:
-        content = data["content"][0]["text"] or ""
+        content = data["choices"][0]["message"]["content"] or ""
     except (KeyError, IndexError, TypeError):
-        logger.warning("Anthropic 响应结构异常：%s", data)
+        logger.warning("B.AI 响应结构异常：%s", data)
         return None
     return _parse_arbitration(content)
 
@@ -253,7 +269,7 @@ async def run_arbitration(args: argparse.Namespace) -> int:
 
     if not _api_key():
         print(
-            "[arbitrate] 未配置 ANTHROPIC_API_KEY；所有 disputed 样本将标记为 accepted=false。",
+            "[arbitrate] 未配置 BAI_API_KEY；所有 disputed 样本将标记为 accepted=false。",
             file=sys.stderr,
         )
 
@@ -262,7 +278,7 @@ async def run_arbitration(args: argparse.Namespace) -> int:
     async with httpx.AsyncClient() as client:
         async def _bounded(row: dict[str, Any]) -> dict[str, Any] | None:
             async with sem:
-                return await _call_anthropic(client, row, args.timeout)
+                return await _call_arbitrator(client, row, args.timeout)
 
         tasks = [_bounded(r) for r in disputed]
         results = await asyncio.gather(*tasks, return_exceptions=False)
@@ -271,7 +287,7 @@ async def run_arbitration(args: argparse.Namespace) -> int:
     arbitrated_rows: list[dict[str, Any]] = []
     agree_count = 0
     arbitrated_count = 0
-    for row, arb in zip(disputed, results, strict=True):
+    for row, arb in zip(disputed, results):
         history_action = _normalize_action(row.get("history_action"))
         if arb is None:
             arbitrated_rows.append(

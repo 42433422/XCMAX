@@ -205,6 +205,9 @@ def _poll_once() -> None:
         for task in tasks:
             if isinstance(task, dict):
                 result = _execute_task(task)
+                relay_status = str(result.pop("_relay_status", "") or "").strip()
+                if not relay_status:
+                    relay_status = "failed" if result.get("error") else "completed"
                 client.post(
                     _api_url(
                         f"/api/mobile/v1/relay/desktop/tasks/{task.get('task_id')}/complete",
@@ -213,7 +216,7 @@ def _poll_once() -> None:
                     json={
                         "relay_id": relay_id,
                         "desktop_token": desktop_token,
-                        "status": "failed" if result.get("error") else "done",
+                        "status": relay_status,
                         "result": result,
                     },
                 ).raise_for_status()
@@ -243,12 +246,70 @@ def _execute_task(task: dict[str, Any]) -> dict[str, Any]:
         "target_devices": ["all"],
     }
     try:
-        result = CodexSuperEmployeeService().invoke(
+        service = CodexSuperEmployeeService()
+        result = service.invoke(
             user_id=user_id,
             message=message,
             context=context,
         )
-        return {"ok": True, "codex": result}
+        dispatch = result.get("dispatch") if isinstance(result.get("dispatch"), dict) else {}
+        dispatch_status = str(dispatch.get("status") or "").strip().lower()
+        if dispatch_status == "completed":
+            return {"ok": True, "codex": result, "_relay_status": "completed"}
+        if dispatch.get("accepted") is not True:
+            reason = str(dispatch.get("reason") or "Codex/MCP 调度器当前不可用").strip()
+            return {
+                "error": reason,
+                "codex": result,
+                "_relay_status": "blocked",
+            }
+
+        request_id = str(dispatch.get("request_id") or "").strip()
+        task_id = str(dispatch.get("task_id") or "").strip()
+        timeout = max(0.0, float(os.environ.get("XCAGI_RELAY_CODEX_WAIT_TIMEOUT_SEC") or "300"))
+        interval = max(0.05, float(os.environ.get("XCAGI_RELAY_CODEX_WAIT_INTERVAL_SEC") or "2"))
+        deadline = time.monotonic() + timeout
+        while True:
+            terminal = _terminal_codex_message(
+                service.list_messages(user_id=user_id, limit=200),
+                request_id=request_id,
+                task_id=task_id,
+            )
+            if terminal:
+                result["assistant_message"] = terminal
+                return {"ok": True, "codex": result, "_relay_status": "completed"}
+            if time.monotonic() >= deadline:
+                break
+            time.sleep(min(interval, max(0.0, deadline - time.monotonic())))
+        suffix = f"（task_id={task_id}）" if task_id else ""
+        return {
+            "error": f"Codex 已派发，但在 {timeout:g} 秒内未回写{suffix}",
+            "codex": result,
+            "_relay_status": "blocked",
+        }
     except Exception as exc:
         logger.exception("mobile relay Codex task failed")
         return {"error": str(exc)[:1000]}
+
+
+def _terminal_codex_message(
+    messages: list[dict[str, Any]],
+    *,
+    request_id: str,
+    task_id: str,
+) -> dict[str, Any] | None:
+    for row in reversed(messages):
+        if str(row.get("role") or "").strip().lower() != "assistant":
+            continue
+        kind = str(row.get("kind") or "").strip().lower()
+        if kind not in {"codex_result", "codex_direct"}:
+            continue
+        row_request = str(row.get("dispatch_request_id") or row.get("request_id") or "").strip()
+        row_task = str(row.get("task_id") or "").strip()
+        if request_id and row_request != request_id:
+            continue
+        if task_id and row_task != task_id:
+            continue
+        if str(row.get("body") or "").strip():
+            return row
+    return None

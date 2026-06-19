@@ -52,6 +52,7 @@ VITEST_CONFIG = FHD_ROOT / "frontend" / "vitest.config.js"
 BACKEND_JSON_DEFAULT = FHD_ROOT / "coverage.json"
 FRONTEND_SUMMARY_DEFAULT = FHD_ROOT / "frontend" / "coverage" / "coverage-summary.json"
 BASELINE = FHD_ROOT / "metrics" / "coverage_ratchet_baseline.json"
+DUAL_SUMMARY = FHD_ROOT / "metrics" / "coverage-dual-summary.json"
 HISTORY = FHD_ROOT / "metrics" / "coverage-history.jsonl"
 
 # 防止可复现性 ±0.5% 抖动造成假失败：bump 时把 floor 设为 floor(实测 - MARGIN)。
@@ -148,6 +149,52 @@ def _floor(value: float, margin: float) -> int:
 
 
 # --------------------------------------------------------------------------- #
+# coverage-dual-summary.json 的 branch_floor 读写（SSOT 对外口径）
+# --------------------------------------------------------------------------- #
+def read_dual_summary_branch_floor() -> int | None:
+    """从 coverage-dual-summary.json 读取 branch_floor 字段。
+
+    与 coverage_ratchet_baseline.json 的 backend_branch_floor 同义，但本字段是对外
+    SSOT（coverage-dual-summary.json）。两者应保持一致；本函数返回 None 时由调用方
+    回退到 baseline 文件。
+    """
+    if not DUAL_SUMMARY.is_file():
+        return None
+    try:
+        data = json.loads(DUAL_SUMMARY.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    floors = data.get("ratchet_floors") or {}
+    val = floors.get("branch_floor")
+    if val is None:
+        return None
+    try:
+        return int(val)
+    except (TypeError, ValueError):
+        return None
+
+
+def write_dual_summary_branch_floor(value: int) -> bool:
+    """把 branch_floor 写入 coverage-dual-summary.json 的 ratchet_floors 段。
+
+    同步更新 ratchet_floors.backend_branch（历史字段）以保持一致。返回是否写入。
+    """
+    if not DUAL_SUMMARY.is_file():
+        return False
+    try:
+        data = json.loads(DUAL_SUMMARY.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    floors = data.setdefault("ratchet_floors", {})
+    if floors.get("branch_floor") == value and floors.get("backend_branch") == value:
+        return False
+    floors["branch_floor"] = value
+    floors["backend_branch"] = value
+    DUAL_SUMMARY.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return True
+
+
+# --------------------------------------------------------------------------- #
 # vitest thresholds 同步（只升不降，在 thresholds {...} 块内替换数字）
 # --------------------------------------------------------------------------- #
 def sync_vitest_thresholds(floors: dict[str, int]) -> bool:
@@ -207,7 +254,10 @@ def cmd_check(args: argparse.Namespace) -> int:
     fe = read_frontend(args.frontend_summary)
     base = load_baseline()
     line_floor = read_fail_under(PYPROJECT)
-    branch_floor = base.get("backend_branch_floor")
+    # branch_floor SSOT 优先 coverage-dual-summary.json，回退到 baseline 文件
+    branch_floor = read_dual_summary_branch_floor()
+    if branch_floor is None:
+        branch_floor = base.get("backend_branch_floor")
     fe_floors = base.get("frontend_floors", {})
 
     failed = False
@@ -226,7 +276,7 @@ def cmd_check(args: argparse.Namespace) -> int:
         )
         if be["line_pct"] + eps < line_floor:
             print(
-                f"FAIL: 后端行覆盖率 {be['line_pct']}% < floor {line_floor}%（回退）",
+                f"FAIL: line coverage regression — 后端行覆盖率 {be['line_pct']}% < floor {line_floor}%",
                 file=sys.stderr,
             )
             failed = True
@@ -236,7 +286,7 @@ def cmd_check(args: argparse.Namespace) -> int:
             and be["branch_pct"] + eps < float(branch_floor)
         ):
             print(
-                f"FAIL: 后端分支覆盖率 {be['branch_pct']}% < floor {branch_floor}%（回退）",
+                f"FAIL: branch coverage regression — 后端分支覆盖率 {be['branch_pct']}% < floor {branch_floor}%",
                 file=sys.stderr,
             )
             failed = True
@@ -287,6 +337,9 @@ def cmd_bump(args: argparse.Namespace) -> int:
                 base["backend_branch_floor"] = new_b
                 print(f"[cov-ratchet] backend 分支 floor {cur_b:g} -> {new_b}")
                 changed = True
+                # 同步 branch_floor 到 coverage-dual-summary.json（对外 SSOT）
+                if write_dual_summary_branch_floor(new_b):
+                    print(f"[cov-ratchet] coverage-dual-summary.json branch_floor -> {new_b}")
 
     if fe is not None:
         ff = base.setdefault("frontend_floors", {})

@@ -1,0 +1,102 @@
+# CI SSOT: generated from 成都修茈科技有限公司/.github/workflows/ci-market.yml
+#
+# 根仓 .github/workflows/ 为唯一调度入口（cicd-e2e-prompt.md 约束）。
+# 本文件为 market 子项目的 CI 执行入口，编辑源在子目录。
+#
+# 责任边界：仅负责 成都修茈科技有限公司/MODstore_deploy/market 子项目。
+# 下游：market-live-deploy.yml 通过 workflow_run 监听本工作流。
+
+name: CI - Market
+
+on:
+  pull_request:
+    paths:
+      - '成都修茈科技有限公司/MODstore_deploy/market/**'
+      - '.github/workflows/market-ci.yml'
+  push:
+    branches: [main]
+    paths:
+      - '成都修茈科技有限公司/MODstore_deploy/market/**'
+      - '.github/workflows/market-ci.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ci-market-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  market-ci:
+    name: Market subproject (MODstore_deploy/market)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: 成都修茈科技有限公司/MODstore_deploy/market
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 成都修茈科技有限公司/MODstore_deploy/market/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Unit tests + coverage
+        run: npm run test:coverage
+
+      - name: Build
+        run: npm run build
+        env:
+          VITE_PUBLIC_BASE: '/market/'
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        id: pw-cache-market
+        with:
+          path: ~/.cache/ms-playwright
+          key: pw-${{ runner.os }}-market-${{ hashFiles('成都修茈科技有限公司/MODstore_deploy/market/package-lock.json') }}
+          restore-keys: |
+            pw-${{ runner.os }}-market-
+
+      - name: Install Playwright browsers
+        if: steps.pw-cache-market.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+
+      - name: Install Playwright system deps (cache hit fallback)
+        if: steps.pw-cache-market.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+
+      - name: E2E tests
+        run: npm run test:e2e
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: market-coverage
+          path: 成都修茈科技有限公司/MODstore_deploy/market/coverage/
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: market-playwright-report
+          path: 成都修茈科技有限公司/MODstore_deploy/market/playwright-report/
+          if-no-files-found: ignore
+          retention-days: 14

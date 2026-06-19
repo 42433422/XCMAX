@@ -612,7 +612,13 @@ class TestExecuteWorkflowToolGenerateOffice:
             "app.services.kitten_ai_document.generate.generate_office_file"
         ) as mock_gen, patch(
             "app.services.kitten_ai_document.pickup.store_document_pickup"
-        ) as mock_store:
+        ) as mock_store, patch(
+            "app.mod_sdk.employee_tool_registry.is_employee_tool", return_value=False
+        ), patch(
+            "app.mod_sdk.planner_native_tools.try_execute_native_planner_tool", return_value=(None, None)
+        ), patch(
+            "app.application.employee_pack_runner.try_execute_employee_planner_tool", return_value=None
+        ):
             mock_gen.return_value = (b"content", "out.docx")
             mock_store.return_value = "tok123"
             result = execute_workflow_tool(
@@ -632,7 +638,13 @@ class TestExecuteWorkflowToolGenerateOffice:
             "app.services.kitten_ai_document.generate.generate_office_file"
         ) as mock_gen, patch(
             "app.services.kitten_ai_document.pickup.store_document_pickup"
-        ) as mock_store:
+        ) as mock_store, patch(
+            "app.mod_sdk.employee_tool_registry.is_employee_tool", return_value=False
+        ), patch(
+            "app.mod_sdk.planner_native_tools.try_execute_native_planner_tool", return_value=(None, None)
+        ), patch(
+            "app.application.employee_pack_runner.try_execute_employee_planner_tool", return_value=None
+        ):
             mock_gen.return_value = (b"content", "out.xlsx")
             mock_store.return_value = "tok456"
             result = execute_workflow_tool(

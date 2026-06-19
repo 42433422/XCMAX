@@ -17,7 +17,6 @@ object DatabaseModule {
     @Singleton
     fun provideDb(@ApplicationContext ctx: Context): XcagiDatabase =
         Room.databaseBuilder(ctx, XcagiDatabase::class.java, "xcagi.db")
-            .addMigrations(XcagiDatabase.MIGRATION_3_4)
-            .fallbackToDestructiveMigration()
+            .addMigrations(XcagiDatabase.MIGRATION_3_4, XcagiDatabase.MIGRATION_4_5)
             .build()
 }

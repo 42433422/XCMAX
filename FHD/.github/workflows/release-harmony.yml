@@ -1,0 +1,75 @@
+name: Release HarmonyOS
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release version
+        required: false
+        type: string
+        default: "10.0.0"
+      tag:
+        description: GitHub release tag
+        required: false
+        type: string
+        default: "FHD/v10.0.0"
+      runner_label:
+        description: Runner label with DevEco/HarmonyOS SDK, or ubuntu-latest when using a checked-in artifact path
+        required: false
+        type: string
+        default: "ubuntu-latest"
+      harmony_artifact:
+        description: Optional repo-relative .hap/.hsp path. If empty, build from FHD/mobile-harmony on the runner.
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+defaults:
+  run:
+    working-directory: .
+
+concurrency:
+  group: fhd-release-harmony-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  publish-harmony:
+    runs-on: ${{ github.event.inputs.runner_label || 'ubuntu-latest' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Resolve inputs
+        id: release_inputs
+        run: |
+          set -euo pipefail
+          raw="${{ github.event.inputs.version || github.ref_name }}"
+          raw="${raw#FHD/}"
+          raw="${raw#v}"
+          raw="${raw#V}"
+          if [[ -z "${raw}" || "${raw}" == "main" || "${raw}" == "master" ]]; then
+            raw="10.0.0"
+          fi
+          tag="${{ github.event.inputs.tag || '' }}"
+          if [[ -z "${tag}" ]]; then
+            tag="FHD/v${raw}"
+          fi
+          echo "version=${raw}" >> "${GITHUB_OUTPUT}"
+          echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
+      - name: Publish HarmonyOS release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          harmony_arg=()
+          if [[ -n "${{ github.event.inputs.harmony_artifact || '' }}" ]]; then
+            harmony_arg=(--harmony-artifact "${{ github.event.inputs.harmony_artifact }}")
+          fi
+          bash FHD/mobile-harmony/scripts/publish-release-harmony.sh \
+            --version "${{ steps.release_inputs.outputs.version }}" \
+            --tag "${{ steps.release_inputs.outputs.tag }}" \
+            --repo "${{ github.repository }}" \
+            "${harmony_arg[@]}"

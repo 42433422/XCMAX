@@ -16,6 +16,7 @@ data class UserDto(
     val email: String = "",
     val role: String = "",
     val is_active: Boolean = true,
+    val avatar_url: String? = null,
 )
 
 data class MobileLoginData(
@@ -29,6 +30,12 @@ data class MobileLoginData(
     val market_refresh_token: String? = null,
     val market_is_admin: Boolean = false,
     val market_is_enterprise: Boolean = false,
+)
+
+data class CodexSuperEmployeeMobileMessageBody(
+    val body: String = "",
+    val message: String = "",
+    val context: Map<String, Any?> = mapOf("source" to "mobile", "client_surface" to "mobile"),
 )
 
 data class MeData(
@@ -165,6 +172,7 @@ data class ModInfo(
     val author: String = "",
     val primary: Boolean = false,
     val industry: ModIndustry? = null,
+    val avatar_url: String? = null,
     val frontend_menu: List<ModMenuItem> = emptyList(),
     val menu_overrides: List<ModMenuOverride> = emptyList(),
     val workflow_employees: List<WorkflowEmployeeInfo> = emptyList(),
@@ -189,6 +197,7 @@ data class WorkflowEmployeeInfo(
     val market_material_category: String = "",
     val market_license_scope: String = "",
     val market_security_level: String = "",
+    val market_avatar: String? = null,
 )
 
 data class ModMenuItem(
@@ -238,6 +247,7 @@ data class AdminMobileEmployeeInfo(
     val market_material_category: String = "",
     val market_license_scope: String = "",
     val market_security_level: String = "",
+    val market_avatar: String? = null,
 )
 
 data class AdminMobileFeature(

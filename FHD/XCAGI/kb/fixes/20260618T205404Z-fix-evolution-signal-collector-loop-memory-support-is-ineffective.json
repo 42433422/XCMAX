@@ -1,0 +1,15 @@
+{
+  "created_at": "2026-06-18T20:54:04.620628+00:00",
+  "fix_diff": "diff --git a/evolution_signal_collector.py b/evolution_signal_collector.py\n+from modstore_server.self_maintenance_policy import load_loop_memory\n+def _collect_loop_memory_signals(...):\n+    memory = load_loop_memory()\n+    emit last_policy_decision, open_items, recent risky runs\n+    preserve created_at/completed_at timestamps in formatted prompt\n+\n collect_evolution_signals(...):\n+    loop_memory_items = _collect_loop_memory_signals()\n+    total_count += len(loop_memory_items)\n",
+  "kind": "fix",
+  "metadata": {
+    "files": [
+      "evolution_signal_collector.py",
+      "test_self_evolution_loop.py"
+    ],
+    "source": "codex_direct_fix"
+  },
+  "root_cause": "The collector did not read the real self-maintenance loop memory file by default, so prior review_or_qa_reported_risk and failed_steps were invisible to digest/vibe prompts.",
+  "schema_version": 1,
+  "symptom": "evolution_signal_collector loop memory support is ineffective because digest_vibe_prep calls collect_evolution_signals() without injecting memory"
+}

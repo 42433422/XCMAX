@@ -1,4 +1,4 @@
-"""Tests for app.fastapi_routes.mounts.legacy_compat — register_legacy_compat_routes."""
+"""Tests for app.legacy.routes.legacy_compat — register_legacy_compat_routes."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from fastapi import FastAPI
 
-from app.fastapi_routes.mounts.legacy_compat import register_legacy_compat_routes
+from app.legacy.routes.legacy_compat import register_legacy_compat_routes
 
 
 @pytest.fixture
@@ -23,9 +23,9 @@ class TestRegisterLegacyCompatRoutes:
 
     def test_registers_market_account(self, fresh_app):
         with patch(
-            "app.fastapi_routes.mounts.legacy_compat.register_legacy_gap_routers"
+            "app.legacy.routes.legacy_compat.register_legacy_gap_routers"
         ), patch(
-            "app.fastapi_routes.mounts.legacy_compat.is_ci_strict",
+            "app.legacy.routes.legacy_compat.is_ci_strict",
             return_value=False,
         ):
             register_legacy_compat_routes(fresh_app)
@@ -34,7 +34,7 @@ class TestRegisterLegacyCompatRoutes:
 
     def test_registers_without_legacy_gap_by_default(self, fresh_app):
         with patch(
-            "app.fastapi_routes.mounts.legacy_compat.register_legacy_gap_routers"
+            "app.legacy.routes.legacy_compat.register_legacy_gap_routers"
         ) as mock_gap, patch.dict(
             os.environ, {}, clear=False
         ):
@@ -44,7 +44,7 @@ class TestRegisterLegacyCompatRoutes:
 
     def test_registers_with_legacy_gap_when_env_set_true(self, fresh_app):
         with patch(
-            "app.fastapi_routes.mounts.legacy_compat.register_legacy_gap_routers"
+            "app.legacy.routes.legacy_compat.register_legacy_gap_routers"
         ) as mock_gap, patch.dict(
             os.environ, {"XCAGI_REGISTER_LEGACY_ROUTES": "1"}
         ):
@@ -53,7 +53,7 @@ class TestRegisterLegacyCompatRoutes:
 
     def test_registers_with_legacy_gap_when_env_set_yes(self, fresh_app):
         with patch(
-            "app.fastapi_routes.mounts.legacy_compat.register_legacy_gap_routers"
+            "app.legacy.routes.legacy_compat.register_legacy_gap_routers"
         ) as mock_gap, patch.dict(
             os.environ, {"XCAGI_REGISTER_LEGACY_ROUTES": "yes"}
         ):
@@ -62,7 +62,7 @@ class TestRegisterLegacyCompatRoutes:
 
     def test_registers_with_legacy_gap_when_env_set_on(self, fresh_app):
         with patch(
-            "app.fastapi_routes.mounts.legacy_compat.register_legacy_gap_routers"
+            "app.legacy.routes.legacy_compat.register_legacy_gap_routers"
         ) as mock_gap, patch.dict(
             os.environ, {"XCAGI_REGISTER_LEGACY_ROUTES": "on"}
         ):
@@ -71,7 +71,7 @@ class TestRegisterLegacyCompatRoutes:
 
     def test_does_not_register_legacy_gap_when_env_set_false(self, fresh_app):
         with patch(
-            "app.fastapi_routes.mounts.legacy_compat.register_legacy_gap_routers"
+            "app.legacy.routes.legacy_compat.register_legacy_gap_routers"
         ) as mock_gap, patch.dict(
             os.environ, {"XCAGI_REGISTER_LEGACY_ROUTES": "false"}
         ):
@@ -87,7 +87,7 @@ class TestRegisterLegacyCompatRoutes:
     def test_private_db_read_assistant_recoverable_error(self, fresh_app):
         """When private_db_read_assistant raises a recoverable error, it should be skipped."""
         with patch(
-            "app.fastapi_routes.mounts.legacy_compat.register_legacy_gap_routers"
+            "app.legacy.routes.legacy_compat.register_legacy_gap_routers"
         ), patch.dict(os.environ, {}, clear=False):
             os.environ.pop("XCAGI_REGISTER_LEGACY_ROUTES", None)
             with patch.dict(sys.modules, {"app.fastapi_routes.private_db_read_assistant_compat": None}):
@@ -96,7 +96,7 @@ class TestRegisterLegacyCompatRoutes:
     def test_user_cs_wechat_passive_recoverable_error(self, fresh_app):
         """When user_cs_wechat_passive raises a recoverable error, it should be skipped."""
         with patch(
-            "app.fastapi_routes.mounts.legacy_compat.register_legacy_gap_routers"
+            "app.legacy.routes.legacy_compat.register_legacy_gap_routers"
         ), patch.dict(os.environ, {}, clear=False):
             os.environ.pop("XCAGI_REGISTER_LEGACY_ROUTES", None)
             with patch.dict(sys.modules, {"app.fastapi_routes.user_cs_wechat_passive_compat": None}):
@@ -105,7 +105,7 @@ class TestRegisterLegacyCompatRoutes:
     def test_wechat_decrypt_recoverable_error(self, fresh_app):
         """When wechat_decrypt_routes import fails, it should be skipped."""
         with patch(
-            "app.fastapi_routes.mounts.legacy_compat.register_legacy_gap_routers"
+            "app.legacy.routes.legacy_compat.register_legacy_gap_routers"
         ), patch.dict(os.environ, {}, clear=False):
             os.environ.pop("XCAGI_REGISTER_LEGACY_ROUTES", None)
             with patch.dict(sys.modules, {"app.fastapi_routes.wechat_decrypt_routes": None}):
@@ -114,7 +114,7 @@ class TestRegisterLegacyCompatRoutes:
     def test_model_payment_recoverable_error(self, fresh_app):
         """When model_payment import fails, it should be skipped."""
         with patch(
-            "app.fastapi_routes.mounts.legacy_compat.register_legacy_gap_routers"
+            "app.legacy.routes.legacy_compat.register_legacy_gap_routers"
         ), patch.dict(os.environ, {}, clear=False):
             os.environ.pop("XCAGI_REGISTER_LEGACY_ROUTES", None)
             # model_payment is already imported at module level in legacy_compat,
@@ -131,7 +131,7 @@ class TestRegisterLegacyCompatRoutes:
     def test_contract_lifecycle_import_error(self, fresh_app):
         """When contract_lifecycle_api import fails, it should be skipped."""
         with patch(
-            "app.fastapi_routes.mounts.legacy_compat.register_legacy_gap_routers"
+            "app.legacy.routes.legacy_compat.register_legacy_gap_routers"
         ), patch.dict(os.environ, {}, clear=False):
             os.environ.pop("XCAGI_REGISTER_LEGACY_ROUTES", None)
             with patch.dict(sys.modules, {"app.fastapi_routes.contract_lifecycle_api": None}):
@@ -140,11 +140,11 @@ class TestRegisterLegacyCompatRoutes:
     def test_service_bridge_ci_strict_raises(self, fresh_app):
         """When CI is strict and service_bridge fails, it should raise RuntimeError."""
         with patch(
-            "app.fastapi_routes.mounts.legacy_compat.register_legacy_gap_routers"
+            "app.legacy.routes.legacy_compat.register_legacy_gap_routers"
         ), patch.dict(os.environ, {}, clear=False):
             os.environ.pop("XCAGI_REGISTER_LEGACY_ROUTES", None)
             with patch(
-                "app.fastapi_routes.mounts.legacy_compat.is_ci_strict",
+                "app.legacy.routes.legacy_compat.is_ci_strict",
                 return_value=True,
             ), patch.dict(sys.modules, {"app.fastapi_routes.service_bridge": None}), \
                 pytest.raises(RuntimeError, match="service_bridge router required in CI"):
@@ -153,11 +153,11 @@ class TestRegisterLegacyCompatRoutes:
     def test_service_bridge_non_ci_logs_warning(self, fresh_app):
         """When not in CI and service_bridge fails, it should log a warning."""
         with patch(
-            "app.fastapi_routes.mounts.legacy_compat.register_legacy_gap_routers"
+            "app.legacy.routes.legacy_compat.register_legacy_gap_routers"
         ), patch.dict(os.environ, {}, clear=False):
             os.environ.pop("XCAGI_REGISTER_LEGACY_ROUTES", None)
             with patch(
-                "app.fastapi_routes.mounts.legacy_compat.is_ci_strict",
+                "app.legacy.routes.legacy_compat.is_ci_strict",
                 return_value=False,
             ), patch.dict(sys.modules, {"app.fastapi_routes.service_bridge": None}):
                 register_legacy_compat_routes(fresh_app)
@@ -165,7 +165,7 @@ class TestRegisterLegacyCompatRoutes:
     def test_tts_install_recoverable_error(self, fresh_app):
         """When tts_install import fails, it should be skipped."""
         with patch(
-            "app.fastapi_routes.mounts.legacy_compat.register_legacy_gap_routers"
+            "app.legacy.routes.legacy_compat.register_legacy_gap_routers"
         ), patch.dict(os.environ, {}, clear=False):
             os.environ.pop("XCAGI_REGISTER_LEGACY_ROUTES", None)
             with patch.dict(sys.modules, {"app.fastapi_routes.tts_install": None}):
@@ -174,7 +174,7 @@ class TestRegisterLegacyCompatRoutes:
     def test_all_routers_registered(self, fresh_app):
         """Verify that many routers are registered successfully."""
         with patch(
-            "app.fastapi_routes.mounts.legacy_compat.register_legacy_gap_routers"
+            "app.legacy.routes.legacy_compat.register_legacy_gap_routers"
         ), patch.dict(os.environ, {}, clear=False):
             os.environ.pop("XCAGI_REGISTER_LEGACY_ROUTES", None)
             register_legacy_compat_routes(fresh_app)

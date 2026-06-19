@@ -7,9 +7,6 @@ import logging
 import os
 import time
 from datetime import datetime, timezone
-
-logger = logging.getLogger(__name__)
-
 from typing import (
     Any,
     Dict,
@@ -28,7 +25,11 @@ from sqlalchemy.orm import Session
 
 from modstore_server.api.deps import require_admin
 from modstore_server.employee_executor import list_employees as list_employees_exec
-from modstore_server.employee_runtime import load_employee_pack, parse_employee_config_v2
+from modstore_server.employee_runtime import (
+    employee_pack_runtime_issues,
+    load_employee_pack,
+    parse_employee_config_v2,
+)
 from modstore_server.integrations.ops_action_handlers import OPS_COMMAND_REGISTRY
 from modstore_server.llm_crypto import fernet_configured
 from modstore_server.llm_key_resolver import KNOWN_PROVIDERS, credential_status
@@ -41,6 +42,8 @@ from modstore_server.models import (
     get_session_factory,
 )
 from modstore_server.services.employee import get_default_employee_client
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/admin", tags=["admin-duty-graph"])
 
@@ -223,6 +226,12 @@ def _latest_metric(session: Session, employee_id: str) -> Dict[str, Any] | None:
     )
     if not row:
         return None
+    created_at_epoch = 0.0
+    if row.created_at:
+        created_at = row.created_at
+        if created_at.tzinfo is None:
+            created_at = created_at.replace(tzinfo=timezone.utc)
+        created_at_epoch = created_at.timestamp()
     return {
         "id": int(row.id),
         "status": _as_str(row.status),
@@ -231,6 +240,7 @@ def _latest_metric(session: Session, employee_id: str) -> Dict[str, Any] | None:
         "llm_tokens": int(row.llm_tokens or 0),
         "error": _as_str(row.error),
         "created_at": row.created_at.isoformat() if row.created_at else None,
+        "created_at_epoch": created_at_epoch,
     }
 
 
@@ -305,6 +315,9 @@ def _analyze_employee_capability(
             "key_source": "none",
         },
         "risk": {"high_risk": False, "requires_confirmation": False, "details": []},
+        "runtime_issues": [],
+        "operational_state": "unknown",
+        "pack_updated_at_epoch": 0.0,
         "recent_execution": _latest_metric(session, employee_id),
         "recent_ops_audits": _latest_ops_audits(session, employee_id, 5),
     }
@@ -333,6 +346,23 @@ def _analyze_employee_capability(
     reasons: List[str] = []
     if llm_state.get("needs_llm") and not llm_state.get("activated"):
         reasons.append("缺少可用 LLM 密钥（平台密钥或可解密 BYOK）")
+    try:
+        loaded_pack = load_employee_pack(session, employee_id)
+        runtime_issues = employee_pack_runtime_issues(loaded_pack)
+    except Exception as exc:  # noqa: BLE001
+        loaded_pack = {}
+        runtime_issues = [f"员工包运行时检查失败: {str(exc)[:300]}"]
+    reasons.extend(runtime_issues)
+    recent = base.get("recent_execution")
+    pack_updated_at = float(loaded_pack.get("archive_mtime") or 0.0)
+    if not isinstance(recent, Mapping) or (
+        float(recent.get("created_at_epoch") or 0.0) < pack_updated_at
+    ):
+        operational_state = "untested"
+    elif _as_str(recent.get("status")) == "success":
+        operational_state = "healthy"
+    else:
+        operational_state = "degraded"
 
     base.update(
         {
@@ -340,6 +370,9 @@ def _analyze_employee_capability(
             "declared_dependencies": deps,
             "llm": llm_state,
             "risk": risk_state,
+            "runtime_issues": runtime_issues,
+            "operational_state": operational_state,
+            "pack_updated_at_epoch": pack_updated_at,
             "reasons": reasons,
             "executable": len(reasons) == 0,
         }

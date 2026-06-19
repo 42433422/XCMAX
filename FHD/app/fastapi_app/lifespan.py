@@ -99,6 +99,16 @@ async def lifespan(app: FastAPI):
 
         await teardown_neuro_bus()
         logger.info("✅ 神经总线已关闭")
+        try:
+            from app.neuro_bus.health_monitor import get_health_monitor
+
+            get_health_monitor().stop_monitoring()
+            task = getattr(app.state, "neuro_health_monitor_task", None)
+            if task and not task.done():
+                task.cancel()
+            logger.info("✅ HealthMonitor 监控循环已停止")
+        except RECOVERABLE_ERRORS as hm_err:
+            logger.warning("⚠️ HealthMonitor 关闭失败: %s", hm_err)
     except RECOVERABLE_ERRORS as e:
         logger.warning("⚠️ 神经总线关闭失败: %s", e)
 
@@ -235,6 +245,14 @@ async def _init_neuro_ddd_async(app: FastAPI):
         app.state.neuro_bus = bus
         app.state.neuro_bus_manager = get_neuro_bus_manager()
         logger.info("✅ 神经总线已启动，域: %s", bus.registered_domains)
+        try:
+            from app.neuro_bus.health_monitor import get_health_monitor
+
+            monitor = get_health_monitor()
+            app.state.neuro_health_monitor_task = asyncio.create_task(monitor.start_monitoring())
+            logger.info("✅ HealthMonitor 监控循环已启动")
+        except RECOVERABLE_ERRORS as hm_err:
+            logger.warning("⚠️ HealthMonitor 启动失败: %s", hm_err)
     except RECOVERABLE_ERRORS as e:
         logger.warning("⚠️ 神经总线初始化失败: %s", e)
 

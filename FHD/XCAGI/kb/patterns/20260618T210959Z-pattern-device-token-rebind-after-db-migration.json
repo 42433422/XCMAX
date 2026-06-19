@@ -1,0 +1,12 @@
+{
+  "after": "Upsert the expected device id with sha256(device token), activated/allowed flags, and restart the agent.",
+  "before": "Migrate API DB without preserving activated device token hashes; agent connects but is not listed as online.",
+  "created_at": "2026-06-18T21:09:59.090773+00:00",
+  "kind": "code_pattern",
+  "metadata": {
+    "fix_path": "/Users/a4243342/Desktop/XCMAX/FHD/XCAGI/kb/fixes/20260618T210959Z-fix-para-api-is-healthy-but-self-maintenance-loop.json"
+  },
+  "pattern": "device_token_rebind_after_db_migration",
+  "schema_version": 1,
+  "summary": "When moving controller API DBs, rebind long-lived device tokens to the configured device id."
+}

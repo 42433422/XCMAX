@@ -1,0 +1,1 @@
+import{_ as e}from"./HostModBridgeView.vue_vue_type_script_setup_true_lang-BvrZDvc2.js";import{a1 as a,a2 as t,t as n}from"./index-CinG43sm.js";const _=a({__name:"LanGateView",setup(i){return(o,r)=>(n(),t(e,{"mod-id":"xcagi-lan-license-bridge",view:"LanGateView",title:"局域网门禁"}))}});export{_ as default};

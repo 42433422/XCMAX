@@ -1,0 +1,12 @@
+{
+  "created_at": "2026-06-18T23:04:30.944210+00:00",
+  "fix_diff": "Added _strip_modstore_deploy_prefix() and use deploy-relative paths for overlay placement and related-test inference. Added regression for monorepo root + MODstore_deploy/modstore_server path that must run smoke pytest. Extended loop_memory_requires_executable_change() to require executable changes after await_human_strategy_approval review/QA risks and recent human-strategy runs. Added ops_staged_auto_approve regression that marker-only self_maintenance_loop_status.py is rejected under review_or_qa_reported_risk memory.",
+  "kind": "fix",
+  "metadata": {
+    "component": "cr_narrow_ci,self_maintenance_policy,ops_staged_auto_approve",
+    "run_id": "e7a2510f-ce0d-4cb2-a6b7-b7938160b226"
+  },
+  "root_cause": "Path handling used raw rel_path for overlay/test inference, so monorepo-root inputs with MODstore_deploy/ prefixes bypassed modstore_server smoke fallback or double-prefixed overlay paths. loop_memory_requires_executable_change only considered stop/open_items, not await_human_strategy_approval/recent completed_waiting_human_strategy states.",
+  "schema_version": 1,
+  "symptom": "Self-maintenance loop still fails after target-branch prompt fix: narrow CI loses smoke fallback for prefixed MODstore_deploy paths and marker-only gate does not fail closed for recent review/QA risk memory."
+}

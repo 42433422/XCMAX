@@ -53,6 +53,15 @@
             </intent-filter>
         </service>
 
+        <service
+            android:name=".core.push.JPushService"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="cn.jpush.android.intent.RECEIVE_MESSAGE" />
+            </intent-filter>
+        </service>
+
         <receiver
             android:name=".core.push.JPushReceiver"
             android:enabled="true"

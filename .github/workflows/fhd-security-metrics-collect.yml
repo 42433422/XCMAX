@@ -1,0 +1,116 @@
+# CI SSOT: generated from FHD/.github/workflows/security-metrics-collect.yml — DO NOT edit here.
+# Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
+name: Security metrics collect (daily)
+
+on:
+  schedule:
+    - cron: "30 8 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: security-metrics-collect
+  cancel-in-progress: false
+
+
+defaults:
+  run:
+    working-directory: FHD
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Ensure metrics dir exists
+        run: mkdir -p metrics
+
+      # gitleaks: 密钥泄漏扫描（SARIF v2.1.0）
+      - name: Run gitleaks scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_COMMENTS: "false"
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "false"
+
+      - name: Export gitleaks SARIF to metrics
+        run: |
+          # gitleaks-action 将结果上传到 GitHub Code Scanning，
+          # 但我们额外保存一份到 metrics/ 供 telemetry_backlog_loop 读取。
+          # 使用 gitleaks CLI 直接扫描生成 SARIF（与 action 独立，确保有文件落盘）。
+          DATE=$(date -u +%Y-%m-%d)
+          docker run --rm -v "${PWD}:/repo" zricethezav/gitleaks:latest \
+            detect --source /repo --report-format sarif --report-path /repo/metrics/gitleaks-${DATE}.json \
+            --no-banner --redact || true
+          # 如果 gitleaks 未发现泄漏，report-format sarif 仍会生成空 runs 数组
+          if [ ! -f metrics/gitleaks-${DATE}.json ]; then
+            echo '{"runs":[{"results":[]}]}' > metrics/gitleaks-${DATE}.json
+          fi
+          echo "gitleaks SARIF saved to metrics/gitleaks-${DATE}.json"
+
+      # Trivy: 容器/依赖漏洞扫描（JSON 格式）
+      - name: Run Trivy dependency scan
+        uses: aquasecurity/trivy-action@0.35.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: json
+          output: metrics/trivy-$(date -u +%Y-%m-%d).json
+          severity: CRITICAL,HIGH,MEDIUM
+          ignore-unfixed: true
+          exit-code: "0"
+
+      - name: Verify metrics files
+        run: |
+          DATE=$(date -u +%Y-%m-%d)
+          echo "=== metrics/ contents ==="
+          ls -la metrics/gitleaks-${DATE}.json metrics/trivy-${DATE}.json 2>&1 || true
+          echo "=== gitleaks summary ==="
+          python3 -c "
+          import json
+          from pathlib import Path
+          f = Path('metrics/gitleaks-${DATE}.json')
+          if f.exists():
+              data = json.loads(f.read_text())
+              total = sum(len(r.get('results', [])) for r in data.get('runs', []))
+              print(f'gitleaks findings: {total}')
+          " || true
+          echo "=== trivy summary ==="
+          python3 -c "
+          import json
+          from pathlib import Path
+          f = Path('metrics/trivy-${DATE}.json')
+          if f.exists():
+              data = json.loads(f.read_text())
+              crit_high = 0
+              for result in data.get('Results', []):
+                  for v in result.get('Vulnerabilities', []):
+                      if v.get('Severity') in ('CRITICAL', 'HIGH'):
+                          crit_high += 1
+              print(f'trivy CRITICAL/HIGH: {crit_high}')
+          " || true
+
+      - name: Prune old metrics files (keep 30 days)
+        run: |
+          find metrics/ -name "gitleaks-*.json" -mtime +30 -delete 2>/dev/null || true
+          find metrics/ -name "trivy-*.json" -mtime +30 -delete 2>/dev/null || true
+
+      - name: Commit metrics
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add metrics/gitleaks-*.json metrics/trivy-*.json
+          git diff --staged --quiet || git commit -m "chore(metrics): security scan $(date -u +%Y%m%d)"
+          git push || true

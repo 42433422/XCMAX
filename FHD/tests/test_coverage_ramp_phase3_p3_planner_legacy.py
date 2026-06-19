@@ -6,7 +6,7 @@ import json
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-from app.application.workflow.legacy_chat_adapter import (
+from app.legacy.chat.legacy_chat_adapter import (
     _parse_generate_office_format,
     _planner_tools_max_workers,
     _post_tool_round_hint,
@@ -74,9 +74,9 @@ def test_planner_plan_uses_fallback_when_react_none(
     assert plan.nodes
 
 
-@patch("app.application.workflow.legacy_chat_adapter.get_openai_compatible_client")
-@patch("app.application.workflow.legacy_chat_adapter.require_api_key")
-@patch("app.application.workflow.legacy_chat_adapter._get_workflow_tool_registry")
+@patch("app.legacy.chat.legacy_chat_adapter.get_openai_compatible_client")
+@patch("app.legacy.chat.legacy_chat_adapter.require_api_key")
+@patch("app.legacy.chat.legacy_chat_adapter._get_workflow_tool_registry")
 def test_legacy_chat_adapter_chat_minimal(
     mock_reg: MagicMock, _mock_key: MagicMock, mock_client: MagicMock
 ) -> None:
@@ -89,7 +89,7 @@ def test_legacy_chat_adapter_chat_minimal(
     mock_client.return_value.chat.completions.create.return_value = MagicMock(
         choices=[choice]
     )
-    from app.application.workflow.legacy_chat_adapter import chat
+    from app.legacy.chat.legacy_chat_adapter import chat
 
     out = chat("你好", workspace_root="/tmp", model="deepseek-chat")
     assert out is not None

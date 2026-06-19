@@ -1,0 +1,15 @@
+{
+  "created_at": "2026-06-18T21:27:00.739976+00:00",
+  "fix_diff": "diff --git a/self_maintenance_loop_runner.py b/self_maintenance_loop_runner.py\n-label = os.environ.get(\"MODSTORE_PARA_AGENT_LAUNCHD_LABEL\", \"com.xcmax.para-main-agent\")\n+label = os.environ.get(\"MODSTORE_PARA_AGENT_LAUNCHD_LABEL\", \"com.xcmax.para-main-agent.watchdog\")\n\nlaunchctl bootout/disable com.xcmax.para-main-agent\nkeep only com.xcmax.para-main-agent.watchdog running one e2e-agent process\n",
+  "kind": "fix",
+  "metadata": {
+    "files": [
+      "self_maintenance_loop_runner.py",
+      "LaunchAgents"
+    ],
+    "source": "codex_direct_fix"
+  },
+  "root_cause": "Two launchd jobs started e2e-agent with the same device token, so each WebSocket connection replaced the other and tasks were not reliably delivered.",
+  "schema_version": 1,
+  "symptom": "Para task stays running with only waiting-dispatch log; e2e-agent repeatedly online/disconnected"
+}

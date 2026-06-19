@@ -1,0 +1,1 @@
+import{_ as e}from"./HostModBridgeView.vue_vue_type_script_setup_true_lang-BvrZDvc2.js";import{a1 as a,a2 as t,t as n}from"./index-CinG43sm.js";const s=a({__name:"ChatDebugView",setup(r){return(o,i)=>(n(),t(e,{"mod-id":"xcagi-planner-bridge",view:"ChatDebugView",title:"Planner 页"}))}});export{s as default};

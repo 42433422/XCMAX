@@ -2352,12 +2352,14 @@ class TestMobileExtMobileModItems:
     """Cover ``_mobile_mod_items`` branches."""
 
     def test_empty_list(self, ext_mod):
-        with patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_mm:
+        with patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_mm, \
+             patch("app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item"):
             mock_mm.return_value.list_all_mods.return_value = []
             assert ext_mod._mobile_mod_items() == []
 
     def test_dict_mods(self, ext_mod):
-        with patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_mm:
+        with patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_mm, \
+             patch("app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item"):
             mock_mm.return_value.list_all_mods.return_value = [
                 {"id": "mod-a", "name": "Mod A"},
                 {"mod_id": "mod-b", "title": "Mod B"},
@@ -2367,7 +2369,8 @@ class TestMobileExtMobileModItems:
             assert items[0]["id"] == "mod-a"
 
     def test_object_mods(self, ext_mod):
-        with patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_mm:
+        with patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_mm, \
+             patch("app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item"):
             mod = MagicMock()
             mod.id = "mod-obj"
             mod.name = "Obj Mod"
@@ -2381,18 +2384,21 @@ class TestMobileExtMobileModItems:
         with patch(
             "app.infrastructure.mods.mod_manager.get_mod_manager",
             side_effect=RuntimeError("fail"),
-        ):
+        ), \
+            patch("app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item"):
             assert ext_mod._mobile_mod_items() == []
 
     def test_limit_100(self, ext_mod):
-        with patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_mm:
+        with patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_mm, \
+             patch("app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item"):
             mock_mm.return_value.list_all_mods.return_value = [
                 {"id": f"mod-{i}", "name": f"Mod {i}"} for i in range(150)
             ]
             assert len(ext_mod._mobile_mod_items()) == 100
 
     def test_empty_id_skipped(self, ext_mod):
-        with patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_mm:
+        with patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_mm, \
+             patch("app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item"):
             mock_mm.return_value.list_all_mods.return_value = [
                 {"id": "", "name": "NoId"},
                 {"mod_id": "has-id", "title": "HasId"},

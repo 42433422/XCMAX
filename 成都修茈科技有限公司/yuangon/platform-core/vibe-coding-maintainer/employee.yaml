@@ -45,6 +45,15 @@ sla:
 llm_default: "auto"
 llm_reasoning: "auto"
 
+capabilities:
+  - vibe.core.test
+  - nl.parsing.update
+  - doc.sync.vibe
+  - agent.layer.test
+  - security.harden
+  - workflow.engine.update
+  - adapter.compat.check
+
 skills:
   - skills/skill-vibe-core-test.md
   - skills/skill-nl-parsing-update.md
@@ -54,7 +63,21 @@ skills:
   - skills/skill-workflow-engine-update.md
   - skills/skill-adapter-compat-check.md
 
+actions:
+  handlers: ["agent"]
+  agent:
+    workspace:
+      read_only: false
+      requires_project_root: true
+
 depends_on: []
+
+examples:
+  - title: "Vibe-Coding 维护员岗位验收"
+    description: "以最小、无副作用输入验证岗位输出包含真实证据、风险与下一步。"
+    input:
+      task: "执行一次Vibe-Coding 维护员职责范围内的只读检查，并返回证据、风险和下一步。"
+      dry_run: true
 
 changelog:
   - version: "2.0.0"

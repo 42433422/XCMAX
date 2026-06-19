@@ -1,26 +1,22 @@
 {
   "_ssot": "FHD 覆盖率唯一对外口径。全量 source=[app] + branch，.venv = CI 等价依赖（不含 ml extra）。棘轮见 pyproject.toml fail_under + coverage_ratchet_baseline.json；趋势见 coverage-history.jsonl。红灯 WIP 不可对外宣称达标。",
-  "_updated": "2026-06-19",
+  "_updated": "2026-06-20",
   "committed_head": {
-    "captured_at": "2026-06-14T08:33:13Z",
-    "commit": "1569dfa4",
-    "status": "committed_snapshot_below_current_floor",
-    "backend_line_pct": 52.74,
-    "backend_branch_pct": 37.17,
-    "backend_statements": 75357,
-    "frontend_line_pct": 55.82,
-    "frontend_branch_pct": 62.8,
-    "frontend_function_pct": 51.15,
-    "pytest_passed": 3785,
-    "pytest_failed": 0,
-    "pytest_skipped": 51,
-    "vitest_passed": 1143,
-    "vitest_failed": 0
+    "captured_at": "2026-06-19T16:57:59Z",
+    "commit": "bb5e15a7",
+    "status": "committed_green_bump",
+    "backend_line_pct": 85.07,
+    "backend_branch_pct": 74.22,
+    "backend_statements": 85261,
+    "frontend_line_pct": 90.03,
+    "frontend_branch_pct": 80.02,
+    "frontend_function_pct": 77.2,
+    "note": "全绿 bump；后续 mobile 相关提交未重新测量"
   },
   "wip_local": {
     "captured_at": "2026-06-17T03:09:31Z",
     "branch": "feat/enterprise-deploy-maturity",
-    "status": "uncommitted_red",
+    "status": "stale_snapshot_needs_remeasure",
     "backend_line_pct": 74.56,
     "backend_branch_pct": 61.8,
     "backend_statements": 76237,
@@ -31,19 +27,20 @@
     "pytest_failed": 196,
     "pytest_errors": 7,
     "pytest_skipped": 39,
-    "note": "工作区实测；有待修红灯，不可对外宣称已达标或 bump 棘轮"
+    "note": "2026-06-17 快照；HEAD 已于 2026-06-20 bump 至 85.07%，此 WIP 快照需重新测量以反映当前工作区状态"
   },
   "quality_gate": {
-    "status": "failed",
-    "reason": "captured wip_local pytest red; coverage-only artifacts cannot claim green without a full passing test run",
-    "backend_line_floor": 80,
-    "backend_branch_floor": 70,
-    "wip_backend_line_delta": -5.44,
-    "wip_backend_branch_delta": -8.2
+    "status": "head_green_wip_stale",
+    "reason": "HEAD (bb5e15a7) 全绿 bump 至 85.07%；WIP 快照（2026-06-17）已过期，需重新测量当前工作区 pytest 状态",
+    "backend_line_floor": 84,
+    "backend_branch_floor": 73,
+    "head_backend_line_delta": 1.07,
+    "head_backend_branch_delta": 1.22
   },
   "ratchet_floors": {
-    "backend_line": 80,
-    "backend_branch": 70,
+    "backend_line": 84,
+    "backend_branch": 73,
+    "branch_floor": 73,
     "frontend_lines": 73,
     "frontend_branches": 68,
     "frontend_functions": 64,

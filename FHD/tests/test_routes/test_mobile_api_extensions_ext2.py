@@ -853,7 +853,8 @@ class TestMobileModItemsAdditional:
         """Test object mod that only has mod_id attribute."""
         with patch(
             "app.infrastructure.mods.mod_manager.get_mod_manager"
-        ) as mock_mm:
+        ) as mock_mm, \
+            patch("app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item"):
             mod = MagicMock()
             mod.id = None
             mod.name = None
@@ -868,7 +869,8 @@ class TestMobileModItemsAdditional:
         """Test object mod that only has title attribute."""
         with patch(
             "app.infrastructure.mods.mod_manager.get_mod_manager"
-        ) as mock_mm:
+        ) as mock_mm, \
+            patch("app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item"):
             mod = MagicMock()
             mod.id = "mod-1"
             mod.name = None
@@ -883,7 +885,8 @@ class TestMobileModItemsAdditional:
         """Test dict mod that uses name as fallback for id."""
         with patch(
             "app.infrastructure.mods.mod_manager.get_mod_manager"
-        ) as mock_mm:
+        ) as mock_mm, \
+            patch("app.fastapi_routes.mobile_api_extensions._upsert_admin_duty_mod_item"):
             mock_mm.return_value.list_all_mods.return_value = [
                 {"name": "Just Name"},  # No id/mod_id
             ]

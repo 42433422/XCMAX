@@ -459,7 +459,14 @@ class MobileRelayService:
         result: dict[str, Any] | None = None,
     ) -> dict[str, Any] | None:
         now = _utc_now()
-        final_status = status if status in {"done", "failed"} else "done"
+        requested_status = (status or "completed").strip().lower()
+        if requested_status == "done":
+            requested_status = "completed"
+        final_status = (
+            requested_status
+            if requested_status in {"completed", "failed", "blocked", "cancelled"}
+            else "completed"
+        )
         with get_db() as db:
             self.ensure_tables(db)
             desktop = self._desktop_for_token(db, relay_id=relay_id, desktop_token=desktop_token)
@@ -550,13 +557,22 @@ class MobileRelayService:
         return _row_dict(row) if row else None
 
     def _public_desktop(self, data: dict[str, Any]) -> dict[str, Any]:
+        capabilities = data.get("capabilities") if isinstance(data.get("capabilities"), dict) else {}
+        host = str(capabilities.get("host") or "").strip()
+        port = int(capabilities.get("port") or 0)
+        local_base_url = ""
+        if host and host not in {"0.0.0.0", "::"}:
+            local_base_url = f"http://{host}{f':{port}' if port > 0 else ''}"
+        status = data.get("status") or "pending"
         return {
             "relay_id": data.get("relay_id"),
             "label": data.get("desktop_label") or "XCAGI 桌面执行端",
             "device_id": data.get("device_id") or "",
-            "status": data.get("status") or "pending",
+            "status": status,
             "relay_base_url": data.get("relay_base_url") or "",
-            "capabilities": data.get("capabilities") or {},
+            "local_base_url": local_base_url,
+            "paired_at": data.get("updated_at") if status == "paired" else "",
+            "capabilities": capabilities,
             "last_seen_at": data.get("last_seen_at") or "",
             "created_at": data.get("created_at") or "",
             "updated_at": data.get("updated_at") or "",

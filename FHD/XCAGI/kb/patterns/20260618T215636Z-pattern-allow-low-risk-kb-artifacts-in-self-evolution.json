@@ -1,0 +1,12 @@
+{
+  "after": "Include fixes/patterns/metrics KB artifacts in the dynamic low-risk self-evolution scope.",
+  "before": "Require employees to write KB artifacts but block those files from auto-merge.",
+  "created_at": "2026-06-18T21:56:36.057047+00:00",
+  "kind": "code_pattern",
+  "metadata": {
+    "fix_path": "/Users/a4243342/Desktop/XCMAX/FHD/XCAGI/kb/fixes/20260618T215636Z-fix-auto-merge-blocks-a-valid-self-evolution-branch.json"
+  },
+  "pattern": "allow_low_risk_kb_artifacts_in_self_evolution_scope",
+  "schema_version": 1,
+  "summary": "Self-evolution outputs must be in the same merge policy scope as their code changes."
+}

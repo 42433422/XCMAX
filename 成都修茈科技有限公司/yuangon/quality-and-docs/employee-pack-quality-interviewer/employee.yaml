@@ -23,6 +23,9 @@ triggers:
   on_quality_fail: false
   on_coverage_miss: false
 
+capabilities:
+  - xcemp.interview.rubric
+
 skills:
   - skills/skill-xcemp-interview-rubric.md
 
@@ -34,6 +37,13 @@ actions:
   handlers:
     - llm_md
     - echo
+
+examples:
+  - title: "员工包质询员岗位验收"
+    description: "以最小、无副作用输入验证岗位输出包含真实证据、风险与下一步。"
+    input:
+      task: "执行一次员工包质询员职责范围内的只读检查，并返回证据、风险和下一步。"
+      dry_run: true
 
 changelog:
   - version: "1.0.0"

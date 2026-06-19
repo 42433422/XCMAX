@@ -7,7 +7,7 @@
           <p class="wf-viz-sub">以编制图谱为主源，可视化六部门员工、流程派发和执行回写是否在同一条链路上。</p>
         </div>
         <div class="wf-viz-header-actions">
-          <router-link :to="{ name: 'duty-roster-graph' }" class="wf-viz-back">编制图谱</router-link>
+          <router-link :to="{ name: 'duty-roster-graph', query: { view: 'department' } }" class="wf-viz-back">编制图谱</router-link>
           <router-link :to="{ name: 'workflow-employee-space' }" class="wf-viz-back">员工空间</router-link>
         </div>
       </header>

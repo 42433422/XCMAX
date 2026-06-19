@@ -28,11 +28,10 @@ try:
 except ImportError:
     pytest.skip("distillation_trainer 依赖不可用", allow_module_level=True)
 
-torch_available = True
-try:
-    import torch
-except ImportError:
-    torch_available = False
+from app.services import distillation_trainer as _distillation_module
+
+torch = _distillation_module.torch
+torch_available = torch is not None
 
 
 # ========================= DistillationDataset.__len__ =====================
@@ -80,8 +79,6 @@ class TestDistillationTrainerTrainInsufficientData:
 class TestDistillationTrainerTrainEpoch:
     @pytest.mark.skipif(not torch_available, reason="torch not available")
     def test_train_epoch_returns_loss_and_accuracy(self):
-        import torch
-
         trainer = DistillationTrainer(device="cpu", epochs=1, batch_size=2)
 
         # Create a minimal model and data loader
@@ -208,8 +205,6 @@ class TestDistillationTrainerLoadDataTSV:
 class TestDistillationTrainerEvaluateEmpty:
     @pytest.mark.skipif(not torch_available, reason="torch not available")
     def test_evaluate_with_no_batches(self):
-        import torch
-
         trainer = DistillationTrainer(device="cpu")
         trainer.model = MagicMock()
         mock_loader = MagicMock()

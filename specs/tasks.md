@@ -137,4 +137,4 @@
 - [x] G5: 前端 `src/api` 补 auth、orders、materials、modStore、core 单测；Vitest lines 50 / statements 30
 - [x] G6: MODstore `docs/coverage-gates.md` + `tests/integration/test_payment_webhook_flow.py`
 - [x] G7: `specs/checklist.md` PR 测试纪律 + `.trae/specs/_template/checklist.md`
-- [x] G8: 全量 `app` 覆盖率 HEAD **52.74%** 行（2026-06-14 bump）；WIP **74.56%**（待清红灯）— 见 `metrics/coverage-dual-summary.json` / `COVERAGE_RAMP.md`
+- [x] G8: 全量 `app` 覆盖率 HEAD **85.07%** 行（2026-06-20 bump）；WIP **74.56%**（待清红灯）— 见 `metrics/coverage-dual-summary.json` / `COVERAGE_RAMP.md`

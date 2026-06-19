@@ -1,0 +1,15 @@
+{
+  "created_at": "2026-06-18T21:09:59.088922+00:00",
+  "fix_diff": "diff --git a/devfleet.db b/devfleet.db\n+INSERT/UPSERT devices(\n+  id=\"48acf8c9-3549-442d-8838-0849ee2dc50d\",\n+  name=\"Mac 主设备 MODstore Bridge\",\n+  device_token_hash=sha256(DEVFLEET_DEVICE_TOKEN),\n+  activated=1,\n+  connection_allowed=1,\n+  is_primary=1,\n+  dev_tool=\"codex\"\n+)\n+kickstart com.xcmax.para-main-agent/watchdog\n",
+  "kind": "fix",
+  "metadata": {
+    "files": [
+      "DevFleet sqlite devices table",
+      "run-watchdog.sh"
+    ],
+    "source": "codex_direct_fix"
+  },
+  "root_cause": "The migrated DevFleet SQLite DB had only inactive devices without device_token_hash, so the launchd e2e-agent token could not authenticate and bind to the fixed MODSTORE_PARA_DEVICE_ID.",
+  "schema_version": 1,
+  "symptom": "Para API is healthy but self-maintenance loop says configured device is not online; /api/devices is empty"
+}

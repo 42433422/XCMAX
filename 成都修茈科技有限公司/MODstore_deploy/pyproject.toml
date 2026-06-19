@@ -58,6 +58,7 @@ vibe = [
 dev = [
   "pytest>=7.4",
   "pytest-cov>=4.1",
+  "PyYAML>=6.0",
   "black>=24.3",
   "isort>=5.13",
   "jsonschema>=4.21",

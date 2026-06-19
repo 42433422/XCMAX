@@ -5,13 +5,15 @@ metadata:
   annotations:
     kubernetes.io/ingress.class: nginx
     cert-manager.io/cluster-issuer: letsencrypt-prod
+    # 域名来源：cicd-e2e-prompt.md 健康检查 URL https://xiu-ci.com/fhd-api/api/health
+    # 证书签发依赖 letsencrypt-prod ClusterIssuer + DNS 已解析到集群 Ingress LB
 spec:
   tls:
   - hosts:
-    - xcagi.example.com
+    - fhd-api.xiu-ci.com
     secretName: xcagi-tls
   rules:
-  - host: xcagi.example.com
+  - host: fhd-api.xiu-ci.com
     http:
       paths:
       - path: /

@@ -135,7 +135,7 @@ def is_mod_visible_for_enterprise(mod_id: str) -> bool:
 
         if client_primary_mod_on_disk_visible(mid):
             return True
-    except (ImportError, OSError):
+    except RECOVERABLE_ERRORS:
         logger.debug("client primary mod disk visibility check skipped", exc_info=True)
     local_name = _cached_market_username.strip().lower()
     if mid == "taiyangniao-pro" and local_name in {"sunbird", "taiyangniao", "太阳鸟"}:

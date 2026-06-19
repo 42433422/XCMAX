@@ -1,0 +1,12 @@
+{
+  "after": "Copy runtime service trees under XCMAX-runtime and launch from that non-protected working directory.",
+  "before": "Run long-lived launchd services from Desktop project folders.",
+  "created_at": "2026-06-18T21:05:03.467948+00:00",
+  "kind": "code_pattern",
+  "metadata": {
+    "fix_path": "/Users/a4243342/Desktop/XCMAX/FHD/XCAGI/kb/fixes/20260618T210503Z-fix-para-api-is-down-under-launchd-npm-fails.json"
+  },
+  "pattern": "launchd_runtime_outside_desktop",
+  "schema_version": 1,
+  "summary": "macOS launchd services should not depend on Desktop cwd when they must run unattended."
+}

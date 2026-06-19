@@ -65,6 +65,7 @@ dev = [
     "types-aiofiles",
     "types-pillow",
     "types-openpyxl",
+    "celery-types",
     "safety>=3.0",
     "bandit>=1.7",
 ]
@@ -173,7 +174,7 @@ ignore_errors = true
 
 # pytest 配置唯一真相源（2026-05-04 整合）：
 # - 旧 pytest.ini 已删除；当前 addopts 保留为不含 --cov，与历史 pytest.ini 的有效行为一致，
-#   避免本地交互式运行因 fail_under（当前 51，由棘轮维护）产生噪音。CI 通过显式 --cov 等参数生效（见
+#   避免本地交互式运行因 fail_under（当前 84，由棘轮维护）产生噪音。CI 通过显式 --cov 等参数生效（见
 #   .github/workflows/ci-cd.yml + test.yml）。
 [tool.pytest.ini_options]
 # 唯一默认后端套件：tests/（与 CI 一致）。勿与 XCAGI/xcagi_tests 同跑——模块名冲突且部分用例已迁移。
@@ -227,11 +228,14 @@ exclude_lines = [
 # fail_under 语义 = 纯**行覆盖率** floor（铁律1 全量 source=[app]，铁律6 分支单独由棘轮把关）。
 # 当前动态实测只看 metrics/coverage-dual-summary.json；本文件只保存 coverage.py 行覆盖 floor。
 # 禁止在这里复制 pytest passed/failed 快照，避免 SSOT 分裂。
-# 历史 36.35% 为 Phase 4 起点；58/60.63/66.33/77.4% 来自富依赖或误报，已退役。
-# 目标 90% 行 / 85% 分支；未修红灯前禁止对外宣称达标或 bump 棘轮。
+# 三档目标（分阶段达成，非一次性切到 90%）：
+#   - 当前 floor：84% 行（本字段）/ 73% 分支（由 coverage_ratchet_baseline.json 守护）
+#   - Q3 目标（2026-Q3）：85% 行 + 80% 分支
+#   - Q4 终极目标（2026-Q4）：90% 行 + 85% 分支
+# 未修红灯前禁止对外宣称达标或 bump 棘轮。
 # 留 ~2pt 余量防止回退。开启 branch 后 coverage 自带门禁按合并指标拦截，故标准命令传
 # --cov-fail-under=0，由 coverage_ratchet.py --check 按行/分支分别守护（floor 只升不降）。
-fail_under = 80
+fail_under = 84
 
 [tool.coverage.html]
 directory = "htmlcov"
@@ -245,6 +249,9 @@ source_paths = [
     "app/http/",
     "app/contexts/",
     "app/di/",
+    "app/utils/",
+    "app/security/",
+    "app/middleware/",
 ]
 runner = "python -m pytest tests/test_http tests/test_contexts tests/test_di -x --tb=no -q"
 dict_synonyms = ["Struct", "NamedTuple"]

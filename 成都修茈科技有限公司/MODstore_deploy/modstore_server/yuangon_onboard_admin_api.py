@@ -17,6 +17,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException
 from modstore_server.api.deps import require_admin
 from modstore_server.integrations.ops_action_handlers import repo_root
 from modstore_server.models import CatalogItem, User, get_session_factory
+from modstore_server.yuangon_paths import resolve_yuangon_repo_root
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +42,14 @@ def _append_governance_audit(record: Dict[str, Any]) -> None:
         fh.write("\n")
 
 
+def _yuangon_repo_root() -> Path:
+    runtime_roots = [
+        os.environ.get("MODSTORE_RUNTIME_ROOT", ""),
+        os.environ.get("XCMAX_MONOREPO_ROOT", ""),
+    ]
+    return resolve_yuangon_repo_root(repo_root(), extra_roots=runtime_roots)
+
+
 def _parse_onboard_summary(stdout: str) -> Dict[str, int]:
     match = re.search(r"done:\s*onboarded=(\d+),\s*skipped=(\d+),\s*failed=(\d+)", stdout or "", re.I)
     if not match:
@@ -58,6 +67,7 @@ def _discover_yuangon_ids(repo: Path) -> tuple[List[str], List[str]]:
         import yaml
     except ImportError:
         return [], ["PyYAML not installed"]
+    repo = resolve_yuangon_repo_root(repo)
     ydir = (repo / "yuangon").resolve()
     if not ydir.is_dir():
         return [], [f"no yuangon directory: {ydir}"]
@@ -78,7 +88,7 @@ def _discover_yuangon_ids(repo: Path) -> tuple[List[str], List[str]]:
 @router.get("/yuangon-onboard/status")
 def yuangon_onboard_status(admin_user: User = Depends(require_admin)) -> Dict[str, Any]:
     _ = admin_user
-    repo = repo_root()
+    repo = _yuangon_repo_root()
     yuangon_ids, y_errs = _discover_yuangon_ids(repo)
     sf = get_session_factory()
     with sf() as session:
@@ -114,7 +124,7 @@ def yuangon_onboard_run(
     dry_run = bool(body.get("dry_run", False))
     force = bool(body.get("force", False))
     pkg_raw = str(body.get("pkg_ids") or "").strip()
-    repo = repo_root()
+    repo = _yuangon_repo_root()
     script = Path(__file__).resolve().parent / "scripts" / "onboard_yuangon_employees.py"
     if not script.is_file():
         raise HTTPException(500, f"onboard script missing: {script}")

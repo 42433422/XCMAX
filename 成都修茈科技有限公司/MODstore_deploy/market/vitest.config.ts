@@ -31,11 +31,12 @@ export default defineConfig({
         'src/**/*.test.ts',
         'src/**/*.spec.ts',
       ],
+      // 阶梯提升计划：30 → 50 → 80（实际覆盖率 59%，30% 是安全第一台阶）
       thresholds: {
-        statements: 8,
-        branches: 7,
-        functions: 5,
-        lines: 8,
+        statements: 30,
+        branches: 25,
+        functions: 28,
+        lines: 30,
         'src/application/paymentApi.ts': {
           statements: 80,
           branches: 70,

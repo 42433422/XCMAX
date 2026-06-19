@@ -3,9 +3,9 @@ import { ADMIN_OPERATOR_AUX_MENU_ITEMS } from '../../../admin-console/src/consta
 import { mergeSidebarMenuItems } from '@/utils/mergeSidebarMenuItems'
 
 describe('admin operator aux sidebar', () => {
-  it('includes internal-customer-service in admin aux catalog', () => {
+  it('keeps internal-customer-service out of admin aux catalog', () => {
     const keys = ADMIN_OPERATOR_AUX_MENU_ITEMS.map((m) => m.key)
-    expect(keys).toContain('internal-customer-service')
+    expect(keys).not.toContain('internal-customer-service')
   })
 
   it('keeps im as the admin information entry', () => {
@@ -20,7 +20,7 @@ describe('admin operator aux sidebar', () => {
     expect(keys).not.toContain('workflow-visualization')
   })
 
-  it('merges admin aux trailing without duplicate mod slot', () => {
+  it('does not merge internal customer service into admin aux trailing', () => {
     const merged = mergeSidebarMenuItems(
       [
         { key: 'xcmax-admin', name: '服务器后台总览', iconClass: 'fa-dashboard' },
@@ -40,7 +40,7 @@ describe('admin operator aux sidebar', () => {
       ['xcagi-customer-service-bridge'],
       '',
     )
-    expect(merged.map((m) => m.key)).toContain('internal-customer-service')
+    expect(merged.map((m) => m.key)).not.toContain('internal-customer-service')
     expect(merged.map((m) => m.key)).not.toContain('mod-internal-customer-service')
   })
 })

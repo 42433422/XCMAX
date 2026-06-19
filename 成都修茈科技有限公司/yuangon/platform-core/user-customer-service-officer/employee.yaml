@@ -35,6 +35,10 @@ sla:
 llm_default: "auto"
 llm_reasoning: "auto"
 
+capabilities:
+  - demand.intake
+  - wechat.relay
+
 skills:
   - skills/skill-demand-intake.md
   - skills/skill-wechat-relay.md
@@ -44,6 +48,13 @@ actions:
 
 depends_on:
   - intake-dispatcher
+
+examples:
+  - title: "用户客服员工岗位验收"
+    description: "以最小、无副作用输入验证岗位输出包含真实证据、风险与下一步。"
+    input:
+      task: "执行一次用户客服员工职责范围内的只读检查，并返回证据、风险和下一步。"
+      dry_run: true
 
 changelog:
   - version: "1.0.0"

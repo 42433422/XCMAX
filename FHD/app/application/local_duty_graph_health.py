@@ -102,8 +102,19 @@ def read_local_employee_manifest(employee_id: str) -> dict[str, Any] | None:
         from app.infrastructure.mods.mod_manager import get_mod_manager
 
         mgr = get_mod_manager()
-        mods_root = getattr(mgr, "mods_root", None)
-        if mods_root:
+        # 遍历所有 mods search roots，避免主 mods_root 副本残缺时读不到 manifest
+        roots: list[str] = []
+        try:
+            roots = list(mgr.all_mods_roots() or [])
+        except RECOVERABLE_ERRORS:
+            pass
+        if not roots:
+            primary = getattr(mgr, "mods_root", None)
+            if primary:
+                roots = [primary]
+        for mods_root in roots:
+            if not mods_root:
+                continue
             mf_path = os.path.join(os.path.abspath(mods_root), "_employees", pid, "manifest.json")
             if os.path.isfile(mf_path):
                 with open(mf_path, encoding="utf-8") as f:

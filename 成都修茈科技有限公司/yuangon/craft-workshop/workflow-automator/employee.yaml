@@ -27,10 +27,20 @@ actions:
   handlers:
   - llm_md
   - echo
+capabilities:
+  - workflow.automation
+
 skills:
 - skills/skill-workflow-automation.md
 depends_on:
 - script-binder
+examples:
+  - title: "流程自动化员工岗位验收"
+    description: "以最小、无副作用输入验证岗位输出包含真实证据、风险与下一步。"
+    input:
+      task: "执行一次流程自动化员工职责范围内的只读检查，并返回证据、风险和下一步。"
+      dry_run: true
+
 changelog:
 - version: 1.0.0
   date: '2026-05-18'

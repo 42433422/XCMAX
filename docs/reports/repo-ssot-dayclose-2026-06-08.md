@@ -1,4 +1,4 @@
-# XCMAX 根仓 SSOT — 日终检查与归档（2026-06-08）
+# XCMAX 根仓日终检查与归档（2026-06-08）
 
 > v10 线内迭代 · 不升版本号 · 归档类型：**工程起源迁移**
 
@@ -8,20 +8,20 @@
 |---|-----|------|------|
 | 1 | 仓根唯一 `.git` | ✅ | 仅 `/XCMAX/.git`；`FHD/`、`MODstore_deploy/` 无嵌套 `.git` |
 | 2 | 嵌套仓历史备份 | ✅ | `~/XCMAX-archives/nested-git-backup-20260608/`（FHD / MODstore / WechatDecrypt） |
-| 3 | GitHub remote SSOT | ✅ | `origin` → `42433422/XCMAX`，分支 `main` |
+| 3 | GitHub remote 权威 | ✅ | `origin` → `42433422/XCMAX`，分支 `main` |
 | 4 | WechatDecrypt gitlink | ✅ | 160000 已移除，普通文件 3 个 |
 | 5 | CI 调度入口 | ✅ | 根 `.github/workflows/` 20 个；见 [`CI_SSOT.md`](../CI_SSOT.md) |
 | 6 | 子目录 workflow 指针 | ✅ | `FHD/.github/workflows/README.md`、`MODstore_deploy/.github/workflows/README.md` |
 | 7 | 克隆/提交文档 | ✅ | 根 `README`、`FHD/README`、`QUICK_START`、`specs/weekly/` |
 | 8 | `_archive/` 卫生 | ✅ | `bash scripts/verify_no_archive_in_tree.sh` → OK |
-| 9 | Mod SSOT | ✅ | `python FHD/scripts/dev/mods_ssot.py check` → 2 Mod 一致 |
+| 9 | Mod 一致性 | ✅ | `python FHD/scripts/dev/mods_ssot.py check` → 2 Mod 一致 |
 | 10 | 版本锚点 v10 锁 | ✅ | 本次未 bump；`CHANGELOG` Unreleased 已记 |
 
 ## 2. Git 提交链（根仓）
 
 | SHA | 说明 |
 |-----|------|
-| `9367bbcf` | 初始化 XCMAX 根仓 SSOT（~18k 文件，pack ~123 MB） |
+| `9367bbcf` | 初始化 XCMAX 根仓（~18k 文件，pack ~123 MB） |
 | `5fd24c9c` | CI 迁根、WechatDecrypt、文档对齐 |
 
 ## 3. 体积双口径（迁移后复测）

@@ -6,6 +6,10 @@ domain: 负责全站测试套件的维护与执行：pytest 单元/集成测试�
 owner: admin
 area: quality-and-docs
 scope_globs:
+- MODstore_deploy/.flake8
+- MODstore_deploy/_mypy_override_test.toml
+- MODstore_deploy/market/.ts-strict-allowlist.txt
+- MODstore_deploy/market/vitest.config.ts
 - .cursor/contracts/error-code-map.yaml
 - MODstore_deploy/tests/**
 - vibe-coding/tests/**
@@ -44,6 +48,16 @@ sla:
   escalate_to_human: true
 llm_default: auto
 llm_reasoning: auto
+capabilities:
+  - pytest.run
+  - playwright.e2e
+  - vitest.run
+  - coverage.gate
+  - pre.commit.maintain
+  - ci.workflow.check
+  - failure.triage
+  - test.case.review.checklist
+
 skills:
 - skills/skill-pytest-run.md
 - skills/skill-playwright-e2e.md
@@ -55,11 +69,25 @@ skills:
 - skills/skill-test-case-review-checklist.md
 - skills/skill-typecheck-guard.md
 - skills/skill-generate-pytest-stub.md
+actions:
+  handlers: ["agent"]
+  agent:
+    workspace:
+      read_only: false
+      requires_project_root: true
+
 depends_on:
 - modstore-backend-api
 - vibe-coding-maintainer
 - market-frontend-dev
 - deploy-release-officer
+examples:
+  - title: "测试质量运行员岗位验收"
+    description: "以最小、无副作用输入验证岗位输出包含真实证据、风险与下一步。"
+    input:
+      task: "执行一次测试质量运行员职责范围内的只读检查，并返回证据、风险和下一步。"
+      dry_run: true
+
 changelog:
 - version: 2.0.3
   date: '2026-05-08'

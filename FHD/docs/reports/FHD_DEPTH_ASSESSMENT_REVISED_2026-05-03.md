@@ -1,7 +1,10 @@
 # FHD (XCAGI) 项目深度评估报告（修订版）
 
+> **注**：本文件中的覆盖率数据已退役，SSOT 指向 [COVERAGE_RAMP.md](./COVERAGE_RAMP.md)。
+> 本文件保留作为深度评估的历史快照。最后更新：2026-06-20。
+
 > **⚠️ 本文档为 2026-05-03 历史评估**。覆盖率等数字已过期。
-> **当前 SSOT**（2026-06-17）：[`metrics/coverage-dual-summary.json`](../metrics/coverage-dual-summary.json)（HEAD **52.74%** 行 / WIP **74.56%**）、[`CLAIMED_VS_ACTUAL.md`](../CLAIMED_VS_ACTUAL.md)、[`reports/COVERAGE_RAMP.md`](COVERAGE_RAMP.md)。
+> **覆盖率 SSOT 已收敛至 [`reports/COVERAGE_RAMP.md`](COVERAGE_RAMP.md)**，本文件覆盖率章节不再维护。
 
 > 评估日期：2026-05-03  
 > 评估范围：`FHD` 仓库根目录 `app/`、`frontend/`、`k8s/`、`pyproject.toml` 等  

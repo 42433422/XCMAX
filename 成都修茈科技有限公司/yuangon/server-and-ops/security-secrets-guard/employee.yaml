@@ -20,6 +20,9 @@ scope_globs:
   - MODstore_deploy/.env.local.bak-*
   - MODstore_deploy/.env.production
   - MODstore_deploy/.env.production.example
+  - MODstore_deploy/.env*
+  - MODstore_deploy/market/.env*
+  - MODstore_deploy/market/.deploy-ssh.local*
   - MODstore_deploy/env.database.local.example
   - MODstore_deploy/runtime_allowlist.json
   - MODstore_deploy/deploy-target.local.ps1.example
@@ -45,6 +48,9 @@ sla:
 llm_default: "auto"
 llm_reasoning: "auto"
 
+capabilities:
+  - secret.audit
+
 skills:
   - skills/skill-secret-audit.md
 
@@ -54,6 +60,13 @@ actions:
     command_id: pip-audit-run
 
 depends_on: []
+
+examples:
+  - title: "安全密钥守卫岗位验收"
+    description: "以最小、无副作用输入验证岗位输出包含真实证据、风险与下一步。"
+    input:
+      task: "执行一次安全密钥守卫职责范围内的只读检查，并返回证据、风险和下一步。"
+      dry_run: true
 
 changelog:
   - version: "1.0.1"

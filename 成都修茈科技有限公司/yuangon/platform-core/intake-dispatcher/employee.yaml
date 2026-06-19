@@ -6,6 +6,7 @@ owner: admin
 area: platform-core
 
 scope_globs:
+  - contact-intake.js
   - MODstore_deploy/modstore_server/eventing/intake/**
   - MODstore_deploy/modstore_server/api/intake_api.py
   - MODstore_deploy/modstore_server/webhook_events/intake/**
@@ -49,6 +50,9 @@ sla:
 llm_default: "auto"
 llm_reasoning: "auto"
 
+capabilities:
+  - intake.normalize
+
 skills:
   - skills/skill-intake-normalize.md
 
@@ -61,7 +65,13 @@ actions:
 
 depends_on:
   - doc-knowledge-curator   # 自然语言查文档时引用知识库
-  - task-router-officer     # 归一化后转交派发
+
+examples:
+  - title: "需求接入员岗位验收"
+    description: "以最小、无副作用输入验证岗位输出包含真实证据、风险与下一步。"
+    input:
+      task: "执行一次需求接入员职责范围内的只读检查，并返回证据、风险和下一步。"
+      dry_run: true
 
 changelog:
   - version: "1.0.1"

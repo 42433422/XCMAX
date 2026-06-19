@@ -77,15 +77,62 @@ type HealthSt = { total: number; success: number; rate: number; lastExecution?: 
 type HealthLv = 'healthy' | 'warn' | 'idle' | 'unknown'
 type GapState = 'deployed' | 'missing' | 'untracked'
 type ViewMode = 'hub' | 'department' | 'legacy-area' | 'client' | 'loop'
+type GraphViewMode = Exclude<ViewMode, 'loop'>
+const DEFAULT_GRAPH_VIEW_MODE: GraphViewMode = 'department'
+const GRAPH_VIEW_TOKENS = new Set([
+  'department',
+  'dept',
+  '六部门',
+  'hub',
+  'center',
+  '中心',
+  '中心图',
+  'legacy-area',
+  'area',
+  '物理',
+  '物理分区',
+  'client',
+  'workshop',
+  '车间',
+  '客户端车间',
+])
 
-function parseViewModeFromQuery(raw: unknown): ViewMode {
-  const v = String(Array.isArray(raw) ? raw[0] : raw || '').trim().toLowerCase()
+function normalizeViewToken(raw: unknown): string {
+  return String(Array.isArray(raw) ? raw[0] : raw || '').trim().toLowerCase()
+}
+
+function isGraphViewToken(raw: unknown): boolean {
+  return GRAPH_VIEW_TOKENS.has(normalizeViewToken(raw))
+}
+
+function parseViewModeFromQuery(raw: unknown): GraphViewMode {
+  const v = normalizeViewToken(raw)
   if (v === 'department' || v === 'dept' || v === '六部门') return 'department'
   if (v === 'hub' || v === 'center' || v === '中心' || v === '中心图') return 'hub'
   if (v === 'legacy-area' || v === 'area' || v === '物理' || v === '物理分区') return 'legacy-area'
   if (v === 'client' || v === 'workshop' || v === '车间' || v === '客户端车间') return 'client'
-  if (v === 'loop' || v === 'self' || v === 'self-evolution' || v === '自进化') return 'loop'
-  return 'department'
+  return DEFAULT_GRAPH_VIEW_MODE
+}
+
+function clampDutyRosterGraphViewQuery(raw: unknown): void {
+  const nextQuery = { ...route.query }
+  if (raw == null || String(Array.isArray(raw) ? raw[0] : raw).trim() === '') {
+    if (route.query.view === DEFAULT_GRAPH_VIEW_MODE) return
+    nextQuery.view = DEFAULT_GRAPH_VIEW_MODE
+    void router.replace({ query: nextQuery })
+    return
+  }
+  const viewText = normalizeViewToken(raw)
+  if (!isGraphViewToken(viewText)) {
+    delete nextQuery.view
+    void router.replace({ query: nextQuery })
+    return
+  }
+}
+
+function readDutyRosterViewFromRoute() {
+  viewMode.value = parseViewModeFromQuery(route.query.view)
+  clampDutyRosterGraphViewQuery(route.query.view)
 }
 
 // Phase 4 types
@@ -426,6 +473,39 @@ const loopGovernanceAuditLastSummary = computed(() => {
 const loopRuntimeSchemaVersion = computed(() => dgLoopFirstText(dgLoopRecord(loopRuntimeStatus.value).schema_version))
 const loopRuntimeContractRecord = computed(() => dgLoopRecord(loopRuntimeStatus.value?.contract))
 const loopRuntimeContractValidationRecord = computed(() => dgLoopRecord(loopRuntimeStatus.value?.contract_validation))
+const loopRuntimeSurfaceReadinessCards = computed(() => {
+  const readiness = dgLoopRecord(loopRuntimeContractValidationRecord.value.surface_readiness)
+  const surfaces = [
+    { key: 'employee_space', label: '员工空间', role: '执行入口' },
+    { key: 'duty_roster_graph', label: '编制图谱', role: '治理覆盖' },
+    { key: 'self_evolution_loop_runtime', label: 'Runtime', role: '链路审计' },
+  ]
+  return surfaces.map((surface) => {
+    const item = dgLoopRecord(readiness[surface.key])
+    const missing = dgLoopArray(item.missing).map((value) => dgLoopString(value)).filter(Boolean)
+    const known = Object.keys(item).length > 0
+    const ok = item.ok === true
+    const severity = dgLoopFirstText(item.severity, ok ? 'ok' : known && missing.length ? 'bad' : 'warn')
+    const blocked = known && ok === false
+    return {
+      key: surface.key,
+      label: surface.label,
+      role: surface.role,
+      ok,
+      known,
+      blocked,
+      stateLabel: ok ? 'ready' : blocked ? 'blocked' : 'unknown',
+      ctaLabel: ok ? '查看链路' : blocked ? '处理断点' : '等待状态',
+      tone: severity === 'bad' || blocked ? 'bad' : severity === 'warn' || !known ? 'warn' : 'ok',
+      action: dgLoopFirstText(item.action, ok ? 'watch' : known ? 'inspect_runtime_contract' : 'waiting_runtime_contract'),
+      detail: dgLoopFirstText(item.detail, missing.length ? `missing ${missing.slice(0, 3).join(' / ')}` : known ? 'contract ready' : '等待后端暴露该 surface readiness'),
+      sourceLabel: known ? 'source · contract_validation.surface_readiness' : 'waiting · runtime surface readiness missing',
+      missing,
+      target: dgLoopFirstText(item.target_surface, surface.key),
+      view: dgLoopFirstText(item.target_view, 'runtime'),
+    }
+  })
+})
 const loopRuntimeContractRequiredFields = computed(() =>
   dgLoopArray(loopRuntimeContractRecord.value.required_top_level).map((item) => dgLoopString(item)).filter(Boolean),
 )
@@ -471,7 +551,7 @@ const loopRuntimeContractPrimaryRoute = computed(() =>
 )
 const loopRuntimePrimaryRouteLocation = computed(() => {
   const surface = dgLoopString(loopRuntimeContractPrimaryRoute.value.surface)
-  const view = dgLoopFirstText(loopRuntimeContractPrimaryRoute.value.view, 'loop')
+  const view = parseViewModeFromQuery(loopRuntimeContractPrimaryRoute.value.view)
   const employeeId = dgLoopFirstText(
     loopRuntimeContractPrimaryRoute.value.employee_id,
     dgLoopArray(loopRuntimeContractPrimaryRoute.value.target_employee_ids)[0],
@@ -898,106 +978,6 @@ const loopGovernanceTodoQueue = computed(() => {
   return rows
 })
 
-const loopGovernanceTruthCards = computed(() => [
-  {
-    key: 'contract',
-    label: 'Runtime contract',
-    value: dgLoopFirstText(loopRuntimeSchemaVersion.value, 'unknown'),
-    sub: dgLoopFirstText(
-      dgLoopRecord(dgLoopRecord(loopRuntimeStatus.value).source).name,
-      'schema/source missing',
-    ),
-    tone: loopRuntimeContractOk.value ? 'ok' : 'bad',
-  },
-  {
-    key: 'contract-fields',
-    label: 'Contract fields',
-    value: loopRuntimeContractMissingFields.value.length || loopRuntimeSurfaceMissing.value.length
-      ? `missing ${loopRuntimeContractMissingFields.value.length + loopRuntimeSurfaceMissing.value.length}`
-      : `${dgLoopNumber(loopRuntimeContractValidationRecord.value.required_count) ?? loopRuntimeContractRequiredFields.value.length}`,
-    sub: loopRuntimeContractMissingFields.value.length
-      ? `缺字段=${loopRuntimeContractMissingFields.value.slice(0, 4).join(' / ')}`
-      : loopRuntimeSurfaceMissing.value.length
-      ? `本页缺依赖=${loopRuntimeSurfaceMissing.value.slice(0, 4).join(' / ')}`
-      : dgLoopArray(loopRuntimeContractRecord.value.gate_dependencies).length
-      ? `gates=${dgLoopArray(loopRuntimeContractRecord.value.gate_dependencies).map((item) => dgLoopString(item)).filter(Boolean).join(' / ')}`
-      : 'contract.gate_dependencies missing',
-    tone: loopRuntimeContractOk.value ? 'ok' : 'warn',
-  },
-  {
-    key: 'surface-ready',
-    label: 'Duty graph surface',
-    value: loopRuntimeSurfaceReadinessOk.value ? 'ready' : 'blocked',
-    sub: loopRuntimeSurfaceMissing.value.length
-      ? `${dgLoopFirstText(loopRuntimeSurfaceReadiness.value.action, 'repair')} · ${loopRuntimeSurfaceMissing.value.slice(0, 3).join(' / ')}`
-      : dgLoopFirstText(loopRuntimeSurfaceReadiness.value.title, `required=${dgLoopArray(loopRuntimeSurfaceReadiness.value.required).length || 0}`),
-    tone: loopRuntimeSurfaceReadinessOk.value ? 'ok' : 'bad',
-  },
-  {
-    key: 'surface-incident',
-    label: 'Surface incident',
-    value: loopRuntimeSurfaceIncidents.value.length ? `${loopRuntimeSurfaceIncidents.value.length}` : 'none',
-    sub: loopRuntimeSurfaceIncidents.value.length
-      ? dgLoopFirstText(loopRuntimeSurfaceIncident.value.action, loopRuntimeSurfaceIncident.value.title, 'inspect_runtime_contract')
-      : 'duty_roster_graph 当前没有 contract incident',
-    tone: loopRuntimeSurfaceIncidents.value.length ? 'bad' : 'ok',
-  },
-  {
-    key: 'incident-summary',
-    label: 'Incident summary',
-    value: dgLoopFirstText(loopRuntimeSurfaceIncidentSummary.value.status, `${dgLoopNumber(loopRuntimeSurfaceIncidentSummary.value.total) ?? 0}`),
-    sub: dgLoopFirstText(loopRuntimeSurfaceIncidentSummary.value.primary_action)
-      ? `${loopRuntimeSurfaceIncidentSummary.value.primary_action} -> ${dgLoopFirstText(loopRuntimeSurfaceIncidentSummary.value.primary_target_surface, loopRuntimeSurfaceIncidentSummary.value.primary_surface, 'unknown')} · total ${dgLoopNumber(loopRuntimeSurfaceIncidentSummary.value.total) ?? 0}`
-      : dgLoopArray(loopRuntimeSurfaceIncidentSummary.value.surfaces).length
-      ? `surfaces=${dgLoopArray(loopRuntimeSurfaceIncidentSummary.value.surfaces).map((item) => dgLoopString(item)).filter(Boolean).join(' / ')}`
-      : '全局 surface incident clear',
-    tone: dgLoopNumber(loopRuntimeSurfaceIncidentSummary.value.total) ? 'warn' : 'ok',
-  },
-  {
-    key: 'global-nested',
-    label: 'Global nested audit',
-    value: loopRuntimeContractMissingNested.value.length ? `missing ${loopRuntimeContractMissingNested.value.length}` : 'clear',
-    sub: loopRuntimeContractMissingNested.value.length
-      ? loopRuntimeContractMissingNested.value.slice(0, 4).join(' / ')
-      : `global=${loopRuntimeContractValidationRecord.value.global_ok === false ? 'blocked' : 'ok'} · all_surfaces=${loopRuntimeContractValidationRecord.value.all_surfaces_ok === false ? 'blocked' : 'ok'}`,
-    tone: loopRuntimeContractMissingNested.value.length ? 'warn' : 'ok',
-  },
-  {
-    key: 'runtime',
-    label: 'Runtime',
-    value: loopRuntimeStatus.value ? 'connected' : 'missing',
-    sub: loopRuntimeStatus.value
-      ? 'self-maintenance status live'
-      : '无法证明后端 loop 已接入',
-    tone: loopRuntimeStatus.value ? 'ok' : 'bad',
-  },
-  {
-    key: 'roster',
-    label: 'Roster source',
-    value: loopRosterAlignment.value.status || 'unknown',
-    sub: dgLoopFirstText(loopRosterAlignment.value.source, loopRosterAlignment.value.reason, 'roster_alignment'),
-    tone: loopRosterAlignment.value.status === 'error' ? 'bad' : 'ok',
-  },
-  {
-    key: 'audit',
-    label: 'Audit ledger',
-    value: loopGovernanceAuditSummary.value.recent_count != null
-      ? `${loopGovernanceAuditSummary.value.recent_count}`
-      : 'no audit',
-    sub: `health=${loopGovernanceAuditSummary.value.health || 'ok'}`,
-    tone: loopGovernanceAuditSummary.value.health === 'bad' ? 'bad' : 'ok',
-  },
-  {
-    key: 'gates',
-    label: 'Structured gates',
-    value: `${loopActiveGateCards.length}`,
-    sub: loopActiveGateCards.length
-      ? 'active_gates from runtime/policy'
-      : '没有结构化 gate 就不自动放行',
-    tone: loopActiveGateCards.some((card) => card.tone === 'bad') ? 'bad' : 'ok',
-  },
-])
-
 const loopGovernanceFreshnessCards = computed(() => {
   const payload = dgLoopRecord(loopRuntimeStatus.value)
   const generatedAt = dgLoopFirstText(payload.generated_at, payload.created_at, payload.snapshot_at)
@@ -1053,19 +1033,6 @@ const loopParticipantPreview = computed(() =>
       id,
     ),
   })),
-)
-const loopActiveGatesRecord = computed(() => dgLoopRecord(loopRuntimeStatus.value?.active_gates))
-const loopActiveGateCards = computed(() =>
-  dgLoopArray(loopActiveGatesRecord.value.items)
-    .map((item) => dgLoopRecord(item))
-    .filter((item) => dgLoopFirstText(item.key, item.label))
-    .map((item) => ({
-      key: dgLoopFirstText(item.key, item.label),
-      label: dgLoopFirstText(item.label, item.key),
-      value: dgLoopFirstText(item.status, item.ok === false ? 'blocked' : 'allow'),
-      sub: dgLoopFirstText(item.reason, item.detail, 'ready'),
-      tone: item.blocking === true ? 'bad' : 'ok',
-    })),
 )
 const loopDepartmentCoverage = computed(() => {
   const backendCoverage = dgLoopArray(loopRosterAlignment.value.department_coverage)
@@ -3186,9 +3153,11 @@ function stopAutoRefresh() {
   if (refreshTimer)   { clearInterval(refreshTimer);   refreshTimer   = 0 }
 }
 
+readDutyRosterViewFromRoute()
+
 watch(
   () => route.query.view,
-  (q) => { viewMode.value = parseViewModeFromQuery(q) },
+  () => { readDutyRosterViewFromRoute() },
 )
 
 watch(
@@ -3434,7 +3403,7 @@ function goBackFromPage() {
     return
   }
   if (router.hasRoute('duty-roster-graph')) {
-    void router.push({ name: 'duty-roster-graph' })
+    void router.push({ name: 'duty-roster-graph', query: { view: 'department' } })
     return
   }
   if (router.hasRoute('other-tools')) {
@@ -3732,376 +3701,18 @@ function formatTime(iso?: string | null) {
                 <router-link :to="{ name: 'workflow-visualization' }" class="dg-loop-link">流程可视化</router-link>
               </div>
 
-              <div class="dg-loop-command-strip" role="region" aria-label="自进化 loop 调度摘要">
-                <div class="dg-loop-command-main">
-                  <span>Self-evolution Loop</span>
-                  <strong>{{ loopStatusLabel }}</strong>
-                  <small>{{ loopOpenRunCount }} open runs · {{ loopParticipantIds.length }} employees</small>
-                </div>
-                <div class="dg-loop-governance-map" aria-label="员工空间到编制图谱治理闭环">
-                  <div class="dg-loop-governance-map-node dg-loop-governance-map-node--source">
-                    <span>员工空间</span>
-                    <strong>看执行现场</strong>
-                    <small>任务、角色、step、证据回写</small>
-                  </div>
-                  <div class="dg-loop-governance-map-arrow">→</div>
-                  <div class="dg-loop-governance-map-node dg-loop-governance-map-node--center">
-                    <span>编制图谱</span>
-                    <strong>管准入治理</strong>
-                    <small>上岗、补登记、隔离、审计</small>
-                  </div>
-                  <div class="dg-loop-governance-map-arrow">→</div>
-                  <div class="dg-loop-governance-map-node dg-loop-governance-map-node--target">
-                    <span>Self-maintenance loop</span>
-                    <strong>{{ loopActiveGateCards.length ? '结构化门禁' : '等待 runtime' }}</strong>
-                    <small>{{ loopActiveGateCards.length }} gates · {{ loopBridgeIsolationIds.length }} isolated</small>
-                  </div>
-                </div>
-                <div class="dg-loop-governance-truth" aria-label="治理真实数据来源">
-                  <div
-                    class="dg-loop-governance-truth-card dg-loop-governance-truth-card--primary"
-                    :class="loopRuntimeContractStatus.tone === 'bad' ? 'dg-loop-governance-truth-card--bad' : (dgLoopNumber(loopRuntimeSurfaceIncidentSummary.total) ? 'dg-loop-governance-truth-card--warn' : 'dg-loop-governance-truth-card--ok')"
-                  >
-                    <span>Primary contract state</span>
-                    <strong>{{ dgLoopFirstText(loopRuntimeContractStatus.state, loopRuntimeSurfaceIncidentSummary.status, loopRuntimeContractOk ? 'trusted' : 'blocked') }}</strong>
-                    <small>{{ dgLoopFirstText(loopRuntimeContractPrimaryRoute.action, loopRuntimeContractStatus.primary_action, loopRuntimeSurfaceIncidentSummary.primary_action, loopRuntimeSurfaceReadiness.action, loopRuntimeContractOk ? 'all clear' : 'inspect contract') }} -> {{ dgLoopFirstText(loopRuntimeContractPrimaryRoute.surface, loopRuntimeContractStatus.primary_target_surface, 'self_evolution_loop_runtime') }}</small>
-                    <small v-if="dgLoopFirstText(loopRuntimeContractPrimaryRoute.employee_id, dgLoopArray(loopRuntimeContractPrimaryRoute.target_employee_ids)[0])">target employee · {{ dgLoopFirstText(loopRuntimeContractPrimaryRoute.employee_id, dgLoopArray(loopRuntimeContractPrimaryRoute.target_employee_ids)[0]) }}</small>
-                    <small>global={{ loopRuntimeContractStatus.global_ok === false ? 'blocked' : 'ok' }} · all_surfaces={{ loopRuntimeContractStatus.all_surfaces_ok === false ? 'blocked' : 'ok' }}</small>
-                    <small>{{ loopRuntimeContractPrimaryRoute.requires_admin ? 'admin-only' : 'operator' }} · {{ loopRuntimeContractPrimaryRoute.executable ? 'executable' : 'navigate-only' }} · {{ dgLoopFirstText(loopRuntimeContractPrimaryRoute.detail, '按后端 primary_route 跳转') }}</small>
-                    <router-link :to="loopRuntimePrimaryRouteLocation">{{ loopRuntimePrimaryRouteLabel }}</router-link>
-                  </div>
-                  <div
-                    v-for="item in loopGovernanceTruthCards"
-                    :key="item.key"
-                    class="dg-loop-governance-truth-card"
-                    :class="`dg-loop-governance-truth-card--${item.tone}`"
-                  >
-                    <span>{{ item.label }}</span>
-                    <strong>{{ item.value }}</strong>
-                    <small>{{ item.sub }}</small>
-                  </div>
-                </div>
-                <div v-if="loopRuntimeSurfaceIncidents.length" class="dg-loop-governance-incidents" aria-label="编制图谱 contract incidents">
-                  <div
-                    v-for="incident in loopRuntimeSurfaceIncidents"
-                    :key="dgLoopFirstText(incident.id, incident.action, incident.surface)"
-                    class="dg-loop-governance-incident"
-                    :class="`dg-loop-governance-incident--${dgLoopFirstText(incident.severity, 'bad')}`"
-                  >
-                    <span>{{ dgLoopFirstText(incident.surface, 'duty_roster_graph') }} · {{ dgLoopFirstText(incident.severity, 'bad') }}</span>
-                    <strong>{{ dgLoopFirstText(incident.title, 'Surface contract incident') }}</strong>
-                    <small>{{ dgLoopFirstText(incident.action, 'inspect_runtime_contract') }} -> {{ dgLoopFirstText(incident.target_surface, 'self_evolution_loop_runtime') }}</small>
-                    <small>{{ incident.requires_admin ? 'admin-only' : 'operator' }} · {{ incident.executable ? 'executable' : 'navigate-only' }} · {{ dgLoopFirstText(incident.id, 'contract:duty_roster_graph') }}</small>
-                    <small>{{ dgLoopFirstText(incident.source, 'contract_validation') }} · {{ dgLoopFirstText(incident.schema_version, loopRuntimeSchemaVersion) }} · {{ dgLoopFirstText(incident.created_at, 'time unknown') }}</small>
-                    <em>{{ dgLoopArray(incident.missing).map((item) => dgLoopString(item)).filter(Boolean).slice(0, 5).join(' / ') || dgLoopFirstText(incident.detail, 'missing dependencies') }}</em>
-                    <router-link :to="loopRuntimePrimaryRouteLocation">{{ loopRuntimePrimaryRouteLabel }}</router-link>
-                  </div>
-                </div>
-                <div class="dg-loop-governance-freshness" aria-label="治理数据新鲜度">
-                  <div
-                    v-for="item in loopGovernanceFreshnessCards"
-                    :key="item.key"
-                    class="dg-loop-governance-freshness-card"
-                    :class="`dg-loop-governance-freshness-card--${item.tone}`"
-                  >
-                    <span>{{ item.label }}</span>
-                    <strong>{{ item.value }}</strong>
-                    <small>{{ item.sub }}</small>
-                  </div>
-                </div>
-                <div class="dg-loop-command-cards dg-loop-command-cards--governance" role="list" aria-label="编制治理控制台">
-                  <div
-                    v-for="card in loopGovernanceControlCards"
-                    :key="card.key"
-                    class="dg-loop-command-card"
-                    :class="`dg-loop-command-card--${card.tone}`"
-                    role="listitem"
-                  >
-                    <span>{{ card.label }}</span>
-                    <strong>{{ card.value }}</strong>
-                    <small>{{ card.sub }}</small>
-                  </div>
-                </div>
-                <div class="dg-loop-command-cards" role="list">
-                  <div
-                    v-for="card in loopCommandCards"
-                    :key="card.key"
-                    class="dg-loop-command-card"
-                    :class="`dg-loop-command-card--${card.tone}`"
-                    role="listitem"
-                  >
-                    <span>{{ card.label }}</span>
-                    <strong>{{ card.value }}</strong>
-                    <small>{{ card.sub }}</small>
-                  </div>
-                </div>
-                <div v-if="loopActiveGateCards.length" class="dg-loop-command-cards dg-loop-command-cards--gates" role="list" aria-label="当前门禁">
-                  <div
-                    v-for="card in loopActiveGateCards"
-                    :key="card.key"
-                    class="dg-loop-command-card"
-                    :class="`dg-loop-command-card--${card.tone}`"
-                    role="listitem"
-                  >
-                    <span>{{ card.label }}</span>
-                    <strong>{{ card.value }}</strong>
-                    <small>{{ card.sub }}</small>
-                  </div>
-                </div>
-                <div v-if="loopParticipantPreview.length" class="dg-loop-command-workers">
-                  <button
-                    v-for="worker in loopParticipantPreview"
-                    :key="worker.id"
-                    type="button"
-                    class="dg-loop-command-worker"
-                    @click="focusLoopParticipant(worker.id)"
-                  >
-                    <span>{{ worker.id }}</span>
-                    <small>{{ worker.label }}</small>
-                  </button>
-                </div>
-                <div v-if="loopDepartmentCoverage.length" class="dg-loop-command-coverage" aria-label="Loop 部门覆盖">
-                  <button
-                    v-for="dept in loopDepartmentCoverage"
-                    :key="dept.key"
-                    type="button"
-                    class="dg-loop-command-dept"
-                    @click="focusLoopParticipant(dept.ids[0])"
-                  >
-                    <span>{{ dept.label }}</span>
-                    <strong>{{ dept.count }}/{{ dept.total }}</strong>
-                    <small>{{ dept.ids.join(' / ') }}</small>
-                  </button>
-                </div>
-                <div class="dg-loop-command-separation" aria-label="编制与员工隔离">
-                  <div
-                    v-for="card in loopRosterSeparationCards"
-                    :key="card.key"
-                    class="dg-loop-command-separation-card"
-                    :class="`dg-loop-command-separation-card--${card.tone}`"
-                  >
-                    <span>{{ card.label }}</span>
-                    <strong>{{ card.value }}</strong>
-                    <small>{{ card.sub }}</small>
-                  </div>
-                </div>
-                <div class="dg-loop-command-cards dg-loop-command-cards--actions" role="list" aria-label="治理动作路径">
-                  <div
-                    v-for="card in loopGovernanceActionPathCards"
-                    :key="card.key"
-                    class="dg-loop-command-card"
-                    :class="`dg-loop-command-card--${card.tone}`"
-                    role="listitem"
-                  >
-                    <span>{{ card.label }}</span>
-                    <strong>{{ card.value }}</strong>
-                    <small>{{ card.sub }}</small>
-                  </div>
-                </div>
-                <div class="dg-loop-command-cards dg-loop-command-cards--isolation" role="list" aria-label="员工身份隔离矩阵">
-                  <div
-                    v-for="card in loopGovernanceIsolationMatrix"
-                    :key="card.key"
-                    class="dg-loop-command-card"
-                    :class="`dg-loop-command-card--${card.tone}`"
-                    role="listitem"
-                  >
-                    <span>{{ card.label }}</span>
-                    <strong>{{ card.value }}</strong>
-                    <small>{{ card.sub }}</small>
-                  </div>
-                </div>
-                <div class="dg-loop-governance-checklist" aria-label="治理操作清单">
-                  <div class="dg-loop-governance-checklist-head">
-                    <span>Governance checklist</span>
-                    <strong>先准入，再执行，再合并</strong>
-                    <small>员工空间只观察；编制图谱负责上岗、隔离和审计复核。</small>
-                  </div>
-                  <div
-                    v-for="item in loopGovernanceChecklist"
-                    :key="item.key"
-                    class="dg-loop-governance-check"
-                    :class="`dg-loop-governance-check--${item.tone}`"
-                  >
-                    <div>
-                      <span>{{ item.label }}</span>
-                      <strong>{{ item.title }}</strong>
-                      <small>{{ item.detail }}</small>
-                      <small v-if="item.incidentId">incident {{ item.incidentId }} · {{ item.route }}</small>
-                    </div>
-                    <button
-                      v-if="item.action === 'register'"
-                      type="button"
-                      :disabled="loopRemediationBusy"
-                      @click="runLoopDutyRegistration"
-                    >
-                      {{ loopRemediationBusy ? '处理中...' : item.actionLabel }}
-                    </button>
-                    <button
-                      v-else-if="item.action === 'review'"
-                      type="button"
-                      :disabled="loopGovernanceReviewBusy"
-                      @click="reviewLoopGovernanceAudit"
-                    >
-                      {{ loopGovernanceReviewBusy ? '复核中...' : item.actionLabel }}
-                    </button>
-                    <button
-                      v-else-if="item.action === 'focus' && loopBridgePrimaryEmployeeId"
-                      type="button"
-                      @click="focusLoopParticipant(loopBridgePrimaryEmployeeId)"
-                    >
-                      {{ item.actionLabel }}
-                    </button>
-                    <button
-                      v-else
-                      type="button"
-                      @click="viewMode = 'loop'"
-                    >
-                      {{ item.actionLabel }}
-                    </button>
-                  </div>
-                </div>
-                <div class="dg-loop-governance-todos" aria-label="治理待办队列">
-                  <div class="dg-loop-governance-todos-head">
-                    <span>Governance queue</span>
-                    <strong>{{ loopGovernanceTodoQueue.length }} 项待办</strong>
-                    <small>只列需要管理端处理的准入、隔离、审计事项。</small>
-                  </div>
-                  <div
-                    v-for="item in loopGovernanceTodoQueue"
-                    :key="item.key"
-                    class="dg-loop-governance-todo"
-                    :class="`dg-loop-governance-todo--${item.tone}`"
-                  >
-                    <div>
-                      <span>{{ item.label }}</span>
-                      <strong>{{ item.title }}</strong>
-                      <small>{{ item.detail }}</small>
-                    </div>
-                    <button
-                      v-if="item.action === 'register'"
-                      type="button"
-                      :disabled="loopRemediationBusy"
-                      @click="runLoopDutyRegistration"
-                    >
-                      {{ loopRemediationBusy ? '处理中...' : item.actionLabel }}
-                    </button>
-                    <button
-                      v-else-if="item.action === 'review'"
-                      type="button"
-                      :disabled="loopGovernanceReviewBusy"
-                      @click="reviewLoopGovernanceAudit"
-                    >
-                      {{ loopGovernanceReviewBusy ? '复核中...' : item.actionLabel }}
-                    </button>
-                    <button
-                      v-else-if="item.action === 'focus' && loopBridgePrimaryEmployeeId"
-                      type="button"
-                      @click="focusLoopParticipant(loopBridgePrimaryEmployeeId)"
-                    >
-                      {{ item.actionLabel }}
-                    </button>
-                    <button
-                      v-else
-                      type="button"
-                      @click="viewMode = 'loop'"
-                    >
-                      {{ item.actionLabel }}
-                    </button>
-                  </div>
-                </div>
-                <div class="dg-loop-command-diagnosis" :class="`dg-loop-command-diagnosis--${loopAdminDiagnosis.tone}`">
-                  <div>
-                    <span>管理诊断</span>
-                    <strong>{{ loopAdminDiagnosis.title }}</strong>
-                    <small>{{ loopAdminDiagnosis.detail }}</small>
-                    <div class="dg-loop-command-diagnosis-links">
-                      <router-link :to="employeeSpaceLocation(selectedEmp?.id)">回员工空间</router-link>
-                      <router-link
-                        v-if="loopBridgePrimaryEmployeeId"
-                        :to="employeeSpaceLocation(loopBridgePrimaryEmployeeId)"
-                      >
-                        目标员工空间
-                      </router-link>
-                      <button type="button" @click="viewMode = 'loop'">看完整 Loop</button>
-                      <button
-                        v-if="loopBridgePrimaryEmployeeId"
-                        type="button"
-                        @click="focusLoopParticipant(loopBridgePrimaryEmployeeId)"
-                      >
-                        定位目标员工
-                      </button>
-                      <button
-                        v-if="loopCanRunDutyRegistration || loopRemediationBusy"
-                        type="button"
-                        class="dg-loop-command-diagnosis-action"
-                        :disabled="loopRemediationBusy"
-                        @click="runLoopDutyRegistration"
-                      >
-                        {{ loopRemediationBusy ? '补登记中...' : `${dgLoopFirstText(loopGovernanceActionRecord.label, '补登记')} ${loopRemediationTargetIds.length} 个上岗员工` }}
-                      </button>
-                      <button
-                        v-if="loopCanReviewGovernanceAudit || loopGovernanceReviewBusy"
-                        type="button"
-                        class="dg-loop-command-diagnosis-action"
-                        :disabled="loopGovernanceReviewBusy"
-                        @click="reviewLoopGovernanceAudit"
-                      >
-                        {{ loopGovernanceReviewBusy ? '复核中...' : '人工复核治理审计' }}
-                      </button>
-                    </div>
-                    <small
-                      v-if="loopRemediationResult"
-                      class="dg-loop-command-diagnosis-result"
-                      :class="loopRemediationResult.ok === false ? 'dg-loop-command-diagnosis-result--bad' : 'dg-loop-command-diagnosis-result--ok'"
-                    >
-                      onboard exit={{ loopRemediationResult.exit_code ?? '0' }} · {{ loopRemediationResult.ok === false ? '失败' : '已提交补登记' }}<template v-if="loopRemediationResultSummary"> · {{ loopRemediationResultSummary }}</template>
-                    </small>
-                    <small v-if="loopRemediationError" class="dg-loop-command-diagnosis-result dg-loop-command-diagnosis-result--bad">
-                      {{ loopRemediationError }}
-                    </small>
-                    <small
-                      v-if="loopGovernanceReviewResult"
-                      class="dg-loop-command-diagnosis-result dg-loop-command-diagnosis-result--ok"
-                    >
-                      治理审计已复核：{{ dgLoopRecord(loopGovernanceReviewResult.summary).health || 'ok' }}
-                    </small>
-                    <small v-if="loopGovernanceReviewError" class="dg-loop-command-diagnosis-result dg-loop-command-diagnosis-result--bad">
-                      {{ loopGovernanceReviewError }}
-                    </small>
-                    <small
-                      v-if="loopBridgeIsolationIds.length"
-                      class="dg-loop-command-diagnosis-result dg-loop-command-diagnosis-result--bad"
-                    >
-                      已隔离非编制：{{ loopBridgeIsolationIds.slice(0, 6).join(' / ') }}
-                    </small>
-                    <small
-                      v-if="loopGovernanceAuditLast.action"
-                      class="dg-loop-command-diagnosis-result"
-                      :class="loopGovernanceAuditLast.ok === false ? 'dg-loop-command-diagnosis-result--bad' : 'dg-loop-command-diagnosis-result--ok'"
-                    >
-                      最近治理：{{ loopGovernanceAuditLast.action }} · {{ loopGovernanceAuditLast.status || (loopGovernanceAuditLast.ok === false ? 'failed' : 'success') }}<template v-if="loopGovernanceAuditLastSummary"> · {{ loopGovernanceAuditLastSummary }}</template><template v-if="loopGovernanceAuditLastTargets.length"> · {{ loopGovernanceAuditLastTargets.slice(0, 4).join(' / ') }}</template>
-                    </small>
-                    <small
-                      v-if="loopGovernanceAuditSummary.recent_count != null"
-                      class="dg-loop-command-diagnosis-result"
-                      :class="loopGovernanceAuditSummary.health === 'bad' ? 'dg-loop-command-diagnosis-result--bad' : 'dg-loop-command-diagnosis-result--ok'"
-                    >
-                      治理健康：{{ loopGovernanceAuditSummary.health || 'ok' }} · {{ loopGovernanceAuditSummary.success_count ?? 0 }} ok · {{ loopGovernanceAuditSummary.failure_count ?? 0 }} failed · 连续失败 {{ loopGovernanceAuditSummary.consecutive_failures ?? 0 }}
-                    </small>
-                    <small
-                      v-if="loopCurrentGovernanceGateRecord.action"
-                      class="dg-loop-command-diagnosis-result"
-                      :class="loopCurrentGovernanceGateRecord.blocking === true ? 'dg-loop-command-diagnosis-result--bad' : 'dg-loop-command-diagnosis-result--ok'"
-                    >
-                      当前治理门禁：{{ loopCurrentGovernanceGateRecord.action }} · {{ loopCurrentGovernanceGateRecord.reason || 'governance policy' }}
-                    </small>
-                  </div>
-                  <ul>
-                    <li v-for="action in loopAdminDiagnosis.actions" :key="action">{{ action }}</li>
-                  </ul>
-                </div>
-              </div>
+              <button
+                v-if="viewMode !== 'loop' && loopRuntimeStatus"
+                type="button"
+                class="dg-loop-status-chip"
+                :class="`dg-loop-status-chip--${loopRuntimeContractStatus.tone === 'bad' ? 'bad' : (loopOpenRunCount > 0 ? 'run' : 'idle')}`"
+                title="打开自进化 Loop 查看治理闭环与 runtime"
+                @click="viewMode = 'loop'"
+              >
+                <span>Loop</span>
+                <strong>{{ loopStatusLabel }}</strong>
+                <small>{{ loopOpenRunCount }} runs · {{ loopParticipantIds.length }} emp</small>
+              </button>
 
               <div class="dg-more-wrap">
                 <button
@@ -5161,11 +4772,20 @@ function formatTime(iso?: string | null) {
 </template>
 
 <style scoped>
+.dg-loop-command-strip,
+.dg-loop-command-strip > * {
+  --loop-compact-card-min: 145px;
+  --loop-detail-card-min: 220px;
+  min-width: 0;
+}
+
 .dg-loop-governance-map {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr);
   gap: 8px;
   align-items: stretch;
+  min-width: 0;
+  overflow: hidden;
   padding: 10px;
   border: 1px solid rgba(148, 163, 184, 0.18);
   border-radius: 16px;
@@ -5177,6 +4797,8 @@ function formatTime(iso?: string | null) {
 
 .dg-loop-governance-map-node {
   min-width: 0;
+  overflow: hidden;
+  contain: layout paint;
   padding: 10px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 13px;
@@ -5186,6 +4808,21 @@ function formatTime(iso?: string | null) {
 .dg-loop-governance-map-node--center {
   border-color: rgba(20, 184, 166, 0.32);
   background: rgba(15, 118, 110, 0.22);
+}
+
+.dg-loop-governance-map-node--source {
+  border-color: rgba(59, 130, 246, 0.22);
+  background: rgba(30, 64, 175, 0.18);
+}
+
+.dg-loop-governance-map-node--target {
+  border-color: rgba(99, 102, 241, 0.24);
+  background: rgba(49, 46, 129, 0.2);
+}
+
+.dg-loop-governance-map-node--route {
+  border-color: rgba(34, 211, 238, 0.58);
+  box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.18), 0 18px 44px rgba(34, 211, 238, 0.12);
 }
 
 .dg-loop-governance-map-node span,
@@ -5224,15 +4861,329 @@ function formatTime(iso?: string | null) {
   display: flex;
   align-items: center;
   justify-content: center;
+  min-width: 18px;
   color: rgba(226, 232, 240, 0.7);
   font-size: 18px;
   font-weight: 950;
 }
 
+.dg-loop-governance-directive {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 0.7fr) max-content;
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+  contain: layout paint;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+  background:
+    radial-gradient(circle at 0% 0%, rgba(34, 211, 238, 0.2), transparent 30%),
+    linear-gradient(135deg, rgba(15, 23, 42, 0.72), rgba(30, 41, 59, 0.6));
+  box-shadow: 0 18px 44px rgba(2, 6, 23, 0.18);
+}
+
+.dg-loop-governance-directive--ok {
+  border-color: rgba(34, 197, 94, 0.24);
+  background:
+    radial-gradient(circle at 0% 0%, rgba(34, 197, 94, 0.16), transparent 30%),
+    linear-gradient(135deg, rgba(20, 83, 45, 0.56), rgba(15, 23, 42, 0.56));
+}
+
+.dg-loop-governance-directive--warn {
+  border-color: rgba(251, 191, 36, 0.28);
+  background:
+    radial-gradient(circle at 0% 0%, rgba(251, 191, 36, 0.16), transparent 30%),
+    linear-gradient(135deg, rgba(120, 53, 15, 0.58), rgba(15, 23, 42, 0.56));
+}
+
+.dg-loop-governance-directive--bad {
+  border-color: rgba(248, 113, 113, 0.3);
+  background:
+    radial-gradient(circle at 0% 0%, rgba(248, 113, 113, 0.18), transparent 30%),
+    linear-gradient(135deg, rgba(127, 29, 29, 0.62), rgba(15, 23, 42, 0.58));
+}
+
+.dg-loop-governance-directive-copy,
+.dg-loop-governance-directive-meta {
+  min-width: 0;
+}
+
+.dg-loop-governance-directive-copy span,
+.dg-loop-governance-directive-meta span {
+  display: block;
+  color: rgba(203, 213, 225, 0.82);
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.dg-loop-governance-directive-copy strong,
+.dg-loop-governance-directive-meta strong {
+  display: block;
+  margin-top: 4px;
+  color: #f8fafc;
+  font-size: 15px;
+  font-weight: 950;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dg-loop-governance-directive-copy small,
+.dg-loop-governance-directive-meta small {
+  display: block;
+  margin-top: 4px;
+  color: rgba(226, 232, 240, 0.78);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
+.dg-loop-governance-directive-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  justify-self: end;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 32px;
+  padding: 9px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #f8fafc;
+  font-size: 12px;
+  font-weight: 950;
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dg-loop-governance-directive-link:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.dg-loop-section-head {
+  display: grid;
+  grid-template-columns: minmax(0, 0.32fr) minmax(0, 0.68fr);
+  gap: 6px 10px;
+  align-items: baseline;
+  min-width: 0;
+  padding: 2px 2px 0;
+}
+
+.dg-loop-section-head span,
+.dg-loop-section-head strong,
+.dg-loop-section-head small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dg-loop-section-head span {
+  color: rgba(45, 212, 191, 0.86);
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.dg-loop-section-head strong {
+  color: #f8fafc;
+  font-size: 13px;
+  font-weight: 950;
+}
+
+.dg-loop-section-head small {
+  grid-column: 1 / -1;
+  color: rgba(226, 232, 240, 0.72);
+  font-size: 11px;
+  font-weight: 800;
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.dg-loop-section-legend {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.dg-loop-section-dot {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  padding: 3px 7px;
+  border-radius: 999px;
+  color: rgba(203, 213, 225, 0.78);
+  font-size: 10px;
+  font-weight: 950;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.dg-loop-section-dot::before {
+  width: 6px;
+  height: 6px;
+  margin-right: 5px;
+  border-radius: 999px;
+  background: currentColor;
+  content: '';
+}
+
+.dg-loop-section-dot--ok {
+  background: rgba(34, 197, 94, 0.12);
+  color: rgba(134, 239, 172, 0.92);
+}
+
+.dg-loop-section-dot--bad {
+  background: rgba(239, 68, 68, 0.14);
+  color: rgba(252, 165, 165, 0.92);
+}
+
+.dg-loop-section-dot--warn {
+  background: rgba(245, 158, 11, 0.14);
+  color: rgba(253, 230, 138, 0.92);
+}
+
+.dg-loop-surface-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+
+.dg-loop-surface-card {
+  min-width: 0;
+  overflow: hidden;
+  contain: layout paint;
+  padding: 11px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.34);
+  isolation: isolate;
+}
+
+.dg-loop-surface-card--ok {
+  border-color: rgba(34, 197, 94, 0.22);
+  background: rgba(20, 83, 45, 0.22);
+}
+
+.dg-loop-surface-card--warn {
+  border-color: rgba(245, 158, 11, 0.26);
+  background: rgba(120, 53, 15, 0.24);
+}
+
+.dg-loop-surface-card--bad {
+  border-color: rgba(239, 68, 68, 0.28);
+  background: rgba(127, 29, 29, 0.28);
+}
+
+.dg-loop-surface-card span,
+.dg-loop-surface-card strong,
+.dg-loop-surface-card small,
+.dg-loop-surface-card em {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dg-loop-surface-card span {
+  color: rgba(203, 213, 225, 0.82);
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.dg-loop-surface-card strong {
+  margin-top: 4px;
+  color: #f8fafc;
+  font-size: 16px;
+  font-weight: 950;
+}
+
+.dg-loop-surface-card small,
+.dg-loop-surface-card em {
+  margin-top: 4px;
+  color: rgba(226, 232, 240, 0.78);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.dg-loop-surface-card a,
+.dg-loop-surface-wait {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  max-width: 100%;
+  min-height: 28px;
+  margin-top: 8px;
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: rgba(45, 212, 191, 0.12);
+  color: rgba(153, 246, 228, 0.94);
+  font-size: 11px;
+  font-weight: 950;
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dg-loop-surface-card a:hover {
+  background: rgba(45, 212, 191, 0.18);
+}
+
+.dg-loop-surface-route-note {
+  color: rgba(148, 163, 184, 0.78);
+}
+
+.dg-loop-surface-source-note {
+  color: rgba(148, 163, 184, 0.78);
+  font-size: 10px;
+}
+
+.dg-loop-surface-wait {
+  background: rgba(148, 163, 184, 0.12);
+  color: rgba(203, 213, 225, 0.72);
+  cursor: default;
+}
+
+.dg-loop-surface-card a:focus-visible,
+.dg-loop-governance-directive-link:focus-visible,
+.dg-loop-governance-truth-card a:focus-visible,
+.dg-loop-governance-incident a:focus-visible {
+  outline: 2px solid rgba(45, 212, 191, 0.74);
+  outline-offset: 2px;
+}
+
+.dg-loop-governance-directive-copy small,
+.dg-loop-surface-card em {
+  display: -webkit-box;
+  overflow: hidden;
+  white-space: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
 .dg-loop-governance-truth {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(var(--loop-compact-card-min), 1fr));
   gap: 8px;
+  min-width: 0;
   padding: 10px;
   border: 1px solid rgba(148, 163, 184, 0.16);
   border-radius: 16px;
@@ -5241,6 +5192,8 @@ function formatTime(iso?: string | null) {
 
 .dg-loop-governance-truth-card {
   min-width: 0;
+  overflow: hidden;
+  contain: layout paint;
   padding: 10px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 13px;
@@ -5281,7 +5234,11 @@ function formatTime(iso?: string | null) {
 
 .dg-loop-governance-truth-card a {
   display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: fit-content;
+  max-width: 100%;
+  min-height: 28px;
   margin-top: 7px;
   padding: 5px 8px;
   border-radius: 999px;
@@ -5290,6 +5247,9 @@ function formatTime(iso?: string | null) {
   font-size: 11px;
   font-weight: 950;
   text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .dg-loop-governance-truth-card--ok {
@@ -5315,8 +5275,9 @@ function formatTime(iso?: string | null) {
 
 .dg-loop-governance-incidents {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(var(--loop-detail-card-min), 1fr));
   gap: 8px;
+  min-width: 0;
   padding: 10px;
   border: 1px solid rgba(239, 68, 68, 0.18);
   border-radius: 16px;
@@ -5325,6 +5286,8 @@ function formatTime(iso?: string | null) {
 
 .dg-loop-governance-incident {
   min-width: 0;
+  overflow: hidden;
+  contain: layout paint;
   padding: 10px;
   border: 1px solid rgba(239, 68, 68, 0.28);
   border-radius: 13px;
@@ -5373,7 +5336,11 @@ function formatTime(iso?: string | null) {
 
 .dg-loop-governance-incident a {
   display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: fit-content;
+  max-width: 100%;
+  min-height: 28px;
   margin-top: 7px;
   padding: 5px 8px;
   border-radius: 999px;
@@ -5382,11 +5349,15 @@ function formatTime(iso?: string | null) {
   font-size: 11px;
   font-weight: 950;
   text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .dg-loop-governance-freshness {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(var(--loop-compact-card-min), 1fr));
+  min-width: 0;
   gap: 8px;
   padding: 10px;
   border: 1px solid rgba(148, 163, 184, 0.16);
@@ -5396,6 +5367,8 @@ function formatTime(iso?: string | null) {
 
 .dg-loop-governance-freshness-card {
   min-width: 0;
+  overflow: hidden;
+  contain: layout paint;
   padding: 10px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 13px;
@@ -5629,13 +5602,42 @@ function formatTime(iso?: string | null) {
   cursor: wait;
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1180px) {
+  .dg-loop-command-strip {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dg-loop-command-main {
+    min-width: 0;
+  }
+
   .dg-loop-governance-map {
     grid-template-columns: minmax(0, 1fr);
   }
 
   .dg-loop-governance-map-arrow {
     transform: rotate(90deg);
+  }
+
+  .dg-loop-governance-directive {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dg-loop-governance-directive-link {
+    justify-self: start;
+  }
+
+  .dg-loop-section-head {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dg-loop-surface-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dg-loop-governance-truth-card--primary {
+    grid-column: auto;
   }
 
   .dg-loop-governance-checklist {
@@ -5783,7 +5785,7 @@ function formatTime(iso?: string | null) {
   isolation: isolate;
 }
 .dg-header-left  { grid-area: left; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; min-width: 0; }
-.dg-header-right { grid-area: right; display: flex; align-items: center; gap: 8px; flex-shrink: 0; flex-wrap: wrap; justify-self: end; }
+.dg-header-right { grid-area: right; display: flex; align-items: center; gap: 8px; flex-shrink: 1; flex-wrap: wrap; justify-self: end; min-width: 0; max-width: 100%; }
 .dg-header-actions {
   grid-area: actions;
   display: flex;
@@ -5848,6 +5850,56 @@ function formatTime(iso?: string | null) {
 }
 .dg-loop-link:hover {
   background: var(--dg-btn-hover, rgba(255,255,255,0.06));
+}
+
+.dg-loop-status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 220px;
+  padding: 5px 10px;
+  border: 1px solid rgba(20,184,166,0.28);
+  border-radius: 999px;
+  background: rgba(15,23,42,0.42);
+  color: #94a3b8;
+  font: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.dg-loop-status-chip span {
+  color: #5eead4;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.dg-loop-status-chip strong {
+  color: #f8fafc;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.dg-loop-status-chip small {
+  color: #94a3b8;
+  font-size: 0.68rem;
+}
+
+.dg-loop-status-chip:hover {
+  border-color: rgba(20,184,166,0.45);
+  background: rgba(20,184,166,0.12);
+}
+
+.dg-loop-status-chip--run {
+  border-color: rgba(59,130,246,0.35);
+  background: rgba(30,64,175,0.18);
+}
+
+.dg-loop-status-chip--bad {
+  border-color: rgba(239,68,68,0.35);
+  background: rgba(127,29,29,0.22);
 }
 
 /* Buttons */
@@ -6090,6 +6142,26 @@ function formatTime(iso?: string | null) {
     radial-gradient(circle at 8% 0%, rgba(20,184,166,0.18), transparent 36%),
     rgba(15,23,42,0.68);
   box-shadow:0 12px 32px rgba(15,23,42,0.22);
+}
+
+.dg-loop-command-strip--compact {
+  grid-template-columns:minmax(140px, 180px) minmax(0, 1fr);
+  grid-template-areas:
+    'main map'
+    'directive directive';
+  align-self:flex-start;
+  width:min(720px, 100%);
+}
+
+.dg-loop-command-strip--compact .dg-loop-command-main { grid-area:main; }
+.dg-loop-command-strip--compact .dg-loop-governance-map { grid-area:map; }
+.dg-loop-command-strip--compact .dg-loop-governance-directive { grid-area:directive; }
+
+.dg-loop-runtime-panel {
+  flex:1;
+  min-height:0;
+  overflow:auto;
+  padding:12px 16px;
 }
 
 .dg-loop-command-main {

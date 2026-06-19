@@ -103,6 +103,20 @@ class UnitProductsImportService:
             imported = import_result.get("imported", 0)
             failed_products = import_result.get("failed_products", [])
 
+            # P2 NeuroBus: 广播产品导入完成事件
+            try:
+                from app.neuro_bus.application_neuro_bridge import (
+                    neuro_notify_products_imported,
+                )
+
+                neuro_notify_products_imported(
+                    count=imported,
+                    customer_id=unit_name,
+                    source="excel",
+                )
+            except RECOVERABLE_ERRORS:
+                logger.debug("neuro_notify_products_imported skipped", exc_info=True)
+
             return {
                 "success": True,
                 "message": import_result.get("message") or "导入完成",

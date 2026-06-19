@@ -32,6 +32,7 @@ import com.xiuci.xcagi.mobile.model.CsInfoDto
 import com.xiuci.xcagi.mobile.model.CsMessageItemDto
 import com.xiuci.xcagi.mobile.model.PinnedIds
 import com.xiuci.xcagi.mobile.navigation.Routes
+import com.xiuci.xcagi.mobile.navigation.aiEmployeeAvatarColor
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.time.Instant
@@ -278,6 +279,16 @@ constructor(
     private val _modInfos = MutableStateFlow<List<ModInfo>>(emptyList())
     val modInfos: StateFlow<List<ModInfo>> = _modInfos.asStateFlow()
 
+    // 用户头像 URL（从登录响应或本地存储获取）
+    private val _userAvatarUrl = MutableStateFlow<String?>(null)
+    val userAvatarUrl: StateFlow<String?> = _userAvatarUrl.asStateFlow()
+
+    fun refreshUserAvatar() {
+        viewModelScope.launch {
+            _userAvatarUrl.value = repo.refreshMe()
+        }
+    }
+
     val dynamicMenuItems: StateFlow<List<ModMenuItem>> =
             _modInfos
                     .map { mods -> mods.flatMap { it.frontend_menu } }
@@ -298,6 +309,7 @@ constructor(
             )
 
     private var chatJob: Job? = null
+    private var conversationsLoadJob: Job? = null
 
     init {
         pushRegistrar.initSdk()
@@ -547,7 +559,9 @@ constructor(
 
     /** 构建会话列表：固定入口 + 当前账号生态里的 workflow_employees。 */
     fun loadConversations(isEnterprise: Boolean) {
-        viewModelScope.launch {
+        // 去重：取消上一次未完成的加载，避免并发竞相更新 _conversations 造成瞬间闪烁
+        conversationsLoadJob?.cancel()
+        conversationsLoadJob = viewModelScope.launch {
             rebuildConversationItems(isEnterprise)
         }
     }
@@ -559,37 +573,34 @@ constructor(
                         showCodex = isEnterprise || adminMode,
                         showCustomerService = isEnterprise && !adminMode,
                 )
-        _conversations.value = fixedItems
+        val badgeText = if (adminMode) "管理端" else "已安装"
+        val badgeColor =
+                if (adminMode) androidx.compose.ui.graphics.Color(0xFFED7B2F)
+                else androidx.compose.ui.graphics.Color(0xFF3370FF)
 
-        if (adminMode) {
-            val mods = repo.loadAdminModInfos().getOrElse {
-                _conversations.value = fixedItems
-                return 0
-            }
-            _modInfos.value = mods
-            val employees =
-                    employeeConversationItems(
-                            mods = mods,
-                            badgeText = "管理端",
-                            badgeColor = androidx.compose.ui.graphics.Color(0xFFED7B2F),
-                    )
-            _conversations.value = fixedItems + employees
-            return employees.size
+        // 1. 先读缓存立即填充（避免列表闪烁/被刷掉）
+        val cached = repo.loadCachedModInfos(adminMode)
+        if (cached.isNotEmpty()) {
+            _modInfos.value = cached
+            val cachedEmployees = employeeConversationItems(cached, badgeText, badgeColor)
+            _conversations.value = fixedItems + cachedEmployees
         }
+        // 缓存为空时不主动清空 _conversations，保持当前显示，等网络结果回来再更新
 
-        if (!isEnterprise) return 0
+        // 非企业且非管理端：不发起网络刷新
+        if (!adminMode && !isEnterprise) return 0
 
-        val mods = repo.loadModInfos().getOrElse {
-            _conversations.value = fixedItems
-            return 0
+        // 2. 后台网络刷新；失败或返回空时保持缓存数据不清空
+        val mods = repo.refreshAndCacheModInfos(adminMode).getOrElse {
+            // 网络失败：保持缓存填充结果，不额外操作
+            return if (cached.isNotEmpty()) employeeConversationItems(cached, badgeText, badgeColor).size else 0
+        }
+        // 网络成功但返回空列表：若已有缓存则保持缓存，不用空列表覆盖
+        if (mods.isEmpty() && cached.isNotEmpty()) {
+            return employeeConversationItems(cached, badgeText, badgeColor).size
         }
         _modInfos.value = mods
-        val employees =
-                employeeConversationItems(
-                        mods = mods,
-                        badgeText = "已安装",
-                        badgeColor = androidx.compose.ui.graphics.Color(0xFF3370FF),
-                )
+        val employees = employeeConversationItems(mods, badgeText, badgeColor)
         _conversations.value = fixedItems + employees
         return employees.size
     }
@@ -649,13 +660,13 @@ constructor(
                                 timestamp = 0L,
                                 avatarType = AvatarType.LETTER,
                                 avatarLetter = title.firstOrNull { !it.isWhitespace() } ?: 'A',
-                                avatarColor = employeeAvatarColor("${mod.id}:$employeeId"),
+                                avatarColor = aiEmployeeAvatarColor("${mod.id}:$employeeId"),
                                 badgeText = badgeText,
                                 badgeColor = badgeColor,
                         )
                     }
                 }
-            }
+            }.distinctBy { it.id } // 防止后端返回重复 employee id 导致 LazyColumn key 冲突崩溃
 
     private fun com.xiuci.xcagi.mobile.core.model.WorkflowEmployeeInfo.contactSubtitle(
             source: String?,
@@ -734,20 +745,6 @@ constructor(
         }
 
         return items
-    }
-
-    private fun employeeAvatarColor(key: String): androidx.compose.ui.graphics.Color {
-        val colors =
-                listOf(
-                        0xFF3370FF,
-                        0xFF00B578,
-                        0xFF8B5CF6,
-                        0xFF00ACC1,
-                        0xFFED7B2F,
-	                        0xFF494E56,
-	                )
-        val idx = Math.floorMod(key.hashCode(), colors.size)
-        return androidx.compose.ui.graphics.Color(colors[idx])
     }
 
     fun runSyncNow() =
@@ -921,6 +918,7 @@ constructor(
                             analytics.log("login_success", mapOf("method" to "password"))
                             refreshMarketTokens()
                             refreshConversationRuntime()
+                            refreshUserAvatar()
                             registerPushWithHint()
                             onDone(true, null)
                         }
@@ -1327,6 +1325,9 @@ constructor(
     fun loadMods() =
             viewModelScope.launch {
                 val adminMode = isAdminAccountKind(sessionStore.accountKindFlow.first())
+                // 缓存优先：先读 Room 缓存避免列表闪空
+                val cached = repo.loadCachedModInfos(adminMode)
+                if (cached.isNotEmpty()) _modInfos.value = cached
                 if (adminMode) {
                     repo.loadAdminMobileHome()
                             .onSuccess { home ->
@@ -1344,7 +1345,10 @@ constructor(
                                     snack("需要管理端管理员账号", true)
                                 }
                             }
-                    repo.loadAdminModInfos().onSuccess { _modInfos.value = it }.onFailure {
+                    repo.loadAdminModInfos().onSuccess {
+                        // 网络返回非空才更新；空列表通常是临时错误，保持缓存
+                        if (it.isNotEmpty()) _modInfos.value = it
+                    }.onFailure {
                         /* 管理端员工加载失败时静默，不阻断页面 */
                     }
                     return@launch
@@ -1361,7 +1365,10 @@ constructor(
                         else -> snack("生态功能暂不可用，同步中", true)
                     }
                 }
-                repo.loadModInfos().onSuccess { _modInfos.value = it }.onFailure {
+                repo.loadModInfos().onSuccess {
+                    // 网络返回非空才更新；空列表通常是临时错误，保持缓存
+                    if (it.isNotEmpty()) _modInfos.value = it
+                }.onFailure {
                     /* modInfos 加载失败时静默，不干扰用户 */
                 }
             }
@@ -1369,11 +1376,19 @@ constructor(
     fun refreshModInfos(showError: Boolean = false) =
             viewModelScope.launch {
                 val adminMode = isAdminAccountKind(sessionStore.accountKindFlow.first())
-                val result = if (adminMode) repo.loadAdminModInfos() else repo.loadModInfos()
+                // 1. 先读缓存（UI 秒出）
+                val cached = repo.loadCachedModInfos(adminMode)
+                if (cached.isNotEmpty()) _modInfos.value = cached
+                // 2. 后台刷新
+                val result = repo.refreshAndCacheModInfos(adminMode)
                 result
-                        .onSuccess { _modInfos.value = it }
+                        .onSuccess {
+                            // 网络返回非空才更新；空列表通常是临时错误，保持缓存
+                            if (it.isNotEmpty()) _modInfos.value = it
+                        }
                         .onFailure {
-                            if (showError) {
+                            // 网络失败时保持缓存数据，不清空；仅无缓存且失败时才提示
+                            if (showError && cached.isEmpty()) {
                                 snack(productErrorMessage(it.message, "AI 员工同步失败，请重新绑定后台"), true)
                             }
                         }

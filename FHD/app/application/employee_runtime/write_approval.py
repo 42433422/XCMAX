@@ -8,7 +8,7 @@ import os
 import uuid
 from typing import Any
 
-from app.application.employee_runtime.tool_scope import WRITE_TOOLS
+from app.application.employee_runtime.tool_scope import CODE_WRITE_TOOLS, WRITE_TOOLS
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -20,7 +20,8 @@ def build_write_approval_gate(
 ):
     """返回 agent_loop gate：(tool_name, args) -> {ok, reason}。
 
-    写库类工具（``import_excel_to_database`` / ``products_bulk_import``）需满足其一：
+    写库类工具（``import_excel_to_database`` / ``products_bulk_import``）与代码修改工具
+    （``patch_file`` / ``write_file``）需满足其一：
     - 输入 ``approved_write=True`` / ``allow_write=True``
     - 输入 ``write_token`` / ``approval_token`` 匹配 ``FHD_DB_WRITE_TOKEN``
     - ApprovalGatedEngine 生成人工审批请求后，由审批工作台放行
@@ -29,7 +30,7 @@ def build_write_approval_gate(
 
     def gate(tool_name: str, args: dict[str, Any]) -> dict[str, Any]:
         name = str(tool_name or "").strip()
-        if name not in WRITE_TOOLS:
+        if name not in WRITE_TOOLS and name not in CODE_WRITE_TOOLS:
             return {"ok": True}
         if payload.get("approved_write") or payload.get("allow_write"):
             return {"ok": True}

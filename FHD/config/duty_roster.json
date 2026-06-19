@@ -7,15 +7,25 @@
       "subzones": {
         "public-acquisition": {
           "label": "公域获客 O1",
-          "ids": ["site-content-editor", "seo-sitemap-curator", "marketing-site-builder"]
+          "ids": [
+            "site-content-editor",
+            "seo-sitemap-curator",
+            "marketing-site-builder"
+          ]
         },
         "crm-pipeline": {
           "label": "CRM 与商机 O2-O3",
-          "ids": ["user-customer-service-officer", "intake-dispatcher", "modstore-backend-api"]
+          "ids": [
+            "user-customer-service-officer",
+            "intake-dispatcher",
+            "modstore-backend-api"
+          ]
         },
         "billing": {
           "label": "收费对账 O4/O10",
-          "ids": ["payment-billing-reconciler"]
+          "ids": [
+            "payment-billing-reconciler"
+          ]
         },
         "delivery-feedback": {
           "label": "交付反馈签收 O5/O7-O8",
@@ -35,23 +45,33 @@
       "subzones": {
         "partner-onboard": {
           "label": "生态接入 B1",
-          "ids": ["ecosystem-partner-onboard-officer"]
+          "ids": [
+            "ecosystem-partner-onboard-officer"
+          ]
         },
         "joint-catalog": {
           "label": "联合 catalog B2",
-          "ids": ["ecosystem-joint-catalog-officer"]
+          "ids": [
+            "ecosystem-joint-catalog-officer"
+          ]
         },
         "delivery-bridge": {
           "label": "生态交付 B3",
-          "ids": ["ecosystem-delivery-reporter"]
+          "ids": [
+            "ecosystem-delivery-reporter"
+          ]
         },
         "investor-portal": {
           "label": "投资方视图 B4",
-          "ids": ["ecosystem-investor-portal-officer"]
+          "ids": [
+            "ecosystem-investor-portal-officer"
+          ]
         },
         "revenue-share": {
           "label": "分润对账 B5",
-          "ids": ["ecosystem-revenue-share-reconciler"]
+          "ids": [
+            "ecosystem-revenue-share-reconciler"
+          ]
         }
       }
     },
@@ -61,27 +81,49 @@
       "subzones": {
         "static-site": {
           "label": "营销静态 P1a",
-          "ids": ["site-content-editor", "seo-sitemap-curator", "marketing-site-builder", "flask-entry-keeper"]
+          "ids": [
+            "site-content-editor",
+            "seo-sitemap-curator",
+            "marketing-site-builder",
+            "flask-entry-keeper"
+          ]
         },
         "market-spa": {
           "label": "市场 SPA P1b",
-          "ids": ["market-frontend-dev"]
+          "ids": [
+            "market-frontend-dev"
+          ]
         },
         "workbench": {
           "label": "工作台 P1c",
-          "ids": ["workbench-ux-stylist", "daily-orchestrator", "task-router-officer", "vibe-coding-maintainer"]
+          "ids": [
+            "workbench-ux-stylist",
+            "daily-orchestrator",
+            "task-router-officer",
+            "vibe-coding-maintainer"
+          ]
         },
         "modstore-api": {
           "label": "MODstore 后端 P1d",
-          "ids": ["modstore-backend-api", "employee-pack-curator", "java-payment-bridge-officer"]
+          "ids": [
+            "modstore-backend-api",
+            "employee-pack-curator",
+            "java-payment-bridge-officer"
+          ]
         },
         "docs-seo": {
           "label": "文档 SEO P1e",
-          "ids": ["doc-knowledge-curator", "seo-sitemap-curator"]
+          "ids": [
+            "doc-knowledge-curator",
+            "seo-sitemap-curator"
+          ]
         },
         "nginx-deploy": {
           "label": "nginx 部署 P1f",
-          "ids": ["nginx-config-engineer", "deploy-release-officer"]
+          "ids": [
+            "nginx-config-engineer",
+            "deploy-release-officer"
+          ]
         }
       }
     },
@@ -119,11 +161,17 @@
         },
         "mod-ota": {
           "label": "Mod OTA P6",
-          "ids": ["push-update-context-officer", "pack-registrar"]
+          "ids": [
+            "push-update-context-officer",
+            "pack-registrar"
+          ]
         },
         "roster-quality": {
           "label": "编制质检",
-          "ids": ["employee-interview-assistant", "employee-pack-quality-interviewer"]
+          "ids": [
+            "employee-interview-assistant",
+            "employee-pack-quality-interviewer"
+          ]
         }
       }
     },
@@ -133,11 +181,19 @@
       "subzones": {
         "core-coding": {
           "label": "核心编码 P2",
-          "ids": ["fhd-core-maintainer", "vibe-coding-maintainer"]
+          "ids": [
+            "fhd-core-maintainer",
+            "vibe-coding-maintainer"
+          ]
         },
         "testing": {
           "label": "自动测试 P3",
-          "ids": ["test-qa-runner", "sandbox-tester", "code-validator", "self-checker"]
+          "ids": [
+            "test-qa-runner",
+            "sandbox-tester",
+            "code-validator",
+            "self-checker"
+          ]
         },
         "build-release": {
           "label": "构建发布 P4-P5",
@@ -151,11 +207,20 @@
         },
         "ota-monitor": {
           "label": "OTA 监控 P6-P7",
-          "ids": ["push-update-context-officer", "log-monitor-incident", "host-checker"]
+          "ids": [
+            "push-update-context-officer",
+            "log-monitor-incident",
+            "host-checker"
+          ]
         },
         "orchestration": {
           "label": "编排迭代 P9-P10",
-          "ids": ["daily-orchestrator", "intake-dispatcher", "task-router-officer", "dbops-engineer"]
+          "ids": [
+            "daily-orchestrator",
+            "intake-dispatcher",
+            "task-router-officer",
+            "dbops-engineer"
+          ]
         }
       }
     },
@@ -165,19 +230,30 @@
       "subzones": {
         "ttl-janitor": {
           "label": "TTL 清理 R1",
-          "ids": ["retention-officer"]
+          "ids": [
+            "retention-officer"
+          ]
         },
         "commit-guards": {
           "label": "提交门禁 R2",
-          "ids": ["security-secrets-guard"]
+          "ids": [
+            "security-secrets-guard"
+          ]
         },
         "legacy-archive": {
           "label": "legacy 归档 R3",
-          "ids": ["retention-officer", "legacy-archive-curator"]
+          "ids": [
+            "retention-officer",
+            "legacy-archive-curator"
+          ]
         },
         "alert-cve": {
           "label": "告警 CVE R4",
-          "ids": ["log-monitor-incident", "daily-orchestrator", "security-secrets-guard"]
+          "ids": [
+            "log-monitor-incident",
+            "daily-orchestrator",
+            "security-secrets-guard"
+          ]
         }
       }
     }
@@ -185,7 +261,12 @@
   "areas": {
     "site-and-marketing": {
       "label": "对外网站与 SEO",
-      "ids": ["site-content-editor", "seo-sitemap-curator", "flask-entry-keeper", "marketing-site-builder"]
+      "ids": [
+        "site-content-editor",
+        "seo-sitemap-curator",
+        "flask-entry-keeper",
+        "marketing-site-builder"
+      ]
     },
     "server-and-ops": {
       "label": "服务器与运维",
@@ -197,6 +278,7 @@
         "log-monitor-incident",
         "retention-officer",
         "dbops-engineer",
+        "llm-ops-engineer",
         "legacy-archive-curator"
       ]
     },
@@ -211,7 +293,10 @@
     },
     "modstore-frontend": {
       "label": "MODstore 前端",
-      "ids": ["market-frontend-dev", "workbench-ux-stylist"]
+      "ids": [
+        "market-frontend-dev",
+        "workbench-ux-stylist"
+      ]
     },
     "platform-core": {
       "label": "平台核心",
