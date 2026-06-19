@@ -150,6 +150,7 @@ data class ModInfoCacheEntity(
     @ColumnInfo(name = "primary_flag") val primary: Boolean,
     val industry: String,
     val avatarUrl: String?,
+    val employeesJson: String,
     val cachedAt: Long,
 )
 
@@ -157,6 +158,9 @@ data class ModInfoCacheEntity(
 interface ModInfoCacheDao {
     @Query("SELECT * FROM mod_info_cache ORDER BY cachedAt DESC")
     suspend fun getAll(): List<ModInfoCacheEntity>
+
+    @Query("SELECT * FROM mod_info_cache ORDER BY cachedAt DESC")
+    fun observeAll(): Flow<List<ModInfoCacheEntity>>
 
     @Query("DELETE FROM mod_info_cache")
     suspend fun clear()
@@ -174,7 +178,7 @@ interface ModInfoCacheDao {
         ImReadStateEntity::class,
         ModInfoCacheEntity::class,
     ],
-    version = 5,
+    version = 6,
     exportSchema = false,
 )
 abstract class XcagiDatabase : RoomDatabase() {
@@ -210,6 +214,14 @@ abstract class XcagiDatabase : RoomDatabase() {
                         cachedAt INTEGER NOT NULL
                     )
                     """.trimIndent()
+                )
+            }
+        }
+
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    "ALTER TABLE mod_info_cache ADD COLUMN employeesJson TEXT NOT NULL DEFAULT '[]'"
                 )
             }
         }

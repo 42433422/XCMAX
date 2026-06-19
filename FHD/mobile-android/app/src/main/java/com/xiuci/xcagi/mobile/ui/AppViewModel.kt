@@ -578,26 +578,28 @@ constructor(
                 if (adminMode) androidx.compose.ui.graphics.Color(0xFFED7B2F)
                 else androidx.compose.ui.graphics.Color(0xFF3370FF)
 
-        // 1. 先读缓存立即填充（避免列表闪烁/被刷掉）
-        val cached = repo.loadCachedModInfos(adminMode)
-        if (cached.isNotEmpty()) {
-            _modInfos.value = cached
-            val cachedEmployees = employeeConversationItems(cached, badgeText, badgeColor)
-            _conversations.value = fixedItems + cachedEmployees
+        // 1. 仅当当前列表没有员工项时，才用缓存填充（避免刷新时用旧缓存覆盖当前显示）
+        val currentHasEmployees = _conversations.value.any { it.type == ConversationType.AI_TASK }
+        if (!currentHasEmployees) {
+            val cached = repo.loadCachedModInfos(adminMode)
+            if (cached.isNotEmpty()) {
+                _modInfos.value = cached
+                val cachedEmployees = employeeConversationItems(cached, badgeText, badgeColor)
+                _conversations.value = fixedItems + cachedEmployees
+            }
         }
-        // 缓存为空时不主动清空 _conversations，保持当前显示，等网络结果回来再更新
 
         // 非企业且非管理端：不发起网络刷新
         if (!adminMode && !isEnterprise) return 0
 
-        // 2. 后台网络刷新；失败或返回空时保持缓存数据不清空
+        // 2. 后台网络刷新；失败或返回空时保持当前显示不清空
         val mods = repo.refreshAndCacheModInfos(adminMode).getOrElse {
-            // 网络失败：保持缓存填充结果，不额外操作
-            return if (cached.isNotEmpty()) employeeConversationItems(cached, badgeText, badgeColor).size else 0
+            // 网络失败：保持当前显示
+            return _conversations.value.count { it.type == ConversationType.AI_TASK }
         }
-        // 网络成功但返回空列表：若已有缓存则保持缓存，不用空列表覆盖
-        if (mods.isEmpty() && cached.isNotEmpty()) {
-            return employeeConversationItems(cached, badgeText, badgeColor).size
+        // 网络成功但返回空列表：保持当前显示，不用空列表覆盖
+        if (mods.isEmpty()) {
+            return _conversations.value.count { it.type == ConversationType.AI_TASK }
         }
         _modInfos.value = mods
         val employees = employeeConversationItems(mods, badgeText, badgeColor)
@@ -651,18 +653,19 @@ constructor(
                         null
                     } else {
                         val source = mod.name.ifBlank { mod.id }.trim().takeIf { it.isNotBlank() }
+                        val avatarUrl = employee.market_avatar?.takeIf { it.isNotBlank() }
+                            ?: mod.avatar_url?.takeIf { it.isNotBlank() }
                         ConversationItem(
                                 id = "employee:${mod.id}:$employeeId",
                                 type = ConversationType.AI_TASK,
                                 title = title,
                                 subtitle =
                                         employee.contactSubtitle(source),
-                                timestamp = 0L,
-                                avatarType = AvatarType.LETTER,
+                                timestamp = System.currentTimeMillis(),
+                                avatarType = if (avatarUrl != null) AvatarType.URL else AvatarType.LETTER,
                                 avatarLetter = title.firstOrNull { !it.isWhitespace() } ?: 'A',
                                 avatarColor = aiEmployeeAvatarColor("${mod.id}:$employeeId"),
-                                badgeText = badgeText,
-                                badgeColor = badgeColor,
+                                avatarUrl = avatarUrl,
                         )
                     }
                 }
@@ -704,8 +707,6 @@ constructor(
                 timestamp = System.currentTimeMillis(),
                 avatarType = AvatarType.ICON,
                 isPinned = true,
-                badgeText = "AI在线",
-                badgeColor = androidx.compose.ui.graphics.Color(0xFF4CAF50),
             )
         )
 
@@ -720,10 +721,8 @@ constructor(
                             avatarType = AvatarType.ICON,
                             isOnline = true,
                             isPinned = true,
-                            badgeText = "可派工",
-                            badgeColor = androidx.compose.ui.graphics.Color(0xFF111827),
                     )
-            )
+                )
         }
 
         // 3. 专属客服（仅企业客户账号；管理端账号不显示客服）
@@ -738,8 +737,6 @@ constructor(
                     avatarType = AvatarType.ICON,
                     isOnline = true,
                     isPinned = true,
-                    badgeText = "在线",
-                    badgeColor = androidx.compose.ui.graphics.Color(0xFF07C160),
                 )
             )
         }

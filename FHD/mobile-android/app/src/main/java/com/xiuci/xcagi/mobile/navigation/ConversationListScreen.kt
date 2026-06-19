@@ -3,6 +3,8 @@ package com.xiuci.xcagi.mobile.navigation
 import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.AsyncImage
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -644,10 +646,10 @@ private fun ConversationCell(item: ConversationItem, onClick: () -> Unit) {
                                     colorOverride = item.avatarColor,
                             )
                     AvatarType.URL ->
-                            Box(
-                                    Modifier.size(52.dp)
-                                            .clip(MaterialTheme.shapes.small)
-                                            .background(MaterialTheme.colorScheme.surfaceVariant),
+                            UrlAvatar(
+                                url = item.avatarUrl,
+                                letter = item.avatarLetter ?: 'A',
+                                colorOverride = item.avatarColor,
                             )
                 }
 
@@ -873,11 +875,26 @@ private fun LetterAvatar(letter: Char, colorOverride: Color? = null) {
     }
 }
 
+/** 网络图片头像，加载失败回退字母头像 */
+@Composable
+private fun UrlAvatar(url: String?, letter: Char, colorOverride: Color? = null) {
+    if (url.isNullOrBlank()) {
+        LetterAvatar(letter = letter, colorOverride = colorOverride)
+        return
+    }
+    AsyncImage(
+            model = url,
+            contentDescription = null,
+            modifier = Modifier.size(52.dp).clip(MaterialTheme.shapes.small),
+            contentScale = ContentScale.Crop,
+    )
+}
+
 // ═══════════════════════════════════════════
 // 时间格式化
 // ═══════════════════════════════════════════
 private fun formatTimestamp(ts: Long): String {
-    if (ts <= 0L) return "已安装"
+    if (ts <= 0L) return ""
     val now = System.currentTimeMillis()
     val diffMs = now - ts
     return when {
