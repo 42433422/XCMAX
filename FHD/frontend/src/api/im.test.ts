@@ -26,6 +26,8 @@ function jsonRes(body: unknown, { ok = true, status = 200, ct = 'application/jso
 
 beforeEach(() => {
   apiFetch.mockReset()
+  getApiBase.mockReset()
+  getApiBase.mockReturnValue('')
 })
 
 describe('im api success paths', () => {
@@ -104,5 +106,15 @@ describe('im api error paths', () => {
 describe('imWebSocketUrl', () => {
   it('derives ws url from location', () => {
     expect(imWebSocketUrl()).toMatch(/\/ws\/im$/)
+  })
+
+  it('uses configured absolute API base', () => {
+    getApiBase.mockReturnValue('https://xiu-ci.com/fhd-api')
+    expect(imWebSocketUrl()).toBe('wss://xiu-ci.com/fhd-api/ws/im')
+  })
+
+  it('keeps relative API prefixes on current origin', () => {
+    getApiBase.mockReturnValue('/fhd-api')
+    expect(imWebSocketUrl()).toMatch(/^ws:\/\/.*\/fhd-api\/ws\/im$/)
   })
 })

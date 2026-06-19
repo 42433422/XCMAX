@@ -186,7 +186,6 @@
 | application | `app/application/planner_compat_service.py` | `conversation` |
 | application | `app/application/print_app_service.py` | `printer_service` |
 | application | `app/application/product_import_app_service.py` | `product_import_service` |
-| application | `app/application/purchase_app_service_v2.py` | `purchase_service` |
 | application | `app/application/tenant_workspace_prefs.py` | `user_preference_service` |
 | application | `app/application/tools/workflow.py` | `kitten_ai_document` |
 | application | `app/application/tools/workflow.py` | `unified_query_service` |

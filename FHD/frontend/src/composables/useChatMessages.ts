@@ -202,12 +202,16 @@ export function useChatMessages(sessionId: Ref<string>) {
         const roleRaw = asString(row.role)
         const role = (roleRaw === 'user' || roleRaw === 'task') ? roleRaw : 'ai'
         const content = asString(row.content)
-        if (!hasMeaningfulContent(content)) return null
+        const streamingShell = asBoolean(row.streamingShell)
+        const toolProgressLabel = asString(row.toolProgressLabel).trim()
+        if (!hasMeaningfulContent(content) && !streamingShell && !toolProgressLabel) return null
         return {
           role,
           content,
           time: asString(row.time).trim()
-            || new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+            || new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
+          ...(streamingShell ? { streamingShell: true } : {}),
+          ...(toolProgressLabel ? { toolProgressLabel } : {}),
         } as ChatMessage
       })
       .filter((m): m is ChatMessage => !!m)
@@ -273,8 +277,9 @@ export function useChatMessages(sessionId: Ref<string>) {
     const time = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
     messages.value.push({
       role: 'ai',
-      content: '...',
-      time
+      content: '',
+      time,
+      streamingShell: true,
     })
     persistMessagesCache()
     return messages.value.length - 1
@@ -285,7 +290,12 @@ export function useChatMessages(sessionId: Ref<string>) {
     const safe = escapeHtml(plain).replace(/\n/g, '<br>')
     const row = messages.value[index]
     if (!row) return
-    row.content = safe || '...'
+    row.content = safe
+    if (safe) {
+      delete row.streamingShell
+    } else {
+      row.streamingShell = true
+    }
     persistMessagesCache()
   }
 

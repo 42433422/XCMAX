@@ -7,8 +7,8 @@ import logging
 from fastapi import APIRouter, Body, Depends, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 
-from app.application.im_app_service import ImApplicationService, ensure_im_tables
 from app.application.codex_super_employee_service import CodexSuperEmployeeService
+from app.application.im_app_service import ImApplicationService, ensure_im_tables
 from app.config import Config
 from app.db import HostSessionLocal, get_host_engine
 from app.infrastructure.auth.dependencies import (
@@ -48,7 +48,7 @@ def _is_admin_customer_service_session(request: Request, db) -> bool:
         if not sid:
             return False
         row = db.query(UserSession).filter(UserSession.session_id == sid).first()
-    except Exception:
+    except Exception:  # noqa: BLE001
         return False
     return bool(
         row is not None
@@ -64,7 +64,9 @@ def _include_enterprise_dedicated_cs(request: Request, db) -> bool:
 def _require_admin_customer_service_session(request: Request, db) -> JSONResponse | None:
     if _is_admin_customer_service_session(request, db):
         return None
-    return JSONResponse({"success": False, "message": "仅管理端可调用 Codex 超级员工"}, status_code=403)
+    return JSONResponse(
+        {"success": False, "message": "仅管理端可调用 Codex 超级员工"}, status_code=403
+    )
 
 
 def _resolve_ws_user_id(ws: WebSocket) -> int | None:
@@ -81,7 +83,7 @@ def _resolve_ws_user_id(ws: WebSocket) -> int | None:
         return None
     try:
         from app.services import get_session_service
-    except Exception:
+    except ImportError:
         from app.application.facades.session_facade import get_session_service
 
     user = get_session_service().validate_session(str(sid).strip())
@@ -95,7 +97,7 @@ async def _notify_offline_im_members(member_ids: list[int], sender_id: int, body
         from app.infrastructure.im import ws_hub as ws_hub_module
 
         source_hub = ws_hub_module.im_ws_hub
-    except Exception:
+    except (ImportError, AttributeError):
         source_hub = im_ws_hub
     local_is_mock = hasattr(im_ws_hub, "mock_calls")
     source_is_mock = hasattr(source_hub, "mock_calls")
@@ -107,7 +109,7 @@ async def _notify_offline_im_members(member_ids: list[int], sender_id: int, body
     try:
         try:
             from app.services.mobile_push import notify_user as notify_mobile_user
-        except Exception:
+        except ImportError:
             from app.application.mobile_push_app_service import notify_mobile_user
 
         preview = (body or "").strip()[:120] or "新消息"

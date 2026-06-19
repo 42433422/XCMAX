@@ -85,7 +85,7 @@ fun ConversationListScreen(
     val employeeCount = conversations.count { it.type == ConversationType.AI_TASK }
     val unreadTotal = conversations.sumOf { it.unreadCount }
 
-    LaunchedEffect(Unit) { vm.loadConversations(isEnterprise) }
+    LaunchedEffect(isEnterprise, accountKindLabel) { vm.loadConversations(isEnterprise) }
 
     val filtered =
             remember(searchQuery, selectedFilter, conversations) {
@@ -144,6 +144,7 @@ fun ConversationListScreen(
                                 when (item.id) {
                                     PinnedIds.ASSISTANT -> onOpenAssistant()
                                     PinnedIds.CS -> onOpenCustomerService()
+                                    PinnedIds.CODEX -> onOpenConversation(PinnedIds.CODEX)
                                     else -> onOpenConversation(item.id)
                                 }
                             }
@@ -156,7 +157,7 @@ fun ConversationListScreen(
                 }
 
                 if (!hasEcosystemEmployees && searchQuery.isBlank() && selectedFilter == ConversationFilter.ALL) {
-                    item { EcosystemSyncHint() }
+                    item { EcosystemSyncHint(onRefresh = { vm.loadConversations(isEnterprise) }) }
                 }
 
                 if (filtered.isEmpty()) {
@@ -575,9 +576,11 @@ private fun ConversationFilterBar(
 }
 
 @Composable
-private fun EcosystemSyncHint() {
+private fun EcosystemSyncHint(onRefresh: () -> Unit) {
     Row(
-            Modifier.fillMaxWidth().padding(horizontal = Spacing.lg, vertical = 14.dp),
+            Modifier.fillMaxWidth()
+                    .clickable(onClick = onRefresh)
+                    .padding(horizontal = Spacing.lg, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
@@ -601,7 +604,7 @@ private fun EcosystemSyncHint() {
                     color = MaterialTheme.colorScheme.onSurface,
             )
             Text(
-                    "登录企业或管理端账号后，智能伙伴会自动出现在会话里。",
+                    "点这里重新同步管理端员工。",
                     style = MaterialTheme.typography.bodySmall,
                     color = XcagiTheme.extra.n500,
                     maxLines = 1,
@@ -763,6 +766,7 @@ private fun PinnedAvatar(type: ConversationType) {
     when (type) {
         ConversationType.PINNED_ASSISTANT -> AssistantAvatar()
         ConversationType.PINNED_CS -> CsAvatar()
+        ConversationType.PINNED_CODEX -> CodexAvatar()
         else -> AssistantAvatar()
     }
 }
@@ -822,6 +826,33 @@ private fun CsAvatar() {
     }
 }
 
+/** 超级员工-Codex 头像 — 深色执行端标识 */
+@Composable
+private fun CodexAvatar() {
+    Box(
+            modifier =
+                    Modifier.size(52.dp)
+                            .clip(MaterialTheme.shapes.small)
+                            .background(Color(0xFF111827)),
+            contentAlignment = Alignment.Center,
+    ) {
+        Box(
+                modifier =
+                        Modifier.size(34.dp)
+                                .clip(RoundedCornerShape(9.dp))
+                                .background(Color.White.copy(alpha = 0.10f)),
+                contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                    text = ">_",
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+            )
+        }
+    }
+}
+
 // ═══════════════════════════════════════════
 // 字母头像
 // ═══════════════════════════════════════════
@@ -836,7 +867,7 @@ private fun LetterAvatar(letter: Char, colorOverride: Color? = null) {
                     Color(0xFF8B5CF6),
                     Color(0xFF00ACC1),
             )
-    val idx = kotlin.math.abs(letter.code) % colors.size
+    val idx = Math.floorMod(letter.code, colors.size)
     Box(
             modifier =
                     Modifier.size(52.dp)

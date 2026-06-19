@@ -103,6 +103,22 @@ const xcmaxMarketProxy = {
     marketReq('admin/duty-graph/runs', { method: 'POST', body: payload }),
   adminDutyGraphRunDetail: (runId: number | string) =>
     marketReq(`admin/duty-graph/runs/${encodeURIComponent(String(runId))}`),
+  adminYuangonOnboardStatus: () => marketReq('admin/yuangon-onboard/status'),
+  adminYuangonOnboardRun: (
+    payload: { pkg_ids?: string[] | string; dry_run?: boolean; force?: boolean } = {},
+  ) => {
+    const pkgIds = Array.isArray(payload.pkg_ids)
+      ? payload.pkg_ids.map((id) => String(id || '').trim()).filter(Boolean).join(',')
+      : String(payload.pkg_ids || '').trim()
+    return marketReq('admin/yuangon-onboard/run', {
+      method: 'POST',
+      body: {
+        dry_run: Boolean(payload.dry_run),
+        force: Boolean(payload.force),
+        pkg_ids: pkgIds,
+      },
+    })
+  },
   adminEmployeeExecutionCapabilities: (employeeIds?: string[]) =>
     marketReq('admin/employees/execution-capabilities', {
       method: 'POST',
@@ -151,6 +167,13 @@ const xcmaxMarketProxy = {
     marketReq(`employees/${encodeURIComponent(employeeId)}/execute`, {
       method: 'POST',
       body: { task, input_data: inputData ?? {} },
+    }),
+  selfMaintenanceRuntimeStatus: (limit = 80) =>
+    marketReq(`ops/self-maintenance/status?limit=${encodeURIComponent(String(limit))}`),
+  selfMaintenanceGovernanceReview: (payload: { note?: string } = {}) =>
+    marketReq('ops/self-maintenance/governance-review', {
+      method: 'POST',
+      body: payload,
     }),
   llmStatus: () => marketReq('llm/status'),
   llmResolveChatDefault: () => marketReq('llm/resolve-chat-default'),

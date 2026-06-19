@@ -1355,6 +1355,14 @@ def _filter_handlers_vibe_coding_maintainer(
 ) -> List[str]:
     """按 payload 路由 vibe-coding-maintainer，避免每次任务跑完全部 handler。"""
     inp = reasoning.get("input") if isinstance(reasoning.get("input"), dict) else {}
+    try:
+        from modstore_server.para_delegate_handler import para_delegate_enabled
+    except Exception:
+        para_delegate_enabled = lambda: False  # type: ignore[assignment]
+
+    if para_delegate_enabled():
+        return ["para_delegate"]
+
     requested = str(inp.get("handler") or "").strip()
     if requested and requested in handlers:
         out = [requested]
@@ -1414,6 +1422,14 @@ def _actions_real(
         actions_cfg["direct_python"] = direct_cfg
         actions_cfg["handlers"] = ["direct_python"]
     handlers = actions_cfg.get("handlers") or ["echo"]
+    if employee_id in ("vibe-coding-maintainer", "change-request-auditor", "test-qa-runner"):
+        try:
+            from modstore_server.para_delegate_handler import para_delegate_enabled
+
+            if para_delegate_enabled():
+                handlers = ["para_delegate"]
+        except Exception:
+            pass
     if employee_id == "vibe-coding-maintainer":
         handlers = _filter_handlers_vibe_coding_maintainer(handlers, reasoning, task)
     outputs: List[Dict[str, Any]] = []
@@ -1497,6 +1513,17 @@ def _actions_real(
             )
         elif handler == "agent":
             outputs.append(_action_agent_runner(actions_cfg, reasoning, task, employee_id, user_id))
+        elif handler == "para_delegate":
+            from modstore_server.para_delegate_handler import dispatch_para_delegate
+
+            cog_in = reasoning.get("input") if isinstance(reasoning.get("input"), dict) else {}
+            outputs.append(
+                dispatch_para_delegate(
+                    task=task,
+                    input_data=cog_in,
+                    employee_id=employee_id,
+                )
+            )
         elif handler == "cursor_delegate":
             from modstore_server.cursor_delegate_handler import dispatch_cursor_delegate
 
@@ -1768,6 +1795,17 @@ def execute_employee_task(
                 pack = load_employee_pack_resolved(session, employee_id)
                 manifest = pack.get("manifest") or {}
                 config = parse_employee_config_v2(manifest)
+                try:
+                    from modstore_server.employee_runtime_policy import apply_policy_to_config
+
+                    config, runtime_policy = apply_policy_to_config(employee_id, config)
+                except Exception:
+                    logger.debug(
+                        "employee runtime policy apply failed employee_id=%s",
+                        employee_id,
+                        exc_info=True,
+                    )
+                    runtime_policy = {}
                 actions_section = config.get("actions") or {}
                 actions_inner = (
                     actions_section.get("actions")
@@ -1819,6 +1857,7 @@ def execute_employee_task(
                         "executed_at": datetime.now(timezone.utc).isoformat(),
                         "llm_tokens": 0,
                         "blocked_by_risk_gate": True,
+                        "runtime_policy": runtime_policy or None,
                         "risk_level": gate.get("risk_level"),
                     }
 
@@ -1871,14 +1910,20 @@ def execute_employee_task(
                 )
                 session.commit()
                 if not handler_ok:
-                    try:
-                        from modstore_server.notification_service import (
-                            notify_employee_execution_done,
-                        )
+                    suppress_lifecycle_events = (
+                        isinstance(payload, dict)
+                        and str(payload.get("suppress_lifecycle_events") or "").strip().lower()
+                        in {"1", "true", "yes", "on"}
+                    )
+                    if not suppress_lifecycle_events:
+                        try:
+                            from modstore_server.notification_service import (
+                                notify_employee_execution_done,
+                            )
 
-                        notify_employee_execution_done(user_id, employee_id, task, exec_status)
-                    except Exception:
-                        pass
+                            notify_employee_execution_done(user_id, employee_id, task, exec_status)
+                        except Exception:
+                            pass
                     return {
                         "employee_id": employee_id,
                         "pack": {"id": pack["pack_id"], "version": pack["version"]},
@@ -1887,6 +1932,7 @@ def execute_employee_task(
                         "executed_at": datetime.now(timezone.utc).isoformat(),
                         "llm_tokens": llm_tokens,
                         "handler_failed": True,
+                        "runtime_policy": runtime_policy or None,
                     }
                 if recovery_meta.get("recovered"):
                     try:
@@ -1949,23 +1995,29 @@ def execute_employee_task(
                     )
                 except Exception:
                     pass
-                try:
-                    from modstore_server.services.change_signal import (
-                        emit_signal_on_execution_complete,
-                        emit_task_lifecycle_event,
-                    )
+                suppress_lifecycle_events = (
+                    isinstance(payload, dict)
+                    and str(payload.get("suppress_lifecycle_events") or "").strip().lower()
+                    in {"1", "true", "yes", "on"}
+                )
+                if not suppress_lifecycle_events:
+                    try:
+                        from modstore_server.services.change_signal import (
+                            emit_signal_on_execution_complete,
+                            emit_task_lifecycle_event,
+                        )
 
-                    emit_signal_on_execution_complete(
-                        employee_id, task, {"status": "success", "result": result}
-                    )
-                    emit_task_lifecycle_event(
-                        employee_id,
-                        task,
-                        status="success",
-                        result={"result": result},
-                    )
-                except Exception:
-                    pass
+                        emit_signal_on_execution_complete(
+                            employee_id, task, {"status": "success", "result": result}
+                        )
+                        emit_task_lifecycle_event(
+                            employee_id,
+                            task,
+                            status="success",
+                            result={"result": result},
+                        )
+                    except Exception:
+                        pass
                 cog_err = ""
                 if isinstance(reasoning, dict):
                     cog_err = str(reasoning.get("error") or "").strip()
@@ -2003,6 +2055,7 @@ def execute_employee_task(
                     "result": result,
                     "executed_at": datetime.now(timezone.utc).isoformat(),
                     "llm_tokens": llm_tokens,
+                    "runtime_policy": runtime_policy or None,
                     "cognition_error": cog_err or None,
                     "cognition_help": (
                         "LLM 未返回有效内容。请检查 API Key、模型名、网络与平台余额。"
@@ -2059,12 +2112,18 @@ def execute_employee_task(
                     )
                 except Exception:
                     pass
-                try:
-                    from modstore_server.services.change_signal import emit_task_lifecycle_event
+                suppress_lifecycle_events = (
+                    isinstance(payload, dict)
+                    and str(payload.get("suppress_lifecycle_events") or "").strip().lower()
+                    in {"1", "true", "yes", "on"}
+                )
+                if not suppress_lifecycle_events:
+                    try:
+                        from modstore_server.services.change_signal import emit_task_lifecycle_event
 
-                    emit_task_lifecycle_event(employee_id, task, status="failed", error=str(e))
-                except Exception:
-                    pass
+                        emit_task_lifecycle_event(employee_id, task, status="failed", error=str(e))
+                    except Exception:
+                        pass
                 raise
     finally:
         if sem:

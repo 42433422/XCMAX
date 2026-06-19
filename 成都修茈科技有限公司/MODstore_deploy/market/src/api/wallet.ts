@@ -8,9 +8,9 @@ import type {
 } from '../types/api'
 
 export const wallet = {
-  balance: () => req('/api/wallet/balance', { timeoutMs: 20_000 }),
+  balance: () => req('/api/wallet/balance'),
   walletOverview: (limit = 20, offset = 0) =>
-    req(`/api/wallet/overview?limit=${limit}&offset=${offset}`, { timeoutMs: 30_000 }),
+    req(`/api/wallet/overview?limit=${limit}&offset=${offset}`),
   walletAdminSelfCredit: (amount: number, description = '') =>
     req('/api/wallet/admin-self-credit', { method: 'POST', body: JSON.stringify({ amount, description }) }),
   recharge: (amount: number, description = '') => req('/api/wallet/recharge', { method: 'POST', body: JSON.stringify({ amount, description }) }),

@@ -12,6 +12,25 @@ let deliverableCached: DeliverableStatus | null = null
 const baselineCache = new Map<string, IndustryBaselinePlan>()
 let onboardingCatalogCached: OnboardingIndustryCatalog | null = null
 
+function offlineIndustryBaseline(industryId: string): IndustryBaselinePlan {
+  return {
+    industry_id: industryId,
+    summary: '行业基线暂不可用',
+    groups: [],
+    required_mod_ids: [],
+    optional_mod_ids: [],
+    industry_mod_ids: [],
+    missing_required_mod_ids: [],
+    missing_optional_mod_ids: [],
+    missing_industry_mod_ids: [],
+    host_baseline_ready: false,
+    account_custom_ready: false,
+    baseline_ready: false,
+    full_stack_ready: false,
+    industry_mod_ready: false,
+  }
+}
+
 export async function fetchPlatformShellCapabilities(
   force = false,
 ): Promise<PlatformShellCapabilities> {
@@ -78,13 +97,18 @@ export async function fetchIndustryBaseline(
   if (!force && baselineCache.has(key)) {
     return baselineCache.get(key) as IndustryBaselinePlan
   }
-  const r = await apiFetch(
-    `/api/platform-shell/industry-baseline?industry_id=${encodeURIComponent(key)}`,
-    { timeoutMs: DEFAULT_MOD_API_TIMEOUT_MS },
-  )
-  if (!r.ok) throw new Error(`industry-baseline HTTP ${r.status}`)
-  const body = await r.json()
-  const data = (body?.data || body) as IndustryBaselinePlan
+  let data: IndustryBaselinePlan
+  try {
+    const r = await apiFetch(
+      `/api/platform-shell/industry-baseline?industry_id=${encodeURIComponent(key)}`,
+      { timeoutMs: DEFAULT_MOD_API_TIMEOUT_MS },
+    )
+    if (!r.ok) throw new Error(`industry-baseline HTTP ${r.status}`)
+    const body = await r.json()
+    data = (body?.data || body) as IndustryBaselinePlan
+  } catch {
+    data = offlineIndustryBaseline(key)
+  }
   baselineCache.set(key, data)
   return data
 }

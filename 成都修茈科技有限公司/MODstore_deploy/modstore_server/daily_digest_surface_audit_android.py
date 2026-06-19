@@ -21,6 +21,12 @@ def _android_enabled() -> bool:
 
 
 def _fhd_root() -> Path:
+    for key in ("XCAGI_FHD_ROOT", "MODSTORE_DAILY_FHD_ROOT"):
+        raw = (os.environ.get(key) or "").strip()
+        if raw:
+            p = Path(raw).expanduser().resolve()
+            if p.is_dir():
+                return p
     mono = (
         os.environ.get("XCMAX_MONOREPO_ROOT") or os.environ.get("MODSTORE_REPO_ROOT") or ""
     ).strip()
@@ -74,11 +80,12 @@ def _try_start_emulator() -> bool:
     ):
         return False
     fhd = _fhd_root()
-    script = fhd / "scripts" / "dev" / "start_android_emulator.sh"
+    script_raw = (os.environ.get("MODSTORE_ANDROID_EMULATOR_START_SCRIPT") or "").strip()
+    script = Path(script_raw).expanduser().resolve() if script_raw else (fhd / "scripts" / "dev" / "start_android_emulator.sh")
     if not script.is_file():
         return False
     try:
-        subprocess.run(["bash", str(script)], cwd=str(fhd), check=False, timeout=180)
+        subprocess.run(["bash", str(script)], cwd=str(fhd), check=False, timeout=240)
     except Exception:
         logger.warning("android audit: emulator start script failed", exc_info=True)
         return False
@@ -174,7 +181,7 @@ def run_android_surface_audit_sync(
     adb = _adb_bin()
     if not _adb_has_device(adb):
         if not _try_start_emulator():
-            msg = "未检测到 Android 设备/模拟器（bash FHD/scripts/dev/start_android_emulator.sh）"
+            msg = "未检测到 Android 设备/模拟器（bash start_android_emulator.sh）"
             return [], {"ok": False, "error": msg}
         adb = _adb_bin()
 
@@ -214,6 +221,13 @@ def run_android_surface_audit_sync(
         "SURFACE_AUDIT_PASSWORD",
         os.environ.get("MODSTORE_SURFACE_AUDIT_PASSWORD") or "Demo@2026",
     )
+    if sample:
+        env["SURFACE_AUDIT_ANDROID_SAMPLE"] = "1"
+    env.setdefault(
+        "SURFACE_AUDIT_ANDROID_MAX_PAGES",
+        os.environ.get("MODSTORE_DAILY_SURFACE_AUDIT_MAX_PER_LANE", "1"),
+    )
+    env.setdefault("SURFACE_AUDIT_ANDROID_ADB_TIMEOUT_MS", "60000")
     try:
         timeout = int(os.environ.get("SURFACE_AUDIT_ANDROID_TIMEOUT_MS", "600000"))
     except ValueError:
@@ -228,6 +242,8 @@ def run_android_surface_audit_sync(
         out_json = Path(tempfile.mkstemp(suffix=".json")[1])
 
     cmd = ["node", str(script), "--out", str(out_json)]
+    if sample:
+        cmd.append("--sample")
     logger.info("android audit: node %s (sample=%s adb=%s)", script.name, sample, adb)
     proc = subprocess.run(
         cmd,

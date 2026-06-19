@@ -36,7 +36,7 @@ class SkillRegistry:
                 - parameters: 参数定义
         """
         self._skills[skill_id] = skill_info
-        logger.info("技能注册成功: %s - %s", skill_id, skill_info.get('name', ''))
+        logger.info("技能注册成功: %s - %s", skill_id, skill_info.get("name", ""))
 
     def get(self, skill_id: str) -> dict[str, Any] | None:
         """获取技能信息"""

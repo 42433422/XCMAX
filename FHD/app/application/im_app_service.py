@@ -110,7 +110,9 @@ class ImApplicationService:
         ).first()
         return int(row[0]) if row else None
 
-    def list_conversations(self, user_id: int) -> list[dict[str, Any]]:
+    def list_conversations(
+        self, user_id: int, *, include_enterprise_dedicated_cs: bool = True
+    ) -> list[dict[str, Any]]:
         rows = (
             self._db.execute(
                 select(ImConversation)
@@ -156,19 +158,32 @@ class ImApplicationService:
                 "last_message_preview": (last_msg.body[:120] if last_msg else ""),
                 "unread_count": unread,
             }
-            if conv.is_direct and self._is_enterprise_dedicated_cs_user(peer):
+            is_enterprise_dedicated_cs = conv.is_direct and self._is_enterprise_dedicated_cs_user(
+                peer
+            )
+            if is_enterprise_dedicated_cs and not include_enterprise_dedicated_cs:
+                continue
+            if is_enterprise_dedicated_cs:
                 item["is_enterprise_dedicated_cs"] = True
             out.append(item)
         return out
 
-    def list_contacts(self, user_id: int) -> list[dict[str, Any]]:
+    def list_contacts(
+        self, user_id: int, *, include_enterprise_dedicated_cs: bool = True
+    ) -> list[dict[str, Any]]:
         me = self._db.get(User, int(user_id))
         my_tenant = getattr(me, "tenant_id", None) if me else None
-        dedicated_cs = self._ensure_enterprise_dedicated_cs_user()
-        dedicated_cs_id = int(dedicated_cs.id) if dedicated_cs is not None and dedicated_cs.id else None
+        dedicated_cs = (
+            self._ensure_enterprise_dedicated_cs_user() if include_enterprise_dedicated_cs else None
+        )
+        dedicated_cs_id = (
+            int(dedicated_cs.id) if dedicated_cs is not None and dedicated_cs.id else None
+        )
         q = select(User).where(User.id != int(user_id), User.is_active.is_(True))
         if dedicated_cs_id is not None:
             q = q.where(User.id != dedicated_cs_id)
+        elif not include_enterprise_dedicated_cs:
+            q = q.where(User.username != ENTERPRISE_DEDICATED_CS_USERNAME)
         if my_tenant is not None:
             q = q.where(User.tenant_id == my_tenant)
         rows = self._db.execute(q.order_by(User.display_name, User.username)).scalars().all()
@@ -281,9 +296,7 @@ class ImApplicationService:
             "updated_at_ms": updated_at_ms,
         }
 
-    def mark_read(
-        self, conversation_id: int, user_id: int, last_message_id: int
-    ) -> dict[str, Any]:
+    def mark_read(self, conversation_id: int, user_id: int, last_message_id: int) -> dict[str, Any]:
         member = self._get_member(conversation_id, user_id)
         if not member:
             raise PermissionError("非会话成员")

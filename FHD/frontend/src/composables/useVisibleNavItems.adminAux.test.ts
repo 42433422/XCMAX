@@ -8,6 +8,11 @@ describe('admin operator aux sidebar', () => {
     expect(keys).toContain('internal-customer-service')
   })
 
+  it('keeps im as the admin information entry', () => {
+    const item = ADMIN_OPERATOR_AUX_MENU_ITEMS.find((m) => m.key === 'im')
+    expect(item?.name).toBe('信息')
+  })
+
   it('does not flatten employee-workflow children into admin aux trailing', () => {
     const keys = ADMIN_OPERATOR_AUX_MENU_ITEMS.map((m) => m.key)
     expect(keys).not.toContain('other-tools')

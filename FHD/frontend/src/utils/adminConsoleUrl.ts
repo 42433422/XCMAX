@@ -1,5 +1,4 @@
 /** 平台运维台（admin-console）与 enterprise frontend 分离构建时的 URL 解析 */
-
 export function isAdminConsoleSpa(): boolean {
   return String(import.meta.env.VITE_XCMAX_ADMIN_CONSOLE || '').trim() === '1';
 }

@@ -139,7 +139,7 @@ async def _handle_llm_md(payload: Dict[str, Any], ctx: Dict[str, Any], v2: Dict[
     except Exception as e:  # noqa: BLE001
         logger.exception('call_llm raised')
         return _err('LLM 调用异常：' + str(e)[:300], meta={'handler': 'llm_md'})
-    if not isinstance(res, dict) or not res.get('ok'):
+    if not isinstance(res, dict) or not (res.get('ok') or res.get('success')):
         return _err(str((res or {}).get('error') or 'LLM 调用失败')[:400], meta={'handler': 'llm_md'})
     content = str(res.get('content') or '').strip()
     return _ok(content, meta={'handler': 'llm_md', 'max_tokens': cfg['max_tokens']})

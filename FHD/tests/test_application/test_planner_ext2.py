@@ -239,7 +239,7 @@ class TestExecuteShipmentGenerateToolDeep:
         mock_svc.generate_shipment_document.return_value = {"success": True}
         with (
             patch("app.bootstrap.get_shipment_app_service", return_value=mock_svc),
-            patch("app.routes.tools._parse_order_text", return_value={"success": True, "unit_name": "公司A", "products": []}),
+            patch("app.application.facades.tools_facade._parse_order_text", return_value={"success": True, "unit_name": "公司A", "products": []}),
         ):
             result = _execute_shipment_generate_tool({"order_text": "给公司A发10桶涂料"})
         assert result["success"] is True
@@ -259,7 +259,7 @@ class TestExecuteShipmentGenerateToolDeep:
         from app.application.workflow.planner import _execute_shipment_generate_tool
         with (
             patch("app.bootstrap.get_shipment_app_service"),
-            patch("app.routes.tools._parse_order_text", return_value={"success": False, "message": "无法解析"}),
+            patch("app.application.facades.tools_facade._parse_order_text", return_value={"success": False, "message": "无法解析"}),
         ):
             result = _execute_shipment_generate_tool({"order_text": "无效订单"})
         assert result["success"] is False
@@ -267,7 +267,7 @@ class TestExecuteShipmentGenerateToolDeep:
     def test_import_error(self):
         from app.application.workflow.planner import _execute_shipment_generate_tool
         # Make the import of _parse_order_text fail to trigger the ImportError handler
-        with patch.dict("sys.modules", {"app.routes.tools": None}):
+        with patch.dict("sys.modules", {"app.application.facades.tools_facade": None}):
             result = _execute_shipment_generate_tool({"order_text": "test"})
         assert result["success"] is False
         assert result.get("error_code") == "service_unavailable" or "不可用" in result.get("message", "")

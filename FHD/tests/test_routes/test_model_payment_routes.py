@@ -212,6 +212,67 @@ class TestCheckout:
             assert body["data"]["status"] == "pending_payment"
             assert body["data"]["redirect_url"] == "https://pay.alipay.com/xxx"
 
+    def test_usage_returns_model_usage_ledger_entries(self, client_mp, tmp_path, monkeypatch):
+        ledger_path = tmp_path / "model_usage_ledger.json"
+        monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(ledger_path))
+        from app.infrastructure.billing.model_usage import (
+            record_model_usage,
+            set_model_wallet_balance,
+        )
+
+        set_model_wallet_balance("u1", 3, reason="route-test")
+        record_model_usage(
+            run_id="run-usage",
+            user_id="u1",
+            provider="xcauto",
+            model="xcauto-account",
+            total_tokens=5,
+            cost_units=1,
+            usage_key="run-usage:llm-1",
+        )
+
+        r = client_mp.get("/api/model-payment/usage?run_id=run-usage&user_id=u1")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["success"] is True
+        assert body["data"]["count"] == 1
+        assert body["data"]["entries"][0]["run_id"] == "run-usage"
+        assert body["data"]["entries"][0]["model"] == "xcauto-account"
+        assert body["data"]["wallet"]["balance_units"] == 2
+        assert body["data"]["wallet"]["configured"] is True
+        assert body["data"]["wallet_backend"] == "local"
+
+    def test_usage_returns_tool_usage_ledger_entries(self, client_mp, tmp_path, monkeypatch):
+        ledger_path = tmp_path / "model_usage_ledger.json"
+        monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(ledger_path))
+        monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
+        from app.infrastructure.billing.model_usage import record_tool_usage
+
+        record_tool_usage(
+            run_id="run-tool-usage",
+            user_id="u1",
+            tool_id="employee",
+            action="execute",
+            call_id="call-tool-1",
+            permission="employee.execute",
+            status="pre_execution",
+            cost_units=5,
+            usage_key="run-tool-usage:call-tool-1",
+        )
+
+        r = client_mp.get("/api/model-payment/usage?run_id=run-tool-usage&user_id=u1")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["success"] is True
+        assert body["data"]["count"] == 1
+        entry = body["data"]["entries"][0]
+        assert entry["entry_type"] == "tool_call"
+        assert entry["tool_id"] == "employee"
+        assert entry["action"] == "execute"
+        assert entry["model"] == "employee.execute"
+        assert entry["cost_units"] == 5
+        assert entry["wallet_backend"] == "audit"
+
     def test_checkout_alipay_ready_pay_failure(self, client_mp):
         with patch("app.fastapi_routes.model_payment.is_modstore_payment_sot", return_value=False), \
              patch("app.fastapi_routes.model_payment.is_json_legacy_payment_sot", return_value=False), \

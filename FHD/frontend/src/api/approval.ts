@@ -51,12 +51,12 @@ export interface ApprovalFlowNode {
 export interface ApprovalRequest {
   id: number
   request_no: string
-  flow_id: number
+  flow_id: number | null
   business_type: string
   business_id?: number
   title: string
   description?: string
-  applicant_id: number
+  applicant_id: number | null
   status: string
   current_node_id?: number
   current_node_name?: string
@@ -64,6 +64,8 @@ export interface ApprovalRequest {
   created_at: string
   approved_at?: string
   records?: ApprovalRecord[]
+  workflow_execution?: ApprovalWorkflowExecution
+  is_ai_workflow_approval?: boolean
 }
 
 export interface ApprovalRecord {
@@ -76,6 +78,30 @@ export interface ApprovalRecord {
   action: string
   opinion?: string
   created_at: string
+}
+
+export interface ApprovalWorkflowExecutionNode {
+  node_id: string
+  tool_id: string
+  action: string
+  success: boolean
+  error?: string
+  retries?: number
+  retryable?: boolean
+  recovery_hint?: string
+}
+
+export interface ApprovalWorkflowExecution {
+  workflow_executed: boolean
+  approval_request_id?: string
+  approved_in_memory?: boolean
+  success?: boolean
+  plan_id?: string
+  intent?: string
+  message?: string
+  nodes_executed?: number
+  nodes_total?: number
+  node_results?: ApprovalWorkflowExecutionNode[]
 }
 
 export interface ApprovalStats {

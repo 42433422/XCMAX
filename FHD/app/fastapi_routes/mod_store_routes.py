@@ -209,19 +209,24 @@ def _remote_to_mod_info(d: dict[str, Any], installed_ids: set[str]) -> dict[str,
 
 
 async def _remote_rows() -> list[dict[str, Any]]:
+    from fastapi import HTTPException
+
     from app.mod_sdk.host_foundation import is_infrastructure_mod_hidden_from_store
 
     installed_ids = set(_installed_by_id())
     rows: list[dict[str, Any]] = []
-    async for row in iter_catalog_packages():
-        info = _remote_to_mod_info(row, installed_ids)
-        mid = str(info.get("id") or "").strip()
-        if not mid:
-            continue
-        # 市场上架的工作流单员工 Mod（public_listing）须在能力库展示，与 /api/market/catalog 一致
-        if is_infrastructure_mod_hidden_from_store(mid) and not row.get("public_listing"):
-            continue
-        rows.append(info)
+    try:
+        async for row in iter_catalog_packages():
+            info = _remote_to_mod_info(row, installed_ids)
+            mid = str(info.get("id") or "").strip()
+            if not mid:
+                continue
+            # 市场上架的工作流单员工 Mod（public_listing）须在能力库展示，与 /api/market/catalog 一致
+            if is_infrastructure_mod_hidden_from_store(mid) and not row.get("public_listing"):
+                continue
+            rows.append(info)
+    except HTTPException as exc:
+        logger.warning("mod store remote catalog unavailable, using empty fallback: %s", exc)
     return rows
 
 

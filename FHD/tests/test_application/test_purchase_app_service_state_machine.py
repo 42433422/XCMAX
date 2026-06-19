@@ -15,7 +15,7 @@ import pytest
 
 pytest.importorskip(
     "app.application.purchase_app_service",
-    reason="purchase_app_service (v1 delegating wrapper) removed; superseded by purchase_app_service_v2 with a different API",
+    reason="purchase currently uses purchase routes and inventory facade directly; no parallel application wrapper is shipped",
 )
 from app.application.purchase_app_service import (
     PurchaseApplicationService,

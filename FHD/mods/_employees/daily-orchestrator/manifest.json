@@ -3,7 +3,7 @@
   "name": "每日编排员",
   "version": "1.0.0",
   "author": "admin",
-  "description": "每日定时：在独立分支上做最小修复（测试失败、日志告警），提交后进入「待邮件审批」队列；不触达用户数据目录与 ORM 模型定义。",
+  "description": "每日编排员工包：实际执行由宿主 daily_orchestrator_job 注入 agent_runner 后完成；员工包本身只提供 echo / llm_md / webhook / agent 通用 handler。",
   "artifact": "employee_pack",
   "scope": "global",
   "dependencies": {
@@ -25,10 +25,10 @@
       "version": "1.0.0",
       "artifact": "employee_pack",
       "name": "每日编排员",
-      "description": "每日定时：在独立分支上做最小修复（测试失败、日志告警），提交后进入「待邮件审批」队列；不触达用户数据目录与 ORM 模型定义。",
+      "description": "每日编排员工包：实际执行由宿主 daily_orchestrator_job 注入 agent_runner 后完成；员工包本身只提供 echo / llm_md / webhook / agent 通用 handler。",
       "owner": "admin",
       "area": "platform-core",
-      "domain": "每日定时：在独立分支上做最小修复（测试失败、日志告警），提交后进入「待邮件审批」队列；不触达用户数据目录与 ORM 模型定义。"
+      "domain": "每日编排员工包：宿主负责分支、提交、OpsStagedChange 入队和审批链；员工包负责在注入 agent_runner 时执行任务。"
     },
     "perception": {
       "type": "web_rankings"
@@ -38,10 +38,10 @@
     },
     "cognition": {
       "agent": {
-        "system_prompt": "你是 AI 模型排行榜统计员工。请基于输入中的网页抓取片段，整理主流 AI 模型的排名、模型名称、来源网站和简短结论；如果某来源抓取失败，要明确列出失败来源，不要编造未出现在片段中的排名。",
+        "system_prompt": "你是 XCAGI 每日编排员。实际修复/分支/提交/待审批入队由宿主 daily_orchestrator_job 和 ctx.agent_runner 协同完成；当 agent_runner 未注入时，只能输出离线计划或明确说明缺少执行能力。不得声称已经创建分支、提交或入队，除非宿主返回了对应证据。",
         "role": {
           "name": "每日编排员",
-          "persona": "每日定时：在独立分支上做最小修复（测试失败、日志告警），提交后进入「待邮件审批」队列；不触达用户数据目录与 ORM 模型定义。",
+          "persona": "每日编排员工包：通过宿主注入能力执行每日修复链；无宿主能力时只做结构化说明。",
           "tone": "professional",
           "expertise": [
             "skill-daily-orchestrator"
@@ -65,7 +65,7 @@
       "skills": [
         {
           "name": "skill-daily-orchestrator",
-          "brief": "skill-daily-orchestrator每日编排员相关内容，输出结构化结果，服务于：每日定时：在独立分支上做最小修复（测试失败、日志告警），提交后进入「待邮件审批」队列；不触达用户数据目录与 ORM 模型定义。"
+          "brief": "skill-daily-orchestrator 每日编排员相关内容，输出结构化结果；真实分支/提交/审批入队由宿主 daily_orchestrator_job 完成。"
         }
       ]
     },
@@ -92,7 +92,24 @@
     },
     "metadata": {
       "framework_version": "2.0.0",
-      "created_by": "employee_ai_scaffold"
+      "created_by": "employee_ai_scaffold",
+      "actual_behavior": {
+        "host_entrypoint": "modstore_server.daily_orchestrator_job.run_daily_orchestrator_job",
+        "employee_runtime": "backend/employees/daily_orchestrator.py",
+        "execution_contract": "employee package dispatches handlers declared in employee_config_v2.actions.handlers; only the agent handler calls ctx.agent_runner, and it fails closed when agent_runner is absent",
+        "host_responsibilities": [
+          "checkout or create daily branch",
+          "call employee_orchestrator.plan_and_dispatch",
+          "commit resulting changes",
+          "create OpsStagedChange pending approval row",
+          "optionally run low-risk auto-deploy gate"
+        ],
+        "non_goals": [
+          "employee package alone does not guarantee branch creation",
+          "employee package alone does not write OpsStagedChange",
+          "employee package alone does not bypass approval"
+        ]
+      }
     },
     "workspace_policy": {
       "scope_globs": [
@@ -118,7 +135,7 @@
       "id": "daily-orchestrator",
       "label": "每日编排员",
       "panel_title": "每日编排员",
-      "panel_summary": "每日定时：在独立分支上做最小修复（测试失败、日志告警），提交后进入「待邮件审批」队列；不触达用户数据目录与 ORM 模型定义。",
+      "panel_summary": "每日编排员工包；真实分支/提交/审批入队由宿主 daily_orchestrator_job 完成。",
       "api_base_path": "employees/daily-orchestrator"
     }
   ],

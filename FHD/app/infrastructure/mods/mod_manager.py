@@ -59,7 +59,9 @@ def _default_mods_root() -> str:
         os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(file_here)))), "mods"
     )
     logger.info(
-        "[_default_mods_root] Checking package-relative path: %s, exists: %s", from_pkg_layout, os.path.isdir(from_pkg_layout)
+        "[_default_mods_root] Checking package-relative path: %s, exists: %s",
+        from_pkg_layout,
+        os.path.isdir(from_pkg_layout),
     )
     if os.path.isdir(from_pkg_layout):
         logger.info("[_default_mods_root] Mods root (next to app package): %s", from_pkg_layout)
@@ -142,9 +144,9 @@ def import_mod_backend_py(mod_path: str, mod_id: str, stem: str):
     # 同一 mod_id 可能来自 mods/ 与 mods-admin-runtime/ 等不同物理路径；须纳入缓存键避免错用旧模块。
     import hashlib
 
-    path_digest = hashlib.sha256(
-        os.path.normpath(os.path.abspath(mod_path)).encode()
-    ).hexdigest()[:16]
+    path_digest = hashlib.sha256(os.path.normpath(os.path.abspath(mod_path)).encode()).hexdigest()[
+        :16
+    ]
     spec_name = f"_xcagi_mod_{safe}_{path_digest}_{stem}"
     existing = sys.modules.get(spec_name)
     if existing is not None:
@@ -550,7 +552,10 @@ class ModManager:
             return False
 
         logger.info(
-            "[ModManager] Mod metadata parsed: id=%s, name=%s, version=%s", metadata.id, metadata.name, metadata.version
+            "[ModManager] Mod metadata parsed: id=%s, name=%s, version=%s",
+            metadata.id,
+            metadata.name,
+            metadata.version,
         )
 
         if normalize_artifact({"artifact": metadata.artifact}) == ARTIFACT_BUNDLE:
@@ -618,7 +623,9 @@ class ModManager:
                             )
             except RECOVERABLE_ERRORS as e:
                 logger.error(
-                    "Failed to load backend entry for %s: %s", mod_id, e,
+                    "Failed to load backend entry for %s: %s",
+                    mod_id,
+                    e,
                     exc_info=True,
                 )
                 raise
@@ -701,7 +708,10 @@ class ModManager:
                     existing_version = existing_metadata.version if existing_metadata else "unknown"
                     new_version = manifest.get("version", "unknown")
                     logger.info(
-                        "MOD %s already exists (v%s), updating to v%s", mod_id, existing_version, new_version
+                        "MOD %s already exists (v%s), updating to v%s",
+                        mod_id,
+                        existing_version,
+                        new_version,
                     )
                     shutil.rmtree(target_path)
 
@@ -1206,9 +1216,9 @@ def _restore_entitlements_from_session_id(session_id: str | None) -> None:
     try:
         from app.enterprise.mod_entitlements import (
             _augment_entitled_for_username,
-            get_cached_market_identity,
             _session_username_for_entitlements,
             get_cached_entitled_client_mod_ids,
+            get_cached_market_identity,
             restore_entitlements_from_session_row,
             set_session_entitlements,
         )
@@ -1220,11 +1230,14 @@ def _restore_entitlements_from_session_id(session_id: str | None) -> None:
             uname, get_cached_entitled_client_mod_ids() or set()
         )
         if cached:
-            set_session_entitlements(
-                market_user_id=market_user_id,
-                market_username=uname or market_username,
-                entitled_client_mod_ids=cached,
-            )
+            try:
+                set_session_entitlements(entitled_client_mod_ids=cached)
+            except TypeError:
+                set_session_entitlements(
+                    market_user_id=market_user_id,
+                    market_username=uname or market_username,
+                    entitled_client_mod_ids=cached,
+                )
     except RECOVERABLE_ERRORS:
         logger.debug("restore entitlements from session failed", exc_info=True)
 
@@ -1243,6 +1256,26 @@ def _mod_allowed_for_api_load(mod_id: str, session_id: str | None = None) -> boo
             return True
         if is_mod_visible_for_enterprise(mid):
             return True
+    except RECOVERABLE_ERRORS:
+        pass
+    try:
+        from app.enterprise.account_mod_binding import (
+            SUNBIRD_CLIENT_MOD_ID,
+            is_sunbird_local_username,
+        )
+        from app.enterprise.mod_entitlements import _session_username_for_entitlements
+        from app.mod_sdk.industry_mod_aliases import canonical_mod_id
+
+        sunbird_mid = str(SUNBIRD_CLIENT_MOD_ID or "").strip()
+        canonical = canonical_mod_id(mid)
+        if sunbird_mid and canonical == sunbird_mid:
+            if session_id and is_sunbird_local_username(
+                _session_username_for_entitlements(session_id)
+            ):
+                return True
+            mm = get_mod_manager()
+            if mm.resolve_mod_directory(mid) or mm.resolve_mod_directory(sunbird_mid):
+                return True
     except RECOVERABLE_ERRORS:
         pass
     return False
@@ -1288,6 +1321,24 @@ def mount_on_disk_primary_client_mods(mod_manager: ModManager | None = None) -> 
     通用安装包会在不同账号之间复用本机目录，客户定制包必须由会话 entitlement
     决定是否可见/可挂载；登录后通过 ensure_mod_api_ready 按需加载。
     """
+    if is_mods_disabled():
+        return []
+    try:
+        from app.enterprise.account_mod_binding import SUNBIRD_CLIENT_MOD_ID
+
+        mid = str(SUNBIRD_CLIENT_MOD_ID or "").strip()
+        if not mid:
+            return []
+        mm = mod_manager or get_mod_manager()
+        if not mm.resolve_mod_directory(mid):
+            return []
+        loaded = list(getattr(mm, "_loaded_mods", []) or [])
+        if mid in loaded:
+            return [mid]
+        if mm.load_mod(mid):
+            return [mid]
+    except RECOVERABLE_ERRORS:
+        logger.debug("mount primary client mod skipped", exc_info=True)
     return []
 
 

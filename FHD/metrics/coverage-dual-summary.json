@@ -1,10 +1,10 @@
 {
-  "_ssot": "FHD 覆盖率唯一对外口径。全量 source=[app] + branch，.venv = CI 等价依赖（不含 ml extra）。棘轮见 pyproject.toml fail_under + coverage_ratchet_baseline.json；趋势见 coverage-history.jsonl。",
-  "_updated": "2026-06-17",
+  "_ssot": "FHD 覆盖率唯一对外口径。全量 source=[app] + branch，.venv = CI 等价依赖（不含 ml extra）。棘轮见 pyproject.toml fail_under + coverage_ratchet_baseline.json；趋势见 coverage-history.jsonl。红灯 WIP 不可对外宣称达标。",
+  "_updated": "2026-06-19",
   "committed_head": {
     "captured_at": "2026-06-14T08:33:13Z",
     "commit": "1569dfa4",
-    "status": "last_green_bump",
+    "status": "committed_snapshot_below_current_floor",
     "backend_line_pct": 52.74,
     "backend_branch_pct": 37.17,
     "backend_statements": 75357,
@@ -33,13 +33,21 @@
     "pytest_skipped": 39,
     "note": "工作区实测；有待修红灯，不可对外宣称已达标或 bump 棘轮"
   },
+  "quality_gate": {
+    "status": "failed",
+    "reason": "captured wip_local pytest red; coverage-only artifacts cannot claim green without a full passing test run",
+    "backend_line_floor": 80,
+    "backend_branch_floor": 70,
+    "wip_backend_line_delta": -5.44,
+    "wip_backend_branch_delta": -8.2
+  },
   "ratchet_floors": {
-    "backend_line": 51,
-    "backend_branch": 36,
-    "frontend_lines": 54,
-    "frontend_branches": 62,
-    "frontend_functions": 50,
-    "frontend_statements": 54,
+    "backend_line": 80,
+    "backend_branch": 70,
+    "frontend_lines": 73,
+    "frontend_branches": 68,
+    "frontend_functions": 64,
+    "frontend_statements": 73,
     "source": "pyproject.toml fail_under + metrics/coverage_ratchet_baseline.json"
   },
   "targets": {

@@ -34,6 +34,7 @@ import com.xiuci.xcagi.mobile.model.PinnedIds
 import com.xiuci.xcagi.mobile.navigation.Routes
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import java.time.Instant
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import kotlinx.coroutines.Job
@@ -109,8 +110,13 @@ constructor(
             )
 
     val serverModeLabel =
-            combine(sessionStore.serverModeFlow, sessionStore.fhdHostFlow) { mode, host ->
+            combine(
+                    sessionStore.serverModeFlow,
+                    sessionStore.fhdHostFlow,
+                    sessionStore.relayDesktopIdFlow,
+            ) { mode, host, relayId ->
                         when {
+                            relayId.isNotBlank() -> "服务器中继 · 电脑执行端"
                             host.isNotBlank() -> "Agent 控制 · $host"
                             mode == "cloud" -> "远程同步可用"
                             else -> "本地连通待启"
@@ -148,8 +154,16 @@ constructor(
     private fun registerPushWithHint() {
         viewModelScope.launch {
             val result = pushRegistrar.registerAll()
-            result.hint?.let { snack(it, isError = true) }
+            if (!result.fcmRegistered && !result.jpushRegistered && result.hint != null) {
+                // Push is optional. Do not show SDK/API-key diagnostics as a blocking login error.
+                snack("消息提醒未开启，不影响登录和员工同步")
+            }
         }
+    }
+
+    private suspend fun refreshConversationRuntime() {
+        val adminMode = isAdminAccountKind(sessionStore.accountKindFlow.first())
+        rebuildConversationItems(ProductSkuConfig.showsEnterpriseNav || adminMode)
     }
 
     private val _navReady = MutableStateFlow(false)
@@ -195,8 +209,13 @@ constructor(
                     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
 
     val chatConnectionChip =
-            combine(sessionStore.serverModeFlow, sessionStore.fhdHostFlow) { mode, host ->
+            combine(
+                    sessionStore.serverModeFlow,
+                    sessionStore.fhdHostFlow,
+                    sessionStore.relayDesktopIdFlow,
+            ) { mode, host, relayId ->
                         when {
+                            relayId.isNotBlank() -> "中继"
                             host.isNotBlank() -> "Agent"
                             mode == "cloud" -> "远程"
                             else -> "本地"
@@ -205,9 +224,9 @@ constructor(
                     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "远程")
 
     val isAgentControlActive =
-            sessionStore
-                    .fhdHostFlow
-                    .map { it.isNotBlank() }
+            combine(sessionStore.fhdHostFlow, sessionStore.relayDesktopIdFlow) { host, relayId ->
+                        host.isNotBlank() || relayId.isNotBlank()
+                    }
                     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
     private val _homeHub = MutableStateFlow(HomeHubState())
@@ -226,8 +245,12 @@ constructor(
     val chatAction: StateFlow<ChatAction?> = _chatAction.asStateFlow()
 
     val syncStaleHint =
-            combine(sessionStore.lastSyncAtFlow, sessionStore.fhdHostFlow) { last, host ->
-                        host.isNotBlank() && last.isBlank()
+            combine(
+                    sessionStore.lastSyncAtFlow,
+                    sessionStore.fhdHostFlow,
+                    sessionStore.relayDesktopIdFlow,
+            ) { last, host, relayId ->
+                        (host.isNotBlank() || relayId.isNotBlank()) && last.isBlank()
                     }
                     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
@@ -344,6 +367,7 @@ constructor(
                             serverRouter.mode = mode
                             snack("欢迎回来，$it")
                             refreshMarketTokens()
+                            refreshConversationRuntime()
                             registerPushWithHint()
                             _startRoute.value = Routes.CHAT
                         }
@@ -456,39 +480,56 @@ constructor(
 
     fun loadHomeHub() =
             viewModelScope.launch {
-                _homeHub.value = _homeHub.value.copy(loading = true)
-                val host = sessionStore.fhdHostFlow.first()
-                val online = host.isNotBlank() && repo.checkHealth(host)
-                val syncLabel = syncRepo.statusLabel(online)
-                val (mods, fromCloud) =
-                        if (online) {
-                            val list =
-                                    repo.fetchHome().getOrNull()?.let { data ->
-                                        @Suppress("UNCHECKED_CAST")
-                                        val raw =
-                                                (data["mods"] as? List<Map<String, Any?>>)
-                                                        ?: emptyList()
-                                        raw.mapNotNull { row ->
-                                            val id = row["id"]?.toString()?.trim().orEmpty()
-                                            val name = row["name"]?.toString()?.trim().orEmpty()
-                                            if (id.isNotBlank()) ListItem(id, name.ifBlank { id })
-                                            else null
+                try {
+                    _homeHub.value = _homeHub.value.copy(loading = true)
+                    repo.preferCloudIfLanUnreachable()
+                    val host = sessionStore.fhdHostFlow.first()
+                    val relayId = sessionStore.relayDesktopId()
+                    val online =
+                            if (relayId.isNotBlank()) {
+                                repo.checkHealth()
+                            } else {
+                                host.isNotBlank() && repo.checkHealth(host)
+                            }
+                    val syncLabel = syncRepo.statusLabel(online)
+                    val (mods, fromCloud) =
+                            if (online) {
+                                val list =
+                                        repo.fetchHome().getOrNull()?.let { data ->
+                                            @Suppress("UNCHECKED_CAST")
+                                            val raw =
+                                                    (data["mods"] as? List<Map<String, Any?>>)
+                                                            ?: emptyList()
+                                            raw.mapNotNull { row ->
+                                                val id = row["id"]?.toString()?.trim().orEmpty()
+                                                val name = row["name"]?.toString()?.trim().orEmpty()
+                                                if (id.isNotBlank()) ListItem(id, name.ifBlank { id })
+                                                else null
+                                            }
                                         }
-                                    }
-                                            ?: repo.mods().getOrElse { emptyList() }
-                            list to false
-                        } else {
-                            repo.marketCatalog().getOrElse { emptyList() } to true
-                        }
-                _homeHub.value =
-                        HomeHubState(
-                                loading = false,
-                                pcOnline = online,
-                                mods = mods,
-                                modsFromCloud = fromCloud,
-                                syncLabel = syncLabel,
-                        )
-                rebuildChatSuggestions(mods, online)
+                                                ?: repo.mods().getOrElse { emptyList() }
+                                list to false
+                            } else {
+                                repo.marketCatalog().getOrElse { emptyList() } to true
+                            }
+                    _homeHub.value =
+                            HomeHubState(
+                                    loading = false,
+                                    pcOnline = online,
+                                    mods = mods,
+                                    modsFromCloud = fromCloud,
+                                    syncLabel = syncLabel,
+                            )
+                    rebuildChatSuggestions(mods, online)
+                } catch (_: Exception) {
+                    _homeHub.value =
+                            _homeHub.value.copy(
+                                    loading = false,
+                                    pcOnline = false,
+                                    syncLabel = "同步状态待刷新",
+                            )
+                    rebuildChatSuggestions(emptyList(), false)
+                }
             }
 
     private fun rebuildChatSuggestions(mods: List<ListItem>, pcOnline: Boolean) {
@@ -509,47 +550,78 @@ constructor(
         _conversations.value = fixedConversationItems(isEnterprise)
 
         viewModelScope.launch {
-            val adminMode = isAdminAccountKind(sessionStore.accountKindFlow.first())
-            val fixedItems = fixedConversationItems(isEnterprise || adminMode)
-            _conversations.value = fixedItems
-
-            if (adminMode) {
-                repo.loadAdminModInfos()
-                        .onSuccess { mods ->
-                            _modInfos.value = mods
-                            _conversations.value =
-                                    fixedItems +
-                                            employeeConversationItems(
-                                                    mods = mods,
-                                                    badgeText = "管理端",
-                                                    badgeColor =
-                                                            androidx.compose.ui.graphics.Color(
-                                                                    0xFFED7B2F
-                                                            ),
-                                            )
-                        }
-                        .onFailure { _conversations.value = fixedItems }
-                return@launch
-            }
-
-            if (!isEnterprise) return@launch
-
-            repo.loadModInfos()
-                    .onSuccess { mods ->
-                        _modInfos.value = mods
-                        _conversations.value =
-                                fixedItems +
-                                        employeeConversationItems(
-                                                mods = mods,
-                                                badgeText = "已安装",
-                                                badgeColor =
-                                                        androidx.compose.ui.graphics.Color(
-                                                                0xFF3370FF
-                                                        ),
-                                        )
-                    }
-                    .onFailure { _conversations.value = fixedItems }
+            rebuildConversationItems(isEnterprise)
         }
+    }
+
+    private suspend fun rebuildConversationItems(isEnterprise: Boolean): Int {
+        val adminMode = isAdminAccountKind(sessionStore.accountKindFlow.first())
+        val fixedItems = fixedConversationItems(isEnterprise || adminMode)
+        _conversations.value = fixedItems
+
+        if (adminMode) {
+            val mods = repo.loadAdminModInfos().getOrElse {
+                _conversations.value = fixedItems
+                return 0
+            }
+            _modInfos.value = mods
+            val employees =
+                    employeeConversationItems(
+                            mods = mods,
+                            badgeText = "管理端",
+                            badgeColor = androidx.compose.ui.graphics.Color(0xFFED7B2F),
+                    )
+            _conversations.value = fixedItems + employees
+            return employees.size
+        }
+
+        if (!isEnterprise) return 0
+
+        val mods = repo.loadModInfos().getOrElse {
+            _conversations.value = fixedItems
+            return 0
+        }
+        _modInfos.value = mods
+        val employees =
+                employeeConversationItems(
+                        mods = mods,
+                        badgeText = "已安装",
+                        badgeColor = androidx.compose.ui.graphics.Color(0xFF3370FF),
+                )
+        _conversations.value = fixedItems + employees
+        return employees.size
+    }
+
+    private suspend fun refreshBoundRuntimeAfterPairing(): Int {
+        refreshStartRoute()
+        repo.preferCloudIfLanUnreachable()
+        if (repo.hasNativeFhdAuth()) {
+            try {
+                withTimeout(5_000) { repo.refreshMe(sessionStore.accountKindFlow.first()) }
+            } catch (_: Exception) {
+            }
+            try {
+                withTimeout(5_000) { repo.syncMarketSessionHandoff() }
+            } catch (_: Exception) {
+            }
+        }
+        val (access, refresh) = repo.marketTokensForWeb()
+        _marketAccess.value = access
+        _marketRefresh.value = refresh
+        val adminMode = isAdminAccountKind(sessionStore.accountKindFlow.first())
+        val employeeCount = rebuildConversationItems(ProductSkuConfig.showsEnterpriseNav || adminMode)
+        val syncSummary = try {
+            withTimeout(6_000) { syncRepo.pullAndCache().getOrNull() }
+        } catch (_: Exception) {
+            null
+        }
+        if (syncSummary == null) {
+            sessionStore.setLastSyncAt(Instant.now().toString())
+        }
+        loadHomeHub()
+        refreshApprovalCount()
+        registerPushWithHint()
+        return employeeCount
     }
 
     private fun employeeConversationItems(
@@ -571,9 +643,7 @@ constructor(
                                 type = ConversationType.AI_TASK,
                                 title = title,
                                 subtitle =
-                                        employee.panel_summary.ifBlank {
-                                            source?.let { "来自 $it" }.orEmpty()
-                                        },
+                                        employee.contactSubtitle(source),
                                 timestamp = 0L,
                                 avatarType = AvatarType.LETTER,
                                 avatarLetter = title.firstOrNull { !it.isWhitespace() } ?: 'A',
@@ -583,6 +653,26 @@ constructor(
                         )
                     }
                 }
+            }
+
+    private fun com.xiuci.xcagi.mobile.core.model.WorkflowEmployeeInfo.contactSubtitle(
+            source: String?,
+    ): String {
+        val channel = phone_channel.contactChannelLabel()
+        val aiNo = id.takeIf { it.isNotBlank() }?.let { "AI号 $it" }.orEmpty()
+        val summary =
+                panel_summary.ifBlank {
+                    source?.let { "来自 $it" }.orEmpty()
+                }
+        return listOf(channel, aiNo, summary).filter { it.isNotBlank() }.joinToString(" · ")
+    }
+
+    private fun String.contactChannelLabel(): String =
+            when (trim()) {
+                "admin-duty" -> "管理端工作台"
+                "mobile", "mobile-chat" -> "手机端会话"
+                "" -> ""
+                else -> trim()
             }
 
     private fun fixedConversationItems(isEnterprise: Boolean): List<ConversationItem> {
@@ -603,7 +693,24 @@ constructor(
             )
         )
 
-        // 2. 专属客服（仅企业版）
+        if (isEnterprise) {
+            items.add(
+                    ConversationItem(
+                            id = PinnedIds.CODEX,
+                            type = ConversationType.PINNED_CODEX,
+                            title = "超级员工-Codex",
+                            subtitle = "全设备协同调度",
+                            timestamp = System.currentTimeMillis(),
+                            avatarType = AvatarType.ICON,
+                            isOnline = true,
+                            isPinned = true,
+                            badgeText = "可派工",
+                            badgeColor = androidx.compose.ui.graphics.Color(0xFF111827),
+                    )
+            )
+        }
+
+        // 3. 专属客服（仅企业版）
         if (isEnterprise) {
             items.add(
                 ConversationItem(
@@ -632,15 +739,16 @@ constructor(
                         0xFF8B5CF6,
                         0xFF00ACC1,
                         0xFFED7B2F,
-                        0xFF494E56,
-                )
-        val idx = kotlin.math.abs(key.hashCode()) % colors.size
+	                        0xFF494E56,
+	                )
+        val idx = Math.floorMod(key.hashCode(), colors.size)
         return androidx.compose.ui.graphics.Color(colors[idx])
     }
 
     fun runSyncNow() =
             viewModelScope.launch {
                 _homeHub.value = _homeHub.value.copy(syncing = true)
+                repo.preferCloudIfLanUnreachable()
                 syncRepo.pullAndCache()
                         .onSuccess { summary ->
                             snack("数据同步完成")
@@ -651,8 +759,19 @@ constructor(
                                     )
                         }
                         .onFailure {
-                            snack(it.message ?: "同步失败，请检查网络连接", true)
-                            _homeHub.value = _homeHub.value.copy(syncing = false)
+                            val relayId = sessionStore.relayDesktopId()
+                            if (relayId.isNotBlank()) {
+                                sessionStore.setLastSyncAt(Instant.now().toString())
+                                snack("中继已连接，业务数据将在电脑端在线后继续同步")
+                                _homeHub.value =
+                                        _homeHub.value.copy(
+                                                syncing = false,
+                                                syncLabel = "中继已连接",
+                                        )
+                            } else {
+                                snack(it.message ?: "同步失败，请检查网络连接", true)
+                                _homeHub.value = _homeHub.value.copy(syncing = false)
+                            }
                         }
                 loadHomeHub()
             }
@@ -722,6 +841,29 @@ constructor(
     fun snack(text: String, isError: Boolean = false) {
         _message.value = UiMessage(text, isError)
     }
+
+    private fun productErrorMessage(raw: String?, fallback: String): String {
+        val msg = raw.orEmpty()
+        return when {
+            msg.contains("401", ignoreCase = true) || msg.contains("未授权") ->
+                    "登录已过期，请重新登录或重新扫码绑定"
+            msg.contains("403", ignoreCase = true) || msg.contains("拒绝") ->
+                    "当前账号没有权限，请切换到管理员账号或重新绑定后台"
+            msg.contains("failed to connect", ignoreCase = true) ||
+                    msg.contains("timeout", ignoreCase = true) ||
+                    msg.contains("connect", ignoreCase = true) ->
+                    "连接不到电脑执行端，已尝试通过服务器中继，请稍后重试"
+            msg.contains("Firebase", ignoreCase = true) ||
+                    msg.contains("FCM", ignoreCase = true) ||
+                    msg.contains("JPUSH", ignoreCase = true) ||
+                    msg.contains("极光", ignoreCase = true) ->
+                    "消息提醒未开启，不影响登录和员工同步"
+            msg.isBlank() -> fallback
+            msg.length > 80 -> fallback
+            else -> msg
+        }
+    }
+
     fun clearSnack() {
         _message.value = null
     }
@@ -773,6 +915,7 @@ constructor(
                             snack("欢迎回来，$it")
                             analytics.log("login_success", mapOf("method" to "password"))
                             refreshMarketTokens()
+                            refreshConversationRuntime()
                             registerPushWithHint()
                             onDone(true, null)
                         }
@@ -815,6 +958,7 @@ constructor(
                             snack(it)
                             analytics.log("login_success", mapOf("method" to "phone"))
                             refreshMarketTokens()
+                            refreshConversationRuntime()
                             registerPushWithHint()
                             onDone(true)
                         }
@@ -842,7 +986,9 @@ constructor(
                         )
                     } else if (
                             parsed.token.length == 6 &&
-                                    parsed.token.all { it.isDigit() }
+                                    parsed.token.all { it.isDigit() } &&
+                                    parsed.host.isBlank() &&
+                                    targetHost.isBlank()
                     ) {
                         val relayResult = repo.relayPairingConfirmCode(parsed.token)
                         if (relayResult.isSuccess) {
@@ -856,6 +1002,15 @@ constructor(
                         } else {
                             relayResult
                         }
+                    } else if (
+                            parsed.token.length == 6 &&
+                                    parsed.token.all { it.isDigit() }
+                    ) {
+                        repo.pairingExchange(
+                                code = parsed.token,
+                                exchangeHost = parsed.host.ifBlank { targetHost },
+                                exchangePort = parsed.port.takeIf { it > 0 } ?: targetPort,
+                        )
                     } else if (parsed.version >= 2 && parsed.token.isNotBlank()) {
                         repo.pairingExchange(
                                 nonce = parsed.nonce.ifBlank { parsed.token },
@@ -874,12 +1029,22 @@ constructor(
                 }
                         .onSuccess { (_, _) ->
                             sessionStore.setSetupComplete(true)
-                            refreshStartRoute()
-                            snack("设备绑定成功")
+                            val employeeCount = refreshBoundRuntimeAfterPairing()
+                            if (employeeCount > 0) {
+                                snack("设备绑定成功，已同步 ${employeeCount} 位 AI 员工")
+                            } else {
+                                snack("设备绑定成功")
+                            }
                             onDone(true)
                         }
                         .onFailure {
-                            snack(it.message ?: "设备配对失败，请重试", true)
+                            snack(
+                                    productErrorMessage(
+                                            it.message,
+                                            "设备配对失败，请刷新二维码或输入设备码",
+                                    ),
+                                    true,
+                            )
                             onDone(false)
                         }
             }
@@ -898,7 +1063,7 @@ constructor(
                             onDone(true)
                         }
                         .onFailure {
-                            snack(it.message ?: "扫码登录失败，请重试", true)
+                            snack(productErrorMessage(it.message, "扫码登录失败，请重试"), true)
                             onDone(false)
                         }
             }
@@ -953,7 +1118,7 @@ constructor(
     fun sendChat(text: String) {
         chatJob?.cancel()
         _chatAction.value = null
-        _chatMessages.value = _chatMessages.value + ("user" to text)
+        _chatMessages.value = _chatMessages.value + ("user" to text) + ("assistant" to "")
         _streaming.value = true
         var acc = ""
         chatJob =
@@ -967,18 +1132,23 @@ constructor(
                                     _chatMessages.value =
                                             _chatMessages.value.dropLast(1) + ("assistant" to acc)
                                 },
-                                onDone = { full ->
-                                    _streaming.value = false
-                                    _chatMessages.value =
-                                            _chatMessages.value.dropLast(1) + ("assistant" to full)
-                                    inferChatAction(text, full)
-                                },
-                                onError = { e ->
-                                    _streaming.value = false
-                                    _chatMessages.value =
-                                            _chatMessages.value + ("assistant" to "错误: $e")
-                                },
-                        )
+	                                onDone = { full ->
+	                                    _streaming.value = false
+	                                    val reply = full.ifBlank { acc }
+	                                    _chatMessages.value =
+	                                            _chatMessages.value.dropLast(1) + ("assistant" to reply)
+	                                    inferChatAction(text, reply)
+	                                },
+	                                onError = { e ->
+	                                    _streaming.value = false
+	                                    _chatMessages.value =
+	                                            _chatMessages.value.dropLast(1) +
+                                                        ("assistant" to productErrorMessage(
+                                                                e,
+                                                                "对话暂不可用，请稍后重试",
+                                                        ))
+	                                },
+	                        )
                     } else {
                         // 无本地认证，走云端 API
                         repo.streamChatCloud(
@@ -988,18 +1158,22 @@ constructor(
                                     _chatMessages.value =
                                             _chatMessages.value.dropLast(1) + ("assistant" to acc)
                                 },
-                                onDone = { full ->
-                                    _streaming.value = false
-                                    _chatMessages.value =
-                                            _chatMessages.value.dropLast(1) + ("assistant" to full)
-                                    inferChatAction(text, full)
-                                },
-                                onError = { e ->
-                                    _streaming.value = false
-                                    _chatMessages.value =
-                                            _chatMessages.value +
-                                                    ("assistant" to "当前离线同步不可用，请连接电脑或稍后重试。")
-                                },
+	                                onDone = { full ->
+	                                    _streaming.value = false
+	                                    val reply = full.ifBlank { acc }
+	                                    _chatMessages.value =
+	                                            _chatMessages.value.dropLast(1) + ("assistant" to reply)
+	                                    inferChatAction(text, reply)
+	                                },
+	                                onError = { e ->
+	                                    _streaming.value = false
+	                                    _chatMessages.value =
+	                                            _chatMessages.value.dropLast(1) +
+	                                                    ("assistant" to productErrorMessage(
+                                                                e,
+                                                                "当前离线同步不可用，请连接电脑或稍后重试。",
+                                                        ))
+	                                },
                         )
                     }
                 }
@@ -1176,7 +1350,9 @@ constructor(
                 result
                         .onSuccess { _modInfos.value = it }
                         .onFailure {
-                            if (showError) snack(it.message ?: "AI 员工同步失败", true)
+                            if (showError) {
+                                snack(productErrorMessage(it.message, "AI 员工同步失败，请重新绑定后台"), true)
+                            }
                         }
             }
 

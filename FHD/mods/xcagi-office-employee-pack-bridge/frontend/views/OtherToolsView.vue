@@ -12,7 +12,7 @@
           当前为<strong>原版模式</strong>（前端不加载扩展）：在此查看与管理副窗中的<strong>固定六类</strong>工作流；开关样式与侧栏「专业版」一致。扩展相关蓝图与说明由各扩展包自行提供。
         </p>
         <p v-else-if="ctx.modsDisabledByServer" style="margin: 0; color: #6b7280;">
-          后端已关闭扩展（XCAGI_DISABLE_MODS）：仅<strong>固定六类</strong>工作流；副窗与「流程全景」不展示扩展向内容。
+          后端已关闭扩展（XCAGI_DISABLE_MODS）：仅<strong>固定六类</strong>工作流；副窗与「流程可视化」不展示扩展向内容。
         </p>
         <p v-else-if="!ctx.isModsListLoaded" style="margin: 0; color: #6b7280;">
           正在与后端同步扩展列表；当前说明以<strong>固定六类</strong>为主。若环境中存在带工作流员工的扩展，同步完成后本页描述会与副窗一致更新。
@@ -25,10 +25,10 @@
         </p>
 
         <p v-if="modWorkflowEmployeesActive" style="margin: 12px 0 0; color: #6b7280;">
-          「流程全景」以图解说明固定六类与已出现的扩展工作流执行逻辑；扩展专有细节仍以各扩展为准。
+          「流程可视化」以图解说明固定六类与已出现的扩展工作流执行逻辑；扩展专有细节仍以各扩展为准。
         </p>
         <p v-else style="margin: 12px 0 0; color: #6b7280;">
-          「流程全景」以图解说明<strong>固定六类</strong>执行逻辑与任务面板对应关系；扩展相关内容仅在扩展实际启用工作流员工后才会在总览中体现。
+          「流程可视化」以图解说明<strong>固定六类</strong>执行逻辑与任务面板对应关系；扩展相关内容仅在扩展实际启用工作流员工后才会在总览中体现。
         </p>
 
         <div style="margin-top: 12px;">
@@ -36,7 +36,7 @@
             :to="{ name: 'workflow-visualization' }"
             class="btn btn-primary"
             :title="workflowPanoramaTitle"
-          >流程全景</router-link>
+          >流程可视化</router-link>
         </div>
         <p v-if="!ctx.clientModsUiOff && !ctx.modsDisabledByServer" style="margin: 12px 0 0; color: #6b7280;">
           「微信联系人」侧栏入口与副窗「微信触点管家」工作流员工由可选扩展 Mod<strong> wechat-contacts-ai-employee</strong>（微信触点 AI 员工）提供；源码见公司仓库 <code>mods/wechat-contacts-ai-employee/</code>，可打包上架 MODstore。

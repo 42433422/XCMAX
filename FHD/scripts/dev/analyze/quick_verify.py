@@ -78,18 +78,24 @@ else:
 # 5. 检查 API 路由
 print("\n5. 检查 API 路由...")
 try:
-    from app.routes.skills import skills_bp
+    from app.fastapi_routes.domains.system.routes import router as system_router
 
-    print("   ✓ skills 蓝图已注册")
+    if any(getattr(route, "path", "") == "/api/skills/list" for route in system_router.routes):
+        print("   ✓ skills FastAPI 路由已注册")
+    else:
+        print("   ✗ skills FastAPI 路由未找到")
 except Exception as e:
-    print(f"   ✗ skills 蓝图加载失败：{e}")
+    print(f"   ✗ skills FastAPI 路由加载失败：{e}")
 
 try:
-    from app.routes.excel_templates import excel_templates_bp
+    from app.fastapi_routes.excel_templates import router as excel_templates_router
 
-    print("   ✓ excel_templates 蓝图已注册")
+    if any(getattr(route, "path", "") == "/api/excel/templates" for route in excel_templates_router.routes):
+        print("   ✓ excel_templates FastAPI 路由已注册")
+    else:
+        print("   ✗ excel_templates FastAPI 路由未找到")
 except Exception as e:
-    print(f"   ✗ excel_templates 蓝图加载失败：{e}")
+    print(f"   ✗ excel_templates FastAPI 路由加载失败：{e}")
 
 # 6. 测试条形码生成
 print("\n6. 测试条形码生成...")

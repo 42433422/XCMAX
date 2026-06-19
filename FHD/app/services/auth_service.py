@@ -6,6 +6,7 @@ from typing import Any, cast
 
 from app.db.models import Permission, Role, User
 from app.db.session import get_db
+from app.di.registry import get_service_registry
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
 from app.services.session_service import get_session_service
 from app.utils import audit_logger
@@ -169,8 +170,6 @@ class AuthService(NeuroEventPublisherMixin):
 
 
 def get_auth_service() -> AuthService:
-    from app.di.registry import get_service_registry
-
     return get_service_registry().auth_service
 
 

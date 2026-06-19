@@ -807,7 +807,9 @@ def ensure_sqlite_enterprise_business_bootstrap(
             )
     except RECOVERABLE_ERRORS as exc:
         if swallow_errors:
-            logger.warning("ensure_sqlite_enterprise_business_bootstrap 失败: %s", exc, exc_info=True)
+            logger.warning(
+                "ensure_sqlite_enterprise_business_bootstrap 失败: %s", exc, exc_info=True
+            )
             return
         raise
 

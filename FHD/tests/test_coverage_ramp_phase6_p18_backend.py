@@ -2199,11 +2199,15 @@ class TestMobileExtPairingRoutes:
     @pytest.mark.asyncio
     async def test_pairing_issue_success(self, ext_mod):
         body = ext_mod.PairingIssueBody(host="192.168.1.10", port=5000)
+        request = SimpleNamespace(
+            headers={"host": "192.168.1.10:5000"},
+            url=SimpleNamespace(hostname="192.168.1.10"),
+        )
         with patch.object(ext_mod, "_pairing_issue_host", return_value="192.168.1.10"), patch(
             "app.security.mobile_pairing.issue_pairing_nonce",
             return_value={"nonce": "abc123", "host": "192.168.1.10", "port": 5000},
         ):
-            result = await ext_mod.mobile_pairing_issue(body)
+            result = await ext_mod.mobile_pairing_issue(body, request)
         if hasattr(result, "body"):
             data = json.loads(result.body)
         else:

@@ -5,6 +5,7 @@ import {
   isClientModeTiersUiEnabled,
   resetClientModeTierLocalState,
 } from '@/constants/clientModeTiers'
+import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
 
 export function useAppProMode(
   modsStore: ReturnType<typeof useModsStore>,
@@ -55,6 +56,7 @@ export function useAppProMode(
   }
 
   async function enterModProMode() {
+    if (isAdminConsoleSpa()) return
     if (!Array.isArray(modsStore.modsForUi) || modsStore.modsForUi.length === 0) {
       try {
         await modsStore.initialize()
@@ -73,6 +75,7 @@ export function useAppProMode(
 
   async function exitModProMode() {
     isProMode.value = false
+    if (isAdminConsoleSpa()) return
     if (route.name !== 'chat') {
       await router.push({ name: 'chat' }).catch(() => undefined)
     }

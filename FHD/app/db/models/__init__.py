@@ -1,3 +1,4 @@
+from app.db.models.agent import AgentRunRecord
 from app.db.models.ai import (
     AIConversation,
     AIConversationSession,
@@ -50,6 +51,7 @@ from app.db.models.wechat import WechatContact, WechatContactContext, WechatTask
 
 __all__ = [
     "PurchaseUnit",
+    "AgentRunRecord",
     "Product",
     "ShipmentRecord",
     "Customer",

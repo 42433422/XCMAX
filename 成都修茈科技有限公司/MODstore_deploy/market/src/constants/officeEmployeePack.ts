@@ -13,13 +13,7 @@ export const OFFICE_EMPLOYEE_PKG_IDS = [
 ] as const
 
 /** 办公员工附属包1：JSON 量化报告 + 小猫分析可视化图表员工。 */
-export const OFFICE_AUX_PACK_1_PKG_IDS = [
-  'json-report-employee',
-  'chart-bar-employee',
-  'chart-line-employee',
-  'chart-pie-employee',
-  'chart-dashboard-employee',
-] as const
+export const OFFICE_AUX_PACK_1_PKG_IDS = ['json-report-employee'] as const
 
 export const OFFICE_EMPLOYEE_COLLECTION = 'office_employee_pack'
 export const OFFICE_AUX_PACK_1_COLLECTION = 'office_employee_aux_pack_1'

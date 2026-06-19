@@ -1,6 +1,7 @@
 """Tests for app.services.conversation.api (ApiMixin)."""
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -246,6 +247,13 @@ class TestExecuteOrGenerateResponse:
             mock_llm.return_value = {
                 "choices": [{"message": {"content": "AI reply"}}],
                 "usage": {"total_tokens": 10},
+                "_xcagi_trace": {
+                    "provider_id": "openai_compatible",
+                    "provider": "xcauto",
+                    "model": "xcauto-account",
+                    "total_tokens": 10,
+                    "latency_ms": 12.0,
+                },
             }
             ctx = ConversationContext(user_id="u1", metadata={}, conversation_history=[])
             result = await svc._execute_or_generate_response(
@@ -256,6 +264,9 @@ class TestExecuteOrGenerateResponse:
             )
         assert result["action"] == "ai_response"
         assert result["text"] == "AI reply"
+        assert result["data"]["provider"] == "xcauto"
+        assert result["data"]["model"] == "xcauto-account"
+        assert result["data"]["llm_trace"]["provider_id"] == "openai_compatible"
 
     @pytest.mark.asyncio
     async def test_online_mode_fallback_on_empty_response(self):
@@ -347,9 +358,18 @@ class TestCallLlmApi:
     async def test_returns_result_from_provider(self):
         svc = _ConcreteApi()
         mock_provider = MagicMock()
-        mock_provider.provider_id = "test-provider"
+        mock_provider.provider_id = "openai_compatible"
+        mock_provider._adapter = SimpleNamespace(provider_name="xcauto", model_name="xcauto-account")
         mock_provider.chat_completion = AsyncMock(
-            return_value={"choices": [{"message": {"content": "hi"}}], "usage": {"total_tokens": 5}}
+            return_value={
+                "choices": [{"message": {"content": "hi"}}],
+                "model": "xcauto-account",
+                "usage": {
+                    "prompt_tokens": 2,
+                    "completion_tokens": 3,
+                    "total_tokens": 5,
+                },
+            }
         )
 
         with (
@@ -357,11 +377,21 @@ class TestCallLlmApi:
                 "app.infrastructure.llm.providers.registry.get_active_provider",
                 return_value=mock_provider,
             ),
-            patch("app.neuro_bus.application_neuro_bridge.neuro_notify_ai_model_roundtrip"),
+            patch(
+                "app.neuro_bus.application_neuro_bridge.neuro_notify_ai_model_roundtrip"
+            ) as notify,
         ):
             result = await svc.call_llm_api([{"role": "user", "content": "hi"}])
         assert result is not None
         assert result["choices"][0]["message"]["content"] == "hi"
+        assert result["_xcagi_trace"]["provider_id"] == "openai_compatible"
+        assert result["_xcagi_trace"]["provider"] == "xcauto"
+        assert result["_xcagi_trace"]["model"] == "xcauto-account"
+        assert result["_xcagi_trace"]["total_tokens"] == 5
+        assert svc._last_llm_trace == result["_xcagi_trace"]
+        notify.assert_called_once()
+        assert notify.call_args.kwargs["model"] == "xcauto-account"
+        assert notify.call_args.kwargs["token_count"] == 5
 
     @pytest.mark.asyncio
     async def test_handles_exception(self):

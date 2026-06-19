@@ -8,6 +8,8 @@ import zipfile
 from typing import Any, Dict, Optional
 
 from modstore_server.catalog_store import employee_pack_records_from_store, files_dir
+from modstore_server.duty_employee_registry import get_duty_employee_record
+from modstore_server.duty_roster import employee_partition_meta, is_planned_duty_employee_pack
 from modstore_server.employee_config_v2_adapter import (
     needs_executor_translation,
     translate_v2_to_executor_config,
@@ -38,17 +40,30 @@ def normalize_manifest_legacy_deepseek_to_auto(manifest: Dict[str, Any]) -> None
 
 
 def load_employee_pack(session, pack_id: str) -> Dict[str, Any]:
-    row = (
-        session.query(CatalogItem)
-        .filter(CatalogItem.pkg_id == pack_id, CatalogItem.artifact == "employee_pack")
-        .first()
+    requested_id = str(pack_id or "").strip()
+    duty_rec = (
+        get_duty_employee_record(requested_id)
+        if is_planned_duty_employee_pack(requested_id, "employee_pack")
+        else None
     )
+    row = None
+    if duty_rec:
+        pkg_id = str(duty_rec.get("id") or duty_rec.get("pkg_id") or requested_id).strip()
+        name = str(duty_rec.get("name") or pkg_id)
+        version = str(duty_rec.get("version") or "")
+        stored_filename = str(duty_rec.get("stored_filename") or "")
+    else:
+        row = (
+            session.query(CatalogItem)
+            .filter(CatalogItem.pkg_id == pack_id, CatalogItem.artifact == "employee_pack")
+            .first()
+        )
     if row:
         pkg_id = str(row.pkg_id)
         name = str(row.name or pkg_id)
         version = str(row.version or "")
         stored_filename = str(row.stored_filename or "")
-    else:
+    elif not duty_rec:
         rec = employee_pack_records_from_store().get(str(pack_id).strip())
         if not isinstance(rec, dict):
             raise ValueError(f"员工包不存在: {pack_id}")
@@ -81,6 +96,7 @@ def load_employee_pack(session, pack_id: str) -> Dict[str, Any]:
         "version": version,
         "stored_filename": stored_filename,
         "manifest": manifest,
+        **employee_partition_meta(pkg_id, "employee_pack"),
     }
 
 
@@ -164,6 +180,7 @@ def try_load_employee_pack_from_library(pack_id: str) -> Optional[Dict[str, Any]
         "version": version,
         "stored_filename": "",
         "manifest": manifest,
+        **employee_partition_meta(mid, "employee_pack"),
     }
 
 

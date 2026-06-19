@@ -51,6 +51,8 @@ def _staffing_areas_from_doc(doc: dict[str, Any], registered: set[str]) -> list[
 
 def build_local_duty_graph_health() -> dict[str, Any]:
     """与 MODstore ``/api/admin/duty-graph/health`` staffing 字段对齐，数据源为本机。"""
+    from app.application.employee_runtime.scheduler import get_employee_scheduler_status
+
     planned = sorted(all_planned_duty_employee_ids())
     registered = _local_registered_employee_pack_ids()
     planned_set = set(planned)
@@ -58,6 +60,7 @@ def build_local_duty_graph_health() -> dict[str, Any]:
     area_map = _duty_employee_area_map()
     doc = load_duty_roster_document()
     areas = _staffing_areas_from_doc(doc, registered)
+    scheduler = get_employee_scheduler_status()
 
     return {
         "success": True,
@@ -73,11 +76,16 @@ def build_local_duty_graph_health() -> dict[str, Any]:
             "area_map_size": len(area_map),
         },
         "change_requests": {"pending": 0, "failed": 0},
-        "employee_cron_jobs": [],
+        "employee_cron_jobs": scheduler.get("jobs", []),
+        "employee_scheduler": {
+            "enabled": scheduler.get("enabled", False),
+            "running": scheduler.get("running", False),
+            "last_error": scheduler.get("last_error", ""),
+        },
         "incident_unknown_24h": 0,
         "env_flags": {
             "MODSTORE_DAILY_ORCHESTRATOR_ENABLED": os.environ.get(
-                "MODSTORE_DAILY_ORCHESTRATOR_ENABLED", "0"
+                "MODSTORE_DAILY_ORCHESTRATOR_ENABLED", "1"
             ),
             "MODSTORE_EMPLOYEE_AUTO_CRON_ENABLED": os.environ.get(
                 "MODSTORE_EMPLOYEE_AUTO_CRON_ENABLED", "1"
@@ -113,17 +121,26 @@ def read_local_employee_manifest(employee_id: str) -> dict[str, Any] | None:
 
 def build_local_employee_status(employee_id: str) -> dict[str, Any]:
     """本地无远端执行审计时返回空统计，供编制图 Phase2 渲染。"""
+    from app.application.employee_runtime.metrics import get_employee_runtime_metrics
+
     pid = str(employee_id or "").strip()
     manifest = read_local_employee_manifest(pid)
     deployed = manifest is not None
+    metrics = get_employee_runtime_metrics()
+    row = dict((metrics.get("by_employee") or {}).get(pid) or {})
+    total = int(row.get("runs_total") or 0)
+    success_count = int(row.get("runs_success") or 0)
+    success_rate = round(success_count / total, 4) if total else 0
     return {
         "employee_id": pid,
         "deployed": deployed,
-        "last_execution": None,
+        "last_execution": row.get("last_execution"),
         "execution_stats": {
-            "total_executions": 0,
-            "success_count": 0,
-            "success_rate": 0,
+            "total_executions": total,
+            "success_count": success_count,
+            "failed_count": int(row.get("runs_failed") or 0),
+            "blocked_count": int(row.get("runs_blocked") or 0),
+            "success_rate": success_rate,
         },
     }
 

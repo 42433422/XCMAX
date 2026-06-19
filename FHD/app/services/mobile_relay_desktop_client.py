@@ -62,9 +62,19 @@ def _public_payload_from_config(config: dict[str, Any]) -> dict[str, Any] | None
     if not relay_id or not pairing_code:
         return None
     base_url = str(config.get("relay_base_url") or "").strip() or _relay_base_url()
+    exp = int(config.get("exp") or 0)
+    if exp <= 0:
+        registered_at = int(config.get("registered_at") or 0)
+        if registered_at > 0:
+            exp = registered_at + int(os.environ.get("XCAGI_RELAY_PAIRING_TTL_SEC") or "86400")
+    if exp > 0 and exp <= int(time.time()):
+        return None
+    expires_at = str(config.get("expires_at") or "").strip()
     return {
         "relay_id": relay_id,
         "pairing_code": pairing_code,
+        **({"expires_at": expires_at} if expires_at else {}),
+        **({"exp": exp} if exp > 0 else {}),
         "relay_base_url": base_url,
         "qr_json": {
             "v": 3,
@@ -107,12 +117,18 @@ def register_desktop_relay(*, host: str, port: int, label: str = "") -> dict[str
     timeout = float(os.environ.get("XCAGI_RELAY_REGISTER_TIMEOUT_SEC") or "5")
     try:
         with httpx.Client(timeout=timeout) as client:
-            resp = client.post(_api_url("/api/mobile/v1/relay/desktop/register", base_url), json=body)
+            resp = client.post(
+                _api_url("/api/mobile/v1/relay/desktop/register", base_url), json=body
+            )
             resp.raise_for_status()
             payload = resp.json()
     except (httpx.HTTPError, ValueError) as exc:
         logger.warning("mobile relay desktop register failed: %s", exc)
-        return cached_desktop_relay_payload()
+        cached = cached_desktop_relay_payload()
+        if cached:
+            start_desktop_relay_poller()
+            return cached
+        return None
     data = payload.get("data") if isinstance(payload, dict) else None
     if not isinstance(data, dict) or not data.get("desktop_token") or not data.get("relay_id"):
         logger.warning("mobile relay desktop register returned invalid payload")
@@ -122,6 +138,8 @@ def register_desktop_relay(*, host: str, port: int, label: str = "") -> dict[str
         "desktop_token": str(data.get("desktop_token") or ""),
         "relay_base_url": str(data.get("relay_base_url") or base_url),
         "pairing_code": str(data.get("pairing_code") or ""),
+        "expires_at": str(data.get("expires_at") or ""),
+        "exp": int(data.get("exp") or 0),
         "registered_at": int(time.time()),
         "label": device_label,
     }
@@ -158,7 +176,7 @@ def _poll_loop() -> None:
     while not _STOP_EVENT.is_set():
         try:
             _poll_once()
-        except Exception:
+        except Exception:  # noqa: BLE001
             logger.warning("mobile relay poll failed", exc_info=True)
         _STOP_EVENT.wait(max(1.0, interval))
 

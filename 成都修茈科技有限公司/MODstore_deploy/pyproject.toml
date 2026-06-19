@@ -37,6 +37,8 @@ knowledge = [
     "python-docx>=1.0",
     "openpyxl>=3.1",
     "rank-bm25>=0.2.2",
+    "redis>=5.0",
+    "redisvl>=0.3.0",
 ]
 employee-docs = [
     "pypdf>=4.0",

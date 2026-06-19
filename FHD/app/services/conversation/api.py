@@ -20,6 +20,52 @@ def _make_ai_response_cache_key(message: str, context_hash: str = "") -> str:
     ).hexdigest()
 
 
+def _coerce_int(value: Any) -> int:
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _build_llm_trace(provider: Any, result: dict[str, Any], latency_ms: float) -> dict[str, Any]:
+    from app.infrastructure.billing.model_usage import estimate_llm_cost_units
+
+    adapter = getattr(provider, "_adapter", None)
+    provider_id = str(getattr(provider, "provider_id", "") or "")
+    provider_name = str(
+        getattr(adapter, "provider_name", "")
+        or getattr(provider, "provider_name", "")
+        or provider_id
+    )
+    model = str(
+        result.get("model")
+        or getattr(adapter, "model_name", "")
+        or getattr(provider, "model_name", "")
+        or ""
+    )
+    usage = result.get("usage") if isinstance(result.get("usage"), dict) else {}
+    prompt_tokens = _coerce_int(usage.get("prompt_tokens"))
+    completion_tokens = _coerce_int(usage.get("completion_tokens"))
+    total_tokens = _coerce_int(usage.get("total_tokens"))
+    cost_units = estimate_llm_cost_units(
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        total_tokens=total_tokens,
+    )
+    return {
+        "provider_id": provider_id,
+        "provider": provider_name,
+        "model": model,
+        "prompt_tokens": prompt_tokens,
+        "completion_tokens": completion_tokens,
+        "total_tokens": total_tokens,
+        "latency_ms": round(float(latency_ms), 2),
+        "cost_units": cost_units,
+        "billing_status": "metered" if cost_units else "unmetered",
+        "billing_source": "estimated_token_units",
+    }
+
+
 class ApiMixin(NeuroEventPublisherMixin):
     async def _get_deepseek_async_client(self):
         import asyncio
@@ -103,16 +149,19 @@ class ApiMixin(NeuroEventPublisherMixin):
                 **kwargs,
             )
             if result:
+                latency_ms = (time.perf_counter() - t0) * 1000.0
+                trace = _build_llm_trace(provider, result, latency_ms)
+                result["_xcagi_trace"] = trace
+                self._last_llm_trace = trace
                 try:
                     from app.neuro_bus.application_neuro_bridge import (
                         neuro_notify_ai_model_roundtrip,
                     )
 
-                    usage = result.get("usage") or {}
                     neuro_notify_ai_model_roundtrip(
-                        model=provider.provider_id,
-                        latency_ms=(time.perf_counter() - t0) * 1000.0,
-                        token_count=int(usage.get("total_tokens") or 0),
+                        model=trace["model"] or trace["provider_id"],
+                        latency_ms=latency_ms,
+                        token_count=trace["total_tokens"],
                         user_id=str(
                             getattr(getattr(self, "modstore_adapter", None), "user_id", "") or ""
                         ),
@@ -380,8 +429,10 @@ XCAGI 系统主要功能：
         response = await self.call_llm_api(messages)  # 使用三级路由方法
 
         logger.info(
-            "LLM API 响应 [%s %s]: "
-            f"%s...", mode_tag, provider_info, str(response)[:150] if response else 'None'
+            "LLM API 响应 [%s %s]: %s...",
+            mode_tag,
+            provider_info,
+            str(response)[:150] if response else "None",
         )
 
         if response and response.get("choices"):
@@ -393,7 +444,13 @@ XCAGI 系统主要功能：
             _ai_response_cache.set(cache_key, ai_reply)
 
             # 获取当前使用的模型和供应商信息
-            if hasattr(self, "modstore_adapter") and self.modstore_adapter:
+            llm_trace = dict(response.get("_xcagi_trace") or {})
+            if llm_trace:
+                current_model = str(llm_trace.get("model") or self.model)
+                current_provider = str(
+                    llm_trace.get("provider") or llm_trace.get("provider_id") or ""
+                )
+            elif hasattr(self, "modstore_adapter") and self.modstore_adapter:
                 current_model = f"modstore:{self.modstore_adapter.default_model}"
                 current_provider = "modstore-platform"
             elif (
@@ -411,6 +468,7 @@ XCAGI 系统主要功能：
                 "data": {
                     "model": current_model,
                     "provider": current_provider,
+                    "llm_trace": llm_trace,
                     "usage": response.get("usage", {}),
                     "intent": intent_result,
                 },

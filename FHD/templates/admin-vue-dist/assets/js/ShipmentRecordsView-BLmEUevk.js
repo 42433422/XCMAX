@@ -1,1 +1,0 @@
-import e from"./ShipmentRecordsView-CgkK3Abo.js";import{E as o,d as r,Q as t}from"./index-BM0eyJ6q.js";import"./templatePreview-CjCQYra9.js";import"./useCoreNavLabel-BMW4RzOT.js";const _=o({__name:"ShipmentRecordsView",setup(p){return(m,n)=>(r(),t(e))}});export{_ as default};

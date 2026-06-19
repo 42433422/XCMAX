@@ -1,4 +1,4 @@
-name: Release Android
+name: Release Enterprise Mobile
 
 on:
   workflow_dispatch:
@@ -13,7 +13,7 @@ on:
         type: boolean
         default: false
       harmony_artifact:
-        description: Optional HarmonyOS .hap/.hsp path (enterprise package). If empty, scan mobile-harmony/artifacts then mobile-harmony for latest matching package.
+        description: Enterprise HarmonyOS .hap/.hsp path. If empty, scan mobile-harmony/artifacts then mobile-harmony; packaging fails if none is found.
         required: false
         type: string
   # Tag (FHD/v*) entry is centralized in fhd-release-orchestrator.yml (gated on
@@ -68,13 +68,14 @@ jobs:
             --version "${{ steps.release_version.outputs.version }}" \
             --android-version "${{ steps.release_version.outputs.version }}" \
             --harmony-artifact "${{ github.event.inputs.harmony_artifact || '' }}"
-      - name: Upload APK artifacts
+      - name: Upload mobile package artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: xcagi-android-release-packages
+          name: xcagi-enterprise-mobile-release-packages
           path: |
             FHD/mobile-android/app/build/outputs/apk/enterprise/release/*.apk
             release/packages-v${{ steps.release_version.outputs.version }}/enterprise/
+            release/packages-v${{ steps.release_version.outputs.version }}/企业版/
             release/XCAGI-Enterprise-Mobile-Packages-v${{ steps.release_version.outputs.version }}.zip
           if-no-files-found: error
 
@@ -85,7 +86,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: xcagi-android-release-packages
+          name: xcagi-enterprise-mobile-release-packages
           path: artifacts
       - name: Upload mobile packages to release
         uses: softprops/action-gh-release@v2

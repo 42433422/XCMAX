@@ -148,10 +148,35 @@ const xcmaxMarketProxy = {
       throw e
     }
   },
-  executeEmployeeTask: (employeeId: string, task: string, inputData: unknown) =>
-    marketReq(`employees/${encodeURIComponent(employeeId)}/execute`, {
+  executeEmployeeTask: async (employeeId: string, task: string, inputData: unknown) => {
+    const body = { task, input_data: inputData ?? {} }
+    const marketExecute = () =>
+      marketReq(`employees/${encodeURIComponent(employeeId)}/execute`, {
+        method: 'POST',
+        body,
+      })
+    if (!(await isLocalDutyApiAvailable())) return marketExecute()
+    try {
+      return await api.post(`${LOCAL_PREFIX}/employees/${encodeURIComponent(employeeId)}/execute`, body)
+    } catch (e: unknown) {
+      const err = e as { status?: number }
+      if (err?.status === 404) {
+        localDutyApiAvailable = false
+        return marketExecute()
+      }
+      throw e
+    }
+  },
+  localEmployeeCronJobs: () =>
+    api.get(`${LOCAL_PREFIX}/employee-cron/jobs`) as Promise<unknown>,
+  localRunEmployeeCronJob: (jobId: string, payload?: { task?: string; input_data?: unknown }) =>
+    api.post(`${LOCAL_PREFIX}/employee-cron/jobs/${encodeURIComponent(jobId)}/run`, payload ?? {}) as Promise<unknown>,
+  selfMaintenanceRuntimeStatus: (limit = 80) =>
+    marketReq(`ops/self-maintenance/status?limit=${encodeURIComponent(String(limit))}`),
+  selfMaintenanceGovernanceReview: (payload: { note?: string } = {}) =>
+    marketReq('ops/self-maintenance/governance-review', {
       method: 'POST',
-      body: { task, input_data: inputData ?? {} },
+      body: payload,
     }),
   llmStatus: () => marketReq('llm/status'),
   llmResolveChatDefault: () => marketReq('llm/resolve-chat-default'),

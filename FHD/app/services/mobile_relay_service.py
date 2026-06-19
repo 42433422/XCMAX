@@ -7,7 +7,7 @@ import json
 import secrets
 import time
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import text
@@ -16,13 +16,15 @@ from app.db.session import get_db
 
 
 def _utc_now() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    return datetime.now(UTC).replace(microsecond=0).isoformat()
 
 
 def _utc_after(seconds: int) -> str:
-    return (datetime.now(timezone.utc) + timedelta(seconds=max(60, int(seconds)))).replace(
-        microsecond=0
-    ).isoformat()
+    return (
+        (datetime.now(UTC) + timedelta(seconds=max(60, int(seconds))))
+        .replace(microsecond=0)
+        .isoformat()
+    )
 
 
 def _epoch_from_iso(value: str) -> int:
@@ -501,8 +503,7 @@ class MobileRelayService:
                     db.execute(
                         text("SELECT 1 FROM mobile_relay_desktops WHERE pairing_code = :code"),
                         {"code": code},
-                    )
-                    .first()
+                    ).first()
                     is not None
                 )
                 if not exists:

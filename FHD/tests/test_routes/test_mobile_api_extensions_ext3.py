@@ -25,6 +25,7 @@ Focus on REMAINING uncovered lines:
 from __future__ import annotations
 
 import sys
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -55,6 +56,13 @@ def _mock_user_no_username():
     # Remove username attribute to trigger fallback
     del user.username
     return user
+
+
+def _mock_pairing_request(host_header: str = "127.0.0.1:5112", hostname: str = "127.0.0.1"):
+    return SimpleNamespace(
+        headers={"host": host_header},
+        url=SimpleNamespace(hostname=hostname),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -532,9 +540,9 @@ class TestMobilePairingIssueAdditional:
             ext_mod, "_guess_lan_ipv4", return_value="10.0.0.5"
         ), patch(
             "app.security.mobile_pairing.issue_pairing_nonce",
-            return_value={"nonce": "n", "host": "10.0.0.5", "port": 5000},
+            return_value={"nonce": "n", "host": "10.0.0.5", "port": 5112},
         ):
-            result = await ext_mod.mobile_pairing_issue(body)
+            result = await ext_mod.mobile_pairing_issue(body, _mock_pairing_request())
         assert hasattr(result, "body") or isinstance(result, dict)
 
     @pytest.mark.asyncio
@@ -546,7 +554,10 @@ class TestMobilePairingIssueAdditional:
             "app.security.mobile_pairing.issue_pairing_nonce",
             return_value={"nonce": "n", "host": "10.0.0.5", "port": 8080},
         ):
-            result = await ext_mod.mobile_pairing_issue(body)
+            result = await ext_mod.mobile_pairing_issue(
+                body,
+                _mock_pairing_request("localhost:8080", "localhost"),
+            )
         assert hasattr(result, "body") or isinstance(result, dict)
 
     @pytest.mark.asyncio
@@ -556,7 +567,10 @@ class TestMobilePairingIssueAdditional:
             "app.security.mobile_pairing.issue_pairing_nonce",
             return_value={"nonce": "n", "host": "example.com", "port": 443},
         ):
-            result = await ext_mod.mobile_pairing_issue(body)
+            result = await ext_mod.mobile_pairing_issue(
+                body,
+                _mock_pairing_request("example.com:443", "example.com"),
+            )
         assert hasattr(result, "body") or isinstance(result, dict)
 
 

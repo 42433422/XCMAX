@@ -163,8 +163,10 @@ class Lifeline:
             self._dropped_stats[event.event_type] = self._dropped_stats.get(event.event_type, 0) + 1
 
             logger.warning(
-                "Lifeline dropped event: %s "
-                f"(priority=%s, load=%s)", event.event_type, event.priority.name, load.value
+                "Lifeline dropped event: %s (priority=%s, load=%s)",
+                event.event_type,
+                event.priority.name,
+                load.value,
             )
             return False
 

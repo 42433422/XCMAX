@@ -3,13 +3,18 @@ import {
   employeeAcceptsFileExtension,
   employeeFileMismatchHint,
   extractDocumentFullJsonText,
+  extractDirectPythonPayload,
   extractEmployeeExecuteDiagnostics,
   extractEmployeeReadTextForLlm,
+  extractWordReadStats,
   formatEmployeeReadResultSummary,
+  isGenerateEmployeeId,
   normalizeEmployeeExecuteEnvelope,
   parseEmployeeOutputDownloads,
   pickDocumentFullJsonDownload,
   pickPresentationFullJsonDownload,
+  pickQuantitativeReportDownload,
+  readEmployeeDisplayName,
   extractPresentationFullJsonText,
   resolveReadEmployeeForExtension,
   suggestEmployeeForUploadedFile,
@@ -171,5 +176,180 @@ describe('tabularReadEmployees', () => {
       ],
     })
     expect(d.map((x) => x.filename)).toEqual(['generated_document.docx', 'document_full.json'])
+  })
+
+  it('covers mismatch, display, and generate employee edge branches', () => {
+    expect(isGenerateEmployeeId(' csv-generate-employee ')).toBe(true)
+    expect(isGenerateEmployeeId('csv-full-read-employee')).toBe(false)
+    expect(readEmployeeDisplayName('excel-generate-employee')).toBe('Excel 生成员')
+    expect(employeeAcceptsFileExtension('word-full-read-employee', '')).toBe(false)
+    expect(employeeAcceptsFileExtension('unknown-employee', 'txt')).toBe(false)
+    expect(employeeFileMismatchHint('excel-generate-employee', 'xlsx')).toContain('excel-full-read-employee')
+    expect(employeeFileMismatchHint('unknown-employee', 'xyz')).toContain('不支持 .xyz')
+  })
+
+  it('skips invalid direct python outputs before returning the first valid payload', () => {
+    const payload = extractDirectPythonPayload({
+      outputs: [
+        null,
+        'bad',
+        { ok: false, output: { ok: true, value: 'skipped' } },
+        { ok: true },
+        { ok: true, output: 'not-object' },
+        { ok: true, output: { ok: false, value: 'failed' } },
+        { ok: true, output: { ok: true, value: 42 } },
+      ],
+    })
+
+    expect(payload).toEqual({ ok: true, value: 42 })
+  })
+
+  it('handles embedded document and presentation json fallbacks and stringify failures', () => {
+    const circularDoc: Record<string, unknown> = { paragraphs: [] }
+    circularDoc.self = circularDoc
+    const circularPresentation: Record<string, unknown> = { slides: [] }
+    circularPresentation.self = circularPresentation
+
+    expect(extractDocumentFullJsonText({ llm_context_text: '{"paragraphs":[]}' })).toBe('{"paragraphs":[]}')
+    expect(extractDocumentFullJsonText({ outputs: [{ output: { items: [circularDoc] } }] })).toBeNull()
+    expect(extractDocumentFullJsonText({ outputs: [{ output: circularDoc }] })).toBeNull()
+    expect(extractPresentationFullJsonText({ llm_context_text: '{"slides":[]}' })).toBe('{"slides":[]}')
+    expect(extractPresentationFullJsonText({ outputs: [{ output: { items: [circularPresentation] } }] })).toBeNull()
+    expect(extractPresentationFullJsonText({ outputs: [{ output: circularPresentation }] })).toBeNull()
+  })
+
+  it('extracts word stats and parses downloads through fallback fields', () => {
+    expect(extractWordReadStats({ outputs: [{ output: { paragraph_count: 7, table_count: 2 } }] })).toEqual({
+      paragraphCount: 7,
+      tableCount: 2,
+      title: undefined,
+    })
+    expect(extractWordReadStats({ outputs: [{ output: { items: [{ paragraph_count: 3, table_count: 1 }] } }] })).toEqual({
+      paragraphCount: 3,
+      tableCount: 1,
+      title: undefined,
+    })
+
+    const downloads = parseEmployeeOutputDownloads({
+      output_downloads: [
+        null,
+        { job_id: ' ', filename: 'missing-job.txt' },
+        { job_id: 'job-shared', filename: '' },
+        { job_id: 'job-shared', files: [{ filename: 'from-file-object.txt' }] },
+        { name: 'uses-shared-job.txt' },
+        { jobId: 'job-shared', path: 'uses-path.txt', label: '  Path Label  ' },
+        { jobId: 'job-shared', file: 'uses-file.txt' },
+      ],
+    })
+
+    expect(downloads.map((d) => d.filename)).toEqual([
+      'from-file-object.txt',
+      'uses-shared-job.txt',
+      'uses-path.txt',
+      'uses-file.txt',
+    ])
+    expect(downloads[2].label).toBe('Path Label')
+    expect(pickQuantitativeReportDownload([{ jobId: 'job', filename: 'reports/quantitative_report.html' }])).toBeTruthy()
+  })
+
+  it('extracts and truncates LLM text from nested fallback shapes', () => {
+    const longJson = `{\n"rows": "${'x'.repeat(80)}"\n}`
+    expect(extractEmployeeReadTextForLlm({ data: { text: longJson } }, 30)).toContain('已截断')
+
+    const cyclic: Record<string, unknown> = {}
+    cyclic.self = cyclic
+    expect(extractEmployeeReadTextForLlm({ outputs: [{ output: cyclic }] })).toBe('')
+    expect(extractEmployeeReadTextForLlm(cyclic)).toBe('')
+  })
+
+  it('formats summaries for warning, message, json, and generic preview branches', () => {
+    const failed = formatEmployeeReadResultSummary('word-full-read-employee', 'legacy.doc', {
+      ok: false,
+      outputs: [
+        { ok: false, output: { ok: false, error: 'LibreOffice missing', warnings: ['请安装转换器'] } },
+      ],
+    })
+    expect(failed.text).toContain('提示')
+    expect(failed.text).toContain('另存为 .docx')
+
+    const okWithMessage = formatEmployeeReadResultSummary('csv-full-read-employee', 'data.csv', {
+      message: '任务已完成',
+      llm_context_text: '表格解析结果\n' + 'x'.repeat(60),
+      output_downloads: [{ job_id: 'job', filename: 'rows.json' }],
+    })
+    expect(okWithMessage.text).toContain('任务已完成')
+    expect(okWithMessage.text).toContain('解析摘要')
+
+    const jsonItemsSummary = formatEmployeeReadResultSummary('json-report-employee', 'document_full.json', {
+      items: { source_title: 'Items Doc', paragraph_count: 5, table_count: 4 },
+      output_downloads: [{ job_id: 'job', filename: 'nested/quantitative_report.html' }],
+      llm_context_text: '{"paragraphs":[]}',
+    })
+    expect(jsonItemsSummary.text).toContain('Items Doc')
+    expect(jsonItemsSummary.text).toContain('HTML 量化报告已生成')
+  })
+
+  it('covers nested extraction, diagnostics, downloads, and fallback hint edge cases', () => {
+    expect(employeeFileMismatchHint('unknown-employee', '')).toContain('不支持 .该')
+    expect(employeeFileMismatchHint('pdf-generate-employee', 'pdf')).toContain('pdf-full-read-employee')
+
+    const merged = normalizeEmployeeExecuteEnvelope({
+      output_downloads: ['raw-download', { job_id: 'j1', filename: 'a.txt' }],
+      result: {
+        outputDownloads: ['raw-download', 'inner-download'],
+        downloads: [{ job_id: 'j2', filename: 'b.txt' }],
+      },
+    })
+    expect(merged.output_downloads).toEqual([
+      'raw-download',
+      { job_id: 'j1', filename: 'a.txt' },
+      'inner-download',
+      { job_id: 'j2', filename: 'b.txt' },
+    ])
+
+    const pptTooDeep = Array.from({ length: 14 }).reduce((node) => ({ data: node }), { slides: [] } as unknown)
+    expect(extractPresentationFullJsonText(pptTooDeep)).toBeNull()
+    expect(extractPresentationFullJsonText({ presentation_full: 'not-object' })).toBeNull()
+    expect(extractPresentationFullJsonText({
+      outputs: [null, 'bad', { output: { payload: { slides: [{ title: 'Nested' }] } } }],
+    })).toContain('Nested')
+
+    const docTooDeep = Array.from({ length: 14 }).reduce((node) => ({ data: node }), { paragraphs: [] } as unknown)
+    expect(extractDocumentFullJsonText(docTooDeep)).toBeNull()
+    expect(extractDocumentFullJsonText({ document_full: 'not-object' })).toBeNull()
+    expect(extractDocumentFullJsonText({
+      outputs: [null, 'bad', { output: { payload: { paragraphs: [{ text: 'Nested' }] } } }],
+    })).toContain('Nested')
+
+    expect(extractWordReadStats({
+      llm_context_text: '{"title":"Root Title","paragraphs":[]}',
+      outputs: [{ output: { ok: true } }],
+    }).title).toBe('Root Title')
+
+    expect(extractEmployeeExecuteDiagnostics({
+      ok: false,
+      summary: 'top summary only',
+      outputs: [null, 'bad', { ok: true, output: { ok: true, warnings: [' '] } }],
+    })).toMatchObject({
+      success: false,
+      error: 'top summary only',
+      summary: 'top summary only',
+    })
+
+    const downloads = parseEmployeeOutputDownloads({
+      output_downloads: [
+        { job_id: 'job', filename: 'dir/file.txt' },
+        { job_id: 'job', filename: 'dir/file.txt' },
+      ],
+    })
+    expect(downloads).toEqual([{ jobId: 'job', filename: 'dir/file.txt', label: 'file.txt' }])
+
+    expect(extractEmployeeReadTextForLlm({ llm_context_text: 'x'.repeat(50) }, 12)).toContain('已截断')
+    const summary = formatEmployeeReadResultSummary('csv-full-read-employee', 'rows.csv', {
+      output_downloads: [{ job_id: 'job', filename: 'dir/file.txt' }],
+      outputs: [{ output: { text: '解析结果\n' + 'x'.repeat(80) } }],
+    })
+    expect(summary.text).toContain('file.txt')
+    expect(summary.text).toContain('解析摘要')
   })
 })

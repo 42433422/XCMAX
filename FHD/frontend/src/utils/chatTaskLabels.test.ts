@@ -14,6 +14,7 @@ describe('chatTaskLabels', () => {
   it('formatTaskSourceLabel maps known sources', () => {
     expect(formatTaskSourceLabel('workflow')).toBe('工作流');
     expect(formatTaskSourceLabel('wechat')).toBe('微信');
+    expect(formatTaskSourceLabel('agent')).toBe('Agent');
     expect(formatTaskSourceLabel('unknown-src')).toBe('unknown-src');
     expect(formatTaskSourceLabel('')).toBe('—');
   });

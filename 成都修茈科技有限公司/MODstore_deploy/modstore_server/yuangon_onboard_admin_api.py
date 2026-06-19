@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 import logging
+import json
+import os
+import re
 import subprocess
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Set
 
@@ -17,6 +21,35 @@ from modstore_server.models import CatalogItem, User, get_session_factory
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/admin", tags=["admin-yuangon-onboard"])
+
+DEFAULT_RUNTIME_DIR = str(Path.home() / ".xcmax" / "modstore-daily")
+DEFAULT_GOVERNANCE_AUDIT_NAME = "self_maintenance_governance_actions.jsonl"
+
+
+def _governance_audit_path() -> Path:
+    raw = os.environ.get("MODSTORE_SELF_MAINTENANCE_GOVERNANCE_AUDIT")
+    if raw:
+        return Path(raw)
+    return Path(os.environ.get("MODSTORE_RUNTIME_DIR") or DEFAULT_RUNTIME_DIR) / DEFAULT_GOVERNANCE_AUDIT_NAME
+
+
+def _append_governance_audit(record: Dict[str, Any]) -> None:
+    path = _governance_audit_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(record, ensure_ascii=False, sort_keys=True))
+        fh.write("\n")
+
+
+def _parse_onboard_summary(stdout: str) -> Dict[str, int]:
+    match = re.search(r"done:\s*onboarded=(\d+),\s*skipped=(\d+),\s*failed=(\d+)", stdout or "", re.I)
+    if not match:
+        return {}
+    return {
+        "onboarded": int(match.group(1)),
+        "skipped": int(match.group(2)),
+        "failed": int(match.group(3)),
+    }
 
 
 def _discover_yuangon_ids(repo: Path) -> tuple[List[str], List[str]]:
@@ -115,13 +148,37 @@ def yuangon_onboard_run(
 
     out = (proc.stdout or "")[-24_000:]
     err = (proc.stderr or "")[-8000:]
-    return {
+    onboard_summary = _parse_onboard_summary(out)
+    result = {
         "ok": proc.returncode == 0,
         "exit_code": proc.returncode,
         "command": cmd,
         "stdout_tail": out,
         "stderr_tail": err,
+        "onboard_summary": onboard_summary,
     }
+    audit = {
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "action": "register_duty_employees",
+        "status": "success" if proc.returncode == 0 else "failed",
+        "ok": proc.returncode == 0,
+        "exit_code": proc.returncode,
+        "target_employee_ids": [p.strip() for p in pkg_raw.split(",") if p.strip()],
+        "dry_run": dry_run,
+        "force": force,
+        "stdout_tail": out[-4000:],
+        "stderr_tail": err[-2000:],
+        "onboard_summary": onboard_summary,
+        "admin_user_id": getattr(admin_user, "id", None),
+        "source": "yuangon_onboard_admin_api",
+    }
+    try:
+        _append_governance_audit(audit)
+        result["governance_audit_path"] = str(_governance_audit_path())
+    except Exception:
+        logger.exception("failed to append governance audit")
+        result["governance_audit_error"] = "append_failed"
+    return result
 
 
 __all__ = ["router"]

@@ -1160,7 +1160,7 @@ class TestExecuteShipmentGenerateTool:
         assert result["error_code"] == "missing_order_params"
 
     def test_with_order_text_parse_fail(self) -> None:
-        with patch("app.routes.tools._parse_order_text", return_value={"success": False, "message": "bad"}):
+        with patch("app.application.facades.tools_facade._parse_order_text", return_value={"success": False, "message": "bad"}):
             result = _execute_shipment_generate_tool({"order_text": "invalid"})
             assert result["success"] is False
 
@@ -1190,19 +1190,19 @@ class TestExecuteShipmentGenerateTool:
         assert result["error_code"] == "service_unavailable"
 
     def test_value_error(self) -> None:
-        with patch("app.routes.tools._parse_order_text", side_effect=ValueError("bad")):
+        with patch("app.application.facades.tools_facade._parse_order_text", side_effect=ValueError("bad")):
             result = _execute_shipment_generate_tool({"order_text": "x"})
             assert result["success"] is False
             assert result["error_code"] == "invalid_parameters"
 
     def test_os_error(self) -> None:
-        with patch("app.routes.tools._parse_order_text", side_effect=OSError("io")):
+        with patch("app.application.facades.tools_facade._parse_order_text", side_effect=OSError("io")):
             result = _execute_shipment_generate_tool({"order_text": "x"})
             assert result["success"] is False
             assert result["error_code"] == "file_io_error"
 
     def test_runtime_error(self) -> None:
-        with patch("app.routes.tools._parse_order_text", side_effect=RuntimeError("fail")):
+        with patch("app.application.facades.tools_facade._parse_order_text", side_effect=RuntimeError("fail")):
             result = _execute_shipment_generate_tool({"order_text": "x"})
             assert result["success"] is False
             assert result["error_code"] == "generation_failed"
@@ -2492,7 +2492,7 @@ class TestHandleImportExcelToDatabase:
         # RECOVERABLE_ERROR) on non-xlsx files. We mock both to exercise the
         # read_excel_failed error path with a RECOVERABLE_ERROR.
         with patch(
-            "app.routes.template_grid_core._extract_customer_hint_from_excel",
+            "app.application.template_grid_core._extract_customer_hint_from_excel",
             return_value="",
         ), patch(
             "app.application.tools.workflow._read_excel_dataframe",

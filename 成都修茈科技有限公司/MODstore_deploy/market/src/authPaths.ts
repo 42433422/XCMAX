@@ -4,12 +4,11 @@ export function safeRedirectPath(raw: unknown): string {
   if (typeof raw !== 'string') return '/workbench/home'
   const trimmed = raw.trim()
   if (!trimmed.startsWith('/') || trimmed.startsWith('//')) return '/workbench/home'
+  if (trimmed === '/market') return '/'
 
   const withoutBase = trimmed.startsWith('/market/')
     ? trimmed.slice('/market'.length)
-    : trimmed === '/market'
-      ? '/'
-      : trimmed
+    : trimmed
 
   if (
     withoutBase === '/' ||

@@ -17,13 +17,13 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
-
 # ========================= _read_excel_dataframe engine selection ===========
 
 
 class TestReadExcelDataframeEngineSelection:
     def test_xlsx_file_uses_openpyxl(self, tmp_path):
         import pandas as pd
+
         from app.application.tools.workflow import _read_excel_dataframe
 
         df = pd.DataFrame({"name": ["A", "B"], "value": [1, 2]})
@@ -36,6 +36,7 @@ class TestReadExcelDataframeEngineSelection:
 
     def test_with_sheet_name(self, tmp_path):
         import pandas as pd
+
         from app.application.tools.workflow import _read_excel_dataframe
 
         df = pd.DataFrame({"name": ["A"], "value": [1]})
@@ -47,6 +48,7 @@ class TestReadExcelDataframeEngineSelection:
 
     def test_none_header_row(self, tmp_path):
         import pandas as pd
+
         from app.application.tools.workflow import _read_excel_dataframe
 
         df = pd.DataFrame({"name": ["A"], "value": [1]})
@@ -220,6 +222,7 @@ class TestExecuteWorkflowToolAdditionalHandlers:
 
     def test_excel_join_compare_diff(self, tmp_path):
         import pandas as pd
+
         from app.application.tools.workflow import execute_workflow_tool
 
         df = pd.DataFrame({"key": ["A", "B"], "val1": [1, 2]})
@@ -239,6 +242,7 @@ class TestExecuteWorkflowToolAdditionalHandlers:
 
     def test_excel_join_compare_diff_no_keys(self, tmp_path):
         import pandas as pd
+
         from app.application.tools.workflow import execute_workflow_tool
 
         df = pd.DataFrame({"key": ["A", "B"], "val1": [1, 2]})
@@ -265,6 +269,7 @@ class TestExecuteWorkflowToolAdditionalHandlers:
 
     def test_excel_prophet_with_file(self, tmp_path):
         import pandas as pd
+
         from app.application.tools.workflow import execute_workflow_tool
 
         df = pd.DataFrame({"date": pd.date_range("2024-01-01", periods=10), "value": range(10)})
@@ -294,6 +299,7 @@ class TestExecuteWorkflowToolAdditionalHandlers:
 
     def test_excel_schema_understand(self, tmp_path):
         import pandas as pd
+
         from app.application.tools.workflow import execute_workflow_tool
 
         df = pd.DataFrame({"name": ["A"], "value": [1]})
@@ -314,6 +320,9 @@ class TestExecuteWorkflowToolAdditionalHandlers:
             result = execute_workflow_tool("generate_office_document", {"user_request": "test doc", "output_format": "docx"})
         parsed = json.loads(result)
         assert parsed["success"] is True
+        assert parsed["artifacts"][0]["artifact_type"] == "office_document"
+        assert parsed["artifacts"][0]["name"] == "test.docx"
+        assert parsed["artifacts"][0]["uri"] == "/api/ai/kitten/document/pickup/pickup_tok"
 
     def test_generate_office_document_missing_request(self):
         from app.application.tools.workflow import execute_workflow_tool
@@ -329,6 +338,7 @@ class TestExecuteWorkflowToolAdditionalHandlers:
 class TestImportProductsPreviewOrExecute:
     def test_preview_mode(self, tmp_path):
         import pandas as pd
+
         from app.application.tools.workflow import _import_products_preview_or_execute
 
         df = pd.DataFrame({"产品名称": ["涂料A"], "型号": ["5003A"], "单价": [100]})
@@ -341,6 +351,7 @@ class TestImportProductsPreviewOrExecute:
 
     def test_empty_dataframe(self):
         import pandas as pd
+
         from app.application.tools.workflow import _import_products_preview_or_execute
 
         df = pd.DataFrame()
@@ -355,6 +366,7 @@ class TestImportProductsPreviewOrExecute:
 class TestImportCustomersPreviewOrExecute:
     def test_preview_mode(self):
         import pandas as pd
+
         from app.application.tools.workflow import _import_customers_preview_or_execute
 
         df = pd.DataFrame({"名称": ["公司A"], "联系人": ["张三"]})
@@ -364,6 +376,7 @@ class TestImportCustomersPreviewOrExecute:
 
     def test_empty_dataframe(self):
         import pandas as pd
+
         from app.application.tools.workflow import _import_customers_preview_or_execute
 
         df = pd.DataFrame()
@@ -378,6 +391,7 @@ class TestImportCustomersPreviewOrExecute:
 class TestImportOrdersPreviewOrExecute:
     def test_preview_mode(self):
         import pandas as pd
+
         from app.application.tools.workflow import _import_orders_preview_or_execute
 
         df = pd.DataFrame({"产品名称": ["涂料"], "数量": [10]})
@@ -387,6 +401,7 @@ class TestImportOrdersPreviewOrExecute:
 
     def test_empty_dataframe(self):
         import pandas as pd
+
         from app.application.tools.workflow import _import_orders_preview_or_execute
 
         df = pd.DataFrame()

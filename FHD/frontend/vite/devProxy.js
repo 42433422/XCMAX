@@ -94,6 +94,11 @@ export function buildDevProxy(apiBase) {
           target: apiBase,
           changeOrigin: true,
         },
+        '/ws': {
+          target: apiBase,
+          changeOrigin: true,
+          ws: true,
+        },
 
         // 出货/打印/AI/chat/以及 compat 中的相关接口都走 5000
         '/api/shipment': {

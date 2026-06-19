@@ -2,7 +2,7 @@
 报表分析 API 路由
 
 来源：从 legacy_inventory.py 中 /api/report/* 端点迁出。
-预计后续引入 report_app_service_v2 接入 NeuroBus 事件流。
+后续如需应用服务编排，应扩展无后缀 application service 或 domain SSOT。
 
 覆盖：
 - /api/report/sales          销售报表

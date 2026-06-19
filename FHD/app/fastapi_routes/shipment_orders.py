@@ -19,7 +19,7 @@ import re
 from datetime import datetime, timedelta
 from typing import Any
 
-from fastapi import APIRouter, Body, HTTPException, Query
+from fastapi import APIRouter, Body, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse
 
 from app.application.facades.query_facade import query_service
@@ -34,6 +34,169 @@ router = APIRouter(tags=["shipment-orders-compat"])
 
 def _svc():
     return get_shipment_application_service_core()
+
+
+def _agent_node_output(run: Any, node_id: str) -> dict[str, Any]:
+    final_output = getattr(run, "final_output", None)
+    node_outputs = dict((final_output or {}).get("node_outputs") or {})
+    output = dict(node_outputs.get(node_id) or {})
+    if not output:
+        for step in getattr(run, "steps", []) or []:
+            if str(getattr(step, "node_id", "")) == node_id:
+                output = dict(getattr(step, "output", {}) or {})
+                break
+    if not output:
+        output = {"success": getattr(run, "status", "") == "completed"}
+    if not output.get("success") and getattr(run, "error", "") and not output.get("message"):
+        output["message"] = getattr(run, "error", "")
+    run_id = str(getattr(run, "run_id", "") or "")
+    if run_id:
+        output["run_id"] = run_id
+        output["agent_run_id"] = run_id
+    output["agent_status"] = str(getattr(run, "status", "") or "")
+    return output
+
+
+def _shipment_agent_user_id(request: Request, payload: dict[str, Any]) -> str:
+    return str(
+        request.headers.get("X-User-Id")
+        or request.headers.get("X-User-ID")
+        or payload.get("user_id")
+        or payload.get("userId")
+        or "shipment-route"
+    ).strip()
+
+
+def _run_shipment_records_agent(
+    *,
+    request: Request,
+    action: str,
+    params: dict[str, Any],
+    route_path: str,
+) -> dict[str, Any]:
+    from app.application.agent_orchestrator import AgentOrchestrator
+    from app.application.workflow.types import PlanGraph, WorkflowNode
+    from app.services.tools_execution.registry import get_workflow_tool_registry
+
+    registry = get_workflow_tool_registry()
+    action_meta = dict((registry.get("shipment_records") or {}).get("actions") or {}).get(action)
+    if not isinstance(action_meta, dict):
+        return {
+            "success": False,
+            "message": f"未注册的 shipment_records 动作: {action}",
+            "agent_status": "failed",
+        }
+
+    node_id = f"shipment_records_{action}"
+    user_id = _shipment_agent_user_id(request, params)
+    plan = PlanGraph(
+        plan_id=node_id,
+        intent=node_id,
+        todo_steps=[f"通过 AgentOrchestrator 执行 shipment_records.{action}"],
+        nodes=[
+            WorkflowNode(
+                node_id=node_id,
+                tool_id="shipment_records",
+                action=action,
+                params=dict(params or {}),
+                risk=str(action_meta.get("risk") or "medium"),
+                idempotent=bool(action_meta.get("idempotent", False)),
+                description=f"Execute shipment_records.{action} through the unified Agent runtime.",
+            )
+        ],
+        risk_level=str(action_meta.get("risk") or "medium"),
+        metadata={"source": "shipment_records_route", "route": route_path},
+    )
+    runtime_context = {
+        "source": "shipment_records_route",
+        "route": route_path,
+        "request_path": str(request.url.path),
+        "user_id": user_id,
+        "route_confirmed": True,
+        "service_source": "fastapi_shipment_records_route",
+    }
+    orchestrator = AgentOrchestrator()
+    run = orchestrator.start_run_from_plan(
+        user_id=user_id,
+        message=str(params.get("message") or f"Shipment records {action}"),
+        plan=plan,
+        runtime_context=runtime_context,
+    )
+    if run.status == "waiting_user":
+        continued = orchestrator.continue_run(
+            run.run_id,
+            approved_by=user_id or "shipment-route",
+            runtime_context=runtime_context,
+        )
+        if continued is not None:
+            run = continued
+    return _agent_node_output(run, node_id)
+
+
+def _run_shipment_orders_agent(
+    *,
+    request: Request,
+    action: str,
+    params: dict[str, Any],
+    route_path: str,
+) -> dict[str, Any]:
+    from app.application.agent_orchestrator import AgentOrchestrator
+    from app.application.workflow.types import PlanGraph, WorkflowNode
+    from app.services.tools_execution.registry import get_workflow_tool_registry
+
+    registry = get_workflow_tool_registry()
+    action_meta = dict((registry.get("shipment_orders") or {}).get("actions") or {}).get(action)
+    if not isinstance(action_meta, dict):
+        return {
+            "success": False,
+            "message": f"未注册的 shipment_orders 动作: {action}",
+            "agent_status": "failed",
+        }
+
+    node_id = f"shipment_orders_{action}"
+    user_id = _shipment_agent_user_id(request, params)
+    plan = PlanGraph(
+        plan_id=node_id,
+        intent=node_id,
+        todo_steps=[f"通过 AgentOrchestrator 执行 shipment_orders.{action}"],
+        nodes=[
+            WorkflowNode(
+                node_id=node_id,
+                tool_id="shipment_orders",
+                action=action,
+                params=dict(params or {}),
+                risk=str(action_meta.get("risk") or "high"),
+                idempotent=bool(action_meta.get("idempotent", False)),
+                description=f"Execute shipment_orders.{action} through the unified Agent runtime.",
+            )
+        ],
+        risk_level=str(action_meta.get("risk") or "high"),
+        metadata={"source": "shipment_orders_route", "route": route_path},
+    )
+    runtime_context = {
+        "source": "shipment_orders_route",
+        "route": route_path,
+        "request_path": str(request.url.path),
+        "user_id": user_id,
+        "route_confirmed": True,
+        "service_source": "fastapi_shipment_orders_route",
+    }
+    orchestrator = AgentOrchestrator()
+    run = orchestrator.start_run_from_plan(
+        user_id=user_id,
+        message=str(params.get("message") or f"Shipment orders {action}"),
+        plan=plan,
+        runtime_context=runtime_context,
+    )
+    if run.status == "waiting_user":
+        continued = orchestrator.continue_run(
+            run.run_id,
+            approved_by=user_id or "shipment-route",
+            runtime_context=runtime_context,
+        )
+        if continued is not None:
+            run = continued
+    return _agent_node_output(run, node_id)
 
 
 def _next_order_number_payload(suffix: str = "A") -> dict[str, Any]:
@@ -82,45 +245,22 @@ def orders_next_number_under_api(suffix: str = Query(default="A")):
 
 
 @router.post("/api/shipment/generate-batch")
-def shipment_generate_batch(payload: dict[str, Any] = Body(default_factory=dict)):
+def shipment_generate_batch(request: Request, payload: dict[str, Any] = Body(default_factory=dict)):
     """批量生成：兼容测试与旧前端字段（customer_name / items）。"""
     shipments = payload.get("shipments") or []
     if not shipments:
         raise HTTPException(status_code=400, detail="shipments 不能为空")
-    ok_count = 0
-    errors: list[dict[str, Any]] = []
-    for idx, s in enumerate(shipments):
-        if not isinstance(s, dict):
-            errors.append({"index": idx, "error": "条目必须是对象"})
-            continue
-        unit_name = str(s.get("unit_name") or s.get("customer_name") or "").strip()
-        products = s.get("products") or s.get("items") or []
-        if not unit_name:
-            errors.append({"index": idx, "error": "单位名称不能为空"})
-            continue
-        if not products:
-            errors.append({"index": idx, "error": "产品列表不能为空"})
-            continue
-        try:
-            result = _svc().generate_shipment_document(
-                unit_name=unit_name,
-                products=products,
-            )
-            if result.get("success"):
-                ok_count += 1
-            else:
-                errors.append({"index": idx, "error": result.get("message", "生成失败")})
-        except RECOVERABLE_ERRORS as e:
-            logger.exception("shipment generate-batch[%s]: %s", idx, e)
-            errors.append({"index": idx, "error": str(e)})
-    return {
-        "success": ok_count > 0 or not errors,
-        "data": {"processed": ok_count, "total": len(shipments), "errors": errors},
-    }
+    result = _run_shipment_orders_agent(
+        request=request,
+        action="generate_batch",
+        params={"shipments": shipments},
+        route_path="/api/shipment/generate-batch",
+    )
+    return JSONResponse(result, status_code=200)
 
 
 @router.post("/api/shipment/generate")
-def shipment_generate(payload: dict[str, Any] = Body(default_factory=dict)):
+def shipment_generate(request: Request, payload: dict[str, Any] = Body(default_factory=dict)):
     unit_name = str(payload.get("unit_name") or "").strip()
     products = payload.get("products") or []
     date = payload.get("date")
@@ -129,10 +269,11 @@ def shipment_generate(payload: dict[str, Any] = Body(default_factory=dict)):
     if not products:
         raise HTTPException(status_code=400, detail="产品列表不能为空")
     try:
-        result = _svc().generate_shipment_document(
-            unit_name=unit_name,
-            products=products,
-            date=date,
+        result = _run_shipment_orders_agent(
+            request=request,
+            action="generate",
+            params={"unit_name": unit_name, "products": products, "date": date},
+            route_path="/api/shipment/generate",
         )
         return JSONResponse(result, status_code=200 if result.get("success") else 500)
     except RECOVERABLE_ERRORS as e:
@@ -144,7 +285,7 @@ def shipment_generate(payload: dict[str, Any] = Body(default_factory=dict)):
 
 
 @router.post("/api/shipment/print")
-def shipment_print(payload: dict[str, Any] = Body(default_factory=dict)):
+def shipment_print(request: Request, payload: dict[str, Any] = Body(default_factory=dict)):
     file_path = payload.get("file_path")
     order_id = payload.get("order_id")
     printer_name = payload.get("printer_name")
@@ -157,23 +298,19 @@ def shipment_print(payload: dict[str, Any] = Body(default_factory=dict)):
     try:
         if order_id:
             try:
-                shipment_id = int(order_id)
+                int(order_id)
             except RECOVERABLE_ERRORS:
                 raise HTTPException(status_code=400, detail="order_id 无效")
-            result = _svc().mark_as_printed(shipment_id, printer_name=str(printer_name or ""))
-            if isinstance(result, dict):
-                result["file_path"] = file_path
-                if "updated" not in result:
-                    result["updated"] = bool(result.get("success"))
-        else:
-            result = {
-                "success": True,
-                "message": "发货单打印请求已完成，但未更新记录（缺少 order_id）",
-                "printed_at": datetime.now().isoformat(),
-                "file_path": file_path,
-                "updated": False,
-                "warning": "缺少 order_id，已跳过数据库状态更新",
-            }
+        result = _run_shipment_orders_agent(
+            request=request,
+            action="print",
+            params={
+                "file_path": str(file_path),
+                "order_id": order_id,
+                "printer_name": printer_name,
+            },
+            route_path="/api/shipment/print",
+        )
         return JSONResponse(result, status_code=200 if result.get("success") else 500)
     except HTTPException:
         raise
@@ -211,11 +348,18 @@ def shipment_orders_purchase_units():
 
 
 @router.post("/api/shipment/orders/clear-shipment")
-def shipment_orders_clear_shipment(payload: dict[str, Any] = Body(default_factory=dict)):
+def shipment_orders_clear_shipment(
+    request: Request, payload: dict[str, Any] = Body(default_factory=dict)
+):
     purchase_unit = str(payload.get("purchase_unit") or "").strip()
     if not purchase_unit:
         raise HTTPException(status_code=400, detail="缺少购买单位参数")
-    result = _svc().clear_shipment_by_unit(purchase_unit)
+    result = _run_shipment_orders_agent(
+        request=request,
+        action="clear_shipment",
+        params={"purchase_unit": purchase_unit},
+        route_path="/api/shipment/orders/clear-shipment",
+    )
     return JSONResponse(result, status_code=200 if result.get("success") else 500)
 
 
@@ -242,21 +386,38 @@ def shipment_orders_latest():
 
 
 @router.post("/api/shipment/orders/set-sequence")
-def shipment_orders_set_sequence(payload: dict[str, Any] = Body(default_factory=dict)):
+def shipment_orders_set_sequence(
+    request: Request, payload: dict[str, Any] = Body(default_factory=dict)
+):
     sequence = int(payload.get("sequence", 1))
-    result = _svc().set_order_sequence(sequence)
+    result = _run_shipment_orders_agent(
+        request=request,
+        action="set_sequence",
+        params={"sequence": sequence},
+        route_path="/api/shipment/orders/set-sequence",
+    )
     return JSONResponse(result, status_code=200 if result.get("success") else 500)
 
 
 @router.post("/api/shipment/orders/reset-sequence")
-def shipment_orders_reset_sequence():
-    result = _svc().reset_order_sequence()
+def shipment_orders_reset_sequence(request: Request):
+    result = _run_shipment_orders_agent(
+        request=request,
+        action="reset_sequence",
+        params={},
+        route_path="/api/shipment/orders/reset-sequence",
+    )
     return JSONResponse(result, status_code=200 if result.get("success") else 500)
 
 
 @router.delete("/api/shipment/orders/clear-all")
-def shipment_orders_clear_all():
-    result = _svc().clear_all_orders()
+def shipment_orders_clear_all(request: Request):
+    result = _run_shipment_orders_agent(
+        request=request,
+        action="clear_all",
+        params={},
+        route_path="/api/shipment/orders/clear-all",
+    )
     return JSONResponse(result, status_code=200 if result.get("success") else 500)
 
 
@@ -279,8 +440,13 @@ def api_orders_list(limit: int = Query(default=100, ge=1, le=5000)):
 
 @router.delete("/api/orders")
 @router.delete("/api/orders/", include_in_schema=False)
-def api_orders_delete_root():
-    result = _svc().clear_all_orders()
+def api_orders_delete_root(request: Request):
+    result = _run_shipment_orders_agent(
+        request=request,
+        action="clear_all",
+        params={},
+        route_path="/api/orders",
+    )
     return JSONResponse(result, status_code=200 if result.get("success") else 500)
 
 
@@ -298,14 +464,26 @@ def api_orders_search(q: str = Query(default="")):
 
 
 @router.post("/api/orders/set-sequence")
-def api_orders_set_sequence(payload: dict[str, Any] = Body(default_factory=dict)):
+def api_orders_set_sequence(request: Request, payload: dict[str, Any] = Body(default_factory=dict)):
     sequence = int(payload.get("sequence", 1))
-    return _svc().set_order_sequence(sequence)
+    result = _run_shipment_orders_agent(
+        request=request,
+        action="set_sequence",
+        params={"sequence": sequence},
+        route_path="/api/orders/set-sequence",
+    )
+    return JSONResponse(result, status_code=200 if result.get("success") else 500)
 
 
 @router.post("/api/orders/reset-sequence")
-def api_orders_reset_sequence():
-    return _svc().reset_order_sequence()
+def api_orders_reset_sequence(request: Request):
+    result = _run_shipment_orders_agent(
+        request=request,
+        action="reset_sequence",
+        params={},
+        route_path="/api/orders/reset-sequence",
+    )
+    return JSONResponse(result, status_code=200 if result.get("success") else 500)
 
 
 @router.get("/api/orders/purchase-units")
@@ -315,17 +493,29 @@ def api_orders_purchase_units():
 
 
 @router.post("/api/orders/clear-shipment")
-def api_orders_clear_shipment(payload: dict[str, Any] = Body(default_factory=dict)):
+def api_orders_clear_shipment(
+    request: Request, payload: dict[str, Any] = Body(default_factory=dict)
+):
     purchase_unit = str(payload.get("purchase_unit") or "").strip()
     if not purchase_unit:
         raise HTTPException(status_code=400, detail="缺少购买单位参数")
-    result = _svc().clear_shipment_by_unit(purchase_unit)
+    result = _run_shipment_orders_agent(
+        request=request,
+        action="clear_shipment",
+        params={"purchase_unit": purchase_unit},
+        route_path="/api/orders/clear-shipment",
+    )
     return JSONResponse(result, status_code=200 if result.get("success") else 500)
 
 
 @router.delete("/api/orders/clear-all")
-def api_orders_clear_all():
-    result = _svc().clear_all_orders()
+def api_orders_clear_all(request: Request):
+    result = _run_shipment_orders_agent(
+        request=request,
+        action="clear_all",
+        params={},
+        route_path="/api/orders/clear-all",
+    )
     return JSONResponse(result, status_code=200 if result.get("success") else 500)
 
 
@@ -342,15 +532,21 @@ def api_orders_get(order_number: str):
 
 
 @router.delete("/api/shipment/orders/{order_number}")
-def shipment_orders_delete(order_number: str):
+def shipment_orders_delete(request: Request, order_number: str):
     try:
         shipment_id = int(order_number)
     except ValueError:
         raise HTTPException(status_code=400, detail=f"无效的订单编号格式：{order_number}")
-    result = _svc().delete_shipment(shipment_id)
+    result = _run_shipment_orders_agent(
+        request=request,
+        action="delete",
+        params={"id": shipment_id, "order_number": order_number},
+        route_path="/api/shipment/orders/{order_number}",
+    )
     if not result.get("success"):
         raise HTTPException(status_code=400, detail=result.get("message", "删除失败"))
-    return {"success": True, "message": f"订单 {order_number} 已删除"}
+    result["message"] = f"订单 {order_number} 已删除"
+    return result
 
 
 # ----- /api/shipment/shipment-records -----
@@ -395,7 +591,7 @@ def shipment_records_list(
 
 
 @router.post("/api/shipment/shipment-records/record")
-def shipment_records_create(payload: dict[str, Any] = Body(...)):
+def shipment_records_create(request: Request, payload: dict[str, Any] = Body(...)):
     """新建出货记录（从出货记录管理页手动建单）。"""
     unit_name = str(payload.get("unit_name") or payload.get("purchase_unit") or "").strip()
     if not unit_name:
@@ -403,36 +599,53 @@ def shipment_records_create(payload: dict[str, Any] = Body(...)):
     products = payload.get("products") or []
     if not isinstance(products, list):
         products = []
-    result = _svc().create_shipment(
-        unit_name=unit_name,
-        items_data=products,
-        contact_person=payload.get("contact_person"),
-        contact_phone=payload.get("contact_phone"),
+    result = _run_shipment_records_agent(
+        request=request,
+        action="create",
+        params={
+            "unit_name": unit_name,
+            "products": products,
+            "contact_person": payload.get("contact_person"),
+            "contact_phone": payload.get("contact_phone"),
+        },
+        route_path="/api/shipment/shipment-records/record",
     )
     return JSONResponse(result, status_code=200 if result.get("success") else 400)
 
 
 @router.patch("/api/shipment/shipment-records/record")
-def shipment_records_patch(payload: dict[str, Any] = Body(...)):
+def shipment_records_patch(request: Request, payload: dict[str, Any] = Body(...)):
     record_id = payload.get("id")
     if not record_id:
         raise HTTPException(status_code=400, detail="缺少记录 ID")
-    result = _svc().update_shipment_record(
-        int(record_id),
-        unit_name=payload.get("unit_name"),
-        products=payload.get("products"),
-        date=payload.get("date"),
-        **{k: v for k, v in payload.items() if k not in ("id", "unit_name", "products", "date")},
+    result = _run_shipment_records_agent(
+        request=request,
+        action="update",
+        params={
+            "id": int(record_id),
+            "unit_name": payload.get("unit_name"),
+            "products": payload.get("products"),
+            "date": payload.get("date"),
+            **{
+                k: v for k, v in payload.items() if k not in ("id", "unit_name", "products", "date")
+            },
+        },
+        route_path="/api/shipment/shipment-records/record",
     )
     return JSONResponse(result, status_code=200 if result.get("success") else 404)
 
 
 @router.delete("/api/shipment/shipment-records/record")
-def shipment_records_delete(payload: dict[str, Any] = Body(...)):
+def shipment_records_delete(request: Request, payload: dict[str, Any] = Body(...)):
     record_id = payload.get("id")
     if not record_id:
         raise HTTPException(status_code=400, detail="缺少记录 ID")
-    result = _svc().delete_shipment_record(int(record_id))
+    result = _run_shipment_records_agent(
+        request=request,
+        action="delete",
+        params={"id": int(record_id)},
+        route_path="/api/shipment/shipment-records/record",
+    )
     return JSONResponse(result, status_code=200 if result.get("success") else 404)
 
 

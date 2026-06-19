@@ -52,7 +52,7 @@ def test_execute_customers_intent_add_missing_unit() -> None:
     assert "单位" in out["response"]
 
 
-@patch("app.routes.tools.execute_registered_workflow_tool")
+@patch("app.application.facades.tools_facade.execute_registered_workflow_tool")
 def test_execute_customers_intent_add_create(mock_exec: MagicMock) -> None:
     svc = _chat_svc()
     mock_exec.return_value = {"success": True, "created": True}
@@ -63,7 +63,7 @@ def test_execute_customers_intent_add_create(mock_exec: MagicMock) -> None:
     assert "甲公司" in out["response"]
 
 
-@patch("app.routes.tools.execute_registered_workflow_tool")
+@patch("app.application.facades.tools_facade.execute_registered_workflow_tool")
 def test_execute_customers_intent_query(mock_exec: MagicMock) -> None:
     svc = _chat_svc()
     mock_exec.return_value = {"success": True, "data": [{"unit_name": "甲"}]}

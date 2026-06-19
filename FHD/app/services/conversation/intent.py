@@ -247,7 +247,7 @@ class IntentMixin:
 
         merged_slots = dict(intent_result.get("slots") or {})
         try:
-            from app.routes.tools import _parse_order_text
+            from app.application.facades.tools_facade import _parse_order_text
 
             parsed_order = _parse_order_text(message)
             if not parsed_order.get("success"):

@@ -972,6 +972,31 @@ const EmpWfRadialGraph = (() => {
     return bases;
   }
 
+  function readCsrfToken() {
+    const raw = typeof document !== 'undefined' ? String(document.cookie || '') : '';
+    for (const part of raw.split(';')) {
+      const item = part.trim();
+      if (!item.startsWith('csrf_token=')) continue;
+      const token = item.slice('csrf_token='.length);
+      try {
+        return decodeURIComponent(token);
+      } catch (_err) {
+        return token;
+      }
+    }
+    return '';
+  }
+
+  function csrfJsonHeaders() {
+    const headers = {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    };
+    const csrf = readCsrfToken();
+    if (csrf) headers['X-CSRF-Token'] = csrf;
+    return headers;
+  }
+
   async function syncMissingEvidenceBacklog(limit = 32) {
     const paths = [
       '/api/xcmax/production-line/time-rail/maintenance/sync',
@@ -984,7 +1009,8 @@ const EmpWfRadialGraph = (() => {
           const url = base ? base + path : path;
           const r = await fetch(url, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: csrfJsonHeaders(),
+            credentials: 'include',
             body: JSON.stringify({ limit }),
             signal: AbortSignal.timeout(2500),
           });

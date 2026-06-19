@@ -61,6 +61,7 @@ from app.application.facades.tools_facade import (
     execute_registered_workflow_tool,
     execute_tool_from_payload,
     get_workflow_tool_registry,
+    run_archive_tools_execute,
     set_tool_execute_headers,
 )
 from app.application.facades.tts_facade import synthesize_to_data_uri, trigger_common_tts_warmup
@@ -85,6 +86,7 @@ __all__ = [
     "execute_registered_workflow_tool",
     "execute_tool_from_payload",
     "get_workflow_tool_registry",
+    "run_archive_tools_execute",
     "set_tool_execute_headers",
     "build_kitten_business_snapshot",
     "build_kitten_docx",

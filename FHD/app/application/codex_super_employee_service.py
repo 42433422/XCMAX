@@ -10,14 +10,13 @@ import subprocess
 import tempfile
 import uuid
 from collections.abc import Callable
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import httpx
 
 from app.utils.path_utils import get_app_data_dir
-
 
 CODEX_SUPER_EMPLOYEE_ID = "codex-super-employee"
 CODEX_SUPER_EMPLOYEE_NAME = "超级员工-Codex"
@@ -34,7 +33,7 @@ def _coerce_list(value: Any) -> list[Any]:
 
 
 def _utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _safe_json_line(payload: dict[str, Any]) -> str:
@@ -69,9 +68,7 @@ class CodexSuperEmployeeService:
         if direct_changed:
             self._write_all_message_rows(all_rows)
         rows = [
-            self._public_message(item)
-            for item in all_rows
-            if int(item.get("user_id") or 0) == uid
+            self._public_message(item) for item in all_rows if int(item.get("user_id") or 0) == uid
         ]
         return rows[-max(1, min(int(limit), 200)) :]
 
@@ -150,7 +147,9 @@ class CodexSuperEmployeeService:
                 "task_id": str(dispatch.get("task_id") or ""),
                 "task_status": str(dispatch.get("task_status") or ""),
                 "dispatcher": str(dispatch.get("dispatcher") or ""),
-                "devices": dispatch.get("devices") if isinstance(dispatch.get("devices"), list) else [],
+                "devices": dispatch.get("devices")
+                if isinstance(dispatch.get("devices"), list)
+                else [],
             },
         )
         self._append_messages([user_msg, dispatcher_msg])
@@ -207,10 +206,14 @@ class CodexSuperEmployeeService:
 
     def _dispatch(self, request: dict[str, Any]) -> dict[str, Any]:
         mode = (
-            os.environ.get("XCMAX_CODEX_SUPER_EMPLOYEE_DISPATCH_MODE")
-            or os.environ.get("MODSTORE_PARA_DISPATCH_MODE")
-            or "auto"
-        ).strip().lower()
+            (
+                os.environ.get("XCMAX_CODEX_SUPER_EMPLOYEE_DISPATCH_MODE")
+                or os.environ.get("MODSTORE_PARA_DISPATCH_MODE")
+                or "auto"
+            )
+            .strip()
+            .lower()
+        )
         if mode in {"auto", "para", "devfleet", "mcp"}:
             para_dispatch, para_reason = self._dispatch_to_para(request)
             if para_dispatch is not None:
@@ -251,7 +254,7 @@ class CodexSuperEmployeeService:
             body: Any
             try:
                 body = resp.json() if resp.content else {}
-            except Exception:
+            except ValueError:
                 body = {"raw": resp.text[:1000]}
             accepted = resp.status_code < 400 and (
                 body.get("ok") is True
@@ -271,9 +274,11 @@ class CodexSuperEmployeeService:
                 request,
                 status="dispatch_failed",
                 accepted=False,
-                reason=str(body.get("error") or body.get("message") or f"HTTP {resp.status_code}")[:500],
+                reason=str(body.get("error") or body.get("message") or f"HTTP {resp.status_code}")[
+                    :500
+                ],
             )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             return self._write_outbox(
                 request,
                 status="dispatch_error",
@@ -295,7 +300,9 @@ class CodexSuperEmployeeService:
                 token = self._para_token(client, api_url)
                 devices_body = self._para_request(client, api_url, token, "GET", "/api/devices")
                 devices = devices_body.get("devices") if isinstance(devices_body, dict) else []
-                selected = self._select_para_codex_devices(devices if isinstance(devices, list) else [], request)
+                selected = self._select_para_codex_devices(
+                    devices if isinstance(devices, list) else [], request
+                )
                 if not selected:
                     return self._write_outbox(
                         request,
@@ -311,7 +318,7 @@ class CodexSuperEmployeeService:
                 return self._create_para_task(client, api_url, token, request, prepared), ""
         except (httpx.TimeoutException, httpx.ConnectError, httpx.NetworkError) as exc:
             return None, f"para_api_unreachable: {exc}"
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             return self._write_outbox(
                 request,
                 status="dispatch_error",
@@ -329,11 +336,15 @@ class CodexSuperEmployeeService:
 
     def _para_api_url(self) -> str:
         value = (
-            os.environ.get("XCMAX_CODEX_SUPER_EMPLOYEE_PARA_API_URL")
-            or os.environ.get("MODSTORE_PARA_API_URL")
-            or os.environ.get("DEVFLEET_API_URL")
-            or DEFAULT_PARA_API_URL
-        ).strip().rstrip("/")
+            (
+                os.environ.get("XCMAX_CODEX_SUPER_EMPLOYEE_PARA_API_URL")
+                or os.environ.get("MODSTORE_PARA_API_URL")
+                or os.environ.get("DEVFLEET_API_URL")
+                or DEFAULT_PARA_API_URL
+            )
+            .strip()
+            .rstrip("/")
+        )
         if value.lower() in {"", "0", "false", "off", "none", "disabled"}:
             return ""
         return value
@@ -350,7 +361,9 @@ class CodexSuperEmployeeService:
         resp = client.post(f"{api_url}/api/auth/guest", json={})
         body = self._json_response(resp)
         if resp.status_code >= 400:
-            raise RuntimeError(self._error_message(body, f"Para guest 登录失败 ({resp.status_code})"))
+            raise RuntimeError(
+                self._error_message(body, f"Para guest 登录失败 ({resp.status_code})")
+            )
         token = str(body.get("token") or body.get("access_token") or "").strip()
         if not token:
             raise RuntimeError("Para guest 登录未返回 token")
@@ -383,25 +396,35 @@ class CodexSuperEmployeeService:
         request: dict[str, Any],
     ) -> list[dict[str, Any]]:
         target_devices = request.get("target_devices")
-        targets = {
-            str(item).strip()
-            for item in target_devices
-            if str(item).strip()
-        } if isinstance(target_devices, list) else {"all"}
+        targets = (
+            {str(item).strip() for item in target_devices if str(item).strip()}
+            if isinstance(target_devices, list)
+            else {"all"}
+        )
         candidates: list[dict[str, Any]] = []
         for item in devices:
             if not isinstance(item, dict):
                 continue
             if str(item.get("status") or "") != "online":
                 continue
-            if "all" not in targets and str(item.get("id") or "") not in targets and str(item.get("name") or "") not in targets:
+            if (
+                "all" not in targets
+                and str(item.get("id") or "") not in targets
+                and str(item.get("name") or "") not in targets
+            ):
                 continue
             codex_tool = self._device_tool(item, "codex")
             if codex_tool and str(codex_tool.get("status") or "") == "not_installed":
                 continue
-            if codex_tool and str(codex_tool.get("status") or "") == "running" and codex_tool.get("currentTask"):
+            if (
+                codex_tool
+                and str(codex_tool.get("status") or "") == "running"
+                and codex_tool.get("currentTask")
+            ):
                 continue
-            capabilities = item.get("capabilities") if isinstance(item.get("capabilities"), dict) else {}
+            capabilities = (
+                item.get("capabilities") if isinstance(item.get("capabilities"), dict) else {}
+            )
             if not codex_tool and capabilities.get("codex_cli") is not True:
                 continue
             candidates.append(item)
@@ -442,9 +465,16 @@ class CodexSuperEmployeeService:
         request: dict[str, Any],
         devices: list[dict[str, Any]],
     ) -> dict[str, Any]:
-        raw_context = request.get("raw_context") if isinstance(request.get("raw_context"), dict) else {}
+        raw_context = (
+            request.get("raw_context") if isinstance(request.get("raw_context"), dict) else {}
+        )
         title = str(request.get("title") or "超级员工-Codex 任务").strip()[:120]
-        branch = str(raw_context.get("branch") or os.environ.get("MODSTORE_PARA_BASE_BRANCH") or "main").strip() or "main"
+        branch = (
+            str(
+                raw_context.get("branch") or os.environ.get("MODSTORE_PARA_BASE_BRANCH") or "main"
+            ).strip()
+            or "main"
+        )
         repo_url = str(
             raw_context.get("repo_url")
             or os.environ.get("MODSTORE_PARA_REPO_URL")
@@ -469,7 +499,9 @@ class CodexSuperEmployeeService:
             if task_id:
                 body["task_id"] = task_id
 
-            result = self._para_request(client, api_url, token, "POST", "/api/tasks", json_body=body)
+            result = self._para_request(
+                client, api_url, token, "POST", "/api/tasks", json_body=body
+            )
             task = result.get("task") if isinstance(result.get("task"), dict) else task
             task_id = str((task or {}).get("id") or task_id)
             subtask = result.get("subtask") if isinstance(result.get("subtask"), dict) else {}
@@ -526,8 +558,14 @@ class CodexSuperEmployeeService:
         return f"{label}：{title[:60]}"
 
     def _max_para_devices(self, request: dict[str, Any]) -> int:
-        raw_context = request.get("raw_context") if isinstance(request.get("raw_context"), dict) else {}
-        value = raw_context.get("max_devices") or os.environ.get("XCMAX_CODEX_SUPER_EMPLOYEE_MAX_DEVICES") or 3
+        raw_context = (
+            request.get("raw_context") if isinstance(request.get("raw_context"), dict) else {}
+        )
+        value = (
+            raw_context.get("max_devices")
+            or os.environ.get("XCMAX_CODEX_SUPER_EMPLOYEE_MAX_DEVICES")
+            or 3
+        )
         try:
             return max(1, min(8, int(value)))
         except (TypeError, ValueError):
@@ -545,7 +583,7 @@ class CodexSuperEmployeeService:
     def _json_response(self, resp: httpx.Response) -> dict[str, Any]:
         try:
             body = resp.json() if resp.content else {}
-        except Exception:
+        except ValueError:
             body = {"raw": resp.text[:1000]}
         return body if isinstance(body, dict) else {"data": body}
 
@@ -560,7 +598,10 @@ class CodexSuperEmployeeService:
         accepted: bool,
         reason: str,
     ) -> dict[str, Any]:
-        path = self._outbox_dir / f"{request['created_at'].replace(':', '').replace('+', 'Z')}-{request['request_id']}.json"
+        path = (
+            self._outbox_dir
+            / f"{request['created_at'].replace(':', '').replace('+', 'Z')}-{request['request_id']}.json"
+        )
         path.write_text(json.dumps(request, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         return {
             "request_id": request["request_id"],
@@ -679,12 +720,15 @@ class CodexSuperEmployeeService:
             if not task:
                 continue
             changed = self._refresh_dispatcher_row(row, task) or changed
-            changed = self._upsert_codex_result_messages(
-                user_id=int(user_id),
-                dispatch_row=row,
-                task=task,
-                rows=rows,
-            ) or changed
+            changed = (
+                self._upsert_codex_result_messages(
+                    user_id=int(user_id),
+                    dispatch_row=row,
+                    task=task,
+                    rows=rows,
+                )
+                or changed
+            )
         if changed:
             self._write_all_message_rows(rows)
 
@@ -803,7 +847,7 @@ class CodexSuperEmployeeService:
                 )
             except subprocess.TimeoutExpired:
                 return f"Codex CLI 已接通，但本次回答超过 {timeout:g} 秒还没返回。请把问题拆短一点，或直接发开发任务给我派工。"
-            except Exception as exc:
+            except (OSError, subprocess.SubprocessError) as exc:
                 return f"Codex CLI 调用失败：{str(exc)[:300]}"
             if output_path.exists():
                 body = output_path.read_text(encoding="utf-8", errors="replace").strip()
@@ -923,7 +967,7 @@ class CodexSuperEmployeeService:
                 body = self._para_request(client, api_url, token, "GET", f"/api/tasks/{task_id}")
             task = body.get("task") if isinstance(body, dict) else None
             return task if isinstance(task, dict) else None
-        except Exception:
+        except (httpx.HTTPError, ValueError, KeyError, TypeError):
             return None
 
     def _upsert_direct_reply_messages(self, *, user_id: int, rows: list[dict[str, Any]]) -> bool:
@@ -932,7 +976,8 @@ class CodexSuperEmployeeService:
             for item in rows
             if int(item.get("user_id") or 0) == int(user_id)
             and (
-                str(item.get("kind") or "") in {CODEX_DIRECT_MESSAGE_KIND, CODEX_RESULT_MESSAGE_KIND}
+                str(item.get("kind") or "")
+                in {CODEX_DIRECT_MESSAGE_KIND, CODEX_RESULT_MESSAGE_KIND}
                 or (
                     str(item.get("role") or "") == "assistant"
                     and str(item.get("kind") or "") != DISPATCHER_MESSAGE_KIND
@@ -953,7 +998,10 @@ class CodexSuperEmployeeService:
             if not body and codex_cli_backfills < 1:
                 text = str(item.get("body") or "")
                 if self._should_reply_with_codex_cli(text, {}):
-                    body = self._codex_cli_reply_body(text, {}) or "Codex CLI 暂时没有返回内容，请确认本机 Codex 已登录后重试。"
+                    body = (
+                        self._codex_cli_reply_body(text, {})
+                        or "Codex CLI 暂时没有返回内容，请确认本机 Codex 已登录后重试。"
+                    )
                     codex_cli_backfills += 1
             if not body:
                 continue
@@ -1108,7 +1156,9 @@ class CodexSuperEmployeeService:
         )
         return content.startswith(prefixes)
 
-    def _dedupe_log_tail(self, logs: list[str], *, max_items: int = 5, max_chars: int = 4000) -> str:
+    def _dedupe_log_tail(
+        self, logs: list[str], *, max_items: int = 5, max_chars: int = 4000
+    ) -> str:
         seen: set[str] = set()
         unique: list[str] = []
         for item in logs:

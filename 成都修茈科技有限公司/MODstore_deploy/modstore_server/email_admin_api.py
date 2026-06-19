@@ -111,9 +111,11 @@ async def post_email_test(
 async def post_digest_now(_: User = Depends(_require_admin)):
     """行为与定时任务 ``daily_ops_digest_email`` 相同：收件人见 ``MODSTORE_DAILY_DIGEST_EMAIL``。"""
     try:
+        import asyncio
+
         from modstore_server.daily_digest import run_daily_digest_email
 
-        result = run_daily_digest_email()
+        result = await asyncio.to_thread(run_daily_digest_email)
     except Exception as e:  # noqa: BLE001
         logger.exception("digest-now failed")
         raise HTTPException(500, str(e)) from e

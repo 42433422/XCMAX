@@ -63,7 +63,7 @@ def subscribe(event: str, handler: Callable) -> None:
 def trigger(event: str, *args, **kwargs) -> None:
     # 检查前端是否启用了原版模式，如果是则跳过所有 hooks
     try:
-        from app.routes.state import read_client_mods_off_state
+        from app.fastapi_routes.state import read_client_mods_off_state
 
         if read_client_mods_off_state():
             logger.debug("Hook skipped (client_mods_off=True): %s", event)

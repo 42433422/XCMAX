@@ -4,7 +4,7 @@ export const llm = {
   llmStatus: () => req('/api/llm/status'),
   llmResolveChatDefault: () => req('/api/llm/resolve-chat-default'),
   llmCatalog: (refresh = false) =>
-    req(`/api/llm/catalog?refresh=${refresh ? 1 : 0}`, { timeoutMs: 120_000 }),
+    req(`/api/llm/catalog?refresh=${refresh ? 1 : 0}`),
   llmSaveCredentials: (provider: string, apiKey: string, baseUrl?: string | null) => req(`/api/llm/credentials/${encodeURIComponent(provider)}`, { method: 'PUT', body: JSON.stringify({ api_key: apiKey, base_url: baseUrl ?? null }) }),
   llmDeleteCredentials: (provider: string) => req(`/api/llm/credentials/${encodeURIComponent(provider)}`, { method: 'DELETE' }),
   llmSavePreferences: (provider: string, model: string) => req('/api/llm/preferences', { method: 'PUT', body: JSON.stringify({ provider, model }) }),

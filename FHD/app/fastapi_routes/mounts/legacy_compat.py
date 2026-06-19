@@ -67,6 +67,13 @@ def register_legacy_compat_routes(app: FastAPI) -> None:
         logger.warning("private_db_read_assistant compat routes skipped: %s", e)
 
     try:
+        from app.fastapi_routes.xcmax_personnel_compat import register_xcmax_personnel_routes
+
+        register_xcmax_personnel_routes(app)
+    except RECOVERABLE_ERRORS as e:
+        logger.warning("xcmax_personnel compat routes skipped: %s", e)
+
+    try:
         from app.fastapi_routes.user_cs_wechat_passive_compat import (
             register_user_cs_wechat_passive_routes,
         )

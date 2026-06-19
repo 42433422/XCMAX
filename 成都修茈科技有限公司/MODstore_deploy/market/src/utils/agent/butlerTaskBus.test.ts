@@ -94,4 +94,87 @@ describe('butlerTaskBus', () => {
     const e2 = publishButlerTask({ source: 's', employeeId: 'e', brief: 'b' })
     expect(e1.eventId).not.toBe(e2.eventId)
   })
+
+  it('trims invalid payloads, skips empty local dispatch, and prunes old seen ids', () => {
+    const handler = vi.fn()
+    const unsub = subscribeButlerTask(handler)
+
+    const empty = publishButlerTask({ source: 's', employeeId: '  ', brief: '  ', maxConcurrency: Number.NaN } as any)
+    expect(empty.employeeId).toBe('')
+    expect(empty.brief).toBe('')
+    expect(empty.maxConcurrency).toBe(2)
+    expect(handler).not.toHaveBeenCalledWith(empty)
+
+    for (let i = 0; i < 125; i++) {
+      publishButlerTask({ source: 's', employeeId: `emp-${i}`, brief: `task-${i}` })
+    }
+    expect(handler).toHaveBeenCalled()
+    unsub()
+  })
+
+  it('falls back to local delivery when BroadcastChannel is unavailable', async () => {
+    vi.resetModules()
+    vi.stubGlobal('BroadcastChannel', undefined)
+    const mod = await import('./butlerTaskBus')
+    const handler = vi.fn()
+    const unsub = mod.subscribeButlerTask(handler)
+    const event = mod.publishButlerTask({ source: 'dynamic', employeeId: 'emp', brief: 'brief' })
+
+    expect(handler).toHaveBeenCalledWith(event)
+    unsub()
+    vi.unstubAllGlobals()
+  })
+
+  it('handles broadcast messages, ignores own events, and suppresses duplicates', async () => {
+    vi.resetModules()
+    const channels: FakeBroadcastChannel[] = []
+    class FakeBroadcastChannel {
+      listeners: Array<(event: MessageEvent) => void> = []
+      postMessage = vi.fn()
+      removeEventListener = vi.fn((type: string, cb: (event: MessageEvent) => void) => {
+        if (type === 'message') this.listeners = this.listeners.filter((item) => item !== cb)
+      })
+
+      constructor(public name: string) {
+        channels.push(this)
+      }
+
+      addEventListener(type: string, cb: (event: MessageEvent) => void) {
+        if (type === 'message') this.listeners.push(cb)
+      }
+
+      emit(data: unknown) {
+        for (const cb of this.listeners) cb({ data } as MessageEvent)
+      }
+    }
+    vi.stubGlobal('BroadcastChannel', FakeBroadcastChannel)
+    const mod = await import('./butlerTaskBus')
+    const received = vi.fn()
+    const unsub = mod.subscribeButlerTask(received)
+    const local = mod.publishButlerTask({ source: 'local', employeeId: 'emp', brief: 'brief' })
+    const channel = channels[0]
+    const posted = channel.postMessage.mock.calls[0][0]
+
+    channel.emit(undefined)
+    channel.emit({ topic: 'other' })
+    channel.emit({ topic: posted.topic, originId: posted.originId, event: local })
+    channel.emit({ topic: posted.topic, originId: 'remote', event: { eventId: 'bad' } })
+
+    const remote = {
+      ...local,
+      eventId: 'remote-event',
+      emittedAt: Date.now() + 1,
+      source: 'remote',
+      employeeId: 'remote-emp',
+      brief: 'remote brief',
+    }
+    channel.emit({ topic: posted.topic, originId: 'remote-origin', event: remote })
+    channel.emit({ topic: posted.topic, originId: 'remote-origin', event: remote })
+
+    expect(received).toHaveBeenCalledWith(remote)
+    expect(received.mock.calls.filter(([event]) => event.eventId === 'remote-event')).toHaveLength(1)
+    unsub()
+    expect(channel.removeEventListener).toHaveBeenCalled()
+    vi.unstubAllGlobals()
+  })
 })

@@ -318,7 +318,7 @@ allRoutes.push(
     path: '/im',
     name: 'im',
     component: () => import('../views/ImMessengerView.vue'),
-    meta: { title: '消息' }
+    meta: { title: '信息' }
   },
   {
     path: '/admin/entitlements',
@@ -365,12 +365,23 @@ allRoutes.push(
     component: () => import('../views/EmployeeWorkspaceView.vue'),
     meta: { title: '员工空间' }
   },
-  {
-    path: '/workflow-employee-space/stitch-full',
-    name: 'workflow-employee-stitch-full',
-    component: () => import('../views/YuangongStitchFullView.vue'),
-    meta: { title: '员工工作流全景' }
-  },
+  ...(isAdminConsoleSpa()
+    ? [
+        {
+          path: '/workflow-employee-space/stitch-full',
+          name: 'workflow-employee-stitch-full',
+          redirect: { name: 'duty-roster-graph' },
+          meta: { title: '管理端六部门可视化' },
+        } as RouteRecordRaw,
+      ]
+    : [
+        {
+          path: '/workflow-employee-space/stitch-full',
+          name: 'workflow-employee-stitch-full',
+          component: () => import('../views/YuangongStitchFullView.vue'),
+          meta: { title: '企业员工工作流全景' },
+        } as RouteRecordRaw,
+      ]),
   {
     path: '/employee-workspace',
     redirect: { name: 'workflow-employee-space' }
@@ -619,7 +630,7 @@ router.beforeEach(async (to, _from, next) => {
         await profile.refreshFromServer();
       }
       if (customerServiceSide === 'admin' && !profile.isAdminAccount) {
-        next({ name: 'enterprise-customer-service' });
+        next({ name: 'im' });
         return;
       }
       if (customerServiceSide === 'enterprise' && profile.isAdminAccount) {

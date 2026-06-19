@@ -23,7 +23,7 @@ android {
         manifestPlaceholders["JPUSH_PKGNAME"] = "com.xiuci.xcagi.mobile"
         manifestPlaceholders["JPUSH_CHANNEL"] = "developer-default"
         manifestPlaceholders["JPUSH_APPKEY"] = "placeholder_replace_in_local_properties"
-        buildConfigField("int", "FHD_DEFAULT_PORT", "5000")
+        buildConfigField("int", "FHD_DEFAULT_PORT", "17500")
         buildConfigField("String", "MODSTORE_BASE_URL", "\"https://xiu-ci.com\"")
         buildConfigField("String", "ENTERPRISE_FHD_BASE_URL", "\"https://xiu-ci.com/fhd-api\"")
         buildConfigField("String", "COMPANY_NAME", "\"成都修茈科技有限公司\"")

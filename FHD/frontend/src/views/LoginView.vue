@@ -233,14 +233,17 @@ async function startQrLogin() {
   errorMessage.value = '';
   qrDataUrl.value = '';
   try {
-    const res = await authApi.issueAuthQr(navigator.userAgent.slice(0, 120));
+    const res = await authApi.issueAuthQr(navigator.userAgent.slice(0, 120), accountKind.value);
     const data =
       (res as { data?: Record<string, unknown> }).data ??
       (res as unknown as Record<string, unknown>);
     qrId.value = String(data.qr_id || '');
     qrPollSecret.value = String(data.poll_secret || '');
     qrExpiresAt.value = Number(data.expires_at || 0);
-    const payload = `xcagi://auth-qr?qr_id=${encodeURIComponent(qrId.value)}`;
+    const qrAccountKind = String(data.account_kind || accountKind.value || 'enterprise');
+    const payload =
+      `xcagi://auth-qr?qr_id=${encodeURIComponent(qrId.value)}` +
+      `&account_kind=${encodeURIComponent(qrAccountKind)}`;
     qrDataUrl.value = await QRCode.toDataURL(payload, { width: 220, margin: 1 });
     qrPollTimer.value = window.setInterval(() => void pollQrStatus(), 2000);
   } catch (error: unknown) {

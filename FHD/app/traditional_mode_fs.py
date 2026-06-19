@@ -27,7 +27,12 @@ def _resolve_root_dir() -> str:
     raw = (os.environ.get("TRADITIONAL_MODE_ROOT") or "").strip()
     root = raw if raw else os.path.join(get_base_dir(), "bang")
     root = os.path.abspath(os.path.expanduser(os.path.expandvars(root)))
-    os.makedirs(root, exist_ok=True)
+    try:
+        os.makedirs(root, exist_ok=True)
+    except PermissionError:
+        fallback_base = os.environ.get("TMPDIR") or "/tmp"
+        root = os.path.abspath(os.path.join(fallback_base, os.path.basename(root)))
+        os.makedirs(root, exist_ok=True)
     return root
 
 

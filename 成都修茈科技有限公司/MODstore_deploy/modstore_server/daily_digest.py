@@ -1183,6 +1183,97 @@ def _surface_meeting_topic(surface_audit_report: Dict[str, Any] | None) -> Tuple
     return question, emp_ids
 
 
+def _surface_audit_meeting_minutes_html(
+    surface_audit_report: Dict[str, Any] | None,
+    *,
+    employee_ids: List[str],
+) -> str:
+    report = surface_audit_report if isinstance(surface_audit_report, dict) else {}
+    results = report.get("results") if isinstance(report.get("results"), list) else []
+    lane_analysis = report.get("lane_analysis") if isinstance(report.get("lane_analysis"), dict) else {}
+    lanes = [("P-W", "网站 P-W"), ("P-S", "软件 P-S"), ("P-App", "移动 P-App")]
+
+    def _row_ok(row: Dict[str, Any]) -> bool:
+        try:
+            status = int(row.get("status") or 0)
+        except Exception:
+            status = 0
+        return status < 400 and not str(row.get("error") or "").strip()
+
+    total = len(results)
+    ok_count = sum(1 for r in results if isinstance(r, dict) and _row_ok(r))
+    bad_rows = [r for r in results if isinstance(r, dict) and not _row_ok(r)]
+    console_count = sum(len(r.get("console_errors") or []) for r in results if isinstance(r, dict))
+    owners_seen: List[str] = []
+    for lane, _label in lanes:
+        la = lane_analysis.get(lane) if isinstance(lane_analysis.get(lane), dict) else {}
+        for owner in la.get("owners") or []:
+            if str(owner).strip() and str(owner).strip() not in owners_seen:
+                owners_seen.append(str(owner).strip())
+    for eid in employee_ids:
+        if str(eid).strip() and str(eid).strip() not in owners_seen:
+            owners_seen.append(str(eid).strip())
+    try:
+        attendance_count = count_on_duty_employees()
+    except Exception:
+        logger.exception("daily digest: count on-duty meeting attendance failed")
+        attendance_count = len(owners_seen)
+    if attendance_count <= 0:
+        attendance_count = len(owners_seen)
+    owner_count = len(owners_seen)
+
+    meta_html = (
+        '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px;font-size:12px;color:#64748b">'
+        f'<span>到会 <strong style="color:#1e293b">{attendance_count}</strong> 人</span>'
+        f'<span style="color:#cbd5e1">·</span><span>产线参会负责人 <strong style="color:#1e293b">{owner_count}</strong> 人</span>'
+        f'<span style="color:#cbd5e1">·</span><span>页面 <strong style="color:#1e293b">{total}</strong></span>'
+        f'<span style="color:#cbd5e1">·</span><span>正常 <strong style="color:#0f766e">{ok_count}</strong></span>'
+        f'<span style="color:#cbd5e1">·</span><span>异常 <strong style="color:#b91c1c">{len(bad_rows)}</strong></span>'
+        f'<span style="color:#cbd5e1">·</span><span>console 告警 <strong style="color:#b45309">{console_count}</strong></span>'
+        "</div>"
+    )
+
+    blocks: List[str] = [
+        '<p style="margin:0 0 10px;font-size:13px;color:#0f172a">'
+        "本次员工大会基于三端页面巡检 manifest、截图与产线分析自动归档；不再在 08:00 邮件链路中实时等待员工 cognition 外部模型调用。"
+        "</p>"
+    ]
+    for lane, label in lanes:
+        rows = [r for r in results if isinstance(r, dict) and str(r.get("lane")) == lane]
+        if not rows:
+            continue
+        la = lane_analysis.get(lane) if isinstance(lane_analysis.get(lane), dict) else {}
+        owners = [str(x) for x in (la.get("owners") or []) if str(x).strip()]
+        if not owners:
+            try:
+                from modstore_server.daily_digest_surface_audit import lane_employee_ids
+
+                owners = [str(x) for x in lane_employee_ids(lane) if str(x).strip()]
+            except Exception:
+                owners = []
+        ok_lane = sum(1 for r in rows if _row_ok(r))
+        bad_lane = len(rows) - ok_lane
+        console_lane = sum(len(r.get("console_errors") or []) for r in rows)
+        md = str(la.get("markdown") or "").strip()
+        if not md:
+            md = f"现状：巡检 {len(rows)} 页，正常 {ok_lane} 页。\\n异常：{bad_lane} 页异常，console 告警 {console_lane} 条。\\n改进建议：按异常页面责任岗位继续排查。"
+        md_html = "<br>".join(html.escape(line) for line in md.splitlines() if line.strip())
+        blocks.append(
+            '<div style="margin:10px 0 0;padding:10px 12px;border:1px solid #dbeafe;border-radius:10px;background:#ffffff">'
+            f'<div style="font-weight:700;color:#0f172a;margin-bottom:4px">{html.escape(label)}</div>'
+            f'<div style="font-size:12px;color:#64748b;margin-bottom:6px">对应员工：{html.escape(", ".join(owners) or "未配置")} · 页面 {len(rows)} · 正常 {ok_lane} · 异常 {bad_lane} · console {console_lane}</div>'
+            f'<div style="font-size:13px;color:#334155;line-height:1.65">{md_html}</div>'
+            "</div>"
+        )
+
+    return (
+        '<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:14px 16px">'
+        + meta_html
+        + "".join(blocks)
+        + "</div>"
+    )
+
+
 def build_meeting_minutes_html_sync(*, surface_audit_report: Dict[str, Any] | None = None) -> str:
     """每日摘要邮件「员工大会摘要」段落 HTML（同步）。
 
@@ -1194,7 +1285,7 @@ def build_meeting_minutes_html_sync(*, surface_audit_report: Dict[str, Any] | No
     - ``MODSTORE_DAILY_MEETING_ENABLED``（默认 ``1``）：关闭则返回空串，邮件不显示该段。
     - ``MODSTORE_DAILY_MEETING_MAX_EMPLOYEES``（默认 ``6``）：单次大会最多多少名员工。
     - ``MODSTORE_DAILY_MEETING_WITH_RESEARCH``（默认 ``0``）：是否开启员工汇报内的联网调研。
-    - ``MODSTORE_DAILY_MEETING_TIMEOUT_SECONDS``（默认 ``600``）：整轮大会硬超时。
+    - ``MODSTORE_DAILY_MEETING_TIMEOUT_SECONDS``（默认 ``240``）：整轮大会硬超时。
     - ``MODSTORE_DAILY_MEETING_USER_ID``（默认 ``MODSTORE_DAILY_BRIEF_USER_ID`` 或 ``0``）。
     """
     enabled = (os.environ.get("MODSTORE_DAILY_MEETING_ENABLED", "1") or "").strip().lower()
@@ -1206,9 +1297,9 @@ def build_meeting_minutes_html_sync(*, surface_audit_report: Dict[str, Any] | No
     except ValueError:
         max_emp = 6
     try:
-        timeout_s = max(60, int(os.environ.get("MODSTORE_DAILY_MEETING_TIMEOUT_SECONDS", "600")))
+        timeout_s = max(60, int(os.environ.get("MODSTORE_DAILY_MEETING_TIMEOUT_SECONDS", "240")))
     except ValueError:
-        timeout_s = 600
+        timeout_s = 240
     with_research = (
         os.environ.get("MODSTORE_DAILY_MEETING_WITH_RESEARCH", "0") or ""
     ).strip().lower() in (
@@ -1232,6 +1323,14 @@ def build_meeting_minutes_html_sync(*, surface_audit_report: Dict[str, Any] | No
         )
 
     topic_question, topic_emp_ids = _surface_meeting_topic(surface_audit_report)
+    use_employee_executor = (
+        os.environ.get("MODSTORE_DAILY_MEETING_USE_EMPLOYEE_EXECUTOR", "0") or ""
+    ).strip().lower() in ("1", "true", "yes", "on")
+    if surface_audit_report and not use_employee_executor:
+        return _surface_audit_meeting_minutes_html(
+            surface_audit_report,
+            employee_ids=topic_emp_ids,
+        )
 
     # 议题模式（有三端巡检）：参会者应覆盖全部相关产线 owner（P-W/P-S/P-App 去重并集），
     # 不能被 MODSTORE_DAILY_MEETING_MAX_EMPLOYEES 默认 6 截断，否则部分产线无人到会。
@@ -1255,7 +1354,7 @@ def build_meeting_minutes_html_sync(*, surface_audit_report: Dict[str, Any] | No
                     user_id=user_id,
                     concurrency=2,
                     user_question=(topic_question or None),
-                    synthesize=bool(topic_question),
+                    synthesize=False,
                 ),
                 timeout=timeout_s,
             )
@@ -1314,6 +1413,55 @@ def build_meeting_minutes_html_sync(*, surface_audit_report: Dict[str, Any] | No
         + body_html
         + "</div>"
     )
+
+
+def _daily_meeting_error_card(msg: str) -> str:
+    return (
+        '<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:14px 16px">'
+        f'<p style="margin:0;font-size:13px;color:#92400e">员工大会未生成摘要：{html.escape(msg)}</p>'
+        "</div>"
+    )
+
+
+def _daily_meeting_outer_timeout_sec() -> int:
+    raw = (
+        os.environ.get("MODSTORE_DAILY_MEETING_OUTER_TIMEOUT_SECONDS")
+        or os.environ.get("MODSTORE_DAILY_MEETING_TIMEOUT_SECONDS")
+        or "300"
+    )
+    try:
+        return max(60, min(int(raw), 900))
+    except Exception:
+        return 300
+
+
+def _build_meeting_minutes_html_bounded(
+    *, surface_audit_report: Dict[str, Any] | None = None
+) -> str:
+    timeout_sec = _daily_meeting_outer_timeout_sec()
+    if timeout_sec <= 0:
+        return build_meeting_minutes_html_sync(surface_audit_report=surface_audit_report)
+
+    from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
+
+    executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="digest-meeting")
+    future = executor.submit(
+        build_meeting_minutes_html_sync,
+        surface_audit_report=surface_audit_report,
+    )
+    try:
+        return future.result(timeout=timeout_sec)
+    except FuturesTimeoutError:
+        logger.error("daily digest: meeting minutes timed out after %ss", timeout_sec)
+        future.cancel()
+        return _daily_meeting_error_card(
+            f"生成超时（>{timeout_sec}s）；三端巡检结果已正常写入日报，可稍后单独补跑员工大会。"
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("daily digest: meeting minutes failed")
+        return _daily_meeting_error_card(f"调度异常：{exc}")
+    finally:
+        executor.shutdown(wait=False, cancel_futures=True)
 
 
 def build_digest_html(
@@ -1802,17 +1950,9 @@ def run_daily_digest_email() -> Dict[str, Any]:
 
         meeting_minutes_html = ""
         if surface_audit_bundle.get("ok"):
-            try:
-                meeting_minutes_html = build_meeting_minutes_html_sync(
-                    surface_audit_report=surface_audit_report
-                )
-            except Exception:
-                logger.exception("daily digest: meeting minutes failed")
-                meeting_minutes_html = (
-                    '<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:14px 16px">'
-                    '<p style="margin:0;font-size:13px;color:#b91c1c">员工大会段落生成失败（见服务器日志）。</p>'
-                    "</div>"
-                )
+            meeting_minutes_html = _build_meeting_minutes_html_bounded(
+                surface_audit_report=surface_audit_report
+            )
         else:
             meeting_minutes_html = (
                 '<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:14px 16px">'

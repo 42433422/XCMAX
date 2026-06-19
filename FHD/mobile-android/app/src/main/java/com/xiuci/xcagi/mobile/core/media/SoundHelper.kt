@@ -13,6 +13,8 @@ import com.xiuci.xcagi.mobile.R
  */
 object SoundHelper {
 
+    private const val SOUND_ENABLED = false
+
     private var pool: SoundPool? = null
     private var soundSuccess: Int = 0
     private var soundError: Int = 0
@@ -21,6 +23,7 @@ object SoundHelper {
     @Volatile private var initialized = false
 
     fun init(context: Context) {
+        if (!SOUND_ENABLED) return
         if (initialized) return
         pool =
                 SoundPool.Builder()
@@ -39,15 +42,18 @@ object SoundHelper {
     }
 
     fun playSuccess() {
-        pool?.play(soundSuccess, 1f, 1f, 0, 0, 1f)
+        if (!SOUND_ENABLED) return
+        pool?.play(soundSuccess, 0.18f, 0.18f, 0, 0, 0.95f)
     }
 
     fun playError() {
-        pool?.play(soundError, 0.7f, 0.7f, 0, 0, 0.85f) // 稍低沉
+        if (!SOUND_ENABLED) return
+        pool?.play(soundError, 0.12f, 0.12f, 0, 0, 0.85f)
     }
 
     fun playNotify() {
-        pool?.play(soundNotify, 0.8f, 0.8f, 0, 0, 1.1f) // 稍高调
+        if (!SOUND_ENABLED) return
+        pool?.play(soundNotify, 0.14f, 0.14f, 0, 0, 1.0f)
     }
 
     fun release() {

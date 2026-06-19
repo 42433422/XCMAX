@@ -42,7 +42,6 @@ import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Stop
-import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -78,6 +77,7 @@ import androidx.compose.ui.unit.sp
 import com.xiuci.xcagi.mobile.R
 import com.xiuci.xcagi.mobile.ui.AppViewModel
 import com.xiuci.xcagi.mobile.ui.ChatSuggestion
+import com.xiuci.xcagi.mobile.model.PinnedIds
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeCell
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeCellGroup
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeModeCapsule
@@ -110,6 +110,9 @@ private fun parseEmployeeConversationRef(conversationId: String?): EmployeeConve
     if (parts.size != 3) return null
     return EmployeeConversationRef(modId = parts[1], employeeId = parts[2])
 }
+
+private fun isCodexConversation(conversationId: String?): Boolean =
+    conversationId?.trim() == PinnedIds.CODEX
 
 private val chatModes = listOf(
     WeModeOption("fast", "快速", Icons.Default.Bolt, "即时响应"),
@@ -149,18 +152,31 @@ fun ChatScreen(
     val modInfos by vm.modInfos.collectAsState()
     val employees = remember(modInfos) { modInfos.aiEmployeeProfiles() }
     val employeeRef = remember(conversationId) { parseEmployeeConversationRef(conversationId) }
+    val codexConversation = remember(conversationId) { isCodexConversation(conversationId) }
     val employeeProfile =
         remember(employeeRef, employees) {
             employeeRef?.let { employees.findEmployee(it.modId, it.employeeId) }
         }
-    val resolvedTitle = employeeProfile?.name ?: conversationTitle
+    val resolvedTitle =
+        when {
+            employeeProfile != null -> employeeProfile.name
+            codexConversation -> "超级员工-Codex"
+            else -> conversationTitle
+        }
     val resolvedProfileAvatar =
-        employeeProfile?.let {
-            ChatTopProfileAvatar(
-                text = it.avatarText,
-                containerColor = aiEmployeeAvatarColor(it.key),
-            )
-        } ?: profileAvatar
+        when {
+            employeeProfile != null ->
+                ChatTopProfileAvatar(
+                    text = employeeProfile.avatarText,
+                    containerColor = aiEmployeeAvatarColor(employeeProfile.key),
+                )
+            codexConversation ->
+                ChatTopProfileAvatar(
+                    text = ">_",
+                    containerColor = Color(0xFF111827),
+                )
+            else -> profileAvatar
+        }
 
     LaunchedEffect(chatMode) { deepThinking = chatMode == "expert" }
 
@@ -801,12 +817,20 @@ fun AiEmployeeListScreen(
                 contentAlignment = Alignment.Center,
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        Icons.Default.SmartToy,
-                        contentDescription = null,
-                        modifier = Modifier.size(48.dp),
-                        tint = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
-                    )
+                    Box(
+                        modifier = Modifier
+                            .size(64.dp)
+                            .clip(RoundedCornerShape(18.dp))
+                            .background(XcagiTheme.extra.brandBlue.copy(alpha = 0.10f)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            Icons.Default.AutoAwesome,
+                            contentDescription = null,
+                            modifier = Modifier.size(34.dp),
+                            tint = XcagiTheme.extra.brandBlue,
+                        )
+                    }
                     Spacer(Modifier.height(Spacing.md))
                     Text(
                         "暂无 AI 员工",
@@ -865,7 +889,7 @@ fun AiEmployeeListScreen(
                                 Color(0xFFF39C12), Color(0xFF9B59B6), Color(0xFF1ABC9C),
                                 Color(0xFFE67E22), Color(0xFF3498DB),
                             )
-                            val avatarColor = avatarColors[kotlin.math.abs(employee.key.hashCode()) % avatarColors.size]
+                            val avatarColor = avatarColors[Math.floorMod(employee.key.hashCode(), avatarColors.size)]
 	                            Box(
 	                                Modifier
 	                                    .size(44.dp)
@@ -898,6 +922,13 @@ fun AiEmployeeListScreen(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     maxLines = 1,
                                 )
+                                Spacer(Modifier.height(2.dp))
+                                Text(
+                                    employee.contactLine(),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = XcagiTheme.extra.brandBlue,
+                                    maxLines = 1,
+                                )
                             }
 
                             // 右箭头
@@ -915,3 +946,18 @@ fun AiEmployeeListScreen(
         }
     }
 }
+
+private fun AiEmployeeProfile.contactLine(): String =
+    listOf(
+        phoneChannel.contactChannelLabel(),
+        employeeId.takeIf { it.isNotBlank() }?.let { "AI号 $it" }.orEmpty(),
+        apiBasePath.takeIf { it.isNotBlank() }?.let { "入口 $it" }.orEmpty(),
+    ).filter { it.isNotBlank() }.joinToString(" · ")
+
+private fun String.contactChannelLabel(): String =
+    when (trim()) {
+        "admin-duty" -> "管理端工作台"
+        "mobile", "mobile-chat" -> "手机端会话"
+        "" -> ""
+        else -> trim()
+    }

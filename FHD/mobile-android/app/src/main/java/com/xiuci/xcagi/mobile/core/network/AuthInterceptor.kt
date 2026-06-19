@@ -11,9 +11,48 @@ import okhttp3.Response
 import javax.inject.Inject
 import javax.inject.Singleton
 
+internal object AuthHeaderPolicy {
+    private fun normalizedBase(base: String): String = base.trim().trimEnd('/')
+
+    fun isEnterpriseFhdRequest(url: String, enterpriseFhdBaseUrl: String): Boolean {
+        val base = normalizedBase(enterpriseFhdBaseUrl)
+        if (base.isBlank()) return false
+        return url == base || url.startsWith("$base/")
+    }
+
+    fun isModstoreRequest(
+        url: String,
+        modstoreBaseUrl: String,
+        enterpriseFhdBaseUrl: String,
+    ): Boolean {
+        val base = normalizedBase(modstoreBaseUrl)
+        if (base.isBlank()) return false
+        return (url == base || url.startsWith("$base/")) &&
+            !isEnterpriseFhdRequest(url, enterpriseFhdBaseUrl)
+    }
+
+    fun selectBearer(
+        url: String,
+        fhdToken: String,
+        marketToken: String,
+        modstoreBaseUrl: String,
+        enterpriseFhdBaseUrl: String,
+    ): String {
+        val fhd = fhdToken.trim()
+        val market = marketToken.trim()
+        return when {
+            isEnterpriseFhdRequest(url, enterpriseFhdBaseUrl) -> fhd
+            isModstoreRequest(url, modstoreBaseUrl, enterpriseFhdBaseUrl) -> market
+            fhd.isNotBlank() -> fhd
+            else -> market
+        }
+    }
+}
+
 @Singleton
 class AuthInterceptor @Inject constructor(
     private val sessionStore: SessionStore,
+    private val cookieJar: MobileCookieJar,
 ) : Interceptor {
     private fun isPublicAuthWriteRequest(url: HttpUrl): Boolean {
         val path = url.encodedPath.trimEnd('/')
@@ -23,7 +62,11 @@ class AuthInterceptor @Inject constructor(
             path.endsWith("/api/mobile/v1/auth/login-with-phone-code") ||
             path.endsWith("/api/mobile/v1/auth/refresh") ||
             path.endsWith("/api/mobile/v1/auth/oidc/exchange") ||
-            path.endsWith("/api/mobile/v1/auth/qr/confirm")
+            path.endsWith("/api/mobile/v1/auth/qr/confirm") ||
+            path.endsWith("/api/mobile/v1/pairing/issue") ||
+            path.endsWith("/api/mobile/v1/pairing/exchange") ||
+            path.endsWith("/api/mobile/v1/relay/mobile/confirm") ||
+            path.endsWith("/api/mobile/v1/relay/mobile/confirm-code")
     }
 
     override fun intercept(chain: Interceptor.Chain): Response {
@@ -31,19 +74,24 @@ class AuthInterceptor @Inject constructor(
         val marketToken = runBlocking { sessionStore.marketTokenFlow.first() }
         val request = chain.request()
         val url = request.url.toString()
-        val modstoreHost = BuildConfig.MODSTORE_BASE_URL.trimEnd('/')
-        val isModstore = url.startsWith(modstoreHost)
-
-        val bearer = when {
-            isModstore && marketToken.isNotBlank() -> marketToken
-            fhdToken.isNotBlank() -> fhdToken
-            marketToken.isNotBlank() -> marketToken
-            else -> ""
-        }
+        val bearer =
+            AuthHeaderPolicy.selectBearer(
+                url = url,
+                fhdToken = fhdToken,
+                marketToken = marketToken,
+                modstoreBaseUrl = BuildConfig.MODSTORE_BASE_URL,
+                enterpriseFhdBaseUrl = BuildConfig.ENTERPRISE_FHD_BASE_URL,
+            )
 
         val builder = request.newBuilder()
             .header("X-XCAGI-Client", "android")
             .header("X-XCAGI-SKU", ProductSkuConfig.sku)
+        if (request.method.uppercase() in setOf("POST", "PUT", "PATCH", "DELETE")) {
+            val csrf = cookieJar.csrfToken(request.url)
+            if (csrf.isNotBlank()) {
+                builder.header("X-CSRF-Token", csrf)
+            }
+        }
         if (!isPublicAuthWriteRequest(request.url) && bearer.isNotBlank()) {
             builder.header("Authorization", "Bearer $bearer")
         }

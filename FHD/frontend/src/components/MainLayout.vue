@@ -277,12 +277,12 @@ const viewTitlesBase = {
   'template-preview': '模板库',
   console: '模板库',
   settings: '系统设置',
-  im: '消息',
+  im: '信息',
   tools: '工具表',
   'other-tools': '员工视图',
   'employee-workflow': '员工工作台',
   'workflow-employee-space': '员工空间',
-  'workflow-visualization': '流程全景',
+  'workflow-visualization': '流程可视化',
   purchase: '耗材申领',
   'label-editor': '模板编辑器',
   'batch-analyze': '批量分析',
@@ -546,9 +546,9 @@ const ensureSidebarExpandedForTutorial = () => {
 }
 
 const scheduleSidebarAutoCollapse = () => {
+  clearSidebarCollapseTimer()
   if (isAnyTutorialActive.value) return
   if (!isSidebarFeatureEnabled.value || sidebarCollapsed.value) return
-  clearSidebarCollapseTimer()
   sidebarCollapseTimer = window.setTimeout(() => {
     if (isAnyTutorialActive.value) return
     sidebarCollapsed.value = true

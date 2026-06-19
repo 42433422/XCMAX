@@ -363,7 +363,7 @@
 | **v2.0** | 稳定 | Vue 3 + AI 对话 + OCR |
 | **v3.0** | 稳定 | 混合意图引擎 + TTS + 任务 Agent |
 | **v4.0** | 稳定 | AI 员工定位 + 全自动流程 + 多模态交互 |
-| **v5.0** | 稳定 | Neuro-DDD 架构 + 小程序 + 性能监控 + 审批流 |
+| **v5.0** | 稳定 | Neuro-DDD 架构 + 性能监控 + 审批流 |
 | **v6.0** | 稳定 | **商业模式明确 + 三层收入 + Mod 生态** |
 | **v7.0** | 稳定 | **Windows/macOS 桌面版 + Web 版并行交付 + 自动更新** |
 | **v8.0** | 稳定 | **跨行业 UI 适配 + Mod 制作端行业选择 + 平台壳 V8** |
@@ -708,7 +708,6 @@ docker-compose pull && docker-compose up -d
 - 🧠 **Neuro-DDD 架构** - 神经领域驱动设计，12 个神经域（含 `ShipmentNeuroDomain`）
 - 🚌 **NeuroBus** - 8 大可靠性机制（去重、限流、熔断、追踪、SLA 等）
 - ⚡ **神经反射弧** - <1ms 超快响应
-- 📱 **小程序支持** - 微信小程序完整 CRM 功能
 
 ### 🆕 新增核心能力
 
@@ -718,7 +717,6 @@ docker-compose pull && docker-compose up -d
 | **NeuroBus 8 大机制** | 去重、追踪、限流、熔断、SLA 等 | ⭐⭐⭐⭐⭐ |
 | **神经反射弧** | <1ms 规则匹配快速响应 | ⭐⭐⭐⭐ |
 | **潜意识/显意识双模** | <10ms / <200ms 双模处理 | ⭐⭐⭐⭐ |
-| **小程序 API** | 微信小程序完整功能 | ⭐⭐⭐⭐ |
 | **审批流** | 多级审批流程支持 | ⭐⭐⭐⭐ |
 | **FastAPI 主入口** | `XCAGI/run.py` → `app.fastapi_app:get_fastapi_app`；Flask 已拆除 | ⭐⭐⭐⭐⭐ |
 
@@ -865,7 +863,6 @@ Python + openpyxl + SQLite + TSC 打印机
 | **Neuro-DDD / NeuroBus** | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | **神经反射弧 (<1ms)** | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | **FastAPI 唯一入口** | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| **小程序 API** | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | **审批流** | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | **Mod 商店 / 员工商店** | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ | ✅ | ✅ |
 | **Token 认证钱包** | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ | ✅ | ✅ |
@@ -920,7 +917,7 @@ Python 3.11 + FastAPI 0.110 + Uvicorn + Vue 3.4 + Vite 6 + TypeScript 5
     + SQLAlchemy 2 + Alembic + PostgreSQL 16 + pgvector
     + Neuro-DDD 分层 + NeuroBus 8 大机制 + 12 神经域
     + DeepSeek / BERT / PaddleOCR / EasyOCR
-    + MODstore / Mod Manager + 微信小程序 + 审批流
+    + MODstore / Mod Manager + 审批流
 ```
 
 ### v6.0

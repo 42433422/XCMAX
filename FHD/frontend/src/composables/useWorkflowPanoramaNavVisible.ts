@@ -5,7 +5,7 @@ import { useModsStore } from '@/stores/mods'
 import { isClientErpSidebarContext } from '@/constants/genericModPack'
 import { buildRoleMenuProfile, canShowCoreMenuKey } from '@/utils/roleMenuProfile'
 
-/** 企业端隐藏「流程全景」；管理端运维壳保留。 */
+/** 企业端隐藏「流程可视化」；管理端运维壳保留。 */
 export function useWorkflowPanoramaNavVisible() {
   const accountProfileStore = useAccountProfileStore()
   const modsStore = useModsStore()

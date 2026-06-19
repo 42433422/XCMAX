@@ -340,6 +340,7 @@
 .trace-list li {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: 6px;
     font-size: 12px;
     margin-top: 4px;
@@ -360,6 +361,26 @@
 .trace-status.fail {
     background: #fee2e2;
     color: #991b1b;
+}
+
+.trace-node-meta,
+.trace-node-error,
+.trace-node-hint {
+    flex-basis: 100%;
+    margin-left: 56px;
+    line-height: 1.4;
+}
+
+.trace-node-meta {
+    color: #475569;
+}
+
+.trace-node-error {
+    color: #991b1b;
+}
+
+.trace-node-hint {
+    color: #1e3a8a;
 }
 
 .message .time {

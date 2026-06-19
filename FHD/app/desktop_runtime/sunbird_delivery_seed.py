@@ -56,7 +56,11 @@ def _has_seed_payload(path: Path) -> bool:
 
 
 def _roster_candidates(data_root: Path) -> list[Path]:
-    return [root / "config" / ROSTER_FILENAME for root in _seed_root_candidates(data_root)]
+    root = data_root.resolve()
+    return [
+        root / "config" / ROSTER_FILENAME,
+        root.parent / "config" / ROSTER_FILENAME,
+    ]
 
 
 def _marker_path(data_root: Path) -> Path:
@@ -175,9 +179,7 @@ def apply_sunbird_roster_seed_if_needed(data_root: Path | None = None) -> bool:
             if existing_products > 0:
                 marker.parent.mkdir(parents=True, exist_ok=True)
                 marker.write_text("skipped:products_already_present\n", encoding="utf-8")
-                logger.info(
-                    "太阳鸟花名册跳过：主库已有 %s 条人员", existing_products
-                )
+                logger.info("太阳鸟花名册跳过：主库已有 %s 条人员", existing_products)
                 return False
 
             for row in employees:
@@ -225,9 +227,7 @@ def apply_sunbird_roster_seed_if_needed(data_root: Path | None = None) -> bool:
         + "\n",
         encoding="utf-8",
     )
-    logger.info(
-        "太阳鸟花名册已写入主库：products=%s customers=%s", prod_rows, cust_rows
-    )
+    logger.info("太阳鸟花名册已写入主库：products=%s customers=%s", prod_rows, cust_rows)
     return True
 
 

@@ -8,6 +8,7 @@ Tests: ``set_service_registry(CustomServiceContainer(...))`` or ``reset_service_
 from __future__ import annotations
 
 import threading
+from pathlib import Path
 from typing import TYPE_CHECKING, Optional, cast
 
 if TYPE_CHECKING:
@@ -17,11 +18,16 @@ if TYPE_CHECKING:
         ShipmentApplicationServiceEventPrimary,
     )
     from app.application.file_analysis_app_service import FileAnalysisService
+    from app.application.ports.wechat_contact_store import WechatContactStorePort
     from app.application.shipment_app_service import ShipmentApplicationService
+    from app.application.template_app_service import TemplateApplicationService
     from app.application.unit_products_import_app_service import UnitProductsImportService
     from app.application.wechat_contact_app_service import WechatContactApplicationService
-    from app.application.ports.wechat_contact_store import WechatContactStorePort
     from app.services.auth_service import AuthService
+    from app.services.extract_log_service import ExtractLogService
+    from app.services.materials_service import MaterialsService
+    from app.services.product_import_service import ProductImportService
+    from app.services.products_service import ProductsService
     from app.services.session_service import SessionService
     from app.services.user_preference_service import UserPreferenceService
     from app.services.user_service import UserService
@@ -42,6 +48,11 @@ class ServiceContainer:
         "_ai_chat_application_service",
         "_unit_products_import_application_service",
         "_file_analysis_application_service",
+        "_template_application_service",
+        "_materials_service",
+        "_products_service",
+        "_extract_log_service",
+        "_product_import_service",
         "_wechat_contact_store",
         "_wechat_contact_application_service",
         "_shipment_application_service_core",
@@ -57,6 +68,11 @@ class ServiceContainer:
         self._ai_chat_application_service = None
         self._unit_products_import_application_service = None
         self._file_analysis_application_service = None
+        self._template_application_service = None
+        self._materials_service = None
+        self._products_service = None
+        self._extract_log_service = None
+        self._product_import_service = None
         self._wechat_contact_store: WechatContactStorePort | None = None
         self._wechat_contact_application_service = None
         self._shipment_application_service_core = None
@@ -143,6 +159,61 @@ class ServiceContainer:
         return cast(
             "FileAnalysisService",
             self._lazy("_file_analysis_application_service", FileAnalysisService),
+        )
+
+    @property
+    def template_application_service(self) -> TemplateApplicationService:
+        def _factory() -> TemplateApplicationService:
+            from app.application.template_app_service import TemplateApplicationService
+            from app.infrastructure.templates.template_store_impl import FileSystemTemplateStore
+
+            base_dir = str(Path(__file__).resolve().parents[2])
+            return TemplateApplicationService(FileSystemTemplateStore(base_dir=base_dir))
+
+        return cast(
+            "TemplateApplicationService",
+            self._lazy("_template_application_service", _factory),
+        )
+
+    def set_template_application_service(self, service: TemplateApplicationService | None) -> None:
+        self._template_application_service = service
+
+    @property
+    def materials_service(self) -> MaterialsService:
+        def _factory() -> MaterialsService:
+            from app.infrastructure.persistence.material_repository_impl import (
+                SQLAlchemyMaterialRepository,
+            )
+            from app.services.materials_service import MaterialsService
+
+            return MaterialsService(SQLAlchemyMaterialRepository())
+
+        return cast("MaterialsService", self._lazy("_materials_service", _factory))
+
+    @property
+    def products_service(self) -> ProductsService:
+        def _factory() -> ProductsService:
+            from app.mod_sdk.erp_repository_registry import resolve_products_repository
+            from app.services.products_service import ProductsService
+
+            repo, _provider = resolve_products_repository()
+            return ProductsService(repo)
+
+        return cast("ProductsService", self._lazy("_products_service", _factory))
+
+    @property
+    def extract_log_service(self) -> ExtractLogService:
+        from app.services.extract_log_service import ExtractLogService
+
+        return cast("ExtractLogService", self._lazy("_extract_log_service", ExtractLogService))
+
+    @property
+    def product_import_service(self) -> ProductImportService:
+        from app.services.product_import_service import ProductImportService
+
+        return cast(
+            "ProductImportService",
+            self._lazy("_product_import_service", ProductImportService),
         )
 
     @property

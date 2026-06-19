@@ -35,7 +35,10 @@ class ProductImportApplicationService:
         Returns:
             导入结果
         """
-        return cast("dict[str, Any]", self._product_import_service.import_products_from_excel(file_path, unit_name))
+        return cast(
+            "dict[str, Any]",
+            self._product_import_service.import_products_from_excel(file_path, unit_name),
+        )
 
     def import_from_data(self, products: list[dict[str, Any]], unit_name: str) -> dict[str, Any]:
         """
@@ -48,7 +51,9 @@ class ProductImportApplicationService:
         Returns:
             导入结果
         """
-        return cast("dict[str, Any]", self._product_import_service.batch_add_products(products, unit_name))
+        return cast(
+            "dict[str, Any]", self._product_import_service.batch_add_products(products, unit_name)
+        )
 
     def validate_import_data(self, products: list[dict[str, Any]]) -> dict[str, Any]:
         """
@@ -73,7 +78,10 @@ class ProductImportApplicationService:
         Returns:
             导入历史和分页信息
         """
-        return cast("dict[str, Any]", self._product_import_service.get_import_history(page=page, per_page=per_page))
+        return cast(
+            "dict[str, Any]",
+            self._product_import_service.get_import_history(page=page, per_page=per_page),
+        )
 
 
 from app.neuro_bus.neuro_application_instrumentation import instrument_application_service_class

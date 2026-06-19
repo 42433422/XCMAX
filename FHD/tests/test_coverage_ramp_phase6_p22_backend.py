@@ -158,7 +158,7 @@ class TestAiAssistantBranches:
         """doc_name 缺失时使用 file_path 的 basename。"""
         client = _ai_assistant_client()
         with (
-            patch("app.routes.tools._parse_order_text") as mock_parse,
+            patch("app.application.facades.tools_facade._parse_order_text") as mock_parse,
             patch.object(ai_assistant, "_shipment_svc") as mock_svc_get,
         ):
             mock_parse.return_value = {
@@ -188,7 +188,7 @@ class TestAiAssistantBranches:
         """file_path 和 doc_name 都缺失 → download_url 为 None。"""
         client = _ai_assistant_client()
         with (
-            patch("app.routes.tools._parse_order_text") as mock_parse,
+            patch("app.application.facades.tools_facade._parse_order_text") as mock_parse,
             patch.object(ai_assistant, "_shipment_svc") as mock_svc_get,
         ):
             mock_parse.return_value = {
@@ -216,7 +216,7 @@ class TestAiAssistantBranches:
         """template_name 应透传到 service。"""
         client = _ai_assistant_client()
         with (
-            patch("app.routes.tools._parse_order_text") as mock_parse,
+            patch("app.application.facades.tools_facade._parse_order_text") as mock_parse,
             patch.object(ai_assistant, "_shipment_svc") as mock_svc_get,
         ):
             mock_parse.return_value = {
@@ -242,7 +242,7 @@ class TestAiAssistantBranches:
     def test_compat_ai_generate_parse_success_no_unit_name_returns_400(self) -> None:
         """解析成功但 unit_name 为空 → 400。"""
         client = _ai_assistant_client()
-        with patch("app.routes.tools._parse_order_text") as mock_parse:
+        with patch("app.application.facades.tools_facade._parse_order_text") as mock_parse:
             mock_parse.return_value = {
                 "success": True,
                 "unit_name": "",
@@ -255,7 +255,7 @@ class TestAiAssistantBranches:
     def test_compat_ai_generate_parse_success_no_products_returns_400(self) -> None:
         """解析成功但 products 为空 → 400。"""
         client = _ai_assistant_client()
-        with patch("app.routes.tools._parse_order_text") as mock_parse:
+        with patch("app.application.facades.tools_facade._parse_order_text") as mock_parse:
             mock_parse.return_value = {
                 "success": True,
                 "unit_name": "甲公司",
@@ -267,7 +267,7 @@ class TestAiAssistantBranches:
     def test_compat_ai_generate_parse_success_products_none_returns_400(self) -> None:
         """解析成功但 products 为 None → 400。"""
         client = _ai_assistant_client()
-        with patch("app.routes.tools._parse_order_text") as mock_parse:
+        with patch("app.application.facades.tools_facade._parse_order_text") as mock_parse:
             mock_parse.return_value = {
                 "success": True,
                 "unit_name": "甲公司",
@@ -279,7 +279,7 @@ class TestAiAssistantBranches:
     def test_compat_ai_generate_parse_no_message_uses_default(self) -> None:
         """解析失败但无 message → 使用默认错误信息。"""
         client = _ai_assistant_client()
-        with patch("app.routes.tools._parse_order_text") as mock_parse:
+        with patch("app.application.facades.tools_facade._parse_order_text") as mock_parse:
             mock_parse.return_value = {"success": False}  # 无 message
             resp = client.post("/api/generate", json={"order_text": "x"})
         assert resp.status_code == 400

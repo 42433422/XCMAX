@@ -28,15 +28,18 @@ class OpenAISdkProvider:
         **kwargs: Any,
     ) -> dict[str, Any] | None:
         import asyncio
-        import os
 
-        from app.infrastructure.llm.client import get_llm_client, require_api_key
+        from app.infrastructure.llm.client import (
+            get_llm_client,
+            require_api_key,
+            resolve_chat_model,
+        )
 
         require_api_key()
         client = get_llm_client()
         if client is None:
             return None
-        model_name = model or (os.environ.get("OPENAI_MODEL") or "").strip() or "deepseek-chat"
+        model_name = model or resolve_chat_model()
         t0 = time.perf_counter()
 
         def _sync_call() -> dict[str, Any]:

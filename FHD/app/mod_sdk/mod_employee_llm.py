@@ -5,7 +5,7 @@ Mod 员工脚本用的窄 LLM 入口（经 ``app.mod_sdk`` 暴露）。
 避免 Mod 代码直接依赖 ``app.services.*`` 或 ``modstore_server``。
 
 支持 OpenAI 兼容 Chat Completions：
-- 默认委托 ``AIConversationService.call_deepseek_api``（与宿主 DEEPSEEK 配置一致）。
+- 默认委托 ``AIConversationService.call_deepseek_api`` 兼容别名（实际走宿主统一 LLM Provider）。
 - 可选：设置 ``XCAGI_LLM_PROVIDER`` + ``{PROVIDER}_API_KEY`` + ``{PROVIDER}_BASE_URL``（或内置默认 URL）
   时，对该 URL 直接发起 ``httpx`` 请求（真正切换供应商，而非仅改文案）。
 """
@@ -23,7 +23,20 @@ logger = logging.getLogger(__name__)
 _DEFAULT_CHAT_URLS: dict[str, str] = {
     "deepseek": "https://api.deepseek.com/v1/chat/completions",
     "openai": "https://api.openai.com/v1/chat/completions",
+    "xcauto": "https://xiu-ci.com/v1/chat/completions",
+    "xiuci": "https://xiu-ci.com/v1/chat/completions",
 }
+
+
+def _chat_url_from_base_url(base_url: str) -> str:
+    base = str(base_url or "").strip().rstrip("/")
+    if not base:
+        return ""
+    if base.endswith("/chat/completions"):
+        return base
+    if any(base.endswith(f"/v{i}") for i in range(1, 6)):
+        return f"{base}/chat/completions"
+    return f"{base}/v1/chat/completions"
 
 
 def _resolve_provider_override() -> dict[str, Any]:
@@ -41,6 +54,21 @@ def _resolve_provider_override() -> dict[str, Any]:
         if bu:
             base_url = bu.rstrip("/")
         model = os.environ.get(f"{provider.upper()}_MODEL", "").strip() or None
+    else:
+        try:
+            from app.infrastructure.llm.providers.credentials import (
+                resolve_default_chat_model,
+                resolve_default_openai_provider,
+                resolve_openai_env_credentials,
+            )
+
+            api_key, base_url = resolve_openai_env_credentials()
+            provider = resolve_default_openai_provider()
+            model = resolve_default_chat_model()
+        except RECOVERABLE_ERRORS:
+            logger.debug(
+                "mod_employee_complete: unified LLM credentials unavailable", exc_info=True
+            )
 
     if not api_key or not provider:
         return {"use_direct": False}
@@ -53,11 +81,15 @@ def _resolve_provider_override() -> dict[str, Any]:
             "error": f"未设置 {provider.upper()}_BASE_URL，且无内置默认 chat/completions URL",
         }
 
-    chat_url = base_url if "/chat/completions" in base_url else f"{base_url}/v1/chat/completions"
+    chat_url = _chat_url_from_base_url(base_url)
 
     if not model:
         model = os.environ.get("XCAGI_EMPLOYEE_LLM_MODEL", "").strip() or (
-            "gpt-4o-mini" if provider == "openai" else "deepseek-chat"
+            "xcauto-account"
+            if provider in {"xcauto", "xiuci"}
+            else "gpt-4o-mini"
+            if provider == "openai"
+            else "deepseek-chat"
         )
 
     return {
@@ -151,11 +183,17 @@ async def mod_employee_complete(
         }
 
     svc = get_ai_conversation_service()
-    if not getattr(svc, "api_key", None):
+    try:
+        from app.infrastructure.llm.providers.registry import get_active_provider
+
+        active_provider = get_active_provider(conversation_service=svc)
+    except RECOVERABLE_ERRORS:
+        active_provider = None
+    if active_provider is None:
         return {
             "success": False,
             "content": "",
-            "error": "宿主未配置 DEEPSEEK_API_KEY（或 resources/config/deepseek_config.py），无法为员工调用 LLM",
+            "error": "宿主未配置 OpenAI-compatible/XCauto LLM 凭证，无法为员工调用 LLM",
         }
 
     kwargs: dict[str, Any] = {}

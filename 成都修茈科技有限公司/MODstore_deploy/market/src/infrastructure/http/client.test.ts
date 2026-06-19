@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { ApiError, requestJson, fetchZipBlob, requestBlob } from './client'
+import { ApiError, requestJson, fetchZipBlob, requestBlob, requestStreamBlob } from './client'
 import { getAccessToken, getRefreshToken, setAuthTokens, clearAuthTokens } from '../storage/tokenStore'
 
 vi.mock('../storage/tokenStore', () => ({
@@ -133,6 +133,54 @@ describe('requestJson', () => {
     vi.unstubAllGlobals()
   })
 
+  it('attaches csrf headers and formats structured or html errors', async () => {
+    vi.mocked(getAccessToken).mockReturnValue('')
+    document.cookie = 'csrf_token=csrf%20value'
+    const mockFetch = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        text: () => Promise.resolve('{"ok":true}'),
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 400,
+        statusText: 'Bad Request',
+        text: () => Promise.resolve('{"detail":[{"msg":"field missing"},{"type":"bad"}]}'),
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 502,
+        statusText: 'Bad Gateway',
+        text: () => Promise.resolve('<html><body>Bad Gateway</body></html>'),
+      })
+    vi.stubGlobal('fetch', mockFetch)
+
+    await requestJson('/api/csrf', { method: 'POST', body: '{}' })
+    expect((mockFetch.mock.calls[0][1].headers as Headers).get('X-CSRF-Token')).toBe('csrf value')
+    await expect(requestJson('/api/validation')).rejects.toThrow('field missing')
+    await expect(requestJson('/api/html')).rejects.toThrow('HTTP 502 Bad Gateway')
+
+    vi.unstubAllGlobals()
+  })
+
+  it('reports timeout aborts as ApiError 408', async () => {
+    vi.useFakeTimers()
+    const mockFetch = vi.fn((_url: string, init: RequestInit) => new Promise((_resolve, reject) => {
+      init.signal?.addEventListener('abort', () => {
+        reject(Object.assign(new Error('aborted'), { name: 'AbortError' }))
+      })
+    }))
+    vi.stubGlobal('fetch', mockFetch)
+
+    const pending = requestJson('/api/slow', { timeoutMs: 25 })
+    const assertion = expect(pending).rejects.toMatchObject({ status: 408 })
+    await vi.advanceTimersByTimeAsync(30)
+    await assertion
+
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
+  })
+
   it('attempts token refresh on 401', async () => {
     vi.mocked(getAccessToken).mockReturnValue('expired-token')
     vi.mocked(getRefreshToken).mockReturnValue('refresh-token')
@@ -224,6 +272,68 @@ describe('fetchZipBlob', () => {
     vi.stubGlobal('fetch', mockFetch)
 
     await expect(fetchZipBlob('/api/download')).rejects.toThrow()
+
+    vi.unstubAllGlobals()
+  })
+})
+
+describe('requestBlob and stream blobs', () => {
+  it('refreshes auth for binary requests and returns blob', async () => {
+    vi.mocked(getAccessToken).mockReturnValue('expired-token')
+    vi.mocked(getRefreshToken).mockReturnValue('refresh-token')
+    const blob = new Blob(['ok'], { type: 'text/plain' })
+    const mockFetch = vi.fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        statusText: 'Unauthorized',
+        json: () => Promise.resolve({ detail: 'expired' }),
+        text: () => Promise.resolve('expired'),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        text: () => Promise.resolve('{"access_token":"new-token"}'),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        blob: () => Promise.resolve(blob),
+      })
+    vi.stubGlobal('fetch', mockFetch)
+
+    await expect(requestBlob('/api/blob')).resolves.toBe(blob)
+    expect(setAuthTokens).toHaveBeenCalledWith({ access_token: 'new-token' })
+
+    vi.unstubAllGlobals()
+  })
+
+  it('merges streamed chunks and falls back to response blob without reader', async () => {
+    const chunks = [new Uint8Array([1, 2]), new Uint8Array([3])]
+    const reader = {
+      read: vi.fn()
+        .mockResolvedValueOnce({ done: false, value: chunks[0] })
+        .mockResolvedValueOnce({ done: false, value: chunks[1] })
+        .mockResolvedValueOnce({ done: true }),
+      releaseLock: vi.fn(),
+    }
+    const fallback = new Blob(['fallback'], { type: 'audio/wav' })
+    const mockFetch = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'content-type': 'audio/ogg' }),
+        body: { getReader: () => reader },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers(),
+        body: null,
+        blob: () => Promise.resolve(fallback),
+      })
+    vi.stubGlobal('fetch', mockFetch)
+
+    const streamed = await requestStreamBlob('/api/stream')
+    expect(streamed.type).toBe('audio/ogg')
+    expect(reader.releaseLock).toHaveBeenCalled()
+    await expect(requestStreamBlob('/api/no-reader')).resolves.toBe(fallback)
 
     vi.unstubAllGlobals()
   })

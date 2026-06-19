@@ -402,6 +402,21 @@ async def auth_forgot_password_send_code(body: dict = Body(default_factory=dict)
             status_code=400,
         )
     local_users = _find_local_users_by_email(email)
+    try:
+        from app.application.auth_app_service import get_auth_app_service
+
+        svc = get_auth_app_service()
+        send_local = getattr(svc, "send_password_reset_code", None)
+        if callable(send_local):
+            local_result = send_local(email)
+            if isinstance(local_result, dict) and local_result.get("success"):
+                return {
+                    "success": True,
+                    "message": local_result.get("message", "若该邮箱已注册，将收到验证码"),
+                    "data": {"local_user_count": len(local_users)},
+                }
+    except Exception:  # noqa: BLE001
+        pass
     result = await send_market_reset_password_code(email)
     if not result.get("success"):
         hint = result.get("message", "发送失败")
@@ -788,10 +803,16 @@ async def auth_oidc_callback(request: Request):
 
 @router.post("/api/auth/qr/issue")
 async def auth_qr_issue(request: Request, body: dict = Body(default_factory=dict)):
+    from app.application.session_account_meta import normalize_account_kind
     from app.security.auth_qr_login import issue_auth_qr
 
     client_hint = str(body.get("client_hint") or request.headers.get("User-Agent") or "")[:256]
-    data = issue_auth_qr(client_hint=client_hint)
+    kwargs: dict[str, Any] = {"client_hint": client_hint}
+    if "account_kind" in body:
+        kwargs["account_kind"] = normalize_account_kind(
+            body.get("account_kind"), default="enterprise"
+        )
+    data = issue_auth_qr(**kwargs)
     return {"success": True, "data": data}
 
 

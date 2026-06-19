@@ -31,6 +31,7 @@ struct Index {
   @State private displayName: string = '企业用户';
   @State private companyBrand: string = '修辞企业版';
   @State private accountKind: string = 'enterprise';
+  @State private loginAccountKind: string = 'admin';
   @State private statusText: string = '连接企业端移动服务';
   @State private loading: boolean = false;
   @State private loggedIn: boolean = false;
@@ -65,158 +66,256 @@ struct Index {
 
   @Builder
   LoginScreen() {
-    Column() {
-      Blank()
-        .height(36);
-
-      Row() {
-        Column({ space: 4 }) {
-          Text('XCAGI 企业移动端')
-            .fontSize(26)
-            .fontWeight(FontWeight.Bold)
-            .fontColor('#111827');
-          Text('登录企业端后同步员工、会话和业务能力')
-            .fontSize(15)
-            .fontColor('#374151');
-        }
-        .alignItems(HorizontalAlign.Start)
-        .layoutWeight(1);
-
-        Text('C')
-          .width(48)
-          .height(48)
-          .borderRadius(16)
-          .fontSize(20)
-          .fontWeight(FontWeight.Bold)
-          .fontColor('#FFFFFF')
-          .textAlign(TextAlign.Center)
-          .backgroundColor('#18A85F');
-      }
-      .width('100%')
-      .padding({ left: 22, right: 22, top: 18, bottom: 18 });
-
-      Column({ space: 14 }) {
-        this.FieldLabel('企业服务地址');
-        TextInput({ placeholder: '例如 http://192.168.1.10:5000', text: this.baseUrl })
-          .height(48)
-          .fontSize(15)
-          .fontColor('#111827')
-          .placeholderColor('#6B7280')
-          .backgroundColor('#FFFFFF')
-          .borderRadius(12)
-          .padding({ left: 14, right: 14 })
-          .onChange((value: string) => {
-            this.baseUrl = value;
-          });
-
-        this.FieldLabel('管理员账号');
-        TextInput({ placeholder: '企业端管理员账号', text: this.username })
-          .height(48)
-          .fontSize(15)
-          .fontColor('#111827')
-          .placeholderColor('#6B7280')
-          .backgroundColor('#FFFFFF')
-          .borderRadius(12)
-          .padding({ left: 14, right: 14 })
-          .onChange((value: string) => {
-            this.username = value;
-          });
-
-        this.FieldLabel('密码');
-        TextInput({ placeholder: '企业端登录密码', text: this.password })
-          .height(48)
-          .fontSize(15)
-          .fontColor('#111827')
-          .placeholderColor('#6B7280')
-          .backgroundColor('#FFFFFF')
-          .borderRadius(12)
-          .padding({ left: 14, right: 14 })
-          .type(InputType.Password)
-          .onChange((value: string) => {
-            this.password = value;
-          });
-
-        Button(this.loading ? '登录中...' : '登录企业账号')
-          .width('100%')
-          .height(48)
-          .fontSize(16)
-          .fontWeight(FontWeight.Medium)
-          .fontColor('#FFFFFF')
-          .backgroundColor('#18A85F')
-          .borderRadius(12)
-          .enabled(!this.loading)
-          .onClick(() => {
-            this.login();
-          });
-
-        Text(this.statusText)
-          .width('100%')
-          .fontSize(13)
-          .fontColor('#374151')
-          .maxLines(3);
-      }
-      .width('100%')
-      .padding({ left: 22, right: 22, top: 10, bottom: 18 });
-
-      Column({ space: 12 }) {
+    Scroll() {
+      Column({ space: 18 }) {
         Row() {
-          Text('扫码绑定辅助入口')
+          Row({ space: 12 }) {
+            Text('XC')
+              .width(52)
+              .height(52)
+              .borderRadius(16)
+              .fontSize(18)
+              .fontWeight(FontWeight.Bold)
+              .fontColor('#FFFFFF')
+              .textAlign(TextAlign.Center)
+              .backgroundColor('#101827');
+
+            Column({ space: 4 }) {
+              Text('XCAGI 企业移动端')
+                .fontSize(24)
+                .fontWeight(FontWeight.Bold)
+                .fontColor('#101827');
+              Text('员工、会话、Codex 协同入口')
+                .fontSize(14)
+                .fontColor('#506074');
+            }
+            .alignItems(HorizontalAlign.Start)
+            .layoutWeight(1);
+          }
+          .layoutWeight(1);
+
+          Text(this.loading ? '连接中' : '在线')
+            .fontSize(12)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(this.loading ? '#92400E' : '#166534')
+            .padding({ left: 10, right: 10, top: 5, bottom: 5 })
+            .backgroundColor(this.loading ? '#FEF3C7' : '#DCFCE7')
+            .borderRadius(12);
+        }
+        .width('100%')
+        .padding({ left: 22, right: 22, top: 28, bottom: 4 });
+
+        Column({ space: 16 }) {
+          Row() {
+            Column({ space: 3 }) {
+              Text('登录')
+                .fontSize(21)
+                .fontWeight(FontWeight.Bold)
+                .fontColor('#111827');
+              Text(this.loginAccountKind === 'admin' ? '管理端账号' : '企业端账号')
+                .fontSize(13)
+                .fontColor('#64748B');
+            }
+            .layoutWeight(1)
+            .alignItems(HorizontalAlign.Start);
+
+            Text(this.loginAccountKind === 'admin' ? '管理员' : '企业')
+              .fontSize(12)
+              .fontColor('#1D4ED8')
+              .padding({ left: 10, right: 10, top: 5, bottom: 5 })
+              .backgroundColor('#E8F0FF')
+              .borderRadius(12);
+          }
+          .width('100%');
+
+          Row() {
+            Text('管理员账号')
+              .layoutWeight(1)
+              .height(38)
+              .fontSize(14)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(this.loginAccountKind === 'admin' ? '#FFFFFF' : '#475569')
+              .textAlign(TextAlign.Center)
+              .backgroundColor(this.loginAccountKind === 'admin' ? '#2563EB' : '#EEF2F7')
+              .borderRadius(10)
+              .onClick(() => {
+                this.loginAccountKind = 'admin';
+              });
+            Text('企业账号')
+              .layoutWeight(1)
+              .height(38)
+              .fontSize(14)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(this.loginAccountKind === 'enterprise' ? '#FFFFFF' : '#475569')
+              .textAlign(TextAlign.Center)
+              .backgroundColor(this.loginAccountKind === 'enterprise' ? '#2563EB' : '#EEF2F7')
+              .borderRadius(10)
+              .onClick(() => {
+                this.loginAccountKind = 'enterprise';
+              });
+          }
+          .width('100%')
+          .padding(4)
+          .backgroundColor('#EEF2F7')
+          .borderRadius(14);
+
+          Column({ space: 8 }) {
+            this.FieldLabel('服务地址');
+            TextInput({ placeholder: '例如 http://192.168.1.10:17500', text: this.baseUrl })
+              .height(50)
+              .fontSize(15)
+              .fontColor('#111827')
+              .placeholderColor('#7B8794')
+              .backgroundColor('#F8FAFC')
+              .borderRadius(12)
+              .border({ width: 1, color: '#D8E0EA' })
+              .padding({ left: 14, right: 14 })
+              .onChange((value: string) => {
+                this.baseUrl = value;
+              });
+          }
+          .width('100%');
+
+          Column({ space: 8 }) {
+            this.FieldLabel(this.loginAccountKind === 'admin' ? '管理员账号' : '企业账号');
+            TextInput({
+              placeholder: this.loginAccountKind === 'admin' ? '服务器后台管理员账号' : '企业端账号或邮箱',
+              text: this.username
+            })
+              .height(50)
+              .fontSize(15)
+              .fontColor('#111827')
+              .placeholderColor('#7B8794')
+              .backgroundColor('#F8FAFC')
+              .borderRadius(12)
+              .border({ width: 1, color: '#D8E0EA' })
+              .padding({ left: 14, right: 14 })
+              .onChange((value: string) => {
+                this.username = value;
+              });
+          }
+          .width('100%');
+
+          Column({ space: 8 }) {
+            this.FieldLabel('密码');
+            TextInput({
+              placeholder: this.loginAccountKind === 'admin' ? '管理员登录密码' : '企业账号登录密码',
+              text: this.password
+            })
+              .height(50)
+              .fontSize(15)
+              .fontColor('#111827')
+              .placeholderColor('#7B8794')
+              .backgroundColor('#F8FAFC')
+              .borderRadius(12)
+              .border({ width: 1, color: '#D8E0EA' })
+              .padding({ left: 14, right: 14 })
+              .type(InputType.Password)
+              .onChange((value: string) => {
+                this.password = value;
+              });
+          }
+          .width('100%');
+
+          Button(this.loading ? '登录中...' : (this.loginAccountKind === 'admin' ? '进入管理端' : '进入企业端'))
+            .width('100%')
+            .height(50)
             .fontSize(16)
             .fontWeight(FontWeight.Medium)
-            .fontColor('#111827')
-            .layoutWeight(1);
-          Text('可选')
-            .fontSize(12)
-            .fontColor('#1D4ED8')
-            .padding({ left: 10, right: 10, top: 4, bottom: 4 })
-            .backgroundColor('#E8F0FF')
-            .borderRadius(10);
-        }
-        .width('100%');
-
-        Text('输入桌面端显示的绑定码后，会切换到桌面端返回的企业服务地址。')
-          .fontSize(13)
-          .fontColor('#4B5563')
-          .lineHeight(19);
-
-        Row({ space: 10 }) {
-          TextInput({ placeholder: '绑定码', text: this.pairingCode })
-            .height(44)
-            .fontSize(15)
-            .fontColor('#111827')
-            .placeholderColor('#6B7280')
-            .backgroundColor('#FFFFFF')
-            .borderRadius(12)
-            .padding({ left: 14, right: 14 })
-            .layoutWeight(1)
-            .onChange((value: string) => {
-              this.pairingCode = value;
-            });
-          Button('绑定')
-            .height(44)
-            .fontSize(15)
             .fontColor('#FFFFFF')
-            .backgroundColor('#1D4ED8')
+            .backgroundColor(this.loading ? '#94A3B8' : '#2563EB')
             .borderRadius(12)
-            .padding({ left: 18, right: 18 })
             .enabled(!this.loading)
             .onClick(() => {
-              this.exchangePairingCode();
+              this.login();
             });
+
+          Row({ space: 8 }) {
+            Text(this.statusText.indexOf('失败') >= 0 ? '!' : 'i')
+              .width(22)
+              .height(22)
+              .borderRadius(11)
+              .fontSize(12)
+              .fontWeight(FontWeight.Bold)
+              .fontColor(this.statusText.indexOf('失败') >= 0 ? '#B91C1C' : '#1D4ED8')
+              .textAlign(TextAlign.Center)
+              .backgroundColor(this.statusText.indexOf('失败') >= 0 ? '#FEE2E2' : '#E8F0FF');
+            Text(this.statusText)
+              .layoutWeight(1)
+              .fontSize(13)
+              .fontColor(this.statusText.indexOf('失败') >= 0 ? '#B91C1C' : '#35506B')
+              .maxLines(3);
+          }
+          .width('100%')
+          .padding({ left: 12, right: 12, top: 10, bottom: 10 })
+          .backgroundColor(this.statusText.indexOf('失败') >= 0 ? '#FFF1F2' : '#F8FAFC')
+          .borderRadius(12)
+          .border({ width: 1, color: this.statusText.indexOf('失败') >= 0 ? '#FECACA' : '#E2E8F0' });
         }
-        .width('100%');
+        .width('100%')
+        .padding(18)
+        .margin({ left: 18, right: 18 })
+        .backgroundColor('#FFFFFF')
+        .borderRadius(18)
+        .border({ width: 1, color: '#DDE5EF' });
+
+        Column({ space: 12 }) {
+          Row() {
+            Text('桌面绑定')
+              .fontSize(16)
+              .fontWeight(FontWeight.Medium)
+              .fontColor('#111827')
+              .layoutWeight(1);
+            Text('可选')
+              .fontSize(12)
+              .fontColor('#64748B')
+              .padding({ left: 10, right: 10, top: 4, bottom: 4 })
+              .backgroundColor('#F1F5F9')
+              .borderRadius(10);
+          }
+          .width('100%');
+
+          Row({ space: 10 }) {
+            TextInput({ placeholder: '输入绑定码', text: this.pairingCode })
+              .height(46)
+              .fontSize(15)
+              .fontColor('#111827')
+              .placeholderColor('#7B8794')
+              .backgroundColor('#F8FAFC')
+              .borderRadius(12)
+              .border({ width: 1, color: '#D8E0EA' })
+              .padding({ left: 14, right: 14 })
+              .layoutWeight(1)
+              .onChange((value: string) => {
+                this.pairingCode = value;
+              });
+            Button('绑定')
+              .height(46)
+              .fontSize(15)
+              .fontColor('#1D4ED8')
+              .backgroundColor('#E8F0FF')
+              .borderRadius(12)
+              .padding({ left: 18, right: 18 })
+              .enabled(!this.loading)
+              .onClick(() => {
+                this.exchangePairingCode();
+              });
+          }
+          .width('100%');
+        }
+        .width('100%')
+        .padding(16)
+        .margin({ left: 18, right: 18, bottom: 24 })
+        .backgroundColor('#FFFFFF')
+        .borderRadius(16)
+        .border({ width: 1, color: '#DDE5EF' });
       }
       .width('100%')
-      .padding(16)
-      .margin({ left: 22, right: 22, top: 8 })
-      .backgroundColor('#FFFFFF')
-      .borderRadius(14)
-      .border({ width: 1, color: '#E5E7EB' });
+      .alignItems(HorizontalAlign.Start);
     }
     .width('100%')
     .height('100%')
-    .alignItems(HorizontalAlign.Start)
-    .backgroundColor('#F4F6F8');
+    .backgroundColor('#F3F6FA');
   }
 
   @Builder
@@ -1040,14 +1139,14 @@ struct Index {
       return;
     }
     if (this.username.trim().length === 0 || this.password.length === 0) {
-      this.statusText = '请输入企业端账号和密码';
+      this.statusText = this.loginAccountKind === 'admin' ? '请输入管理员账号和密码' : '请输入企业账号和密码';
       return;
     }
     this.loading = true;
-    this.statusText = '正在连接企业登录后端...';
+    this.statusText = '正在验证账号...';
     this.api.setBaseUrl(this.baseUrl);
     try {
-      const data = await this.api.login(this.username, this.password);
+      const data = await this.api.login(this.username, this.password, this.loginAccountKind);
       const token = cleanText(data.access_token);
       if (token.length === 0) {
         throw new Error('服务端未返回访问令牌');
@@ -1058,9 +1157,16 @@ struct Index {
       this.sessionId = cleanText(data.session_id, `harmony-${new Date().getTime()}`);
       this.displayName = cleanText(user.display_name, cleanText(user.username, this.username));
       this.companyBrand = cleanText(data.company_brand, '修辞企业版');
-      this.accountKind = cleanText(data.account_kind, 'enterprise');
+      this.accountKind = cleanText(data.account_kind, this.loginAccountKind);
       this.loggedIn = true;
-      this.statusText = '登录成功，正在同步企业数据...';
+      this.statusText = '登录成功，正在同步账号信息...';
+      const me = await this.api.me();
+      if (me.user) {
+        this.displayName = cleanText(me.user.display_name, this.displayName);
+        this.companyBrand = cleanText(me.company_brand, this.companyBrand);
+        this.accountKind = cleanText(me.account_kind, this.accountKind);
+      }
+      this.statusText = '正在同步企业数据...';
       await this.loadHome();
       this.statusText = `已同步 ${this.mods.length} 个模块、${this.employees.length} 位员工`;
     } catch (err) {
@@ -1085,10 +1191,14 @@ struct Index {
       const data = await this.api.pairingExchange(this.pairingCode);
       const host = cleanText(data.host);
       const port = data.port || 0;
-      if (host.length === 0 || port <= 0) {
+      const apiBaseUrl = cleanText(data.api_base_url || data.base_url || '');
+      if (apiBaseUrl.length > 0) {
+        this.baseUrl = apiBaseUrl.endsWith('/') ? apiBaseUrl : `${apiBaseUrl}/`;
+      } else if (host.length > 0 && port > 0) {
+        this.baseUrl = `http://${host}:${port}/`;
+      } else {
         throw new Error('绑定返回地址无效');
       }
-      this.baseUrl = `http://${host}:${port}/`;
       this.api.setBaseUrl(this.baseUrl);
       this.statusText = `已切换到 ${this.baseUrl}`;
     } catch (err) {

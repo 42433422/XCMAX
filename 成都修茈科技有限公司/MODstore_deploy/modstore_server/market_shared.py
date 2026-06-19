@@ -14,6 +14,7 @@ from fastapi import Depends, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from modstore_server.api.deps import get_current_user, require_admin
+from modstore_server.duty_roster import employee_partition_meta
 from modstore_server.models import (
     CatalogItem,
     Entitlement,
@@ -159,6 +160,10 @@ def _catalog_item_payload(
         getattr(item, "artifact", None),
     )
     license_scope = _effective_license_scope(item)
+    employee_partition = employee_partition_meta(
+        getattr(item, "pkg_id", None),
+        getattr(item, "artifact", None),
+    )
     return {
         "id": item.id,
         "pkg_id": item.pkg_id,
@@ -187,6 +192,7 @@ def _catalog_item_payload(
         "user_has_review": user_has_review,
         "complaint_count": complaint_count,
         "created_at": item.created_at.isoformat() if item.created_at else "",
+        **employee_partition,
     }
 
 

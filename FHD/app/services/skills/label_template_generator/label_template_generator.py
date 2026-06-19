@@ -172,7 +172,9 @@ def extract_text_with_ocr(image_path: str, use_regions: bool = True) -> dict[str
         horizontal_lines = merge_close_lines(horizontal_lines, threshold=50)
         vertical_lines = merge_close_lines(vertical_lines, threshold=50)
 
-        logger.info("检测到网格：%s条水平线，%s条垂直线", len(horizontal_lines), len(vertical_lines))
+        logger.info(
+            "检测到网格：%s条水平线，%s条垂直线", len(horizontal_lines), len(vertical_lines)
+        )
 
         # 2. OCR 识别（与 /api/ocr 共用 OCRService：默认 PaddleOCR，可回退 EasyOCR）
         from app.services.ocr_service import get_ocr_service
@@ -1345,7 +1347,7 @@ class LabelTemplateGeneratorSkill:
             if enable_ocr:
                 ocr_result = extract_text_with_ocr(image_path)
                 if ocr_result.get("success"):
-                    logger.info("OCR 识别成功，提取 %s 个字段", len(ocr_result.get('fields', [])))
+                    logger.info("OCR 识别成功，提取 %s 个字段", len(ocr_result.get("fields", [])))
 
             code = generate_template_code(image_path, class_name, ocr_result, verbose)
 

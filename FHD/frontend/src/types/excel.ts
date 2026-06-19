@@ -36,6 +36,7 @@ export interface ExcelSheetDetail {
 export interface ExcelPreviewData {
   sheet_name?: string;
   sheet_names?: string[];
+  file_path?: string;
   sample_rows?: ExcelRow[];
   grid_preview?: { rows?: ExcelGridRow[] };
   all_sheets?: ExcelSheetDetail[];

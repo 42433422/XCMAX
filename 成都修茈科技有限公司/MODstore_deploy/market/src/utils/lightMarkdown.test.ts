@@ -86,6 +86,43 @@ describe('lightMarkdown.renderMarkdown', () => {
     expect(html).toContain('<blockquote class="md-quote">')
     expect(html).toContain('引用一句')
   })
+
+  it('renders safe URLs, titles, images, centered tables, block math, hr, and empty inputs', () => {
+    expect(renderMarkdown(null as unknown as string)).toBe('')
+
+    const html = renderMarkdown([
+      '[站点](https://example.com "标题")',
+      '![图](data:image/png;base64,abc "图标题")',
+      '自动链接 https://example.com/path',
+      '',
+      '\\[ a + b \\]',
+      '',
+      '| A | B |',
+      '| :---: | ---: |',
+      '| x | y |',
+      '',
+      '---',
+      '',
+      '[bad](data:text/html,1) [vb](vbscript:msgbox(1)) ![bad](data:text/html,1)',
+    ].join('\n'))
+
+    expect(html).toContain('title="标题"')
+    expect(html).toContain('title="图标题"')
+    expect(html).toContain('href="https://example.com/path"')
+    expect(html).toContain('md-math-block')
+    expect(html).toContain('style="text-align:center"')
+    expect(html).toContain('style="text-align:right"')
+    expect(html).toContain('<hr class="md-hr" />')
+    expect(html).not.toContain('data:text/html')
+    expect(html).not.toContain('vbscript:')
+  })
+
+  it('renders plain fenced code language and blank paragraphs safely', () => {
+    const html = renderMarkdown('```VERY-LONG-LANGUAGE-NAME-THAT-WILL-BE-TRUNCATED\nx\n```\n\n  \n')
+    expect(html).toContain('md-code__lang')
+    expect(html).toContain('very-long-language-name')
+    expect(html).not.toContain('<p class="md-p"></p>')
+  })
 })
 
 describe('lightMarkdown.stripInternalMarkers', () => {

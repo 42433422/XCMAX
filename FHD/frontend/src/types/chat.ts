@@ -82,5 +82,7 @@ export interface ChatPlannerPayload extends Record<string, unknown> {
   batch?: boolean;
   results?: ChatPlannerPayload[];
   requires_token?: boolean;
+  token_name?: string;
+  token_description?: string;
   thinking_steps?: string;
 }

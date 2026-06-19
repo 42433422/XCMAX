@@ -285,7 +285,7 @@ def run_normal_slot_shipment_preview(order_text: str) -> dict[str, Any]:
     if not text:
         return {"success": False, "message": "缺少 order_text", "data": {}}
 
-    from app.routes.tools import _parse_order_text
+    from app.application.facades.tools_facade import _parse_order_text
 
     parsed = _parse_order_text(text)
     if not parsed.get("success"):
@@ -301,7 +301,7 @@ def run_normal_slot_shipment_preview(order_text: str) -> dict[str, Any]:
             "normal_slot_dispatch": True,
         }
 
-    from app.routes import ai_chat as ai_chat_mod
+    from app.application import ai_chat_helpers as ai_chat_mod
 
     body = ai_chat_mod.build_shipment_preview_response_dict(
         parsed.get("unit_name", ""),

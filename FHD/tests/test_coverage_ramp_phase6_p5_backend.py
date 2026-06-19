@@ -13,7 +13,6 @@ exercised for real.
 from __future__ import annotations
 
 import asyncio
-import os
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -21,7 +20,6 @@ import pytest
 
 from app.infrastructure.db import sync_engine
 from app.mod_sdk import mod_employee_llm
-
 
 # ===========================================================================
 # 1. mod_employee_llm — _resolve_provider_override
@@ -33,11 +31,23 @@ class TestResolveProviderOverride:
 
     def test_no_provider_returns_disabled(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("XCAGI_LLM_PROVIDER", raising=False)
+        monkeypatch.delenv("LLM_PROVIDER", raising=False)
+        monkeypatch.delenv("XCAUTO_API_KEY", raising=False)
+        monkeypatch.delenv("XCAUTO_PAT", raising=False)
+        monkeypatch.delenv("XIUCI_API_KEY", raising=False)
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
         out = mod_employee_llm._resolve_provider_override()
         assert out == {"use_direct": False}
 
     def test_empty_provider_returns_disabled(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("XCAGI_LLM_PROVIDER", "   ")
+        monkeypatch.delenv("LLM_PROVIDER", raising=False)
+        monkeypatch.delenv("XCAUTO_API_KEY", raising=False)
+        monkeypatch.delenv("XCAUTO_PAT", raising=False)
+        monkeypatch.delenv("XIUCI_API_KEY", raising=False)
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
         out = mod_employee_llm._resolve_provider_override()
         assert out == {"use_direct": False}
 
@@ -370,12 +380,15 @@ class TestModEmployeeComplete:
         with patch(
             "app.services.ai_conversation_service.get_ai_conversation_service",
             return_value=mock_svc,
+        ), patch(
+            "app.infrastructure.llm.providers.registry.get_active_provider",
+            return_value=None,
         ):
             out = await mod_employee_llm.mod_employee_complete(
                 [{"role": "user", "content": "hi"}]
             )
         assert out["success"] is False
-        assert "DEEPSEEK_API_KEY" in out["error"]
+        assert "OpenAI-compatible/XCauto" in out["error"]
 
     @pytest.mark.asyncio
     async def test_default_path_call_returns_none(

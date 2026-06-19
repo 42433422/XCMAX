@@ -1,4 +1,4 @@
-"""Tests for app.routes.template_grid_core — coverage ramp."""
+"""Tests for app.application.template_grid_core coverage ramp."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.routes.template_grid_core import (
+from app.application.template_grid_core import (
     _clean_customer_candidate,
     _extract_inline_customer_hits_from_cell,
     _is_trivial_customer_token,
@@ -125,7 +125,7 @@ class TestExtractInlineCustomerHitsFromCell:
 # _extract_customer_hint_from_excel
 # ---------------------------------------------------------------------------
 class TestExtractCustomerHintFromExcel:
-    @patch("app.routes.template_grid_core._extract_inline_customer_hits_from_cell")
+    @patch("app.application.template_grid_core._extract_inline_customer_hits_from_cell")
     @patch("openpyxl.load_workbook")
     def test_with_customer_in_cell(self, mock_wb_cls, mock_extract):
         mock_wb = MagicMock()
@@ -145,13 +145,13 @@ class TestExtractCustomerHintFromExcel:
         mock_extract.return_value = ["成都修茈科技有限公司"]
         mock_wb_cls.return_value = mock_wb
 
-        from app.routes.template_grid_core import _extract_customer_hint_from_excel
+        from app.application.template_grid_core import _extract_customer_hint_from_excel
 
         result = _extract_customer_hint_from_excel("/tmp/test.xlsx")
         assert result == "成都修茈科技有限公司"
 
     def test_nonexistent_file(self):
-        from app.routes.template_grid_core import _extract_customer_hint_from_excel
+        from app.application.template_grid_core import _extract_customer_hint_from_excel
 
         result = _extract_customer_hint_from_excel("/nonexistent/file.xlsx")
         assert result == ""
@@ -162,7 +162,7 @@ class TestExtractCustomerHintFromExcel:
         mock_wb.sheetnames = []
         mock_wb_cls.return_value = mock_wb
 
-        from app.routes.template_grid_core import _extract_customer_hint_from_excel
+        from app.application.template_grid_core import _extract_customer_hint_from_excel
 
         result = _extract_customer_hint_from_excel("/tmp/test.xlsx")
         assert result == ""
@@ -173,7 +173,7 @@ class TestExtractCustomerHintFromExcel:
 # ---------------------------------------------------------------------------
 class TestExtractRectangularExcelPreview:
     def test_nonexistent_file(self):
-        from app.routes.template_grid_core import _extract_rectangular_excel_preview
+        from app.application.template_grid_core import _extract_rectangular_excel_preview
 
         result = _extract_rectangular_excel_preview("/nonexistent/file.xlsx")
         assert result["fields"] == []
@@ -216,7 +216,7 @@ class TestExtractRectangularExcelPreview:
         mock_ws.cell = cell_fn
         mock_wb_cls.return_value = mock_wb
 
-        from app.routes.template_grid_core import _extract_rectangular_excel_preview
+        from app.application.template_grid_core import _extract_rectangular_excel_preview
 
         result = _extract_rectangular_excel_preview("/tmp/test.xlsx")
         assert len(result["fields"]) == 2
@@ -228,7 +228,7 @@ class TestExtractRectangularExcelPreview:
 # ---------------------------------------------------------------------------
 class TestExtractStructuredExcelPreview:
     def test_no_force_header_delegates_to_legacy(self):
-        from app.routes.template_grid_core import _extract_structured_excel_preview
+        from app.application.template_grid_core import _extract_structured_excel_preview
 
         with patch(
             "app.application.facades.template_facade._extract_structured_excel_preview"
@@ -238,7 +238,7 @@ class TestExtractStructuredExcelPreview:
             mock_legacy.assert_called_once()
 
     def test_negative_force_header_delegates_to_legacy(self):
-        from app.routes.template_grid_core import _extract_structured_excel_preview
+        from app.application.template_grid_core import _extract_structured_excel_preview
 
         with patch(
             "app.application.facades.template_facade._extract_structured_excel_preview"
@@ -273,7 +273,7 @@ class TestExtractStructuredExcelPreview:
         mock_ws.cell = cell_fn
         mock_wb_cls.return_value = mock_wb
 
-        from app.routes.template_grid_core import _extract_structured_excel_preview
+        from app.application.template_grid_core import _extract_structured_excel_preview
 
         result = _extract_structured_excel_preview(
             "/tmp/test.xlsx", force_header_row_1based=1
@@ -296,7 +296,7 @@ class TestExtractStructuredExcelPreview:
         mock_ws.cell = MagicMock(return_value=cell_empty)
         mock_wb_cls.return_value = mock_wb
 
-        from app.routes.template_grid_core import _extract_structured_excel_preview
+        from app.application.template_grid_core import _extract_structured_excel_preview
 
         result = _extract_structured_excel_preview(
             "/tmp/test.xlsx", force_header_row_1based=1

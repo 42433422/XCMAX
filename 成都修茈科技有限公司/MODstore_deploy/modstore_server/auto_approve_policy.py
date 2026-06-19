@@ -140,6 +140,22 @@ def evaluate_risk(
         return "high", f"路径 {rel_path} 命中高风险规则或 forbidden_globs"
     if _path_requires_manual_approval(rel_path, approval_required_globs):
         return "medium", f"路径 {rel_path} 命中 approval_required_globs，强制人工审批"
+    try:
+        from modstore_server.self_maintenance_policy import (
+            is_marker_status_path,
+            loop_memory_requires_executable_change,
+        )
+
+        if is_marker_status_path(rel_path):
+            requirement = loop_memory_requires_executable_change()
+            if requirement.get("required"):
+                return (
+                    "medium",
+                    "self-maintenance marker-only change requires human review: "
+                    + str(requirement.get("reason") or ""),
+                )
+    except Exception:
+        return "medium", "self-maintenance policy check failed closed"
 
     line_count = _count_diff_lines(content, original_content)
     max_l = _max_lines()

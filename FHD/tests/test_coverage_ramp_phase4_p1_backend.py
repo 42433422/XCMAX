@@ -188,7 +188,7 @@ def test_execute_customers_ensure_exists_missing_unit() -> None:
 
 
 @patch("app.bootstrap.get_shipment_app_service")
-@patch("app.routes.tools._parse_order_text")
+@patch("app.application.facades.tools_facade._parse_order_text")
 def test_execute_shipment_generate_from_text(mock_parse: MagicMock, mock_ship: MagicMock) -> None:
     mock_parse.return_value = {
         "success": True,
@@ -297,7 +297,7 @@ def test_planner_react_probe_and_compose(mock_rag: MagicMock, mock_ai: MagicMock
     planner = LLMWorkflowPlanner()
     with (
         patch.object(planner, "_plan_with_llm", side_effect=[candidate, final]),
-        patch("app.routes.tools.execute_registered_workflow_tool") as mock_exec,
+        patch("app.application.facades.tools_facade.execute_registered_workflow_tool") as mock_exec,
     ):
         mock_exec.return_value = {"success": True, "data": [{"name": "漆"}]}
         out = planner._plan_with_react_multiagent(

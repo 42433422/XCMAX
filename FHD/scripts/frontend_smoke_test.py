@@ -176,7 +176,7 @@ def check_backend_implementation():
     print("=" * 60)
 
     # 检查后端路由文件
-    routes_file = "e:/FHD/xcagi/app/routes/customers.py"
+    routes_file = "e:/FHD/xcagi/app/fastapi_routes/domains/customer/routes.py"
 
     try:
         with open(routes_file, "r", encoding="utf-8") as f:
@@ -185,7 +185,7 @@ def check_backend_implementation():
             # 查找路由定义
             import re
 
-            routes = re.findall(r'@customers_bp\.route\("([^"]+)"', content)
+            routes = re.findall(r'@router\.(?:get|post|put|delete|patch)\("([^"]+)"', content)
 
             print("🏷️ 后端定义的路由:")
             for route in routes:

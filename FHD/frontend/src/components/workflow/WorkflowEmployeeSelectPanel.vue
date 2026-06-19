@@ -7,7 +7,7 @@
         :to="workflowVisualizationLocation"
         class="workflow-employee-visual-link"
         :title="workflowPanoramaLinkTitle"
-      >流程全景</router-link>
+      >流程可视化</router-link>
     </div>
 
     <p v-if="statusHint" class="workflow-employee-hint">{{ statusHint }}</p>

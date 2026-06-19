@@ -108,7 +108,9 @@ async def install_customer_delivery_seed_package(
         applied = False
         apply_kind = str(pkg.get("apply") or "").strip()
         if apply_kind == "sunbird_roster":
-            from app.desktop_runtime.sunbird_delivery_seed import apply_sunbird_roster_seed_if_needed
+            from app.desktop_runtime.sunbird_delivery_seed import (
+                apply_sunbird_roster_seed_if_needed,
+            )
 
             applied = bool(apply_sunbird_roster_seed_if_needed(data_root))
 

@@ -1,1 +1,0 @@
-import{E as t,ag as s,d as c,e as o,M as r,az as n,c as d,R as p}from"./index-BM0eyJ6q.js";const _={class:"lan-gate-page"},i=t({__name:"LanGateView",setup(u){const e=s(),a=d(()=>e.query.redirect||"/");return(l,m)=>(c(),o("div",_,[r(n,{variant:"page","redirect-path":a.value},null,8,["redirect-path"])]))}}),h=p(i,[["__scopeId","data-v-3110b2ab"]]);export{h as default};

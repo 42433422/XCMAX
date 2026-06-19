@@ -93,6 +93,8 @@ export interface SyncStatusData {
 export interface PairingExchangeData {
   host?: string;
   port?: number;
+  api_base_url?: string;
+  base_url?: string;
   hint?: string;
 }
 

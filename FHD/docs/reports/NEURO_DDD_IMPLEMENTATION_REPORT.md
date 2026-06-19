@@ -13,33 +13,9 @@
 
 ## Level 2: 事件驱动架构 (Event-Driven)
 
-### 2.1 应用服务层 (AppServiceV2)
+### 2.1 应用服务层
 
-已实施 **21 个事件驱动应用服务**：
-
-| 服务 | 文件路径 | 关键事件 |
-|------|----------|----------|
-| OrderAppServiceV2 | `app/application/order_app_service_v2.py` | OrderSubmittedEvent, OrderPaidEvent, OrderShippedEvent |
-| CustomerAppServiceV2 | `app/application/customer_app_service_v2.py` | CustomerRegisteredEvent, CustomerUpdatedEvent |
-| InventoryAppServiceV2 | `app/application/inventory_app_service_v2.py` | InventoryStockInEvent, InventoryStockOutEvent |
-| ProductAppServiceV2 | `app/application/product_app_service_v2.py` | ProductCreatedEvent, ProductUpdatedEvent |
-| ShipmentAppServiceV2 | `app/application/shipment_app_service_v2.py` | ShipmentCreatedEvent, ShipmentShippedEvent |
-| WechatTaskAppServiceV2 | `app/application/wechat_task_app_service_v2.py` | WechatTaskCreatedEvent, WechatTaskCompletedEvent |
-| WechatContactAppServiceV2 | `app/application/wechat_contact_app_service_v2.py` | ContactAddedEvent, ContactUpdatedEvent |
-| UserAppServiceV2 | `app/application/user_app_service_v2.py` | UserRegisteredEvent, UserLoginEvent |
-| UserPreferenceAppServiceV2 | `app/application/user_preference_app_service_v2.py` | PreferenceUpdatedEvent |
-| UserMemoryVectorAppServiceV2 | `app/application/user_memory_vector_app_service_v2.py` | MemoryIngestedEvent |
-| OCRAppServiceV2 | `app/application/ocr_app_service_v2.py` | OCRTaskSubmittedEvent, OCRCompletedEvent |
-| PrintAppServiceV2 | `app/application/print_app_service_v2.py` | PrintTaskSubmittedEvent, PrintCompletedEvent |
-| MaterialAppServiceV2 | `app/application/material_app_service_v2.py` | MaterialStockChangedEvent |
-| AuthAppServiceV2 | `app/application/auth_app_service_v2.py` | AuthLoginEvent, AuthLogoutEvent |
-| AIChatAppServiceV2 | `app/application/ai_chat_app_service_v2.py` | ChatMessageSentEvent |
-| ConversationAppServiceV2 | `app/application/conversation_app_service_v2.py` | ConversationStartedEvent |
-| ExcelVectorAppServiceV2 | `app/application/excel_vector_app_service_v2.py` | ExcelIndexedEvent |
-| FileAnalysisAppServiceV2 | `app/application/file_analysis_app_service_v2.py` | FileAnalysisCompletedEvent |
-| ExtractLogAppServiceV2 | `app/application/extract_log_app_service_v2.py` | LogExtractedEvent |
-| ProductImportAppServiceV2 | `app/application/product_import_app_service_v2.py` | ImportStartedEvent, ImportCompletedEvent |
-| TemplateAppServiceV2 | `app/application/template_app_service_v2.py` | TemplateUsedEvent |
+旧的 `AppServiceV2` 应用服务文件已收敛删除。事件能力保留在 NeuroBus 事件、处理器、无后缀 application service 或 domain SSOT 中，不再通过 `app/application/*_app_service_v2.py` 维护第二套入口。
 
 ### 2.2 领域事件定义
 
@@ -261,7 +237,7 @@ app/services/
 
 | 层级 | 组件 | 已完成 | 目标 | 完成度 |
 |------|------|--------|------|--------|
-| **Level 2** | AppServiceV2 | 21 | 21 | **100%** |
+| **Level 2** | 应用服务双轨收敛 | 已清零 | 0 个 `_v2` app service | **100%** |
 | | 领域事件 | 14 | 14 | **100%** |
 | | 事件处理器 | 12 | 12 | **100%** |
 | | 路由集成 | 2 | 4 | 50% |
@@ -315,7 +291,7 @@ app/services/
 
 Neuro-DDD 实施已达到 **90% 完成度**，核心架构已完成：
 
-1. **事件驱动架构**: 21 个 AppServiceV2 服务，14 类领域事件，12 个处理器
+1. **事件驱动架构**: 应用服务双轨已清零，事件能力由 14 类领域事件与 12 个处理器承载
 2. **领域模型**: 5 个聚合根，7 类值对象，5 个仓储接口，6 个领域服务
 3. **可靠性机制**: 22 个组件，已集成初始化，34 个服务接入监控
 

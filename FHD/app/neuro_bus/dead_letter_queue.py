@@ -159,8 +159,11 @@ class DeadLetterQueue:
         self._stats["total_entries"] += 1
 
         logger.error(
-            "[DeadLetterQueue] 事件进入死信队列: %s "
-            f"(reason=%s, entry_id=%s, retries=%s)", event.event_type, reason.value, entry_id, retry_count
+            "[DeadLetterQueue] 事件进入死信队列: %s (reason=%s, entry_id=%s, retries=%s)",
+            event.event_type,
+            reason.value,
+            entry_id,
+            retry_count,
         )
 
         # 触发告警
@@ -192,7 +195,9 @@ class DeadLetterQueue:
             return False
 
         logger.info(
-            "[DeadLetterQueue] 重播事件: %s (entry_id=%s)", entry.original_event.event_type, entry_id
+            "[DeadLetterQueue] 重播事件: %s (entry_id=%s)",
+            entry.original_event.event_type,
+            entry_id,
         )
 
         # 触发重播回调
@@ -257,7 +262,10 @@ class DeadLetterQueue:
             return False
 
         logger.info(
-            "[DeadLetterQueue] 手动解决: %s (resolution=%s, by=%s)", entry_id, resolution, resolved_by
+            "[DeadLetterQueue] 手动解决: %s (resolution=%s, by=%s)",
+            entry_id,
+            resolution,
+            resolved_by,
         )
 
         entry.metadata["resolved"] = True

@@ -8,13 +8,13 @@
 在 2026-04-20 的 Neuro-DDD 重整之前，Mod 代码可以随意 ``from app.<内部模块> import ...``。
 这带来两个问题：
 
-1.  主程一重构，Mod 就炸（``app.routes.*`` 变 ``app.fastapi_routes.*`` 就是例子）。
+1.  主程一重构，Mod 就炸（历史内部路径变动就是例子）。
 2.  "每个 Mod 一个文件夹"的独立性空心化：物理目录隔离，但依赖图与主程深度耦合。
 
 ``app.mod_sdk`` 是主程对 Mod 承诺的**稳定契约层**：
 
 - Mod 代码**只允许** ``from app.mod_sdk.<submodule> import ...``。
-  其它任何 ``app.*`` 前缀（如 ``app.services.*``、``app.db.*``、``app.routes.*``、``app.application.*``、
+  其它任何 ``app.*`` 前缀（如 ``app.services.*``、``app.db.*``、``app.application.*``、
   ``app.bootstrap``）都**不再**对 Mod 可见。
 - 每次主程内部重构，只需要保证 ``app.mod_sdk.*`` 的符号不变即可，Mod 就不会因内部搬家而挂。
 - 约束由 ``scripts/dev/check_mod_import_boundaries.py`` 强制检查，CI 与冒烟脚本里都会跑。

@@ -17,8 +17,8 @@ from dataclasses import dataclass
 from typing import Any
 
 from fastapi import HTTPException, Request
-from starlette.responses import JSONResponse
 from starlette.requests import Request as StarletteRequest
+from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
