@@ -9,7 +9,6 @@ from typing import Any
 
 from app.neuro_bus.domains.base import DomainChannel, NeuroDomain, get_domain_registry
 from app.neuro_bus.events.base import EventPriority
-from app.neuro_bus.neuro_trace_config import bump_domain_handler_metric
 
 logger = logging.getLogger(__name__)
 
@@ -36,21 +35,7 @@ class SafetyNeuroDomain(NeuroDomain):
         self._setup_handlers()
 
     def _setup_handlers(self):
-        @self.on("security.threat.detected", priority=0, channel=DomainChannel.CRITICAL)
-        async def on_threat(event):
-            self._threat_count += 1
-            threat_type = event.payload.get("threat_type")
-            severity = event.payload.get("severity")
-            logger.critical("SECURITY THREAT: type=%s, severity=%s", threat_type, severity)
-            bump_domain_handler_metric("security.threat.detected")
-
-        @self.on("security.audit.log", priority=2, channel=DomainChannel.CRITICAL)
-        async def on_audit(event):
-            self._audit_count += 1
-            action = event.payload.get("action")
-            user_id = event.payload.get("user_id")
-            logger.info("Audit: user=%s, action=%s", user_id, action)
-            bump_domain_handler_metric("security.audit.log")
+        register_safety_domain_handlers(self)
 
     async def initialize(self):
         logger.info("SafetyNeuroDomain initialized")
@@ -149,3 +134,6 @@ def get_safety_domain() -> SafetyNeuroDomain:
         _safety_domain = SafetyNeuroDomain()
         get_domain_registry().register(_safety_domain)
     return _safety_domain
+
+
+from .safety_domain_handlers import *  # noqa: F401,F403  向后兼容：暴露 handlers 符号
