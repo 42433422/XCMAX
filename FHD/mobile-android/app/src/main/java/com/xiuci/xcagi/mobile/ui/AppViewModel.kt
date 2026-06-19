@@ -239,8 +239,22 @@ constructor(
     private val _chatSuggestions = MutableStateFlow<List<ChatSuggestion>>(emptyList())
     val chatSuggestions: StateFlow<List<ChatSuggestion>> = _chatSuggestions.asStateFlow()
 
-    private val _conversations = MutableStateFlow<List<ConversationItem>>(emptyList())
-    val conversations: StateFlow<List<ConversationItem>> = _conversations.asStateFlow()
+    // 微信风格：conversations 从本地 DB Flow 派生，网络请求只写入 DB，不直接操作 UI 状态
+    val conversations: StateFlow<List<ConversationItem>> =
+            combine(repo.observeCachedModInfos(), sessionStore.accountKindFlow) { mods, kind ->
+                val adminMode = isAdminAccountKind(kind)
+                val isEnterprise = ProductSkuConfig.showsEnterpriseNav || adminMode
+                val fixedItems = fixedConversationItems(
+                        showCodex = isEnterprise || adminMode,
+                        showCustomerService = isEnterprise && !adminMode,
+                )
+                val badgeText = if (adminMode) "管理端" else "已安装"
+                val badgeColor =
+                        if (adminMode) androidx.compose.ui.graphics.Color(0xFFED7B2F)
+                        else androidx.compose.ui.graphics.Color(0xFF3370FF)
+                val employees = employeeConversationItems(mods, badgeText, badgeColor)
+                fixedItems + employees
+            }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val _chatAction = MutableStateFlow<ChatAction?>(null)
     val chatAction: StateFlow<ChatAction?> = _chatAction.asStateFlow()
@@ -557,54 +571,23 @@ constructor(
         _chatSuggestions.value = base
     }
 
-    /** 构建会话列表：固定入口 + 当前账号生态里的 workflow_employees。 */
+    /** 网络刷新员工列表并写入 DB；conversations 由 DB Flow 自动驱动更新 */
     fun loadConversations(isEnterprise: Boolean) {
-        // 去重：取消上一次未完成的加载，避免并发竞相更新 _conversations 造成瞬间闪烁
         conversationsLoadJob?.cancel()
         conversationsLoadJob = viewModelScope.launch {
-            rebuildConversationItems(isEnterprise)
+            val adminMode = isAdminAccountKind(sessionStore.accountKindFlow.first())
+            if (!adminMode && !isEnterprise) return@launch
+            // 只写入 DB，conversations 会自动从 DB Flow 更新
+            repo.refreshAndCacheModInfos(adminMode)
         }
     }
 
     private suspend fun rebuildConversationItems(isEnterprise: Boolean): Int {
         val adminMode = isAdminAccountKind(sessionStore.accountKindFlow.first())
-        val fixedItems =
-                fixedConversationItems(
-                        showCodex = isEnterprise || adminMode,
-                        showCustomerService = isEnterprise && !adminMode,
-                )
-        val badgeText = if (adminMode) "管理端" else "已安装"
-        val badgeColor =
-                if (adminMode) androidx.compose.ui.graphics.Color(0xFFED7B2F)
-                else androidx.compose.ui.graphics.Color(0xFF3370FF)
-
-        // 1. 仅当当前列表没有员工项时，才用缓存填充（避免刷新时用旧缓存覆盖当前显示）
-        val currentHasEmployees = _conversations.value.any { it.type == ConversationType.AI_TASK }
-        if (!currentHasEmployees) {
-            val cached = repo.loadCachedModInfos(adminMode)
-            if (cached.isNotEmpty()) {
-                _modInfos.value = cached
-                val cachedEmployees = employeeConversationItems(cached, badgeText, badgeColor)
-                _conversations.value = fixedItems + cachedEmployees
-            }
-        }
-
-        // 非企业且非管理端：不发起网络刷新
         if (!adminMode && !isEnterprise) return 0
-
-        // 2. 后台网络刷新；失败或返回空时保持当前显示不清空
-        val mods = repo.refreshAndCacheModInfos(adminMode).getOrElse {
-            // 网络失败：保持当前显示
-            return _conversations.value.count { it.type == ConversationType.AI_TASK }
-        }
-        // 网络成功但返回空列表：保持当前显示，不用空列表覆盖
-        if (mods.isEmpty()) {
-            return _conversations.value.count { it.type == ConversationType.AI_TASK }
-        }
+        val mods = repo.refreshAndCacheModInfos(adminMode).getOrElse { return 0 }
         _modInfos.value = mods
-        val employees = employeeConversationItems(mods, badgeText, badgeColor)
-        _conversations.value = fixedItems + employees
-        return employees.size
+        return mods.flatMap { it.workflow_employees }.size
     }
 
     private suspend fun refreshBoundRuntimeAfterPairing(): Int {
