@@ -68,3 +68,28 @@ def test_record_multiple_measurements_append(tmp_path, monkeypatch):
 
     lines = log_path.read_text(encoding="utf-8").strip().split("\n")
     assert len(lines) == 5
+
+
+def test_sla_monitor_finish_records_to_collector(tmp_path, monkeypatch):
+    """SLAMonitor.finish() 触发采集器记录。"""
+    monkeypatch.setenv("XCAGI_NEURO_BUS_SLA_COLLECT", "1")
+    log_path = tmp_path / "sla_measurements.jsonl"
+    monkeypatch.setenv("XCAGI_SLA_MEASUREMENTS_PATH", str(log_path))
+
+    from app.neuro_bus.sla_collector import SLACollector
+    from app.neuro_bus.sla_controller import SLAConfig, SLAMonitor
+
+    collector = SLACollector()
+    monitor = SLAMonitor(
+        sla_timeout=SLAConfig.REFLEX,
+        operation_name="greeting@ai_service",
+        collector=collector,
+    )
+    monitor.finish()
+
+    assert log_path.exists()
+    lines = log_path.read_text(encoding="utf-8").strip().split("\n")
+    assert len(lines) == 1
+    row = json.loads(lines[0])
+    assert row["operation"] == "greeting@ai_service"
+    assert row["level"] == "reflex"
