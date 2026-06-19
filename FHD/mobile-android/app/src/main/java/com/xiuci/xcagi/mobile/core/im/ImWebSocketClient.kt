@@ -1,9 +1,15 @@
 package com.xiuci.xcagi.mobile.core.im
 
 import com.xiuci.xcagi.mobile.core.network.ServerRouter
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
@@ -15,6 +21,8 @@ import javax.inject.Singleton
 
 /**
  * IM V0 WebSocket（/ws/im?session_id=）— 以会话 ID 鉴权，避免客户端自报 user_id 带来的安全风险。
+ *
+ * 含心跳 ping（30s）+ 断线指数退避重连（5s→10s→...→5min cap）。
  */
 @Singleton
 class ImWebSocketClient @Inject constructor(
@@ -29,9 +37,22 @@ class ImWebSocketClient @Inject constructor(
     var connected: Boolean = false
         private set
 
+    private var currentSessionId: String = ""
+    private var reconnectAttempts: Int = 0
+    private var heartbeatJob: Job? = null
+    private var reconnectJob: Job? = null
+    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+
+    @Synchronized
     fun connect(sessionId: String) {
         if (sessionId.isBlank()) return
-        disconnect()
+        currentSessionId = sessionId
+        disconnectSocket()
+        cancelReconnect()
+        doConnect(sessionId)
+    }
+
+    private fun doConnect(sessionId: String) {
         val url = serverRouter.fhdImWebSocketUrl(sessionId)
         val request = Request.Builder().url(url).build()
         socket = okHttp.newWebSocket(
@@ -39,6 +60,8 @@ class ImWebSocketClient @Inject constructor(
             object : WebSocketListener() {
                 override fun onOpen(webSocket: WebSocket, response: Response) {
                     connected = true
+                    reconnectAttempts = 0
+                    startHeartbeat()
                 }
 
                 override fun onMessage(webSocket: WebSocket, text: String) {
@@ -47,19 +70,66 @@ class ImWebSocketClient @Inject constructor(
 
                 override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
                     connected = false
+                    stopHeartbeat()
+                    scheduleReconnect()
                 }
 
                 override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                     connected = false
+                    stopHeartbeat()
+                    scheduleReconnect()
                 }
             },
         )
     }
 
-    fun disconnect() {
+    private fun startHeartbeat() {
+        stopHeartbeat()
+        heartbeatJob = scope.launch {
+            while (connected) {
+                delay(30_000)
+                if (connected) {
+                    socket?.send("""{"type":"ping"}""")
+                }
+            }
+        }
+    }
+
+    private fun stopHeartbeat() {
+        heartbeatJob?.cancel()
+        heartbeatJob = null
+    }
+
+    private fun scheduleReconnect() {
+        if (currentSessionId.isBlank()) return
+        cancelReconnect()
+        val delayMs = ReconnectBackoff.delayForAttempt(reconnectAttempts)
+        reconnectAttempts++
+        reconnectJob = scope.launch {
+            delay(delayMs)
+            if (currentSessionId.isNotBlank()) {
+                doConnect(currentSessionId)
+            }
+        }
+    }
+
+    private fun cancelReconnect() {
+        reconnectJob?.cancel()
+        reconnectJob = null
+    }
+
+    private fun disconnectSocket() {
+        stopHeartbeat()
         socket?.close(1000, "client_close")
         socket = null
         connected = false
+    }
+
+    @Synchronized
+    fun disconnect() {
+        currentSessionId = ""
+        cancelReconnect()
+        disconnectSocket()
     }
 
     companion object {
