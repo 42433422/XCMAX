@@ -8,7 +8,6 @@ import logging
 
 from app.neuro_bus.domains.base import DomainChannel, NeuroDomain, get_domain_registry
 from app.neuro_bus.events.base import EventPriority
-from app.neuro_bus.neuro_trace_config import bump_domain_handler_metric
 
 logger = logging.getLogger(__name__)
 
@@ -33,17 +32,7 @@ class CustomerNeuroDomain(NeuroDomain):
         self._setup_handlers()
 
     def _setup_handlers(self):
-        @self.on("customer.registered", priority=1)
-        async def on_registered(event):
-            customer_id = event.payload.get("customer_id")
-            logger.info("Customer registered: %s", customer_id)
-            bump_domain_handler_metric("customer.registered")
-
-        @self.on("customer.login", priority=2)
-        async def on_login(event):
-            customer_id = event.payload.get("customer_id")
-            logger.info("Customer login: %s", customer_id)
-            bump_domain_handler_metric("customer.login")
+        register_customer_domain_handlers(self)
 
     async def initialize(self):
         logger.info("CustomerNeuroDomain initialized")
@@ -96,3 +85,6 @@ def get_customer_domain() -> CustomerNeuroDomain:
         _customer_domain = CustomerNeuroDomain()
         get_domain_registry().register(_customer_domain)
     return _customer_domain
+
+
+from .customer_domain_handlers import *  # noqa: F401,F403  向后兼容：暴露 handlers 符号
