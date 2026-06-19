@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlencode
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
@@ -115,7 +115,7 @@ class RelayDesktopPollBody(BaseModel):
 class RelayDesktopCompleteBody(BaseModel):
     relay_id: str = Field(..., min_length=8, max_length=80)
     desktop_token: str = Field(..., min_length=16, max_length=256)
-    status: str = Field(default="done", max_length=32)
+    status: str = Field(default="completed", max_length=32)
     result: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -123,6 +123,12 @@ class CodexSuperEmployeeMobileMessageBody(BaseModel):
     message: str = Field(default="", max_length=4000)
     body: str = Field(default="", max_length=4000)
     context: dict[str, Any] = Field(default_factory=dict)
+
+
+class MobileServiceBridgeRespondBody(BaseModel):
+    response: str
+    responded_by: str | None = None
+    status: str = Field(default="resolved", max_length=32)
 
 
 @extension_router.get("/approval/requests")
@@ -380,6 +386,8 @@ def _mobile_user_public_dict(user: Any) -> dict[str, Any]:
         "email": str(getattr(user, "email", "") or ""),
         "role": str(getattr(user, "role", "") or ""),
         "is_active": bool(getattr(user, "is_active", True)),
+        "account_id": str(getattr(user, "account_id", "") or ""),
+        "tenant_id": str(getattr(user, "tenant_id", "") or ""),
     }
 
 
@@ -453,15 +461,25 @@ def _resolve_mobile_relay_user(user: Any, *, prefer_admin: bool = False) -> dict
         raise
 
 
-def _relay_mobile_auth_payload(user_public: dict[str, Any]) -> dict[str, Any]:
+def _relay_mobile_auth_payload(
+    user_public: dict[str, Any],
+    desktop: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     uid = int(user_public.get("id") or 0)
     username = str(user_public.get("username") or user_public.get("display_name") or "mobile")
     role = str(user_public.get("role") or "")
     account_kind = "admin" if role in {"admin", "super_admin", "owner"} else "enterprise"
     session_id = f"mobile-relay-{uuid.uuid4().hex}"
+    relay = desktop or {}
     return {
         "user": user_public,
         "session_id": session_id,
+        "session_token": str(relay.get("session_token") or user_public.get("session_token") or session_id).strip(),
+        "account_id": str(relay.get("account_id") or user_public.get("account_id") or uid).strip(),
+        "tenant_id": str(relay.get("tenant_id") or user_public.get("tenant_id") or "").strip(),
+        "relay_base_url": str(relay.get("relay_base_url") or user_public.get("relay_base_url") or "").strip(),
+        "local_base_url": str(relay.get("local_base_url") or user_public.get("local_base_url") or "").strip(),
+        "paired_at": str(relay.get("paired_at") or user_public.get("paired_at") or "").strip(),
         "account_kind": account_kind,
         **issue_mobile_tokens(
             user_id=uid,
@@ -605,6 +623,100 @@ async def mobile_pairing_exchange(body: PairingExchangeBody, user=Depends(get_mo
     )
 
 
+def _mobile_bridge_request_statuses() -> tuple[str, ...]:
+    return ("pending", "processing", "resolved", "closed")
+
+
+@extension_router.get("/service-bridge/requests")
+async def mobile_service_bridge_requests(
+    request: Request,
+    status: str | None = None,
+    source_instance_id: str | None = None,
+    request_type: str | None = None,
+    page: int = Query(1, ge=1),
+    per_page: int = Query(20, ge=1, le=100),
+    user=Depends(get_mobile_user),
+):
+    if user is None:
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
+        )
+    from app.db.session import get_db
+
+    with get_db() as db:
+        from app.db.models.service_request import ServiceRequest
+
+        q = db.query(ServiceRequest)
+        if status:
+            q = q.filter(ServiceRequest.status == status)
+        if source_instance_id:
+            q = q.filter(ServiceRequest.source_instance_id == source_instance_id)
+        if request_type:
+            q = q.filter(ServiceRequest.request_type == request_type)
+        total = q.count()
+        items = (
+            q.order_by(ServiceRequest.created_at.desc())
+            .offset((page - 1) * per_page)
+            .limit(per_page)
+            .all()
+        )
+        return format_mobile_response(data=paginate_list([r.to_dict() for r in items], total, page, per_page))
+
+
+@extension_router.put("/service-bridge/requests/{request_id}/respond")
+async def mobile_service_bridge_request_respond(
+    request_id: int,
+    body: MobileServiceBridgeRespondBody,
+    user=Depends(get_mobile_user),
+):
+    if request_id <= 0:
+        return JSONResponse(
+            format_mobile_response(None, "请求 ID 无效", success=False, code=400),
+            status_code=400,
+        )
+    if body.status not in _mobile_bridge_request_statuses():
+        return JSONResponse(
+            format_mobile_response(None, "状态值非法", success=False, code=400),
+            status_code=400,
+        )
+    if user is None:
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
+        )
+    from app.db.session import get_db
+
+    try:
+        with get_db() as db:
+            from app.db.models.service_request import ServiceRequest
+
+            req = db.query(ServiceRequest).filter(ServiceRequest.id == request_id).first()
+            if not req:
+                return JSONResponse(
+                    format_mobile_response(None, "请求不存在", success=False, code=404),
+                    status_code=404,
+                )
+            req.response = body.response
+            req.responded_by = body.responded_by
+            req.responded_at = datetime.utcnow()
+            req.status = body.status
+            db.flush()
+        return format_mobile_response(data=req.to_dict())
+    except HTTPException:
+        raise
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("mobile_service_bridge_request_respond")
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=500),
+            status_code=500,
+        )
+    except Exception as exc:
+        logger.exception("mobile service-bridge respond failed")
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=500),
+            status_code=500,
+        )
+
+
 @extension_router.post("/relay/desktop/register")
 async def mobile_relay_desktop_register(body: RelayDesktopRegisterBody):
     """Desktop runtime registers a long-lived cloud relay binding session."""
@@ -645,7 +757,7 @@ async def mobile_relay_confirm(body: RelayMobileConfirmBody, user=Depends(get_mo
             data={
                 "desktop": desktop,
                 "relay_id": desktop.get("relay_id"),
-                **_relay_mobile_auth_payload(user_public),
+                **_relay_mobile_auth_payload(user_public, desktop),
             }
         )
     except RECOVERABLE_ERRORS as exc:
@@ -679,7 +791,7 @@ async def mobile_relay_confirm_code(
             data={
                 "desktop": desktop,
                 "relay_id": desktop.get("relay_id"),
-                **_relay_mobile_auth_payload(user_public),
+                **_relay_mobile_auth_payload(user_public, desktop),
             }
         )
     except RECOVERABLE_ERRORS as exc:
@@ -1089,7 +1201,12 @@ def _mobile_session_meta(request: Request) -> dict[str, Any]:
                 "username": str(payload.get("username") or "").strip(),
             }
     if not sid:
-        sid = session_id_from_request(request)
+        try:
+            sid = session_id_from_request(request)
+        except (AttributeError, TypeError):
+            # Keep direct service-level callers and compatibility shims usable;
+            # a real Starlette Request always exposes cookies.
+            sid = ""
     if sid:
         meta = load_session_account_meta(sid)
         if meta:
@@ -1116,6 +1233,32 @@ def _require_mobile_admin(
             status_code=403,
         )
     return meta, None
+
+
+def _require_mobile_admin_or_enterprise(
+    request: Request, user: Any
+) -> tuple[dict[str, Any], JSONResponse | None]:
+    """企业端 + 管理端都可访问的 Codex 超级员工专用鉴权。"""
+    if user is None:
+        return {}, JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401),
+            status_code=401,
+        )
+    meta = _mobile_session_meta(request) or {}
+    role = str(getattr(user, "role", "") or "").strip().lower()
+    account_kind = str(meta.get("account_kind") or "").strip().lower()
+    if not account_kind:
+        account_kind = "enterprise" if role == "enterprise" else "personal"
+    if account_kind == "enterprise":
+        return meta, None
+    if account_kind in {"admin", "admin_portal"} and (
+        bool(meta.get("market_is_admin")) or role in {"admin", "admin_portal", "super_admin", "owner"}
+    ):
+        return meta, None
+    return meta, JSONResponse(
+        format_mobile_response(None, "需要管理端管理员账号", success=False, code=403),
+        status_code=403,
+    )
 
 
 def _mobile_request_user_id(request: Request, user: Any) -> int:
@@ -1475,7 +1618,7 @@ async def mobile_admin_codex_super_employee_messages(
     user=Depends(get_mobile_user),
 ):
     """移动端管理员信息页的 Codex 超级员工对话记录。"""
-    _, err = _require_mobile_admin(request, user)
+    _, err = _require_mobile_admin_or_enterprise(request, user)
     if err is not None:
         return err
     uid = _mobile_request_user_id(request, user)
@@ -1502,7 +1645,7 @@ async def mobile_admin_codex_super_employee_invoke(
     user=Depends(get_mobile_user),
 ):
     """移动端管理员信息页的软件内 Codex 调用入口。"""
-    _, err = _require_mobile_admin(request, user)
+    _, err = _require_mobile_admin_or_enterprise(request, user)
     if err is not None:
         return err
     uid = _mobile_request_user_id(request, user)
@@ -1908,173 +2051,6 @@ async def mobile_auth_qr_confirm(body: AuthQrConfirmBody, request: Request):
                 pass
         return JSONResponse(
             format_mobile_response(None, msg, success=False, code=401),
-            status_code=401,
-        )
-    session_id = str((result or {}).get("session_id") or "")
-    if not session_id:
-        return JSONResponse(
-            format_mobile_response(None, "会话创建失败", success=False, code=500),
-            status_code=500,
-        )
-    ok = confirm_auth_qr(body.qr_id.strip(), session_id=session_id, login_payload=result or {})
-    if not ok:
-        return JSONResponse(
-            format_mobile_response(None, "二维码无效", success=False, code=400),
-            status_code=400,
-        )
-    return format_mobile_response(data={"confirmed": True, "qr_id": body.qr_id.strip()})
-
-
-class OidcExchangeBody(BaseModel):
-    code: str = Field(..., min_length=4)
-    state: str = Field(..., min_length=8)
-
-
-@extension_router.post("/auth/oidc/exchange")
-async def mobile_auth_oidc_exchange(body: OidcExchangeBody):
-    """Android Custom Tabs OIDC 回调换 mobile JWT。"""
-    from app.application.auth_app_service import get_auth_app_service
-    from app.application.enterprise_login_flow import finalize_enterprise_login
-    from app.application.session_account_meta import normalize_account_kind
-    from app.infrastructure.auth.oidc_provider import exchange_code_for_userinfo, verify_oidc_state
-    from app.mod_sdk.product_skus import resolve_product_sku
-    from app.security.mobile_jwt import issue_mobile_tokens
-
-    ok, _rt = verify_oidc_state(body.state)
-    if not ok:
-        return JSONResponse(
-            format_mobile_response(None, "OIDC state 无效", success=False, code=400),
-            status_code=400,
-        )
-    try:
-        profile = await exchange_code_for_userinfo(body.code)
-    except OPERATIONAL_ERRORS as exc:
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=502),
-            status_code=502,
-        )
-    auth_app_service = get_auth_app_service()
-    auth_result = auth_app_service.authenticate_oidc_user(profile)
-    if not auth_result.get("success"):
-        return JSONResponse(
-            format_mobile_response(
-                None,
-                str(auth_result.get("message") or "OIDC 登录失败"),
-                success=False,
-                code=401,
-            ),
-            status_code=401,
-        )
-    sku = resolve_product_sku()
-    account_kind = normalize_account_kind(
-        None, default="enterprise" if sku == "enterprise" else "personal"
-    )
-    username = str((auth_result.get("user") or {}).get("username") or "")
-    session_id = auth_result.get("session_id")
-    payload = await finalize_enterprise_login(
-        result=auth_result,
-        session_id=str(session_id) if session_id else None,
-        market_result={"success": False},
-        account_kind=account_kind,
-        username=username,
-        sku=sku,
-        skip_market_sync=True,
-    )
-    user_raw = payload.get("user") or {}
-    tokens = issue_mobile_tokens(
-        user_id=int(user_raw["id"]),
-        session_id=str(session_id),
-        account_kind=str(payload.get("account_kind") or account_kind),
-        username=username,
-    )
-    return format_mobile_response(
-        data={
-            "user": user_raw,
-            "session_id": session_id,
-            "account_kind": payload.get("account_kind") or account_kind,
-            **tokens,
-        },
-    )
-
-
-class AuthQrConfirmBody(BaseModel):
-    qr_id: str = Field(..., min_length=8)
-    username: str = Field(default="", max_length=128)
-    password: str = Field(default="", max_length=256)
-    account_kind: str = Field(default="enterprise", max_length=32)
-
-
-@extension_router.post("/auth/qr/confirm")
-async def mobile_auth_qr_confirm(body: AuthQrConfirmBody, request: Request):
-    """手机确认 PC 扫码登录。"""
-    from app.application.auth_app_service import get_auth_app_service
-    from app.application.enterprise_login_flow import run_market_first_login
-    from app.application.session_account_meta import normalize_account_kind
-    from app.fastapi_routes.domains.auth.routes import (
-        _jit_create_local_user_for_enterprise,
-        _market_user_email_from_raw,
-    )
-    from app.fastapi_routes.market_account import login_market_with_password
-    from app.mod_sdk.product_skus import resolve_product_sku
-    from app.security.auth_qr_login import confirm_auth_qr, get_auth_qr
-
-    rec = get_auth_qr(body.qr_id)
-    if not rec or rec.get("status") == "expired":
-        return JSONResponse(
-            format_mobile_response(None, "二维码已过期", success=False, code=400),
-            status_code=400,
-        )
-
-    username = (body.username or "").strip()
-    password = body.password or ""
-    auth_app_service = get_auth_app_service()
-    sku = resolve_product_sku()
-    fields_set = getattr(body, "model_fields_set", getattr(body, "__fields_set__", set()))
-    qr_account_kind = str(rec.get("account_kind") or "").strip()
-    body_account_kind = body.account_kind if "account_kind" in fields_set else qr_account_kind
-    account_kind = normalize_account_kind(
-        body_account_kind,
-        default=qr_account_kind or ("enterprise" if sku == "enterprise" else "personal"),
-    )
-
-    authorization = request.headers.get("Authorization") or ""
-    if authorization.startswith("Bearer ") and not username:
-        from app.security.mobile_jwt import user_id_from_mobile_bearer
-
-        uid = user_id_from_mobile_bearer(authorization)
-        if uid:
-            from app.db.models.user import User
-            from app.db.session import get_db
-
-            with get_db() as db:
-                row = db.query(User).filter(User.id == int(uid)).first()
-                if row:
-                    username = str(row.username or "")
-
-    if not username or not password:
-        return JSONResponse(
-            format_mobile_response(None, "请提供账号与密码确认登录", success=False, code=400),
-            status_code=400,
-        )
-
-    result, err = await run_market_first_login(
-        username=username,
-        password=password,
-        account_kind=account_kind,
-        market_result=None,
-        auth_app_service=auth_app_service,
-        sku=sku,
-        jit_create_fn=_jit_create_local_user_for_enterprise,
-        market_user_email_from_raw=_market_user_email_from_raw,
-        login_market_fn=login_market_with_password,
-    )
-    if err:
-        try:
-            payload = err.body.decode("utf-8") if hasattr(err, "body") else str(err)
-        except OPERATIONAL_ERRORS:
-            payload = "登录失败"
-        return JSONResponse(
-            format_mobile_response(None, payload, success=False, code=401),
             status_code=401,
         )
     session_id = str((result or {}).get("session_id") or "")
