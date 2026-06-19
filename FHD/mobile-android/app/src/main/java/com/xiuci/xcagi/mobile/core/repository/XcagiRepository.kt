@@ -1580,11 +1580,22 @@ class XcagiRepository @Inject constructor(
             primary = primary,
             industry = industry?.let { "${it.id}|${it.name}" } ?: "",
             avatarUrl = avatar_url,
+            employeesJson = gson.toJson(workflow_employees),
             cachedAt = System.currentTimeMillis(),
         )
 
-    private fun ModInfoCacheEntity.toModInfo(): ModInfo =
-        ModInfo(
+    private fun ModInfoCacheEntity.toModInfo(): ModInfo {
+        val employees: List<WorkflowEmployeeInfo> = try {
+            gson.fromJson(
+                employeesJson,
+                com.google.gson.reflect.TypeToken.getParameterized(
+                    List::class.java, WorkflowEmployeeInfo::class.java
+                ).type
+            ) ?: emptyList()
+        } catch (_: Exception) {
+            emptyList()
+        }
+        return ModInfo(
             id = id,
             name = name,
             version = version,
@@ -1599,7 +1610,13 @@ class XcagiRepository @Inject constructor(
                 )
             },
             avatar_url = avatarUrl,
+            workflow_employees = employees,
         )
+    }
+
+    /** 观察本地缓存的 Mod 列表（微信风格：DB 为唯一数据源，UI 观察 DB 变化） */
+    fun observeCachedModInfos(): Flow<List<ModInfo>> =
+        db.modInfoCacheDao().observeAll().map { entities -> entities.map { it.toModInfo() } }
 
     suspend fun fetchHome(): Result<Map<String, Any?>> = try {
         syncRouterFromStore()
