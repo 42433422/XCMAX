@@ -1,0 +1,59 @@
+# gitleaks 自定义配置
+# CI SSOT: hand-written — 编辑此文件即可
+#
+# 用途：
+#   - 在 gitleaks 默认规则基础上，扩展项目特定的密钥模式
+#   - allowlist 排除测试 fixture 中的假密钥
+
+title = "XCMAX gitleaks config"
+
+[extend]
+# 继承 gitleaks 默认规则集
+useDefault = true
+
+# 全局允许列表（不扫描的路径）
+[allowlist]
+description = "Global allowlist"
+paths = [
+    # 测试 fixture 中的假密钥
+    '''FHD/tests/.*fixture.*''',
+    '''FHD/tests/.*mock.*''',
+    '''FHD/tests/.*stub.*''',
+    # 文档中的示例密钥
+    '''docs/.*\.md''',
+    '''\.md$''',
+    # 锁文件
+    '''package-lock\.json''',
+    '''poetry\.lock''',
+    '''Pipfile\.lock''',
+    # CI 配置中的 ${{ secrets.* }} 占位符
+    '''\.github/workflows/.*\.yml''',
+    # .env.example 模板
+    '''\.env\.example''',
+    '''\.env\.local\.example''',
+]
+
+# 项目特定的密钥模式（XCMAX 自定义）
+[[rules]]
+id = "xcmag-cursor-admin-token"
+description = "XCMAG cursor admin token"
+regex = '''cursor_admin_token['"]?\s*[:=]\s*['"]([a-zA-Z0-9_-]{32,})['"]'''
+secretGroup = 1
+keywords = ["cursor_admin_token"]
+tags = ["xcmag", "token"]
+
+[[rules]]
+id = "xcmag-modstore-api-key"
+description = "MODstore API key"
+regex = '''MODSTORE_API_KEY['"]?\s*[:=]\s*['"]([a-zA-Z0-9_-]{32,})['"]'''
+secretGroup = 1
+keywords = ["modstore_api_key"]
+tags = ["xcmag", "api-key"]
+
+[[rules]]
+id = "xcmag-lan-gateway-secret"
+description = "LAN gateway secret"
+regex = '''LAN_GATEWAY_SECRET['"]?\s*[:=]\s*['"]([a-zA-Z0-9_-]{32,})['"]'''
+secretGroup = 1
+keywords = ["lan_gateway_secret"]
+tags = ["xcmag", "lan"]

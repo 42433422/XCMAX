@@ -504,9 +504,14 @@ class TestExecuteRegisteredWorkflowTool:
     def test_registered_routers_dict_completeness(self):
         expected_keys = {
             "normal_slot_dispatch", "customers", "products", "materials",
-            "shipment_records", "business_docking", "template_extract",
-            "template_preview", "wechat", "print", "printer_list",
-            "settings", "excel_analysis", "generate_office_document", "excel_import",
-            "unit_products_import",
+            "shipment_records", "shipment_orders", "business_docking",
+            "business_event", "template_extract", "template_preview",
+            "document_template", "label_template_generator",
+            "wechat", "print", "printer_list",
+            "settings", "excel_analysis", "excel_analyzer", "excel_toolkit",
+            "excel_import", "excel_vector_index",
+            "generate_office_document", "unit_products_import",
+            "inventory", "purchase", "finance", "ocr",
+            "dataset_rag", "memory_v2", "system_maintenance",
         }
         assert set(_REGISTERED_WORKFLOW_ROUTERS.keys()) == expected_keys

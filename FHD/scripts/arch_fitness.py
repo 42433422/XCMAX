@@ -144,6 +144,23 @@ def check_no_giant_files_in_modstore_server() -> None:
             )
 
 
+def check_legacy_boundary() -> None:
+    """legacy_* 文件必须收容在 app/legacy/ 下，禁止散落到 app/ 其他子目录。"""
+    legacy_root = APP_DIR / "legacy"
+    for py in APP_DIR.rglob("legacy_*.py"):
+        if _is_excluded_path(py):
+            continue
+        try:
+            py.relative_to(legacy_root)
+            continue
+        except ValueError:
+            pass
+        rel = py.relative_to(REPO_ROOT)
+        VIOLATIONS.append(
+            f"[legacy-boundary] {rel} — legacy_* file must live under app/legacy/"
+        )
+
+
 def main() -> int:
     print("=== Architecture Fitness Check ===\n")
 
@@ -152,6 +169,7 @@ def main() -> int:
     check_domain_not_depend_on_infrastructure()
     check_no_giant_files_in_app()
     check_no_giant_files_in_modstore_server()
+    check_legacy_boundary()
 
     baseline = _load_baseline_keys()
     new_violations = [v for v in VIOLATIONS if _violation_key(v) not in baseline]

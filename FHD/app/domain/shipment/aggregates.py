@@ -33,7 +33,7 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from app.domain.shipment.legacy_vo import ContactInfo, Money, OrderNumber, Quantity
+from app.legacy.domain.legacy_vo import ContactInfo, Money, OrderNumber, Quantity
 
 
 @dataclass

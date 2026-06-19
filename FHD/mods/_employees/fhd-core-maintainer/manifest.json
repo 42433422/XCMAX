@@ -80,7 +80,7 @@
     },
     "actions": {
       "handlers": [
-        "direct_python"
+        "agent"
       ],
       "direct_python": {
         "module": "fhd_core_maintainer",

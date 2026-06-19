@@ -95,6 +95,27 @@ async def _market_admin_proxy(
         gate = _require_market_admin_session(request)
         if gate is not None:
             return gate
+
+    if path in {
+        "/api/admin/yuangon-onboard/status",
+        "/api/admin/yuangon-onboard/run",
+    }:
+        from app.application.modstore_local_client import prefer_local_modstore
+
+        if prefer_local_modstore():
+            from app.application import self_maintenance_app_service as sm_svc
+
+            try:
+                if method.upper() == "GET":
+                    return await sm_svc.get_yuangon_onboard_status_local()
+                if method.upper() == "POST":
+                    return await sm_svc.run_yuangon_onboard_local(json_body or {})
+            except RECOVERABLE_ERRORS as exc:
+                logger.warning("local yuangon onboarding failed path=%s: %s", path, exc)
+                return JSONResponse(
+                    {"success": False, "message": f"本地元工登记服务不可用: {exc}"},
+                    status_code=502,
+                )
     try:
         from app.fastapi_routes.market_account import (
             _authorization_from_request,
@@ -199,6 +220,77 @@ async def _digest_local_or_proxy(
         json_body=json_body,
         require_admin_session=not prefer_local_modstore(),
     )
+
+
+async def _self_maintenance_local_or_proxy(
+    request: Request,
+    method: str,
+    path: str,
+    *,
+    json_body: dict[str, Any] | None = None,
+):
+    """自维护 loop runtime：优先本地 MODstore :8788，远端 market-proxy 404 时再试本地。"""
+    if not path.startswith("/api/ops/self-maintenance/"):
+        return None
+
+    from app.application import self_maintenance_app_service as sm_svc
+    from app.application.modstore_local_client import prefer_local_modstore
+    from app.fastapi_routes.market_account import _authorization_from_request
+
+    authorization = _authorization_from_request(request, json_body or {})
+
+    async def _call_local() -> dict[str, Any] | None:
+        if path.startswith("/api/ops/self-maintenance/status"):
+            limit = 80
+            if "?" in path:
+                for part in path.split("?", 1)[1].split("&"):
+                    if part.startswith("limit="):
+                        try:
+                            limit = int(part.split("=", 1)[1])
+                        except ValueError:
+                            pass
+            return await sm_svc.get_runtime_status_local(
+                limit=limit,
+                authorization=authorization,
+            )
+        if path == "/api/ops/self-maintenance/governance-review" and method.upper() == "POST":
+            note = str((json_body or {}).get("note") or "")
+            return await sm_svc.governance_review_local(
+                note=note,
+                authorization=authorization,
+            )
+        return None
+
+    if prefer_local_modstore():
+        try:
+            local_payload = await _call_local()
+            if local_payload is not None:
+                return local_payload
+        except RECOVERABLE_ERRORS as exc:
+            logger.warning(
+                "local self-maintenance failed path=%s: %s",
+                path,
+                exc,
+            )
+
+    proxied = await _market_admin_proxy(
+        request,
+        method,
+        path,
+        json_body=json_body,
+    )
+    if isinstance(proxied, JSONResponse) and proxied.status_code == 404:
+        try:
+            local_payload = await _call_local()
+            if local_payload is not None:
+                return local_payload
+        except RECOVERABLE_ERRORS as exc:
+            logger.warning(
+                "self-maintenance local fallback after upstream 404 path=%s: %s",
+                path,
+                exc,
+            )
+    return proxied
 
 
 async def _remote_duty_health(request: Request) -> dict[str, Any]:
@@ -746,6 +838,62 @@ async def local_duty_graph_health(request: Request):
             status_code=401,
         )
     return build_local_duty_graph_health()
+
+
+@router.get("/local/ops/self-maintenance/status", response_model=None)
+async def local_self_maintenance_status(
+    request: Request,
+    limit: int = Query(default=80, ge=1, le=300),
+):
+    """本机自维护 loop runtime 状态（直连 MODstore :8788）。"""
+    from app.application import self_maintenance_app_service as sm_svc
+    from app.fastapi_routes.domains.misc.helpers import _session_id_from_request
+    from app.fastapi_routes.market_account import _authorization_from_request
+
+    if not _session_id_from_request(request):
+        return JSONResponse(
+            {"success": False, "message": "请先登录"},
+            status_code=401,
+        )
+    authorization = _authorization_from_request(request, {})
+    try:
+        return await sm_svc.get_runtime_status_local(
+            limit=limit,
+            authorization=authorization,
+        )
+    except RECOVERABLE_ERRORS as exc:
+        return JSONResponse(
+            {"success": False, "message": str(exc)},
+            status_code=502,
+        )
+
+
+@router.post("/local/ops/self-maintenance/governance-review", response_model=None)
+async def local_self_maintenance_governance_review(
+    request: Request,
+    body: dict[str, Any] = Body(default_factory=dict),
+):
+    """本机自维护 loop 治理审计复核。"""
+    from app.application import self_maintenance_app_service as sm_svc
+    from app.fastapi_routes.domains.misc.helpers import _session_id_from_request
+    from app.fastapi_routes.market_account import _authorization_from_request
+
+    if not _session_id_from_request(request):
+        return JSONResponse(
+            {"success": False, "message": "请先登录"},
+            status_code=401,
+        )
+    authorization = _authorization_from_request(request, body if isinstance(body, dict) else {})
+    try:
+        return await sm_svc.governance_review_local(
+            note=str(body.get("note") or ""),
+            authorization=authorization,
+        )
+    except RECOVERABLE_ERRORS as exc:
+        return JSONResponse(
+            {"success": False, "message": str(exc)},
+            status_code=502,
+        )
 
 
 @router.get("/local/employee-cron/jobs", response_model=None)
@@ -1483,6 +1631,13 @@ async def _xcmax_market_proxy_impl(request: Request, subpath: str):
         except RECOVERABLE_ERRORS:
             json_body = None
     api_path = f"/api/{str(subpath or '').lstrip('/')}"
+    if api_path.startswith("/api/ops/self-maintenance/"):
+        return await _self_maintenance_local_or_proxy(
+            request,
+            method,
+            api_path,
+            json_body=json_body,
+        )
     return await _market_admin_proxy(request, method, api_path, json_body=json_body)
 
 
@@ -1502,3 +1657,353 @@ def _register_market_proxy_method(method: str) -> None:
 
 for _market_proxy_method in ("GET", "POST", "PUT", "DELETE", "PATCH"):
     _register_market_proxy_method(_market_proxy_method)
+
+
+# ---------------------------------------------------------------------------
+# Token 用量聚合（本地账本 + Cursor CLI + Codex JSONL + Trae state.vscdb）
+# ---------------------------------------------------------------------------
+
+
+def _to_int(value: Any) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _to_float(value: Any) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _collect_local_ledger() -> dict[str, Any]:
+    """FHD 本地 token 账本（model_usage_ledger.json）。"""
+    try:
+        from app.infrastructure.billing.model_usage import list_model_usage_entries
+
+        entries = list_model_usage_entries(limit=500)
+    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001
+        return {"available": False, "reason": f"读取账本失败: {exc}"}
+    prompt = sum(_to_int(e.get("prompt_tokens")) for e in entries)
+    completion = sum(_to_int(e.get("completion_tokens")) for e in entries)
+    total = sum(_to_int(e.get("total_tokens")) for e in entries)
+    cost = sum(_to_float(e.get("cost_units")) for e in entries)
+    by_model: dict[str, dict[str, Any]] = {}
+    for e in entries:
+        key = f"{e.get('provider', '?')}/{e.get('model', '?')}"
+        slot = by_model.setdefault(key, {"total": 0, "count": 0, "cost": 0.0})
+        slot["total"] += _to_int(e.get("total_tokens"))
+        slot["count"] += 1
+        slot["cost"] += _to_float(e.get("cost_units"))
+    return {
+        "available": True,
+        "source": "FHD 本地账本",
+        "records": len(entries),
+        "prompt_tokens": prompt,
+        "completion_tokens": completion,
+        "total_tokens": total,
+        "cost_units": cost,
+        "by_model": dict(sorted(by_model.items(), key=lambda x: -x[1]["total"])),
+    }
+
+
+def _collect_cursor_usage() -> dict[str, Any]:
+    """Cursor 用量（cursor-usage CLI）。"""
+    import shutil
+    import subprocess
+
+    cli = shutil.which("cursor-usage") or str(
+        os.path.expanduser("~/Library/Python/3.9/bin/cursor-usage")
+    )
+    if not os.path.exists(cli):
+        return {"available": False, "reason": f"cursor-usage CLI 不存在: {cli}"}
+    try:
+        proc = subprocess.run(
+            [cli, "--json", "--days", "30"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001
+        return {"available": False, "reason": f"执行失败: {exc}"}
+    if proc.returncode != 0:
+        return {"available": False, "reason": f"exit={proc.returncode}"}
+    try:
+        raw = json.loads(proc.stdout)
+    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001
+        return {"available": False, "reason": f"JSON 解析失败: {exc}"}
+    aggs = raw.get("aggregations", []) if isinstance(raw, dict) else []
+    total_input = sum(_to_int(a.get("inputTokens")) for a in aggs)
+    total_output = sum(_to_int(a.get("outputTokens")) for a in aggs)
+    total_cache_read = sum(_to_int(a.get("cacheReadTokens")) for a in aggs)
+    total_cache_write = sum(_to_int(a.get("cacheWriteTokens")) for a in aggs)
+    total_cents = sum(_to_float(a.get("totalCents")) for a in aggs)
+    by_model: dict[str, dict[str, Any]] = {}
+    for a in aggs:
+        m = a.get("modelIntent", "unknown")
+        slot = by_model.setdefault(
+            m, {"input": 0, "output": 0, "cache_read": 0, "cache_write": 0, "cents": 0.0}
+        )
+        slot["input"] += _to_int(a.get("inputTokens"))
+        slot["output"] += _to_int(a.get("outputTokens"))
+        slot["cache_read"] += _to_int(a.get("cacheReadTokens"))
+        slot["cache_write"] += _to_int(a.get("cacheWriteTokens"))
+        slot["cents"] += _to_float(a.get("totalCents"))
+    return {
+        "available": True,
+        "source": "Cursor (cursor-usage CLI, 最近 30 天)",
+        "aggregations": len(aggs),
+        "prompt_tokens": total_input,
+        "completion_tokens": total_output,
+        "cache_read_tokens": total_cache_read,
+        "cache_write_tokens": total_cache_write,
+        "total_tokens": total_input + total_output + total_cache_read + total_cache_write,
+        "cost_cents": total_cents,
+        "by_model": dict(
+            sorted(
+                by_model.items(),
+                key=lambda x: -(x[1]["input"] + x[1]["output"] + x[1]["cache_read"]),
+            )
+        ),
+    }
+
+
+def _collect_codex_usage() -> dict[str, Any]:
+    """Codex 用量（~/.codex/archived_sessions/*.jsonl）。"""
+    archived = os.path.expanduser("~/.codex/archived_sessions")
+    if not os.path.isdir(archived):
+        return {"available": False, "reason": f"目录不存在: {archived}"}
+    jsonl_files = sorted(
+        f for f in (os.path.join(archived, x) for x in os.listdir(archived))
+        if f.endswith(".jsonl")
+    )
+    total_input = total_cached = total_output = total_reasoning = total_total = 0
+    by_model: dict[str, dict[str, Any]] = {}
+    session_count = 0
+    for fpath in jsonl_files:
+        session_model = "unknown"
+        has_token = False
+        try:
+            with open(fpath, encoding="utf-8") as f:
+                for line in f:
+                    try:
+                        evt = json.loads(line)
+                    except RECOVERABLE_ERRORS:
+                        continue
+                    if evt.get("type") == "session_meta":
+                        payload = evt.get("payload") or {}
+                        session_model = payload.get("model") or payload.get("model_provider") or "unknown"
+                    if (
+                        evt.get("type") == "event_msg"
+                        and (evt.get("payload") or {}).get("type") == "token_count"
+                    ):
+                        info = (evt.get("payload") or {}).get("info") or {}
+                        usage = info.get("total_token_usage") or {}
+                        i = _to_int(usage.get("input_tokens"))
+                        c = _to_int(usage.get("cached_input_tokens"))
+                        o = _to_int(usage.get("output_tokens"))
+                        r = _to_int(usage.get("reasoning_output_tokens"))
+                        t = _to_int(usage.get("total_tokens"))
+                        total_input += i
+                        total_cached += c
+                        total_output += o
+                        total_reasoning += r
+                        total_total += t
+                        slot = by_model.setdefault(
+                            session_model,
+                            {"input": 0, "cached": 0, "output": 0, "reasoning": 0, "total": 0, "count": 0},
+                        )
+                        slot["input"] += i
+                        slot["cached"] += c
+                        slot["output"] += o
+                        slot["reasoning"] += r
+                        slot["total"] += t
+                        slot["count"] += 1
+                        has_token = True
+        except RECOVERABLE_ERRORS:
+            continue
+        if has_token:
+            session_count += 1
+    return {
+        "available": True,
+        "source": "Codex (~/.codex/archived_sessions)",
+        "jsonl_files": len(jsonl_files),
+        "sessions_with_tokens": session_count,
+        "prompt_tokens": total_input,
+        "cached_tokens": total_cached,
+        "completion_tokens": total_output,
+        "reasoning_tokens": total_reasoning,
+        "total_tokens": total_total,
+        "by_model": dict(sorted(by_model.items(), key=lambda x: -x[1]["total"])),
+    }
+
+
+def _collect_trae_usage() -> dict[str, Any]:
+    """Trae 用量（state.vscdb，API 403 无法获取精确 token）。"""
+    import sqlite3
+
+    state_db = os.path.expanduser(
+        "~/Library/Application Support/Trae CN/User/globalStorage/state.vscdb"
+    )
+    if not os.path.exists(state_db):
+        return {"available": False, "reason": f"state.vscdb 不存在: {state_db}"}
+    total_turns = 0
+    turn_details: dict[str, int] = {}
+    current_models: Any = None
+    available_models_count = 0
+    try:
+        conn = sqlite3.connect(state_db)
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT key, value FROM ItemTable WHERE key LIKE 'ai.chat.feedback%.accumulatedTurns'"
+        )
+        for key, value in cur.fetchall():
+            n = _to_int(value)
+            total_turns += n
+            turn_details[key] = n
+        cur.execute(
+            "SELECT value FROM ItemTable WHERE key LIKE '%sessionRelation:globalModelMap%' LIMIT 1"
+        )
+        row = cur.fetchone()
+        if row:
+            try:
+                current_models = json.loads(row[0])
+            except RECOVERABLE_ERRORS:
+                current_models = None
+        cur.execute(
+            "SELECT value FROM ItemTable WHERE key LIKE '%model_list_map%' LIMIT 1"
+        )
+        row = cur.fetchone()
+        if row:
+            try:
+                m = json.loads(row[0])
+                if isinstance(m, dict):
+                    for _mode, models in m.items():
+                        if isinstance(models, list):
+                            available_models_count += len(models)
+            except RECOVERABLE_ERRORS:
+                pass
+        conn.close()
+    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001
+        return {"available": False, "reason": f"读取 state.vscdb 失败: {exc}"}
+    # Trae API 被 403 拦截，用轮次估算 token 用量
+    # IDE AI 助手 Composer/Agent 模式每轮：prompt ~10000000（含多文件代码上下文+历史对话缓存）
+    # + completion ~500000（AI 回复+代码生成）
+    # 参照 Cursor 52 亿/30 天、Codex 84 亿/5 会话校准
+    est_prompt_per_turn = 10_000_000
+    est_completion_per_turn = 500_000
+    est_prompt = total_turns * est_prompt_per_turn
+    est_completion = total_turns * est_completion_per_turn
+    est_total = est_prompt + est_completion
+    return {
+        "available": True,
+        "source": "Trae (state.vscdb + 轮次估算)",
+        "note": f"Trae API 被 WAF 403 拦截，按 {total_turns} 轮 × 1050 万 tokens/轮 估算"
+        f"（prompt 1000 万 + completion 50 万）",
+        "estimated": True,
+        "total_chat_turns": total_turns,
+        "turn_details": turn_details,
+        "current_models": current_models,
+        "available_models_count": available_models_count,
+        "prompt_tokens": est_prompt,
+        "completion_tokens": est_completion,
+        "total_tokens": est_total,
+    }
+
+
+def _estimate_cost_usd(source_key: str, data: dict[str, Any]) -> float:
+    """估算费用（美元）。Cursor 用精确 cents，其余按 API 单价估算。"""
+    if not data.get("available"):
+        return 0.0
+    if source_key == "cursor":
+        return _to_int(data.get("cost_cents")) / 100.0
+    if source_key == "codex":
+        # GPT-5: input $5/1M (uncached), $1.25/1M (cached), output+reasoning $10/1M
+        prompt = _to_int(data.get("prompt_tokens"))
+        cached = _to_int(data.get("cache_read_tokens"))
+        output = _to_int(data.get("completion_tokens"))
+        reasoning = _to_int(data.get("reasoning_tokens"))
+        uncached = max(0, prompt - cached)
+        return (
+            uncached * 5 / 1_000_000
+            + cached * 1.25 / 1_000_000
+            + (output + reasoning) * 10 / 1_000_000
+        )
+    if source_key == "trae":
+        # GLM-5.1: input ¥5/1M, output ¥5/1M, 1 USD ≈ 7.2 CNY
+        prompt = _to_int(data.get("prompt_tokens"))
+        output = _to_int(data.get("completion_tokens"))
+        return (prompt + output) * 5 / 7.2 / 1_000_000
+    if source_key == "local":
+        return _to_int(data.get("cost_units")) / 100.0
+    if source_key == "mimo":
+        # mimo 套餐制，Credits 额度内不再单独计费
+        return 0.0
+    return 0.0
+
+
+def _collect_mimo_usage() -> dict[str, Any]:
+    """采集 mimo（小米 MiMo）用量。手动输入静态数据。"""
+    # 用户手动提供：实际 token 80,621,905，Credits 额度 38,000,000,000
+    credits_used = 22_070_888_859
+    credits_quota = 38_000_000_000
+    actual_tokens = 80_621_905
+    usage_pct = round(credits_used / credits_quota * 100, 1) if credits_quota else 0
+    return {
+        "available": True,
+        "source": "mimo (小米 MiMo, 手动输入)",
+        "note": f"Credits {credits_used:,} / {credits_quota:,}（{usage_pct}%），"
+        f"实际 token {actual_tokens:,}",
+        "total_tokens": actual_tokens,
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "credits_used": credits_used,
+        "credits_quota": credits_quota,
+        "usage_percent": usage_pct,
+        "estimated": True,
+    }
+
+
+def _build_token_usage_summary() -> dict[str, Any]:
+    """聚合 5 个来源的 token 用量。"""
+    local = _collect_local_ledger()
+    cursor = _collect_cursor_usage()
+    codex = _collect_codex_usage()
+    trae = _collect_trae_usage()
+    mimo = _collect_mimo_usage()
+    sources = {"local": local, "cursor": cursor, "codex": codex, "trae": trae, "mimo": mimo}
+    # 给每个来源加费用估算
+    for key, src in sources.items():
+        src["estimated_cost_usd"] = round(_estimate_cost_usd(key, src), 2)
+    grand_total = sum(_to_int(s.get("total_tokens")) for s in sources.values())
+    grand_prompt = sum(
+        _to_int(s.get("prompt_tokens")) for s in sources.values()
+    )
+    grand_completion = sum(
+        _to_int(s.get("completion_tokens")) for s in sources.values()
+    )
+    grand_cost = round(sum(s.get("estimated_cost_usd", 0.0) for s in sources.values()), 2)
+    return {
+        "success": True,
+        "grand_total_tokens": grand_total,
+        "grand_prompt_tokens": grand_prompt,
+        "grand_completion_tokens": grand_completion,
+        "grand_cost_usd": grand_cost,
+        "sources": sources,
+        "collected_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+    }
+
+
+@router.get("/admin/token-usage", response_model=None)
+async def admin_token_usage(request: Request):
+    """Token 用量聚合：本地账本 + Cursor + Codex + Trae。"""
+    from app.fastapi_routes.domains.misc.helpers import _session_id_from_request
+
+    if not _session_id_from_request(request):
+        return JSONResponse(
+            {"success": False, "message": "请先登录"},
+            status_code=401,
+        )
+    return await asyncio.to_thread(_build_token_usage_summary)

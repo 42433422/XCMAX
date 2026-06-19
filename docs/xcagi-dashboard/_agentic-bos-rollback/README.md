@@ -45,5 +45,5 @@ bash docs/xcagi-dashboard/_agentic-bos-rollback/backend/ROLLBACK_BACKEND.sh
 ```
 
 后端本次改了什么：
-- **FASTGATE**（新增 `成都修茈科技有限公司/MODstore_deploy/modstore_server/installer_fastgate.py` + 接入 `digest_daily_line_chain.execute_installer_employee_chain`）：installer/major 快路径推 COS / 回写下载 SSOT 前，强制 staging + /api/health + 市场下载页 smoke 门禁；不过则阻断推送、不写 last_push。开关 `MODSTORE_INSTALLER_FASTGATE_ENABLED`（默认 1）。
+- **FASTGATE**（新增 `成都修茈科技有限公司/MODstore_deploy/modstore_server/installer_fastgate.py` + 接入 `digest_daily_line_chain.execute_installer_employee_chain`）：installer/major 快路径推 COS / 回写下载源前，强制 staging + /api/health + 市场下载页 smoke 门禁；不过则阻断推送、不写 last_push。开关 `MODSTORE_INSTALLER_FASTGATE_ENABLED`（默认 1）。
 - **GOV**（`operations_line_bridge.compute_governance_summary` + 网关/应用服务透出 + `GET /api/operations-line/governance/summary`）：聚合 O4 收费 / O8 签收 / O10 对账 + 断点 → SLA + 风控标记 + 总体状态。

@@ -19,7 +19,6 @@ export const ADMIN_SIDEBAR_PINNED_TOP_KEYS = ADMIN_OPERATOR_MENU_ITEMS.map((m) =
  */
 export const ADMIN_OPERATOR_AUX_MENU_ITEMS: CoreMenuCatalogItem[] = [
   { key: 'im', name: '信息', iconClass: 'fa-envelope-o' },
-  { key: 'internal-customer-service', name: '内部客服', iconClass: 'fa-headphones' },
   { key: 'data-sources', name: '数据来源', iconClass: 'fa-database' },
   { key: 'tools', name: '工具表', iconClass: 'fa-wrench' },
   { key: 'mod-store', name: '能力库', iconClass: 'fa-puzzle-piece' },
@@ -37,8 +36,6 @@ export const ADMIN_OPERATOR_VISIBLE_CORE_KEYS = new Set([
   'tools',
   'data-sources',
   'chat-debug',
-  'internal-customer-service',
-  'mod-internal-customer-service',
   'desktop-runtime',
   'duty-roster-graph',
 ])
@@ -108,6 +105,8 @@ export const ADMIN_OPERATOR_HIDDEN_HOST_KEYS = new Set([
   'printer-list',
   'template-preview',
   'enterprise-customer-service',
+  'internal-customer-service',
+  'mod-internal-customer-service',
 ])
 
 export const ADMIN_OPERATOR_BLOCKED_ROUTE_NAMES = new Set([
@@ -127,6 +126,8 @@ export const ADMIN_OPERATOR_BLOCKED_ROUTE_NAMES = new Set([
   'inventory',
   'kitten-finance',
   'enterprise-customer-service',
+  'internal-customer-service',
+  'mod-internal-customer-service',
   'printer-list',
   'template-preview',
 ])

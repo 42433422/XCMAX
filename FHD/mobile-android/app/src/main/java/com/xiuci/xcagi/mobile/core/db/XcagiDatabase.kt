@@ -1,5 +1,6 @@
 package com.xiuci.xcagi.mobile.core.db
 
+import androidx.room.ColumnInfo
 import androidx.room.Dao
 import androidx.room.Database
 import androidx.room.Entity
@@ -139,6 +140,31 @@ interface ImReadStateDao {
     suspend fun clearAll()
 }
 
+@Entity(tableName = "mod_info_cache")
+data class ModInfoCacheEntity(
+    @PrimaryKey val id: String,
+    val name: String,
+    val version: String,
+    val description: String,
+    val author: String,
+    @ColumnInfo(name = "primary_flag") val primary: Boolean,
+    val industry: String,
+    val avatarUrl: String?,
+    val cachedAt: Long,
+)
+
+@Dao
+interface ModInfoCacheDao {
+    @Query("SELECT * FROM mod_info_cache ORDER BY cachedAt DESC")
+    suspend fun getAll(): List<ModInfoCacheEntity>
+
+    @Query("DELETE FROM mod_info_cache")
+    suspend fun clear()
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(items: List<ModInfoCacheEntity>)
+}
+
 @Database(
     entities = [
         ChatCacheEntity::class,
@@ -146,8 +172,9 @@ interface ImReadStateDao {
         ShipmentCacheEntity::class,
         ImMessageCacheEntity::class,
         ImReadStateEntity::class,
+        ModInfoCacheEntity::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = false,
 )
 abstract class XcagiDatabase : RoomDatabase() {
@@ -156,12 +183,33 @@ abstract class XcagiDatabase : RoomDatabase() {
     abstract fun shipmentDao(): ShipmentCacheDao
     abstract fun imMessageDao(): ImMessageCacheDao
     abstract fun imReadStateDao(): ImReadStateDao
+    abstract fun modInfoCacheDao(): ModInfoCacheDao
 
     companion object {
         val MIGRATION_3_4 = object : Migration(3, 4) {
             override fun migrate(database: SupportSQLiteDatabase) {
                 database.execSQL(
                     "ALTER TABLE chat_cache ADD COLUMN session_id TEXT NOT NULL DEFAULT 'default'"
+                )
+            }
+        }
+
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS mod_info_cache (
+                        id TEXT NOT NULL PRIMARY KEY,
+                        name TEXT NOT NULL,
+                        version TEXT NOT NULL,
+                        description TEXT NOT NULL,
+                        author TEXT NOT NULL,
+                        primary_flag INTEGER NOT NULL,
+                        industry TEXT NOT NULL,
+                        avatarUrl TEXT,
+                        cachedAt INTEGER NOT NULL
+                    )
+                    """.trimIndent()
                 )
             }
         }

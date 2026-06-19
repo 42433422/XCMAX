@@ -1,3 +1,5 @@
+# CI SSOT: 此文件为编辑源，执行入口在根仓 .github/workflows/market-ci.yml
+#
 # 组件级 CI：MODstore market 前端（MODstore_deploy/market）
 #
 # 责任边界：仅负责 MODstore_deploy/market 子项目。

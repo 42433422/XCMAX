@@ -25,6 +25,10 @@ scope_globs:
   - MODstore_deploy/modstore_server/infrastructure/**
   - MODstore_deploy/modstore_server/integrations/**
   - MODstore_deploy/modstore_server/tools/**
+  - MODstore_deploy/config/**
+  - MODstore_deploy/tools/**
+  - MODstore_deploy/reset_admin.py
+  - MODstore_deploy/modstore_build.json.example
   # API / 事件 / 编排契约
   - MODstore_deploy/docs/contracts/events/**
   - MODstore_deploy/docs/contracts/openapi/**
@@ -55,15 +59,32 @@ sla:
 llm_default: "auto"
 llm_reasoning: "auto"
 
+capabilities:
+  - api.health.check
+  - flask.blueprint.update
+
 skills:
   - skills/skill-api-health-check.md
   - skills/skill-flask-blueprint-update.md
 
+actions:
+  handlers: ["agent"]
+  agent:
+    workspace:
+      read_only: false
+      requires_project_root: true
+
 depends_on:
-  - test-qa-runner
   - log-monitor-incident
   - deploy-release-officer # 发版与部署编排协作
   - dbops-engineer         # schema 变更必须由 DBA 会签
+
+examples:
+  - title: "MODstore 后端 API 员岗位验收"
+    description: "以最小、无副作用输入验证岗位输出包含真实证据、风险与下一步。"
+    input:
+      task: "执行一次MODstore 后端 API 员职责范围内的只读检查，并返回证据、风险和下一步。"
+      dry_run: true
 
 changelog:
   - version: "1.0.0"

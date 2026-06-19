@@ -24,6 +24,8 @@ READ_TOOLS = ("excel_analysis", "excel_schema_understand", "excel_join_compare")
 CHART_TOOLS = ("excel_chart_recommend",)
 DOC_TOOLS = ("generate_office_document",)
 WRITE_TOOLS = frozenset({"import_excel_to_database", "products_bulk_import"})
+# 代码修改工具（patch_file/write_file 等）—— 受 scope_globs + write_approval gate 强制
+CODE_WRITE_TOOLS = frozenset({"patch_file", "write_file"})
 
 _EXCEL_KW = (
     "excel",

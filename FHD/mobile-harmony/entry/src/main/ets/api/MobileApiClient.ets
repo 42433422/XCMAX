@@ -1,4 +1,5 @@
 import http from '@ohos.net.http';
+import { ApiEndpoints } from './ApiEndpoints';
 import {
   ChatResponseData,
   MobileEnvelope,
@@ -54,7 +55,7 @@ export class MobileApiClient {
       account_kind: accountKind.trim().length > 0 ? accountKind.trim() : 'admin'
     };
     const envelope = await this.request<MobileLoginData>(
-      'api/mobile/v1/auth/login',
+      ApiEndpoints.AUTH_LOGIN,
       http.RequestMethod.POST,
       body
     );
@@ -62,17 +63,17 @@ export class MobileApiClient {
   }
 
   async me(): Promise<MobileMeData> {
-    const envelope = await this.request<MobileMeData>('api/mobile/v1/me', http.RequestMethod.GET);
+    const envelope = await this.request<MobileMeData>(ApiEndpoints.ME, http.RequestMethod.GET);
     return envelope.data || {};
   }
 
   async home(): Promise<MobileHomeData> {
-    const envelope = await this.request<MobileHomeData>('api/mobile/v1/home', http.RequestMethod.GET);
+    const envelope = await this.request<MobileHomeData>(ApiEndpoints.HOME, http.RequestMethod.GET);
     return envelope.data || {};
   }
 
   async mods(): Promise<MobileModsData> {
-    const envelope = await this.request<MobileModsData>('api/mobile/v1/mods', http.RequestMethod.GET);
+    const envelope = await this.request<MobileModsData>(ApiEndpoints.MODS, http.RequestMethod.GET);
     return envelope.data || {};
   }
 
@@ -81,7 +82,7 @@ export class MobileApiClient {
       code: code.trim()
     };
     const envelope = await this.request<PairingExchangeData>(
-      'api/mobile/v1/pairing/exchange',
+      ApiEndpoints.PAIRING_EXCHANGE,
       http.RequestMethod.POST,
       body
     );

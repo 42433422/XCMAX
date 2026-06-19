@@ -37,6 +37,13 @@ function hostSlotForModItem(item: ResolvedSidebarMenuItem): string {
   return ''
 }
 
+function isInternalCustomerServiceMenuItem(item: ResolvedSidebarMenuItem): boolean {
+  const key = normalizeModSidebarNavKey(String(item.key || '').trim())
+  if (key === 'internal-customer-service' || key === 'mod-internal-customer-service') return true
+  const path = String(item.path || '').trim()
+  return path.split('?')[0].split('#')[0].includes('/internal-customer-service')
+}
+
 const hostKeysFromPath = new Set([
   'enterprise-customer-service',
   'internal-customer-service',
@@ -83,6 +90,7 @@ export function mergeSidebarMenuItems(
   const push = (item: ResolvedSidebarMenuItem) => {
     const key = String(item.key || '').trim()
     if (!key || seen.has(key)) return
+    if (isInternalCustomerServiceMenuItem(item)) return
 
     const modId = String(item.modId || '').trim()
     const navKey = normalizeModSidebarNavKey(key)

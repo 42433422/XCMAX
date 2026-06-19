@@ -25,10 +25,25 @@ sla:
   retry_max: 2
   escalate_to_human: true
 llm_default: auto
-skills: []
+capabilities:
+  - revenue.share.reconcile
+  - settlement.exception.report
+
+skills:
+  - skills/skill-ecosystem-revenue-share-reconciler.md
+actions:
+  handlers: ["llm_md", "echo"]
+
 depends_on:
 - payment-billing-reconciler
 - java-payment-bridge-officer
+examples:
+  - title: "生态分润对账员岗位验收"
+    description: "以最小、无副作用输入验证岗位输出包含真实证据、风险与下一步。"
+    input:
+      task: "执行一次生态分润对账员职责范围内的只读检查，并返回证据、风险和下一步。"
+      dry_run: true
+
 changelog:
 - version: 1.0.0
   date: '2026-06-03'

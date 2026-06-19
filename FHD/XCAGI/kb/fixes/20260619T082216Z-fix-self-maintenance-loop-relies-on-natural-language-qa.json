@@ -1,0 +1,24 @@
+{
+  "created_at": "2026-06-19T08:22:16.308991+00:00",
+  "executable_template": {
+    "applicability_check": "Apply when QA/review reports are prose-only, old test failures pollute QA, Para currentTask is stale, or KB fix records cannot be executed safely.",
+    "patch_strategy": "Require structured JSON contracts, compare QA against clean baseline, block auto-merge on structured risk, and enrich KB records with executable templates.",
+    "required_tests": [
+      "test_self_maintenance_loop_runner_policy.py",
+      "test_self_evolution_knowledge.py",
+      "test_self_evolution_loop.py",
+      "test_ops_staged_auto_approve.py"
+    ],
+    "rollback_plan": "Revert the self_maintenance_loop_runner and self_evolution_knowledge changes; remove the generated baseline if structured gate blocks all runs unexpectedly."
+  },
+  "fix_diff": "Added structured review/QA JSON markers and _structured_report_gate(); policy now blocks missing/failed structured QA/review JSON before auto-merge. Added clean baseline read/write with initial allowed pytest/ruff/openapi counts and prompt injection. Added Para codex currentTask busy wait and stale idle currentTask cleanup. Extended fix knowledge with executable_template: applicability_check, patch_strategy, required_tests, rollback_plan.",
+  "kind": "fix",
+  "metadata": {
+    "baseline_id": "initial-current-known-failures-2026-06-18",
+    "baseline_path": "/Users/a4243342/Desktop/XCMAX/FHD/XCAGI/kb/metrics/self_maintenance_clean_baseline.json",
+    "component": "self_maintenance_loop_runner,self_evolution_knowledge"
+  },
+  "root_cause": "Policy parsed prose instead of a structured contract; QA had no clean baseline to separate historical failures from new failures; merge gate fields were implicit; Para device availability ignored codex currentTask; fix knowledge lacked applicability and rollback instructions.",
+  "schema_version": 1,
+  "symptom": "Self-maintenance loop relies on natural-language QA/review reports, dirty full-test history, loose merge gates, Para currentTask contamination, and non-executable KB records."
+}

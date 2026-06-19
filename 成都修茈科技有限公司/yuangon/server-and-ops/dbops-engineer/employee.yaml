@@ -45,6 +45,11 @@ sla:
 llm_default: "auto"
 llm_reasoning: "auto"
 
+capabilities:
+  - schema.migration
+  - slow.sql.triage
+  - backup.restore.advice
+
 skills:
   - skills/skill-schema-migration.md
   - skills/skill-slow-sql-triage.md
@@ -58,8 +63,14 @@ actions:
       requires_project_root: true
 
 depends_on:
-  - test-qa-runner
   - security-secrets-guard
+
+examples:
+  - title: "数据库运维工程师岗位验收"
+    description: "以最小、无副作用输入验证岗位输出包含真实证据、风险与下一步。"
+    input:
+      task: "执行一次数据库运维工程师职责范围内的只读检查，并返回证据、风险和下一步。"
+      dry_run: true
 
 changelog:
   - version: "1.0.0"

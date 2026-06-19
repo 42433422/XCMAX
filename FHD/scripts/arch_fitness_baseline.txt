@@ -3,7 +3,7 @@
 [giant-file] app/application/shipment_app_service.py
 [giant-file] app/application/tools/workflow.py
 [giant-file] app/application/wechat_task_app_service.py
-[giant-file] app/application/workflow/legacy_chat_adapter.py
+[giant-file] app/legacy/chat/legacy_chat_adapter.py
 [giant-file] app/application/workflow/planner.py
 [giant-file] app/db/init_db.py
 [giant-file] app/domain/context/session_context.py

@@ -23,6 +23,12 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+_MISSING_MODULE = object()
+_ORIGINAL_ML_MODULES = {
+    name: sys.modules.get(name, _MISSING_MODULE)
+    for name in ("torch", "torch.utils", "torch.utils.data", "transformers")
+}
+
 # ---------------------------------------------------------------------------
 # Stub heavy ML deps so the source module can be imported without torch /
 # transformers installed. We use real ``types.ModuleType`` stubs (not bare
@@ -171,6 +177,8 @@ _install_torch_transformers_stubs()
 
 # Now safe to import the source module — its top-level imports will resolve
 # against the stubs.
+import torch  # noqa: E402  (the stub)
+
 from app.services.distillation_trainer import (  # noqa: E402
     CHECKPOINT_DIR,
     DISTILL_DIR,
@@ -182,7 +190,12 @@ from app.services.distillation_trainer import (  # noqa: E402
     DistillationTrainer,
     main,
 )
-import torch  # noqa: E402  (the stub)
+
+for _module_name, _original_module in _ORIGINAL_ML_MODULES.items():
+    if _original_module is _MISSING_MODULE:
+        sys.modules.pop(_module_name, None)
+    else:
+        sys.modules[_module_name] = _original_module
 
 
 # ---------------------------------------------------------------------------

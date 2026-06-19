@@ -25,6 +25,7 @@ LOGIN_APP="${SUPPORT_DIR}/${LOGIN_ITEM_NAME}.app"
 RUNTIME_ROOT="${HOME}/XCMAX-runtime/modstore-daily"
 RUNTIME_DEPLOY_ROOT="${RUNTIME_ROOT}/MODstore_deploy"
 RUNTIME_PACKAGES_ROOT="${RUNTIME_ROOT}/packages"
+RUNTIME_YUANGON_ROOT="${RUNTIME_ROOT}/yuangon"
 RUNTIME_FHD_ROOT="${RUNTIME_ROOT}/FHD"
 RUNTIME_FHD_CONFIG_ROOT="${RUNTIME_FHD_ROOT}/config"
 RUNTIME_GIT_MIRROR="${RUNTIME_ROOT}/XCMAX.git"
@@ -97,6 +98,9 @@ rsync -a --delete \
 log "同步共享 packages → ${RUNTIME_PACKAGES_ROOT}"
 mkdir -p "${RUNTIME_PACKAGES_ROOT}"
 rsync -a --delete "${XCMAX_ROOT}/packages/" "${RUNTIME_PACKAGES_ROOT}/"
+log "同步元工定义 → ${RUNTIME_YUANGON_ROOT}"
+mkdir -p "${RUNTIME_YUANGON_ROOT}"
+rsync -a --delete "${XCMAX_ROOT}/成都修茈科技有限公司/yuangon/" "${RUNTIME_YUANGON_ROOT}/"
 if command -v git >/dev/null 2>&1; then
   if [[ -d "${RUNTIME_GIT_MIRROR}/objects" ]]; then
     log "同步 git mirror → ${RUNTIME_GIT_MIRROR}"

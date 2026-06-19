@@ -153,6 +153,34 @@ class ApiMixin(NeuroEventPublisherMixin):
                 trace = _build_llm_trace(provider, result, latency_ms)
                 result["_xcagi_trace"] = trace
                 self._last_llm_trace = trace
+                # 持久化 token 用量到本地账本（供 llm-ops-engineer 查询）
+                try:
+                    from app.infrastructure.billing.model_usage import (
+                        record_model_usage,
+                    )
+
+                    record_model_usage(
+                        provider_id=trace["provider_id"],
+                        provider=trace["provider"],
+                        model=trace["model"],
+                        prompt_tokens=trace["prompt_tokens"],
+                        completion_tokens=trace["completion_tokens"],
+                        total_tokens=trace["total_tokens"],
+                        cost_units=trace["cost_units"],
+                        billing_status=trace["billing_status"],
+                        billing_source=trace["billing_source"],
+                        source="conversation_service",
+                        user_id=str(
+                            getattr(
+                                getattr(self, "modstore_adapter", None),
+                                "user_id",
+                                "",
+                            )
+                            or ""
+                        ),
+                    )
+                except RECOVERABLE_ERRORS:
+                    logger.debug("record_model_usage failed", exc_info=True)
                 try:
                     from app.neuro_bus.application_neuro_bridge import (
                         neuro_notify_ai_model_roundtrip,
@@ -210,6 +238,38 @@ class ApiMixin(NeuroEventPublisherMixin):
             result = response.json()
 
             if result.get("choices") and len(result["choices"]) > 0:
+                latency_ms = (time.perf_counter() - t0) * 1000.0
+                # 解析真实 token 用量（之前硬编码 token_count=0）
+                usage = result.get("usage") if isinstance(result.get("usage"), dict) else {}
+                prompt_tokens = _coerce_int(usage.get("prompt_tokens"))
+                completion_tokens = _coerce_int(usage.get("completion_tokens"))
+                total_tokens = _coerce_int(usage.get("total_tokens"))
+                # 持久化 token 用量到本地账本
+                try:
+                    from app.infrastructure.billing.model_usage import (
+                        estimate_llm_cost_units,
+                        record_model_usage,
+                    )
+
+                    cost_units = estimate_llm_cost_units(
+                        prompt_tokens=prompt_tokens,
+                        completion_tokens=completion_tokens,
+                        total_tokens=total_tokens,
+                    )
+                    record_model_usage(
+                        provider_id="deepseek-legacy",
+                        provider="deepseek",
+                        model=str(self.model or ""),
+                        prompt_tokens=prompt_tokens,
+                        completion_tokens=completion_tokens,
+                        total_tokens=total_tokens,
+                        cost_units=cost_units,
+                        billing_status="metered" if cost_units else "unmetered",
+                        billing_source="estimated_token_units",
+                        source="conversation_service.deepseek_legacy",
+                    )
+                except RECOVERABLE_ERRORS:
+                    logger.debug("record_model_usage failed", exc_info=True)
                 try:
                     from app.neuro_bus.application_neuro_bridge import (
                         neuro_notify_ai_model_roundtrip,
@@ -217,8 +277,8 @@ class ApiMixin(NeuroEventPublisherMixin):
 
                     neuro_notify_ai_model_roundtrip(
                         model=self.model,
-                        latency_ms=(time.perf_counter() - t0) * 1000.0,
-                        token_count=0,
+                        latency_ms=latency_ms,
+                        token_count=total_tokens,
                         user_id="",
                     )
                 except RECOVERABLE_ERRORS:

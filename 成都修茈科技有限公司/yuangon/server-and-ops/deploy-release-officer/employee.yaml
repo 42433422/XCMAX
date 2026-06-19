@@ -6,6 +6,8 @@ owner: admin
 area: server-and-ops
 
 scope_globs:
+  - MODstore_deploy/desktop-shell/**
+  - release/**
   - deploy/**
   - scripts/**
   - docker/**
@@ -63,6 +65,9 @@ sla:
 llm_default: "auto"
 llm_reasoning: "auto"
 
+capabilities:
+  - deploy.pipeline
+
 skills:
   - skills/skill-deploy-pipeline.md
 
@@ -82,6 +87,13 @@ actions:
 depends_on:
   - nginx-config-engineer
   - security-secrets-guard
+
+examples:
+  - title: "发布部署主管岗位验收"
+    description: "以最小、无副作用输入验证岗位输出包含真实证据、风险与下一步。"
+    input:
+      task: "执行一次发布部署主管职责范围内的只读检查，并返回证据、风险和下一步。"
+      dry_run: true
 
 changelog:
   - version: "1.0.1"

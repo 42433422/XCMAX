@@ -6,7 +6,7 @@
 
 - `FHD/app/application/*_app_service_v2.py`: 0
 - `app/application/app_service_pair_registry.py`: removed
-- HTTP and planner code should use the existing no-suffix application service modules or the domain/route SSOT.
+- HTTP and planner code should use the existing no-suffix application service modules or the domain/route registry.
 
 ## Guard
 

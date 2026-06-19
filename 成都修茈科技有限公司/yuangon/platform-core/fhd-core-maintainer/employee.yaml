@@ -11,6 +11,8 @@ scope_globs:
   - FHD/pyproject.toml
   - FHD/alembic/**
   - FHD/docs/api/openapi.json
+  - FHD/config/**
+  - packages/xcagi_common/**
   - FHD/mods/_employees/fhd-core-maintainer/**
   - yuangon/platform-core/fhd-core-maintainer/**
 
@@ -39,11 +41,28 @@ sla:
 llm_default: "auto"
 llm_reasoning: "auto"
 
+capabilities:
+  - fhd.app.patch
+
 skills:
   - skills/skill-fhd-app-patch.md
 
+actions:
+  handlers: ["agent"]
+  agent:
+    workspace:
+      read_only: false
+      requires_project_root: true
+
 depends_on:
   - test-qa-runner
+
+examples:
+  - title: "FHD 核心应用维护员岗位验收"
+    description: "以最小、无副作用输入验证岗位输出包含真实证据、风险与下一步。"
+    input:
+      task: "执行一次FHD 核心应用维护员职责范围内的只读检查，并返回证据、风险和下一步。"
+      dry_run: true
 
 changelog:
   - version: "1.0.0"

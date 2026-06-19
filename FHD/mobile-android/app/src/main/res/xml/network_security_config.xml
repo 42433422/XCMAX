@@ -1,11 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    网络安全策略说明（2026-06-20 修订）：
+
+    1. base-config 放行 cleartext —— 因为 LAN 内网连接 PC 桌面端用的是私有 IP
+       （192.168.x.x / 10.x.x.x / 172.16-31.x.x），Android 的 network-security-config
+       不支持按 IP 段或 CIDR 配置 <domain>，只能用 base-config 兜底放行。
+    2. domain-config 对生产域名 xiu-ci.com 强制 HTTPS，防止云端流量被降级。
+    3. AndroidManifest 已移除冗余的 android:usesCleartextTraffic="true"，
+       由本文件单独接管 cleartext 策略（networkSecurityConfig 优先级高于该属性）。
+    4. debug 构建见 app/src/debug/res/xml/network_security_config.xml（全放行，便于本地调试）。
+-->
 <network-security-config>
-    <!-- 局域网 FHD 桌面使用 HTTP/ws；云端 MODstore 仍走 HTTPS -->
+    <!-- 局域网 FHD 桌面使用 HTTP/ws（私有 IP 无法按 domain 配置，只能 base 放行） -->
     <base-config cleartextTrafficPermitted="true">
         <trust-anchors>
             <certificates src="system" />
         </trust-anchors>
     </base-config>
+    <!-- 云端 MODstore / FHD API 强制 HTTPS -->
     <domain-config cleartextTrafficPermitted="false">
         <domain includeSubdomains="true">xiu-ci.com</domain>
         <domain includeSubdomains="true">www.xiu-ci.com</domain>

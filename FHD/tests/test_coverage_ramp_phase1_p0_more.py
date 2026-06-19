@@ -272,13 +272,13 @@ def test_mobile_shipments_list(mock_get_db: MagicMock, mobile_client: TestClient
 
 
 def test_mobile_mods_list(mobile_client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(mobile_ext, "_mobile_mod_items", lambda: [{"id": "demo"}])
+    monkeypatch.setattr(mobile_ext, "_mobile_mod_items", lambda *args, **kwargs: [{"id": "demo"}])
     r = mobile_client.get("/mods")
     assert r.status_code == 200
 
 
 def test_mobile_home(mobile_client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(mobile_ext, "_mobile_mod_items", lambda: [{"id": "demo"}])
+    monkeypatch.setattr(mobile_ext, "_mobile_mod_items", lambda *args, **kwargs: [{"id": "demo"}])
     r = mobile_client.get("/home")
     assert r.status_code == 200
 
@@ -289,6 +289,6 @@ def test_mobile_sync_status(mobile_client: TestClient) -> None:
 
 
 def test_mobile_platform_shell(mobile_client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(mobile_ext, "_mobile_mod_items", lambda: [{"id": "demo"}])
+    monkeypatch.setattr(mobile_ext, "_mobile_mod_items", lambda *args, **kwargs: [{"id": "demo"}])
     r = mobile_client.get("/platform-shell")
     assert r.status_code == 200

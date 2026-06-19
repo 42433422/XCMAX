@@ -1,0 +1,13 @@
+{
+  "after": "Merge policy consumes structured review/QA JSON, QA compares against clean baseline, and KB fixes include executable applicability/test/rollback templates.",
+  "before": "Merge policy inferred QA state from prose and old failures; KB records were passive notes.",
+  "created_at": "2026-06-19T08:22:16.309178+00:00",
+  "kind": "code_pattern",
+  "metadata": {
+    "baseline_path": "/Users/a4243342/Desktop/XCMAX/FHD/XCAGI/kb/metrics/self_maintenance_clean_baseline.json",
+    "fix_path": "/Users/a4243342/Desktop/XCMAX/FHD/XCAGI/kb/fixes/20260619T082216Z-fix-self-maintenance-loop-relies-on-natural-language-qa.json"
+  },
+  "pattern": "structured_report_gate_with_clean_baseline_and_executable_kb_template",
+  "schema_version": 1,
+  "summary": "Autonomous maintenance loops need structured employee contracts plus clean baselines and executable repair templates before auto-merge."
+}

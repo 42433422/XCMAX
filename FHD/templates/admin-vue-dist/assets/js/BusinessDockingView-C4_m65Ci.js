@@ -1,0 +1,1 @@
+import{_ as e}from"./HostModBridgeView.vue_vue_type_script_setup_true_lang-BvrZDvc2.js";import{a1 as i,t as o,a2 as s}from"./index-CinG43sm.js";const _=i({__name:"BusinessDockingView",setup(a){return(n,t)=>(o(),s(e,{"mod-id":"xcagi-erp-domain-bridge",view:"BusinessDockingView",title:"ERP 业务页"}))}});export{_ as default};

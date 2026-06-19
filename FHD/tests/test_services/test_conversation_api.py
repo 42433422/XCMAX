@@ -456,6 +456,164 @@ class TestCallDeepseekLegacy:
 
 
 # ---------------------------------------------------------------------------
+# token 用量持久化到本地账本（record_model_usage）
+# ---------------------------------------------------------------------------
+class TestTokenUsagePersisted:
+    """验证 call_llm_api 和 _call_deepseek_legacy 会把 token 用量写入账本。"""
+
+    @pytest.mark.asyncio
+    async def test_call_llm_api_persists_token_usage(self):
+        """call_llm_api 调用后 record_model_usage 被调用，参数含真实 token。"""
+        svc = _ConcreteApi()
+        mock_provider = MagicMock()
+        mock_provider.provider_id = "openai_compatible"
+        mock_provider._adapter = SimpleNamespace(provider_name="b.ai", model_name="MiniMax-M3")
+        mock_provider.chat_completion = AsyncMock(
+            return_value={
+                "choices": [{"message": {"content": "hi"}}],
+                "model": "MiniMax-M3",
+                "usage": {"prompt_tokens": 10, "completion_tokens": 20, "total_tokens": 30},
+            }
+        )
+
+        with (
+            patch(
+                "app.infrastructure.llm.providers.registry.get_active_provider",
+                return_value=mock_provider,
+            ),
+            patch(
+                "app.neuro_bus.application_neuro_bridge.neuro_notify_ai_model_roundtrip"
+            ),
+            patch(
+                "app.infrastructure.billing.model_usage.record_model_usage"
+            ) as mock_record,
+        ):
+            await svc.call_llm_api([{"role": "user", "content": "hi"}])
+
+        mock_record.assert_called_once()
+        kwargs = mock_record.call_args.kwargs
+        assert kwargs["prompt_tokens"] == 10
+        assert kwargs["completion_tokens"] == 20
+        assert kwargs["total_tokens"] == 30
+        assert kwargs["model"] == "MiniMax-M3"
+        assert kwargs["provider"] == "b.ai"
+        assert kwargs["source"] == "conversation_service"
+
+    @pytest.mark.asyncio
+    async def test_call_llm_api_record_failure_does_not_break(self):
+        """record_model_usage 抛异常不影响主流程。"""
+        svc = _ConcreteApi()
+        mock_provider = MagicMock()
+        mock_provider.provider_id = "openai_compatible"
+        mock_provider._adapter = SimpleNamespace(provider_name="b.ai", model_name="MiniMax-M3")
+        mock_provider.chat_completion = AsyncMock(
+            return_value={
+                "choices": [{"message": {"content": "hi"}}],
+                "model": "MiniMax-M3",
+                "usage": {"prompt_tokens": 5, "completion_tokens": 5, "total_tokens": 10},
+            }
+        )
+
+        with (
+            patch(
+                "app.infrastructure.llm.providers.registry.get_active_provider",
+                return_value=mock_provider,
+            ),
+            patch(
+                "app.neuro_bus.application_neuro_bridge.neuro_notify_ai_model_roundtrip"
+            ),
+            patch(
+                "app.infrastructure.billing.model_usage.record_model_usage",
+                side_effect=RuntimeError("ledger write failed"),
+            ),
+        ):
+            result = await svc.call_llm_api([{"role": "user", "content": "hi"}])
+
+        # 主流程不受影响，result 正常返回
+        assert result is not None
+        assert result["choices"][0]["message"]["content"] == "hi"
+
+    @pytest.mark.asyncio
+    async def test_deepseek_legacy_persists_token_usage(self):
+        """_call_deepseek_legacy 调用后 record_model_usage 被调用，参数含真实 token。"""
+        svc = _ConcreteApi()
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "choices": [{"message": {"content": "hello"}}],
+            "usage": {"prompt_tokens": 8, "completion_tokens": 12, "total_tokens": 20},
+        }
+        mock_response.raise_for_status = MagicMock()
+
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(return_value=mock_response)
+        mock_client.aclose = AsyncMock()
+
+        with (
+            patch.object(svc, "_get_deepseek_async_client", new_callable=AsyncMock, return_value=mock_client),
+            patch(
+                "app.neuro_bus.application_neuro_bridge.neuro_notify_ai_model_roundtrip"
+            ),
+            patch(
+                "app.infrastructure.billing.model_usage.record_model_usage"
+            ) as mock_record,
+        ):
+            await svc._call_deepseek_legacy([{"role": "user", "content": "hi"}])
+
+        mock_record.assert_called_once()
+        kwargs = mock_record.call_args.kwargs
+        assert kwargs["prompt_tokens"] == 8
+        assert kwargs["completion_tokens"] == 12
+        assert kwargs["total_tokens"] == 20
+        assert kwargs["provider"] == "deepseek"
+        assert kwargs["source"] == "conversation_service.deepseek_legacy"
+
+    @pytest.mark.asyncio
+    async def test_end_to_end_token_usage_queryable(self, tmp_path, monkeypatch):
+        """端到端：call_llm_api 写入账本 → query_local_token_usage 能查到。"""
+        # 用临时账本路径，避免污染真实账本
+        ledger = tmp_path / "test_ledger.json"
+        monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(ledger))
+
+        svc = _ConcreteApi()
+        mock_provider = MagicMock()
+        mock_provider.provider_id = "openai_compatible"
+        mock_provider._adapter = SimpleNamespace(provider_name="b.ai", model_name="MiniMax-M3")
+        mock_provider.chat_completion = AsyncMock(
+            return_value={
+                "choices": [{"message": {"content": "hi"}}],
+                "model": "MiniMax-M3",
+                "usage": {"prompt_tokens": 100, "completion_tokens": 200, "total_tokens": 300},
+            }
+        )
+
+        with (
+            patch(
+                "app.infrastructure.llm.providers.registry.get_active_provider",
+                return_value=mock_provider,
+            ),
+            patch(
+                "app.neuro_bus.application_neuro_bridge.neuro_notify_ai_model_roundtrip"
+            ),
+        ):
+            await svc.call_llm_api([{"role": "user", "content": "hi"}])
+
+        # 用 query_local_token_usage 查询（直接 await，已在 event loop 中）
+        from app.mod_sdk.employee_specialized_tools import TOOL_REGISTRY
+
+        fn = TOOL_REGISTRY["query_local_token_usage"]
+        result = await fn({}, {})
+
+        assert result["ok"] is True
+        assert result["usage_summary"]["total_tokens"] == 300
+        assert result["usage_summary"]["prompt_tokens"] == 100
+        assert result["usage_summary"]["completion_tokens"] == 200
+        assert result["usage_summary"]["total_calls"] == 1
+        # 按 model 分组应有 MiniMax-M3
+        assert "MiniMax-M3" in result["groups"]
+        assert result["groups"]["MiniMax-M3"]["total_tokens"] == 300
+
+
+# ---------------------------------------------------------------------------
 # _call_ai (cached + LLM integration)
 # ---------------------------------------------------------------------------
 class TestCallAi:

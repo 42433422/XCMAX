@@ -81,6 +81,7 @@ def test_admin_duty_graph_capability_and_run(tmp_path, monkeypatch):
         raise ValueError("not found")
 
     monkeypatch.setattr(duty_api, "load_employee_pack", _fake_pack)
+    monkeypatch.setattr(duty_api, "employee_pack_runtime_issues", lambda _pack: [])
     monkeypatch.setattr(
         duty_api,
         "credential_status",

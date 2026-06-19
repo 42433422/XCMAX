@@ -1,3 +1,8 @@
+// AUTO-GENERATED 类型见 api-generated.ets（由 scripts/dev/gen_arkts_models.py 生成）。
+// 本文件仅保留 ArkTS 特有类型（MobileEnvelope<T>、AiEmployeeProfile、ChatMessage 等）
+// 和工具函数（cleanText、firstChar）。重导出 api-generated 以保持现有 import 路径不变。
+export * from './api-generated';
+
 export interface UserDto {
   id?: number;
   username?: string;

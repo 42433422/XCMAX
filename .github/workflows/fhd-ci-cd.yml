@@ -269,6 +269,9 @@ jobs:
       - name: Run architecture fitness checks
         run: python scripts/arch_fitness.py
 
+      - name: docs-ssot-lint
+        run: python scripts/dev/docs_ssot_lint.py --strict
+
   # Security & Dependency Scanning
   security-scan:
     needs: guard-temp-scripts

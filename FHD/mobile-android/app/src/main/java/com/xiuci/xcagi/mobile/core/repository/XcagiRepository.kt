@@ -6,6 +6,7 @@ import com.xiuci.xcagi.mobile.core.db.ApprovalCacheEntity
 import com.xiuci.xcagi.mobile.core.db.ChatCacheEntity
 import com.xiuci.xcagi.mobile.core.db.ShipmentCacheEntity
 import com.xiuci.xcagi.mobile.core.db.XcagiDatabase
+import com.xiuci.xcagi.mobile.core.db.ModInfoCacheEntity
 import com.xiuci.xcagi.mobile.core.model.AccessRequestPayload
 import com.xiuci.xcagi.mobile.core.model.AdminMobileHomeData
 import com.xiuci.xcagi.mobile.core.model.CodexSuperEmployeeMobileMessageBody
@@ -64,6 +65,7 @@ import retrofit2.converter.gson.GsonConverterFactory
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.coroutines.cancellation.CancellationException
 
 internal object AuthRoutingPolicy {
     fun shouldUseEnterpriseAuthHost(isEnterprise: Boolean, configuredHost: String): Boolean =
@@ -335,7 +337,7 @@ class XcagiRepository @Inject constructor(
         if (!res.success || res.data?.access_token.isNullOrBlank()) {
             Result.failure(Exception(res.message.ifBlank { "登录失败" }))
         } else {
-            val d = res.data!!
+            val d = res.data ?: return Result.failure(Exception("登录响应为空"))
             val resolvedKind = resolveAccountKindFromSignals(
                 d.account_kind,
                 d.user?.role,
@@ -421,20 +423,23 @@ class XcagiRepository @Inject constructor(
         }
     }
 
-    suspend fun refreshMe(preferredKind: String = ProductSkuConfig.accountKind) {
+    suspend fun refreshMe(preferredKind: String = ProductSkuConfig.accountKind): String? {
         try {
             val me = fhd().me()
             val uid = me.data?.user?.id ?: 0
             if (uid > 0) sessionStore.setUserId(uid)
+            val avatarUrl = me.data?.user?.avatar_url
             val currentKind = sessionStore.accountKindFlow.first()
-            if (currentKind.isNotBlank()) return
+            if (currentKind.isNotBlank()) return avatarUrl
             val resolvedKind = resolveAccountKindFromSignals(
                 me.data?.account_kind,
                 me.data?.user?.role,
                 preferredKind,
             )
             sessionStore.setAccountKind(resolvedKind)
+            return avatarUrl
         } catch (_: Exception) {
+            return null
         }
     }
 
@@ -874,7 +879,7 @@ class XcagiRepository @Inject constructor(
                 if (!res.success || res.data?.access_token.isNullOrBlank()) {
                     Result.failure(Exception(res.message.ifBlank { "手机验证码登录失败" }))
                 } else {
-                    val d = res.data!!
+                    val d = res.data ?: return Result.failure(Exception("登录响应为空"))
                     val resolvedKind = resolveAccountKindFromSignals(
                         d.account_kind,
                         d.user?.role,
@@ -1088,6 +1093,8 @@ class XcagiRepository @Inject constructor(
 
             finalText = "已提交到超级员工-Codex，任务将在电脑端执行后回写。"
             onDone(finalText)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             onError(e.message ?: "超级员工-Codex 调用失败")
         }
@@ -1335,6 +1342,8 @@ class XcagiRepository @Inject constructor(
                 }
             }
             onError("电脑执行端暂未回写结果，任务已保留在服务器队列。")
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             onError(e.message ?: "中继任务失败")
         }
@@ -1533,6 +1542,64 @@ class XcagiRepository @Inject constructor(
 
     suspend fun loadAdminModInfos(): Result<List<ModInfo>> =
         loadAdminMobileHome().map { home -> listOf(home.toAdminModInfo()) }
+
+    /** 从 Room 缓存读取员工列表（UI 秒出用）。失败或空缓存返回空列表。 */
+    suspend fun loadCachedModInfos(adminMode: Boolean): List<ModInfo> {
+        return try {
+            db.modInfoCacheDao().getAll().map { it.toModInfo() }
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    /** 网络刷新员工列表并写入 Room 缓存。网络失败或返回空列表时保留旧缓存。 */
+    suspend fun refreshAndCacheModInfos(adminMode: Boolean): Result<List<ModInfo>> {
+        val result = if (adminMode) loadAdminModInfos() else loadModInfos()
+        if (result.isSuccess) {
+            val mods = result.getOrThrow()
+            // 仅当网络返回非空列表时才更新缓存；空列表通常是临时错误，不清空旧缓存
+            if (mods.isNotEmpty()) {
+                try {
+                    db.modInfoCacheDao().clear()
+                    db.modInfoCacheDao().insertAll(mods.map { it.toCacheEntity() })
+                } catch (_: Exception) {
+                    // 缓存写入失败不阻断 UI
+                }
+            }
+        }
+        return result
+    }
+
+    private fun ModInfo.toCacheEntity(): ModInfoCacheEntity =
+        ModInfoCacheEntity(
+            id = id.ifBlank { name },
+            name = name,
+            version = version,
+            description = description,
+            author = author,
+            primary = primary,
+            industry = industry?.let { "${it.id}|${it.name}" } ?: "",
+            avatarUrl = avatar_url,
+            cachedAt = System.currentTimeMillis(),
+        )
+
+    private fun ModInfoCacheEntity.toModInfo(): ModInfo =
+        ModInfo(
+            id = id,
+            name = name,
+            version = version,
+            description = description,
+            author = author,
+            primary = primary,
+            industry = industry.takeIf { it.isNotBlank() }?.let { raw ->
+                val parts = raw.split("|", limit = 2)
+                ModIndustry(
+                    id = parts.getOrNull(0) ?: "",
+                    name = parts.getOrNull(1) ?: "",
+                )
+            },
+            avatar_url = avatarUrl,
+        )
 
     suspend fun fetchHome(): Result<Map<String, Any?>> = try {
         syncRouterFromStore()
@@ -1795,6 +1862,7 @@ class XcagiRepository @Inject constructor(
                         market_material_category = employee.market_material_category,
                         market_license_scope = employee.market_license_scope,
                         market_security_level = employee.market_security_level,
+                        market_avatar = employee.market_avatar,
                     )
                 },
         )

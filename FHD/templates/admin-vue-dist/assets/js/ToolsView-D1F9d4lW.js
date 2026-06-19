@@ -1,0 +1,1 @@
+import{_ as e}from"./HostModBridgeView.vue_vue_type_script_setup_true_lang-BvrZDvc2.js";import{a1 as o,a2 as a,t}from"./index-CinG43sm.js";const m=o({__name:"ToolsView",setup(i){return(c,r)=>(t(),a(e,{"mod-id":"xcagi-office-employee-pack-bridge",view:"ToolsView",title:"员工工作流"}))}});export{m as default};

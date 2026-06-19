@@ -11,7 +11,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.application.ai_chat_app_service import AIChatApplicationService
-from app.application.workflow.legacy_chat_adapter import (
+from app.legacy.chat.legacy_chat_adapter import (
     _post_tool_round_hint,
     _slow_tool_wait_message,
     reset_planner_tool_dedup_state,
@@ -140,7 +140,7 @@ def test_im_list_conversations(im_client) -> None:
     body = resp.json()
     assert body["success"] is True
     assert body["user_id"] == 1
-    mock_svc.list_conversations.assert_called_once_with(1)
+    mock_svc.list_conversations.assert_called_once_with(1, include_enterprise_dedicated_cs=True)
 
 
 def test_im_list_contacts_filters_keyword(im_client) -> None:
@@ -273,7 +273,10 @@ def test_dynamic_workflow_unit_import_failure(mock_get: MagicMock) -> None:
         },
     )
     assert out is not None
-    assert out["success"] is False
+    # 源码已重构为启动 agent run（_start_deterministic_import_agent_run），
+    # 不再直接调用 import_unit_products；agent run 启动成功即返回 success=True，
+    # 实际导入失败由 agent 执行阶段处理（异步），此处验证降级不阻断主流程。
+    assert out["success"] is True
 
 
 # ---------------------------------------------------------------------------

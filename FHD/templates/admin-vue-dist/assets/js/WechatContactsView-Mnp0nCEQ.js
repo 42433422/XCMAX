@@ -1,0 +1,1 @@
+import{a1 as a,q as t,o,t as s,v as c}from"./index-CinG43sm.js";const r={class:"page-view",id:"view-wechat-contacts","aria-busy":"true","aria-label":"正在跳转到数据来源"},d=a({__name:"WechatContactsView",setup(n){const e=t();return o(()=>{e.replace({name:"mod-erp-data-sources",query:{source:"wechat_local_db"}})}),(u,i)=>(s(),c("div",r))}});export{d as default};

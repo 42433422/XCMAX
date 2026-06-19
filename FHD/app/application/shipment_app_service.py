@@ -12,7 +12,7 @@ from app.application.ports import (
     ShipmentRepository,
 )
 from app.domain.shipment.aggregates import Shipment, ShipmentItem
-from app.domain.shipment.legacy_vo import ContactInfo
+from app.legacy.domain.legacy_vo import ContactInfo
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)

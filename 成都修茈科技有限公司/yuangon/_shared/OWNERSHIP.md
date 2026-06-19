@@ -1,7 +1,8 @@
 # 仓库全覆盖归属表（Single Source of Truth）
 
-> 版本：1.1.0 · 更新：2026-05-08  
+> 版本：2.0.0 · 更新：2026-06-20  
 > 目标：`E:\成都修茈科技有限公司` 下的**每一个文件/目录**都必须有一名 AI 员工或一条「显式忽略」规则覆盖，没有真空地带。
+> 当前编制：52 名；完整性、依赖 DAG 与文件覆盖以 [`COVERAGE_REPORT.md`](COVERAGE_REPORT.md) 的自动审计结果为准。
 
 本表与 [`yuangon/**/employee.yaml`](.) 的 `scope_globs` / `forbidden_globs` 保持一致；
 任何新增目录/文件**先**登记到本表，再扩 yaml，再跑 `push-update-context-officer.skill-yuangon-resync`

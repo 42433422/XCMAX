@@ -14,10 +14,9 @@ import fnmatch
 import json
 import logging
 import os
-import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Sequence
 
 from modstore_server.tools.doc_consistency_checker import run_full_consistency_check
 from modstore_server.tools.markdown_lint import lint_file
@@ -62,6 +61,11 @@ def _match_glob(filepath: str, patterns: Sequence[str]) -> bool:
     for pattern in patterns:
         p = pattern.strip()
         if not p:
+            continue
+        if p.startswith(("./", "/")):
+            anchored = p[2:] if p.startswith("./") else p[1:]
+            if fnmatch.fnmatch(parts, anchored):
+                return True
             continue
         if "/" in p:
             if fnmatch.fnmatch(parts, p):

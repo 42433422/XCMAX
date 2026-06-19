@@ -15,7 +15,7 @@
 
 ### 2.1 应用服务层
 
-旧的 `AppServiceV2` 应用服务文件已收敛删除。事件能力保留在 NeuroBus 事件、处理器、无后缀 application service 或 domain SSOT 中，不再通过 `app/application/*_app_service_v2.py` 维护第二套入口。
+旧的 `AppServiceV2` 应用服务文件已收敛删除。事件能力保留在 NeuroBus 事件、处理器、无后缀 application service 或 domain 登记模块中，不再通过 `app/application/*_app_service_v2.py` 维护第二套入口。
 
 ### 2.2 领域事件定义
 

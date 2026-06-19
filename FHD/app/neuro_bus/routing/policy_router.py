@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import random
 import time
+from pathlib import Path
 from typing import Any
 
 from app.domain.neuro.processors.coordinator import ProcessorType, RoutingDecision
@@ -17,6 +19,17 @@ from app.neuro_bus.routing.routing_log import append_routing_decision
 logger = logging.getLogger(__name__)
 
 _ACTION_ORDER = (ProcessorType.REFLEX, ProcessorType.SUBCONSCIOUS, ProcessorType.CONSCIOUS)
+
+# 动态 canary 状态文件（daemon 写入，router 读取）
+_CANARY_STATE_PATH = Path(
+    os.environ.get(
+        "XCAGI_ROUTING_CANARY_STATE",
+        str(Path(__file__).resolve().parents[3] / "resources" / "routing_policies" / "canary_state.json"),
+    )
+)
+_CANARY_CACHE_TTL = 30.0  # 秒，每 30 秒刷新一次 canary 状态
+_canary_cache: dict[str, Any] | None = None
+_canary_cache_ts = 0.0
 
 
 def _parse_canary_ratio(raw: str) -> float:
@@ -32,6 +45,34 @@ def _parse_canary_ratio(raw: str) -> float:
     return val
 
 
+def _load_canary_state() -> tuple[float, str]:
+    """从 canary_state.json 动态读取 canary_ratio 和 mode。
+
+    返回 (canary_ratio, mode)。mode 可能是 "shadow"/"canary"/"full"。
+    文件不存在或读取失败时回退到环境变量。
+    """
+    global _canary_cache, _canary_cache_ts
+    now = time.monotonic()
+    if _canary_cache is not None and (now - _canary_cache_ts) < _CANARY_CACHE_TTL:
+        return _canary_cache.get("canary_ratio", 0.0), _canary_cache.get("mode", "shadow")
+
+    try:
+        text = _CANARY_STATE_PATH.read_text(encoding="utf-8")
+        data = json.loads(text)
+        _canary_cache = {
+            "canary_ratio": _parse_canary_ratio(str(data.get("canary_ratio", 0.0))),
+            "mode": str(data.get("mode", "shadow")),
+        }
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        # 回退到环境变量
+        _canary_cache = {
+            "canary_ratio": _parse_canary_ratio(os.environ.get("XCAGI_ROUTING_POLICY_CANARY_RATIO", "0.0")),
+            "mode": (os.environ.get("XCAGI_ROUTING_POLICY_ENABLED") or "").strip().lower(),
+        }
+    _canary_cache_ts = now
+    return _canary_cache["canary_ratio"], _canary_cache["mode"]
+
+
 def decide_processor_with_policy(
     text: str,
     event: NeuroEvent | None = None,
@@ -39,13 +80,15 @@ def decide_processor_with_policy(
     trace_id: str | None = None,
     extra: dict[str, Any] | None = None,
 ) -> RoutingDecision | None:
-    raw = (os.environ.get("XCAGI_ROUTING_POLICY_ENABLED") or "").strip().lower()
-    if raw not in {"1", "true", "yes", "on", "shadow"}:
-        return None
-    shadow_mode = raw == "shadow"
-
-    canary_raw = (os.environ.get("XCAGI_ROUTING_POLICY_CANARY_RATIO") or "").strip()
-    canary_ratio = _parse_canary_ratio(canary_raw)
+    # 优先从 canary_state.json 动态读取，回退到环境变量
+    canary_ratio, mode = _load_canary_state()
+    if mode not in {"1", "true", "yes", "on", "shadow", "canary", "full"}:
+        # 环境变量也没启用
+        raw_env = (os.environ.get("XCAGI_ROUTING_POLICY_ENABLED") or "").strip().lower()
+        if raw_env not in {"1", "true", "yes", "on", "shadow"}:
+            return None
+        mode = raw_env
+    shadow_mode = mode == "shadow"
 
     t0 = time.perf_counter()
     feats = build_routing_features(text, event, extra)

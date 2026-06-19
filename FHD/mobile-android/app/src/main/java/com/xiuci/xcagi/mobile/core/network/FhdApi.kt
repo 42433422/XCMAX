@@ -6,6 +6,7 @@ import com.xiuci.xcagi.mobile.core.model.AdminMobileHomeData
 import com.xiuci.xcagi.mobile.core.model.DeviceRegisterBody
 import com.xiuci.xcagi.mobile.core.model.ChatRequest
 import com.xiuci.xcagi.mobile.core.model.DiscoverHintData
+import com.xiuci.xcagi.mobile.core.model.CodexSuperEmployeeMobileMessageBody
 import com.xiuci.xcagi.mobile.core.model.MobileEnvelope
 import com.xiuci.xcagi.mobile.core.model.MobileLoginData
 import com.xiuci.xcagi.mobile.core.model.MeData
@@ -87,28 +88,28 @@ interface FhdApi {
     @GET("api/health")
     suspend fun health(): Map<String, Any?>
 
-    @GET("api/mobile/v1/health")
+    @GET(ApiEndpoints.HEALTH)
     suspend fun mobileHealth(): MobileEnvelope<Map<String, String>>
 
-    @POST("api/mobile/v1/auth/login")
+    @POST(ApiEndpoints.AUTH_LOGIN)
     suspend fun mobileLogin(@Body body: MobileLoginRequest): MobileEnvelope<MobileLoginData>
 
-    @POST("api/mobile/v1/auth/login-with-phone-code")
+    @POST(ApiEndpoints.AUTH_LOGIN_WITH_PHONE_CODE)
     suspend fun mobileLoginWithPhone(@Body body: MobilePhoneLoginRequest): MobileEnvelope<MobileLoginData>
 
-    @POST("api/mobile/v1/auth/qr/confirm")
+    @POST(ApiEndpoints.AUTH_QR_CONFIRM)
     suspend fun authQrConfirm(@Body body: AuthQrConfirmBody): MobileEnvelope<Map<String, Any?>>
 
-    @POST("api/mobile/v1/auth/oidc/exchange")
+    @POST(ApiEndpoints.AUTH_OIDC_EXCHANGE)
     suspend fun oidcExchange(@Body body: OidcExchangeBody): MobileEnvelope<MobileLoginData>
 
-    @POST("api/mobile/v1/auth/refresh")
+    @POST(ApiEndpoints.AUTH_REFRESH)
     suspend fun mobileRefresh(@Body body: MobileRefreshRequest): MobileEnvelope<MobileLoginData>
 
-    @GET("api/mobile/v1/host/discover-hint")
+    @GET(ApiEndpoints.HOST_DISCOVER_HINT)
     suspend fun discoverHint(): MobileEnvelope<DiscoverHintData>
 
-    @GET("api/mobile/v1/me")
+    @GET(ApiEndpoints.ME)
     suspend fun me(): MobileEnvelope<MeData>
 
     @POST("api/auth/register")
@@ -127,7 +128,7 @@ interface FhdApi {
     @POST("api/ai/chat/stream")
     suspend fun chatStream(@Body body: Map<String, String>): ResponseBody
 
-    @GET("api/mobile/v1/approval/requests")
+    @GET(ApiEndpoints.APPROVAL_REQUESTS)
     suspend fun mobileApprovals(
         @Query("page") page: Int = 1,
         @Query("page_size") pageSize: Int = 50,
@@ -142,16 +143,28 @@ interface FhdApi {
     @POST("api/approval/requests/{id}/reject")
     suspend fun approvalReject(@Path("id") id: Int, @Body body: RejectBody): Map<String, Any?>
 
-    @GET("api/mobile/v1/customers")
+    @GET(ApiEndpoints.CUSTOMERS)
     suspend fun mobileCustomers(
         @Query("page") page: Int = 1,
         @Query("per_page") perPage: Int = 20,
     ): MobileEnvelope<Map<String, Any?>>
 
-    @GET("api/mobile/v1/shipments")
+    @GET(ApiEndpoints.SHIPMENTS)
     suspend fun mobileShipments(
         @Query("page") page: Int = 1,
         @Query("per_page") perPage: Int = 20,
+    ): MobileEnvelope<Map<String, Any?>>
+
+    @GET(ApiEndpoints.SERVICE_BRIDGE_REQUESTS)
+    suspend fun mobileBridgeRequests(
+        @Query("page") page: Int = 1,
+        @Query("per_page") perPage: Int = 20,
+    ): MobileEnvelope<Map<String, Any?>>
+
+    @PUT(ApiEndpoints.SERVICE_BRIDGE_REQUESTS_RESPOND)
+    suspend fun mobileBridgeRespond(
+        @Path("id") id: Int,
+        @Body body: BridgeRespondBody,
     ): MobileEnvelope<Map<String, Any?>>
 
     @GET("api/service-bridge/requests")
@@ -166,28 +179,28 @@ interface FhdApi {
         @Body body: BridgeRespondBody,
     ): Map<String, Any?>
 
-    @GET("api/mobile/v1/mods")
+    @GET(ApiEndpoints.MODS)
     suspend fun mobileMods(): MobileEnvelope<Map<String, Any?>>
 
-    @GET("api/mobile/v1/platform-shell")
+    @GET(ApiEndpoints.PLATFORM_SHELL)
     suspend fun mobilePlatformShell(): MobileEnvelope<Map<String, Any?>>
 
-    @GET("api/mobile/v1/home")
+    @GET(ApiEndpoints.HOME)
     suspend fun mobileHome(): MobileEnvelope<Map<String, Any?>>
 
-    @GET("api/mobile/v1/admin/home")
+    @GET(ApiEndpoints.ADMIN_HOME)
     suspend fun mobileAdminHome(): MobileEnvelope<AdminMobileHomeData>
 
-    @GET("api/mobile/v1/sync/status")
+    @GET(ApiEndpoints.SYNC_STATUS)
     suspend fun mobileSyncStatus(): MobileEnvelope<Map<String, Any?>>
 
-    @POST("api/mobile/v1/sync/pull")
+    @POST(ApiEndpoints.SYNC_PULL)
     suspend fun mobileSyncPull(@Body body: SyncPullBody): MobileEnvelope<Map<String, Any?>>
 
-    @POST("api/mobile/v1/sync/push")
+    @POST(ApiEndpoints.SYNC_PUSH)
     suspend fun mobileSyncPush(@Body body: SyncPushBody): MobileEnvelope<Map<String, Any?>>
 
-    @GET("api/mobile/v1/sync/conflicts")
+    @GET(ApiEndpoints.SYNC_CONFLICTS)
     suspend fun mobileSyncConflicts(): MobileEnvelope<Map<String, Any?>>
 
     @GET("api/inventory/items")
@@ -196,25 +209,25 @@ interface FhdApi {
     @GET("api/mods/")
     suspend fun modsList(): Map<String, Any?>
 
-    @POST("api/mobile/v1/devices/register")
+    @POST(ApiEndpoints.DEVICES_REGISTER)
     suspend fun registerDevice(@Body body: DeviceRegisterBody): MobileEnvelope<Map<String, Any?>>
 
-    @POST("api/mobile/v1/pairing/exchange")
+    @POST(ApiEndpoints.PAIRING_EXCHANGE)
     suspend fun pairingExchange(@Body body: PairingExchangeBody): MobileEnvelope<Map<String, Any?>>
 
-    @POST("api/mobile/v1/relay/mobile/confirm")
+    @POST(ApiEndpoints.RELAY_MOBILE_CONFIRM)
     suspend fun relayConfirm(@Body body: RelayConfirmBody): MobileEnvelope<Map<String, Any?>>
 
-    @POST("api/mobile/v1/relay/mobile/confirm-code")
+    @POST(ApiEndpoints.RELAY_MOBILE_CONFIRM_CODE)
     suspend fun relayConfirmCode(@Body body: RelayConfirmCodeBody): MobileEnvelope<Map<String, Any?>>
 
-    @GET("api/mobile/v1/relay/mobile/desktops")
+    @GET(ApiEndpoints.RELAY_MOBILE_DESKTOPS)
     suspend fun relayDesktops(): MobileEnvelope<Map<String, Any?>>
 
-    @POST("api/mobile/v1/relay/tasks")
+    @POST(ApiEndpoints.RELAY_TASKS)
     suspend fun relayCreateTask(@Body body: RelayTaskCreateBody): MobileEnvelope<Map<String, Any?>>
 
-    @GET("api/mobile/v1/relay/tasks/{taskId}")
+    @GET(ApiEndpoints.RELAY_TASKS_DETAIL)
     suspend fun relayTaskStatus(@Path("taskId") taskId: String): MobileEnvelope<Map<String, Any?>>
 
     @POST("api/market/account-sync")
@@ -242,12 +255,22 @@ interface FhdApi {
     ): Map<String, Any?>
 
     // ── 专属客服接口 ──
-    @GET("api/mobile/v1/cs/info")
+    @GET(ApiEndpoints.CS_INFO)
     suspend fun getCsInfo(): MobileEnvelope<CsInfoDto>
 
-    @POST("api/mobile/v1/cs/messages")
+    @POST(ApiEndpoints.CS_MESSAGES)
     suspend fun sendCsMessage(@Body body: Map<String, String>): MobileEnvelope<CsMessageResponseDto>
 
-    @GET("api/mobile/v1/cs/messages")
+    @GET(ApiEndpoints.CS_MESSAGES)
     suspend fun getCsMessages(@Query("since") since: String? = null): MobileEnvelope<CsMessagesListDto>
+
+    @GET(ApiEndpoints.ADMIN_CODEX_SUPER_EMPLOYEE_MESSAGES)
+    suspend fun getCodexSuperEmployeeMessages(
+        @Query("limit") limit: Int = 80,
+    ): MobileEnvelope<Map<String, Any?>>
+
+    @POST(ApiEndpoints.ADMIN_CODEX_SUPER_EMPLOYEE_MESSAGES)
+    suspend fun postCodexSuperEmployeeMessage(
+        @Body body: CodexSuperEmployeeMobileMessageBody,
+    ): MobileEnvelope<Map<String, Any?>>
 }

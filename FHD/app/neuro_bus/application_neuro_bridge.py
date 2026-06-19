@@ -229,3 +229,167 @@ def neuro_notify_ai_model_roundtrip(
         )
     except RECOVERABLE_ERRORS:
         logger.debug("neuro_notify_ai_model_roundtrip skipped", exc_info=True)
+
+
+# --------------------------------------------------------------------------- #
+# P2 NeuroBus 迁移：核心业务事件发布（2026-06-20）
+# 将双轨/DB-only 服务的关键状态变更通过 NeuroBus 广播，提升采用率。
+# --------------------------------------------------------------------------- #
+
+def neuro_notify_customer_changed(
+    action: str,
+    customer_id: str | int = "",
+    customer_name: str = "",
+    tenant_id: str = "",
+) -> None:
+    """客户应用服务：PurchaseUnit 增删改后广播（action=created|updated|deleted）。"""
+    _publish(
+        "application.customer.changed",
+        {
+            "action": action,
+            "customer_id": str(customer_id),
+            "customer_name": (customer_name or "")[:120],
+            "tenant_id": tenant_id,
+        },
+        domain="customer",
+    )
+
+
+def neuro_notify_user_authenticated(
+    user_id: str,
+    auth_method: str = "",
+    success: bool = True,
+) -> None:
+    """认证应用服务：OIDC/密码登录结果（find-or-create / 更新登录信息后）。"""
+    _publish(
+        "application.auth.completed",
+        {
+            "user_id": str(user_id),
+            "auth_method": auth_method,
+            "success": success,
+        },
+        domain="safety",
+    )
+
+
+def neuro_notify_user_changed(
+    action: str,
+    user_id: str | int = "",
+    username: str = "",
+) -> None:
+    """用户应用服务：User 增删改后广播（action=created|updated|deleted）。"""
+    _publish(
+        "application.user.changed",
+        {
+            "action": action,
+            "user_id": str(user_id),
+            "username": (username or "")[:120],
+        },
+        domain="customer",
+    )
+
+
+def neuro_notify_wechat_task_changed(
+    action: str,
+    task_id: str | int = "",
+    status: str = "",
+) -> None:
+    """微信任务应用服务：WechatTask 创建/状态更新后广播。"""
+    _publish(
+        "application.wechat_task.changed",
+        {
+            "action": action,
+            "task_id": str(task_id),
+            "status": status,
+        },
+        domain="wechat",
+    )
+
+
+def neuro_notify_approval_changed(
+    action: str,
+    approval_id: str | int = "",
+    flow_id: str | int = "",
+    decision: str = "",
+) -> None:
+    """审批服务：审批请求创建/决议后广播（action=created|approved|rejected|timeout）。"""
+    _publish(
+        "application.approval.changed",
+        {
+            "action": action,
+            "approval_id": str(approval_id),
+            "flow_id": str(flow_id),
+            "decision": decision,
+        },
+        domain="safety",
+    )
+
+
+def neuro_notify_products_imported(
+    count: int = 0,
+    customer_id: str = "",
+    source: str = "",
+) -> None:
+    """单位产品导入服务：批量导入完成后广播。"""
+    _publish(
+        "application.products.imported",
+        {
+            "count": count,
+            "customer_id": customer_id,
+            "source": source,
+        },
+        domain="product",
+    )
+
+
+def neuro_notify_transaction_changed(
+    action: str,
+    transaction_id: str | int = "",
+    amount: float = 0.0,
+    txn_type: str = "",
+) -> None:
+    """财务应用服务：FinancialTransaction 增改后广播（action=created|updated）。"""
+    _publish(
+        "application.finance.transaction_changed",
+        {
+            "action": action,
+            "transaction_id": str(transaction_id),
+            "amount": amount,
+            "txn_type": txn_type,
+        },
+        domain="finance",
+    )
+
+
+def neuro_notify_tenant_changed(
+    action: str,
+    tenant_id: str = "",
+    tenant_name: str = "",
+) -> None:
+    """租户订阅服务：租户创建/更新后广播。"""
+    _publish(
+        "application.tenant.changed",
+        {
+            "action": action,
+            "tenant_id": tenant_id,
+            "tenant_name": (tenant_name or "")[:120],
+        },
+        domain="customer",
+    )
+
+
+def neuro_notify_im_message_sent(
+    conversation_id: str | int = "",
+    sender_id: str = "",
+    message_type: str = "",
+) -> None:
+    """IM 应用服务：消息发送后广播。"""
+    _publish(
+        "application.im.message_sent",
+        {
+            "conversation_id": str(conversation_id),
+            "sender_id": sender_id,
+            "message_type": message_type,
+        },
+        domain="im",
+    )

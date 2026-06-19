@@ -203,7 +203,7 @@ class TestXcagiCompatReplyPayloadAdditional:
 
         with (
             patch(
-                "app.application.workflow.legacy_chat_adapter.get_last_tool_result",
+                "app.legacy.chat.legacy_chat_adapter.get_last_tool_result",
                 return_value={"success": True, "tool_key": "tool_a"},
                 create=True,
             ),
@@ -220,7 +220,7 @@ class TestXcagiCompatReplyPayloadAdditional:
 
         with (
             patch(
-                "app.application.workflow.legacy_chat_adapter.get_last_tool_result",
+                "app.legacy.chat.legacy_chat_adapter.get_last_tool_result",
                 return_value={"tool_key": "tool_a", "message": "ok"},
                 create=True,
             ),
@@ -236,7 +236,7 @@ class TestXcagiCompatReplyPayloadAdditional:
 
         with (
             patch(
-                "app.application.workflow.legacy_chat_adapter.get_last_tool_result",
+                "app.legacy.chat.legacy_chat_adapter.get_last_tool_result",
                 return_value={
                     "errors": ["e1", "e2", "e3", "e4", "e5", "e6", "e7"],
                     "success": False,
@@ -256,7 +256,7 @@ class TestXcagiCompatReplyPayloadAdditional:
 
         with (
             patch(
-                "app.application.workflow.legacy_chat_adapter.get_last_tool_result",
+                "app.legacy.chat.legacy_chat_adapter.get_last_tool_result",
                 return_value={
                     "errors": [None, "e2", None, "e4"],
                     "success": False,
@@ -281,7 +281,7 @@ class TestXcagiCompatReplyPayloadAdditional:
         )
         with (
             patch(
-                "app.application.workflow.legacy_chat_adapter.get_last_tool_result",
+                "app.legacy.chat.legacy_chat_adapter.get_last_tool_result",
                 return_value={
                     "error": "ERR001",
                     "tool_key": "tool_a",
@@ -301,7 +301,7 @@ class TestXcagiCompatReplyPayloadAdditional:
 
         with (
             patch(
-                "app.application.workflow.legacy_chat_adapter.get_last_tool_result",
+                "app.legacy.chat.legacy_chat_adapter.get_last_tool_result",
                 return_value={
                     "message": "失败原因",
                     "success": False,
@@ -323,7 +323,7 @@ class TestXcagiCompatReplyPayloadAdditional:
 
         with (
             patch(
-                "app.application.workflow.legacy_chat_adapter.get_last_tool_result",
+                "app.legacy.chat.legacy_chat_adapter.get_last_tool_result",
                 return_value={
                     "tool_key": "my_tool",
                     "success": False,
@@ -345,7 +345,7 @@ class TestXcagiCompatReplyPayloadAdditional:
 
         with (
             patch(
-                "app.application.workflow.legacy_chat_adapter.get_last_tool_result",
+                "app.legacy.chat.legacy_chat_adapter.get_last_tool_result",
                 return_value={
                     "error": "ERR001",
                     "success": False,

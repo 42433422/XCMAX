@@ -58,15 +58,15 @@ class AuthInterceptor @Inject constructor(
         val path = url.encodedPath.trimEnd('/')
         return path.endsWith("/api/auth/login") ||
             path.endsWith("/api/auth/login-with-phone-code") ||
-            path.endsWith("/api/mobile/v1/auth/login") ||
-            path.endsWith("/api/mobile/v1/auth/login-with-phone-code") ||
-            path.endsWith("/api/mobile/v1/auth/refresh") ||
-            path.endsWith("/api/mobile/v1/auth/oidc/exchange") ||
-            path.endsWith("/api/mobile/v1/auth/qr/confirm") ||
-            path.endsWith("/api/mobile/v1/pairing/issue") ||
-            path.endsWith("/api/mobile/v1/pairing/exchange") ||
-            path.endsWith("/api/mobile/v1/relay/mobile/confirm") ||
-            path.endsWith("/api/mobile/v1/relay/mobile/confirm-code")
+            path.endsWith("/" + ApiEndpoints.AUTH_LOGIN) ||
+            path.endsWith("/" + ApiEndpoints.AUTH_LOGIN_WITH_PHONE_CODE) ||
+            path.endsWith("/" + ApiEndpoints.AUTH_REFRESH) ||
+            path.endsWith("/" + ApiEndpoints.AUTH_OIDC_EXCHANGE) ||
+            path.endsWith("/" + ApiEndpoints.AUTH_QR_CONFIRM) ||
+            path.endsWith("/" + ApiEndpoints.PAIRING_ISSUE) ||
+            path.endsWith("/" + ApiEndpoints.PAIRING_EXCHANGE) ||
+            path.endsWith("/" + ApiEndpoints.RELAY_MOBILE_CONFIRM) ||
+            path.endsWith("/" + ApiEndpoints.RELAY_MOBILE_CONFIRM_CODE)
     }
 
     override fun intercept(chain: Interceptor.Chain): Response {

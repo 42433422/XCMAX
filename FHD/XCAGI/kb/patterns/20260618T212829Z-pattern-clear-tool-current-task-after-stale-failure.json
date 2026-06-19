@@ -1,0 +1,12 @@
+{
+  "after": "Clear tool_statuses.current_task when resetting stale running tasks before rerun.",
+  "before": "Mark stale subtask failed but leave device tool current_task pointing at it.",
+  "created_at": "2026-06-18T21:28:29.474848+00:00",
+  "kind": "code_pattern",
+  "metadata": {
+    "fix_path": "/Users/a4243342/Desktop/XCMAX/FHD/XCAGI/kb/fixes/20260618T212829Z-fix-device-shows-codex-idle-but-currenttask-still-points.json"
+  },
+  "pattern": "clear_tool_current_task_after_stale_failure",
+  "schema_version": 1,
+  "summary": "Dispatch recovery must clear both task state and per-tool current task state."
+}

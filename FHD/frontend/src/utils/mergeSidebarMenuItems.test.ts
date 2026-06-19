@@ -21,7 +21,7 @@ describe('mergeSidebarMenuItems', () => {
     const keys = merged.map((m) => m.key)
     expect(keys).not.toContain('mod-enterprise-customer-service')
     expect(keys.filter((k) => k === 'enterprise-customer-service')).toHaveLength(1)
-    expect(keys.filter((k) => k === 'internal-customer-service')).toHaveLength(1)
+    expect(keys).not.toContain('internal-customer-service')
   })
 
   it('drops mod item when key uses erroneous mod-mod- prefix', () => {
@@ -38,7 +38,7 @@ describe('mergeSidebarMenuItems', () => {
       },
     ]
     const merged = mergeSidebarMenuItems([], mod, [], trailing, [])
-    expect(merged.map((m) => m.key)).toEqual(['internal-customer-service'])
+    expect(merged.map((m) => m.key)).toEqual([])
   })
 
   it('hides mod-workflow-visualization when client primary erp installed', () => {

@@ -42,6 +42,10 @@ sla:
   escalate_to_human: true
 llm_default: auto
 llm_reasoning: auto
+capabilities:
+  - log.triage
+  - doc.ownership
+
 skills:
 - skills/skill-log-triage.md
 - skills/skill-doc-ownership.md
@@ -52,8 +56,14 @@ actions:
   - shell_exec
   shell_exec:
     command_id: read-pytest-lastfailed
-depends_on:
-- test-qa-runner
+depends_on: []
+examples:
+  - title: "日志监控与事故响应员岗位验收"
+    description: "以最小、无副作用输入验证岗位输出包含真实证据、风险与下一步。"
+    input:
+      task: "执行一次日志监控与事故响应员职责范围内的只读检查，并返回证据、风险和下一步。"
+      dry_run: true
+
 changelog:
 - version: 1.2.1
   date: '2026-05-08'

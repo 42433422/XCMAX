@@ -66,6 +66,9 @@ sla:
 llm_default: "auto"
 llm_reasoning: "auto"
 
+capabilities:
+  - doc.sync
+
 skills:
   - skills/skill-doc-sync.md
 
@@ -85,6 +88,13 @@ depends_on:
   - mods-and-eskill-curator  # ESkill.md 变更同步
   - vibe-coding-maintainer   # vibe-coding 文档同步
   - employee-pack-curator    # 员工包专属文档由其全权负责
+
+examples:
+  - title: "文档知识管理员岗位验收"
+    description: "以最小、无副作用输入验证岗位输出包含真实证据、风险与下一步。"
+    input:
+      task: "执行一次文档知识管理员职责范围内的只读检查，并返回证据、风险和下一步。"
+      dry_run: true
 
 changelog:
   - version: "1.0.3"

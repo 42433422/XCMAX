@@ -198,6 +198,8 @@ async def transcribe_audio(
 async def voice_health():
     """轻量健康检查：只检查 faster-whisper 是否可导入，不触发模型加载（避免健康检查拖慢冷启动）。"""
     try:
+        import faster_whisper  # noqa: F401 — 仅检查可导入性，不加载模型
+
         ready = True
         reason = ""
     except RECOVERABLE_ERRORS as exc:

@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.db.models.im import ImConversation, ImConversationMember, ImMessage
 from app.db.models.user import User
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.time import utc_now_naive
 
 logger = logging.getLogger(__name__)
@@ -287,6 +288,16 @@ class ImApplicationService:
             conv.last_message_at = utc_now_naive()
         self._db.commit()
         self._db.refresh(msg)
+        try:
+            from app.neuro_bus.application_neuro_bridge import neuro_notify_im_message_sent
+
+            neuro_notify_im_message_sent(
+                conversation_id=msg.conversation_id,
+                sender_id=str(msg.sender_user_id),
+                message_type="text",
+            )
+        except RECOVERABLE_ERRORS:
+            logger.debug("neuro_notify_im_message_sent skipped", exc_info=True)
         member_ids = self._member_user_ids(conversation_id)
         message = self._message_dict(msg, self._display_name(sender_user_id))
         updated_at_ms = self._record_im_message_change(message, actor=str(sender_user_id))

@@ -803,11 +803,13 @@ class TestSpan:
 
 class TestTraceContext:
     def test_context_manager(self):
+        previous_trace = current_trace.get()
+        previous_span = current_span.get()
         with TraceContext(trace_id="t1", span_id="s1") as ctx:
             assert current_trace.get() == "t1"
             assert current_span.get() == "s1"
-        assert current_trace.get() is None
-        assert current_span.get() is None
+        assert current_trace.get() == previous_trace
+        assert current_span.get() == previous_span
 
 
 class TestNeuroTracer:

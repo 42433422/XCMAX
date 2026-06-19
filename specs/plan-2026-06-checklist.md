@@ -90,10 +90,11 @@
 
 ### P2-1 macOS 桌面真实验证
 - [x] T47：CI `macos-latest` runner 跑 electron 冒烟（`.github/workflows/desktop-macos-smoke.yml`）
-- [x] T48：`start-desktop.command` macOS 启动脚本（`FHD/start-desktop.command` → `XCAGI/start-desktop-sqlite.command`）
-- [x] T49：electron-builder notarize 配置（`desktop/electron-builder.yml` 注释骨架 + 既有 `build/notarize.cjs`）
+- [x] T48：`start-desktop.command` macOS 启动脚本（实际入口 `FHD/XCAGI/start-desktop-sqlite.command`；`FHD/start-desktop.command` redirect 未创建，仓根 README 已直接指向真实路径）
+- [x] T49：electron-builder notarize 配置（`desktop/electron-builder.yml` 引用 `build/notarize.cjs` 等 4 文件；**2026-06-20 补齐** `build/{before-pack.cjs, installer.nsh, entitlements.mac.plist, notarize.cjs}`，此前缺失导致打包失败）
 - [x] T50：`docs/DEPLOYMENT.md` 加"macOS 实验性"标识
 - [x] T51-mac：**macOS 升签约级（2026-06-06）**：arm64+x64 双架构 dmg · `electron-builder.yml` 移除 pkg · `build-installer.sh` 增 `XCAGI_MAC_ARCH` · `release-desktop.yml` 双架构矩阵 + `macos-merge` job · `desktop-macos-smoke.yml` 同步 · 本机 arm64 企业版冒烟验证 · 桌面/Web **签约级**；**Android 仍为实验骨架**（见 P2-2 / [`VERSION.md`](../FHD/VERSION.md)）
+  - > **2026-06-20 复核降级**：上述"签约级"为过度声称。实测发现 `desktop/build/` 下 4 个文件（before-pack.cjs / installer.nsh / entitlements.mac.plist / notarize.cjs）缺失，导致 electron-builder 打包必然失败（已补齐）；CI `desktop-macos-smoke.yml` 仅跑启动冒烟、不跑打包；无真实 Electron E2E（IPC/托盘/更新/崩溃恢复未端到端测过）。实际状态：**代码已适配 arm64/x64，待生产级完整验证**。仓根 README 已同步为该表述。
 
 ### P2-2 Android 端诚实标注
 - [x] T51：`mobile-android/README.md` 改"规划中"

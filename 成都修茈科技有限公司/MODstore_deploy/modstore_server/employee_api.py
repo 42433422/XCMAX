@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from modstore_server.api.deps import _get_current_user, require_admin
 from modstore_server.duty_roster import (
@@ -27,8 +28,6 @@ from modstore_server.employee_executor import (
 from modstore_server.employee_executor import list_employees as list_employees_exec
 from modstore_server.employee_runtime import (
     library_manifest_fallback_enabled,
-    load_employee_pack,
-    try_load_employee_pack_from_library,
 )
 from modstore_server.infrastructure.db import get_db
 from modstore_server.models import CatalogItem, Entitlement, User, UserPlan
@@ -285,7 +284,7 @@ def _user_may_execute_employee_pack(db: Session, user_id: int, pack_id: str) -> 
         .filter(
             Entitlement.user_id == user_id,
             Entitlement.catalog_id == row.id,
-            Entitlement.is_active == True,
+            Entitlement.is_active.is_(True),
         )
         .first()
     )
@@ -298,7 +297,7 @@ def _user_may_execute_employee_pack(db: Session, user_id: int, pack_id: str) -> 
     now = datetime.now(timezone.utc)
     plan = (
         db.query(UserPlan)
-        .filter(UserPlan.user_id == user_id, UserPlan.is_active == True)
+        .filter(UserPlan.user_id == user_id, UserPlan.is_active.is_(True))
         .order_by(UserPlan.id.desc())
         .first()
     )
@@ -571,7 +570,8 @@ async def execute_employee_task_endpoint(
 
     failure: str | None = None
     try:
-        result = get_default_employee_client().execute_task(
+        result = await run_in_threadpool(
+            get_default_employee_client().execute_task,
             employee_id=employee_id,
             task=task,
             input_data=input_data or {},
@@ -863,7 +863,8 @@ async def execute_employee_task_file_endpoint(
             input_data["template_relpath"] = template_dest.name
         _resolve_taiyangniao_backend(input_data)
 
-        result = get_default_employee_client().execute_task(
+        result = await run_in_threadpool(
+            get_default_employee_client().execute_task,
             employee_id=employee_id,
             task=task or "执行附件任务",
             input_data=input_data,

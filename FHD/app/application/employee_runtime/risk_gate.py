@@ -13,6 +13,8 @@ _HIGH_RISK_HANDLERS = frozenset({"shell_exec", "ssh_exec", "vibe_edit", "vibe_he
 _MEDIUM_RISK_HANDLERS = frozenset(
     {"agent", "doc_sync", "openapi_tool", "fhd_business", "http_request", "webhook"}
 )
+# 代码修改工具名（无论从哪条 handler 路径调用，都判为 high 风险）
+_CODE_WRITE_TOOL_NAMES = frozenset({"patch_file", "write_file"})
 
 
 def _high_risk_gate_token() -> str:
@@ -58,6 +60,11 @@ def gate_action_or_block(
     _ = employee_id
     level, reason = assess_risk(manifest or {}, handlers)
     payload = input_data or {}
+    # 代码修改工具强制 high 风险（无论 handler 类型，specialized/agent/direct_python 均覆盖）
+    tool_in_payload = str(payload.get("tool") or "").strip()
+    if tool_in_payload in _CODE_WRITE_TOOL_NAMES:
+        level = "high"
+        reason = f"代码修改工具 {tool_in_payload} 强制 high 风险"
     if level == "low":
         return {"ok": True, "risk_level": level, "reason": reason}
     if level == "medium":

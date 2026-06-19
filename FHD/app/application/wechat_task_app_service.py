@@ -67,6 +67,14 @@ class WechatTaskApplicationService:
                 db.add(task)
                 db.commit()
                 db.refresh(task)
+                try:
+                    from app.neuro_bus.application_neuro_bridge import (
+                        neuro_notify_wechat_task_changed,
+                    )
+
+                    neuro_notify_wechat_task_changed("created", task_id=task.id, status=task.status)
+                except RECOVERABLE_ERRORS:
+                    logger.debug("neuro_notify_wechat_task_changed skipped", exc_info=True)
                 return task.id
         except IntegrityError:
             with get_db() as db:
@@ -435,6 +443,16 @@ class WechatTaskApplicationService:
                     task.last_status_at = datetime.now()
                     task.updated_at = datetime.now()
                     db.commit()
+                    try:
+                        from app.neuro_bus.application_neuro_bridge import (
+                            neuro_notify_wechat_task_changed,
+                        )
+
+                        neuro_notify_wechat_task_changed(
+                            "updated", task_id=task.id, status=task.status
+                        )
+                    except RECOVERABLE_ERRORS:
+                        logger.debug("neuro_notify_wechat_task_changed skipped", exc_info=True)
                     return True
                 return False
         except RECOVERABLE_ERRORS as e:

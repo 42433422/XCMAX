@@ -12,5 +12,6 @@ types-psutil
 types-aiofiles
 types-pillow
 types-openpyxl
+celery-types
 safety>=3.0
 bandit>=1.7

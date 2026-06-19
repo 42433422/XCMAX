@@ -131,6 +131,17 @@ def _registered_router_products(
 ) -> dict:
     from app.application.normal_chat_dispatch import run_workflow_products_query_normal_profile
 
+    if str(runtime_context.get("service_source") or "") == "fastapi_product_compat_route":
+        import importlib
+
+        route_module = str(
+            runtime_context.get("route_module")
+            or "app.fastapi_routes.domains.product.compat_routes"
+        )
+        module = importlib.import_module(route_module)
+        execute_action = module._execute_products_compat_action
+        return dict(execute_action(action, params) or {})
+
     if str(runtime_context.get("service_source") or "") == "fastapi_product_route":
         from app.fastapi_routes.domains.product import routes as product_routes
 
@@ -226,6 +237,27 @@ def _registered_router_products(
         return svc.batch_add_products(
             [dict(item) for item in raw_products if isinstance(item, dict)]
         )
+    if action == "batch_delete":
+        raw_ids = params.get("ids") or params.get("product_ids") or []
+        if not isinstance(raw_ids, list) or not raw_ids:
+            return {"success": False, "message": "ids 须为非空数组"}
+        ids: list[int] = []
+        skipped: list = []
+        for raw_id in raw_ids:
+            try:
+                ids.append(int(raw_id))
+            except RECOVERABLE_ERRORS:
+                skipped.append(raw_id)
+        if not ids:
+            return {"success": False, "message": "ids 须包含有效数字", "skipped": skipped}
+        batch_delete = getattr(svc, "batch_delete_products", None)
+        if callable(batch_delete):
+            result = dict(batch_delete(ids) or {})
+        else:
+            result = dict(svc.batch_delete(ids) or {})
+        if skipped:
+            result["skipped"] = list(result.get("skipped") or []) + skipped
+        return result
     return {"success": False, "message": f"未注册的 products 动作: {action}"}
 
 
@@ -1113,9 +1145,51 @@ def _registered_router_wechat(
 def _registered_router_print(
     action: str, params: dict, runtime_context: dict, profile: str, user_message: str
 ) -> dict:
-    from app.services import get_printer_service
+    if action == "workflow_label_dispatch":
+        from app.application.print_app_service import get_print_application_service
 
-    svc = get_printer_service()
+        model_number = str(params.get("model_number") or "").strip()
+        if not model_number:
+            return {"success": False, "message": "model_number 不能为空"}
+        quantity = max(1, min(100, int(params.get("quantity") or 1)))
+        product_name = model_number
+        specification: str | None = None
+        unit = "个"
+        try:
+            from app.application import get_product_app_service
+
+            products = get_product_app_service().search_products(keyword=model_number, limit=1)
+            if products and isinstance(products, list):
+                product = products[0]
+                if isinstance(product, dict):
+                    product_name = str(
+                        product.get("name") or product.get("product_name") or model_number
+                    )
+                    specification = str(
+                        product.get("specification") or product.get("spec") or ""
+                    ) or None
+                    unit = str(product.get("unit") or "个")
+        except RECOVERABLE_ERRORS as lookup_err:
+            logger.warning("print.workflow_label_dispatch: 产品查找失败: %s", lookup_err)
+        return dict(
+            get_print_application_service().print_single_label(
+                product_name=product_name,
+                model_number=model_number or None,
+                specification=specification,
+                unit=unit,
+                quantity=quantity,
+            )
+            or {}
+        )
+
+    if str(runtime_context.get("service_source") or "") == "fastapi_print_route":
+        from app.fastapi_routes import print_routes
+
+        svc = print_routes._svc()
+    else:
+        from app.services import get_printer_service
+
+        svc = get_printer_service()
     if action == "view":
         return {"success": True, "redirect": "/console?view=print"}
     if action in ("list", "query"):
@@ -1134,6 +1208,41 @@ def _registered_router_print(
         )
     if action == "test":
         return svc.test_printer(str(params.get("printer_name") or "").strip())
+    if action == "save_printer_selection":
+        document_printer = params.get("document_printer")
+        label_printer = params.get("label_printer")
+        printers_result = dict(svc.get_printers() or {})
+        printers = printers_result.get("printers", [])
+        if not isinstance(printers, list):
+            printers = []
+        available_names = {
+            (printer.get("name") or "").strip()
+            for printer in printers
+            if isinstance(printer, dict)
+        }
+
+        def is_valid(name: Any) -> bool:
+            if name is None:
+                return True
+            value = str(name).strip()
+            return value == "" or value in available_names
+
+        if not is_valid(document_printer):
+            return {"success": False, "message": "发货单打印机不在当前可用打印机列表中"}
+        if not is_valid(label_printer):
+            return {"success": False, "message": "标签打印机不在当前可用打印机列表中"}
+        result = dict(
+            svc.save_printer_selection(
+                document_printer=(
+                    str(document_printer).strip() if document_printer is not None else None
+                ),
+                label_printer=str(label_printer).strip() if label_printer is not None else None,
+            )
+            or {}
+        )
+        result.update(dict(svc.classify_printers(printers) or {}))
+        return result
+    return {"success": False, "message": f"未注册的 print 动作: {action}"}
 
 
 def _registered_router_printer_list(

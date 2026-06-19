@@ -1,6 +1,6 @@
 # AppService `*_vN.py` 收口与删除计划
 
-> **SSOT 登记**：`FHD/app/application/app_service_pair_registry.py`（V1/V2 成对与 HTTP 选型）  
+> **登记**：`FHD/app/application/app_service_pair_registry.py`（V1/V2 成对与 HTTP 选型）  
 > **盘点日期**：2026-06-04（T11）  
 > **原则**：不删业务功能；V1 为生产实现，V2 多为 NeuroBus 事件侧车；禁止 `from v2 import *` 替换 V1（会破坏路由与测试）。
 
@@ -49,7 +49,7 @@
 | 2026-12 | `app/application/**/*_v2.py` → **0**（`sdk_v2`、明确 compat 除外） | `find` 清单为空 |
 | 持续 | 数量**单调递减** | 每月更新 §1 表格行数 |
 
-允许列表（守门脚本 SSOT）：[`scripts/ci/v2_versioned_py_allowlist.txt`](../scripts/ci/v2_versioned_py_allowlist.txt)
+允许列表（守门脚本配置源）：[`scripts/ci/v2_versioned_py_allowlist.txt`](../scripts/ci/v2_versioned_py_allowlist.txt)
 
 ---
 

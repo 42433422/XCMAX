@@ -52,6 +52,12 @@ constructor(
     private val autoLoginKey = booleanPreferencesKey("auto_login")
     private val avatarUriKey = stringPreferencesKey("avatar_uri")
     private val relayDesktopIdKey = stringPreferencesKey("relay_desktop_id")
+    private val relayBaseUrlKey = stringPreferencesKey("relay_base_url")
+    private val localBaseUrlKey = stringPreferencesKey("local_base_url")
+    private val relaySessionTokenKey = stringPreferencesKey("relay_session_token")
+    private val relayAccountIdKey = stringPreferencesKey("relay_account_id")
+    private val relayTenantIdKey = stringPreferencesKey("relay_tenant_id")
+    private val relayPairedAtKey = stringPreferencesKey("relay_paired_at")
 
     val fhdHostFlow: Flow<String> = context.dataStore.data.map { it[fhdHost] ?: "" }
     val userIdFlow: Flow<Int> = context.dataStore.data.map { it[userIdKey] ?: 0 }
@@ -97,6 +103,14 @@ constructor(
     val autoLoginFlow: Flow<Boolean> = context.dataStore.data.map { it[autoLoginKey] == true }
     val avatarUriFlow: Flow<String> = context.dataStore.data.map { it[avatarUriKey] ?: "" }
     val relayDesktopIdFlow: Flow<String> = context.dataStore.data.map { it[relayDesktopIdKey] ?: "" }
+    val relayBaseUrlFlow: Flow<String> = context.dataStore.data.map { it[relayBaseUrlKey] ?: "" }
+    val localBaseUrlFlow: Flow<String> = context.dataStore.data.map { it[localBaseUrlKey] ?: "" }
+    val relaySessionTokenFlow: Flow<String> =
+            context.dataStore.data.map { it[relaySessionTokenKey] ?: "" }
+    val relayAccountIdFlow: Flow<String> =
+            context.dataStore.data.map { it[relayAccountIdKey] ?: "" }
+    val relayTenantIdFlow: Flow<String> = context.dataStore.data.map { it[relayTenantIdKey] ?: "" }
+    val relayPairedAtFlow: Flow<String> = context.dataStore.data.map { it[relayPairedAtKey] ?: "" }
 
     suspend fun isSetupComplete(): Boolean = isSetupCompleteFlow.first()
 
@@ -212,7 +226,61 @@ constructor(
         }
     }
 
+    suspend fun setRelayBaseUrl(url: String) {
+        context.dataStore.edit { prefs ->
+            val value = url.trim()
+            if (value.isBlank()) prefs.remove(relayBaseUrlKey)
+            else prefs[relayBaseUrlKey] = value
+        }
+    }
+
+    suspend fun setLocalBaseUrl(url: String) {
+        context.dataStore.edit { prefs ->
+            val value = url.trim()
+            if (value.isBlank()) prefs.remove(localBaseUrlKey)
+            else prefs[localBaseUrlKey] = value
+        }
+    }
+
+    suspend fun setRelaySessionToken(token: String) {
+        context.dataStore.edit { prefs ->
+            val value = token.trim()
+            if (value.isBlank()) prefs.remove(relaySessionTokenKey)
+            else prefs[relaySessionTokenKey] = value
+        }
+    }
+
+    suspend fun setRelayAccountId(accountId: String) {
+        context.dataStore.edit { prefs ->
+            val value = accountId.trim()
+            if (value.isBlank()) prefs.remove(relayAccountIdKey)
+            else prefs[relayAccountIdKey] = value
+        }
+    }
+
+    suspend fun setRelayTenantId(tenantId: String) {
+        context.dataStore.edit { prefs ->
+            val value = tenantId.trim()
+            if (value.isBlank()) prefs.remove(relayTenantIdKey)
+            else prefs[relayTenantIdKey] = value
+        }
+    }
+
+    suspend fun setRelayPairedAt(timestamp: String) {
+        context.dataStore.edit { prefs ->
+            val value = timestamp.trim()
+            if (value.isBlank()) prefs.remove(relayPairedAtKey)
+            else prefs[relayPairedAtKey] = value
+        }
+    }
+
     suspend fun relayDesktopId(): String = relayDesktopIdFlow.first()
+    suspend fun relayBaseUrl(): String = relayBaseUrlFlow.first()
+    suspend fun localBaseUrl(): String = localBaseUrlFlow.first()
+    suspend fun relaySessionToken(): String = relaySessionTokenFlow.first()
+    suspend fun relayAccountId(): String = relayAccountIdFlow.first()
+    suspend fun relayTenantId(): String = relayTenantIdFlow.first()
+    suspend fun relayPairedAt(): String = relayPairedAtFlow.first()
 
     suspend fun legalAcceptedVersion(): String = legalAcceptedVersionFlow.first()
 

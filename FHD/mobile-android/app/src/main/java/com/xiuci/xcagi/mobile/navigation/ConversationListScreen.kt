@@ -1,6 +1,7 @@
 package com.xiuci.xcagi.mobile.navigation
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -55,6 +56,7 @@ import com.xiuci.xcagi.mobile.model.ConversationItem
 import com.xiuci.xcagi.mobile.model.ConversationType
 import com.xiuci.xcagi.mobile.model.PinnedIds
 import com.xiuci.xcagi.mobile.ui.AppViewModel
+import com.xiuci.xcagi.mobile.ui.components.mobile.CodexAppAvatar
 import com.xiuci.xcagi.mobile.ui.components.mobile.LocalProfileAvatar
 import com.xiuci.xcagi.mobile.ui.theme.Elevation
 import com.xiuci.xcagi.mobile.ui.theme.Spacing
@@ -284,7 +286,7 @@ private fun BrandIdentityAvatar(displayName: String, avatarUri: String) {
 }
 
 @Composable
-private fun SearchBarField(
+internal fun SearchBarField(
         value: String,
         onValueChange: (String) -> Unit,
         onClear: () -> Unit,
@@ -292,7 +294,8 @@ private fun SearchBarField(
 ) {
     Surface(
             shape = RoundedCornerShape(20.dp),
-            color = XcagiTheme.extra.n50,
+            color = Color.White,
+            border = BorderStroke(0.5.dp, XcagiTheme.extra.n200),
             shadowElevation = Elevation.none,
             modifier = modifier.height(38.dp),
     ) {
@@ -745,15 +748,18 @@ private fun ConversationCell(item: ConversationItem, onClick: () -> Unit) {
 @Composable
 private fun StatusBadge(text: String, color: Color) {
     Surface(
-            shape = RoundedCornerShape(4.dp),
-            color = color.copy(alpha = 0.10f),
+            shape = RoundedCornerShape(10.dp),
+            color = color.copy(alpha = 0.12f),
+            border = BorderStroke(0.5.dp, color.copy(alpha = 0.3f)),
     ) {
         Text(
                 text = text,
-                style = MaterialTheme.typography.labelSmall,
+                style = MaterialTheme.typography.labelSmall.copy(
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
+                ),
                 color = color,
-                fontWeight = FontWeight.Medium,
-                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
         )
     }
 }
@@ -826,31 +832,14 @@ private fun CsAvatar() {
     }
 }
 
-/** 超级员工-Codex 头像 — 深色执行端标识 */
+/** 超级员工-Codex 头像 */
 @Composable
 private fun CodexAvatar() {
-    Box(
-            modifier =
-                    Modifier.size(52.dp)
-                            .clip(MaterialTheme.shapes.small)
-                            .background(Color(0xFF111827)),
-            contentAlignment = Alignment.Center,
-    ) {
-        Box(
-                modifier =
-                        Modifier.size(34.dp)
-                                .clip(RoundedCornerShape(9.dp))
-                                .background(Color.White.copy(alpha = 0.10f)),
-                contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                    text = ">_",
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White,
-            )
-        }
-    }
+    CodexAppAvatar(
+        size = 52.dp,
+        cornerRadius = 10.dp,
+        contentPadding = 0.dp,
+    )
 }
 
 // ═══════════════════════════════════════════

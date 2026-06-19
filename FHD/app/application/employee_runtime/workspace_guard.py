@@ -18,7 +18,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from app.application.employee_runtime.tool_scope import WRITE_TOOLS, is_read_only
+from app.application.employee_runtime.tool_scope import CODE_WRITE_TOOLS, WRITE_TOOLS, is_read_only
 
 logger = logging.getLogger(__name__)
 
@@ -35,8 +35,8 @@ _OUTPUT_PATH_KEYS = (
 )
 _LIST_PATH_KEYS = ("file_paths", "paths", "files", "inputs", "targets")
 
-# 输出类工具：scope_globs 对其强制
-_WRITE_LIKE_TOOLS = WRITE_TOOLS | {"generate_office_document"}
+# 输出类工具：scope_globs 对其强制（含代码修改工具）
+_WRITE_LIKE_TOOLS = WRITE_TOOLS | {"generate_office_document"} | CODE_WRITE_TOOLS
 
 
 def _glob_to_regex(pattern: str) -> str:
