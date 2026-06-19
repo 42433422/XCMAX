@@ -16,6 +16,13 @@ data:
   XCAGI_NEURO_BUS_LIFELINE: "1"
   XCAGI_NEURO_BUS_DLQ_AUTO: "1"
   XCAGI_NEURO_BUS_SLA_LOG: "1"
+  # SLA 采集
+  XCAGI_NEURO_BUS_SLA_COLLECT: "1"
+  # Redis transport（staging 用 streams 灰度）
+  XCAGI_NEURO_BUS_REDIS_TRANSPORT: "streams"
+  # OTel exporter
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector.observability:4317"
+  OTEL_SERVICE_NAME: "xcagi-neurobus"
   # HTTP 限流
   XCAGI_GLOBAL_RATE_LIMIT: "1"
   XCAGI_GLOBAL_RATE_LIMIT_MAX: "300"
