@@ -24,6 +24,8 @@ def append_routing_decision(
     outcome: str,
     reward: float | None = None,
     extra: dict[str, Any] | None = None,
+    sla_hit: bool | None = None,
+    success: bool | None = None,
 ) -> None:
     row = {
         "ts": time.time(),
@@ -34,6 +36,8 @@ def append_routing_decision(
         "outcome": outcome,
         "reward": reward,
         "extra": extra or {},
+        "sla_hit": sla_hit,
+        "success": success,
     }
     path = Path(os.environ.get("XCAGI_ROUTING_LOG_PATH", str(_default_log_path())))
     path.parent.mkdir(parents=True, exist_ok=True)
