@@ -98,6 +98,9 @@ class CSRFMiddleware:
             if path.startswith("/api/mobile/v1/pairing/"):
                 await self.app(scope, receive, send)
                 return
+            if path.startswith("/api/mobile/v1/relay/"):
+                await self.app(scope, receive, send)
+                return
 
             auth_header = request.headers.get("authorization", "")
             if auth_header.startswith("Bearer "):

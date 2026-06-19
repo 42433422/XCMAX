@@ -51,6 +51,7 @@ constructor(
     private val rememberPassKey = booleanPreferencesKey("remember_password")
     private val autoLoginKey = booleanPreferencesKey("auto_login")
     private val avatarUriKey = stringPreferencesKey("avatar_uri")
+    private val relayDesktopIdKey = stringPreferencesKey("relay_desktop_id")
 
     val fhdHostFlow: Flow<String> = context.dataStore.data.map { it[fhdHost] ?: "" }
     val userIdFlow: Flow<Int> = context.dataStore.data.map { it[userIdKey] ?: 0 }
@@ -95,6 +96,7 @@ constructor(
     val rememberPassFlow: Flow<Boolean> = context.dataStore.data.map { it[rememberPassKey] == true }
     val autoLoginFlow: Flow<Boolean> = context.dataStore.data.map { it[autoLoginKey] == true }
     val avatarUriFlow: Flow<String> = context.dataStore.data.map { it[avatarUriKey] ?: "" }
+    val relayDesktopIdFlow: Flow<String> = context.dataStore.data.map { it[relayDesktopIdKey] ?: "" }
 
     suspend fun isSetupComplete(): Boolean = isSetupCompleteFlow.first()
 
@@ -197,6 +199,16 @@ constructor(
             else prefs[avatarUriKey] = value
         }
     }
+
+    suspend fun setRelayDesktopId(relayId: String) {
+        context.dataStore.edit { prefs ->
+            val value = relayId.trim()
+            if (value.isBlank()) prefs.remove(relayDesktopIdKey)
+            else prefs[relayDesktopIdKey] = value
+        }
+    }
+
+    suspend fun relayDesktopId(): String = relayDesktopIdFlow.first()
 
     suspend fun legalAcceptedVersion(): String = legalAcceptedVersionFlow.first()
 

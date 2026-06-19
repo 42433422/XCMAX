@@ -37,6 +37,9 @@ import com.xiuci.xcagi.mobile.core.network.ModstoreApi
 import com.xiuci.xcagi.mobile.core.network.MobileLoginRequest
 import com.xiuci.xcagi.mobile.core.network.MobilePhoneLoginRequest
 import com.xiuci.xcagi.mobile.core.network.PairingExchangeBody
+import com.xiuci.xcagi.mobile.core.network.RelayConfirmBody
+import com.xiuci.xcagi.mobile.core.network.RelayConfirmCodeBody
+import com.xiuci.xcagi.mobile.core.network.RelayTaskCreateBody
 import com.xiuci.xcagi.mobile.core.network.RegisterRequest
 import com.xiuci.xcagi.mobile.core.network.RejectBody
 import com.xiuci.xcagi.mobile.BuildConfig
@@ -45,11 +48,14 @@ import com.xiuci.xcagi.mobile.core.network.ServerMode
 import com.xiuci.xcagi.mobile.core.network.ServerRouter
 import com.xiuci.xcagi.mobile.core.network.SseChatClient
 import com.google.gson.Gson
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.SharedFlow
 import okhttp3.OkHttpClient
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import org.json.JSONObject
+import retrofit2.HttpException
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import java.util.UUID
@@ -173,6 +179,13 @@ class XcagiRepository @Inject constructor(
             .create(ModstoreApi::class.java).also { modstoreApi = it }
     }
 
+    private fun fhdForBase(baseUrl: String): FhdApi {
+        val normalized = baseUrl.trim().ifBlank { serverRouter.enterpriseFhdBaseUrl() }.trimEnd('/') + "/"
+        return Retrofit.Builder().baseUrl(normalized).client(okHttp)
+            .addConverterFactory(GsonConverterFactory.create()).build()
+            .create(FhdApi::class.java)
+    }
+
     suspend fun checkHealth(host: String? = null): Boolean {
         syncRouterFromStore()
         if (host.isNullOrBlank() && ProductSkuConfig.isEnterprise && serverRouter.mode == ServerMode.CLOUD) {
@@ -191,12 +204,70 @@ class XcagiRepository @Inject constructor(
     private fun normalizeAccountKind(raw: String): String =
             raw.trim().lowercase().ifBlank { ProductSkuConfig.accountKind }
 
+    private fun hostPortFromApiBase(apiBaseUrl: String): Pair<String, Int> {
+        val raw = apiBaseUrl.trim()
+        if (raw.isBlank()) return "" to 0
+        val url = raw.toHttpUrlOrNull() ?: "http://${raw.trimStart('/')}".toHttpUrlOrNull()
+        return if (url == null) {
+            "" to 0
+        } else {
+            url.host to url.port
+        }
+    }
+
+    private fun compactHostPort(host: String, port: Int): String {
+        val clean = host.trim().removePrefix("http://").removePrefix("https://").trimEnd('/')
+        val hostPart = clean.substringBefore('/').substringBefore('?')
+        val bare = hostPart.substringBefore(':').trim()
+        val resolvedPort = hostPart.substringAfter(':', "").toIntOrNull() ?: port
+        return if (resolvedPort in 1..65535) "$bare:$resolvedPort" else bare
+    }
+
+    private fun isLoopbackHost(host: String): Boolean {
+        val bare =
+            host.trim()
+                .removePrefix("http://")
+                .removePrefix("https://")
+                .substringBefore('/')
+                .substringBefore('?')
+                .substringBefore(':')
+                .lowercase()
+        return bare == "localhost" || bare == "0.0.0.0" || bare.startsWith("127.")
+    }
+
+    private suspend fun unusablePhoneLanHostMessage(): String? {
+        val mode = sessionStore.serverModeFlow.first()
+        val host = sessionStore.fhdHostFlow.first()
+        if (mode == "cloud" || host.isBlank() || !isLoopbackHost(host)) return null
+        return "手机端不能使用电脑的 ${host.substringBefore('/')}。请在电脑端重新生成绑定二维码，或填写电脑局域网 IP。"
+    }
+
     private fun isEnterpriseAccountKind(kind: String): Boolean = when (normalizeAccountKind(kind)) {
         "enterprise", "admin", "admin_portal" -> true
         else -> false
     }
 
     private fun isAdminRole(raw: String): Boolean = normalizeAccountKind(raw).contains("admin")
+
+    private suspend fun primeFhdCsrf() {
+        try {
+            fhd().mobileHealth()
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun loginErrorMessage(error: Throwable, accountKind: String): String {
+        val http = error as? HttpException
+        return when (http?.code()) {
+            403 -> "服务器拒绝登录请求。请先扫码绑定后台/电脑执行端，或确认服务器已开放移动端登录。"
+            500 -> "服务器登录接口异常，请稍后重试或切换到已绑定的后台地址。"
+            else -> error.message ?: if (normalizeAccountKind(accountKind) == "admin") {
+                "服务器后台登录失败"
+            } else {
+                "登录失败"
+            }
+        }
+    }
 
     private fun resolveAccountKindFromSignals(
             accountKind: String?,
@@ -221,6 +292,7 @@ class XcagiRepository @Inject constructor(
     ): Result<String> = try {
         syncRouterFromStore()
         val normalizedKind = normalizeAccountKind(accountKind)
+        primeFhdCsrf()
         val res = fhd().mobileLogin(
             MobileLoginRequest(username, password, normalizedKind),
         )
@@ -250,7 +322,7 @@ class XcagiRepository @Inject constructor(
             Result.success(d.user?.display_name ?: username)
         }
     } catch (e: Exception) {
-        Result.failure(e)
+        Result.failure(Exception(loginErrorMessage(e, accountKind)))
     }
 
     /** 从 FHD 会话拉取 MODstore token，供企业端模块 WebView 注入。 */
@@ -394,6 +466,8 @@ class XcagiRepository @Inject constructor(
     ): Result<Pair<String, Int>> {
         val targetHost = exchangeHost.trim()
         val body = PairingExchangeBody(nonce = nonce, code = code)
+        val previousHost = sessionStore.fhdHostFlow.first()
+        val previousMode = sessionStore.serverModeFlow.first()
         val primary =
             try {
                 if (targetHost.isNotBlank()) {
@@ -410,6 +484,10 @@ class XcagiRepository @Inject constructor(
                 syncRouterFromStore()
                 completePairingExchange(fhd(), body)
             } catch (e: Exception) {
+                sessionStore.setFhdHost(previousHost)
+                sessionStore.setServerMode(previousMode)
+                serverRouter.fhdHost = previousHost
+                serverRouter.mode = if (previousMode == "cloud") ServerMode.CLOUD else ServerMode.LAN
                 Result.failure(e)
             }
 
@@ -424,6 +502,68 @@ class XcagiRepository @Inject constructor(
         return primary
     }
 
+    suspend fun relayPairingConfirm(
+        relayId: String,
+        code: String,
+        relayBaseUrl: String = "",
+    ): Result<Pair<String, Int>> {
+        val cleanRelayId = relayId.trim()
+        val cleanCode = code.trim()
+        if (cleanRelayId.isBlank() || cleanCode.isBlank()) {
+            return Result.failure(Exception("中继二维码缺少绑定信息"))
+        }
+        return try {
+            serverRouter.mode = ServerMode.CLOUD
+            sessionStore.setServerMode("cloud")
+            val api = fhdForBase(relayBaseUrl)
+            val r = api.relayConfirm(RelayConfirmBody(relay_id = cleanRelayId, code = cleanCode))
+            if (!r.success) {
+                Result.failure(Exception(r.message.ifBlank { "中继绑定失败" }))
+            } else {
+                sessionStore.setRelayDesktopId(cleanRelayId)
+                sessionStore.setSetupComplete(true)
+                Result.success("relay" to 0)
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun relayPairingConfirmCode(
+        code: String,
+        relayBaseUrl: String = "",
+    ): Result<Pair<String, Int>> {
+        val cleanCode = code.trim()
+        if (cleanCode.length != 6 || !cleanCode.all { it.isDigit() }) {
+            return Result.failure(Exception("请输入 6 位设备码"))
+        }
+        return try {
+            serverRouter.mode = ServerMode.CLOUD
+            sessionStore.setServerMode("cloud")
+            val api = fhdForBase(relayBaseUrl)
+            val r = api.relayConfirmCode(RelayConfirmCodeBody(code = cleanCode))
+            if (!r.success) {
+                Result.failure(Exception(r.message.ifBlank { "设备码绑定失败" }))
+            } else {
+                val data = r.data ?: emptyMap()
+                val relayId = data["relay_id"]?.toString().orEmpty()
+                    .ifBlank {
+                        @Suppress("UNCHECKED_CAST")
+                        ((data["desktop"] as? Map<String, Any?>)?.get("relay_id")?.toString()).orEmpty()
+                    }
+                if (relayId.isBlank()) {
+                    Result.failure(Exception("设备码绑定响应缺少 relay_id"))
+                } else {
+                    sessionStore.setRelayDesktopId(relayId)
+                    sessionStore.setSetupComplete(true)
+                    Result.success("relay" to 0)
+                }
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     private suspend fun completePairingExchange(
         api: FhdApi,
         body: PairingExchangeBody,
@@ -431,10 +571,17 @@ class XcagiRepository @Inject constructor(
         val r = api.pairingExchange(body)
         if (!r.success) return Result.failure(Exception(r.message.ifBlank { "设备配对失败" }))
         val d = r.data ?: return Result.failure(Exception(r.message.ifBlank { "设备配对失败" }))
-        val host = d["host"]?.toString()?.trim().orEmpty()
+        val baseUrl =
+            d["api_base_url"]?.toString()?.trim().orEmpty()
+                .ifBlank { d["base_url"]?.toString()?.trim().orEmpty() }
+        val fromBase = hostPortFromApiBase(baseUrl)
+        val host = d["host"]?.toString()?.trim().orEmpty().ifBlank { fromBase.first }
         if (host.isBlank()) return Result.failure(Exception("配对响应缺少 host"))
-        val port = (d["port"] as? Number)?.toInt() ?: BuildConfig.FHD_DEFAULT_PORT
-        val hostWithPort = if (":" in host) host else "$host:$port"
+        val port = (d["port"] as? Number)?.toInt()
+            ?: d["port"]?.toString()?.toIntOrNull()
+            ?: fromBase.second.takeIf { it > 0 }
+            ?: BuildConfig.FHD_DEFAULT_PORT
+        val hostWithPort = compactHostPort(host, port)
         sessionStore.setFhdHost(hostWithPort)
         sessionStore.setServerMode("lan")
         serverRouter.fhdHost = hostWithPort
@@ -481,6 +628,7 @@ class XcagiRepository @Inject constructor(
                         sessionStore.accountKindFlow.first().ifBlank { ProductSkuConfig.accountKind }
                     },
                 )
+            primeFhdCsrf()
             val r = fhd().authQrConfirm(
                 AuthQrConfirmBody(
                     qr_id = qrId,
@@ -495,7 +643,7 @@ class XcagiRepository @Inject constructor(
                 Result.success(Unit)
             }
         } catch (e: Exception) {
-            Result.failure(e)
+            Result.failure(Exception(loginErrorMessage(e, accountKind.ifBlank { ProductSkuConfig.accountKind })))
         }
     }
 
@@ -590,6 +738,7 @@ class XcagiRepository @Inject constructor(
     suspend fun loginMarketPhone(phone: String, code: String): Result<String> {
         return try {
             if (ProductSkuConfig.isEnterprise || isPcReachable()) {
+                primeFhdCsrf()
                 val res = fhd().mobileLoginWithPhone(
                     MobilePhoneLoginRequest(
                         phone = phone,
@@ -623,7 +772,7 @@ class XcagiRepository @Inject constructor(
                 applyMarketAuth(res, phone)
             }
         } catch (e: Exception) {
-            Result.failure(e)
+            Result.failure(Exception(loginErrorMessage(e, ProductSkuConfig.accountKind)))
         }
     }
 
@@ -659,6 +808,7 @@ class XcagiRepository @Inject constructor(
         accountKind: String,
     ): Result<String> {
         syncRouterFromStore()
+        unusablePhoneLanHostMessage()?.let { return Result.failure(Exception(it)) }
         return if (ProductSkuConfig.isEnterprise || isPcReachable()) {
             loginFhd(username, password, accountKind)
         } else {
@@ -687,6 +837,22 @@ class XcagiRepository @Inject constructor(
         db.chatDao().insert(ChatCacheEntity(role = "user", text = message))
         val acc = StringBuilder()
         val useCloud = !isPcReachable()
+        if (useCloud) {
+            val relayId = sessionStore.relayDesktopId()
+            if (relayId.isNotBlank()) {
+                streamRelayCodexTask(
+                    relayId = relayId,
+                    message = message,
+                    onToken = { t ->
+                        acc.append(t)
+                        onToken(t)
+                    },
+                    onDone = onDone,
+                    onError = onError,
+                )
+                return
+            }
+        }
         sseChat.streamChat(
             message,
             authHeader(),
@@ -706,6 +872,69 @@ class XcagiRepository @Inject constructor(
         if (finalText.isNotBlank()) {
             db.chatDao().insert(ChatCacheEntity(role = "assistant", text = finalText))
         }
+    }
+
+    private suspend fun streamRelayCodexTask(
+        relayId: String,
+        message: String,
+        onToken: (String) -> Unit,
+        onDone: (String) -> Unit,
+        onError: (String) -> Unit,
+    ) {
+        try {
+            val created = fhd().relayCreateTask(
+                RelayTaskCreateBody(
+                    relay_id = relayId,
+                    kind = "codex.invoke",
+                    payload = mapOf(
+                        "message" to message,
+                        "context" to mapOf(
+                            "source" to "mobile_chat",
+                            "client_surface" to "mobile",
+                            "mode" to "code",
+                        ),
+                    ),
+                ),
+            )
+            if (!created.success) {
+                onError(created.message.ifBlank { "中继任务创建失败" })
+                return
+            }
+            val task = created.data?.get("task") as? Map<*, *> ?: emptyMap<Any?, Any?>()
+            val taskId = task["task_id"]?.toString().orEmpty()
+            if (taskId.isBlank()) {
+                onError("中继任务缺少 task_id")
+                return
+            }
+            onToken("已派发到电脑执行端，等待 Codex 回写。")
+            repeat(60) {
+                delay(2000)
+                val status = fhd().relayTaskStatus(taskId)
+                val current = status.data?.get("task") as? Map<*, *> ?: emptyMap<Any?, Any?>()
+                when (current["status"]?.toString().orEmpty()) {
+                    "done" -> {
+                        val final = relayTaskResultText(current).ifBlank { "电脑执行端已完成任务。" }
+                        onDone(final)
+                        return
+                    }
+                    "failed" -> {
+                        onError(relayTaskResultText(current).ifBlank { "电脑执行端执行失败" })
+                        return
+                    }
+                }
+            }
+            onError("电脑执行端暂未回写结果，任务已保留在服务器队列。")
+        } catch (e: Exception) {
+            onError(e.message ?: "中继任务失败")
+        }
+    }
+
+    private fun relayTaskResultText(task: Map<*, *>): String {
+        val result = task["result"] as? Map<*, *> ?: return ""
+        result["error"]?.toString()?.takeIf { it.isNotBlank() }?.let { return it }
+        val codex = result["codex"] as? Map<*, *> ?: return ""
+        val assistant = codex["assistant_message"] as? Map<*, *> ?: return ""
+        return assistant["body"]?.toString().orEmpty()
     }
 
     suspend fun streamChatCloud(
