@@ -31,7 +31,7 @@ class RedisStreamsBridge:
 
     def __init__(
         self,
-        bus: "NeuroBus",
+        bus: NeuroBus,
         redis_client: Any | None = None,
         consumer_id: str | None = None,
     ) -> None:
@@ -47,7 +47,7 @@ class RedisStreamsBridge:
         try:
             self._redis.xgroup_create(STREAM_KEY, CONSUMER_GROUP, id="$", mkstream=True)
             logger.info("created consumer group %s on %s", CONSUMER_GROUP, STREAM_KEY)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - transport boundary: handle all redis errors gracefully
             # BUSYGROUP 表示已存在
             if "BUSYGROUP" not in str(e):
                 logger.debug("xgroup create: %s", e)
