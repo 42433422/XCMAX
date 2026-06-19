@@ -111,6 +111,34 @@ def predict_action_index(features: list[float], mask: list[bool] | None = None) 
         return int(torch.argmax(logits).item())
 
 
+def predict_with_confidence(
+    features: list[float], mask: list[bool] | None = None
+) -> tuple[int, float]:
+    """返回 (action_index, confidence)。
+
+    confidence 来自 softmax(logits) 中选中动作的概率：
+    - 无策略加载时返回 (-1, 0.0)
+    - 全 mask 屏蔽时返回 (-1, 0.0)
+    """
+    pol = get_policy()
+    if pol is None or torch is None:
+        return -1, 0.0
+    x = torch.tensor([features], dtype=torch.float32, device=_policy_device)
+    with torch.no_grad():
+        logits = pol(x)[0]
+        if mask is not None and len(mask) == NUM_ACTIONS:
+            logits = logits.clone()
+            for i, m in enumerate(mask):
+                if not m:
+                    logits[i] = float("-inf")
+        if bool(torch.isinf(logits).all().item()):
+            return -1, 0.0
+        probs = torch.softmax(logits, dim=0)
+        idx = int(torch.argmax(probs).item())
+        confidence = float(probs[idx].item())
+        return idx, confidence
+
+
 def save_policy_state_dict(path: Path, model: RoutingMLP) -> None:
     if torch is None:
         raise RuntimeError("torch not installed")
